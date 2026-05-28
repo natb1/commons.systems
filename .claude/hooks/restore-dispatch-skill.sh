@@ -19,8 +19,10 @@ REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 
 [ -f "$REPO_ROOT/tmp/dispatch-worktree" ] || exit 0
 
-# Emit reload instruction so Claude reloads /dispatch — it re-derives the phase
-# from PR/CI ground truth, so recovery is correct after a /clear in any phase.
-printf 'COMPACTION RECOVERY: Reload skill: /dispatch #%s\n' "$ISSUE_NUM"
+# Emit reload instruction so Claude reloads /dispatch-worker — the marker only
+# exists in worker worktrees (the router never writes it), so this recovery
+# always restores a worker. /dispatch-worker re-derives the phase from PR/CI
+# ground truth, so recovery is correct after a /clear in any phase.
+printf 'COMPACTION RECOVERY: Reload skill: /dispatch-worker %s\n' "$ISSUE_NUM"
 
 exit 0

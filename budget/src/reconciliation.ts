@@ -1,5 +1,6 @@
 import type { JournalEntry, JournalLeg } from "./firestore.js";
 import type { AccountType } from "./schema/enums.js";
+import type { JournalEntryFields, JournalLegFields } from "./data-source.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -95,4 +96,72 @@ export function clearedBalance(legs: JournalLeg[], accountType: AccountType): nu
  */
 export function balancesMatch(a: number, b: number): boolean {
   return Math.round(a * 100) === Math.round(b * 100);
+}
+
+// ── Adjustment-entry generation ──────────────────────────────────────────────────
+
+/**
+ * Deterministic `{institution}_{account}` document id of the `Adjustment Suspense`
+ * equity account seeded by #552. Adjustment-entry generation offsets against it.
+ */
+export const ADJUSTMENT_SUSPENSE_ACCOUNT_ID = "Budget_Adjustment Suspense";
+
+export interface BuildAdjustmentEntryInput {
+  /** Signed reconciliation difference: clearedBalance − bankBalance. Must be non-zero. */
+  readonly difference: number;
+  readonly reconcilingAccountId: string;
+  readonly reconcilingAccountType: AccountType;
+  readonly suspenseAccountId: string;
+  /** Human-readable account label for the entry description. */
+  readonly accountLabel: string;
+  /** Reconciled-through date, ms since epoch — used as the entry timestamp. */
+  readonly throughDateMs: number;
+}
+
+/**
+ * Builds a balanced two-leg adjustment journal entry that closes the reconciliation
+ * difference. The reconciling leg's signed amount (per `signedLegAmount`) equals
+ * `−difference`, bringing the cleared balance exactly to the bank balance.
+ *
+ * Returns the entry fields and an ordered pair of legs: [reconcilingLeg, suspenseLeg].
+ * Both legs are marked `cleared: true`.
+ */
+export function buildAdjustmentEntry(
+  input: BuildAdjustmentEntryInput,
+): { entry: JournalEntryFields; legs: [JournalLegFields, JournalLegFields] } {
+  const amount = Math.abs(input.difference);
+  // The reconciling leg's signed amount must equal -difference so that including
+  // this leg in the cleared set moves clearedBalance exactly to bankBalance.
+  const signedTarget = -input.difference;
+
+  // asset/expense are debit-positive: signed = debit - credit, so debit when signedTarget > 0.
+  // liability/equity/income are credit-positive: signed = credit - debit, so debit when signedTarget < 0.
+  const debitPositive =
+    input.reconcilingAccountType === "asset" || input.reconcilingAccountType === "expense";
+  const reconcilingIsDebit = debitPositive ? signedTarget > 0 : signedTarget < 0;
+
+  const reconcilingLeg: JournalLegFields = {
+    accountId: input.reconcilingAccountId,
+    debit: reconcilingIsDebit ? amount : 0,
+    credit: reconcilingIsDebit ? 0 : amount,
+    cleared: true,
+  };
+
+  const suspenseLeg: JournalLegFields = {
+    accountId: input.suspenseAccountId,
+    debit: reconcilingIsDebit ? 0 : amount,
+    credit: reconcilingIsDebit ? amount : 0,
+    cleared: true,
+  };
+
+  const dateStr = new Date(input.throughDateMs).toISOString().slice(0, 10);
+  const description = `Reconciliation adjustment — ${input.accountLabel} through ${dateStr}`;
+
+  const entry: JournalEntryFields = {
+    timestampMs: input.throughDateMs,
+    description,
+    note: null,
+  };
+
+  return { entry, legs: [reconcilingLeg, suspenseLeg] };
 }

@@ -10,6 +10,8 @@ import {
   buildReconcileRows,
   clearedBalance,
   balancesMatch,
+  buildAdjustmentEntry,
+  ADJUSTMENT_SUSPENSE_ACCOUNT_ID,
 } from "../src/reconciliation";
 import type { JournalEntry, JournalLeg } from "../src/firestore";
 
@@ -150,5 +152,135 @@ describe("balancesMatch", () => {
   });
   it("returns false for a difference of a cent or more", () => {
     expect(balancesMatch(100.0, 100.01)).toBe(false);
+  });
+});
+
+describe("buildAdjustmentEntry", () => {
+  const reconcilingAccountId = "Budget_Checking";
+  const suspenseAccountId = ADJUSTMENT_SUSPENSE_ACCOUNT_ID;
+  const throughDateMs = Date.UTC(2025, 2, 31); // 2025-03-31
+
+  it("asset account, positive difference (cleared > bank): reconciling leg is credit, suspense is debit", () => {
+    const { entry, legs } = buildAdjustmentEntry({
+      difference: 50,
+      reconcilingAccountId,
+      reconcilingAccountType: "asset",
+      suspenseAccountId,
+      accountLabel: "Checking",
+      throughDateMs,
+    });
+    const [reconcilingLeg, suspenseLeg] = legs;
+    // signedTarget = -50; asset is debit-positive → debit when signedTarget > 0, so credit here
+    expect(reconcilingLeg.debit).toBe(0);
+    expect(reconcilingLeg.credit).toBe(50);
+    // debit - credit === -50 (equals signedTarget)
+    expect(reconcilingLeg.debit - reconcilingLeg.credit).toBe(-50);
+    expect(suspenseLeg.debit).toBe(50);
+    expect(suspenseLeg.credit).toBe(0);
+    // entry fields
+    expect(entry.timestampMs).toBe(throughDateMs);
+    expect(entry.note).toBeNull();
+  });
+
+  it("asset account, negative difference (cleared < bank): reconciling leg is debit, suspense is credit", () => {
+    const { legs } = buildAdjustmentEntry({
+      difference: -30,
+      reconcilingAccountId,
+      reconcilingAccountType: "asset",
+      suspenseAccountId,
+      accountLabel: "Checking",
+      throughDateMs,
+    });
+    const [reconcilingLeg, suspenseLeg] = legs;
+    // signedTarget = 30; asset is debit-positive → debit
+    expect(reconcilingLeg.debit).toBe(30);
+    expect(reconcilingLeg.credit).toBe(0);
+    expect(suspenseLeg.debit).toBe(0);
+    expect(suspenseLeg.credit).toBe(30);
+  });
+
+  it("liability account, positive difference: reconciling leg is debit, suspense is credit", () => {
+    const { legs } = buildAdjustmentEntry({
+      difference: 20,
+      reconcilingAccountId,
+      reconcilingAccountType: "liability",
+      suspenseAccountId,
+      accountLabel: "Credit Card",
+      throughDateMs,
+    });
+    const [reconcilingLeg, suspenseLeg] = legs;
+    // signedTarget = -20; liability is credit-positive → debit when signedTarget < 0
+    expect(reconcilingLeg.debit).toBe(20);
+    expect(reconcilingLeg.credit).toBe(0);
+    expect(suspenseLeg.debit).toBe(0);
+    expect(suspenseLeg.credit).toBe(20);
+  });
+
+  it("entry balances: total debits equal total credits", () => {
+    const { legs } = buildAdjustmentEntry({
+      difference: 75,
+      reconcilingAccountId,
+      reconcilingAccountType: "asset",
+      suspenseAccountId,
+      accountLabel: "Checking",
+      throughDateMs,
+    });
+    const [reconcilingLeg, suspenseLeg] = legs;
+    const totalDebits = reconcilingLeg.debit + suspenseLeg.debit;
+    const totalCredits = reconcilingLeg.credit + suspenseLeg.credit;
+    expect(totalDebits).toBe(totalCredits);
+  });
+
+  it("both legs are cleared", () => {
+    const { legs } = buildAdjustmentEntry({
+      difference: 10,
+      reconcilingAccountId,
+      reconcilingAccountType: "asset",
+      suspenseAccountId,
+      accountLabel: "Checking",
+      throughDateMs,
+    });
+    expect(legs[0].cleared).toBe(true);
+    expect(legs[1].cleared).toBe(true);
+  });
+
+  it("description format matches the expected string with em dash", () => {
+    const { entry } = buildAdjustmentEntry({
+      difference: 10,
+      reconcilingAccountId,
+      reconcilingAccountType: "asset",
+      suspenseAccountId,
+      accountLabel: "Checking",
+      throughDateMs,
+    });
+    expect(entry.description).toBe(
+      "Reconciliation adjustment — Checking through 2025-03-31",
+    );
+  });
+
+  it("legs are ordered: reconciling first, suspense second", () => {
+    const { legs } = buildAdjustmentEntry({
+      difference: 10,
+      reconcilingAccountId,
+      reconcilingAccountType: "asset",
+      suspenseAccountId,
+      accountLabel: "Checking",
+      throughDateMs,
+    });
+    expect(legs[0].accountId).toBe(reconcilingAccountId);
+    expect(legs[1].accountId).toBe(suspenseAccountId);
+  });
+
+  it("entry timestampMs equals throughDateMs and note is null", () => {
+    const { entry } = buildAdjustmentEntry({
+      difference: 10,
+      reconcilingAccountId,
+      reconcilingAccountType: "asset",
+      suspenseAccountId,
+      accountLabel: "Checking",
+      throughDateMs,
+    });
+    expect(entry.timestampMs).toBe(throughDateMs);
+    expect(entry.note).toBeNull();
   });
 });

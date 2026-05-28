@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# dispatch-spawn-worker — spawn a /dispatch-worker background job for a target
+# worktree (the router → worker spawn primitive).
+#
+# /dispatch (the router) selects an issue, resolves its worktree, and then
+# delegates phase execution to a dedicated worker session via this script.
+# The worker session is started with cwd = the target worktree, so the worker's
+# SessionStart fires in the right context and session-title hooks reflect the
+# worktree basename — resolving #825 as a natural consequence of the split.
+#
+# The sibling primitive for the reverse direction (worker → router) is
+# dispatch-spawn-router, spawned with cwd at `worktrees/main` (not the target
+# worktree, which is where this script spawns the worker).
+#
+# Usage: dispatch-spawn-worker <issue-num> <worktree-path>
+#
+# Arguments (both required):
+#   <issue-num>     The issue number N. The spawned agent is named
+#                   dispatch-<N>-<short-id> and is invoked as
+#                   `/dispatch-worker <N>`.
+#   <worktree-path> Absolute path to the target worktree. The spawn subshell
+#                   cd's here, so the worker session starts with cwd = this
+#                   path (not worktrees/main).
+#
+# Behavior, in order:
+#   1. Prune    — remove stale stopped dispatch-* agents (`claude rm`).
+#                 Best-effort: a prune failure logs to stderr and continues.
+#   2. Dedup    — if another live dispatch-* session is already running under
+#                 <worktree-path> (excluding this one), spawn nothing. Fail-safe:
+#                 if the session registry cannot be queried, also spawn nothing —
+#                 a dispatch agent may be running; the #725 heartbeat re-seeds
+#                 the chain if it actually dropped.
+#   3. Spawn    — `claude --bg --name dispatch-<N>-<short-id> --permission-mode
+#                 auto "/dispatch-worker <N>"`, cwd = <worktree-path>.
+#   4. Verify   — re-query the registry under <worktree-path> and confirm the
+#                 new agent registered.
+#
+# (In-script `# ---- Step N: ... ----` markers offset by 2 — arg validation
+# and config resolution come first as Steps 0 and 1.)
+#
+# Stdout protocol (exactly one word):
+#   deduped   another dispatch-* agent is running under <worktree-path>, or the
+#             registry could not be queried — nothing was spawned.
+#   spawned   a new dispatch-* /dispatch-worker job was spawned and verified.
+# A spawn that does not verify prints nothing to stdout, writes a diagnostic to
+# stderr, and exits non-zero.
+#
+# Exit codes:
+#   0  deduped or spawned (stdout disambiguates).
+#   1  the successor never registered in 'claude agents --json' — see stderr.
+#   2  the script cannot operate — wrong number of command-line arguments.
+#
+# Environment overrides for testability (mirroring dispatch-spawn-router's
+# DISPATCH_SPAWN_ROUTER_* pattern):
+#   DISPATCH_SPAWN_WORKER_CLAUDE_CMD    The `claude` command. The script's own
+#                                       `claude --bg` / `claude rm` / `claude
+#                                       agents` calls use it, and it is exported
+#                                       as CLAUDE_AGENTS_CMD so the sourced
+#                                       lib-claude-agents.sh helper is faked
+#                                       consistently. Default: `claude`.
+#   DISPATCH_SPAWN_WORKER_SESSION_ID    This session's id, for the dedup self-
+#                                       exclusion. Default: $CLAUDE_CODE_SESSION_ID.
+#   DISPATCH_SPAWN_WORKER_JOBS_DIR      The Claude jobs ledger directory walked
+#                                       for the prune step. Default: ~/.claude/jobs.
+#
+# Note: there is no DISPATCH_SPAWN_WORKER_MAIN_WORKTREE override — the worktree
+# path is passed in as the positional argument and does not need an env-override.
+#
+# Sandbox: every `claude` call here reaches the local Claude daemon over a Unix
+# socket; callers must invoke this script with `dangerouslyDisableSandbox:
+# true` — see `.claude/rules/sandbox.md § claude agents --json`.
+#
+# Build-time note (Claude Code 2.1.147): the prune step reads the on-disk
+# ledger under ~/.claude/jobs/<id>/state.json — `claude agents --json` lists
+# only LIVE sessions, so a stopped agent isn't visible there and the registry
+# is the wrong source for a stopped-agent reaper. `claude rm <id>` and
+# `claude stop <id>` both take the job-id (the basename of the ledger
+# directory), not the registry's `.sessionId`. `claude --bg` / `claude rm` are
+# the #725-coordinated background-job verbs; #725 may refine the exact flags.
+#
+# NOT set -e: exits are handled explicitly (matching dispatch-acquire-lock /
+# dispatch-sweep).
+set -uo pipefail
+
+# ---- Step 0: reject unexpected arguments ------------------------------------
+if [[ $# -lt 2 ]]; then
+  echo "dispatch-spawn-worker: expected 2 arguments: <issue-num> <worktree-path>" >&2
+  exit 2
+fi
+if [[ $# -gt 2 ]]; then
+  echo "dispatch-spawn-worker: unexpected argument '$3'" >&2
+  exit 2
+fi
+
+ISSUE_NUM="$1"
+WORKTREE_PATH="$2"
+
+if [[ ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
+  echo "dispatch-spawn-worker: invalid issue number '$ISSUE_NUM' (expected a positive integer)" >&2
+  exit 2
+fi
+
+# ---- Step 1: resolve config -------------------------------------------------
+CLAUDE_CMD="${DISPATCH_SPAWN_WORKER_CLAUDE_CMD:-claude}"
+# The sourced helper reads CLAUDE_AGENTS_CMD for its own `claude agents --json`
+# call; point it at the same command so a faked `claude` fakes every path.
+export CLAUDE_AGENTS_CMD="$CLAUDE_CMD"
+
+SESSION_ID="${DISPATCH_SPAWN_WORKER_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+# ---- Step 2: prune stale stopped dispatch-* agents --------------------------
+# Best-effort. A stopped dispatch-* agent left behind by a crashed or
+# self-closed job is removed with `claude rm`. `claude agents --json` lists
+# only LIVE sessions, so the on-disk ledger under ~/.claude/jobs/ is the source
+# of truth for stopped ones. For each <id>/state.json:
+#   - filter on the recorded --name starting with `dispatch-` so the prune
+#     never touches non-dispatch agents;
+#   - filter on a terminal `state` value ("stopped", "done", or "failed");
+#     "working" is live, "blocked" is alive waiting for input — neither is
+#     prunable;
+#   - pass the *directory basename* (the job-id) to `claude rm`, which is what
+#     it expects — not the registry's `.sessionId`.
+# A stat / parse / rm failure logs to stderr and continues — pruning must
+# never abort the spawn.
+JOBS_DIR="${DISPATCH_SPAWN_WORKER_JOBS_DIR:-$HOME/.claude/jobs}"
+prune_stopped_dispatch_agents() {
+  local dir job_id state name
+  [[ -d "$JOBS_DIR" ]] || return 0
+  for dir in "$JOBS_DIR"/*/; do
+    [[ -d "$dir" ]] || continue
+    [[ -f "$dir/state.json" ]] || continue
+    if ! IFS=$'\t' read -r state name < <(jq -r \
+        '"\(.state // "")\t\(.name // "")"' "$dir/state.json" 2>/dev/null); then
+      echo "dispatch-spawn-worker: prune: '${dir}state.json' not parseable; continuing" >&2
+      continue
+    fi
+    [[ "$name" == dispatch-* ]] || continue
+    case "$state" in
+      stopped|done|failed) ;;
+      *) continue ;;
+    esac
+    job_id=$(basename "$dir")
+    if ! "$CLAUDE_CMD" rm "$job_id" >/dev/null 2>&1; then
+      echo "dispatch-spawn-worker: prune: 'claude rm $job_id' failed; continuing" >&2
+    fi
+  done
+}
+prune_stopped_dispatch_agents
+
+# ---- Step 3: dedup guard ----------------------------------------------------
+# Spawn nothing if another live dispatch-* session is already under the target
+# worktree. The query is filtered to <worktree-path> — per-worktree invariant:
+# at most one live dispatch-* agent per issue worktree. Fail safe: an unknown
+# (unqueryable) registry is treated as "a dispatch agent may be running", so
+# nothing is spawned. A TOCTOU window exists between this query and the spawn
+# below — two concurrent router invocations could each pass the guard and each
+# spawn a worker. The per-worktree invariant and #755 absorb this: the next
+# selection scan will detect the duplicate, so the extra cost is one wasted
+# tick, not lost work.
+if ! sessions=$(claude_sessions_under "$WORKTREE_PATH"); then
+  echo deduped
+  exit 0
+fi
+while IFS=$'\t' read -r sid _ status name; do
+  [[ -z "$sid" ]] && continue
+  [[ "$name" == dispatch-* ]] || continue    # not a dispatch job
+  # Defensive: `claude agents --json` only lists live sessions, so a "stopped"
+  # row should not appear here in normal operation. The check survives a
+  # registry that nonetheless surfaces a terminal status.
+  [[ "$status" == "stopped" ]] && continue
+  [[ "$sid" == "$SESSION_ID" ]] && continue  # this very session — not "another"
+  # Another live dispatch-* session already owns the worktree; spawn nothing.
+  echo deduped
+  exit 0
+done <<<"$sessions"
+
+# ---- Step 4: spawn the worker -----------------------------------------------
+# dispatch-<N>-<short-id> — the issue number prefix makes per-worktree worker
+# sessions distinguishable in `claude agents`, and the short token keeps the
+# name unique among concurrently-registered agents. $RANDOM is dependency-free
+# (openssl is not installed on the dev image); the dedup guard above already
+# ensures at most one new dispatch worker per worktree at a time, so ~30 bits
+# is ample.
+SHORT_ID=$(printf '%04x%04x' "$RANDOM" "$RANDOM")
+AGENT_NAME="dispatch-${ISSUE_NUM}-${SHORT_ID}"
+# Capture the spawn's combined output so a failure diagnostic can surface why
+# (`cd` failed, `claude` missing, `--bg` rejected). `|| true` keeps a non-zero
+# spawn from aborting the script — Step 5's registry check is the source of
+# truth for whether the agent actually came up.
+spawn_output=$( ( cd "$WORKTREE_PATH" && "$CLAUDE_CMD" --bg --name "$AGENT_NAME" \
+    --permission-mode auto "/dispatch-worker $ISSUE_NUM" ) 2>&1 ) || true
+
+# ---- Step 5: verify the new agent registered --------------------------------
+registered=""
+if sessions=$(claude_sessions_under "$WORKTREE_PATH"); then
+  while IFS=$'\t' read -r _ _ _ name; do
+    if [[ "$name" == "$AGENT_NAME" ]]; then
+      registered=1
+      break
+    fi
+  done <<<"$sessions"
+fi
+if [[ -n "$registered" ]]; then
+  echo spawned
+  exit 0
+fi
+if [[ -n "${spawn_output//[[:space:]]/}" ]]; then
+  echo "dispatch-spawn-worker: '$AGENT_NAME' did not register in 'claude agents --json' after 'claude --bg'; output: $spawn_output" >&2
+else
+  echo "dispatch-spawn-worker: '$AGENT_NAME' did not register in 'claude agents --json' after 'claude --bg'" >&2
+fi
+exit 1

@@ -80,6 +80,19 @@ setup() {
   # dispatch-select-target test stays green.
   mkdir -p "$TMPDIR_TEST/config"
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+  export DISPATCH_FIND_PR_RETRY_DELAY=0
+
+  # Default no-op dispatch-sweep stub: silent, exit 0 (no orphan to adopt).
+  # dispatch-select-target invokes "$SCRIPT_DIR/dispatch-sweep" in default mode
+  # between the main-broken gate and the queue ladder; with this stub the call
+  # is inert and every existing default-mode test stays green. Tests that
+  # exercise sweep integration overwrite this stub before invoking
+  # dispatch-select-target.
+  cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/dispatch-sweep"
 
   # dispatch-select-target calls dispatch-phase as "$SCRIPT_DIR/dispatch-phase".
   # Since we copied them all to TMPDIR_TEST, SCRIPT_DIR inside each copy will
@@ -103,7 +116,11 @@ case "$args" in
   "pr list --state open --json number,headRefName")
     # dispatch-find-pr self-fetch: only the two correlation fields.
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
-    if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
+    echo "pr list" >> "$STUB_DIR/gh-find-pr-calls.log"
+    call_count=$(wc -l < "$STUB_DIR/gh-find-pr-calls.log")
+    if [[ "$call_count" -ge 2 && -f "$STUB_DIR/pr-list-retry.json" ]]; then
+      cat "$STUB_DIR/pr-list-retry.json"
+    elif [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
       cat "$STUB_DIR/pr-list-full.json"
     else
       echo "[]"
@@ -149,6 +166,15 @@ case "$args" in
       cat "$STUB_DIR/issue-title-${num}.json"
     else
       echo "{\"title\":\"Issue $num\"}"
+    fi
+    ;;
+  issue\ view\ *\ --json\ closedByPullRequestsReferences)
+    # dispatch-find-pr cross-check fallback: gh issue view <num> --json closedByPullRequestsReferences
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/issue-closing-prs-${num}.json" ]]; then
+      cat "$STUB_DIR/issue-closing-prs-${num}.json"
+    else
+      echo '{"closedByPullRequestsReferences":[]}'
     fi
     ;;
   api\ */dependencies/blocked_by)
@@ -377,6 +403,7 @@ teardown() {
   STUB_DIR=""
   export PATH="$SAVED_PATH"
   unset DISPATCH_CONFIG_DIR
+  unset DISPATCH_FIND_PR_RETRY_DELAY
 }
 trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
 
@@ -593,6 +620,72 @@ setup
 printf '[{"number":10,"headRefName":"60-foo"}]\n' > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-find-pr" "6")
 assert_eq "issue 6 does not match branch 60-foo → empty" "" "$result"
+teardown
+
+# 6. Flake recovery: first pr list call is empty, second returns the PR.
+# Models gh pr list flaking (exit 0 + []) on call 1 and returning the real list
+# on call 2. The retry-on-empty should produce the PR number.
+echo "Test: flake recovery — empty first call, PR on retry → PR number"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+printf '[{"number":820,"headRefName":"820-x"}]\n' > "$STUB_DIR/pr-list-retry.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "820")
+assert_eq "flake recovery → PR number" "820" "$result"
+teardown
+
+# 7. Cross-check fallback: pr list yields empty on both attempts, but the
+# issue's closedByPullRequestsReferences lists an OPEN PR. This covers the
+# case where the branch was renamed away from the <issue>- convention.
+echo "Test: cross-check fallback — issue references an OPEN PR → PR number"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+printf '{"closedByPullRequestsReferences":[{"number":830,"state":"OPEN"}]}\n' \
+  > "$STUB_DIR/issue-closing-prs-822.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "822")
+assert_eq "cross-check OPEN reference → PR number" "830" "$result"
+teardown
+
+# 8. Cross-check ignores non-OPEN references. The script's contract is "open
+# PR for issue N or empty"; a MERGED reference must not be reported.
+echo "Test: cross-check ignores MERGED reference → empty"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+printf '{"closedByPullRequestsReferences":[{"number":840,"state":"MERGED"}]}\n' \
+  > "$STUB_DIR/issue-closing-prs-822.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "822")
+assert_eq "cross-check MERGED reference → empty" "" "$result"
+teardown
+
+# 9. Genuine empty: pr list empty on both attempts AND issue references no
+# PR. Output stays empty, exit 0 — the "no PR exists" answer.
+echo "Test: genuine empty (no PR, no references) → empty"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+printf '{"closedByPullRequestsReferences":[]}\n' \
+  > "$STUB_DIR/issue-closing-prs-822.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "822")
+assert_eq "genuine empty → empty" "" "$result"
+teardown
+
+# 10. DISPATCH_PR_LIST supplied without matching branch; cross-check resolves PR.
+# The retry (step 1) is skipped when DISPATCH_PR_LIST is set — the caller owns
+# the list. The cross-check (step 2) still runs regardless, using a different gh
+# endpoint that the caller cannot pre-supply.
+echo "Test: DISPATCH_PR_LIST no match + cross-check OPEN reference → PR number"
+setup
+printf '[{"number":850,"headRefName":"999-unrelated"}]\n' > "$STUB_DIR/pr-list-full.json"
+printf '{"closedByPullRequestsReferences":[{"number":851,"state":"OPEN"}]}\n' \
+  > "$STUB_DIR/issue-closing-prs-822.json"
+result=$(DISPATCH_PR_LIST='[{"number":850,"headRefName":"999-unrelated"}]' \
+  "$TMPDIR_TEST/dispatch-find-pr" "822")
+assert_eq "DISPATCH_PR_LIST no prefix match; cross-check finds OPEN PR → PR number" "851" "$result"
+# Verify no self-fetch: gh pr list --state open --json number,headRefName was not called.
+if [[ -f "$STUB_DIR/gh-find-pr-calls.log" ]]; then
+  call_count=$(wc -l < "$STUB_DIR/gh-find-pr-calls.log")
+else
+  call_count=0
+fi
+assert_eq "no self-fetch gh pr list calls when DISPATCH_PR_LIST set" "0" "$call_count"
 teardown
 
 # ============================================================================
@@ -882,6 +975,8 @@ assert_eq "lone waiting PR → empty" "empty" "$result"
 teardown
 
 # 16. Open issue worktree → worktree output, queue scan skipped.
+# The default no-op dispatch-sweep stub installed by setup() is in place but
+# unused — current-worktree continuation short-circuits before the sweep call.
 echo "Test: open issue worktree → worktree <N> <branch>, scan skipped"
 setup
 # Seed a verify PR that would normally be selected — proves the scan is skipped.
@@ -1226,7 +1321,7 @@ assert_eq "issue 6 not masked by 60-foo worktree" "issue 6" "$result"
 teardown
 
 # --- topic-category prioritization (issue #707) -----------------------------
-# A topic category (bug → testing infrastructure → dispatch → other) nests
+# A topic category (priority → bug → testing infrastructure → dispatch → other) nests
 # outside the phase ladder. A PR's category is resolved from the labels of the
 # issues it closes; an issue's category from its own labels.
 
@@ -1276,6 +1371,26 @@ printf '[{"number":500,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"hel
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR with no closing issue is 'other'; bug issue wins" "issue 500" "$result"
+teardown
+
+# 30b. A PR closing a `priority`-labelled issue outranks a PR closing a `bug`
+#      issue, even when the bug PR is older — `priority` is the new top of the
+#      category ladder. Mirrors test 28 with priority swapped in for bug.
+echo "Test: PR closing a priority issue beats PR closing a bug issue"
+setup
+# PR 20 (older) closes bug issue 200; PR 10 (newer) closes priority issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Issues 100/200 are the closing issues — they carry the topic label that the
+# PRs inherit. No "help wanted" label, so they are not themselves queue items.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "priority-closing PR beats bug-closing PR" "pr 10 10-priority-pr verify" "$result"
 teardown
 
 # --- blocked-issue PR skip (issue #786) -------------------------------------
@@ -1805,6 +1920,216 @@ printf '%s\n' \
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "parked issue skipped; next help-wanted issue returned" "issue 66" "$result"
+teardown
+
+# --- sweep routing (issue #803) ---------------------------------------------
+# dispatch-select-target invokes dispatch-sweep internally in default mode,
+# between the main-broken gate and the queue ladder. The sweep call comes
+# AFTER current-worktree continuation, so a session inside an <issue>-*
+# worktree always continues there even when an orphan exists elsewhere.
+# Tests below overwrite the default no-op sweep stub seeded by setup() to
+# exercise the routing branches.
+
+# SR1. (AC b) Inside an active <issue>-* worktree with an orphan elsewhere →
+#      still worktree <N> <branch>. The sweep stub would emit an adoption
+#      directive if invoked; the assert proves it never was.
+echo "Test: worktree continuation precedes sweep adoption (regression — #803)"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
+printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
+# Sweep stub would adopt an orphan at issue 725 if invoked — proves the sweep
+# never ran (current-worktree continuation short-circuited first).
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "worktree 725 725-some-orphan"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "worktree continuation beats sweep adoption" "worktree 42 42-some-slug" "$result"
+teardown
+
+# SR2. (AC c) Outside any worktree, orphan present → worktree-adopted.
+echo "Test: outside any worktree, orphan present → worktree-adopted"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "worktree 725 725-orphan"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "sweep adoption → worktree-adopted 725 725-orphan" "worktree-adopted 725 725-orphan" "$result"
+teardown
+
+# SR3. (AC d) Outside any worktree, no orphan → ladder result.
+echo "Test: outside any worktree, no orphan → ladder result"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Default no-op sweep stub from setup() is unchanged → sweep falls through.
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "no orphan → ladder picks verify PR" "pr 10 10-verify-me verify" "$result"
+teardown
+
+# SR4. cleanup-unknown propagation: sweep exits 3 with stderr "cleanup-unknown:<path>".
+echo "Test: sweep exit 3 + cleanup-unknown stderr → cleanup-unknown <path>"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "cleanup-unknown:/tmp/some-orphan" >&2
+exit 3
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "cleanup-unknown propagated to stdout" "cleanup-unknown /tmp/some-orphan" "$result"
+assert_eq "cleanup-unknown route exits 0" "0" "$rc"
+teardown
+
+# SR5. --no-sweep bypasses the sweep call. A sweep stub that would adopt an
+#      orphan is installed; the flag must prove it was never invoked.
+echo "Test: --no-sweep bypasses the sweep call"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Stub would emit worktree-adopted-style adoption directive if invoked.
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "worktree 725 725-orphan"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target" --no-sweep)
+assert_eq "--no-sweep skips adoption → ladder result" "pr 10 10-verify-me verify" "$result"
+teardown
+
+# SR6. A non-3 non-zero sweep exit logs a diagnostic but falls through to the
+#      ladder — defense-in-depth so a malformed sweep does not stall dispatch.
+echo "Test: sweep exit 2 (unrelated failure) → warning, fall through to ladder"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "some unrelated sweep error" >&2
+exit 2
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null)
+assert_eq "sweep exit 2 → falls through to ladder result" "pr 10 10-verify-me verify" "$result"
+teardown
+
+# SR7. --cleanup-confirm <path> calls dispatch-sweep --cleanup-unknown <path>
+#      first, then re-runs the default sweep+route block. With a sweep stub
+#      that exits 0 / empty stdout on the second call, the script falls
+#      through to the ladder. Proves both calls happen and that routing after
+#      cleanup is identical to default mode.
+echo "Test: --cleanup-confirm <path> runs cleanup then resumes selection"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Sweep stub logs each invocation's args and is silent / exit 0 otherwise.
+cat > "$TMPDIR_TEST/dispatch-sweep" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$STUB_DIR/dispatch-sweep-calls.log"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm "/tmp/some-orphan" 2>/dev/null)
+assert_eq "cleanup-confirm → falls through to ladder result" "pr 10 10-verify-me verify" "$result"
+assert_eq "dispatch-sweep called twice (cleanup + resume)" \
+  "2" "$(wc -l < "$STUB_DIR/dispatch-sweep-calls.log" | tr -d ' ')"
+assert_eq "first sweep call carries --cleanup-unknown <path>" \
+  "--cleanup-unknown /tmp/some-orphan" \
+  "$(sed -n '1p' "$STUB_DIR/dispatch-sweep-calls.log")"
+assert_eq "second sweep call carries no args" \
+  "" "$(sed -n '2p' "$STUB_DIR/dispatch-sweep-calls.log")"
+teardown
+
+# SR8. --cleanup-confirm <path> halts at the next unknown orphan: the
+#      post-cleanup sweep emits cleanup-unknown:<path2> on stderr and exits 3,
+#      and the script propagates cleanup-unknown <path2> on stdout. Proves
+#      multiple unknown orphans iterate one-at-a-time via repeated SKILL.md
+#      AskUserQuestion confirmations rather than being silently consumed.
+echo "Test: --cleanup-confirm <path> halts on the next unknown orphan"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Sweep stub: first call (cleanup) exits 0; second call (resume) emits a new
+# unknown orphan on stderr and exits 3.
+cat > "$TMPDIR_TEST/dispatch-sweep" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$STUB_DIR/dispatch-sweep-calls.log"
+n=\$(wc -l < "$STUB_DIR/dispatch-sweep-calls.log" | tr -d ' ')
+if [[ "\$n" -eq 1 ]]; then
+  exit 0
+else
+  echo "cleanup-unknown:/tmp/second-orphan" >&2
+  exit 3
+fi
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm "/tmp/first-orphan" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "second unknown orphan propagated to stdout" \
+  "cleanup-unknown /tmp/second-orphan" "$result"
+assert_eq "halting on next unknown orphan exits 0" "0" "$rc"
+teardown
+
+# SR9. --cleanup-confirm <path> with a failing dispatch-sweep --cleanup-unknown
+#      call propagates the non-zero exit code (set -e) instead of silently
+#      falling through to the ladder. Proves cleanup failures are fail-loud per
+#      the contract documented at the top of the sweep+route block.
+echo "Test: --cleanup-confirm with failing cleanup propagates non-zero exit"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "dispatch-sweep: invalid cleanup path" >&2
+exit 2
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm "/tmp/bad" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "cleanup failure propagates exit 2" "2" "$rc"
+assert_eq "cleanup failure emits no stdout" "" "$result"
+teardown
+
+# SR10. --cleanup-confirm and --no-sweep are mutually exclusive: combining them
+#       would silently skip the post-cleanup sweep, violating the "resumes
+#       selection" contract.
+echo "Test: --cleanup-confirm + --no-sweep is rejected"
+setup
+if err=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm /tmp/x --no-sweep 2>&1 >/dev/null); then rc=0; else rc=$?; fi
+assert_eq "combining the flags exits 1" "1" "$rc"
+assert_eq "stderr names both flags" \
+  "error: --cleanup-confirm and --no-sweep are mutually exclusive" "$err"
 teardown
 
 # ============================================================================
@@ -2375,8 +2700,11 @@ echo "=== dispatch-sweep ==="
 #
 # Shims:
 #   gh   — gh-pr-list-all.json drives `pr list --state all`; each entry carries
-#          {state, headRefName, number}, partitioned by the script into
-#          MERGED_BY_BRANCH / OPEN_BY_BRANCH.
+#          {state, headRefName, number, isDraft}, partitioned by the script into
+#          MERGED_BY_BRANCH / OPEN_BY_BRANCH / DRAFT_BY_BRANCH (the last for
+#          OPEN entries only). isDraft is required on OPEN entries — the
+#          SKIP_ORPHAN_READY_PR gate reads DRAFT_BY_BRANCH and an OPEN stub
+#          missing isDraft will silently bypass the gate.
 #   git  — knows worktree list/remove/prune, branch -D, -C <p> status,
 #          -C <p> rev-list --count, -C <p> log -1 --format=%ct, and
 #          rev-parse --path-format=absolute --git-common-dir.
@@ -2406,7 +2734,7 @@ sweep_setup() {
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  "pr list --state all --json number,headRefName,state --limit 200")
+  "pr list --state all --json number,headRefName,state,isDraft --limit 200")
     cat "$STUB_DIR/gh-pr-list-all.json"
     ;;
   issue\ view\ *\ --json\ state\ -q\ .state)
@@ -2905,6 +3233,122 @@ else
 fi
 sweep_teardown
 
+# --- Test 12: open non-draft (ready) PR → orphan is skipped -------------------
+
+echo "Test: open non-draft (ready) PR orphan is skipped"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/63-ready-pr"
+sweep_register_wt "$WT_PATH" "63-ready-pr"
+KEY=$(sweep_path_key "$WT_PATH")
+echo "1500000004" > "$STUB_DIR/headct${KEY}.txt"
+# Register an open, non-draft PR for this branch.
+echo '[{"number":200,"headRefName":"63-ready-pr","state":"OPEN","isDraft":false}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "ready-pr sweep exits 0" "0" "$rc"
+assert_eq "ready-pr stdout is empty" "" "$out"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_ORPHAN_READY_PR: '$WT_PATH' branch=63-ready-pr issue=63 pr=#200" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_ORPHAN_READY_PR log line for 63-ready-pr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_ORPHAN_READY_PR log line for 63-ready-pr"
+  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "ADOPT_ORPHAN" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: ADOPT_ORPHAN must NOT appear for ready-PR orphan"
+else
+  PASS=$((PASS + 1)); echo "  PASS: ADOPT_ORPHAN absent for ready-PR orphan"
+fi
+sweep_teardown
+
+# --- Test 13: open draft PR → orphan still adopts -----------------------------
+
+echo "Test: open draft PR orphan still adopts (gate only skips non-draft)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/64-draft-pr"
+sweep_register_wt "$WT_PATH" "64-draft-pr"
+KEY=$(sweep_path_key "$WT_PATH")
+echo "1500000005" > "$STUB_DIR/headct${KEY}.txt"
+echo '[{"number":201,"headRefName":"64-draft-pr","state":"OPEN","isDraft":true}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "draft-pr sweep exits 0" "0" "$rc"
+assert_eq "draft-pr orphan adopted" "worktree 64 64-draft-pr" "$out"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_ORPHAN_READY_PR" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_ORPHAN_READY_PR must NOT fire for draft PR"
+else
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_ORPHAN_READY_PR absent for draft-PR orphan"
+fi
+sweep_teardown
+
+# --- Test 14: ready-PR gate fires even when gh issue view fails ---------------
+#
+# Regression guard for the ordering of the orphan-classification gates: the
+# ready-PR gate uses the already-fetched DRAFT_BY_BRANCH map and must run
+# BEFORE the gh-dependent closed-issue gate. Otherwise a transient
+# `gh issue view` failure on a ready-PR orphan would exit 1 instead of
+# logging SKIP_ORPHAN_READY_PR — adoption was never warranted anyway, since
+# the PR is awaiting human merge.
+
+echo "Test: ready-PR gate fires even when gh issue view fails"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/65-ready-pr-gh-fail"
+sweep_register_wt "$WT_PATH" "65-ready-pr-gh-fail"
+KEY=$(sweep_path_key "$WT_PATH")
+echo "1500000006" > "$STUB_DIR/headct${KEY}.txt"
+echo '[{"number":202,"headRefName":"65-ready-pr-gh-fail","state":"OPEN","isDraft":false}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+# Replace the gh shim so `issue view ... --json state -q .state` exits 1 —
+# simulating a transient gh failure for the issue-state fetch. `pr list` still
+# succeeds (uses the gh-pr-list-all.json fixture above).
+cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  "pr list --state all --json number,headRefName,state,isDraft --limit 200")
+    cat "$STUB_DIR/gh-pr-list-all.json"
+    ;;
+  issue\ view\ *\ --json\ state\ -q\ .state)
+    echo "gh: simulated transient failure" >&2
+    exit 1
+    ;;
+  api\ */dependencies/blocked_by)
+    echo "[]"
+    ;;
+  *)
+    echo "gh sweep stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+chmod +x "$TMPDIR_TEST/bin/gh"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "ready-pr-gh-fail sweep exits 0" "0" "$rc"
+assert_eq "ready-pr-gh-fail stdout is empty" "" "$out"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_ORPHAN_READY_PR: '$WT_PATH' branch=65-ready-pr-gh-fail issue=65 pr=#202" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_ORPHAN_READY_PR fires before failing issue-state gh call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_ORPHAN_READY_PR fires before failing issue-state gh call"
+  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "ERROR_ISSUE_STATE_FETCH" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: ERROR_ISSUE_STATE_FETCH must NOT appear (ready-PR gate ran first)"
+else
+  PASS=$((PASS + 1)); echo "  PASS: ERROR_ISSUE_STATE_FETCH absent (closed-issue gate skipped)"
+fi
+sweep_teardown
+
 # ============================================================================
 # dispatch-acquire-lock tests
 # ============================================================================
@@ -2942,12 +3386,26 @@ lock_teardown() {
 # JSON array of session objects carrying the given sessionIds (and exits 0).
 # Points CLAUDE_AGENTS_CMD at the fake. Call with zero args to simulate an
 # empty registry (`[]`). Safe to re-invoke mid-test: regenerates the fake.
+#
+# Each argument is either a bare sessionId or a `sid=cwd` entry. A bare sid
+# emits `"cwd":""`; a `sid=/path` entry emits `"cwd":"/path"`. The cwd field
+# feeds the marker-based reclaim path in dispatch-acquire-lock — tests that
+# do not care about cwd can keep passing bare sessionIds unchanged.
 lock_fake_claude_sessions() {
   local fake="$TMPDIR_TEST/fake/claude"
-  local payload="[" sid first=1
-  for sid in "$@"; do
+  local payload="[" entry sid cwd first=1
+  for entry in "$@"; do
+    if [[ "$entry" == *=* ]]; then
+      sid="${entry%%=*}"
+      cwd="${entry#*=}"
+    else
+      sid="$entry"
+      cwd=""
+    fi
     if (( first )); then first=0; else payload+=","; fi
-    payload+="{\"sessionId\":\"$sid\",\"pid\":1,\"status\":\"busy\",\"name\":\"x\"}"
+    # Test paths under $TMPDIR_TEST never contain quotes or backslashes, so
+    # raw interpolation is sufficient (no JSON-escaping needed).
+    payload+="{\"sessionId\":\"$sid\",\"pid\":1,\"status\":\"busy\",\"name\":\"x\",\"cwd\":\"$cwd\"}"
   done
   payload+="]"
   printf '%s' "$payload" > "$TMPDIR_TEST/fake/payload.json"
@@ -3390,6 +3848,92 @@ fi
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
 assert_eq "--release missing-session-id leaves the foreign lock intact" \
   "sess-6c-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 20: live foreign holder with marker → reclaim ----------------------
+#
+# A foreign holder's session is still live AND its cwd carries the
+# tmp/dispatch-worktree marker, meaning it has completed Step 5. acquire must
+# reclaim the lock (lenient branch) rather than block.
+
+echo "Test: live foreign holder with marker → reclaim"
+lock_setup
+printf '%s\n' "sess-2020-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-2020-self"
+# Build the foreign holder's marker-bearing cwd inside the test tmp tree.
+foreign_cwd="$TMPDIR_TEST/foreign-worktree"
+mkdir -p "$foreign_cwd/tmp"
+touch "$foreign_cwd/tmp/dispatch-worktree"
+lock_fake_claude_sessions "sess-2020-foreign=$foreign_cwd" "sess-2020-self=$TMPDIR_TEST"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "past-Step-5 holder reclaim exits 0" "0" "$rc"
+assert_eq "past-Step-5 holder reclaim prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "past-Step-5 holder reclaim rewrites lock to caller's sessionId" \
+  "sess-2020-self" "$lock_contents"
+lock_teardown
+
+# --- Test 21: live foreign holder WITHOUT marker → busy (regression) ---------
+#
+# Today's strict blocking behavior on an in-flight Step 0–5 holder MUST be
+# preserved: a live foreign holder whose cwd has no marker is still in
+# selection and the lock must hold it.
+
+echo "Test: live foreign holder without marker → busy (in-flight)"
+lock_setup
+printf '%s\n' "sess-2121-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-2121-self"
+foreign_cwd="$TMPDIR_TEST/foreign-worktree-no-marker"
+mkdir -p "$foreign_cwd"   # cwd exists but marker file does NOT
+lock_fake_claude_sessions "sess-2121-foreign=$foreign_cwd" "sess-2121-self=$TMPDIR_TEST"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "in-flight holder blocks: exits 0" "0" "$rc"
+assert_eq "in-flight holder blocks: prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "in-flight holder blocks: lock file unchanged" \
+  "sess-2121-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 22: --release with marker present → released (lenient) ------------
+#
+# A caller whose CLAUDE_CODE_SESSION_ID differs from the recorded holder can
+# still --release when the holder's cwd carries the marker. Closes the silent
+# `noop` leak that today blocks subsequent /dispatch ticks.
+
+echo "Test: --release with marker present from a different-sessionId caller → released"
+lock_setup
+printf '%s\n' "sess-2222-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-2222-self"
+foreign_cwd="$TMPDIR_TEST/foreign-worktree-with-marker"
+mkdir -p "$foreign_cwd/tmp"
+touch "$foreign_cwd/tmp/dispatch-worktree"
+lock_fake_claude_sessions "sess-2222-foreign=$foreign_cwd" "sess-2222-self=$TMPDIR_TEST"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
+assert_eq "lenient --release exits 0" "0" "$rc"
+assert_eq "lenient --release prints released" "released" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "lenient --release empties the lock file" "" "$lock_contents"
+lock_teardown
+
+# --- Test 23: --release with NO marker → noop (strict pre-marker) -----------
+#
+# Refinement of Test 12: the marker is what flips the verdict to released.
+# Without a marker, a different-sessionId caller's --release stays a noop and
+# the lock file is left intact for the in-flight holder.
+
+echo "Test: --release with foreign holder and NO marker → noop (pre-marker stop path)"
+lock_setup
+printf '%s\n' "sess-2323-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-2323-self"
+foreign_cwd="$TMPDIR_TEST/foreign-worktree-no-marker-release"
+mkdir -p "$foreign_cwd"   # no marker
+lock_fake_claude_sessions "sess-2323-foreign=$foreign_cwd" "sess-2323-self=$TMPDIR_TEST"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
+assert_eq "pre-marker --release exits 0" "0" "$rc"
+assert_eq "pre-marker --release prints noop" "noop" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "pre-marker --release leaves the lock file unchanged" \
+  "sess-2323-foreign" "$lock_contents"
 lock_teardown
 
 # ============================================================================
@@ -3924,56 +4468,56 @@ assert_eq "writer change is visible via the reader" "In Progress" "$status"
 proj_teardown
 
 # ============================================================================
-# dispatch-spawn tests
+# dispatch-spawn-router tests
 # ============================================================================
-echo "=== dispatch-spawn ==="
+echo "=== dispatch-spawn-router ==="
 #
-# dispatch-spawn is exercised against a fake `claude` — a multi-subcommand
-# temp script DISPATCH_SPAWN_CLAUDE_CMD points at by absolute path, so no real
-# daemon is needed. The same fake also backs the sourced lib-claude-agents.sh
-# helper (dispatch-spawn exports CLAUDE_AGENTS_CMD to it).
+# dispatch-spawn-router is exercised against a fake `claude` — a multi-subcommand
+# temp script DISPATCH_SPAWN_ROUTER_CLAUDE_CMD points at by absolute path, so no
+# real daemon is needed. The same fake also backs the sourced lib-claude-agents.sh
+# helper (dispatch-spawn-router exports CLAUDE_AGENTS_CMD to it).
 #
 # Each test gets a fresh tmp tree:
-#   $TMPDIR_TEST/scripts/        copies of dispatch-spawn + lib-claude-agents.sh
+#   $TMPDIR_TEST/scripts/        copies of dispatch-spawn-router + lib-claude-agents.sh
 #   $TMPDIR_TEST/worktrees/main/ the main worktree (the spawn subshell cd's here)
 #   $TMPDIR_TEST/fake-claude     the multi-subcommand fake `claude`
 #   $TMPDIR_TEST/registry.json   the `claude agents --json` fixture
-#   $TMPDIR_TEST/jobs/           the on-disk jobs ledger (DISPATCH_SPAWN_JOBS_DIR)
+#   $TMPDIR_TEST/jobs/           the on-disk jobs ledger (DISPATCH_SPAWN_ROUTER_JOBS_DIR)
 #   $TMPDIR_TEST/bg-argv         recorded argv of each `claude --bg` call
 #   $TMPDIR_TEST/rm-log          recorded job-ids of each `claude rm` call
 #   $TMPDIR_TEST/stop-log        recorded job-ids of each `claude stop` call
 #
-# The test shell runs under `set -e`; dispatch-spawn can exit non-zero, so
+# The test shell runs under `set -e`; dispatch-spawn-router can exit non-zero, so
 # every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
 
-SPAWN_REGISTRY=""
-SPAWN_JOBS_DIR=""
-SPAWN_BG_ARGV=""
-SPAWN_RM_LOG=""
-SPAWN_STOP_LOG=""
+SPAWN_ROUTER_REGISTRY=""
+SPAWN_ROUTER_JOBS_DIR=""
+SPAWN_ROUTER_BG_ARGV=""
+SPAWN_ROUTER_RM_LOG=""
+SPAWN_ROUTER_STOP_LOG=""
 
-# write_fake_spawn_claude — install the multi-subcommand fake `claude`.
+# write_fake_spawn_router_claude — install the multi-subcommand fake `claude`.
 # Dispatches on $1:
 #   agents   — print the registry fixture verbatim. The fake ignores --cwd:
 #              claude_sessions_under does no client-side path filtering — it
 #              trusts server-side `--cwd` filtering — so every fixture session
 #              is returned. Fine here: each fixture holds only sessions a test
-#              means dispatch-spawn to see.
+#              means dispatch-spawn-router to see.
 #   --bg     — record full argv to bg-argv; when SPAWN_BG_REGISTERS=1 (default)
 #              parse --name and jq-append the new agent to the fixture so the
 #              verify step finds it.
 #   rm       — append $2 (the job-id) to rm-log.
 #   stop     — append $2 (the job-id) to stop-log.
-write_fake_spawn_claude() {
+write_fake_spawn_router_claude() {
   cat > "$TMPDIR_TEST/fake-claude" <<FAKE
 #!/usr/bin/env bash
 set -uo pipefail
 case "\${1:-}" in
   agents)
-    cat "$SPAWN_REGISTRY"
+    cat "$SPAWN_ROUTER_REGISTRY"
     ;;
   --bg)
-    printf '%s\n' "\$@" > "$SPAWN_BG_ARGV"
+    printf '%s\n' "\$@" > "$SPAWN_ROUTER_BG_ARGV"
     if [[ "\${SPAWN_BG_REGISTERS:-1}" == "1" ]]; then
       name=""
       while [[ \$# -gt 0 ]]; do
@@ -3983,67 +4527,68 @@ case "\${1:-}" in
       tmp=\$(mktemp)
       jq --arg name "\$name" \
         '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":"/main","kind":"background","status":"busy","name":\$name}]' \
-        "$SPAWN_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_REGISTRY"
+        "$SPAWN_ROUTER_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_ROUTER_REGISTRY"
     fi
     ;;
   rm)
-    printf '%s\n' "\${2:-}" >> "$SPAWN_RM_LOG"
+    shift
+    printf '%s\n' "\${1:-}" >> "$SPAWN_ROUTER_RM_LOG"
     ;;
   stop)
-    printf '%s\n' "\${2:-}" >> "$SPAWN_STOP_LOG"
+    printf '%s\n' "\${2:-}" >> "$SPAWN_ROUTER_STOP_LOG"
     ;;
 esac
 FAKE
   chmod +x "$TMPDIR_TEST/fake-claude"
 }
 
-spawn_setup() {
+spawn_router_setup() {
   TMPDIR_TEST=$(mktemp -d)
   mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/worktrees/main" \
     "$TMPDIR_TEST/jobs"
 
-  # dispatch-spawn sources lib-claude-agents.sh from its own directory, so the
+  # dispatch-spawn-router sources lib-claude-agents.sh from its own directory, so the
   # helper must sit alongside the copy. It is sourced, not executed — no chmod.
-  cp "$SCRIPT_DIR/dispatch-spawn" "$TMPDIR_TEST/scripts/dispatch-spawn"
+  cp "$SCRIPT_DIR/dispatch-spawn-router" "$TMPDIR_TEST/scripts/dispatch-spawn-router"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
-  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-router"
 
-  SPAWN_REGISTRY="$TMPDIR_TEST/registry.json"
-  SPAWN_JOBS_DIR="$TMPDIR_TEST/jobs"
-  SPAWN_BG_ARGV="$TMPDIR_TEST/bg-argv"
-  SPAWN_RM_LOG="$TMPDIR_TEST/rm-log"
-  SPAWN_STOP_LOG="$TMPDIR_TEST/stop-log"
-  printf '[]' > "$SPAWN_REGISTRY"
+  SPAWN_ROUTER_REGISTRY="$TMPDIR_TEST/registry.json"
+  SPAWN_ROUTER_JOBS_DIR="$TMPDIR_TEST/jobs"
+  SPAWN_ROUTER_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_ROUTER_RM_LOG="$TMPDIR_TEST/rm-log"
+  SPAWN_ROUTER_STOP_LOG="$TMPDIR_TEST/stop-log"
+  printf '[]' > "$SPAWN_ROUTER_REGISTRY"
 
-  export DISPATCH_SPAWN_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
-  export DISPATCH_SPAWN_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
-  export DISPATCH_SPAWN_SESSION_ID="sess-self"
-  export DISPATCH_SPAWN_JOBS_DIR="$SPAWN_JOBS_DIR"
+  export DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+  export DISPATCH_SPAWN_ROUTER_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+  export DISPATCH_SPAWN_ROUTER_SESSION_ID="sess-self"
+  export DISPATCH_SPAWN_ROUTER_JOBS_DIR="$SPAWN_ROUTER_JOBS_DIR"
 }
 
-spawn_teardown() {
+spawn_router_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
-  SPAWN_REGISTRY=""
-  SPAWN_JOBS_DIR=""
-  SPAWN_BG_ARGV=""
-  SPAWN_RM_LOG=""
-  SPAWN_STOP_LOG=""
-  unset DISPATCH_SPAWN_MAIN_WORKTREE DISPATCH_SPAWN_CLAUDE_CMD \
-    DISPATCH_SPAWN_SESSION_ID DISPATCH_SPAWN_JOBS_DIR SPAWN_BG_REGISTERS
+  SPAWN_ROUTER_REGISTRY=""
+  SPAWN_ROUTER_JOBS_DIR=""
+  SPAWN_ROUTER_BG_ARGV=""
+  SPAWN_ROUTER_RM_LOG=""
+  SPAWN_ROUTER_STOP_LOG=""
+  unset DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE DISPATCH_SPAWN_ROUTER_CLAUDE_CMD \
+    DISPATCH_SPAWN_ROUTER_SESSION_ID DISPATCH_SPAWN_ROUTER_JOBS_DIR SPAWN_BG_REGISTERS
 }
 
 # --- Test 1: spawn success ---------------------------------------------------
 
 echo "Test: an empty registry spawns one /dispatch background job"
-spawn_setup
-write_fake_spawn_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "spawn: dispatch-spawn exits 0" "0" "$rc"
+spawn_router_setup
+write_fake_spawn_router_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "spawn: dispatch-spawn-router exits 0" "0" "$rc"
 assert_eq "spawn: stdout is 'spawned'" "spawned" "$out"
 # The recorded argv must be exactly: --bg --name dispatch-<id> \
 #   --permission-mode auto /dispatch
-mapfile -t bg_argv < "$SPAWN_BG_ARGV"
+mapfile -t bg_argv < "$SPAWN_ROUTER_BG_ARGV"
 assert_eq "spawn: argv[0] is --bg" "--bg" "${bg_argv[0]:-}"
 assert_eq "spawn: argv[1] is --name" "--name" "${bg_argv[1]:-}"
 case "${bg_argv[2]:-}" in
@@ -4054,57 +4599,57 @@ assert_eq "spawn: argv[2] is a dispatch-* agent name" "yes" "$name_ok"
 assert_eq "spawn: argv[3] is --permission-mode" "--permission-mode" "${bg_argv[3]:-}"
 assert_eq "spawn: argv[4] is auto" "auto" "${bg_argv[4]:-}"
 assert_eq "spawn: argv[5] is /dispatch" "/dispatch" "${bg_argv[5]:-}"
-spawn_teardown
+spawn_router_teardown
 
 # --- Test 2: dedup -----------------------------------------------------------
 
 echo "Test: another live dispatch-* session deduplicates the spawn"
-spawn_setup
+spawn_router_setup
 printf '%s' \
   '[{"sessionId":"sess-other","pid":4242,"cwd":"/main","kind":"background","status":"busy","name":"dispatch-aaaa1111"}]' \
-  > "$SPAWN_REGISTRY"
-write_fake_spawn_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "dedup: dispatch-spawn exits 0" "0" "$rc"
+  > "$SPAWN_ROUTER_REGISTRY"
+write_fake_spawn_router_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "dedup: dispatch-spawn-router exits 0" "0" "$rc"
 assert_eq "dedup: stdout is 'deduped'" "deduped" "$out"
 # No --bg invocation was recorded — nothing was spawned.
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$SPAWN_BG_ARGV" ]]; then
+if [[ ! -e "$SPAWN_ROUTER_BG_ARGV" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: dedup: no 'claude --bg' invocation recorded"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: dedup: no 'claude --bg' invocation recorded"
-  echo "    bg-argv: $(cat "$SPAWN_BG_ARGV")"
+  echo "    bg-argv: $(cat "$SPAWN_ROUTER_BG_ARGV")"
 fi
-spawn_teardown
+spawn_router_teardown
 
 # --- Test 3: self-exclusion --------------------------------------------------
 
 echo "Test: a dispatch-* session that is this session does not deduplicate"
-spawn_setup
+spawn_router_setup
 # The only dispatch-* session in the registry IS this session (sess-self).
 printf '%s' \
   '[{"sessionId":"sess-self","pid":4242,"cwd":"/main","kind":"background","status":"busy","name":"dispatch-self0000"}]' \
-  > "$SPAWN_REGISTRY"
-write_fake_spawn_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "self-exclude: dispatch-spawn exits 0" "0" "$rc"
+  > "$SPAWN_ROUTER_REGISTRY"
+write_fake_spawn_router_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "self-exclude: dispatch-spawn-router exits 0" "0" "$rc"
 assert_eq "self-exclude: stdout is 'spawned' (own session is not 'another')" \
   "spawned" "$out"
-spawn_teardown
+spawn_router_teardown
 
 # --- Test 4: spawn failure ---------------------------------------------------
 
 echo "Test: a spawned job that never registers exits non-zero with a diagnostic"
-spawn_setup
-write_fake_spawn_claude
+spawn_router_setup
+write_fake_spawn_router_claude
 export SPAWN_BG_REGISTERS=0
 rc=0
-err=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>&1 1>/dev/null) || rc=$?
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>&1 1>/dev/null) || rc=$?
 TOTAL=$((TOTAL + 1))
 if [[ "$rc" -ne 0 ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-fail: dispatch-spawn exits non-zero"
+  PASS=$((PASS + 1)); echo "  PASS: spawn-fail: dispatch-spawn-router exits non-zero"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-fail: dispatch-spawn exits non-zero (rc=$rc)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-fail: dispatch-spawn-router exits non-zero (rc=$rc)"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ "$err" == *"did not register"* ]]; then
@@ -4113,30 +4658,30 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: spawn-fail: stderr reports the unregistered agent"
   echo "    stderr: $err"
 fi
-spawn_teardown
+spawn_router_teardown
 
 # --- Test 5: prune -----------------------------------------------------------
 
 echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
-spawn_setup
+spawn_router_setup
 # Seed the on-disk ledger with three entries:
 #   abcd1234  — stopped dispatch-* (the rm target)
 #   ef015678  — stopped non-dispatch (must NOT be pruned)
 #   9999cccc  — live (working) dispatch-* (must NOT be pruned)
-mkdir -p "$SPAWN_JOBS_DIR/abcd1234" "$SPAWN_JOBS_DIR/ef015678" \
-  "$SPAWN_JOBS_DIR/9999cccc"
+mkdir -p "$SPAWN_ROUTER_JOBS_DIR/abcd1234" "$SPAWN_ROUTER_JOBS_DIR/ef015678" \
+  "$SPAWN_ROUTER_JOBS_DIR/9999cccc"
 printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
-  > "$SPAWN_JOBS_DIR/abcd1234/state.json"
+  > "$SPAWN_ROUTER_JOBS_DIR/abcd1234/state.json"
 printf '%s' '{"name":"manual-session","state":"stopped"}' \
-  > "$SPAWN_JOBS_DIR/ef015678/state.json"
+  > "$SPAWN_ROUTER_JOBS_DIR/ef015678/state.json"
 printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
-  > "$SPAWN_JOBS_DIR/9999cccc/state.json"
-write_fake_spawn_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "prune: dispatch-spawn exits 0" "0" "$rc"
+  > "$SPAWN_ROUTER_JOBS_DIR/9999cccc/state.json"
+write_fake_spawn_router_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "prune: dispatch-spawn-router exits 0" "0" "$rc"
 assert_eq "prune: stdout is 'spawned' (stopped agent does not dedup)" \
   "spawned" "$out"
-rm_log=$(cat "$SPAWN_RM_LOG" 2>/dev/null || true)
+rm_log=$(cat "$SPAWN_ROUTER_RM_LOG" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$rm_log" == *"abcd1234"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: prune: 'claude rm abcd1234' (directory basename, not sessionId) was invoked"
@@ -4158,41 +4703,355 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: prune: live dispatch-* agent '9999cccc' was not pruned"
   echo "    rm-log: $rm_log"
 fi
-spawn_teardown
+spawn_router_teardown
 
 # --- Test 6: unqueryable registry fails safe ---------------------------------
 
 echo "Test: an unparseable session registry fails safe — spawns nothing"
-spawn_setup
+spawn_router_setup
 # A registry that is not a JSON array: lib-claude-agents.sh's
-# claude_sessions_under cannot parse it and returns 1 (unknown). dispatch-spawn
+# claude_sessions_under cannot parse it and returns 1 (unknown). dispatch-spawn-router
 # must treat unknown as "a dispatch agent may be running" and spawn nothing —
 # the documented fail-safe in the script's Step 3 dedup guard.
-printf '%s' 'not-a-json-array' > "$SPAWN_REGISTRY"
-write_fake_spawn_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "unknown-registry: dispatch-spawn exits 0" "0" "$rc"
+printf '%s' 'not-a-json-array' > "$SPAWN_ROUTER_REGISTRY"
+write_fake_spawn_router_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "unknown-registry: dispatch-spawn-router exits 0" "0" "$rc"
 assert_eq "unknown-registry: stdout is 'deduped'" "deduped" "$out"
 # No --bg invocation was recorded — nothing was spawned.
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$SPAWN_BG_ARGV" ]]; then
+if [[ ! -e "$SPAWN_ROUTER_BG_ARGV" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: unknown-registry: no 'claude --bg' invocation recorded"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: unknown-registry: no 'claude --bg' invocation recorded"
-  echo "    bg-argv: $(cat "$SPAWN_BG_ARGV")"
+  echo "    bg-argv: $(cat "$SPAWN_ROUTER_BG_ARGV")"
 fi
-spawn_teardown
+spawn_router_teardown
+
+# ============================================================================
+# dispatch-spawn-worker tests
+# ============================================================================
+echo "=== dispatch-spawn-worker ==="
+#
+# dispatch-spawn-worker is exercised against a fake `claude` — a multi-subcommand
+# temp script DISPATCH_SPAWN_WORKER_CLAUDE_CMD points at by absolute path, so
+# no real daemon is needed. The same fake also backs the sourced
+# lib-claude-agents.sh helper (dispatch-spawn-worker exports CLAUDE_AGENTS_CMD
+# to it).
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/dispatch-spawn-worker  copy of the script under test
+#   $TMPDIR_TEST/scripts/lib-claude-agents.sh   sourced helper (not chmod'd)
+#   $TMPDIR_TEST/worktrees/main/                backdrop only (not used by script)
+#   $TMPDIR_TEST/worktrees/839-test-worker/     the target worktree path (arg 2)
+#   $TMPDIR_TEST/fake-claude                    the multi-subcommand fake `claude`
+#   $TMPDIR_TEST/registry.json                  `claude agents --json` fixture
+#   $TMPDIR_TEST/jobs/                          on-disk jobs ledger
+#   $TMPDIR_TEST/bg-argv                        recorded argv of each `claude --bg` call
+#   $TMPDIR_TEST/pwd-log                        new: records the spawn subshell's $PWD
+#                                               so Test 2 can assert the script
+#                                               cd'd into the worktree path.
+#   $TMPDIR_TEST/rm-log                         recorded job-ids of each `claude rm` call
+#
+# The test shell runs under `set -e`; dispatch-spawn-worker can exit non-zero,
+# so every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
+
+SPAWN_WORKER_REGISTRY=""
+SPAWN_WORKER_JOBS_DIR=""
+SPAWN_WORKER_BG_ARGV=""
+SPAWN_WORKER_PWD_LOG=""
+SPAWN_WORKER_RM_LOG=""
+WORKER_TARGET_WORKTREE=""
+
+# write_fake_spawn_worker_claude — install the multi-subcommand fake `claude`.
+# Dispatches on $1:
+#   agents   — print the registry fixture verbatim. The fake ignores --cwd:
+#              claude_sessions_under does no client-side path filtering — it
+#              trusts server-side `--cwd` filtering — so every fixture session
+#              is returned. Fine here: each fixture holds only sessions a test
+#              means dispatch-spawn-worker to see.
+#   --bg     — record full argv to bg-argv AND record $PWD to pwd-log; when
+#              SPAWN_BG_REGISTERS=1 (default) parse --name and jq-append the
+#              new agent to the fixture so the verify step finds it.
+#   rm       — append $2 (the job-id) to rm-log.
+write_fake_spawn_worker_claude() {
+  cat > "$TMPDIR_TEST/fake-claude" <<FAKE
+#!/usr/bin/env bash
+set -uo pipefail
+case "\${1:-}" in
+  agents)
+    cat "$SPAWN_WORKER_REGISTRY"
+    ;;
+  --bg)
+    pwd >> "$SPAWN_WORKER_PWD_LOG"
+    printf '%s\n' "\$@" > "$SPAWN_WORKER_BG_ARGV"
+    if [[ "\${SPAWN_BG_REGISTERS:-1}" == "1" ]]; then
+      name=""
+      while [[ \$# -gt 0 ]]; do
+        if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
+        shift
+      done
+      tmp=\$(mktemp)
+      jq --arg name "\$name" \
+        '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":"/worker","kind":"background","status":"busy","name":\$name}]' \
+        "$SPAWN_WORKER_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_WORKER_REGISTRY"
+    fi
+    ;;
+  rm)
+    shift
+    printf '%s\n' "\${1:-}" >> "$SPAWN_WORKER_RM_LOG"
+    ;;
+esac
+FAKE
+  chmod +x "$TMPDIR_TEST/fake-claude"
+}
+
+spawn_worker_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" \
+    "$TMPDIR_TEST/worktrees/main" \
+    "$TMPDIR_TEST/worktrees/839-test-worker" \
+    "$TMPDIR_TEST/jobs"
+
+  # dispatch-spawn-worker sources lib-claude-agents.sh from its own directory,
+  # so the helper must sit alongside the copy. It is sourced, not executed —
+  # no chmod.
+  cp "$SCRIPT_DIR/dispatch-spawn-worker" "$TMPDIR_TEST/scripts/dispatch-spawn-worker"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-worker"
+
+  SPAWN_WORKER_REGISTRY="$TMPDIR_TEST/registry.json"
+  SPAWN_WORKER_JOBS_DIR="$TMPDIR_TEST/jobs"
+  SPAWN_WORKER_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_WORKER_PWD_LOG="$TMPDIR_TEST/pwd-log"
+  SPAWN_WORKER_RM_LOG="$TMPDIR_TEST/rm-log"
+  WORKER_TARGET_WORKTREE="$TMPDIR_TEST/worktrees/839-test-worker"
+  printf '[]' > "$SPAWN_WORKER_REGISTRY"
+
+  export DISPATCH_SPAWN_WORKER_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+  export DISPATCH_SPAWN_WORKER_SESSION_ID="sess-self"
+  export DISPATCH_SPAWN_WORKER_JOBS_DIR="$SPAWN_WORKER_JOBS_DIR"
+}
+
+spawn_worker_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  SPAWN_WORKER_REGISTRY=""
+  SPAWN_WORKER_JOBS_DIR=""
+  SPAWN_WORKER_BG_ARGV=""
+  SPAWN_WORKER_PWD_LOG=""
+  SPAWN_WORKER_RM_LOG=""
+  WORKER_TARGET_WORKTREE=""
+  unset DISPATCH_SPAWN_WORKER_CLAUDE_CMD DISPATCH_SPAWN_WORKER_SESSION_ID \
+    DISPATCH_SPAWN_WORKER_JOBS_DIR SPAWN_BG_REGISTERS
+}
+
+# --- Test 1: spawn success ---------------------------------------------------
+
+echo "Test: an empty registry spawns one /dispatch-worker background job"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "spawn-worker: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "spawn-worker: stdout is 'spawned'" "spawned" "$out"
+# The recorded argv must be exactly: --bg --name dispatch-839-<id>
+#   --permission-mode auto /dispatch-worker 839
+mapfile -t sw_bg_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-worker: argv[0] is --bg" "--bg" "${sw_bg_argv[0]:-}"
+assert_eq "spawn-worker: argv[1] is --name" "--name" "${sw_bg_argv[1]:-}"
+case "${sw_bg_argv[2]:-}" in
+  dispatch-839-*) sw_name_ok=yes ;;
+  *)              sw_name_ok="no: ${sw_bg_argv[2]:-}" ;;
+esac
+assert_eq "spawn-worker: argv[2] is a dispatch-839-* agent name" "yes" "$sw_name_ok"
+assert_eq "spawn-worker: argv[3] is --permission-mode" "--permission-mode" "${sw_bg_argv[3]:-}"
+assert_eq "spawn-worker: argv[4] is auto" "auto" "${sw_bg_argv[4]:-}"
+assert_eq "spawn-worker: argv[5] is /dispatch-worker 839" "/dispatch-worker 839" "${sw_bg_argv[5]:-}"
+spawn_worker_teardown
+
+# --- Test 2: cwd assertion ---------------------------------------------------
+
+echo "Test: the spawn subshell cd's into the target worktree path"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "spawn-worker-cwd: exits 0" "0" "$rc"
+# Read the first line of the pwd-log and compare it (via realpath) to the
+# target worktree. mktemp -d on Linux does not add a /private/ prefix, but
+# realpath is robust on all platforms.
+sw_pwd_line=$(head -1 "$SPAWN_WORKER_PWD_LOG" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" == "$(realpath "$WORKER_TARGET_WORKTREE")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: spawn subshell ran in the target worktree"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: spawn subshell ran in the target worktree"
+  echo "    pwd-log:  '$sw_pwd_line'"
+  echo "    expected: '$WORKER_TARGET_WORKTREE'"
+fi
+spawn_worker_teardown
+
+# --- Test 3: per-worktree dedup ----------------------------------------------
+
+echo "Test: another live dispatch-* session under the worktree deduplicates the spawn"
+spawn_worker_setup
+printf '%s' \
+  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"dispatch-839-aaaa1111"}]' \
+  > "$SPAWN_WORKER_REGISTRY"
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "dedup-worker: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "dedup-worker: stdout is 'deduped'" "deduped" "$out"
+# No --bg invocation was recorded — nothing was spawned.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: dedup-worker: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: dedup-worker: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
+fi
+spawn_worker_teardown
+
+# --- Test 4: self-exclusion --------------------------------------------------
+
+echo "Test: a dispatch-* session that is this session does not deduplicate"
+spawn_worker_setup
+# The only dispatch-* session in the registry IS this session (sess-self).
+printf '%s' \
+  '[{"sessionId":"sess-self","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"dispatch-839-self0000"}]' \
+  > "$SPAWN_WORKER_REGISTRY"
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "self-exclude-worker: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "self-exclude-worker: stdout is 'spawned' (own session is not 'another')" \
+  "spawned" "$out"
+spawn_worker_teardown
+
+# --- Test 5: spawn failure ---------------------------------------------------
+
+echo "Test: a spawned worker job that never registers exits non-zero with a diagnostic"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export SPAWN_BG_REGISTERS=0
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>&1 1>/dev/null) || rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-fail: dispatch-spawn-worker exits non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-fail: dispatch-spawn-worker exits non-zero (rc=$rc)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"did not register"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-fail: stderr reports the unregistered agent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-fail: stderr reports the unregistered agent"
+  echo "    stderr: $err"
+fi
+spawn_worker_teardown
+
+# --- Test 6: prune -----------------------------------------------------------
+
+echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
+spawn_worker_setup
+# Seed the on-disk ledger with three entries:
+#   abcd1234  — stopped dispatch-* (the rm target)
+#   ef015678  — stopped non-dispatch (must NOT be pruned)
+#   9999cccc  — live (working) dispatch-* (must NOT be pruned)
+mkdir -p "$SPAWN_WORKER_JOBS_DIR/abcd1234" "$SPAWN_WORKER_JOBS_DIR/ef015678" \
+  "$SPAWN_WORKER_JOBS_DIR/9999cccc"
+printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
+  > "$SPAWN_WORKER_JOBS_DIR/abcd1234/state.json"
+printf '%s' '{"name":"manual-session","state":"stopped"}' \
+  > "$SPAWN_WORKER_JOBS_DIR/ef015678/state.json"
+printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
+  > "$SPAWN_WORKER_JOBS_DIR/9999cccc/state.json"
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "prune-worker: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "prune-worker: stdout is 'spawned' (stopped agent does not dedup)" \
+  "spawned" "$out"
+sw_rm_log=$(cat "$SPAWN_WORKER_RM_LOG" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$sw_rm_log" == *"abcd1234"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
+  echo "    rm-log: $sw_rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$sw_rm_log" != *"ef015678"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune-worker: non-dispatch agent 'ef015678' was not pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: non-dispatch agent 'ef015678' was not pruned"
+  echo "    rm-log: $sw_rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$sw_rm_log" != *"9999cccc"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune-worker: live dispatch-* agent '9999cccc' was not pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: live dispatch-* agent '9999cccc' was not pruned"
+  echo "    rm-log: $sw_rm_log"
+fi
+spawn_worker_teardown
+
+# --- Test 7: unqueryable registry fails safe ---------------------------------
+
+echo "Test: an unparseable session registry fails safe — spawns nothing"
+spawn_worker_setup
+# A registry that is not a JSON array: lib-claude-agents.sh's
+# claude_sessions_under cannot parse it and returns 1 (unknown).
+# dispatch-spawn-worker must treat unknown as "a dispatch agent may be running"
+# and spawn nothing — the documented fail-safe in the script's Step 3 dedup
+# guard.
+printf '%s' 'not-a-json-array' > "$SPAWN_WORKER_REGISTRY"
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "unknown-registry-worker: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "unknown-registry-worker: stdout is 'deduped'" "deduped" "$out"
+# No --bg invocation was recorded — nothing was spawned.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: unknown-registry-worker: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unknown-registry-worker: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
+fi
+spawn_worker_teardown
+
+# --- Test 8: missing args ----------------------------------------------------
+
+echo "Test: missing arguments exit 2"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+
+# Sub-case A: no args at all
+if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 2>/dev/null; then sw_rc_a=0; else sw_rc_a=$?; fi
+assert_eq "missing-args-worker: no args → exit 2" "2" "$sw_rc_a"
+
+# Sub-case B: only <N> given (no <worktree-path>)
+if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 2>/dev/null; then sw_rc_b=0; else sw_rc_b=$?; fi
+assert_eq "missing-args-worker: only <N> given → exit 2" "2" "$sw_rc_b"
+
+# Sub-case C: three args given (extra argument)
+if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" extra 2>/dev/null; then sw_rc_c=0; else sw_rc_c=$?; fi
+assert_eq "missing-args-worker: three args → exit 2" "2" "$sw_rc_c"
+
+# Sub-case D: non-integer issue number rejected
+if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" "not-a-number" "$WORKER_TARGET_WORKTREE" 2>/dev/null; then sw_rc_d=0; else sw_rc_d=$?; fi
+assert_eq "missing-args-worker: non-integer <N> → exit 2" "2" "$sw_rc_d"
+
+spawn_worker_teardown
 
 # ============================================================================
 # dispatch-self-close tests
 # ============================================================================
 echo "=== dispatch-self-close ==="
 #
-# dispatch-self-close runs `claude stop <job-id>` against the basename of
-# $CLAUDE_JOB_DIR. The fake `claude` records its argv in SPAWN_STOP_LOG (see
+# dispatch-self-close runs `claude rm <job-id>` against the basename of
+# $CLAUDE_JOB_DIR. The fake `claude` records its argv in SPAWN_RM_LOG (see
 # write_fake_spawn_claude). When CLAUDE_JOB_DIR is unset, the script is a no-op
 # — the foreground-safe gate that protects an interactive /dispatch from
-# stopping the user's live conversation.
+# deleting the user's live conversation.
 
 selfclose_setup() {
   TMPDIR_TEST=$(mktemp -d)
@@ -4200,16 +5059,16 @@ selfclose_setup() {
   cp "$SCRIPT_DIR/dispatch-self-close" "$TMPDIR_TEST/scripts/dispatch-self-close"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-self-close"
 
-  # Reuse the dispatch-spawn fake `claude` writer: it already dispatches on
-  # `stop` and appends $2 to SPAWN_STOP_LOG. The unused SPAWN_REGISTRY /
-  # SPAWN_BG_ARGV / SPAWN_RM_LOG paths still need to be set because the writer
-  # interpolates them into the fake-claude script body.
-  SPAWN_REGISTRY="$TMPDIR_TEST/registry.json"
-  SPAWN_BG_ARGV="$TMPDIR_TEST/bg-argv"
-  SPAWN_RM_LOG="$TMPDIR_TEST/rm-log"
-  SPAWN_STOP_LOG="$TMPDIR_TEST/stop-log"
-  printf '[]' > "$SPAWN_REGISTRY"
-  write_fake_spawn_claude
+  # Reuse the dispatch-spawn-router fake `claude` writer: it already dispatches on
+  # `rm` and appends $2 to SPAWN_ROUTER_RM_LOG. The unused SPAWN_ROUTER_REGISTRY /
+  # SPAWN_ROUTER_BG_ARGV / SPAWN_ROUTER_STOP_LOG paths still need to be set because
+  # the writer interpolates them into the fake-claude script body.
+  SPAWN_ROUTER_REGISTRY="$TMPDIR_TEST/registry.json"
+  SPAWN_ROUTER_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_ROUTER_RM_LOG="$TMPDIR_TEST/rm-log"
+  SPAWN_ROUTER_STOP_LOG="$TMPDIR_TEST/stop-log"
+  printf '[]' > "$SPAWN_ROUTER_REGISTRY"
+  write_fake_spawn_router_claude
 
   export DISPATCH_SELF_CLOSE_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
 }
@@ -4217,24 +5076,24 @@ selfclose_setup() {
 selfclose_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
-  SPAWN_REGISTRY=""
-  SPAWN_BG_ARGV=""
-  SPAWN_RM_LOG=""
-  SPAWN_STOP_LOG=""
+  SPAWN_ROUTER_REGISTRY=""
+  SPAWN_ROUTER_BG_ARGV=""
+  SPAWN_ROUTER_RM_LOG=""
+  SPAWN_ROUTER_STOP_LOG=""
   unset DISPATCH_SELF_CLOSE_CLAUDE_CMD CLAUDE_JOB_DIR
 }
 
-# --- Test 1: managed-job → stops itself --------------------------------------
+# --- Test 1: managed-job → deletes itself -------------------------------------
 
-echo "Test: a managed background job stops itself by job-id (basename of CLAUDE_JOB_DIR)"
+echo "Test: a managed background job deletes itself by job-id (basename of CLAUDE_JOB_DIR)"
 selfclose_setup
 mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 if out=$("$TMPDIR_TEST/scripts/dispatch-self-close" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "self-close: dispatch-self-close exits 0" "0" "$rc"
-stop_log=$(cat "$SPAWN_STOP_LOG" 2>/dev/null || true)
-assert_eq "self-close: 'claude stop abcd1234' was invoked (basename, not full path)" \
-  "abcd1234" "$stop_log"
+rm_log=$(cat "$SPAWN_ROUTER_RM_LOG" 2>/dev/null || true)
+assert_eq "self-close: 'claude rm abcd1234' was invoked (basename, not full path)" \
+  "abcd1234" "$rm_log"
 selfclose_teardown
 
 # --- Test 2: interactive → no-op ---------------------------------------------
@@ -4253,11 +5112,11 @@ else
   echo "    stderr: $err"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$SPAWN_STOP_LOG" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: interactive: no 'claude stop' invocation recorded"
+if [[ ! -e "$SPAWN_ROUTER_RM_LOG" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: interactive: no 'claude rm' invocation recorded"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: interactive: no 'claude stop' invocation recorded"
-  echo "    stop-log: $(cat "$SPAWN_STOP_LOG")"
+  FAIL=$((FAIL + 1)); echo "  FAIL: interactive: no 'claude rm' invocation recorded"
+  echo "    rm-log: $(cat "$SPAWN_ROUTER_RM_LOG")"
 fi
 selfclose_teardown
 
@@ -5171,6 +6030,281 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: strip (non-issue): no gh call was invoked"
 fi
 ohs_teardown
+
+# ============================================================================
+# ensure_deps (lib.sh) retry tests
+# ============================================================================
+echo ""
+echo "=== ensure_deps retry ==="
+
+# These tests use a fresh TMPDIR_TEST with a STUB_DIR holding npm and sleep
+# shims on PATH. lib.sh is sourced from SCRIPT_DIR (not the TMPDIR_TEST copy)
+# so ensure_deps resolves directly. REPO_ROOT is a fresh tmpdir with no
+# node_modules — forcing the install branch every time.
+
+# 1. ensure_deps retries and succeeds on attempt 3.
+echo "Test: ensure_deps retries and succeeds on attempt 3"
+TMPDIR_TEST=$(mktemp -d)
+STUB_DIR="$TMPDIR_TEST/stub"
+mkdir -p "$STUB_DIR"
+REPO_ROOT_TEST=$(mktemp -d)
+
+# npm stub: fail on calls 1 and 2; succeed on call 3.
+cat > "$STUB_DIR/npm" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")" && pwd)"
+count_file="$STUB_DIR/npm-count"
+count=0
+[ -f "$count_file" ] && count=$(cat "$count_file")
+count=$((count + 1))
+echo "$count" > "$count_file"
+if [ "$count" -lt 3 ]; then
+  exit 1
+fi
+exit 0
+STUB
+chmod +x "$STUB_DIR/npm"
+
+# sleep stub: no-op.
+cat > "$STUB_DIR/sleep" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$STUB_DIR/sleep"
+
+export PATH="$STUB_DIR:$SAVED_PATH"
+rc=0
+( export REPO_ROOT="$REPO_ROOT_TEST"; source "$SCRIPT_DIR/lib.sh"; ensure_deps ) || rc=$?
+assert_eq "ensure_deps succeeds on attempt 3 (exit code)" "0" "$rc"
+npm_count=0
+[ -f "$STUB_DIR/npm-count" ] && npm_count=$(cat "$STUB_DIR/npm-count")
+assert_eq "ensure_deps called npm exactly 3 times" "3" "$npm_count"
+
+rm -rf "$TMPDIR_TEST" "$REPO_ROOT_TEST"
+TMPDIR_TEST=""
+STUB_DIR=""
+export PATH="$SAVED_PATH"
+
+# 2. ensure_deps fails after exhausting all 3 attempts.
+echo "Test: ensure_deps fails after exhausting all 3 attempts"
+TMPDIR_TEST=$(mktemp -d)
+STUB_DIR="$TMPDIR_TEST/stub"
+mkdir -p "$STUB_DIR"
+REPO_ROOT_TEST=$(mktemp -d)
+
+# npm stub: always fails.
+cat > "$STUB_DIR/npm" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")" && pwd)"
+count_file="$STUB_DIR/npm-count"
+count=0
+[ -f "$count_file" ] && count=$(cat "$count_file")
+count=$((count + 1))
+echo "$count" > "$count_file"
+exit 1
+STUB
+chmod +x "$STUB_DIR/npm"
+
+# sleep stub: no-op.
+cat > "$STUB_DIR/sleep" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$STUB_DIR/sleep"
+
+export PATH="$STUB_DIR:$SAVED_PATH"
+rc=0
+( export REPO_ROOT="$REPO_ROOT_TEST"; source "$SCRIPT_DIR/lib.sh"; ensure_deps ) || rc=$?
+TOTAL=$((TOTAL + 1))
+if [ "$rc" -ne 0 ]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: ensure_deps returns non-zero after 3 failed attempts"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: ensure_deps returns non-zero after 3 failed attempts"
+  echo "    expected non-zero, got 0"
+fi
+npm_count=0
+[ -f "$STUB_DIR/npm-count" ] && npm_count=$(cat "$STUB_DIR/npm-count")
+assert_eq "ensure_deps tried npm exactly 3 times before giving up" "3" "$npm_count"
+
+rm -rf "$TMPDIR_TEST" "$REPO_ROOT_TEST"
+TMPDIR_TEST=""
+STUB_DIR=""
+export PATH="$SAVED_PATH"
+
+# ============================================================================
+# /dispatch router smoke (Step 5 create + Step 6 spawn)
+# ============================================================================
+# Pin the shell sequence documented in /dispatch SKILL.md Step 5's `create`
+# branch and Step 6, by faking every external binary the sequence calls and
+# asserting each fake was invoked with the expected arguments. This is a
+# documentation-pinning test, not a behaviour test of the router itself: it
+# catches the case where someone edits Step 5/6 in SKILL.md and forgets to
+# update the spawn call, or where the documented shell sequence drifts from
+# what the script expects.
+#
+# Tested sequence (matches /dispatch SKILL.md Step 5 create + Step 6):
+#   GIT_COMMON_DIR=...                                       # faked git
+#   PROJECT_ROOT=...
+#   WORKTREE_PATH="$PROJECT_ROOT/worktrees/<branch>"
+#   git worktree add -b <branch> "$WORKTREE_PATH" origin/main
+#   direnv allow "$WORKTREE_PATH"
+#   direnv exec "$WORKTREE_PATH" true
+#   (cd "$WORKTREE_PATH" && sync-issue-context <N>)
+#   (cd "$WORKTREE_PATH" && mkdir -p tmp && touch tmp/dispatch-worktree)
+#   dispatch-spawn-worker <N> "$WORKTREE_PATH"
+echo ""
+echo "=== /dispatch router smoke (Step 5 create + Step 6 spawn) ==="
+
+router_smoke_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/bin" "$TMPDIR_TEST/logs"
+
+  # Faked PROJECT_ROOT — mock the layout `git rev-parse --git-common-dir`
+  # would return (parent is the project root by the same idiom dispatch-spawn-router /
+  # dispatch-acquire-lock use).
+  mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
+
+  # Fake `git` — only supports the two subcommands the Step 5 create sequence
+  # calls: `rev-parse --git-common-dir` (used for resolving PROJECT_ROOT) and
+  # `worktree add -b <branch> <path> origin/main`. Each invocation appends its
+  # full argv to a per-binary log. The rev-parse path returns the faked
+  # .bare/ absolute path.
+  cat > "$TMPDIR_TEST/bin/git" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/git.log"
+case "\$*" in
+  "rev-parse --path-format=absolute --git-common-dir")
+    echo "$TMPDIR_TEST/project/.bare"
+    ;;
+  "worktree add -b "*)
+    # No-op; the smoke test does not need a real worktree on disk.
+    ;;
+  *)
+    echo "fake git: unexpected invocation: \$*" >&2
+    exit 99
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/git"
+
+  # Fake `direnv` — record its argv only.
+  cat > "$TMPDIR_TEST/bin/direnv" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/direnv.log"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/direnv"
+
+  # Fake `sync-issue-context` — record cwd + argv.
+  cat > "$TMPDIR_TEST/bin/sync-issue-context" <<STUB
+#!/usr/bin/env bash
+echo "cwd=\$PWD argv=\$*" >> "$TMPDIR_TEST/logs/sync-issue-context.log"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/sync-issue-context"
+
+  # Fake `dispatch-spawn-worker` — record argv only.
+  cat > "$TMPDIR_TEST/bin/dispatch-spawn-worker" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/dispatch-spawn-worker.log"
+echo spawned
+STUB
+  chmod +x "$TMPDIR_TEST/bin/dispatch-spawn-worker"
+
+  export PATH="$TMPDIR_TEST/bin:$SAVED_PATH"
+}
+
+router_smoke_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  export PATH="$SAVED_PATH"
+}
+
+echo "Test: Step 5 create + Step 6 sequence invokes git, direnv, sync, and spawn-worker with the right args"
+router_smoke_setup
+
+# Run the documented shell sequence inline. The variable names match SKILL.md.
+BRANCH="839-test"
+ISSUE_NUM="839"
+GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir)
+PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
+WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
+# The fake `git worktree add` does not actually create the directory, so make
+# it here so the subshell `cd "$WORKTREE_PATH"` for sync-issue-context and the
+# recovery marker creation succeed.
+mkdir -p "$WORKTREE_PATH"
+git worktree add -b "$BRANCH" "$WORKTREE_PATH" origin/main
+direnv allow "$WORKTREE_PATH"
+direnv exec "$WORKTREE_PATH" true
+(cd "$WORKTREE_PATH" && sync-issue-context "$ISSUE_NUM")
+(cd "$WORKTREE_PATH" && mkdir -p tmp && touch tmp/dispatch-worktree)
+dispatch-spawn-worker "$ISSUE_NUM" "$WORKTREE_PATH"
+
+# Assertions: each fake binary's log captures one expected invocation.
+assert_eq "git worktree add args" \
+  "worktree add -b 839-test $WORKTREE_PATH origin/main" \
+  "$(grep '^worktree add' "$TMPDIR_TEST/logs/git.log")"
+assert_eq "direnv allow args" \
+  "allow $WORKTREE_PATH" \
+  "$(grep '^allow' "$TMPDIR_TEST/logs/direnv.log")"
+assert_eq "direnv exec args" \
+  "exec $WORKTREE_PATH true" \
+  "$(grep '^exec' "$TMPDIR_TEST/logs/direnv.log")"
+assert_eq "recovery marker created in target worktree" "1" \
+  "$([ -f "$WORKTREE_PATH/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
+assert_eq "sync-issue-context cwd + arg" \
+  "cwd=$WORKTREE_PATH argv=839" \
+  "$(cat "$TMPDIR_TEST/logs/sync-issue-context.log")"
+assert_eq "dispatch-spawn-worker args" \
+  "839 $WORKTREE_PATH" \
+  "$(cat "$TMPDIR_TEST/logs/dispatch-spawn-worker.log")"
+
+router_smoke_teardown
+
+# ============================================================================
+# dispatch chain: no EnterWorktree/ExitWorktree mid-session (ratchet for #839)
+# ============================================================================
+echo "=== dispatch chain: no EnterWorktree/ExitWorktree mid-session ==="
+#
+# Regression guard for #839: the dispatch chain — router /dispatch and the
+# skills the worker (/dispatch-worker) invokes — must not call EnterWorktree
+# or ExitWorktree. The worker is born in its target worktree (cwd set by
+# dispatch-spawn-worker); any mid-session worktree switch is at best a no-op
+# and at worst an error. The router runs in worktrees/main and materializes
+# the target worktree explicitly (git worktree add).
+#
+# Allowed exception: dispatch-worker/SKILL.md mentions the words in its
+# preamble contract: "It never calls EnterWorktree or ExitWorktree."
+
+PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
+
+# Map of chain-skill SKILL.md → allowed count of EnterWorktree+ExitWorktree
+# substring mentions (grep -oE counts each occurrence, not each line).
+declare -A CHAIN_GUARD_EXPECTED=(
+  [".claude/skills/dispatch/SKILL.md"]=0
+  [".claude/skills/dispatch-worker/SKILL.md"]=2
+  [".claude/skills/dispatch-qa/SKILL.md"]=0
+  [".claude/skills/plan-implement/SKILL.md"]=0
+  [".claude/skills/code-review-fix/SKILL.md"]=0
+  [".claude/skills/review-fix/SKILL.md"]=0
+  [".claude/skills/security-review-fix/SKILL.md"]=0
+  [".claude/skills/verify-pr/SKILL.md"]=0
+  [".claude/skills/implement-unit/SKILL.md"]=0
+  [".claude/skills/commit-merge-push/SKILL.md"]=0
+)
+
+for relpath in "${!CHAIN_GUARD_EXPECTED[@]}"; do
+  abspath="$PROJECT_ROOT_FOR_GUARD/$relpath"
+  expected="${CHAIN_GUARD_EXPECTED[$relpath]}"
+  if [[ ! -f "$abspath" ]]; then
+    TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+    echo "  FAIL: chain-guard: file missing: $relpath"
+    continue
+  fi
+  actual=$({ grep -oE 'EnterWorktree|ExitWorktree' "$abspath" || true; } | wc -l | tr -d ' ')
+  assert_eq "chain-guard: $relpath: EnterWorktree/ExitWorktree count" \
+    "$expected" "$actual"
+done
 
 # ============================================================================
 # summary
