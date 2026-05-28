@@ -157,9 +157,22 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    .claude/skills/dispatch/scripts/post-pr-comment.sh <pr-num> tmp/verify-summary.md
    ```
 
-8. **Stop.** The `/dispatch` background-job chain drives the next iteration —
-   the next `/dispatch` job re-derives the phase from CI ground truth and
-   re-invokes `/verify-pr` if checks still fail.
+8. **Hand off.** Derive the issue number from the branch:
+
+   ```bash
+   ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | cut -d- -f1)
+   ```
+
+   Then run, in order:
+
+   - `ExitWorktree action: "keep"` — return to the main worktree.
+   - `.claude/skills/dispatch/scripts/dispatch-handoff "$ISSUE_NUM" --phase-completed`
+     (`dangerouslyDisableSandbox: true`).
+
+   `dispatch-handoff` spawns the next `/dispatch` background job — which
+   re-derives the phase from CI ground truth and re-invokes `/verify-pr` if
+   checks still fail — and self-closes this one. All four outcomes (Fix,
+   Generic no-repro, Main already fixed it, Flake) converge here.
 
 ## Accumulator
 

@@ -71,9 +71,22 @@ The body has one `Closes #N` line per issue implemented in this PR — the prima
 issue plus any implemented sub-issues or blockers. This draft PR is the
 implement→verify transition marker.
 
-### 4. Stop
+### 4. Hand off
 
-Stop. The next `/dispatch` background job advances to the `verify` phase.
+Derive the issue number from the branch:
+
+```bash
+ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | cut -d- -f1)
+```
+
+Then run, in order:
+
+- `ExitWorktree action: "keep"` — return to the main worktree.
+- `.claude/skills/dispatch/scripts/dispatch-handoff "$ISSUE_NUM" --phase-completed`
+  (`dangerouslyDisableSandbox: true`).
+
+`dispatch-handoff` spawns the next `/dispatch` background job (which advances
+to the `verify` phase) and self-closes this one.
 
 ## Requirement changes mid-session
 

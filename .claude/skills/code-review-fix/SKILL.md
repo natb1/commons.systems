@@ -171,6 +171,21 @@ steps in order.
    `dispatch:security-reviewed` — so `/dispatch` does not apply the label after
    this skill returns.
 
+8. **Hand off.** Derive the issue number from the branch:
+
+   ```bash
+   ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | cut -d- -f1)
+   ```
+
+   Then run, in order:
+
+   - `ExitWorktree action: "keep"` — return to the main worktree.
+   - `.claude/skills/dispatch/scripts/dispatch-handoff "$ISSUE_NUM" --phase-completed`
+     (`dangerouslyDisableSandbox: true`).
+
+   `dispatch-handoff` spawns the next `/dispatch` background job (which
+   advances to the `review` phase) and self-closes this one.
+
 ## Finding classification
 
 Every `/code-review` finding lands in exactly one of four buckets:

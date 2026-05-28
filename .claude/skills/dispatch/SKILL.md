@@ -51,15 +51,19 @@ Route on `$LOCK`:
 - **`acquired`** → this `/dispatch` holds the lock; proceed to Step 1.
 - **`busy`** → the wait timeout elapsed without acquiring — a wedged selection
   in another `/dispatch`. The script's **stderr** carries a one-line diagnostic
-  naming the wait duration and the holding sessionId; report those then **exit
-  via Step 9** (early-stop — `dispatch-handoff --early-stop`) — run no sync, no
-  health gate, no sweep, no selection, and no phase skill.
+  naming the wait duration and the holding sessionId; report those, then run
+  the terminal sequence:
+  - `ExitWorktree action: "keep"` — return to the main worktree.
+  - `.claude/skills/dispatch/scripts/dispatch-handoff --early-stop`
+    (`dangerouslyDisableSandbox: true`).
+
+  Run no sync, no health gate, no sweep, no selection, and no phase skill.
 
 ### Releasing the lock
 
 The lock covers **Steps 0-5 only** — target selection and worktree resolution.
-Steps 6-9 (the phase skill, the pre-implementation relevance review, and the
-hand-off) run with the lock **released**.
+Steps 6-8 (the phase skill and the pre-implementation relevance review) run
+with the lock **released**.
 
 Release happens at exactly two kinds of point, each with its own canonical
 command:
@@ -68,8 +72,9 @@ command:
   `dispatch-finalize-selection`. The wrapper writes the
   `tmp/dispatch-worktree` marker (see *Step 5* and the marker paragraph below)
   and execs `dispatch-acquire-lock --release` in one step.
-- **Every Steps 1-5 stop path** — immediately before reporting the stop reason
-  and proceeding to Step 9 (early-stop), run
+- **Every Steps 1-5 stop path** — immediately before the terminal sequence
+  (the `ExitWorktree` + `dispatch-handoff --early-stop` pair shown at each
+  stop callsite below), run
   `.claude/skills/dispatch/scripts/dispatch-acquire-lock --release` directly.
   Stop paths fire before the marker is written, so the strict
   `CLAUDE_CODE_SESSION_ID`-match branch applies.
@@ -122,8 +127,12 @@ It is a no-op when local `main` already equals `origin/main`.
 
 - If `git fetch` fails, or `git merge --ff-only` rejects a non-fast-forward (local
   `main` has diverged with unexpected commits), release the lock (see *Releasing
-  the lock*), surface the error, then **exit via Step 9** (early-stop —
-  `dispatch-handoff --early-stop`) — do not proceed to target selection.
+  the lock*), surface the error, then run the terminal sequence:
+  - `ExitWorktree action: "keep"` — return to the main worktree.
+  - `.claude/skills/dispatch/scripts/dispatch-handoff --early-stop`
+    (`dangerouslyDisableSandbox: true`).
+
+  Do not proceed to target selection.
 
 ## 2. Run the JIT Engine
 
@@ -166,11 +175,14 @@ continue to target selection.
   - **Exit 0** → `$TARGET` is the target issue number; that issue is the target.
     Skip the queue scan.
   - **Non-zero exit** → release the lock (see *Releasing the lock*), report the
-    script's stderr message, then **exit via Step 9** (early-stop —
-    `dispatch-handoff --early-stop`); create no worktree. This covers a PR
-    that closes no issue, a PR that closes more than one issue, and an argument
-    that is neither an issue nor a PR — consistent with the other Steps 1-5 stop
-    paths.
+    script's stderr message, then run the terminal sequence:
+    - `ExitWorktree action: "keep"` — return to the main worktree.
+    - `.claude/skills/dispatch/scripts/dispatch-handoff --early-stop`
+      (`dangerouslyDisableSandbox: true`).
+
+    Create no worktree. This covers a PR that closes no issue, a PR that closes
+    more than one issue, and an argument that is neither an issue nor a PR —
+    consistent with the other Steps 1-5 stop paths.
 
 - **No argument** → run target selection. A single invocation decides every
   Step 3 outcome: current-worktree continuation, JIT, main-broken gate, sweep
@@ -191,9 +203,12 @@ continue to target selection.
   - `worktree-closed <N> <branch>` — the current branch is `<N>-…` and issue
     `<N>` is closed or unrecognized. Release the lock (see *Releasing the
     lock*), report that the current worktree belongs to closed/unrecognized
-    issue `<N>`, then **exit via Step 9** (early-stop — `dispatch-handoff
-    --early-stop`) (consistent with the named-target "closed → report and stop"
-    rule in Step 4).
+    issue `<N>`, then run the terminal sequence:
+    - `ExitWorktree action: "keep"` — return to the main worktree.
+    - `.claude/skills/dispatch/scripts/dispatch-handoff --early-stop`
+      (`dangerouslyDisableSandbox: true`).
+
+    Consistent with the named-target "closed → report and stop" rule in Step 4.
   - `worktree-adopted <N> <branch>` — `dispatch-sweep` adopted an orphaned
     worktree elsewhere on disk. Skip Step 4 and proceed to Step 5 with `<N>` and
     mode `explicit` — treat the adoption like an explicit `/dispatch <N>`.
@@ -214,18 +229,19 @@ continue to target selection.
     for routing here. Treat the returned line as a fresh `$SELECTED` and route
     on it as above. This is the only sweep path that can destroy
     potentially-unmerged code.
-  - `main-broken <sha>` — invoke `/dispatch-diagnose-main <sha>`, then
-    **proceed to Step 9** (early-stop). The skill owns the failing-check
-    enumeration, log-fetch, summary, lock-release, and stop.
+  - `main-broken <sha>` — invoke `/dispatch-diagnose-main <sha>`. The skill
+    owns lock-release, failing-check enumeration, log-fetch, summary, and the
+    terminal handoff (`dispatch-handoff --early-stop`).
   - `jit-reminder <repo> <num> <project> <item-id>` — invoke
-    `/dispatch-jit-reminder <repo> <num> <project> <item-id>`, then stop the
-    tick directly (the skill is a Step 9 bypass — its user-visible summary must
-    stay open in the transcript for a human to read). The skill owns the claim
-    + lock-release + summarize + stop sequence; Steps 4, 5, and 6-7 are all
-    skipped.
+    `/dispatch-jit-reminder <repo> <num> <project> <item-id>`. The skill owns
+    the claim + lock-release + summarize + stop sequence; it stays open in the
+    transcript by design (no terminal handoff — its user-visible summary must
+    remain for a human to read). Steps 4, 5, and 6-7 are all skipped.
   - `empty` — nothing eligible. Release the lock (see *Releasing the lock*),
-    report that the queue is empty, then **exit via Step 9** (early-stop —
-    `dispatch-handoff --early-stop`).
+    report that the queue is empty, then run the terminal sequence:
+    - `ExitWorktree action: "keep"` — return to the main worktree.
+    - `.claude/skills/dispatch/scripts/dispatch-handoff --early-stop`
+      (`dangerouslyDisableSandbox: true`).
 
   An **explicit issue argument overrides current-worktree detection** — the
   selection script, and therefore its current-worktree detection, runs only
@@ -300,13 +316,21 @@ Skip leaf tracing when:
 
 If the resolved target issue `<N>` has any **open** blocker — run
 `issue-blocking <N>` and check for any entry with `state` `OPEN` — release the
-lock (see *Releasing the lock*), report the open blocker, then **exit via
-Step 9** (early-stop — `dispatch-handoff --early-stop`). This guard applies
-even when a PR exists; closed blockers do not gate.
+lock (see *Releasing the lock*), report the open blocker, then run the terminal
+sequence:
+
+- `ExitWorktree action: "keep"` — return to the main worktree.
+- `.claude/skills/dispatch/scripts/dispatch-handoff --early-stop`
+  (`dangerouslyDisableSandbox: true`).
+
+This guard applies even when a PR exists; closed blockers do not gate.
 
 If a named target issue is **closed**, release the lock (see *Releasing the
-lock*), report it, then **exit via Step 9** (early-stop — `dispatch-handoff
---early-stop`).
+lock*), report it, then run the terminal sequence:
+
+- `ExitWorktree action: "keep"` — return to the main worktree.
+- `.claude/skills/dispatch/scripts/dispatch-handoff --early-stop`
+  (`dangerouslyDisableSandbox: true`).
 
 ## 5. Resolve the Worktree
 
@@ -341,9 +365,12 @@ one of `path` (switch to an existing worktree) or `name` (create a new one).
   another session owns it. (`dispatch-select-target` resolves the `help wanted`
   tier to a leaf with no worktree, so for a queue selection this arises only from
   a race — another session created the worktree between selection and worktree
-  resolution.) Release the lock (see *Releasing the lock*), then report the
-  conflict (name `<path>` and issue `<N>`), then **exit via Step 9**
-  (early-stop — `dispatch-handoff --early-stop`); do not `EnterWorktree`.
+  resolution.) Release the lock (see *Releasing the lock*), report the conflict
+  (name `<path>` and issue `<N>`), then run the terminal sequence (do **not**
+  `EnterWorktree` first — no worktree was entered):
+  - `ExitWorktree action: "keep"` — no-op when `EnterWorktree` was not called.
+  - `.claude/skills/dispatch/scripts/dispatch-handoff --early-stop`
+    (`dangerouslyDisableSandbox: true`).
 
 As the **final action of this step on every non-`conflict` (proceed) path** —
 before Step 6 — run:
@@ -405,7 +432,7 @@ Map the phase:
 | `code-review` | draft PR + `dispatch:qa-done` | `/code-review-fix` (applies `dispatch:code-reviewed` itself) |
 | `review` | draft PR + `dispatch:code-reviewed` | `/review-fix` (applies `dispatch:reviewed` itself) |
 | `security` | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` — re-entry; `/security-review-fix` is idempotent) | `/security-review-fix` (applies `dispatch:security-reviewed` and marks ready itself) |
-| `done` | non-draft (ready) PR | already complete — report, then Step 9 (early-stop) |
+| `done` | non-draft (ready) PR | already complete — report, then early-stop (see `done` in Step 7) |
 
 ## 7. Dispatch One Phase, Then Stop
 
@@ -435,8 +462,10 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
      this step — `/verify-pr` if any check failed, otherwise the green-CI
      phases (`qa` / `code-review` / `review` / `security` / `ready`).
   4. If the re-derived phase is still `waiting` (CI never registered any check),
-     report it, then **exit via Step 9** (early-stop — `dispatch-handoff
-     --early-stop`) — do not loop.
+     report it, then run the terminal sequence (do not loop):
+     - `ExitWorktree action: "keep"` — return to the main worktree.
+     - `.claude/skills/dispatch/scripts/dispatch-handoff --early-stop`
+       (`dangerouslyDisableSandbox: true`).
 - **`qa`** — invoke `/dispatch-qa`. It owns and applies `dispatch:qa-done` itself on
   a clean pass; `/dispatch` applies no label.
 - **`code-review`** — invoke `/code-review-fix`. It runs `/code-review max`, applies the
@@ -452,16 +481,22 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
   CodeQL alerts — then applies the required fixes, posts a PR comment, applies
   the `dispatch:security-reviewed` label, and marks the PR ready. It is
   idempotent on re-entry — `/dispatch` applies no label.
-- **`done`** — report that the PR is already ready, then **exit via Step 9**
-  (early-stop — `dispatch-handoff --early-stop`). No phase skill ran, so Step 9
-  spawns no successor and self-closes.
+- **`done`** — report that the PR is already ready, then run the terminal
+  sequence:
+  - `ExitWorktree action: "keep"` — return to the main worktree.
+  - `.claude/skills/dispatch/scripts/dispatch-handoff --early-stop`
+    (`dangerouslyDisableSandbox: true`).
+
+  No phase skill ran, so the handoff spawns no successor and self-closes.
 
 The PR stays a **draft** through every phase; the `security` phase's
 `/security-review-fix` flips it to ready as the workflow's terminal action.
 
-After the one phase skill has run to completion, **exit via Step 9**
-(phase-completed — `dispatch-handoff <N> --phase-completed`) — do not advance
-to the next phase here; Step 9 hands off and ends the job.
+Each phase skill owns its own clean-completion terminal handoff — it returns
+to the main worktree (`ExitWorktree action: "keep"`) and runs
+`dispatch-handoff <N> --phase-completed`, which spawns the successor
+`/dispatch` job and self-closes. `/dispatch` itself does **not** advance to
+the next phase after the skill returns — the skill has already ended the job.
 
 `/ultrareview` is intentionally **never** invoked: it is user-triggered and billed,
 so `/dispatch` cannot launch it.
@@ -556,73 +591,8 @@ always owns the verdict.
   understanding, then `/plan-implement`.
 - **`stop`** — codebase has moved past the need; report what changed and recommend
   closing the issue or re-running `/ready`. Do **not** invoke `/plan-implement`;
-  **exit via Step 9** (early-stop — `dispatch-handoff --early-stop`).
+  run the terminal sequence:
+  - `ExitWorktree action: "keep"` — return to the main worktree.
+  - `.claude/skills/dispatch/scripts/dispatch-handoff --early-stop`
+    (`dangerouslyDisableSandbox: true`).
 
-## 9. Hand off and self-close
-
-Every Step 0–8 termination routes here — Step 9 is the single way a `/dispatch`
-job ends. A job that just finished a phase passes the baton to a fresh
-`/dispatch` job and self-closes; that self-perpetuating chain, re-seeded by the
-#725 heartbeat, is what advances the workflow.
-
-The one documented exception is the **jit-reminder** outcome in Step 3,
-handled by the `/dispatch-jit-reminder` skill: by design it bypasses Step 9
-and stops directly, because its user-visible summary must stay open in the
-transcript for a human to read — self-closing the job would hide it. See the
-jit summary session note in the `/dispatch-jit-reminder` skill.
-
-Each termination reaches Step 9 with one of two dispositions, named by the step
-that routed here:
-
-- **phase-completed** — a phase skill (`/plan-implement`, `/verify-pr`,
-  `/dispatch-qa`, `/code-review-fix`, `/review-fix`, or `/security-review-fix`)
-  ran to completion. Only the Step 7 post-dispatch hand-off arrives this way.
-- **early-stop** — the job stopped before any phase skill ran: a busy lock, a
-  fetch / non-fast-forward failure, an empty queue, `main-broken`, a resolver
-  failure, a `worktree-closed` or closed-issue target, a worktree `conflict`, a
-  `waiting` phase that stayed `waiting`, a `done` PR, or an `implement`
-  relevance verdict of `stop`.
-
-Step 9 is two tool calls in fixed order. Both Bash calls run with
-`dangerouslyDisableSandbox: true` (the handoff script invokes `gh`,
-`dispatch-spawn`, and `dispatch-self-close`, all of which reach `gh` over the
-network or the Claude daemon over a Unix socket — see
-`.claude/rules/sandbox.md`).
-
-**1. Return to the main worktree.** If this job entered an issue worktree via
-`EnterWorktree` in Step 5 (the `enter` and `create` outcomes), call
-`ExitWorktree` with `action: "keep"`: return to the main worktree and leave the
-issue worktree on disk as an adoptable orphan. This must run **before** the
-hand-off below, so the successor's selection scan does not misread this
-still-finishing job as a live session owning the issue worktree. `ExitWorktree`
-is a no-op when `EnterWorktree` was not called this session, so it is harmless
-on the early stops that never reached a worktree.
-
-**2. Hand off via the scripted entrypoint.** On a phase-completed disposition,
-pass the target issue number:
-
-```bash
-.claude/skills/dispatch/scripts/dispatch-handoff <N> --phase-completed
-```
-
-On an early-stop disposition, pass no issue number:
-
-```bash
-.claude/skills/dispatch/scripts/dispatch-handoff --early-stop
-```
-
-`dispatch-handoff` is the scripted terminal disposition. Its decision is
-computed from observable state — spawn exit code and PR labels — rather than
-free-text interpretation; the script's header carries the full behavior
-table. In summary: on `--phase-completed` it spawns the successor
-(`dispatch-spawn` — the baton pass), reads the PR's labels via
-`dispatch-find-pr` and `gh pr view`, and either self-closes via
-`dispatch-self-close` (the happy path) or — when `dispatch:office-hours` is on
-the PR — exits without self-closing so the deviation stays visible for human
-review. A spawn failure surfaces stderr and exits non-zero without
-self-closing, so a failed baton-pass is visible too. On `--early-stop` the
-script skips the spawn (the #725 heartbeat re-seeds the chain) and hands off
-directly to `dispatch-self-close`. The self-close primitive is a no-op when
-`CLAUDE_JOB_DIR` is unset (the session is interactive, not a managed
-background job) — so an interactive `/dispatch` reaching Step 9 does not stop
-the user's live conversation.

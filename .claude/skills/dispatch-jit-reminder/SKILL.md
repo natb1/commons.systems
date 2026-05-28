@@ -12,11 +12,10 @@ Invoked by `/dispatch` Step 3 when `dispatch-select-target` reports
 Takes four arguments: `<repo> <num> <project> <item-id>`.
 
 Claim the issue, release the dispatch lock, summarize the issue for the
-user, and stop. On this skill's return, the caller (`/dispatch` Step 3)
-**bypasses Step 9** and stops directly — the summary printed here must stay
-open in the transcript for a human to read, and Step 9's terminal
-disposition would self-close the job and hide it. Steps 4, 5, and 6-7 of
-`/dispatch` are all skipped — no worktree, no PR, no phase skill, no leaf
+user, and stop. This skill **does not** run a terminal handoff: the summary
+printed here must stay open in the transcript for a human to read, and
+`dispatch-handoff` would self-close the job and hide it. Steps 4, 5, and 6-7
+of `/dispatch` are all skipped — no worktree, no PR, no phase skill, no leaf
 trace.
 
 Run `gh`-calling commands with `dangerouslyDisableSandbox: true` — see

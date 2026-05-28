@@ -278,7 +278,7 @@ The QA pass covers **public data only** — documents present in both the QA ser
 
    On the non-browser path, no QA server was started — skip cleanup.
 
-8. **Clean pass — apply the `dispatch:qa-done` label, then stop.**
+8. **Clean pass — apply the `dispatch:qa-done` label, then hand off.**
 
    This step runs **only on a clean pass** — the walkthrough completed with no bug
    found. On the bug-fix path (Step 5), the skill has already stopped and this step
@@ -304,4 +304,19 @@ The QA pass covers **public data only** — documents present in both the QA ser
    The script applies the label, creating it first only if it does not yet exist
    (e.g. on a fork where it has not been created).
 
-   Then **stop**. `/loop /dispatch` advances to the next phase.
+   Then hand off. Derive the issue number from the branch:
+
+   ```bash
+   ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | cut -d- -f1)
+   ```
+
+   Then run, in order:
+
+   - `ExitWorktree action: "keep"` — return to the main worktree.
+   - `.claude/skills/dispatch/scripts/dispatch-handoff "$ISSUE_NUM" --phase-completed`
+     (`dangerouslyDisableSandbox: true`).
+
+   `dispatch-handoff` spawns the next `/dispatch` background job (which
+   advances to the `code-review` phase) and self-closes this one. The bug-fix
+   path (Step 5) does **not** reach this hand-off — that path stops open for
+   the user to re-dispatch.

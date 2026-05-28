@@ -235,7 +235,23 @@ ready. Otherwise run all steps in order.
    gh pr ready "$PR_NUM"
    ```
 
-   This is the workflow's terminal action.
+   This flips the PR to ready — the workflow's terminal product change.
+
+8. **Hand off.** Derive the issue number from the branch:
+
+   ```bash
+   ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | cut -d- -f1)
+   ```
+
+   Then run, in order:
+
+   - `ExitWorktree action: "keep"` — return to the main worktree.
+   - `.claude/skills/dispatch/scripts/dispatch-handoff "$ISSUE_NUM" --phase-completed`
+     (`dangerouslyDisableSandbox: true`).
+
+   `dispatch-handoff` self-closes this job. The PR is now ready, so the
+   successor `/dispatch` tick (spawned by the handoff) will see no further
+   `dispatch:*`-pending work on it and route to the next queue item.
 
 ## Per-finding schema
 
@@ -278,4 +294,5 @@ PR-comment summaries are the audit trail. This is an intentional trade-off for a
 autonomous `/dispatch` background-job run.
 
 The skill is idempotent: a re-invocation with `dispatch:security-reviewed` already
-on the PR skips Steps 1–6 and only ensures the PR is ready (Step 7).
+on the PR skips Steps 1–6 and only ensures the PR is ready (Step 7), then hands
+off (Step 8).

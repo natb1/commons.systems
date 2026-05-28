@@ -205,12 +205,30 @@ already applied, so re-entry is a true no-op. Otherwise run all steps in order.
    regardless of whether any fixes were made, so a no-findings run still
    advances the workflow.
 
-9. **Print the 4-section final report.** Print, in the conversation, the same
-   4-section body that was posted to the PR in Step 7 — reuse the body file
-   written under `tmp/` rather than regenerating it. On a no-findings run,
-   every section renders `_None._` and the skill still terminates cleanly.
+9. **Hand off (autonomous terminus).** Derive the issue number from the branch:
 
-10. **Interactive follow-up (attended use only).** If the user requests a fix
+   ```bash
+   ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | cut -d- -f1)
+   ```
+
+   Then run, in order:
+
+   - `ExitWorktree action: "keep"` — return to the main worktree.
+   - `.claude/skills/dispatch/scripts/dispatch-handoff "$ISSUE_NUM" --phase-completed`
+     (`dangerouslyDisableSandbox: true`).
+
+   `dispatch-handoff` spawns the next `/dispatch` background job (which
+   advances to the `security` phase) and self-closes this one. This is the
+   skill's terminal action on the autonomous path; the attended-only Steps 10
+   and 11 below do not run because the session has already closed.
+
+10. **Print the 4-section final report (attended use only).** Print, in the
+    conversation, the same 4-section body that was posted to the PR in Step 7
+    — reuse the body file written under `tmp/` rather than regenerating it.
+    On a no-findings run, every section renders `_None._` and the skill still
+    terminates cleanly.
+
+11. **Interactive follow-up (attended use only).** If the user requests a fix
     for a remaining finding (typically from the Informational, Dismissed, or
     Deferred buckets), implement it (working-tree edits only), fork
     `/commit-merge-push` to commit and push it, and document it on the PR with
@@ -218,14 +236,17 @@ already applied, so re-entry is a true no-op. Otherwise run all steps in order.
 
 ## Autonomous vs. attended
 
-In an autonomous `/dispatch` background job there is no user to drive Step 10 —
-the skill applies the `dispatch:reviewed` label (Step 8) and stops; the Step 9
-4-section report is informational. The label is applied regardless of whether
-any fixes were made, so `/dispatch` can always advance to the next phase.
+In an autonomous `/dispatch` background job there is no user to drive Steps 10
+and 11 — the skill applies the `dispatch:reviewed` label (Step 8), hands off
+to the successor `/dispatch` job (Step 9), and self-closes. The Step 10 chat
+print and Step 11 interactive follow-up only fire in attended mode (no
+self-close happens because `dispatch-self-close` is a no-op when
+`CLAUDE_JOB_DIR` is unset). The label is applied regardless of whether any
+fixes were made, so `/dispatch` can always advance to the next phase.
 
 ## Notes
 
 The skill is idempotent: a re-invocation with `dispatch:reviewed` already on the
-PR skips Steps 1–10 and returns. Step 10 (interactive follow-up) is in the skip
+PR skips Steps 1–11 and returns. Step 11 (interactive follow-up) is in the skip
 range because attended follow-up edits would be made directly, not by re-running
 the wrapper.
