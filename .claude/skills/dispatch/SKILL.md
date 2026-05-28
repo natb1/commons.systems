@@ -262,9 +262,10 @@ continue to target selection.
     + lock-release + summarize + stop sequence; Steps 4, 5, and 6 are all
     skipped.
   - `empty` — nothing eligible. Release the lock (see *Releasing the lock*),
-    then proceed to Step 7 with `drain empty-queue` — the user-visible report
-    is mandatory there ("queue empty — closing; #725 restart will re-check at
-    9 AM"), not optional.
+    then proceed to Step 7 with `notify empty-queue` — the user-visible report
+    is mandatory there ("queue empty — session staying open for diagnostics;
+    #725 restart will re-check at 9 AM"), not optional. The session stays open
+    so the no-work state is visible rather than buried in a closed transcript.
 
   Priority order the script implements, top to bottom: JIT scan →
   `origin/main` CI health gate → sweep orphan adoption → topic-category ×
@@ -430,10 +431,11 @@ worktree path that Step 6 will pass to `dispatch-spawn-worker`.
   tier to a leaf with no worktree, so for a queue selection this arises only from
   a race — another session created the worktree between selection and worktree
   resolution.) Release the lock (see *Releasing the lock*), then proceed to
-  Step 7 with `drain worktree-conflict` — the user-visible report is mandatory
+  Step 7 with `notify worktree-conflict` — the user-visible report is mandatory
   there ("worktree at `<path>` owned by another live session for issue `<N>`;
-  closing — #725 restart will re-check at 9 AM"), not optional. Do not spawn a
-  worker.
+  session staying open for diagnostics — #725 restart will re-check at 9 AM"),
+  not optional. The session stays open so the race state is visible rather than
+  buried in a closed transcript. Do not spawn a worker.
 
 On every non-`conflict` path, before the worker is spawned, create the recovery
 marker **inside the target worktree** (`$WORKTREE_PATH`):
@@ -579,11 +581,13 @@ the action.
 
 **Invariant**: the only silent terminal path is `propagate` on success.
 Every other terminal disposition — `propagate` falling through to `notify
-spawn-failed` on a failed spawn, every `notify <reason>` variance, every
-`drain <reason>` no-work case — emits a user-visible report before the
-session ends (before `dispatch-self-close` for `drain` and `propagate`;
-before this turn's text output completes for `notify`, which does not
-self-close). A silent `notify` or silent `drain` is a defect.
+spawn-failed` on a failed spawn, every `notify <reason>` variance, the lone
+`drain concurrency-cap` no-work case — emits a user-visible report before
+the session ends. `drain concurrency-cap` and `propagate` self-close via
+`dispatch-self-close`; every `notify` (including the reclassified
+`notify empty-queue` and `notify worktree-conflict`) leaves the session
+open so the variance is visible rather than buried in a closed transcript.
+A silent `notify` or silent `drain` is a defect.
 
 The three dispositions:
 
@@ -610,16 +614,16 @@ The three dispositions:
   | `notify busy-lock-timeout` | Step 0 — wait timeout while another router holds the lock (subsumes #850) |
   | `notify sync-failed` | Step 1 — `git fetch` failed or `git merge --ff-only` rejected a non-fast-forward |
   | `notify resolver-failed` | Step 3 — `dispatch-resolve-arg` non-zero (PR closes ≠1 issue, bad argument) |
+  | `notify empty-queue` | Step 3 — `dispatch-select-target` returned `empty` (nothing eligible to dispatch) |
   | `notify main-broken` | Step 3 — `/dispatch-diagnose-main` ran and returned (`origin/main` is red) |
   | `notify target-blocked` | Step 4 — named target is closed or has an open blocker |
+  | `notify worktree-conflict` | Step 5 — target's worktree is owned by another live session (race) |
 
-- **`drain <reason>`** — `drain empty-queue` (Step 3, queue empty),
-  `drain worktree-conflict` (Step 5, target's worktree is owned by another
-  live session), or `drain concurrency-cap` (Step 6, `live_count >=
-  target_N` — the chain re-seeds on the next router tick when budget
+- **`drain <reason>`** — only `drain concurrency-cap` (Step 6, `live_count
+  >= target_N` — the chain re-seeds on the next router tick when budget
   reopens). The call site has already printed a **mandatory** user-visible
-  report stating the reason and the recovery path (templates live at the
-  Step 3, Step 5, and Step 6 call sites). Then self-close
+  report stating the reason and the recovery path (template lives at the
+  Step 6 call site). Then self-close
   (`dangerouslyDisableSandbox: true`):
 
   ```bash
@@ -637,9 +641,9 @@ Step 3's `jit-reminder` and `cleanup-unknown` outcomes do not reach Step 7.
 open in the transcript for a human to read, so the skill stops the tick
 directly. `cleanup-unknown` returns to Step 3's routing.
 
-The router does **not** spawn a successor `/dispatch` itself — the worker
-spawned in Step 6 spawns a fresh router back in `worktrees/main` when its
-phase completes (`/dispatch-worker` Step 4).
+The router does **not** spawn a successor `/dispatch` itself — the worker's
+Stop hook (`.claude/hooks/dispatch-stop.sh`) spawns a fresh router back in
+`worktrees/main` when the worker session ends.
 
 ### The #725 daily restart
 
