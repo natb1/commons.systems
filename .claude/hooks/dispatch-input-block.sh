@@ -68,7 +68,7 @@ ISSUE_NUM=$(printf '%s\n' "$BRANCH" | grep -oE '^[0-9]+') || exit 0
 [ -n "$ISSUE_NUM" ] || exit 0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
-SCRIPTS="$SCRIPT_DIR/../skills/dispatch/scripts"
+SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
 
 # Resolve PR for this issue; fall back to the issue itself when no PR exists
 # (the implement phase has no PR yet).

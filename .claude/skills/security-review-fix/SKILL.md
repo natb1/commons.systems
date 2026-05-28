@@ -5,7 +5,7 @@ description: Security phase — merge origin/main, fan out 9 parallel security s
 
 # Security Review and Fix
 
-The `security` phase of the issue workflow, dispatched by `/dispatch`. This skill
+The `security` phase of the issue workflow, dispatched by `/dispatch-propagate`. This skill
 owns the full structured security review for the dispatch workflow: merge current
 `main`, fan out 9 parallel security subagents directly, de-duplicate and classify
 their findings, implement the required fixes, commit and push, post a PR comment,
@@ -208,14 +208,14 @@ ready. Otherwise run all steps in order.
    `gh`):
 
    ```bash
-   .claude/skills/dispatch/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
+   .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
 6. **Apply the `dispatch:security-reviewed` label** via `dispatch-complete-phase`
    (use `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash
-   .claude/skills/dispatch/scripts/dispatch-complete-phase "$PR_NUM" security
+   .claude/skills/dispatch-propagate/scripts/dispatch-complete-phase "$PR_NUM" security
    ```
 
    The PR number passed here is **expected** to differ from the worktree's
@@ -225,8 +225,8 @@ ready. Otherwise run all steps in order.
    re-confirm the mismatch.
 
    This skill **owns** its `dispatch:security-reviewed` label — unlike the generic
-   `/security-review`, which `/dispatch` cannot make dispatch-aware — so
-   `/dispatch` does not apply the label after this skill returns.
+   `/security-review`, which `/dispatch-propagate` cannot make dispatch-aware — so
+   `/dispatch-propagate` does not apply the label after this skill returns.
 
 7. **Mark the PR ready.** Flip the draft to ready-for-review (use
    `dangerouslyDisableSandbox: true` — `gh` needs network):
@@ -275,7 +275,7 @@ classified set — has these fields:
 Marking the PR ready is the workflow's terminal action. After this change the
 dispatch workflow has no human checkpoint before a PR goes ready — the per-phase
 PR-comment summaries are the audit trail. This is an intentional trade-off for an
-autonomous `/dispatch` background-job run.
+autonomous `/dispatch-propagate` background-job run.
 
 The skill is idempotent: a re-invocation with `dispatch:security-reviewed` already
 on the PR skips Steps 1–6 and only ensures the PR is ready (Step 7).

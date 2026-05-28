@@ -5,11 +5,11 @@ description: Verify phase — single pass that reproduces and fixes one set of f
 
 # Verify PR
 
-The `verify` phase of the issue workflow, dispatched by `/dispatch` only when a
+The `verify` phase of the issue workflow, dispatched by `/dispatch-propagate` only when a
 draft PR has **completed-and-failed** CI. This skill is **single-pass — it has no
 internal loop**. It fixes one round of failed checks, records the outcome, posts it,
-and stops. The `/dispatch` background-job chain drives iteration: each subsequent
-failure is a fresh `/dispatch` → `/verify-pr` invocation.
+and stops. The `/dispatch-propagate` background-job chain drives iteration: each subsequent
+failure is a fresh `/dispatch-propagate` → `/verify-pr` invocation.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
 launch subagents and invoke `/implement-unit`.
@@ -24,7 +24,7 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    (`dangerouslyDisableSandbox: true` — `gh`):
 
    ```bash
-   PR_NUM=$(.claude/skills/dispatch/scripts/dispatch-find-pr <issue-N>)
+   PR_NUM=$(.claude/skills/dispatch-propagate/scripts/dispatch-find-pr <issue-N>)
    N=$(gh pr view "$PR_NUM" --json labels \
      --jq '[.labels[].name | capture("^dispatch:verify-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0')
    NEXT=$(( N < 3 ? N + 1 : 3 ))
@@ -75,7 +75,7 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
 
    This is a **local merge, NOT `/commit-merge-push`**. Pushing a bare merge commit
    here would re-trigger CI and discard the concluded-failure state that routed
-   `/dispatch` to the `verify` phase. The merge is pushed only when the fix step
+   `/dispatch-propagate` to the `verify` phase. The merge is pushed only when the fix step
    (Step 6) invokes `/implement-unit`, whose `/commit-merge-push` pushes the fix
    commit together with this merge. Diagnosing and fixing against current `main`
    avoids re-fixing a failure `main` already resolved.
@@ -90,10 +90,10 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
 4. **Read the failed checks.** Run (use `dangerouslyDisableSandbox: true`):
 
    ```bash
-   .claude/skills/dispatch/scripts/run-pr-checks-wait.sh <pr-num>
+   .claude/skills/dispatch-propagate/scripts/run-pr-checks-wait.sh <pr-num>
    ```
 
-   The checks have already concluded — `/dispatch` only routes a PR here once CI is
+   The checks have already concluded — `/dispatch-propagate` only routes a PR here once CI is
    complete-and-failed — so this returns immediately with a per-check summary:
    name, conclusion, and a failure-log excerpt for each failing check.
 
@@ -101,9 +101,9 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    failure excerpt. The subagent maps the check to a local reproduce command and runs
    it (use `dangerouslyDisableSandbox: true` when network or npm cache is needed):
 
-   - Unit test check → `.claude/skills/dispatch/scripts/run-unit-tests.sh`
-   - Lint check → `.claude/skills/dispatch/scripts/run-lint.sh`
-   - Acceptance test check → `.claude/skills/dispatch/scripts/run-acceptance-tests.sh`
+   - Unit test check → `.claude/skills/dispatch-propagate/scripts/run-unit-tests.sh`
+   - Lint check → `.claude/skills/dispatch-propagate/scripts/run-lint.sh`
+   - Acceptance test check → `.claude/skills/dispatch-propagate/scripts/run-acceptance-tests.sh`
    - Type-check → `npx tsc --noEmit --project <pkg>`
    - Other → best-effort map from the failing workflow name
 
@@ -132,7 +132,7 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
      (Step 8), and then push the Step 2 merge **alone** — no fix — so CI re-runs
      against the merged state. What gets pushed is the already-completed,
      deterministic merge of `main`, not a fix. Without this push the stale failed
-     CI keeps routing `/dispatch` back to the `verify` phase forever. Step 2's
+     CI keeps routing `/dispatch-propagate` back to the `verify` phase forever. Step 2's
      `git merge origin/main` is always a clean merge here — a conflict would have
      halted the skill back in Step 2 — and a clean `git merge` auto-creates the
      merge commit, so the merge commit already exists; just push it (`git push`
@@ -183,8 +183,8 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
         distinct from a generic no-repro one.
      5. **Post the accumulator (Step 8) and stop (Step 9). Push nothing** — the
         same terminal behavior as the generic no-repro outcome. On the next
-        `/dispatch` run the PR's tracked issue carries a `blocked_by` against the
-        flake issue; `/dispatch`'s queue scan skips blocked issues, so the PR is
+        `/dispatch-propagate` run the PR's tracked issue carries a `blocked_by` against the
+        flake issue; `/dispatch-propagate`'s queue scan skips blocked issues, so the PR is
         no longer re-routed to the `verify` phase. The flake issue stands on its
         own in the queue for independent triage.
 
@@ -199,11 +199,11 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
 8. **Post the accumulator as a PR comment** (use `dangerouslyDisableSandbox: true`):
 
    ```bash
-   .claude/skills/dispatch/scripts/post-pr-comment.sh <pr-num> tmp/verify-summary.md
+   .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh <pr-num> tmp/verify-summary.md
    ```
 
-9. **Stop.** The `/dispatch` background-job chain drives the next iteration —
-   the next `/dispatch` job re-derives the phase from CI ground truth and
+9. **Stop.** The `/dispatch-propagate` background-job chain drives the next iteration —
+   the next `/dispatch-propagate` job re-derives the phase from CI ground truth and
    re-invokes `/verify-pr` if checks still fail.
 
 ## Accumulator

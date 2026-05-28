@@ -2,7 +2,7 @@
 # dispatch-spawn-worker — spawn a /dispatch-worker background job for a target
 # worktree (the router → worker spawn primitive).
 #
-# /dispatch (the router) selects an issue, resolves its worktree, and then
+# /dispatch-propagate (the router) selects an issue, resolves its worktree, and then
 # delegates phase execution to a dedicated worker session via this script.
 # The worker session is spawned from the caller's cwd (worktrees/main) — there
 # is no `cd` into the target worktree at spawn time. The Claude daemon treats

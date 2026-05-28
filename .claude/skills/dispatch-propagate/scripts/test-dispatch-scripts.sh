@@ -1029,7 +1029,7 @@ teardown
 # conclusion short-circuits to "main-broken <sha>". The gate is uniform —
 # there is no cwd-based bypass.
 #
-# The explicit-`/dispatch <issue|pr>` bypass is structural and not script-
+# The explicit-`/dispatch-propagate <issue|pr>` bypass is structural and not script-
 # testable here: an explicit argument skips the queue scan entirely (SKILL.md
 # Step 3), so dispatch-select-target is never invoked on that path.
 
@@ -1128,7 +1128,7 @@ teardown
 
 # --- --health-only mode (issue #683 AC: gate before sweep) ------------------
 # --health-only runs the JIT scan and the gate, then exits without the queue
-# scan. /dispatch SKILL.md calls it before dispatch-sweep so the sweep does
+# scan. /dispatch-propagate SKILL.md calls it before dispatch-sweep so the sweep does
 # not run while main is red.
 
 # 27a. --health-only, main green, not in a worktree → "ok", exit 0.
@@ -2434,7 +2434,7 @@ matches=$(grep -rl 'BFD4F2' "$REPO_ROOT/.claude" \
   --exclude='test-dispatch-scripts.sh' 2>/dev/null \
   | sed "s|$REPO_ROOT/||" | sort || true)
 assert_eq "only dispatch-complete-phase owns BFD4F2" \
-  ".claude/skills/dispatch/scripts/dispatch-complete-phase" \
+  ".claude/skills/dispatch-propagate/scripts/dispatch-complete-phase" \
   "$matches"
 
 # ============================================================================
@@ -3991,7 +3991,7 @@ lock_teardown
 #
 # A caller whose CLAUDE_CODE_SESSION_ID differs from the recorded holder can
 # still --release when the holder's cwd carries the marker. Closes the silent
-# `noop` leak that today blocks subsequent /dispatch ticks.
+# `noop` leak that today blocks subsequent /dispatch-propagate ticks.
 
 echo "Test: --release with marker present from a different-sessionId caller → released"
 lock_setup
@@ -5145,14 +5145,14 @@ spawn_router_teardown() {
 
 # --- Test 1: spawn success ---------------------------------------------------
 
-echo "Test: an empty registry spawns one /dispatch background job"
+echo "Test: an empty registry spawns one /dispatch-propagate background job"
 spawn_router_setup
 write_fake_spawn_router_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "spawn: dispatch-spawn-router exits 0" "0" "$rc"
 assert_eq "spawn: stdout is 'spawned'" "spawned" "$out"
 # The recorded argv must be exactly: --bg --name dispatch-<id> \
-#   --permission-mode auto /dispatch
+#   --permission-mode auto /dispatch-propagate
 mapfile -t bg_argv < "$SPAWN_ROUTER_BG_ARGV"
 assert_eq "spawn: argv[0] is --bg" "--bg" "${bg_argv[0]:-}"
 assert_eq "spawn: argv[1] is --name" "--name" "${bg_argv[1]:-}"
@@ -5163,7 +5163,7 @@ esac
 assert_eq "spawn: argv[2] is a dispatch-* agent name" "yes" "$name_ok"
 assert_eq "spawn: argv[3] is --permission-mode" "--permission-mode" "${bg_argv[3]:-}"
 assert_eq "spawn: argv[4] is auto" "auto" "${bg_argv[4]:-}"
-assert_eq "spawn: argv[5] is /dispatch" "/dispatch" "${bg_argv[5]:-}"
+assert_eq "spawn: argv[5] is /dispatch-propagate" "/dispatch-propagate" "${bg_argv[5]:-}"
 spawn_router_teardown
 
 # --- Test 2: dedup -----------------------------------------------------------
@@ -5730,7 +5730,7 @@ echo "=== dispatch-self-close ==="
 # dispatch-self-close runs `claude rm <job-id>` against the basename of
 # $CLAUDE_JOB_DIR. The fake `claude` records its argv in SPAWN_RM_LOG (see
 # write_fake_spawn_claude). When CLAUDE_JOB_DIR is unset, the script is a no-op
-# — the foreground-safe gate that protects an interactive /dispatch from
+# — the foreground-safe gate that protects an interactive /dispatch-propagate from
 # deleting the user's live conversation.
 
 selfclose_setup() {
@@ -6337,20 +6337,20 @@ echo "=== dispatch-input-block ==="
 #
 # Each test gets a fresh tmp tree:
 #   $TMPDIR_TEST/hooks/dispatch-input-block.sh     — the hook under test
-#   $TMPDIR_TEST/skills/dispatch/scripts/          — fakes for dispatch-find-pr,
+#   $TMPDIR_TEST/skills/dispatch-propagate/scripts/          — fakes for dispatch-find-pr,
 #                                                    dispatch-spawn
 #   $TMPDIR_TEST/bin/{gh,git}                      — PATH shims
 #   $TMPDIR_TEST/jobs/<id>/state.json              — fake CLAUDE_JOB_DIR ledger
 #   $TMPDIR_TEST/stub/{gh,git,spawn}-calls.log     — recorded invocations
 #
 # HOOK_SCRIPT_DIR — the project hooks directory the test copies from. SCRIPT_DIR
-# here is .claude/skills/dispatch/scripts; the hooks live at .claude/hooks.
+# here is .claude/skills/dispatch-propagate/scripts; the hooks live at .claude/hooks.
 HOOK_SCRIPT_DIR="$SCRIPT_DIR/../../../hooks"
 
 ib_setup() {
   TMPDIR_TEST=$(mktemp -d)
   STUB_DIR="$TMPDIR_TEST/stub"
-  mkdir -p "$TMPDIR_TEST/hooks" "$TMPDIR_TEST/skills/dispatch/scripts" \
+  mkdir -p "$TMPDIR_TEST/hooks" "$TMPDIR_TEST/skills/dispatch-propagate/scripts" \
     "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/jobs/abcd1234"
 
   cp "$HOOK_SCRIPT_DIR/dispatch-input-block.sh" \
@@ -6359,21 +6359,21 @@ ib_setup() {
 
   # Fake dispatch-find-pr: prints contents of $STUB_DIR/find-pr-output if
   # present, else nothing (no PR exists).
-  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr" <<'FAKE'
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr" <<'FAKE'
 #!/usr/bin/env bash
 [[ -f "$STUB_DIR/find-pr-output" ]] && cat "$STUB_DIR/find-pr-output"
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr"
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr"
 
   # Fake dispatch-spawn-router: log invocations to spawn-calls.log.
-  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn-router" <<'FAKE'
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-router" <<'FAKE'
 #!/usr/bin/env bash
 echo "spawn" >> "$STUB_DIR/spawn-calls.log"
 echo "spawned"
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn-router"
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-router"
 
   # gh PATH stub. pr-edit-mode/issue-edit-mode select behavior (default: ok and
   # log args). "label-missing" models the first apply failing with a missing-
@@ -6629,19 +6629,19 @@ echo "=== dispatch-office-hours-strip ==="
 ohs_setup() {
   TMPDIR_TEST=$(mktemp -d)
   STUB_DIR="$TMPDIR_TEST/stub"
-  mkdir -p "$TMPDIR_TEST/hooks" "$TMPDIR_TEST/skills/dispatch/scripts" \
+  mkdir -p "$TMPDIR_TEST/hooks" "$TMPDIR_TEST/skills/dispatch-propagate/scripts" \
     "$TMPDIR_TEST/bin" "$STUB_DIR"
 
   cp "$HOOK_SCRIPT_DIR/dispatch-office-hours-strip.sh" \
     "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh"
   chmod +x "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh"
 
-  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr" <<'FAKE'
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr" <<'FAKE'
 #!/usr/bin/env bash
 [[ -f "$STUB_DIR/find-pr-output" ]] && cat "$STUB_DIR/find-pr-output"
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr"
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr"
 
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
@@ -6850,9 +6850,9 @@ STUB_DIR=""
 export PATH="$SAVED_PATH"
 
 # ============================================================================
-# /dispatch router smoke (Step 5 create + Step 6 spawn)
+# /dispatch-propagate router smoke (Step 5 create + Step 6 spawn)
 # ============================================================================
-# Pin the shell sequence documented in /dispatch SKILL.md Step 5's `create`
+# Pin the shell sequence documented in /dispatch-propagate SKILL.md Step 5's `create`
 # branch and Step 6, by faking every external binary the sequence calls and
 # asserting each fake was invoked with the expected arguments. This is a
 # documentation-pinning test, not a behaviour test of the router itself: it
@@ -6860,7 +6860,7 @@ export PATH="$SAVED_PATH"
 # update the spawn call, or where the documented shell sequence drifts from
 # what the script expects.
 #
-# Tested sequence (matches /dispatch SKILL.md Step 5 create + Step 6):
+# Tested sequence (matches /dispatch-propagate SKILL.md Step 5 create + Step 6):
 #   GIT_COMMON_DIR=...                                       # faked git
 #   PROJECT_ROOT=...
 #   WORKTREE_PATH="$PROJECT_ROOT/worktrees/<branch>"
@@ -6871,7 +6871,7 @@ export PATH="$SAVED_PATH"
 #   (cd "$WORKTREE_PATH" && mkdir -p tmp && touch tmp/dispatch-worktree)
 #   dispatch-spawn-worker <N> "$WORKTREE_PATH"
 echo ""
-echo "=== /dispatch router smoke (Step 5 create + Step 6 spawn) ==="
+echo "=== /dispatch-propagate router smoke (Step 5 create + Step 6 spawn) ==="
 
 router_smoke_setup() {
   TMPDIR_TEST=$(mktemp -d)
@@ -6982,7 +6982,7 @@ router_smoke_teardown
 # ============================================================================
 echo "=== dispatch chain: no EnterWorktree/ExitWorktree mid-session ==="
 #
-# Regression guard for #839: the dispatch chain — router /dispatch and the
+# Regression guard for #839: the dispatch chain — router /dispatch-propagate and the
 # skills the worker (/dispatch-worker) invokes — must not call EnterWorktree
 # or ExitWorktree. The worker is born in its target worktree (cwd set by
 # dispatch-spawn-worker); any mid-session worktree switch is at best a no-op
@@ -6998,6 +6998,7 @@ PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 # substring mentions (grep -oE counts each occurrence, not each line).
 declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/dispatch/SKILL.md"]=0
+  [".claude/skills/dispatch-propagate/SKILL.md"]=0
   [".claude/skills/dispatch-worker/SKILL.md"]=2
   [".claude/skills/dispatch-qa/SKILL.md"]=0
   [".claude/skills/plan-implement/SKILL.md"]=0

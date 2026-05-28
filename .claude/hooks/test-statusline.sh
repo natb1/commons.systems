@@ -58,9 +58,9 @@ setup_case() {
   # Stub dispatch-phase at the path the hook derives from its SCRIPT_DIR:
   #   SCRIPT_DIR/../skills/dispatch/scripts/dispatch-phase
   # = $tmp/.claude/hooks/../skills/dispatch/scripts/dispatch-phase
-  # = $tmp/.claude/skills/dispatch/scripts/dispatch-phase
-  mkdir -p "$tmp/.claude/skills/dispatch/scripts"
-  cat >"$tmp/.claude/skills/dispatch/scripts/dispatch-phase" <<'DPHASE'
+  # = $tmp/.claude/skills/dispatch-propagate/scripts/dispatch-phase
+  mkdir -p "$tmp/.claude/skills/dispatch-propagate/scripts"
+  cat >"$tmp/.claude/skills/dispatch-propagate/scripts/dispatch-phase" <<'DPHASE'
 #!/usr/bin/env bash
 # Sleep first so the hook's synchronous `cat $cache` reads the pre-existing
 # cache value, not the just-written one, making case 3 deterministic.
@@ -70,7 +70,7 @@ if [ "${STUB_FAIL:-0}" = "1" ]; then
 fi
 printf '%s' "${STUB_PHASE:-implement}"
 DPHASE
-  chmod +x "$tmp/.claude/skills/dispatch/scripts/dispatch-phase"
+  chmod +x "$tmp/.claude/skills/dispatch-propagate/scripts/dispatch-phase"
 
   # Point update-rate-limits.sh to a non-existent path under tmp; the hook
   # swallows the error with || true so there is no real side effect.

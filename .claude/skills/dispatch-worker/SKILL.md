@@ -1,12 +1,12 @@
 ---
 name: dispatch-worker
-description: Worker for the dispatch chain — runs one phase skill in its target worktree, then hands off to a fresh `/dispatch` router
+description: Worker for the dispatch chain — runs one phase skill in its target worktree, then hands off to a fresh `/dispatch-propagate` router
 ---
 
 # Dispatch Worker
 
 The worker is the per-worktree execution half of the dispatch chain. The other
-half — `/dispatch` — is the router: it selects a target, resolves its worktree,
+half — `/dispatch-propagate` — is the router: it selects a target, resolves its worktree,
 and spawns this worker. The worker then enters the target worktree, derives
 the phase, runs exactly one phase skill, and hands off.
 
@@ -69,7 +69,7 @@ resulting worktree. When that exit fires, proceed to Step 4 with
 Derive the phase via `dispatch-phase <N>`:
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-phase <N>
+.claude/skills/dispatch-propagate/scripts/dispatch-phase <N>
 ```
 
 It prints exactly one phase name. CI status is checked **before** labels — a
@@ -114,7 +114,7 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
      `model: sonnet`) that:
      - first waits for CI to register at least one check — a freshly-pushed
        branch can briefly have an empty check rollup;
-     - then runs `.claude/skills/dispatch/scripts/run-pr-checks-wait.sh
+     - then runs `.claude/skills/dispatch-propagate/scripts/run-pr-checks-wait.sh
        <pr-num>` with `dangerouslyDisableSandbox: true`, which blocks until
        every check concludes;
      - returns once all checks have completed.
@@ -180,7 +180,7 @@ Before invoking `/plan-implement` on an `implement`-phase issue, confirm no PR
 exists for the target by running:
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-find-pr <N>
+.claude/skills/dispatch-propagate/scripts/dispatch-find-pr <N>
 ```
 
 If it prints a PR number, **skip this relevance review** and advance directly to
@@ -249,7 +249,7 @@ Every Step 0–3 termination routes here — Step 4 is the single way a
 `/dispatch-worker` job ends. The disposition that routed it here determines
 the action.
 
-The dispatch-chain terminal-disposition invariant is stated in `/dispatch`
+The dispatch-chain terminal-disposition invariant is stated in `/dispatch-propagate`
 Step 7 and applies equally here — every disposition other than `propagate`
 on success emits a user-visible report before the session ends (before
 `dispatch-self-close` for `drain` and `propagate`; before this turn's text
@@ -268,21 +268,21 @@ The worker reaches Step 4 with one of these dispositions:
 
 The worker `cd`'d into its target worktree in Step 0 and never entered
 another worktree mid-session — there is nothing to exit. The router
-(`/dispatch`) is what runs in `worktrees/main`; this worker's lifetime ends
+(`/dispatch-propagate`) is what runs in `worktrees/main`; this worker's lifetime ends
 here, in its target worktree.
 
 ### `propagate`
 
 The phase skill ran to completion; the chain moves forward. Spawn a fresh
-`/dispatch` (router) job back in `worktrees/main`
+`/dispatch-propagate` (router) job back in `worktrees/main`
 (`dangerouslyDisableSandbox: true` — the script reaches the local Claude
 daemon over a socket; see `.claude/rules/sandbox.md`):
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-spawn-router
+.claude/skills/dispatch-propagate/scripts/dispatch-spawn-router
 ```
 
-The worker spawns a `/dispatch` router, not another worker — the router will
+The worker spawns a `/dispatch-propagate` router, not another worker — the router will
 select the next target and spawn its worker. The script prints `spawned` (a
 router was started) or `deduped` (another `dispatch-*` session is already
 live in `worktrees/main`, or the session registry could not be queried — the
@@ -303,7 +303,7 @@ The disposition then resolves in this priority order:
    fully satisfy the issue's acceptance criteria. Self-closing would bury
    the deviation in a closed job's transcript; instead, route the item to
    the office-hours queue for human review. Resolve the PR for the target
-   with `.claude/skills/dispatch/scripts/dispatch-find-pr <N>` and apply
+   with `.claude/skills/dispatch-propagate/scripts/dispatch-find-pr <N>` and apply
    the `dispatch:office-hours` label (`gh`,
    `dangerouslyDisableSandbox: true`):
 
@@ -337,7 +337,7 @@ The disposition then resolves in this priority order:
    has changed. Re-derive the phase against current PR/CI ground truth:
 
    ```bash
-   .claude/skills/dispatch/scripts/dispatch-phase <N>
+   .claude/skills/dispatch-propagate/scripts/dispatch-phase <N>
    ```
 
    If the re-derived phase **differs** from the phase that just ran, the
@@ -354,7 +354,7 @@ The disposition then resolves in this priority order:
    (`dangerouslyDisableSandbox: true` — `gh`):
 
    ```bash
-   PR_NUM=$(.claude/skills/dispatch/scripts/dispatch-find-pr <N>)
+   PR_NUM=$(.claude/skills/dispatch-propagate/scripts/dispatch-find-pr <N>)
    N=$(gh pr view "$PR_NUM" --json labels \
      --jq '[.labels[].name | capture("^dispatch:verify-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0')
    ```
@@ -373,7 +373,7 @@ The disposition then resolves in this priority order:
    (`dangerouslyDisableSandbox: true`):
 
    ```bash
-   .claude/skills/dispatch/scripts/dispatch-self-close
+   .claude/skills/dispatch-propagate/scripts/dispatch-self-close
    ```
 
 ### `notify worker-wrong-cwd`
@@ -390,7 +390,7 @@ closed transcript.
 Step 2 found a non-draft (ready) PR (`done` phase) that slipped past the
 sweep — `dispatch-sweep` (#843) is meant to adopt these before they reach a
 worker, so this is a real variance. Resolve the PR with
-`.claude/skills/dispatch/scripts/dispatch-find-pr <N>` and apply
+`.claude/skills/dispatch-propagate/scripts/dispatch-find-pr <N>` and apply
 `dispatch:office-hours` to it with the same apply-first / create-on-"not
 found" idiom as `notify deviation` above so the slip is queued for human
 review. If `dispatch-find-pr` prints nothing (e.g. a transient `gh` failure
@@ -415,7 +415,7 @@ restart will re-check at 9 AM"), then self-close
 (`dangerouslyDisableSandbox: true`):
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-self-close
+.claude/skills/dispatch-propagate/scripts/dispatch-self-close
 ```
 
 A silent `drain` is a defect.
@@ -431,7 +431,7 @@ Step 4 does not stop the user's live conversation.
 
 ### The #725 daily restart
 
-See `/dispatch` Step 7's *The #725 daily restart* subsection — the worker's
+See `/dispatch-propagate` Step 7's *The #725 daily restart* subsection — the worker's
 relationship to the daily restart is the same as the router's. Every
 terminal state the worker reaches, including `drain waiting` and every
 `notify <reason>` whose session the user closes without manual restart,

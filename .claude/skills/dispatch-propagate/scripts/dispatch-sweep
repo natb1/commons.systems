@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dispatch-sweep — reconcile worktrees once per /dispatch queue-scan tick.
+# dispatch-sweep — reconcile worktrees once per /dispatch-propagate queue-scan tick.
 #
 # Usage:
 #   dispatch-sweep                       — full sweep: cleanup merged + classify
@@ -47,7 +47,7 @@
 #   3  halted on an unknown-orphan worktree; stderr carries the directive.
 #
 # NOT set -e: per-worktree errors should not abort the sweep — bookkeeping
-# decisions must keep flowing into the log so the next /dispatch tick can act.
+# decisions must keep flowing into the log so the next /dispatch-propagate tick can act.
 set -uo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -304,7 +304,7 @@ while [[ $i -lt ${#ORPHAN_PATHS[@]} ]]; do
   # Ready-PR gate. A `done`-phase orphan whose PR has been flipped to ready
   # (e.g. by /security-review-fix) is awaiting human merge — adopting it
   # short-circuits the queue-ladder and the chain drains on the early-stop in
-  # /dispatch Step 9. Skip so the ladder gets to pick real queued work.
+  # /dispatch-propagate Step 7. Skip so the ladder gets to pick real queued work.
   # No-PR orphans and open-draft-PR orphans still fall through to adoption.
   #
   # Runs BEFORE the gh-dependent closed-issue/blocker gates so a transient

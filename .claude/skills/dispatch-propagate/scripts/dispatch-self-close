@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # dispatch-self-close — delete this background job.
 #
-# /dispatch SKILL.md Step 9 invokes this as the last step on a clean
+# /dispatch-propagate SKILL.md Step 7 invokes this as the last step on a clean
 # completion. `claude rm <id>` wants the *job-id* — the 8-hex-char basename
 # of $CLAUDE_JOB_DIR — not the conversation session UUID and not the
 # registry's .sessionId. CLAUDE_JOB_DIR is set only in managed background
 # jobs, so its presence doubles as the foreground-safe gate: an interactive
-# /dispatch reaching Step 9 must not delete the user's live conversation.
+# /dispatch-propagate reaching Step 7 must not delete the user's live conversation.
 #
 # Behavior:
 #   $CLAUDE_JOB_DIR set    → `claude rm $(basename "$CLAUDE_JOB_DIR")`,

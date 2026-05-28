@@ -5,7 +5,7 @@ description: Code-review phase — merge origin/main, run the generic /code-revi
 
 # Code Review and Fix
 
-The `code-review` phase of the issue workflow, dispatched by `/dispatch`. This is the
+The `code-review` phase of the issue workflow, dispatched by `/dispatch-propagate`. This is the
 dispatch-specific wrapper around the generic built-in `/code-review` skill.
 `/code-review` applies in-scope fixes to the working tree and surfaces findings with the
 skill's own (fixed vs skipped) disposition; it
@@ -150,14 +150,14 @@ steps in order.
    invokes `gh`) and also print the report to chat:
 
    ```bash
-   .claude/skills/dispatch/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
+   .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
 7. **Apply the `dispatch:code-reviewed` label** via `dispatch-complete-phase` (use
    `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash
-   .claude/skills/dispatch/scripts/dispatch-complete-phase "$PR_NUM" code-review
+   .claude/skills/dispatch-propagate/scripts/dispatch-complete-phase "$PR_NUM" code-review
    ```
 
    The PR number passed here is **expected** to differ from the worktree's
@@ -168,7 +168,7 @@ steps in order.
 
    This skill **owns** its `dispatch:code-reviewed` label — parallel to how
    `/review-fix` owns `dispatch:reviewed` and `/security-review-fix` owns
-   `dispatch:security-reviewed` — so `/dispatch` does not apply the label after
+   `dispatch:security-reviewed` — so `/dispatch-propagate` does not apply the label after
    this skill returns.
 
 ## Finding classification

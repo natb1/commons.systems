@@ -14,7 +14,7 @@
 #   worktree-adopted <N> <branch>
 #                               — dispatch-sweep adopted an orphaned worktree
 #                                 elsewhere on disk; SKILL.md routes this exactly
-#                                 like an explicit /dispatch <N>
+#                                 like an explicit /dispatch-propagate <N>
 #   cleanup-unknown <path>      — dispatch-sweep halted on an orphan worktree
 #                                 with no open PR and no inferable issue number;
 #                                 SKILL.md confirms with the user before destroying
@@ -34,7 +34,7 @@
 #      help-wanted issues
 #
 # --health-only mode runs the JIT scan and the origin/main CI health gate, then
-# exits — no sweep, no queue scan, no PR/issue fetches. /dispatch SKILL.md uses
+# exits — no sweep, no queue scan, no PR/issue fetches. /dispatch-propagate SKILL.md uses
 # it to re-seed the dispatch chain heartbeat cheaply.
 # Output is exactly one line:
 #   ok                          — safe to proceed (main is healthy)
@@ -411,7 +411,7 @@ issue_has_worktree() {
 PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences)
 # Skip PRs carrying dispatch:office-hours — the item is parked for human review
 # (either an input-block recorded by dispatch-input-block.sh, or a phase that
-# completed but surfaced a deviation, recorded by /dispatch Step 9). A later
+# completed but surfaced a deviation, recorded by /dispatch-propagate Step 7). A later
 # UserPromptSubmit clears the label and the item re-enters the queue.
 PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r '
   sort_by(.createdAt) | .[]
