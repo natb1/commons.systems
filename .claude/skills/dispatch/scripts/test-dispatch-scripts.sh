@@ -5232,6 +5232,15 @@ assert_eq "missing-args-worker: non-integer <N> → exit 2" "2" "$sw_rc_d"
 if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$TMPDIR_TEST/worktrees/does-not-exist" 2>/dev/null; then sw_rc_e=0; else sw_rc_e=$?; fi
 assert_eq "missing-args-worker: non-existent <worktree-path> → exit 2" "2" "$sw_rc_e"
 
+# Sub-case F: unsafe characters in <worktree-path> rejected (defense-in-depth
+# against shell-metacharacter / whitespace injection into the prompt string
+# passed to `claude --bg`). Path must exist so the `-d` check passes first,
+# isolating the new char-validation step.
+unsafe_path="$TMPDIR_TEST/worktrees/839 unsafe"
+mkdir -p "$unsafe_path"
+if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$unsafe_path" 2>/dev/null; then sw_rc_f=0; else sw_rc_f=$?; fi
+assert_eq "missing-args-worker: unsafe chars in <worktree-path> → exit 2" "2" "$sw_rc_f"
+
 spawn_worker_teardown
 
 # --- Test 9: dedup + verify query the spawner cwd, NOT the worktree path ----

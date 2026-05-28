@@ -120,6 +120,14 @@ if [[ ! -d "$WORKTREE_PATH" ]]; then
   echo "dispatch-spawn-worker: worktree path '$WORKTREE_PATH' does not exist" >&2
   exit 2
 fi
+# Defense-in-depth: WORKTREE_PATH flows into the worker's --name (via basename)
+# and into the inline prompt string passed to `claude --bg`. Reject characters
+# that could split the prompt argument on the worker's `read -r` boundary or
+# affect downstream parsing.
+if [[ ! "$WORKTREE_PATH" =~ ^[A-Za-z0-9/_.-]+$ ]]; then
+  echo "dispatch-spawn-worker: worktree path '$WORKTREE_PATH' contains unsafe characters" >&2
+  exit 2
+fi
 
 # ---- Step 1: resolve config -------------------------------------------------
 CLAUDE_CMD="${DISPATCH_SPAWN_WORKER_CLAUDE_CMD:-claude}"

@@ -44,6 +44,14 @@ fi
 [ -n "$ISSUE_NUM" ] || exit 0
 [ -n "$WORKTREE_BASENAME" ] || exit 0
 
+# WORKTREE_BASENAME comes from session --name or git branch name; reject
+# path-traversal characters before composing the absolute path below. Git
+# refnames already disallow `..`, so a slash or `..` here indicates a
+# malformed or hostile source.
+case "$WORKTREE_BASENAME" in
+  *..*|*/*) exit 0 ;;
+esac
+
 # Resolve the absolute worktree path. The project root is the parent of the
 # shared git common dir (.bare). git is run from the hook's cwd, which is some
 # worktree of the project — --git-common-dir always returns the shared path.
