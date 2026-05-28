@@ -31,6 +31,18 @@
 #     return 1 — definitely no live session under <path>.
 #   `if worktree_has_live_session <path>` is fail-safe by construction.
 #
+# claude_agents_count_by_name_prefix <prefix>
+#   Counts live sessions whose `name` starts with `<prefix>`, repo-wide (no
+#   `--cwd` filter). Used by the dispatch router's concurrency gate to count
+#   live `dispatch-worker-*` sessions before deciding whether to spawn one
+#   more. Same UNKNOWN contract as `claude_sessions_under`: a count of `0` is
+#   a definite "no matches", non-zero return is "could not determine".
+#     return 0 — daemon queried successfully. Stdout is a single integer (>=0)
+#               line: the count of matching sessions.
+#     return 1 — UNKNOWN. Stdout is empty. Callers that gate on the count
+#               should fail open (proceed to spawn) — the per-worktree dedup
+#               inside `dispatch-spawn-worker` is the last-line defense.
+#
 # Test override: CLAUDE_AGENTS_CMD replaces the `claude` invocation with an
 # arbitrary command (e.g. an absolute path to a fake script), so the helper is
 # testable with no real daemon. Default: `claude`.
@@ -109,6 +121,39 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     fi
     # The daemon was queried successfully and reported zero sessions.
     return 1
+  }
+
+  # claude_agents_count_by_name_prefix <prefix> — emit the count of live
+  # sessions whose `name` starts with <prefix>. See the header comment.
+  claude_agents_count_by_name_prefix() {
+    local prefix="${1:-}"
+    if [[ -z "$prefix" ]]; then
+      printf 'lib-claude-agents: claude_agents_count_by_name_prefix requires a <prefix> argument\n' >&2
+      return 1
+    fi
+
+    # No --cwd here: the router needs a repo-wide count of live workers, not a
+    # per-path filter. 2>/dev/null drops daemon noise.
+    local out
+    if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json 2>/dev/null); then
+      return 1
+    fi
+    if [[ -z "${out//[[:space:]]/}" ]]; then
+      return 1
+    fi
+
+    # One jq pass validates the array shape and counts matches. Non-array
+    # input errors out and the result is UNKNOWN.
+    local count
+    if ! count=$(jq -r --arg prefix "$prefix" '
+      if type == "array"
+      then [ .[] | select(.name | type == "string" and startswith($prefix)) ] | length
+      else error("claude agents --json output is not a JSON array")
+      end' <<<"$out" 2>/dev/null); then
+      return 1
+    fi
+    printf '%s\n' "$count"
+    return 0
   }
 
 fi

@@ -4056,6 +4056,111 @@ assert_eq "cwd-arg: claude invoked as 'agents --json --cwd <path>'" \
   "$(printf 'agents\n--json\n--cwd\n%s' "$CA_DIR")" "$(cat "$CA_DIR/argv")"
 ca_teardown
 
+# --- Test 10: claude_agents_count_by_name_prefix counts prefix-matching ----
+
+echo "Test: claude_agents_count_by_name_prefix matches 2 of 3 sessions"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"a","pid":1,"status":"busy","name":"dispatch-worker-845-foo"},
+  {"sessionId":"b","pid":2,"status":"busy","name":"dispatch-worker-720-bar"},
+  {"sessionId":"c","pid":3,"status":"idle","name":"dispatch-router-baz"}
+]' 0
+if out=$(claude_agents_count_by_name_prefix dispatch-worker-); then rc=0; else rc=$?; fi
+assert_eq "count: exits 0" "0" "$rc"
+assert_eq "count: 2 of 3 match dispatch-worker-" "2" "$out"
+ca_teardown
+
+# --- Test 11: claude_agents_count_by_name_prefix returns 0 for no matches --
+
+echo "Test: claude_agents_count_by_name_prefix returns 0 for no matches"
+ca_setup
+write_fake_claude '[{"sessionId":"a","pid":1,"status":"busy","name":"other-thing"}]' 0
+if out=$(claude_agents_count_by_name_prefix dispatch-worker-); then rc=0; else rc=$?; fi
+assert_eq "no-match: exits 0" "0" "$rc"
+assert_eq "no-match: prints 0" "0" "$out"
+ca_teardown
+
+# --- Test 12: claude_agents_count_by_name_prefix reports UNKNOWN on failure-
+
+echo "Test: claude_agents_count_by_name_prefix returns rc 1 on daemon failure"
+ca_setup
+write_fake_claude '' 1
+if out=$(claude_agents_count_by_name_prefix dispatch-worker-); then rc=0; else rc=$?; fi
+assert_eq "daemon-fail: exits non-zero (UNKNOWN)" "1" "$rc"
+assert_eq "daemon-fail: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 13: claude_agents_count_by_name_prefix rejects non-array output --
+
+echo "Test: claude_agents_count_by_name_prefix returns rc 1 on non-array output"
+ca_setup
+write_fake_claude '{}' 0
+if out=$(claude_agents_count_by_name_prefix dispatch-worker-); then rc=0; else rc=$?; fi
+assert_eq "non-array: exits non-zero (UNKNOWN)" "1" "$rc"
+ca_teardown
+
+# --- Test 14: router concurrency gate — skip when live >= target ----------
+
+echo "Test: router gate skips spawn when live_count >= target_N"
+ca_setup
+# Three live dispatch-worker-* agents, target = 2 → skip branch.
+write_fake_claude '[
+  {"sessionId":"a","pid":1,"status":"busy","name":"dispatch-worker-1"},
+  {"sessionId":"b","pid":2,"status":"busy","name":"dispatch-worker-2"},
+  {"sessionId":"c","pid":3,"status":"busy","name":"dispatch-worker-3"}
+]' 0
+TARGET_N=2
+ROUTE=""
+if LIVE_COUNT=$(claude_agents_count_by_name_prefix dispatch-worker-); then
+  if (( LIVE_COUNT >= TARGET_N )); then
+    ROUTE="skip"
+  else
+    ROUTE="spawn"
+  fi
+else
+  ROUTE="spawn-failopen"
+fi
+assert_eq "router-gate: 3 live >= target 2 → skip" "skip" "$ROUTE"
+ca_teardown
+
+# --- Test 15: router concurrency gate — spawn when live < target ----------
+
+echo "Test: router gate spawns when live_count < target_N"
+ca_setup
+write_fake_claude '[{"sessionId":"a","pid":1,"status":"busy","name":"dispatch-worker-1"}]' 0
+TARGET_N=2
+ROUTE=""
+if LIVE_COUNT=$(claude_agents_count_by_name_prefix dispatch-worker-); then
+  if (( LIVE_COUNT >= TARGET_N )); then
+    ROUTE="skip"
+  else
+    ROUTE="spawn"
+  fi
+else
+  ROUTE="spawn-failopen"
+fi
+assert_eq "router-gate: 1 live < target 2 → spawn" "spawn" "$ROUTE"
+ca_teardown
+
+# --- Test 16: router concurrency gate — fail open when daemon UNKNOWN -----
+
+echo "Test: router gate fails open to spawn when daemon UNKNOWN"
+ca_setup
+write_fake_claude '' 1
+TARGET_N=2
+ROUTE=""
+if LIVE_COUNT=$(claude_agents_count_by_name_prefix dispatch-worker-); then
+  if (( LIVE_COUNT >= TARGET_N )); then
+    ROUTE="skip"
+  else
+    ROUTE="spawn"
+  fi
+else
+  ROUTE="spawn-failopen"
+fi
+assert_eq "router-gate: daemon UNKNOWN → spawn-failopen" "spawn-failopen" "$ROUTE"
+ca_teardown
+
 # ============================================================================
 # dispatch-config-load tests
 # ============================================================================
