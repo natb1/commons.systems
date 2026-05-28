@@ -2666,7 +2666,7 @@ echo "=== dispatch-sweep ==="
 #   project/.bare/                fake git common dir (parent = project/)
 #   project/worktrees/<n>-<slug>/ fake worktrees
 #   project/tmp/                  sweep log default dir
-#   proc/                         synthetic /proc tree (overridden per test)
+#   fake/                         fake `claude` script (CLAUDE_AGENTS_CMD target)
 #   stub/                         per-test JSON + record files (calls, gh out)
 #
 # Shims:
