@@ -42,8 +42,8 @@ case "$ACTUAL_BRANCH" in
 esac
 ```
 
-If the assertion fails, **proceed to Step 4 (early-stop)** — do not derive a
-phase or run a phase skill.
+If the assertion fails, proceed to Step 4 with `notify worker-wrong-cwd` —
+do not derive a phase or run a phase skill.
 
 ## 1. Derive the Phase
 
@@ -74,7 +74,7 @@ Map the phase:
 | `code-review` | draft PR + `dispatch:qa-done` | `/code-review-fix` (applies `dispatch:code-reviewed` itself) |
 | `review` | draft PR + `dispatch:code-reviewed` | `/review-fix` (applies `dispatch:reviewed` itself) |
 | `security` | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` — re-entry; `/security-review-fix` is idempotent) | `/security-review-fix` (applies `dispatch:security-reviewed` and marks ready itself) |
-| `done` | non-draft (ready) PR | already complete — report, then Step 4 (early-stop) |
+| `done` | non-draft (ready) PR | already complete — proceed to Step 4 with `notify already-done` |
 
 ## 2. Dispatch One Phase, Then Hand Off
 
@@ -103,8 +103,8 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
      the phase from the now-complete CI, then dispatch the resolved phase per
      this step — `/verify-pr` if any check failed, otherwise the green-CI
      phases (`qa` / `code-review` / `review` / `security` / `ready`).
-  4. If the re-derived phase is still `waiting` (CI never registered any check),
-     report it, then **proceed to Step 4** (early-stop) — do not loop.
+  4. If the re-derived phase is still `waiting` (CI never registered any
+     check), proceed to Step 4 with `drain waiting` — do not loop.
 - **`qa`** — invoke `/dispatch-qa`. It owns and applies `dispatch:qa-done`
   itself on a clean pass; `/dispatch-worker` applies no label.
 - **`code-review`** — invoke `/code-review-fix`. It runs `/code-review max`,
@@ -120,15 +120,15 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
   CodeQL alerts — then applies the required fixes, posts a PR comment, applies
   the `dispatch:security-reviewed` label, and marks the PR ready. It is
   idempotent on re-entry — `/dispatch-worker` applies no label.
-- **`done`** — report that the PR is already ready, then **proceed to Step 4**
-  (early-stop). No phase skill ran.
+- **`done`** — proceed to Step 4 with `notify already-done`. No phase skill
+  ran; the slip past sweep (#843) flags this PR for office-hours review.
 
 The PR stays a **draft** through every phase; the `security` phase's
 `/security-review-fix` flips it to ready as the workflow's terminal action.
 
-After the one phase skill has run to completion, **proceed to Step 4**
-(phase-completed) — do not advance to the next phase here; Step 4 hands off and
-ends the job.
+After the one phase skill has run to completion, proceed to Step 4 with the
+`propagate` disposition — do not advance to the next phase here; Step 4 hands
+off and ends the job.
 
 `/ultrareview` is intentionally **never** invoked: it is user-triggered and
 billed, so `/dispatch-worker` cannot launch it.
@@ -222,139 +222,188 @@ always owns the verdict.
   understanding, then `/plan-implement`.
 - **`stop`** — codebase has moved past the need; report what changed and
   recommend closing the issue or re-running `/ready`. Do **not** invoke
-  `/plan-implement`; **proceed to Step 4** (early-stop).
+  `/plan-implement`; proceed to Step 4 with `notify implement-stop`.
 
 ## 4. Hand off and self-close
 
 Every Step 0–3 termination routes here — Step 4 is the single way a
-`/dispatch-worker` job ends. A worker that just finished a phase passes the
-baton to a fresh `/dispatch` (router) job and self-closes; that hand-off keeps
-the dispatch chain moving.
+`/dispatch-worker` job ends. The disposition that routed it here determines
+the action.
 
-Each termination reaches Step 4 with one of two dispositions, named by the step
-that routed here:
+The dispatch-chain terminal-disposition invariant is stated in `/dispatch`
+Step 7 and applies equally here — every disposition other than `propagate`
+on success emits a user-visible report before any tool action; a silent
+`notify` or silent `drain` is a defect.
 
-- **phase-completed** — a phase skill (`/plan-implement`, `/verify-pr`,
-  `/dispatch-qa`, `/code-review-fix`, `/review-fix`, or `/security-review-fix`)
-  ran to completion. Only the Step 2 post-dispatch hand-off arrives this way.
-- **early-stop** — the job stopped before any phase skill completed: a Step 0
-  cwd-verification failure, a `done` phase, a `waiting` phase that stayed
-  `waiting`, or an `implement` relevance verdict of `stop`.
+The worker reaches Step 4 with one of these dispositions:
 
-Run these in order.
+| Disposition | Source |
+|---|---|
+| `propagate` (silent on success; falls through to `notify spawn-failed` / `notify deviation` / `notify phase-non-advancement` per the priority below) | Step 2 — phase skill ran to completion |
+| `notify worker-wrong-cwd` | Step 0 — cwd verification failed |
+| `notify already-done` | Step 2 — `done` phase (non-draft PR slipped past sweep) |
+| `notify implement-stop` | Step 3 — relevance verdict `stop` |
+| `drain waiting` | Step 2 — `waiting` phase stayed `waiting` after the CI subagent returned |
 
-**1. No worktree to exit.** The worker was born in its target worktree and
-never entered another worktree mid-session — there is nothing to exit. The
-router (`/dispatch`) is what runs in `worktrees/main`; this worker's lifetime
-ends here, in its target worktree.
+The worker was born in its target worktree and never entered another
+worktree mid-session — there is nothing to exit. The router (`/dispatch`)
+is what runs in `worktrees/main`; this worker's lifetime ends here, in its
+target worktree.
 
-**2. Pass the baton.** On the **phase-completed** disposition only, spawn a
-fresh `/dispatch` (router) job back in `worktrees/main` (run with
-`dangerouslyDisableSandbox: true` — the script reaches the local Claude daemon
-over a socket; see `.claude/rules/sandbox.md`):
+### `propagate`
+
+The phase skill ran to completion; the chain moves forward. Spawn a fresh
+`/dispatch` (router) job back in `worktrees/main`
+(`dangerouslyDisableSandbox: true` — the script reaches the local Claude
+daemon over a socket; see `.claude/rules/sandbox.md`):
 
 ```bash
 .claude/skills/dispatch/scripts/dispatch-spawn-router
 ```
 
 The worker spawns a `/dispatch` router, not another worker — the router will
-select the next target and spawn its worker. The script prints `spawned` (a
-successor was started) or `deduped` (another `dispatch-*` job is already
-running, so none was needed) and exits 0; it exits non-zero when a job was
-spawned but did not register. **early-stop** dispositions skip this step —
-they spawn no successor; the #725 heartbeat re-seeds the chain if it has
-drained.
+select the next target and spawn its worker. The script prints `spawned` or
+`deduped` and exits 0 on success; exits non-zero when a job was spawned but
+did not register.
 
-**3. Print the completion report.** State what this job did: the phase that
-ran and its outcome, or the reason it stopped early.
+Print the completion report — the phase that ran and its outcome.
 
-**4. Terminal disposition.** Take exactly one of the following, in this
-priority:
+The disposition then resolves in this priority order:
 
-- **`dispatch-spawn-router` failed** — a phase-completed run whose step-2 spawn
-  exited non-zero. Do **not** self-close. Report the failed baton-pass and
-  stop, leaving this job open so the failure is visible and the spawn can be
-  retried.
+1. **`notify spawn-failed`** — `dispatch-spawn-router` exited non-zero. Do
+   **not** self-close. Report the failed baton-pass and stop, leaving this
+   job open so the failure is visible and the spawn can be retried.
 
-- **The report surfaces a deviation** — a phase-completed run whose step-2
-  spawn succeeded, but whose completion report surfaces a deviation from the
-  approved plan, or a result that does not fully satisfy the issue's acceptance
-  criteria. Do **not** self-close — self-closing would bury the deviation in a
-  closed job's transcript. The baton was already passed in step 2, so the chain
-  keeps moving; route this item to the office-hours queue for human review.
-  Resolve the PR for the target with
-  `.claude/skills/dispatch/scripts/dispatch-find-pr <N>` and apply the
-  `dispatch:office-hours` label to it (`gh`, `dangerouslyDisableSandbox: true`):
+2. **`notify deviation`** — spawn succeeded, but the completion report
+   surfaces a deviation from the approved plan, or a result that does not
+   fully satisfy the issue's acceptance criteria. Self-closing would bury
+   the deviation in a closed job's transcript; instead, route the item to
+   the office-hours queue for human review. Resolve the PR for the target
+   with `.claude/skills/dispatch/scripts/dispatch-find-pr <N>` and apply
+   the `dispatch:office-hours` label (`gh`,
+   `dangerouslyDisableSandbox: true`):
 
-  ```bash
-  gh pr edit <pr-num> --add-label dispatch:office-hours
-  ```
+   ```bash
+   gh pr edit <pr-num> --add-label dispatch:office-hours
+   ```
 
-  If that fails because the label does not exist yet, create it and retry —
-  the same apply-first / create-on-"not found" idiom `dispatch-complete-phase`
-  uses:
+   If that fails because the label does not exist yet, create it and retry —
+   the same apply-first / create-on-"not found" idiom `dispatch-complete-phase`
+   uses:
 
-  ```bash
-  gh label create dispatch:office-hours \
-    --description "dispatch workflow: blocked on a human — awaiting input or review"
-  gh pr edit <pr-num> --add-label dispatch:office-hours
-  ```
+   ```bash
+   gh label create dispatch:office-hours \
+     --description "dispatch workflow: blocked on a human — awaiting input or review"
+   gh pr edit <pr-num> --add-label dispatch:office-hours
+   ```
 
-  Pass no `--color`: `dispatch-complete-phase` is the single source of the
-  `dispatch:*` label-colour metadata, and #757 owns `dispatch:office-hours`'s
-  canonical definition — Step 4 only needs the label to exist.
-  `dispatch:office-hours` is the office-hours queue's marker, shared with #757,
-  whose input-block detection hooks are the label's other writer; whichever
-  writer runs first creates it. Then stop — report that the item is parked in
-  the office-hours queue for human review.
+   Pass no `--color`: `dispatch-complete-phase` is the single source of the
+   `dispatch:*` label-colour metadata, and #757 owns `dispatch:office-hours`'s
+   canonical definition — this step only needs the label to exist.
+   `dispatch:office-hours` is the office-hours queue's marker, shared with
+   #757, whose input-block detection hooks are the label's other writer;
+   whichever writer runs first creates it. Then report that the item is
+   parked in the office-hours queue for human review, and stop (no
+   self-close).
 
-- **Phase did not advance** — a phase-completed run whose step-2 spawn
-  succeeded, but where the phase skill returned success without flipping its
-  workflow marker. Without this check, the next router tick re-derives the
-  same phase, spawns a worker, runs the same phase skill, and loops forever —
-  nothing observable has changed. Re-derive the phase against current PR/CI
-  ground truth:
+3. **`notify phase-non-advancement`** — spawn succeeded, but the phase skill
+   returned success without flipping its workflow marker. Without this
+   check, the next router tick would re-derive the same phase, spawn a
+   worker, run the same phase skill, and loop forever — nothing observable
+   has changed. Re-derive the phase against current PR/CI ground truth:
 
-  ```bash
-  .claude/skills/dispatch/scripts/dispatch-phase <N>
-  ```
+   ```bash
+   .claude/skills/dispatch/scripts/dispatch-phase <N>
+   ```
 
-  If the re-derived phase **differs** from the phase that just ran, the
-  workflow advanced — skip this bullet and fall through to the next one.
+   If the re-derived phase **differs** from the phase that just ran, the
+   workflow advanced — fall through to the silent propagate-success bullet.
 
-  If the re-derived phase **equals** the phase that just ran, the workflow did
-  not advance. Apply the verify-phase exemption: `/verify-pr` does not flip a
-  marker on a single pass (CI re-runs in the background and either flips the
-  PR back to `qa` or stays in `verify`), and is allowed up to 3 cumulative
-  attempts. For a non-advanced `verify` phase, read the highest extant
-  `dispatch:verify-attempt-<n>` label on the PR
-  (`dangerouslyDisableSandbox: true` — `gh`):
+   If the re-derived phase **equals** the phase that just ran, the workflow
+   did not advance. Apply the verify-phase exemption: `/verify-pr` does not
+   flip a marker on a single pass (CI re-runs in the background and either
+   flips the PR back to `qa` or stays in `verify`), and is allowed up to 3
+   cumulative attempts. For a non-advanced `verify` phase, read the highest
+   extant `dispatch:verify-attempt-<n>` label on the PR
+   (`dangerouslyDisableSandbox: true` — `gh`):
 
-  ```bash
-  PR_NUM=$(.claude/skills/dispatch/scripts/dispatch-find-pr <N>)
-  N=$(gh pr view "$PR_NUM" --json labels \
-    --jq '[.labels[].name | capture("^dispatch:verify-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0')
-  ```
+   ```bash
+   PR_NUM=$(.claude/skills/dispatch/scripts/dispatch-find-pr <N>)
+   N=$(gh pr view "$PR_NUM" --json labels \
+     --jq '[.labels[].name | capture("^dispatch:verify-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0')
+   ```
 
-  When `N < 3`, fall through to the clean-completion bullet (the chain
-  retries on the next router tick). When `N >= 3` — or for any non-`verify`
-  phase that did not advance — apply `dispatch:office-hours` to the PR (same
-  apply-first / create-on-"not found" idiom as the deviation bullet above)
-  and stop. Do **not** self-close; the parked job's transcript is the
-  diagnostic record of the loop the chain just escaped.
+   When `N < 3`, fall through to the silent propagate-success bullet (the
+   chain retries on the next router tick). When `N >= 3` — or for any
+   non-`verify` phase that did not advance — apply `dispatch:office-hours`
+   to the PR (same apply-first / create-on-"not found" idiom as `notify
+   deviation` above), report that the loop was broken, and stop (no
+   self-close). The parked job's transcript is the diagnostic record of the
+   loop the chain just escaped.
 
-- **Clean completion or early-stop** — an early-stop, or a phase-completed run
-  whose `dispatch-spawn-router` succeeded and whose report surfaces nothing that needs
-  the user. Self-close (`dangerouslyDisableSandbox: true`):
+4. **propagate-success (silent)** — spawn succeeded, no deviation, phase
+   advanced. This is the only silent terminal path. Self-close
+   (`dangerouslyDisableSandbox: true`):
 
-  ```bash
-  .claude/skills/dispatch/scripts/dispatch-self-close
-  ```
+   ```bash
+   .claude/skills/dispatch/scripts/dispatch-self-close
+   ```
 
-  The script stops the managed background job by its job-id (the basename of
-  `$CLAUDE_JOB_DIR`, which is what `claude stop` expects — not the conversation
-  session UUID, not the registry's `.sessionId`). It is a no-op when
-  `CLAUDE_JOB_DIR` is unset (the session is interactive, not a managed
-  background job) — so an interactive `/dispatch-worker` reaching Step 4 does
-  not stop the user's live conversation. The job ends; the router it spawned —
-  or, for an early-stop, the #725 heartbeat — carries the workflow forward.
+### `notify worker-wrong-cwd`
+
+Step 0 detected that the worker was spawned into the wrong cwd. No phase
+ran and no PR is typically resolvable. Print the Step 0 diagnostic to
+stderr, report the variance to the user, and stop (no self-close) — the
+session stays in `claude agents` until the user closes it, so the wrong-cwd
+spawn is visible rather than buried in a closed transcript.
+
+### `notify already-done`
+
+Step 2 found a non-draft (ready) PR (`done` phase) that slipped past the
+sweep — `dispatch-sweep` (#843) is meant to adopt these before they reach a
+worker, so this is a real variance. Resolve the PR with
+`.claude/skills/dispatch/scripts/dispatch-find-pr <N>` and apply
+`dispatch:office-hours` to it with the same apply-first / create-on-"not
+found" idiom as `notify deviation` above so the slip is queued for human
+review. Report the variance and stop (no self-close).
+
+### `notify implement-stop`
+
+Step 3's relevance verdict was `stop` — the codebase has moved past the
+issue's need. No PR exists yet for an `implement`-phase target, so there is
+nothing to label. Print the Step 3 drift report (what changed, the
+recommendation to close the issue or re-run `/ready`), and stop (no
+self-close).
+
+### `drain waiting`
+
+Step 2's CI subagent returned but the re-derived phase is still `waiting`
+because CI registered no checks. Print a **mandatory** user-visible report
+("CI registered no checks for issue `<N>`'s draft PR; closing — #725
+restart will re-check at 9 AM"), then self-close
+(`dangerouslyDisableSandbox: true`):
+
+```bash
+.claude/skills/dispatch/scripts/dispatch-self-close
+```
+
+A silent `drain` is a defect.
+
+---
+
+`dispatch-self-close` stops the managed background job by its job-id (the
+basename of `$CLAUDE_JOB_DIR`, which is what `claude stop` expects — not
+the conversation session UUID, not the registry's `.sessionId`). It is a
+no-op when `CLAUDE_JOB_DIR` is unset (the session is interactive, not a
+managed background job) — so an interactive `/dispatch-worker` reaching
+Step 4 does not stop the user's live conversation.
+
+### The #725 daily restart
+
+The #725 daily 9 AM dispatch restart is the workflow's restart-from-zero
+mechanism. It re-seeds the chain when the prior day ended without an
+in-flight worker — covering the cumulative end-of-day drain (every `drain
+waiting` that ended a tick), rate-limit cap reached (#845), predecessor
+crash, and missed ticks (e.g. a WSL shutdown). It is not tied to any one
+disposition; every terminal state, including `notify` paths whose sessions
+the user closes without manual restart, falls within its scope.
