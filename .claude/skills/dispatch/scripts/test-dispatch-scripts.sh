@@ -4824,56 +4824,73 @@ spawn_worker_teardown() {
 echo "Test: an empty registry spawns one /dispatch-worker background job"
 spawn_worker_setup
 write_fake_spawn_worker_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+# Run from a stable known cwd so Test 2 (and 1's name/positional-arg
+# assertions) can compare against it. The spawn must NOT cd into the target
+# worktree — it runs from the caller's cwd.
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-worker: dispatch-spawn-worker exits 0" "0" "$rc"
 assert_eq "spawn-worker: stdout is 'spawned'" "spawned" "$out"
-# The recorded argv must be exactly: --bg --name dispatch-839-<id>
-#   --permission-mode auto /dispatch-worker 839
+# The recorded argv must be exactly:
+#   --bg --name <worktree-basename> --permission-mode auto
+#   "/dispatch-worker 839 <worktree-path>"
 mapfile -t sw_bg_argv < "$SPAWN_WORKER_BG_ARGV"
 assert_eq "spawn-worker: argv[0] is --bg" "--bg" "${sw_bg_argv[0]:-}"
 assert_eq "spawn-worker: argv[1] is --name" "--name" "${sw_bg_argv[1]:-}"
-case "${sw_bg_argv[2]:-}" in
-  dispatch-839-*) sw_name_ok=yes ;;
-  *)              sw_name_ok="no: ${sw_bg_argv[2]:-}" ;;
-esac
-assert_eq "spawn-worker: argv[2] is a dispatch-839-* agent name" "yes" "$sw_name_ok"
+assert_eq "spawn-worker: argv[2] is the worktree basename" \
+  "839-test-worker" "${sw_bg_argv[2]:-}"
 assert_eq "spawn-worker: argv[3] is --permission-mode" "--permission-mode" "${sw_bg_argv[3]:-}"
 assert_eq "spawn-worker: argv[4] is auto" "auto" "${sw_bg_argv[4]:-}"
-assert_eq "spawn-worker: argv[5] is /dispatch-worker 839" "/dispatch-worker 839" "${sw_bg_argv[5]:-}"
+assert_eq "spawn-worker: argv[5] is '/dispatch-worker 839 <worktree-path>'" \
+  "/dispatch-worker 839 $WORKER_TARGET_WORKTREE" "${sw_bg_argv[5]:-}"
 spawn_worker_teardown
 
-# --- Test 2: cwd assertion ---------------------------------------------------
+# --- Test 2: spawn cwd stays at caller's cwd --------------------------------
 
-echo "Test: the spawn subshell cd's into the target worktree path"
+echo "Test: dispatch-spawn-worker invokes 'claude --bg' from the caller's cwd, NOT the target worktree"
 spawn_worker_setup
 write_fake_spawn_worker_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-worker-cwd: exits 0" "0" "$rc"
 # Read the first line of the pwd-log and compare it (via realpath) to the
-# target worktree. mktemp -d on Linux does not add a /private/ prefix, but
-# realpath is robust on all platforms.
+# caller's cwd. realpath is used to normalize platform-specific path
+# differences (e.g. macOS /private/ prefix on /tmp).
 sw_pwd_line=$(head -1 "$SPAWN_WORKER_PWD_LOG" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" == "$(realpath "$WORKER_TARGET_WORKTREE")" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: spawn subshell ran in the target worktree"
+if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" == "$(realpath "$SPAWN_CALLER_CWD")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: 'claude --bg' ran with cwd = caller's cwd (worktrees/main)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: spawn subshell ran in the target worktree"
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: 'claude --bg' ran with cwd = caller's cwd (worktrees/main)"
   echo "    pwd-log:  '$sw_pwd_line'"
-  echo "    expected: '$WORKER_TARGET_WORKTREE'"
+  echo "    expected: '$SPAWN_CALLER_CWD'"
+fi
+# Independently assert the cwd is NOT the target worktree — that is the
+# regression the issue prevents (cwd-pollution of the daemon's launcher
+# default).
+TOTAL=$((TOTAL + 1))
+if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" != "$(realpath "$WORKER_TARGET_WORKTREE")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: 'claude --bg' did NOT cd into the target worktree"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: 'claude --bg' did NOT cd into the target worktree"
+  echo "    pwd-log: '$sw_pwd_line'"
 fi
 spawn_worker_teardown
 
 # --- Test 3: per-worktree dedup ----------------------------------------------
 
-echo "Test: another live dispatch-* session under the worktree deduplicates the spawn"
+echo "Test: another live same-name (worktree-basename) session deduplicates the spawn"
 spawn_worker_setup
+# The dedup is keyed on `name == <worktree-basename>` — i.e. `839-test-worker`
+# in this test fixture. Prime the registry with a different sessionId whose
+# name matches the worktree-basename the spawn would use.
 printf '%s' \
-  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"dispatch-839-aaaa1111"}]' \
+  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"839-test-worker"}]' \
   > "$SPAWN_WORKER_REGISTRY"
 write_fake_spawn_worker_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "dedup-worker: dispatch-spawn-worker exits 0" "0" "$rc"
-assert_eq "dedup-worker: stdout is 'deduped'" "deduped" "$out"
+assert_eq "dedup-worker: stdout is 'deduped' (name-keyed dedup hit)" "deduped" "$out"
 # No --bg invocation was recorded — nothing was spawned.
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
@@ -4886,11 +4903,12 @@ spawn_worker_teardown
 
 # --- Test 4: self-exclusion --------------------------------------------------
 
-echo "Test: a dispatch-* session that is this session does not deduplicate"
+echo "Test: a same-name session that is this session does not deduplicate"
 spawn_worker_setup
-# The only dispatch-* session in the registry IS this session (sess-self).
+# The only worker-named session in the registry IS this session (sess-self).
+# Self-exclusion makes name-keyed dedup ignore sessionId == DISPATCH_SPAWN_WORKER_SESSION_ID.
 printf '%s' \
-  '[{"sessionId":"sess-self","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"dispatch-839-self0000"}]' \
+  '[{"sessionId":"sess-self","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"839-test-worker"}]' \
   > "$SPAWN_WORKER_REGISTRY"
 write_fake_spawn_worker_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
