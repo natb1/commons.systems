@@ -5228,6 +5228,10 @@ assert_eq "missing-args-worker: three args → exit 2" "2" "$sw_rc_c"
 if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" "not-a-number" "$WORKER_TARGET_WORKTREE" 2>/dev/null; then sw_rc_d=0; else sw_rc_d=$?; fi
 assert_eq "missing-args-worker: non-integer <N> → exit 2" "2" "$sw_rc_d"
 
+# Sub-case E: non-existent worktree path rejected at the spawner edge
+if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$TMPDIR_TEST/worktrees/does-not-exist" 2>/dev/null; then sw_rc_e=0; else sw_rc_e=$?; fi
+assert_eq "missing-args-worker: non-existent <worktree-path> → exit 2" "2" "$sw_rc_e"
+
 spawn_worker_teardown
 
 # --- Test 9: dedup + verify query the spawner cwd, NOT the worktree path ----

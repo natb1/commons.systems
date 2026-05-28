@@ -60,7 +60,8 @@
 # Exit codes:
 #   0  deduped or spawned (stdout disambiguates).
 #   1  the successor never registered in 'claude agents --json' — see stderr.
-#   2  the script cannot operate — wrong number of command-line arguments.
+#   2  the script cannot operate — argument validation failed (wrong count,
+#      non-integer <issue-num>, or non-existent <worktree-path>).
 #
 # Environment overrides for testability (mirroring dispatch-spawn-router's
 # DISPATCH_SPAWN_ROUTER_* pattern):
@@ -109,6 +110,14 @@ WORKTREE_PATH="$2"
 
 if [[ ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
   echo "dispatch-spawn-worker: invalid issue number '$ISSUE_NUM' (expected a positive integer)" >&2
+  exit 2
+fi
+
+# The worker `cd`s into <worktree-path> as its Step 0; a missing path would
+# only surface there, after the spawn has already happened. Validate at the
+# system edge so the diagnostic names the spawner, not the worker.
+if [[ ! -d "$WORKTREE_PATH" ]]; then
+  echo "dispatch-spawn-worker: worktree path '$WORKTREE_PATH' does not exist" >&2
   exit 2
 fi
 
