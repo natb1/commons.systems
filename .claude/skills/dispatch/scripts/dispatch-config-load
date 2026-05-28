@@ -260,8 +260,12 @@ case "$CONFIG_TYPE" in
          "five_hour_window_seconds"] |
         .[] |
         . as $field |
-        if ($cfg | has($field)) and ($cfg[$field] | type) != "number" then
+        if ($cfg | has($field)) | not then
+          empty
+        elif ($cfg[$field] | type) != "number" then
           "\($field) must be a number if present, got \($cfg[$field] | type)"
+        elif $cfg[$field] <= 0 then
+          "\($field) must be > 0 if present, got \($cfg[$field])"
         else
           empty
         end

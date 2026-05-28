@@ -4569,6 +4569,44 @@ out_compact=$(printf '%s' "$out" | jq -c '.')
 assert_eq "empty object prints {}" "{}" "$out_compact"
 config_teardown
 
+# --- Test 12: five_hour_window_seconds: 0 is rejected (must be > 0) ----------
+
+echo "Test: five_hour_window_seconds: 0 exits 1 and stderr says must be > 0"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"five_hour_window_seconds": 0}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "five_hour_window_seconds 0 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"five_hour_window_seconds"* && "$err" == *"must be > 0"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: five_hour_window_seconds 0 stderr says must be > 0"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: five_hour_window_seconds 0 stderr says must be > 0"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 13: max_concurrent_workers: -1 is rejected (must be > 0) -----------
+
+echo "Test: max_concurrent_workers: -1 exits 1 and stderr says must be > 0"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"max_concurrent_workers": -1}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "max_concurrent_workers -1 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"max_concurrent_workers"* && "$err" == *"must be > 0"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: max_concurrent_workers -1 stderr says must be > 0"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: max_concurrent_workers -1 stderr says must be > 0"
+  echo "    stderr: $err"
+fi
+config_teardown
+
 # ============================================================================
 # dispatch-target-workers tests
 # ============================================================================
@@ -4820,20 +4858,23 @@ out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "env override clears 5h gate; late-week ramp → 7" "7" "$out"
 tw_teardown
 
-# --- Test 13: ramp_tau_seconds=0 disables spawning --------------------------
+# --- Test 13: ramp_tau_seconds=0 is rejected; dispatch-target-workers uses defaults ----
 
-echo "Test: ramp_tau_seconds=0 disables spawning (documents tau=0 behavior)"
+echo "Test: ramp_tau_seconds=0 rejected by config validator; dispatch-target-workers uses defaults"
 tw_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
 {"ramp_tau_seconds": 0}
 EOF
-# Late-week regime: default tau=86400 would yield target_N=7 here (same as
-# Test 12 baseline).  With tau=0, ramp = 0/(3600+0) = 0, so target_N=0.
+# ramp_tau_seconds=0 is rejected by dispatch-config-load (must be > 0).
+# dispatch-target-workers silently ignores a failed config-load and uses
+# the baked-in default tau=86400. Late-week regime (remaining_weekly=3600)
+# with 5h gate clear (used_5h=0, elapsed_5h_frac=0.8 → cap=40 > 0) yields
+# target_N=7.
 export DISPATCH_TARGET_WORKERS_NOW=10000
 # remaining_weekly=3600s (1h), remaining_5h=3600s (mid-window 5h gate clear)
 write_rl "rl.json" 50 13600 0 13600
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "ramp_tau_seconds=0 disables spawning → 0" "0" "$out"
+assert_eq "ramp_tau_seconds=0 rejected; defaults used → 7" "7" "$out"
 tw_teardown
 
 # ============================================================================
