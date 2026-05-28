@@ -15,8 +15,9 @@
 #   2. Dedup    — if another live dispatch-* session is already running
 #                 (excluding this one), spawn nothing. Fail-safe: if the
 #                 session registry cannot be queried, also spawn nothing — a
-#                 dispatch agent may be running; the #725 heartbeat re-seeds
-#                 the chain if it actually dropped.
+#                 dispatch agent may be running; the #725 cap-keyed re-seed
+#                 re-seeds the chain if a rate-limit cap-stall actually
+#                 dropped it.
 #   3. Spawn    — `claude --bg --name dispatch-<short-id> --permission-mode
 #                 auto "/dispatch"`, cwd = the main worktree (where every
 #                 /dispatch job is started).

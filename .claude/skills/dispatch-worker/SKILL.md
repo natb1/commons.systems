@@ -410,8 +410,8 @@ self-close).
 
 Step 2's CI subagent returned but the re-derived phase is still `waiting`
 because CI registered no checks. Print a **mandatory** user-visible report
-("CI registered no checks for issue `<N>`'s draft PR; closing — #725
-restart will re-check at 9 AM"), then self-close
+("CI registered no checks for issue `<N>`'s draft PR; closing — the next
+baton-pass or cap-keyed re-seed will re-check"), then self-close
 (`dangerouslyDisableSandbox: true`):
 
 ```bash
@@ -429,10 +429,10 @@ no-op when `CLAUDE_JOB_DIR` is unset (the session is interactive, not a
 managed background job) — so an interactive `/dispatch-worker` reaching
 Step 4 does not stop the user's live conversation.
 
-### The #725 daily restart
+### The #725 cap-keyed re-seed
 
-See `/dispatch` Step 7's *The #725 daily restart* subsection — the worker's
-relationship to the daily restart is the same as the router's. Every
-terminal state the worker reaches, including `drain waiting` and every
-`notify <reason>` whose session the user closes without manual restart,
-falls within #725's restart-from-zero scope.
+See `/dispatch` Step 7's *The #725 cap-keyed re-seed* subsection — the
+worker's relationship to the re-seed is the same as the router's. The
+cap-keyed re-seed covers chain stalls caused by a rate-limit cap hit; an
+empty queue or all-parked stall is handled by the office-hours queue, not
+this mechanism.
