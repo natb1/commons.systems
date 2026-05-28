@@ -511,8 +511,10 @@ the action.
 **Invariant**: the only silent terminal path is `propagate` on success.
 Every other terminal disposition — `propagate` falling through to `notify
 spawn-failed` on a failed spawn, every `notify <reason>` variance, every
-`drain <reason>` no-work case — emits a user-visible report before any tool
-action. A silent `notify` or silent `drain` is a defect.
+`drain <reason>` no-work case — emits a user-visible report before the
+session ends (before `dispatch-self-close` for `drain` and `propagate`;
+before this turn's text output completes for `notify`, which does not
+self-close). A silent `notify` or silent `drain` is a defect.
 
 The three dispositions:
 

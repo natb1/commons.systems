@@ -42,8 +42,9 @@ case "$ACTUAL_BRANCH" in
 esac
 ```
 
-If the assertion fails, proceed to Step 4 with `notify worker-wrong-cwd` —
-do not derive a phase or run a phase skill.
+The bash above exits 1 to signal the wrong-cwd disposition. When that exit
+fires, proceed to Step 4 with `notify worker-wrong-cwd` — do not derive a
+phase or run a phase skill.
 
 ## 1. Derive the Phase
 
@@ -232,18 +233,20 @@ the action.
 
 The dispatch-chain terminal-disposition invariant is stated in `/dispatch`
 Step 7 and applies equally here — every disposition other than `propagate`
-on success emits a user-visible report before any tool action; a silent
+on success emits a user-visible report before the session ends (before
+`dispatch-self-close` for `drain` and `propagate`; before this turn's text
+output completes for `notify`, which does not self-close); a silent
 `notify` or silent `drain` is a defect.
 
 The worker reaches Step 4 with one of these dispositions:
 
 | Disposition | Source |
 |---|---|
-| `propagate` (silent on success; falls through to `notify spawn-failed` / `notify deviation` / `notify phase-non-advancement` per the priority below) | Step 2 — phase skill ran to completion |
+| `propagate` (silent on success; may fall through to `notify spawn-failed` / `notify deviation` / `notify phase-non-advancement` per the priority below) | Step 2 — phase skill ran to completion |
 | `notify worker-wrong-cwd` | Step 0 — cwd verification failed |
 | `notify already-done` | Step 2 — `done` phase (non-draft PR slipped past sweep) |
 | `notify implement-stop` | Step 3 — relevance verdict `stop` |
-| `drain waiting` | Step 2 — `waiting` phase stayed `waiting` after the CI subagent returned |
+| `drain waiting` | Step 2 — re-derived phase is still `waiting` after the CI subagent returned (CI registered no checks) |
 
 The worker was born in its target worktree and never entered another
 worktree mid-session — there is nothing to exit. The router (`/dispatch`)
@@ -317,7 +320,9 @@ The disposition then resolves in this priority order:
    ```
 
    If the re-derived phase **differs** from the phase that just ran, the
-   workflow advanced — fall through to the silent propagate-success bullet.
+   workflow advanced — fall through to the propagate-success bullet (silent
+   self-close; the completion report above already surfaced the phase
+   outcome to the user).
 
    If the re-derived phase **equals** the phase that just ran, the workflow
    did not advance. Apply the verify-phase exemption: `/verify-pr` does not
@@ -333,8 +338,9 @@ The disposition then resolves in this priority order:
      --jq '[.labels[].name | capture("^dispatch:verify-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0')
    ```
 
-   When `N < 3`, fall through to the silent propagate-success bullet (the
-   chain retries on the next router tick). When `N >= 3` — or for any
+   When `N < 3`, fall through to the propagate-success bullet (silent
+   self-close; the completion report above stays as the diagnostic record;
+   the chain retries on the next router tick). When `N >= 3` — or for any
    non-`verify` phase that did not advance — apply `dispatch:office-hours`
    to the PR (same apply-first / create-on-"not found" idiom as `notify
    deviation` above), report that the loop was broken, and stop (no
@@ -352,10 +358,11 @@ The disposition then resolves in this priority order:
 ### `notify worker-wrong-cwd`
 
 Step 0 detected that the worker was spawned into the wrong cwd. No phase
-ran and no PR is typically resolvable. Print the Step 0 diagnostic to
-stderr, report the variance to the user, and stop (no self-close) — the
-session stays in `claude agents` until the user closes it, so the wrong-cwd
-spawn is visible rather than buried in a closed transcript.
+ran and no PR is typically resolvable. Step 0's bash already echoed the
+stderr diagnostic; emit a user-visible chat report of the variance and
+stop (no self-close) — the session stays in `claude agents` until the user
+closes it, so the wrong-cwd spawn is visible rather than buried in a
+closed transcript.
 
 ### `notify already-done`
 
@@ -365,7 +372,10 @@ worker, so this is a real variance. Resolve the PR with
 `.claude/skills/dispatch/scripts/dispatch-find-pr <N>` and apply
 `dispatch:office-hours` to it with the same apply-first / create-on-"not
 found" idiom as `notify deviation` above so the slip is queued for human
-review. Report the variance and stop (no self-close).
+review. If `dispatch-find-pr` prints nothing (e.g. a transient `gh` failure
+or branch-prefix edge case), print a clear diagnostic to stderr without
+applying the label; the disposition still proceeds. Report the variance
+and stop (no self-close).
 
 ### `notify implement-stop`
 
@@ -400,10 +410,8 @@ Step 4 does not stop the user's live conversation.
 
 ### The #725 daily restart
 
-The #725 daily 9 AM dispatch restart is the workflow's restart-from-zero
-mechanism. It re-seeds the chain when the prior day ended without an
-in-flight worker — covering the cumulative end-of-day drain (every `drain
-waiting` that ended a tick), rate-limit cap reached (#845), predecessor
-crash, and missed ticks (e.g. a WSL shutdown). It is not tied to any one
-disposition; every terminal state, including `notify` paths whose sessions
-the user closes without manual restart, falls within its scope.
+See `/dispatch` Step 7's *The #725 daily restart* subsection — the worker's
+relationship to the daily restart is the same as the router's. Every
+terminal state the worker reaches, including `drain waiting` and every
+`notify <reason>` whose session the user closes without manual restart,
+falls within #725's restart-from-zero scope.
