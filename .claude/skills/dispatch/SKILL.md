@@ -517,6 +517,13 @@ many concurrent `dispatch-worker-*` sessions should run:
   | 1h (3600s)     | 0.8             | 40%    |
   | 0              | 1.0             | 50%    |
 
+  At window-start, `cap_5h = 0` and the gate condition `used_5h >= cap_5h`
+  evaluates as `0 >= 0`, so spawning is briefly paused for the first slice of
+  every 5h window. This is intentional — the linear schedule enforces the
+  per-window ceiling from second zero. The blackout clears as soon as `cap_5h`
+  rises above the current `used_5h`; if `used_5h` was 0 at refresh, this
+  happens within seconds.
+
 Tunables (each optional in `dispatch.config/target-workers.json`; defaults
 baked into the script):
 

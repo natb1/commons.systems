@@ -209,6 +209,9 @@ awk -v used_weekly="$WEEKLY_USED" \
     -v now="$NOW" \
     -v fiveh_enabled="$FIVEH_ENABLED" \
     'BEGIN {
+       # + 0 throughout: explicit numeric coercion; awk treats any unset/empty
+       # var as "" in numeric contexts and silently breaks comparisons without it.
+
        # Step 1: weekly target reached → 0.
        if (used_weekly + 0 >= target_weekly + 0) { print 0; exit }
 

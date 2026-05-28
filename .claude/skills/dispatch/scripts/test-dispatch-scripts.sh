@@ -4820,6 +4820,22 @@ out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "env override clears 5h gate; late-week ramp → 7" "7" "$out"
 tw_teardown
 
+# --- Test 13: ramp_tau_seconds=0 disables spawning --------------------------
+
+echo "Test: ramp_tau_seconds=0 disables spawning (documents tau=0 behavior)"
+tw_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"ramp_tau_seconds": 0}
+EOF
+# Late-week regime: default tau=86400 would yield target_N=7 here (same as
+# Test 12 baseline).  With tau=0, ramp = 0/(3600+0) = 0, so target_N=0.
+export DISPATCH_TARGET_WORKERS_NOW=10000
+# remaining_weekly=3600s (1h), remaining_5h=3600s (mid-window 5h gate clear)
+write_rl "rl.json" 50 13600 0 13600
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "ramp_tau_seconds=0 disables spawning → 0" "0" "$out"
+tw_teardown
+
 # ============================================================================
 # dispatch project-helper tests (item-add / status-read / status-write)
 # ============================================================================

@@ -33,11 +33,15 @@
 #   `if worktree_has_live_session <path>` is fail-safe by construction.
 #
 # claude_agents_count_by_name_prefix <prefix>
-#   Counts live sessions whose `name` starts with `<prefix>`, repo-wide (no
-#   `--cwd` filter). Used by the dispatch router's concurrency gate to count
-#   live `dispatch-worker-*` sessions before deciding whether to spawn one
-#   more. Same UNKNOWN contract as `claude_sessions_under`: a count of `0` is
-#   a definite "no matches", non-zero return is "could not determine".
+#   Counts live sessions whose `name` starts with `<prefix>`, machine-wide (no
+#   `--cwd` filter). On a single dev machine this is acceptable; if two separate
+#   checkouts run in parallel, their `dispatch-worker-*` sessions are counted
+#   together, inflating the count and gating spawning too aggressively —
+#   fail-safe (errs toward fewer workers). Used by the dispatch router's
+#   concurrency gate to count live `dispatch-worker-*` sessions before deciding
+#   whether to spawn one more. Same UNKNOWN contract as `claude_sessions_under`:
+#   a count of `0` is a definite "no matches", non-zero return is "could not
+#   determine".
 #     return 0 — daemon queried successfully. Stdout is a single integer (>=0)
 #               line: the count of matching sessions.
 #     return 1 — UNKNOWN. Stdout is empty. Callers that gate on the count
@@ -147,8 +151,10 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       return 1
     fi
 
-    # No --cwd here: the router needs a repo-wide count of live workers, not a
-    # per-path filter. 2>/dev/null drops daemon noise.
+    # No --cwd here: the router needs a machine-wide count of live workers, not
+    # a per-path filter. Two checkouts on the same machine share this count —
+    # cross-repo inflation is fail-safe (gates spawning conservatively).
+    # 2>/dev/null drops daemon noise.
     local out
     if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json 2>/dev/null); then
       return 1
