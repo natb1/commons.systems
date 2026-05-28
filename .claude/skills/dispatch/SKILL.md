@@ -206,21 +206,23 @@ continue to target selection.
     selection scan to a startable open leaf (not necessarily the top-level
     `help wanted` issue). Proceed to Step 5 with mode `queue`.
   - `cleanup-unknown <path>` — the sweep found a worktree with no open PR and
-    no inferable issue number. Use `AskUserQuestion` to ask whether to delete
-    `<path>` — its history is only local. This is the only sweep path that can
-    destroy potentially-unmerged code.
-    - **Yes** → re-run `dispatch-select-target --cleanup-confirm <path>` and
-      route on its new output. The script performs the cleanup and resumes
-      selection; if a second unknown orphan exists it halts again with
-      `cleanup-unknown <path2>` — confirm that path with a fresh
-      `AskUserQuestion`.
-    - **No** → re-run `dispatch-select-target --no-sweep` and route on its new
-      output. The flag bypasses the sweep so the next call doesn't immediately
-      re-halt on the same unknown orphan.
-  - `main-broken <sha>` — see the **main-broken handler** at the end of this
-    step.
-  - `jit-reminder <repo> <num> <project> <item-id>` — see the **jit-reminder
-    handler** at the end of this step.
+    no inferable issue number. Invoke `/dispatch-cleanup-unknown <path>` — the
+    skill owns the `AskUserQuestion` confirmation and the on-Yes/No actions, and
+    returns the resumed `dispatch-select-target` output (`worktree-adopted`,
+    `pr`, `issue`, `empty`, or another `cleanup-unknown <path2>` if a second
+    unknown orphan exists — re-invoke the skill with the new path to confirm)
+    for routing here. Treat the returned line as a fresh `$SELECTED` and route
+    on it as above. This is the only sweep path that can destroy
+    potentially-unmerged code.
+  - `main-broken <sha>` — invoke `/dispatch-diagnose-main <sha>`, then
+    **proceed to Step 9** (early-stop). The skill owns the failing-check
+    enumeration, log-fetch, summary, lock-release, and stop.
+  - `jit-reminder <repo> <num> <project> <item-id>` — invoke
+    `/dispatch-jit-reminder <repo> <num> <project> <item-id>`, then stop the
+    tick directly (the skill is a Step 9 bypass — its user-visible summary must
+    stay open in the transcript for a human to read). The skill owns the claim
+    + lock-release + summarize + stop sequence; Steps 4, 5, and 6-7 are all
+    skipped.
   - `empty` — nothing eligible. Release the lock (see *Releasing the lock*),
     report that the queue is empty, then **exit via Step 9** (early-stop —
     `dispatch-handoff --early-stop`).
@@ -263,67 +265,6 @@ continue to target selection.
   another session — exactly as a directly-worktree'd issue is skipped; selection
   falls through to the next tier. The tier emits the resolved startable leaf, so
   a queue-selected `issue <num>` is always a directly-startable target.
-
-  **main-broken handler.** `origin/main` itself is red, so no new work is safe
-  to start. Do **not** run the sweep, create a worktree, branch, or phase skill.
-  Diagnose main instead: enumerate the failing checks on `<sha>` by aggregating
-  `gh run list --branch main` and
-  `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`. For a failing workflow
-  run, fetch its logs with `gh run view <databaseId> --log-failed`; for a failing
-  CodeQL check-run (which has no workflow-run id), open its `details_url` from
-  the check-runs response. These diagnostic `gh` calls run before the stop —
-  keep them. Then, as the action immediately before the final report, release
-  the lock (see *Releasing the lock*); summarize the likely cause, report it,
-  then **exit via Step 9** (early-stop — `dispatch-handoff --early-stop`). Once
-  a PR that fixes main exists the
-  normal ladder picks it up
-  (verify/ready) — this gate only blocks starting new, unrelated work.
-
-  **jit-reminder handler.** The JIT scan selected `<num>` in `<repo>` as the
-  earliest-due open JIT issue. Claim it, summarize it for the user, and stop —
-  no worktree, no PR, no phase skill, no leaf trace. Steps 4, 5, and 6-7 are all
-  skipped.
-
-  1. **Claim the issue inside the scoped lock window.** The lock is still held
-     from Step 0 — the reminder path is a Step 3 stop path and never reaches
-     Step 5's proceed-path release, so the claim runs under the lock, exactly as
-     the JIT engine does. Resolve the project's In-Progress status value from
-     local config, then write it:
-
-     ```bash
-     IN_PROGRESS=$(.claude/skills/dispatch/scripts/dispatch-config-load projects \
-       | jq -r --arg key "<project>" \
-         '.projects[] | select(.key == $key) | .statusInProgress')
-     .claude/skills/dispatch/scripts/dispatch-project-status-write \
-       <project> "https://github.com/<repo>/issues/<num>" "$IN_PROGRESS"
-     ```
-
-     The `dispatch-project-status-write` call needs `dangerouslyDisableSandbox:
-     true` — it calls `gh` (see `.claude/rules/sandbox.md`).
-  2. **Release the lock.** This is a Steps 1-5 stop path — release the lock (see
-     *Releasing the lock*) immediately after the claim, before the summary.
-  3. **Summarize the issue for the user.** Fetch the issue
-     (`dangerouslyDisableSandbox: true` — `gh` needs network):
-
-     ```bash
-     gh issue view <num> --repo <repo> --json number,title,body
-     ```
-
-     Present its number, title, and body to the user as a human-readable
-     reminder, framed as the most-overdue / soonest-due JIT reminder the scan
-     surfaced. The `jit-reminder` line carries no due timestamp — do not state a
-     precise computed due time.
-  4. **Stop the tick — bypass Step 9.** The handler stops directly without
-     routing through Step 9: the summary just printed must stay open in the
-     transcript for a human to read, and Step 9's terminal disposition would
-     self-close the job and hide it. The `In Progress` status the claim wrote
-     stops a later `/dispatch` tick from re-selecting this issue.
-
-  A `jit-reminder` run is a **jit summary session** — an office-hours session
-  (#755): the summary is surfaced to the user for a human to read, not consumed
-  as autonomous dispatch-chain work. #755's two-queue infrastructure is not yet
-  built, so this handler is that documented intent plus the mechanical claim →
-  release → summarize → stop branch above.
 
 ## 4. Trace to an Open Leaf
 
@@ -624,10 +565,11 @@ job ends. A job that just finished a phase passes the baton to a fresh
 `/dispatch` job and self-closes; that self-perpetuating chain, re-seeded by the
 #725 heartbeat, is what advances the workflow.
 
-The one documented exception is the **jit-reminder handler** in Step 3: by
-design it bypasses Step 9 and stops directly, because its user-visible summary
-must stay open in the transcript for a human to read — self-closing the job
-would hide it. See the jit summary session note at the end of Step 3.
+The one documented exception is the **jit-reminder** outcome in Step 3,
+handled by the `/dispatch-jit-reminder` skill: by design it bypasses Step 9
+and stops directly, because its user-visible summary must stay open in the
+transcript for a human to read — self-closing the job would hide it. See the
+jit summary session note in the `/dispatch-jit-reminder` skill.
 
 Each termination reaches Step 9 with one of two dispositions, named by the step
 that routed here:
