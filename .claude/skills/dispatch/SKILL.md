@@ -79,6 +79,10 @@ command:
   Stop paths fire before the marker is written, so the strict
   `CLAUDE_CODE_SESSION_ID`-match branch applies.
 
+The `main-broken` stop path is the one exception: `/dispatch-diagnose-main`
+runs `--release` itself as its Step 3, so `/dispatch` Step 3's `main-broken`
+branch must not call `--release` again.
+
 Both calls need `dangerouslyDisableSandbox: true` (same reason as Step 0); no
 elevated timeout is needed — `--release` returns immediately. They print
 `released` or `noop`; both are fine — `noop` is a no-op when the lock is
@@ -548,10 +552,8 @@ The three dispositions:
 - **`drain <reason>`** — `drain empty-queue` (Step 3, queue empty) or
   `drain worktree-conflict` (Step 5, target's worktree is owned by another
   live session). The call site has already printed a **mandatory**
-  user-visible report stating the reason and the recovery path ("queue
-  empty — closing; #725 restart will re-check at 9 AM" / "worktree at
-  `<path>` owned by another live session for issue `<N>`; closing — #725
-  restart will re-check at 9 AM"). Then self-close
+  user-visible report stating the reason and the recovery path (templates
+  live at the Step 3 and Step 5 call sites). Then self-close
   (`dangerouslyDisableSandbox: true`):
 
   ```bash

@@ -265,8 +265,11 @@ daemon over a socket; see `.claude/rules/sandbox.md`):
 ```
 
 The worker spawns a `/dispatch` router, not another worker — the router will
-select the next target and spawn its worker. The script prints `spawned` or
-`deduped` and exits 0 on success; exits non-zero when a job was spawned but
+select the next target and spawn its worker. The script prints `spawned` (a
+router was started) or `deduped` (another `dispatch-*` session is already
+live in `worktrees/main`, or the session registry could not be queried — the
+chain is in-flight or assumed-in-flight, so this worker does not need to
+push it) and exits 0 on success; exits non-zero when a job was spawned but
 did not register.
 
 Print the completion report — the phase that ran and its outcome.
