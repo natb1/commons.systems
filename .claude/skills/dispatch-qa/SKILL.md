@@ -8,7 +8,9 @@ description: Post-implementation user-acceptance QA — single self-verifying pa
 Runs a single user-acceptance QA pass on an implemented PR. Invoked two ways:
 
 - By the `/dispatch-worker` skill — the session is already inside the target
-  worktree (cwd set by `dispatch-spawn-worker` at spawn time).
+  worktree (the worker `cd`s into it in its own Step 0; `dispatch-spawn-worker`
+  itself spawns from `worktrees/main` and passes the path as the worker's
+  second positional argument).
 - Standalone from inside a target worktree with an optional `#<issue>` argument.
 
 **Step 0** verifies the current worktree and derives the target issue number

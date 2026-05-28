@@ -2,13 +2,15 @@
 # Select the single highest-priority task from the queue.
 # Usage: dispatch-select-target [--qa | --health-only] [--no-sweep] [--cleanup-confirm <path>]
 #
+# Selection is a pure function of GitHub state plus local-worktree existence.
+# The router's cwd carries no priority signal; invoking this script from any
+# worktree (main, an issue worktree, or elsewhere) produces the same result.
+#
 # Output: exactly one line:
 #   pr <num> <branch> <phase>   — a PR to work on, with its already-derived phase
 #   issue <num>                 — a help-wanted issue, resolved to a startable
 #                                 open leaf (may differ from the top-level issue)
 #   empty                       — nothing eligible
-#   worktree <N> <branch>       — the current worktree's own open issue (short-circuits the queue scan)
-#   worktree-closed <N> <branch>— the current worktree's issue is closed or unknown
 #   worktree-adopted <N> <branch>
 #                               — dispatch-sweep adopted an orphaned worktree
 #                                 elsewhere on disk; SKILL.md routes this exactly
@@ -24,25 +26,17 @@
 #                                 dispatch.config/jit.json is present.
 #   main-broken <sha>           — origin/main's HEAD CI has a failing check; no task selected
 #
-# Default-mode priority, top to bottom — current-worktree continuation runs
-# first so a session inside an <issue>-* worktree always continues there, even
-# when the sweep finds an orphan elsewhere on disk:
-#   1. current-worktree continuation (worktree / worktree-closed), gated on no
-#      *other* live session under the worktree; when another session owns the
-#      worktree the selector falls through rather than mis-claim it
-#   2. JIT scan (jit-reminder)
-#   3. origin/main CI health gate (main-broken)
-#   4. dispatch-sweep (worktree-adopted / cleanup-unknown), unless --no-sweep
-#   5. the topic-category × phase ladder over open PRs and help-wanted issues
+# Default-mode priority, top to bottom:
+#   1. JIT scan (jit-reminder)
+#   2. origin/main CI health gate (main-broken)
+#   3. dispatch-sweep (worktree-adopted / cleanup-unknown), unless --no-sweep
+#   4. the topic-category × phase ladder over open PRs and help-wanted issues
 #
-# --health-only mode runs the pre-ladder bypasses (current-worktree continuation),
-# the JIT scan, and the origin/main CI health gate, then exits — no sweep,
-# no queue scan, no PR/issue fetches. /dispatch SKILL.md uses it to re-seed the
-# dispatch chain heartbeat cheaply.
+# --health-only mode runs the JIT scan and the origin/main CI health gate, then
+# exits — no sweep, no queue scan, no PR/issue fetches. /dispatch SKILL.md uses
+# it to re-seed the dispatch chain heartbeat cheaply.
 # Output is exactly one line:
-#   ok                          — safe to proceed (either main is healthy or the
-#                                 current branch is an <N>-* worktree that
-#                                 bypasses the gate)
+#   ok                          — safe to proceed (main is healthy)
 #   jit-reminder <repo> <num> <project> <item-id>
 #                               — a configured JIT issue due for a reminder;
 #                                 emitted before the main-broken gate
@@ -98,7 +92,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
-source "$SCRIPT_DIR/lib-claude-agents.sh"
 QA_MODE=false
 HEALTH_ONLY=false
 NO_SWEEP=false
@@ -162,15 +155,6 @@ main_broken_sha() {
   if [[ "$cr_fail" -gt 0 || "$wf_fail" -gt 0 ]]; then
     echo "$sha"
   fi
-}
-
-# Current branch shared by --health-only and default modes; computed once.
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-
-# Current-worktree continuation bypasses the main-broken gate: a session
-# continuing its own in-progress work doesn't care about main's state.
-on_worktree_branch() {
-  [[ "$CURRENT_BRANCH" =~ ^([0-9]+)- ]]
 }
 
 # Convert a duration string ("12h", "7d", "30m") to whole seconds. Units:
@@ -331,10 +315,6 @@ sweep_and_route() {
 }
 
 if [[ "$HEALTH_ONLY" == "true" ]]; then
-  if on_worktree_branch; then
-    echo "ok"
-    exit 0
-  fi
   JIT_LINE=$(jit_scan)
   if [[ -n "$JIT_LINE" ]]; then
     echo "$JIT_LINE"
@@ -349,39 +329,8 @@ if [[ "$HEALTH_ONLY" == "true" ]]; then
   exit 0
 fi
 
-# Default mode: current-worktree detection first, then the main-broken gate.
+# Default mode: JIT scan, then the main-broken gate.
 if [[ "$QA_MODE" == "false" ]]; then
-  if on_worktree_branch; then
-    N="${BASH_REMATCH[1]}"
-    WT_PATH=$(git rev-parse --show-toplevel)
-    # Gate the priority-1 emission on liveness. When another live Claude
-    # session is already under this worktree (the dispatching router is a
-    # background job, hook-spawned, or a sibling of an interactive session),
-    # current-worktree continuation should NOT fire — the spawn-side dedup
-    # would catch the race, but the upstream selection was wrong and the tick
-    # would be wasted. Fall through to the rest of the ladder instead.
-    # Fail-safe: `other_live_sessions_under` returns "occupied" on any
-    # uncertainty (daemon unreachable, missing $CLAUDE_CODE_SESSION_ID), so
-    # ambiguous environments fall through rather than mis-claim.
-    if ! other_live_sessions_under "$WT_PATH"; then
-      if STATE=$(gh issue view "$N" --json state 2>/dev/null | jq -r '.state'); then
-        if [[ "$STATE" == "OPEN" ]]; then
-          echo "worktree $N $CURRENT_BRANCH"
-        else
-          echo "worktree-closed $N $CURRENT_BRANCH"
-        fi
-      else
-        # A failed `gh issue view` (nonexistent issue, transient API/auth error)
-        # is intentionally conflated with a genuinely closed issue: both yield
-        # worktree-closed, and /dispatch reports and stops on either.
-        echo "worktree-closed $N $CURRENT_BRANCH"
-      fi
-      exit 0
-    fi
-    # Another live session owns this worktree; fall through to the rest of
-    # the ladder so the router picks up real work elsewhere.
-  fi
-
   JIT_LINE=$(jit_scan)
   if [[ -n "$JIT_LINE" ]]; then
     echo "$JIT_LINE"
@@ -395,12 +344,10 @@ if [[ "$QA_MODE" == "false" ]]; then
   fi
 
   # Internal sweep: adopt an orphaned worktree elsewhere on disk, or halt on
-  # an unknown orphan. Runs after current-worktree continuation (above) so a
-  # session inside an <issue>-* worktree always continues there. --no-sweep
-  # skips this so a re-call after a declined cleanup-unknown doesn't re-halt
-  # on the same unknown orphan. --cleanup-confirm runs the user-confirmed
-  # cleanup first, then re-enters this same sweep+route block (so a second
-  # unknown orphan, if any, halts the script the same way).
+  # an unknown orphan. --no-sweep skips this so a re-call after a declined
+  # cleanup-unknown doesn't re-halt on the same unknown orphan. --cleanup-confirm
+  # runs the user-confirmed cleanup first, then re-enters this same sweep+route
+  # block (so a second unknown orphan, if any, halts the script the same way).
   if [[ -n "$CLEANUP_CONFIRM_PATH" ]]; then
     # Cleanup itself is fail-loud: a non-zero exit (invalid path, registration
     # race) propagates with stderr intact, matching the cleanup-unknown

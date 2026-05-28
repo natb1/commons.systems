@@ -16,21 +16,24 @@
 #      the main worktree and detached HEADs.
 #   3. For each worktree whose branch is in the merged map and which is in sync
 #      (clean tree + zero unpushed commits), remove it and its branch.
-#   4. Classify the remaining worktrees as active vs orphaned by walking
-#      $DISPATCH_SWEEP_PROC_ROOT (default /proc): any /proc/<pid> with a comm
-#      starting with ".claude" whose resolved cwd lives inside a worktree path
-#      marks that worktree active.
+#   4. Classify the remaining worktrees as active vs orphaned by calling
+#      claude_sessions_under (from lib-claude-agents.sh) per surviving worktree.
+#      A worktree with at least one live session is ACTIVE; one with zero live
+#      sessions is ORPHANED. If the daemon cannot be queried (UNKNOWN), the
+#      worktree is classified ACTIVE so nothing is adopted or cleaned on an
+#      unknown signal (fail-safe).
 #   5. Among orphans, separate those eligible for adoption (an open PR OR an
 #      inferable issue number ^[0-9]+-) from "unknown" orphans (no PR + no
 #      inferable issue number) — the latter halt the sweep with exit 3 and a
 #      "cleanup-unknown:<path>" directive on stderr.
 #   6. From the eligible orphans pick the OLDEST by HEAD commit time and emit
-#      "worktree <N> <branch>" on stdout (the same directive shape dispatch-
-#      select-target uses for current-worktree mode); SKILL.md routes that to
-#      the existing resume-worktree flow.
+#      "worktree <N> <branch>" on stdout; dispatch-select-target wraps this as
+#      "worktree-adopted <N> <branch>" and SKILL.md routes that to the existing
+#      resume-worktree flow.
 #
 # Environment overrides for testability:
-#   DISPATCH_SWEEP_PROC_ROOT  Root of the /proc walk. Default: /proc.
+#   CLAUDE_AGENTS_CMD         Override the `claude` invocation (e.g. a fake script
+#                             that prints a JSON array). Default: `claude`.
 #   DISPATCH_SWEEP_LOG_FILE   Override log path. Default: <root>/tmp/dispatch-sweep.log.
 #   DISPATCH_SWEEP_NOW        Override UTC timestamp source (deterministic tests).
 #
@@ -51,6 +54,8 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # shellcheck source=./lib-worktree-in-sync.sh
 source "$SCRIPT_DIR/lib-worktree-in-sync.sh"
+# shellcheck source=./lib-claude-agents.sh
+source "$SCRIPT_DIR/lib-claude-agents.sh"
 # shellcheck source=./lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
@@ -186,7 +191,7 @@ flush_record
 # in sync remove the worktree + delete the local branch. Not-in-sync merged
 # worktrees stay on the surviving list with a SKIP log line so the user can
 # investigate; they're explicitly NOT auto-adoption candidates (the unpushed
-# work may belong to a live session whose comm we missed).
+# work may belong to a live session the daemon did not report).
 SURVIVING_PATHS=()
 SURVIVING_BRANCHES=()
 
@@ -224,54 +229,13 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
 done
 
 # ---- Step 4: classify remaining worktrees as active vs orphaned -------------
-# Walk $DISPATCH_SWEEP_PROC_ROOT. A worktree is active when at least one PID's
-# comm starts with ".claude" (e.g. ".claude-unwrapp" on NixOS — the comm field
-# is already a basename so a prefix test is enough) AND its resolved cwd lies
-# inside that worktree's path. /proc may yield transient or unreadable PIDs;
-# treat any read failure as "no signal" rather than aborting.
-PROC_ROOT="${DISPATCH_SWEEP_PROC_ROOT:-/proc}"
-
-# Initialise the active-pid map for every surviving worktree to empty.
-declare -A ACTIVE_PID=()
-for wt_path in "${SURVIVING_PATHS[@]}"; do
-  ACTIVE_PID["$wt_path"]=""
-done
-
-# Precompute "path/" forms for cheap case-glob containment checks.
-if [[ -d "$PROC_ROOT" ]]; then
-  for entry in "$PROC_ROOT"/*; do
-    pid="${entry##*/}"
-    [[ "$pid" =~ ^[0-9]+$ ]] || continue
-
-    comm_file="$entry/comm"
-    [[ -r "$comm_file" ]] || continue
-    comm=""
-    IFS= read -r comm <"$comm_file" 2>/dev/null || comm=""
-    [[ "$comm" == .claude* ]] || continue
-
-    # cwd is a symlink; readlink follows it, realpath -e canonicalises.
-    cwd_link="$entry/cwd"
-    cwd=$(readlink -f "$cwd_link" 2>/dev/null) || cwd=""
-    [[ -n "$cwd" ]] || continue
-
-    for wt_path in "${SURVIVING_PATHS[@]}"; do
-      case "$cwd/" in
-        "$wt_path/"*)
-          # Record the first PID we see for this worktree; later overlapping
-          # claudes don't change the classification.
-          if [[ -z "${ACTIVE_PID[$wt_path]:-}" ]]; then
-            ACTIVE_PID["$wt_path"]="$pid"
-          fi
-          break
-          ;;
-      esac
-    done
-  done
-else
-  log "PROC_ROOT_MISSING: '$PROC_ROOT' is not a directory — all surviving worktrees will classify as orphaned"
-fi
-
-# Now log ACTIVE / ORPHANED per surviving worktree and collect the orphans.
+# For each surviving worktree, call claude_sessions_under (lib-claude-agents.sh)
+# to ask the daemon whether any live session is running there.
+#   Exit 0 + non-empty output → at least one live session → ACTIVE.
+#   Exit 0 + empty output    → daemon queried, zero sessions → ORPHANED.
+#   Exit non-zero (UNKNOWN)  → daemon unreachable → classify ACTIVE (fail-safe).
+# The fail-safe ensures no orphan adoption or merged-cleanup is emitted on a
+# tick where the daemon cannot be reached.
 ORPHAN_PATHS=()
 ORPHAN_BRANCHES=()
 i=0
@@ -280,13 +244,24 @@ while [[ $i -lt ${#SURVIVING_PATHS[@]} ]]; do
   wt_branch="${SURVIVING_BRANCHES[$i]}"
   i=$((i + 1))
 
-  pid="${ACTIVE_PID[$wt_path]:-}"
-  if [[ -n "$pid" ]]; then
-    log "ACTIVE: '$wt_path' branch=$wt_branch pid=$pid"
+  sessions=""
+  if sessions=$(claude_sessions_under "$wt_path"); then
+    # Daemon queried successfully.
+    if [[ -n "$sessions" ]]; then
+      # At least one live session — extract the first line for diagnostics.
+      first_line=$(printf '%s\n' "$sessions" | head -n1)
+      sid="" status="" name=""
+      IFS=$'\t' read -r sid _ status name <<< "$first_line"
+      log "ACTIVE: '$wt_path' branch=$wt_branch sessionId=$sid name=$name status=$status"
+    else
+      # Zero sessions — eligible orphan.
+      log "ORPHANED: '$wt_path' branch=$wt_branch"
+      ORPHAN_PATHS+=("$wt_path")
+      ORPHAN_BRANCHES+=("$wt_branch")
+    fi
   else
-    log "ORPHANED: '$wt_path' branch=$wt_branch"
-    ORPHAN_PATHS+=("$wt_path")
-    ORPHAN_BRANCHES+=("$wt_branch")
+    # UNKNOWN — daemon unreachable or query failed. Fail safe: classify ACTIVE.
+    log "ACTIVE: '$wt_path' branch=$wt_branch liveness=unknown"
   fi
 done
 
@@ -319,8 +294,8 @@ while [[ $i -lt ${#ORPHAN_PATHS[@]} ]]; do
     exit 3
   fi
 
-  # Open PR but no leading issue number: we can't form the "worktree <N>
-  # <branch>" directive. Log and skip — the operator has the log to investigate.
+  # Open PR but no leading issue number: we can't form the adoption directive.
+  # Log and skip — the operator has the log to investigate.
   if [[ -z "$issue_num" ]]; then
     log "SKIP_ORPHAN_NO_ISSUE_NUM: '$wt_path' branch=$wt_branch pr=#$open_pr"
     continue
