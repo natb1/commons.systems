@@ -25,9 +25,9 @@
 #      inferable issue number) — the latter halt the sweep with exit 3 and a
 #      "cleanup-unknown:<path>" directive on stderr.
 #   6. From the eligible orphans pick the OLDEST by HEAD commit time and emit
-#      "worktree <N> <branch>" on stdout (the same directive shape dispatch-
-#      select-target uses for current-worktree mode); SKILL.md routes that to
-#      the existing resume-worktree flow.
+#      "worktree <N> <branch>" on stdout; dispatch-select-target wraps this as
+#      "worktree-adopted <N> <branch>" and SKILL.md routes that to the existing
+#      resume-worktree flow.
 #
 # Environment overrides for testability:
 #   DISPATCH_SWEEP_PROC_ROOT  Root of the /proc walk. Default: /proc.
@@ -319,8 +319,8 @@ while [[ $i -lt ${#ORPHAN_PATHS[@]} ]]; do
     exit 3
   fi
 
-  # Open PR but no leading issue number: we can't form the "worktree <N>
-  # <branch>" directive. Log and skip — the operator has the log to investigate.
+  # Open PR but no leading issue number: we can't form the adoption directive.
+  # Log and skip — the operator has the log to investigate.
   if [[ -z "$issue_num" ]]; then
     log "SKIP_ORPHAN_NO_ISSUE_NUM: '$wt_path' branch=$wt_branch pr=#$open_pr"
     continue
