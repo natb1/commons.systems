@@ -127,8 +127,49 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
 
   pr_num="${MERGED_BY_BRANCH[$wt_branch]:-}"
   if [[ -z "$pr_num" ]]; then
-    SURVIVING_PATHS+=("$wt_path")
-    SURVIVING_BRANCHES+=("$wt_branch")
+    # Not a merged-PR branch. Check if this is a dispatch-style branch (^[1-9][0-9]*-).
+    if [[ "$wt_branch" =~ ^([1-9][0-9]*)-. ]]; then
+      issue_num="${BASH_REMATCH[1]}"
+      issue_state=$(gh issue view "$issue_num" --json state -q .state 2>/dev/null) || {
+        log "ERROR_ISSUE_STATE_FETCH: branch=$wt_branch issue=$issue_num gh issue view failed"
+        echo "ERROR: gh issue view $issue_num failed for branch=$wt_branch" >&2
+        exit 1
+      }
+      case "$issue_state" in
+        CLOSED)
+          if worktree_in_sync "$wt_path" "$LOG_FILE" "dispatch-sweep"; then
+            if git worktree remove "$wt_path" 2>>"$LOG_FILE"; then
+              git worktree prune 2>/dev/null || true
+              if ! git branch -D "$wt_branch" >>"$LOG_FILE" 2>&1; then
+                log "BRANCH_DELETE_FAILED: branch=$wt_branch (worktree removed; branch retained)"
+              fi
+              log "REMOVE_CLOSED_ISSUE: '$wt_path' branch=$wt_branch issue=#$issue_num"
+            else
+              log "SKIP_WORKTREE_REMOVE_FAILED: '$wt_path' branch=$wt_branch"
+              SURVIVING_PATHS+=("$wt_path")
+              SURVIVING_BRANCHES+=("$wt_branch")
+            fi
+          else
+            log "SKIP_CLOSED_NOT_IN_SYNC: '$wt_path' branch=$wt_branch issue=#$issue_num"
+            SURVIVING_PATHS+=("$wt_path")
+            SURVIVING_BRANCHES+=("$wt_branch")
+          fi
+          ;;
+        OPEN)
+          SURVIVING_PATHS+=("$wt_path")
+          SURVIVING_BRANCHES+=("$wt_branch")
+          ;;
+        *)
+          log "ERROR_ISSUE_STATE_FETCH: branch=$wt_branch issue=$issue_num unexpected state='$issue_state'"
+          echo "ERROR: gh issue view $issue_num returned unexpected state '$issue_state' for branch=$wt_branch" >&2
+          exit 1
+          ;;
+      esac
+    else
+      # Non-dispatch branch (e.g. main, or a non-issue-prefixed branch). Keep.
+      SURVIVING_PATHS+=("$wt_path")
+      SURVIVING_BRANCHES+=("$wt_branch")
+    fi
     continue
   fi
 

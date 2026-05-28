@@ -1904,6 +1904,30 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "parked issue skipped; next help-wanted issue returned" "issue 66" "$result"
 teardown
 
+# OH3. A PR with dispatch:office-hours that has a worktree on disk is not
+#      selected — the PR-ladder worktree-skip keeps it out regardless of the
+#      label, but the label alone is also sufficient. This test codifies the
+#      no-regression claim: the old sweep-adoption mechanism would have picked
+#      such a PR; without it the labeled-and-worktree'd PR stays out.
+echo "Test: office-hours PR with worktree on disk is not selected"
+setup
+# PR 10 is parked (dispatch:office-hours) and also has a worktree on disk.
+# PR 20 is the second eligible verify PR with no labels and no worktree.
+OFFICE_HOURS_LABELS='[{"name":"dispatch:office-hours"}]'
+UNION='['
+UNION+="$(make_pr_union 10 "10-oh-parked" "2024-01-01T00:00:00Z" "true" "$OFFICE_HOURS_LABELS" "$FAILING_ROLLUP")"','
+UNION+="$(make_pr_union 20 "20-active" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"
+UNION+=']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+# Worktree exists on disk for 10-oh-parked (what the old adoption mechanism would
+# have targeted); no worktree for 20-active.
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/10-oh-parked\nHEAD def456\nbranch refs/heads/10-oh-parked\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "office-hours PR with worktree not selected; second PR chosen" "pr 20 20-active verify" "$result"
+teardown
+
 # ============================================================================
 # dispatch-trace-leaf tests
 # ============================================================================
@@ -2500,7 +2524,7 @@ sweep_setup() {
   # Default empty worktree list (each test should overwrite with its records).
   : > "$STUB_DIR/worktree-list.txt"
 
-  # gh shim — only the call dispatch-sweep makes.
+  # gh shim — handles dispatch-sweep's calls.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
@@ -2508,6 +2532,23 @@ args="$*"
 case "$args" in
   "pr list --state all --json number,headRefName,state,isDraft --limit 200")
     cat "$STUB_DIR/gh-pr-list-all.json"
+    ;;
+  issue\ view\ *\ --json\ state\ -q\ .state)
+    # dispatch-sweep closed-issue check: gh issue view <N> --json state -q .state
+    num=$(echo "$args" | awk '{print $3}')
+    # Controllable failure: if SWEEP_GH_ISSUE_FAIL matches this issue number, fail.
+    if [[ "${SWEEP_GH_ISSUE_FAIL:-}" == "$num" ]]; then
+      echo "gh sweep stub: simulated gh issue view failure for $num" >&2
+      exit 1
+    fi
+    # Per-issue state fixture: issue-state-<N>.txt holds the raw state string.
+    f="$STUB_DIR/issue-state-${num}.txt"
+    if [[ -f "$f" ]]; then
+      cat "$f"
+    else
+      echo "gh sweep stub: no issue-state-${num}.txt for issue view $num" >&2
+      exit 1
+    fi
     ;;
   *)
     echo "gh sweep stub: unknown invocation: $args" >&2
@@ -2660,6 +2701,129 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_MERGED log line present"
   echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
+sweep_teardown
+
+# --- Test 1b: closed-issue worktree (in-sync) is removed + branch deleted ----
+
+echo "Test: closed-issue worktree (in-sync) is removed + branch deleted"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/57-closed-feature"
+sweep_register_wt "$WT_PATH" "57-closed-feature"
+# No merged PRs — the closed-issue path must fire.
+echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+# Issue 57 is CLOSED.
+echo "CLOSED" > "$STUB_DIR/issue-state-57.txt"
+# Clean tree + zero unpushed (defaults).
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "closed-issue sweep exits 0" "0" "$rc"
+assert_eq "closed-issue sweep emits no stdout" "" "$out"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH"; then
+  PASS=$((PASS + 1)); echo "  PASS: REMOVE_CLOSED_ISSUE worktree-remove call recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_CLOSED_ISSUE worktree-remove call recorded"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "branch-D:57-closed-feature"; then
+  PASS=$((PASS + 1)); echo "  PASS: REMOVE_CLOSED_ISSUE branch -D call recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_CLOSED_ISSUE branch -D call recorded"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "REMOVE_CLOSED_ISSUE: '$WT_PATH' branch=57-closed-feature issue=#57" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: REMOVE_CLOSED_ISSUE log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_CLOSED_ISSUE log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test 1c: closed-issue worktree (not-in-sync) is kept ---------------------
+
+echo "Test: closed-issue worktree (not-in-sync) is kept"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/58-closed-dirty"
+sweep_register_wt "$WT_PATH" "58-closed-dirty"
+echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+echo "CLOSED" > "$STUB_DIR/issue-state-58.txt"
+# Not-in-sync: has an uncommitted change.
+key=$(sweep_path_key "$WT_PATH")
+echo " M somefile.txt" > "$STUB_DIR/status${key}.txt"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "closed-not-in-sync sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_CLOSED_NOT_IN_SYNC no worktree-remove call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_CLOSED_NOT_IN_SYNC no worktree-remove call"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_CLOSED_NOT_IN_SYNC: '$WT_PATH' branch=58-closed-dirty issue=#58" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_CLOSED_NOT_IN_SYNC log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_CLOSED_NOT_IN_SYNC log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test 1d: open-issue worktree is kept (regression guard) -----------------
+
+echo "Test: open-issue worktree is kept (regression guard)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/59-open-feature"
+sweep_register_wt "$WT_PATH" "59-open-feature"
+echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+echo "OPEN" > "$STUB_DIR/issue-state-59.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "open-issue sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: open-issue worktree not removed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: open-issue worktree not removed"
+  echo "    calls: $calls"
+fi
+sweep_teardown
+
+# --- Test 1e: gh issue view fails → ERROR_ISSUE_STATE_FETCH, exit 1 ----------
+
+echo "Test: gh issue view fails → ERROR_ISSUE_STATE_FETCH on stderr, exit 1"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/60-closed-feature"
+sweep_register_wt "$WT_PATH" "60-closed-feature"
+echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+# No issue-state-60.txt — let gh fail via the SWEEP_GH_ISSUE_FAIL env var.
+export SWEEP_GH_ISSUE_FAIL="60"
+
+stderr_out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "gh issue view fail → exit 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if echo "$stderr_out" | grep -q "60"; then
+  PASS=$((PASS + 1)); echo "  PASS: ERROR_ISSUE_STATE_FETCH stderr mentions issue number"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ERROR_ISSUE_STATE_FETCH stderr mentions issue number"
+  echo "    stderr: $stderr_out"
+fi
+unset SWEEP_GH_ISSUE_FAIL
 sweep_teardown
 
 # ============================================================================
