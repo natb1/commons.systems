@@ -308,6 +308,41 @@ priority:
   writer runs first creates it. Then stop — report that the item is parked in
   the office-hours queue for human review.
 
+- **Phase did not advance** — a phase-completed run whose step-2 spawn
+  succeeded, but where the phase skill returned success without flipping its
+  workflow marker. Without this check, the next router tick re-derives the
+  same phase, spawns a worker, runs the same phase skill, and loops forever —
+  nothing observable has changed. Re-derive the phase against current PR/CI
+  ground truth:
+
+  ```bash
+  .claude/skills/dispatch/scripts/dispatch-phase <N>
+  ```
+
+  If the re-derived phase **differs** from the phase that just ran, the
+  workflow advanced — skip this bullet and fall through to the next one.
+
+  If the re-derived phase **equals** the phase that just ran, the workflow did
+  not advance. Apply the verify-phase exemption: `/verify-pr` does not flip a
+  marker on a single pass (CI re-runs in the background and either flips the
+  PR back to `qa` or stays in `verify`), and is allowed up to 3 cumulative
+  attempts. For a non-advanced `verify` phase, read the highest extant
+  `dispatch:verify-attempt-<n>` label on the PR
+  (`dangerouslyDisableSandbox: true` — `gh`):
+
+  ```bash
+  PR_NUM=$(.claude/skills/dispatch/scripts/dispatch-find-pr <N>)
+  N=$(gh pr view "$PR_NUM" --json labels \
+    --jq '[.labels[].name | capture("^dispatch:verify-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0')
+  ```
+
+  When `N < 3`, fall through to the clean-completion bullet (the chain
+  retries on the next router tick). When `N >= 3` — or for any non-`verify`
+  phase that did not advance — apply `dispatch:office-hours` to the PR (same
+  apply-first / create-on-"not found" idiom as the deviation bullet above)
+  and stop. Do **not** self-close; the parked job's transcript is the
+  diagnostic record of the loop the chain just escaped.
+
 - **Clean completion or early-stop** — an early-stop, or a phase-completed run
   whose `dispatch-spawn-router` succeeded and whose report surfaces nothing that needs
   the user. Self-close (`dangerouslyDisableSandbox: true`):
