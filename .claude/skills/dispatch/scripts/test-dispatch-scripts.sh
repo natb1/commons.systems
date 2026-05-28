@@ -4636,14 +4636,17 @@ spawn_router_teardown
 
 echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
 spawn_router_setup
-# Seed the on-disk ledger with three entries:
-#   abcd1234  — stopped dispatch-* (the rm target)
+# Seed the on-disk ledger with four entries:
+#   abcd1234  — stopped dispatch-* router name (the rm target)
+#   feed5678  — stopped <N>-<slug> worker name (also an rm target)
 #   ef015678  — stopped non-dispatch (must NOT be pruned)
 #   9999cccc  — live (working) dispatch-* (must NOT be pruned)
-mkdir -p "$SPAWN_ROUTER_JOBS_DIR/abcd1234" "$SPAWN_ROUTER_JOBS_DIR/ef015678" \
-  "$SPAWN_ROUTER_JOBS_DIR/9999cccc"
+mkdir -p "$SPAWN_ROUTER_JOBS_DIR/abcd1234" "$SPAWN_ROUTER_JOBS_DIR/feed5678" \
+  "$SPAWN_ROUTER_JOBS_DIR/ef015678" "$SPAWN_ROUTER_JOBS_DIR/9999cccc"
 printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
   > "$SPAWN_ROUTER_JOBS_DIR/abcd1234/state.json"
+printf '%s' '{"name":"999-some-worker","state":"stopped"}' \
+  > "$SPAWN_ROUTER_JOBS_DIR/feed5678/state.json"
 printf '%s' '{"name":"manual-session","state":"stopped"}' \
   > "$SPAWN_ROUTER_JOBS_DIR/ef015678/state.json"
 printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
@@ -4659,6 +4662,13 @@ if [[ "$rm_log" == *"abcd1234"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: prune: 'claude rm abcd1234' (directory basename, not sessionId) was invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: prune: 'claude rm abcd1234' (directory basename) was invoked"
+  echo "    rm-log: $rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$rm_log" == *"feed5678"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
   echo "    rm-log: $rm_log"
 fi
 TOTAL=$((TOTAL + 1))
@@ -4944,14 +4954,17 @@ spawn_worker_teardown
 
 echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
 spawn_worker_setup
-# Seed the on-disk ledger with three entries:
-#   abcd1234  — stopped dispatch-* (the rm target)
+# Seed the on-disk ledger with four entries:
+#   abcd1234  — stopped dispatch-* router name (the rm target)
+#   feed5678  — stopped <N>-<slug> worker name (also an rm target)
 #   ef015678  — stopped non-dispatch (must NOT be pruned)
 #   9999cccc  — live (working) dispatch-* (must NOT be pruned)
-mkdir -p "$SPAWN_WORKER_JOBS_DIR/abcd1234" "$SPAWN_WORKER_JOBS_DIR/ef015678" \
-  "$SPAWN_WORKER_JOBS_DIR/9999cccc"
+mkdir -p "$SPAWN_WORKER_JOBS_DIR/abcd1234" "$SPAWN_WORKER_JOBS_DIR/feed5678" \
+  "$SPAWN_WORKER_JOBS_DIR/ef015678" "$SPAWN_WORKER_JOBS_DIR/9999cccc"
 printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
   > "$SPAWN_WORKER_JOBS_DIR/abcd1234/state.json"
+printf '%s' '{"name":"999-some-worker","state":"stopped"}' \
+  > "$SPAWN_WORKER_JOBS_DIR/feed5678/state.json"
 printf '%s' '{"name":"manual-session","state":"stopped"}' \
   > "$SPAWN_WORKER_JOBS_DIR/ef015678/state.json"
 printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
@@ -4967,6 +4980,13 @@ if [[ "$sw_rm_log" == *"abcd1234"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
+  echo "    rm-log: $sw_rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$sw_rm_log" == *"feed5678"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune-worker: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
   echo "    rm-log: $sw_rm_log"
 fi
 TOTAL=$((TOTAL + 1))

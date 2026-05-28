@@ -108,8 +108,9 @@ fi
 # self-closed job is removed with `claude rm`. `claude agents --json` lists
 # only LIVE sessions, so the on-disk ledger under ~/.claude/jobs/ is the source
 # of truth for stopped ones. For each <id>/state.json:
-#   - filter on the recorded --name starting with `dispatch-` so the prune
-#     never touches non-dispatch agents;
+#   - filter on the recorded --name starting with `dispatch-` or `<N>-`
+#     (router and worker name shapes) so the prune never touches non-dispatch
+#     agents;
 #   - filter on a terminal `state` value ("stopped", "done", or "failed");
 #     "working" is live, "blocked" is alive waiting for input — neither is
 #     prunable;
@@ -129,7 +130,7 @@ prune_stopped_dispatch_agents() {
       echo "dispatch-spawn-router: prune: '${dir}state.json' not parseable; continuing" >&2
       continue
     fi
-    [[ "$name" == dispatch-* ]] || continue
+    [[ "$name" =~ ^([0-9]+-|dispatch-) ]] || continue
     case "$state" in
       stopped|done|failed) ;;
       *) continue ;;
