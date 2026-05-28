@@ -3,8 +3,6 @@
 # Usage: dispatch-resolve-worktree <issue-num> <explicit|queue>
 #
 # Prints exactly one decision line to stdout:
-#   here            — the current branch already is <issue>-*; the caller
-#                     uses the current worktree path.
 #   enter <path>    — an existing <issue>-* worktree exists; the caller
 #                     uses <path>.
 #   create <branch> — no <issue>-* worktree exists; the caller materializes
@@ -17,7 +15,6 @@
 #              (recycle-after-completion); an existing worktree yields `enter`.
 #   queue    — the target was queue-selected; an existing worktree belongs to
 #              another session and yields `conflict`.
-# The `here` check is mode-independent and fires before the worktree scan.
 #
 # The branch name printed by `create` matches the WorktreeCreate hook's
 # accepted form ^[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$, full name <= 32 characters.
@@ -35,14 +32,6 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
-
-# `here` — the current branch already is the target's branch. Mode-independent,
-# checked before the worktree scan.
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-if [[ "$CURRENT_BRANCH" == "$ISSUE"-* ]]; then
-  echo "here"
-  exit 0
-fi
 
 # `enter` / `conflict` — scan local worktrees for one whose branch carries the
 # <issue>-* prefix, via the shared list_worktree_records helper (lib.sh).

@@ -22,9 +22,9 @@ it when the prior day ended without an in-flight worker (see Step 7's
 optional). With an argument, it targets that issue and skips the queue scan; a
 PR number is resolved to the issue that PR closes (see Step 3).
 
-Run `/dispatch` from the **main worktree**, or from inside an issue worktree to
-continue that issue. The router never enters a worktree; it materializes the
-target worktree (if needed) and spawns the worker into it.
+Run `/dispatch` from any worktree; selection ignores cwd. The router never
+enters a worktree; it materializes the target worktree (if needed) and spawns
+the worker into it.
 
 Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 `gh`) with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
@@ -124,14 +124,18 @@ The selection lock above is **per-repo** and serializes the router's selection
 step (so two routers cannot race on the same target). It is one of two
 mechanisms; the other is per-worktree and enforced elsewhere.
 
-The **per-worktree invariant**: at most one live `dispatch-*` agent per issue
+The **per-worktree invariant**: at most one live worker agent per issue
 worktree. The router's Step 6 spawn primitive (`dispatch-spawn-worker`)
-enforces this at the spawn boundary by querying
-`claude agents --json --cwd <worktree-path>` (the `claude_sessions_under`
-helper in `lib-claude-agents.sh`). If any live `dispatch-*` agent is already
-under `<worktree-path>`, the spawn is `deduped` and no new worker starts. The
-worker is born in the target worktree and dies there; per-worktree dedup
-naturally serializes per-issue work without the selection lock having to.
+enforces this at the spawn boundary. Every worker is born with the target
+worktree's basename as its `--name` (the dispatch-spawn-worker script does not
+`cd` into the target worktree — it stays at the spawner's cwd, `worktrees/main`,
+to keep the daemon's launcher-default cwd anchored there), so per-worktree name
+uniqueness is automatic. The dedup query lists live sessions under the spawner
+cwd (where every worker registers) and checks for `name == <worktree-basename>`;
+if any other live worker matches, the spawn is `deduped` and no new worker
+starts. The worker `cd`s into its target worktree as its own Step 0 and dies
+there; per-worktree dedup naturally serializes per-issue work without the
+selection lock having to.
 
 The two mechanisms have orthogonal scopes:
 
@@ -212,27 +216,17 @@ continue to target selection.
     consistent with the other Steps 1-5 stop paths.
 
 - **No argument** → run target selection. A single invocation decides every
-  Step 3 outcome: current-worktree continuation, JIT, main-broken gate, sweep
-  orphan adoption, and the queue ladder are all internal to the script and
-  emitted on its one output line.
+  Step 3 outcome: JIT, main-broken gate, sweep orphan adoption, and the queue
+  ladder are all internal to the script and emitted on its one output line.
 
   ```bash
   SELECTED=$(.claude/skills/dispatch/scripts/dispatch-select-target)
   ```
 
-  (`dangerouslyDisableSandbox: true` — it calls `gh` and walks `/proc`.)
+  (`dangerouslyDisableSandbox: true` — it calls `gh` and queries the local Claude daemon over a Unix socket.)
 
   Route on `$SELECTED`:
 
-  - `worktree <N> <branch>` — the current branch is `<N>-…` and issue `<N>` is
-    open. Continue here; skip Step 4 and proceed to Step 5 with mode `queue`
-    (worktree resolution will print `here`).
-  - `worktree-closed <N> <branch>` — the current branch is `<N>-…` and issue
-    `<N>` is closed or unrecognized. Release the lock (see *Releasing the
-    lock*), report that the current worktree belongs to closed/unrecognized
-    issue `<N>`, then proceed to Step 7 with `notify worktree-closed`
-    (consistent with the named-target "closed → report and stop" rule in
-    Step 4).
   - `worktree-adopted <N> <branch>` — `dispatch-sweep` adopted an orphaned
     worktree elsewhere on disk. Skip Step 4 and proceed to Step 5 with `<N>` and
     mode `explicit` — treat the adoption like an explicit `/dispatch <N>`.
@@ -272,21 +266,10 @@ continue to target selection.
     is mandatory there ("queue empty — closing; #725 restart will re-check at
     9 AM"), not optional.
 
-  An **explicit issue argument overrides current-worktree detection** — the
-  selection script, and therefore its current-worktree detection, runs only
-  when no argument is given. `/dispatch #123` run from inside worktree-456
-  still targets 123.
-
-  Priority order the script implements, top to bottom: current-worktree
-  continuation → JIT scan → `origin/main` CI health gate → sweep orphan
-  adoption → topic-category × phase ladder. A jit-reminder surfaces even when
-  `origin/main` is red because the JIT scan precedes the main-broken gate;
-  current-worktree continuation surfaces before either, so a session inside an
-  `<issue>-*` worktree always continues there. Current-worktree continuation
-  requires the worktree to have no *other* live Claude session — consistent
-  with the queue-mode liveness dedup landed in #741 and the explicit-mode case
-  tracked in #837; when another session owns the worktree, the selector falls
-  through to the rest of the ladder.
+  Priority order the script implements, top to bottom: JIT scan →
+  `origin/main` CI health gate → sweep orphan adoption → topic-category ×
+  phase ladder. A jit-reminder surfaces even when `origin/main` is red because
+  the JIT scan precedes the main-broken gate.
 
   The topic-category × phase ladder is three-tier: a topic **category** nests
   outside a **priority bit**, which nests outside the phase **ladder**.
@@ -344,9 +327,6 @@ Skip leaf tracing when:
   result or as an explicit issue argument. **Do not infer PR existence from title
   search or other ad-hoc `gh` queries** — `dispatch-find-pr` is the only correct
   check (see Step 5).
-- The target was current-worktree detected (`worktree <N>` result) — the worktree
-  is the already-committed unit of work; retargeting to a sub-issue or blocker
-  would be wrong.
 
 If the resolved target issue `<N>` has any **open** blocker — run
 `issue-blocking <N>` and check for any entry with `state` `OPEN` — release the
@@ -401,14 +381,6 @@ an explicit `/dispatch` argument, otherwise `queue`:
 
 It prints exactly one decision line — act on it. Each branch resolves to a
 worktree path that Step 6 will pass to `dispatch-spawn-worker`.
-
-- **`here`** → the current branch already is the target's worktree. Set
-  `WORKTREE_PATH="$(git rev-parse --show-toplevel)"` for Step 6. Re-sync issue
-  context (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls
-  `gh`):
-  ```bash
-  .claude/skills/dispatch/scripts/sync-issue-context <N>
-  ```
 
 - **`enter <path>`** → re-use an existing `<issue>-*` worktree (the
   recycle-after-completion case, reached only for an explicit argument). Set
@@ -470,21 +442,21 @@ marker **inside the target worktree** (`$WORKTREE_PATH`):
 (cd "$WORKTREE_PATH" && mkdir -p tmp && touch tmp/dispatch-worktree)
 ```
 
-The marker is the canonical "Step 5 completed" signal. Two consumers read it:
-`restore-dispatch-skill.sh` (bound to `SessionStart:clear`) keys context-clear
-recovery on it — when present, it re-invokes `/dispatch-worker <N>` so the
-worker re-derives the phase from PR/CI ground truth — and the lock script
-keys post-Step-5 reclaim on it (see *Releasing the lock*).
+The marker is the canonical "Step 5 completed" signal, read by the lock script
+as the post-Step-5 reclaim signal (see *Releasing the lock*). Context-clear
+recovery does **not** read it: `restore-dispatch-skill.sh` (bound to
+`SessionStart:clear`) keys on the session's `--name` shape (`<N>-<slug>` for
+workers) and emits `/dispatch-worker <N> <worktree-path>` so the worker
+re-derives the phase from PR/CI ground truth.
 `.claude/hooks/worktree-create.sh` also writes the marker as its final action
 on every successful worktree creation, so a fresh worktree is marker-bearing
 the moment the hook returns — the router's explicit marker write here is the
-in-skill defense for the `here` path and for any code path that bypasses the
-hook. The router itself never writes the marker
-into its own cwd (`worktrees/main`), so a `SessionStart:clear` there is a
-no-op — correct, since the router is short-lived and re-seeded by the #725
-daily restart. The marker is an empty boolean flag with no payload; it persists
-for the worktree's life and needs no cleanup — `tmp/` is git-ignored, and
-removing the worktree removes it.
+in-skill defense for any code path that bypasses the hook. The router itself
+never writes the marker into its own cwd (`worktrees/main`), so a
+`SessionStart:clear` there is a no-op — correct, since the router is
+short-lived and re-seeded by the #725 daily restart. The marker is an empty
+boolean flag with no payload; it persists for the worktree's life and needs no
+cleanup — `tmp/` is git-ignored, and removing the worktree removes it.
 
 As the **final action of this step on every non-`conflict` (proceed) path** —
 after the marker is written, before Step 6 — release the lock (see *Releasing
@@ -492,17 +464,19 @@ the lock*). The worker in Step 6 onward runs lock-free.
 
 ## 6. Spawn the Worker
 
-Spawn a `/dispatch-worker <N>` background job with `cwd=$WORKTREE_PATH` (the
-path resolved in Step 5). Run with `dangerouslyDisableSandbox: true` — the
-script reaches the local Claude daemon over a socket; see
-`.claude/rules/sandbox.md`:
+Spawn a `/dispatch-worker <N> <worktree-path>` background job. The spawn runs
+from the router's own cwd (`worktrees/main`) — `dispatch-spawn-worker` does
+**not** `cd` into the target worktree, so the daemon's launcher-default cwd
+stays anchored at the main worktree; the worker `cd`s into its target worktree
+as its own Step 0. Run with `dangerouslyDisableSandbox: true` — the script
+reaches the local Claude daemon over a socket; see `.claude/rules/sandbox.md`:
 
 ```bash
 .claude/skills/dispatch/scripts/dispatch-spawn-worker <N> "$WORKTREE_PATH"
 ```
 
-It prints `spawned` (a worker was started) or `deduped` (another `dispatch-*`
-session is already live at `$WORKTREE_PATH` — the per-worktree invariant
+It prints `spawned` (a worker was started) or `deduped` (another live worker
+already has the worktree-basename `--name` — the per-worktree invariant
 prevents two workers from racing on the same worktree) and exits 0; it exits
 non-zero when a worker was spawned but did not register.
 
@@ -550,7 +524,6 @@ The three dispositions:
   | `notify busy-lock-timeout` | Step 0 — wait timeout while another router holds the lock (subsumes #850) |
   | `notify sync-failed` | Step 1 — `git fetch` failed or `git merge --ff-only` rejected a non-fast-forward |
   | `notify resolver-failed` | Step 3 — `dispatch-resolve-arg` non-zero (PR closes ≠1 issue, bad argument) |
-  | `notify worktree-closed` | Step 3 — current worktree belongs to a closed or unrecognized issue |
   | `notify main-broken` | Step 3 — `/dispatch-diagnose-main` ran and returned (`origin/main` is red) |
   | `notify target-blocked` | Step 4 — named target is closed or has an open blocker |
 
