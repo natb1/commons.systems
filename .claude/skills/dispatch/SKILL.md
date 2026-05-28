@@ -21,9 +21,9 @@ running.
 optional). With an argument, it targets that issue and skips the queue scan; a
 PR number is resolved to the issue that PR closes (see Step 3).
 
-Run `/dispatch` from the **main worktree**, or from inside an issue worktree to
-continue that issue. The router never enters a worktree; it materializes the
-target worktree (if needed) and spawns the worker into it.
+Run `/dispatch` from any worktree; selection ignores cwd. The router never
+enters a worktree; it materializes the target worktree (if needed) and spawns
+the worker into it.
 
 Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 `gh`) with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
@@ -208,9 +208,8 @@ continue to target selection.
     paths.
 
 - **No argument** → run target selection. A single invocation decides every
-  Step 3 outcome: current-worktree continuation, JIT, main-broken gate, sweep
-  orphan adoption, and the queue ladder are all internal to the script and
-  emitted on its one output line.
+  Step 3 outcome: JIT, main-broken gate, sweep orphan adoption, and the queue
+  ladder are all internal to the script and emitted on its one output line.
 
   ```bash
   SELECTED=$(.claude/skills/dispatch/scripts/dispatch-select-target)
@@ -220,14 +219,6 @@ continue to target selection.
 
   Route on `$SELECTED`:
 
-  - `worktree <N> <branch>` — the current branch is `<N>-…` and issue `<N>` is
-    open. Continue here; skip Step 4 and proceed to Step 5 with mode `queue`
-    (worktree resolution will print `here`).
-  - `worktree-closed <N> <branch>` — the current branch is `<N>-…` and issue
-    `<N>` is closed or unrecognized. Release the lock (see *Releasing the
-    lock*), report that the current worktree belongs to closed/unrecognized
-    issue `<N>`, then **proceed to Step 7** (early-stop) (consistent with the
-    named-target "closed → report and stop" rule in Step 4).
   - `worktree-adopted <N> <branch>` — `dispatch-sweep` adopted an orphaned
     worktree elsewhere on disk. Skip Step 4 and proceed to Step 5 with `<N>` and
     mode `explicit` — treat the adoption like an explicit `/dispatch <N>`.
@@ -262,17 +253,10 @@ continue to target selection.
   - `empty` — nothing eligible. Release the lock (see *Releasing the lock*),
     report that the queue is empty, then **proceed to Step 7** (early-stop).
 
-  An **explicit issue argument overrides current-worktree detection** — the
-  selection script, and therefore its current-worktree detection, runs only
-  when no argument is given. `/dispatch #123` run from inside worktree-456
-  still targets 123.
-
-  Priority order the script implements, top to bottom: current-worktree
-  continuation → JIT scan → `origin/main` CI health gate → sweep orphan
-  adoption → topic-category × phase ladder. A jit-reminder surfaces even when
-  `origin/main` is red because the JIT scan precedes the main-broken gate;
-  current-worktree continuation surfaces before either, so a session inside an
-  `<issue>-*` worktree always continues there.
+  Priority order the script implements, top to bottom: JIT scan →
+  `origin/main` CI health gate → sweep orphan adoption → topic-category ×
+  phase ladder. A jit-reminder surfaces even when `origin/main` is red because
+  the JIT scan precedes the main-broken gate.
 
   The topic-category × phase ladder is two-tier: a topic **category** nests
   outside the phase **ladder**. Categories, highest priority first:
@@ -329,9 +313,6 @@ Skip leaf tracing when:
   result or as an explicit issue argument. **Do not infer PR existence from title
   search or other ad-hoc `gh` queries** — `dispatch-find-pr` is the only correct
   check (see Step 5).
-- The target was current-worktree detected (`worktree <N>` result) — the worktree
-  is the already-committed unit of work; retargeting to a sub-issue or blocker
-  would be wrong.
 
 If the resolved target issue `<N>` has any **open** blocker — run
 `issue-blocking <N>` and check for any entry with `state` `OPEN` — release the
@@ -353,14 +334,6 @@ an explicit `/dispatch` argument, otherwise `queue`:
 
 It prints exactly one decision line — act on it. Each branch resolves to a
 worktree path that Step 6 will pass to `dispatch-spawn-worker`.
-
-- **`here`** → the current branch already is the target's worktree. Set
-  `WORKTREE_PATH="$(git rev-parse --show-toplevel)"` for Step 6. Re-sync issue
-  context (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls
-  `gh`):
-  ```bash
-  .claude/skills/dispatch/scripts/sync-issue-context <N>
-  ```
 
 - **`enter <path>`** → re-use an existing `<issue>-*` worktree (the
   recycle-after-completion case, reached only for an explicit argument). Set
@@ -428,8 +401,7 @@ keys post-Step-5 reclaim on it (see *Releasing the lock*).
 `.claude/hooks/worktree-create.sh` also writes the marker as its final action
 on every successful worktree creation, so a fresh worktree is marker-bearing
 the moment the hook returns — the router's explicit marker write here is the
-in-skill defense for the `here` path and for any code path that bypasses the
-hook. The router itself never writes the marker
+in-skill defense for any code path that bypasses the hook. The router itself never writes the marker
 into its own cwd (`worktrees/main`), so a `SessionStart:clear` there is a
 no-op — correct, since the router is short-lived and re-seeded by the #725
 heartbeat. The marker is an empty boolean flag with no payload; it persists
@@ -474,8 +446,8 @@ The router's tick ends here. There are two dispositions:
 - **clean completion or early-stop** — every other terminal path:
   - Step 6 returned `spawned` or `deduped` (clean completion).
   - A Steps 0–5 stop path (busy lock, sync failure, empty queue, `main-broken`,
-    resolver failure, `worktree-closed`, closed-issue target, open-blocker
-    gate, `worktree` conflict, jit-reminder summary). The jit-reminder
+    resolver failure, closed-issue target, open-blocker gate, worktree
+    conflict, jit-reminder summary). The jit-reminder
     summary is an exception that **does not self-close** — it bypasses Step 7
     entirely, per the jit-reminder handler in Step 3.
 
