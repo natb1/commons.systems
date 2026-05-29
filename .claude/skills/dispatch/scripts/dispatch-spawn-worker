@@ -34,8 +34,9 @@
 #                 to <worktree-path> — the new worker registers there because
 #                 the spawn subshell `cd`s in before `claude --bg`. Fail-safe:
 #                 if the session registry cannot be queried, also spawn nothing
-#                 — a dispatch agent may be running; the #725 heartbeat
-#                 re-seeds the chain if it actually dropped.
+#                 — a dispatch agent may be running; the #725 cap-keyed re-seed
+#                 re-seeds the chain if a rate-limit cap-stall actually dropped
+#                 it.
 #   2. Spawn    — `claude --bg --name <worktree-basename> --permission-mode
 #                 auto "/dispatch-worker <N> <worktree-path>"`, run from a
 #                 subshell that `cd`s into <worktree-path> first so the new

@@ -14,9 +14,10 @@ Each `/dispatch` is a `claude --bg` background job (#725) rooted in
 `worktrees/main`. The router selects, spawns a worker, and exits. The worker
 runs one phase in its target worktree, then spawns a fresh `/dispatch` router
 back in `worktrees/main` and self-deletes. That router → worker → router
-chain advances the workflow; the #725 daily 9 AM restart-from-zero re-seeds
-it when the prior day ended without an in-flight worker (see Step 7's
-*The #725 daily restart* subsection).
+chain advances the workflow; the #725 cap-keyed re-seed scheduled at the
+next rate-limit window reset re-seeds it when a tick stalled on a
+concurrency-budget cap (see Step 7's *The #725 cap-keyed re-seed*
+subsection).
 
 `/dispatch` takes an **optional issue-or-PR-number argument** (leading `#`
 optional). With an argument, it targets that issue and skips the queue scan; a
@@ -254,8 +255,8 @@ continue to target selection.
     skipped.
   - `empty` — nothing eligible. Release the lock (see *Releasing the lock*),
     then proceed to Step 7 with `drain empty-queue` — the user-visible report
-    is mandatory there ("queue empty — closing; #725 restart will re-check at
-    9 AM"), not optional.
+    is mandatory there ("queue empty — closing; the office-hours queue or a
+    new issue will re-seed the chain"), not optional.
 
   Priority order the script implements, top to bottom: JIT scan →
   `origin/main` CI health gate → topic-category × priority × phase ladder.
@@ -421,10 +422,10 @@ worktree path that Step 6 will pass to `dispatch-spawn-worker`.
   tier to a leaf with no worktree, so for a queue selection this arises only from
   a race — another session created the worktree between selection and worktree
   resolution.) Release the lock (see *Releasing the lock*), then proceed to
-  Step 7 with `drain worktree-conflict` — the user-visible report is mandatory
+  Step 7 with `notify worktree-conflict` — the user-visible report is mandatory
   there ("worktree at `<path>` owned by another live session for issue `<N>`;
-  closing — #725 restart will re-check at 9 AM"), not optional. Do not spawn a
-  worker.
+  closing — the next baton-pass or office-hours hand-off will re-seed"), not
+  optional. Do not spawn a worker.
 
 On every non-`conflict` path, before the worker is spawned, create the recovery
 marker **inside the target worktree** (`$WORKTREE_PATH`):
@@ -445,7 +446,8 @@ the moment the hook returns — the router's explicit marker write here is the
 in-skill defense for any code path that bypasses the hook. The router itself
 never writes the marker into its own cwd (`worktrees/main`), so a
 `SessionStart:clear` there is a no-op — correct, since the router is
-short-lived and re-seeded by the #725 daily restart. The marker is an empty
+short-lived and re-seeded by the #725 cap-keyed re-seed when a cap stall ends
+the chain. The marker is an empty
 boolean flag with no payload; it persists for the worktree's life and needs no
 cleanup — `tmp/` is git-ignored, and removing the worktree removes it.
 
@@ -478,7 +480,10 @@ TARGET_N=$(.claude/skills/dispatch/scripts/dispatch-target-workers)
 if LIVE_COUNT=$(claude_agents_count_by_name_prefix dispatch-worker-); then
   if (( LIVE_COUNT >= TARGET_N )); then
     echo "router: skipping spawn — $LIVE_COUNT live worker(s) >= target $TARGET_N (drain concurrency-cap)"
-    # Skip-over-cap is `drain concurrency-cap`; proceed to Step 7.
+    # Skip-over-cap is `drain concurrency-cap`. Before proceeding to Step 7,
+    # schedule the cap-keyed re-seed so the chain resumes at the next
+    # rate-limit window reset (see *The #725 cap-keyed re-seed* below).
+    .claude/skills/dispatch/scripts/dispatch-schedule-reseed
   else
     .claude/skills/dispatch/scripts/dispatch-spawn-worker <N> "$WORKTREE_PATH"
   fi
@@ -489,6 +494,15 @@ else
   .claude/skills/dispatch/scripts/dispatch-spawn-worker <N> "$WORKTREE_PATH"
 fi
 ```
+
+When the spawn is skipped because the live worker count already meets the
+target (`drain concurrency-cap`), the chain is paused with work waiting and
+will not advance until the cap window reopens. `dispatch-schedule-reseed`
+writes a transient `systemd.user` timer that fires at the next rate-limit
+`resets_at` to re-seed the chain at the precise moment the cap reopens — see
+*The #725 cap-keyed re-seed* below. The script invokes `systemd-run --user`,
+which talks to user systemd over D-Bus, so the outer Bash call's
+`dangerouslyDisableSandbox: true` (above) covers this requirement.
 
 `dispatch-spawn-worker` prints `spawned` (a worker was started) or `deduped`
 (another live worker already has the worktree-basename `--name` — the
@@ -578,7 +592,7 @@ the action.
 Every other terminal disposition — `propagate` falling through to `notify
 spawn-failed` on a failed spawn, every `notify <reason>` variance, every
 `drain <reason>` no-work case — emits a user-visible report before the
-session ends (before `dispatch-handoff --early-stop` for `drain` and `propagate`;
+session ends (before `dispatch-self-close` for `drain` and `propagate`;
 before this turn's text output completes for `notify`, which does not
 self-close). A silent `notify` or silent `drain` is a defect.
 
@@ -589,7 +603,7 @@ The three dispositions:
   (`dangerouslyDisableSandbox: true`):
 
   ```bash
-  .claude/skills/dispatch/scripts/dispatch-handoff --early-stop
+  .claude/skills/dispatch/scripts/dispatch-self-close
   ```
 
 - **`notify <reason>`** — `notify spawn-failed` (Step 6's spawn exited
@@ -612,36 +626,53 @@ The three dispositions:
 - **`drain <reason>`** — `drain empty-queue` (Step 3, queue empty),
   `drain worktree-conflict` (Step 5, target's worktree is owned by another
   live session), or `drain concurrency-cap` (Step 6, `live_count >=
-  target_N` — the chain re-seeds on the next router tick when budget
-  reopens). The call site has already printed a **mandatory** user-visible
+  target_N` — the chain re-seeds when the cap-keyed timer fires at the next
+  rate-limit window reset; see *The #725 cap-keyed re-seed* above). The call site has already printed a **mandatory** user-visible
   report stating the reason and the recovery path (templates live at the
   Step 3, Step 5, and Step 6 call sites). Then self-close
   (`dangerouslyDisableSandbox: true`):
 
   ```bash
-  .claude/skills/dispatch/scripts/dispatch-handoff --early-stop
+  .claude/skills/dispatch/scripts/dispatch-self-close
   ```
 
-`dispatch-handoff --early-stop` execs `dispatch-self-close`, which removes
-the managed background job by its job-id (the basename of `$CLAUDE_JOB_DIR`).
-It is a no-op when `CLAUDE_JOB_DIR` is unset (the session is interactive, not
-a managed background job) — so an interactive `/dispatch` reaching Step 7 does
-not stop the user's live conversation.
+`dispatch-self-close` removes the managed background job by its job-id (the
+basename of `$CLAUDE_JOB_DIR`). It is a no-op when `CLAUDE_JOB_DIR` is unset
+(the session is interactive, not a managed background job) — so an
+interactive `/dispatch` reaching Step 7 does not stop the user's live
+conversation.
 
 Step 3's `jit-reminder` outcome does not reach Step 7 — it is a deliberate
 bypass, since its user-visible summary must stay open in the transcript for a
 human to read, so the skill stops the tick directly.
 
-The router does **not** spawn a successor `/dispatch` itself — the worker
-spawned in Step 6 spawns a fresh router back in `worktrees/main` when its
-phase completes (`/dispatch-worker` Step 4).
+The router does **not** spawn a successor `/dispatch` itself — the worker's
+Stop hook (`.claude/hooks/dispatch-stop.sh`) spawns a fresh router back in
+`worktrees/main` when the worker session ends.
 
-### The #725 daily restart
+### The #725 cap-keyed re-seed
 
-The #725 daily 9 AM dispatch restart is the workflow's restart-from-zero
-mechanism. It re-seeds the chain when the prior day ended without an
-in-flight worker — covering the cumulative end-of-day drain (every `drain`
-disposition that ended a tick), rate-limit cap reached (#845), predecessor
-crash, and missed ticks (e.g. a WSL shutdown). It is not tied to any one
-disposition; every terminal state, including `notify` paths whose sessions
-the user closes without manual restart, falls within its scope.
+The #725 cap-keyed re-seed is the chain's resume-from-cap-stall mechanism.
+When a tick's Step 6 decides to skip the spawn because the live worker count
+already meets the budgeter's target, that means the rate-limit cap closed
+the budget — `dispatch-target-workers` reads
+`~/.local/share/productivity-tui/rate_limits.json` and returns 0 when
+`used_percentage >= target` on either the weekly or the 5-hour window. The
+chain pauses with work waiting; the only thing that unblocks it is the cap
+window resetting.
+
+`dispatch-schedule-reseed` (invoked from Step 6's spawn-skip) reads the same
+telemetry, computes the earliest blocking `resets_at`, and writes a
+transient `systemd.user` timer (`dispatch-reseed-<resets_at>`) that fires at
+that time and runs `dispatch-spawn-router` from the main worktree. The unit
+name embeds the epoch, so a repeated call observing the same blocking cap
+collides on the unit name and is a no-op — idempotent across the many ticks
+that may observe the same stall.
+
+This mechanism only covers the cap-stall class of stall. **Empty-queue and
+all-parked stalls** are handled by the office-hours queue (#755 / #757 /
+#758): when a human engages an `office-hours`-labeled item, the Step 4
+hand-off returns it to the dispatch chain and re-seeds from human action.
+A weekly fallback heartbeat for the edge case of a manual issue filed while
+the chain is stalled with no live session to receive it can be added in a
+follow-up if it matters in practice.

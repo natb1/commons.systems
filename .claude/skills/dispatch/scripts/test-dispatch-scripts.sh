@@ -2509,10 +2509,11 @@ sweep_setup() {
   STUB_DIR="$TMPDIR_TEST/stub"
   mkdir -p "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/scripts" \
            "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees" \
-           "$TMPDIR_TEST/project/tmp"
+           "$TMPDIR_TEST/project/tmp" "$TMPDIR_TEST/fake"
 
   cp "$SCRIPT_DIR/dispatch-sweep" "$TMPDIR_TEST/scripts/dispatch-sweep"
   cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/scripts/lib-worktree-in-sync.sh"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
 
   # Default empty gh output (each test may overwrite).
@@ -2627,7 +2628,19 @@ STUB
 
   export PATH="$TMPDIR_TEST/bin:$PATH"
 
+  # Default fake `claude` — prints `[]` and exits 0 (no live sessions).
+  # Step 3's liveness gate sees a definite "no sessions" and proceeds with
+  # removal. Tests that need a live session call sweep_fake_claude_sessions_by_name.
+  local default_fake="$TMPDIR_TEST/fake/claude"
+  cat > "$default_fake" <<'FAKE'
+#!/usr/bin/env bash
+printf '[]'
+exit 0
+FAKE
+  chmod +x "$default_fake"
+
   # Defaults for dispatch-sweep env overrides.
+  export CLAUDE_AGENTS_CMD="$default_fake"
   export DISPATCH_SWEEP_LOG_FILE="$STUB_DIR/sweep.log"
   export DISPATCH_SWEEP_NOW="2026-01-01T00:00:00Z"
 }
@@ -2637,7 +2650,7 @@ sweep_teardown() {
   TMPDIR_TEST=""
   STUB_DIR=""
   export PATH="$SAVED_PATH"
-  unset DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW
+  unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW
 }
 
 # Helper: register a worktree in the porcelain list AND create its directory.
@@ -2653,6 +2666,37 @@ sweep_register_wt() {
 # used by the git -C shim.
 sweep_path_key() {
   echo "$1" | tr '/' '_'
+}
+
+# Helper: install a fake `claude` whose `agents --json` invocation (NO --cwd)
+# returns sessions keyed by name — matching how claude_sessions_with_name
+# queries the daemon after the #882 Unit 2 name-keyed rewrite.
+# Each argument must be in `name=sid` form; name is the worktree basename
+# (as passed via --name=<basename> by dispatch-spawn-worker). The cwd field is
+# set to "" since name-keyed classification ignores it.
+# The fake ignores any --cwd argument and always returns the full payload; the
+# client-side jq select(.name == $name) in claude_sessions_with_name does the
+# filtering, exactly as in production.
+sweep_fake_claude_sessions_by_name() {
+  local fake="$TMPDIR_TEST/fake/claude"
+  local all_payload="[" entry name sid first=1
+  for entry in "$@"; do
+    name="${entry%%=*}"
+    sid="${entry#*=}"
+    if (( first )); then first=0; else all_payload+=","; fi
+    all_payload+="{\"sessionId\":\"$sid\",\"pid\":1,\"status\":\"busy\",\"name\":\"$name\",\"cwd\":\"\"}"
+  done
+  all_payload+="]"
+  printf '%s' "$all_payload" > "$TMPDIR_TEST/fake/payload.json"
+  cat > "$fake" <<'FAKE'
+#!/usr/bin/env bash
+# Ignore any args (including --cwd) — return the full payload unconditionally.
+# claude_sessions_with_name applies its own jq name filter client-side.
+cat "$(cd "$(dirname "$0")" && pwd)/payload.json"
+exit 0
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
 }
 
 # --- Test 1: merged classification triggers cleanup --------------------------
@@ -2847,6 +2891,83 @@ if ! echo "$calls" | grep -q "worktree-remove"; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: open-PR worktree not removed despite closed issue"
   echo "    calls: $calls"
+fi
+sweep_teardown
+
+# --- Test 15: Step 3 with live name-match — merged+in-sync worktree is kept --
+#
+# A merged + in-sync worktree whose basename matches a live session in the
+# fake-claude registry must NOT be removed; the script must log
+# SKIP_MERGED_LIVE_SESSION and add it to the surviving list.
+
+echo "Test: Step 3 skips merged+in-sync worktree when a live session matches its basename"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/70-live-merged"
+sweep_register_wt "$WT_PATH" "70-live-merged"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+echo '[{"number":300,"headRefName":"70-live-merged","state":"MERGED"}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+# Register a live session whose name matches the worktree's basename.
+sweep_fake_claude_sessions_by_name "70-live-merged=sess-live-70"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "Step3-live-merged sweep exits 0" "0" "$rc"
+
+# The worktree must NOT have been removed.
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -q "worktree-remove:$WT_PATH"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: Step 3 must NOT remove a worktree with a live session"
+  echo "    calls: $calls"
+else
+  PASS=$((PASS + 1)); echo "  PASS: Step 3 did not remove the live-session worktree"
+fi
+
+# The log must carry SKIP_MERGED_LIVE_SESSION.
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_MERGED_LIVE_SESSION: '$WT_PATH' branch=70-live-merged pr=#300" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_MERGED_LIVE_SESSION log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_MERGED_LIVE_SESSION log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test 16: Step 3 happy path — merged+in-sync with no live session is removed
+
+echo "Test: Step 3 removes merged+in-sync worktree when no live session matches its basename"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/71-no-live-merged"
+sweep_register_wt "$WT_PATH" "71-no-live-merged"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+echo '[{"number":301,"headRefName":"71-no-live-merged","state":"MERGED"}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+# Default fake (no live sessions) — the worktree is free to remove.
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "Step3-no-live-merged sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH"; then
+  PASS=$((PASS + 1)); echo "  PASS: Step 3 removed the unoccupied merged worktree"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: Step 3 removed the unoccupied merged worktree"
+  echo "    calls: $calls"
+fi
+
+TOTAL=$((TOTAL + 1))
+if grep -q "REMOVE_MERGED: '$WT_PATH' branch=71-no-live-merged pr=#301" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: REMOVE_MERGED log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_MERGED log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
 sweep_teardown
 
@@ -3485,11 +3606,14 @@ FAKE
 
 echo "Test: a live session is reported by both helpers"
 ca_setup
-write_fake_claude '[{"sessionId":"sess-1","pid":4242,"status":"busy","name":"task-one"}]' 0
+# worktree_has_live_session is now name-keyed: the session name must match
+# basename "$CA_DIR" for the predicate to report occupied.
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"sess-1\",\"pid\":4242,\"status\":\"busy\",\"name\":\"$ca_basename\"}]" 0
 if out=$(claude_sessions_under "$CA_DIR"); then rc=0; else rc=$?; fi
 assert_eq "live: claude_sessions_under exits 0" "0" "$rc"
 assert_eq "live: claude_sessions_under prints the session TSV line" \
-  "$(printf 'sess-1\t4242\tbusy\ttask-one')" "$out"
+  "$(printf 'sess-1\t4242\tbusy\t%s' "$ca_basename")" "$out"
 if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
 assert_eq "live: worktree_has_live_session reports occupied" "occupied" "$live"
 ca_teardown
@@ -3689,6 +3813,112 @@ else
   ROUTE="spawn-failopen"
 fi
 assert_eq "router-gate: daemon UNKNOWN → spawn-failopen" "spawn-failopen" "$ROUTE"
+ca_teardown
+
+# --- Test 17: claude_sessions_with_name — matched name exits 0 with TSV -----
+
+echo "Test: claude_sessions_with_name exits 0 and emits TSV for matched name"
+ca_setup
+write_fake_claude '[{"sessionId":"sess-a","pid":111,"status":"busy","name":"my-worktree"}]' 0
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-match: exits 0" "0" "$rc"
+assert_eq "name-match: prints the TSV line" \
+  "$(printf 'sess-a\t111\tbusy\tmy-worktree')" "$out"
+ca_teardown
+
+# --- Test 18: claude_sessions_with_name — no match exits 0 with no output ---
+
+echo "Test: claude_sessions_with_name exits 0 and emits nothing when name not found"
+ca_setup
+write_fake_claude '[{"sessionId":"sess-a","pid":111,"status":"busy","name":"other-worktree"}]' 0
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-no-match: exits 0" "0" "$rc"
+assert_eq "name-no-match: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 19: claude_sessions_with_name — multi-session, only matching names -
+
+echo "Test: claude_sessions_with_name emits only the matching sessions from a mixed array"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s-1","pid":10,"status":"busy","name":"target-wt"},
+  {"sessionId":"s-2","pid":20,"status":"idle","name":"other-wt"},
+  {"sessionId":"s-3","pid":30,"status":"busy","name":"target-wt"}
+]' 0
+if out=$(claude_sessions_with_name "target-wt"); then rc=0; else rc=$?; fi
+assert_eq "name-multi: exits 0" "0" "$rc"
+assert_eq "name-multi: prints only the two matching lines" \
+  "$(printf 's-1\t10\tbusy\ttarget-wt\ns-3\t30\tbusy\ttarget-wt')" "$out"
+ca_teardown
+
+# --- Test 20: claude_sessions_with_name UNKNOWN cases ------------------------
+
+echo "Test: claude_sessions_with_name returns rc 1 on daemon failure (non-zero exit)"
+ca_setup
+write_fake_claude '' 1
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-daemon-fail: exits 1 (UNKNOWN)" "1" "$rc"
+assert_eq "name-daemon-fail: prints nothing" "" "$out"
+ca_teardown
+
+echo "Test: claude_sessions_with_name returns rc 1 when claude binary is missing"
+ca_setup
+CLAUDE_AGENTS_CMD="$CA_DIR/no-such-claude"
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-missing-claude: exits 1 (UNKNOWN)" "1" "$rc"
+ca_teardown
+
+echo "Test: claude_sessions_with_name returns rc 1 on non-array JSON output"
+ca_setup
+write_fake_claude '{}' 0
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-non-array: exits 1 (UNKNOWN)" "1" "$rc"
+ca_teardown
+
+echo "Test: claude_sessions_with_name returns rc 1 on zero exit with empty output"
+ca_setup
+write_fake_claude '' 0
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-empty-output: exits 1 (UNKNOWN)" "1" "$rc"
+ca_teardown
+
+# --- Test 21: claude_sessions_with_name — invoked WITHOUT --cwd arg ----------
+
+echo "Test: claude_sessions_with_name invokes claude without a --cwd argument"
+ca_setup
+cat > "$CA_FAKE" <<FAKE
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$CA_DIR/argv"
+echo '[]'
+FAKE
+chmod +x "$CA_FAKE"
+CLAUDE_AGENTS_CMD="$CA_FAKE"
+if claude_sessions_with_name "any-name" >/dev/null; then rc=0; else rc=$?; fi
+assert_eq "name-no-cwd: exits 0" "0" "$rc"
+assert_eq "name-no-cwd: claude invoked as 'agents --json' (no --cwd)" \
+  "$(printf 'agents\n--json')" "$(cat "$CA_DIR/argv")"
+ca_teardown
+
+# --- Test 22: claude_sessions_with_name — empty name arg exits 1 -------------
+
+echo "Test: claude_sessions_with_name rejects empty name argument"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(claude_sessions_with_name "" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "name-empty-arg: exits 1" "1" "$rc"
+ca_teardown
+
+# --- Test 23 (updated worktree_has_live_session): cwd-match but wrong name → FREE
+
+echo "Test: worktree_has_live_session reports free when session cwd matches but name differs from basename"
+ca_setup
+# The session's cwd could match CA_DIR, but its name does NOT match basename "$CA_DIR".
+# Under the old cwd-based semantics this would have reported occupied (via
+# claude_sessions_under). Under the new name-based semantics it must report free.
+# The fake returns a session whose name is 'wrong-name', not basename "$CA_DIR".
+write_fake_claude '[{"sessionId":"s-x","pid":99,"status":"busy","name":"wrong-name"}]' 0
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "regression-guard: cwd-match wrong-name → free" "free" "$live"
 ca_teardown
 
 # ============================================================================
@@ -4227,6 +4457,480 @@ write_rl "rl.json" 50 13600 0 13600
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "ramp_tau_seconds=0 rejected; defaults used → 7" "7" "$out"
 tw_teardown
+
+# ============================================================================
+# dispatch-schedule-reseed tests
+# ============================================================================
+#
+# dispatch-schedule-reseed writes a transient systemd.user timer at the next
+# rate-limit cap reset. The test harness stubs `systemd-run` on PATH and
+# records each invocation's argv, so a test can assert exactly what was
+# scheduled. The script's env-var contract mirrors dispatch-target-workers's
+# (per-field telemetry + path overrides) — tests rely on the overrides and
+# do not require a real rate_limits.json on the filesystem.
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   copy of dispatch-schedule-reseed + dispatch-config-load
+#   $TMPDIR_TEST/config/    synthetic config directory (DISPATCH_CONFIG_DIR)
+#   $TMPDIR_TEST/rl/        synthetic rate_limits.json directory
+#   $TMPDIR_TEST/bin/       systemd-run stub
+#   $TMPDIR_TEST/systemd-log  recorded systemd-run argv (one line per call)
+#   $TMPDIR_TEST/main/      a synthetic main worktree path
+echo ""
+echo "=== dispatch-schedule-reseed ==="
+
+sr_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/config" "$TMPDIR_TEST/rl" \
+    "$TMPDIR_TEST/bin" "$TMPDIR_TEST/main"
+
+  cp "$SCRIPT_DIR/dispatch-schedule-reseed" "$TMPDIR_TEST/scripts/dispatch-schedule-reseed"
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-schedule-reseed" \
+           "$TMPDIR_TEST/scripts/dispatch-config-load"
+
+  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+  # Default: point at an absent file so tests without explicit telemetry get
+  # the missing-telemetry no-op unless they override env vars.
+  export DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH="$TMPDIR_TEST/rl/missing.json"
+  export DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE="$TMPDIR_TEST/main"
+
+  # systemd-run stub: records its argv (one line per call), exits 0.
+  cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/systemd-log"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemd-run"
+  export DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
+}
+
+sr_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_CONFIG_DIR
+  unset DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH
+  unset DISPATCH_SCHEDULE_RESEED_NOW
+  unset DISPATCH_SCHEDULE_RESEED_USED_WEEKLY
+  unset DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY
+  unset DISPATCH_SCHEDULE_RESEED_USED_5H
+  unset DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H
+  unset DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE
+  unset DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD
+}
+
+# sr_write_rl <file-name> <used_weekly> <resets_weekly> <used_5h> <resets_5h>
+#   Write a rate_limits.json. Set any of the four to "absent" to omit the
+#   surrounding block. Mirrors tw_write_rl above.
+sr_write_rl() {
+  local name="$1" uw="$2" rw="$3" u5="$4" r5="$5"
+  local path="$TMPDIR_TEST/rl/$name"
+  local seven=""
+  local five=""
+  if [[ "$uw" != "absent" && "$rw" != "absent" ]]; then
+    seven="\"seven_day\":{\"used_percentage\":$uw,\"resets_at\":$rw}"
+  fi
+  if [[ "$u5" != "absent" && "$r5" != "absent" ]]; then
+    five="\"five_hour\":{\"used_percentage\":$u5,\"resets_at\":$r5}"
+  fi
+  local parts=()
+  [[ -n "$five" ]] && parts+=("$five")
+  [[ -n "$seven" ]] && parts+=("$seven")
+  local joined
+  joined=$(IFS=,; printf '%s' "${parts[*]}")
+  printf '{%s}\n' "$joined" > "$path"
+  export DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH="$path"
+}
+
+# --- Test 1: weekly cap hit → schedules at weekly resets_at ------------------
+
+echo "Test: weekly cap-hit schedules at the weekly resets_at"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# used_weekly=95 >= target_weekly=90 → weekly cap hit.
+# 5h cap clear (10 < 50). Expect schedule at the weekly resets_at.
+sr_write_rl "rl.json" 95 20000 10 15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+assert_eq "weekly cap-hit stdout names the unit" \
+  "scheduled dispatch-reseed-20000 at 20000" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-reseed-20000"* \
+   && "$log" == *"--on-calendar=@20000"* \
+   && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
+   && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch/scripts/dispatch-spawn-router"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + cwd + exec)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + cwd + exec)"
+  echo "    log: $log"
+fi
+sr_teardown
+
+# --- Test 2: 5h cap hit → schedules at 5h resets_at --------------------------
+
+echo "Test: 5h cap-hit schedules at the 5h resets_at"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# used_5h=60 >= target_5h=50 → 5h cap hit. Weekly clear (50 < 90).
+sr_write_rl "rl.json" 50 20000 60 15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+assert_eq "5h cap-hit stdout names the 5h reset unit" \
+  "scheduled dispatch-reseed-15000 at 15000" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-reseed-15000"* \
+   && "$log" == *"--on-calendar=@15000"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 5h cap-hit systemd-run argv (unit + calendar)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5h cap-hit systemd-run argv (unit + calendar)"
+  echo "    log: $log"
+fi
+sr_teardown
+
+# --- Test 3: both caps hit → picks the earlier reset -------------------------
+
+echo "Test: both caps hit → schedules at the earlier resets_at"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# Both caps hit; 5h reset (15000) is earlier than weekly reset (20000).
+sr_write_rl "rl.json" 95 20000 60 15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+assert_eq "both caps hit; picks earlier reset" \
+  "scheduled dispatch-reseed-15000 at 15000" "$out"
+sr_teardown
+
+# --- Test 4: neither cap hit → no-op (no systemd-run invocation) -------------
+
+echo "Test: neither cap hit → silent no-op (no systemd-run call)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# 50 < 90 weekly, 20 < 50 5h → no cap hit.
+sr_write_rl "rl.json" 50 20000 20 15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "neither cap hit; stdout silent" "" "$out"
+assert_eq "neither cap hit; stderr silent" "" "$err"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: neither cap hit; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: neither cap hit; no systemd-run invocation"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+sr_teardown
+
+# --- Test 5: missing telemetry file → no-op with stderr diagnostic -----------
+
+echo "Test: missing rate_limits.json → no-op with stderr diagnostic"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# Default RATE_LIMITS_PATH points at a non-existent file.
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "missing telemetry; stdout silent" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"dispatch-schedule-reseed"* && "$err" == *"missing or unreadable"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing telemetry stderr names the diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing telemetry stderr names the diagnostic"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing telemetry; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing telemetry; no systemd-run invocation"
+fi
+sr_teardown
+
+# --- Test 6: seven_day absent + 5h cap hit → schedules at 5h resets_at -------
+
+echo "Test: seven_day absent + 5h cap-hit schedules at the 5h resets_at"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+sr_write_rl "rl.json" absent absent 60 15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+assert_eq "seven_day absent; 5h cap-hit schedules at 15000" \
+  "scheduled dispatch-reseed-15000 at 15000" "$out"
+sr_teardown
+
+# --- Test 7: five_hour absent + weekly cap hit → schedules at weekly resets_at
+
+echo "Test: five_hour absent + weekly cap-hit schedules at the weekly resets_at"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+sr_write_rl "rl.json" 95 20000 absent absent
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+assert_eq "five_hour absent; weekly cap-hit schedules at 20000" \
+  "scheduled dispatch-reseed-20000 at 20000" "$out"
+sr_teardown
+
+# --- Test 8: idempotent re-call (unit already exists) → no-op, exit 0 --------
+
+echo "Test: repeated call with the same resets_at is idempotent (single timer)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+sr_write_rl "rl.json" 95 20000 10 15000
+# Replace the systemd-run stub with one that simulates the second call hitting
+# the already-exists collision: first call succeeds; second call exits 1 with
+# the "already exists" message on stderr.
+cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/systemd-log"
+count=\$(wc -l < "$TMPDIR_TEST/systemd-log")
+if [[ "\$count" -gt 1 ]]; then
+  echo "Unit dispatch-reseed-20000.timer already exists." >&2
+  exit 1
+fi
+STUB
+chmod +x "$TMPDIR_TEST/bin/systemd-run"
+
+out1=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr1")
+rc1=$?
+out2=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr2")
+rc2=$?
+assert_eq "first call exits 0" "0" "$rc1"
+assert_eq "first call stdout names the new unit" \
+  "scheduled dispatch-reseed-20000 at 20000" "$out1"
+assert_eq "second call exits 0 (idempotent)" "0" "$rc2"
+assert_eq "second call stdout silent" "" "$out2"
+err2=$(cat "$TMPDIR_TEST/stderr2")
+TOTAL=$((TOTAL + 1))
+if [[ "$err2" == *"already scheduled"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: second call stderr notes already-scheduled"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: second call stderr notes already-scheduled"
+  echo "    stderr2: $err2"
+fi
+sr_teardown
+
+# --- Test 9: reseed_at already passed → no-op --------------------------------
+
+echo "Test: reseed_at already passed → no-op (no systemd-run call)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# Weekly cap hit but resets_at=5000 < now=10000 → already passed.
+sr_write_rl "rl.json" 95 5000 10 15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "already-passed reseed; stdout silent" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"cap reset already passed"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: already-passed reseed; stderr contains 'cap reset already passed'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-passed reseed; stderr contains 'cap reset already passed'"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"no-op"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: already-passed reseed; stderr contains 'no-op'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-passed reseed; stderr contains 'no-op'"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: already-passed reseed; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-passed reseed; no systemd-run invocation"
+fi
+sr_teardown
+
+# --- Test 10: unexpected systemd-run failure → exit code passes through ------
+#
+# systemd-run can fail for reasons unrelated to the already-exists collision —
+# e.g. D-Bus down, missing systemd, permission denied. The script's documented
+# contract is: "non-zero — systemd-run failed for a reason other than the
+# already-exists collision; the exit code is passed through." A naive
+# `if cmd; then ...; fi; RC=$?` swallows the real exit code (because `$?`
+# after `if` is the exit status of the construct itself, not the condition),
+# so the test asserts the real exit code propagates.
+
+echo "Test: unexpected systemd-run failure → exit code passes through"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+sr_write_rl "rl.json" 95 20000 10 15000
+# Replace the stub with one that exits 42 with a non-already-exists message.
+cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/systemd-log"
+echo "D-Bus connection failed: Address not available" >&2
+exit 42
+STUB
+chmod +x "$TMPDIR_TEST/bin/systemd-run"
+
+# Use `if cmd; then rc=0; else rc=$?; fi` so `set -e` doesn't abort the suite
+# on the expected non-zero exit, AND `$?` is captured inside the `else` branch
+# where it correctly reflects the failed command's exit code.
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr"); then
+  rc=0
+else
+  rc=$?
+fi
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "unexpected failure exit code passes through" "42" "$rc"
+assert_eq "unexpected failure; stdout silent" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"D-Bus connection failed"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: unexpected failure surfaces systemd-run stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unexpected failure surfaces systemd-run stderr"
+  echo "    stderr: $err"
+fi
+sr_teardown
+
+# --- Test 11: seven_day present but resets_at null → block treated as absent -
+
+echo "Test: seven_day present but resets_at null → block treated as absent"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+cat > "$TMPDIR_TEST/rl/rl.json" <<'JSON'
+{"seven_day":{"used_percentage":95,"resets_at":null},"five_hour":{"used_percentage":10,"resets_at":15000}}
+JSON
+export DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH="$TMPDIR_TEST/rl/rl.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "partial seven_day record; stdout silent" "" "$out"
+assert_eq "partial seven_day record; stderr silent" "" "$err"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: partial seven_day record; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: partial seven_day record; no systemd-run invocation"
+fi
+sr_teardown
+
+# --- Test 12: tampered resets_at → treated as missing, no RCE in `(( ))` -----
+#
+# bash arithmetic context evaluates array-index command substitution, so a
+# resets_at value like `a[$(touch /tmp/pwn)]` from a tampered rate_limits.json
+# (or a hostile env override) would execute the inner command when it reaches
+# `(( CAND_WEEKLY <= CAND_5H ))` or `(( RESEED_AT <= NOW ))`. The sanitizer
+# strips any *_RESETS that is not a pure integer; the malformed block is then
+# treated as absent telemetry. The RCE canary is a sentinel file: if it
+# appears, the injection executed.
+
+echo "Test: tampered weekly resets_at is rejected (no RCE, treated as missing)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+CANARY="$TMPDIR_TEST/canary-weekly"
+# Tampered weekly resets_at carries a bash-arithmetic RCE payload. 5h cap clear
+# so the script no-ops cleanly with both blocks dropped.
+export DISPATCH_SCHEDULE_RESEED_USED_WEEKLY=95
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY='a[$(touch '"$CANARY"')]'
+export DISPATCH_SCHEDULE_RESEED_USED_5H=10
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H=15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$CANARY" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered weekly resets_at did not trigger RCE"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered weekly resets_at triggered RCE (canary exists)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"WEEKLY_RESETS"* && "$err" == *"non-integer"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered weekly resets_at stderr names the sanitizer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered weekly resets_at stderr names the sanitizer"
+  echo "    stderr: $err"
+fi
+assert_eq "tampered weekly resets_at; no schedule line" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered weekly resets_at; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered weekly resets_at; no systemd-run invocation"
+fi
+sr_teardown
+
+echo "Test: tampered 5h resets_at is rejected (no RCE, treated as missing)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+CANARY="$TMPDIR_TEST/canary-5h"
+export DISPATCH_SCHEDULE_RESEED_USED_WEEKLY=50
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY=20000
+export DISPATCH_SCHEDULE_RESEED_USED_5H=60
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H='a[$(touch '"$CANARY"')]'
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$CANARY" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered 5h resets_at did not trigger RCE"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered 5h resets_at triggered RCE (canary exists)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"FIVEH_RESETS"* && "$err" == *"non-integer"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered 5h resets_at stderr names the sanitizer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered 5h resets_at stderr names the sanitizer"
+  echo "    stderr: $err"
+fi
+# Weekly is still clear (50 < 90) and 5h block was dropped → silent no-op.
+assert_eq "tampered 5h resets_at; no schedule line" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered 5h resets_at; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered 5h resets_at; no systemd-run invocation"
+fi
+sr_teardown
+
+# --- Test 13: non-integer DISPATCH_SCHEDULE_RESEED_NOW → abort exit 2 --------
+
+echo "Test: non-integer NOW override aborts with exit 2"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW='a[$(touch '"$TMPDIR_TEST/canary-now"')]'
+sr_write_rl "rl.json" 95 20000 10 15000
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr"); then
+  rc=0
+else
+  rc=$?
+fi
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "non-integer NOW; exit 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$TMPDIR_TEST/canary-now" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-integer NOW did not trigger RCE"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-integer NOW triggered RCE (canary exists)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"NOW must be an integer"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-integer NOW stderr names the validator"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-integer NOW stderr names the validator"
+  echo "    stderr: $err"
+fi
+sr_teardown
+
+# --- Test 14: non-numeric used_percentage → block treated as missing ---------
+
+echo "Test: non-numeric used_percentage is rejected (block treated as missing)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# Weekly USED is garbage; weekly block dropped. 5h is clear → silent no-op.
+export DISPATCH_SCHEDULE_RESEED_USED_WEEKLY='nope'
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY=20000
+export DISPATCH_SCHEDULE_RESEED_USED_5H=10
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H=15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"WEEKLY_USED"* && "$err" == *"non-numeric"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-numeric WEEKLY_USED stderr names the sanitizer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-numeric WEEKLY_USED stderr names the sanitizer"
+  echo "    stderr: $err"
+fi
+assert_eq "non-numeric WEEKLY_USED; no schedule line" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-numeric WEEKLY_USED; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-numeric WEEKLY_USED; no systemd-run invocation"
+fi
+sr_teardown
 
 # ============================================================================
 # dispatch project-helper tests (item-add / status-read / status-write)
@@ -6025,6 +6729,553 @@ fi
 ohs_teardown
 
 # ============================================================================
+# dispatch-stop hook tests
+# ============================================================================
+echo ""
+echo "=== dispatch-stop ==="
+#
+# Stop hook owning the post-phase disposition: read phase-completed marker,
+# decide branch (A absent / B advanced / C verify-retry / D non-advance),
+# manage dispatch:office-hours, spawn router, self-close on advance.
+# Discriminator: CLAUDE_JOB_DIR set, state.json present, .name matches ^[0-9]+-
+# (workers only; router names like dispatch-<id> are skipped).
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/hooks/dispatch-stop.sh               — hook under test
+#   $TMPDIR_TEST/skills/dispatch/scripts/             — fakes for find-pr,
+#                                                       phase, spawn-router,
+#                                                       self-close
+#   $TMPDIR_TEST/bin/{gh,git}                         — PATH shims
+#   $TMPDIR_TEST/jobs/abcd1234/state.json             — fake CLAUDE_JOB_DIR
+#   $TMPDIR_TEST/jobs/abcd1234/phase-completed        — marker (optional)
+#   $TMPDIR_TEST/stub/                                — recorded invocations
+#                                                       (order.log, *-calls.log,
+#                                                       gh-*.log)
+
+stop_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  STUB_DIR="$TMPDIR_TEST/stub"
+  mkdir -p "$TMPDIR_TEST/hooks" "$TMPDIR_TEST/skills/dispatch/scripts" \
+    "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/jobs/abcd1234"
+
+  cp "$HOOK_SCRIPT_DIR/dispatch-stop.sh" \
+    "$TMPDIR_TEST/hooks/dispatch-stop.sh"
+  chmod +x "$TMPDIR_TEST/hooks/dispatch-stop.sh"
+
+  # Fake dispatch-find-pr: prints contents of $STUB_DIR/find-pr-output if
+  # present, else nothing.
+  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr" <<'FAKE'
+#!/usr/bin/env bash
+[[ -f "$STUB_DIR/find-pr-output" ]] && cat "$STUB_DIR/find-pr-output"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr"
+
+  # Fake dispatch-phase: prints contents of $STUB_DIR/current-phase.txt if
+  # present, else "implement".
+  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-phase" <<'FAKE'
+#!/usr/bin/env bash
+if [[ -f "$STUB_DIR/current-phase.txt" ]]; then
+  cat "$STUB_DIR/current-phase.txt"
+else
+  echo "implement"
+fi
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-phase"
+
+  # Fake dispatch-spawn-router: log to order.log + spawn-calls.log.
+  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn-router" <<'FAKE'
+#!/usr/bin/env bash
+echo "spawn" >> "$STUB_DIR/order.log"
+echo "spawn" >> "$STUB_DIR/spawn-calls.log"
+echo "spawned"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn-router"
+
+  # Fake dispatch-self-close: log to order.log + self-close-calls.log.
+  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-self-close" <<'FAKE'
+#!/usr/bin/env bash
+echo "self-close" >> "$STUB_DIR/order.log"
+echo "self-close" >> "$STUB_DIR/self-close-calls.log"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-self-close"
+
+  # gh PATH stub. issue-edit-mode "label-missing" models the apply-first /
+  # create-on-"not found" idiom — first add-label fails with "not found" stderr,
+  # exits 1; once gh-label-create.log exists, the retry succeeds.
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  pr\ edit\ *--add-label*)
+    echo "$args" >> "$STUB_DIR/gh-pr-edit.log"
+    ;;
+  pr\ edit\ *--remove-label*)
+    echo "$args" >> "$STUB_DIR/gh-pr-remove.log"
+    ;;
+  pr\ view\ *)
+    if [[ -f "$STUB_DIR/verify-count.txt" ]]; then
+      cat "$STUB_DIR/verify-count.txt"
+    else
+      echo "0"
+    fi
+    ;;
+  issue\ edit\ *--add-label*)
+    mode="ok"
+    [[ -f "$STUB_DIR/issue-edit-mode" ]] && mode=$(cat "$STUB_DIR/issue-edit-mode")
+    case "$mode" in
+      label-missing)
+        if [[ -f "$STUB_DIR/gh-label-create.log" ]]; then
+          echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
+          echo "label-apply" >> "$STUB_DIR/order.log"
+        else
+          echo "failed to update: 'dispatch:office-hours' not found" >&2
+          exit 1
+        fi
+        ;;
+      *)
+        echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
+        echo "label-apply" >> "$STUB_DIR/order.log"
+        ;;
+    esac
+    ;;
+  issue\ edit\ *--remove-label*)
+    echo "$args" >> "$STUB_DIR/gh-issue-remove.log"
+    ;;
+  label\ create\ *)
+    echo "$args" >> "$STUB_DIR/gh-label-create.log"
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  cat > "$TMPDIR_TEST/bin/git" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  "rev-parse --abbrev-ref HEAD")
+    if [[ -f "$STUB_DIR/current-branch.txt" ]]; then
+      cat "$STUB_DIR/current-branch.txt"
+    else
+      echo "main"
+    fi
+    ;;
+  *) echo "git stub: unknown invocation: $args" >&2; exit 1 ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/git"
+
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+  export STUB_DIR
+}
+
+stop_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  STUB_DIR=""
+  export PATH="$SAVED_PATH"
+  unset CLAUDE_JOB_DIR
+}
+
+# --- Test 1: marker present, phase advanced → strip both, spawn, self-close --
+
+echo "Test: stop hook + marker present + phase advanced → strip PR+issue, spawn, self-close"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "verify" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=implement" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop advance: hook exits 0" "0" "$rc"
+pr_remove_log=$(cat "$STUB_DIR/gh-pr-remove.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$pr_remove_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop advance: PR --remove-label invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: PR --remove-label invoked"
+  echo "    pr-remove-log: $pr_remove_log"
+fi
+issue_remove_log=$(cat "$STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop advance: issue --remove-label invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: issue --remove-label invoked"
+  echo "    issue-remove-log: $issue_remove_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop advance: spawn invoked exactly once" "1" "$spawn_calls"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop advance: self-close invoked exactly once" "1" "$self_close_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop advance: no add-label calls were made"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: no add-label calls were made"
+fi
+stop_teardown
+
+# --- Test 2: marker present, same phase, verify, counter < 3 → spawn only ----
+
+echo "Test: stop hook + same phase + verify + counter<3 → spawn only (silent variance)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "verify" > "$STUB_DIR/current-phase.txt"
+echo "1" > "$STUB_DIR/verify-count.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=verify" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop verify-retry: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop verify-retry: no label add or remove invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-retry: no label add or remove invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop verify-retry: self-close not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-retry: self-close not invoked"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop verify-retry: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
+# --- Test 3: marker present, same phase, verify, counter >= 3 → branch D -----
+
+echo "Test: stop hook + same phase + verify + counter>=3 → apply label to issue, spawn"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "verify" > "$STUB_DIR/current-phase.txt"
+echo "3" > "$STUB_DIR/verify-count.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=verify" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop verify-exhausted: hook exits 0" "0" "$rc"
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop verify-exhausted: issue --add-label invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-exhausted: issue --add-label invoked"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop verify-exhausted: PR --add-label not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-exhausted: PR --add-label not invoked"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop verify-exhausted: spawn invoked exactly once" "1" "$spawn_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop verify-exhausted: self-close not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-exhausted: self-close not invoked"
+fi
+stop_teardown
+
+# --- Test 4: marker present, same phase, non-verify → branch D ---------------
+
+echo "Test: stop hook + same phase + non-verify → apply label to issue, spawn"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "qa" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=qa" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop same-phase non-verify: hook exits 0" "0" "$rc"
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop same-phase non-verify: issue --add-label invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop same-phase non-verify: issue --add-label invoked"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop same-phase non-verify: PR --add-label not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop same-phase non-verify: PR --add-label not invoked"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop same-phase non-verify: spawn invoked exactly once" "1" "$spawn_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop same-phase non-verify: self-close not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop same-phase non-verify: self-close not invoked"
+fi
+stop_teardown
+
+# --- Test 5: marker absent → apply label to issue, spawn ---------------------
+
+echo "Test: stop hook + marker absent → apply label to issue, spawn"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+# No find-pr-output → implement-phase, no PR yet.
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop marker-absent: hook exits 0" "0" "$rc"
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop marker-absent: issue --add-label invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop marker-absent: issue --add-label invoked"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-pr-remove.log" \
+   && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop marker-absent: no PR calls and no remove calls"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop marker-absent: no PR calls and no remove calls"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop marker-absent: spawn invoked exactly once" "1" "$spawn_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop marker-absent: self-close not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop marker-absent: self-close not invoked"
+fi
+stop_teardown
+
+# --- Test 6: CLAUDE_JOB_DIR unset → no-op ------------------------------------
+
+echo "Test: stop hook + CLAUDE_JOB_DIR unset → no-op (interactive session excluded)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+unset CLAUDE_JOB_DIR
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop no-job-dir: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop no-job-dir: no gh calls invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop no-job-dir: no gh calls invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop no-job-dir: spawn not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop no-job-dir: spawn not invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop no-job-dir: self-close not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop no-job-dir: self-close not invoked"
+fi
+stop_teardown
+
+# --- Test 7: router name discriminator → no-op -------------------------------
+
+echo "Test: stop hook + state.json name 'dispatch-<id>' (router) → no-op"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=implement" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop router-name: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop router-name: no gh calls invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop router-name: no gh calls invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop router-name: spawn not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop router-name: spawn not invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop router-name: self-close not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop router-name: self-close not invoked"
+fi
+stop_teardown
+
+# --- Test 8: label create-on-"not found" idiom -------------------------------
+
+echo "Test: stop hook + marker absent + label missing → create label, retry apply"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo "label-missing" > "$STUB_DIR/issue-edit-mode"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker → branch A.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop label-missing: hook exits 0" "0" "$rc"
+label_create_log=$(cat "$STUB_DIR/gh-label-create.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$label_create_log" == *"--color FBCA04"* ]] \
+   && [[ "$label_create_log" == *"dispatch:office-hours"* ]] \
+   && [[ "$label_create_log" == *"blocked on a human"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop label-missing: label created with canonical color and description"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop label-missing: label created with canonical color and description"
+  echo "    label-create-log: $label_create_log"
+fi
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop label-missing: issue apply retried after label create"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop label-missing: issue apply retried after label create"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop label-missing: spawn invoked exactly once after recovery" "1" "$spawn_calls"
+stop_teardown
+
+# --- Test 9: spawn-last ordering (branch D) ----------------------------------
+
+echo "Test: stop hook branch D → spawn is invoked AFTER label apply"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "qa" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=qa" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop ordering: hook exits 0" "0" "$rc"
+order_log=$(cat "$STUB_DIR/order.log" 2>/dev/null || true)
+label_line=$(grep -n '^label-apply$' "$STUB_DIR/order.log" 2>/dev/null | head -n1 | cut -d: -f1)
+spawn_line=$(grep -n '^spawn$' "$STUB_DIR/order.log" 2>/dev/null | head -n1 | cut -d: -f1)
+TOTAL=$((TOTAL + 1))
+if [[ -n "$label_line" && -n "$spawn_line" && "$spawn_line" -gt "$label_line" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop ordering: spawn appears after label-apply"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop ordering: spawn appears after label-apply"
+  echo "    order.log:"
+  echo "$order_log" | sed 's/^/      /'
+fi
+stop_teardown
+
+# --- Test 10: empty CURRENT_PHASE (dispatch-phase failure) → Branch D, no self-close --
+
+echo "Test: stop hook + marker present + dispatch-phase fails (empty CURRENT_PHASE) → Branch D (park), no self-close"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+# Simulate dispatch-phase failure by making the fake return nothing (exit 1).
+cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-phase" <<'FAKE'
+#!/usr/bin/env bash
+exit 1
+FAKE
+chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-phase"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=code-review" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop empty-phase: hook exits 0" "0" "$rc"
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop empty-phase: office-hours applied to issue (Branch D, not false Branch B)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop empty-phase: office-hours applied to issue (Branch D, not false Branch B)"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop empty-phase: self-close NOT invoked (no false advance)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop empty-phase: self-close NOT invoked (no false advance)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop empty-phase: no remove-label calls (no strip)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop empty-phase: no remove-label calls (no strip)"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop empty-phase: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
+# --- Test 11: unrecognized MARKER_PHASE value → treated as absent (Branch A) --
+
+echo "Test: stop hook + marker present with unrecognized phase value → Branch A (treat as absent), no self-close"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# A value outside the known phase set — would otherwise drive Branch B's
+# self-close since "garbage-injection" != "implement".
+echo "phase=garbage-injection" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop unknown-phase: hook exits 0" "0" "$rc"
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop unknown-phase: office-hours applied to issue (Branch A, not false Branch B)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop unknown-phase: office-hours applied to issue (Branch A, not false Branch B)"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop unknown-phase: self-close NOT invoked (corrupt marker doesn't drive advance)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop unknown-phase: self-close NOT invoked (corrupt marker doesn't drive advance)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop unknown-phase: no remove-label calls (no strip)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop unknown-phase: no remove-label calls (no strip)"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop unknown-phase: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
+# ============================================================================
 # ensure_deps (lib.sh) retry tests
 # ============================================================================
 echo ""
@@ -6442,14 +7693,16 @@ PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/dispatch/SKILL.md"]=0
   [".claude/skills/dispatch-worker/SKILL.md"]=2
-  # Phase skills call ExitWorktree action:"keep" at their clean-completion
-  # terminus (#824) — one terminal ExitWorktree each, not a mid-session switch.
-  [".claude/skills/dispatch-qa/SKILL.md"]=1
-  [".claude/skills/plan-implement/SKILL.md"]=1
-  [".claude/skills/code-review-fix/SKILL.md"]=1
-  [".claude/skills/review-fix/SKILL.md"]=1
-  [".claude/skills/security-review-fix/SKILL.md"]=1
-  [".claude/skills/verify-pr/SKILL.md"]=1
+  # Phase skills do not call EnterWorktree/ExitWorktree (#868): they write the
+  # phase-completed marker and stop; the Stop hook (`.claude/hooks/dispatch-stop.sh`)
+  # owns post-phase disposition (label management, router spawn, self-close).
+  # This supersedes #824's terminal ExitWorktree action:"keep" pattern.
+  [".claude/skills/dispatch-qa/SKILL.md"]=0
+  [".claude/skills/plan-implement/SKILL.md"]=0
+  [".claude/skills/code-review-fix/SKILL.md"]=0
+  [".claude/skills/review-fix/SKILL.md"]=0
+  [".claude/skills/security-review-fix/SKILL.md"]=0
+  [".claude/skills/verify-pr/SKILL.md"]=0
   [".claude/skills/implement-unit/SKILL.md"]=0
   [".claude/skills/commit-merge-push/SKILL.md"]=0
 )

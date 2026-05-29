@@ -248,16 +248,25 @@ The QA pass covers **public data only** — documents present in both the QA ser
    4. **Stop without labeling.** Do **not** apply `dispatch:qa-done`. The fix
       commits change the PR; the user re-runs `/dispatch`, which re-derives the
       phase from CI/labels (→ `waiting`/`verify` while CI runs, → `qa` once green)
-      and re-QAs the fixed build. The skill ends here — Steps 6 and 7 already ran
+      and re-QAs the fixed build.
+
+      Also do **not** write the phase-completed marker. The Stop hook
+      (`.claude/hooks/dispatch-stop.sh`) reads marker absence as
+      "park this issue" and applies `dispatch:office-hours` to the issue,
+      so the bug-fix path parks for human review until the fix is QA'd
+      again on the next `/dispatch` tick.
+
+      The skill ends here — Steps 6 and 7 already ran
       inline in sub-step 1, and Step 8 does not run on the bug-fix path.
 
 6. **Post the PR comment summary.**
 
    Resolve the PR number (use `dangerouslyDisableSandbox: true` — `gh` needs network):
    ```bash
-   gh pr view "$BRANCH" --json number -q .number
+   PR_NUM=$(gh pr view "$BRANCH" --json number -q .number)
    ```
    where `$BRANCH` is the current branch (`git rev-parse --abbrev-ref HEAD`).
+   `PR_NUM` is reused in Steps 8 and the phase-completed marker write.
 
    Write a markdown summary to `tmp/dispatch-qa-summary-<n>.md` (where `<n>` is the Step-0-resolved issue number `<N>`). Include:
    - Items walked.
@@ -308,14 +317,18 @@ The QA pass covers **public data only** — documents present in both the QA ser
    The script applies the label, creating it first only if it does not yet exist
    (e.g. on a fork where it has not been created).
 
-   Then exit the worktree and hand off. Run (`dangerouslyDisableSandbox: true`
-   — the script calls `gh` and `dispatch-self-close`):
+   Then write the phase-completed marker as the final action so the Stop
+   hook (`.claude/hooks/dispatch-stop.sh`) can propagate the dispatch chain.
+   Atomic via tempfile + mv. `CLAUDE_JOB_DIR` unset = interactive run; skip.
+   The PR number was resolved in Step 6.
 
    ```bash
-   ExitWorktree action:"keep"
-   .claude/skills/dispatch/scripts/dispatch-handoff <N> --phase-completed
+   if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+     printf 'phase=qa\npr=%s\n' "$PR_NUM" \
+       > "$CLAUDE_JOB_DIR/phase-completed.tmp"
+     mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
+        "$CLAUDE_JOB_DIR/phase-completed"
+   fi
    ```
 
-   `dispatch-handoff` spawns the next `/dispatch` router, checks for a
-   `dispatch:office-hours` deviation flag on the PR, and self-closes the
-   session.
+   Then **stop**. The Stop hook reads the marker and advances the chain.

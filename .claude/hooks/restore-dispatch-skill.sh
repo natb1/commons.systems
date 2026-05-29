@@ -59,11 +59,26 @@ GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/nu
 PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
 WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 
-# Emit reload instruction so Claude reloads /dispatch-worker for this worker
-# session. /dispatch-worker re-derives the phase from PR/CI ground truth, so
-# recovery is correct after a /clear in any phase. The worker requires
-# <N> <worktree-path> — its Step 0 cd's into the path itself.
-printf 'COMPACTION RECOVERY: Reload skill: /dispatch-worker %s %s\n' \
-  "$ISSUE_NUM" "$WORKTREE_PATH"
+# Emit reload instruction. For phases with a single owning phase skill,
+# reload that skill directly so a compaction mid-phase-skill resumes inside
+# the same skill rather than re-entering /dispatch-worker (which can leave
+# the active skill in an inconsistent reload state). For waiting/done/unknown,
+# fall back to /dispatch-worker so the worker's Step 2 CI-monitor subagent
+# loop and Step 2 done variance handling still run. dispatch-phase failure
+# (network blip, no PR yet) also falls back to /dispatch-worker.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
+DISPATCH_SCRIPTS="$SCRIPT_DIR/../skills/dispatch/scripts"
+PHASE=$("$DISPATCH_SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || PHASE=""
 
+case "$PHASE" in
+  implement)   DIRECTIVE="/plan-implement $ISSUE_NUM" ;;
+  verify)      DIRECTIVE="/verify-pr" ;;
+  qa)          DIRECTIVE="/dispatch-qa $ISSUE_NUM" ;;
+  code-review) DIRECTIVE="/code-review-fix" ;;
+  review)      DIRECTIVE="/review-fix" ;;
+  security)    DIRECTIVE="/security-review-fix" ;;
+  *)           DIRECTIVE="/dispatch-worker $ISSUE_NUM $WORKTREE_PATH" ;;
+esac
+
+printf 'COMPACTION RECOVERY: Reload skill: %s\n' "$DIRECTIVE"
 exit 0
