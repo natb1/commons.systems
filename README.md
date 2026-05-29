@@ -75,7 +75,7 @@ Each router tick:
 
 The worker, inside its worktree:
 
-1. Derives the phase from PR/CI state via [`dispatch-phase`](.claude/skills/dispatch/scripts/dispatch-phase).
+1. Derives the phase from PR/CI state via [`dispatch-phase`](.claude/skills/dispatch-propagate/scripts/dispatch-phase).
 2. Runs exactly one phase skill — the skill named in the [PR Control Flow](#pr-control-flow) table for that phase.
 3. Hands off with one of two dispositions:
    - `--phase-completed` — spawns a fresh `/dispatch` router back in `worktrees/main` and self-deletes (`claude rm`). If `dispatch:office-hours` is on the PR, the worker still spawns the router but **skips** self-delete, so the parked transcript stays visible for human review.
@@ -113,7 +113,7 @@ With no `dispatch.config/jit.json` present the engine is a no-op.
 
 ### Key design decisions for adopters
 
-- **Ground truth is PR/CI + label state.** No persisted state machine; [`dispatch-phase`](.claude/skills/dispatch/scripts/dispatch-phase) derives the phase from draft state, CI status, and the accumulating `dispatch:*` labels.
+- **Ground truth is PR/CI + label state.** No persisted state machine; [`dispatch-phase`](.claude/skills/dispatch-propagate/scripts/dispatch-phase) derives the phase from draft state, CI status, and the accumulating `dispatch:*` labels.
 - **Per-worktree concurrency.** N issues in flight equals N concurrent worker sessions in N worktrees. The per-repo selection lock serializes router *selection* only — the worker holds no lock.
 - **Self-perpetuating background-job chain.** Each `/dispatch-worker` runs as a `claude --bg` background session that self-deletes on clean completion and spawns its successor router. The #725 heartbeat re-seeds the chain if it drains.
 - **Transient escalation via `dispatch:office-hours`.** One label, two writers (input-block hooks per #757, phase-skill deviation detection per #826), one reader (the office-hours queue). The label clears when the user engages the worktree.
