@@ -394,8 +394,8 @@ closed transcript.
 ### `notify already-done`
 
 Step 2 found a non-draft (ready) PR (`done` phase) that slipped past the
-sweep — `dispatch-sweep` (#843) is meant to adopt these before they reach a
-worker, so this is a real variance. Resolve the PR with
+queue-ladder filter — a `done`-phase PR should not reach a worker, so this
+is a real variance. Resolve the PR with
 `.claude/skills/dispatch/scripts/dispatch-find-pr <N>` and apply
 `dispatch:office-hours` to it with the same apply-first / create-on-"not
 found" idiom as `notify deviation` above so the slip is queued for human
