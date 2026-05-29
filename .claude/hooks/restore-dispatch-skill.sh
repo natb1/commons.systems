@@ -142,8 +142,13 @@ printf '\n'
 # strip: first remove line 1 (the opening `---`), then delete through the
 # next `---` line (the closing delimiter). A single `sed '1,/^---$/d'`
 # does not work when line 1 is `---` — the range matches just line 1.
+#
+# Only strip when a closing `---` actually exists. A malformed file with an
+# opening `---` but no closing delimiter would otherwise have its entire body
+# deleted (the second sed range runs to EOF), silently emitting an empty
+# skill — worse than the legacy fallback. In that case emit the file verbatim.
 first_line=$(head -n1 "$SKILL_FILE")
-if [ "$first_line" = "---" ]; then
+if [ "$first_line" = "---" ] && tail -n +2 "$SKILL_FILE" | grep -qx -- '---'; then
   sed '1d' "$SKILL_FILE" | sed '1,/^---$/d'
 else
   cat "$SKILL_FILE"
