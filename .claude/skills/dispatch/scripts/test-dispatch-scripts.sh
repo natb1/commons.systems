@@ -3921,6 +3921,43 @@ if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
 assert_eq "regression-guard: cwd-match wrong-name → free" "free" "$live"
 ca_teardown
 
+# --- Test 24: verify_agent_registered_under skips a stopped row --------------
+
+echo "Test: verify_agent_registered_under does not count a stopped session as registered"
+ca_setup
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+# A row whose name matches the target but whose status is "stopped" must not
+# satisfy the verify — only a live successor counts (mirrors the dedup guards).
+write_fake_claude '[{"sessionId":"s-1","pid":7,"status":"stopped","name":"dispatch-dead"}]' 0
+if verify_agent_registered_under "dispatch-dead" "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "verify-stopped: stopped row is not registered (rc 1)" "1" "$rc"
+# Positive control: a live row with the same name does satisfy the verify.
+write_fake_claude '[{"sessionId":"s-1","pid":7,"status":"busy","name":"dispatch-live"}]' 0
+if verify_agent_registered_under "dispatch-live" "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "verify-live: busy row is registered (rc 0)" "0" "$rc"
+unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+ca_teardown
+
+# --- Test 25: verify_agent_registered_under rejects a non-numeric interval ---
+
+echo "Test: verify_agent_registered_under rejects a non-numeric interval override"
+ca_setup
+# `inf` is a valid GNU `sleep` argument that would hang the verify forever. The
+# guard must reject it, warn on stderr, and fall back to the 0.2 s default so
+# the call still returns (here: exhausts to rc 1 against an empty registry).
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=inf
+write_fake_claude '[]' 0
+if err=$(verify_agent_registered_under "dispatch-x" "$CA_DIR" 2>&1 1>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "verify-bad-interval: exhausts and returns 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q "is not a non-negative number"; then
+  PASS=$((PASS + 1)); echo "  PASS: verify-bad-interval: warns and falls back to default"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: verify-bad-interval: warns and falls back to default"
+fi
+unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+ca_teardown
+
 # ============================================================================
 # dispatch-config-load tests
 # ============================================================================
