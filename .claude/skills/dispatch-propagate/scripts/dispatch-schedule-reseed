@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# dispatch-schedule-reseed — schedule a one-shot re-seed of the /dispatch chain
-# at the next rate-limit cap reset.
+# dispatch-schedule-reseed — schedule a one-shot re-seed of the
+# /dispatch-propagate chain at the next rate-limit cap reset.
 #
-# The /dispatch chain is a self-perpetuating baton-pass of background jobs:
+# The /dispatch-propagate chain is a self-perpetuating baton-pass of
+# background jobs:
 # each worker finishes its phase, the baton-pass spawns the next tick, and the
 # chain keeps moving until something stops it. When a tick observes a
 # rate-limit cap-hit (used_percentage >= target on the weekly or 5-hour
@@ -287,8 +288,8 @@ fi
 #
 # ExecStart is dispatch-spawn-router — the worker→router baton-pass primitive
 # that dedup-guards, prunes stopped agents, and spawns
-# `claude --bg --name dispatch-<id> --permission-mode auto "/dispatch"` from
-# the main worktree.
+# `claude --bg --name dispatch-<id> --permission-mode auto "/dispatch-propagate"`
+# from the main worktree.
 
 SYSTEMD_RUN_CMD="${DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD:-systemd-run}"
 UNIT_NAME="dispatch-reseed-${RESEED_AT}"
@@ -305,7 +306,7 @@ trap 'rm -f "$RUN_STDERR"' EXIT
      --on-calendar="@$RESEED_AT" \
      --working-directory="$MAIN_WORKTREE" \
      --timer-property=Persistent=true \
-     "$MAIN_WORKTREE/.claude/skills/dispatch/scripts/dispatch-spawn-router" \
+     "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-spawn-router" \
      2>"$RUN_STDERR"
 RC=$?
 if (( RC == 0 )); then

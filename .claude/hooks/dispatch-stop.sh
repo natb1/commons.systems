@@ -59,7 +59,7 @@ ISSUE_NUM=$(printf '%s\n' "$BRANCH" | grep -oE '^[0-9]+') || exit 0
 [ -n "$ISSUE_NUM" ] || exit 0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
-SCRIPTS="$SCRIPT_DIR/../skills/dispatch/scripts"
+SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
 
 # Resolve PR (may be empty for implement-phase before the draft PR opens).
 PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""

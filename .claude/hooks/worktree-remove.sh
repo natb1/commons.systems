@@ -18,10 +18,10 @@ err() { log "ERROR: $*"; }
 trap 'err "unexpected error on line $LINENO (exit $?)"; exit 0' ERR
 trap 'exit 0' EXIT
 
-# shellcheck source=../skills/dispatch/scripts/lib-worktree-in-sync.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../skills/dispatch/scripts/lib-worktree-in-sync.sh"
-# shellcheck source=../skills/dispatch/scripts/lib-claude-agents.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../skills/dispatch/scripts/lib-claude-agents.sh"
+# shellcheck source=../skills/dispatch-propagate/scripts/lib-worktree-in-sync.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../skills/dispatch-propagate/scripts/lib-worktree-in-sync.sh"
+# shellcheck source=../skills/dispatch-propagate/scripts/lib-claude-agents.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../skills/dispatch-propagate/scripts/lib-claude-agents.sh"
 
 PAYLOAD=$(cat 2>/dev/null) || PAYLOAD=""
 log "raw payload: ${PAYLOAD:-<empty>}"   # first real fire reveals the schema

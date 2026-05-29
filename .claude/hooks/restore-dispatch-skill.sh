@@ -16,7 +16,7 @@ if [ -n "$SESSION_ID" ]; then
     2>/dev/null) || NAME=""
 fi
 
-# Router sessions (dispatch-<short-id>) restart via /dispatch, not skill
+# Router sessions (dispatch-<short-id>) restart via /dispatch-propagate, not skill
 # restoration — skip them explicitly.
 case "$NAME" in
   dispatch-*) exit 0 ;;
@@ -77,7 +77,7 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 # Falls back to the one-line Reload directive if SKILL.md is missing or
 # unreadable — defensive against a packaging error breaking recovery.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
-DISPATCH_SCRIPTS="$SCRIPT_DIR/../skills/dispatch/scripts"
+DISPATCH_SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
 PHASE=$("$DISPATCH_SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || PHASE=""
 
 case "$PHASE" in

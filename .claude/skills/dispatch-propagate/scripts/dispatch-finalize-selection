@@ -3,7 +3,7 @@
 # tmp/dispatch-worktree marker that signals "Step 5 completed" (the lock script
 # reads it on subsequent ticks to reclaim a marker-bearing foreign holder), then
 # execs dispatch-acquire-lock --release so the wrapper's exit code is the
-# release call's exit code. See `.claude/skills/dispatch/SKILL.md` Step 5 and
+# release call's exit code. See `.claude/skills/dispatch-propagate/SKILL.md` Step 5 and
 # Step 0 "Releasing the lock".
 set -euo pipefail
 

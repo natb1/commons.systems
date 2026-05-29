@@ -304,27 +304,28 @@ only to the topic axis — `dispatch` and `testing infrastructure`. `priority`
 is a separate axis (an escalation marker) and may be applied alongside a
 topic label.
 
-- **`dispatch`** — concerns the `/dispatch` workflow, one of its phase skills
-  (`/plan-implement`, `/verify-pr`, `/dispatch-qa`, `/code-review-fix`,
-  `/review-fix`, `/security-review-fix`), a `ref-*` reference skill those
-  skills use (`ref-ready`, `ref-memory-management`, `ref-github-issues`,
-  `ref-write-instructions`), or a `dispatch-*` script under
-  `.claude/skills/dispatch/scripts/` (e.g. `dispatch-select-target`,
-  `dispatch-phase`, `dispatch-trace-leaf`). Keyword signals: "dispatch",
-  "phase skill", "issue workflow", "queue selection", "worktree resolution".
+- **`dispatch`** — concerns the `/dispatch` or `/dispatch-propagate` workflow,
+  one of its phase skills (`/plan-implement`, `/verify-pr`, `/dispatch-qa`,
+  `/code-review-fix`, `/review-fix`, `/security-review-fix`), a `ref-*`
+  reference skill those skills use (`ref-ready`, `ref-memory-management`,
+  `ref-github-issues`, `ref-write-instructions`), or a `dispatch-*` script
+  under `.claude/skills/dispatch-propagate/scripts/` (e.g.
+  `dispatch-select-target`, `dispatch-phase`, `dispatch-trace-leaf`). Keyword
+  signals: "dispatch", "phase skill", "issue workflow", "queue selection",
+  "worktree resolution".
 
 - **`testing infrastructure`** — concerns CI workflows under
   `.github/workflows/` (e.g. `pr-checks.yml`, `unit-tests.yml`), the unit or
   acceptance test harness, Vitest or Playwright configuration, test fixtures or
   seed data, or a `run-*.sh` test runner under
-  `.claude/skills/dispatch/scripts/` (e.g. `run-unit-tests.sh`,
+  `.claude/skills/dispatch-propagate/scripts/` (e.g. `run-unit-tests.sh`,
   `run-acceptance-tests.sh`, `run-lint.sh`, `run-typecheck.sh`). Keyword
   signals: "CI", "unit test", "acceptance test", "Vitest", "Playwright",
   "fixture", "seed data", "test runner".
 
 - **`priority`** — a separate axis from the topic labels above. A
   human-applied escalation marker that routes the issue (or any PR closing it)
-  ahead of non-priority items within its own topic category in `/dispatch` queue selection. Apply only
+  ahead of non-priority items within its own topic category in `/dispatch-propagate` queue selection. Apply only
   when a human explicitly asks to escalate; `/ready` never applies it
   automatically. May be combined with any topic label.
 
