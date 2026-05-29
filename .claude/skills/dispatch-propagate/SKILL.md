@@ -78,9 +78,12 @@ Release happens at exactly two kinds of point, each with its own canonical
 command:
 
 - **Proceed path** — as the final action of Step 5, run
-  `dispatch-finalize-selection`. The wrapper writes the
-  `tmp/dispatch-worktree` marker (see *Step 5* and the marker paragraph below)
-  and execs `dispatch-acquire-lock --release` in one step.
+  `dispatch-finalize-selection "$WORKTREE_PATH"`. The wrapper takes the target
+  worktree path as its one required argument, `cd`s into it, writes the
+  `tmp/dispatch-worktree` marker (see *Step 5* and the marker paragraph below),
+  and execs `dispatch-acquire-lock --release` in one step. The `cd`-first
+  contract is why the router never accidentally writes the marker into its
+  own cwd — the wrapper is the sole Step-5 marker writer on the proceed path.
 - **Every Steps 1-5 stop path** — immediately before reporting the stop reason
   and proceeding to Step 7, run
   `.claude/skills/dispatch-propagate/scripts/dispatch-acquire-lock --release` directly.
@@ -440,12 +443,12 @@ worktree path that Step 6 will pass to `dispatch-spawn-worker`.
   closing — the next baton-pass or office-hours hand-off will re-seed"), not
   optional. Do not spawn a worker.
 
-On every non-`conflict` path, before the worker is spawned, create the recovery
-marker **inside the target worktree** (`$WORKTREE_PATH`):
-
-```bash
-(cd "$WORKTREE_PATH" && mkdir -p tmp && touch tmp/dispatch-worktree)
-```
+As the **final action of this step on every non-`conflict` (proceed) path** —
+before Step 6 — run `dispatch-finalize-selection "$WORKTREE_PATH"`. The
+wrapper `cd`s into the target worktree, writes the recovery marker
+**inside the target worktree** (`$WORKTREE_PATH/tmp/dispatch-worktree`), and
+releases the lock in one step (see *Releasing the lock*). The worker in Step 6
+onward runs lock-free.
 
 The marker is the canonical "Step 5 completed" signal, read by the lock script
 as the post-Step-5 reclaim signal (see *Releasing the lock*). Context-clear
@@ -455,18 +458,13 @@ workers) and emits `/dispatch-worker <N> <worktree-path>` so the worker
 re-derives the phase from PR/CI ground truth.
 `.claude/hooks/worktree-create.sh` also writes the marker as its final action
 on every successful worktree creation, so a fresh worktree is marker-bearing
-the moment the hook returns — the router's explicit marker write here is the
-in-skill defense for any code path that bypasses the hook. The router itself
-never writes the marker into its own cwd (`worktrees/main`), so a
-`SessionStart:clear` there is a no-op — correct, since the router is
-short-lived and re-seeded by the #725 cap-keyed re-seed when a cap stall ends
-the chain. The marker is an empty
-boolean flag with no payload; it persists for the worktree's life and needs no
-cleanup — `tmp/` is git-ignored, and removing the worktree removes it.
-
-As the **final action of this step on every non-`conflict` (proceed) path** —
-after the marker is written, before Step 6 — release the lock (see *Releasing
-the lock*). The worker in Step 6 onward runs lock-free.
+the moment the hook returns — the in-skill defense for any code path that
+bypasses the hook. The router itself never writes the marker into its own cwd
+(`worktrees/main`), so a `SessionStart:clear` there is a no-op — correct,
+since the router is short-lived and re-seeded by the #725 cap-keyed re-seed
+when a cap stall ends the chain. The marker is an empty boolean flag with no
+payload; it persists for the worktree's life and needs no cleanup — `tmp/` is
+git-ignored, and removing the worktree removes it.
 
 ## 6. Spawn the Worker
 
