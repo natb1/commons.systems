@@ -607,8 +607,9 @@ The three dispositions:
 - **`notify <reason>`** — `notify spawn-failed` (Step 6's spawn exited
   non-zero) or any Steps 0–5 variance. The call site has already printed a
   user-visible report; for `notify target-blocked` it has also applied
-  `dispatch:office-hours` to the target's PR when one is resolvable (see
-  Step 4's *Applying `dispatch:office-hours`* subsection). Do **not**
+  `dispatch:office-hours` to the target's **issue** via
+  `dispatch-apply-office-hours` (see Step 4's *Applying
+  `dispatch:office-hours`* subsection). Do **not**
   self-close — the session stays in `claude agents` until the user closes
   it, so the variance is visible rather than buried in a closed transcript.
 

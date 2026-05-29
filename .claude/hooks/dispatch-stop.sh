@@ -88,11 +88,17 @@ fi
 resolve_office_hours_reason() {
   local default_reason="$1"
   local reason_file="$CLAUDE_JOB_DIR/office-hours-reason"
+  local file_reason
   if [ -n "${CLAUDE_JOB_DIR:-}" ] && [ -s "$reason_file" ]; then
-    cat "$reason_file"
-  else
-    printf '%s' "$default_reason"
+    # Command substitution strips trailing newlines; a file that contains only
+    # whitespace/newlines produces an empty string — fall through to the default.
+    file_reason="$(cat "$reason_file")"
+    if [ -n "$file_reason" ]; then
+      printf '%s' "$file_reason"
+      return
+    fi
   fi
+  printf '%s' "$default_reason"
 }
 
 # Strip targets both the PR (if any) and the issue, since this runs from either

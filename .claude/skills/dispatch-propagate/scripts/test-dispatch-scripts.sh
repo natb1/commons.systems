@@ -6960,7 +6960,7 @@ else
 fi
 ib_teardown
 
-# --- Test 4: CLAUDE_JOB_DIR unset → no-op (no label, no spawn) ---------------
+# --- Test 3: CLAUDE_JOB_DIR unset → no-op (no label, no spawn) ---------------
 
 echo "Test: CLAUDE_JOB_DIR unset → no-op (interactive session is excluded)"
 ib_setup
@@ -6984,7 +6984,7 @@ else
 fi
 ib_teardown
 
-# --- Test 5: non-dispatch job name → no-op -----------------------------------
+# --- Test 4: non-dispatch job name → no-op -----------------------------------
 
 echo "Test: state.json name is not 'dispatch-*' → no-op (other background jobs excluded)"
 ib_setup
@@ -7009,7 +7009,7 @@ else
 fi
 ib_teardown
 
-# --- Test 6: non-permission-prompt notification → silent pass-through --------
+# --- Test 5: non-permission-prompt notification → silent pass-through --------
 
 echo "Test: Notification with non-permission-prompt type → no-op (passes through silently)"
 ib_setup
@@ -7029,7 +7029,7 @@ else
 fi
 ib_teardown
 
-# --- Test 7: non-issue branch with dispatch job → no-op ----------------------
+# --- Test 6: non-issue branch with dispatch job → no-op ----------------------
 
 echo "Test: non-issue branch (main) + dispatch-* job → no-op (no label, no spawn)"
 ib_setup
