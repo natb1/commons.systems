@@ -60,7 +60,14 @@ Route on `$LOCK`:
   in another `/dispatch`. The script's **stderr** carries a one-line diagnostic
   naming the wait duration and the holding sessionId; report those, then proceed
   to Step 7 with `notify busy-lock-timeout` (subsumes #850) — run no sync, no
-  health gate, no sweep, no selection, and no phase skill.
+  health gate, no sweep, no selection, and no phase skill. The user-visible
+  report is mandatory: the background-session classifier reads only message
+  text, not tool output, so a silent stop would hide the wedge. Recommend the
+  user verify the recorded holder is still live with:
+
+  ```
+  claude agents --json | jq '.[] | select(.sessionId == "<holder>")'
+  ```
 
 ### Releasing the lock
 
