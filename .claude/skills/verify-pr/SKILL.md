@@ -202,9 +202,18 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh <pr-num> tmp/verify-summary.md
    ```
 
-9. **Stop.** The `/dispatch-propagate` background-job chain drives the next iteration —
-   the next `/dispatch-propagate` job re-derives the phase from CI ground truth and
-   re-invokes `/verify-pr` if checks still fail.
+9. **Stop.** Exit the worktree and hand off. Run (`dangerouslyDisableSandbox:
+   true` — the script calls `gh` and `dispatch-self-close`):
+
+   ```bash
+   ExitWorktree action:"keep"
+   .claude/skills/dispatch-propagate/scripts/dispatch-handoff <N> --phase-completed
+   ```
+
+   `dispatch-handoff` spawns the next `/dispatch-propagate` router, checks for a
+   `dispatch:office-hours` deviation flag on the PR, and self-closes the
+   session. The next `/dispatch-propagate` job re-derives the phase from CI ground
+   truth and re-invokes `/verify-pr` if checks still fail.
 
 ## Accumulator
 

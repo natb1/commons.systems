@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# dispatch-handoff — scripted terminal disposition for /dispatch-worker phase completions
+# and /dispatch router early-stop paths.
+#
+# Two invocation forms:
+#
+#   dispatch-handoff <N> --phase-completed
+#     Phase skill completed cleanly. Spawn the next /dispatch router via
+#     dispatch-spawn-router. On spawn failure: print stderr, exit non-zero, no
+#     self-close (leave the session open so the failure is visible). On spawn
+#     success: resolve the PR via dispatch-find-pr <N> and read its labels —
+#     if dispatch:office-hours is present, exit 0 without self-closing (the
+#     phase skill flagged a deviation; session stays open for human review).
+#     Otherwise exec dispatch-self-close.
+#
+#   dispatch-handoff --early-stop
+#     Router early-stop path. No spawn (the #725 heartbeat re-seeds the chain).
+#     Exec dispatch-self-close.
+#
+# Both forms require dangerouslyDisableSandbox: true — this script calls gh,
+# dispatch-self-close (which calls `claude rm`), and dispatch-spawn-router
+# (which calls `claude agents`). See .claude/rules/sandbox.md.
+#
+# Environment overrides for testability:
+#   DISPATCH_HANDOFF_SELF_CLOSE_CMD  The dispatch-self-close command. Default:
+#                                    resolved relative to this script.
+#   DISPATCH_HANDOFF_SPAWN_CMD       The dispatch-spawn-router command. Default:
+#                                    resolved relative to this script.
+#   DISPATCH_HANDOFF_GH_CMD          The gh command. Default: gh.
+#   DISPATCH_HANDOFF_FIND_PR_CMD     The dispatch-find-pr command. Default:
+#                                    resolved relative to this script.
+#
+# Exit codes:
+#   0   self-close was exec'd (or deviation branch: no self-close, exit 0).
+#   1   spawn failed (--phase-completed path only).
+#   2   bad arguments.
+#
+# NOT set -e: exits are handled explicitly.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+SELF_CLOSE_CMD="${DISPATCH_HANDOFF_SELF_CLOSE_CMD:-$SCRIPT_DIR/dispatch-self-close}"
+SPAWN_CMD="${DISPATCH_HANDOFF_SPAWN_CMD:-$SCRIPT_DIR/dispatch-spawn-router}"
+GH_CMD="${DISPATCH_HANDOFF_GH_CMD:-gh}"
+FIND_PR_CMD="${DISPATCH_HANDOFF_FIND_PR_CMD:-$SCRIPT_DIR/dispatch-find-pr}"
+
+# --- argument parsing ---------------------------------------------------------
+
+MODE=""
+ISSUE_NUM=""
+
+case "${1:-}" in
+  --early-stop)
+    if [[ $# -ne 1 ]]; then
+      echo "dispatch-handoff: --early-stop takes no arguments" >&2
+      exit 2
+    fi
+    MODE="early-stop"
+    ;;
+  --phase-completed)
+    echo "dispatch-handoff: --phase-completed requires an issue number: dispatch-handoff <N> --phase-completed" >&2
+    exit 2
+    ;;
+  "")
+    echo "dispatch-handoff: usage: dispatch-handoff <N> --phase-completed | dispatch-handoff --early-stop" >&2
+    exit 2
+    ;;
+  *)
+    # Expect: dispatch-handoff <N> --phase-completed
+    ISSUE_NUM="${1#\#}"  # strip leading # if present
+    if [[ $# -ne 2 || "${2:-}" != "--phase-completed" ]]; then
+      echo "dispatch-handoff: usage: dispatch-handoff <N> --phase-completed | dispatch-handoff --early-stop" >&2
+      exit 2
+    fi
+    if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
+      echo "dispatch-handoff: issue number must be a positive integer, got '${1}'" >&2
+      exit 2
+    fi
+    MODE="phase-completed"
+    ;;
+esac
+
+# --- early-stop path ----------------------------------------------------------
+
+if [[ "$MODE" == "early-stop" ]]; then
+  exec "$SELF_CLOSE_CMD"
+  # exec replaces the process; the line below is unreachable.
+  exit 1
+fi
+
+# --- phase-completed path -----------------------------------------------------
+
+# Step 1: spawn the next /dispatch router.
+spawn_output=$("$SPAWN_CMD" 2>&1)
+spawn_exit=$?
+
+if [[ $spawn_exit -ne 0 ]]; then
+  echo "dispatch-handoff: dispatch-spawn-router failed (exit $spawn_exit): $spawn_output" >&2
+  exit 1
+fi
+
+# Step 2: check for dispatch:office-hours on the PR.
+PR_NUM=$("$FIND_PR_CMD" "$ISSUE_NUM" 2>/dev/null || true)
+
+if [[ -n "$PR_NUM" ]]; then
+  labels=$("$GH_CMD" pr view "$PR_NUM" --json labels --jq '[.labels[].name] | join("\n")' 2>/dev/null || true)
+  if echo "$labels" | grep -qx "dispatch:office-hours"; then
+    # Deviation detected — session stays open for human review.
+    exit 0
+  fi
+fi
+
+# Step 3: clean completion — self-close.
+exec "$SELF_CLOSE_CMD"
+exit 1

@@ -171,6 +171,18 @@ steps in order.
    `dispatch:security-reviewed` — so `/dispatch-propagate` does not apply the label after
    this skill returns.
 
+8. **Exit and hand off.** Run (`dangerouslyDisableSandbox: true` — the script
+   calls `gh` and `dispatch-self-close`):
+
+   ```bash
+   ExitWorktree action:"keep"
+   .claude/skills/dispatch-propagate/scripts/dispatch-handoff <N> --phase-completed
+   ```
+
+   `dispatch-handoff` spawns the next `/dispatch-propagate` router, checks for a
+   `dispatch:office-hours` deviation flag on the PR, and self-closes the
+   session.
+
 ## Finding classification
 
 Every `/code-review` finding lands in exactly one of four buckets:
