@@ -841,7 +841,9 @@ UNION='['"$(make_pr_union 10 "10-active-branch" "2024-01-01T00:00:00Z" "true" "$
 setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 # Worktree exists for branch 10-active-branch, owned by a live session.
-printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/10-active-branch\n\nworktree /worktrees/10-active-branch\nHEAD def456\nbranch refs/heads/10-active-branch\n\n' \
+# /repo is on main — git never allows two worktrees to share a branch, so
+# the main worktree uses refs/heads/main here (not 10-active-branch).
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/10-active-branch\nHEAD def456\nbranch refs/heads/10-active-branch\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude "10-active-branch"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -855,7 +857,7 @@ setup
 UNION='['"$(make_pr_union 10 "10-active-branch" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-other" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
 setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/10-active-branch\n\nworktree /worktrees/10-active-branch\nHEAD def456\nbranch refs/heads/10-active-branch\n\n' \
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/10-active-branch\nHEAD def456\nbranch refs/heads/10-active-branch\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 # No live sessions: 10-active-branch's worktree is an orphan.
 select_target_fake_claude
