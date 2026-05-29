@@ -4,14 +4,12 @@
 #
 # /dispatch (the router) selects an issue, resolves its worktree, and then
 # delegates phase execution to a dedicated worker session via this script.
-# The worker session is spawned from the caller's cwd (worktrees/main) — there
-# is no `cd` into the target worktree at spawn time. The Claude daemon treats
-# the most-recent `claude --bg` invocation's cwd as the default cwd for new
-# sessions launched from the `claude agents` TUI, so spawning from
-# worktrees/main avoids polluting the launcher default with the target
-# worktree path. The worker enters its target worktree itself as the first
-# action of its Step 0; the worktree path is passed in as its positional
-# argument.
+# The worker session is spawned with cwd = <worktree-path> (via a subshell
+# `cd`) so SessionStart-derived attributes (title, restored skill set, sandbox
+# allowlist) key on the right worktree directly. Trade-off: the Claude daemon's
+# "+ new session" launcher default cwd will track the most-recent worker's
+# worktree path rather than staying anchored at worktrees/main. The worktree
+# path is passed in as the positional argument and is also the spawn cwd.
 #
 # The sibling primitive for the reverse direction (worker → router) is
 # dispatch-spawn-router, also spawned from the caller's cwd.
@@ -21,9 +19,10 @@
 # Arguments (both required):
 #   <issue-num>     The issue number N. The worker is invoked as
 #                   `/dispatch-worker <N> <worktree-path>`.
-#   <worktree-path> Absolute path to the target worktree. Passed through to
-#                   the worker as its second positional argument; the worker
-#                   `cd`s into it as the first action of its Step 0. The
+#   <worktree-path> Absolute path to the target worktree. The spawn subshell
+#                   `cd`s into this path before invoking `claude --bg`, so the
+#                   new worker is born in its target worktree. Passed through
+#                   to the worker as its second positional argument. The
 #                   basename of this path is the worker's --name, so per-
 #                   worktree name uniqueness is automatic.
 #
@@ -32,17 +31,17 @@
 #                 basename) is already running, spawn nothing. Per-worktree
 #                 name uniqueness keys the dedup on
 #                 `name == basename "$WORKTREE_PATH"`. The query is filtered
-#                 to the script's spawner cwd — every worker registers there
-#                 (Step 2 does not `cd`), so the filter is a scoping no-op
-#                 that still surfaces every worker. Fail-safe: if the session
-#                 registry cannot be queried, also spawn nothing — a dispatch
-#                 agent may be running; the #725 cap-keyed re-seed re-seeds
-#                 the chain if a rate-limit cap-stall actually dropped it.
+#                 to <worktree-path> — the new worker registers there because
+#                 the spawn subshell `cd`s in before `claude --bg`. Fail-safe:
+#                 if the session registry cannot be queried, also spawn nothing
+#                 — a dispatch agent may be running; the #725 cap-keyed re-seed
+#                 re-seeds the chain if a rate-limit cap-stall actually dropped
+#                 it.
 #   2. Spawn    — `claude --bg --name <worktree-basename> --permission-mode
-#                 auto "/dispatch-worker <N> <worktree-path>"`, run from the
-#                 script's inherited cwd (worktrees/main) — no `cd` into the
-#                 target worktree.
-#   3. Verify   — re-query the registry under the spawner cwd (where the new
+#                 auto "/dispatch-worker <N> <worktree-path>"`, run from a
+#                 subshell that `cd`s into <worktree-path> first so the new
+#                 worker is born in its target worktree.
+#   3. Verify   — re-query the registry under <worktree-path> (where the new
 #                 worker registers) and confirm the new agent appears.
 #
 # (In-script `# ---- Step N: ... ----` markers offset by 2 — arg validation
@@ -101,9 +100,9 @@ if [[ ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
-# The worker `cd`s into <worktree-path> as its Step 0; a missing path would
-# only surface there, after the spawn has already happened. Validate at the
-# system edge so the diagnostic names the spawner, not the worker.
+# The worker is born in <worktree-path> via spawn cwd; a missing path would
+# only surface at spawn time if not caught here. Validate at the spawner edge
+# so the diagnostic names the spawner, not the worker.
 if [[ ! -d "$WORKTREE_PATH" ]]; then
   echo "dispatch-spawn-worker: worktree path '$WORKTREE_PATH' does not exist" >&2
   exit 2
@@ -129,27 +128,25 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 
-# The spawner's cwd at script entry is where Step 3's `claude --bg` will run
-# (no `cd` happens between here and there), so it is the cwd the daemon
-# registers the new worker under. Dedup (Step 2) and verify (Step 4) must
-# query the registry under THIS path — `claude agents --json --cwd <path>`
-# filters server-side to sessions started under <path>, and the new worker's
-# start cwd is here, not <worktree-path>.
-SPAWN_CWD="$(pwd)"
+# The spawn subshell `cd`s into WORKTREE_PATH before `claude --bg`, so the
+# new worker is born there and the daemon registers it under that path.
+# Dedup (Step 2) and verify (Step 4) must query the registry under THIS path
+# — `claude agents --json --cwd <path>` filters server-side to sessions
+# started under <path>, and the new worker's start cwd is WORKTREE_PATH.
+SPAWN_CWD="$WORKTREE_PATH"
 
 # ---- Step 2: dedup guard ----------------------------------------------------
 # The worker's --name is the target worktree's basename, so per-worktree name
 # uniqueness reduces the dedup to a single name-equality check: if another
 # live session already has name == <worktree-basename>, spawn nothing. The
-# registry query filters by SPAWN_CWD because that is where every worker
-# registers (Step 3 does not `cd`); a query under <worktree-path> would miss
-# the just-spawned worker entirely. Fail safe: an unknown (unqueryable)
-# registry is treated as "a dispatch agent may be running", so nothing is
-# spawned. A TOCTOU window exists between this query and the spawn below —
-# two concurrent router invocations could each pass the guard and each spawn
-# a worker. The per-worktree invariant and #755 absorb this: the next
-# selection scan will detect the duplicate, so the extra cost is one wasted
-# tick, not lost work.
+# registry query filters by SPAWN_CWD (= WORKTREE_PATH) because the spawn
+# subshell `cd`s there before `claude --bg`, so the new worker registers
+# under the worktree path. Fail safe: an unknown (unqueryable) registry is
+# treated as "a dispatch agent may be running", so nothing is spawned. A
+# TOCTOU window exists between this query and the spawn below — two concurrent
+# router invocations could each pass the guard and each spawn a worker. The
+# per-worktree invariant and #755 absorb this: the next selection scan will
+# detect the duplicate, so the extra cost is one wasted tick, not lost work.
 AGENT_NAME="$(basename "$WORKTREE_PATH")"
 if ! sessions=$(claude_sessions_under "$SPAWN_CWD"); then
   echo deduped
@@ -172,22 +169,23 @@ done <<<"$sessions"
 # The worker's --name is the target worktree's basename (e.g.
 # `860-dispatch-spawn-worker-from-m`). The basename is unique per worktree, so
 # the name is unique per worker, and the dedup above keys on it directly. The
-# worker is born with cwd = this script's inherited cwd (worktrees/main, in
-# production) — no `cd` to the target worktree — and `cd`s into the worktree
-# itself as its Step 0. This keeps the Claude daemon's "+ new session"
-# launcher default cwd anchored at worktrees/main rather than drifting onto
-# the latest worker-target worktree.
+# worker is born with cwd = <worktree-path> via a subshell `cd` so
+# SessionStart hooks key on the right worktree directly. The subshell `cd` is
+# scoped — this script's own cwd is untouched.
 # Capture the spawn's combined output so a failure diagnostic can surface why
 # (`claude` missing, `--bg` rejected). `|| true` keeps a non-zero spawn from
 # aborting the script — Step 4's registry check is the source of truth for
 # whether the agent actually came up.
-spawn_output=$("$CLAUDE_CMD" --bg --name "$AGENT_NAME" \
-    --permission-mode auto "/dispatch-worker $ISSUE_NUM $WORKTREE_PATH" 2>&1) || true
+spawn_output=$(
+  cd "$WORKTREE_PATH" && "$CLAUDE_CMD" --bg --name "$AGENT_NAME" \
+    --permission-mode auto "/dispatch-worker $ISSUE_NUM $WORKTREE_PATH" 2>&1
+) || true
 
 # ---- Step 4: verify the new agent registered --------------------------------
-# Query under SPAWN_CWD — the new worker's registered cwd. A query under
-# <worktree-path> would never find it because the daemon's --cwd filter
-# excludes sessions that started elsewhere.
+# Query under SPAWN_CWD (= WORKTREE_PATH) — the new worker's registered cwd.
+# The spawn subshell `cd`d into the worktree path, so the daemon registered
+# the worker there; the --cwd filter returns only sessions started under that
+# path.
 registered=""
 if sessions=$(claude_sessions_under "$SPAWN_CWD"); then
   while IFS=$'\t' read -r _ _ _ name; do
