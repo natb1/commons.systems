@@ -2509,10 +2509,11 @@ sweep_setup() {
   STUB_DIR="$TMPDIR_TEST/stub"
   mkdir -p "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/scripts" \
            "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees" \
-           "$TMPDIR_TEST/project/tmp"
+           "$TMPDIR_TEST/project/tmp" "$TMPDIR_TEST/fake"
 
   cp "$SCRIPT_DIR/dispatch-sweep" "$TMPDIR_TEST/scripts/dispatch-sweep"
   cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/scripts/lib-worktree-in-sync.sh"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
 
   # Default empty gh output (each test may overwrite).
@@ -2627,7 +2628,19 @@ STUB
 
   export PATH="$TMPDIR_TEST/bin:$PATH"
 
+  # Default fake `claude` — prints `[]` and exits 0 (no live sessions).
+  # Step 3's liveness gate sees a definite "no sessions" and proceeds with
+  # removal. Tests that need a live session call sweep_fake_claude_sessions_by_name.
+  local default_fake="$TMPDIR_TEST/fake/claude"
+  cat > "$default_fake" <<'FAKE'
+#!/usr/bin/env bash
+printf '[]'
+exit 0
+FAKE
+  chmod +x "$default_fake"
+
   # Defaults for dispatch-sweep env overrides.
+  export CLAUDE_AGENTS_CMD="$default_fake"
   export DISPATCH_SWEEP_LOG_FILE="$STUB_DIR/sweep.log"
   export DISPATCH_SWEEP_NOW="2026-01-01T00:00:00Z"
 }
@@ -2637,7 +2650,7 @@ sweep_teardown() {
   TMPDIR_TEST=""
   STUB_DIR=""
   export PATH="$SAVED_PATH"
-  unset DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW
+  unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW
 }
 
 # Helper: register a worktree in the porcelain list AND create its directory.
@@ -2653,6 +2666,37 @@ sweep_register_wt() {
 # used by the git -C shim.
 sweep_path_key() {
   echo "$1" | tr '/' '_'
+}
+
+# Helper: install a fake `claude` whose `agents --json` invocation (NO --cwd)
+# returns sessions keyed by name — matching how claude_sessions_with_name
+# queries the daemon after the #882 Unit 2 name-keyed rewrite.
+# Each argument must be in `name=sid` form; name is the worktree basename
+# (as passed via --name=<basename> by dispatch-spawn-worker). The cwd field is
+# set to "" since name-keyed classification ignores it.
+# The fake ignores any --cwd argument and always returns the full payload; the
+# client-side jq select(.name == $name) in claude_sessions_with_name does the
+# filtering, exactly as in production.
+sweep_fake_claude_sessions_by_name() {
+  local fake="$TMPDIR_TEST/fake/claude"
+  local all_payload="[" entry name sid first=1
+  for entry in "$@"; do
+    name="${entry%%=*}"
+    sid="${entry#*=}"
+    if (( first )); then first=0; else all_payload+=","; fi
+    all_payload+="{\"sessionId\":\"$sid\",\"pid\":1,\"status\":\"busy\",\"name\":\"$name\",\"cwd\":\"\"}"
+  done
+  all_payload+="]"
+  printf '%s' "$all_payload" > "$TMPDIR_TEST/fake/payload.json"
+  cat > "$fake" <<'FAKE'
+#!/usr/bin/env bash
+# Ignore any args (including --cwd) — return the full payload unconditionally.
+# claude_sessions_with_name applies its own jq name filter client-side.
+cat "$(cd "$(dirname "$0")" && pwd)/payload.json"
+exit 0
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
 }
 
 # --- Test 1: merged classification triggers cleanup --------------------------
@@ -2847,6 +2891,83 @@ if ! echo "$calls" | grep -q "worktree-remove"; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: open-PR worktree not removed despite closed issue"
   echo "    calls: $calls"
+fi
+sweep_teardown
+
+# --- Test 15: Step 3 with live name-match — merged+in-sync worktree is kept --
+#
+# A merged + in-sync worktree whose basename matches a live session in the
+# fake-claude registry must NOT be removed; the script must log
+# SKIP_MERGED_LIVE_SESSION and add it to the surviving list.
+
+echo "Test: Step 3 skips merged+in-sync worktree when a live session matches its basename"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/70-live-merged"
+sweep_register_wt "$WT_PATH" "70-live-merged"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+echo '[{"number":300,"headRefName":"70-live-merged","state":"MERGED"}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+# Register a live session whose name matches the worktree's basename.
+sweep_fake_claude_sessions_by_name "70-live-merged=sess-live-70"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "Step3-live-merged sweep exits 0" "0" "$rc"
+
+# The worktree must NOT have been removed.
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -q "worktree-remove:$WT_PATH"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: Step 3 must NOT remove a worktree with a live session"
+  echo "    calls: $calls"
+else
+  PASS=$((PASS + 1)); echo "  PASS: Step 3 did not remove the live-session worktree"
+fi
+
+# The log must carry SKIP_MERGED_LIVE_SESSION.
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_MERGED_LIVE_SESSION: '$WT_PATH' branch=70-live-merged pr=#300" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_MERGED_LIVE_SESSION log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_MERGED_LIVE_SESSION log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test 16: Step 3 happy path — merged+in-sync with no live session is removed
+
+echo "Test: Step 3 removes merged+in-sync worktree when no live session matches its basename"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/71-no-live-merged"
+sweep_register_wt "$WT_PATH" "71-no-live-merged"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+echo '[{"number":301,"headRefName":"71-no-live-merged","state":"MERGED"}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+# Default fake (no live sessions) — the worktree is free to remove.
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "Step3-no-live-merged sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH"; then
+  PASS=$((PASS + 1)); echo "  PASS: Step 3 removed the unoccupied merged worktree"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: Step 3 removed the unoccupied merged worktree"
+  echo "    calls: $calls"
+fi
+
+TOTAL=$((TOTAL + 1))
+if grep -q "REMOVE_MERGED: '$WT_PATH' branch=71-no-live-merged pr=#301" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: REMOVE_MERGED log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_MERGED log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
 sweep_teardown
 
@@ -3485,11 +3606,14 @@ FAKE
 
 echo "Test: a live session is reported by both helpers"
 ca_setup
-write_fake_claude '[{"sessionId":"sess-1","pid":4242,"status":"busy","name":"task-one"}]' 0
+# worktree_has_live_session is now name-keyed: the session name must match
+# basename "$CA_DIR" for the predicate to report occupied.
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"sess-1\",\"pid\":4242,\"status\":\"busy\",\"name\":\"$ca_basename\"}]" 0
 if out=$(claude_sessions_under "$CA_DIR"); then rc=0; else rc=$?; fi
 assert_eq "live: claude_sessions_under exits 0" "0" "$rc"
 assert_eq "live: claude_sessions_under prints the session TSV line" \
-  "$(printf 'sess-1\t4242\tbusy\ttask-one')" "$out"
+  "$(printf 'sess-1\t4242\tbusy\t%s' "$ca_basename")" "$out"
 if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
 assert_eq "live: worktree_has_live_session reports occupied" "occupied" "$live"
 ca_teardown
@@ -3689,6 +3813,112 @@ else
   ROUTE="spawn-failopen"
 fi
 assert_eq "router-gate: daemon UNKNOWN → spawn-failopen" "spawn-failopen" "$ROUTE"
+ca_teardown
+
+# --- Test 17: claude_sessions_with_name — matched name exits 0 with TSV -----
+
+echo "Test: claude_sessions_with_name exits 0 and emits TSV for matched name"
+ca_setup
+write_fake_claude '[{"sessionId":"sess-a","pid":111,"status":"busy","name":"my-worktree"}]' 0
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-match: exits 0" "0" "$rc"
+assert_eq "name-match: prints the TSV line" \
+  "$(printf 'sess-a\t111\tbusy\tmy-worktree')" "$out"
+ca_teardown
+
+# --- Test 18: claude_sessions_with_name — no match exits 0 with no output ---
+
+echo "Test: claude_sessions_with_name exits 0 and emits nothing when name not found"
+ca_setup
+write_fake_claude '[{"sessionId":"sess-a","pid":111,"status":"busy","name":"other-worktree"}]' 0
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-no-match: exits 0" "0" "$rc"
+assert_eq "name-no-match: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 19: claude_sessions_with_name — multi-session, only matching names -
+
+echo "Test: claude_sessions_with_name emits only the matching sessions from a mixed array"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s-1","pid":10,"status":"busy","name":"target-wt"},
+  {"sessionId":"s-2","pid":20,"status":"idle","name":"other-wt"},
+  {"sessionId":"s-3","pid":30,"status":"busy","name":"target-wt"}
+]' 0
+if out=$(claude_sessions_with_name "target-wt"); then rc=0; else rc=$?; fi
+assert_eq "name-multi: exits 0" "0" "$rc"
+assert_eq "name-multi: prints only the two matching lines" \
+  "$(printf 's-1\t10\tbusy\ttarget-wt\ns-3\t30\tbusy\ttarget-wt')" "$out"
+ca_teardown
+
+# --- Test 20: claude_sessions_with_name UNKNOWN cases ------------------------
+
+echo "Test: claude_sessions_with_name returns rc 1 on daemon failure (non-zero exit)"
+ca_setup
+write_fake_claude '' 1
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-daemon-fail: exits 1 (UNKNOWN)" "1" "$rc"
+assert_eq "name-daemon-fail: prints nothing" "" "$out"
+ca_teardown
+
+echo "Test: claude_sessions_with_name returns rc 1 when claude binary is missing"
+ca_setup
+CLAUDE_AGENTS_CMD="$CA_DIR/no-such-claude"
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-missing-claude: exits 1 (UNKNOWN)" "1" "$rc"
+ca_teardown
+
+echo "Test: claude_sessions_with_name returns rc 1 on non-array JSON output"
+ca_setup
+write_fake_claude '{}' 0
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-non-array: exits 1 (UNKNOWN)" "1" "$rc"
+ca_teardown
+
+echo "Test: claude_sessions_with_name returns rc 1 on zero exit with empty output"
+ca_setup
+write_fake_claude '' 0
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-empty-output: exits 1 (UNKNOWN)" "1" "$rc"
+ca_teardown
+
+# --- Test 21: claude_sessions_with_name — invoked WITHOUT --cwd arg ----------
+
+echo "Test: claude_sessions_with_name invokes claude without a --cwd argument"
+ca_setup
+cat > "$CA_FAKE" <<FAKE
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$CA_DIR/argv"
+echo '[]'
+FAKE
+chmod +x "$CA_FAKE"
+CLAUDE_AGENTS_CMD="$CA_FAKE"
+if claude_sessions_with_name "any-name" >/dev/null; then rc=0; else rc=$?; fi
+assert_eq "name-no-cwd: exits 0" "0" "$rc"
+assert_eq "name-no-cwd: claude invoked as 'agents --json' (no --cwd)" \
+  "$(printf 'agents\n--json')" "$(cat "$CA_DIR/argv")"
+ca_teardown
+
+# --- Test 22: claude_sessions_with_name — empty name arg exits 1 -------------
+
+echo "Test: claude_sessions_with_name rejects empty name argument"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(claude_sessions_with_name "" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "name-empty-arg: exits 1" "1" "$rc"
+ca_teardown
+
+# --- Test 23 (updated worktree_has_live_session): cwd-match but wrong name → FREE
+
+echo "Test: worktree_has_live_session reports free when session cwd matches but name differs from basename"
+ca_setup
+# The session's cwd could match CA_DIR, but its name does NOT match basename "$CA_DIR".
+# Under the old cwd-based semantics this would have reported occupied (via
+# claude_sessions_under). Under the new name-based semantics it must report free.
+# The fake returns a session whose name is 'wrong-name', not basename "$CA_DIR".
+write_fake_claude '[{"sessionId":"s-x","pid":99,"status":"busy","name":"wrong-name"}]' 0
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "regression-guard: cwd-match wrong-name → free" "free" "$live"
 ca_teardown
 
 # ============================================================================
