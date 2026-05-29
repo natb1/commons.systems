@@ -7939,8 +7939,14 @@ echo "$CLAUDE_CODE_SESSION_ID" > "$DISPATCH_LOCK_FILE"
 
 FIN_ORIG_PWD="$PWD"
 cd "$ROUTER_CWD"
-"$FINALIZE_SCRIPT" "$TARGET_WT" > "$TMPDIR_TEST/finalize.out" 2>&1
-finalize_exit=$?
+# Capture the exit code via `if` so the test file's `set -e` does not abort
+# the whole suite before `finalize_exit` is set on a (regression) non-zero
+# exit — same pattern as the error-path tests B/C/D below.
+if "$FINALIZE_SCRIPT" "$TARGET_WT" > "$TMPDIR_TEST/finalize.out" 2>&1; then
+  finalize_exit=0
+else
+  finalize_exit=$?
+fi
 cd "$FIN_ORIG_PWD"
 
 assert_eq "happy path: exit 0" "0" "$finalize_exit"
