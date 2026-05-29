@@ -2,7 +2,7 @@
 # dispatch-spawn-worker — spawn a /dispatch-worker background job for a target
 # worktree (the router → worker spawn primitive).
 #
-# /dispatch (the router) selects an issue, resolves its worktree, and then
+# /dispatch-propagate (the router) selects an issue, resolves its worktree, and then
 # delegates phase execution to a dedicated worker session via this script.
 # The worker session is spawned with cwd = <worktree-path> (via a subshell
 # `cd`) so SessionStart-derived attributes (title, restored skill set, sandbox
@@ -42,7 +42,9 @@
 #                 subshell that `cd`s into <worktree-path> first so the new
 #                 worker is born in its target worktree.
 #   3. Verify   — re-query the registry under <worktree-path> (where the new
-#                 worker registers) and confirm the new agent appears.
+#                 worker registers) with a bounded retry (via
+#                 `verify_agent_registered_under`) to absorb the async-
+#                 registration race; confirm the new agent appears.
 #
 # (In-script `# ---- Step N: ... ----` markers offset by 2 — arg validation
 # and config resolution come first as Steps 0 and 1.)
@@ -185,17 +187,10 @@ spawn_output=$(
 # Query under SPAWN_CWD (= WORKTREE_PATH) — the new worker's registered cwd.
 # The spawn subshell `cd`d into the worktree path, so the daemon registered
 # the worker there; the --cwd filter returns only sessions started under that
-# path.
-registered=""
-if sessions=$(claude_sessions_under "$SPAWN_CWD"); then
-  while IFS=$'\t' read -r _ _ _ name; do
-    if [[ "$name" == "$AGENT_NAME" ]]; then
-      registered=1
-      break
-    fi
-  done <<<"$sessions"
-fi
-if [[ -n "$registered" ]]; then
+# path. The bounded retry in `verify_agent_registered_under` absorbs the
+# async-registration race between `claude --bg` returning and the daemon
+# surfacing the new agent.
+if verify_agent_registered_under "$AGENT_NAME" "$SPAWN_CWD"; then
   echo spawned
   exit 0
 fi

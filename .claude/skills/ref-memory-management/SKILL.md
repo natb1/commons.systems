@@ -11,7 +11,7 @@ When creating any plan (issue implementation, review, security review, or ad hoc
 # Issue Context Loading
 
 When loading issue context (at session start, after context loss, or when a skill requests issue data), run:
-`.claude/skills/dispatch/scripts/sync-issue-context <issue-number>`
+`.claude/skills/dispatch-propagate/scripts/sync-issue-context <issue-number>`
 
 This script consolidates all context types into a single invocation:
 
@@ -25,7 +25,7 @@ This script consolidates all context types into a single invocation:
 
 Full = `title, body, comments, number, state`. Summary = `title, number, state`. Consumers that need additional fields (e.g., `ref-ready` uses `labels, assignees, projectItems` for evaluation) extend the base set.
 
-Individual scripts for standalone use are in `.claude/skills/dispatch/scripts/`. Each accepts an optional issue number argument; otherwise it derives the number from the branch name.
+Individual scripts for standalone use are in `.claude/skills/dispatch-propagate/scripts/`. Each accepts an optional issue number argument; otherwise it derives the number from the branch name.
 
 # Commit Guidelines
 

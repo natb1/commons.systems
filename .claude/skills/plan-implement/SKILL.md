@@ -5,7 +5,7 @@ description: Implement phase — plan logical units of work, build each one, and
 
 # Plan and Implement
 
-The `implement` phase of the issue workflow, dispatched by `/dispatch`. Plans the
+The `implement` phase of the issue workflow, dispatched by `/dispatch-propagate`. Plans the
 work as an ordered list of logical units, builds each unit, and opens a draft PR.
 One draft PR with a `Closes #N` line is the implement→verify transition marker.
 
@@ -38,7 +38,7 @@ Each unit becomes one commit. The user reviews and approves the plan.
 
 The plan must include a **plan preface** per `ref-memory-management`'s Clean Context
 Planning Rule: the plan assumes execution in a clean context and records that the
-active workflow step is the `implement` phase of `/dispatch`.
+active workflow step is the `implement` phase of `/dispatch-propagate`.
 
 ### 2. Build each unit
 
@@ -88,8 +88,8 @@ if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
 fi
 ```
 
-Stop. The Stop hook reads the marker, spawns the next `/dispatch` router,
-strips `dispatch:office-hours` if present, and self-closes this job.
+Stop. The Stop hook reads the marker, spawns the next `/dispatch-propagate`
+router, strips `dispatch:office-hours` if present, and self-closes this job.
 
 ## Requirement changes mid-session
 

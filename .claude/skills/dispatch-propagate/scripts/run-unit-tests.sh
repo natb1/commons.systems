@@ -73,7 +73,7 @@ if [ "$EXPLICIT" = false ]; then
       nix/*|flake.nix|flake.lock) RUN_NIX=true ;;
       firestore.rules) RUN_RULES=true ;;
       .github/scripts/*) RUN_CI_SCRIPTS=true ;;
-      .claude/skills/dispatch/scripts/*) RUN_PR_SCRIPTS=true ;;
+      .claude/skills/dispatch-propagate/scripts/*) RUN_PR_SCRIPTS=true ;;
     esac
   done <<< "$CHANGED"
 fi

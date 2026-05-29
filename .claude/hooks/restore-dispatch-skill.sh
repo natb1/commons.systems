@@ -16,7 +16,7 @@ if [ -n "$SESSION_ID" ]; then
     2>/dev/null) || NAME=""
 fi
 
-# Router sessions (dispatch-<short-id>) restart via /dispatch, not skill
+# Router sessions (dispatch-<short-id>) restart via /dispatch-propagate, not skill
 # restoration — skip them explicitly.
 case "$NAME" in
   dispatch-*) exit 0 ;;
@@ -67,7 +67,7 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 # loop and Step 2 done variance handling still run. dispatch-phase failure
 # (network blip, no PR yet) also falls back to /dispatch-worker.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
-DISPATCH_SCRIPTS="$SCRIPT_DIR/../skills/dispatch/scripts"
+DISPATCH_SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
 PHASE=$("$DISPATCH_SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || PHASE=""
 
 case "$PHASE" in

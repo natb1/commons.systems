@@ -8,10 +8,10 @@
 #   create <branch> — no <issue>-* worktree exists; the caller materializes
 #                     <branch> and uses its path.
 #   conflict <path> — a queue-selected target already has a worktree (another
-#                     session owns it); /dispatch reports <path> and stops.
+#                     session owns it); /dispatch-propagate reports <path> and stops.
 #
 # The mode argument decides what an existing <issue>-* worktree means:
-#   explicit — the target was named by an explicit /dispatch argument
+#   explicit — the target was named by an explicit /dispatch-propagate argument
 #              (recycle-after-completion); an existing worktree yields `enter`.
 #   queue    — the target was queue-selected; an existing worktree belongs to
 #              another session and yields `conflict`.

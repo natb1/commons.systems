@@ -1007,7 +1007,7 @@ teardown
 # conclusion short-circuits to "main-broken <sha>". The gate is uniform —
 # there is no cwd-based bypass.
 #
-# The explicit-`/dispatch <issue|pr>` bypass is structural and not script-
+# The explicit-`/dispatch-propagate <issue|pr>` bypass is structural and not script-
 # testable here: an explicit argument skips the queue scan entirely (SKILL.md
 # Step 3), so dispatch-select-target is never invoked on that path.
 
@@ -1106,7 +1106,7 @@ teardown
 
 # --- --health-only mode (issue #683 AC: gate before sweep) ------------------
 # --health-only runs the JIT scan and the gate, then exits without the queue
-# scan. /dispatch SKILL.md calls it before dispatch-sweep so the sweep does
+# scan. /dispatch-propagate SKILL.md calls it before dispatch-sweep so the sweep does
 # not run while main is red.
 
 # 27a. --health-only, main green, not in a worktree → "ok", exit 0.
@@ -2231,7 +2231,7 @@ matches=$(grep -rl 'BFD4F2' "$REPO_ROOT/.claude" \
   --exclude='test-dispatch-scripts.sh' 2>/dev/null \
   | sed "s|$REPO_ROOT/||" | sort || true)
 assert_eq "only dispatch-complete-phase owns BFD4F2" \
-  ".claude/skills/dispatch/scripts/dispatch-complete-phase" \
+  ".claude/skills/dispatch-propagate/scripts/dispatch-complete-phase" \
   "$matches"
 
 # ============================================================================
@@ -3520,7 +3520,7 @@ lock_teardown
 #
 # A caller whose CLAUDE_CODE_SESSION_ID differs from the recorded holder can
 # still --release when the holder's cwd carries the marker. Closes the silent
-# `noop` leak that today blocks subsequent /dispatch ticks.
+# `noop` leak that today blocks subsequent /dispatch-propagate ticks.
 
 echo "Test: --release with marker present from a different-sessionId caller → released"
 lock_setup
@@ -3919,6 +3919,43 @@ ca_setup
 write_fake_claude '[{"sessionId":"s-x","pid":99,"status":"busy","name":"wrong-name"}]' 0
 if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
 assert_eq "regression-guard: cwd-match wrong-name → free" "free" "$live"
+ca_teardown
+
+# --- Test 24: verify_agent_registered_under skips a stopped row --------------
+
+echo "Test: verify_agent_registered_under does not count a stopped session as registered"
+ca_setup
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+# A row whose name matches the target but whose status is "stopped" must not
+# satisfy the verify — only a live successor counts (mirrors the dedup guards).
+write_fake_claude '[{"sessionId":"s-1","pid":7,"status":"stopped","name":"dispatch-dead"}]' 0
+if verify_agent_registered_under "dispatch-dead" "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "verify-stopped: stopped row is not registered (rc 1)" "1" "$rc"
+# Positive control: a live row with the same name does satisfy the verify.
+write_fake_claude '[{"sessionId":"s-1","pid":7,"status":"busy","name":"dispatch-live"}]' 0
+if verify_agent_registered_under "dispatch-live" "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "verify-live: busy row is registered (rc 0)" "0" "$rc"
+unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+ca_teardown
+
+# --- Test 25: verify_agent_registered_under rejects a non-numeric interval ---
+
+echo "Test: verify_agent_registered_under rejects a non-numeric interval override"
+ca_setup
+# `inf` is a valid GNU `sleep` argument that would hang the verify forever. The
+# guard must reject it, warn on stderr, and fall back to the 0.2 s default so
+# the call still returns (here: exhausts to rc 1 against an empty registry).
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=inf
+write_fake_claude '[]' 0
+if err=$(verify_agent_registered_under "dispatch-x" "$CA_DIR" 2>&1 1>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "verify-bad-interval: exhausts and returns 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q "is not a non-negative number"; then
+  PASS=$((PASS + 1)); echo "  PASS: verify-bad-interval: warns and falls back to default"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: verify-bad-interval: warns and falls back to default"
+fi
+unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 ca_teardown
 
 # ============================================================================
@@ -4557,7 +4594,7 @@ TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-20000"* \
    && "$log" == *"--on-calendar=@20000"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
-   && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch/scripts/dispatch-spawn-router"* ]]; then
+   && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-spawn-router"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + cwd + exec)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + cwd + exec)"
@@ -5170,6 +5207,7 @@ SPAWN_ROUTER_REGISTRY=""
 SPAWN_ROUTER_BG_ARGV=""
 SPAWN_ROUTER_RM_LOG=""
 SPAWN_ROUTER_STOP_LOG=""
+SPAWN_ROUTER_PENDING=""
 
 # write_fake_spawn_router_claude — install the multi-subcommand fake `claude`.
 # Dispatches on $1:
@@ -5177,10 +5215,19 @@ SPAWN_ROUTER_STOP_LOG=""
 #              claude_sessions_under does no client-side path filtering — it
 #              trusts server-side `--cwd` filtering — so every fixture session
 #              is returned. Fine here: each fixture holds only sessions a test
-#              means dispatch-spawn-router to see.
-#   --bg     — record full argv to bg-argv; when SPAWN_BG_REGISTERS=1 (default)
-#              parse --name and jq-append the new agent to the fixture so the
-#              verify step finds it.
+#              means dispatch-spawn-router to see. If SPAWN_BG_REGISTER_AFTER_N
+#              mode left a pending sidecar, decrement its countdown; when it
+#              reaches zero, merge the pending agent into the registry and
+#              delete the sidecar.
+#   --bg     — record full argv to bg-argv. Then:
+#                - SPAWN_BG_REGISTER_AFTER_N=<n> set → write pending sidecar
+#                  (name + countdown=n) so the agent first appears on the
+#                  n-th subsequent `agents` call. Models the daemon's async-
+#                  registration race that verify_agent_registered_under closes.
+#                - else SPAWN_BG_REGISTERS=1 (default) → parse --name and
+#                  jq-append the new agent to the fixture so the verify step
+#                  finds it on the first attempt.
+#                - else (SPAWN_BG_REGISTERS=0) → never register.
 #   rm       — append $2 (the job-id) to rm-log.
 #   stop     — append $2 (the job-id) to stop-log.
 write_fake_spawn_router_claude() {
@@ -5189,16 +5236,32 @@ write_fake_spawn_router_claude() {
 set -uo pipefail
 case "\${1:-}" in
   agents)
+    if [[ -f "$SPAWN_ROUTER_PENDING" ]]; then
+      pending_name=\$(sed -n '1p' "$SPAWN_ROUTER_PENDING")
+      pending_count=\$(sed -n '2p' "$SPAWN_ROUTER_PENDING")
+      pending_count=\$((pending_count - 1))
+      if [[ "\$pending_count" -le 0 ]]; then
+        tmp=\$(mktemp)
+        jq --arg name "\$pending_name" \
+          '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":"/main","kind":"background","status":"busy","name":\$name}]' \
+          "$SPAWN_ROUTER_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_ROUTER_REGISTRY"
+        rm -f "$SPAWN_ROUTER_PENDING"
+      else
+        printf '%s\n%s\n' "\$pending_name" "\$pending_count" > "$SPAWN_ROUTER_PENDING"
+      fi
+    fi
     cat "$SPAWN_ROUTER_REGISTRY"
     ;;
   --bg)
     printf '%s\n' "\$@" > "$SPAWN_ROUTER_BG_ARGV"
-    if [[ "\${SPAWN_BG_REGISTERS:-1}" == "1" ]]; then
-      name=""
-      while [[ \$# -gt 0 ]]; do
-        if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
-        shift
-      done
+    name=""
+    while [[ \$# -gt 0 ]]; do
+      if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
+      shift
+    done
+    if [[ -n "\${SPAWN_BG_REGISTER_AFTER_N:-}" ]]; then
+      printf '%s\n%s\n' "\$name" "\$SPAWN_BG_REGISTER_AFTER_N" > "$SPAWN_ROUTER_PENDING"
+    elif [[ "\${SPAWN_BG_REGISTERS:-1}" == "1" ]]; then
       tmp=\$(mktemp)
       jq --arg name "\$name" \
         '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":"/main","kind":"background","status":"busy","name":\$name}]' \
@@ -5231,6 +5294,7 @@ spawn_router_setup() {
   SPAWN_ROUTER_BG_ARGV="$TMPDIR_TEST/bg-argv"
   SPAWN_ROUTER_RM_LOG="$TMPDIR_TEST/rm-log"
   SPAWN_ROUTER_STOP_LOG="$TMPDIR_TEST/stop-log"
+  SPAWN_ROUTER_PENDING="$TMPDIR_TEST/pending"
   printf '[]' > "$SPAWN_ROUTER_REGISTRY"
 
   export DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
@@ -5245,20 +5309,22 @@ spawn_router_teardown() {
   SPAWN_ROUTER_BG_ARGV=""
   SPAWN_ROUTER_RM_LOG=""
   SPAWN_ROUTER_STOP_LOG=""
+  SPAWN_ROUTER_PENDING=""
   unset DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE DISPATCH_SPAWN_ROUTER_CLAUDE_CMD \
-    DISPATCH_SPAWN_ROUTER_SESSION_ID SPAWN_BG_REGISTERS
+    DISPATCH_SPAWN_ROUTER_SESSION_ID SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
+    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 }
 
 # --- Test 1: spawn success ---------------------------------------------------
 
-echo "Test: an empty registry spawns one /dispatch background job"
+echo "Test: an empty registry spawns one /dispatch-propagate background job"
 spawn_router_setup
 write_fake_spawn_router_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "spawn: dispatch-spawn-router exits 0" "0" "$rc"
 assert_eq "spawn: stdout is 'spawned'" "spawned" "$out"
 # The recorded argv must be exactly: --bg --name dispatch-<id> \
-#   --permission-mode auto /dispatch
+#   --permission-mode auto /dispatch-propagate
 mapfile -t bg_argv < "$SPAWN_ROUTER_BG_ARGV"
 assert_eq "spawn: argv[0] is --bg" "--bg" "${bg_argv[0]:-}"
 assert_eq "spawn: argv[1] is --name" "--name" "${bg_argv[1]:-}"
@@ -5269,7 +5335,7 @@ esac
 assert_eq "spawn: argv[2] is a dispatch-* agent name" "yes" "$name_ok"
 assert_eq "spawn: argv[3] is --permission-mode" "--permission-mode" "${bg_argv[3]:-}"
 assert_eq "spawn: argv[4] is auto" "auto" "${bg_argv[4]:-}"
-assert_eq "spawn: argv[5] is /dispatch" "/dispatch" "${bg_argv[5]:-}"
+assert_eq "spawn: argv[5] is /dispatch-propagate" "/dispatch-propagate" "${bg_argv[5]:-}"
 spawn_router_teardown
 
 # --- Test 2: dedup -----------------------------------------------------------
@@ -5314,6 +5380,9 @@ echo "Test: a spawned job that never registers exits non-zero with a diagnostic"
 spawn_router_setup
 write_fake_spawn_router_claude
 export SPAWN_BG_REGISTERS=0
+# Skip the real inter-attempt sleeps — this test exercises the full exhaustion
+# path, which would otherwise add ~0.8 s of wall-clock sleep.
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>&1 1>/dev/null) || rc=$?
 TOTAL=$((TOTAL + 1))
@@ -5354,6 +5423,55 @@ else
 fi
 spawn_router_teardown
 
+# --- Test 6: delayed registration absorbed by verify retry -------------------
+
+echo "Test: a spawned job that registers on the 2nd 'agents' call still exits 0"
+spawn_router_setup
+write_fake_spawn_router_claude
+# SPAWN_BG_REGISTER_AFTER_N=2 means the spawned agent first appears in the
+# fake's registry on the 2nd subsequent `agents` call — modeling the daemon's
+# async-registration race the issue describes. verify_agent_registered_under
+# polls up to 5 times, so the 2nd attempt finds it and the script exits 0.
+export SPAWN_BG_REGISTER_AFTER_N=2
+err_file="$TMPDIR_TEST/stderr"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>"$err_file"); then rc=0; else rc=$?; fi
+err=$(cat "$err_file")
+assert_eq "delayed-register: dispatch-spawn-router exits 0" "0" "$rc"
+assert_eq "delayed-register: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ -z "${err//[[:space:]]/}" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: delayed-register: no diagnostic on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: delayed-register: no diagnostic on stderr"
+  echo "    stderr: $err"
+fi
+spawn_router_teardown
+
+# --- Test 7: registration on the exact last attempt still exits 0 ------------
+
+echo "Test: a spawned job that registers on the 5th (final) 'agents' call still exits 0"
+spawn_router_setup
+write_fake_spawn_router_claude
+# SPAWN_BG_REGISTER_AFTER_N=5 makes the agent first appear on the 5th
+# subsequent `agents` call — the last poll before verify_agent_registered_under
+# exhausts its 5-attempt budget. This pins the off-by-one in the retry loop:
+# the final attempt is honoured, so the script must still exit 0.
+export SPAWN_BG_REGISTER_AFTER_N=5
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+err_file="$TMPDIR_TEST/stderr"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>"$err_file"); then rc=0; else rc=$?; fi
+err=$(cat "$err_file")
+assert_eq "last-attempt-register: dispatch-spawn-router exits 0" "0" "$rc"
+assert_eq "last-attempt-register: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ -z "${err//[[:space:]]/}" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: last-attempt-register: no diagnostic on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: last-attempt-register: no diagnostic on stderr"
+  echo "    stderr: $err"
+fi
+spawn_router_teardown
+
 # ============================================================================
 # dispatch-spawn-worker tests
 # ============================================================================
@@ -5383,6 +5501,7 @@ echo "=== dispatch-spawn-worker ==="
 SPAWN_WORKER_REGISTRY=""
 SPAWN_WORKER_BG_ARGV=""
 SPAWN_WORKER_PWD_LOG=""
+SPAWN_WORKER_PENDING=""
 WORKER_TARGET_WORKTREE=""
 
 # write_fake_spawn_worker_claude — install the multi-subcommand fake `claude`.
@@ -5391,27 +5510,52 @@ WORKER_TARGET_WORKTREE=""
 #              claude_sessions_under does no client-side path filtering — it
 #              trusts server-side `--cwd` filtering — so every fixture session
 #              is returned. Fine here: each fixture holds only sessions a test
-#              means dispatch-spawn-worker to see.
-#   --bg     — record full argv to bg-argv AND record $PWD to pwd-log; when
-#              SPAWN_BG_REGISTERS=1 (default) parse --name and jq-append the
-#              new agent to the fixture so the verify step finds it.
+#              means dispatch-spawn-worker to see. If SPAWN_BG_REGISTER_AFTER_N
+#              mode left a pending sidecar, decrement its countdown; when it
+#              reaches zero, merge the pending agent into the registry and
+#              delete the sidecar.
+#   --bg     — record full argv to bg-argv AND record $PWD to pwd-log. Then:
+#                - SPAWN_BG_REGISTER_AFTER_N=<n> set → write pending sidecar
+#                  (name + countdown=n) so the agent first appears on the
+#                  n-th subsequent `agents` call. Models the daemon's async-
+#                  registration race that verify_agent_registered_under closes.
+#                - else SPAWN_BG_REGISTERS=1 (default) → parse --name and
+#                  jq-append the new agent to the fixture so the verify step
+#                  finds it on the first attempt.
+#                - else (SPAWN_BG_REGISTERS=0) → never register.
 write_fake_spawn_worker_claude() {
   cat > "$TMPDIR_TEST/fake-claude" <<FAKE
 #!/usr/bin/env bash
 set -uo pipefail
 case "\${1:-}" in
   agents)
+    if [[ -f "$SPAWN_WORKER_PENDING" ]]; then
+      pending_name=\$(sed -n '1p' "$SPAWN_WORKER_PENDING")
+      pending_count=\$(sed -n '2p' "$SPAWN_WORKER_PENDING")
+      pending_count=\$((pending_count - 1))
+      if [[ "\$pending_count" -le 0 ]]; then
+        tmp=\$(mktemp)
+        jq --arg name "\$pending_name" \
+          '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":"/worker","kind":"background","status":"busy","name":\$name}]' \
+          "$SPAWN_WORKER_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_WORKER_REGISTRY"
+        rm -f "$SPAWN_WORKER_PENDING"
+      else
+        printf '%s\n%s\n' "\$pending_name" "\$pending_count" > "$SPAWN_WORKER_PENDING"
+      fi
+    fi
     cat "$SPAWN_WORKER_REGISTRY"
     ;;
   --bg)
     pwd >> "$SPAWN_WORKER_PWD_LOG"
     printf '%s\n' "\$@" > "$SPAWN_WORKER_BG_ARGV"
-    if [[ "\${SPAWN_BG_REGISTERS:-1}" == "1" ]]; then
-      name=""
-      while [[ \$# -gt 0 ]]; do
-        if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
-        shift
-      done
+    name=""
+    while [[ \$# -gt 0 ]]; do
+      if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
+      shift
+    done
+    if [[ -n "\${SPAWN_BG_REGISTER_AFTER_N:-}" ]]; then
+      printf '%s\n%s\n' "\$name" "\$SPAWN_BG_REGISTER_AFTER_N" > "$SPAWN_WORKER_PENDING"
+    elif [[ "\${SPAWN_BG_REGISTERS:-1}" == "1" ]]; then
       tmp=\$(mktemp)
       jq --arg name "\$name" \
         '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":"/worker","kind":"background","status":"busy","name":\$name}]' \
@@ -5439,6 +5583,7 @@ spawn_worker_setup() {
   SPAWN_WORKER_REGISTRY="$TMPDIR_TEST/registry.json"
   SPAWN_WORKER_BG_ARGV="$TMPDIR_TEST/bg-argv"
   SPAWN_WORKER_PWD_LOG="$TMPDIR_TEST/pwd-log"
+  SPAWN_WORKER_PENDING="$TMPDIR_TEST/pending"
   WORKER_TARGET_WORKTREE="$TMPDIR_TEST/worktrees/839-test-worker"
   printf '[]' > "$SPAWN_WORKER_REGISTRY"
 
@@ -5452,9 +5597,11 @@ spawn_worker_teardown() {
   SPAWN_WORKER_REGISTRY=""
   SPAWN_WORKER_BG_ARGV=""
   SPAWN_WORKER_PWD_LOG=""
+  SPAWN_WORKER_PENDING=""
   WORKER_TARGET_WORKTREE=""
   unset DISPATCH_SPAWN_WORKER_CLAUDE_CMD DISPATCH_SPAWN_WORKER_SESSION_ID \
-    SPAWN_BG_REGISTERS
+    SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
+    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 }
 
 # --- Test 1: spawn success ---------------------------------------------------
@@ -5560,6 +5707,9 @@ echo "Test: a spawned worker job that never registers exits non-zero with a diag
 spawn_worker_setup
 write_fake_spawn_worker_claude
 export SPAWN_BG_REGISTERS=0
+# Skip the real inter-attempt sleeps — this test exercises the full exhaustion
+# path, which would otherwise add ~0.8 s of wall-clock sleep.
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>&1 1>/dev/null) || rc=$?
 TOTAL=$((TOTAL + 1))
@@ -5703,6 +5853,57 @@ assert_eq "cwd-aware-spawn: stdout is 'spawned' (verify queried under worktree p
   "spawned" "$out"
 spawn_worker_teardown
 
+# --- Test 9: delayed registration absorbed by verify retry -------------------
+
+echo "Test: a spawned worker that registers on the 2nd 'agents' call still exits 0"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+# SPAWN_BG_REGISTER_AFTER_N=2 models the daemon's async-registration race:
+# the spawned worker first appears in the fake's registry on the 2nd
+# subsequent `agents` call. verify_agent_registered_under polls up to 5
+# times, so the 2nd attempt finds the worker and the script exits 0.
+export SPAWN_BG_REGISTER_AFTER_N=2
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+err_file="$TMPDIR_TEST/stderr"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>"$err_file" ); then rc=0; else rc=$?; fi
+err=$(cat "$err_file")
+assert_eq "delayed-register-worker: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "delayed-register-worker: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ -z "${err//[[:space:]]/}" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: delayed-register-worker: no diagnostic on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: delayed-register-worker: no diagnostic on stderr"
+  echo "    stderr: $err"
+fi
+spawn_worker_teardown
+
+# --- Test 10: registration on the exact last attempt still exits 0 -----------
+
+echo "Test: a spawned worker that registers on the 5th (final) 'agents' call still exits 0"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+# SPAWN_BG_REGISTER_AFTER_N=5 makes the worker first appear on the 5th
+# subsequent `agents` call — the last poll before verify_agent_registered_under
+# exhausts its 5-attempt budget. This pins the off-by-one in the retry loop:
+# the final attempt is honoured, so the script must still exit 0.
+export SPAWN_BG_REGISTER_AFTER_N=5
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+err_file="$TMPDIR_TEST/stderr"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>"$err_file" ); then rc=0; else rc=$?; fi
+err=$(cat "$err_file")
+assert_eq "last-attempt-register-worker: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "last-attempt-register-worker: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ -z "${err//[[:space:]]/}" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: last-attempt-register-worker: no diagnostic on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: last-attempt-register-worker: no diagnostic on stderr"
+  echo "    stderr: $err"
+fi
+spawn_worker_teardown
+
 # ============================================================================
 # dispatch-self-close tests
 # ============================================================================
@@ -5711,7 +5912,7 @@ echo "=== dispatch-self-close ==="
 # dispatch-self-close runs `claude rm <job-id>` against the basename of
 # $CLAUDE_JOB_DIR. The fake `claude` records its argv in SPAWN_RM_LOG (see
 # write_fake_spawn_claude). When CLAUDE_JOB_DIR is unset, the script is a no-op
-# — the foreground-safe gate that protects an interactive /dispatch from
+# — the foreground-safe gate that protects an interactive /dispatch-propagate from
 # deleting the user's live conversation.
 
 selfclose_setup() {
@@ -6318,20 +6519,20 @@ echo "=== dispatch-input-block ==="
 #
 # Each test gets a fresh tmp tree:
 #   $TMPDIR_TEST/hooks/dispatch-input-block.sh     — the hook under test
-#   $TMPDIR_TEST/skills/dispatch/scripts/          — fakes for dispatch-find-pr,
+#   $TMPDIR_TEST/skills/dispatch-propagate/scripts/          — fakes for dispatch-find-pr,
 #                                                    dispatch-spawn
 #   $TMPDIR_TEST/bin/{gh,git}                      — PATH shims
 #   $TMPDIR_TEST/jobs/<id>/state.json              — fake CLAUDE_JOB_DIR ledger
 #   $TMPDIR_TEST/stub/{gh,git,spawn}-calls.log     — recorded invocations
 #
 # HOOK_SCRIPT_DIR — the project hooks directory the test copies from. SCRIPT_DIR
-# here is .claude/skills/dispatch/scripts; the hooks live at .claude/hooks.
+# here is .claude/skills/dispatch-propagate/scripts; the hooks live at .claude/hooks.
 HOOK_SCRIPT_DIR="$SCRIPT_DIR/../../../hooks"
 
 ib_setup() {
   TMPDIR_TEST=$(mktemp -d)
   STUB_DIR="$TMPDIR_TEST/stub"
-  mkdir -p "$TMPDIR_TEST/hooks" "$TMPDIR_TEST/skills/dispatch/scripts" \
+  mkdir -p "$TMPDIR_TEST/hooks" "$TMPDIR_TEST/skills/dispatch-propagate/scripts" \
     "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/jobs/abcd1234"
 
   cp "$HOOK_SCRIPT_DIR/dispatch-input-block.sh" \
@@ -6340,21 +6541,21 @@ ib_setup() {
 
   # Fake dispatch-find-pr: prints contents of $STUB_DIR/find-pr-output if
   # present, else nothing (no PR exists).
-  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr" <<'FAKE'
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr" <<'FAKE'
 #!/usr/bin/env bash
 [[ -f "$STUB_DIR/find-pr-output" ]] && cat "$STUB_DIR/find-pr-output"
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr"
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr"
 
   # Fake dispatch-spawn-router: log invocations to spawn-calls.log.
-  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn-router" <<'FAKE'
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-router" <<'FAKE'
 #!/usr/bin/env bash
 echo "spawn" >> "$STUB_DIR/spawn-calls.log"
 echo "spawned"
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn-router"
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-router"
 
   # gh PATH stub. pr-edit-mode/issue-edit-mode select behavior (default: ok and
   # log args). "label-missing" models the first apply failing with a missing-
@@ -6610,19 +6811,19 @@ echo "=== dispatch-office-hours-strip ==="
 ohs_setup() {
   TMPDIR_TEST=$(mktemp -d)
   STUB_DIR="$TMPDIR_TEST/stub"
-  mkdir -p "$TMPDIR_TEST/hooks" "$TMPDIR_TEST/skills/dispatch/scripts" \
+  mkdir -p "$TMPDIR_TEST/hooks" "$TMPDIR_TEST/skills/dispatch-propagate/scripts" \
     "$TMPDIR_TEST/bin" "$STUB_DIR"
 
   cp "$HOOK_SCRIPT_DIR/dispatch-office-hours-strip.sh" \
     "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh"
   chmod +x "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh"
 
-  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr" <<'FAKE'
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr" <<'FAKE'
 #!/usr/bin/env bash
 [[ -f "$STUB_DIR/find-pr-output" ]] && cat "$STUB_DIR/find-pr-output"
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr"
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr"
 
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
@@ -6742,7 +6943,7 @@ echo "=== dispatch-stop ==="
 #
 # Each test gets a fresh tmp tree:
 #   $TMPDIR_TEST/hooks/dispatch-stop.sh               — hook under test
-#   $TMPDIR_TEST/skills/dispatch/scripts/             — fakes for find-pr,
+#   $TMPDIR_TEST/skills/dispatch-propagate/scripts/             — fakes for find-pr,
 #                                                       phase, spawn-router,
 #                                                       self-close
 #   $TMPDIR_TEST/bin/{gh,git}                         — PATH shims
@@ -6755,7 +6956,7 @@ echo "=== dispatch-stop ==="
 stop_setup() {
   TMPDIR_TEST=$(mktemp -d)
   STUB_DIR="$TMPDIR_TEST/stub"
-  mkdir -p "$TMPDIR_TEST/hooks" "$TMPDIR_TEST/skills/dispatch/scripts" \
+  mkdir -p "$TMPDIR_TEST/hooks" "$TMPDIR_TEST/skills/dispatch-propagate/scripts" \
     "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/jobs/abcd1234"
 
   cp "$HOOK_SCRIPT_DIR/dispatch-stop.sh" \
@@ -6764,16 +6965,16 @@ stop_setup() {
 
   # Fake dispatch-find-pr: prints contents of $STUB_DIR/find-pr-output if
   # present, else nothing.
-  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr" <<'FAKE'
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr" <<'FAKE'
 #!/usr/bin/env bash
 [[ -f "$STUB_DIR/find-pr-output" ]] && cat "$STUB_DIR/find-pr-output"
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr"
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr"
 
   # Fake dispatch-phase: prints contents of $STUB_DIR/current-phase.txt if
   # present, else "implement".
-  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-phase" <<'FAKE'
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-phase" <<'FAKE'
 #!/usr/bin/env bash
 if [[ -f "$STUB_DIR/current-phase.txt" ]]; then
   cat "$STUB_DIR/current-phase.txt"
@@ -6782,26 +6983,26 @@ else
 fi
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-phase"
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-phase"
 
   # Fake dispatch-spawn-router: log to order.log + spawn-calls.log.
-  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn-router" <<'FAKE'
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-router" <<'FAKE'
 #!/usr/bin/env bash
 echo "spawn" >> "$STUB_DIR/order.log"
 echo "spawn" >> "$STUB_DIR/spawn-calls.log"
 echo "spawned"
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn-router"
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-router"
 
   # Fake dispatch-self-close: log to order.log + self-close-calls.log.
-  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-self-close" <<'FAKE'
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-self-close" <<'FAKE'
 #!/usr/bin/env bash
 echo "self-close" >> "$STUB_DIR/order.log"
 echo "self-close" >> "$STUB_DIR/self-close-calls.log"
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-self-close"
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-self-close"
 
   # gh PATH stub. issue-edit-mode "label-missing" models the apply-first /
   # create-on-"not found" idiom — first add-label fails with "not found" stderr,
@@ -7202,11 +7403,11 @@ stop_setup
 echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
 # Simulate dispatch-phase failure by making the fake return nothing (exit 1).
-cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-phase" <<'FAKE'
+cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-phase" <<'FAKE'
 #!/usr/bin/env bash
 exit 1
 FAKE
-chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-phase"
+chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-phase"
 echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 echo "phase=code-review" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
@@ -7378,9 +7579,9 @@ STUB_DIR=""
 export PATH="$SAVED_PATH"
 
 # ============================================================================
-# /dispatch router smoke (Step 5 create + Step 6 spawn)
+# /dispatch-propagate router smoke (Step 5 create + Step 6 spawn)
 # ============================================================================
-# Pin the shell sequence documented in /dispatch SKILL.md Step 5's `create`
+# Pin the shell sequence documented in /dispatch-propagate SKILL.md Step 5's `create`
 # branch and Step 6, by faking every external binary the sequence calls and
 # asserting each fake was invoked with the expected arguments. This is a
 # documentation-pinning test, not a behaviour test of the router itself: it
@@ -7388,7 +7589,7 @@ export PATH="$SAVED_PATH"
 # update the spawn call, or where the documented shell sequence drifts from
 # what the script expects.
 #
-# Tested sequence (matches /dispatch SKILL.md Step 5 create + Step 6):
+# Tested sequence (matches /dispatch-propagate SKILL.md Step 5 create + Step 6):
 #   GIT_COMMON_DIR=...                                       # faked git
 #   PROJECT_ROOT=...
 #   WORKTREE_PATH="$PROJECT_ROOT/worktrees/<branch>"
@@ -7399,7 +7600,7 @@ export PATH="$SAVED_PATH"
 #   dispatch-finalize-selection "$WORKTREE_PATH"   # cds in, writes marker, releases lock
 #   dispatch-spawn-worker <N> "$WORKTREE_PATH"
 echo ""
-echo "=== /dispatch router smoke (Step 5 create + Step 6 spawn) ==="
+echo "=== /dispatch-propagate router smoke (Step 5 create + Step 6 spawn) ==="
 
 router_smoke_setup() {
   TMPDIR_TEST=$(mktemp -d)
@@ -7633,6 +7834,14 @@ phase_exit=$?
 assert_eq "--phase-completed exit code" "0" "$phase_exit"
 assert_eq "--phase-completed spawn called" "spawn called" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
 assert_eq "--phase-completed self-close called" "self-close called" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
+# gh must be called with the PR number returned by fake-find-pr (99).
+TOTAL=$((TOTAL + 1))
+if grep -q "gh pr view 99 " "$HGH_LOG" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: --phase-completed gh called with PR 99"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: --phase-completed gh called with PR 99"
+  echo "    gh log: $(cat "$HGH_LOG" 2>/dev/null || echo '<empty>')"
+fi
 handoff_teardown
 
 # ----- 3. --phase-completed with spawn failure: no self-close, exits 1 -------
@@ -7803,7 +8012,7 @@ lock_teardown
 # ============================================================================
 echo "=== dispatch chain: no EnterWorktree/ExitWorktree mid-session ==="
 #
-# Regression guard for #839: the dispatch chain — router /dispatch and the
+# Regression guard for #839: the dispatch chain — router /dispatch-propagate and the
 # skills the worker (/dispatch-worker) invokes — must not call EnterWorktree
 # or ExitWorktree. The worker is born in its target worktree (cwd set by
 # dispatch-spawn-worker); any mid-session worktree switch is at best a no-op
@@ -7819,6 +8028,7 @@ PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 # substring mentions (grep -oE counts each occurrence, not each line).
 declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/dispatch/SKILL.md"]=0
+  [".claude/skills/dispatch-propagate/SKILL.md"]=0
   [".claude/skills/dispatch-worker/SKILL.md"]=2
   # Phase skills do not call EnterWorktree/ExitWorktree (#868): they write the
   # phase-completed marker and stop; the Stop hook (`.claude/hooks/dispatch-stop.sh`)
