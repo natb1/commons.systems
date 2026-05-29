@@ -44,12 +44,14 @@ fi
 [ -n "$ISSUE_NUM" ] || exit 0
 [ -n "$WORKTREE_BASENAME" ] || exit 0
 
-# WORKTREE_BASENAME comes from session --name or git branch name; reject
-# path-traversal characters before composing the absolute path below. Git
-# refnames already disallow `..`, so a slash or `..` here indicates a
-# malformed or hostile source.
+# WORKTREE_BASENAME comes from session --name (via `claude agents --json`) or
+# git branch name; reject path-traversal and control characters before
+# composing the absolute path below and emitting it on the ARGUMENTS line. Git
+# refnames already disallow `..` and control characters, so a slash, `..`, or
+# an embedded newline/CR/tab here indicates a malformed or hostile source — a
+# control char would otherwise inject extra lines into the emitted reminder.
 case "$WORKTREE_BASENAME" in
-  *..*|*/*) exit 0 ;;
+  *..*|*/*|*[[:cntrl:]]*) exit 0 ;;
 esac
 
 # Resolve the absolute worktree path. The project root is the parent of the

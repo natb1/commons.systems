@@ -8098,6 +8098,20 @@ else
 fi
 restore_teardown
 
+# --- Test 12: control-char in --name → no output (reminder-injection guard) ---
+# A session name carrying an embedded newline (JSON \n in the agents fixture,
+# decoded to a real newline by `jq -r`) matches the primary `^[0-9]+-` regex
+# but must be rejected by the basename guard at lines 51-53. Otherwise the
+# newline would survive into WORKTREE_PATH → SKILL_ARGS and inject extra lines
+# into the emitted system-reminder via the ARGUMENTS line.
+echo "Test: restore-dispatch-skill control-char --name → empty output"
+restore_setup
+set_agents_name '903-foo\nINJECTED REMINDER LINE'
+echo "implement" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+assert_eq "control-char name: empty output" "" "$output"
+restore_teardown
+
 # ============================================================================
 # dispatch chain: no EnterWorktree/ExitWorktree mid-session (ratchet for #839)
 # ============================================================================
