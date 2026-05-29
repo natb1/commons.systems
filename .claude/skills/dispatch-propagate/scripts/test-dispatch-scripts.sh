@@ -2598,6 +2598,24 @@ checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && grep -q -- "-B 42-pr-
 assert_eq "queue orphan + wrong branch → re-point checkout logged" "yes" "$checkout_logged"
 teardown
 
+# 16. queue live-session + wrong branch + PR → the live-session conflict
+#     short-circuits before reconciliation: conflict, no gh pr view, no checkout.
+#     Documents that live-session ownership takes precedence over branch identity.
+echo "Test: queue live-session + wrong branch → conflict (no reconciliation)"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "42-my-feature"   # live session owns the worktree
+printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
+assert_eq "queue live-session + wrong branch → conflict" \
+  "conflict /worktrees/42-my-feature" "$result"
+pr_view_called=$([[ -f "$STUB_DIR/gh-pr-view-headref.log" ]] && echo yes || echo no)
+assert_eq "queue live-session + wrong branch → gh pr view not called" "no" "$pr_view_called"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
+assert_eq "queue live-session + wrong branch → no checkout" "no" "$checkout_logged"
+teardown
+
 # ============================================================================
 # list_worktree_records (lib.sh) tests
 # ============================================================================
