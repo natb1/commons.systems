@@ -44,12 +44,14 @@ fi
 [ -n "$ISSUE_NUM" ] || exit 0
 [ -n "$WORKTREE_BASENAME" ] || exit 0
 
-# WORKTREE_BASENAME comes from session --name or git branch name; reject
-# path-traversal characters before composing the absolute path below. Git
-# refnames already disallow `..`, so a slash or `..` here indicates a
-# malformed or hostile source.
+# WORKTREE_BASENAME comes from session --name (via `claude agents --json`) or
+# git branch name; reject path-traversal and control characters before
+# composing the absolute path below and emitting it on the ARGUMENTS line. Git
+# refnames already disallow `..` and control characters, so a slash, `..`, or
+# an embedded newline/CR/tab here indicates a malformed or hostile source — a
+# control char would otherwise inject extra lines into the emitted reminder.
 case "$WORKTREE_BASENAME" in
-  *..*|*/*) exit 0 ;;
+  *..*|*/*|*[[:cntrl:]]*) exit 0 ;;
 esac
 
 # Resolve the absolute worktree path. The project root is the parent of the
@@ -59,26 +61,104 @@ GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/nu
 PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
 WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 
-# Emit reload instruction. For phases with a single owning phase skill,
-# reload that skill directly so a compaction mid-phase-skill resumes inside
-# the same skill rather than re-entering /dispatch-worker (which can leave
-# the active skill in an inconsistent reload state). For waiting/done/unknown,
-# fall back to /dispatch-worker so the worker's Step 2 CI-monitor subagent
-# loop and Step 2 done variance handling still run. dispatch-phase failure
-# (network blip, no PR yet) also falls back to /dispatch-worker.
+# Inline the phase skill's SKILL.md body into a system-reminder so the model
+# resumes the phase skill semantically. The previous design emitted a one-line
+# `Reload skill: /<name>` directive — a prompt-engineering nudge the model
+# could ignore when a competing injected user prompt clobbered it (#903 root
+# cause). Inlining the SKILL.md body mirrors the shape the Skill tool delivers
+# when it fires, so the phase skill's full instructions are present in context
+# regardless of whether the Skill tool was invoked.
+#
+# Routing: implement→plan-implement; verify→verify-pr; qa→dispatch-qa;
+# code-review→code-review-fix; review→review-fix; security→security-review-fix;
+# waiting/done/unknown/dispatch-phase failure→dispatch-worker (the worker's
+# Step 2 CI-monitor loop and Step 2 done variance handling still run).
+#
+# Falls back to the one-line Reload directive if SKILL.md is missing or
+# unreadable — defensive against a packaging error breaking recovery.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 DISPATCH_SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
 PHASE=$("$DISPATCH_SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || PHASE=""
 
 case "$PHASE" in
-  implement)   DIRECTIVE="/plan-implement $ISSUE_NUM" ;;
-  verify)      DIRECTIVE="/verify-pr" ;;
-  qa)          DIRECTIVE="/dispatch-qa $ISSUE_NUM" ;;
-  code-review) DIRECTIVE="/code-review-fix" ;;
-  review)      DIRECTIVE="/review-fix" ;;
-  security)    DIRECTIVE="/security-review-fix" ;;
-  *)           DIRECTIVE="/dispatch-worker $ISSUE_NUM $WORKTREE_PATH" ;;
+  implement)
+    SKILL_DIR_NAME="plan-implement"
+    SKILL_ARGS="$ISSUE_NUM"
+    DIRECTIVE="/plan-implement $ISSUE_NUM"
+    ;;
+  verify)
+    SKILL_DIR_NAME="verify-pr"
+    SKILL_ARGS=""
+    DIRECTIVE="/verify-pr"
+    ;;
+  qa)
+    SKILL_DIR_NAME="dispatch-qa"
+    SKILL_ARGS="$ISSUE_NUM"
+    DIRECTIVE="/dispatch-qa $ISSUE_NUM"
+    ;;
+  code-review)
+    SKILL_DIR_NAME="code-review-fix"
+    SKILL_ARGS=""
+    DIRECTIVE="/code-review-fix"
+    ;;
+  review)
+    SKILL_DIR_NAME="review-fix"
+    SKILL_ARGS=""
+    DIRECTIVE="/review-fix"
+    ;;
+  security)
+    SKILL_DIR_NAME="security-review-fix"
+    SKILL_ARGS=""
+    DIRECTIVE="/security-review-fix"
+    ;;
+  *)
+    SKILL_DIR_NAME="dispatch-worker"
+    SKILL_ARGS="$ISSUE_NUM $WORKTREE_PATH"
+    DIRECTIVE="/dispatch-worker $ISSUE_NUM $WORKTREE_PATH"
+    ;;
 esac
 
-printf 'COMPACTION RECOVERY: Reload skill: %s\n' "$DIRECTIVE"
+# Canonicalize the skill directory. On cd failure fall back to the legacy
+# one-line Reload directive — recovery still works, just without inlining.
+SKILL_DIR=$(cd "$SCRIPT_DIR/../skills/$SKILL_DIR_NAME" 2>/dev/null && pwd) || {
+  printf 'COMPACTION RECOVERY: Reload skill: %s\n' "$DIRECTIVE"
+  exit 0
+}
+SKILL_FILE="$SKILL_DIR/SKILL.md"
+
+# If SKILL.md is missing or unreadable, emit the legacy one-line Reload
+# directive. The model will then invoke the Skill tool to load it.
+if [ ! -r "$SKILL_FILE" ]; then
+  printf 'COMPACTION RECOVERY: Reload skill: %s\n' "$DIRECTIVE"
+  exit 0
+fi
+
+# Inlined form: header, base directory, SKILL.md body (frontmatter stripped),
+# and optional ARGUMENTS line.
+printf 'COMPACTION RECOVERY — resume the active phase skill below.\n'
+printf '\n'
+printf 'Base directory for this skill: %s\n' "$SKILL_DIR"
+printf '\n'
+
+# Strip a leading YAML frontmatter block delimited by `---` lines. Two-pass
+# strip: first remove line 1 (the opening `---`), then delete through the
+# next `---` line (the closing delimiter). A single `sed '1,/^---$/d'`
+# does not work when line 1 is `---` — the range matches just line 1.
+#
+# Only strip when a closing `---` actually exists. A malformed file with an
+# opening `---` but no closing delimiter would otherwise have its entire body
+# deleted (the second sed range runs to EOF), silently emitting an empty
+# skill — worse than the legacy fallback. In that case emit the file verbatim.
+first_line=$(head -n1 "$SKILL_FILE")
+if [ "$first_line" = "---" ] && tail -n +2 "$SKILL_FILE" | grep -qx -- '---'; then
+  sed '1d' "$SKILL_FILE" | sed '1,/^---$/d'
+else
+  cat "$SKILL_FILE"
+fi
+
+if [ -n "$SKILL_ARGS" ]; then
+  printf '\n'
+  printf 'ARGUMENTS: %s\n' "$SKILL_ARGS"
+fi
+
 exit 0
