@@ -6978,6 +6978,172 @@ assert_eq "dispatch-spawn-worker args" \
 router_smoke_teardown
 
 # ============================================================================
+# dispatch-handoff tests (#824)
+# ============================================================================
+echo "=== dispatch-handoff ==="
+
+HANDOFF_SCRIPT="$SCRIPT_DIR/dispatch-handoff"
+
+# Minimal per-test harness for handoff: does not need the full setup/teardown
+# (no gh stub via PATH, no git stub). Uses env overrides to fake every external
+# call the script makes.
+
+# Helper — create a temp dir with fake command stubs.
+handoff_setup() {
+  HTMPDIR=$(mktemp -d)
+  HSELF_CLOSE_LOG="$HTMPDIR/self-close.log"
+  HSPAWN_LOG="$HTMPDIR/spawn.log"
+  HGH_LOG="$HTMPDIR/gh.log"
+  HFIND_PR_LOG="$HTMPDIR/find-pr.log"
+
+  # Default fake dispatch-self-close: records the call, exits 0.
+  cat > "$HTMPDIR/fake-self-close" <<'FAKE'
+#!/usr/bin/env bash
+echo "self-close called" >> "$HSELF_CLOSE_LOG"
+exit 0
+FAKE
+  # Inject HSELF_CLOSE_LOG into the fake via env at call time.
+  chmod +x "$HTMPDIR/fake-self-close"
+
+  # Default fake dispatch-spawn-router: records the call, exits 0, prints "spawned".
+  cat > "$HTMPDIR/fake-spawn" <<'FAKE'
+#!/usr/bin/env bash
+echo "spawn called" >> "$HSPAWN_LOG"
+echo "spawned"
+exit 0
+FAKE
+  chmod +x "$HTMPDIR/fake-spawn"
+
+  # Default fake gh: records invocation, prints no labels.
+  cat > "$HTMPDIR/fake-gh" <<'FAKE'
+#!/usr/bin/env bash
+echo "gh $*" >> "$HGH_LOG"
+# pr view <N> --json labels --jq ...  → return empty label list
+echo ""
+exit 0
+FAKE
+  chmod +x "$HTMPDIR/fake-gh"
+
+  # Default fake dispatch-find-pr: prints PR number 99.
+  cat > "$HTMPDIR/fake-find-pr" <<'FAKE'
+#!/usr/bin/env bash
+echo "find-pr $*" >> "$HFIND_PR_LOG"
+echo "99"
+exit 0
+FAKE
+  chmod +x "$HTMPDIR/fake-find-pr"
+}
+
+handoff_teardown() {
+  rm -rf "$HTMPDIR"
+  unset HTMPDIR HSELF_CLOSE_LOG HSPAWN_LOG HGH_LOG HFIND_PR_LOG
+}
+
+# Run dispatch-handoff with fake commands injected via env.
+run_handoff() {
+  DISPATCH_HANDOFF_SELF_CLOSE_CMD="$HTMPDIR/fake-self-close" \
+  DISPATCH_HANDOFF_SPAWN_CMD="$HTMPDIR/fake-spawn" \
+  DISPATCH_HANDOFF_GH_CMD="$HTMPDIR/fake-gh" \
+  DISPATCH_HANDOFF_FIND_PR_CMD="$HTMPDIR/fake-find-pr" \
+  HSELF_CLOSE_LOG="$HSELF_CLOSE_LOG" \
+  HSPAWN_LOG="$HSPAWN_LOG" \
+  HGH_LOG="$HGH_LOG" \
+  HFIND_PR_LOG="$HFIND_PR_LOG" \
+    "$HANDOFF_SCRIPT" "$@"
+}
+
+# ----- 1. --early-stop: calls self-close, exits 0 ---------------------------
+echo "Test: dispatch-handoff --early-stop calls self-close and exits 0"
+handoff_setup
+# Wrap fake-self-close so that exec is simulated by just running and exiting.
+# dispatch-handoff uses `exec` for self-close; the fake does not exec, it exits.
+# The test just checks exit code and log presence.
+run_handoff --early-stop
+early_stop_exit=$?
+assert_eq "--early-stop exit code" "0" "$early_stop_exit"
+assert_eq "--early-stop self-close called" "self-close called" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
+# spawn must NOT be called on early-stop.
+assert_eq "--early-stop no spawn" "" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
+handoff_teardown
+
+# ----- 2. --phase-completed happy path: spawn + self-close, exits 0 ----------
+echo "Test: dispatch-handoff <N> --phase-completed happy path"
+handoff_setup
+run_handoff 42 --phase-completed
+phase_exit=$?
+assert_eq "--phase-completed exit code" "0" "$phase_exit"
+assert_eq "--phase-completed spawn called" "spawn called" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
+assert_eq "--phase-completed self-close called" "self-close called" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
+handoff_teardown
+
+# ----- 3. --phase-completed with spawn failure: no self-close, exits 1 -------
+echo "Test: dispatch-handoff --phase-completed spawn failure → no self-close, exit 1"
+handoff_setup
+# Override spawn to fail.
+cat > "$HTMPDIR/fake-spawn" <<'FAKE'
+#!/usr/bin/env bash
+echo "spawn called" >> "$HSPAWN_LOG"
+echo "agent did not register" >&2
+exit 1
+FAKE
+chmod +x "$HTMPDIR/fake-spawn"
+# Use if/else to capture the exit code without triggering set -e.
+if run_handoff 42 --phase-completed 2>/dev/null; then spawn_fail_exit=0; else spawn_fail_exit=$?; fi
+assert_eq "--phase-completed spawn-failed exit code" "1" "$spawn_fail_exit"
+assert_eq "--phase-completed spawn-failed: spawn was called" "spawn called" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
+# self-close must NOT have been called.
+assert_eq "--phase-completed spawn-failed: no self-close" "" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
+handoff_teardown
+
+# ----- 4. --phase-completed with dispatch:office-hours → no self-close, exit 0
+echo "Test: dispatch-handoff --phase-completed with dispatch:office-hours → no self-close"
+handoff_setup
+# Override gh to return the office-hours label.
+cat > "$HTMPDIR/fake-gh" <<'FAKE'
+#!/usr/bin/env bash
+echo "gh $*" >> "$HGH_LOG"
+echo "dispatch:office-hours"
+exit 0
+FAKE
+chmod +x "$HTMPDIR/fake-gh"
+run_handoff 42 --phase-completed
+office_exit=$?
+assert_eq "--phase-completed office-hours exit code" "0" "$office_exit"
+assert_eq "--phase-completed office-hours: spawn called" "spawn called" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
+# self-close must NOT have been called (session stays open for human review).
+assert_eq "--phase-completed office-hours: no self-close" "" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
+handoff_teardown
+
+# ----- 5. Missing issue number → exit 2 with diagnostic ----------------------
+echo "Test: dispatch-handoff --phase-completed missing issue number → exit 2"
+handoff_setup
+# Use if/else to capture exit code without triggering set -e.
+if run_handoff --phase-completed 2>/dev/null; then missing_exit=0; else missing_exit=$?; fi
+assert_eq "--phase-completed missing issue: exit 2" "2" "$missing_exit"
+assert_eq "--phase-completed missing issue: no spawn" "" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
+assert_eq "--phase-completed missing issue: no self-close" "" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
+handoff_teardown
+
+# ----- 6. No arguments → exit 2 -----------------------------------------------
+echo "Test: dispatch-handoff with no arguments → exit 2"
+handoff_setup
+# Use if/else to capture exit code without triggering set -e.
+if run_handoff 2>/dev/null; then no_args_exit=0; else no_args_exit=$?; fi
+assert_eq "no arguments: exit 2" "2" "$no_args_exit"
+handoff_teardown
+
+# ----- 7. CLAUDE_JOB_DIR unset: self-close is a no-op (interactive session) --
+echo "Test: dispatch-handoff --early-stop with CLAUDE_JOB_DIR unset: self-close no-op, exits 0"
+handoff_setup
+# The real dispatch-self-close is a no-op when CLAUDE_JOB_DIR is unset.
+# Our fake always succeeds — same observable behavior. The test verifies that
+# dispatch-handoff does not error when CLAUDE_JOB_DIR is absent.
+(unset CLAUDE_JOB_DIR; run_handoff --early-stop)
+interactive_exit=$?
+assert_eq "--early-stop interactive: exits 0" "0" "$interactive_exit"
+handoff_teardown
+
+# ============================================================================
 # dispatch chain: no EnterWorktree/ExitWorktree mid-session (ratchet for #839)
 # ============================================================================
 echo "=== dispatch chain: no EnterWorktree/ExitWorktree mid-session ==="
@@ -6999,12 +7165,14 @@ PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/dispatch/SKILL.md"]=0
   [".claude/skills/dispatch-worker/SKILL.md"]=2
-  [".claude/skills/dispatch-qa/SKILL.md"]=0
-  [".claude/skills/plan-implement/SKILL.md"]=0
-  [".claude/skills/code-review-fix/SKILL.md"]=0
-  [".claude/skills/review-fix/SKILL.md"]=0
-  [".claude/skills/security-review-fix/SKILL.md"]=0
-  [".claude/skills/verify-pr/SKILL.md"]=0
+  # Phase skills call ExitWorktree action:"keep" at their clean-completion
+  # terminus (#824) — one terminal ExitWorktree each, not a mid-session switch.
+  [".claude/skills/dispatch-qa/SKILL.md"]=1
+  [".claude/skills/plan-implement/SKILL.md"]=1
+  [".claude/skills/code-review-fix/SKILL.md"]=1
+  [".claude/skills/review-fix/SKILL.md"]=1
+  [".claude/skills/security-review-fix/SKILL.md"]=1
+  [".claude/skills/verify-pr/SKILL.md"]=1
   [".claude/skills/implement-unit/SKILL.md"]=0
   [".claude/skills/commit-merge-push/SKILL.md"]=0
 )
