@@ -53,13 +53,12 @@ fi
 PAYLOAD=""
 if read -t 1 -d '' PAYLOAD; then :; fi
 
-# Resolve issue number from the current branch (<N>-<slug>).
-BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || exit 0
-ISSUE_NUM=$(printf '%s\n' "$BRANCH" | grep -oE '^[0-9]+') || exit 0
-[ -n "$ISSUE_NUM" ] || exit 0
+# Resolve issue number from the validated JOB_NAME (<N>-<slug>). Discriminator 2
+# guarantees JOB_NAME matches ^[0-9]+-, so the numeric prefix is non-empty.
+ISSUE_NUM="${JOB_NAME%%-*}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
-SCRIPTS="$SCRIPT_DIR/../skills/dispatch/scripts"
+SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
 
 # Resolve PR (may be empty for implement-phase before the draft PR opens).
 PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""

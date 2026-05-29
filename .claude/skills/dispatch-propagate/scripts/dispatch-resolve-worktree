@@ -7,14 +7,19 @@
 #                     uses <path>.
 #   create <branch> — no <issue>-* worktree exists; the caller materializes
 #                     <branch> and uses its path.
-#   conflict <path> — a queue-selected target already has a worktree (another
-#                     session owns it); /dispatch reports <path> and stops.
+#   conflict <path> — a queue-selected target's worktree is owned by another
+#                     live Claude session; /dispatch-propagate reports <path> and stops.
 #
 # The mode argument decides what an existing <issue>-* worktree means:
-#   explicit — the target was named by an explicit /dispatch argument
+#   explicit — the target was named by an explicit /dispatch-propagate argument
 #              (recycle-after-completion); an existing worktree yields `enter`.
-#   queue    — the target was queue-selected; an existing worktree belongs to
-#              another session and yields `conflict`.
+#   queue    — the target was queue-selected. An existing worktree yields
+#              `conflict` only when a live Claude session owns it; an orphan
+#              worktree (on disk, no live session) yields `enter` so the
+#              queue target recycles it instead of stalling the tick (#905).
+#              Liveness is checked via worktree_has_live_session
+#              (lib-claude-agents.sh), which is fail-safe: an unqueryable
+#              daemon counts as owned and yields `conflict`.
 #
 # The branch name printed by `create` matches the WorktreeCreate hook's
 # accepted form ^[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$, full name <= 32 characters.
@@ -32,6 +37,9 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+# worktree_has_live_session — queue mode distinguishes a live-session-owned
+# worktree (conflict) from an orphan one (enter / recycle) (#905).
+source "$SCRIPT_DIR/lib-claude-agents.sh"
 
 # `enter` / `conflict` — scan local worktrees for one whose branch carries the
 # <issue>-* prefix, via the shared list_worktree_records helper (lib.sh).
@@ -41,8 +49,12 @@ while IFS= read -r line; do
   if [[ "$WT_NUM" == "$ISSUE" ]]; then
     if [[ "$MODE" == "explicit" ]]; then
       echo "enter $WT_PATH"
-    else
+    elif worktree_has_live_session "$WT_PATH"; then
+      # Queue target whose worktree a live session owns — a genuine race.
       echo "conflict $WT_PATH"
+    else
+      # Queue target whose worktree is an orphan — recycle it as the target.
+      echo "enter $WT_PATH"
     fi
     exit 0
   fi

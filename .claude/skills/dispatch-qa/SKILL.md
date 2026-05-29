@@ -8,9 +8,10 @@ description: Post-implementation user-acceptance QA — single self-verifying pa
 Runs a single user-acceptance QA pass on an implemented PR. Invoked two ways:
 
 - By the `/dispatch-worker` skill — the session is already inside the target
-  worktree (the worker `cd`s into it in its own Step 0; `dispatch-spawn-worker`
-  itself spawns from `worktrees/main` and passes the path as the worker's
-  second positional argument).
+  worktree (the worker enters its target worktree via spawn cwd, not via Step 0
+  `cd`; `dispatch-spawn-worker` invokes `claude --bg` from a subshell `cd`'d
+  into `<worktree-path>` and still passes the path as the worker's second
+  positional argument).
 - Standalone from inside a target worktree with an optional `#<issue>` argument.
 
 **Step 0** verifies the current worktree and derives the target issue number
@@ -52,7 +53,7 @@ The QA pass covers **public data only** — documents present in both the QA ser
 
    `/dispatch-qa` operates in place — the **current worktree dictates the target**.
    The session must be in a target worktree: the current branch is `<N>-…`,
-   where `<N>` is the issue number. The router (`/dispatch`) is responsible
+   where `<N>` is the issue number. The router (`/dispatch-propagate`) is responsible
    for entering a target worktree; this skill never switches.
 
    Verify the worktree and derive the issue number `<N>`:
@@ -147,18 +148,18 @@ The QA pass covers **public data only** — documents present in both the QA ser
 
    a. **Start the QA server in the background.** Use a Bash tool call with `run_in_background: true`:
       ```bash
-      .claude/skills/dispatch/scripts/run-qa-server.sh <app-dir>
+      .claude/skills/dispatch-propagate/scripts/run-qa-server.sh <app-dir>
       ```
       Capture the App URL printed to stdout. The QA server seeds public data only — do not re-run it or any seed step with `SEED_TEST_ONLY=true` (see [QA data policy](#qa-data-policy)).
 
    b. **Wait for the server:**
       ```bash
-      .claude/skills/dispatch/scripts/wait-for-url.sh <url>
+      .claude/skills/dispatch-propagate/scripts/wait-for-url.sh <url>
       ```
 
    c. **Pre-QA acceptance check:**
       ```bash
-      .claude/skills/dispatch/scripts/run-acceptance-tests.sh <app-dir> <url>
+      .claude/skills/dispatch-propagate/scripts/run-acceptance-tests.sh <app-dir> <url>
       ```
 
       - **If the check fails** → A failed pre-QA acceptance check is a bug. Go to
@@ -237,7 +238,7 @@ The QA pass covers **public data only** — documents present in both the QA ser
       **Model** (per `/implement-unit`'s model-selection heuristic), and
       **Dependencies**. Include the `ref-memory-management` Clean Context Planning
       preface (the plan assumes a clean context and records that the active
-      workflow step is the `qa` phase of `/dispatch`). The idempotency guard at the top of
+      workflow step is the `qa` phase of `/dispatch-propagate`). The idempotency guard at the top of
       this skill resumes here after the plan is accepted and context is cleared.
    3. **Build the fix.** Follow `/plan-implement` Step 2: for each approved unit, in
       dependency order, invoke `/implement-unit` via the Skill tool, passing
@@ -276,14 +277,14 @@ The QA pass covers **public data only** — documents present in both the QA ser
 
    Post via (use `dangerouslyDisableSandbox: true` — script invokes `gh`):
    ```bash
-   .claude/skills/dispatch/scripts/post-pr-comment.sh <pr-num> tmp/dispatch-qa-summary-<n>.md
+   .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh <pr-num> tmp/dispatch-qa-summary-<n>.md
    ```
 
 7. **Cleanup.**
 
    On the browser path (server was started), always run on exit:
    ```bash
-   .claude/skills/dispatch/scripts/run-qa-cleanup.sh
+   .claude/skills/dispatch-propagate/scripts/run-qa-cleanup.sh
    ```
 
    Use this script — never broad `pkill`. The user's standing rule (project memory): `run-qa-cleanup.sh` avoids permission errors and worktree conflicts.
@@ -303,7 +304,7 @@ The QA pass covers **public data only** — documents present in both the QA ser
    (run with `dangerouslyDisableSandbox: true` — it invokes `gh`):
 
    ```bash
-   .claude/skills/dispatch/scripts/dispatch-complete-phase <pr-num> qa
+   .claude/skills/dispatch-propagate/scripts/dispatch-complete-phase <pr-num> qa
    ```
 
    The PR number passed here is **expected** to differ from the worktree's
