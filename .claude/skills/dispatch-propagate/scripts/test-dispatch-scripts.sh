@@ -8012,6 +8012,447 @@ assert_eq "--early-stop interactive: exits 0" "0" "$interactive_exit"
 handoff_teardown
 
 # ============================================================================
+# restore-dispatch-skill tests (#903)
+# ============================================================================
+echo ""
+echo "=== restore-dispatch-skill ==="
+#
+# SessionStart:clear recovery hook: emits the phase skill's SKILL.md body
+# inline, so a context-cleared session resumes the phase skill semantically
+# instead of relying on a prompt-engineering Reload directive that can be
+# overridden by a competing injected user prompt (#903 root cause).
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/.claude/hooks/restore-dispatch-skill.sh   — hook under test
+#   $TMPDIR_TEST/.claude/skills/<phase-skill>/SKILL.md     — fixture body
+#   $TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts/dispatch-phase — phase shim
+#   $TMPDIR_TEST/bin/{claude,git}                          — PATH shims
+#   $TMPDIR_TEST/stub/                                     — fixture inputs
+#
+# HOOK_SCRIPT_DIR is already defined above at the dispatch-input-block section;
+# reuse it here.
+
+restore_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  STUB_DIR="$TMPDIR_TEST/stub"
+  mkdir -p "$TMPDIR_TEST/.claude/hooks" \
+    "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts" \
+    "$TMPDIR_TEST/bin" \
+    "$STUB_DIR"
+  for skill in plan-implement verify-pr dispatch-qa code-review-fix \
+               review-fix security-review-fix dispatch-worker; do
+    mkdir -p "$TMPDIR_TEST/.claude/skills/$skill"
+    cat > "$TMPDIR_TEST/.claude/skills/$skill/SKILL.md" <<EOF
+---
+name: $skill
+description: test fixture
+---
+
+# Test Skill $skill
+
+RESTORE_MARKER_$skill body line.
+EOF
+  done
+
+  cp "$HOOK_SCRIPT_DIR/restore-dispatch-skill.sh" \
+    "$TMPDIR_TEST/.claude/hooks/restore-dispatch-skill.sh"
+  chmod +x "$TMPDIR_TEST/.claude/hooks/restore-dispatch-skill.sh"
+
+  # dispatch-phase shim: read $STUB_DIR/current-phase.txt.
+  cat > "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts/dispatch-phase" <<'FAKE'
+#!/usr/bin/env bash
+if [[ -f "$STUB_DIR/current-phase.txt" ]]; then
+  cat "$STUB_DIR/current-phase.txt"
+else
+  echo "implement"
+fi
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts/dispatch-phase"
+
+  # claude PATH stub: handle `agents --json`.
+  cat > "$TMPDIR_TEST/bin/claude" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  "agents --json")
+    if [[ -f "$STUB_DIR/claude-agents.json" ]]; then
+      cat "$STUB_DIR/claude-agents.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/claude"
+
+  # git PATH stub.
+  cat > "$TMPDIR_TEST/bin/git" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  "rev-parse --abbrev-ref HEAD")
+    if [[ -f "$STUB_DIR/current-branch.txt" ]]; then
+      cat "$STUB_DIR/current-branch.txt"
+    else
+      echo "main"
+    fi
+    ;;
+  "rev-parse --path-format=absolute --git-common-dir")
+    cat "$STUB_DIR/git-common-dir.txt"
+    ;;
+  *)
+    echo "git stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/git"
+
+  # Provide --git-common-dir output. The hook computes PROJECT_ROOT as
+  # dirname($GIT_COMMON_DIR), so $TMPDIR_TEST/.bare → PROJECT_ROOT=$TMPDIR_TEST
+  # and WORKTREE_PATH=$TMPDIR_TEST/worktrees/<basename>.
+  echo "$TMPDIR_TEST/.bare" > "$STUB_DIR/git-common-dir.txt"
+
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+  export STUB_DIR
+}
+
+restore_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  STUB_DIR=""
+  export PATH="$SAVED_PATH"
+}
+
+run_restore() {
+  printf '{"session_id":"sid-test"}' | \
+    "$TMPDIR_TEST/.claude/hooks/restore-dispatch-skill.sh" 2>/dev/null
+}
+
+# Helper to set the agents fixture for sid-test.
+set_agents_name() {
+  printf '[{"sessionId":"sid-test","name":"%s"}]\n' "$1" > "$STUB_DIR/claude-agents.json"
+}
+
+# --- Test 1: implement → plan-implement body + ARGUMENTS: <N> -----------------
+echo "Test: restore-dispatch-skill phase=implement → plan-implement body + args"
+restore_setup
+set_agents_name "903-foo"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"COMPACTION RECOVERY — resume the active phase skill below."* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: implement: header line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: implement: header line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/plan-implement"
+if [[ "$output" == *"$expected_dir"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: implement: base directory line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: implement: base directory line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"RESTORE_MARKER_plan-implement"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: implement: SKILL.md body marker emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: implement: SKILL.md body marker emitted"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"ARGUMENTS: 903"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: implement: ARGUMENTS line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: implement: ARGUMENTS line emitted"
+  echo "    output: $output"
+fi
+# Frontmatter must be stripped — no `name: plan-implement` line should appear.
+TOTAL=$((TOTAL + 1))
+if [[ "$output" != *"name: plan-implement"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: implement: frontmatter stripped"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: implement: frontmatter stripped"
+fi
+restore_teardown
+
+# --- Test 2: verify → verify-pr body, no ARGUMENTS ---------------------------
+echo "Test: restore-dispatch-skill phase=verify → verify-pr body, no ARGUMENTS"
+restore_setup
+set_agents_name "903-foo"
+echo "verify" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/verify-pr"
+if [[ "$output" == *"$expected_dir"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: verify: base directory line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: verify: base directory line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"RESTORE_MARKER_verify-pr"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: verify: SKILL.md body marker emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: verify: SKILL.md body marker emitted"
+fi
+TOTAL=$((TOTAL + 1))
+if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
+  PASS=$((PASS + 1)); echo "  PASS: verify: no ARGUMENTS line"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: verify: no ARGUMENTS line"
+  echo "    output: $output"
+fi
+restore_teardown
+
+# --- Test 3: qa → dispatch-qa body + ARGUMENTS: <N> --------------------------
+echo "Test: restore-dispatch-skill phase=qa → dispatch-qa body + args"
+restore_setup
+set_agents_name "903-foo"
+echo "qa" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/dispatch-qa"
+if [[ "$output" == *"$expected_dir"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: qa: base directory line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: qa: base directory line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"RESTORE_MARKER_dispatch-qa"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: qa: SKILL.md body marker emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: qa: SKILL.md body marker emitted"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"ARGUMENTS: 903"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: qa: ARGUMENTS line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: qa: ARGUMENTS line emitted"
+  echo "    output: $output"
+fi
+restore_teardown
+
+# --- Test 4: code-review → code-review-fix body, no ARGUMENTS ----------------
+echo "Test: restore-dispatch-skill phase=code-review → code-review-fix body, no ARGUMENTS"
+restore_setup
+set_agents_name "903-foo"
+echo "code-review" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/code-review-fix"
+if [[ "$output" == *"$expected_dir"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: code-review: base directory line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: code-review: base directory line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"RESTORE_MARKER_code-review-fix"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: code-review: SKILL.md body marker emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: code-review: SKILL.md body marker emitted"
+fi
+TOTAL=$((TOTAL + 1))
+if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
+  PASS=$((PASS + 1)); echo "  PASS: code-review: no ARGUMENTS line"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: code-review: no ARGUMENTS line"
+  echo "    output: $output"
+fi
+restore_teardown
+
+# --- Test 5: review → review-fix body, no ARGUMENTS --------------------------
+echo "Test: restore-dispatch-skill phase=review → review-fix body, no ARGUMENTS"
+restore_setup
+set_agents_name "903-foo"
+echo "review" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/review-fix"
+if [[ "$output" == *"$expected_dir"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: review: base directory line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: review: base directory line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"RESTORE_MARKER_review-fix"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: review: SKILL.md body marker emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: review: SKILL.md body marker emitted"
+fi
+TOTAL=$((TOTAL + 1))
+if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
+  PASS=$((PASS + 1)); echo "  PASS: review: no ARGUMENTS line"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: review: no ARGUMENTS line"
+  echo "    output: $output"
+fi
+restore_teardown
+
+# --- Test 6: security → security-review-fix body, no ARGUMENTS ---------------
+echo "Test: restore-dispatch-skill phase=security → security-review-fix body, no ARGUMENTS"
+restore_setup
+set_agents_name "903-foo"
+echo "security" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/security-review-fix"
+if [[ "$output" == *"$expected_dir"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: security: base directory line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: security: base directory line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"RESTORE_MARKER_security-review-fix"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: security: SKILL.md body marker emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: security: SKILL.md body marker emitted"
+fi
+TOTAL=$((TOTAL + 1))
+if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
+  PASS=$((PASS + 1)); echo "  PASS: security: no ARGUMENTS line"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: security: no ARGUMENTS line"
+  echo "    output: $output"
+fi
+restore_teardown
+
+# --- Test 7: fallback (waiting) → dispatch-worker body + ARGUMENTS: <N> <path>
+echo "Test: restore-dispatch-skill phase=waiting → dispatch-worker fallback"
+restore_setup
+set_agents_name "903-foo"
+echo "waiting" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/dispatch-worker"
+if [[ "$output" == *"$expected_dir"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: waiting: base directory line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: waiting: base directory line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"RESTORE_MARKER_dispatch-worker"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: waiting: SKILL.md body marker emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: waiting: SKILL.md body marker emitted"
+fi
+TOTAL=$((TOTAL + 1))
+expected_args="ARGUMENTS: 903 $TMPDIR_TEST/worktrees/903-foo"
+if [[ "$output" == *"$expected_args"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: waiting: ARGUMENTS line with worktree path"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: waiting: ARGUMENTS line with worktree path"
+  echo "    output: $output"
+  echo "    expected to contain: $expected_args"
+fi
+restore_teardown
+
+# --- Test 8: missing SKILL.md → legacy one-line Reload fallback --------------
+echo "Test: restore-dispatch-skill missing SKILL.md → legacy fallback"
+restore_setup
+set_agents_name "903-foo"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+rm -f "$TMPDIR_TEST/.claude/skills/plan-implement/SKILL.md"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"COMPACTION RECOVERY: Reload skill: /plan-implement 903"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing SKILL.md: legacy line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing SKILL.md: legacy line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" != *"Base directory for this skill:"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing SKILL.md: no inline emission"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing SKILL.md: no inline emission"
+fi
+restore_teardown
+
+# --- Test 9: router-shaped --name → no output -------------------------------
+echo "Test: restore-dispatch-skill router-shaped --name → empty output"
+restore_setup
+set_agents_name "dispatch-abc123"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+assert_eq "router-shaped name: empty output" "" "$output"
+restore_teardown
+
+# --- Test 10: path-traversal --name → no output ------------------------------
+# Use a --name that matches the primary regex (^[0-9]+-) AND contains `..`
+# to exercise the path-traversal rejection at lines 51-53 of the hook.
+echo "Test: restore-dispatch-skill path-traversal --name → empty output"
+restore_setup
+set_agents_name "903-../bad"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+assert_eq "path-traversal name: empty output" "" "$output"
+restore_teardown
+
+# --- Test 11: malformed frontmatter (no closing `---`) → file emitted verbatim
+# An opening `---` with no closing delimiter must NOT have its body deleted to
+# EOF (the over-delete failure mode the guard at line 151 prevents). The hook
+# emits the file verbatim instead — the frontmatter lines, including the opening
+# `---`, are preserved rather than stripped.
+echo "Test: restore-dispatch-skill malformed frontmatter → file emitted verbatim"
+restore_setup
+set_agents_name "903-foo"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+cat > "$TMPDIR_TEST/.claude/skills/plan-implement/SKILL.md" <<'EOF'
+---
+name: plan-implement
+description: malformed fixture with no closing delimiter
+
+# Test Skill plan-implement
+
+RESTORE_MARKER_malformed body line.
+EOF
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"RESTORE_MARKER_malformed body line."* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: malformed frontmatter: body not deleted to EOF"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed frontmatter: body not deleted to EOF"
+  echo "    output: $output"
+fi
+# Verbatim emission keeps the unstrippable frontmatter lines (incl. the `name:`
+# line that the normal path would have removed), proving the guard's else branch.
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"name: plan-implement"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: malformed frontmatter: file emitted verbatim (frontmatter retained)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed frontmatter: file emitted verbatim (frontmatter retained)"
+  echo "    output: $output"
+fi
+restore_teardown
+
+# --- Test 12: control-char in --name → no output (reminder-injection guard) ---
+# A session name carrying an embedded newline (JSON \n in the agents fixture,
+# decoded to a real newline by `jq -r`) matches the primary `^[0-9]+-` regex
+# but must be rejected by the basename guard at lines 51-53. Otherwise the
+# newline would survive into WORKTREE_PATH → SKILL_ARGS and inject extra lines
+# into the emitted system-reminder via the ARGUMENTS line.
+echo "Test: restore-dispatch-skill control-char --name → empty output"
+restore_setup
+set_agents_name '903-foo\nINJECTED REMINDER LINE'
+echo "implement" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+assert_eq "control-char name: empty output" "" "$output"
+restore_teardown
+
+# ============================================================================
 # dispatch chain: no EnterWorktree/ExitWorktree mid-session (ratchet for #839)
 # ============================================================================
 echo "=== dispatch chain: no EnterWorktree/ExitWorktree mid-session ==="
