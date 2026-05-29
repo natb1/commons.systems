@@ -483,8 +483,8 @@ if [[ "$QA_MODE" == "true" ]]; then
 fi
 
 # First-seen help-wanted issue per category. The queue is the open-issue list
-# filtered client-side to "help wanted"; issues whose <N>-* worktree exists
-# (a session is working them) are skipped. Each candidate is resolved to a
+# filtered client-side to "help wanted"; issues whose <N>-* worktree is owned
+# by a live session are skipped. Each candidate is resolved to a
 # startable open leaf within its subtree, and the leaf — not the top-level
 # help-wanted issue — is what gets recorded; the category is still the
 # top-level issue's own.
