@@ -33,8 +33,8 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 ## 0. Acquire the Dispatch Lock
 
 Run this as the **very first action** — before the `origin/main` sync, the
-JIT engine, the `origin/main` health gate, the worktree sweep, target selection,
-and worktree resolution. Runs unconditionally, whether or not an issue-or-PR-number argument
+JIT engine, the `origin/main` health gate, target selection, and worktree
+resolution. Runs unconditionally, whether or not an issue-or-PR-number argument
 was given.
 
 ```bash
@@ -60,7 +60,7 @@ Route on `$LOCK`:
   in another `/dispatch`. The script's **stderr** carries a one-line diagnostic
   naming the wait duration and the holding sessionId; report those, then proceed
   to Step 7 with `notify busy-lock-timeout` (subsumes #850) — run no sync, no
-  health gate, no sweep, no selection, and no phase skill. The user-visible
+  health gate, no selection, and no phase skill. The user-visible
   report is mandatory: the background-session classifier reads only message
   text, not tool output, so a silent stop would hide the wedge. Recommend the
   user verify the recorded holder is still live with:
@@ -224,8 +224,8 @@ continue to target selection.
     consistent with the other Steps 1-5 stop paths.
 
 - **No argument** → run target selection. A single invocation decides every
-  Step 3 outcome: JIT, main-broken gate, sweep orphan adoption, and the queue
-  ladder are all internal to the script and emitted on its one output line.
+  Step 3 outcome: JIT, main-broken gate, and the queue ladder are all internal
+  to the script and emitted on its one output line.
 
   ```bash
   SELECTED=$(.claude/skills/dispatch/scripts/dispatch-select-target)
@@ -235,28 +235,12 @@ continue to target selection.
 
   Route on `$SELECTED`:
 
-  - `worktree-adopted <N> <branch>` — `dispatch-sweep` adopted an orphaned
-    worktree elsewhere on disk. Skip Step 4 and proceed to Step 5 with `<N>` and
-    mode `explicit` — treat the adoption like an explicit `/dispatch <N>`.
-    (Step 4's closed-issue, open-blocker, and ready-PR gates have already been
-    enforced by `dispatch-sweep` itself before emitting this directive — a
-    `done`-phase orphan whose PR is non-draft and awaiting human merge is not
-    adopted and instead falls through to the queue-ladder on the next tick.)
   - `pr <num> <branch> <phase>` — a PR to work on; `<phase>` is pre-derived by
     the selection scan, so Step 6 reuses it instead of re-deriving. Proceed to
     Step 5 with mode `queue`.
   - `issue <num>` — a `help wanted` issue to implement, pre-resolved by the
     selection scan to a startable open leaf (not necessarily the top-level
     `help wanted` issue). Proceed to Step 5 with mode `queue`.
-  - `cleanup-unknown <path>` — the sweep found a worktree with no open PR and
-    no inferable issue number. Invoke `/dispatch-cleanup-unknown <path>` — the
-    skill owns the `AskUserQuestion` confirmation and the on-Yes/No actions, and
-    returns the resumed `dispatch-select-target` output (`worktree-adopted`,
-    `pr`, `issue`, `empty`, or another `cleanup-unknown <path2>` if a second
-    unknown orphan exists — re-invoke the skill with the new path to confirm)
-    for routing here. Treat the returned line as a fresh `$SELECTED` and route
-    on it as above. This is the only sweep path that can destroy
-    potentially-unmerged code.
   - `main-broken <sha>` — invoke `/dispatch-diagnose-main <sha>`. The skill
     owns the failing-check enumeration, log-fetch, summary, lock-release, and
     terminal disposition — it calls `dispatch-handoff --early-stop` to self-
@@ -273,9 +257,9 @@ continue to target selection.
     new issue will re-seed the chain"), not optional.
 
   Priority order the script implements, top to bottom: JIT scan →
-  `origin/main` CI health gate → sweep orphan adoption → topic-category ×
-  phase ladder. A jit-reminder surfaces even when `origin/main` is red because
-  the JIT scan precedes the main-broken gate.
+  `origin/main` CI health gate → topic-category × priority × phase ladder.
+  A jit-reminder surfaces even when `origin/main` is red because the JIT scan
+  precedes the main-broken gate.
 
   The topic-category × phase ladder is three-tier: a topic **category** nests
   outside a **priority bit**, which nests outside the phase **ladder**.
@@ -650,10 +634,9 @@ It is a no-op when `CLAUDE_JOB_DIR` is unset (the session is interactive, not
 a managed background job) — so an interactive `/dispatch` reaching Step 7 does
 not stop the user's live conversation.
 
-Step 3's `jit-reminder` and `cleanup-unknown` outcomes do not reach Step 7.
-`jit-reminder` is a deliberate bypass — its user-visible summary must stay
-open in the transcript for a human to read, so the skill stops the tick
-directly. `cleanup-unknown` returns to Step 3's routing.
+Step 3's `jit-reminder` outcome does not reach Step 7 — it is a deliberate
+bypass, since its user-visible summary must stay open in the transcript for a
+human to read, so the skill stops the tick directly.
 
 The router does **not** spawn a successor `/dispatch` itself — the worker
 spawned in Step 6 spawns a fresh router back in `worktrees/main` when its
