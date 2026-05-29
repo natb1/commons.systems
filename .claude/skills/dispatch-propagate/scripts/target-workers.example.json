@@ -2,7 +2,6 @@
   "target_weekly_usage_pct": 90,
   "target_five_hour_usage_pct": 50,
   "max_concurrent_workers": 8,
-  "ramp_tau_seconds": 86400,
-  "ramp_shape_k": 2,
-  "five_hour_window_seconds": 18000
+  "weekly_taper_window_pct": 30,
+  "five_hour_taper_window_pct": 15
 }
