@@ -312,6 +312,21 @@ describe("exportToJson", () => {
     expect(data.budgets[0].overrides[0].balance).toBe(50);
   });
 
+  it("round-trip preserves virtual: true on transactions", async () => {
+    const original = mockGetAll.getMockImplementation()!;
+    mockGetAll.mockImplementation((storeName: string) =>
+      storeName === "transactions"
+        ? Promise.resolve([{ ...idbTransactions[0], id: "txn-virtual", virtual: true }])
+        : original(storeName),
+    );
+    const json = await exportToJson();
+    expect(JSON.parse(json).transactions[0].virtual).toBe(true);
+
+    const parsed = parseUploadedJson(json);
+    const data = toParsedData(parsed);
+    expect(data.transactions[0].virtual).toBe(true);
+  });
+
   it("round-trip preserves journalEntryId on transactions", async () => {
     const original = mockGetAll.getMockImplementation()!;
     mockGetAll.mockImplementation((storeName: string) =>
