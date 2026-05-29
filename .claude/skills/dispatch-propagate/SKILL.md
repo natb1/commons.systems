@@ -470,7 +470,31 @@ default cwd tracks the most-recent worker's worktree rather than
 `worktrees/main` — a recoverable UI default, accepted in exchange for
 sessions whose cwd does not silently drift. The previous arrangement — where
 the worker `cd`'d in its own Step 0 — silently broke when subsequent `Bash` /
-`Skill` calls reset cwd back to the spawn cwd. Before spawning, consult the
+`Skill` calls reset cwd back to the spawn cwd.
+
+Before anything else in this step, run the **CI-status gate**. Derive the
+target's phase with `dispatch-phase <N>` (`dangerouslyDisableSandbox: true` —
+it calls `gh`, same as the other `gh`-calling script invocations):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-phase <N>
+```
+
+- If it returns `waiting` — the target's CI is still in progress — **skip the
+  spawn for this tick**. Do not consult the concurrency budgeter and do not run
+  `dispatch-spawn-worker`. Do **not** release the lock: it is already released
+  at the end of Step 5 (#898), so — exactly like the concurrency-cap gate —
+  this gate is lock-free. Print the mandatory user-visible report verbatim:
+
+  ```
+  #<N>: CI in progress; the next router tick will re-evaluate.
+  ```
+
+  Then proceed to Step 7 with disposition `drain ci-waiting`.
+- Otherwise — any non-`waiting` phase — fall through to the concurrency-budget
+  gate and the spawn below, unchanged.
+
+Before spawning, consult the
 concurrency budgeter (see
 *Concurrency budgeting* below). If the live worker count already meets the
 target, **skip the spawn** for this tick — the chain re-seeds on the next
@@ -639,7 +663,9 @@ The three dispositions:
 
 - **`drain <reason>`** — `drain empty-queue` (Step 3, queue empty),
   `drain worktree-conflict` (Step 5, target's worktree is owned by another
-  live session), or `drain concurrency-cap` (Step 6, `live_count >=
+  live session), `drain ci-waiting` (Step 6, the target PR's CI is still in
+  progress — `dispatch-phase` returned `waiting`; the chain re-evaluates the
+  PR on the next router tick), or `drain concurrency-cap` (Step 6, `live_count >=
   target_N` — the chain re-seeds when the cap-keyed timer fires at the next
   rate-limit window reset; see *The #725 cap-keyed re-seed* above). The call site has already printed a **mandatory** user-visible
   report stating the reason and the recovery path (templates live at the

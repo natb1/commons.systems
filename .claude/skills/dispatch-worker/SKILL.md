@@ -94,7 +94,6 @@ Map the phase:
 |---|---|---|
 | `implement` | no PR on the target | relevance review (Step 3), then dispatch its verdict |
 | `verify` | draft PR, CI completed and failed | `/verify-pr` |
-| `waiting` | draft PR, CI in progress (running/queued/not started) | monitor CI to completion with a `sonnet` subagent, then re-derive the phase and dispatch it (Step 2) |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` |
 | `code-review` | draft PR + `dispatch:qa-done` | `/code-review-fix` (applies `dispatch:code-reviewed` itself) |
 | `review` | draft PR + `dispatch:code-reviewed` | `/review-fix` (applies `dispatch:reviewed` itself) |
@@ -106,31 +105,20 @@ Map the phase:
 Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 `/dispatch-worker` invocation.
 
+**Race-window check first.** If `dispatch-phase <N>` returns `waiting` — CI
+transitioned back to in-progress since the router selected this target (e.g. a
+new push between selection and worker derivation) — stop with no marker and
+print the user-visible report verbatim: `#<N>: CI transitioned back to waiting
+since router selection; next router tick will re-derive.` Apply no
+`dispatch:office-hours` and spawn no babysitter — the router's queue skips
+`waiting` PRs until CI concludes, and the Stop hook spawns a fresh router.
+
 - **`implement`** — run the Step 3 relevance review and dispatch the verdict it
   returns (`proceed` / `adjust` / `stop` — see Step 3). The draft PR's existence
   plus its CI status is its own marker — `/plan-implement` gets **no**
   `dispatch:*` label.
 - **`verify`** — invoke `/verify-pr`. It runs a single pass: fix one set of
   failed CI checks, record the outcome, post it, stop. No label.
-- **`waiting`** — CI checks are still running or queued. Monitor them to
-  completion, then re-derive and dispatch the resolved phase within this same
-  `/dispatch-worker` invocation:
-  1. Resolve the draft PR number for the target.
-  2. Spawn a subagent via the Agent tool (`subagent_type: general-purpose`,
-     `model: sonnet`) that:
-     - first waits for CI to register at least one check — a freshly-pushed
-       branch can briefly have an empty check rollup;
-     - then runs `.claude/skills/dispatch-propagate/scripts/run-pr-checks-wait.sh
-       <pr-num>` with `dangerouslyDisableSandbox: true`, which blocks until
-       every check concludes;
-     - returns once all checks have completed.
-  3. After the subagent returns, re-run Step 1 (`dispatch-phase`) to re-derive
-     the phase from the now-complete CI, then dispatch the resolved phase per
-     this step — `/verify-pr` if any check failed, otherwise the green-CI
-     phases (`qa` / `code-review` / `review` / `security` / `ready`).
-  4. If the re-derived phase is still `waiting` (CI never registered any
-     check), stop; the Stop hook applies `dispatch:office-hours` to the
-     issue because no marker was written. Do not loop.
 - **`qa`** — invoke `/dispatch-qa`. It owns and applies `dispatch:qa-done`
   itself on a clean pass; `/dispatch-worker` applies no label.
 - **`code-review`** — invoke `/code-review-fix`. It runs `/code-review max`,
