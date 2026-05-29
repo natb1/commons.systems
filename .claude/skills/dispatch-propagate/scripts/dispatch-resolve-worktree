@@ -21,6 +21,18 @@
 #              (lib-claude-agents.sh), which is fail-safe: an unqueryable
 #              daemon counts as owned and yields `conflict`.
 #
+# Branch reconciliation on the `enter` path (#913): a reused <issue>-* worktree
+# is matched by branch-name prefix, but the target's PR (resolved by
+# dispatch-find-pr via GitHub closing-linkage) may live on a different
+# <issue>-* branch. Before entering, the worktree's checked-out branch is
+# reconciled against the PR head branch:
+#   - no PR for <issue> (the implement phase) → enter unchanged.
+#   - worktree already on the PR head branch → enter unchanged (no checkout).
+#   - worktree on a different branch with no commits unique to it → the
+#     worktree is re-pointed to the PR head branch (lossless), then `enter`.
+#   - worktree on a different branch carrying unique commits → `conflict`,
+#     rather than silently discarding them.
+#
 # The branch name printed by `create` matches the WorktreeCreate hook's
 # accepted form ^[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$, full name <= 32 characters.
 #
@@ -41,20 +53,37 @@ source "$SCRIPT_DIR/lib.sh"
 # worktree (conflict) from an orphan one (enter / recycle) (#905).
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 
+# Reconcile a reused worktree's checked-out branch against the target PR's head
+# branch, then emit the `enter`/`conflict` decision (#913). Called on every
+# `enter`-bound path (explicit, and queue-orphan recycle).
+emit_enter_reconciled() {
+  local wt_path="$1" wt_branch="$2" pr pr_head unique
+  pr=$("$SCRIPT_DIR/dispatch-find-pr" "$ISSUE") || pr=""
+  if [[ -z "$pr" ]]; then echo "enter $wt_path"; return 0; fi   # no PR → unchanged
+  pr_head=$(gh pr view "$pr" --json headRefName | jq -r '.headRefName // empty')
+  if [[ -z "$pr_head" || "$pr_head" == "$wt_branch" ]]; then     # same branch → no-op
+    echo "enter $wt_path"; return 0
+  fi
+  git -C "$wt_path" fetch --quiet origin "$pr_head"
+  unique=$(git -C "$wt_path" rev-list --count "origin/${pr_head}..${wt_branch}")
+  if [[ "$unique" -ne 0 ]]; then echo "conflict $wt_path"; return 0; fi  # unique commits → conflict
+  git -C "$wt_path" checkout --quiet -B "$pr_head" "origin/${pr_head}"   # lossless re-point
+  echo "enter $wt_path"
+}
+
 # `enter` / `conflict` — scan local worktrees for one whose branch carries the
 # <issue>-* prefix, via the shared list_worktree_records helper (lib.sh).
 # Records arrive in `git worktree list` order, so the first matching record wins.
 while IFS= read -r line; do
   split_worktree_record "$line"
   if [[ "$WT_NUM" == "$ISSUE" ]]; then
-    if [[ "$MODE" == "explicit" ]]; then
-      echo "enter $WT_PATH"
-    elif worktree_has_live_session "$WT_PATH"; then
+    if [[ "$MODE" == "queue" ]] && worktree_has_live_session "$WT_PATH"; then
       # Queue target whose worktree a live session owns — a genuine race.
       echo "conflict $WT_PATH"
     else
-      # Queue target whose worktree is an orphan — recycle it as the target.
-      echo "enter $WT_PATH"
+      # explicit-enter, or queue-orphan recycle: reconcile the reused
+      # worktree's branch against the target PR's head branch before entering.
+      emit_enter_reconciled "$WT_PATH" "$WT_BRANCH"
     fi
     exit 0
   fi

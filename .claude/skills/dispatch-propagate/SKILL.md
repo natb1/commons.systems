@@ -381,8 +381,12 @@ worktree path that Step 6 will pass to `dispatch-spawn-worker`.
 
 - **`enter <path>`** → re-use an existing `<issue>-*` worktree
   (recycle-after-completion for an explicit argument, or recycle of an orphan
-  worktree — on disk, no live session — for a queue selection, #905). Set
-  `WORKTREE_PATH=<path>` for Step 6. Re-sync issue context from the worktree
+  worktree — on disk, no live session — for a queue selection, #905). A reused
+  worktree whose checked-out branch differs from the target PR's head branch
+  (resolved by `dispatch-find-pr`) is re-pointed to the PR head branch by the
+  resolver before it emits `enter` — lossless, since the case where the existing
+  branch carries commits not on the PR head yields `conflict` instead (#913).
+  Set `WORKTREE_PATH=<path>` for Step 6. Re-sync issue context from the worktree
   (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`):
   ```bash
   (cd <path> && .claude/skills/dispatch-propagate/scripts/sync-issue-context <N>)
@@ -423,11 +427,14 @@ worktree path that Step 6 will pass to `dispatch-spawn-worker`.
      (cd "$WORKTREE_PATH" && .claude/skills/dispatch-propagate/scripts/sync-issue-context <N>)
      ```
 
-- **`conflict <path>`** → a queue-selected target already has a worktree, so
-  another session owns it. (`dispatch-select-target` resolves the `help wanted`
-  tier to a leaf with no worktree, so for a queue selection this arises only from
-  a race — another session created the worktree between selection and worktree
-  resolution.) Release the lock (see *Releasing the lock*), then proceed to
+- **`conflict <path>`** → the worktree at `<path>` cannot be safely entered.
+  Either a queue-selected target already has a worktree another live session
+  owns (`dispatch-select-target` resolves the `help wanted` tier to a leaf with
+  no worktree, so for a queue selection this arises only from a race — another
+  session created the worktree between selection and worktree resolution), or
+  the reused `<issue>-*` worktree's checked-out branch carries commits not on
+  the target PR's head branch, so re-pointing it would discard work (#913).
+  Release the lock (see *Releasing the lock*), then proceed to
   Step 7 with `notify worktree-conflict` — the user-visible report is mandatory
   there ("worktree at `<path>` owned by another live session for issue `<N>`;
   closing — the next baton-pass or office-hours hand-off will re-seed"), not

@@ -221,6 +221,16 @@ case "$args" in
       echo '{"closingIssuesReferences":[]}'
     fi
     ;;
+  pr\ view\ *\ --json\ headRefName)
+    # dispatch-resolve-worktree reconciliation: gh pr view <N> --json headRefName.
+    echo "pr view" >> "$STUB_DIR/gh-pr-view-headref.log"
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/pr-headref-${num}.json" ]]; then
+      cat "$STUB_DIR/pr-headref-${num}.json"
+    else
+      echo '{"headRefName":""}'
+    fi
+    ;;
   label\ create\ *)
     # dispatch-complete-phase creates the label only when the apply reported
     # it missing.
@@ -332,6 +342,22 @@ case "$args" in
     else
       echo "/repo"
     fi
+    ;;
+  -C\ *\ fetch\ *)
+    # dispatch-resolve-worktree reconciliation: fetch the PR head branch.
+    : ;;
+  -C\ *\ rev-list\ --count\ *)
+    # dispatch-resolve-worktree reconciliation: commits unique to the worktree
+    # branch. Default 0 (lossless re-point); rev-list-count.txt overrides to N.
+    if [[ -f "$STUB_DIR/rev-list-count.txt" ]]; then
+      cat "$STUB_DIR/rev-list-count.txt"
+    else
+      echo "0"
+    fi
+    ;;
+  -C\ *\ checkout\ *)
+    # dispatch-resolve-worktree reconciliation: re-point to the PR head branch.
+    echo "$args" >> "$STUB_DIR/git-checkout.log"
     ;;
   *)
     echo "git stub: unknown invocation: $args" >&2
@@ -2495,6 +2521,81 @@ setup
 echo '{"title":"!!!"}' > "$STUB_DIR/issue-title-42.json"
 if "$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "empty-slug title exits non-zero" "1" "$rc"
+teardown
+
+# ----------------------------------------------------------------------------
+# Branch reconciliation on the `enter` path (#913). PR existence is driven via
+# pr-list-full.json (dispatch-find-pr's prefix match on headRefName); the PR
+# head branch is driven via pr-headref-<num>.json (gh pr view headRefName).
+# The git stub logs checkouts to git-checkout.log and reads the unique-commit
+# count from rev-list-count.txt (default 0).
+# ----------------------------------------------------------------------------
+
+# 11. Wrong branch + PR + no unique commits → re-point: enter AND checkout logged.
+echo "Test: reconcile wrong branch (no unique commits) → re-point + enter"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "wrong branch + no unique commits → enter" \
+  "enter /worktrees/42-my-feature" "$result"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && grep -q -- "-B 42-pr-branch origin/42-pr-branch" "$STUB_DIR/git-checkout.log" && echo yes || echo no)
+assert_eq "wrong branch + no unique commits → re-point checkout logged" "yes" "$checkout_logged"
+teardown
+
+# 12. Worktree already on the PR head branch → enter, no redundant checkout.
+echo "Test: worktree already on PR branch → enter, no checkout"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+printf '[{"number":100,"headRefName":"42-my-feature"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"42-my-feature"}' > "$STUB_DIR/pr-headref-100.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "already on PR branch → enter" "enter /worktrees/42-my-feature" "$result"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
+assert_eq "already on PR branch → no checkout" "no" "$checkout_logged"
+teardown
+
+# 13. Wrong branch + unique commits on the worktree branch → conflict.
+echo "Test: reconcile wrong branch (unique commits) → conflict"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+echo "2" > "$STUB_DIR/rev-list-count.txt"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "wrong branch + unique commits → conflict" \
+  "conflict /worktrees/42-my-feature" "$result"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
+assert_eq "wrong branch + unique commits → no checkout" "no" "$checkout_logged"
+teardown
+
+# 14. No PR for the issue (implement phase) → enter unchanged: no gh pr view,
+#     no checkout.
+echo "Test: no PR → enter unchanged (no pr view, no checkout)"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+# No pr-list-full.json: dispatch-find-pr finds no PR.
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "no PR → enter" "enter /worktrees/42-my-feature" "$result"
+pr_view_called=$([[ -f "$STUB_DIR/gh-pr-view-headref.log" ]] && echo yes || echo no)
+assert_eq "no PR → gh pr view not called" "no" "$pr_view_called"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
+assert_eq "no PR → no checkout" "no" "$checkout_logged"
+teardown
+
+# 15. queue-orphan + wrong branch + PR → reconciliation applies in queue mode too.
+echo "Test: queue orphan + wrong branch + PR → re-point + enter"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # orphan: no live session owns the worktree
+printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
+assert_eq "queue orphan + wrong branch → enter" \
+  "enter /worktrees/42-my-feature" "$result"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && grep -q -- "-B 42-pr-branch origin/42-pr-branch" "$STUB_DIR/git-checkout.log" && echo yes || echo no)
+assert_eq "queue orphan + wrong branch → re-point checkout logged" "yes" "$checkout_logged"
 teardown
 
 # ============================================================================
