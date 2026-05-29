@@ -5082,6 +5082,49 @@ else
 fi
 sr_teardown
 
+# --- Test 10: unexpected systemd-run failure → exit code passes through ------
+#
+# systemd-run can fail for reasons unrelated to the already-exists collision —
+# e.g. D-Bus down, missing systemd, permission denied. The script's documented
+# contract is: "non-zero — systemd-run failed for a reason other than the
+# already-exists collision; the exit code is passed through." A naive
+# `if cmd; then ...; fi; RC=$?` swallows the real exit code (because `$?`
+# after `if` is the exit status of the construct itself, not the condition),
+# so the test asserts the real exit code propagates.
+
+echo "Test: unexpected systemd-run failure → exit code passes through"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+sr_write_rl "rl.json" 95 20000 10 15000
+# Replace the stub with one that exits 42 with a non-already-exists message.
+cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/systemd-log"
+echo "D-Bus connection failed: Address not available" >&2
+exit 42
+STUB
+chmod +x "$TMPDIR_TEST/bin/systemd-run"
+
+# Use `if cmd; then rc=0; else rc=$?; fi` so `set -e` doesn't abort the suite
+# on the expected non-zero exit, AND `$?` is captured inside the `else` branch
+# where it correctly reflects the failed command's exit code.
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr"); then
+  rc=0
+else
+  rc=$?
+fi
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "unexpected failure exit code passes through" "42" "$rc"
+assert_eq "unexpected failure; stdout silent" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"D-Bus connection failed"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: unexpected failure surfaces systemd-run stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unexpected failure surfaces systemd-run stderr"
+  echo "    stderr: $err"
+fi
+sr_teardown
+
 # ============================================================================
 # dispatch project-helper tests (item-add / status-read / status-write)
 # ============================================================================

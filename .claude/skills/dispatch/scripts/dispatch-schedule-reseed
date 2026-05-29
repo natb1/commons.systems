@@ -253,18 +253,24 @@ UNIT_NAME="dispatch-reseed-${RESEED_AT}"
 
 RUN_STDERR=$(mktemp)
 trap 'rm -f "$RUN_STDERR"' EXIT
-if "$SYSTEMD_RUN_CMD" --user \
+# Capture the exit code directly — after `if cmd; then ... fi`, `$?` is the
+# exit status of the `if` construct (0 when the condition was evaluated
+# successfully, even if it returned non-zero), NOT the exit code of `cmd`.
+# Running `cmd` outside an `if` and capturing `$?` immediately preserves the
+# real exit code so the "pass-through on unexpected failure" contract holds.
+"$SYSTEMD_RUN_CMD" --user \
      --unit="$UNIT_NAME" \
      --on-calendar="@$RESEED_AT" \
      --working-directory="$MAIN_WORKTREE" \
      --timer-property=Persistent=true \
      "$MAIN_WORKTREE/.claude/skills/dispatch/scripts/dispatch-spawn-router" \
-     2>"$RUN_STDERR"; then
+     2>"$RUN_STDERR"
+RC=$?
+if (( RC == 0 )); then
   echo "scheduled $UNIT_NAME at $RESEED_AT"
   exit 0
 fi
 
-RC=$?
 err=$(cat "$RUN_STDERR")
 # systemd's already-exists message varies slightly across versions
 # ("Unit ... already exists" / "Failed to start transient timer unit: Unit
