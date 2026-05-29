@@ -4459,6 +4459,480 @@ assert_eq "ramp_tau_seconds=0 rejected; defaults used → 7" "7" "$out"
 tw_teardown
 
 # ============================================================================
+# dispatch-schedule-reseed tests
+# ============================================================================
+#
+# dispatch-schedule-reseed writes a transient systemd.user timer at the next
+# rate-limit cap reset. The test harness stubs `systemd-run` on PATH and
+# records each invocation's argv, so a test can assert exactly what was
+# scheduled. The script's env-var contract mirrors dispatch-target-workers's
+# (per-field telemetry + path overrides) — tests rely on the overrides and
+# do not require a real rate_limits.json on the filesystem.
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   copy of dispatch-schedule-reseed + dispatch-config-load
+#   $TMPDIR_TEST/config/    synthetic config directory (DISPATCH_CONFIG_DIR)
+#   $TMPDIR_TEST/rl/        synthetic rate_limits.json directory
+#   $TMPDIR_TEST/bin/       systemd-run stub
+#   $TMPDIR_TEST/systemd-log  recorded systemd-run argv (one line per call)
+#   $TMPDIR_TEST/main/      a synthetic main worktree path
+echo ""
+echo "=== dispatch-schedule-reseed ==="
+
+sr_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/config" "$TMPDIR_TEST/rl" \
+    "$TMPDIR_TEST/bin" "$TMPDIR_TEST/main"
+
+  cp "$SCRIPT_DIR/dispatch-schedule-reseed" "$TMPDIR_TEST/scripts/dispatch-schedule-reseed"
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-schedule-reseed" \
+           "$TMPDIR_TEST/scripts/dispatch-config-load"
+
+  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+  # Default: point at an absent file so tests without explicit telemetry get
+  # the missing-telemetry no-op unless they override env vars.
+  export DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH="$TMPDIR_TEST/rl/missing.json"
+  export DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE="$TMPDIR_TEST/main"
+
+  # systemd-run stub: records its argv (one line per call), exits 0.
+  cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/systemd-log"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemd-run"
+  export DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
+}
+
+sr_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_CONFIG_DIR
+  unset DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH
+  unset DISPATCH_SCHEDULE_RESEED_NOW
+  unset DISPATCH_SCHEDULE_RESEED_USED_WEEKLY
+  unset DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY
+  unset DISPATCH_SCHEDULE_RESEED_USED_5H
+  unset DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H
+  unset DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE
+  unset DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD
+}
+
+# sr_write_rl <file-name> <used_weekly> <resets_weekly> <used_5h> <resets_5h>
+#   Write a rate_limits.json. Set any of the four to "absent" to omit the
+#   surrounding block. Mirrors tw_write_rl above.
+sr_write_rl() {
+  local name="$1" uw="$2" rw="$3" u5="$4" r5="$5"
+  local path="$TMPDIR_TEST/rl/$name"
+  local seven=""
+  local five=""
+  if [[ "$uw" != "absent" && "$rw" != "absent" ]]; then
+    seven="\"seven_day\":{\"used_percentage\":$uw,\"resets_at\":$rw}"
+  fi
+  if [[ "$u5" != "absent" && "$r5" != "absent" ]]; then
+    five="\"five_hour\":{\"used_percentage\":$u5,\"resets_at\":$r5}"
+  fi
+  local parts=()
+  [[ -n "$five" ]] && parts+=("$five")
+  [[ -n "$seven" ]] && parts+=("$seven")
+  local joined
+  joined=$(IFS=,; printf '%s' "${parts[*]}")
+  printf '{%s}\n' "$joined" > "$path"
+  export DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH="$path"
+}
+
+# --- Test 1: weekly cap hit → schedules at weekly resets_at ------------------
+
+echo "Test: weekly cap-hit schedules at the weekly resets_at"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# used_weekly=95 >= target_weekly=90 → weekly cap hit.
+# 5h cap clear (10 < 50). Expect schedule at the weekly resets_at.
+sr_write_rl "rl.json" 95 20000 10 15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+assert_eq "weekly cap-hit stdout names the unit" \
+  "scheduled dispatch-reseed-20000 at 20000" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-reseed-20000"* \
+   && "$log" == *"--on-calendar=@20000"* \
+   && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
+   && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch/scripts/dispatch-spawn-router"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + cwd + exec)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + cwd + exec)"
+  echo "    log: $log"
+fi
+sr_teardown
+
+# --- Test 2: 5h cap hit → schedules at 5h resets_at --------------------------
+
+echo "Test: 5h cap-hit schedules at the 5h resets_at"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# used_5h=60 >= target_5h=50 → 5h cap hit. Weekly clear (50 < 90).
+sr_write_rl "rl.json" 50 20000 60 15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+assert_eq "5h cap-hit stdout names the 5h reset unit" \
+  "scheduled dispatch-reseed-15000 at 15000" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-reseed-15000"* \
+   && "$log" == *"--on-calendar=@15000"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 5h cap-hit systemd-run argv (unit + calendar)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5h cap-hit systemd-run argv (unit + calendar)"
+  echo "    log: $log"
+fi
+sr_teardown
+
+# --- Test 3: both caps hit → picks the earlier reset -------------------------
+
+echo "Test: both caps hit → schedules at the earlier resets_at"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# Both caps hit; 5h reset (15000) is earlier than weekly reset (20000).
+sr_write_rl "rl.json" 95 20000 60 15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+assert_eq "both caps hit; picks earlier reset" \
+  "scheduled dispatch-reseed-15000 at 15000" "$out"
+sr_teardown
+
+# --- Test 4: neither cap hit → no-op (no systemd-run invocation) -------------
+
+echo "Test: neither cap hit → silent no-op (no systemd-run call)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# 50 < 90 weekly, 20 < 50 5h → no cap hit.
+sr_write_rl "rl.json" 50 20000 20 15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "neither cap hit; stdout silent" "" "$out"
+assert_eq "neither cap hit; stderr silent" "" "$err"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: neither cap hit; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: neither cap hit; no systemd-run invocation"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+sr_teardown
+
+# --- Test 5: missing telemetry file → no-op with stderr diagnostic -----------
+
+echo "Test: missing rate_limits.json → no-op with stderr diagnostic"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# Default RATE_LIMITS_PATH points at a non-existent file.
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "missing telemetry; stdout silent" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"dispatch-schedule-reseed"* && "$err" == *"missing or unreadable"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing telemetry stderr names the diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing telemetry stderr names the diagnostic"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing telemetry; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing telemetry; no systemd-run invocation"
+fi
+sr_teardown
+
+# --- Test 6: seven_day absent + 5h cap hit → schedules at 5h resets_at -------
+
+echo "Test: seven_day absent + 5h cap-hit schedules at the 5h resets_at"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+sr_write_rl "rl.json" absent absent 60 15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+assert_eq "seven_day absent; 5h cap-hit schedules at 15000" \
+  "scheduled dispatch-reseed-15000 at 15000" "$out"
+sr_teardown
+
+# --- Test 7: five_hour absent + weekly cap hit → schedules at weekly resets_at
+
+echo "Test: five_hour absent + weekly cap-hit schedules at the weekly resets_at"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+sr_write_rl "rl.json" 95 20000 absent absent
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+assert_eq "five_hour absent; weekly cap-hit schedules at 20000" \
+  "scheduled dispatch-reseed-20000 at 20000" "$out"
+sr_teardown
+
+# --- Test 8: idempotent re-call (unit already exists) → no-op, exit 0 --------
+
+echo "Test: repeated call with the same resets_at is idempotent (single timer)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+sr_write_rl "rl.json" 95 20000 10 15000
+# Replace the systemd-run stub with one that simulates the second call hitting
+# the already-exists collision: first call succeeds; second call exits 1 with
+# the "already exists" message on stderr.
+cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/systemd-log"
+count=\$(wc -l < "$TMPDIR_TEST/systemd-log")
+if [[ "\$count" -gt 1 ]]; then
+  echo "Unit dispatch-reseed-20000.timer already exists." >&2
+  exit 1
+fi
+STUB
+chmod +x "$TMPDIR_TEST/bin/systemd-run"
+
+out1=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr1")
+rc1=$?
+out2=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr2")
+rc2=$?
+assert_eq "first call exits 0" "0" "$rc1"
+assert_eq "first call stdout names the new unit" \
+  "scheduled dispatch-reseed-20000 at 20000" "$out1"
+assert_eq "second call exits 0 (idempotent)" "0" "$rc2"
+assert_eq "second call stdout silent" "" "$out2"
+err2=$(cat "$TMPDIR_TEST/stderr2")
+TOTAL=$((TOTAL + 1))
+if [[ "$err2" == *"already scheduled"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: second call stderr notes already-scheduled"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: second call stderr notes already-scheduled"
+  echo "    stderr2: $err2"
+fi
+sr_teardown
+
+# --- Test 9: reseed_at already passed → no-op --------------------------------
+
+echo "Test: reseed_at already passed → no-op (no systemd-run call)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# Weekly cap hit but resets_at=5000 < now=10000 → already passed.
+sr_write_rl "rl.json" 95 5000 10 15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "already-passed reseed; stdout silent" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"cap reset already passed"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: already-passed reseed; stderr contains 'cap reset already passed'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-passed reseed; stderr contains 'cap reset already passed'"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"no-op"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: already-passed reseed; stderr contains 'no-op'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-passed reseed; stderr contains 'no-op'"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: already-passed reseed; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-passed reseed; no systemd-run invocation"
+fi
+sr_teardown
+
+# --- Test 10: unexpected systemd-run failure → exit code passes through ------
+#
+# systemd-run can fail for reasons unrelated to the already-exists collision —
+# e.g. D-Bus down, missing systemd, permission denied. The script's documented
+# contract is: "non-zero — systemd-run failed for a reason other than the
+# already-exists collision; the exit code is passed through." A naive
+# `if cmd; then ...; fi; RC=$?` swallows the real exit code (because `$?`
+# after `if` is the exit status of the construct itself, not the condition),
+# so the test asserts the real exit code propagates.
+
+echo "Test: unexpected systemd-run failure → exit code passes through"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+sr_write_rl "rl.json" 95 20000 10 15000
+# Replace the stub with one that exits 42 with a non-already-exists message.
+cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/systemd-log"
+echo "D-Bus connection failed: Address not available" >&2
+exit 42
+STUB
+chmod +x "$TMPDIR_TEST/bin/systemd-run"
+
+# Use `if cmd; then rc=0; else rc=$?; fi` so `set -e` doesn't abort the suite
+# on the expected non-zero exit, AND `$?` is captured inside the `else` branch
+# where it correctly reflects the failed command's exit code.
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr"); then
+  rc=0
+else
+  rc=$?
+fi
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "unexpected failure exit code passes through" "42" "$rc"
+assert_eq "unexpected failure; stdout silent" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"D-Bus connection failed"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: unexpected failure surfaces systemd-run stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unexpected failure surfaces systemd-run stderr"
+  echo "    stderr: $err"
+fi
+sr_teardown
+
+# --- Test 11: seven_day present but resets_at null → block treated as absent -
+
+echo "Test: seven_day present but resets_at null → block treated as absent"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+cat > "$TMPDIR_TEST/rl/rl.json" <<'JSON'
+{"seven_day":{"used_percentage":95,"resets_at":null},"five_hour":{"used_percentage":10,"resets_at":15000}}
+JSON
+export DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH="$TMPDIR_TEST/rl/rl.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "partial seven_day record; stdout silent" "" "$out"
+assert_eq "partial seven_day record; stderr silent" "" "$err"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: partial seven_day record; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: partial seven_day record; no systemd-run invocation"
+fi
+sr_teardown
+
+# --- Test 12: tampered resets_at → treated as missing, no RCE in `(( ))` -----
+#
+# bash arithmetic context evaluates array-index command substitution, so a
+# resets_at value like `a[$(touch /tmp/pwn)]` from a tampered rate_limits.json
+# (or a hostile env override) would execute the inner command when it reaches
+# `(( CAND_WEEKLY <= CAND_5H ))` or `(( RESEED_AT <= NOW ))`. The sanitizer
+# strips any *_RESETS that is not a pure integer; the malformed block is then
+# treated as absent telemetry. The RCE canary is a sentinel file: if it
+# appears, the injection executed.
+
+echo "Test: tampered weekly resets_at is rejected (no RCE, treated as missing)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+CANARY="$TMPDIR_TEST/canary-weekly"
+# Tampered weekly resets_at carries a bash-arithmetic RCE payload. 5h cap clear
+# so the script no-ops cleanly with both blocks dropped.
+export DISPATCH_SCHEDULE_RESEED_USED_WEEKLY=95
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY='a[$(touch '"$CANARY"')]'
+export DISPATCH_SCHEDULE_RESEED_USED_5H=10
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H=15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$CANARY" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered weekly resets_at did not trigger RCE"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered weekly resets_at triggered RCE (canary exists)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"WEEKLY_RESETS"* && "$err" == *"non-integer"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered weekly resets_at stderr names the sanitizer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered weekly resets_at stderr names the sanitizer"
+  echo "    stderr: $err"
+fi
+assert_eq "tampered weekly resets_at; no schedule line" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered weekly resets_at; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered weekly resets_at; no systemd-run invocation"
+fi
+sr_teardown
+
+echo "Test: tampered 5h resets_at is rejected (no RCE, treated as missing)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+CANARY="$TMPDIR_TEST/canary-5h"
+export DISPATCH_SCHEDULE_RESEED_USED_WEEKLY=50
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY=20000
+export DISPATCH_SCHEDULE_RESEED_USED_5H=60
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H='a[$(touch '"$CANARY"')]'
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$CANARY" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered 5h resets_at did not trigger RCE"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered 5h resets_at triggered RCE (canary exists)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"FIVEH_RESETS"* && "$err" == *"non-integer"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered 5h resets_at stderr names the sanitizer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered 5h resets_at stderr names the sanitizer"
+  echo "    stderr: $err"
+fi
+# Weekly is still clear (50 < 90) and 5h block was dropped → silent no-op.
+assert_eq "tampered 5h resets_at; no schedule line" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered 5h resets_at; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered 5h resets_at; no systemd-run invocation"
+fi
+sr_teardown
+
+# --- Test 13: non-integer DISPATCH_SCHEDULE_RESEED_NOW → abort exit 2 --------
+
+echo "Test: non-integer NOW override aborts with exit 2"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW='a[$(touch '"$TMPDIR_TEST/canary-now"')]'
+sr_write_rl "rl.json" 95 20000 10 15000
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr"); then
+  rc=0
+else
+  rc=$?
+fi
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "non-integer NOW; exit 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$TMPDIR_TEST/canary-now" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-integer NOW did not trigger RCE"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-integer NOW triggered RCE (canary exists)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"NOW must be an integer"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-integer NOW stderr names the validator"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-integer NOW stderr names the validator"
+  echo "    stderr: $err"
+fi
+sr_teardown
+
+# --- Test 14: non-numeric used_percentage → block treated as missing ---------
+
+echo "Test: non-numeric used_percentage is rejected (block treated as missing)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# Weekly USED is garbage; weekly block dropped. 5h is clear → silent no-op.
+export DISPATCH_SCHEDULE_RESEED_USED_WEEKLY='nope'
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY=20000
+export DISPATCH_SCHEDULE_RESEED_USED_5H=10
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H=15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"WEEKLY_USED"* && "$err" == *"non-numeric"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-numeric WEEKLY_USED stderr names the sanitizer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-numeric WEEKLY_USED stderr names the sanitizer"
+  echo "    stderr: $err"
+fi
+assert_eq "non-numeric WEEKLY_USED; no schedule line" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-numeric WEEKLY_USED; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-numeric WEEKLY_USED; no systemd-run invocation"
+fi
+sr_teardown
+
+# ============================================================================
 # dispatch project-helper tests (item-add / status-read / status-write)
 # ============================================================================
 #

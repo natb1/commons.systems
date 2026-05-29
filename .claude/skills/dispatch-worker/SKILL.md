@@ -245,9 +245,10 @@ terminal step (see each phase skill's SKILL.md). A skill that detects a
 deviation skips the marker; the Stop hook reads marker presence and
 current PR/CI state to decide propagate vs park.
 
-### The #725 daily restart
+### The #725 cap-keyed re-seed
 
-See `/dispatch` Step 7's *The #725 daily restart* subsection — the
-worker's relationship to the daily restart is the same as the router's.
-Every terminal state the worker reaches falls within #725's
-restart-from-zero scope.
+See `/dispatch` Step 7's *The #725 cap-keyed re-seed* subsection — the
+worker's relationship to the re-seed is the same as the router's. The
+cap-keyed re-seed covers chain stalls caused by a rate-limit cap hit; an
+empty queue or all-parked stall is handled by the office-hours queue, not
+this mechanism.

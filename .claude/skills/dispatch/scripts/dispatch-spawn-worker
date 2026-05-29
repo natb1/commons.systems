@@ -36,8 +36,8 @@
 #                 (Step 2 does not `cd`), so the filter is a scoping no-op
 #                 that still surfaces every worker. Fail-safe: if the session
 #                 registry cannot be queried, also spawn nothing — a dispatch
-#                 agent may be running; the #725 heartbeat re-seeds the chain
-#                 if it actually dropped.
+#                 agent may be running; the #725 cap-keyed re-seed re-seeds
+#                 the chain if a rate-limit cap-stall actually dropped it.
 #   2. Spawn    — `claude --bg --name <worktree-basename> --permission-mode
 #                 auto "/dispatch-worker <N> <worktree-path>"`, run from the
 #                 script's inherited cwd (worktrees/main) — no `cd` into the
