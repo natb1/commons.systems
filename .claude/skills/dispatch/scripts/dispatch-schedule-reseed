@@ -41,9 +41,9 @@
 #
 # Stdout protocol:
 #   scheduled <unit-name> at <reseed_at>   timer was created.
-#   (silent)                               no-op (no cap hit, already-passed
-#                                          reset, missing telemetry, or
-#                                          idempotent re-call).
+#   (stderr diagnostic + exit 0)           no-op (already-passed reset,
+#                                          missing telemetry, or idempotent
+#                                          re-call). Silent only: no cap hit.
 #
 # Exit codes:
 #   0  always on no-op or successful schedule.
@@ -216,6 +216,7 @@ fi
 # either re-hit the cap (because telemetry hasn't refreshed yet) or duplicate
 # the next tick's spawn.
 if (( RESEED_AT <= NOW )); then
+  echo "dispatch-schedule-reseed: cap reset already passed (resets_at=$RESEED_AT <= now=$NOW); no-op" >&2
   exit 0
 fi
 

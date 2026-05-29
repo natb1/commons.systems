@@ -5073,7 +5073,22 @@ export DISPATCH_SCHEDULE_RESEED_NOW=10000
 # Weekly cap hit but resets_at=5000 < now=10000 → already passed.
 sr_write_rl "rl.json" 95 5000 10 15000
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
 assert_eq "already-passed reseed; stdout silent" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"cap reset already passed"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: already-passed reseed; stderr contains 'cap reset already passed'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-passed reseed; stderr contains 'cap reset already passed'"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"no-op"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: already-passed reseed; stderr contains 'no-op'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-passed reseed; stderr contains 'no-op'"
+  echo "    stderr: $err"
+fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: already-passed reseed; no systemd-run invocation"
@@ -5122,6 +5137,27 @@ if [[ "$err" == *"D-Bus connection failed"* ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: unexpected failure surfaces systemd-run stderr"
   echo "    stderr: $err"
+fi
+sr_teardown
+
+# --- Test 11: seven_day present but resets_at null → block treated as absent -
+
+echo "Test: seven_day present but resets_at null → block treated as absent"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+cat > "$TMPDIR_TEST/rl/rl.json" <<'JSON'
+{"seven_day":{"used_percentage":95,"resets_at":null},"five_hour":{"used_percentage":10,"resets_at":15000}}
+JSON
+export DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH="$TMPDIR_TEST/rl/rl.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "partial seven_day record; stdout silent" "" "$out"
+assert_eq "partial seven_day record; stderr silent" "" "$err"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: partial seven_day record; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: partial seven_day record; no systemd-run invocation"
 fi
 sr_teardown
 

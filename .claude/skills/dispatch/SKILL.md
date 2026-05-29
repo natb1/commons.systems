@@ -508,9 +508,9 @@ target (`drain concurrency-cap`), the chain is paused with work waiting and
 will not advance until the cap window reopens. `dispatch-schedule-reseed`
 writes a transient `systemd.user` timer that fires at the next rate-limit
 `resets_at` to re-seed the chain at the precise moment the cap reopens — see
-*The #725 cap-keyed re-seed* below. Run with `dangerouslyDisableSandbox:
-true` (the script invokes `systemd-run --user`, which talks to user systemd
-over D-Bus).
+*The #725 cap-keyed re-seed* below. The script invokes `systemd-run --user`,
+which talks to user systemd over D-Bus, so the outer Bash call's
+`dangerouslyDisableSandbox: true` (above) covers this requirement.
 
 `dispatch-spawn-worker` prints `spawned` (a worker was started) or `deduped`
 (another live worker already has the worktree-basename `--name` — the
