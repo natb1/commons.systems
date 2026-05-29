@@ -58,7 +58,10 @@ source "$SCRIPT_DIR/lib-claude-agents.sh"
 # `enter`-bound path (explicit, and queue-orphan recycle).
 emit_enter_reconciled() {
   local wt_path="$1" wt_branch="$2" pr pr_head unique
-  pr=$("$SCRIPT_DIR/dispatch-find-pr" "$ISSUE") || pr=""
+  if ! pr=$("$SCRIPT_DIR/dispatch-find-pr" "$ISSUE"); then
+    echo "error: dispatch-find-pr failed for issue $ISSUE; cannot reconcile branch" >&2
+    exit 1
+  fi
   if [[ -z "$pr" ]]; then echo "enter $wt_path"; return 0; fi   # no PR → unchanged
   pr_head=$(gh pr view "$pr" --json headRefName | jq -r '.headRefName // empty')
   if [[ -z "$pr_head" || "$pr_head" == "$wt_branch" ]]; then     # same branch → no-op
