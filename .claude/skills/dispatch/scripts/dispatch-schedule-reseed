@@ -107,10 +107,29 @@ if [[ -n "$CONFIG_JSON" ]]; then
   [[ -n "$val" ]] && TARGET_5H="$val"
 fi
 
+# Defense-in-depth: TARGET_* flow into `awk -v` (safe, but kept tight) and the
+# defaults are integers, so require a non-negative number with optional decimal.
+# A misconfigured config file aborts loudly rather than silently no-op'ing.
+for var in TARGET_WEEKLY TARGET_5H; do
+  if ! [[ "${!var}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    echo "dispatch-schedule-reseed: $var must be a non-negative number, got '${!var}'; aborting" >&2
+    exit 2
+  fi
+done
+
 # ---- Step 1: load telemetry -------------------------------------------------
 
 RL_PATH="${DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH:-$HOME/.local/share/productivity-tui/rate_limits.json}"
 NOW="${DISPATCH_SCHEDULE_RESEED_NOW:-$(date +%s)}"
+
+# NOW reaches `(( RESEED_AT <= NOW ))` — bash arithmetic context evaluates
+# array-index command substitution (e.g. `a[$(touch /tmp/pwn)]`), so any value
+# entering `(( ))` must be a literal integer. The default (`date +%s`) is
+# always safe; the env-override path is the surface that requires validation.
+if ! [[ "$NOW" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-schedule-reseed: NOW must be an integer epoch, got '$NOW'; aborting" >&2
+  exit 2
+fi
 
 WEEKLY_USED=""
 WEEKLY_RESETS=""
@@ -140,6 +159,28 @@ fi
 [[ -n "${DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY:-}" ]] && WEEKLY_RESETS="$DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY"
 [[ -n "${DISPATCH_SCHEDULE_RESEED_USED_5H:-}" ]] && FIVEH_USED="$DISPATCH_SCHEDULE_RESEED_USED_5H"
 [[ -n "${DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H:-}" ]] && FIVEH_RESETS="$DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H"
+
+# Sanitize telemetry before it reaches arithmetic or `awk -v` contexts. The
+# *_RESETS values flow into `(( CAND_WEEKLY <= CAND_5H ))` and
+# `(( RESEED_AT <= NOW ))` — bash arithmetic evaluates array-index command
+# substitution, so a string like `a[$(touch /tmp/pwn)]` from a tampered
+# rate_limits.json (or a hostile env override) would trigger RCE. *_USED only
+# feeds `awk -v` (which does not shell-eval), but the same fail-closed posture
+# applies for consistency. Any malformed value is treated as missing → the
+# WEEKLY_PRESENT / FIVEH_PRESENT guard catches it as the missing-telemetry case
+# and the script no-ops with a stderr diagnostic.
+for var in WEEKLY_USED FIVEH_USED; do
+  if [[ -n "${!var}" && ! "${!var}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    echo "dispatch-schedule-reseed: $var has non-numeric value '${!var}'; treating as missing" >&2
+    printf -v "$var" ""
+  fi
+done
+for var in WEEKLY_RESETS FIVEH_RESETS; do
+  if [[ -n "${!var}" && ! "${!var}" =~ ^[0-9]+$ ]]; then
+    echo "dispatch-schedule-reseed: $var has non-integer value '${!var}'; treating as missing" >&2
+    printf -v "$var" ""
+  fi
+done
 
 WEEKLY_PRESENT=0
 FIVEH_PRESENT=0

@@ -5161,6 +5161,139 @@ else
 fi
 sr_teardown
 
+# --- Test 12: tampered resets_at → treated as missing, no RCE in `(( ))` -----
+#
+# bash arithmetic context evaluates array-index command substitution, so a
+# resets_at value like `a[$(touch /tmp/pwn)]` from a tampered rate_limits.json
+# (or a hostile env override) would execute the inner command when it reaches
+# `(( CAND_WEEKLY <= CAND_5H ))` or `(( RESEED_AT <= NOW ))`. The sanitizer
+# strips any *_RESETS that is not a pure integer; the malformed block is then
+# treated as absent telemetry. The RCE canary is a sentinel file: if it
+# appears, the injection executed.
+
+echo "Test: tampered weekly resets_at is rejected (no RCE, treated as missing)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+CANARY="$TMPDIR_TEST/canary-weekly"
+# Tampered weekly resets_at carries a bash-arithmetic RCE payload. 5h cap clear
+# so the script no-ops cleanly with both blocks dropped.
+export DISPATCH_SCHEDULE_RESEED_USED_WEEKLY=95
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY='a[$(touch '"$CANARY"')]'
+export DISPATCH_SCHEDULE_RESEED_USED_5H=10
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H=15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$CANARY" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered weekly resets_at did not trigger RCE"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered weekly resets_at triggered RCE (canary exists)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"WEEKLY_RESETS"* && "$err" == *"non-integer"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered weekly resets_at stderr names the sanitizer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered weekly resets_at stderr names the sanitizer"
+  echo "    stderr: $err"
+fi
+assert_eq "tampered weekly resets_at; no schedule line" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered weekly resets_at; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered weekly resets_at; no systemd-run invocation"
+fi
+sr_teardown
+
+echo "Test: tampered 5h resets_at is rejected (no RCE, treated as missing)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+CANARY="$TMPDIR_TEST/canary-5h"
+export DISPATCH_SCHEDULE_RESEED_USED_WEEKLY=50
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY=20000
+export DISPATCH_SCHEDULE_RESEED_USED_5H=60
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H='a[$(touch '"$CANARY"')]'
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$CANARY" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered 5h resets_at did not trigger RCE"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered 5h resets_at triggered RCE (canary exists)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"FIVEH_RESETS"* && "$err" == *"non-integer"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered 5h resets_at stderr names the sanitizer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered 5h resets_at stderr names the sanitizer"
+  echo "    stderr: $err"
+fi
+# Weekly is still clear (50 < 90) and 5h block was dropped → silent no-op.
+assert_eq "tampered 5h resets_at; no schedule line" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: tampered 5h resets_at; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tampered 5h resets_at; no systemd-run invocation"
+fi
+sr_teardown
+
+# --- Test 13: non-integer DISPATCH_SCHEDULE_RESEED_NOW → abort exit 2 --------
+
+echo "Test: non-integer NOW override aborts with exit 2"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW='a[$(touch '"$TMPDIR_TEST/canary-now"')]'
+sr_write_rl "rl.json" 95 20000 10 15000
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr"); then
+  rc=0
+else
+  rc=$?
+fi
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "non-integer NOW; exit 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$TMPDIR_TEST/canary-now" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-integer NOW did not trigger RCE"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-integer NOW triggered RCE (canary exists)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"NOW must be an integer"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-integer NOW stderr names the validator"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-integer NOW stderr names the validator"
+  echo "    stderr: $err"
+fi
+sr_teardown
+
+# --- Test 14: non-numeric used_percentage → block treated as missing ---------
+
+echo "Test: non-numeric used_percentage is rejected (block treated as missing)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# Weekly USED is garbage; weekly block dropped. 5h is clear → silent no-op.
+export DISPATCH_SCHEDULE_RESEED_USED_WEEKLY='nope'
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY=20000
+export DISPATCH_SCHEDULE_RESEED_USED_5H=10
+export DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H=15000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"WEEKLY_USED"* && "$err" == *"non-numeric"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-numeric WEEKLY_USED stderr names the sanitizer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-numeric WEEKLY_USED stderr names the sanitizer"
+  echo "    stderr: $err"
+fi
+assert_eq "non-numeric WEEKLY_USED; no schedule line" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-numeric WEEKLY_USED; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-numeric WEEKLY_USED; no systemd-run invocation"
+fi
+sr_teardown
+
 # ============================================================================
 # dispatch project-helper tests (item-add / status-read / status-write)
 # ============================================================================
