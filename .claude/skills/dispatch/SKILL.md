@@ -415,15 +415,18 @@ worktree path that Step 6 will pass to `dispatch-spawn-worker`.
      (cd "$WORKTREE_PATH" && .claude/skills/dispatch/scripts/sync-issue-context <N>)
      ```
 
-- **`conflict <path>`** → a queue-selected target already has a worktree, so
-  another session owns it. (`dispatch-select-target` resolves the `help wanted`
-  tier to a leaf with no worktree, so for a queue selection this arises only from
-  a race — another session created the worktree between selection and worktree
-  resolution.) Release the lock (see *Releasing the lock*), then proceed to
-  Step 7 with `notify worktree-conflict` — the user-visible report is mandatory
-  there ("worktree at `<path>` owned by another live session for issue `<N>`;
-  closing — the next baton-pass or office-hours hand-off will re-seed"), not
-  optional. Do not spawn a worker.
+- **`conflict <path>`** → a live session owns the worktree. The check is
+  mode-independent. In explicit mode the script runs a name-keyed liveness
+  check against the daemon and emits `conflict` when the worktree's basename
+  matches a live session (or when the daemon cannot be queried — fail-safe).
+  In queue mode the script emits `conflict` on existence as a race fallback;
+  `dispatch-select-target`'s upstream owned-worktree filter is the primary
+  gate, so a queue-mode `conflict` means another session created the worktree
+  between selection and worktree resolution. Release the lock (see *Releasing
+  the lock*), then proceed to Step 7 with `notify worktree-conflict` — the
+  user-visible report is mandatory there ("worktree at `<path>` owned by
+  another live session for issue `<N>`; closing — the next baton-pass or
+  office-hours hand-off will re-seed"), not optional. Do not spawn a worker.
 
 On every non-`conflict` path, before the worker is spawned, create the recovery
 marker **inside the target worktree** (`$WORKTREE_PATH`):

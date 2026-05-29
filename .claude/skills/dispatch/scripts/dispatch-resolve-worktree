@@ -3,18 +3,22 @@
 # Usage: dispatch-resolve-worktree <issue-num> <explicit|queue>
 #
 # Prints exactly one decision line to stdout:
-#   enter <path>    — an existing <issue>-* worktree exists; the caller
-#                     uses <path>.
+#   enter <path>    — explicit mode + an existing <issue>-* worktree with no
+#                     live session; the caller uses <path>.
 #   create <branch> — no <issue>-* worktree exists; the caller materializes
 #                     <branch> and uses its path.
-#   conflict <path> — a queue-selected target already has a worktree (another
-#                     session owns it); /dispatch reports <path> and stops.
+#   conflict <path> — a live session owns the worktree (or the daemon could
+#                     not be queried, fail-safe). /dispatch reports <path> and
+#                     stops.
 #
 # The mode argument decides what an existing <issue>-* worktree means:
 #   explicit — the target was named by an explicit /dispatch argument
-#              (recycle-after-completion); an existing worktree yields `enter`.
-#   queue    — the target was queue-selected; an existing worktree belongs to
-#              another session and yields `conflict`.
+#              (recycle-after-completion). A name-keyed liveness check runs:
+#              sessionless → `enter`; live (or unknown) → `conflict`.
+#   queue    — the target was queue-selected. An existing worktree yields
+#              `conflict` unconditionally as a race fallback; the primary
+#              gate is `dispatch-select-target`'s upstream owned-worktree
+#              filter.
 #
 # The branch name printed by `create` matches the WorktreeCreate hook's
 # accepted form ^[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$, full name <= 32 characters.
@@ -32,6 +36,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+source "$SCRIPT_DIR/lib-claude-agents.sh"
 
 # `enter` / `conflict` — scan local worktrees for one whose branch carries the
 # <issue>-* prefix, via the shared list_worktree_records helper (lib.sh).
@@ -40,7 +45,25 @@ while IFS= read -r line; do
   split_worktree_record "$line"
   if [[ "$WT_NUM" == "$ISSUE" ]]; then
     if [[ "$MODE" == "explicit" ]]; then
-      echo "enter $WT_PATH"
+      # Explicit-mode liveness check: name-keyed against the daemon. An
+      # owned worktree (or unknown — fail-safe) yields `conflict`; sessionless
+      # yields `enter`.
+      if worktree_has_live_session "$WT_PATH"; then
+        if sessions=$(claude_sessions_with_name "$(basename "$WT_PATH")") \
+           && [[ -n "$sessions" ]]; then
+          # TSV: sessionId<TAB>pid<TAB>status<TAB>name. First line wins.
+          IFS=$'\t' read -r owner_sid _ _ owner_name \
+            <<<"$(printf '%s\n' "$sessions" | head -n 1)"
+          printf 'dispatch-resolve-worktree: worktree %s for issue %s owned by live session name=%s sessionId=%s\n' \
+            "$WT_PATH" "$ISSUE" "$owner_name" "$owner_sid" >&2
+        else
+          printf 'dispatch-resolve-worktree: worktree %s for issue %s owned by a live session (session lookup failed or unknown)\n' \
+            "$WT_PATH" "$ISSUE" >&2
+        fi
+        echo "conflict $WT_PATH"
+      else
+        echo "enter $WT_PATH"
+      fi
     else
       echo "conflict $WT_PATH"
     fi

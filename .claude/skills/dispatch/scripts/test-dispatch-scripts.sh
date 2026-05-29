@@ -2251,17 +2251,76 @@ branch refs/heads/42-my-feature
 
 '
 
-# 1. explicit mode + an existing <N>-* worktree → enter <path>.
-echo "Test: explicit + existing <N>-* worktree → enter"
+# 1. explicit mode + an existing <N>-* worktree + no live session → enter <path>.
+#    The name-keyed liveness check (#837) reports sessionless; recycle-after-
+#    completion proceeds.
+echo "Test: explicit + existing <N>-* worktree + sessionless → enter"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+# Stub fake claude that returns an empty agents array — a definite "no live
+# sessions" answer (rc 0, `[]`). Without this, claude_sessions_with_name treats
+# the unreachable real daemon as UNKNOWN and the predicate fails safe to
+# `conflict`, which would mask the sessionless path.
+mkdir -p "$TMPDIR_TEST/fake"
+cat > "$TMPDIR_TEST/fake/claude" <<'FAKE'
+#!/usr/bin/env bash
+printf '[]'
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/fake/claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake/claude"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
-assert_eq "explicit + existing worktree → enter <path>" \
+assert_eq "explicit + existing worktree + sessionless → enter <path>" \
   "enter /worktrees/42-my-feature" "$result"
 teardown
 
-# 3. queue mode + the same worktree setup → conflict <path>. Acceptance
-#    criterion 3: same target, explicit → enter, queue → conflict.
+# 2. explicit mode + matching worktree + live session with same name → conflict.
+#    Stderr names the owning session by `name` and `sessionId` (AC2).
+echo "Test: explicit + matching worktree + live session → conflict"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+mkdir -p "$TMPDIR_TEST/fake"
+cat > "$TMPDIR_TEST/fake/claude" <<'FAKE'
+#!/usr/bin/env bash
+printf '[{"sessionId":"sess-live-42","pid":4242,"status":"busy","name":"42-my-feature","cwd":""}]'
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/fake/claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake/claude"
+err_log="$TMPDIR_TEST/stderr.log"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>"$err_log")
+assert_eq "explicit + live session → conflict <path>" \
+  "conflict /worktrees/42-my-feature" "$result"
+TOTAL=$((TOTAL + 1))
+if grep -q 'name=42-my-feature' "$err_log" && grep -q 'sessionId=sess-live-42' "$err_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: conflict diagnostic names owning session"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: conflict diagnostic names owning session"
+  echo "    stderr was: $(cat "$err_log")"
+fi
+teardown
+
+# 2b. explicit mode + matching worktree + claude unreachable → conflict (fail-safe).
+#     UNKNOWN folds into occupied; a fallback diagnostic prints to stderr.
+echo "Test: explicit + matching worktree + claude unreachable → conflict (fail-safe)"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
+err_log="$TMPDIR_TEST/stderr.log"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>"$err_log")
+assert_eq "explicit + unreachable claude → conflict <path>" \
+  "conflict /worktrees/42-my-feature" "$result"
+TOTAL=$((TOTAL + 1))
+if grep -q 'session lookup failed or unknown' "$err_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: unknown-daemon fallback diagnostic emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unknown-daemon fallback diagnostic emitted"
+  echo "    stderr was: $(cat "$err_log")"
+fi
+teardown
+
+# 3. queue mode + the same worktree setup → conflict <path>. Queue mode skips
+#    the liveness check — existence alone yields `conflict` as a race fallback.
 echo "Test: queue + existing <N>-* worktree → conflict"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
@@ -2315,9 +2374,18 @@ teardown
 #    AND matching worktree entry → enter <path> (no special-case `here`).
 #    current-branch.txt is not read by dispatch-resolve-worktree (the `here`
 #    check was removed); it is seeded here only to document the scenario intent.
+#    Sessionless stub so the #837 liveness check proceeds to `enter`.
 echo "Test: explicit from issue-branch cwd with matching worktree → enter (not here)"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+mkdir -p "$TMPDIR_TEST/fake"
+cat > "$TMPDIR_TEST/fake/claude" <<'FAKE'
+#!/usr/bin/env bash
+printf '[]'
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/fake/claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake/claude"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "explicit from issue-branch cwd, matching worktree → enter (not here)" \
   "enter /worktrees/42-my-feature" "$result"
