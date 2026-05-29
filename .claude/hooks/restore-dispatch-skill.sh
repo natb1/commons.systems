@@ -16,7 +16,7 @@ if [ -n "$SESSION_ID" ]; then
     2>/dev/null) || NAME=""
 fi
 
-# Router sessions (dispatch-<short-id>) restart via /dispatch, not skill
+# Router sessions (dispatch-<short-id>) restart via /dispatch-propagate, not skill
 # restoration — skip them explicitly.
 case "$NAME" in
   dispatch-*) exit 0 ;;

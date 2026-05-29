@@ -42,7 +42,7 @@ A reference workflow for individual practitioners who want to fork and adapt an 
 
 Issues and PRs flow through two parallel queues (see #755 for the framing):
 
-- **Dispatch queue** — autonomous work, advanced by the `/dispatch` router and its `/dispatch-worker` background jobs. Once a target is selected, the chain runs unattended, one phase at a time.
+- **Dispatch queue** — autonomous work, advanced by the `/dispatch-propagate` router and its `/dispatch-worker` background jobs. Once a target is selected, the chain runs unattended, one phase at a time.
 - **Office hours queue** — human-driven work. Items here wait for live human attention: requirement changes, judgment calls during QA, or deviations flagged by phase skills.
 
 The `dispatch:office-hours` label is the transition signal between the two. Input-block hooks apply it when a phase skill requests user input mid-run (see #757); phase skills apply it on a deviation (see #826). The office-hours queue surfaces labeled items for a human; the label clears once the user engages the worktree.
@@ -51,13 +51,13 @@ Ground truth lives in PR state (draft vs. ready), CI status, the accumulating `d
 
 JIT (just-in-time) reminders seed both queues. Each dispatch tick fires a JIT scan that creates due reminders from `dispatch.config/jit.json` (see #769); some surface as dispatch-queue work that the chain picks up next tick, while others run as office-hours sessions for a human to read.
 
-This section describes the **target** dispatch model. The current implementation lives in [.claude/skills/dispatch/SKILL.md](.claude/skills/dispatch/SKILL.md); inline issue references below mark the open work that ages the README forward as it merges.
+This section describes the **target** dispatch model. The current implementation lives in [.claude/skills/dispatch-propagate/SKILL.md](.claude/skills/dispatch-propagate/SKILL.md); inline issue references below mark the open work that ages the README forward as it merges.
 
 ### Dispatch Queue
 
 #### 1. Entry points
 
-- [`/dispatch`](.claude/skills/dispatch/SKILL.md) — the router. Runs in `worktrees/main`. Selects the next target, resolves its worktree, releases the selection lock, spawns a worker, and exits.
+- [`/dispatch-propagate`](.claude/skills/dispatch-propagate/SKILL.md) — the router. Runs in `worktrees/main`. Selects the next target, resolves its worktree, releases the selection lock, spawns a worker, and exits.
 - [`/dispatch-worker <N>`](.claude/skills/dispatch-worker/SKILL.md) — the worker. Runs in `worktrees/<N>-…`, one per in-flight issue. Runs exactly one phase skill, then hands off.
 
 See #839 for the router/worker split.
@@ -78,7 +78,7 @@ The worker, inside its worktree:
 1. Derives the phase from PR/CI state via [`dispatch-phase`](.claude/skills/dispatch-propagate/scripts/dispatch-phase).
 2. Runs exactly one phase skill — the skill named in the [PR Control Flow](#pr-control-flow) table for that phase.
 3. Hands off with one of two dispositions:
-   - `--phase-completed` — spawns a fresh `/dispatch` router back in `worktrees/main` and self-deletes (`claude rm`). If `dispatch:office-hours` is on the PR, the worker still spawns the router but **skips** self-delete, so the parked transcript stays visible for human review.
+   - `--phase-completed` — spawns a fresh `/dispatch-propagate` router back in `worktrees/main` and self-deletes (`claude rm`). If `dispatch:office-hours` is on the PR, the worker still spawns the router but **skips** self-delete, so the parked transcript stays visible for human review.
    - `--early-stop` — skips the router spawn and self-deletes. The #725 heartbeat re-seeds the chain when the queue drains.
 
 Workers and phase skills call [`/commit-merge-push`](.claude/skills/commit-merge-push/SKILL.md) inline to commit, merge `origin/main`, and push. See #824, #826, #831 for the worker contract, deviation handling, and lock semantics.

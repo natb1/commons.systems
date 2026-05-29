@@ -56,8 +56,8 @@ setup_case() {
   chmod +x "$tmp/.claude/hooks/statusline.sh"
 
   # Stub dispatch-phase at the path the hook derives from its SCRIPT_DIR:
-  #   SCRIPT_DIR/../skills/dispatch/scripts/dispatch-phase
-  # = $tmp/.claude/hooks/../skills/dispatch/scripts/dispatch-phase
+  #   SCRIPT_DIR/../skills/dispatch-propagate/scripts/dispatch-phase
+  # = $tmp/.claude/hooks/../skills/dispatch-propagate/scripts/dispatch-phase
   # = $tmp/.claude/skills/dispatch-propagate/scripts/dispatch-phase
   mkdir -p "$tmp/.claude/skills/dispatch-propagate/scripts"
   cat >"$tmp/.claude/skills/dispatch-propagate/scripts/dispatch-phase" <<'DPHASE'

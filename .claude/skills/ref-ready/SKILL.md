@@ -242,7 +242,7 @@ topic label.
 
 - **`priority`** — a separate axis from the topic labels above. A
   human-applied escalation marker that routes the issue (or any PR closing it)
-  ahead of non-priority items within its own topic category in `/dispatch` queue selection. Apply only
+  ahead of non-priority items within its own topic category in `/dispatch-propagate` queue selection. Apply only
   when a human explicitly asks to escalate; `/ready` never applies it
   automatically. May be combined with any topic label.
 

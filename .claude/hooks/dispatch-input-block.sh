@@ -14,7 +14,7 @@
 #   3. applies dispatch:office-hours, creating the label on first use with the
 #      canonical color/description (this script is the single source of those
 #      defaults);
-#   4. spawns the next /dispatch via dispatch-spawn-router, so the chain keeps moving
+#   4. spawns the next /dispatch-propagate via dispatch-spawn-router, so the chain keeps moving
 #      around the blocked item.
 #
 # Never blocks the session — every failure logs to stderr and the script exits
