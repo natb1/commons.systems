@@ -210,7 +210,21 @@ already applied, so re-entry is a true no-op. Otherwise run all steps in order.
    written under `tmp/` rather than regenerating it. On a no-findings run,
    every section renders `_None._` and the skill still terminates cleanly.
 
-10. **Interactive follow-up (attended use only).** If the user requests a fix
+10. **Autonomous exit and hand off (dispatched use only).** In an autonomous
+    `/dispatch` background job, after printing the Step 9 report, exit the
+    worktree and hand off. Run (`dangerouslyDisableSandbox: true` — the script
+    calls `gh` and `dispatch-self-close`):
+
+    ```bash
+    ExitWorktree action:"keep"
+    .claude/skills/dispatch/scripts/dispatch-handoff <N> --phase-completed
+    ```
+
+    `dispatch-handoff` spawns the next `/dispatch` router, checks for a
+    `dispatch:office-hours` deviation flag on the PR, and self-closes the
+    session.
+
+11. **Interactive follow-up (attended use only).** If the user requests a fix
     for a remaining finding (typically from the Informational, Dismissed, or
     Deferred buckets), implement it (working-tree edits only), fork
     `/commit-merge-push` to commit and push it, and document it on the PR with
@@ -218,14 +232,15 @@ already applied, so re-entry is a true no-op. Otherwise run all steps in order.
 
 ## Autonomous vs. attended
 
-In an autonomous `/dispatch` background job there is no user to drive Step 10 —
-the skill applies the `dispatch:reviewed` label (Step 8) and stops; the Step 9
-4-section report is informational. The label is applied regardless of whether
-any fixes were made, so `/dispatch` can always advance to the next phase.
+In an autonomous `/dispatch` background job Step 10 runs immediately after
+Step 9 — the skill applies the `dispatch:reviewed` label (Step 8), prints
+the report (Step 9), and hands off (Step 10). There is no user to drive
+Step 11. The label is applied regardless of whether any fixes were made, so
+`/dispatch` can always advance to the next phase.
 
 ## Notes
 
 The skill is idempotent: a re-invocation with `dispatch:reviewed` already on the
-PR skips Steps 1–10 and returns. Step 10 (interactive follow-up) is in the skip
+PR skips Steps 1–11 and returns. Step 11 (interactive follow-up) is in the skip
 range because attended follow-up edits would be made directly, not by re-running
 the wrapper.

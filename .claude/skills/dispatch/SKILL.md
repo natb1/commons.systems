@@ -233,12 +233,10 @@ continue to target selection.
   - `issue <num>` — a `help wanted` issue to implement, pre-resolved by the
     selection scan to a startable open leaf (not necessarily the top-level
     `help wanted` issue). Proceed to Step 5 with mode `queue`.
-  - `main-broken <sha>` — invoke `/dispatch-diagnose-main <sha>`, then proceed
-    to Step 7 with `notify main-broken`. The skill owns the failing-check
-    enumeration, log-fetch, summary, and lock-release; the caller-side
-    `notify main-broken` disposition keeps the session in `claude agents`
-    until the user closes it, so the diagnosis stays visible rather than
-    being buried in a closed transcript.
+  - `main-broken <sha>` — invoke `/dispatch-diagnose-main <sha>`. The skill
+    owns the failing-check enumeration, log-fetch, summary, lock-release, and
+    terminal disposition — it calls `dispatch-handoff --early-stop` to self-
+    close at the end of its own Step 4. The caller does not proceed to Step 7.
   - `jit-reminder <repo> <num> <project> <item-id>` — invoke
     `/dispatch-jit-reminder <repo> <num> <project> <item-id>`, then stop the
     tick directly (the skill is a Step 7 bypass — its user-visible summary must
@@ -565,7 +563,7 @@ the action.
 Every other terminal disposition — `propagate` falling through to `notify
 spawn-failed` on a failed spawn, every `notify <reason>` variance, every
 `drain <reason>` no-work case — emits a user-visible report before the
-session ends (before `dispatch-self-close` for `drain` and `propagate`;
+session ends (before `dispatch-handoff --early-stop` for `drain` and `propagate`;
 before this turn's text output completes for `notify`, which does not
 self-close). A silent `notify` or silent `drain` is a defect.
 
@@ -576,7 +574,7 @@ The three dispositions:
   (`dangerouslyDisableSandbox: true`):
 
   ```bash
-  .claude/skills/dispatch/scripts/dispatch-self-close
+  .claude/skills/dispatch/scripts/dispatch-handoff --early-stop
   ```
 
 - **`notify <reason>`** — `notify spawn-failed` (Step 6's spawn exited
@@ -594,7 +592,6 @@ The three dispositions:
   | `notify busy-lock-timeout` | Step 0 — wait timeout while another router holds the lock (subsumes #850) |
   | `notify sync-failed` | Step 1 — `git fetch` failed or `git merge --ff-only` rejected a non-fast-forward |
   | `notify resolver-failed` | Step 3 — `dispatch-resolve-arg` non-zero (PR closes ≠1 issue, bad argument) |
-  | `notify main-broken` | Step 3 — `/dispatch-diagnose-main` ran and returned (`origin/main` is red) |
   | `notify target-blocked` | Step 4 — named target is closed or has an open blocker |
 
 - **`drain <reason>`** — `drain empty-queue` (Step 3, queue empty),
@@ -607,14 +604,14 @@ The three dispositions:
   (`dangerouslyDisableSandbox: true`):
 
   ```bash
-  .claude/skills/dispatch/scripts/dispatch-self-close
+  .claude/skills/dispatch/scripts/dispatch-handoff --early-stop
   ```
 
-`dispatch-self-close` removes the managed background job by its job-id (the
-basename of `$CLAUDE_JOB_DIR`). It is a no-op when `CLAUDE_JOB_DIR` is unset
-(the session is interactive, not a managed background job) — so an
-interactive `/dispatch` reaching Step 7 does not stop the user's live
-conversation.
+`dispatch-handoff --early-stop` execs `dispatch-self-close`, which removes
+the managed background job by its job-id (the basename of `$CLAUDE_JOB_DIR`).
+It is a no-op when `CLAUDE_JOB_DIR` is unset (the session is interactive, not
+a managed background job) — so an interactive `/dispatch` reaching Step 7 does
+not stop the user's live conversation.
 
 Step 3's `jit-reminder` outcome does not reach Step 7 — it is a deliberate
 bypass, since its user-visible summary must stay open in the transcript for a
