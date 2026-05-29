@@ -2033,6 +2033,43 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "office-hours PR with worktree not selected; second PR chosen" "pr 20 20-active verify" "$result"
 teardown
 
+# --- ready-PR gate (issue #920) ---------------------------------------------
+# An open help-wanted issue whose only closing PR is non-draft (ready) is
+# excluded from the issue queue. A *draft* closing PR does NOT gate the issue.
+
+# R1. Excluded by ready PR.
+# Non-draft PR closes issue 55; issue 55 (older) and issue 66 (newer) are both
+# help-wanted. Without the gate the oldest (55) would win. Assert the result is
+# issue 66 — 55 is gated out.
+echo "Test: Excluded by ready PR."
+setup
+# Non-draft (ready) PR 100 with green rollup closes issue 55.
+UNION='['"$(make_pr_union 100 "55-ready-pr" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":55}]')"']'
+setup_union_pr_list "$UNION"
+# Issue 55 is older (Jan 01), issue 66 is newer (Jan 02); both help-wanted.
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "ready PR closes issue 55; issue 66 chosen instead" "issue 66" "$result"
+teardown
+
+# R2. Draft PR does not gate.
+# A draft PR (isDraft=true, pending rollup → classified waiting, dropped from
+# the ladder) closes issue 55; issue 55 is help-wanted with no worktree. Assert
+# the result is issue 55 — the draft does not exclude its issue.
+echo "Test: Draft PR does not gate."
+setup
+# Draft (isDraft=true, pending rollup) PR 100 closes issue 55.
+UNION='['"$(make_pr_union 100 "55-draft-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":55}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "draft PR does not gate issue 55; issue 55 chosen" "issue 55" "$result"
+teardown
+
 # ============================================================================
 # dispatch-trace-leaf tests
 # ============================================================================
