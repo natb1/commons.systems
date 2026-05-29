@@ -13,9 +13,11 @@
 #   A. marker absent — phase skill did not run to completion (mid-phase exit
 #      or context compaction). Apply dispatch:office-hours to the ISSUE, spawn
 #      router, exit 0 — session parks "stopped" for human review.
-#   B. marker present + MARKER_PHASE != CURRENT_PHASE — phase advanced. Strip
-#      dispatch:office-hours from BOTH the PR (if any) and the ISSUE, spawn
-#      router, self-close.
+#   B. marker present + CURRENT_PHASE non-empty + MARKER_PHASE != CURRENT_PHASE
+#      — phase advanced. Strip dispatch:office-hours from BOTH the PR (if any)
+#      and the ISSUE, spawn router, self-close. Empty CURRENT_PHASE (e.g.
+#      dispatch-phase network failure) is treated as "undetermined" and falls
+#      through to Branch D rather than triggering a false self-close.
 #   C. marker present + same phase + CURRENT_PHASE == verify + verify-attempt
 #      counter < 3 — CI re-runs still possible. Spawn router, exit 0 (no label,
 #      no self-close — session parks "stopped"; transcript is the diagnostic).
@@ -77,6 +79,7 @@ apply_office_hours_to_issue() {
 }
 
 apply_office_hours_label() {
+  local apply_output
   if apply_output=$(apply_office_hours_to_issue); then
     :
   elif [[ "$apply_output" == *"not found"* ]]; then
@@ -117,7 +120,7 @@ if [ -z "$MARKER_PHASE" ]; then
   exit 0
 fi
 
-if [ "$MARKER_PHASE" != "$CURRENT_PHASE" ]; then
+if [ -n "$CURRENT_PHASE" ] && [ "$MARKER_PHASE" != "$CURRENT_PHASE" ]; then
   # Branch B — phase advanced.
   strip_office_hours_label
   spawn_router

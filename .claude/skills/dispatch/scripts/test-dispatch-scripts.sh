@@ -7214,6 +7214,48 @@ else
 fi
 stop_teardown
 
+# --- Test 10: empty CURRENT_PHASE (dispatch-phase failure) → Branch D, no self-close --
+
+echo "Test: stop hook + marker present + dispatch-phase fails (empty CURRENT_PHASE) → Branch D (park), no self-close"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+# Simulate dispatch-phase failure by making the fake return nothing (exit 1).
+cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-phase" <<'FAKE'
+#!/usr/bin/env bash
+exit 1
+FAKE
+chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-phase"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=code-review" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop empty-phase: hook exits 0" "0" "$rc"
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop empty-phase: office-hours applied to issue (Branch D, not false Branch B)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop empty-phase: office-hours applied to issue (Branch D, not false Branch B)"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop empty-phase: self-close NOT invoked (no false advance)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop empty-phase: self-close NOT invoked (no false advance)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop empty-phase: no remove-label calls (no strip)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop empty-phase: no remove-label calls (no strip)"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop empty-phase: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
 # ============================================================================
 # ensure_deps (lib.sh) retry tests
 # ============================================================================
