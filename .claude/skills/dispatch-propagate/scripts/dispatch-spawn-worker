@@ -2,7 +2,7 @@
 # dispatch-spawn-worker — spawn a /dispatch-worker background job for a target
 # worktree (the router → worker spawn primitive).
 #
-# /dispatch (the router) selects an issue, resolves its worktree, and then
+# /dispatch-propagate (the router) selects an issue, resolves its worktree, and then
 # delegates phase execution to a dedicated worker session via this script.
 # The worker session is spawned with cwd = <worktree-path> (via a subshell
 # `cd`) so SessionStart-derived attributes (title, restored skill set, sandbox

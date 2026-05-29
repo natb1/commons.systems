@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dispatch-sweep — reconcile worktrees once per /dispatch queue-scan tick.
+# dispatch-sweep — reconcile worktrees once per /dispatch-propagate queue-scan tick.
 #
 # Usage:
 #   dispatch-sweep   — cleanup merged worktrees.
@@ -21,7 +21,7 @@
 #   2  invalid invocation (not in a git repo).
 #
 # NOT set -e: per-worktree errors should not abort the sweep — bookkeeping
-# decisions must keep flowing into the log so the next /dispatch tick can act.
+# decisions must keep flowing into the log so the next /dispatch-propagate tick can act.
 set -uo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
