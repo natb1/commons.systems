@@ -35,8 +35,7 @@
 #
 # --health-only mode runs the JIT scan and the origin/main CI health gate, then
 # exits — no sweep, no queue scan, no PR/issue fetches. /dispatch SKILL.md uses
-# it to re-seed the dispatch chain cheaply (the cap-keyed re-seed fires it
-# when a rate-limit cap window reopens).
+# it to re-seed the dispatch chain cheaply.
 # Output is exactly one line:
 #   ok                          — safe to proceed (main is healthy)
 #   jit-reminder <repo> <num> <project> <item-id>

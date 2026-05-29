@@ -627,8 +627,8 @@ The three dispositions:
 - **`drain <reason>`** — `drain empty-queue` (Step 3, queue empty),
   `drain worktree-conflict` (Step 5, target's worktree is owned by another
   live session), or `drain concurrency-cap` (Step 6, `live_count >=
-  target_N` — the chain re-seeds on the next router tick when budget
-  reopens). The call site has already printed a **mandatory** user-visible
+  target_N` — the chain re-seeds when the cap-keyed timer fires at the next
+  rate-limit window reset; see *The #725 cap-keyed re-seed* above). The call site has already printed a **mandatory** user-visible
   report stating the reason and the recovery path (templates live at the
   Step 3, Step 5, and Step 6 call sites). Then self-close
   (`dangerouslyDisableSandbox: true`):

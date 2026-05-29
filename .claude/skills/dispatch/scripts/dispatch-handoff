@@ -14,8 +14,9 @@
 #     Otherwise exec dispatch-self-close.
 #
 #   dispatch-handoff --early-stop
-#     Router early-stop path. No spawn (the #725 heartbeat re-seeds the chain).
-#     Exec dispatch-self-close.
+#     Router early-stop path. No spawn — the chain re-seeds via the #725
+#     cap-keyed timer when a rate-limit window reopens, or via office-hours
+#     engagement when a parked item is picked up. Exec dispatch-self-close.
 #
 # Both forms require dangerouslyDisableSandbox: true — this script calls gh,
 # dispatch-self-close (which calls `claude rm`), and dispatch-spawn-router
