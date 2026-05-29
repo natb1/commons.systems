@@ -99,9 +99,9 @@ if [[ ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
-# The worker `cd`s into <worktree-path> as its Step 0; a missing path would
-# only surface there, after the spawn has already happened. Validate at the
-# system edge so the diagnostic names the spawner, not the worker.
+# The worker is born in <worktree-path> via spawn cwd; a missing path would
+# only surface at spawn time if not caught here. Validate at the spawner edge
+# so the diagnostic names the spawner, not the worker.
 if [[ ! -d "$WORKTREE_PATH" ]]; then
   echo "dispatch-spawn-worker: worktree path '$WORKTREE_PATH' does not exist" >&2
   exit 2
