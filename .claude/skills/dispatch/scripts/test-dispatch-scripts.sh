@@ -8061,6 +8061,43 @@ output=$(run_restore)
 assert_eq "path-traversal name: empty output" "" "$output"
 restore_teardown
 
+# --- Test 11: malformed frontmatter (no closing `---`) → file emitted verbatim
+# An opening `---` with no closing delimiter must NOT have its body deleted to
+# EOF (the over-delete failure mode the guard at line 151 prevents). The hook
+# emits the file verbatim instead — the frontmatter lines, including the opening
+# `---`, are preserved rather than stripped.
+echo "Test: restore-dispatch-skill malformed frontmatter → file emitted verbatim"
+restore_setup
+set_agents_name "903-foo"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+cat > "$TMPDIR_TEST/.claude/skills/plan-implement/SKILL.md" <<'EOF'
+---
+name: plan-implement
+description: malformed fixture with no closing delimiter
+
+# Test Skill plan-implement
+
+RESTORE_MARKER_malformed body line.
+EOF
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"RESTORE_MARKER_malformed body line."* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: malformed frontmatter: body not deleted to EOF"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed frontmatter: body not deleted to EOF"
+  echo "    output: $output"
+fi
+# Verbatim emission keeps the unstrippable frontmatter lines (incl. the `name:`
+# line that the normal path would have removed), proving the guard's else branch.
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"name: plan-implement"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: malformed frontmatter: file emitted verbatim (frontmatter retained)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed frontmatter: file emitted verbatim (frontmatter retained)"
+  echo "    output: $output"
+fi
+restore_teardown
+
 # ============================================================================
 # dispatch chain: no EnterWorktree/ExitWorktree mid-session (ratchet for #839)
 # ============================================================================
