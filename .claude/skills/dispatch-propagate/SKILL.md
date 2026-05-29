@@ -97,11 +97,14 @@ elevated timeout is needed — `--release` returns immediately. They print
 already released or recorded against a different session whose worktree has no
 marker, so the skill does not branch on the output.
 
-Releasing after Step 5 is safe because (a) the session then owns a worktree
-(or has stopped) and the selection scan skips worktree'd targets, so no other
-router can select the same issue; and (b) Step 6's `dispatch-spawn-worker`
-enforces per-worktree dedup at the spawn boundary, so even if a race let two
-routers reach Step 6 with the same target, only one worker would start. Later
+Releasing after Step 5 is safe because (a) once the spawned worker registers a
+live session, the selection scan skips targets whose worktree a live session
+owns (#905), so no other router selects the same issue; and (b) until that
+session registers — and even if a race let two routers reach Step 6 with the
+same target — Step 6's `dispatch-spawn-worker` enforces per-worktree dedup at
+the spawn boundary, so only one worker starts. (An orphan worktree, on disk
+with no live session, no longer blocks selection — so (b) is what closes the
+lock-release-to-worker-registration window, not (a).) Later
 steps cross-reference *Releasing the lock* rather than repeating these
 commands.
 
@@ -376,8 +379,9 @@ an explicit `/dispatch-propagate` argument, otherwise `queue`:
 It prints exactly one decision line — act on it. Each branch resolves to a
 worktree path that Step 6 will pass to `dispatch-spawn-worker`.
 
-- **`enter <path>`** → re-use an existing `<issue>-*` worktree (the
-  recycle-after-completion case, reached only for an explicit argument). Set
+- **`enter <path>`** → re-use an existing `<issue>-*` worktree
+  (recycle-after-completion for an explicit argument, or recycle of an orphan
+  worktree — on disk, no live session — for a queue selection, #905). Set
   `WORKTREE_PATH=<path>` for Step 6. Re-sync issue context from the worktree
   (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`):
   ```bash
