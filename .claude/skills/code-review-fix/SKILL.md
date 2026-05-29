@@ -171,17 +171,20 @@ steps in order.
    `dispatch:security-reviewed` — so `/dispatch` does not apply the label after
    this skill returns.
 
-8. **Exit and hand off.** Run (`dangerouslyDisableSandbox: true` — the script
-   calls `gh` and `dispatch-self-close`):
+8. **Write the phase-completed marker, then stop.** The Stop hook
+   (`.claude/hooks/dispatch-stop.sh`) reads this to decide propagate vs park.
+   Atomic via tempfile + mv. `CLAUDE_JOB_DIR` unset = interactive run; skip.
 
    ```bash
-   ExitWorktree action:"keep"
-   .claude/skills/dispatch/scripts/dispatch-handoff <N> --phase-completed
+   if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+     printf 'phase=code-review\npr=%s\n' "$PR_NUM" \
+       > "$CLAUDE_JOB_DIR/phase-completed.tmp"
+     mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
+        "$CLAUDE_JOB_DIR/phase-completed"
+   fi
    ```
 
-   `dispatch-handoff` spawns the next `/dispatch` router, checks for a
-   `dispatch:office-hours` deviation flag on the PR, and self-closes the
-   session.
+   Then **stop**. The Stop hook reads the marker and advances the chain.
 
 ## Finding classification
 

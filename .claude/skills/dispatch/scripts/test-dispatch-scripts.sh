@@ -6025,6 +6025,553 @@ fi
 ohs_teardown
 
 # ============================================================================
+# dispatch-stop hook tests
+# ============================================================================
+echo ""
+echo "=== dispatch-stop ==="
+#
+# Stop hook owning the post-phase disposition: read phase-completed marker,
+# decide branch (A absent / B advanced / C verify-retry / D non-advance),
+# manage dispatch:office-hours, spawn router, self-close on advance.
+# Discriminator: CLAUDE_JOB_DIR set, state.json present, .name matches ^[0-9]+-
+# (workers only; router names like dispatch-<id> are skipped).
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/hooks/dispatch-stop.sh               — hook under test
+#   $TMPDIR_TEST/skills/dispatch/scripts/             — fakes for find-pr,
+#                                                       phase, spawn-router,
+#                                                       self-close
+#   $TMPDIR_TEST/bin/{gh,git}                         — PATH shims
+#   $TMPDIR_TEST/jobs/abcd1234/state.json             — fake CLAUDE_JOB_DIR
+#   $TMPDIR_TEST/jobs/abcd1234/phase-completed        — marker (optional)
+#   $TMPDIR_TEST/stub/                                — recorded invocations
+#                                                       (order.log, *-calls.log,
+#                                                       gh-*.log)
+
+stop_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  STUB_DIR="$TMPDIR_TEST/stub"
+  mkdir -p "$TMPDIR_TEST/hooks" "$TMPDIR_TEST/skills/dispatch/scripts" \
+    "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/jobs/abcd1234"
+
+  cp "$HOOK_SCRIPT_DIR/dispatch-stop.sh" \
+    "$TMPDIR_TEST/hooks/dispatch-stop.sh"
+  chmod +x "$TMPDIR_TEST/hooks/dispatch-stop.sh"
+
+  # Fake dispatch-find-pr: prints contents of $STUB_DIR/find-pr-output if
+  # present, else nothing.
+  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr" <<'FAKE'
+#!/usr/bin/env bash
+[[ -f "$STUB_DIR/find-pr-output" ]] && cat "$STUB_DIR/find-pr-output"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr"
+
+  # Fake dispatch-phase: prints contents of $STUB_DIR/current-phase.txt if
+  # present, else "implement".
+  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-phase" <<'FAKE'
+#!/usr/bin/env bash
+if [[ -f "$STUB_DIR/current-phase.txt" ]]; then
+  cat "$STUB_DIR/current-phase.txt"
+else
+  echo "implement"
+fi
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-phase"
+
+  # Fake dispatch-spawn-router: log to order.log + spawn-calls.log.
+  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn-router" <<'FAKE'
+#!/usr/bin/env bash
+echo "spawn" >> "$STUB_DIR/order.log"
+echo "spawn" >> "$STUB_DIR/spawn-calls.log"
+echo "spawned"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn-router"
+
+  # Fake dispatch-self-close: log to order.log + self-close-calls.log.
+  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-self-close" <<'FAKE'
+#!/usr/bin/env bash
+echo "self-close" >> "$STUB_DIR/order.log"
+echo "self-close" >> "$STUB_DIR/self-close-calls.log"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-self-close"
+
+  # gh PATH stub. issue-edit-mode "label-missing" models the apply-first /
+  # create-on-"not found" idiom — first add-label fails with "not found" stderr,
+  # exits 1; once gh-label-create.log exists, the retry succeeds.
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  pr\ edit\ *--add-label*)
+    echo "$args" >> "$STUB_DIR/gh-pr-edit.log"
+    ;;
+  pr\ edit\ *--remove-label*)
+    echo "$args" >> "$STUB_DIR/gh-pr-remove.log"
+    ;;
+  pr\ view\ *)
+    if [[ -f "$STUB_DIR/verify-count.txt" ]]; then
+      cat "$STUB_DIR/verify-count.txt"
+    else
+      echo "0"
+    fi
+    ;;
+  issue\ edit\ *--add-label*)
+    mode="ok"
+    [[ -f "$STUB_DIR/issue-edit-mode" ]] && mode=$(cat "$STUB_DIR/issue-edit-mode")
+    case "$mode" in
+      label-missing)
+        if [[ -f "$STUB_DIR/gh-label-create.log" ]]; then
+          echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
+          echo "label-apply" >> "$STUB_DIR/order.log"
+        else
+          echo "failed to update: 'dispatch:office-hours' not found" >&2
+          exit 1
+        fi
+        ;;
+      *)
+        echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
+        echo "label-apply" >> "$STUB_DIR/order.log"
+        ;;
+    esac
+    ;;
+  issue\ edit\ *--remove-label*)
+    echo "$args" >> "$STUB_DIR/gh-issue-remove.log"
+    ;;
+  label\ create\ *)
+    echo "$args" >> "$STUB_DIR/gh-label-create.log"
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  cat > "$TMPDIR_TEST/bin/git" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  "rev-parse --abbrev-ref HEAD")
+    if [[ -f "$STUB_DIR/current-branch.txt" ]]; then
+      cat "$STUB_DIR/current-branch.txt"
+    else
+      echo "main"
+    fi
+    ;;
+  *) echo "git stub: unknown invocation: $args" >&2; exit 1 ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/git"
+
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+  export STUB_DIR
+}
+
+stop_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  STUB_DIR=""
+  export PATH="$SAVED_PATH"
+  unset CLAUDE_JOB_DIR
+}
+
+# --- Test 1: marker present, phase advanced → strip both, spawn, self-close --
+
+echo "Test: stop hook + marker present + phase advanced → strip PR+issue, spawn, self-close"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "verify" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=implement" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop advance: hook exits 0" "0" "$rc"
+pr_remove_log=$(cat "$STUB_DIR/gh-pr-remove.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$pr_remove_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop advance: PR --remove-label invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: PR --remove-label invoked"
+  echo "    pr-remove-log: $pr_remove_log"
+fi
+issue_remove_log=$(cat "$STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop advance: issue --remove-label invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: issue --remove-label invoked"
+  echo "    issue-remove-log: $issue_remove_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop advance: spawn invoked exactly once" "1" "$spawn_calls"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop advance: self-close invoked exactly once" "1" "$self_close_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop advance: no add-label calls were made"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: no add-label calls were made"
+fi
+stop_teardown
+
+# --- Test 2: marker present, same phase, verify, counter < 3 → spawn only ----
+
+echo "Test: stop hook + same phase + verify + counter<3 → spawn only (silent variance)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "verify" > "$STUB_DIR/current-phase.txt"
+echo "1" > "$STUB_DIR/verify-count.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=verify" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop verify-retry: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop verify-retry: no label add or remove invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-retry: no label add or remove invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop verify-retry: self-close not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-retry: self-close not invoked"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop verify-retry: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
+# --- Test 3: marker present, same phase, verify, counter >= 3 → branch D -----
+
+echo "Test: stop hook + same phase + verify + counter>=3 → apply label to issue, spawn"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "verify" > "$STUB_DIR/current-phase.txt"
+echo "3" > "$STUB_DIR/verify-count.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=verify" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop verify-exhausted: hook exits 0" "0" "$rc"
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop verify-exhausted: issue --add-label invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-exhausted: issue --add-label invoked"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop verify-exhausted: PR --add-label not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-exhausted: PR --add-label not invoked"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop verify-exhausted: spawn invoked exactly once" "1" "$spawn_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop verify-exhausted: self-close not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-exhausted: self-close not invoked"
+fi
+stop_teardown
+
+# --- Test 4: marker present, same phase, non-verify → branch D ---------------
+
+echo "Test: stop hook + same phase + non-verify → apply label to issue, spawn"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "qa" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=qa" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop same-phase non-verify: hook exits 0" "0" "$rc"
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop same-phase non-verify: issue --add-label invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop same-phase non-verify: issue --add-label invoked"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop same-phase non-verify: PR --add-label not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop same-phase non-verify: PR --add-label not invoked"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop same-phase non-verify: spawn invoked exactly once" "1" "$spawn_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop same-phase non-verify: self-close not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop same-phase non-verify: self-close not invoked"
+fi
+stop_teardown
+
+# --- Test 5: marker absent → apply label to issue, spawn ---------------------
+
+echo "Test: stop hook + marker absent → apply label to issue, spawn"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+# No find-pr-output → implement-phase, no PR yet.
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop marker-absent: hook exits 0" "0" "$rc"
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop marker-absent: issue --add-label invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop marker-absent: issue --add-label invoked"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-pr-remove.log" \
+   && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop marker-absent: no PR calls and no remove calls"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop marker-absent: no PR calls and no remove calls"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop marker-absent: spawn invoked exactly once" "1" "$spawn_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop marker-absent: self-close not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop marker-absent: self-close not invoked"
+fi
+stop_teardown
+
+# --- Test 6: CLAUDE_JOB_DIR unset → no-op ------------------------------------
+
+echo "Test: stop hook + CLAUDE_JOB_DIR unset → no-op (interactive session excluded)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+unset CLAUDE_JOB_DIR
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop no-job-dir: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop no-job-dir: no gh calls invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop no-job-dir: no gh calls invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop no-job-dir: spawn not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop no-job-dir: spawn not invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop no-job-dir: self-close not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop no-job-dir: self-close not invoked"
+fi
+stop_teardown
+
+# --- Test 7: router name discriminator → no-op -------------------------------
+
+echo "Test: stop hook + state.json name 'dispatch-<id>' (router) → no-op"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=implement" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop router-name: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop router-name: no gh calls invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop router-name: no gh calls invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop router-name: spawn not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop router-name: spawn not invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop router-name: self-close not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop router-name: self-close not invoked"
+fi
+stop_teardown
+
+# --- Test 8: label create-on-"not found" idiom -------------------------------
+
+echo "Test: stop hook + marker absent + label missing → create label, retry apply"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo "label-missing" > "$STUB_DIR/issue-edit-mode"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker → branch A.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop label-missing: hook exits 0" "0" "$rc"
+label_create_log=$(cat "$STUB_DIR/gh-label-create.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$label_create_log" == *"--color FBCA04"* ]] \
+   && [[ "$label_create_log" == *"dispatch:office-hours"* ]] \
+   && [[ "$label_create_log" == *"blocked on a human"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop label-missing: label created with canonical color and description"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop label-missing: label created with canonical color and description"
+  echo "    label-create-log: $label_create_log"
+fi
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop label-missing: issue apply retried after label create"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop label-missing: issue apply retried after label create"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop label-missing: spawn invoked exactly once after recovery" "1" "$spawn_calls"
+stop_teardown
+
+# --- Test 9: spawn-last ordering (branch D) ----------------------------------
+
+echo "Test: stop hook branch D → spawn is invoked AFTER label apply"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "qa" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=qa" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop ordering: hook exits 0" "0" "$rc"
+order_log=$(cat "$STUB_DIR/order.log" 2>/dev/null || true)
+label_line=$(grep -n '^label-apply$' "$STUB_DIR/order.log" 2>/dev/null | head -n1 | cut -d: -f1)
+spawn_line=$(grep -n '^spawn$' "$STUB_DIR/order.log" 2>/dev/null | head -n1 | cut -d: -f1)
+TOTAL=$((TOTAL + 1))
+if [[ -n "$label_line" && -n "$spawn_line" && "$spawn_line" -gt "$label_line" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop ordering: spawn appears after label-apply"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop ordering: spawn appears after label-apply"
+  echo "    order.log:"
+  echo "$order_log" | sed 's/^/      /'
+fi
+stop_teardown
+
+# --- Test 10: empty CURRENT_PHASE (dispatch-phase failure) → Branch D, no self-close --
+
+echo "Test: stop hook + marker present + dispatch-phase fails (empty CURRENT_PHASE) → Branch D (park), no self-close"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+# Simulate dispatch-phase failure by making the fake return nothing (exit 1).
+cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-phase" <<'FAKE'
+#!/usr/bin/env bash
+exit 1
+FAKE
+chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-phase"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=code-review" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop empty-phase: hook exits 0" "0" "$rc"
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop empty-phase: office-hours applied to issue (Branch D, not false Branch B)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop empty-phase: office-hours applied to issue (Branch D, not false Branch B)"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop empty-phase: self-close NOT invoked (no false advance)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop empty-phase: self-close NOT invoked (no false advance)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop empty-phase: no remove-label calls (no strip)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop empty-phase: no remove-label calls (no strip)"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop empty-phase: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
+# --- Test 11: unrecognized MARKER_PHASE value → treated as absent (Branch A) --
+
+echo "Test: stop hook + marker present with unrecognized phase value → Branch A (treat as absent), no self-close"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# A value outside the known phase set — would otherwise drive Branch B's
+# self-close since "garbage-injection" != "implement".
+echo "phase=garbage-injection" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop unknown-phase: hook exits 0" "0" "$rc"
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop unknown-phase: office-hours applied to issue (Branch A, not false Branch B)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop unknown-phase: office-hours applied to issue (Branch A, not false Branch B)"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop unknown-phase: self-close NOT invoked (corrupt marker doesn't drive advance)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop unknown-phase: self-close NOT invoked (corrupt marker doesn't drive advance)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop unknown-phase: no remove-label calls (no strip)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop unknown-phase: no remove-label calls (no strip)"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop unknown-phase: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
+# ============================================================================
 # ensure_deps (lib.sh) retry tests
 # ============================================================================
 echo ""
@@ -6442,14 +6989,16 @@ PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/dispatch/SKILL.md"]=0
   [".claude/skills/dispatch-worker/SKILL.md"]=2
-  # Phase skills call ExitWorktree action:"keep" at their clean-completion
-  # terminus (#824) — one terminal ExitWorktree each, not a mid-session switch.
-  [".claude/skills/dispatch-qa/SKILL.md"]=1
-  [".claude/skills/plan-implement/SKILL.md"]=1
-  [".claude/skills/code-review-fix/SKILL.md"]=1
-  [".claude/skills/review-fix/SKILL.md"]=1
-  [".claude/skills/security-review-fix/SKILL.md"]=1
-  [".claude/skills/verify-pr/SKILL.md"]=1
+  # Phase skills do not call EnterWorktree/ExitWorktree (#868): they write the
+  # phase-completed marker and stop; the Stop hook (`.claude/hooks/dispatch-stop.sh`)
+  # owns post-phase disposition (label management, router spawn, self-close).
+  # This supersedes #824's terminal ExitWorktree action:"keep" pattern.
+  [".claude/skills/dispatch-qa/SKILL.md"]=0
+  [".claude/skills/plan-implement/SKILL.md"]=0
+  [".claude/skills/code-review-fix/SKILL.md"]=0
+  [".claude/skills/review-fix/SKILL.md"]=0
+  [".claude/skills/security-review-fix/SKILL.md"]=0
+  [".claude/skills/verify-pr/SKILL.md"]=0
   [".claude/skills/implement-unit/SKILL.md"]=0
   [".claude/skills/commit-merge-push/SKILL.md"]=0
 )
