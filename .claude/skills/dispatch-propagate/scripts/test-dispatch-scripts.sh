@@ -53,6 +53,7 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
+  cp "$SCRIPT_DIR/dispatch-apply-office-hours" "$TMPDIR_TEST/dispatch-apply-office-hours"
   cp "$SCRIPT_DIR/dispatch-resolve-worktree" "$TMPDIR_TEST/dispatch-resolve-worktree"
   # dispatch-select-target's JIT scan calls dispatch-config-load and
   # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
@@ -74,6 +75,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
+           "$TMPDIR_TEST/dispatch-apply-office-hours" \
            "$TMPDIR_TEST/dispatch-resolve-worktree" \
            "$TMPDIR_TEST/dispatch-config-load" \
            "$TMPDIR_TEST/dispatch-project-status-read"
@@ -213,9 +215,46 @@ case "$args" in
     fi
     ;;
   label\ create\ *)
-    # dispatch-complete-phase creates the label only when the apply reported
-    # it missing.
+    # dispatch-complete-phase / dispatch-apply-office-hours create the label only
+    # when the apply reported it missing.
     echo "$args" >> "$STUB_DIR/gh-label-create.log"
+    ;;
+  issue\ view\ *\ --json\ labels)
+    # dispatch-apply-office-hours idempotency read: gh issue view <num> --json labels.
+    # $STUB_DIR/issue-labels-<num>.json supplies the labels object; absence means
+    # the issue carries no labels.
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/issue-labels-${num}.json" ]]; then
+      cat "$STUB_DIR/issue-labels-${num}.json"
+    else
+      echo '{"labels":[]}'
+    fi
+    ;;
+  issue\ edit\ *)
+    # dispatch-apply-office-hours applies the label to the ISSUE.
+    # $STUB_DIR/issue-edit-mode selects behavior (default: succeed and log args).
+    mode="ok"
+    [[ -f "$STUB_DIR/issue-edit-mode" ]] && mode=$(cat "$STUB_DIR/issue-edit-mode")
+    case "$mode" in
+      label-missing)
+        # The label does not exist until gh label create runs: model gh's
+        # missing-label error until then, then succeed on the retry.
+        if [[ -f "$STUB_DIR/gh-label-create.log" ]]; then
+          echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
+        else
+          label="${args##* }"
+          echo "failed to update: '$label' not found" >&2
+          exit 1
+        fi
+        ;;
+      *)
+        echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
+        ;;
+    esac
+    ;;
+  issue\ comment\ *)
+    # dispatch-apply-office-hours posts the why-comment to the ISSUE.
+    echo "$args" >> "$STUB_DIR/gh-issue-comment.log"
     ;;
   pr\ edit\ *)
     # dispatch-complete-phase applies the label to the PR. $STUB_DIR/pr-edit-mode
@@ -2233,6 +2272,104 @@ matches=$(grep -rl 'BFD4F2' "$REPO_ROOT/.claude" \
 assert_eq "only dispatch-complete-phase owns BFD4F2" \
   ".claude/skills/dispatch-propagate/scripts/dispatch-complete-phase" \
   "$matches"
+
+# ============================================================================
+# dispatch-apply-office-hours tests
+# ============================================================================
+echo ""
+echo "=== dispatch-apply-office-hours ==="
+
+# Reports whether the gh stub recorded a given call log (present/absent).
+log_state() {
+  [[ -f "$STUB_DIR/$1" ]] && echo "present" || echo "absent"
+}
+
+# Happy path: the issue carries no office-hours label, so the script applies it
+# to the ISSUE and posts a why-comment containing the reason text.
+echo "Test: label absent → apply to issue + post why-comment"
+setup
+"$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion"
+assert_eq "applies dispatch:office-hours to the issue" \
+  "issue edit 42 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+assert_eq "happy path: no gh label create when label exists" \
+  "absent" "$(log_state gh-label-create.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q "Reason: phase exited before completion" "$STUB_DIR/gh-issue-comment.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: why-comment contains the reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: why-comment contains the reason"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "^issue comment 42 " "$STUB_DIR/gh-issue-comment.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: comment targets the issue"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: comment targets the issue"
+fi
+teardown
+
+# Idempotent: the issue already carries the label → no re-apply, no duplicate
+# comment.
+echo "Test: label already present → no edit, no duplicate comment"
+setup
+echo '{"labels":[{"name":"dispatch:office-hours"}]}' > "$STUB_DIR/issue-labels-42.json"
+"$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase ran but did not advance"
+assert_eq "idempotent: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "idempotent: no duplicate comment" "absent" "$(log_state gh-issue-comment.log)"
+teardown
+
+# Missing reason (only an issue number) → non-zero exit, no edit, no comment.
+echo "Test: missing reason → non-zero exit, no edit, no comment"
+setup
+if "$TMPDIR_TEST/dispatch-apply-office-hours" 42 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "missing reason exits non-zero" "1" "$rc"
+assert_eq "missing reason: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "missing reason: no comment" "absent" "$(log_state gh-issue-comment.log)"
+teardown
+
+# Empty reason → same as missing reason.
+echo "Test: empty reason → non-zero exit, no edit, no comment"
+setup
+if "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "empty reason exits non-zero" "1" "$rc"
+assert_eq "empty reason: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+teardown
+
+# Missing both args → non-zero exit.
+echo "Test: missing both args → non-zero exit"
+setup
+if "$TMPDIR_TEST/dispatch-apply-office-hours" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "missing both args exits non-zero" "1" "$rc"
+teardown
+
+# Create-on-first-use: the apply fails "not found" (the *label* does not exist
+# in the repo yet), so the script creates it with the canonical FBCA04 color and
+# retries the edit, then posts the comment.
+echo "Test: label not found → create (FBCA04) then retry + comment"
+setup
+echo "label-missing" > "$STUB_DIR/issue-edit-mode"
+"$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion"
+TOTAL=$((TOTAL + 1))
+if grep -q "^label create dispatch:office-hours --color FBCA04 " "$STUB_DIR/gh-label-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: label created with FBCA04 color"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: label created with FBCA04 color"
+fi
+assert_eq "create-on-first-use: label applied on retry" \
+  "issue edit 42 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+assert_eq "create-on-first-use: why-comment posted" \
+  "present" "$(log_state gh-issue-comment.log)"
+teardown
+
+# dispatch-apply-office-hours owns the FBCA04 hex. (A single-source-of-truth
+# guard that excludes the two writer hooks is deferred to the unit that routes
+# them through this script and removes their inline FBCA04 references.)
+echo "Test: dispatch-apply-office-hours contains the FBCA04 hex"
+TOTAL=$((TOTAL + 1))
+if grep -q 'FBCA04' "$SCRIPT_DIR/dispatch-apply-office-hours"; then
+  PASS=$((PASS + 1)); echo "  PASS: dispatch-apply-office-hours owns FBCA04"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: dispatch-apply-office-hours owns FBCA04"
+fi
 
 # ============================================================================
 # dispatch-resolve-worktree tests

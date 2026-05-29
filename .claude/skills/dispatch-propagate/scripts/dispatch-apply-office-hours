@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Park a dispatch unit of work on a human: apply dispatch:office-hours + post why.
+# Usage: dispatch-apply-office-hours <issue-num> <reason>
+#
+# Purpose: the single write path for the dispatch:office-hours label. Both
+# writers (the PreToolUse/Notification input-block hook and the Stop hook) route
+# through here so the target and the accompanying why-comment never diverge.
+#
+# Issue-only target: the label ALWAYS lands on the ISSUE, never a PR. Queue
+# readers anchor their skip on the issue, so a PR-side label would be invisible
+# to them and the parked item could be re-selected.
+#
+# This script is the single source of truth for the dispatch:office-hours label
+# create metadata (color FBCA04 and description).
+#
+# Idempotency: if the issue already carries dispatch:office-hours, the script is
+# a no-op — it neither re-applies the label nor posts a second why-comment, so a
+# repeatedly-firing hook leaves exactly one comment.
+#
+# Why-comment: a fresh apply posts an issue comment containing "Reason: <reason>"
+# so a human reading the parked issue sees what blocked the workflow.
+#
+# Never blocks a hook: only a missing-argument check is a hard error (a clear
+# misuse, not a fallback). Every gh failure after that warns on stderr and exits
+# 0 — a hook must never be torn down because a label edit or comment failed. Run
+# WITHOUT `set -e` so a guarded gh failure does not abort the script.
+set -uo pipefail
+
+ISSUE_NUM="${1:-}"
+REASON="${2:-}"
+
+LABEL="dispatch:office-hours"
+LABEL_COLOR="FBCA04"
+LABEL_DESC="dispatch workflow: blocked on a human — awaiting input or review"
+
+# Missing args are a clear misuse, not a recoverable condition — hard error.
+if [[ -z "$ISSUE_NUM" || -z "$REASON" ]]; then
+  echo "error: usage: dispatch-apply-office-hours <issue-num> <reason>" >&2
+  exit 1
+fi
+
+# Idempotency gate: if the issue already carries the label, do nothing. A gh
+# read failure here is non-fatal — warn and bail out without parking, since we
+# cannot tell whether a comment was already posted.
+if labels_json=$(gh issue view "$ISSUE_NUM" --json labels 2>&1); then
+  if printf '%s' "$labels_json" \
+      | jq -e --arg l "$LABEL" '.labels[]? | select(.name == $l)' >/dev/null 2>&1; then
+    # Label already present — no-op, no duplicate comment.
+    exit 0
+  fi
+else
+  echo "dispatch-apply-office-hours: warning: could not read labels for issue #$ISSUE_NUM: $labels_json" >&2
+  exit 0
+fi
+
+# Apply the label to the ISSUE first. Once the label exists in the repo — the
+# common case — this is the only edit call that runs.
+if ! apply_output=$(gh issue edit "$ISSUE_NUM" --add-label "$LABEL" 2>&1); then
+  # The edit failed. gh reports a missing *label* (not a missing issue) with a
+  # "not found" message; in that case the label simply does not exist yet —
+  # create it with the canonical metadata and retry once. Any other failure is
+  # real: warn and exit 0 (never block a hook), and post no comment.
+  if [[ "$apply_output" != *"not found"* ]]; then
+    echo "dispatch-apply-office-hours: warning: could not apply $LABEL to issue #$ISSUE_NUM: $apply_output" >&2
+    exit 0
+  fi
+  if ! create_output=$(gh label create "$LABEL" --color "$LABEL_COLOR" --description "$LABEL_DESC" 2>&1); then
+    echo "dispatch-apply-office-hours: warning: could not create label $LABEL: $create_output" >&2
+    exit 0
+  fi
+  if ! retry_output=$(gh issue edit "$ISSUE_NUM" --add-label "$LABEL" 2>&1); then
+    echo "dispatch-apply-office-hours: warning: could not apply $LABEL to issue #$ISSUE_NUM after create: $retry_output" >&2
+    exit 0
+  fi
+fi
+
+# The label is now on the issue. Post the why-comment. A comment failure is
+# non-fatal (the label still landed) — warn and exit 0.
+if ! comment_output=$(gh issue comment "$ISSUE_NUM" --body "Parked on \`$LABEL\`. Reason: $REASON" 2>&1); then
+  echo "dispatch-apply-office-hours: warning: could not post why-comment on issue #$ISSUE_NUM: $comment_output" >&2
+  exit 0
+fi
+
+exit 0
