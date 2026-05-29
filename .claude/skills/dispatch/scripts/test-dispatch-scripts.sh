@@ -5410,6 +5410,31 @@ else
 fi
 spawn_router_teardown
 
+# --- Test 7: registration on the exact last attempt still exits 0 ------------
+
+echo "Test: a spawned job that registers on the 5th (final) 'agents' call still exits 0"
+spawn_router_setup
+write_fake_spawn_router_claude
+# SPAWN_BG_REGISTER_AFTER_N=5 makes the agent first appear on the 5th
+# subsequent `agents` call — the last poll before verify_agent_registered_under
+# exhausts its 5-attempt budget. This pins the off-by-one in the retry loop:
+# the final attempt is honoured, so the script must still exit 0.
+export SPAWN_BG_REGISTER_AFTER_N=5
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+err_file="$TMPDIR_TEST/stderr"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>"$err_file"); then rc=0; else rc=$?; fi
+err=$(cat "$err_file")
+assert_eq "last-attempt-register: dispatch-spawn-router exits 0" "0" "$rc"
+assert_eq "last-attempt-register: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ -z "${err//[[:space:]]/}" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: last-attempt-register: no diagnostic on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: last-attempt-register: no diagnostic on stderr"
+  echo "    stderr: $err"
+fi
+spawn_router_teardown
+
 # ============================================================================
 # dispatch-spawn-worker tests
 # ============================================================================
@@ -5812,6 +5837,32 @@ if [[ -z "${err//[[:space:]]/}" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: delayed-register-worker: no diagnostic on stderr"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: delayed-register-worker: no diagnostic on stderr"
+  echo "    stderr: $err"
+fi
+spawn_worker_teardown
+
+# --- Test 10: registration on the exact last attempt still exits 0 -----------
+
+echo "Test: a spawned worker that registers on the 5th (final) 'agents' call still exits 0"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+# SPAWN_BG_REGISTER_AFTER_N=5 makes the worker first appear on the 5th
+# subsequent `agents` call — the last poll before verify_agent_registered_under
+# exhausts its 5-attempt budget. This pins the off-by-one in the retry loop:
+# the final attempt is honoured, so the script must still exit 0.
+export SPAWN_BG_REGISTER_AFTER_N=5
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+err_file="$TMPDIR_TEST/stderr"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>"$err_file" ); then rc=0; else rc=$?; fi
+err=$(cat "$err_file")
+assert_eq "last-attempt-register-worker: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "last-attempt-register-worker: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ -z "${err//[[:space:]]/}" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: last-attempt-register-worker: no diagnostic on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: last-attempt-register-worker: no diagnostic on stderr"
   echo "    stderr: $err"
 fi
 spawn_worker_teardown
