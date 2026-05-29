@@ -8166,6 +8166,24 @@ assert_eq "extra arg: no marker in second arg path" "0" \
   "$([ -f "$EXTRA_B/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
 lock_teardown
 
+# ----- Test E (flag-shaped argument) -----------------------------------------
+# A flag-shaped first arg (e.g. someone confusing this wrapper with
+# dispatch-acquire-lock --release) is rejected before any cd/marker side effect.
+echo "Test: dispatch-finalize-selection with flag-shaped arg exits 2"
+lock_setup
+if "$FINALIZE_SCRIPT" --release > "$TMPDIR_TEST/flag.out" 2> "$TMPDIR_TEST/flag.err"; then
+  flag_exit=0
+else
+  flag_exit=$?
+fi
+assert_eq "flag arg: exit 2" "2" "$flag_exit"
+assert_eq "flag arg: stderr names script and 'flag-shaped'" "1" \
+  "$(grep -c 'dispatch-finalize-selection.*flag-shaped' "$TMPDIR_TEST/flag.err")"
+# No marker created anywhere on the rejected call.
+assert_eq "flag arg: no marker created in $TMPDIR_TEST" "" \
+  "$(find "$TMPDIR_TEST" -name dispatch-worktree -print 2>/dev/null)"
+lock_teardown
+
 # ============================================================================
 # restore-dispatch-skill tests (#903)
 # ============================================================================
