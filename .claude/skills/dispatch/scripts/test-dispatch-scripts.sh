@@ -85,28 +85,6 @@ setup() {
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
   export DISPATCH_FIND_PR_RETRY_DELAY=0
 
-  # Default fake `claude`: emits an empty JSON array on stdout, exits 0.
-  # lib-claude-agents.sh `claude_sessions_under` reads `[]` as a successful
-  # "zero sessions" response. Installed in $TMPDIR_TEST/bin so it sits on PATH
-  # alongside the gh and git stubs.
-  cat > "$TMPDIR_TEST/bin/claude" <<'STUB'
-#!/usr/bin/env bash
-echo "[]"
-STUB
-  chmod +x "$TMPDIR_TEST/bin/claude"
-
-  # Default no-op dispatch-sweep stub: silent, exit 0 (no orphan to adopt).
-  # dispatch-select-target invokes "$SCRIPT_DIR/dispatch-sweep" in default mode
-  # between the main-broken gate and the queue ladder; with this stub the call
-  # is inert and every existing default-mode test stays green. Tests that
-  # exercise sweep integration overwrite this stub before invoking
-  # dispatch-select-target.
-  cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
-#!/usr/bin/env bash
-exit 0
-STUB
-  chmod +x "$TMPDIR_TEST/dispatch-sweep"
-
   # dispatch-select-target calls dispatch-phase as "$SCRIPT_DIR/dispatch-phase".
   # Since we copied them all to TMPDIR_TEST, SCRIPT_DIR inside each copy will
   # resolve to TMPDIR_TEST correctly.
@@ -1926,209 +1904,28 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "parked issue skipped; next help-wanted issue returned" "issue 66" "$result"
 teardown
 
-# --- sweep routing (issue #803) ---------------------------------------------
-# dispatch-select-target invokes dispatch-sweep internally in default mode,
-# between the main-broken gate and the queue ladder. Selection is a pure
-# function of GitHub state plus local-worktree existence — cwd is not consulted.
-# Tests below overwrite the default no-op sweep stub seeded by setup() to
-# exercise the routing branches.
-
-# SR1. Selector invoked from an <issue>-* worktree returns the same queue-ladder
-#      result it would from main. The default no-op sweep stub is in place so the
-#      ladder runs; the assert proves a queue-ladder result (pr 999), not a
-#      cwd-derived line that old code would have emitted.
-echo "Test: selector from issue-branch cwd returns queue-ladder line (cwd ignored)"
+# OH3. A PR with dispatch:office-hours that has a worktree on disk is not
+#      selected — the PR-ladder worktree-skip keeps it out regardless of the
+#      label, but the label alone is also sufficient. This test codifies the
+#      no-regression claim: the old sweep-adoption mechanism would have picked
+#      such a PR; without it the labeled-and-worktree'd PR stays out.
+echo "Test: office-hours PR with worktree on disk is not selected"
 setup
-# Seed a verify PR as the expected queue-ladder output.
-UNION='['"$(make_pr_union 999 "999-foo" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+# PR 10 is parked (dispatch:office-hours) and also has a worktree on disk.
+# PR 20 is the second eligible verify PR with no labels and no worktree.
+OFFICE_HOURS_LABELS='[{"name":"dispatch:office-hours"}]'
+UNION='['
+UNION+="$(make_pr_union 10 "10-oh-parked" "2024-01-01T00:00:00Z" "true" "$OFFICE_HOURS_LABELS" "$FAILING_ROLLUP")"','
+UNION+="$(make_pr_union 20 "20-active" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"
+UNION+=']'
 setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-# Current branch is an issue branch — but cwd must not affect selection.
-printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
-# Sweep is a no-op so the ladder runs.
+# Worktree exists on disk for 10-oh-parked (what the old adoption mechanism would
+# have targeted); no worktree for 20-active.
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/10-oh-parked\nHEAD def456\nbranch refs/heads/10-oh-parked\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "selector from issue-branch cwd → queue-ladder result (pr 999)" "pr 999 999-foo verify" "$result"
-teardown
-
-# SR2. (AC c) Outside any worktree, orphan present → worktree-adopted.
-echo "Test: outside any worktree, orphan present → worktree-adopted"
-setup
-setup_union_pr_list '[]'
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf 'main' > "$STUB_DIR/current-branch.txt"
-cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
-#!/usr/bin/env bash
-echo "worktree 725 725-orphan"
-exit 0
-STUB
-chmod +x "$TMPDIR_TEST/dispatch-sweep"
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "sweep adoption → worktree-adopted 725 725-orphan" "worktree-adopted 725 725-orphan" "$result"
-teardown
-
-# SR3. (AC d) Outside any worktree, no orphan → ladder result.
-echo "Test: outside any worktree, no orphan → ladder result"
-setup
-UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-setup_union_pr_list "$UNION"
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf 'main' > "$STUB_DIR/current-branch.txt"
-# Default no-op sweep stub from setup() is unchanged → sweep falls through.
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "no orphan → ladder picks verify PR" "pr 10 10-verify-me verify" "$result"
-teardown
-
-# SR4. cleanup-unknown propagation: sweep exits 3 with stderr "cleanup-unknown:<path>".
-echo "Test: sweep exit 3 + cleanup-unknown stderr → cleanup-unknown <path>"
-setup
-setup_union_pr_list '[]'
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf 'main' > "$STUB_DIR/current-branch.txt"
-cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
-#!/usr/bin/env bash
-echo "cleanup-unknown:/tmp/some-orphan" >&2
-exit 3
-STUB
-chmod +x "$TMPDIR_TEST/dispatch-sweep"
-if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "cleanup-unknown propagated to stdout" "cleanup-unknown /tmp/some-orphan" "$result"
-assert_eq "cleanup-unknown route exits 0" "0" "$rc"
-teardown
-
-# SR5. --no-sweep bypasses the sweep call. A sweep stub that would adopt an
-#      orphan is installed; the flag must prove it was never invoked.
-echo "Test: --no-sweep bypasses the sweep call"
-setup
-UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-setup_union_pr_list "$UNION"
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf 'main' > "$STUB_DIR/current-branch.txt"
-# Stub would emit worktree-adopted-style adoption directive if invoked.
-cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
-#!/usr/bin/env bash
-echo "worktree 725 725-orphan"
-exit 0
-STUB
-chmod +x "$TMPDIR_TEST/dispatch-sweep"
-result=$("$TMPDIR_TEST/dispatch-select-target" --no-sweep)
-assert_eq "--no-sweep skips adoption → ladder result" "pr 10 10-verify-me verify" "$result"
-teardown
-
-# SR6. A non-3 non-zero sweep exit logs a diagnostic but falls through to the
-#      ladder — defense-in-depth so a malformed sweep does not stall dispatch.
-echo "Test: sweep exit 2 (unrelated failure) → warning, fall through to ladder"
-setup
-UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-setup_union_pr_list "$UNION"
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf 'main' > "$STUB_DIR/current-branch.txt"
-cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
-#!/usr/bin/env bash
-echo "some unrelated sweep error" >&2
-exit 2
-STUB
-chmod +x "$TMPDIR_TEST/dispatch-sweep"
-result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null)
-assert_eq "sweep exit 2 → falls through to ladder result" "pr 10 10-verify-me verify" "$result"
-teardown
-
-# SR7. --cleanup-confirm <path> calls dispatch-sweep --cleanup-unknown <path>
-#      first, then re-runs the default sweep+route block. With a sweep stub
-#      that exits 0 / empty stdout on the second call, the script falls
-#      through to the ladder. Proves both calls happen and that routing after
-#      cleanup is identical to default mode.
-echo "Test: --cleanup-confirm <path> runs cleanup then resumes selection"
-setup
-UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-setup_union_pr_list "$UNION"
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf 'main' > "$STUB_DIR/current-branch.txt"
-# Sweep stub logs each invocation's args and is silent / exit 0 otherwise.
-cat > "$TMPDIR_TEST/dispatch-sweep" <<STUB
-#!/usr/bin/env bash
-printf '%s\n' "\$*" >> "$STUB_DIR/dispatch-sweep-calls.log"
-exit 0
-STUB
-chmod +x "$TMPDIR_TEST/dispatch-sweep"
-result=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm "/tmp/some-orphan" 2>/dev/null)
-assert_eq "cleanup-confirm → falls through to ladder result" "pr 10 10-verify-me verify" "$result"
-assert_eq "dispatch-sweep called twice (cleanup + resume)" \
-  "2" "$(wc -l < "$STUB_DIR/dispatch-sweep-calls.log" | tr -d ' ')"
-assert_eq "first sweep call carries --cleanup-unknown <path>" \
-  "--cleanup-unknown /tmp/some-orphan" \
-  "$(sed -n '1p' "$STUB_DIR/dispatch-sweep-calls.log")"
-assert_eq "second sweep call carries no args" \
-  "" "$(sed -n '2p' "$STUB_DIR/dispatch-sweep-calls.log")"
-teardown
-
-# SR8. --cleanup-confirm <path> halts at the next unknown orphan: the
-#      post-cleanup sweep emits cleanup-unknown:<path2> on stderr and exits 3,
-#      and the script propagates cleanup-unknown <path2> on stdout. Proves
-#      multiple unknown orphans iterate one-at-a-time via repeated SKILL.md
-#      AskUserQuestion confirmations rather than being silently consumed.
-echo "Test: --cleanup-confirm <path> halts on the next unknown orphan"
-setup
-setup_union_pr_list '[]'
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf 'main' > "$STUB_DIR/current-branch.txt"
-# Sweep stub: first call (cleanup) exits 0; second call (resume) emits a new
-# unknown orphan on stderr and exits 3.
-cat > "$TMPDIR_TEST/dispatch-sweep" <<STUB
-#!/usr/bin/env bash
-printf '%s\n' "\$*" >> "$STUB_DIR/dispatch-sweep-calls.log"
-n=\$(wc -l < "$STUB_DIR/dispatch-sweep-calls.log" | tr -d ' ')
-if [[ "\$n" -eq 1 ]]; then
-  exit 0
-else
-  echo "cleanup-unknown:/tmp/second-orphan" >&2
-  exit 3
-fi
-STUB
-chmod +x "$TMPDIR_TEST/dispatch-sweep"
-if result=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm "/tmp/first-orphan" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "second unknown orphan propagated to stdout" \
-  "cleanup-unknown /tmp/second-orphan" "$result"
-assert_eq "halting on next unknown orphan exits 0" "0" "$rc"
-teardown
-
-# SR9. --cleanup-confirm <path> with a failing dispatch-sweep --cleanup-unknown
-#      call propagates the non-zero exit code (set -e) instead of silently
-#      falling through to the ladder. Proves cleanup failures are fail-loud per
-#      the contract documented at the top of the sweep+route block.
-echo "Test: --cleanup-confirm with failing cleanup propagates non-zero exit"
-setup
-setup_union_pr_list '[]'
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf 'main' > "$STUB_DIR/current-branch.txt"
-cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
-#!/usr/bin/env bash
-echo "dispatch-sweep: invalid cleanup path" >&2
-exit 2
-STUB
-chmod +x "$TMPDIR_TEST/dispatch-sweep"
-if result=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm "/tmp/bad" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "cleanup failure propagates exit 2" "2" "$rc"
-assert_eq "cleanup failure emits no stdout" "" "$result"
-teardown
-
-# SR10. --cleanup-confirm and --no-sweep are mutually exclusive: combining them
-#       would silently skip the post-cleanup sweep, violating the "resumes
-#       selection" contract.
-echo "Test: --cleanup-confirm + --no-sweep is rejected"
-setup
-if err=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm /tmp/x --no-sweep 2>&1 >/dev/null); then rc=0; else rc=$?; fi
-assert_eq "combining the flags exits 1" "1" "$rc"
-assert_eq "stderr names both flags" \
-  "error: --cleanup-confirm and --no-sweep are mutually exclusive" "$err"
+assert_eq "office-hours PR with worktree not selected; second PR chosen" "pr 20 20-active verify" "$result"
 teardown
 
 # ============================================================================
@@ -2696,16 +2493,12 @@ echo "=== dispatch-sweep ==="
 #   project/.bare/                fake git common dir (parent = project/)
 #   project/worktrees/<n>-<slug>/ fake worktrees
 #   project/tmp/                  sweep log default dir
-#   fake/                         fake `claude` script (CLAUDE_AGENTS_CMD target)
 #   stub/                         per-test JSON + record files (calls, gh out)
 #
 # Shims:
 #   gh   — gh-pr-list-all.json drives `pr list --state all`; each entry carries
-#          {state, headRefName, number, isDraft}, partitioned by the script into
-#          MERGED_BY_BRANCH / OPEN_BY_BRANCH / DRAFT_BY_BRANCH (the last for
-#          OPEN entries only). isDraft is required on OPEN entries — the
-#          SKIP_ORPHAN_READY_PR gate reads DRAFT_BY_BRANCH and an OPEN stub
-#          missing isDraft will silently bypass the gate.
+#          {state, headRefName, number}. MERGED entries populate MERGED_BY_BRANCH;
+#          OPEN entries populate OPEN_BY_BRANCH. DRAFT is unused (isDraft not consumed).
 #   git  — knows worktree list/remove/prune, branch -D, -C <p> status,
 #          -C <p> rev-list --count, -C <p> log -1 --format=%ct, and
 #          rev-parse --path-format=absolute --git-common-dir.
@@ -2721,7 +2514,6 @@ sweep_setup() {
   cp "$SCRIPT_DIR/dispatch-sweep" "$TMPDIR_TEST/scripts/dispatch-sweep"
   cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/scripts/lib-worktree-in-sync.sh"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
-  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
 
   # Default empty gh output (each test may overwrite).
@@ -2730,32 +2522,30 @@ sweep_setup() {
   # Default empty worktree list (each test should overwrite with its records).
   : > "$STUB_DIR/worktree-list.txt"
 
-  # gh shim — only the call dispatch-sweep makes.
+  # gh shim — handles dispatch-sweep's calls.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  "pr list --state all --json number,headRefName,state,isDraft --limit 200")
+  "pr list --state all --json number,headRefName,state --limit 200")
     cat "$STUB_DIR/gh-pr-list-all.json"
     ;;
   issue\ view\ *\ --json\ state\ -q\ .state)
+    # dispatch-sweep closed-issue check: gh issue view <N> --json state -q .state
     num=$(echo "$args" | awk '{print $3}')
+    # Controllable failure: if SWEEP_GH_ISSUE_FAIL matches this issue number, fail.
+    if [[ "${SWEEP_GH_ISSUE_FAIL:-}" == "$num" ]]; then
+      echo "gh sweep stub: simulated gh issue view failure for $num" >&2
+      exit 1
+    fi
+    # Per-issue state fixture: issue-state-<N>.txt holds the raw state string.
     f="$STUB_DIR/issue-state-${num}.txt"
     if [[ -f "$f" ]]; then
       cat "$f"
     else
-      echo "OPEN"   # default: not closed (allows adoption)
-    fi
-    ;;
-  api\ */dependencies/blocked_by)
-    path=$(echo "$args" | awk '{print $2}')
-    num=$(echo "$path" | grep -oE '[0-9]+' | tail -1)
-    f="$STUB_DIR/blockers-${num}.json"
-    if [[ -f "$f" ]]; then
-      cat "$f"
-    else
-      echo "[]"     # default: no blockers (allows adoption)
+      echo "gh sweep stub: no issue-state-${num}.txt for issue view $num" >&2
+      exit 1
     fi
     ;;
   *)
@@ -2839,7 +2629,8 @@ STUB
   export PATH="$TMPDIR_TEST/bin:$PATH"
 
   # Default fake `claude` — prints `[]` and exits 0 (no live sessions).
-  # All tests that do not override this get "everything orphaned" semantics.
+  # Step 3's liveness gate sees a definite "no sessions" and proceeds with
+  # removal. Tests that need a live session call sweep_fake_claude_sessions_by_name.
   local default_fake="$TMPDIR_TEST/fake/claude"
   cat > "$default_fake" <<'FAKE'
 #!/usr/bin/env bash
@@ -2849,7 +2640,7 @@ FAKE
   chmod +x "$default_fake"
 
   # Defaults for dispatch-sweep env overrides.
-  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake/claude"
+  export CLAUDE_AGENTS_CMD="$default_fake"
   export DISPATCH_SWEEP_LOG_FILE="$STUB_DIR/sweep.log"
   export DISPATCH_SWEEP_NOW="2026-01-01T00:00:00Z"
 }
@@ -2869,12 +2660,6 @@ sweep_register_wt() {
   mkdir -p "$wt_path"
   printf 'worktree %s\nHEAD abc123\nbranch refs/heads/%s\n\n' \
     "$wt_path" "$branch" >> "$STUB_DIR/worktree-list.txt"
-}
-
-# Helper: prepend a fake main worktree record (the script skips it).
-sweep_register_main() {
-  printf 'worktree %s\nHEAD mainsha\nbranch refs/heads/main\n\n' \
-    "$TMPDIR_TEST/project/worktrees/main" >> "$STUB_DIR/worktree-list.txt"
 }
 
 # Convenience: convert an absolute path to the status/revlist/headct key
@@ -2959,466 +2744,153 @@ else
 fi
 sweep_teardown
 
-# --- Test 2: active vs orphaned via claude agents --json (name-keyed) --------
+# --- Test 1b: closed-issue worktree (in-sync) is removed + branch deleted ----
 
-echo "Test: claude agents --json (name-keyed) distinguishes active vs orphaned worktrees"
+echo "Test: closed-issue worktree (in-sync) is removed + branch deleted"
 sweep_setup
-ACTIVE_WT="$TMPDIR_TEST/project/worktrees/50-active"
-ORPHAN_WT="$TMPDIR_TEST/project/worktrees/51-orphan"
-sweep_register_wt "$ACTIVE_WT" "50-active"
-sweep_register_wt "$ORPHAN_WT" "51-orphan"
-# Neither branch merged or has an open PR — both are eligible for adoption
-# via issue-number inference (^[0-9]+-).
-# Orphan needs a HEAD commit time for the adoption tiebreaker.
-ORPHAN_KEY=$(sweep_path_key "$ORPHAN_WT")
-echo "1700000000" > "$STUB_DIR/headct${ORPHAN_KEY}.txt"
-
-# One live session registered under name "50-active" (the basename), none for "51-orphan".
-# Step 4 uses claude_sessions_with_name("50-active") — name must match the basename.
-sweep_fake_claude_sessions_by_name "50-active=abc"
-
-out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
-assert_eq "active/orphan sweep exits 0" "0" "$rc"
-assert_eq "only orphan adopted" "worktree 51 51-orphan" "$out"
-
-# Log: ACTIVE for 50 with session fields (name=50-active from the session), ORPHANED for 51, ADOPT for 51.
-TOTAL=$((TOTAL + 1))
-if grep -q "ACTIVE: '$ACTIVE_WT' branch=50-active sessionId=abc name=50-active status=busy" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: ACTIVE log line for 50-active with sessionId=abc name=50-active status=busy"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE log line for 50-active with sessionId=abc name=50-active status=busy"
-  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
-fi
-TOTAL=$((TOTAL + 1))
-if grep -q "ORPHANED: '$ORPHAN_WT' branch=51-orphan" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: ORPHANED log line for 51-orphan"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: ORPHANED log line for 51-orphan"
-fi
-TOTAL=$((TOTAL + 1))
-if grep -q "ADOPT_ORPHAN: '$ORPHAN_WT' branch=51-orphan issue=51" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: ADOPT_ORPHAN log line for 51-orphan"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: ADOPT_ORPHAN log line for 51-orphan"
-fi
-sweep_teardown
-
-# --- Test 2b: daemon-query failure classifies all surviving as active ---------
-
-echo "Test: daemon-query failure classifies all surviving worktrees as active"
-sweep_setup
-WT_A="$TMPDIR_TEST/project/worktrees/54-alpha"
-WT_B="$TMPDIR_TEST/project/worktrees/55-beta"
-sweep_register_wt "$WT_A" "54-alpha"
-sweep_register_wt "$WT_B" "55-beta"
-
-# Install a failing fake `claude` (exits non-zero, prints nothing).
-cat > "$TMPDIR_TEST/fake/claude" <<'FAKE'
-#!/usr/bin/env bash
-exit 1
-FAKE
-chmod +x "$TMPDIR_TEST/fake/claude"
-# CLAUDE_AGENTS_CMD is already pointing at $TMPDIR_TEST/fake/claude from sweep_setup.
-
-err_file="$TMPDIR_TEST/stderr-daemon-fail.txt"
-out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>"$err_file"); rc=$?
-assert_eq "daemon-failure sweep exits 0" "0" "$rc"
-assert_eq "daemon-failure emits no stdout (no adoption)" "" "$out"
-
-# Each worktree must log ACTIVE with liveness=unknown.
-TOTAL=$((TOTAL + 1))
-if grep -q "ACTIVE: '$WT_A' branch=54-alpha liveness=unknown" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: ACTIVE liveness=unknown for 54-alpha"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE liveness=unknown for 54-alpha"
-  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
-fi
-TOTAL=$((TOTAL + 1))
-if grep -q "ACTIVE: '$WT_B' branch=55-beta liveness=unknown" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: ACTIVE liveness=unknown for 55-beta"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE liveness=unknown for 55-beta"
-fi
-# No ADOPT_ORPHAN line should be present.
-TOTAL=$((TOTAL + 1))
-if ! grep -q "ADOPT_ORPHAN" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: no ADOPT_ORPHAN on daemon failure"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: unexpected ADOPT_ORPHAN on daemon failure"
-fi
-sweep_teardown
-
-# --- Test 3: oldest-orphan tiebreaker ----------------------------------------
-
-echo "Test: oldest orphan wins by HEAD commit time"
-sweep_setup
-OLD_WT="$TMPDIR_TEST/project/worktrees/52-old"
-NEW_WT="$TMPDIR_TEST/project/worktrees/53-new"
-sweep_register_wt "$OLD_WT" "52-old"
-sweep_register_wt "$NEW_WT" "53-new"
-OLD_KEY=$(sweep_path_key "$OLD_WT")
-NEW_KEY=$(sweep_path_key "$NEW_WT")
-echo "1000" > "$STUB_DIR/headct${OLD_KEY}.txt"
-echo "2000" > "$STUB_DIR/headct${NEW_KEY}.txt"
-# Default fake claude (no live sessions) → both orphans.
-
-out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
-assert_eq "oldest-orphan sweep exits 0" "0" "$rc"
-assert_eq "older orphan adopted" "worktree 52 52-old" "$out"
-
-TOTAL=$((TOTAL + 1))
-if grep -q "ADOPT_ORPHAN: '$OLD_WT' branch=52-old issue=52 ct=1000" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: ADOPT_ORPHAN for older worktree (ct=1000)"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: ADOPT_ORPHAN for older worktree (ct=1000)"
-  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
-fi
-sweep_teardown
-
-# --- Test 4a: inferable issue number, no PR, not merged → adopt --------------
-
-echo "Test: orphan with inferable issue number is adoptable"
-sweep_setup
-WT_PATH="$TMPDIR_TEST/project/worktrees/42-foo-bar"
-sweep_register_wt "$WT_PATH" "42-foo-bar"
-KEY=$(sweep_path_key "$WT_PATH")
-echo "1500000000" > "$STUB_DIR/headct${KEY}.txt"
-
-out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
-assert_eq "inferable-issue sweep exits 0" "0" "$rc"
-assert_eq "inferable issue orphan adopted" "worktree 42 42-foo-bar" "$out"
-sweep_teardown
-
-# --- Test 4b: non-inferable branch, no PR → halt with cleanup-unknown --------
-
-echo "Test: orphan with no PR and no inferable issue number halts"
-sweep_setup
-WT_PATH="$TMPDIR_TEST/project/worktrees/feature-foo"
-sweep_register_wt "$WT_PATH" "feature-foo"
-# No headct file: even if reached, no adoption — but the script halts first.
-
-err_file="$TMPDIR_TEST/stderr.txt"
-# `set -e` is in effect: capture exit code with an if/else, not `cmd; rc=$?`.
-if out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>"$err_file"); then rc=0; else rc=$?; fi
-assert_eq "unknown-orphan sweep exits 3" "3" "$rc"
-err=$(cat "$err_file")
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"cleanup-unknown:$WT_PATH"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stderr carries cleanup-unknown directive"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stderr carries cleanup-unknown directive"
-  echo "    stderr: $err"
-fi
-TOTAL=$((TOTAL + 1))
-if grep -q "HALT_UNKNOWN: '$WT_PATH' branch=feature-foo" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: HALT_UNKNOWN log line for feature-foo"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: HALT_UNKNOWN log line for feature-foo"
-  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
-fi
-sweep_teardown
-
-# --- Test 5: --cleanup-unknown <path> removes a single worktree --------------
-
-echo "Test: --cleanup-unknown removes only the specified worktree"
-sweep_setup
-TARGET_WT="$TMPDIR_TEST/project/worktrees/feature-foo"
-OTHER_WT="$TMPDIR_TEST/project/worktrees/42-other"
-sweep_register_wt "$TARGET_WT" "feature-foo"
-sweep_register_wt "$OTHER_WT" "42-other"
-
-out=$("$TMPDIR_TEST/scripts/dispatch-sweep" --cleanup-unknown "$TARGET_WT" 2>/dev/null); rc=$?
-assert_eq "--cleanup-unknown exits 0" "0" "$rc"
-
-calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if echo "$calls" | grep -qx "worktree-remove-force:$TARGET_WT"; then
-  PASS=$((PASS + 1)); echo "  PASS: forced remove call recorded for target"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: forced remove call recorded for target"
-  echo "    calls: $calls"
-fi
-TOTAL=$((TOTAL + 1))
-if echo "$calls" | grep -q "$OTHER_WT"; then
-  FAIL=$((FAIL + 1)); echo "  FAIL: other worktree untouched (it appears in calls)"
-  echo "    calls: $calls"
-else
-  PASS=$((PASS + 1)); echo "  PASS: other worktree untouched"
-fi
-TOTAL=$((TOTAL + 1))
-if grep -q "CLEANUP_UNKNOWN: '$TARGET_WT'" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: CLEANUP_UNKNOWN log line for target"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: CLEANUP_UNKNOWN log line for target"
-  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
-fi
-sweep_teardown
-
-# --- Test 6: --cleanup-unknown rejects path outside WORKTREES_ROOT -----------
-
-echo "Test: --cleanup-unknown rejects path outside WORKTREES_ROOT"
-sweep_setup
-OUTSIDE_PATH="$TMPDIR_TEST/not-a-worktree"
-mkdir -p "$OUTSIDE_PATH"
-err_file="$TMPDIR_TEST/cleanup-outside-err.txt"
-if "$TMPDIR_TEST/scripts/dispatch-sweep" --cleanup-unknown "$OUTSIDE_PATH" 2>"$err_file"; then
-  rc=0
-else
-  rc=$?
-fi
-assert_eq "--cleanup-unknown outside WORKTREES_ROOT exits 2" "2" "$rc"
-err=$(cat "$err_file")
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"not a direct child"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stderr explains direct-child requirement"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stderr explains direct-child requirement"
-  echo "    stderr: $err"
-fi
-sweep_teardown
-
-# --- Test 7: --cleanup-unknown refuses to remove main ------------------------
-
-echo "Test: --cleanup-unknown refuses to remove main"
-sweep_setup
-MAIN_PATH="$TMPDIR_TEST/project/worktrees/main"
-mkdir -p "$MAIN_PATH"
-err_file="$TMPDIR_TEST/cleanup-main-err.txt"
-if "$TMPDIR_TEST/scripts/dispatch-sweep" --cleanup-unknown "$MAIN_PATH" 2>"$err_file"; then
-  rc=0
-else
-  rc=$?
-fi
-assert_eq "--cleanup-unknown main exits 2" "2" "$rc"
-err=$(cat "$err_file")
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"is main"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stderr identifies main as off-limits"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stderr identifies main as off-limits"
-  echo "    stderr: $err"
-fi
-sweep_teardown
-
-# --- Test 8: --cleanup-unknown without a path argument fails -----------------
-
-echo "Test: --cleanup-unknown without a path argument fails"
-sweep_setup
-err_file="$TMPDIR_TEST/cleanup-noarg-err.txt"
-if "$TMPDIR_TEST/scripts/dispatch-sweep" --cleanup-unknown 2>"$err_file"; then
-  rc=0
-else
-  rc=$?
-fi
-assert_eq "--cleanup-unknown without path exits 2" "2" "$rc"
-err=$(cat "$err_file")
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"requires a path argument"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stderr explains missing path argument"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stderr explains missing path argument"
-  echo "    stderr: $err"
-fi
-sweep_teardown
-
-# --- Test 9: open issue with no blockers → orphan is adopted ------------------
-
-echo "Test: open issue with no blockers is adopted (gates pass)"
-sweep_setup
-WT_PATH="$TMPDIR_TEST/project/worktrees/60-open-no-blockers"
-sweep_register_wt "$WT_PATH" "60-open-no-blockers"
-KEY=$(sweep_path_key "$WT_PATH")
-echo "1500000001" > "$STUB_DIR/headct${KEY}.txt"
-# No per-test fixtures: gh shim defaults to OPEN state + [] blockers.
-
-out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
-assert_eq "open-no-blockers sweep exits 0" "0" "$rc"
-assert_eq "open-no-blockers orphan adopted" "worktree 60 60-open-no-blockers" "$out"
-
-TOTAL=$((TOTAL + 1))
-if grep -q "ADOPT_ORPHAN: '$WT_PATH' branch=60-open-no-blockers issue=60" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: ADOPT_ORPHAN log line for open-no-blockers"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: ADOPT_ORPHAN log line for open-no-blockers"
-  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
-fi
-sweep_teardown
-
-# --- Test 10: open issue with open blocker → orphan is skipped ----------------
-
-echo "Test: open issue with an open blocker is skipped"
-sweep_setup
-WT_PATH="$TMPDIR_TEST/project/worktrees/61-blocked"
-sweep_register_wt "$WT_PATH" "61-blocked"
-KEY=$(sweep_path_key "$WT_PATH")
-echo "1500000002" > "$STUB_DIR/headct${KEY}.txt"
-# Write a blockers fixture with one open-blocker entry.
-printf '[{"number":999,"state":"OPEN","title":"Blocking issue"}]\n' \
-  > "$STUB_DIR/blockers-61.json"
-
-out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
-assert_eq "blocked-orphan sweep exits 0" "0" "$rc"
-assert_eq "blocked-orphan stdout is empty" "" "$out"
-
-TOTAL=$((TOTAL + 1))
-if grep -q "SKIP_ORPHAN_BLOCKED: '$WT_PATH' branch=61-blocked issue=61 blockers=1" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: SKIP_ORPHAN_BLOCKED log line for 61-blocked"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_ORPHAN_BLOCKED log line for 61-blocked"
-  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
-fi
-TOTAL=$((TOTAL + 1))
-if grep -q "ADOPT_ORPHAN" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
-  FAIL=$((FAIL + 1)); echo "  FAIL: ADOPT_ORPHAN must NOT appear when blocked"
-else
-  PASS=$((PASS + 1)); echo "  PASS: ADOPT_ORPHAN absent for blocked orphan"
-fi
-sweep_teardown
-
-# --- Test 11: closed issue → orphan is skipped --------------------------------
-
-echo "Test: closed issue orphan is skipped"
-sweep_setup
-WT_PATH="$TMPDIR_TEST/project/worktrees/62-closed"
-sweep_register_wt "$WT_PATH" "62-closed"
-KEY=$(sweep_path_key "$WT_PATH")
-echo "1500000003" > "$STUB_DIR/headct${KEY}.txt"
-# Write the issue-state fixture for issue #62.
-printf 'CLOSED\n' > "$STUB_DIR/issue-state-62.txt"
-# No blockers fixture needed: closed-issue gate runs first.
+WT_PATH="$TMPDIR_TEST/project/worktrees/57-closed-feature"
+sweep_register_wt "$WT_PATH" "57-closed-feature"
+# No merged PRs — the closed-issue path must fire.
+echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+# Issue 57 is CLOSED.
+echo "CLOSED" > "$STUB_DIR/issue-state-57.txt"
+# Clean tree + zero unpushed (defaults).
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
 
 out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
 assert_eq "closed-issue sweep exits 0" "0" "$rc"
-assert_eq "closed-issue stdout is empty" "" "$out"
+assert_eq "closed-issue sweep emits no stdout" "" "$out"
 
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if grep -q "SKIP_ORPHAN_CLOSED_ISSUE: '$WT_PATH' branch=62-closed issue=62" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: SKIP_ORPHAN_CLOSED_ISSUE log line for 62-closed"
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH"; then
+  PASS=$((PASS + 1)); echo "  PASS: REMOVE_CLOSED_ISSUE worktree-remove call recorded"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_ORPHAN_CLOSED_ISSUE log line for 62-closed"
-  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+  FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_CLOSED_ISSUE worktree-remove call recorded"
+  echo "    calls: $calls"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q "ADOPT_ORPHAN" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
-  FAIL=$((FAIL + 1)); echo "  FAIL: ADOPT_ORPHAN must NOT appear when issue is closed"
+if echo "$calls" | grep -qx "branch-D:57-closed-feature"; then
+  PASS=$((PASS + 1)); echo "  PASS: REMOVE_CLOSED_ISSUE branch -D call recorded"
 else
-  PASS=$((PASS + 1)); echo "  PASS: ADOPT_ORPHAN absent for closed-issue orphan"
-fi
-sweep_teardown
-
-# --- Test 12: open non-draft (ready) PR → orphan is skipped -------------------
-
-echo "Test: open non-draft (ready) PR orphan is skipped"
-sweep_setup
-WT_PATH="$TMPDIR_TEST/project/worktrees/63-ready-pr"
-sweep_register_wt "$WT_PATH" "63-ready-pr"
-KEY=$(sweep_path_key "$WT_PATH")
-echo "1500000004" > "$STUB_DIR/headct${KEY}.txt"
-# Register an open, non-draft PR for this branch.
-echo '[{"number":200,"headRefName":"63-ready-pr","state":"OPEN","isDraft":false}]' \
-  > "$STUB_DIR/gh-pr-list-all.json"
-
-out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
-assert_eq "ready-pr sweep exits 0" "0" "$rc"
-assert_eq "ready-pr stdout is empty" "" "$out"
-
-TOTAL=$((TOTAL + 1))
-if grep -q "SKIP_ORPHAN_READY_PR: '$WT_PATH' branch=63-ready-pr issue=63 pr=#200" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: SKIP_ORPHAN_READY_PR log line for 63-ready-pr"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_ORPHAN_READY_PR log line for 63-ready-pr"
-  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+  FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_CLOSED_ISSUE branch -D call recorded"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q "ADOPT_ORPHAN" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
-  FAIL=$((FAIL + 1)); echo "  FAIL: ADOPT_ORPHAN must NOT appear for ready-PR orphan"
+if grep -q "REMOVE_CLOSED_ISSUE: '$WT_PATH' branch=57-closed-feature issue=#57" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: REMOVE_CLOSED_ISSUE log line present"
 else
-  PASS=$((PASS + 1)); echo "  PASS: ADOPT_ORPHAN absent for ready-PR orphan"
+  FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_CLOSED_ISSUE log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
 sweep_teardown
 
-# --- Test 13: open draft PR → orphan still adopts -----------------------------
+# --- Test 1c: closed-issue worktree (not-in-sync) is kept ---------------------
 
-echo "Test: open draft PR orphan still adopts (gate only skips non-draft)"
+echo "Test: closed-issue worktree (not-in-sync) is kept"
 sweep_setup
-WT_PATH="$TMPDIR_TEST/project/worktrees/64-draft-pr"
-sweep_register_wt "$WT_PATH" "64-draft-pr"
-KEY=$(sweep_path_key "$WT_PATH")
-echo "1500000005" > "$STUB_DIR/headct${KEY}.txt"
-echo '[{"number":201,"headRefName":"64-draft-pr","state":"OPEN","isDraft":true}]' \
-  > "$STUB_DIR/gh-pr-list-all.json"
+WT_PATH="$TMPDIR_TEST/project/worktrees/58-closed-dirty"
+sweep_register_wt "$WT_PATH" "58-closed-dirty"
+echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+echo "CLOSED" > "$STUB_DIR/issue-state-58.txt"
+# Not-in-sync: has an uncommitted change.
+key=$(sweep_path_key "$WT_PATH")
+echo " M somefile.txt" > "$STUB_DIR/status${key}.txt"
 
 out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
-assert_eq "draft-pr sweep exits 0" "0" "$rc"
-assert_eq "draft-pr orphan adopted" "worktree 64 64-draft-pr" "$out"
+assert_eq "closed-not-in-sync sweep exits 0" "0" "$rc"
 
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if grep -q "SKIP_ORPHAN_READY_PR" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
-  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_ORPHAN_READY_PR must NOT fire for draft PR"
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_CLOSED_NOT_IN_SYNC no worktree-remove call"
 else
-  PASS=$((PASS + 1)); echo "  PASS: SKIP_ORPHAN_READY_PR absent for draft-PR orphan"
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_CLOSED_NOT_IN_SYNC no worktree-remove call"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_CLOSED_NOT_IN_SYNC: '$WT_PATH' branch=58-closed-dirty issue=#58" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_CLOSED_NOT_IN_SYNC log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_CLOSED_NOT_IN_SYNC log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
 sweep_teardown
 
-# --- Test 14: ready-PR gate fires even when gh issue view fails ---------------
-#
-# Regression guard for the ordering of the orphan-classification gates: the
-# ready-PR gate uses the already-fetched DRAFT_BY_BRANCH map and must run
-# BEFORE the gh-dependent closed-issue gate. Otherwise a transient
-# `gh issue view` failure on a ready-PR orphan would exit 1 instead of
-# logging SKIP_ORPHAN_READY_PR — adoption was never warranted anyway, since
-# the PR is awaiting human merge.
+# --- Test 1d: open-issue worktree is kept (regression guard) -----------------
 
-echo "Test: ready-PR gate fires even when gh issue view fails"
+echo "Test: open-issue worktree is kept (regression guard)"
 sweep_setup
-WT_PATH="$TMPDIR_TEST/project/worktrees/65-ready-pr-gh-fail"
-sweep_register_wt "$WT_PATH" "65-ready-pr-gh-fail"
-KEY=$(sweep_path_key "$WT_PATH")
-echo "1500000006" > "$STUB_DIR/headct${KEY}.txt"
-echo '[{"number":202,"headRefName":"65-ready-pr-gh-fail","state":"OPEN","isDraft":false}]' \
-  > "$STUB_DIR/gh-pr-list-all.json"
-# Replace the gh shim so `issue view ... --json state -q .state` exits 1 —
-# simulating a transient gh failure for the issue-state fetch. `pr list` still
-# succeeds (uses the gh-pr-list-all.json fixture above).
-cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
-#!/usr/bin/env bash
-STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
-args="$*"
-case "$args" in
-  "pr list --state all --json number,headRefName,state,isDraft --limit 200")
-    cat "$STUB_DIR/gh-pr-list-all.json"
-    ;;
-  issue\ view\ *\ --json\ state\ -q\ .state)
-    echo "gh: simulated transient failure" >&2
-    exit 1
-    ;;
-  api\ */dependencies/blocked_by)
-    echo "[]"
-    ;;
-  *)
-    echo "gh sweep stub: unknown invocation: $args" >&2
-    exit 1
-    ;;
-esac
-STUB
-chmod +x "$TMPDIR_TEST/bin/gh"
+WT_PATH="$TMPDIR_TEST/project/worktrees/59-open-feature"
+sweep_register_wt "$WT_PATH" "59-open-feature"
+echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+echo "OPEN" > "$STUB_DIR/issue-state-59.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
 
 out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
-assert_eq "ready-pr-gh-fail sweep exits 0" "0" "$rc"
-assert_eq "ready-pr-gh-fail stdout is empty" "" "$out"
+assert_eq "open-issue sweep exits 0" "0" "$rc"
 
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if grep -q "SKIP_ORPHAN_READY_PR: '$WT_PATH' branch=65-ready-pr-gh-fail issue=65 pr=#202" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: SKIP_ORPHAN_READY_PR fires before failing issue-state gh call"
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: open-issue worktree not removed"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_ORPHAN_READY_PR fires before failing issue-state gh call"
-  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+  FAIL=$((FAIL + 1)); echo "  FAIL: open-issue worktree not removed"
+  echo "    calls: $calls"
 fi
+sweep_teardown
+
+# --- Test 1e: gh issue view fails → ERROR_ISSUE_STATE_FETCH, exit 1 ----------
+
+echo "Test: gh issue view fails → ERROR_ISSUE_STATE_FETCH on stderr, exit 1"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/60-closed-feature"
+sweep_register_wt "$WT_PATH" "60-closed-feature"
+echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+# No issue-state-60.txt — let gh fail via the SWEEP_GH_ISSUE_FAIL env var.
+export SWEEP_GH_ISSUE_FAIL="60"
+
+stderr_out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "gh issue view fail → exit 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if grep -q "ERROR_ISSUE_STATE_FETCH" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
-  FAIL=$((FAIL + 1)); echo "  FAIL: ERROR_ISSUE_STATE_FETCH must NOT appear (ready-PR gate ran first)"
+if echo "$stderr_out" | grep -q "60"; then
+  PASS=$((PASS + 1)); echo "  PASS: ERROR_ISSUE_STATE_FETCH stderr mentions issue number"
 else
-  PASS=$((PASS + 1)); echo "  PASS: ERROR_ISSUE_STATE_FETCH absent (closed-issue gate skipped)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: ERROR_ISSUE_STATE_FETCH stderr mentions issue number"
+  echo "    stderr: $stderr_out"
+fi
+unset SWEEP_GH_ISSUE_FAIL
+sweep_teardown
+
+# --- Test 1f: open-PR worktree with closed issue is kept (OPEN_BY_BRANCH guard) ---
+
+echo "Test: open-PR worktree with closed issue is kept (OPEN_BY_BRANCH guard)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/61-active-pr"
+sweep_register_wt "$WT_PATH" "61-active-pr"
+echo '[{"state":"OPEN","headRefName":"61-active-pr","number":888}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+# Issue is CLOSED, but the OPEN_BY_BRANCH guard must short-circuit before gh issue view.
+echo "CLOSED" > "$STUB_DIR/issue-state-61.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "open-PR closed-issue sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: open-PR worktree not removed despite closed issue"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: open-PR worktree not removed despite closed issue"
+  echo "    calls: $calls"
 fi
 sweep_teardown
 
@@ -3496,88 +2968,6 @@ if grep -q "REMOVE_MERGED: '$WT_PATH' branch=71-no-live-merged pr=#301" \
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_MERGED log line present"
   echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
-fi
-sweep_teardown
-
-# --- Test 17: Step 4 ACTIVE — basename matches a live session ----------------
-#
-# A surviving (non-merged) worktree whose basename matches a live session must
-# be classified ACTIVE; the log line must carry the session's sid and name.
-
-echo "Test: Step 4 classifies a worktree ACTIVE when its basename matches a live session"
-sweep_setup
-WT_PATH="$TMPDIR_TEST/project/worktrees/72-worker"
-sweep_register_wt "$WT_PATH" "72-worker"
-# Register a live session whose name matches the worktree's basename.
-sweep_fake_claude_sessions_by_name "72-worker=sess-w72"
-
-out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
-assert_eq "Step4-active sweep exits 0" "0" "$rc"
-assert_eq "Step4-active emits no stdout (nothing to adopt)" "" "$out"
-
-TOTAL=$((TOTAL + 1))
-if grep -q "ACTIVE: '$WT_PATH' branch=72-worker sessionId=sess-w72 name=72-worker status=busy" \
-   "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: ACTIVE log line carries sid=sess-w72 name=72-worker"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE log line carries sid=sess-w72 name=72-worker"
-  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
-fi
-TOTAL=$((TOTAL + 1))
-if grep -q "ORPHANED" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
-  FAIL=$((FAIL + 1)); echo "  FAIL: ORPHANED must NOT appear for an ACTIVE worktree"
-else
-  PASS=$((PASS + 1)); echo "  PASS: ORPHANED absent for active worktree"
-fi
-sweep_teardown
-
-# --- Test 18: Step 4 ORPHANED — cwd match is not enough (name-keyed regression guard)
-#
-# A surviving worktree with NO name-matched session must be classified ORPHANED,
-# even if some live session's cwd happens to equal the worktree path.
-# This guards against regressing to cwd-based semantics.
-
-echo "Test: Step 4 classifies ORPHANED when cwd matches but name does not (regression guard)"
-sweep_setup
-WT_PATH="$TMPDIR_TEST/project/worktrees/73-cwd-ghost"
-sweep_register_wt "$WT_PATH" "73-cwd-ghost"
-KEY=$(sweep_path_key "$WT_PATH")
-echo "1500009999" > "$STUB_DIR/headct${KEY}.txt"
-# Install a session whose cwd points at the worktree but whose name is a
-# different string — so a cwd-based query would find it, but a name-based
-# query must not.
-local_fake="$TMPDIR_TEST/fake/claude"
-# Build the payload manually: name="wrong-name", cwd="$WT_PATH".
-cat > "$TMPDIR_TEST/fake/payload.json" \
-  <<EOF
-[{"sessionId":"sess-cwd-only","pid":1,"status":"busy","name":"wrong-name","cwd":"$WT_PATH"}]
-EOF
-cat > "$local_fake" <<'FAKE'
-#!/usr/bin/env bash
-cat "$(cd "$(dirname "$0")" && pwd)/payload.json"
-exit 0
-FAKE
-chmod +x "$local_fake"
-export CLAUDE_AGENTS_CMD="$local_fake"
-
-out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
-assert_eq "Step4-cwd-ghost sweep exits 0" "0" "$rc"
-# The worktree should be adopted (ORPHANED → ADOPT) since it has no name match.
-assert_eq "Step4-cwd-ghost worktree is adopted (classified ORPHANED)" \
-  "worktree 73 73-cwd-ghost" "$out"
-
-TOTAL=$((TOTAL + 1))
-if grep -q "ORPHANED: '$WT_PATH' branch=73-cwd-ghost" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: ORPHANED log line present (cwd match ignored)"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: ORPHANED log line present (cwd match ignored)"
-  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
-fi
-TOTAL=$((TOTAL + 1))
-if grep -q "ACTIVE" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
-  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE must NOT appear (cwd-ghost session should not classify as active)"
-else
-  PASS=$((PASS + 1)); echo "  PASS: ACTIVE absent (name-keyed, not cwd-keyed)"
 fi
 sweep_teardown
 
