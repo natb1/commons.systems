@@ -135,14 +135,16 @@ mechanisms; the other is per-worktree and enforced elsewhere.
 The **per-worktree invariant**: at most one live worker agent per issue
 worktree. The router's Step 6 spawn primitive (`dispatch-spawn-worker`)
 enforces this at the spawn boundary. Every worker is born with the target
-worktree's basename as its `--name` (the dispatch-spawn-worker script does not
-`cd` into the target worktree — it stays at the spawner's cwd, `worktrees/main`,
-to keep the daemon's launcher-default cwd anchored there), so per-worktree name
-uniqueness is automatic. The dedup query lists live sessions under the spawner
-cwd (where every worker registers) and checks for `name == <worktree-basename>`;
-if any other live worker matches, the spawn is `deduped` and no new worker
-starts. The worker `cd`s into its target worktree as its own Step 0 and dies
-there; per-worktree dedup naturally serializes per-issue work without the
+worktree's basename as its `--name` — the `dispatch-spawn-worker` script's
+own cwd stays at the spawner's cwd (`worktrees/main`), but the spawn
+subshell `cd`s into `<worktree-path>` before invoking `claude --bg`, so the
+new worker registers and runs in its target worktree. Per-worktree name
+uniqueness is automatic. The dedup query lists live sessions under
+`<worktree-path>` (not the spawner cwd — that's where every same-target
+worker registers) and checks for `name == <worktree-basename>`; if any other
+live worker matches, the spawn is `deduped` and no new worker starts. The
+worker runs in its target worktree from spawn until it exits;
+per-worktree dedup naturally serializes per-issue work without the
 selection lock having to.
 
 The two mechanisms have orthogonal scopes:
@@ -457,11 +459,17 @@ the lock*). The worker in Step 6 onward runs lock-free.
 
 ## 6. Spawn the Worker
 
-Spawn a `/dispatch-worker <N> <worktree-path>` background job. The spawn runs
-from the router's own cwd (`worktrees/main`) — `dispatch-spawn-worker` does
-**not** `cd` into the target worktree, so the daemon's launcher-default cwd
-stays anchored at the main worktree; the worker `cd`s into its target worktree
-as its own Step 0. Before spawning, consult the concurrency budgeter (see
+Spawn a `/dispatch-worker <N> <worktree-path>` background job. The
+`dispatch-spawn-worker` script runs from the router's own cwd
+(`worktrees/main` — the router stays anchored there), but spawns `claude --bg`
+with cwd = `<worktree-path>` via a subshell `cd`, so the worker is born in its
+target worktree. Trade-off: the Claude daemon's "+ new session" launcher
+default cwd tracks the most-recent worker's worktree rather than
+`worktrees/main` — a recoverable UI default, accepted in exchange for
+sessions whose cwd does not silently drift. The previous arrangement — where
+the worker `cd`'d in its own Step 0 — silently broke when subsequent `Bash` /
+`Skill` calls reset cwd back to the spawn cwd. Before spawning, consult the
+concurrency budgeter (see
 *Concurrency budgeting* below). If the live worker count already meets the
 target, **skip the spawn** for this tick — the chain re-seeds on the next
 router tick when budget reopens. Run with `dangerouslyDisableSandbox: true` —
