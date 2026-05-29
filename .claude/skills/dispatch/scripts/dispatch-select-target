@@ -60,13 +60,20 @@
 #   2. Oldest "review"      PR (draft + dispatch:code-reviewed)
 #   3. Oldest "code-review" PR (draft + dispatch:qa-done)
 #   4. Oldest "verify"      PR (draft, CI completed and failed)
-#   5. Oldest open help-wanted issue with no local git worktree, resolved to a
-#      startable open leaf (an issue whose entire open-leaf subtree is
-#      worktree-conflicted is skipped, exactly as a direct worktree is)
+#   5. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
+#      by a live Claude session, resolved to a startable open leaf (an issue
+#      whose entire open-leaf subtree is worktree-conflicted is skipped, exactly
+#      as a live-session-owned worktree is)
 #   6. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
 #
-# PRs and help-wanted issues with a local git worktree are skipped (a session is
-# actively working them).
+# A PR or help-wanted issue is skipped only when a live Claude session owns its
+# worktree — the row's branch worktree (PR) or any <N>-* worktree (issue). The
+# check sources lib-claude-agents.sh and keys on worktree_has_live_session,
+# which is fail-safe: an unqueryable daemon counts as owned. An orphan worktree
+# (on disk, no live session) does NOT skip the row — it is a reuse signal for
+# dispatch-resolve-worktree, not a priority skip (#905). Worktree existence is a
+# fast-path miss: a row whose branch / <N>-* has no worktree at all never pays
+# the daemon round-trip.
 # A PR is also skipped when an issue it closes is blocked_by an open issue.
 # "done" (non-draft) PRs are skipped entirely.
 # "waiting" PRs (draft, CI still running/queued/not started) are skipped entirely.
@@ -82,6 +89,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+# worktree_has_live_session — a worktree-bearing PR/issue row is skipped only
+# when a live Claude session owns the matching worktree (#905). Sourced here so
+# the queue-scan loops below can ask the liveness question.
+source "$SCRIPT_DIR/lib-claude-agents.sh"
 QA_MODE=false
 HEALTH_ONLY=false
 
@@ -284,35 +295,47 @@ if [[ "$QA_MODE" == "false" ]]; then
 
 fi
 
-# Collect branches that already have a local worktree (a session is working them).
-WORKTREE_BRANCHES=()
-while IFS= read -r line; do
-  # git worktree list --porcelain emits "branch refs/heads/<name>" lines.
-  if [[ "$line" == branch\ * ]]; then
-    branch_ref="${line#branch }"
-    WORKTREE_BRANCHES+=("${branch_ref#refs/heads/}")
+# Map each registered worktree's branch — and its <issue>-number prefix — to its
+# on-disk path. A PR/issue row is skipped only when a *live* Claude session owns
+# the matching worktree (#905): an orphan worktree (on disk, no session) is a
+# reuse signal for dispatch-resolve-worktree, not a priority skip here. Built
+# once via the shared lib.sh record parser so the path is on hand for the
+# liveness query; a bare / detached / non-issue record contributes nothing.
+declare -A WORKTREE_PATH_BY_BRANCH=()
+declare -A WORKTREE_PATHS_BY_NUM=()
+while IFS= read -r wt_record; do
+  split_worktree_record "$wt_record"
+  [[ -z "$WT_PATH" ]] && continue
+  [[ -n "$WT_BRANCH" ]] && WORKTREE_PATH_BY_BRANCH["$WT_BRANCH"]="$WT_PATH"
+  if [[ -n "$WT_NUM" ]]; then
+    WORKTREE_PATHS_BY_NUM["$WT_NUM"]="${WORKTREE_PATHS_BY_NUM[$WT_NUM]:-}$WT_PATH"$'\n'
   fi
-done < <(git worktree list --porcelain)
+done < <(list_worktree_records)
 
-has_worktree() {
+# True when a live session owns the worktree checked out at <branch>. No
+# worktree for <branch> → fast-path miss (return 1), no daemon round-trip. A
+# worktree exists → defer to worktree_has_live_session, which is fail-safe: an
+# unqueryable daemon counts as owned, so the row is skipped rather than
+# double-claimed.
+pr_branch_has_live_worktree() {
   local branch="$1"
-  local b
-  for b in "${WORKTREE_BRANCHES[@]}"; do
-    if [[ "$b" == "$branch" ]]; then
-      return 0
-    fi
-  done
-  return 1
+  local path="${WORKTREE_PATH_BY_BRANCH[$branch]:-}"
+  [[ -z "$path" ]] && return 1
+  worktree_has_live_session "$path"
 }
 
-issue_has_worktree() {
-  local num="$1"
-  local b
-  for b in "${WORKTREE_BRANCHES[@]}"; do
-    if [[ "$b" == "$num-"* ]]; then
+# True when a live session owns any <num>-* worktree. No such worktree →
+# fast-path miss. Several matches → owned if any one is live.
+issue_has_live_worktree() {
+  local num="$1" p
+  local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
+  [[ -z "$paths" ]] && return 1
+  while IFS= read -r p; do
+    [[ -z "$p" ]] && continue
+    if worktree_has_live_session "$p"; then
       return 0
     fi
-  done
+  done <<< "$paths"
   return 1
 }
 
@@ -402,8 +425,9 @@ PHASE_PRIORITY=(security review code-review verify)
 while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "$pr_num" ]] && continue
 
-  # Skip PRs with a local worktree.
-  if has_worktree "$pr_branch"; then
+  # Skip a PR whose branch worktree is owned by a live session. An orphan
+  # worktree does not skip — it is recycled at dispatch-resolve-worktree (#905).
+  if pr_branch_has_live_worktree "$pr_branch"; then
     continue
   fi
 
@@ -471,8 +495,10 @@ ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r '
   | [.number, ((.labels // []) | tojson)] | @tsv')
 while IFS=$'\t' read -r issue_num issue_labels; do
   [[ -z "$issue_num" ]] && continue
-  # Skip issues whose <N>-* worktree exists (a session is working them).
-  if issue_has_worktree "$issue_num"; then
+  # Skip an issue whose <N>-* worktree is owned by a live session. An orphan
+  # <N>-* worktree does not skip — it is recycled at dispatch-resolve-worktree
+  # (#905).
+  if issue_has_live_worktree "$issue_num"; then
     continue
   fi
   # Category is the top-level help-wanted issue's own labels. Priority bit is

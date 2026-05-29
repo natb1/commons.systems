@@ -85,6 +85,15 @@ setup() {
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
   export DISPATCH_FIND_PR_RETRY_DELAY=0
 
+  # Default the worktree-liveness daemon to UNKNOWN: point CLAUDE_AGENTS_CMD at a
+  # path with no executable so `claude agents --json` exits non-zero. The
+  # worktree_has_live_session predicate folds UNKNOWN into "occupied", so a
+  # worktree-bearing row fails safe to skip/conflict — preserving the pre-#905
+  # stat-only behavior for every test that does not opt into a richer fake — and
+  # no test reaches the real `claude` daemon. Per-test calls to
+  # select_target_fake_claude override this to model live or orphan worktrees.
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
+
   # dispatch-select-target calls dispatch-phase as "$SCRIPT_DIR/dispatch-phase".
   # Since we copied them all to TMPDIR_TEST, SCRIPT_DIR inside each copy will
   # resolve to TMPDIR_TEST correctly.
@@ -785,6 +794,33 @@ setup_union_pr_list() {
   printf '%s\n' "$union_json" > "$STUB_DIR/pr-list-union.json"
 }
 
+# Install a fake `claude` for the worktree-liveness checks in
+# dispatch-select-target and dispatch-resolve-worktree. Each argument is a
+# worktree basename that should report a *live* session; the fake's
+# `agents --json` returns one entry per name (client-side jq in
+# claude_sessions_with_name applies the name filter, exactly as in production).
+# Call with zero arguments to model an orphan-worktree world — `[]`, no live
+# sessions — which the predicate reports as free, so the row is NOT skipped and
+# a queue-mode resolve emits `enter`. Overrides the UNKNOWN default from setup.
+select_target_fake_claude() {
+  local payload="[" name first=1
+  for name in "$@"; do
+    if (( first )); then first=0; else payload+=","; fi
+    payload+="{\"sessionId\":\"s-$name\",\"pid\":1,\"status\":\"busy\",\"name\":\"$name\",\"cwd\":\"\"}"
+  done
+  payload+="]"
+  printf '%s' "$payload" > "$TMPDIR_TEST/claude-payload.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+# Ignore all args (including --cwd); return the full payload. The caller's jq
+# name filter selects the matching session, as the real daemon path does.
+cat "$(cd "$(dirname "$0")/.." && pwd)/claude-payload.json"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/claude"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+}
+
 # 1. A non-QA PR is chosen over a QA PR and a help-wanted issue.
 echo "Test: non-QA PR beats QA PR and issue"
 setup
@@ -798,17 +834,33 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "non-QA PR (verify) chosen first" "pr 10 10-verify-me verify" "$result"
 teardown
 
-# 2. PR with a local worktree is skipped.
-echo "Test: PR whose branch has a worktree is skipped"
+# 2. A PR whose branch worktree is owned by a live session is skipped.
+echo "Test: PR whose branch worktree has a live session is skipped"
 setup
 UNION='['"$(make_pr_union 10 "10-active-branch" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-other" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
 setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
-# Worktree exists for branch 10-active-branch.
+# Worktree exists for branch 10-active-branch, owned by a live session.
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/10-active-branch\n\nworktree /worktrees/10-active-branch\nHEAD def456\nbranch refs/heads/10-active-branch\n\n' \
   > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "10-active-branch"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "PR with worktree skipped; next PR returned" "pr 20 20-other verify" "$result"
+assert_eq "PR with live-session worktree skipped; next PR returned" "pr 20 20-other verify" "$result"
+teardown
+
+# 2b. A PR whose branch worktree is an orphan (no live session) is NOT skipped —
+#     the orphan is a reuse signal, not a priority skip (#905).
+echo "Test: PR whose branch worktree is an orphan is not skipped"
+setup
+UNION='['"$(make_pr_union 10 "10-active-branch" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-other" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/10-active-branch\n\nworktree /worktrees/10-active-branch\nHEAD def456\nbranch refs/heads/10-active-branch\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live sessions: 10-active-branch's worktree is an orphan.
+select_target_fake_claude
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "PR with orphan worktree is selected, not skipped" "pr 10 10-active-branch verify" "$result"
 teardown
 
 # 3. When no eligible PR exists, a help-wanted issue is chosen.
@@ -1214,8 +1266,9 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "QA PR (no issue) emits qa phase" "pr 35 35-qa-me qa" "$result"
 teardown
 
-# 24. Help-wanted issue with a worktree is skipped; the next-oldest issue is chosen.
-echo "Test: issue with worktree skipped; next-oldest issue chosen"
+# 24. Help-wanted issue whose <N>-* worktree has a live session is skipped; the
+#     next-oldest issue is chosen.
+echo "Test: issue with live-session worktree skipped; next-oldest issue chosen"
 setup
 setup_union_pr_list '[]'
 # Issue 55 is older, issue 66 is newer. Issue 55 has a 55-* worktree.
@@ -1223,32 +1276,53 @@ printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD def456\nbranch refs/heads/55-some-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "55-some-feature"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "issue with worktree skipped; next issue 66 chosen" "issue 66" "$result"
+assert_eq "issue with live-session worktree skipped; next issue 66 chosen" "issue 66" "$result"
 teardown
 
-# 25. A lone help-wanted issue that has a worktree → empty (nothing else queued).
-echo "Test: lone worktree'd issue → empty"
+# 24b. Help-wanted issue whose <N>-* worktree is an orphan (no live session) is
+#      NOT skipped — it is selected and resolved to a leaf (#905).
+echo "Test: issue with orphan worktree is not skipped"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD def456\nbranch refs/heads/55-some-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live sessions: 55's worktree is an orphan. dispatch-trace-leaf resolves the
+# issue's own leaf (no open blockers / sub-issues stubbed → the issue itself).
+select_target_fake_claude
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "issue with orphan worktree selected, not skipped" "issue 55" "$result"
+teardown
+
+# 25. A lone help-wanted issue whose worktree has a live session → empty
+#     (nothing else queued).
+echo "Test: lone live-session-worktree'd issue → empty"
 setup
 setup_union_pr_list '[]'
 printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD def456\nbranch refs/heads/55-some-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "55-some-feature"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "lone worktree'd issue → empty" "empty" "$result"
+assert_eq "lone live-session-worktree'd issue → empty" "empty" "$result"
 teardown
 
-# 26. Worktree'd issue skipped; QA PR is next in line.
-echo "Test: worktree'd issue skipped → QA PR selected"
+# 26. Live-session-worktree'd issue skipped; QA PR is next in line.
+echo "Test: live-session-worktree'd issue skipped → QA PR selected"
 setup
 UNION='['"$(make_pr_union 20 "20-qa" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
-# The help-wanted issue would normally beat the QA PR, but it has a worktree.
+# The help-wanted issue would normally beat the QA PR, but a live session owns
+# its worktree.
 printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD def456\nbranch refs/heads/55-some-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "55-some-feature"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "worktree'd issue skipped → QA PR returned" "pr 20 20-qa qa" "$result"
+assert_eq "live-session-worktree'd issue skipped → QA PR returned" "pr 20 20-qa qa" "$result"
 teardown
 
 # 27. Prefix disambiguation: issue 6 is NOT masked by an unrelated worktree on branch 60-foo.
@@ -1373,6 +1447,35 @@ printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dis
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "plain-bug PR beats (dispatch, priority) PR — priority does not cross topics" "pr 20 20-bug-pr verify" "$result"
+teardown
+
+# 30e. The 2026-05-29 reproduction (#905). A queue of bug+priority PRs, all but
+#      one carrying an *orphan* worktree, alongside a lower-priority bug
+#      help-wanted issue with no worktree. Before the fix the orphan worktrees
+#      skipped every priority PR and the selector fell through to the
+#      help-wanted issue, violating the priority order. After the fix only the
+#      live-session-owned PR (#898) is skipped; the oldest remaining
+#      security-phase priority PR (#895) wins.
+echo "Test: orphan-worktree bug+priority PRs still beat a no-worktree help-wanted issue (#905)"
+setup
+UNION='['
+UNION+="$(make_pr_union 898 "898-security" "2026-05-20T00:00:00Z" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP" '[{"number":896}]')"','
+UNION+="$(make_pr_union 895 "895-security" "2026-05-21T00:00:00Z" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP" '[{"number":806}]')"','
+UNION+="$(make_pr_union 893 "893-qa" "2026-05-22T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":892}]')"','
+UNION+="$(make_pr_union 883 "883-qa" "2026-05-23T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":879}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Each PR's closing issue carries bug + priority; issue 886 is a lower-priority
+# (no `priority`) bug help-wanted issue with no worktree.
+printf '%s\n' '[{"number":896,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":806,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":892,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":879,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":886,"createdAt":"2026-05-02T00:00:00Z","labels":[{"name":"bug"},{"name":"help wanted"}]}]' \
+  > "$STUB_DIR/issue-list.json"
+# Worktrees exist for all four PR branches; none for issue 886.
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/898-security\nHEAD a1\nbranch refs/heads/898-security\n\nworktree /worktrees/895-security\nHEAD a2\nbranch refs/heads/895-security\n\nworktree /worktrees/893-qa\nHEAD a3\nbranch refs/heads/893-qa\n\nworktree /worktrees/883-qa\nHEAD a4\nbranch refs/heads/883-qa\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# Only #898's worktree has a live session; #895/#893/#883 are orphans.
+select_target_fake_claude "898-security"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "orphan priority PRs not skipped; oldest security priority PR wins" "pr 895 895-security security" "$result"
 teardown
 
 # --- blocked-issue PR skip (issue #786) -------------------------------------
@@ -2260,13 +2363,37 @@ assert_eq "explicit + existing worktree → enter <path>" \
   "enter /worktrees/42-my-feature" "$result"
 teardown
 
-# 3. queue mode + the same worktree setup → conflict <path>. Acceptance
-#    criterion 3: same target, explicit → enter, queue → conflict.
-echo "Test: queue + existing <N>-* worktree → conflict"
+# 3. queue mode + a live-session-owned worktree → conflict <path>. Acceptance
+#    criterion 3: same target, explicit → enter, queue (live) → conflict.
+echo "Test: queue + live-session <N>-* worktree → conflict"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "42-my-feature"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
-assert_eq "queue + existing worktree → conflict <path>" \
+assert_eq "queue + live-session worktree → conflict <path>" \
+  "conflict /worktrees/42-my-feature" "$result"
+teardown
+
+# 3b. queue mode + an orphan worktree (no live session) → enter <path>. The
+#     queue target recycles the orphan instead of stalling the tick (#905).
+echo "Test: queue + orphan <N>-* worktree → enter"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
+assert_eq "queue + orphan worktree → enter <path>" \
+  "enter /worktrees/42-my-feature" "$result"
+teardown
+
+# 3c. queue mode + an UNKNOWN daemon (claude unqueryable) → conflict <path>.
+#     worktree_has_live_session folds UNKNOWN into occupied, so resolve fails
+#     safe to conflict rather than entering a possibly-owned worktree.
+echo "Test: queue + unqueryable daemon → conflict (fail-safe)"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+# setup's default CLAUDE_AGENTS_CMD points at a non-existent binary (UNKNOWN).
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
+assert_eq "queue + unqueryable daemon → conflict <path>" \
   "conflict /worktrees/42-my-feature" "$result"
 teardown
 
@@ -2324,12 +2451,14 @@ assert_eq "explicit from issue-branch cwd, matching worktree → enter (not here
 teardown
 
 # 7b. queue mode invoked from within <N>-* worktree (current-branch = <N>-*)
-#     AND matching worktree entry → conflict <path> (worktree scan runs normally).
-echo "Test: queue from issue-branch cwd with matching worktree → conflict (not here)"
+#     AND a live-session-owned matching worktree → conflict <path> (worktree
+#     scan runs normally).
+echo "Test: queue from issue-branch cwd with live-session worktree → conflict (not here)"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "42-my-feature"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
-assert_eq "queue from issue-branch cwd, matching worktree → conflict (not here)" \
+assert_eq "queue from issue-branch cwd, live-session worktree → conflict (not here)" \
   "conflict /worktrees/42-my-feature" "$result"
 teardown
 

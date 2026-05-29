@@ -273,7 +273,9 @@ continue to target selection.
   the next.
 
   Within each category the ladder is (highest first; within a tier, oldest PR
-  wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
+  wins; PRs and `help wanted` issues whose worktree a live session owns are
+  skipped (an orphan worktree does not skip — it is recycled at
+  dispatch-resolve-worktree); a PR
   whose closing issue is `blocked_by` an open issue is skipped; `waiting`-phase
   PRs are skipped entirely): oldest `security` PR → oldest
   `review` PR → oldest `code-review` PR → oldest `verify` PR → oldest `help wanted`
@@ -415,10 +417,11 @@ worktree path that Step 6 will pass to `dispatch-spawn-worker`.
      (cd "$WORKTREE_PATH" && .claude/skills/dispatch/scripts/sync-issue-context <N>)
      ```
 
-- **`conflict <path>`** → a queue-selected target already has a worktree, so
-  another session owns it. (`dispatch-select-target` resolves the `help wanted`
-  tier to a leaf with no worktree, so for a queue selection this arises only from
-  a race — another session created the worktree between selection and worktree
+- **`conflict <path>`** → a queue-selected target's worktree is owned by a live
+  Claude session. (An orphan worktree — on disk, no live session — yields `enter`
+  instead, recycling it; #905. `dispatch-select-target` already skips a row whose
+  worktree a live session owns, so for a queue selection this arises only from a
+  race — a session claimed the worktree between selection and worktree
   resolution.) Release the lock (see *Releasing the lock*), then proceed to
   Step 7 with `notify worktree-conflict` — the user-visible report is mandatory
   there ("worktree at `<path>` owned by another live session for issue `<N>`;
