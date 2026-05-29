@@ -1,14 +1,14 @@
 ---
 name: dispatch-worker
-description: Worker for the dispatch chain — runs one phase skill in its target worktree, then hands off to a fresh `/dispatch` router
+description: Worker for the dispatch chain — runs one phase skill in its target worktree, then hands off to a fresh `/dispatch-propagate` router
 ---
 
 # Dispatch Worker
 
 The worker is the per-worktree execution half of the dispatch chain. The other
-half — `/dispatch` — is the router: it selects a target, resolves its worktree,
-and spawns this worker into that worktree. The worker derives the phase, runs
-exactly one phase skill, and hands off.
+half — `/dispatch-propagate` — is the router: it selects a target, resolves its
+worktree, and spawns this worker into that worktree. The worker derives the
+phase, runs exactly one phase skill, and hands off.
 
 The worker is spawned **into** its target worktree by `dispatch-spawn-worker`
 — the script invokes `claude --bg` from a subshell that has `cd`'d into
@@ -75,7 +75,7 @@ exit fires, the worker session ends; the Stop hook applies
 Derive the phase via `dispatch-phase <N>`:
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-phase <N>
+.claude/skills/dispatch-propagate/scripts/dispatch-phase <N>
 ```
 
 It prints exactly one phase name. CI status is checked **before** labels — a
@@ -120,7 +120,7 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
      `model: sonnet`) that:
      - first waits for CI to register at least one check — a freshly-pushed
        branch can briefly have an empty check rollup;
-     - then runs `.claude/skills/dispatch/scripts/run-pr-checks-wait.sh
+     - then runs `.claude/skills/dispatch-propagate/scripts/run-pr-checks-wait.sh
        <pr-num>` with `dangerouslyDisableSandbox: true`, which blocks until
        every check concludes;
      - returns once all checks have completed.
@@ -174,7 +174,7 @@ Before invoking `/plan-implement` on an `implement`-phase issue, confirm no PR
 exists for the target by running:
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-find-pr <N>
+.claude/skills/dispatch-propagate/scripts/dispatch-find-pr <N>
 ```
 
 If it prints a PR number, **skip this relevance review** and advance directly to
@@ -252,8 +252,8 @@ current PR/CI state to decide propagate vs park.
 
 ### The #725 cap-keyed re-seed
 
-See `/dispatch` Step 7's *The #725 cap-keyed re-seed* subsection — the
-worker's relationship to the re-seed is the same as the router's. The
-cap-keyed re-seed covers chain stalls caused by a rate-limit cap hit; an
-empty queue or all-parked stall is handled by the office-hours queue, not
-this mechanism.
+See `/dispatch-propagate` Step 7's *The #725 cap-keyed re-seed* subsection
+— the worker's relationship to the re-seed is the same as the router's.
+The cap-keyed re-seed covers chain stalls caused by a rate-limit cap hit;
+an empty queue or all-parked stall is handled by the office-hours queue,
+not this mechanism.

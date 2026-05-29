@@ -43,7 +43,7 @@ print_dispatch_segment() {
   [[ "$branch" =~ ^([1-9][0-9]*)- ]] || return 0     # main / non-issue → nothing
   issue="${BASH_REMATCH[1]}"
   cache="$SCRIPT_DIR/../../tmp/dispatch-phase"
-  phase_script="$SCRIPT_DIR/../skills/dispatch/scripts/dispatch-phase"
+  phase_script="$SCRIPT_DIR/../skills/dispatch-propagate/scripts/dispatch-phase"
   now=$(date +%s)
   mtime=$(stat -c %Y "$cache" 2>/dev/null || echo 0)
   if (( now - mtime >= DISPATCH_PHASE_TTL )); then

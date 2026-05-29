@@ -8,10 +8,10 @@
 #   create <branch> — no <issue>-* worktree exists; the caller materializes
 #                     <branch> and uses its path.
 #   conflict <path> — a queue-selected target's worktree is owned by another
-#                     live Claude session; /dispatch reports <path> and stops.
+#                     live Claude session; /dispatch-propagate reports <path> and stops.
 #
 # The mode argument decides what an existing <issue>-* worktree means:
-#   explicit — the target was named by an explicit /dispatch argument
+#   explicit — the target was named by an explicit /dispatch-propagate argument
 #              (recycle-after-completion); an existing worktree yields `enter`.
 #   queue    — the target was queue-selected. An existing worktree yields
 #              `conflict` only when a live Claude session owns it; an orphan

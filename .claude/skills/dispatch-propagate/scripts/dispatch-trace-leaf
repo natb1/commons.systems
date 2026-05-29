@@ -16,7 +16,7 @@
 #              children but every one is filtered out, the descent bubbles up
 #              too — that subtree has no ready work. If every reachable open
 #              leaf in the subtree is conflicted, the script exits non-zero
-#              with a clear message on stderr so the /dispatch caller can stop
+#              with a clear message on stderr so the /dispatch-propagate caller can stop
 #              instead of dispatching on a conflict.
 #
 # Falls back to printing N in `explicit` mode if cycles block every path to a
@@ -171,7 +171,7 @@ if [[ "$trace_rc" -eq 3 ]]; then
 fi
 
 # In queue mode, no valid leaf is reachable — every leaf is worktree-conflicted
-# (or cycles block every path). Surface this so /dispatch can stop with a clear
+# (or cycles block every path). Surface this so /dispatch-propagate can stop with a clear
 # message instead of dispatching on a conflict.
 if [[ "$MODE" == "queue" ]]; then
   echo "error: all open leaves reachable from $ISSUE_NUM are worktree-conflicted (owned by other sessions)" >&2

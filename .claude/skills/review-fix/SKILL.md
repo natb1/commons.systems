@@ -5,7 +5,7 @@ description: Review phase — merge origin/main, run the generic /review, classi
 
 # Review and Fix
 
-The `review` phase of the issue workflow, dispatched by `/dispatch`. This is the
+The `review` phase of the issue workflow, dispatched by `/dispatch-propagate`. This is the
 dispatch-specific wrapper around the generic built-in `/review` skill. `/review`
 only produces findings — it applies no fixes, commits nothing, and posts no
 summary. This skill wraps it: merge current `main`, run `/review`, classify the
@@ -183,14 +183,14 @@ already applied, so re-entry is a true no-op. Otherwise run all steps in order.
    script invokes `gh`):
 
    ```bash
-   .claude/skills/dispatch/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
+   .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
 8. **Apply the `dispatch:reviewed` label** via `dispatch-complete-phase` (use
    `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash
-   .claude/skills/dispatch/scripts/dispatch-complete-phase "$PR_NUM" review
+   .claude/skills/dispatch-propagate/scripts/dispatch-complete-phase "$PR_NUM" review
    ```
 
    The PR number passed here is **expected** to differ from the worktree's
@@ -200,7 +200,7 @@ already applied, so re-entry is a true no-op. Otherwise run all steps in order.
    re-confirm the mismatch.
 
    This skill **owns** its `dispatch:reviewed` label — unlike the generic
-   `/review`, which `/dispatch` cannot make dispatch-aware — so `/dispatch`
+   `/review`, which `/dispatch-propagate` cannot make dispatch-aware — so `/dispatch-propagate`
    does not apply the label after this skill returns. The label is applied
    regardless of whether any fixes were made, so a no-findings run still
    advances the workflow.
@@ -235,11 +235,11 @@ already applied, so re-entry is a true no-op. Otherwise run all steps in order.
 
 ## Autonomous vs. attended
 
-In an autonomous `/dispatch` background job there is no user to drive Step 10 —
-the skill applies the `dispatch:reviewed` label (Step 8), writes the
+In an autonomous `/dispatch-propagate` background job there is no user to drive
+Step 10 — the skill applies the `dispatch:reviewed` label (Step 8), writes the
 phase-completed marker (Step 11), and stops; the Step 9 4-section report is
 informational. The label is applied regardless of whether any fixes were made,
-so `/dispatch` can always advance to the next phase.
+so `/dispatch-propagate` can always advance to the next phase.
 
 ## Notes
 
