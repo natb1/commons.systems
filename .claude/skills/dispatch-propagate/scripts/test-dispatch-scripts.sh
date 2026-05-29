@@ -4747,6 +4747,27 @@ out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "AC smoke used_weekly=20, used_5h=2 → 8" "8" "$out"
 tw_teardown
 
+# --- Test 21: non-numeric telemetry is sanitized fail-closed ----------------
+
+echo "Test: non-numeric used_weekly is treated as missing → conservative fallback"
+tw_setup
+# A corrupt/tampered used_weekly ("abc") must NOT coerce to 0 and spawn at the
+# cap. It is sanitized to missing, dropping the weekly anchor → fallback 1.
+export DISPATCH_TARGET_WORKERS_NOW=10000
+export DISPATCH_TARGET_WORKERS_USED_WEEKLY=abc
+export DISPATCH_TARGET_WORKERS_USED_5H=2
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "non-numeric used_weekly → fallback 1 (not max_workers)" "1" "$out"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"non-numeric value"* && "$err" == *"WEEKLY_USED"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-numeric used_weekly stderr names the field"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-numeric used_weekly stderr names the field"
+  echo "    stderr: $err"
+fi
+tw_teardown
+
 # ============================================================================
 # dispatch-schedule-reseed tests
 # ============================================================================

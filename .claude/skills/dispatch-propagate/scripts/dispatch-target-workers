@@ -163,6 +163,20 @@ fi
 [[ -n "${DISPATCH_TARGET_WORKERS_USED_5H:-}" ]] && FIVEH_USED="$DISPATCH_TARGET_WORKERS_USED_5H"
 [[ -n "${DISPATCH_TARGET_WORKERS_RESETS_AT_5H:-}" ]] && FIVEH_RESETS="$DISPATCH_TARGET_WORKERS_RESETS_AT_5H"
 
+# Sanitize `used_*` telemetry fail-closed before it reaches `awk -v`. awk
+# coerces a non-numeric value to 0, which under the headroom algorithm reads as
+# full budget remaining and returns max_workers — a corrupt or tampered
+# rate_limits.json (or a hostile env override) would thus spawn at the cap
+# instead of backing off. Treat any malformed value as missing so the
+# PRESENT check below routes it to the conservative missing-telemetry fallback,
+# matching dispatch-schedule-reseed's fail-closed posture on the same telemetry.
+for var in WEEKLY_USED FIVEH_USED; do
+  if [[ -n "${!var}" && ! "${!var}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    echo "dispatch-target-workers: $var has non-numeric value '${!var}'; treating as missing" >&2
+    printf -v "$var" ""
+  fi
+done
+
 # Whether each block is present after env-override merge. The headroom
 # algorithm only consults `used_*`; the `resets_at` fields are retained for
 # parsing-compat with downstream consumers (e.g. dispatch-schedule-reseed)
