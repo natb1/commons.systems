@@ -2,49 +2,23 @@
 # dispatch-sweep — reconcile worktrees once per /dispatch-propagate queue-scan tick.
 #
 # Usage:
-#   dispatch-sweep                       — full sweep: cleanup merged + classify
-#                                          + emit oldest-orphan adoption directive.
-#   dispatch-sweep --cleanup-unknown <p> — destructively remove a single worktree
-#                                          (only invoked by SKILL.md after explicit
-#                                          user confirmation following a prior
-#                                          HALT_UNKNOWN exit).
+#   dispatch-sweep   — cleanup merged worktrees.
 #
-# Default mode behavior, in order:
-#   1. Build branch -> PR maps for merged + open PRs from a single pair of gh calls.
-#      Network/credential failures degrade to empty maps; the sweep continues.
+# Behavior, in order:
+#   1. Build a branch -> merged-PR map from a single gh call.
+#      Network/credential failures degrade to an empty map; the sweep continues.
 #   2. Enumerate registered worktrees under <project-root>/worktrees/, excluding
 #      the main worktree and detached HEADs.
 #   3. For each worktree whose branch is in the merged map and which is in sync
 #      (clean tree + zero unpushed commits), remove it and its branch.
-#   4. Classify the remaining worktrees as active vs orphaned by calling
-#      claude_sessions_under (from lib-claude-agents.sh) per surviving worktree.
-#      A worktree with at least one live session is ACTIVE; one with zero live
-#      sessions is ORPHANED. If the daemon cannot be queried (UNKNOWN), the
-#      worktree is classified ACTIVE so nothing is adopted or cleaned on an
-#      unknown signal (fail-safe).
-#   5. Among orphans, separate those eligible for adoption (an open PR OR an
-#      inferable issue number ^[0-9]+-) from "unknown" orphans (no PR + no
-#      inferable issue number) — the latter halt the sweep with exit 3 and a
-#      "cleanup-unknown:<path>" directive on stderr.
-#   6. From the eligible orphans pick the OLDEST by HEAD commit time and emit
-#      "worktree <N> <branch>" on stdout; dispatch-select-target wraps this as
-#      "worktree-adopted <N> <branch>" and SKILL.md routes that to the existing
-#      resume-worktree flow.
 #
 # Environment overrides for testability:
-#   CLAUDE_AGENTS_CMD         Override the `claude` invocation (e.g. a fake script
-#                             that prints a JSON array). Default: `claude`.
 #   DISPATCH_SWEEP_LOG_FILE   Override log path. Default: <root>/tmp/dispatch-sweep.log.
 #   DISPATCH_SWEEP_NOW        Override UTC timestamp source (deterministic tests).
 #
 # Exit codes:
-#   0  normal sweep — may have emitted an adoption directive on stdout, or
-#      successfully completed --cleanup-unknown.
-#   1  gh API failure inside an orphan-classification gate (issue state or
-#      blocker count). Fail-loud per the gate-spec; SKILL.md's "Any other
-#      non-zero exit" branch falls through to dispatch-select-target.
-#   2  invalid invocation (not in a git repo, bad --cleanup-unknown path).
-#   3  halted on an unknown-orphan worktree; stderr carries the directive.
+#   0  normal sweep completed (merged worktrees removed where possible).
+#   2  invalid invocation (not in a git repo).
 #
 # NOT set -e: per-worktree errors should not abort the sweep — bookkeeping
 # decisions must keep flowing into the log so the next /dispatch-propagate tick can act.
@@ -54,10 +28,6 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # shellcheck source=./lib-worktree-in-sync.sh
 source "$SCRIPT_DIR/lib-worktree-in-sync.sh"
-# shellcheck source=./lib-claude-agents.sh
-source "$SCRIPT_DIR/lib-claude-agents.sh"
-# shellcheck source=./lib.sh
-source "$SCRIPT_DIR/lib.sh"
 
 # Resolve project root + worktrees root from the git common dir. The parent of
 # --git-common-dir is the project root in both classic (.git) and bare (.bare)
@@ -75,78 +45,29 @@ log() {
   printf '%s [dispatch-sweep] %s\n' "$ts" "$*" >>"$LOG_FILE" 2>/dev/null || true
 }
 
-# ---- --cleanup-unknown <path> -----------------------------------------------
-# Destructive single-worktree removal. Only ever invoked by SKILL.md after the
-# user has confirmed a prior HALT_UNKNOWN directive. Does NOT call worktree_in_sync —
-# the whole point is to evict potentially-unmerged work the user has accepted losing.
-if [[ "${1:-}" == "--cleanup-unknown" ]]; then
-  TARGET="${2:-}"
-  if [[ -z "$TARGET" ]]; then
-    echo "ERROR: --cleanup-unknown requires a path argument" >&2
-    exit 2
-  fi
-  CANON=$(realpath -m "$TARGET" 2>/dev/null) || CANON="$TARGET"
-  if [[ "$(dirname "$CANON")" != "$WORKTREES_ROOT" ]]; then
-    echo "ERROR: refusing --cleanup-unknown: '$CANON' is not a direct child of $WORKTREES_ROOT" >&2
-    exit 2
-  fi
-  if [[ "$(basename "$CANON")" == "main" ]]; then
-    echo "ERROR: refusing --cleanup-unknown: '$CANON' is main" >&2
-    exit 2
-  fi
-
-  # Is the target actually registered? Iterate the porcelain list once.
-  registered=0
-  while IFS= read -r line; do
-    case "$line" in
-      "worktree "*)
-        wp=$(realpath -m "${line#worktree }" 2>/dev/null) || wp="${line#worktree }"
-        [[ "$wp" == "$CANON" ]] && registered=1
-        ;;
-    esac
-  done < <(git worktree list --porcelain 2>/dev/null)
-
-  if [[ "$registered" -eq 0 ]]; then
-    log "CLEANUP_UNKNOWN_NOT_REGISTERED: '$CANON'"
-    exit 0
-  fi
-
-  if git worktree remove --force "$CANON" 2>>"$LOG_FILE"; then
-    git worktree prune 2>/dev/null || true
-    log "CLEANUP_UNKNOWN: '$CANON'"
-  else
-    log "CLEANUP_UNKNOWN_REMOVE_FAILED: '$CANON'"
-  fi
-  exit 0
-fi
-
-# Reject any other argument shape — the script only has two modes.
+# Reject any argument — the script has only one mode.
 if [[ $# -gt 0 ]]; then
   echo "ERROR: unknown argument(s): $*" >&2
-  echo "usage: dispatch-sweep [--cleanup-unknown <path>]" >&2
+  echo "usage: dispatch-sweep" >&2
   exit 2
 fi
 
 # ---- Step 1: branch -> PR maps ----------------------------------------------
-# One gh call covers both states. Failure (network, sandbox, missing creds)
-# collapses to an empty map so the rest of the sweep still runs (classification
-# + adoption of issue-number-prefixed orphans still works without PR data).
-PRS_JSON=$(gh pr list --state all --json number,headRefName,state,isDraft --limit 200 2>/dev/null) \
+# One gh call covers merged PRs. Failure (network, sandbox, missing creds)
+# collapses to an empty map so the merged-cleanup pass still runs (it just
+# finds no merged branches to remove).
+PRS_JSON=$(gh pr list --state all --json number,headRefName,state --limit 200 2>/dev/null) \
   || PRS_JSON='[]'
 
 declare -A MERGED_BY_BRANCH=()
 declare -A OPEN_BY_BRANCH=()
-declare -A DRAFT_BY_BRANCH=()
-while IFS=$'\t' read -r state br n is_draft; do
+while IFS=$'\t' read -r state br n; do
   [[ -z "$br" ]] && continue
   case "$state" in
     MERGED) MERGED_BY_BRANCH["$br"]="$n" ;;
-    OPEN)
-      OPEN_BY_BRANCH["$br"]="$n"
-      DRAFT_BY_BRANCH["$br"]="$is_draft"
-      ;;
+    OPEN)   OPEN_BY_BRANCH["$br"]="$n" ;;
   esac
-done < <(printf '%s' "$PRS_JSON" | jq -r '.[] | [.state, .headRefName, .number, (.isDraft|tostring)] | @tsv' 2>/dev/null)
+done < <(printf '%s' "$PRS_JSON" | jq -r '.[] | [.state, .headRefName, .number] | @tsv' 2>/dev/null)
 
 # ---- Step 2: enumerate registered worktrees ---------------------------------
 # git worktree list --porcelain records are blank-line-delimited; each record
@@ -189,12 +110,8 @@ flush_record
 # ---- Step 3: merged cleanup pass --------------------------------------------
 # For each worktree whose branch was squash-merged (per gh pr list), if it is
 # in sync remove the worktree + delete the local branch. Not-in-sync merged
-# worktrees stay on the surviving list with a SKIP log line so the user can
-# investigate; they're explicitly NOT auto-adoption candidates (the unpushed
-# work may belong to a live session the daemon did not report).
-SURVIVING_PATHS=()
-SURVIVING_BRANCHES=()
-
+# worktrees are logged with a SKIP line so the user can investigate —
+# the unpushed work may belong to a live session.
 i=0
 while [[ $i -lt ${#WT_PATHS[@]} ]]; do
   wt_path="${WT_PATHS[$i]}"
@@ -203,8 +120,43 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
 
   pr_num="${MERGED_BY_BRANCH[$wt_branch]:-}"
   if [[ -z "$pr_num" ]]; then
-    SURVIVING_PATHS+=("$wt_path")
-    SURVIVING_BRANCHES+=("$wt_branch")
+    # Not a merged-PR branch. Check if this is a dispatch-style branch (^[1-9][0-9]*-).
+    if [[ "$wt_branch" =~ ^([1-9][0-9]*)-. ]]; then
+      # An open PR backs active work; never reap its worktree.
+      if [[ -n "${OPEN_BY_BRANCH[$wt_branch]:-}" ]]; then
+        continue
+      fi
+      issue_num="${BASH_REMATCH[1]}"
+      issue_state=$(gh issue view "$issue_num" --json state -q .state 2>/dev/null) || {
+        log "ERROR_ISSUE_STATE_FETCH: branch=$wt_branch issue=$issue_num gh issue view failed"
+        echo "ERROR: gh issue view $issue_num failed for branch=$wt_branch" >&2
+        exit 1
+      }
+      case "$issue_state" in
+        CLOSED)
+          if worktree_in_sync "$wt_path" "$LOG_FILE" "dispatch-sweep"; then
+            if git worktree remove "$wt_path" 2>>"$LOG_FILE"; then
+              git worktree prune 2>/dev/null || true
+              if ! git branch -D "$wt_branch" >>"$LOG_FILE" 2>&1; then
+                log "BRANCH_DELETE_FAILED: branch=$wt_branch (worktree removed; branch retained)"
+              fi
+              log "REMOVE_CLOSED_ISSUE: '$wt_path' branch=$wt_branch issue=#$issue_num"
+            else
+              log "SKIP_WORKTREE_REMOVE_FAILED: '$wt_path' branch=$wt_branch"
+            fi
+          else
+            log "SKIP_CLOSED_NOT_IN_SYNC: '$wt_path' branch=$wt_branch issue=#$issue_num"
+          fi
+          ;;
+        OPEN)
+          ;;
+        *)
+          log "ERROR_ISSUE_STATE_FETCH: branch=$wt_branch issue=$issue_num unexpected state='$issue_state'"
+          echo "ERROR: gh issue view $issue_num returned unexpected state '$issue_state' for branch=$wt_branch" >&2
+          exit 1
+          ;;
+      esac
+    fi
     continue
   fi
 
@@ -218,174 +170,10 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
       log "REMOVE_MERGED: '$wt_path' branch=$wt_branch pr=#$pr_num"
     else
       log "SKIP_WORKTREE_REMOVE_FAILED: '$wt_path' branch=$wt_branch"
-      SURVIVING_PATHS+=("$wt_path")
-      SURVIVING_BRANCHES+=("$wt_branch")
     fi
   else
     log "SKIP_MERGED_NOT_IN_SYNC: '$wt_path' branch=$wt_branch"
-    SURVIVING_PATHS+=("$wt_path")
-    SURVIVING_BRANCHES+=("$wt_branch")
   fi
 done
-
-# ---- Step 4: classify remaining worktrees as active vs orphaned -------------
-# For each surviving worktree, call claude_sessions_under (lib-claude-agents.sh)
-# to ask the daemon whether any live session is running there.
-#   Exit 0 + non-empty output → at least one live session → ACTIVE.
-#   Exit 0 + empty output    → daemon queried, zero sessions → ORPHANED.
-#   Exit non-zero (UNKNOWN)  → daemon unreachable → classify ACTIVE (fail-safe).
-# The fail-safe ensures no orphan adoption or merged-cleanup is emitted on a
-# tick where the daemon cannot be reached.
-ORPHAN_PATHS=()
-ORPHAN_BRANCHES=()
-i=0
-while [[ $i -lt ${#SURVIVING_PATHS[@]} ]]; do
-  wt_path="${SURVIVING_PATHS[$i]}"
-  wt_branch="${SURVIVING_BRANCHES[$i]}"
-  i=$((i + 1))
-
-  sessions=""
-  if sessions=$(claude_sessions_under "$wt_path"); then
-    # Daemon queried successfully.
-    if [[ -n "$sessions" ]]; then
-      # At least one live session — extract the first line for diagnostics.
-      first_line=$(printf '%s\n' "$sessions" | head -n1)
-      sid="" status="" name=""
-      IFS=$'\t' read -r sid _ status name <<< "$first_line"
-      log "ACTIVE: '$wt_path' branch=$wt_branch sessionId=$sid name=$name status=$status"
-    else
-      # Zero sessions — eligible orphan.
-      log "ORPHANED: '$wt_path' branch=$wt_branch"
-      ORPHAN_PATHS+=("$wt_path")
-      ORPHAN_BRANCHES+=("$wt_branch")
-    fi
-  else
-    # UNKNOWN — daemon unreachable or query failed. Fail safe: classify ACTIVE.
-    log "ACTIVE: '$wt_path' branch=$wt_branch liveness=unknown"
-  fi
-done
-
-# ---- Step 5: classify orphans + halt on unknown -----------------------------
-# Eligible for adoption: open PR for this branch OR the branch matches ^[0-9]+-.
-# Unknown (no PR + no issue-number prefix) halts the sweep with exit 3 —
-# SKILL.md surfaces a confirmation prompt before re-invoking --cleanup-unknown.
-CAND_PATHS=()
-CAND_BRANCHES=()
-CAND_ISSUES=()
-
-i=0
-while [[ $i -lt ${#ORPHAN_PATHS[@]} ]]; do
-  wt_path="${ORPHAN_PATHS[$i]}"
-  wt_branch="${ORPHAN_BRANCHES[$i]}"
-  i=$((i + 1))
-
-  # Infer issue number from the branch name. Anchored on [1-9] to match
-  # worktree-create.sh — a "0-foo" branch is not a valid issue worktree.
-  issue_num=""
-  if [[ "$wt_branch" =~ ^([1-9][0-9]*)- ]]; then
-    issue_num="${BASH_REMATCH[1]}"
-  fi
-
-  open_pr="${OPEN_BY_BRANCH[$wt_branch]:-}"
-
-  if [[ -z "$open_pr" && -z "$issue_num" ]]; then
-    log "HALT_UNKNOWN: '$wt_path' branch=$wt_branch"
-    echo "cleanup-unknown:$wt_path" >&2
-    exit 3
-  fi
-
-  # Open PR but no leading issue number: we can't form the adoption directive.
-  # Log and skip — the operator has the log to investigate.
-  if [[ -z "$issue_num" ]]; then
-    log "SKIP_ORPHAN_NO_ISSUE_NUM: '$wt_path' branch=$wt_branch pr=#$open_pr"
-    continue
-  fi
-
-  # Ready-PR gate. A `done`-phase orphan whose PR has been flipped to ready
-  # (e.g. by /security-review-fix) is awaiting human merge — adopting it
-  # short-circuits the queue-ladder and the chain drains on the early-stop in
-  # /dispatch-propagate Step 7. Skip so the ladder gets to pick real queued work.
-  # No-PR orphans and open-draft-PR orphans still fall through to adoption.
-  #
-  # Runs BEFORE the gh-dependent closed-issue/blocker gates so a transient
-  # `gh issue view` failure cannot exit 1 on a ready-PR orphan that needs no
-  # adoption anyway — the gate uses the already-fetched DRAFT_BY_BRANCH map
-  # (populated from the single `gh pr list` at the top of the script, which
-  # degrades to an empty map on failure rather than exiting).
-  if [[ -n "$open_pr" && "${DRAFT_BY_BRANCH[$wt_branch]:-}" == "false" ]]; then
-    log "SKIP_ORPHAN_READY_PR: '$wt_path' branch=$wt_branch issue=$issue_num pr=#$open_pr"
-    continue
-  fi
-
-  # Closed-issue gate. Fetch state with one gh call; fail loud on error —
-  # no silent fallback to "open" (would cause stale-orphan adoption). Let gh's
-  # stderr surface to the operator (matches the blocker gate, whose
-  # count_open_blockers / gh_api_array writes to stderr too).
-  if ! issue_state=$(gh issue view "$issue_num" --json state -q .state); then
-    log "ERROR_ISSUE_STATE_FETCH: '$wt_path' branch=$wt_branch issue=$issue_num"
-    echo "ERROR: failed to fetch state for issue #$issue_num" >&2
-    exit 1
-  fi
-  # Default-deny on anything ≠ OPEN/CLOSED (case-insensitive — lib.sh's
-  # count_open_blockers accepts both casings for the same reason). Empty,
-  # whitespace, or future states fail loud rather than silently adopting.
-  case "$issue_state" in
-    OPEN|open) ;;
-    CLOSED|closed)
-      log "SKIP_ORPHAN_CLOSED_ISSUE: '$wt_path' branch=$wt_branch issue=$issue_num"
-      continue
-      ;;
-    *)
-      log "ERROR_ISSUE_STATE_INVALID: '$wt_path' branch=$wt_branch issue=$issue_num state='$issue_state'"
-      echo "ERROR: unexpected state for issue #$issue_num: '$issue_state'" >&2
-      exit 1
-      ;;
-  esac
-
-  # Open-blocker gate. count_open_blockers (lib.sh) returns the integer
-  # count and exits non-zero on gh failure (gh_api_array writes its own
-  # descriptive stderr). Fail loud — no silent fallback to "not blocked".
-  if ! n_blockers=$(count_open_blockers "$issue_num"); then
-    log "ERROR_BLOCKER_COUNT: '$wt_path' branch=$wt_branch issue=$issue_num"
-    exit 1
-  fi
-  if [[ "$n_blockers" -gt 0 ]]; then
-    log "SKIP_ORPHAN_BLOCKED: '$wt_path' branch=$wt_branch issue=$issue_num blockers=$n_blockers"
-    continue
-  fi
-
-  CAND_PATHS+=("$wt_path")
-  CAND_BRANCHES+=("$wt_branch")
-  CAND_ISSUES+=("$issue_num")
-done
-
-# ---- Step 6: oldest-orphan adoption -----------------------------------------
-# HEAD commit time (Unix epoch) as the age proxy. On read failure for a
-# candidate, log and skip — keeps the script useful even with a broken worktree.
-WINNER_IDX=-1
-WINNER_CT=""
-i=0
-while [[ $i -lt ${#CAND_PATHS[@]} ]]; do
-  wt_path="${CAND_PATHS[$i]}"
-  ct=$(git -C "$wt_path" log -1 --format=%ct HEAD 2>/dev/null) || ct=""
-  if ! [[ "$ct" =~ ^[0-9]+$ ]]; then
-    log "SKIP_ORPHAN_NO_HEAD_TIME: '$wt_path' branch=${CAND_BRANCHES[$i]}"
-    i=$((i + 1))
-    continue
-  fi
-  if [[ -z "$WINNER_CT" || "$ct" -lt "$WINNER_CT" ]]; then
-    WINNER_CT="$ct"
-    WINNER_IDX=$i
-  fi
-  i=$((i + 1))
-done
-
-if [[ "$WINNER_IDX" -ge 0 ]]; then
-  wt_path="${CAND_PATHS[$WINNER_IDX]}"
-  wt_branch="${CAND_BRANCHES[$WINNER_IDX]}"
-  issue_num="${CAND_ISSUES[$WINNER_IDX]}"
-  log "ADOPT_ORPHAN: '$wt_path' branch=$wt_branch issue=$issue_num ct=$WINNER_CT"
-  printf 'worktree %s %s\n' "$issue_num" "$wt_branch"
-fi
 
 exit 0
