@@ -7125,6 +7125,44 @@ spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop empty-phase: spawn invoked exactly once" "1" "$spawn_calls"
 stop_teardown
 
+# --- Test 11: unrecognized MARKER_PHASE value → treated as absent (Branch A) --
+
+echo "Test: stop hook + marker present with unrecognized phase value → Branch A (treat as absent), no self-close"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# A value outside the known phase set — would otherwise drive Branch B's
+# self-close since "garbage-injection" != "implement".
+echo "phase=garbage-injection" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop unknown-phase: hook exits 0" "0" "$rc"
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop unknown-phase: office-hours applied to issue (Branch A, not false Branch B)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop unknown-phase: office-hours applied to issue (Branch A, not false Branch B)"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop unknown-phase: self-close NOT invoked (corrupt marker doesn't drive advance)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop unknown-phase: self-close NOT invoked (corrupt marker doesn't drive advance)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop unknown-phase: no remove-label calls (no strip)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop unknown-phase: no remove-label calls (no strip)"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop unknown-phase: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
 # ============================================================================
 # ensure_deps (lib.sh) retry tests
 # ============================================================================

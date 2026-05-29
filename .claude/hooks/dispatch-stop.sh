@@ -68,10 +68,17 @@ PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
 CURRENT_PHASE=$("$SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || CURRENT_PHASE=""
 
 # Read marker (presence drives branch selection; content is for diagnostics).
+# Validate against the known phase set — a corrupt or unknown value falls
+# through to Branch A (treat as absent) rather than driving Branch B's
+# self-close on an unrecognized string.
 MARKER_FILE="$CLAUDE_JOB_DIR/phase-completed"
 MARKER_PHASE=""
 if [ -f "$MARKER_FILE" ]; then
   MARKER_PHASE=$(grep -E '^phase=' "$MARKER_FILE" | head -n1 | cut -d= -f2) || MARKER_PHASE=""
+  case "$MARKER_PHASE" in
+    implement|verify|qa|code-review|review|security|done) ;;
+    *) MARKER_PHASE="" ;;
+  esac
 fi
 
 apply_office_hours_to_issue() {
