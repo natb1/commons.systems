@@ -7275,6 +7275,28 @@ spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop unknown-phase: spawn invoked exactly once" "1" "$spawn_calls"
 stop_teardown
 
+# --- Test 12: wrong-cwd regression — JOB_NAME drives ISSUE_NUM, not branch ---
+
+echo "Test: stop hook + branch=main (wrong-cwd) + JOB_NAME=123-foo-bar → Branch B: spawn + self-close"
+stop_setup
+# Simulate the wrong-cwd bug scenario: git rev-parse returns "main" (the spawn
+# cwd), not the target worktree branch.  With the fix, ISSUE_NUM comes from
+# JOB_NAME, so this value is irrelevant and the hook must NOT exit early.
+echo "main" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "verify" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=implement" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop wrong-cwd: hook exits 0" "0" "$rc"
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop wrong-cwd: spawn invoked exactly once" "1" "$spawn_calls"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop wrong-cwd: self-close invoked exactly once" "1" "$self_close_calls"
+stop_teardown
+
 # ============================================================================
 # ensure_deps (lib.sh) retry tests
 # ============================================================================
