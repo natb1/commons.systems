@@ -2877,58 +2877,6 @@ sweep_register_main() {
     "$TMPDIR_TEST/project/worktrees/main" >> "$STUB_DIR/worktree-list.txt"
 }
 
-# Helper: install a fake `claude` whose `agents --json --cwd <path>` invocation
-# returns only the sessions whose cwd starts with the requested <path>.
-# Overwrites $TMPDIR_TEST/fake/claude and re-exports CLAUDE_AGENTS_CMD.
-# Each argument must be in `sid=cwd` form; the name, status, and pid fields are
-# fixed (name=x, status=busy, pid=1) since sweep tests only care about cwd
-# for session-detection and sessionId/name/status for the ACTIVE log line.
-# The fake honours the --cwd filter (matching how the real daemon filters
-# server-side) so each worktree's query only sees its own sessions.
-sweep_fake_claude_sessions() {
-  local fake="$TMPDIR_TEST/fake/claude"
-  # Write the full session list as a JSON array to payload.json.
-  local all_payload="[" entry sid cwd first=1
-  for entry in "$@"; do
-    sid="${entry%%=*}"
-    cwd="${entry#*=}"
-    if (( first )); then first=0; else all_payload+=","; fi
-    all_payload+="{\"sessionId\":\"$sid\",\"pid\":1,\"status\":\"busy\",\"name\":\"x\",\"cwd\":\"$cwd\"}"
-  done
-  all_payload+="]"
-  printf '%s' "$all_payload" > "$TMPDIR_TEST/fake/payload.json"
-  # The fake script filters the full payload by the --cwd argument using jq,
-  # matching sessions whose cwd starts with the requested path (same as the
-  # real daemon's server-side filter). This ensures each worktree query only
-  # returns sessions that are actually in that worktree.
-  cat > "$fake" <<'FAKE'
-#!/usr/bin/env bash
-# Parse `agents --json --cwd <path>` args; find --cwd value.
-requested_cwd=""
-while [[ $# -gt 0 ]]; do
-  if [[ "$1" == "--cwd" && -n "${2:-}" ]]; then
-    requested_cwd="$2"; shift 2
-  else
-    shift
-  fi
-done
-payload_file="$(cd "$(dirname "$0")" && pwd)/payload.json"
-if [[ -n "$requested_cwd" ]]; then
-  # Directory-boundary match: cwd == path OR cwd starts with path + "/".
-  # `startswith` alone would mis-attribute /foo/worktrees/500-other to a query
-  # for /foo/worktrees/50, which the real daemon's --cwd filter does not.
-  jq --arg cwd "$requested_cwd" \
-    '[.[] | select(.cwd == $cwd or (.cwd | startswith($cwd + "/")))]' \
-    "$payload_file"
-else
-  cat "$payload_file"
-fi
-exit 0
-FAKE
-  chmod +x "$fake"
-  export CLAUDE_AGENTS_CMD="$fake"
-}
-
 # Convenience: convert an absolute path to the status/revlist/headct key
 # used by the git -C shim.
 sweep_path_key() {

@@ -28,7 +28,7 @@ STUB_BIN=$(mktemp -d)
 cat >"$STUB_BIN/claude" <<'STUB'
 #!/usr/bin/env bash
 set -uo pipefail
-# Accept any args (agents --json --cwd <path>) — just emit the canned response.
+# Accept any args (agents --json) — just emit the canned response.
 printf '%s\n' "${STUB_CLAUDE_JSON:-[]}"
 exit "${STUB_CLAUDE_RC:-0}"
 STUB
