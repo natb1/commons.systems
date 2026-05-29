@@ -850,6 +850,25 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR with worktree skipped; next PR returned" "pr 20 20-other verify" "$result"
 teardown
 
+# 2b. A PR whose ISSUE carries dispatch:office-hours is skipped (issue #909).
+# The label lives on the issue, not the PR — the skip resolves the issue number
+# from the PR's branch prefix (<N>-) and reads the issue's labels. PR 10's branch
+# is 10-parked → issue #10, which is parked; PR 20's branch is 20-other → issue
+# #20, which is not. Neither PR itself carries the label.
+echo "Test: PR whose issue carries dispatch:office-hours is skipped"
+setup
+UNION='['"$(make_pr_union 10 "10-parked" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-other" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+# Issue #10 is parked (dispatch:office-hours); issue #20 is not. Neither carries
+# "help wanted", so neither competes in the issue queue — they exist here only as
+# the office-hours-label source the PR loop reads via ISSUE_LABELS_JSON.
+printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch:office-hours"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "PR with parked issue skipped; unparked sibling returned" "pr 20 20-other verify" "$result"
+teardown
+
 # 3. When no eligible PR exists, a help-wanted issue is chosen.
 echo "Test: no eligible PR → help-wanted issue"
 setup
@@ -1914,21 +1933,10 @@ if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else 
 assert_eq "invalid duration → exits non-zero" "yes" "$rc_nonzero"
 teardown
 
-# OH1. A PR carrying dispatch:office-hours is skipped (parked for human review).
-echo "Test: PR with dispatch:office-hours is skipped"
-setup
-# Two verify PRs; the older one (PR 10) is parked.
-OFFICE_HOURS_LABELS='[{"name":"dispatch:office-hours"}]'
-UNION='['
-UNION+="$(make_pr_union 10 "10-parked" "2024-01-01T00:00:00Z" "true" "$OFFICE_HOURS_LABELS" "$FAILING_ROLLUP")"','
-UNION+="$(make_pr_union 20 "20-active" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"
-UNION+=']'
-setup_union_pr_list "$UNION"
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "parked PR skipped; next PR returned" "pr 20 20-active verify" "$result"
-teardown
+# OH1. The PR-phase office-hours skip is issue-anchored (issue #909): see the
+# "PR whose issue carries dispatch:office-hours is skipped" test in the
+# dispatch-select-target section above. The label lives on the issue, never the
+# PR, so there is no PR-label filter here.
 
 # OH2. A help-wanted issue carrying dispatch:office-hours is skipped.
 echo "Test: help-wanted issue with dispatch:office-hours is skipped"
@@ -1943,22 +1951,24 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "parked issue skipped; next help-wanted issue returned" "issue 66" "$result"
 teardown
 
-# OH3. A PR with dispatch:office-hours that has a worktree on disk is not
-#      selected — the PR-ladder worktree-skip keeps it out regardless of the
-#      label, but the label alone is also sufficient. This test codifies the
-#      no-regression claim: the old sweep-adoption mechanism would have picked
-#      such a PR; without it the labeled-and-worktree'd PR stays out.
+# OH3. A PR whose issue is parked (dispatch:office-hours) and that also has a
+#      worktree on disk is not selected — the PR-ladder worktree-skip keeps it
+#      out regardless of the label. This test codifies the no-regression claim:
+#      the old sweep-adoption mechanism would have picked such a PR; without it
+#      the worktree'd PR stays out.
 echo "Test: office-hours PR with worktree on disk is not selected"
 setup
-# PR 10 is parked (dispatch:office-hours) and also has a worktree on disk.
-# PR 20 is the second eligible verify PR with no labels and no worktree.
-OFFICE_HOURS_LABELS='[{"name":"dispatch:office-hours"}]'
+# PR 10's issue (#10) is parked (dispatch:office-hours) and PR 10 also has a
+# worktree on disk. PR 20 is the second eligible verify PR with no parked issue
+# and no worktree.
 UNION='['
-UNION+="$(make_pr_union 10 "10-oh-parked" "2024-01-01T00:00:00Z" "true" "$OFFICE_HOURS_LABELS" "$FAILING_ROLLUP")"','
+UNION+="$(make_pr_union 10 "10-oh-parked" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
 UNION+="$(make_pr_union 20 "20-active" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"
 UNION+=']'
 setup_union_pr_list "$UNION"
-echo '[]' > "$STUB_DIR/issue-list.json"
+# Issue #10 is parked (the office-hours label lives on the issue, issue #909).
+printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch:office-hours"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
 # Worktree exists on disk for 10-oh-parked (what the old adoption mechanism would
 # have targeted); no worktree for 20-active.
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/10-oh-parked\nHEAD def456\nbranch refs/heads/10-oh-parked\n\n' \
@@ -7851,8 +7861,6 @@ handoff_setup() {
   HTMPDIR=$(mktemp -d)
   HSELF_CLOSE_LOG="$HTMPDIR/self-close.log"
   HSPAWN_LOG="$HTMPDIR/spawn.log"
-  HGH_LOG="$HTMPDIR/gh.log"
-  HFIND_PR_LOG="$HTMPDIR/find-pr.log"
 
   # Default fake dispatch-self-close: records the call, exits 0.
   cat > "$HTMPDIR/fake-self-close" <<'FAKE'
@@ -7862,51 +7870,18 @@ exit 0
 FAKE
   # Inject HSELF_CLOSE_LOG into the fake via env at call time.
   chmod +x "$HTMPDIR/fake-self-close"
-
-  # Default fake dispatch-spawn-router: records the call, exits 0, prints "spawned".
-  cat > "$HTMPDIR/fake-spawn" <<'FAKE'
-#!/usr/bin/env bash
-echo "spawn called" >> "$HSPAWN_LOG"
-echo "spawned"
-exit 0
-FAKE
-  chmod +x "$HTMPDIR/fake-spawn"
-
-  # Default fake gh: records invocation, prints no labels.
-  cat > "$HTMPDIR/fake-gh" <<'FAKE'
-#!/usr/bin/env bash
-echo "gh $*" >> "$HGH_LOG"
-# pr view <N> --json labels --jq ...  → return empty label list
-echo ""
-exit 0
-FAKE
-  chmod +x "$HTMPDIR/fake-gh"
-
-  # Default fake dispatch-find-pr: prints PR number 99.
-  cat > "$HTMPDIR/fake-find-pr" <<'FAKE'
-#!/usr/bin/env bash
-echo "find-pr $*" >> "$HFIND_PR_LOG"
-echo "99"
-exit 0
-FAKE
-  chmod +x "$HTMPDIR/fake-find-pr"
 }
 
 handoff_teardown() {
   rm -rf "$HTMPDIR"
-  unset HTMPDIR HSELF_CLOSE_LOG HSPAWN_LOG HGH_LOG HFIND_PR_LOG
+  unset HTMPDIR HSELF_CLOSE_LOG HSPAWN_LOG
 }
 
 # Run dispatch-handoff with fake commands injected via env.
 run_handoff() {
   DISPATCH_HANDOFF_SELF_CLOSE_CMD="$HTMPDIR/fake-self-close" \
-  DISPATCH_HANDOFF_SPAWN_CMD="$HTMPDIR/fake-spawn" \
-  DISPATCH_HANDOFF_GH_CMD="$HTMPDIR/fake-gh" \
-  DISPATCH_HANDOFF_FIND_PR_CMD="$HTMPDIR/fake-find-pr" \
   HSELF_CLOSE_LOG="$HSELF_CLOSE_LOG" \
   HSPAWN_LOG="$HSPAWN_LOG" \
-  HGH_LOG="$HGH_LOG" \
-  HFIND_PR_LOG="$HFIND_PR_LOG" \
     "$HANDOFF_SCRIPT" "$@"
 }
 
@@ -7924,73 +7899,7 @@ assert_eq "--early-stop self-close called" "self-close called" "$(cat "$HSELF_CL
 assert_eq "--early-stop no spawn" "" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
 handoff_teardown
 
-# ----- 2. --phase-completed happy path: spawn + self-close, exits 0 ----------
-echo "Test: dispatch-handoff <N> --phase-completed happy path"
-handoff_setup
-run_handoff 42 --phase-completed
-phase_exit=$?
-assert_eq "--phase-completed exit code" "0" "$phase_exit"
-assert_eq "--phase-completed spawn called" "spawn called" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
-assert_eq "--phase-completed self-close called" "self-close called" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
-# gh must be called with the PR number returned by fake-find-pr (99).
-TOTAL=$((TOTAL + 1))
-if grep -q "gh pr view 99 " "$HGH_LOG" 2>/dev/null; then
-  PASS=$((PASS + 1)); echo "  PASS: --phase-completed gh called with PR 99"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: --phase-completed gh called with PR 99"
-  echo "    gh log: $(cat "$HGH_LOG" 2>/dev/null || echo '<empty>')"
-fi
-handoff_teardown
-
-# ----- 3. --phase-completed with spawn failure: no self-close, exits 1 -------
-echo "Test: dispatch-handoff --phase-completed spawn failure → no self-close, exit 1"
-handoff_setup
-# Override spawn to fail.
-cat > "$HTMPDIR/fake-spawn" <<'FAKE'
-#!/usr/bin/env bash
-echo "spawn called" >> "$HSPAWN_LOG"
-echo "agent did not register" >&2
-exit 1
-FAKE
-chmod +x "$HTMPDIR/fake-spawn"
-# Use if/else to capture the exit code without triggering set -e.
-if run_handoff 42 --phase-completed 2>/dev/null; then spawn_fail_exit=0; else spawn_fail_exit=$?; fi
-assert_eq "--phase-completed spawn-failed exit code" "1" "$spawn_fail_exit"
-assert_eq "--phase-completed spawn-failed: spawn was called" "spawn called" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
-# self-close must NOT have been called.
-assert_eq "--phase-completed spawn-failed: no self-close" "" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
-handoff_teardown
-
-# ----- 4. --phase-completed with dispatch:office-hours → no self-close, exit 0
-echo "Test: dispatch-handoff --phase-completed with dispatch:office-hours → no self-close"
-handoff_setup
-# Override gh to return the office-hours label.
-cat > "$HTMPDIR/fake-gh" <<'FAKE'
-#!/usr/bin/env bash
-echo "gh $*" >> "$HGH_LOG"
-echo "dispatch:office-hours"
-exit 0
-FAKE
-chmod +x "$HTMPDIR/fake-gh"
-run_handoff 42 --phase-completed
-office_exit=$?
-assert_eq "--phase-completed office-hours exit code" "0" "$office_exit"
-assert_eq "--phase-completed office-hours: spawn called" "spawn called" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
-# self-close must NOT have been called (session stays open for human review).
-assert_eq "--phase-completed office-hours: no self-close" "" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
-handoff_teardown
-
-# ----- 5. Missing issue number → exit 2 with diagnostic ----------------------
-echo "Test: dispatch-handoff --phase-completed missing issue number → exit 2"
-handoff_setup
-# Use if/else to capture exit code without triggering set -e.
-if run_handoff --phase-completed 2>/dev/null; then missing_exit=0; else missing_exit=$?; fi
-assert_eq "--phase-completed missing issue: exit 2" "2" "$missing_exit"
-assert_eq "--phase-completed missing issue: no spawn" "" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
-assert_eq "--phase-completed missing issue: no self-close" "" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
-handoff_teardown
-
-# ----- 6. No arguments → exit 2 -----------------------------------------------
+# ----- 2. No arguments → exit 2 -----------------------------------------------
 echo "Test: dispatch-handoff with no arguments → exit 2"
 handoff_setup
 # Use if/else to capture exit code without triggering set -e.
@@ -7998,7 +7907,7 @@ if run_handoff 2>/dev/null; then no_args_exit=0; else no_args_exit=$?; fi
 assert_eq "no arguments: exit 2" "2" "$no_args_exit"
 handoff_teardown
 
-# ----- 7. CLAUDE_JOB_DIR unset: self-close is a no-op (interactive session) --
+# ----- 3. CLAUDE_JOB_DIR unset: self-close is a no-op (interactive session) --
 echo "Test: dispatch-handoff --early-stop with CLAUDE_JOB_DIR unset: self-close no-op, exits 0"
 handoff_setup
 # The real dispatch-self-close is a no-op when CLAUDE_JOB_DIR is unset.
