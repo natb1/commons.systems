@@ -2497,8 +2497,8 @@ echo "=== dispatch-sweep ==="
 #
 # Shims:
 #   gh   — gh-pr-list-all.json drives `pr list --state all`; each entry carries
-#          {state, headRefName, number}. Only MERGED entries are consumed
-#          (MERGED_BY_BRANCH map); OPEN and DRAFT fields are unused.
+#          {state, headRefName, number}. MERGED entries populate MERGED_BY_BRANCH;
+#          OPEN entries populate OPEN_BY_BRANCH. DRAFT is unused (isDraft not consumed).
 #   git  — knows worktree list/remove/prune, branch -D, -C <p> status,
 #          -C <p> rev-list --count, -C <p> log -1 --format=%ct, and
 #          rev-parse --path-format=absolute --git-common-dir.
@@ -2821,6 +2821,33 @@ else
   echo "    stderr: $stderr_out"
 fi
 unset SWEEP_GH_ISSUE_FAIL
+sweep_teardown
+
+# --- Test 1f: open-PR worktree with closed issue is kept (OPEN_BY_BRANCH guard) ---
+
+echo "Test: open-PR worktree with closed issue is kept (OPEN_BY_BRANCH guard)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/61-active-pr"
+sweep_register_wt "$WT_PATH" "61-active-pr"
+echo '[{"state":"OPEN","headRefName":"61-active-pr","number":888}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+# Issue is CLOSED, but the OPEN_BY_BRANCH guard must short-circuit before gh issue view.
+echo "CLOSED" > "$STUB_DIR/issue-state-61.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "open-PR closed-issue sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: open-PR worktree not removed despite closed issue"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: open-PR worktree not removed despite closed issue"
+  echo "    calls: $calls"
+fi
 sweep_teardown
 
 # ============================================================================
