@@ -5047,7 +5047,6 @@ echo "=== dispatch-spawn-router ==="
 #   $TMPDIR_TEST/worktrees/main/ the main worktree (the spawn subshell cd's here)
 #   $TMPDIR_TEST/fake-claude     the multi-subcommand fake `claude`
 #   $TMPDIR_TEST/registry.json   the `claude agents --json` fixture
-#   $TMPDIR_TEST/jobs/           the on-disk jobs ledger (DISPATCH_SPAWN_ROUTER_JOBS_DIR)
 #   $TMPDIR_TEST/bg-argv         recorded argv of each `claude --bg` call
 #   $TMPDIR_TEST/rm-log          recorded job-ids of each `claude rm` call
 #   $TMPDIR_TEST/stop-log        recorded job-ids of each `claude stop` call
@@ -5056,7 +5055,6 @@ echo "=== dispatch-spawn-router ==="
 # every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
 
 SPAWN_ROUTER_REGISTRY=""
-SPAWN_ROUTER_JOBS_DIR=""
 SPAWN_ROUTER_BG_ARGV=""
 SPAWN_ROUTER_RM_LOG=""
 SPAWN_ROUTER_STOP_LOG=""
@@ -5109,8 +5107,7 @@ FAKE
 
 spawn_router_setup() {
   TMPDIR_TEST=$(mktemp -d)
-  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/worktrees/main" \
-    "$TMPDIR_TEST/jobs"
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/worktrees/main"
 
   # dispatch-spawn-router sources lib-claude-agents.sh from its own directory, so the
   # helper must sit alongside the copy. It is sourced, not executed — no chmod.
@@ -5119,7 +5116,6 @@ spawn_router_setup() {
   chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-router"
 
   SPAWN_ROUTER_REGISTRY="$TMPDIR_TEST/registry.json"
-  SPAWN_ROUTER_JOBS_DIR="$TMPDIR_TEST/jobs"
   SPAWN_ROUTER_BG_ARGV="$TMPDIR_TEST/bg-argv"
   SPAWN_ROUTER_RM_LOG="$TMPDIR_TEST/rm-log"
   SPAWN_ROUTER_STOP_LOG="$TMPDIR_TEST/stop-log"
@@ -5128,19 +5124,17 @@ spawn_router_setup() {
   export DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
   export DISPATCH_SPAWN_ROUTER_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
   export DISPATCH_SPAWN_ROUTER_SESSION_ID="sess-self"
-  export DISPATCH_SPAWN_ROUTER_JOBS_DIR="$SPAWN_ROUTER_JOBS_DIR"
 }
 
 spawn_router_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   SPAWN_ROUTER_REGISTRY=""
-  SPAWN_ROUTER_JOBS_DIR=""
   SPAWN_ROUTER_BG_ARGV=""
   SPAWN_ROUTER_RM_LOG=""
   SPAWN_ROUTER_STOP_LOG=""
   unset DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE DISPATCH_SPAWN_ROUTER_CLAUDE_CMD \
-    DISPATCH_SPAWN_ROUTER_SESSION_ID DISPATCH_SPAWN_ROUTER_JOBS_DIR SPAWN_BG_REGISTERS
+    DISPATCH_SPAWN_ROUTER_SESSION_ID SPAWN_BG_REGISTERS
 }
 
 # --- Test 1: spawn success ---------------------------------------------------
@@ -5225,69 +5219,14 @@ else
 fi
 spawn_router_teardown
 
-# --- Test 5: prune -----------------------------------------------------------
-
-echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
-spawn_router_setup
-# Seed the on-disk ledger with four entries:
-#   abcd1234  — stopped dispatch-* router name (the rm target)
-#   feed5678  — stopped <N>-<slug> worker name (also an rm target)
-#   ef015678  — stopped non-dispatch (must NOT be pruned)
-#   9999cccc  — live (working) dispatch-* (must NOT be pruned)
-mkdir -p "$SPAWN_ROUTER_JOBS_DIR/abcd1234" "$SPAWN_ROUTER_JOBS_DIR/feed5678" \
-  "$SPAWN_ROUTER_JOBS_DIR/ef015678" "$SPAWN_ROUTER_JOBS_DIR/9999cccc"
-printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
-  > "$SPAWN_ROUTER_JOBS_DIR/abcd1234/state.json"
-printf '%s' '{"name":"999-some-worker","state":"stopped"}' \
-  > "$SPAWN_ROUTER_JOBS_DIR/feed5678/state.json"
-printf '%s' '{"name":"manual-session","state":"stopped"}' \
-  > "$SPAWN_ROUTER_JOBS_DIR/ef015678/state.json"
-printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
-  > "$SPAWN_ROUTER_JOBS_DIR/9999cccc/state.json"
-write_fake_spawn_router_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "prune: dispatch-spawn-router exits 0" "0" "$rc"
-assert_eq "prune: stdout is 'spawned' (stopped agent does not dedup)" \
-  "spawned" "$out"
-rm_log=$(cat "$SPAWN_ROUTER_RM_LOG" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ "$rm_log" == *"abcd1234"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune: 'claude rm abcd1234' (directory basename, not sessionId) was invoked"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune: 'claude rm abcd1234' (directory basename) was invoked"
-  echo "    rm-log: $rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$rm_log" == *"feed5678"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
-  echo "    rm-log: $rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$rm_log" != *"ef015678"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune: non-dispatch agent 'ef015678' was not pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune: non-dispatch agent 'ef015678' was not pruned"
-  echo "    rm-log: $rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$rm_log" != *"9999cccc"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune: live dispatch-* agent '9999cccc' was not pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune: live dispatch-* agent '9999cccc' was not pruned"
-  echo "    rm-log: $rm_log"
-fi
-spawn_router_teardown
-
-# --- Test 6: unqueryable registry fails safe ---------------------------------
+# --- Test 5: unqueryable registry fails safe ---------------------------------
 
 echo "Test: an unparseable session registry fails safe — spawns nothing"
 spawn_router_setup
 # A registry that is not a JSON array: lib-claude-agents.sh's
 # claude_sessions_under cannot parse it and returns 1 (unknown). dispatch-spawn-router
 # must treat unknown as "a dispatch agent may be running" and spawn nothing —
-# the documented fail-safe in the script's Step 3 dedup guard.
+# the documented fail-safe in the script's Step 2 dedup guard.
 printf '%s' 'not-a-json-array' > "$SPAWN_ROUTER_REGISTRY"
 write_fake_spawn_router_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
@@ -5321,21 +5260,17 @@ echo "=== dispatch-spawn-worker ==="
 #   $TMPDIR_TEST/worktrees/839-test-worker/     the target worktree path (arg 2)
 #   $TMPDIR_TEST/fake-claude                    the multi-subcommand fake `claude`
 #   $TMPDIR_TEST/registry.json                  `claude agents --json` fixture
-#   $TMPDIR_TEST/jobs/                          on-disk jobs ledger
 #   $TMPDIR_TEST/bg-argv                        recorded argv of each `claude --bg` call
 #   $TMPDIR_TEST/pwd-log                        new: records the spawn subshell's $PWD
 #                                               so Test 2 can assert the script
 #                                               cd'd into the worktree path.
-#   $TMPDIR_TEST/rm-log                         recorded job-ids of each `claude rm` call
 #
 # The test shell runs under `set -e`; dispatch-spawn-worker can exit non-zero,
 # so every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
 
 SPAWN_WORKER_REGISTRY=""
-SPAWN_WORKER_JOBS_DIR=""
 SPAWN_WORKER_BG_ARGV=""
 SPAWN_WORKER_PWD_LOG=""
-SPAWN_WORKER_RM_LOG=""
 WORKER_TARGET_WORKTREE=""
 
 # write_fake_spawn_worker_claude — install the multi-subcommand fake `claude`.
@@ -5348,7 +5283,6 @@ WORKER_TARGET_WORKTREE=""
 #   --bg     — record full argv to bg-argv AND record $PWD to pwd-log; when
 #              SPAWN_BG_REGISTERS=1 (default) parse --name and jq-append the
 #              new agent to the fixture so the verify step finds it.
-#   rm       — append $2 (the job-id) to rm-log.
 write_fake_spawn_worker_claude() {
   cat > "$TMPDIR_TEST/fake-claude" <<FAKE
 #!/usr/bin/env bash
@@ -5372,10 +5306,6 @@ case "\${1:-}" in
         "$SPAWN_WORKER_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_WORKER_REGISTRY"
     fi
     ;;
-  rm)
-    shift
-    printf '%s\n' "\${1:-}" >> "$SPAWN_WORKER_RM_LOG"
-    ;;
 esac
 FAKE
   chmod +x "$TMPDIR_TEST/fake-claude"
@@ -5385,8 +5315,7 @@ spawn_worker_setup() {
   TMPDIR_TEST=$(mktemp -d)
   mkdir -p "$TMPDIR_TEST/scripts" \
     "$TMPDIR_TEST/worktrees/main" \
-    "$TMPDIR_TEST/worktrees/839-test-worker" \
-    "$TMPDIR_TEST/jobs"
+    "$TMPDIR_TEST/worktrees/839-test-worker"
 
   # dispatch-spawn-worker sources lib-claude-agents.sh from its own directory,
   # so the helper must sit alongside the copy. It is sourced, not executed —
@@ -5396,29 +5325,24 @@ spawn_worker_setup() {
   chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-worker"
 
   SPAWN_WORKER_REGISTRY="$TMPDIR_TEST/registry.json"
-  SPAWN_WORKER_JOBS_DIR="$TMPDIR_TEST/jobs"
   SPAWN_WORKER_BG_ARGV="$TMPDIR_TEST/bg-argv"
   SPAWN_WORKER_PWD_LOG="$TMPDIR_TEST/pwd-log"
-  SPAWN_WORKER_RM_LOG="$TMPDIR_TEST/rm-log"
   WORKER_TARGET_WORKTREE="$TMPDIR_TEST/worktrees/839-test-worker"
   printf '[]' > "$SPAWN_WORKER_REGISTRY"
 
   export DISPATCH_SPAWN_WORKER_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
   export DISPATCH_SPAWN_WORKER_SESSION_ID="sess-self"
-  export DISPATCH_SPAWN_WORKER_JOBS_DIR="$SPAWN_WORKER_JOBS_DIR"
 }
 
 spawn_worker_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   SPAWN_WORKER_REGISTRY=""
-  SPAWN_WORKER_JOBS_DIR=""
   SPAWN_WORKER_BG_ARGV=""
   SPAWN_WORKER_PWD_LOG=""
-  SPAWN_WORKER_RM_LOG=""
   WORKER_TARGET_WORKTREE=""
   unset DISPATCH_SPAWN_WORKER_CLAUDE_CMD DISPATCH_SPAWN_WORKER_SESSION_ID \
-    DISPATCH_SPAWN_WORKER_JOBS_DIR SPAWN_BG_REGISTERS
+    SPAWN_BG_REGISTERS
 }
 
 # --- Test 1: spawn success ---------------------------------------------------
@@ -5542,69 +5466,14 @@ else
 fi
 spawn_worker_teardown
 
-# --- Test 6: prune -----------------------------------------------------------
-
-echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
-spawn_worker_setup
-# Seed the on-disk ledger with four entries:
-#   abcd1234  — stopped dispatch-* router name (the rm target)
-#   feed5678  — stopped <N>-<slug> worker name (also an rm target)
-#   ef015678  — stopped non-dispatch (must NOT be pruned)
-#   9999cccc  — live (working) dispatch-* (must NOT be pruned)
-mkdir -p "$SPAWN_WORKER_JOBS_DIR/abcd1234" "$SPAWN_WORKER_JOBS_DIR/feed5678" \
-  "$SPAWN_WORKER_JOBS_DIR/ef015678" "$SPAWN_WORKER_JOBS_DIR/9999cccc"
-printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
-  > "$SPAWN_WORKER_JOBS_DIR/abcd1234/state.json"
-printf '%s' '{"name":"999-some-worker","state":"stopped"}' \
-  > "$SPAWN_WORKER_JOBS_DIR/feed5678/state.json"
-printf '%s' '{"name":"manual-session","state":"stopped"}' \
-  > "$SPAWN_WORKER_JOBS_DIR/ef015678/state.json"
-printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
-  > "$SPAWN_WORKER_JOBS_DIR/9999cccc/state.json"
-write_fake_spawn_worker_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "prune-worker: dispatch-spawn-worker exits 0" "0" "$rc"
-assert_eq "prune-worker: stdout is 'spawned' (stopped agent does not dedup)" \
-  "spawned" "$out"
-sw_rm_log=$(cat "$SPAWN_WORKER_RM_LOG" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ "$sw_rm_log" == *"abcd1234"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
-  echo "    rm-log: $sw_rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$sw_rm_log" == *"feed5678"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune-worker: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
-  echo "    rm-log: $sw_rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$sw_rm_log" != *"ef015678"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune-worker: non-dispatch agent 'ef015678' was not pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: non-dispatch agent 'ef015678' was not pruned"
-  echo "    rm-log: $sw_rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$sw_rm_log" != *"9999cccc"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune-worker: live dispatch-* agent '9999cccc' was not pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: live dispatch-* agent '9999cccc' was not pruned"
-  echo "    rm-log: $sw_rm_log"
-fi
-spawn_worker_teardown
-
-# --- Test 7: unqueryable registry fails safe ---------------------------------
+# --- Test 6: unqueryable registry fails safe ---------------------------------
 
 echo "Test: an unparseable session registry fails safe — spawns nothing"
 spawn_worker_setup
 # A registry that is not a JSON array: lib-claude-agents.sh's
 # claude_sessions_under cannot parse it and returns 1 (unknown).
 # dispatch-spawn-worker must treat unknown as "a dispatch agent may be running"
-# and spawn nothing — the documented fail-safe in the script's Step 3 dedup
+# and spawn nothing — the documented fail-safe in the script's Step 2 dedup
 # guard.
 printf '%s' 'not-a-json-array' > "$SPAWN_WORKER_REGISTRY"
 write_fake_spawn_worker_claude
@@ -5621,7 +5490,7 @@ else
 fi
 spawn_worker_teardown
 
-# --- Test 8: missing args ----------------------------------------------------
+# --- Test 7: missing args ----------------------------------------------------
 
 echo "Test: missing arguments exit 2"
 spawn_worker_setup
@@ -5658,13 +5527,13 @@ assert_eq "missing-args-worker: unsafe chars in <worktree-path> → exit 2" "2" 
 
 spawn_worker_teardown
 
-# --- Test 9: dedup + verify query the spawner cwd, NOT the worktree path ----
+# --- Test 8: dedup + verify query the spawner cwd, NOT the worktree path ----
 #
 # Regression guard: in production the daemon server-side-filters `agents
 # --json --cwd <path>` to sessions started under <path>. Since
 # dispatch-spawn-worker does NOT `cd` into the target worktree before
 # `claude --bg`, the new worker registers under the spawner cwd
-# (worktrees/main), not under WORKTREE_PATH. If Step 5 verify queries under
+# (worktrees/main), not under WORKTREE_PATH. If Step 4 verify queries under
 # WORKTREE_PATH, the daemon excludes the new worker, `registered` stays
 # empty, and the script exits 1 — on every spawn in production.
 #
