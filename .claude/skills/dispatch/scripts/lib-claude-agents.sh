@@ -12,6 +12,7 @@
 #   claude_sessions_with_name          <name>
 #   worktree_has_live_session          <worktree-path>
 #   claude_agents_count_by_name_prefix <name-prefix>
+#   verify_agent_registered_under      <agent-name> <cwd>
 #
 # claude_sessions_under <path>
 #   The cwd-based low-level primitive. Runs `claude agents --json --cwd <path>`,
@@ -64,6 +65,21 @@
 #     return 1 — UNKNOWN. Stdout is empty. Callers that gate on the count
 #               should fail open (proceed to spawn) — the per-worktree dedup
 #               inside `dispatch-spawn-worker` is the last-line defense.
+#
+# verify_agent_registered_under <agent-name> <cwd>
+#   Bounded retry of `claude_sessions_under` that closes the async-registration
+#   race between `claude --bg` returning and the daemon adding the new agent to
+#   `claude agents --json`. Polls the registry up to 5 times at 200 ms spacing
+#   (≈1 s total budget). On any attempt where a row appears whose `name` column
+#   equals `<agent-name>`, returns 0 immediately. UNKNOWN results from
+#   `claude_sessions_under` are treated as "not yet" and retried — a daemon
+#   momentarily unresponsive during async registration is exactly the case the
+#   retry is meant to absorb. On exhaustion, returns 1 — the conservative-fail
+#   semantic is preserved so the caller still surfaces its `did not register`
+#   diagnostic and exits non-zero.
+#     return 0 — a row with the given <agent-name> was observed.
+#     return 1 — exhaustion: the agent never appeared within the budget.
+#   Used by `dispatch-spawn-router` and `dispatch-spawn-worker` Step 4 verify.
 #
 # Test override: CLAUDE_AGENTS_CMD replaces the `claude` invocation with an
 # arbitrary command (e.g. an absolute path to a fake script), so the helper is
@@ -223,6 +239,30 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     fi
     printf '%s\n' "$count"
     return 0
+  }
+
+  # verify_agent_registered_under <agent-name> <cwd> — bounded-retry verify
+  # that closes the async-registration race after `claude --bg` returns.
+  # See the header comment for the return-code contract.
+  verify_agent_registered_under() {
+    local agent_name="${1:-}"
+    local cwd="${2:-}"
+    if [[ -z "$agent_name" || -z "$cwd" ]]; then
+      printf 'lib-claude-agents: verify_agent_registered_under requires <agent-name> <cwd>\n' >&2
+      return 1
+    fi
+    local max_attempts=5
+    local interval_s=0.2
+    local i sessions name
+    for (( i = 0; i < max_attempts; i++ )); do
+      if sessions=$(claude_sessions_under "$cwd"); then
+        while IFS=$'\t' read -r _ _ _ name; do
+          [[ "$name" == "$agent_name" ]] && return 0
+        done <<<"$sessions"
+      fi
+      (( i + 1 < max_attempts )) && sleep "$interval_s"
+    done
+    return 1
   }
 
 fi

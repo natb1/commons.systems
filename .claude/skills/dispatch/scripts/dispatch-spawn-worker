@@ -43,7 +43,9 @@
 #                 script's inherited cwd (worktrees/main) — no `cd` into the
 #                 target worktree.
 #   3. Verify   — re-query the registry under the spawner cwd (where the new
-#                 worker registers) and confirm the new agent appears.
+#                 worker registers) with a bounded retry (5 × 200 ms via
+#                 `verify_agent_registered_under`) to absorb the async-
+#                 registration race; confirm the new agent appears.
 #
 # (In-script `# ---- Step N: ... ----` markers offset by 2 — arg validation
 # and config resolution come first as Steps 0 and 1.)
@@ -188,16 +190,7 @@ spawn_output=$("$CLAUDE_CMD" --bg --name "$AGENT_NAME" \
 # Query under SPAWN_CWD — the new worker's registered cwd. A query under
 # <worktree-path> would never find it because the daemon's --cwd filter
 # excludes sessions that started elsewhere.
-registered=""
-if sessions=$(claude_sessions_under "$SPAWN_CWD"); then
-  while IFS=$'\t' read -r _ _ _ name; do
-    if [[ "$name" == "$AGENT_NAME" ]]; then
-      registered=1
-      break
-    fi
-  done <<<"$sessions"
-fi
-if [[ -n "$registered" ]]; then
+if verify_agent_registered_under "$AGENT_NAME" "$SPAWN_CWD"; then
   echo spawned
   exit 0
 fi

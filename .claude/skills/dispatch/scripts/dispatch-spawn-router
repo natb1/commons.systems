@@ -19,7 +19,9 @@
 #   2. Spawn    — `claude --bg --name dispatch-<short-id> --permission-mode
 #                 auto "/dispatch"`, cwd = the main worktree (where every
 #                 /dispatch job is started).
-#   3. Verify   — re-query the registry and confirm the new agent registered.
+#   3. Verify   — re-query the registry with a bounded retry (5 × 200 ms via
+#                 `verify_agent_registered_under`) to absorb the async-
+#                 registration race; confirm the new agent registered.
 #
 # (In-script `# ---- Step N: ... ----` markers offset by 2 — arg validation
 # and config resolution come first as Steps 0 and 1.)
@@ -133,16 +135,7 @@ spawn_output=$( ( cd "$MAIN_WORKTREE" && "$CLAUDE_CMD" --bg --name "$AGENT_NAME"
     --permission-mode auto "/dispatch" ) 2>&1 ) || true
 
 # ---- Step 4: verify the new agent registered -------------------------------
-registered=""
-if sessions=$(claude_sessions_under "$MAIN_WORKTREE"); then
-  while IFS=$'\t' read -r _ _ _ name; do
-    if [[ "$name" == "$AGENT_NAME" ]]; then
-      registered=1
-      break
-    fi
-  done <<<"$sessions"
-fi
-if [[ -n "$registered" ]]; then
+if verify_agent_registered_under "$AGENT_NAME" "$MAIN_WORKTREE"; then
   echo spawned
   exit 0
 fi
