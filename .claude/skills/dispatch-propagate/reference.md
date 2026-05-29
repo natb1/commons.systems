@@ -1,0 +1,251 @@
+# dispatch-propagate reference
+
+This is a non-loaded companion to `SKILL.md`. The skill loader auto-loads only
+`SKILL.md` on every dispatch tick; this file holds the explanatory "why" detail
+that the router does not need each tick — lock/reclaim semantics, the
+per-worktree invariant, the selection-ladder mechanics, the concurrency-budget
+schedules, and the #725 cap-keyed re-seed deep dive. `SKILL.md` cross-references
+the sections below.
+
+Back-link: [`SKILL.md`](./SKILL.md).
+
+## Chain mechanics
+
+Each `/dispatch-propagate` is a `claude --bg` background job (#725) rooted in
+`worktrees/main`. The router selects, spawns a worker, and exits. The worker
+runs one phase in its target worktree, then spawns a fresh `/dispatch-propagate` router
+back in `worktrees/main` and self-deletes. That router → worker → router
+chain advances the workflow; the #725 cap-keyed re-seed scheduled at the
+next rate-limit window reset re-seeds it when a tick stalled on a
+concurrency-budget cap (see *The #725 cap-keyed re-seed*).
+
+## Releasing the lock
+
+Releasing after Step 5 is safe because (a) once the spawned worker registers a
+live session, the selection scan skips targets whose worktree a live session
+owns (#905), so no other router selects the same issue; and (b) until that
+session registers — and even if a race let two routers reach Step 6 with the
+same target — Step 6's `dispatch-spawn-worker` enforces per-worktree dedup at
+the spawn boundary, so only one worker starts. (An orphan worktree, on disk
+with no live session, no longer blocks selection — so (b) is what closes the
+lock-release-to-worker-registration window, not (a).)
+
+The `tmp/dispatch-worktree` marker is the canonical post-Step-5 reclaim signal:
+a recorded holder whose worktree carries the marker is past Step 5, so its
+lock is reclaimable by any subsequent tick regardless of session-id provenance.
+The acquire path skips the busy branch when the foreign holder's cwd has the
+marker, and `--release` succeeds (truncates and prints `released`) when EITHER
+the caller's sessionId matches the holder OR the holder's cwd has the marker.
+This closes the silent-`noop` failure mode for any post-Step-5 caller whose
+`CLAUDE_CODE_SESSION_ID` was re-derived from a different context (a subagent
+or hook). Pre-marker callers — Steps 1-4 stop paths and the Step 5 `conflict`
+stop — keep strict sessionId-match semantics by construction because the
+marker is absent.
+
+The lock is scoped to selection and self-healing. The recorded sessionId
+(`CLAUDE_CODE_SESSION_ID`) outlives any single Bash call within a tick: if a
+tick dies before its explicit release, the next tick detects that the recorded
+sessionId no longer appears in `claude agents --json` and reclaims the lock,
+and a `--wait` waiter re-checks holder liveness every poll, so a dead holder's
+lock is reclaimed automatically. Same-session re-entry (e.g. after a context
+clear that re-invokes `/dispatch-propagate`) re-acquires cleanly because the recorded
+sessionId matches the re-entering session's own `CLAUDE_CODE_SESSION_ID`.
+
+## Per-worktree invariant
+
+The selection lock is **per-repo** and serializes the router's selection
+step (so two routers cannot race on the same target). It is one of two
+mechanisms; the other is per-worktree and enforced elsewhere.
+
+The **per-worktree invariant**: at most one live worker agent per issue
+worktree. The router's Step 6 spawn primitive (`dispatch-spawn-worker`)
+enforces this at the spawn boundary. Every worker is born with the target
+worktree's basename as its `--name` — the `dispatch-spawn-worker` script's
+own cwd stays at the spawner's cwd (`worktrees/main`), but the spawn
+subshell `cd`s into `<worktree-path>` before invoking `claude --bg`, so the
+new worker registers and runs in its target worktree. Per-worktree name
+uniqueness is automatic. The dedup query lists live sessions under
+`<worktree-path>` (not the spawner cwd — that's where every same-target
+worker registers) and checks for `name == <worktree-basename>`; if any other
+live worker matches, the spawn is `deduped` and no new worker starts. The
+worker runs in its target worktree from spawn until it exits;
+per-worktree dedup naturally serializes per-issue work without the
+selection lock having to.
+
+The two mechanisms have orthogonal scopes:
+
+- **Selection lock** — per-repo, held by the router for the
+  duration of Steps 1–5. Prevents two routers from selecting the same target.
+- **Per-worktree dedup** (`dispatch-spawn-worker`) — per-worktree-path,
+  enforced at every router-to-worker spawn. Prevents two workers from racing
+  on the same issue.
+
+N concurrent issues in flight = N concurrent workers, each in its own
+worktree, each advancing its own issue's phase without contention. Only the
+router selection step is serialized; the worker execution path is per-
+worktree-parallel.
+
+## Selection-ladder mechanics
+
+This explains what `dispatch-select-target` does internally. The router only
+acts on the script's one output line; the mechanics below are reference, not
+per-tick action.
+
+Priority order the script implements, top to bottom: JIT scan →
+`origin/main` CI health gate → topic-category × priority × phase ladder.
+A jit-reminder surfaces even when `origin/main` is red because the JIT scan
+precedes the main-broken gate.
+
+The topic-category × phase ladder is three-tier: a topic **category** nests
+outside a **priority bit**, which nests outside the phase **ladder**.
+Categories, highest first: `bug` → `testing infrastructure` → `dispatch` →
+`other`. Within each category, items carrying the `priority` label rank above
+items without it; the label is human-applied — `/ready` never applies it
+automatically. A PR's category is the highest-priority topic among the labels
+of every issue it closes; an issue's category is the highest-priority topic
+among its own labels; anything with no topic label is `other`. The selector
+exhausts one `(category, priority)` bucket's whole ladder before moving to
+the next.
+
+Within each category the ladder is (highest first; within a tier, oldest PR
+wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
+whose closing issue is `blocked_by` an open issue is skipped; `waiting`-phase
+PRs are skipped entirely): oldest `security` PR → oldest
+`review` PR → oldest `code-review` PR → oldest `verify` PR → oldest `help wanted`
+issue → oldest `qa` PR. Non-QA PRs are ranked closest-to-done first —
+`security` is the closest-to-done non-QA tier; `help wanted` issues rank below
+all non-QA PRs but above QA PRs. A queue with no topic-labeled items resolves
+entirely to `other`, reproducing the flat ladder; `empty` when no category
+yields a task.
+
+A `help wanted` issue is also skipped when its entire open-leaf subtree is
+worktree-conflicted — every reachable open leaf already has a worktree owned by
+another session — exactly as a directly-worktree'd issue is skipped; selection
+falls through to the next tier. The tier emits the resolved startable leaf, so
+a queue-selected `issue <num>` is always a directly-startable target.
+
+## Step 5 marker deep dive
+
+The marker is the canonical "Step 5 completed" signal, read by the lock script
+as the post-Step-5 reclaim signal (see *Releasing the lock*). Context-clear
+recovery does **not** read it: `restore-dispatch-skill.sh` (bound to
+`SessionStart:clear`) keys on the session's `--name` shape (`<N>-<slug>` for
+workers) and emits `/dispatch-worker <N> <worktree-path>` so the worker
+re-derives the phase from PR/CI ground truth.
+`.claude/hooks/worktree-create.sh` also writes the marker as its final action
+on every successful worktree creation, so a fresh worktree is marker-bearing
+the moment the hook returns — the router's explicit marker write here is the
+in-skill defense for any code path that bypasses the hook. The router itself
+never writes the marker into its own cwd (`worktrees/main`), so a
+`SessionStart:clear` there is a no-op — correct, since the router is
+short-lived and re-seeded by the #725 cap-keyed re-seed when a cap stall ends
+the chain. The marker is an empty
+boolean flag with no payload; it persists for the worktree's life and needs no
+cleanup — `tmp/` is git-ignored, and removing the worktree removes it.
+
+## Step 6 spawn-cwd trade-off
+
+The `dispatch-spawn-worker` script runs from the router's own cwd
+(`worktrees/main` — the router stays anchored there), but spawns `claude --bg`
+with cwd = `<worktree-path>` via a subshell `cd`, so the worker is born in its
+target worktree. Trade-off: the Claude daemon's "+ new session" launcher
+default cwd tracks the most-recent worker's worktree rather than
+`worktrees/main` — a recoverable UI default, accepted in exchange for
+sessions whose cwd does not silently drift. The previous arrangement — where
+the worker `cd`'d in its own Step 0 — silently broke when subsequent `Bash` /
+`Skill` calls reset cwd back to the spawn cwd.
+
+## Concurrency budgeting
+
+`dispatch-target-workers` composes two open-loop schedules that decide how
+many concurrent `dispatch-worker-*` sessions should run:
+
+- **Weekly ramp** (sets the magnitude) — drives target_N
+  conservative-early/aggressive-late toward `target_weekly_usage_pct` by the
+  weekly window's `resets_at`. The shape is
+  `(tau / (remaining_weekly + tau)) ^ k`; smaller `tau` and larger `k` mean
+  more deferred consumption.
+
+  | remaining_weekly | ramp_weekly | candidate target_N |
+  |------------------|------------:|-------------------:|
+  | 7 days (604800s) | 0.0156      | 0                  |
+  | 3 days (259200s) | 0.0625      | 1                  |
+  | 1 day (86400s)   | 0.25        | 2                  |
+  | 6 hours (21600s) | 0.64        | 5                  |
+  | 1 hour (3600s)   | 0.922       | 7                  |
+  | 0                | 1.0         | 8                  |
+
+- **5-hour linear cap** (binary gate) — over each 5-hour window, the cap on
+  `used_5h` rises linearly from `0` at window-start to
+  `target_five_hour_usage_pct` at window-end. When `used_5h >= cap_5h`, the
+  budgeter prints `0` regardless of the weekly ramp's otherwise-positive
+  output, pausing spawning until either the window resets or the cap rises
+  enough to clear it.
+
+  | remaining_5h   | elapsed_5h_frac | cap_5h |
+  |----------------|----------------:|-------:|
+  | 5h (18000s)    | 0.0             | 0%     |
+  | 4h (14400s)    | 0.2             | 10%    |
+  | 2.5h (9000s)   | 0.5             | 25%    |
+  | 1h (3600s)     | 0.8             | 40%    |
+  | 0              | 1.0             | 50%    |
+
+  At window-start, `cap_5h = 0` and the gate condition `used_5h >= cap_5h`
+  evaluates as `0 >= 0`, so spawning is briefly paused for the first slice of
+  every 5h window. This is intentional — the linear schedule enforces the
+  per-window ceiling from second zero. The blackout clears as soon as `cap_5h`
+  rises above the current `used_5h`; if `used_5h` was 0 at refresh, this
+  happens within seconds.
+
+Tunables (each optional in `dispatch.config/target-workers.json`; defaults
+baked into the script):
+
+| Field | Default | Meaning |
+|---|---|---|
+| `target_weekly_usage_pct` | 90 | Weekly ramp's terminal target. |
+| `target_five_hour_usage_pct` | 50 | 5-hour cap's terminal ceiling. |
+| `max_concurrent_workers` | 8 | Absolute cap on `target_N`. |
+| `ramp_tau_seconds` | 86400 | Weekly ramp time-constant. |
+| `ramp_shape_k` | 2 | Weekly ramp concavity. |
+| `five_hour_window_seconds` | 18000 | 5-hour window length (for cap-slope only). |
+
+Recalibration: if mid-week idleness is too long, try `ramp_tau_seconds=172800`
+(2 days) or `ramp_shape_k=1` (less concave). If the 5-hour cap is too tight,
+raise `target_five_hour_usage_pct`. If you need more headroom for parallel
+work, raise `max_concurrent_workers`.
+
+**Missing-telemetry fallback.** When
+`~/.local/share/productivity-tui/rate_limits.json` is missing or unreadable,
+`dispatch-target-workers` prints `1` and writes a one-line note to stderr —
+the gate's first comparison (`0 >= 1` is false on a typical fresh router
+tick) is a no-op, so the chain degrades to today's "spawn one per tick"
+behavior. The same fallback applies when the `seven_day` block is absent
+(no weekly ramp anchor); a missing `five_hour` block alone disables the
+5-hour gate but the weekly ramp still applies.
+
+## The #725 cap-keyed re-seed
+
+The #725 cap-keyed re-seed is the chain's resume-from-cap-stall mechanism.
+When a tick's Step 6 decides to skip the spawn because the live worker count
+already meets the budgeter's target, that means the rate-limit cap closed
+the budget — `dispatch-target-workers` reads
+`~/.local/share/productivity-tui/rate_limits.json` and returns 0 when
+`used_percentage >= target` on either the weekly or the 5-hour window. The
+chain pauses with work waiting; the only thing that unblocks it is the cap
+window resetting.
+
+`dispatch-schedule-reseed` (invoked from Step 6's spawn-skip) reads the same
+telemetry, computes the earliest blocking `resets_at`, and writes a
+transient `systemd.user` timer (`dispatch-reseed-<resets_at>`) that fires at
+that time and runs `dispatch-spawn-router` from the main worktree. The unit
+name embeds the epoch, so a repeated call observing the same blocking cap
+collides on the unit name and is a no-op — idempotent across the many ticks
+that may observe the same stall.
+
+This mechanism only covers the cap-stall class of stall. **Empty-queue and
+all-parked stalls** are handled by the office-hours queue (#755 / #757 /
+#758): when a human engages an `office-hours`-labeled item, the Step 4
+hand-off returns it to the dispatch chain and re-seeds from human action.
+A weekly fallback heartbeat for the edge case of a manual issue filed while
+the chain is stalled with no live session to receive it can be added in a
+follow-up if it matters in practice.
