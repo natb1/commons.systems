@@ -71,8 +71,12 @@
 #   race between `claude --bg` returning and the daemon adding the new agent to
 #   `claude agents --json`. Polls the registry up to 5 times at 200 ms spacing —
 #   4 sleeps, not 5, since the last attempt is not followed by a sleep
-#   (≈0.8 s total budget). On any attempt where a row appears whose `name` column
-#   equals `<agent-name>`, returns 0 immediately. UNKNOWN results from
+#   (≈0.8 s total budget). On any attempt where a non-`stopped` row appears whose
+#   `name` column equals `<agent-name>`, returns 0 immediately — a `stopped` row
+#   is skipped so only a live successor counts (mirrors the spawn-script dedup
+#   guards). A non-numeric interval override (e.g. `inf`) is rejected in favour
+#   of the 0.2 s default so a malformed value cannot hang the verify. UNKNOWN
+#   results from
 #   `claude_sessions_under` are treated as "not yet" and retried — a daemon
 #   momentarily unresponsive during async registration is exactly the case the
 #   retry is meant to absorb. On exhaustion, returns 1 — the conservative-fail
@@ -258,10 +262,19 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     fi
     local max_attempts=5
     local interval_s="${LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S:-0.2}"
-    local i sessions name
+    # Reject a non-numeric interval (e.g. `inf`, which GNU sleep accepts and
+    # would hang the verify indefinitely) and fall back to the default.
+    if [[ ! "$interval_s" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+      printf 'lib-claude-agents: LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=%s is not a non-negative number; using 0.2\n' "$interval_s" >&2
+      interval_s=0.2
+    fi
+    local i sessions status name
     for (( i = 0; i < max_attempts; i++ )); do
       if sessions=$(claude_sessions_under "$cwd"); then
-        while IFS=$'\t' read -r _ _ _ name; do
+        while IFS=$'\t' read -r _ _ status name; do
+          # Confirm only a live successor: a "stopped" row with the target name
+          # must not count as registered (mirrors the spawn-script dedup guards).
+          [[ "$status" == "stopped" ]] && continue
           [[ "$name" == "$agent_name" ]] && return 0
         done <<<"$sessions"
       fi
