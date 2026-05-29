@@ -78,6 +78,10 @@ apply_office_hours_to_issue() {
   gh issue edit "$ISSUE_NUM" --add-label dispatch:office-hours 2>&1
 }
 
+# Apply targets the issue only — a PR may not exist yet (implement phase exits
+# before /plan-implement opens the draft). Strip targets both, since the
+# UserPromptSubmit hook may run from either an implement-phase or a
+# post-implement worktree and the label could be on either side.
 apply_office_hours_label() {
   local apply_output
   if apply_output=$(apply_office_hours_to_issue); then
