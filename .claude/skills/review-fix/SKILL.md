@@ -210,37 +210,40 @@ already applied, so re-entry is a true no-op. Otherwise run all steps in order.
    written under `tmp/` rather than regenerating it. On a no-findings run,
    every section renders `_None._` and the skill still terminates cleanly.
 
-10. **Autonomous exit and hand off (dispatched use only).** In an autonomous
-    `/dispatch-propagate` background job, after printing the Step 9 report, exit the
-    worktree and hand off. Run (`dangerouslyDisableSandbox: true` — the script
-    calls `gh` and `dispatch-self-close`):
-
-    ```bash
-    ExitWorktree action:"keep"
-    .claude/skills/dispatch-propagate/scripts/dispatch-handoff <N> --phase-completed
-    ```
-
-    `dispatch-handoff` spawns the next `/dispatch-propagate` router, checks for a
-    `dispatch:office-hours` deviation flag on the PR, and self-closes the
-    session.
-
-11. **Interactive follow-up (attended use only).** If the user requests a fix
+10. **Interactive follow-up (attended use only).** If the user requests a fix
     for a remaining finding (typically from the Informational, Dismissed, or
     Deferred buckets), implement it (working-tree edits only), fork
     `/commit-merge-push` to commit and push it, and document it on the PR with
     a comment using Step 7's mechanism.
 
+11. **Write the phase-completed marker (autonomous path only), then stop.**
+    The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads this to decide
+    propagate vs park. Atomic via tempfile + mv. `CLAUDE_JOB_DIR` unset =
+    interactive run; the marker write is a no-op and the skill simply stops
+    (which is correct — interactive Step 10 just ran).
+
+    ```bash
+    if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+      printf 'phase=review\npr=%s\n' "$PR_NUM" \
+        > "$CLAUDE_JOB_DIR/phase-completed.tmp"
+      mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
+         "$CLAUDE_JOB_DIR/phase-completed"
+    fi
+    ```
+
+    Then **stop**. The Stop hook reads the marker and advances the chain.
+
 ## Autonomous vs. attended
 
-In an autonomous `/dispatch-propagate` background job Step 10 runs immediately after
-Step 9 — the skill applies the `dispatch:reviewed` label (Step 8), prints
-the report (Step 9), and hands off (Step 10). There is no user to drive
-Step 11. The label is applied regardless of whether any fixes were made, so
-`/dispatch-propagate` can always advance to the next phase.
+In an autonomous `/dispatch-propagate` background job there is no user to drive
+Step 10 — the skill applies the `dispatch:reviewed` label (Step 8), writes the
+phase-completed marker (Step 11), and stops; the Step 9 4-section report is
+informational. The label is applied regardless of whether any fixes were made,
+so `/dispatch-propagate` can always advance to the next phase.
 
 ## Notes
 
 The skill is idempotent: a re-invocation with `dispatch:reviewed` already on the
-PR skips Steps 1–11 and returns. Step 11 (interactive follow-up) is in the skip
+PR skips Steps 1–10 and returns. Step 10 (interactive follow-up) is in the skip
 range because attended follow-up edits would be made directly, not by re-running
 the wrapper.

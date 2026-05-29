@@ -52,12 +52,7 @@ As the action immediately before the final report:
 ## 4. Summarize and stop
 
 Summarize the likely cause from the logs and check-run details, report it,
-and stop. Run `dispatch-handoff --early-stop` (`dangerouslyDisableSandbox:
-true`) to self-close:
-
-```bash
-.claude/skills/dispatch-propagate/scripts/dispatch-handoff --early-stop
-```
+and return. The caller proceeds to Step 7 with `notify main-broken`.
 
 Include only the failing check/step name and a high-level error category
 (e.g. "test assertion failed", "lint error", "type error"). Do not reproduce

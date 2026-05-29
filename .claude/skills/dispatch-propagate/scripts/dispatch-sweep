@@ -28,6 +28,8 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # shellcheck source=./lib-worktree-in-sync.sh
 source "$SCRIPT_DIR/lib-worktree-in-sync.sh"
+# shellcheck source=./lib-claude-agents.sh
+source "$SCRIPT_DIR/lib-claude-agents.sh"
 
 # Resolve project root + worktrees root from the git common dir. The parent of
 # --git-common-dir is the project root in both classic (.git) and bare (.bare)
@@ -112,6 +114,9 @@ flush_record
 # in sync remove the worktree + delete the local branch. Not-in-sync merged
 # worktrees are logged with a SKIP line so the user can investigate —
 # the unpushed work may belong to a live session.
+# Liveness gate: even a merged + in-sync worktree is skipped when a live
+# session is registered under its basename (worktree_has_live_session) — the
+# worker owns it and will clean up on its own tick.
 i=0
 while [[ $i -lt ${#WT_PATHS[@]} ]]; do
   wt_path="${WT_PATHS[$i]}"
@@ -160,7 +165,13 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
     continue
   fi
 
-  # Branch is merged. Check in-sync; the helper logs its own KEEP/ERROR reason.
+  # Branch is merged. Guard against removing a worktree a live worker owns.
+  if worktree_has_live_session "$wt_path"; then
+    log "SKIP_MERGED_LIVE_SESSION: '$wt_path' branch=$wt_branch pr=#$pr_num"
+    continue
+  fi
+
+  # Check in-sync; the helper logs its own KEEP/ERROR reason.
   if worktree_in_sync "$wt_path" "$LOG_FILE" "dispatch-sweep"; then
     if git worktree remove "$wt_path" 2>>"$LOG_FILE"; then
       git worktree prune 2>/dev/null || true

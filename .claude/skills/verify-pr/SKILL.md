@@ -202,17 +202,22 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh <pr-num> tmp/verify-summary.md
    ```
 
-9. **Stop.** Exit the worktree and hand off. Run (`dangerouslyDisableSandbox:
-   true` — the script calls `gh` and `dispatch-self-close`):
+9. **Write the phase-completed marker, then stop.** The Stop hook
+   (`.claude/hooks/dispatch-stop.sh`) reads this to decide propagate vs park.
+   Atomic via tempfile + mv. `CLAUDE_JOB_DIR` unset = interactive run; skip.
 
    ```bash
-   ExitWorktree action:"keep"
-   .claude/skills/dispatch-propagate/scripts/dispatch-handoff <N> --phase-completed
+   if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+     printf 'phase=verify\npr=%s\n' "$PR_NUM" \
+       > "$CLAUDE_JOB_DIR/phase-completed.tmp"
+     mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
+        "$CLAUDE_JOB_DIR/phase-completed"
+   fi
    ```
 
-   `dispatch-handoff` spawns the next `/dispatch-propagate` router, checks for a
-   `dispatch:office-hours` deviation flag on the PR, and self-closes the
-   session. The next `/dispatch-propagate` job re-derives the phase from CI ground
+   Then **stop**. The `/dispatch-propagate` background-job chain drives the
+   next iteration — the next `/dispatch-propagate` job re-derives the phase
+   from CI ground
    truth and re-invokes `/verify-pr` if checks still fail.
 
 ## Accumulator
