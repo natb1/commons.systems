@@ -3921,6 +3921,43 @@ if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
 assert_eq "regression-guard: cwd-match wrong-name → free" "free" "$live"
 ca_teardown
 
+# --- Test 24: verify_agent_registered_under skips a stopped row --------------
+
+echo "Test: verify_agent_registered_under does not count a stopped session as registered"
+ca_setup
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+# A row whose name matches the target but whose status is "stopped" must not
+# satisfy the verify — only a live successor counts (mirrors the dedup guards).
+write_fake_claude '[{"sessionId":"s-1","pid":7,"status":"stopped","name":"dispatch-dead"}]' 0
+if verify_agent_registered_under "dispatch-dead" "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "verify-stopped: stopped row is not registered (rc 1)" "1" "$rc"
+# Positive control: a live row with the same name does satisfy the verify.
+write_fake_claude '[{"sessionId":"s-1","pid":7,"status":"busy","name":"dispatch-live"}]' 0
+if verify_agent_registered_under "dispatch-live" "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "verify-live: busy row is registered (rc 0)" "0" "$rc"
+unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+ca_teardown
+
+# --- Test 25: verify_agent_registered_under rejects a non-numeric interval ---
+
+echo "Test: verify_agent_registered_under rejects a non-numeric interval override"
+ca_setup
+# `inf` is a valid GNU `sleep` argument that would hang the verify forever. The
+# guard must reject it, warn on stderr, and fall back to the 0.2 s default so
+# the call still returns (here: exhausts to rc 1 against an empty registry).
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=inf
+write_fake_claude '[]' 0
+if err=$(verify_agent_registered_under "dispatch-x" "$CA_DIR" 2>&1 1>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "verify-bad-interval: exhausts and returns 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q "is not a non-negative number"; then
+  PASS=$((PASS + 1)); echo "  PASS: verify-bad-interval: warns and falls back to default"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: verify-bad-interval: warns and falls back to default"
+fi
+unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+ca_teardown
+
 # ============================================================================
 # dispatch-config-load tests
 # ============================================================================
@@ -5170,6 +5207,7 @@ SPAWN_ROUTER_REGISTRY=""
 SPAWN_ROUTER_BG_ARGV=""
 SPAWN_ROUTER_RM_LOG=""
 SPAWN_ROUTER_STOP_LOG=""
+SPAWN_ROUTER_PENDING=""
 
 # write_fake_spawn_router_claude — install the multi-subcommand fake `claude`.
 # Dispatches on $1:
@@ -5177,10 +5215,19 @@ SPAWN_ROUTER_STOP_LOG=""
 #              claude_sessions_under does no client-side path filtering — it
 #              trusts server-side `--cwd` filtering — so every fixture session
 #              is returned. Fine here: each fixture holds only sessions a test
-#              means dispatch-spawn-router to see.
-#   --bg     — record full argv to bg-argv; when SPAWN_BG_REGISTERS=1 (default)
-#              parse --name and jq-append the new agent to the fixture so the
-#              verify step finds it.
+#              means dispatch-spawn-router to see. If SPAWN_BG_REGISTER_AFTER_N
+#              mode left a pending sidecar, decrement its countdown; when it
+#              reaches zero, merge the pending agent into the registry and
+#              delete the sidecar.
+#   --bg     — record full argv to bg-argv. Then:
+#                - SPAWN_BG_REGISTER_AFTER_N=<n> set → write pending sidecar
+#                  (name + countdown=n) so the agent first appears on the
+#                  n-th subsequent `agents` call. Models the daemon's async-
+#                  registration race that verify_agent_registered_under closes.
+#                - else SPAWN_BG_REGISTERS=1 (default) → parse --name and
+#                  jq-append the new agent to the fixture so the verify step
+#                  finds it on the first attempt.
+#                - else (SPAWN_BG_REGISTERS=0) → never register.
 #   rm       — append $2 (the job-id) to rm-log.
 #   stop     — append $2 (the job-id) to stop-log.
 write_fake_spawn_router_claude() {
@@ -5189,16 +5236,32 @@ write_fake_spawn_router_claude() {
 set -uo pipefail
 case "\${1:-}" in
   agents)
+    if [[ -f "$SPAWN_ROUTER_PENDING" ]]; then
+      pending_name=\$(sed -n '1p' "$SPAWN_ROUTER_PENDING")
+      pending_count=\$(sed -n '2p' "$SPAWN_ROUTER_PENDING")
+      pending_count=\$((pending_count - 1))
+      if [[ "\$pending_count" -le 0 ]]; then
+        tmp=\$(mktemp)
+        jq --arg name "\$pending_name" \
+          '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":"/main","kind":"background","status":"busy","name":\$name}]' \
+          "$SPAWN_ROUTER_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_ROUTER_REGISTRY"
+        rm -f "$SPAWN_ROUTER_PENDING"
+      else
+        printf '%s\n%s\n' "\$pending_name" "\$pending_count" > "$SPAWN_ROUTER_PENDING"
+      fi
+    fi
     cat "$SPAWN_ROUTER_REGISTRY"
     ;;
   --bg)
     printf '%s\n' "\$@" > "$SPAWN_ROUTER_BG_ARGV"
-    if [[ "\${SPAWN_BG_REGISTERS:-1}" == "1" ]]; then
-      name=""
-      while [[ \$# -gt 0 ]]; do
-        if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
-        shift
-      done
+    name=""
+    while [[ \$# -gt 0 ]]; do
+      if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
+      shift
+    done
+    if [[ -n "\${SPAWN_BG_REGISTER_AFTER_N:-}" ]]; then
+      printf '%s\n%s\n' "\$name" "\$SPAWN_BG_REGISTER_AFTER_N" > "$SPAWN_ROUTER_PENDING"
+    elif [[ "\${SPAWN_BG_REGISTERS:-1}" == "1" ]]; then
       tmp=\$(mktemp)
       jq --arg name "\$name" \
         '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":"/main","kind":"background","status":"busy","name":\$name}]' \
@@ -5231,6 +5294,7 @@ spawn_router_setup() {
   SPAWN_ROUTER_BG_ARGV="$TMPDIR_TEST/bg-argv"
   SPAWN_ROUTER_RM_LOG="$TMPDIR_TEST/rm-log"
   SPAWN_ROUTER_STOP_LOG="$TMPDIR_TEST/stop-log"
+  SPAWN_ROUTER_PENDING="$TMPDIR_TEST/pending"
   printf '[]' > "$SPAWN_ROUTER_REGISTRY"
 
   export DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
@@ -5245,8 +5309,10 @@ spawn_router_teardown() {
   SPAWN_ROUTER_BG_ARGV=""
   SPAWN_ROUTER_RM_LOG=""
   SPAWN_ROUTER_STOP_LOG=""
+  SPAWN_ROUTER_PENDING=""
   unset DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE DISPATCH_SPAWN_ROUTER_CLAUDE_CMD \
-    DISPATCH_SPAWN_ROUTER_SESSION_ID SPAWN_BG_REGISTERS
+    DISPATCH_SPAWN_ROUTER_SESSION_ID SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
+    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 }
 
 # --- Test 1: spawn success ---------------------------------------------------
@@ -5314,6 +5380,9 @@ echo "Test: a spawned job that never registers exits non-zero with a diagnostic"
 spawn_router_setup
 write_fake_spawn_router_claude
 export SPAWN_BG_REGISTERS=0
+# Skip the real inter-attempt sleeps — this test exercises the full exhaustion
+# path, which would otherwise add ~0.8 s of wall-clock sleep.
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>&1 1>/dev/null) || rc=$?
 TOTAL=$((TOTAL + 1))
@@ -5354,6 +5423,55 @@ else
 fi
 spawn_router_teardown
 
+# --- Test 6: delayed registration absorbed by verify retry -------------------
+
+echo "Test: a spawned job that registers on the 2nd 'agents' call still exits 0"
+spawn_router_setup
+write_fake_spawn_router_claude
+# SPAWN_BG_REGISTER_AFTER_N=2 means the spawned agent first appears in the
+# fake's registry on the 2nd subsequent `agents` call — modeling the daemon's
+# async-registration race the issue describes. verify_agent_registered_under
+# polls up to 5 times, so the 2nd attempt finds it and the script exits 0.
+export SPAWN_BG_REGISTER_AFTER_N=2
+err_file="$TMPDIR_TEST/stderr"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>"$err_file"); then rc=0; else rc=$?; fi
+err=$(cat "$err_file")
+assert_eq "delayed-register: dispatch-spawn-router exits 0" "0" "$rc"
+assert_eq "delayed-register: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ -z "${err//[[:space:]]/}" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: delayed-register: no diagnostic on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: delayed-register: no diagnostic on stderr"
+  echo "    stderr: $err"
+fi
+spawn_router_teardown
+
+# --- Test 7: registration on the exact last attempt still exits 0 ------------
+
+echo "Test: a spawned job that registers on the 5th (final) 'agents' call still exits 0"
+spawn_router_setup
+write_fake_spawn_router_claude
+# SPAWN_BG_REGISTER_AFTER_N=5 makes the agent first appear on the 5th
+# subsequent `agents` call — the last poll before verify_agent_registered_under
+# exhausts its 5-attempt budget. This pins the off-by-one in the retry loop:
+# the final attempt is honoured, so the script must still exit 0.
+export SPAWN_BG_REGISTER_AFTER_N=5
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+err_file="$TMPDIR_TEST/stderr"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>"$err_file"); then rc=0; else rc=$?; fi
+err=$(cat "$err_file")
+assert_eq "last-attempt-register: dispatch-spawn-router exits 0" "0" "$rc"
+assert_eq "last-attempt-register: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ -z "${err//[[:space:]]/}" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: last-attempt-register: no diagnostic on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: last-attempt-register: no diagnostic on stderr"
+  echo "    stderr: $err"
+fi
+spawn_router_teardown
+
 # ============================================================================
 # dispatch-spawn-worker tests
 # ============================================================================
@@ -5383,6 +5501,7 @@ echo "=== dispatch-spawn-worker ==="
 SPAWN_WORKER_REGISTRY=""
 SPAWN_WORKER_BG_ARGV=""
 SPAWN_WORKER_PWD_LOG=""
+SPAWN_WORKER_PENDING=""
 WORKER_TARGET_WORKTREE=""
 
 # write_fake_spawn_worker_claude — install the multi-subcommand fake `claude`.
@@ -5391,27 +5510,52 @@ WORKER_TARGET_WORKTREE=""
 #              claude_sessions_under does no client-side path filtering — it
 #              trusts server-side `--cwd` filtering — so every fixture session
 #              is returned. Fine here: each fixture holds only sessions a test
-#              means dispatch-spawn-worker to see.
-#   --bg     — record full argv to bg-argv AND record $PWD to pwd-log; when
-#              SPAWN_BG_REGISTERS=1 (default) parse --name and jq-append the
-#              new agent to the fixture so the verify step finds it.
+#              means dispatch-spawn-worker to see. If SPAWN_BG_REGISTER_AFTER_N
+#              mode left a pending sidecar, decrement its countdown; when it
+#              reaches zero, merge the pending agent into the registry and
+#              delete the sidecar.
+#   --bg     — record full argv to bg-argv AND record $PWD to pwd-log. Then:
+#                - SPAWN_BG_REGISTER_AFTER_N=<n> set → write pending sidecar
+#                  (name + countdown=n) so the agent first appears on the
+#                  n-th subsequent `agents` call. Models the daemon's async-
+#                  registration race that verify_agent_registered_under closes.
+#                - else SPAWN_BG_REGISTERS=1 (default) → parse --name and
+#                  jq-append the new agent to the fixture so the verify step
+#                  finds it on the first attempt.
+#                - else (SPAWN_BG_REGISTERS=0) → never register.
 write_fake_spawn_worker_claude() {
   cat > "$TMPDIR_TEST/fake-claude" <<FAKE
 #!/usr/bin/env bash
 set -uo pipefail
 case "\${1:-}" in
   agents)
+    if [[ -f "$SPAWN_WORKER_PENDING" ]]; then
+      pending_name=\$(sed -n '1p' "$SPAWN_WORKER_PENDING")
+      pending_count=\$(sed -n '2p' "$SPAWN_WORKER_PENDING")
+      pending_count=\$((pending_count - 1))
+      if [[ "\$pending_count" -le 0 ]]; then
+        tmp=\$(mktemp)
+        jq --arg name "\$pending_name" \
+          '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":"/worker","kind":"background","status":"busy","name":\$name}]' \
+          "$SPAWN_WORKER_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_WORKER_REGISTRY"
+        rm -f "$SPAWN_WORKER_PENDING"
+      else
+        printf '%s\n%s\n' "\$pending_name" "\$pending_count" > "$SPAWN_WORKER_PENDING"
+      fi
+    fi
     cat "$SPAWN_WORKER_REGISTRY"
     ;;
   --bg)
     pwd >> "$SPAWN_WORKER_PWD_LOG"
     printf '%s\n' "\$@" > "$SPAWN_WORKER_BG_ARGV"
-    if [[ "\${SPAWN_BG_REGISTERS:-1}" == "1" ]]; then
-      name=""
-      while [[ \$# -gt 0 ]]; do
-        if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
-        shift
-      done
+    name=""
+    while [[ \$# -gt 0 ]]; do
+      if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
+      shift
+    done
+    if [[ -n "\${SPAWN_BG_REGISTER_AFTER_N:-}" ]]; then
+      printf '%s\n%s\n' "\$name" "\$SPAWN_BG_REGISTER_AFTER_N" > "$SPAWN_WORKER_PENDING"
+    elif [[ "\${SPAWN_BG_REGISTERS:-1}" == "1" ]]; then
       tmp=\$(mktemp)
       jq --arg name "\$name" \
         '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":"/worker","kind":"background","status":"busy","name":\$name}]' \
@@ -5439,6 +5583,7 @@ spawn_worker_setup() {
   SPAWN_WORKER_REGISTRY="$TMPDIR_TEST/registry.json"
   SPAWN_WORKER_BG_ARGV="$TMPDIR_TEST/bg-argv"
   SPAWN_WORKER_PWD_LOG="$TMPDIR_TEST/pwd-log"
+  SPAWN_WORKER_PENDING="$TMPDIR_TEST/pending"
   WORKER_TARGET_WORKTREE="$TMPDIR_TEST/worktrees/839-test-worker"
   printf '[]' > "$SPAWN_WORKER_REGISTRY"
 
@@ -5452,9 +5597,11 @@ spawn_worker_teardown() {
   SPAWN_WORKER_REGISTRY=""
   SPAWN_WORKER_BG_ARGV=""
   SPAWN_WORKER_PWD_LOG=""
+  SPAWN_WORKER_PENDING=""
   WORKER_TARGET_WORKTREE=""
   unset DISPATCH_SPAWN_WORKER_CLAUDE_CMD DISPATCH_SPAWN_WORKER_SESSION_ID \
-    SPAWN_BG_REGISTERS
+    SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
+    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 }
 
 # --- Test 1: spawn success ---------------------------------------------------
@@ -5560,6 +5707,9 @@ echo "Test: a spawned worker job that never registers exits non-zero with a diag
 spawn_worker_setup
 write_fake_spawn_worker_claude
 export SPAWN_BG_REGISTERS=0
+# Skip the real inter-attempt sleeps — this test exercises the full exhaustion
+# path, which would otherwise add ~0.8 s of wall-clock sleep.
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>&1 1>/dev/null) || rc=$?
 TOTAL=$((TOTAL + 1))
@@ -5701,6 +5851,57 @@ if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker"
 assert_eq "cwd-aware-spawn: exits 0" "0" "$rc"
 assert_eq "cwd-aware-spawn: stdout is 'spawned' (verify queried under worktree path, found the new worker)" \
   "spawned" "$out"
+spawn_worker_teardown
+
+# --- Test 9: delayed registration absorbed by verify retry -------------------
+
+echo "Test: a spawned worker that registers on the 2nd 'agents' call still exits 0"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+# SPAWN_BG_REGISTER_AFTER_N=2 models the daemon's async-registration race:
+# the spawned worker first appears in the fake's registry on the 2nd
+# subsequent `agents` call. verify_agent_registered_under polls up to 5
+# times, so the 2nd attempt finds the worker and the script exits 0.
+export SPAWN_BG_REGISTER_AFTER_N=2
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+err_file="$TMPDIR_TEST/stderr"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>"$err_file" ); then rc=0; else rc=$?; fi
+err=$(cat "$err_file")
+assert_eq "delayed-register-worker: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "delayed-register-worker: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ -z "${err//[[:space:]]/}" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: delayed-register-worker: no diagnostic on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: delayed-register-worker: no diagnostic on stderr"
+  echo "    stderr: $err"
+fi
+spawn_worker_teardown
+
+# --- Test 10: registration on the exact last attempt still exits 0 -----------
+
+echo "Test: a spawned worker that registers on the 5th (final) 'agents' call still exits 0"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+# SPAWN_BG_REGISTER_AFTER_N=5 makes the worker first appear on the 5th
+# subsequent `agents` call — the last poll before verify_agent_registered_under
+# exhausts its 5-attempt budget. This pins the off-by-one in the retry loop:
+# the final attempt is honoured, so the script must still exit 0.
+export SPAWN_BG_REGISTER_AFTER_N=5
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+err_file="$TMPDIR_TEST/stderr"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>"$err_file" ); then rc=0; else rc=$?; fi
+err=$(cat "$err_file")
+assert_eq "last-attempt-register-worker: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "last-attempt-register-worker: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ -z "${err//[[:space:]]/}" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: last-attempt-register-worker: no diagnostic on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: last-attempt-register-worker: no diagnostic on stderr"
+  echo "    stderr: $err"
+fi
 spawn_worker_teardown
 
 # ============================================================================
