@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, increment, writeBatch, Timestamp, deleteDoc, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, runTransaction, setDoc, updateDoc, where, increment, writeBatch, Timestamp, deleteDoc, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { requireOneOf } from "@commons-systems/firestoreutil/validate";
 
@@ -482,9 +482,11 @@ export async function updateJournalLegCleared(legId: string, cleared: boolean): 
   requireDocId(legId, "journal leg");
   const path = nsCollectionPath(NAMESPACE, "journal-legs");
   const ref = doc(db, path, legId);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) throw new Error(`Journal leg ${legId} not found`);
-  const leg = parseFirestoreJournalLeg(snap as QueryDocumentSnapshot<DocumentData, DocumentData>);
-  assertLegStateTransition(leg, cleared);
-  await updateDoc(ref, { cleared });
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error(`Journal leg ${legId} not found`);
+    const leg = parseFirestoreJournalLeg(snap as QueryDocumentSnapshot<DocumentData, DocumentData>);
+    assertLegStateTransition(leg, cleared);
+    tx.update(ref, { cleared });
+  });
 }
