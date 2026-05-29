@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # lib-claude-agents.sh — sourceable helper for Claude session liveness.
 #
-# /dispatch must know whether a git worktree currently has a live Claude
+# /dispatch-propagate must know whether a git worktree currently has a live Claude
 # session in it, so it never opens a second session on a worktree another
 # session owns. This helper answers that against `claude agents --json`, the
 # daemon-backed registry of live sessions (Claude Code >= 2.1.146), replacing
