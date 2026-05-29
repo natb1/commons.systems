@@ -324,45 +324,37 @@ Skip leaf tracing when:
 
 If the resolved target issue `<N>` has any **open** blocker — run
 `issue-blocking <N>` and check for any entry with `state` `OPEN` — release the
-lock (see *Releasing the lock*), report the open blocker, apply
-`dispatch:office-hours` to the target's PR if one exists (see *Applying
-`dispatch:office-hours`* below), then proceed to Step 7 with
+lock (see *Releasing the lock*), report the open blocker, park the issue with
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-apply-office-hours <N> "target has an open blocker"
+```
+
+(see *Applying `dispatch:office-hours`* below), then proceed to Step 7 with
 `notify target-blocked`. This guard applies even when a PR exists; closed
 blockers do not gate.
 
 If a named target issue is **closed**, release the lock (see *Releasing the
-lock*), report it, apply `dispatch:office-hours` to the target's PR if one
-exists (see *Applying `dispatch:office-hours`* below), then proceed to Step 7
-with `notify target-blocked`.
+lock*), report it, park the issue with
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-apply-office-hours <N> "named target issue is closed"
+```
+
+(see *Applying `dispatch:office-hours`* below), then proceed to Step 7 with
+`notify target-blocked`.
 
 ### Applying `dispatch:office-hours`
 
-`notify target-blocked` queues the target for human review by applying
-`dispatch:office-hours` to its PR when one exists. Resolve the PR with
-`.claude/skills/dispatch-propagate/scripts/dispatch-find-pr <N>`; if it prints a PR
-number, apply the label with the apply-first / create-on-"not found" idiom
-(`gh`, `dangerouslyDisableSandbox: true`):
+`notify target-blocked` queues the target for human review.
+`dispatch-apply-office-hours <N> <reason>` is the single write path: it applies
+the label to the **issue** (never a PR), creates the label on first use with
+the canonical color and description, is idempotent (a second call posts no
+duplicate comment), and posts a why-comment carrying the reason. Run it with
+`dangerouslyDisableSandbox: true` — `gh` needs network.
 
-```bash
-gh pr edit <pr-num> --add-label dispatch:office-hours
-```
-
-If the first call fails because the label does not exist yet, create it and
-retry — the same idiom `dispatch-complete-phase` uses:
-
-```bash
-gh label create dispatch:office-hours \
-  --description "dispatch workflow: blocked on a human — awaiting input or review"
-gh pr edit <pr-num> --add-label dispatch:office-hours
-```
-
-Pass no `--color`: `dispatch-complete-phase` is the single source of the
-`dispatch:*` label-colour metadata, and #757 owns `dispatch:office-hours`'s
-canonical definition — this call site only needs the label to exist.
-
-If `dispatch-find-pr` prints nothing, print a clear diagnostic to stderr
-without applying the label; the disposition still proceeds to Step 7 as
-`notify target-blocked` and the session stays open in `claude agents`.
+No PR resolution is needed to park a target; the label always lands on the
+issue, where the office-hours queue readers anchor their skip.
 
 ## 5. Resolve the Worktree
 

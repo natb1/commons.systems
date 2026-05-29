@@ -6650,13 +6650,14 @@ echo "=== dispatch-input-block ==="
 #
 # The hook discriminates on CLAUDE_JOB_DIR/state.json {.name} starting with
 # "dispatch-"; resolves the issue number from the current branch (the <N>-*
-# prefix); resolves a PR via dispatch-find-pr; applies dispatch:office-hours
-# with the apply-first / create-on-"not found" idiom; runs dispatch-spawn.
+# prefix); parks the ISSUE via dispatch-apply-office-hours (the single write
+# path — issue target, create-on-first-use, why-comment); runs dispatch-spawn.
 # Always exits 0.
 #
 # Each test gets a fresh tmp tree:
 #   $TMPDIR_TEST/hooks/dispatch-input-block.sh     — the hook under test
-#   $TMPDIR_TEST/skills/dispatch-propagate/scripts/          — fakes for dispatch-find-pr,
+#   $TMPDIR_TEST/skills/dispatch-propagate/scripts/  — fakes for
+#                                                    dispatch-apply-office-hours,
 #                                                    dispatch-spawn
 #   $TMPDIR_TEST/bin/{gh,git}                      — PATH shims
 #   $TMPDIR_TEST/jobs/<id>/state.json              — fake CLAUDE_JOB_DIR ledger
@@ -6676,14 +6677,15 @@ ib_setup() {
     "$TMPDIR_TEST/hooks/dispatch-input-block.sh"
   chmod +x "$TMPDIR_TEST/hooks/dispatch-input-block.sh"
 
-  # Fake dispatch-find-pr: prints contents of $STUB_DIR/find-pr-output if
-  # present, else nothing (no PR exists).
-  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr" <<'FAKE'
+  # Fake dispatch-apply-office-hours: log argv to apply-office-hours.log so
+  # tests can assert the issue target + reason the hook passed. The hook routes
+  # every dispatch:office-hours apply through this single write path.
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-apply-office-hours" <<'FAKE'
 #!/usr/bin/env bash
-[[ -f "$STUB_DIR/find-pr-output" ]] && cat "$STUB_DIR/find-pr-output"
+echo "$*" >> "$STUB_DIR/apply-office-hours.log"
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr"
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-apply-office-hours"
 
   # Fake dispatch-spawn-router: log invocations to spawn-calls.log.
   cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-router" <<'FAKE'
@@ -6764,9 +6766,9 @@ ib_teardown() {
   unset CLAUDE_JOB_DIR
 }
 
-# --- Test 1: dispatch-* job + PR exists → label PR, spawn baton --------------
+# --- Test 1: dispatch-* job + PR exists → still parks the ISSUE, spawn baton --
 
-echo "Test: dispatch-* job + branch <N>-* + PR exists → label PR, spawn baton"
+echo "Test: dispatch-* job + branch <N>-* + PR exists → park ISSUE via apply-office-hours, spawn baton"
 ib_setup
 echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
@@ -6775,71 +6777,46 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "input-block: hook exits 0" "0" "$rc"
-pr_edit_log=$(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$pr_edit_log" == *"pr edit 456 --add-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: input-block: 'gh pr edit 456 --add-label dispatch:office-hours' was invoked"
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: input-block: dispatch-apply-office-hours invoked with issue 123 + non-empty reason (issue target even with a PR)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: input-block: 'gh pr edit 456 --add-label dispatch:office-hours' was invoked"
-  echo "    pr-edit-log: $pr_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: input-block: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: input-block: no PR-targeted gh edit (apply is issue-only)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: input-block: no PR-targeted gh edit (apply is issue-only)"
 fi
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "input-block: dispatch-spawn invoked exactly once" "1" "$spawn_calls"
 ib_teardown
 
-# --- Test 2: dispatch-* job + no PR → label issue, spawn baton ---------------
+# --- Test 2: dispatch-* job + no PR → park the ISSUE, spawn baton ------------
 
-echo "Test: dispatch-* job + branch <N>-* + no PR → label issue (implement phase)"
+echo "Test: dispatch-* job + branch <N>-* + no PR → park ISSUE (implement phase)"
 ib_setup
 echo "789-bare" > "$STUB_DIR/current-branch.txt"
-# No find-pr-output → dispatch-find-pr prints nothing → fall back to issue.
 echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "input-block (no PR): hook exits 0" "0" "$rc"
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 789 --add-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: input-block (no PR): 'gh issue edit 789 --add-label dispatch:office-hours' was invoked"
+if [[ "$apply_issue" == "789" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: input-block (no PR): dispatch-apply-office-hours invoked with issue 789 + non-empty reason"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: input-block (no PR): 'gh issue edit 789 --add-label dispatch:office-hours' was invoked"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: input-block (no PR): dispatch-apply-office-hours invoked with issue 789 + non-empty reason"
+  echo "    apply-log: $apply_log"
 fi
-ib_teardown
-
-# --- Test 3: label missing → create + retry, canonical color/description -----
-
-echo "Test: label-missing → 'gh label create dispatch:office-hours' (canonical color/description) then retry"
-ib_setup
-echo "123-foo" > "$STUB_DIR/current-branch.txt"
-echo "456" > "$STUB_DIR/find-pr-output"
-echo "label-missing" > "$STUB_DIR/pr-edit-mode"
-echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
-export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
-"$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
-rc=$?
-assert_eq "label-missing: hook exits 0" "0" "$rc"
-label_create_log=$(cat "$STUB_DIR/gh-label-create.log" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ "$label_create_log" == *"--color FBCA04"* ]] \
-   && [[ "$label_create_log" == *"dispatch:office-hours"* ]] \
-   && [[ "$label_create_log" == *"blocked on a human"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: label-missing: label created with canonical color (FBCA04) and description"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: label-missing: label created with canonical color (FBCA04) and description"
-  echo "    label-create-log: $label_create_log"
-fi
-pr_edit_log=$(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ "$pr_edit_log" == *"pr edit 456 --add-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: label-missing: PR apply retried after label create"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: label-missing: PR apply retried after label create"
-  echo "    pr-edit-log: $pr_edit_log"
-fi
-spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
-assert_eq "label-missing: dispatch-spawn invoked exactly once after recovery" "1" "$spawn_calls"
 ib_teardown
 
 # --- Test 4: CLAUDE_JOB_DIR unset → no-op (no label, no spawn) ---------------
@@ -6853,10 +6830,10 @@ unset CLAUDE_JOB_DIR
 rc=$?
 assert_eq "no-job-dir: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: no-job-dir: no gh label apply was invoked"
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no-job-dir: no office-hours apply was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: no-job-dir: no gh label apply was invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-job-dir: no office-hours apply was invoked"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
@@ -6878,10 +6855,10 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 rc=$?
 assert_eq "non-dispatch: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: non-dispatch: no gh label apply was invoked"
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-dispatch: no office-hours apply was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: non-dispatch: no gh label apply was invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-dispatch: no office-hours apply was invoked"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
@@ -6904,10 +6881,10 @@ printf '%s' '{"notification_type":"session_complete"}' \
 rc=$?
 assert_eq "non-permission-prompt: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/gh-pr-edit.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: non-permission-prompt: no gh label apply was invoked"
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-permission-prompt: no office-hours apply was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: non-permission-prompt: no gh label apply was invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-permission-prompt: no office-hours apply was invoked"
 fi
 ib_teardown
 
@@ -6922,10 +6899,10 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 rc=$?
 assert_eq "non-issue-branch: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: non-issue-branch: no gh label apply was invoked"
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-issue-branch: no office-hours apply was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: non-issue-branch: no gh label apply was invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-issue-branch: no office-hours apply was invoked"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
@@ -7080,7 +7057,8 @@ echo "=== dispatch-stop ==="
 #
 # Each test gets a fresh tmp tree:
 #   $TMPDIR_TEST/hooks/dispatch-stop.sh               — hook under test
-#   $TMPDIR_TEST/skills/dispatch-propagate/scripts/             — fakes for find-pr,
+#   $TMPDIR_TEST/skills/dispatch-propagate/scripts/   — fakes for find-pr,
+#                                                       apply-office-hours,
 #                                                       phase, spawn-router,
 #                                                       self-close
 #   $TMPDIR_TEST/bin/{gh,git}                         — PATH shims
@@ -7108,6 +7086,18 @@ stop_setup() {
 exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr"
+
+  # Fake dispatch-apply-office-hours: log argv to apply-office-hours.log and a
+  # "label-apply" marker to order.log (the ordering test asserts spawn runs
+  # after the apply). The Stop hook routes every dispatch:office-hours apply
+  # through this single write path.
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-apply-office-hours" <<'FAKE'
+#!/usr/bin/env bash
+echo "$*" >> "$STUB_DIR/apply-office-hours.log"
+echo "label-apply" >> "$STUB_DIR/order.log"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-apply-office-hours"
 
   # Fake dispatch-phase: prints contents of $STUB_DIR/current-phase.txt if
   # present, else "implement".
@@ -7310,13 +7300,15 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "stop verify-exhausted: hook exits 0" "0" "$rc"
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop verify-exhausted: issue --add-label invoked"
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop verify-exhausted: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-exhausted: issue --add-label invoked"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-exhausted: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" ]]; then
@@ -7347,13 +7339,15 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "stop same-phase non-verify: hook exits 0" "0" "$rc"
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop same-phase non-verify: issue --add-label invoked"
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop same-phase non-verify: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop same-phase non-verify: issue --add-label invoked"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop same-phase non-verify: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" ]]; then
@@ -7384,13 +7378,15 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "stop marker-absent: hook exits 0" "0" "$rc"
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop marker-absent: issue --add-label invoked"
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop marker-absent: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop marker-absent: issue --add-label invoked"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop marker-absent: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-pr-remove.log" \
@@ -7472,39 +7468,31 @@ else
 fi
 stop_teardown
 
-# --- Test 8: label create-on-"not found" idiom -------------------------------
+# --- Test 8: $CLAUDE_JOB_DIR/office-hours-reason overrides the branch default -
 
-echo "Test: stop hook + marker absent + label missing → create label, retry apply"
+echo "Test: stop hook branch A + office-hours-reason file present → its contents pass as the reason"
 stop_setup
 echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
 echo "implement" > "$STUB_DIR/current-phase.txt"
-echo "label-missing" > "$STUB_DIR/issue-edit-mode"
 echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
-# No phase-completed marker → branch A.
+# No phase-completed marker → branch A. Enrichment-hook reason override present.
+printf '%s' "enriched: tool denied by policy" > "$TMPDIR_TEST/jobs/abcd1234/office-hours-reason"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
-assert_eq "stop label-missing: hook exits 0" "0" "$rc"
-label_create_log=$(cat "$STUB_DIR/gh-label-create.log" 2>/dev/null || true)
+assert_eq "stop reason-override: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$label_create_log" == *"--color FBCA04"* ]] \
-   && [[ "$label_create_log" == *"dispatch:office-hours"* ]] \
-   && [[ "$label_create_log" == *"blocked on a human"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop label-missing: label created with canonical color and description"
+if [[ "$apply_issue" == "123" && "$apply_reason" == "enriched: tool denied by policy" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop reason-override: office-hours-reason contents passed as the reason"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop label-missing: label created with canonical color and description"
-  echo "    label-create-log: $label_create_log"
-fi
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop label-missing: issue apply retried after label create"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop label-missing: issue apply retried after label create"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop reason-override: office-hours-reason contents passed as the reason"
+  echo "    apply-log: $apply_log"
 fi
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
-assert_eq "stop label-missing: spawn invoked exactly once after recovery" "1" "$spawn_calls"
+assert_eq "stop reason-override: spawn invoked exactly once" "1" "$spawn_calls"
 stop_teardown
 
 # --- Test 9: spawn-last ordering (branch D) ----------------------------------
@@ -7551,13 +7539,15 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "stop empty-phase: hook exits 0" "0" "$rc"
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop empty-phase: office-hours applied to issue (Branch D, not false Branch B)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop empty-phase: office-hours applied to issue (Branch D, not false Branch B)"
-  echo "    issue-edit-log: $issue_edit_log"
+  echo "    apply-log: $apply_log"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
@@ -7589,13 +7579,15 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "stop unknown-phase: hook exits 0" "0" "$rc"
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop unknown-phase: office-hours applied to issue (Branch A, not false Branch B)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop unknown-phase: office-hours applied to issue (Branch A, not false Branch B)"
-  echo "    issue-edit-log: $issue_edit_log"
+  echo "    apply-log: $apply_log"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
