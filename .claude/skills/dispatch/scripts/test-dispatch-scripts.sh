@@ -2497,11 +2497,8 @@ echo "=== dispatch-sweep ==="
 #
 # Shims:
 #   gh   — gh-pr-list-all.json drives `pr list --state all`; each entry carries
-#          {state, headRefName, number, isDraft}, partitioned by the script into
-#          MERGED_BY_BRANCH / OPEN_BY_BRANCH / DRAFT_BY_BRANCH (the last for
-#          OPEN entries only). isDraft is required on OPEN entries — the
-#          SKIP_ORPHAN_READY_PR gate reads DRAFT_BY_BRANCH and an OPEN stub
-#          missing isDraft will silently bypass the gate.
+#          {state, headRefName, number}. Only MERGED entries are consumed
+#          (MERGED_BY_BRANCH map); OPEN and DRAFT fields are unused.
 #   git  — knows worktree list/remove/prune, branch -D, -C <p> status,
 #          -C <p> rev-list --count, -C <p> log -1 --format=%ct, and
 #          rev-parse --path-format=absolute --git-common-dir.
@@ -2530,7 +2527,7 @@ sweep_setup() {
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  "pr list --state all --json number,headRefName,state,isDraft --limit 200")
+  "pr list --state all --json number,headRefName,state --limit 200")
     cat "$STUB_DIR/gh-pr-list-all.json"
     ;;
   issue\ view\ *\ --json\ state\ -q\ .state)
