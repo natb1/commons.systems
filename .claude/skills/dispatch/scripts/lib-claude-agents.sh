@@ -69,8 +69,9 @@
 # verify_agent_registered_under <agent-name> <cwd>
 #   Bounded retry of `claude_sessions_under` that closes the async-registration
 #   race between `claude --bg` returning and the daemon adding the new agent to
-#   `claude agents --json`. Polls the registry up to 5 times at 200 ms spacing
-#   (≈1 s total budget). On any attempt where a row appears whose `name` column
+#   `claude agents --json`. Polls the registry up to 5 times at 200 ms spacing —
+#   4 sleeps, not 5, since the last attempt is not followed by a sleep
+#   (≈0.8 s total budget). On any attempt where a row appears whose `name` column
 #   equals `<agent-name>`, returns 0 immediately. UNKNOWN results from
 #   `claude_sessions_under` are treated as "not yet" and retried — a daemon
 #   momentarily unresponsive during async registration is exactly the case the
@@ -84,6 +85,10 @@
 # Test override: CLAUDE_AGENTS_CMD replaces the `claude` invocation with an
 # arbitrary command (e.g. an absolute path to a fake script), so the helper is
 # testable with no real daemon. Default: `claude`.
+#
+# Test override: LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S overrides the
+# `verify_agent_registered_under` inter-attempt sleep (default 0.2 s). Tests that
+# exercise the full exhaustion path set it to 0 to skip the real sleeps.
 #
 # Sandbox: `claude agents --json` reaches the local daemon over a Unix socket;
 # a sandboxed call returns `[]` indistinguishable from "no sessions". Callers
@@ -252,7 +257,7 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       return 1
     fi
     local max_attempts=5
-    local interval_s=0.2
+    local interval_s="${LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S:-0.2}"
     local i sessions name
     for (( i = 0; i < max_attempts; i++ )); do
       if sessions=$(claude_sessions_under "$cwd"); then

@@ -5274,7 +5274,8 @@ spawn_router_teardown() {
   SPAWN_ROUTER_STOP_LOG=""
   SPAWN_ROUTER_PENDING=""
   unset DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE DISPATCH_SPAWN_ROUTER_CLAUDE_CMD \
-    DISPATCH_SPAWN_ROUTER_SESSION_ID SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N
+    DISPATCH_SPAWN_ROUTER_SESSION_ID SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
+    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 }
 
 # --- Test 1: spawn success ---------------------------------------------------
@@ -5342,6 +5343,9 @@ echo "Test: a spawned job that never registers exits non-zero with a diagnostic"
 spawn_router_setup
 write_fake_spawn_router_claude
 export SPAWN_BG_REGISTERS=0
+# Skip the real inter-attempt sleeps — this test exercises the full exhaustion
+# path, which would otherwise add ~0.8 s of wall-clock sleep.
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>&1 1>/dev/null) || rc=$?
 TOTAL=$((TOTAL + 1))
@@ -5534,7 +5538,8 @@ spawn_worker_teardown() {
   SPAWN_WORKER_PENDING=""
   WORKER_TARGET_WORKTREE=""
   unset DISPATCH_SPAWN_WORKER_CLAUDE_CMD DISPATCH_SPAWN_WORKER_SESSION_ID \
-    SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N
+    SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
+    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 }
 
 # --- Test 1: spawn success ---------------------------------------------------
@@ -5641,6 +5646,9 @@ echo "Test: a spawned worker job that never registers exits non-zero with a diag
 spawn_worker_setup
 write_fake_spawn_worker_claude
 export SPAWN_BG_REGISTERS=0
+# Skip the real inter-attempt sleeps — this test exercises the full exhaustion
+# path, which would otherwise add ~0.8 s of wall-clock sleep.
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>&1 1>/dev/null) || rc=$?
 TOTAL=$((TOTAL + 1))
