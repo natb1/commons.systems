@@ -136,8 +136,8 @@ Suggest alternative requirements or designs that could improve functionality or 
 
 ### h. Open-issue alignment
 
-Reconcile the candidate against the rest of the open-issue corpus to catch scope
-misalignment a new or revised requirement introduces. Reuse the candidate set
+Reconcile the issue under evaluation against the rest of the open-issue corpus to
+catch scope misalignment a new or revised requirement introduces. Reuse the candidate set
 already gathered in Step 3a (Duplicates) — no second search. For each candidate
 that is topically related but **not** a duplicate, classify its scope relative
 to the issue under evaluation:
@@ -148,20 +148,23 @@ to the issue under evaluation:
   obsolete by this issue.
 - **unrelated** — no action.
 
-For each scope-misaligned candidate, check whether it has an open PR:
+For each scope-misaligned candidate, check whether it has an open PR by
+querying the candidate issue's own closing-PR references:
 
 ```bash
-gh pr list --search "linked:<candidate-num> state:open" --json number,state
+gh issue view <candidate-num> --json closedByPullRequestsReferences \
+  --jq '.closedByPullRequestsReferences[0].number // empty'
 ```
 
 Decision rule:
 
-- **Open PR found** → record the candidate and the PR number. Finding: the new
+- **Open PR found** (verify with `gh pr view <pr-num> --json state --jq '.state'`
+  returning `"OPEN"`) → record the candidate and the PR number. Finding: the new
   issue blocks on the PR's closing issue, and the new issue must itself include
   the scope needed to realign once that PR merges.
-- **No open PR** (including merged or closed PRs, which collapse into this case —
-  the candidate is stale) → record the candidate. Finding: edit the candidate's
-  body to realign it with the new requirement.
+- **No open PR** (no closing-PR reference, or the referenced PR is merged or
+  closed — the candidate is stale) → record the candidate. Finding: edit the
+  candidate's body to realign it with the new requirement.
 
 This category runs in both input modes. In **description mode** it compares the
 proposed issue text against the candidate corpus; in **issue number mode** it
@@ -223,7 +226,7 @@ Apply each scope-misaligned candidate's action from the Step 4 plan.
   project's PR-blocker-dependency convention:
   ```bash
   CLOSER_NUM=$(gh pr view <pr-num> --json closingIssuesReferences \
-    --jq '.closingIssuesReferences[0].number')
+    --jq '.closingIssuesReferences | if length == 1 then .[0].number else error("PR closes \(length) issues; specify the issue explicitly") end')
   CLOSER_DB_ID=$(gh api "/repos/{owner}/{repo}/issues/$CLOSER_NUM" --jq '.id')
   gh api -X POST "/repos/{owner}/{repo}/issues/<new-num>/dependencies/blocked_by" \
     --input - <<< "{\"issue_id\": $CLOSER_DB_ID}"
@@ -349,8 +352,8 @@ gh issue edit <N> --add-label "<type>" --add-label "<topic>"  # drop the trailin
 Step 3h (Open-issue alignment) and `/new-requirement` cover different scope-drift
 moments and do not overlap:
 
-- **Step 3h** reconciles a *new* requirement against the open-issue corpus at
-  filing time. It runs inside every `/ready` invocation, before the issue is
-  created or edited.
+- **Step 3h** reconciles the issue under evaluation against the open-issue corpus.
+  In description mode it runs before the issue is created. In issue number mode
+  it runs on the existing issue body before any edits are applied.
 - **`/new-requirement`** reconciles a worktree's *active plan* with a requirement
   that changed mid-flight, after implementation has already started.
