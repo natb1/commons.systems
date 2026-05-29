@@ -7894,7 +7894,7 @@ echo "=== restore-dispatch-skill ==="
 # Each test gets a fresh tmp tree:
 #   $TMPDIR_TEST/.claude/hooks/restore-dispatch-skill.sh   — hook under test
 #   $TMPDIR_TEST/.claude/skills/<phase-skill>/SKILL.md     — fixture body
-#   $TMPDIR_TEST/.claude/skills/dispatch/scripts/dispatch-phase — phase shim
+#   $TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts/dispatch-phase — phase shim
 #   $TMPDIR_TEST/bin/{claude,git}                          — PATH shims
 #   $TMPDIR_TEST/stub/                                     — fixture inputs
 #
@@ -7905,7 +7905,7 @@ restore_setup() {
   TMPDIR_TEST=$(mktemp -d)
   STUB_DIR="$TMPDIR_TEST/stub"
   mkdir -p "$TMPDIR_TEST/.claude/hooks" \
-    "$TMPDIR_TEST/.claude/skills/dispatch/scripts" \
+    "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts" \
     "$TMPDIR_TEST/bin" \
     "$STUB_DIR"
   for skill in plan-implement verify-pr dispatch-qa code-review-fix \
@@ -7928,7 +7928,7 @@ EOF
   chmod +x "$TMPDIR_TEST/.claude/hooks/restore-dispatch-skill.sh"
 
   # dispatch-phase shim: read $STUB_DIR/current-phase.txt.
-  cat > "$TMPDIR_TEST/.claude/skills/dispatch/scripts/dispatch-phase" <<'FAKE'
+  cat > "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts/dispatch-phase" <<'FAKE'
 #!/usr/bin/env bash
 if [[ -f "$STUB_DIR/current-phase.txt" ]]; then
   cat "$STUB_DIR/current-phase.txt"
@@ -7937,7 +7937,7 @@ else
 fi
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/.claude/skills/dispatch/scripts/dispatch-phase"
+  chmod +x "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts/dispatch-phase"
 
   # claude PATH stub: handle `agents --json`.
   cat > "$TMPDIR_TEST/bin/claude" <<'STUB'
