@@ -5502,9 +5502,9 @@ echo "=== dispatch-spawn-worker ==="
 #   $TMPDIR_TEST/fake-claude                    the multi-subcommand fake `claude`
 #   $TMPDIR_TEST/registry.json                  `claude agents --json` fixture
 #   $TMPDIR_TEST/bg-argv                        recorded argv of each `claude --bg` call
-#   $TMPDIR_TEST/pwd-log                        new: records the spawn subshell's $PWD
+#   $TMPDIR_TEST/pwd-log                        records the spawn subshell's $PWD
 #                                               so Test 2 can assert the script
-#                                               cd'd into the worktree path.
+#                                               cd'd into the target worktree.
 #
 # The test shell runs under `set -e`; dispatch-spawn-worker can exit non-zero,
 # so every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
@@ -5592,8 +5592,8 @@ echo "Test: an empty registry spawns one /dispatch-worker background job"
 spawn_worker_setup
 write_fake_spawn_worker_claude
 # Run from a stable known cwd so Test 2 (and 1's name/positional-arg
-# assertions) can compare against it. The spawn must NOT cd into the target
-# worktree — it runs from the caller's cwd.
+# assertions) can compare against it. The spawn subshell cd's into the target
+# worktree; the script's own cwd is the caller's cwd.
 SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
 if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-worker: dispatch-spawn-worker exits 0" "0" "$rc"
@@ -5612,34 +5612,33 @@ assert_eq "spawn-worker: argv[5] is '/dispatch-worker 839 <worktree-path>'" \
   "/dispatch-worker 839 $WORKER_TARGET_WORKTREE" "${sw_bg_argv[5]:-}"
 spawn_worker_teardown
 
-# --- Test 2: spawn cwd stays at caller's cwd --------------------------------
+# --- Test 2: spawn cwd is the target worktree path --------------------------
 
-echo "Test: dispatch-spawn-worker invokes 'claude --bg' from the caller's cwd, NOT the target worktree"
+echo "Test: dispatch-spawn-worker invokes 'claude --bg' from the target worktree path, NOT the caller's cwd"
 spawn_worker_setup
 write_fake_spawn_worker_claude
 SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
 if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-worker-cwd: exits 0" "0" "$rc"
 # Read the first line of the pwd-log and compare it (via realpath) to the
-# caller's cwd. realpath is used to normalize platform-specific path
+# target worktree path. realpath is used to normalize platform-specific path
 # differences (e.g. macOS /private/ prefix on /tmp).
 sw_pwd_line=$(head -1 "$SPAWN_WORKER_PWD_LOG" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" == "$(realpath "$SPAWN_CALLER_CWD")" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: 'claude --bg' ran with cwd = caller's cwd (worktrees/main)"
+if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" == "$(realpath "$WORKER_TARGET_WORKTREE")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: 'claude --bg' ran with cwd = target worktree path"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: 'claude --bg' ran with cwd = caller's cwd (worktrees/main)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: 'claude --bg' ran with cwd = target worktree path"
   echo "    pwd-log:  '$sw_pwd_line'"
-  echo "    expected: '$SPAWN_CALLER_CWD'"
+  echo "    expected: '$WORKER_TARGET_WORKTREE'"
 fi
-# Independently assert the cwd is NOT the target worktree — that is the
-# regression the issue prevents (cwd-pollution of the daemon's launcher
-# default).
+# Independently assert the cwd is NOT the caller's cwd — that is the
+# regression the fix prevents (worker born in the wrong worktree).
 TOTAL=$((TOTAL + 1))
-if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" != "$(realpath "$WORKER_TARGET_WORKTREE")" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: 'claude --bg' did NOT cd into the target worktree"
+if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" != "$(realpath "$SPAWN_CALLER_CWD")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: 'claude --bg' did NOT run from the caller's cwd"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: 'claude --bg' did NOT cd into the target worktree"
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: 'claude --bg' did NOT run from the caller's cwd"
   echo "    pwd-log: '$sw_pwd_line'"
 fi
 spawn_worker_teardown
@@ -5768,24 +5767,25 @@ assert_eq "missing-args-worker: unsafe chars in <worktree-path> → exit 2" "2" 
 
 spawn_worker_teardown
 
-# --- Test 8: dedup + verify query the spawner cwd, NOT the worktree path ----
+# --- Test 8: dedup + verify query the worktree path, not the spawner cwd ----
 #
 # Regression guard: in production the daemon server-side-filters `agents
 # --json --cwd <path>` to sessions started under <path>. Since
-# dispatch-spawn-worker does NOT `cd` into the target worktree before
-# `claude --bg`, the new worker registers under the spawner cwd
-# (worktrees/main), not under WORKTREE_PATH. If Step 4 verify queries under
-# WORKTREE_PATH, the daemon excludes the new worker, `registered` stays
-# empty, and the script exits 1 — on every spawn in production.
+# dispatch-spawn-worker `cd`s into the target worktree before `claude --bg`,
+# the new worker registers under <worktree-path>, not under the spawner cwd
+# (worktrees/main). Dedup and verify both query the worktree path so the new
+# worker is found. If they queried the spawner cwd instead, the daemon would
+# exclude the new worker, `registered` would stay empty, and the script would
+# exit 1 — on every spawn in production.
 #
 # The default fake `claude` (write_fake_spawn_worker_claude) ignores --cwd,
-# so the existing Tests 1–8 do not exercise this filter and would not catch
+# so the existing Tests 1–7 do not exercise this filter and would not catch
 # the regression. This test installs a cwd-aware fake: its `agents` handler
 # filters its registry-emit by --cwd, and its --bg handler records the new
 # worker with cwd = $(pwd) at spawn time. With the fix, both queries pass
-# the spawner cwd and the worker is found. Without it, verify returns no
+# the worktree path and the worker is found. Without it, verify returns no
 # session and the script exits 1.
-echo "Test: dedup + verify query the spawner cwd, not the worktree path"
+echo "Test: dedup + verify query the worktree path, not the spawner cwd"
 spawn_worker_setup
 cat > "$TMPDIR_TEST/fake-claude" <<FAKE
 #!/usr/bin/env bash
@@ -5828,7 +5828,7 @@ chmod +x "$TMPDIR_TEST/fake-claude"
 SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
 if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "cwd-aware-spawn: exits 0" "0" "$rc"
-assert_eq "cwd-aware-spawn: stdout is 'spawned' (verify queried under spawner cwd, found the new worker)" \
+assert_eq "cwd-aware-spawn: stdout is 'spawned' (verify queried under worktree path, found the new worker)" \
   "spawned" "$out"
 spawn_worker_teardown
 
