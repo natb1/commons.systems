@@ -58,7 +58,7 @@ if read -t 1 -d '' PAYLOAD; then :; fi
 ISSUE_NUM="${JOB_NAME%%-*}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
-SCRIPTS="$SCRIPT_DIR/../skills/dispatch/scripts"
+SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
 
 # Resolve PR (may be empty for implement-phase before the draft PR opens).
 PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""

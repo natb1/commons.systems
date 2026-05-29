@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# dispatch-spawn-router — spawn the next /dispatch (router) background job (the worker→router baton pass).
+# dispatch-spawn-router — spawn the next /dispatch-propagate (router) background job (the worker→router baton pass).
 #
 # /dispatch-worker runs one workflow phase per invocation and then stops. The
 # background-job chain (#755) is what keeps the workflow moving: a worker that
-# finishes a phase spawns the next /dispatch (router) job, then self-closes.
+# finishes a phase spawns the next /dispatch-propagate (router) job, then self-closes.
 # This script is the worker → router spawn primitive — /dispatch-worker SKILL.md
 # Step 4 invokes it on the phase-completed path. Its sibling primitive,
 # dispatch-spawn-worker, spawns a worker into a specific issue worktree (the
@@ -17,9 +17,11 @@
 #                 re-seeds the chain if a rate-limit cap-stall actually
 #                 dropped it.
 #   2. Spawn    — `claude --bg --name dispatch-<short-id> --permission-mode
-#                 auto "/dispatch"`, cwd = the main worktree (where every
-#                 /dispatch job is started).
-#   3. Verify   — re-query the registry and confirm the new agent registered.
+#                 auto "/dispatch-propagate"`, cwd = the main worktree (where every
+#                 /dispatch-propagate job is started).
+#   3. Verify   — re-query the registry with a bounded retry (5 × 200 ms via
+#                 `verify_agent_registered_under`) to absorb the async-
+#                 registration race; confirm the new agent registered.
 #
 # (In-script `# ---- Step N: ... ----` markers offset by 2 — arg validation
 # and config resolution come first as Steps 0 and 1.)
@@ -27,7 +29,7 @@
 # Stdout protocol (exactly one word):
 #   deduped   another dispatch-* agent is running, or the registry could not
 #             be queried — nothing was spawned.
-#   spawned   a new dispatch-* /dispatch job was spawned and verified.
+#   spawned   a new dispatch-* /dispatch-propagate job was spawned and verified.
 # A spawn that does not verify prints nothing to stdout, writes a diagnostic to
 # stderr, and exits non-zero.
 #
@@ -77,7 +79,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 
-# Every /dispatch job is started from the main worktree, so that is the cwd of
+# Every /dispatch-propagate job is started from the main worktree, so that is the cwd of
 # a spawned successor and the path the dedup/verify queries filter on. An
 # explicit DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE is authoritative and bypasses the git
 # lookup — tests rely on this. Otherwise the parent of --git-common-dir is the
@@ -94,7 +96,7 @@ fi
 
 # ---- Step 2: dedup guard ----------------------------------------------------
 # Spawn nothing if another live dispatch-* session is already at the main
-# worktree. The query is filtered to the main worktree — every /dispatch runs
+# worktree. The query is filtered to the main worktree — every /dispatch-propagate runs
 # there. Fail safe: an unknown (unqueryable) registry is treated as "a dispatch
 # agent may be running", so nothing is spawned. A TOCTOU window exists between
 # this query and the spawn below — two concurrent phase-completed dispatches
@@ -130,19 +132,10 @@ AGENT_NAME="dispatch-$SHORT_ID"
 # spawn from aborting the script — Step 4's registry check is the source of
 # truth for whether the agent actually came up.
 spawn_output=$( ( cd "$MAIN_WORKTREE" && "$CLAUDE_CMD" --bg --name "$AGENT_NAME" \
-    --permission-mode auto "/dispatch" ) 2>&1 ) || true
+    --permission-mode auto "/dispatch-propagate" ) 2>&1 ) || true
 
 # ---- Step 4: verify the new agent registered -------------------------------
-registered=""
-if sessions=$(claude_sessions_under "$MAIN_WORKTREE"); then
-  while IFS=$'\t' read -r _ _ _ name; do
-    if [[ "$name" == "$AGENT_NAME" ]]; then
-      registered=1
-      break
-    fi
-  done <<<"$sessions"
-fi
-if [[ -n "$registered" ]]; then
+if verify_agent_registered_under "$AGENT_NAME" "$MAIN_WORKTREE"; then
   echo spawned
   exit 0
 fi
