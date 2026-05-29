@@ -5047,7 +5047,6 @@ echo "=== dispatch-spawn-router ==="
 #   $TMPDIR_TEST/worktrees/main/ the main worktree (the spawn subshell cd's here)
 #   $TMPDIR_TEST/fake-claude     the multi-subcommand fake `claude`
 #   $TMPDIR_TEST/registry.json   the `claude agents --json` fixture
-#   $TMPDIR_TEST/jobs/           the on-disk jobs ledger (DISPATCH_SPAWN_ROUTER_JOBS_DIR)
 #   $TMPDIR_TEST/bg-argv         recorded argv of each `claude --bg` call
 #   $TMPDIR_TEST/rm-log          recorded job-ids of each `claude rm` call
 #   $TMPDIR_TEST/stop-log        recorded job-ids of each `claude stop` call
@@ -5056,7 +5055,6 @@ echo "=== dispatch-spawn-router ==="
 # every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
 
 SPAWN_ROUTER_REGISTRY=""
-SPAWN_ROUTER_JOBS_DIR=""
 SPAWN_ROUTER_BG_ARGV=""
 SPAWN_ROUTER_RM_LOG=""
 SPAWN_ROUTER_STOP_LOG=""
@@ -5109,8 +5107,7 @@ FAKE
 
 spawn_router_setup() {
   TMPDIR_TEST=$(mktemp -d)
-  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/worktrees/main" \
-    "$TMPDIR_TEST/jobs"
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/worktrees/main"
 
   # dispatch-spawn-router sources lib-claude-agents.sh from its own directory, so the
   # helper must sit alongside the copy. It is sourced, not executed — no chmod.
@@ -5119,7 +5116,6 @@ spawn_router_setup() {
   chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-router"
 
   SPAWN_ROUTER_REGISTRY="$TMPDIR_TEST/registry.json"
-  SPAWN_ROUTER_JOBS_DIR="$TMPDIR_TEST/jobs"
   SPAWN_ROUTER_BG_ARGV="$TMPDIR_TEST/bg-argv"
   SPAWN_ROUTER_RM_LOG="$TMPDIR_TEST/rm-log"
   SPAWN_ROUTER_STOP_LOG="$TMPDIR_TEST/stop-log"
@@ -5128,19 +5124,17 @@ spawn_router_setup() {
   export DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
   export DISPATCH_SPAWN_ROUTER_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
   export DISPATCH_SPAWN_ROUTER_SESSION_ID="sess-self"
-  export DISPATCH_SPAWN_ROUTER_JOBS_DIR="$SPAWN_ROUTER_JOBS_DIR"
 }
 
 spawn_router_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   SPAWN_ROUTER_REGISTRY=""
-  SPAWN_ROUTER_JOBS_DIR=""
   SPAWN_ROUTER_BG_ARGV=""
   SPAWN_ROUTER_RM_LOG=""
   SPAWN_ROUTER_STOP_LOG=""
   unset DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE DISPATCH_SPAWN_ROUTER_CLAUDE_CMD \
-    DISPATCH_SPAWN_ROUTER_SESSION_ID DISPATCH_SPAWN_ROUTER_JOBS_DIR SPAWN_BG_REGISTERS
+    DISPATCH_SPAWN_ROUTER_SESSION_ID SPAWN_BG_REGISTERS
 }
 
 # --- Test 1: spawn success ---------------------------------------------------
@@ -5225,69 +5219,14 @@ else
 fi
 spawn_router_teardown
 
-# --- Test 5: prune -----------------------------------------------------------
-
-echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
-spawn_router_setup
-# Seed the on-disk ledger with four entries:
-#   abcd1234  — stopped dispatch-* router name (the rm target)
-#   feed5678  — stopped <N>-<slug> worker name (also an rm target)
-#   ef015678  — stopped non-dispatch (must NOT be pruned)
-#   9999cccc  — live (working) dispatch-* (must NOT be pruned)
-mkdir -p "$SPAWN_ROUTER_JOBS_DIR/abcd1234" "$SPAWN_ROUTER_JOBS_DIR/feed5678" \
-  "$SPAWN_ROUTER_JOBS_DIR/ef015678" "$SPAWN_ROUTER_JOBS_DIR/9999cccc"
-printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
-  > "$SPAWN_ROUTER_JOBS_DIR/abcd1234/state.json"
-printf '%s' '{"name":"999-some-worker","state":"stopped"}' \
-  > "$SPAWN_ROUTER_JOBS_DIR/feed5678/state.json"
-printf '%s' '{"name":"manual-session","state":"stopped"}' \
-  > "$SPAWN_ROUTER_JOBS_DIR/ef015678/state.json"
-printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
-  > "$SPAWN_ROUTER_JOBS_DIR/9999cccc/state.json"
-write_fake_spawn_router_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "prune: dispatch-spawn-router exits 0" "0" "$rc"
-assert_eq "prune: stdout is 'spawned' (stopped agent does not dedup)" \
-  "spawned" "$out"
-rm_log=$(cat "$SPAWN_ROUTER_RM_LOG" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ "$rm_log" == *"abcd1234"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune: 'claude rm abcd1234' (directory basename, not sessionId) was invoked"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune: 'claude rm abcd1234' (directory basename) was invoked"
-  echo "    rm-log: $rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$rm_log" == *"feed5678"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
-  echo "    rm-log: $rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$rm_log" != *"ef015678"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune: non-dispatch agent 'ef015678' was not pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune: non-dispatch agent 'ef015678' was not pruned"
-  echo "    rm-log: $rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$rm_log" != *"9999cccc"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune: live dispatch-* agent '9999cccc' was not pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune: live dispatch-* agent '9999cccc' was not pruned"
-  echo "    rm-log: $rm_log"
-fi
-spawn_router_teardown
-
-# --- Test 6: unqueryable registry fails safe ---------------------------------
+# --- Test 5: unqueryable registry fails safe ---------------------------------
 
 echo "Test: an unparseable session registry fails safe — spawns nothing"
 spawn_router_setup
 # A registry that is not a JSON array: lib-claude-agents.sh's
 # claude_sessions_under cannot parse it and returns 1 (unknown). dispatch-spawn-router
 # must treat unknown as "a dispatch agent may be running" and spawn nothing —
-# the documented fail-safe in the script's Step 3 dedup guard.
+# the documented fail-safe in the script's Step 2 dedup guard.
 printf '%s' 'not-a-json-array' > "$SPAWN_ROUTER_REGISTRY"
 write_fake_spawn_router_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
@@ -5321,21 +5260,17 @@ echo "=== dispatch-spawn-worker ==="
 #   $TMPDIR_TEST/worktrees/839-test-worker/     the target worktree path (arg 2)
 #   $TMPDIR_TEST/fake-claude                    the multi-subcommand fake `claude`
 #   $TMPDIR_TEST/registry.json                  `claude agents --json` fixture
-#   $TMPDIR_TEST/jobs/                          on-disk jobs ledger
 #   $TMPDIR_TEST/bg-argv                        recorded argv of each `claude --bg` call
 #   $TMPDIR_TEST/pwd-log                        new: records the spawn subshell's $PWD
 #                                               so Test 2 can assert the script
 #                                               cd'd into the worktree path.
-#   $TMPDIR_TEST/rm-log                         recorded job-ids of each `claude rm` call
 #
 # The test shell runs under `set -e`; dispatch-spawn-worker can exit non-zero,
 # so every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
 
 SPAWN_WORKER_REGISTRY=""
-SPAWN_WORKER_JOBS_DIR=""
 SPAWN_WORKER_BG_ARGV=""
 SPAWN_WORKER_PWD_LOG=""
-SPAWN_WORKER_RM_LOG=""
 WORKER_TARGET_WORKTREE=""
 
 # write_fake_spawn_worker_claude — install the multi-subcommand fake `claude`.
@@ -5348,7 +5283,6 @@ WORKER_TARGET_WORKTREE=""
 #   --bg     — record full argv to bg-argv AND record $PWD to pwd-log; when
 #              SPAWN_BG_REGISTERS=1 (default) parse --name and jq-append the
 #              new agent to the fixture so the verify step finds it.
-#   rm       — append $2 (the job-id) to rm-log.
 write_fake_spawn_worker_claude() {
   cat > "$TMPDIR_TEST/fake-claude" <<FAKE
 #!/usr/bin/env bash
@@ -5372,10 +5306,6 @@ case "\${1:-}" in
         "$SPAWN_WORKER_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_WORKER_REGISTRY"
     fi
     ;;
-  rm)
-    shift
-    printf '%s\n' "\${1:-}" >> "$SPAWN_WORKER_RM_LOG"
-    ;;
 esac
 FAKE
   chmod +x "$TMPDIR_TEST/fake-claude"
@@ -5385,8 +5315,7 @@ spawn_worker_setup() {
   TMPDIR_TEST=$(mktemp -d)
   mkdir -p "$TMPDIR_TEST/scripts" \
     "$TMPDIR_TEST/worktrees/main" \
-    "$TMPDIR_TEST/worktrees/839-test-worker" \
-    "$TMPDIR_TEST/jobs"
+    "$TMPDIR_TEST/worktrees/839-test-worker"
 
   # dispatch-spawn-worker sources lib-claude-agents.sh from its own directory,
   # so the helper must sit alongside the copy. It is sourced, not executed —
@@ -5396,29 +5325,24 @@ spawn_worker_setup() {
   chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-worker"
 
   SPAWN_WORKER_REGISTRY="$TMPDIR_TEST/registry.json"
-  SPAWN_WORKER_JOBS_DIR="$TMPDIR_TEST/jobs"
   SPAWN_WORKER_BG_ARGV="$TMPDIR_TEST/bg-argv"
   SPAWN_WORKER_PWD_LOG="$TMPDIR_TEST/pwd-log"
-  SPAWN_WORKER_RM_LOG="$TMPDIR_TEST/rm-log"
   WORKER_TARGET_WORKTREE="$TMPDIR_TEST/worktrees/839-test-worker"
   printf '[]' > "$SPAWN_WORKER_REGISTRY"
 
   export DISPATCH_SPAWN_WORKER_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
   export DISPATCH_SPAWN_WORKER_SESSION_ID="sess-self"
-  export DISPATCH_SPAWN_WORKER_JOBS_DIR="$SPAWN_WORKER_JOBS_DIR"
 }
 
 spawn_worker_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   SPAWN_WORKER_REGISTRY=""
-  SPAWN_WORKER_JOBS_DIR=""
   SPAWN_WORKER_BG_ARGV=""
   SPAWN_WORKER_PWD_LOG=""
-  SPAWN_WORKER_RM_LOG=""
   WORKER_TARGET_WORKTREE=""
   unset DISPATCH_SPAWN_WORKER_CLAUDE_CMD DISPATCH_SPAWN_WORKER_SESSION_ID \
-    DISPATCH_SPAWN_WORKER_JOBS_DIR SPAWN_BG_REGISTERS
+    SPAWN_BG_REGISTERS
 }
 
 # --- Test 1: spawn success ---------------------------------------------------
@@ -5542,69 +5466,14 @@ else
 fi
 spawn_worker_teardown
 
-# --- Test 6: prune -----------------------------------------------------------
-
-echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
-spawn_worker_setup
-# Seed the on-disk ledger with four entries:
-#   abcd1234  — stopped dispatch-* router name (the rm target)
-#   feed5678  — stopped <N>-<slug> worker name (also an rm target)
-#   ef015678  — stopped non-dispatch (must NOT be pruned)
-#   9999cccc  — live (working) dispatch-* (must NOT be pruned)
-mkdir -p "$SPAWN_WORKER_JOBS_DIR/abcd1234" "$SPAWN_WORKER_JOBS_DIR/feed5678" \
-  "$SPAWN_WORKER_JOBS_DIR/ef015678" "$SPAWN_WORKER_JOBS_DIR/9999cccc"
-printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
-  > "$SPAWN_WORKER_JOBS_DIR/abcd1234/state.json"
-printf '%s' '{"name":"999-some-worker","state":"stopped"}' \
-  > "$SPAWN_WORKER_JOBS_DIR/feed5678/state.json"
-printf '%s' '{"name":"manual-session","state":"stopped"}' \
-  > "$SPAWN_WORKER_JOBS_DIR/ef015678/state.json"
-printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
-  > "$SPAWN_WORKER_JOBS_DIR/9999cccc/state.json"
-write_fake_spawn_worker_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "prune-worker: dispatch-spawn-worker exits 0" "0" "$rc"
-assert_eq "prune-worker: stdout is 'spawned' (stopped agent does not dedup)" \
-  "spawned" "$out"
-sw_rm_log=$(cat "$SPAWN_WORKER_RM_LOG" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ "$sw_rm_log" == *"abcd1234"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
-  echo "    rm-log: $sw_rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$sw_rm_log" == *"feed5678"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune-worker: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
-  echo "    rm-log: $sw_rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$sw_rm_log" != *"ef015678"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune-worker: non-dispatch agent 'ef015678' was not pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: non-dispatch agent 'ef015678' was not pruned"
-  echo "    rm-log: $sw_rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$sw_rm_log" != *"9999cccc"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune-worker: live dispatch-* agent '9999cccc' was not pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: live dispatch-* agent '9999cccc' was not pruned"
-  echo "    rm-log: $sw_rm_log"
-fi
-spawn_worker_teardown
-
-# --- Test 7: unqueryable registry fails safe ---------------------------------
+# --- Test 6: unqueryable registry fails safe ---------------------------------
 
 echo "Test: an unparseable session registry fails safe — spawns nothing"
 spawn_worker_setup
 # A registry that is not a JSON array: lib-claude-agents.sh's
 # claude_sessions_under cannot parse it and returns 1 (unknown).
 # dispatch-spawn-worker must treat unknown as "a dispatch agent may be running"
-# and spawn nothing — the documented fail-safe in the script's Step 3 dedup
+# and spawn nothing — the documented fail-safe in the script's Step 2 dedup
 # guard.
 printf '%s' 'not-a-json-array' > "$SPAWN_WORKER_REGISTRY"
 write_fake_spawn_worker_claude
@@ -5621,7 +5490,7 @@ else
 fi
 spawn_worker_teardown
 
-# --- Test 8: missing args ----------------------------------------------------
+# --- Test 7: missing args ----------------------------------------------------
 
 echo "Test: missing arguments exit 2"
 spawn_worker_setup
@@ -5658,13 +5527,13 @@ assert_eq "missing-args-worker: unsafe chars in <worktree-path> → exit 2" "2" 
 
 spawn_worker_teardown
 
-# --- Test 9: dedup + verify query the spawner cwd, NOT the worktree path ----
+# --- Test 8: dedup + verify query the spawner cwd, NOT the worktree path ----
 #
 # Regression guard: in production the daemon server-side-filters `agents
 # --json --cwd <path>` to sessions started under <path>. Since
 # dispatch-spawn-worker does NOT `cd` into the target worktree before
 # `claude --bg`, the new worker registers under the spawner cwd
-# (worktrees/main), not under WORKTREE_PATH. If Step 5 verify queries under
+# (worktrees/main), not under WORKTREE_PATH. If Step 4 verify queries under
 # WORKTREE_PATH, the daemon excludes the new worker, `registered` stays
 # empty, and the script exits 1 — on every spawn in production.
 #
@@ -6978,6 +6847,172 @@ assert_eq "dispatch-spawn-worker args" \
 router_smoke_teardown
 
 # ============================================================================
+# dispatch-handoff tests (#824)
+# ============================================================================
+echo "=== dispatch-handoff ==="
+
+HANDOFF_SCRIPT="$SCRIPT_DIR/dispatch-handoff"
+
+# Minimal per-test harness for handoff: does not need the full setup/teardown
+# (no gh stub via PATH, no git stub). Uses env overrides to fake every external
+# call the script makes.
+
+# Helper — create a temp dir with fake command stubs.
+handoff_setup() {
+  HTMPDIR=$(mktemp -d)
+  HSELF_CLOSE_LOG="$HTMPDIR/self-close.log"
+  HSPAWN_LOG="$HTMPDIR/spawn.log"
+  HGH_LOG="$HTMPDIR/gh.log"
+  HFIND_PR_LOG="$HTMPDIR/find-pr.log"
+
+  # Default fake dispatch-self-close: records the call, exits 0.
+  cat > "$HTMPDIR/fake-self-close" <<'FAKE'
+#!/usr/bin/env bash
+echo "self-close called" >> "$HSELF_CLOSE_LOG"
+exit 0
+FAKE
+  # Inject HSELF_CLOSE_LOG into the fake via env at call time.
+  chmod +x "$HTMPDIR/fake-self-close"
+
+  # Default fake dispatch-spawn-router: records the call, exits 0, prints "spawned".
+  cat > "$HTMPDIR/fake-spawn" <<'FAKE'
+#!/usr/bin/env bash
+echo "spawn called" >> "$HSPAWN_LOG"
+echo "spawned"
+exit 0
+FAKE
+  chmod +x "$HTMPDIR/fake-spawn"
+
+  # Default fake gh: records invocation, prints no labels.
+  cat > "$HTMPDIR/fake-gh" <<'FAKE'
+#!/usr/bin/env bash
+echo "gh $*" >> "$HGH_LOG"
+# pr view <N> --json labels --jq ...  → return empty label list
+echo ""
+exit 0
+FAKE
+  chmod +x "$HTMPDIR/fake-gh"
+
+  # Default fake dispatch-find-pr: prints PR number 99.
+  cat > "$HTMPDIR/fake-find-pr" <<'FAKE'
+#!/usr/bin/env bash
+echo "find-pr $*" >> "$HFIND_PR_LOG"
+echo "99"
+exit 0
+FAKE
+  chmod +x "$HTMPDIR/fake-find-pr"
+}
+
+handoff_teardown() {
+  rm -rf "$HTMPDIR"
+  unset HTMPDIR HSELF_CLOSE_LOG HSPAWN_LOG HGH_LOG HFIND_PR_LOG
+}
+
+# Run dispatch-handoff with fake commands injected via env.
+run_handoff() {
+  DISPATCH_HANDOFF_SELF_CLOSE_CMD="$HTMPDIR/fake-self-close" \
+  DISPATCH_HANDOFF_SPAWN_CMD="$HTMPDIR/fake-spawn" \
+  DISPATCH_HANDOFF_GH_CMD="$HTMPDIR/fake-gh" \
+  DISPATCH_HANDOFF_FIND_PR_CMD="$HTMPDIR/fake-find-pr" \
+  HSELF_CLOSE_LOG="$HSELF_CLOSE_LOG" \
+  HSPAWN_LOG="$HSPAWN_LOG" \
+  HGH_LOG="$HGH_LOG" \
+  HFIND_PR_LOG="$HFIND_PR_LOG" \
+    "$HANDOFF_SCRIPT" "$@"
+}
+
+# ----- 1. --early-stop: calls self-close, exits 0 ---------------------------
+echo "Test: dispatch-handoff --early-stop calls self-close and exits 0"
+handoff_setup
+# Wrap fake-self-close so that exec is simulated by just running and exiting.
+# dispatch-handoff uses `exec` for self-close; the fake does not exec, it exits.
+# The test just checks exit code and log presence.
+run_handoff --early-stop
+early_stop_exit=$?
+assert_eq "--early-stop exit code" "0" "$early_stop_exit"
+assert_eq "--early-stop self-close called" "self-close called" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
+# spawn must NOT be called on early-stop.
+assert_eq "--early-stop no spawn" "" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
+handoff_teardown
+
+# ----- 2. --phase-completed happy path: spawn + self-close, exits 0 ----------
+echo "Test: dispatch-handoff <N> --phase-completed happy path"
+handoff_setup
+run_handoff 42 --phase-completed
+phase_exit=$?
+assert_eq "--phase-completed exit code" "0" "$phase_exit"
+assert_eq "--phase-completed spawn called" "spawn called" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
+assert_eq "--phase-completed self-close called" "self-close called" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
+handoff_teardown
+
+# ----- 3. --phase-completed with spawn failure: no self-close, exits 1 -------
+echo "Test: dispatch-handoff --phase-completed spawn failure → no self-close, exit 1"
+handoff_setup
+# Override spawn to fail.
+cat > "$HTMPDIR/fake-spawn" <<'FAKE'
+#!/usr/bin/env bash
+echo "spawn called" >> "$HSPAWN_LOG"
+echo "agent did not register" >&2
+exit 1
+FAKE
+chmod +x "$HTMPDIR/fake-spawn"
+# Use if/else to capture the exit code without triggering set -e.
+if run_handoff 42 --phase-completed 2>/dev/null; then spawn_fail_exit=0; else spawn_fail_exit=$?; fi
+assert_eq "--phase-completed spawn-failed exit code" "1" "$spawn_fail_exit"
+assert_eq "--phase-completed spawn-failed: spawn was called" "spawn called" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
+# self-close must NOT have been called.
+assert_eq "--phase-completed spawn-failed: no self-close" "" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
+handoff_teardown
+
+# ----- 4. --phase-completed with dispatch:office-hours → no self-close, exit 0
+echo "Test: dispatch-handoff --phase-completed with dispatch:office-hours → no self-close"
+handoff_setup
+# Override gh to return the office-hours label.
+cat > "$HTMPDIR/fake-gh" <<'FAKE'
+#!/usr/bin/env bash
+echo "gh $*" >> "$HGH_LOG"
+echo "dispatch:office-hours"
+exit 0
+FAKE
+chmod +x "$HTMPDIR/fake-gh"
+run_handoff 42 --phase-completed
+office_exit=$?
+assert_eq "--phase-completed office-hours exit code" "0" "$office_exit"
+assert_eq "--phase-completed office-hours: spawn called" "spawn called" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
+# self-close must NOT have been called (session stays open for human review).
+assert_eq "--phase-completed office-hours: no self-close" "" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
+handoff_teardown
+
+# ----- 5. Missing issue number → exit 2 with diagnostic ----------------------
+echo "Test: dispatch-handoff --phase-completed missing issue number → exit 2"
+handoff_setup
+# Use if/else to capture exit code without triggering set -e.
+if run_handoff --phase-completed 2>/dev/null; then missing_exit=0; else missing_exit=$?; fi
+assert_eq "--phase-completed missing issue: exit 2" "2" "$missing_exit"
+assert_eq "--phase-completed missing issue: no spawn" "" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
+assert_eq "--phase-completed missing issue: no self-close" "" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
+handoff_teardown
+
+# ----- 6. No arguments → exit 2 -----------------------------------------------
+echo "Test: dispatch-handoff with no arguments → exit 2"
+handoff_setup
+# Use if/else to capture exit code without triggering set -e.
+if run_handoff 2>/dev/null; then no_args_exit=0; else no_args_exit=$?; fi
+assert_eq "no arguments: exit 2" "2" "$no_args_exit"
+handoff_teardown
+
+# ----- 7. CLAUDE_JOB_DIR unset: self-close is a no-op (interactive session) --
+echo "Test: dispatch-handoff --early-stop with CLAUDE_JOB_DIR unset: self-close no-op, exits 0"
+handoff_setup
+# The real dispatch-self-close is a no-op when CLAUDE_JOB_DIR is unset.
+# Our fake always succeeds — same observable behavior. The test verifies that
+# dispatch-handoff does not error when CLAUDE_JOB_DIR is absent.
+(unset CLAUDE_JOB_DIR; run_handoff --early-stop)
+interactive_exit=$?
+assert_eq "--early-stop interactive: exits 0" "0" "$interactive_exit"
+handoff_teardown
+
+# ============================================================================
 # dispatch chain: no EnterWorktree/ExitWorktree mid-session (ratchet for #839)
 # ============================================================================
 echo "=== dispatch chain: no EnterWorktree/ExitWorktree mid-session ==="
@@ -6999,12 +7034,14 @@ PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/dispatch/SKILL.md"]=0
   [".claude/skills/dispatch-worker/SKILL.md"]=2
-  [".claude/skills/dispatch-qa/SKILL.md"]=0
-  [".claude/skills/plan-implement/SKILL.md"]=0
-  [".claude/skills/code-review-fix/SKILL.md"]=0
-  [".claude/skills/review-fix/SKILL.md"]=0
-  [".claude/skills/security-review-fix/SKILL.md"]=0
-  [".claude/skills/verify-pr/SKILL.md"]=0
+  # Phase skills call ExitWorktree action:"keep" at their clean-completion
+  # terminus (#824) — one terminal ExitWorktree each, not a mid-session switch.
+  [".claude/skills/dispatch-qa/SKILL.md"]=1
+  [".claude/skills/plan-implement/SKILL.md"]=1
+  [".claude/skills/code-review-fix/SKILL.md"]=1
+  [".claude/skills/review-fix/SKILL.md"]=1
+  [".claude/skills/security-review-fix/SKILL.md"]=1
+  [".claude/skills/verify-pr/SKILL.md"]=1
   [".claude/skills/implement-unit/SKILL.md"]=0
   [".claude/skills/commit-merge-push/SKILL.md"]=0
 )

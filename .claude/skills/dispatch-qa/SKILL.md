@@ -307,4 +307,14 @@ The QA pass covers **public data only** — documents present in both the QA ser
    The script applies the label, creating it first only if it does not yet exist
    (e.g. on a fork where it has not been created).
 
-   Then **stop**. `/loop /dispatch` advances to the next phase.
+   Then exit the worktree and hand off. Run (`dangerouslyDisableSandbox: true`
+   — the script calls `gh` and `dispatch-self-close`):
+
+   ```bash
+   ExitWorktree action:"keep"
+   .claude/skills/dispatch/scripts/dispatch-handoff <N> --phase-completed
+   ```
+
+   `dispatch-handoff` spawns the next `/dispatch` router, checks for a
+   `dispatch:office-hours` deviation flag on the PR, and self-closes the
+   session.
