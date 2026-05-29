@@ -420,7 +420,7 @@ worktree path that Step 6 will pass to `dispatch-spawn-worker`.
   tier to a leaf with no worktree, so for a queue selection this arises only from
   a race — another session created the worktree between selection and worktree
   resolution.) Release the lock (see *Releasing the lock*), then proceed to
-  Step 7 with `drain worktree-conflict` — the user-visible report is mandatory
+  Step 7 with `notify worktree-conflict` — the user-visible report is mandatory
   there ("worktree at `<path>` owned by another live session for issue `<N>`;
   closing — the next baton-pass or office-hours hand-off will re-seed"), not
   optional. Do not spawn a worker.
@@ -584,7 +584,7 @@ the action.
 Every other terminal disposition — `propagate` falling through to `notify
 spawn-failed` on a failed spawn, every `notify <reason>` variance, every
 `drain <reason>` no-work case — emits a user-visible report before the
-session ends (before `dispatch-handoff --early-stop` for `drain` and `propagate`;
+session ends (before `dispatch-self-close` for `drain` and `propagate`;
 before this turn's text output completes for `notify`, which does not
 self-close). A silent `notify` or silent `drain` is a defect.
 
@@ -595,7 +595,7 @@ The three dispositions:
   (`dangerouslyDisableSandbox: true`):
 
   ```bash
-  .claude/skills/dispatch/scripts/dispatch-handoff --early-stop
+  .claude/skills/dispatch/scripts/dispatch-self-close
   ```
 
 - **`notify <reason>`** — `notify spawn-failed` (Step 6's spawn exited
@@ -625,22 +625,22 @@ The three dispositions:
   (`dangerouslyDisableSandbox: true`):
 
   ```bash
-  .claude/skills/dispatch/scripts/dispatch-handoff --early-stop
+  .claude/skills/dispatch/scripts/dispatch-self-close
   ```
 
-`dispatch-handoff --early-stop` execs `dispatch-self-close`, which removes
-the managed background job by its job-id (the basename of `$CLAUDE_JOB_DIR`).
-It is a no-op when `CLAUDE_JOB_DIR` is unset (the session is interactive, not
-a managed background job) — so an interactive `/dispatch` reaching Step 7 does
-not stop the user's live conversation.
+`dispatch-self-close` removes the managed background job by its job-id (the
+basename of `$CLAUDE_JOB_DIR`). It is a no-op when `CLAUDE_JOB_DIR` is unset
+(the session is interactive, not a managed background job) — so an
+interactive `/dispatch` reaching Step 7 does not stop the user's live
+conversation.
 
 Step 3's `jit-reminder` outcome does not reach Step 7 — it is a deliberate
 bypass, since its user-visible summary must stay open in the transcript for a
 human to read, so the skill stops the tick directly.
 
-The router does **not** spawn a successor `/dispatch` itself — the worker
-spawned in Step 6 spawns a fresh router back in `worktrees/main` when its
-phase completes (`/dispatch-worker` Step 4).
+The router does **not** spawn a successor `/dispatch` itself — the worker's
+Stop hook (`.claude/hooks/dispatch-stop.sh`) spawns a fresh router back in
+`worktrees/main` when the worker session ends.
 
 ### The #725 cap-keyed re-seed
 

@@ -60,30 +60,36 @@ After every unit is committed and pushed, create the draft PR (use
 `dangerouslyDisableSandbox: true` — `gh` needs network):
 
 ```bash
-gh pr create --draft --title "<short summary>" --body "$(cat <<'EOF'
+URL=$(gh pr create --draft --title "<short summary>" --body "$(cat <<'EOF'
 Closes #<primary-issue>
 Closes #<sub-issue-or-blocker>   # repeat for each implemented issue
 EOF
-)"
+)")
+PR_NUM=$(basename "$URL")
 ```
 
 The body has one `Closes #N` line per issue implemented in this PR — the primary
 issue plus any implemented sub-issues or blockers. This draft PR is the
 implement→verify transition marker.
 
-### 4. Stop
+### 4. Write the phase-completed marker, then stop
 
-Exit the worktree and hand off. Run (`dangerouslyDisableSandbox: true` — the
-script calls `gh` and `dispatch-self-close`):
+Write the phase-completed marker as the final action so the Stop hook
+(`.claude/hooks/dispatch-stop.sh`) can read it and propagate the dispatch
+chain. Atomic via tempfile + mv so the hook never sees a partial file.
+`CLAUDE_JOB_DIR` unset = interactive run; skip.
 
 ```bash
-ExitWorktree action:"keep"
-.claude/skills/dispatch/scripts/dispatch-handoff <N> --phase-completed
+if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+  printf 'phase=implement\npr=%s\n' "$PR_NUM" \
+    > "$CLAUDE_JOB_DIR/phase-completed.tmp"
+  mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
+     "$CLAUDE_JOB_DIR/phase-completed"
+fi
 ```
 
-`dispatch-handoff` spawns the next `/dispatch` router, checks for a
-`dispatch:office-hours` deviation flag on the PR, and self-closes the
-session. The next `/dispatch` background job advances to the `verify` phase.
+Stop. The Stop hook reads the marker, spawns the next `/dispatch` router,
+strips `dispatch:office-hours` if present, and self-closes this job.
 
 ## Requirement changes mid-session
 
