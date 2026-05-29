@@ -2616,6 +2616,34 @@ checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
 assert_eq "queue live-session + wrong branch → no checkout" "no" "$checkout_logged"
 teardown
 
+# 17. PR found but headRefName empty/unusable → error, not a silent enter. An
+#     empty headRefName once a PR exists is a failed lookup; entering
+#     unreconciled would defeat the reconciliation guard. The same check blocks
+#     option/refspec injection via the GitHub-sourced branch name.
+echo "Test: PR + empty headRefName → error (no silent enter, no checkout)"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":""}' > "$STUB_DIR/pr-headref-100.json"
+if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "PR + empty headRefName → exit 1" "1" "$rc"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
+assert_eq "PR + empty headRefName → no checkout" "no" "$checkout_logged"
+teardown
+
+# 18. PR head branch carrying an option-injection name → error before any git
+#     call. Guards the GitHub-sourced headRefName at the external boundary.
+echo "Test: PR + injection-shaped headRefName → error (no checkout)"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"--upload-pack=evil"}' > "$STUB_DIR/pr-headref-100.json"
+if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "PR + injection-shaped headRefName → exit 1" "1" "$rc"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
+assert_eq "PR + injection-shaped headRefName → no checkout" "no" "$checkout_logged"
+teardown
+
 # ============================================================================
 # list_worktree_records (lib.sh) tests
 # ============================================================================

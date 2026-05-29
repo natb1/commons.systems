@@ -64,7 +64,15 @@ emit_enter_reconciled() {
   fi
   if [[ -z "$pr" ]]; then echo "enter $wt_path"; return 0; fi   # no PR → unchanged
   pr_head=$(gh pr view "$pr" --json headRefName | jq -r '.headRefName // empty')
-  if [[ -z "$pr_head" || "$pr_head" == "$wt_branch" ]]; then     # same branch → no-op
+  # A PR was found, so an empty/malformed headRefName is a failed lookup, not a
+  # no-op — surfacing it as an error beats silently entering unreconciled. The
+  # format guard also blocks option/refspec injection (leading '-', '..') via
+  # this GitHub-sourced name before it reaches git fetch/rev-list/checkout.
+  if [[ -z "$pr_head" || "$pr_head" == -* || "$pr_head" == *..* || ! "$pr_head" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+    echo "error: PR #$pr returned an unusable head branch name '$pr_head' for issue $ISSUE" >&2
+    exit 1
+  fi
+  if [[ "$pr_head" == "$wt_branch" ]]; then     # already on PR head branch → no-op
     echo "enter $wt_path"; return 0
   fi
   git -C "$wt_path" fetch --quiet origin "$pr_head"
