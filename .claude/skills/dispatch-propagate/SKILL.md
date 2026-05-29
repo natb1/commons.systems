@@ -58,8 +58,12 @@ The lock covers **Steps 0-5 only**; Step 6 (the worker spawn) runs with the lock
 **released**. Release happens at exactly two kinds of point:
 
 - **Proceed path** — as the final action of Step 5, run
-  `dispatch-finalize-selection`: the wrapper writes the `tmp/dispatch-worktree`
-  marker (see Step 5) and execs `dispatch-acquire-lock --release` in one step.
+  `dispatch-finalize-selection "$WORKTREE_PATH"`. The wrapper takes the target
+  worktree path as its one required argument, `cd`s into it, writes the
+  `tmp/dispatch-worktree` marker (see *Step 5* and the marker paragraph below),
+  and execs `dispatch-acquire-lock --release` in one step. The `cd`-first
+  contract is why the router never accidentally writes the marker into its
+  own cwd — the wrapper is the sole Step-5 marker writer on the proceed path.
 - **Every Steps 1-5 stop path** — immediately before reporting the stop reason
   and proceeding to Step 7, run
   `.claude/skills/dispatch-propagate/scripts/dispatch-acquire-lock --release` directly.
@@ -287,19 +291,15 @@ worktree path that Step 6 passes to `dispatch-spawn-worker`.
   `<path>` owned by another live session for issue `<N>`; closing — the next
   baton-pass or office-hours hand-off will re-seed"). Do not spawn a worker.
 
-On every non-`conflict` path, before the worker is spawned, create the recovery
-marker **inside the target worktree** (`$WORKTREE_PATH`):
-
-```bash
-(cd "$WORKTREE_PATH" && mkdir -p tmp && touch tmp/dispatch-worktree)
-```
+As the **final action of this step on every non-`conflict` (proceed) path** —
+before Step 6 — run `dispatch-finalize-selection "$WORKTREE_PATH"`. The
+wrapper `cd`s into the target worktree, writes the recovery marker
+**inside the target worktree** (`$WORKTREE_PATH/tmp/dispatch-worktree`), and
+releases the lock in one step (see *Releasing the lock*). The worker in Step 6
+onward runs lock-free.
 
 The marker is the canonical "Step 5 completed" signal used by the lock script's
 post-Step-5 reclaim path; see reference.md (*Step 5 marker deep dive*).
-
-As the **final action of this step on every non-`conflict` (proceed) path** —
-after the marker is written, before Step 6 — release the lock (see *Releasing
-the lock*).
 
 ## 6. Spawn the Worker
 
@@ -339,7 +339,7 @@ runs a phase skill, or invokes the pre-implementation relevance review — those
 are the worker's responsibilities (`/dispatch-worker` Steps 1–3).
 
 After the spawn (or skip) returns, **proceed to Step 7** (terminal disposition).
-The budgeter's schedules, tunables, and missing-telemetry fallback are detailed
+The budgeter's ramps, tunables, and missing-telemetry fallback are detailed
 in reference.md (*Concurrency budgeting*).
 
 ## 7. Terminal Disposition

@@ -157,71 +157,80 @@ the worker `cd`'d in its own Step 0 — silently broke when subsequent `Bash` /
 
 ## Concurrency budgeting
 
-`dispatch-target-workers` composes two open-loop schedules that decide how
+`dispatch-target-workers` composes two **headroom-driven** linear ramps —
+one per axis (weekly and 5h) — and combines them with `min` to decide how
 many concurrent `dispatch-worker-*` sessions should run:
 
-- **Weekly ramp** (sets the magnitude) — drives target_N
-  conservative-early/aggressive-late toward `target_weekly_usage_pct` by the
-  weekly window's `resets_at`. The shape is
-  `(tau / (remaining_weekly + tau)) ^ k`; smaller `tau` and larger `k` mean
-  more deferred consumption.
+```
+ramp(headroom_pp, taper_window_pp):
+  if headroom_pp <  0:                return 0
+  if headroom_pp >= taper_window_pp:  return max_workers
+  return max(1, round(max_workers * headroom_pp / taper_window_pp))
 
-  | remaining_weekly | ramp_weekly | candidate target_N |
-  |------------------|------------:|-------------------:|
-  | 7 days (604800s) | 0.0156      | 0                  |
-  | 3 days (259200s) | 0.0625      | 1                  |
-  | 1 day (86400s)   | 0.25        | 2                  |
-  | 6 hours (21600s) | 0.64        | 5                  |
-  | 1 hour (3600s)   | 0.922       | 7                  |
-  | 0                | 1.0         | 8                  |
+target_N = min(
+  ramp(target_weekly - used_weekly, weekly_taper_window_pct),
+  ramp(target_5h     - used_5h,     five_hour_taper_window_pct),
+)
+```
 
-- **5-hour linear cap** (binary gate) — over each 5-hour window, the cap on
-  `used_5h` rises linearly from `0` at window-start to
-  `target_five_hour_usage_pct` at window-end. When `used_5h >= cap_5h`, the
-  budgeter prints `0` regardless of the weekly ramp's otherwise-positive
-  output, pausing spawning until either the window resets or the cap rises
-  enough to clear it.
+Each ramp returns `max_workers` while headroom comfortably exceeds the
+taper window, tapers linearly toward `1` as headroom approaches zero, floors
+at `1` when headroom is exactly zero, and returns `0` only when actual usage
+has crossed the configured target. The floor at `headroom == 0` prevents the
+`0 >= 0` deadlock the previous time-based ramp produced against Step 6's
+`LIVE_COUNT >= TARGET_N` gate — `target_N=0` now requires `used > target`.
 
-  | remaining_5h   | elapsed_5h_frac | cap_5h |
-  |----------------|----------------:|-------:|
-  | 5h (18000s)    | 0.0             | 0%     |
-  | 4h (14400s)    | 0.2             | 10%    |
-  | 2.5h (9000s)   | 0.5             | 25%    |
-  | 1h (3600s)     | 0.8             | 40%    |
-  | 0              | 1.0             | 50%    |
+- **Weekly axis** (defaults: `target_weekly_usage_pct=90`,
+  `weekly_taper_window_pct=30`, `max_workers=8`):
 
-  At window-start, `cap_5h = 0` and the gate condition `used_5h >= cap_5h`
-  evaluates as `0 >= 0`, so spawning is briefly paused for the first slice of
-  every 5h window. This is intentional — the linear schedule enforces the
-  per-window ceiling from second zero. The blackout clears as soon as `cap_5h`
-  rises above the current `used_5h`; if `used_5h` was 0 at refresh, this
-  happens within seconds.
+  | used_weekly (%) | headroom (pp) | target_N |
+  |---:|---:|---:|
+  | 60 | 30 | 8 |
+  | 70 | 20 | 5 |
+  | 80 | 10 | 3 |
+  | 85 |  5 | 1 |
+  | 89 |  1 | 1 |
+  | 90 |  0 | 1 |
+  | 91 | -1 | 0 |
+
+- **5-hour axis** (defaults: `target_five_hour_usage_pct=50`,
+  `five_hour_taper_window_pct=15`, `max_workers=8`):
+
+  | used_5h (%) | headroom (pp) | target_N |
+  |---:|---:|---:|
+  |  0 | 50 | 8 |
+  | 35 | 15 | 8 |
+  | 40 | 10 | 5 |
+  | 45 |  5 | 3 |
+  | 49 |  1 | 1 |
+  | 50 |  0 | 1 |
+  | 51 | -1 | 0 |
 
 Tunables (each optional in `dispatch.config/target-workers.json`; defaults
 baked into the script):
 
 | Field | Default | Meaning |
 |---|---|---|
-| `target_weekly_usage_pct` | 90 | Weekly ramp's terminal target. |
-| `target_five_hour_usage_pct` | 50 | 5-hour cap's terminal ceiling. |
-| `max_concurrent_workers` | 8 | Absolute cap on `target_N`. |
-| `ramp_tau_seconds` | 86400 | Weekly ramp time-constant. |
-| `ramp_shape_k` | 2 | Weekly ramp concavity. |
-| `five_hour_window_seconds` | 18000 | 5-hour window length (for cap-slope only). |
+| `target_weekly_usage_pct` | 90 | Weekly ramp returns 0 when `used_weekly` strictly exceeds this; returns the floor of 1 when `used_weekly` equals it (headroom = 0). |
+| `target_five_hour_usage_pct` | 50 | Same semantics for the 5h axis. |
+| `max_concurrent_workers` | 8 | Value each ramp returns when headroom comfortably exceeds its taper window. |
+| `weekly_taper_window_pct` | 30 | Headroom band (percentage points) over which the weekly ramp tapers linearly from `max_workers` down to its floor of 1. |
+| `five_hour_taper_window_pct` | 15 | Same band for the 5h ramp. |
 
-Recalibration: if mid-week idleness is too long, try `ramp_tau_seconds=172800`
-(2 days) or `ramp_shape_k=1` (less concave). If the 5-hour cap is too tight,
-raise `target_five_hour_usage_pct`. If you need more headroom for parallel
-work, raise `max_concurrent_workers`.
+Recalibration: narrow a taper window (e.g. `weekly_taper_window_pct=10`) to
+hold full speed until close to the cap and then taper sharply down to the
+floor; widen it to ease off concurrency earlier. Raise `target_*_usage_pct`
+to push closer to the cap before any taper kicks in. Raise
+`max_concurrent_workers` for more parallelism when headroom is comfortable on
+both axes.
 
 **Missing-telemetry fallback.** When
 `~/.local/share/productivity-tui/rate_limits.json` is missing or unreadable,
-`dispatch-target-workers` prints `1` and writes a one-line note to stderr —
-the gate's first comparison (`0 >= 1` is false on a typical fresh router
-tick) is a no-op, so the chain degrades to today's "spawn one per tick"
-behavior. The same fallback applies when the `seven_day` block is absent
-(no weekly ramp anchor); a missing `five_hour` block alone disables the
-5-hour gate but the weekly ramp still applies.
+`dispatch-target-workers` prints `1` and writes a one-line note to stderr,
+so the chain degrades to today's "spawn one per tick" behavior. The same
+fallback applies when the `seven_day` block is absent (no weekly headroom
+anchor); a missing `five_hour` block alone disables the 5h ramp but the
+weekly ramp still applies.
 
 ## The #725 cap-keyed re-seed
 
