@@ -73,7 +73,17 @@ implement→verify transition marker.
 
 ### 4. Stop
 
-Stop. The next `/dispatch` background job advances to the `verify` phase.
+Exit the worktree and hand off. Run (`dangerouslyDisableSandbox: true` — the
+script calls `gh` and `dispatch-self-close`):
+
+```bash
+ExitWorktree action:"keep"
+.claude/skills/dispatch/scripts/dispatch-handoff <N> --phase-completed
+```
+
+`dispatch-handoff` spawns the next `/dispatch` router, checks for a
+`dispatch:office-hours` deviation flag on the PR, and self-closes the
+session. The next `/dispatch` background job advances to the `verify` phase.
 
 ## Requirement changes mid-session
 

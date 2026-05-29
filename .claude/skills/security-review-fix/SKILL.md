@@ -235,7 +235,17 @@ ready. Otherwise run all steps in order.
    gh pr ready "$PR_NUM"
    ```
 
-   This is the workflow's terminal action.
+8. **Exit and hand off.** Run (`dangerouslyDisableSandbox: true` — the script
+   calls `gh` and `dispatch-self-close`):
+
+   ```bash
+   ExitWorktree action:"keep"
+   .claude/skills/dispatch/scripts/dispatch-handoff <N> --phase-completed
+   ```
+
+   `dispatch-handoff` spawns the next `/dispatch` router, checks for a
+   `dispatch:office-hours` deviation flag on the PR, and self-closes the
+   session. This is the workflow's terminal action.
 
 ## Per-finding schema
 
@@ -272,10 +282,12 @@ classified set — has these fields:
 
 ## Notes
 
-Marking the PR ready is the workflow's terminal action. After this change the
-dispatch workflow has no human checkpoint before a PR goes ready — the per-phase
-PR-comment summaries are the audit trail. This is an intentional trade-off for an
-autonomous `/dispatch` background-job run.
+Steps 7–8 are the workflow's terminal actions: marking the PR ready (Step 7)
+and handing off to the next `/dispatch` tick (Step 8). After this change the
+dispatch workflow has no human checkpoint before a PR goes ready — the
+per-phase PR-comment summaries are the audit trail. This is an intentional
+trade-off for an autonomous `/dispatch` background-job run.
 
 The skill is idempotent: a re-invocation with `dispatch:security-reviewed` already
-on the PR skips Steps 1–6 and only ensures the PR is ready (Step 7).
+on the PR skips Steps 1–6 and only ensures the PR is ready (Step 7) before
+handing off (Step 8).
