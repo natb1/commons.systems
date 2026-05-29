@@ -563,8 +563,8 @@ baked into the script):
 
 | Field | Default | Meaning |
 |---|---|---|
-| `target_weekly_usage_pct` | 90 | Cap on `used_weekly` (%) before the weekly ramp returns 0. |
-| `target_five_hour_usage_pct` | 50 | Cap on `used_5h` (%) before the 5h ramp returns 0. |
+| `target_weekly_usage_pct` | 90 | Weekly ramp returns 0 when `used_weekly` strictly exceeds this; returns the floor of 1 when `used_weekly` equals it (headroom = 0). |
+| `target_five_hour_usage_pct` | 50 | Same semantics for the 5h axis. |
 | `max_concurrent_workers` | 8 | Value each ramp returns when headroom comfortably exceeds its taper window. |
 | `weekly_taper_window_pct` | 30 | Headroom band (percentage points) over which the weekly ramp tapers linearly from `max_workers` down to its floor of 1. |
 | `five_hour_taper_window_pct` | 15 | Same band for the 5h ramp. |

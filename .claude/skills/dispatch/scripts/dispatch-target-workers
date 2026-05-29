@@ -38,8 +38,9 @@
 #     ~/.local/share/productivity-tui/rate_limits.json.
 #
 #   DISPATCH_TARGET_WORKERS_NOW
-#     Override the current epoch seconds. Default: date +%s. Retained for
-#     test-injection compatibility; the headroom algorithm does not consult it.
+#     Accepted but not used. Retained for test-injection compatibility across
+#     scripts in the test suite that export it. The headroom algorithm does
+#     not consult the current time at all.
 #
 #   DISPATCH_TARGET_WORKERS_USED_WEEKLY
 #   DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY
@@ -119,7 +120,6 @@ fi
 # ---- Step 1: load telemetry -------------------------------------------------
 
 RL_PATH="${DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH:-$HOME/.local/share/productivity-tui/rate_limits.json}"
-NOW="${DISPATCH_TARGET_WORKERS_NOW:-$(date +%s)}"
 
 # Parse the file if it exists and is readable; otherwise WEEKLY_USED/etc stay
 # empty and the per-field env overrides have the last word.
@@ -163,14 +163,14 @@ fi
 [[ -n "${DISPATCH_TARGET_WORKERS_USED_5H:-}" ]] && FIVEH_USED="$DISPATCH_TARGET_WORKERS_USED_5H"
 [[ -n "${DISPATCH_TARGET_WORKERS_RESETS_AT_5H:-}" ]] && FIVEH_RESETS="$DISPATCH_TARGET_WORKERS_RESETS_AT_5H"
 
-# Whether each block is present after env-override merge. The weekly anchor
-# requires only `used_weekly` to compute headroom; the `resets_at` field is
-# retained for parsing-compat with downstream consumers but is not consulted
-# by the headroom algorithm. Same for the 5h block.
+# Whether each block is present after env-override merge. The headroom
+# algorithm only consults `used_*`; the `resets_at` fields are retained for
+# parsing-compat with downstream consumers (e.g. dispatch-schedule-reseed)
+# but are not required for the PRESENT check here.
 WEEKLY_PRESENT=0
 FIVEH_PRESENT=0
-[[ -n "$WEEKLY_USED" && -n "$WEEKLY_RESETS" ]] && WEEKLY_PRESENT=1
-[[ -n "$FIVEH_USED" && -n "$FIVEH_RESETS" ]] && FIVEH_PRESENT=1
+[[ -n "$WEEKLY_USED" ]] && WEEKLY_PRESENT=1
+[[ -n "$FIVEH_USED" ]] && FIVEH_PRESENT=1
 
 # ---- Step 2: missing-telemetry fallback -------------------------------------
 #
