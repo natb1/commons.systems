@@ -7602,6 +7602,14 @@ phase_exit=$?
 assert_eq "--phase-completed exit code" "0" "$phase_exit"
 assert_eq "--phase-completed spawn called" "spawn called" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
 assert_eq "--phase-completed self-close called" "self-close called" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
+# gh must be called with the PR number returned by fake-find-pr (99).
+TOTAL=$((TOTAL + 1))
+if grep -q "gh pr view 99 " "$HGH_LOG" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: --phase-completed gh called with PR 99"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: --phase-completed gh called with PR 99"
+  echo "    gh log: $(cat "$HGH_LOG" 2>/dev/null || echo '<empty>')"
+fi
 handoff_teardown
 
 # ----- 3. --phase-completed with spawn failure: no self-close, exits 1 -------
