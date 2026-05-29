@@ -7871,7 +7871,7 @@ export PATH="$SAVED_PATH"
 #   direnv allow "$WORKTREE_PATH"
 #   direnv exec "$WORKTREE_PATH" true
 #   (cd "$WORKTREE_PATH" && sync-issue-context <N>)
-#   (cd "$WORKTREE_PATH" && mkdir -p tmp && touch tmp/dispatch-worktree)
+#   dispatch-finalize-selection "$WORKTREE_PATH"   # cds in, writes marker, releases lock
 #   dispatch-spawn-worker <N> "$WORKTREE_PATH"
 echo ""
 echo "=== /dispatch-propagate router smoke (Step 5 create + Step 6 spawn) ==="
@@ -7939,7 +7939,7 @@ router_smoke_teardown() {
   export PATH="$SAVED_PATH"
 }
 
-echo "Test: Step 5 create + Step 6 sequence invokes git, direnv, sync, and spawn-worker with the right args"
+echo "Test: Step 5 create + Step 6 sequence invokes git, direnv, sync, finalize-selection, and spawn-worker with the right args"
 router_smoke_setup
 
 # Run the documented shell sequence inline. The variable names match SKILL.md.
@@ -7950,14 +7950,36 @@ PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
 WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
 # The fake `git worktree add` does not actually create the directory, so make
 # it here so the subshell `cd "$WORKTREE_PATH"` for sync-issue-context and the
-# recovery marker creation succeed.
+# dispatch-finalize-selection wrapper's marker write succeed.
 mkdir -p "$WORKTREE_PATH"
+
+# Stub the router-cwd context so dispatch-finalize-selection's --release call
+# resolves a lock file we control rather than the real repo's lock, succeeds
+# strict-self-release (no foreign holder, no `claude agents --json` query),
+# and we can assert the regression: the marker does NOT land in the router's
+# starting cwd (the cwd-vs-target asymmetry that fixes #896).
+ROUTER_CWD="$TMPDIR_TEST/router-cwd"
+mkdir -p "$ROUTER_CWD"
+export DISPATCH_LOCK_FILE="$TMPDIR_TEST/dispatch.lock"
+export CLAUDE_CODE_SESSION_ID="router-smoke-session"
+# Pre-fill the lock with our own sessionId so `--release` is a strict self-
+# release (truncates the file and prints `released`).
+echo "$CLAUDE_CODE_SESSION_ID" > "$DISPATCH_LOCK_FILE"
+
+# cd into the router-equivalent cwd so the regression assertion below is
+# meaningful — finalize-selection must NOT write a marker here.
+SMOKE_ORIG_PWD="$PWD"
+cd "$ROUTER_CWD"
+
 git worktree add -b "$BRANCH" "$WORKTREE_PATH" origin/main
 direnv allow "$WORKTREE_PATH"
 direnv exec "$WORKTREE_PATH" true
 (cd "$WORKTREE_PATH" && sync-issue-context "$ISSUE_NUM")
-(cd "$WORKTREE_PATH" && mkdir -p tmp && touch tmp/dispatch-worktree)
+"$SCRIPT_DIR/dispatch-finalize-selection" "$WORKTREE_PATH"
 dispatch-spawn-worker "$ISSUE_NUM" "$WORKTREE_PATH"
+
+# Restore cwd so the rest of the test file is unaffected.
+cd "$SMOKE_ORIG_PWD"
 
 # Assertions: each fake binary's log captures one expected invocation.
 assert_eq "git worktree add args" \
@@ -7971,6 +7993,14 @@ assert_eq "direnv exec args" \
   "$(grep '^exec' "$TMPDIR_TEST/logs/direnv.log")"
 assert_eq "recovery marker created in target worktree" "1" \
   "$([ -f "$WORKTREE_PATH/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
+# Regression for #896: the wrapper must not leak the marker into the
+# router's starting cwd.
+assert_eq "no marker leaked into router cwd" "0" \
+  "$([ -f "$ROUTER_CWD/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
+# The wrapper's exec dispatch-acquire-lock --release should have truncated
+# the lock file (strict self-release).
+assert_eq "lock released by finalize-selection" "" \
+  "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "sync-issue-context cwd + arg" \
   "cwd=$WORKTREE_PATH argv=839" \
   "$(cat "$TMPDIR_TEST/logs/sync-issue-context.log")"
@@ -7978,6 +8008,7 @@ assert_eq "dispatch-spawn-worker args" \
   "839 $WORKTREE_PATH" \
   "$(cat "$TMPDIR_TEST/logs/dispatch-spawn-worker.log")"
 
+unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID
 router_smoke_teardown
 
 # ============================================================================
@@ -8153,6 +8184,126 @@ handoff_setup
 interactive_exit=$?
 assert_eq "--early-stop interactive: exits 0" "0" "$interactive_exit"
 handoff_teardown
+
+# ============================================================================
+# dispatch-finalize-selection tests (#896)
+# ============================================================================
+# Pin the cd-first contract introduced for #896. The wrapper takes one
+# required <worktree-path> argument, cds into it, writes the
+# tmp/dispatch-worktree marker, then execs dispatch-acquire-lock --release.
+# The cd-first contract is what keeps the marker out of the router's cwd
+# (worktrees/main); the previous implementation wrote into PWD and leaked
+# the marker into the router's cwd, defeating the selection lock.
+echo ""
+echo "=== dispatch-finalize-selection ==="
+
+FINALIZE_SCRIPT="$SCRIPT_DIR/dispatch-finalize-selection"
+
+# ----- Test A (happy path / #896 regression) ---------------------------------
+echo "Test: dispatch-finalize-selection writes marker into target worktree, not caller's cwd, and releases the lock"
+lock_setup
+# Set up two distinct dirs: A (caller's cwd) and B (target worktree).
+ROUTER_CWD="$TMPDIR_TEST/A"
+TARGET_WT="$TMPDIR_TEST/B"
+mkdir -p "$ROUTER_CWD" "$TARGET_WT"
+export CLAUDE_CODE_SESSION_ID="finalize-self-session"
+# Pre-fill the lock with our own sessionId so the wrapper's --release is a
+# strict self-release: it truncates the file and prints `released`.
+echo "$CLAUDE_CODE_SESSION_ID" > "$DISPATCH_LOCK_FILE"
+
+FIN_ORIG_PWD="$PWD"
+cd "$ROUTER_CWD"
+# Capture the exit code via `if` so the test file's `set -e` does not abort
+# the whole suite before `finalize_exit` is set on a (regression) non-zero
+# exit — same pattern as the error-path tests B/C/D below.
+if "$FINALIZE_SCRIPT" "$TARGET_WT" > "$TMPDIR_TEST/finalize.out" 2>&1; then
+  finalize_exit=0
+else
+  finalize_exit=$?
+fi
+cd "$FIN_ORIG_PWD"
+
+assert_eq "happy path: exit 0" "0" "$finalize_exit"
+assert_eq "happy path: marker in target worktree" "1" \
+  "$([ -f "$TARGET_WT/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
+# Regression for #896: the wrapper must not write the marker into the
+# caller's cwd. This is the load-bearing assertion.
+assert_eq "happy path: no marker in caller cwd" "0" \
+  "$([ -f "$ROUTER_CWD/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
+# Strict self-release truncates the lock file.
+assert_eq "happy path: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "happy path: stdout reports released" "released" \
+  "$(cat "$TMPDIR_TEST/finalize.out")"
+lock_teardown
+
+# ----- Test B (missing argument) ---------------------------------------------
+echo "Test: dispatch-finalize-selection with no args exits 2 with diagnostic"
+lock_setup
+if "$FINALIZE_SCRIPT" > "$TMPDIR_TEST/missing.out" 2> "$TMPDIR_TEST/missing.err"; then
+  missing_exit=0
+else
+  missing_exit=$?
+fi
+assert_eq "missing arg: exit 2" "2" "$missing_exit"
+assert_eq "missing arg: stderr names script and 'missing'" "1" \
+  "$(grep -c 'dispatch-finalize-selection.*missing' "$TMPDIR_TEST/missing.err")"
+lock_teardown
+
+# ----- Test C (invalid worktree path) ----------------------------------------
+echo "Test: dispatch-finalize-selection with nonexistent path exits 2 with diagnostic"
+lock_setup
+BAD_PATH="$TMPDIR_TEST/does-not-exist"
+if "$FINALIZE_SCRIPT" "$BAD_PATH" > "$TMPDIR_TEST/invalid.out" 2> "$TMPDIR_TEST/invalid.err"; then
+  invalid_exit=0
+else
+  invalid_exit=$?
+fi
+assert_eq "invalid path: exit 2" "2" "$invalid_exit"
+assert_eq "invalid path: stderr names script and 'cannot cd'" "1" \
+  "$(grep -c "dispatch-finalize-selection.*cannot cd.*$BAD_PATH" "$TMPDIR_TEST/invalid.err")"
+# The marker must not have been written anywhere on this failure path.
+assert_eq "invalid path: no marker created in $TMPDIR_TEST" "" \
+  "$(find "$TMPDIR_TEST" -name dispatch-worktree -print 2>/dev/null)"
+lock_teardown
+
+# ----- Test D (extra argument) -----------------------------------------------
+echo "Test: dispatch-finalize-selection with extra positional arg exits 2"
+lock_setup
+EXTRA_A="$TMPDIR_TEST/wt-a"
+EXTRA_B="$TMPDIR_TEST/wt-b"
+mkdir -p "$EXTRA_A" "$EXTRA_B"
+if "$FINALIZE_SCRIPT" "$EXTRA_A" "$EXTRA_B" > "$TMPDIR_TEST/extra.out" 2> "$TMPDIR_TEST/extra.err"; then
+  extra_exit=0
+else
+  extra_exit=$?
+fi
+assert_eq "extra arg: exit 2" "2" "$extra_exit"
+assert_eq "extra arg: stderr names script and 'extra'" "1" \
+  "$(grep -c 'dispatch-finalize-selection.*extra' "$TMPDIR_TEST/extra.err")"
+# No marker landed in either dir on the rejected call.
+assert_eq "extra arg: no marker in first arg path" "0" \
+  "$([ -f "$EXTRA_A/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
+assert_eq "extra arg: no marker in second arg path" "0" \
+  "$([ -f "$EXTRA_B/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
+lock_teardown
+
+# ----- Test E (flag-shaped argument) -----------------------------------------
+# A flag-shaped first arg (e.g. someone confusing this wrapper with
+# dispatch-acquire-lock --release) is rejected before any cd/marker side effect.
+echo "Test: dispatch-finalize-selection with flag-shaped arg exits 2"
+lock_setup
+if "$FINALIZE_SCRIPT" --release > "$TMPDIR_TEST/flag.out" 2> "$TMPDIR_TEST/flag.err"; then
+  flag_exit=0
+else
+  flag_exit=$?
+fi
+assert_eq "flag arg: exit 2" "2" "$flag_exit"
+assert_eq "flag arg: stderr names script and 'flag-shaped'" "1" \
+  "$(grep -c 'dispatch-finalize-selection.*flag-shaped' "$TMPDIR_TEST/flag.err")"
+# No marker created anywhere on the rejected call.
+assert_eq "flag arg: no marker created in $TMPDIR_TEST" "" \
+  "$(find "$TMPDIR_TEST" -name dispatch-worktree -print 2>/dev/null)"
+lock_teardown
 
 # ============================================================================
 # restore-dispatch-skill tests (#903)

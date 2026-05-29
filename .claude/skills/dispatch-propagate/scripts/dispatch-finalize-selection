@@ -1,13 +1,34 @@
 #!/usr/bin/env bash
-# dispatch-finalize-selection — canonical Step 5 proceed-path exit. Writes the
-# tmp/dispatch-worktree marker that signals "Step 5 completed" (the lock script
-# reads it on subsequent ticks to reclaim a marker-bearing foreign holder), then
-# execs dispatch-acquire-lock --release so the wrapper's exit code is the
-# release call's exit code. See `.claude/skills/dispatch-propagate/SKILL.md` Step 5 and
-# Step 0 "Releasing the lock".
+# dispatch-finalize-selection <worktree-path> — canonical Step 5 proceed-path
+# exit. Takes the target worktree path as its one required argument, `cd`s into
+# it, writes the `tmp/dispatch-worktree` marker that signals "Step 5 completed"
+# (the lock script reads it on subsequent ticks to reclaim a marker-bearing
+# foreign holder), then execs dispatch-acquire-lock --release so the wrapper's
+# exit code is the release call's exit code. The cd-first contract ensures the
+# marker lands in the target worktree, not the caller's cwd. See
+# `.claude/skills/dispatch-propagate/SKILL.md` Step 5 and Step 0 "Releasing the lock".
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+if [[ $# -lt 1 ]]; then
+  echo "dispatch-finalize-selection: missing required <worktree-path> argument" >&2
+  exit 2
+fi
+if [[ $# -gt 1 ]]; then
+  echo "dispatch-finalize-selection: unexpected extra arguments after <worktree-path>" >&2
+  exit 2
+fi
+if [[ "$1" == -* ]]; then
+  echo "dispatch-finalize-selection: flag-shaped argument '$1' is not a worktree path" >&2
+  exit 2
+fi
+
+WORKTREE="$1"
+cd "$WORKTREE" || {
+  echo "dispatch-finalize-selection: cannot cd to '$WORKTREE'" >&2
+  exit 2
+}
 
 mkdir -p tmp
 touch tmp/dispatch-worktree
