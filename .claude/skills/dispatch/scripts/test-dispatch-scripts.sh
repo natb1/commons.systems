@@ -7543,14 +7543,16 @@ PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/dispatch/SKILL.md"]=0
   [".claude/skills/dispatch-worker/SKILL.md"]=2
-  # Phase skills call ExitWorktree action:"keep" at their clean-completion
-  # terminus (#824) — one terminal ExitWorktree each, not a mid-session switch.
-  [".claude/skills/dispatch-qa/SKILL.md"]=1
-  [".claude/skills/plan-implement/SKILL.md"]=1
-  [".claude/skills/code-review-fix/SKILL.md"]=1
-  [".claude/skills/review-fix/SKILL.md"]=1
-  [".claude/skills/security-review-fix/SKILL.md"]=1
-  [".claude/skills/verify-pr/SKILL.md"]=1
+  # Phase skills do not call EnterWorktree/ExitWorktree (#868): they write the
+  # phase-completed marker and stop; the Stop hook (`.claude/hooks/dispatch-stop.sh`)
+  # owns post-phase disposition (label management, router spawn, self-close).
+  # This supersedes #824's terminal ExitWorktree action:"keep" pattern.
+  [".claude/skills/dispatch-qa/SKILL.md"]=0
+  [".claude/skills/plan-implement/SKILL.md"]=0
+  [".claude/skills/code-review-fix/SKILL.md"]=0
+  [".claude/skills/review-fix/SKILL.md"]=0
+  [".claude/skills/security-review-fix/SKILL.md"]=0
+  [".claude/skills/verify-pr/SKILL.md"]=0
   [".claude/skills/implement-unit/SKILL.md"]=0
   [".claude/skills/commit-merge-push/SKILL.md"]=0
 )
