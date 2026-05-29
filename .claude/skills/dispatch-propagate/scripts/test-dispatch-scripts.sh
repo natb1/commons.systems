@@ -2456,6 +2456,17 @@ if "$TMPDIR_TEST/dispatch-apply-office-hours" 2>/dev/null; then rc=0; else rc=$?
 assert_eq "missing both args exits non-zero" "1" "$rc"
 teardown
 
+# Non-numeric, flag-like issue number → hard error, no gh calls. Guards against a
+# flag-like first arg (e.g. --repo other/repo) being argument-injected into the
+# gh issue view/edit/comment calls.
+echo "Test: non-numeric issue number → non-zero exit, no edit/comment"
+setup
+if "$TMPDIR_TEST/dispatch-apply-office-hours" "--repo other/repo" "a reason" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "non-numeric issue number exits non-zero" "1" "$rc"
+assert_eq "non-numeric issue number: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "non-numeric issue number: no comment" "absent" "$(log_state gh-issue-comment.log)"
+teardown
+
 # Create-on-first-use: the apply fails "not found" (the *label* does not exist
 # in the repo yet), so the script creates it with the canonical FBCA04 color and
 # retries the edit, then posts the comment.

@@ -39,6 +39,15 @@ if [[ -z "$ISSUE_NUM" || -z "$REASON" ]]; then
   exit 1
 fi
 
+# ISSUE_NUM is interpolated as the first positional argument to gh issue
+# view/edit/comment. A non-numeric, flag-like value (e.g. --repo other/repo)
+# would be parsed by gh as an option rather than an issue number, redirecting
+# those writes. Reject anything that is not a bare positive integer.
+if [[ ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
+  echo "error: dispatch-apply-office-hours: issue-num must be a positive integer, got '${ISSUE_NUM}'" >&2
+  exit 1
+fi
+
 # Idempotency gate: if the issue already carries the label, do nothing. A gh
 # read failure here is non-fatal — warn and bail out without parking, since we
 # cannot tell whether a comment was already posted.
