@@ -153,8 +153,12 @@ querying the candidate issue's own closing-PR references:
 
 ```bash
 gh issue view <candidate-num> --json closedByPullRequestsReferences \
-  --jq '.closedByPullRequestsReferences[0].number // empty'
+  --jq '.closedByPullRequestsReferences | if length <= 1 then (.[0].number // empty) else error("issue closed by \(length) PRs; inspect them individually") end'
 ```
+
+The error-on-multiple guard mirrors Step 5's open-PR path — never silently pick
+the first of several closing PRs. The reference carries no `state`/`merged`
+field, so confirm openness with a second call:
 
 Decision rule:
 
@@ -162,9 +166,10 @@ Decision rule:
   returning `"OPEN"`) → record the candidate and the PR number. Finding: the new
   issue blocks on the PR's closing issue, and the new issue must itself include
   the scope needed to realign once that PR merges.
-- **No open PR** (no closing-PR reference, or the referenced PR is merged or
-  closed — the candidate is stale) → record the candidate. Finding: edit the
-  candidate's body to realign it with the new requirement.
+- **No open PR** (no closing-PR reference at all, or the referenced PR is merged
+  or closed) → record the candidate. There is nothing to block on, so the
+  finding is the same regardless of which sub-case applies: edit the candidate's
+  body to realign it with the new requirement.
 
 This category runs in both input modes. In **description mode** it compares the
 proposed issue text against the candidate corpus; in **issue number mode** it
@@ -212,7 +217,9 @@ When decomposition (Step 3f) creates new issues, establish relationships using t
 
 ### Open-issue alignment outcomes
 
-Apply each scope-misaligned candidate's action from the Step 4 plan.
+Apply each scope-misaligned candidate's action from the Step 4 plan. Process
+candidates independently — a failure on one (e.g. the open-PR guard erroring on
+a multi-closing-PR candidate) must not abort the rest.
 
 - **No-PR path** — edit the candidate's body to realign it with the new
   requirement (the realigned body was drafted in the Step 4 plan):
@@ -231,8 +238,9 @@ Apply each scope-misaligned candidate's action from the Step 4 plan.
   gh api -X POST "/repos/{owner}/{repo}/issues/<new-num>/dependencies/blocked_by" \
     --input - <<< "{\"issue_id\": $CLOSER_DB_ID}"
   ```
-  `<new-num>` is the issue from this run. In description mode, resolve it after
-  `/file-issue` returns its number.
+  `<new-num>` is the issue from this run. In issue number mode it is the issue
+  passed to Step 1; in description mode, resolve it after `/file-issue` returns
+  its number.
 
 ## Step 6. Post-Processing
 
