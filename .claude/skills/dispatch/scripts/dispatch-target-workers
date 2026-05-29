@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
 # dispatch-target-workers — print the desired concurrent worker count.
 #
-# Composes two open-loop schedules to gate router-side worker spawning:
+# Composes two headroom-driven linear ramps to gate router-side worker spawning:
 #
-#   weekly ramp     — conservative-early/aggressive-late ramp toward a
-#                     target usage by the weekly window's resets_at. Drives
-#                     target_N's magnitude.
-#   5-hour cap      — a linear schedule that rises from 0% at window-start
-#                     to target_5h at window-end; binary gate when used_5h
-#                     crosses it.
+#   weekly ramp     — linear ramp keyed off headroom (target_weekly -
+#                     used_weekly). Returns max_workers when headroom exceeds
+#                     the taper window, tapers linearly toward 1 as headroom
+#                     approaches zero, floors at 1 when headroom == 0, and
+#                     returns 0 only when used_weekly exceeds target_weekly.
+#   5-hour ramp     — same shape on the 5h axis, keyed off (target_5h -
+#                     used_5h) and five_hour_taper_window_pct.
+#
+# target_N = min(weekly_ramp, five_hour_ramp).
+#
+# The floor of 1 at headroom == 0 prevents the `0 >= 0` deadlock the previous
+# time-based ramp produced against Step 6's `LIVE_COUNT >= TARGET_N` gate.
+# target_N=0 now requires actual usage to exceed the configured target.
 #
 # Telemetry is read from ~/.local/share/productivity-tui/rate_limits.json
 # (written by productivity-tui/hooks/update-rate-limits.sh on every
@@ -31,7 +38,8 @@
 #     ~/.local/share/productivity-tui/rate_limits.json.
 #
 #   DISPATCH_TARGET_WORKERS_NOW
-#     Override the current epoch seconds. Default: date +%s.
+#     Override the current epoch seconds. Default: date +%s. Retained for
+#     test-injection compatibility; the headroom algorithm does not consult it.
 #
 #   DISPATCH_TARGET_WORKERS_USED_WEEKLY
 #   DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY
@@ -39,37 +47,37 @@
 #   DISPATCH_TARGET_WORKERS_RESETS_AT_5H
 #     Override each individual telemetry field. When set, they win over the
 #     value parsed from the rate_limits.json file. The override is per-field,
-#     so a test can supply some fields and let the file supply the rest.
+#     so a test can supply some fields and let the file supply the rest. The
+#     `_RESETS_AT_*` overrides are retained for test-injection compatibility;
+#     the headroom algorithm does not consult them.
 #
 # Config (read via dispatch-config-load target-workers; all optional):
 #
 #   target_weekly_usage_pct       default 90
 #   target_five_hour_usage_pct    default 50
 #   max_concurrent_workers        default 8
-#   ramp_tau_seconds              default 86400  (1 day)
-#   ramp_shape_k                  default 2
-#   five_hour_window_seconds      default 18000  (5 hours)
+#   weekly_taper_window_pct       default 30
+#   five_hour_taper_window_pct    default 15
 #
 # ---- The algorithm ----------------------------------------------------------
 #
-#   1. If used_weekly >= target_weekly → print 0.
-#   2. remaining_weekly = resets_at_weekly - now. If <= 0 → print 0.
-#   3. remaining_5h = max(0, resets_at_5h - now),
-#      elapsed_5h_frac = clamp((five_hour_window_seconds - remaining_5h)
-#                              / five_hour_window_seconds, 0, 1),
-#      cap_5h = target_5h * elapsed_5h_frac.
-#   4. If used_5h >= cap_5h → print 0.
-#   5. ramp_weekly = (tau_seconds / (remaining_weekly + tau_seconds)) ** k.
-#   6. target_N = round(max_workers * ramp_weekly). ramp_weekly is in (0, 1]
-#      for remaining_weekly > 0 (gated by Step 2), so target_N falls in
-#      [0, max_workers] by construction — no post-rounding clamp.
-#   7. Print target_N.
+#   ramp(headroom_pp, taper_window_pp):
+#     if headroom_pp <  0:                return 0
+#     if headroom_pp >= taper_window_pp:  return max_workers
+#     return max(1, round(max_workers * headroom_pp / taper_window_pp))
+#
+#   weekly_ramp     = ramp(target_weekly - used_weekly, weekly_taper_window_pct)
+#   five_hour_ramp  = ramp(target_5h     - used_5h,     five_hour_taper_window_pct)
+#   target_N        = min(weekly_ramp, five_hour_ramp)
+#
+# When the 5h block is absent, the 5h ramp is skipped and target_N is the
+# weekly ramp's output alone.
 #
 # ---- Missing-telemetry fallback --------------------------------------------
 #
 # - File missing/unreadable, or both telemetry blocks missing → print 1.
-# - Only `seven_day` missing → print 1 (no weekly ramp anchor).
-# - Only `five_hour` missing → run the weekly ramp; skip the 5h gate.
+# - Only `seven_day` missing → print 1 (no weekly headroom anchor).
+# - Only `five_hour` missing → run the weekly ramp; skip the 5h ramp.
 set -euo pipefail
 
 # ---- Step 0: defaults & config ----------------------------------------------
@@ -77,9 +85,8 @@ set -euo pipefail
 TARGET_WEEKLY=90
 TARGET_5H=50
 MAX_WORKERS=8
-TAU_SECONDS=86400
-K=2
-FIVE_HOUR_WINDOW_SECONDS=18000
+WEEKLY_TAPER_WINDOW=30
+FIVEH_TAPER_WINDOW=15
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -103,12 +110,10 @@ if [[ -n "$CONFIG_JSON" ]]; then
   [[ -n "$val" ]] && TARGET_5H="$val"
   val=$(jq -r '.max_concurrent_workers // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && MAX_WORKERS="$val"
-  val=$(jq -r '.ramp_tau_seconds // empty' <<<"$CONFIG_JSON")
-  [[ -n "$val" ]] && TAU_SECONDS="$val"
-  val=$(jq -r '.ramp_shape_k // empty' <<<"$CONFIG_JSON")
-  [[ -n "$val" ]] && K="$val"
-  val=$(jq -r '.five_hour_window_seconds // empty' <<<"$CONFIG_JSON")
-  [[ -n "$val" ]] && FIVE_HOUR_WINDOW_SECONDS="$val"
+  val=$(jq -r '.weekly_taper_window_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && WEEKLY_TAPER_WINDOW="$val"
+  val=$(jq -r '.five_hour_taper_window_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && FIVEH_TAPER_WINDOW="$val"
 fi
 
 # ---- Step 1: load telemetry -------------------------------------------------
@@ -158,7 +163,10 @@ fi
 [[ -n "${DISPATCH_TARGET_WORKERS_USED_5H:-}" ]] && FIVEH_USED="$DISPATCH_TARGET_WORKERS_USED_5H"
 [[ -n "${DISPATCH_TARGET_WORKERS_RESETS_AT_5H:-}" ]] && FIVEH_RESETS="$DISPATCH_TARGET_WORKERS_RESETS_AT_5H"
 
-# Whether each block is present after env-override merge.
+# Whether each block is present after env-override merge. The weekly anchor
+# requires only `used_weekly` to compute headroom; the `resets_at` field is
+# retained for parsing-compat with downstream consumers but is not consulted
+# by the headroom algorithm. Same for the 5h block.
 WEEKLY_PRESENT=0
 FIVEH_PRESENT=0
 [[ -n "$WEEKLY_USED" && -n "$WEEKLY_RESETS" ]] && WEEKLY_PRESENT=1
@@ -181,70 +189,47 @@ fi
 
 # ---- Step 3: the algorithm --------------------------------------------------
 #
-# All arithmetic is delegated to a single awk invocation. awk's printf
-# handles both float math (the ramp) and integer rounding (%.0f), and is
-# POSIX-ubiquitous on the dev machines (bc is not).
+# Two headroom-driven linear ramps combined by min. All arithmetic is delegated
+# to a single awk invocation. awk's printf handles both float math (the ramp's
+# linear slope) and integer rounding (int(x + 0.5)), and is POSIX-ubiquitous
+# on the dev machines (bc is not).
 
-# When the 5-hour block is absent, set sentinels that disable the 5h gate.
-# `used_5h=0` and `cap_5h=1` make `used_5h < cap_5h` trivially true.
-FIVEH_USED_FOR_AWK="$FIVEH_USED"
-FIVEH_RESETS_FOR_AWK="$FIVEH_RESETS"
 FIVEH_ENABLED=1
+FIVEH_USED_FOR_AWK="$FIVEH_USED"
 if (( FIVEH_PRESENT == 0 )); then
   FIVEH_USED_FOR_AWK=0
-  FIVEH_RESETS_FOR_AWK=0
   FIVEH_ENABLED=0
 fi
 
 awk -v used_weekly="$WEEKLY_USED" \
-    -v resets_weekly="$WEEKLY_RESETS" \
     -v used_5h="$FIVEH_USED_FOR_AWK" \
-    -v resets_5h="$FIVEH_RESETS_FOR_AWK" \
     -v target_weekly="$TARGET_WEEKLY" \
     -v target_5h="$TARGET_5H" \
     -v max_workers="$MAX_WORKERS" \
-    -v tau="$TAU_SECONDS" \
-    -v k="$K" \
-    -v window_5h="$FIVE_HOUR_WINDOW_SECONDS" \
-    -v now="$NOW" \
+    -v weekly_taper="$WEEKLY_TAPER_WINDOW" \
+    -v fiveh_taper="$FIVEH_TAPER_WINDOW" \
     -v fiveh_enabled="$FIVEH_ENABLED" \
-    'BEGIN {
+    'function ramp(headroom, taper,    raw, rounded) {
        # + 0 throughout: explicit numeric coercion; awk treats any unset/empty
-       # var as "" in numeric contexts and silently breaks comparisons without it.
+       # var as "" in numeric contexts and silently breaks comparisons.
+       if (headroom + 0 < 0) return 0
+       if (headroom + 0 >= taper + 0) return max_workers + 0
+       raw = (max_workers + 0) * (headroom + 0) / (taper + 0)
+       rounded = int(raw + 0.5)
+       if (rounded < 1) rounded = 1
+       return rounded
+     }
+     BEGIN {
+       weekly_headroom = (target_weekly + 0) - (used_weekly + 0)
+       weekly_n = ramp(weekly_headroom, weekly_taper)
 
-       # Step 1: weekly target reached → 0.
-       if (used_weekly + 0 >= target_weekly + 0) { print 0; exit }
-
-       # Step 2: weekly refresh already passed → 0.
-       remaining_weekly = resets_weekly + 0 - (now + 0)
-       if (remaining_weekly <= 0) { print 0; exit }
-
-       # Step 3: 5h linear cap.
        if (fiveh_enabled + 0 == 1) {
-         remaining_5h = resets_5h + 0 - (now + 0)
-         if (remaining_5h < 0) remaining_5h = 0
-         elapsed_frac = (window_5h + 0 - remaining_5h) / (window_5h + 0)
-         if (elapsed_frac < 0) elapsed_frac = 0
-         if (elapsed_frac > 1) elapsed_frac = 1
-         cap_5h = (target_5h + 0) * elapsed_frac
-
-         # Step 4: 5h cap tripped → 0.
-         if (used_5h + 0 >= cap_5h) { print 0; exit }
+         fiveh_headroom = (target_5h + 0) - (used_5h + 0)
+         fiveh_n = ramp(fiveh_headroom, fiveh_taper)
+         target_n = (weekly_n < fiveh_n) ? weekly_n : fiveh_n
+       } else {
+         target_n = weekly_n
        }
 
-       # Step 5: weekly ramp.
-       ramp = (tau + 0) / (remaining_weekly + (tau + 0))
-       ramp = ramp ^ (k + 0)
-
-       # Step 6: round to nearest int. printf %.0f does banker-half-to-even on
-       # some awks; `int(x + 0.5)` gives stable round-half-up. The math above
-       # guarantees target_n in [0, max_workers] (ramp in (0,1) for
-       # remaining_weekly > 0, gated by Step 2), so no post-rounding clamp is
-       # needed.
-       target_n = max_workers + 0
-       target_n = target_n * ramp
-       target_n_rounded = int(target_n + 0.5)
-
-       # Step 7: print.
-       print target_n_rounded
+       print target_n
      }'
