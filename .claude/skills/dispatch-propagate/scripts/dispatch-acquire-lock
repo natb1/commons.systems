@@ -307,6 +307,13 @@ case "$MODE" in
     # released; a dead foreign holder is reclaimed by the next tick's try_acquire
     # dead-holder path. Truncate with `:` rather than `rm` — `rm` would orphan
     # a concurrent acquire's already-open fd.
+    #
+    # Caller invariant: the lenient marker-based release path is gone, so
+    # `--release` only clears the lock when SESSION_ID matches the recorded
+    # holder. A caller running under a different CLAUDE_CODE_SESSION_ID than the
+    # one that acquired (e.g. from a subagent) gets a silent noop and the lock
+    # stays held until self-healing reclaim. Every release call site must run in
+    # the acquiring session.
     result=$(
       exec 9>>"$LOCK_FILE"
       flock 9
