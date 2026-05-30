@@ -104,6 +104,33 @@ detect_features() {
   fi
 }
 
+# Run `npm ci` in the current working directory with retry on transient
+# network failures (e.g. npm ECONNRESET on cold-cache CI runners). 3 attempts
+# with 5s/15s backoff; raises npm's own fetch-retry budget too. Uses `return`
+# (not `exit`) so it works both when called directly and inside a subshell.
+npm_ci_with_retry() {
+  export npm_config_fetch_retries=5
+  export npm_config_fetch_retry_mintimeout=20000
+  export npm_config_fetch_retry_maxtimeout=120000
+  export npm_config_fetch_timeout=600000
+  attempt=1
+  while [ "$attempt" -le 3 ]; do
+    if [ "$attempt" -gt 1 ]; then
+      echo "npm_ci_with_retry: npm ci attempt $attempt/3" >&2
+    fi
+    if npm ci; then
+      return 0
+    fi
+    case "$attempt" in
+      1) sleep 5 ;;
+      2) sleep 15 ;;
+    esac
+    attempt=$((attempt + 1))
+  done
+  echo "npm_ci_with_retry: npm ci failed after 3 attempts" >&2
+  return 1
+}
+
 # Install workspace dependencies if node_modules is missing.
 # Requires REPO_ROOT to be set by the caller.
 ensure_deps() {
@@ -112,29 +139,7 @@ ensure_deps() {
     return 1
   fi
   if [ ! -d "$REPO_ROOT/node_modules" ]; then
-    (
-      cd "$REPO_ROOT"
-      export npm_config_fetch_retries=5
-      export npm_config_fetch_retry_mintimeout=20000
-      export npm_config_fetch_retry_maxtimeout=120000
-      export npm_config_fetch_timeout=600000
-      attempt=1
-      while [ "$attempt" -le 3 ]; do
-        if [ "$attempt" -gt 1 ]; then
-          echo "ensure_deps: npm ci attempt $attempt/3" >&2
-        fi
-        if npm ci; then
-          exit 0
-        fi
-        case "$attempt" in
-          1) sleep 5 ;;
-          2) sleep 15 ;;
-        esac
-        attempt=$((attempt + 1))
-      done
-      echo "ensure_deps: npm ci failed after 3 attempts" >&2
-      exit 1
-    )
+    ( cd "$REPO_ROOT" && npm_ci_with_retry )
   fi
 }
 
