@@ -130,6 +130,35 @@ nothing. Otherwise it prints one line per configured jit — `<key>: created #<n
 JIT generation is best-effort — on a non-zero exit, report the engine's stderr
 but do not stop; continue to target selection.
 
+### Run the Calendar JIT importer
+
+After the JIT engine, run the calendar importer. It files one `jit:calendar`
+reminder issue per pressing Google Calendar event, and closes issues whose event
+has ended. Unlike the one-issue-per-jit engine, this generator fans out per
+event — today's events plus upcoming events whose earliest reminder trigger has
+already passed.
+
+Run it **after** the JIT engine and **before** the health gate, so calendar
+reminders fire even when `main` is red. It runs unconditionally — its debounce
+makes frequent re-runs cheap.
+
+    .claude/skills/dispatch-propagate/scripts/dispatch-jit-calendar-import
+
+Run this Bash call with `dangerouslyDisableSandbox: true`: the importer writes
+its debounce state under `$PROJECT_ROOT/tmp/` and calls both `gh` and `curl` to
+Google's OAuth and Calendar API endpoints — none of which are reachable from the
+sandbox (see `.claude/rules/sandbox.md`).
+
+With any of `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, or
+`GOOGLE_CALENDAR_REFRESH_TOKEN` unset, the importer is a silent no-op. Otherwise
+it prints one line per action — `calendar: created #<n> (<event-id>)`,
+`calendar: closed #<n> (<event-id>)`, `calendar: skipped (<reason>)`, or
+`calendar: debounced`. Report what it created and closed.
+
+A non-zero exit means a per-event hard error (a `gh` call or a Calendar API
+request failed for at least one event). Calendar reconciliation is best-effort —
+report the importer's stderr but do not stop; continue to target selection.
+
 ## 3. Select the Target
 
 - **Issue or PR argument given** → strip any leading `#`, then normalize the
