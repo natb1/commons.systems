@@ -13,7 +13,12 @@
 #   A. marker absent — phase skill did not run to completion (mid-phase exit
 #      or context compaction). Park the ISSUE on a human via
 #      dispatch-apply-office-hours (label + why-comment), spawn router, exit 0 —
-#      session parks "stopped" for human review.
+#      session parks "stopped" for human review. EXCEPTION: when the re-derived
+#      CURRENT_PHASE is `waiting`, the phase is not worker-actionable — the
+#      router owns the CI gate. Skip office-hours and just spawn the router,
+#      handing the issue back to be re-gated; the worker only reaches `waiting`
+#      via the selection/derivation race. (Office-hours would not self-heal: the
+#      dispatch queue skips office-hours issues and nothing strips the label.)
 #   B. marker present + CURRENT_PHASE non-empty + MARKER_PHASE != CURRENT_PHASE
 #      — phase advanced. Strip dispatch:office-hours from BOTH the PR (if any)
 #      and the ISSUE, spawn router, self-close. Empty CURRENT_PHASE (e.g.
@@ -125,6 +130,17 @@ self_close() {
 
 if [ -z "$MARKER_PHASE" ]; then
   # Branch A — marker absent.
+  if [ "$CURRENT_PHASE" = "waiting" ]; then
+    # `waiting` is not worker-actionable: the router owns the CI gate (queue
+    # selection and the Step 6 gate both skip `waiting` PRs). A worker only ever
+    # reaches here through the TOCTOU race — a push restarts CI between router
+    # selection and the worker's phase derivation. Hand the issue back to the
+    # router rather than parking it on a human; the next tick re-gates it and
+    # picks it up once CI concludes. (Office-hours would not self-heal — the
+    # dispatch queue skips office-hours issues and nothing strips the label.)
+    spawn_router
+    exit 0
+  fi
   "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
     "$(resolve_office_hours_reason "phase exited before completion (mid-phase exit or context compaction)")" \
     || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2

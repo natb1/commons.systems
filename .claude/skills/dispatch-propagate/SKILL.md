@@ -60,10 +60,11 @@ The lock covers **Steps 0-5 only**; Step 6 (the worker spawn) runs with the lock
 - **Proceed path** — as the final action of Step 5, run
   `dispatch-finalize-selection "$WORKTREE_PATH"`. The wrapper takes the target
   worktree path as its one required argument, `cd`s into it, writes the
-  `tmp/dispatch-worktree` marker (see *Step 5* and the marker paragraph below),
-  and execs `dispatch-acquire-lock --release` in one step. The `cd`-first
-  contract is why the router never accidentally writes the marker into its
-  own cwd — the wrapper is the sole Step-5 marker writer on the proceed path.
+  `tmp/dispatch-worktree` marker carrying the finalizing holder's
+  `CLAUDE_CODE_SESSION_ID` (see *Step 5* and the marker paragraph below), and
+  execs `dispatch-acquire-lock --release` in one step. The `cd`-first contract
+  is why the router never accidentally writes the marker into its own cwd —
+  the wrapper is the sole Step-5 marker writer on the proceed path.
 - **Every Steps 1-5 stop path** — immediately before reporting the stop reason
   and proceeding to Step 7, run
   `.claude/skills/dispatch-propagate/scripts/dispatch-acquire-lock --release` directly.
@@ -76,10 +77,16 @@ Both calls need `dangerouslyDisableSandbox: true` (same reason as Step 0); they
 print `released` or `noop`, both fine, so the skill does not branch on the output.
 
 Releasing after Step 5 is safe, and the `tmp/dispatch-worktree` marker is the
-canonical post-Step-5 reclaim signal; see reference.md (*Releasing the lock*
-and *Per-worktree invariant*) for the safety argument, marker/reclaim
-semantics, and the two orthogonal lock scopes. Later steps cross-reference
-*Releasing the lock* rather than repeating these commands.
+canonical post-Step-5 reclaim signal. The marker is session-scoped: a later
+tick reclaims a foreign holder via the marker **only** when the marker's
+content equals the recorded holder's `CLAUDE_CODE_SESSION_ID`. A marker naming
+an older, since-finalized session — or an empty marker (the `touch` stamped by
+`.claude/hooks/worktree-create.sh` on every worktree creation) — never reclaims
+a live mid-selection holder, so a stale marker cannot defeat the lock for
+co-located sessions. See reference.md (*Releasing the lock* and *Per-worktree
+invariant*) for the safety argument, marker/reclaim semantics, and the two
+orthogonal lock scopes. Later steps cross-reference *Releasing the lock* rather
+than repeating these commands.
 
 ## 1. Sync local main with `origin/main`
 
@@ -334,23 +341,50 @@ worktree path that Step 6 passes to `dispatch-spawn-worker`.
 As the **final action of this step on every non-`conflict` (proceed) path** —
 before Step 6 — run `dispatch-finalize-selection "$WORKTREE_PATH"`. The
 wrapper `cd`s into the target worktree, writes the recovery marker
-**inside the target worktree** (`$WORKTREE_PATH/tmp/dispatch-worktree`), and
-releases the lock in one step (see *Releasing the lock*). The worker in Step 6
-onward runs lock-free.
+**inside the target worktree** (`$WORKTREE_PATH/tmp/dispatch-worktree`) with the
+finalizing holder's `CLAUDE_CODE_SESSION_ID` as its content, and releases the
+lock in one step (see *Releasing the lock*). The worker in Step 6 onward runs
+lock-free.
 
 The marker is the canonical "Step 5 completed" signal used by the lock script's
-post-Step-5 reclaim path; see reference.md (*Step 5 marker deep dive*).
+post-Step-5 reclaim path. It is session-scoped: reclaim fires only when the
+marker's content equals the recorded holder's sessionId, so a stale or empty
+marker never reclaims a live holder. See reference.md (*Step 5 marker deep
+dive*).
 
 ## 6. Spawn the Worker
 
 Spawn a `/dispatch-worker <N> <worktree-path>` background job.
 `dispatch-spawn-worker` runs from the router's cwd (`worktrees/main`) but spawns
 `claude --bg` with cwd = `<worktree-path>`, so the worker is born in its target
-worktree (see reference.md *Step 6 spawn-cwd trade-off*). Before spawning,
-consult the concurrency budgeter (see reference.md *Concurrency budgeting*); if
-the live worker count already meets the target, **skip the spawn** for this tick.
-Run with `dangerouslyDisableSandbox: true` (budgeter + `lib-claude-agents.sh`
-socket query; see `.claude/rules/sandbox.md`):
+worktree (see reference.md *Step 6 spawn-cwd trade-off*).
+
+Before anything else in this step, run the **CI-status gate**. Derive the
+target's phase with `dispatch-phase <N>` (`dangerouslyDisableSandbox: true` —
+it calls `gh`):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-phase <N>
+```
+
+- If it returns `waiting` — the target's CI is still in progress — **skip the
+  spawn for this tick**. Do not consult the concurrency budgeter and do not run
+  `dispatch-spawn-worker`. Do **not** release the lock: it is already released
+  at the end of Step 5, so — exactly like the concurrency-cap gate — this gate
+  is lock-free. Print the mandatory user-visible report verbatim:
+
+  ```
+  #<N>: CI in progress; the next router tick will re-evaluate.
+  ```
+
+  Then proceed to Step 7 with disposition `drain ci-waiting`.
+- Otherwise — any non-`waiting` phase — fall through to the concurrency-budget
+  gate and the spawn below.
+
+Before spawning, consult the concurrency budgeter (see reference.md
+*Concurrency budgeting*); if the live worker count already meets the target,
+**skip the spawn** for this tick. Run with `dangerouslyDisableSandbox: true`
+(budgeter + `lib-claude-agents.sh` socket query; see `.claude/rules/sandbox.md`):
 
 ```bash
 source .claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh
@@ -425,8 +459,12 @@ The three dispositions:
 - **`drain <reason>`** — `drain empty-queue` (Step 3, queue empty),
   `drain worktree-conflict` (Step 5, target's worktree cannot be safely
   entered — either a live session owns it, or the worktree's branch carries
-  commits not on the PR head branch; see the `conflict` case in Step 5), or
-  `drain concurrency-cap` (Step 6, `live_count >=
+  commits not on the PR head branch; see the `conflict` case in Step 5),
+  `drain ci-waiting` (Step 6, the target PR's CI is still in progress —
+  `dispatch-phase` returned `waiting`; unlike `drain concurrency-cap` this
+  schedules no re-seed — the chain re-evaluates the PR on the next router tick
+  from an existing source: a worker's Stop hook, the #725 cap-keyed timer, or a
+  manual `/dispatch`), or `drain concurrency-cap` (Step 6, `live_count >=
   target_N` — the chain re-seeds when the cap-keyed timer fires at the next
   rate-limit window reset; see *The #725 cap-keyed re-seed* below). The call site has already printed a **mandatory** user-visible
   report stating the reason and the recovery path (templates live at the
