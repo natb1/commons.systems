@@ -1,21 +1,17 @@
 #!/usr/bin/env bash
 # dispatch-target-workers — print the desired concurrent worker count.
 #
-# Composes two headroom-driven linear ramps to gate router-side worker spawning:
+# Runs a sequential four-stage pace-relative pipeline W -> F -> N to gate
+# router-side worker spawning. Instead of a flat weekly cap, the weekly budget
+# follows a cumulative-pace CURVE keyed to how far through the weekly window we
+# are (in 5-hour-window terms), so spend spreads smoothly across the week
+# rather than burning early and idling. It is intentionally more conservative
+# early-week than a flat-cap controller — it throttles whenever actual usage
+# runs ahead of the curve, even far below the weekly cap.
 #
-#   weekly ramp     — linear ramp keyed off headroom (target_weekly -
-#                     used_weekly). Returns max_workers when headroom exceeds
-#                     the taper window, tapers linearly toward 1 as headroom
-#                     approaches zero, floors at 1 when headroom == 0, and
-#                     returns 0 only when used_weekly exceeds target_weekly.
-#   5-hour ramp     — same shape on the 5h axis, keyed off (target_5h -
-#                     used_5h) and five_hour_taper_window_pct.
-#
-# target_N = min(weekly_ramp, five_hour_ramp).
-#
-# The floor of 1 at headroom == 0 prevents the `0 >= 0` deadlock the previous
-# time-based ramp produced against Step 6's `LIVE_COUNT >= TARGET_N` gate.
-# target_N=0 now requires actual usage to exceed the configured target.
+# The two `used_*` telemetry fields stay in their own denominators
+# (used_weekly = % of weekly limit; used_5h = % of 5h limit). They couple only
+# through the SIGN of weekly headroom, so no weekly<->5h conversion is needed.
 #
 # Telemetry is read from ~/.local/share/productivity-tui/rate_limits.json
 # (written by productivity-tui/hooks/update-rate-limits.sh on every
@@ -38,9 +34,8 @@
 #     ~/.local/share/productivity-tui/rate_limits.json.
 #
 #   DISPATCH_TARGET_WORKERS_NOW
-#     Accepted but not used. Retained for test-injection compatibility across
-#     scripts in the test suite that export it. The headroom algorithm does
-#     not consult the current time at all.
+#     Override the current epoch seconds. Default: date +%s. The pace curve
+#     needs the elapsed fraction of the weekly window, so this is consulted.
 #
 #   DISPATCH_TARGET_WORKERS_USED_WEEKLY
 #   DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY
@@ -49,45 +44,72 @@
 #     Override each individual telemetry field. When set, they win over the
 #     value parsed from the rate_limits.json file. The override is per-field,
 #     so a test can supply some fields and let the file supply the rest. The
-#     `_RESETS_AT_*` overrides are retained for test-injection compatibility;
-#     the headroom algorithm does not consult them.
+#     weekly curve consumes used_weekly + resets_at_weekly + now; Stage 3
+#     consumes used_5h. The 5h resets_at is parsed for downstream consumers
+#     but not consulted here.
 #
 # Config (read via dispatch-config-load target-workers; all optional):
 #
-#   target_weekly_usage_pct       default 90
-#   target_five_hour_usage_pct    default 50
-#   max_concurrent_workers        default 8
-#   weekly_taper_window_pct       default 30
-#   five_hour_taper_window_pct    default 15
+#   target_weekly_usage_pct        default 90   curve terminal W(1)
+#   weekly_increment_floor_pct     default 1    per-window floor
+#   weekly_increment_cap_pct       default 10   per-window hard ceiling
+#   weekly_curve_power             default 1    convexity; >1 back-loads
+#   weekly_headroom_taper_pct      default 20   weekly headroom earning full F
+#   five_hour_target_floor_pct     default 50   F band floor
+#   five_hour_target_ceiling_pct   default 80   F band ceiling
+#   five_hour_headroom_taper_pct   default 15   5h headroom -> max workers
+#   max_concurrent_workers         default 8
 #
 # ---- The algorithm ----------------------------------------------------------
 #
-#   ramp(headroom_pp, taper_window_pp):
-#     if headroom_pp <  0:                return 0
-#     if headroom_pp >= taper_window_pp:  return max_workers
-#     return max(1, round(max_workers * headroom_pp / taper_window_pp))
+#   WEEK_SECONDS = 604800
 #
-#   weekly_ramp     = ramp(target_weekly - used_weekly, weekly_taper_window_pct)
-#   five_hour_ramp  = ramp(target_5h     - used_5h,     five_hour_taper_window_pct)
-#   target_N        = min(weekly_ramp, five_hour_ramp)
+#   # Stage 1 — weekly pace curve W (weekly %)
+#   remaining = resets_at_weekly - now;   if remaining <= 0: print 0; exit
+#   x   = clamp((WEEK_SECONDS - remaining) / WEEK_SECONDS, 0, 1)  # elapsed frac
+#   T   = round(WEEK_SECONDS / 18000)                            # ~34 windows
+#   end = floor + (p+1)*(target_weekly/T - floor)                # W(1)=target
+#   end = min(end, cap)                                          # hard ceiling
+#   W   = T*( floor*x + (end-floor)*x^(p+1)/(p+1) )              # cumulative now
 #
-# When the 5h block is absent, the 5h ramp is skipped and target_N is the
-# weekly ramp's output alone.
+#   # Stage 2 — 5h target F (% of 5h limit, absolute)
+#   hw = W - used_weekly
+#   F  = (hw <= 0) ? 0 : floor5 + (ceil5-floor5)*clamp(hw/Hw, 0, 1)
+#
+#   # Stage 3 — workers N
+#   h5 = F - used_5h
+#   N  = (h5 <= 0) ? 0 : clamp(round(max_workers * h5/H5), 1, max_workers)
+#   print N
+#
+# - The weekly increment d(x)=floor+(end-floor)*x^p rises from the floor toward
+#   (but clamped at) the cap; W reaches target_weekly only at x=1 (week end),
+#   never before.
+# - F=0 when ahead of pace (used_weekly >= W); the floor5..ceil5 band opens
+#   with weekly headroom.
+# - N=0 only at/over the 5h target F (includes the F=0 ahead-of-pace pause);
+#   1..max below. No `0 >= 0` router deadlock during healthy under-budget
+#   operation.
 #
 # ---- Missing-telemetry fallback --------------------------------------------
 #
 # - File missing/unreadable, or both telemetry blocks missing → print 1.
-# - Only `seven_day` missing → print 1 (no weekly headroom anchor).
-# - Only `five_hour` missing → run the weekly ramp; skip the 5h ramp.
+# - Weekly anchor absent (missing used_weekly OR resets_at_weekly OR a
+#   malformed now) → print 1.
+# - Only `five_hour` missing → run Stages 1-3 with used_5h treated as 0
+#   (N scales from F alone).
 set -euo pipefail
 
 # ---- Step 0: defaults & config ----------------------------------------------
 
 TARGET_WEEKLY=90
-TARGET_5H=50
+WEEKLY_INCREMENT_FLOOR=1
+WEEKLY_INCREMENT_CAP=10
+WEEKLY_CURVE_POWER=1
+WEEKLY_HEADROOM_TAPER=20
+FIVEH_TARGET_FLOOR=50
+FIVEH_TARGET_CEILING=80
+FIVEH_HEADROOM_TAPER=15
 MAX_WORKERS=8
-WEEKLY_TAPER_WINDOW=30
-FIVEH_TAPER_WINDOW=15
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -107,19 +129,28 @@ fi
 if [[ -n "$CONFIG_JSON" ]]; then
   val=$(jq -r '.target_weekly_usage_pct // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && TARGET_WEEKLY="$val"
-  val=$(jq -r '.target_five_hour_usage_pct // empty' <<<"$CONFIG_JSON")
-  [[ -n "$val" ]] && TARGET_5H="$val"
+  val=$(jq -r '.weekly_increment_floor_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && WEEKLY_INCREMENT_FLOOR="$val"
+  val=$(jq -r '.weekly_increment_cap_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && WEEKLY_INCREMENT_CAP="$val"
+  val=$(jq -r '.weekly_curve_power // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && WEEKLY_CURVE_POWER="$val"
+  val=$(jq -r '.weekly_headroom_taper_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && WEEKLY_HEADROOM_TAPER="$val"
+  val=$(jq -r '.five_hour_target_floor_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && FIVEH_TARGET_FLOOR="$val"
+  val=$(jq -r '.five_hour_target_ceiling_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && FIVEH_TARGET_CEILING="$val"
+  val=$(jq -r '.five_hour_headroom_taper_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && FIVEH_HEADROOM_TAPER="$val"
   val=$(jq -r '.max_concurrent_workers // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && MAX_WORKERS="$val"
-  val=$(jq -r '.weekly_taper_window_pct // empty' <<<"$CONFIG_JSON")
-  [[ -n "$val" ]] && WEEKLY_TAPER_WINDOW="$val"
-  val=$(jq -r '.five_hour_taper_window_pct // empty' <<<"$CONFIG_JSON")
-  [[ -n "$val" ]] && FIVEH_TAPER_WINDOW="$val"
 fi
 
 # ---- Step 1: load telemetry -------------------------------------------------
 
 RL_PATH="${DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH:-$HOME/.local/share/productivity-tui/rate_limits.json}"
+NOW="${DISPATCH_TARGET_WORKERS_NOW:-$(date +%s)}"
 
 # Parse the file if it exists and is readable; otherwise WEEKLY_USED/etc stay
 # empty and the per-field env overrides have the last word.
@@ -164,12 +195,12 @@ fi
 [[ -n "${DISPATCH_TARGET_WORKERS_RESETS_AT_5H:-}" ]] && FIVEH_RESETS="$DISPATCH_TARGET_WORKERS_RESETS_AT_5H"
 
 # Sanitize `used_*` telemetry fail-closed before it reaches `awk -v`. awk
-# coerces a non-numeric value to 0, which under the headroom algorithm reads as
-# full budget remaining and returns max_workers — a corrupt or tampered
-# rate_limits.json (or a hostile env override) would thus spawn at the cap
-# instead of backing off. Treat any malformed value as missing so the
-# PRESENT check below routes it to the conservative missing-telemetry fallback,
-# matching dispatch-schedule-reseed's fail-closed posture on the same telemetry.
+# coerces a non-numeric value to 0, which would read as "no usage yet" and
+# spawn aggressively — a corrupt or tampered rate_limits.json (or a hostile env
+# override) would thus dodge the budget instead of backing off. Treat any
+# malformed value as missing so the PRESENT check below routes it to the
+# conservative missing-telemetry fallback, matching dispatch-schedule-reseed's
+# fail-closed posture on the same telemetry.
 for var in WEEKLY_USED FIVEH_USED; do
   if [[ -n "${!var}" && ! "${!var}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
     echo "dispatch-target-workers: $var has non-numeric value '${!var}'; treating as missing" >&2
@@ -177,73 +208,107 @@ for var in WEEKLY_USED FIVEH_USED; do
   fi
 done
 
-# Whether each block is present after env-override merge. The headroom
-# algorithm only consults `used_*`; the `resets_at` fields are retained for
-# parsing-compat with downstream consumers (e.g. dispatch-schedule-reseed)
-# but are not required for the PRESENT check here.
+# Sanitize the weekly anchor inputs the curve depends on. `now` must be an
+# integer epoch; `resets_at_weekly` must be a number. A malformed value here
+# drops the weekly anchor → fall-closed to the missing-telemetry fallback,
+# rather than letting awk coerce garbage to 0 and miscompute the curve.
+if [[ ! "$NOW" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-target-workers: NOW has non-integer value '$NOW'; treating weekly anchor as missing" >&2
+  NOW=""
+fi
+if [[ -n "$WEEKLY_RESETS" && ! "$WEEKLY_RESETS" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "dispatch-target-workers: WEEKLY_RESETS has non-numeric value '$WEEKLY_RESETS'; treating as missing" >&2
+  WEEKLY_RESETS=""
+fi
+
+# The weekly anchor requires BOTH used_weekly AND resets_at_weekly AND a valid
+# now. The 5h block is present iff used_5h survived sanitization.
 WEEKLY_PRESENT=0
 FIVEH_PRESENT=0
-[[ -n "$WEEKLY_USED" ]] && WEEKLY_PRESENT=1
+[[ -n "$WEEKLY_USED" && -n "$WEEKLY_RESETS" && -n "$NOW" ]] && WEEKLY_PRESENT=1
 [[ -n "$FIVEH_USED" ]] && FIVEH_PRESENT=1
 
 # ---- Step 2: missing-telemetry fallback -------------------------------------
 #
-# The weekly ramp's anchor is required. Without it (or without the whole file
-# and no env overrides), fall back to "spawn one per tick".
+# The weekly anchor (used_weekly + resets_at_weekly + now) is required for the
+# pace curve. Without it (or without the whole file and no env overrides), fall
+# back to "spawn one per tick".
 
 if (( WEEKLY_PRESENT == 0 )); then
   if (( FILE_OK == 0 )); then
     echo "dispatch-target-workers: rate_limits.json missing or unreadable at $RL_PATH; using fallback (1)" >&2
   else
-    echo "dispatch-target-workers: seven_day telemetry absent in $RL_PATH; using fallback (1)" >&2
+    echo "dispatch-target-workers: weekly anchor (seven_day used + resets_at, now) absent in $RL_PATH; using fallback (1)" >&2
   fi
   echo 1
   exit 0
 fi
 
-# ---- Step 3: the algorithm --------------------------------------------------
+# ---- Step 3: the four-stage pace pipeline -----------------------------------
 #
-# Two headroom-driven linear ramps combined by min. All arithmetic is delegated
-# to a single awk invocation. awk's printf handles both float math (the ramp's
-# linear slope) and integer rounding (int(x + 0.5)), and is POSIX-ubiquitous
-# on the dev machines (bc is not).
+# All arithmetic is delegated to a single awk invocation. awk's printf handles
+# both float math (the curve and linear bands) and integer rounding
+# (int(x + 0.5)); `^` is exponentiation. awk is POSIX-ubiquitous on the dev
+# machines (bc is not).
 
-FIVEH_ENABLED=1
 FIVEH_USED_FOR_AWK="$FIVEH_USED"
 if (( FIVEH_PRESENT == 0 )); then
   FIVEH_USED_FOR_AWK=0
-  FIVEH_ENABLED=0
 fi
 
-awk -v used_weekly="$WEEKLY_USED" \
+awk -v now="$NOW" \
+    -v resets_weekly="$WEEKLY_RESETS" \
+    -v used_weekly="$WEEKLY_USED" \
     -v used_5h="$FIVEH_USED_FOR_AWK" \
     -v target_weekly="$TARGET_WEEKLY" \
-    -v target_5h="$TARGET_5H" \
+    -v wfloor="$WEEKLY_INCREMENT_FLOOR" \
+    -v wcap="$WEEKLY_INCREMENT_CAP" \
+    -v p="$WEEKLY_CURVE_POWER" \
+    -v hw_taper="$WEEKLY_HEADROOM_TAPER" \
+    -v floor5="$FIVEH_TARGET_FLOOR" \
+    -v ceil5="$FIVEH_TARGET_CEILING" \
+    -v h5_taper="$FIVEH_HEADROOM_TAPER" \
     -v max_workers="$MAX_WORKERS" \
-    -v weekly_taper="$WEEKLY_TAPER_WINDOW" \
-    -v fiveh_taper="$FIVEH_TAPER_WINDOW" \
-    -v fiveh_enabled="$FIVEH_ENABLED" \
-    'function ramp(headroom, taper,    raw, rounded) {
-       # + 0 throughout: explicit numeric coercion; awk treats any unset/empty
-       # var as "" in numeric contexts and silently breaks comparisons.
-       if (headroom + 0 < 0) return 0
-       if (headroom + 0 >= taper + 0) return max_workers + 0
-       raw = (max_workers + 0) * (headroom + 0) / (taper + 0)
-       rounded = int(raw + 0.5)
-       if (rounded < 1) rounded = 1
-       return rounded
+    'function clamp(v, lo, hi) {
+       v = v + 0
+       if (v < lo) return lo
+       if (v > hi) return hi
+       return v
      }
      BEGIN {
-       weekly_headroom = (target_weekly + 0) - (used_weekly + 0)
-       weekly_n = ramp(weekly_headroom, weekly_taper)
+       WEEK_SECONDS = 604800
 
-       if (fiveh_enabled + 0 == 1) {
-         fiveh_headroom = (target_5h + 0) - (used_5h + 0)
-         fiveh_n = ramp(fiveh_headroom, fiveh_taper)
-         target_n = (weekly_n < fiveh_n) ? weekly_n : fiveh_n
+       # ---- Stage 1: weekly pace curve W (weekly %) ----
+       remaining = (resets_weekly + 0) - (now + 0)
+       if (remaining <= 0) { print 0; exit }
+
+       x = clamp((WEEK_SECONDS - remaining) / WEEK_SECONDS, 0, 1)
+       T = int(WEEK_SECONDS / 18000 + 0.5)              # = 34 five-hour windows
+
+       # Solve `end` so the cumulative curve W(1) == target_weekly, then clamp
+       # the per-window increment ceiling at wcap.
+       end = (wfloor + 0) + ((p + 0) + 1) * ((target_weekly + 0) / T - (wfloor + 0))
+       if (end > (wcap + 0)) end = (wcap + 0)
+
+       W = T * ((wfloor + 0) * x \
+                + (end - (wfloor + 0)) * (x ^ ((p + 0) + 1)) / ((p + 0) + 1))
+
+       # ---- Stage 2: 5h target F (% of 5h limit, absolute) ----
+       hw = W - (used_weekly + 0)
+       if (hw <= 0) {
+         F = 0
        } else {
-         target_n = weekly_n
+         F = (floor5 + 0) + ((ceil5 + 0) - (floor5 + 0)) * clamp(hw / (hw_taper + 0), 0, 1)
        }
 
-       print target_n
+       # ---- Stage 3: workers N ----
+       h5 = F - (used_5h + 0)
+       if (h5 <= 0) {
+         N = 0
+       } else {
+         N = int((max_workers + 0) * h5 / (h5_taper + 0) + 0.5)
+         N = clamp(N, 1, max_workers + 0)
+       }
+
+       print N
      }'
