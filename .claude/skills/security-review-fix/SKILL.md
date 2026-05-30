@@ -260,7 +260,7 @@ ready. Otherwise run all steps in order.
    The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads marker-absence as
    Branch A and applies `dispatch:office-hours` to the issue, surfacing the
    reason in the why-comment, so the parked item explains which criterion
-   fired. Do not call `gh pr edit --add-label dispatch:office-hours` — the
+   fired. Do not apply the `dispatch:office-hours` label inline — the
    Stop hook owns label application.
 
    **No deviation** (all high-confidence `required` findings resolved, or none
