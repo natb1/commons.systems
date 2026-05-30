@@ -107,6 +107,12 @@ Every jit issue carries a `jit:<key>` label and is tracked in its configured Git
 
 With no `dispatch.config/jit.json` present the engine is a no-op.
 
+#### 5. Token-budget pacing
+
+The router paces worker spawning against a cumulative weekly token-budget curve (#917, building on #845 and #878). Rather than a flat cap, the weekly target at any moment is proportional to how far through the weekly rate-limit window you are — so token spend is spread smoothly across the week instead of burning early and idling. The controller is more conservative early-week than a simple headroom check: it pauses spawning whenever actual usage runs ahead of the curve, even when the weekly total is still low. A separate 5-hour headroom ramp then maps the remaining budget into a live worker count (0..`max_concurrent_workers`).
+
+Tunables live in `dispatch.config/target-workers.json` (see `dispatch-propagate/SKILL.md` for the full formula and table). When no telemetry file is present, the router falls back to spawning one worker per tick.
+
 ### Office Hours Queue
 
 *See #858 for the office-hours queue spine.*

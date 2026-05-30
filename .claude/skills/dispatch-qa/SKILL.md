@@ -256,6 +256,18 @@ The QA pass covers **public data only** — documents present in both the QA ser
       so the bug-fix path parks for human review until the fix is QA'd
       again on the next `/dispatch` tick.
 
+      Write a one-line reason to `$CLAUDE_JOB_DIR/office-hours-reason` so the
+      office-hours why-comment names the criterion that fired:
+
+      ```bash
+      if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+        printf '%s\n' "/dispatch-qa: QA found a bug, fixed in-session; parking for re-QA on the next tick" \
+          > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+        mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" \
+           "$CLAUDE_JOB_DIR/office-hours-reason"
+      fi
+      ```
+
       The skill ends here — Steps 6 and 7 already ran
       inline in sub-step 1, and Step 8 does not run on the bug-fix path.
 
