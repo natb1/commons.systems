@@ -124,7 +124,7 @@ which re-gates it and picks it up once CI concludes.
   failed CI checks, record the outcome, post it, stop. No label.
 - **`qa`** — invoke `/dispatch-qa`. It owns and applies `dispatch:qa-done`
   itself on a clean pass; `/dispatch-worker` applies no label.
-- **`code-review`** — invoke `/code-review-fix`. It runs `/code-review max`,
+- **`code-review`** — invoke `/code-review-fix`. It runs `/code-review max --fix`,
   applies the recommended fixes, defers important out-of-scope findings to
   tracking issues, posts a PR comment, and applies the `dispatch:code-reviewed`
   label itself — `/dispatch-worker` applies no label.
