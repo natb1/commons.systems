@@ -10202,6 +10202,41 @@ else
 fi
 cal_teardown
 
+# --- Test 12: Rule 1 — late-night event in the 23:00–midnight window ---------
+
+echo "Test: dispatch-jit-calendar-import files a today event starting after 23:00 local"
+cal_setup
+# Event today starting 23:30Z — inside the final hour before midnight. Its only
+# reminder (default popup 10m) triggers at 23:20Z, still in the future, so Rule 2
+# does not fire: the event qualifies via Rule 1 alone. This locks in the
+# END_OF_TODAY_LOCAL = next-midnight boundary; a 23:00 boundary would silently
+# drop it.
+cat > "$STUB_DIR/events.json" <<'EOF'
+{
+  "items": [
+    {
+      "id": "evt-late-night",
+      "status": "confirmed",
+      "summary": "Late night call",
+      "start": {"dateTime": "2026-05-26T23:30:00Z"},
+      "end":   {"dateTime": "2026-05-26T23:45:00Z"},
+      "reminders": {"useDefault": true}
+    }
+  ]
+}
+EOF
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-calendar-import" 2>/dev/null) || rc=$?
+assert_eq "late-night exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"calendar: created #777 (evt-late-night)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: late-night event filed via Rule 1"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: late-night event filed via Rule 1"
+  echo "    actual: $out"
+fi
+cal_teardown
+
 # ============================================================================
 # summary
 # ============================================================================

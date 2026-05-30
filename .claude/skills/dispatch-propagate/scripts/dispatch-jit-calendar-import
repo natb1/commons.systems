@@ -297,7 +297,9 @@ if ! LOOKAHEAD_SECS=$(parse_duration "$CALENDAR_LOOKAHEAD"); then
 fi
 TODAY_LOCAL_DATE=$(date -d "@$NOW" +%Y-%m-%d)
 START_OF_TODAY_LOCAL=$(date -d "$TODAY_LOCAL_DATE 00:00:00" +%s)
-END_OF_TODAY_LOCAL=$(date -d "$TODAY_LOCAL_DATE 00:00:00 + 1 day" +%s)
+# Bare date + relative day → next local midnight (DST-safe). Pairing an explicit
+# "00:00:00" with "+ 1 day" yields today 23:00, not next midnight, under GNU date.
+END_OF_TODAY_LOCAL=$(date -d "$TODAY_LOCAL_DATE + 1 day" +%s)
 TIME_MIN_RFC3339=$(date -d "@$START_OF_TODAY_LOCAL" --iso-8601=seconds)
 TIME_MAX_RFC3339=$(date -d "@$((NOW + LOOKAHEAD_SECS))" --iso-8601=seconds)
 
@@ -379,6 +381,7 @@ for evt in "${EVENTS[@]}"; do
   # open issues. A closed prior issue is NOT in OPEN_EVENT_IDS, so a re-file
   # is not suppressed.
   if printf '%s' "$OPEN_EVENT_IDS" | grep -Fxq "$EVENT_ID"; then
+    echo "calendar: skipped (open issue exists for event $EVENT_ID)"
     continue
   fi
 
@@ -397,6 +400,7 @@ for evt in "${EVENTS[@]}"; do
 
   # Skip events that have already ended — they should not be filed.
   if (( END_EPOCH <= NOW )); then
+    echo "calendar: skipped (event $EVENT_ID already ended)"
     continue
   fi
 
@@ -410,6 +414,11 @@ for evt in "${EVENTS[@]}"; do
     while IFS= read -r minutes; do
       [[ -z "$minutes" ]] && continue
       [[ "$minutes" == "null" ]] && continue
+      if [[ ! "$minutes" =~ ^[0-9]+$ ]]; then
+        echo "calendar: error (non-numeric reminder minutes '$minutes' for event $EVENT_ID)" >&2
+        HARD_ERROR=1
+        continue
+      fi
       TRIGGER=$(( START_EPOCH - minutes * 60 ))
       if (( TRIGGER <= NOW )); then
         MATCH=1
@@ -419,6 +428,7 @@ for evt in "${EVENTS[@]}"; do
   fi
 
   if [[ "$MATCH" -eq 0 ]]; then
+    echo "calendar: skipped (event $EVENT_ID matches no rule)"
     continue
   fi
 
