@@ -63,6 +63,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 N="${1:-}"
 MODE="${2:-}"
@@ -155,12 +156,11 @@ case "$WT_ACTION" in
     ;;
   create)
     BRANCH="$WT_REST"
-    GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir) || {
+    PROJECT_ROOT=$(resolve_project_root) || {
       release_lock
-      echo "dispatch-materialize-spawn: git rev-parse --git-common-dir failed for #$N" >&2
+      echo "dispatch-materialize-spawn: resolve_project_root failed for #$N" >&2
       exit 2
     }
-    PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
     WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
     if ! git worktree add -b "$BRANCH" "$WORKTREE_PATH" origin/main 1>&2; then
       release_lock
