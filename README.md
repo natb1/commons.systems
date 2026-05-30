@@ -1,6 +1,6 @@
 # commons.systems: Nate's Agentic Coding Workflow
 
-A reference workflow for individual practitioners who want to fork and adapt an agentic coding setup for their own projects. Built to Nate's own specification — not a platform, not a library. The dispatch queue runs autonomously; the office hours queue handles human-driven work. Fork it, argue with it, discard the parts that don't serve you.
+A reference workflow for individuals who want to fork and adapt an agentic coding setup for their own projects. Built to Nate's own specification — not a platform, not a library. The dispatch queue runs autonomously; the office hours queue handles human-driven work.
 
 ## Table of Contents
 

@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # dispatch-finalize-selection <worktree-path> — canonical Step 5 proceed-path
 # exit. Takes the target worktree path as its one required argument, `cd`s into
-# it, writes the `tmp/dispatch-worktree` marker that signals "Step 5 completed"
-# (the lock script reads it on subsequent ticks to reclaim a marker-bearing
-# foreign holder), then execs dispatch-acquire-lock --release so the wrapper's
-# exit code is the release call's exit code. The cd-first contract ensures the
-# marker lands in the target worktree, not the caller's cwd. See
-# `.claude/skills/dispatch-propagate/SKILL.md` Step 5 and Step 0 "Releasing the lock".
+# it, and writes the `tmp/dispatch-worktree` marker that signals "Step 5
+# completed" (the lock script reads it on subsequent ticks to reclaim a
+# marker-bearing foreign holder). The cd-first contract ensures the marker lands
+# in the target worktree, not the caller's cwd. This script no longer releases
+# the lock: the caller (dispatch-materialize-spawn) holds it through the spawn
+# and releases it after the worker registers, closing the boot-gap re-selection
+# race (#945). See `.claude/skills/dispatch-propagate/SKILL.md` Step 5 and
+# reference.md "Releasing the lock".
 #
 # The marker carries the finalizing (holder) session's CLAUDE_CODE_SESSION_ID,
 # not an empty flag: dispatch-acquire-lock reclaims a live foreign holder via
@@ -16,8 +18,6 @@
 # marker — e.g. the `touch` stamped by .claude/hooks/worktree-create.sh on
 # every worktree creation — never reclaims a live mid-selection holder.
 set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [[ $# -lt 1 ]]; then
   echo "dispatch-finalize-selection: missing required <worktree-path> argument" >&2
@@ -41,8 +41,7 @@ cd "$WORKTREE" || {
 # The marker is session-scoped: it names the finalizing holder so the lock can
 # distinguish "THIS recorded holder finished Step 5" from a stale empty marker.
 # An unset CLAUDE_CODE_SESSION_ID is a misconfigured environment — fail clear
-# rather than write an inert empty marker; the exec'd --release would fail on
-# the same unset value anyway.
+# rather than write an inert empty marker.
 SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
 [[ -n "$SESSION_ID" ]] || {
   echo "dispatch-finalize-selection: CLAUDE_CODE_SESSION_ID is unset" >&2
@@ -51,4 +50,3 @@ SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
 
 mkdir -p tmp
 printf '%s\n' "$SESSION_ID" > tmp/dispatch-worktree
-exec "$SCRIPT_DIR/dispatch-acquire-lock" --release
