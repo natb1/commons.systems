@@ -113,7 +113,7 @@ npm_ci_with_retry() {
   export npm_config_fetch_retry_mintimeout=20000
   export npm_config_fetch_retry_maxtimeout=120000
   export npm_config_fetch_timeout=600000
-  attempt=1
+  local attempt=1
   while [ "$attempt" -le 3 ]; do
     if [ "$attempt" -gt 1 ]; then
       echo "npm_ci_with_retry: npm ci attempt $attempt/3" >&2
