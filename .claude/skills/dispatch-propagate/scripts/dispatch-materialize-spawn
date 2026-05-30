@@ -155,7 +155,7 @@ case "$WT_ACTION" in
     BRANCH="$WT_REST"
     PROJECT_ROOT=$(resolve_project_root) || {
       release_lock
-      echo "dispatch-materialize-spawn: git rev-parse --git-common-dir failed for #$N" >&2
+      echo "dispatch-materialize-spawn: resolve_project_root failed for #$N" >&2
       exit 2
     }
     WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
