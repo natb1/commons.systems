@@ -96,6 +96,7 @@ ready. Otherwise run all steps in order.
 
       ```bash
       AUDIT_DIR=$(mktemp -d)
+      trap 'rm -rf "$AUDIT_DIR"' EXIT
       MERGE_BASE=$(git merge-base HEAD origin/main)
 
       # Audit HEAD (current working tree)
