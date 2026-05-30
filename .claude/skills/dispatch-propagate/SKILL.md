@@ -5,65 +5,48 @@ description: Autonomous dispatch chain router — selects the next task, resolve
 
 # Dispatch (propagate)
 
-The dispatch chain router. Selects the single most pressing task, resolves its
-worktree, and spawns a `/dispatch-worker <N>` background job to run one phase
-in that worktree. The router itself runs no phase skill — it is a thin
-selection-and-spawn loop.
-
-Each `/dispatch-propagate` is a `claude --bg` background job (#725) rooted in
-`worktrees/main`. The router selects, spawns a worker, and exits. The worker
-runs one phase in its target worktree, then spawns a fresh `/dispatch-propagate` router
-back in `worktrees/main` and self-deletes. That router → worker → router
-chain advances the workflow; the #725 cap-keyed re-seed scheduled at the
-next rate-limit window reset re-seeds it when a tick stalled on a
-concurrency-budget cap (see Step 7's *The #725 cap-keyed re-seed*
-subsection).
+The dispatch chain router. Each `/dispatch-propagate` is a `claude --bg`
+background job rooted in `worktrees/main`: it selects the single most pressing
+task, resolves its worktree, spawns a `/dispatch-worker <N>` background job to
+run one phase there, and exits. The worker runs that phase, then spawns a fresh
+router and self-deletes (see reference.md *Chain mechanics*). The router runs no
+phase skill itself — it is a thin selection-and-spawn loop.
 
 `/dispatch-propagate` takes an **optional issue-or-PR-number argument** (leading `#`
 optional). With an argument, it targets that issue and skips the queue scan; a
 PR number is resolved to the issue that PR closes (see Step 3).
 
-Run `/dispatch-propagate` from any worktree; selection ignores cwd. The router never
-enters a worktree; it materializes the target worktree (if needed) and spawns
-the worker into it.
-
-Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
-`gh`) with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
+Run `/dispatch-propagate` from any worktree; selection ignores cwd. The router
+never enters a worktree; it materializes the target worktree (if needed) and
+spawns the worker into it. Run `gh` commands (`gh label create`, `gh pr edit`,
+and the scripts that invoke `gh`) with `dangerouslyDisableSandbox: true` — see
+`.claude/rules/sandbox.md`.
 
 ## 0. Acquire the Dispatch Lock
 
-Run this as the **very first action** — before the `origin/main` sync, the
-JIT engine, the `origin/main` health gate, target selection, and worktree
-resolution. Runs unconditionally, whether or not an issue-or-PR-number argument
-was given.
+Run this as the **very first action** — before sync, JIT, the health gate,
+selection, and worktree resolution. Runs unconditionally, whether or not an
+issue-or-PR-number argument was given.
 
 ```bash
 LOCK=$(.claude/skills/dispatch-propagate/scripts/dispatch-acquire-lock --wait)
 ```
 
-Run this Bash call with **both** `dangerouslyDisableSandbox: true` and an
-elevated `timeout: 600000` (ms):
-
-- `dangerouslyDisableSandbox: true` — the script writes
-  `$PROJECT_ROOT/tmp/dispatch.lock`, which is outside the sandbox write-allowlist,
-  and queries `claude agents --json` over a local Unix socket for foreign-holder
-  liveness, which sandbox network-namespace isolation blocks (see
-  `.claude/rules/sandbox.md`).
-- `timeout: 600000` — `--wait` blocks on contention until it acquires the lock
-  or `DISPATCH_LOCK_WAIT_TIMEOUT` (default 300 s) elapses, which exceeds the
-  default Bash-call timeout.
+Run this Bash call with **both** `dangerouslyDisableSandbox: true` (lock write +
+`claude agents --json` socket query; see `.claude/rules/sandbox.md`) and an
+elevated `timeout: 600000` (ms) (`--wait` blocks on contention up to
+`DISPATCH_LOCK_WAIT_TIMEOUT`, default 300 s, exceeding the default Bash timeout).
 
 Route on `$LOCK`:
 
 - **`acquired`** → this `/dispatch-propagate` holds the lock; proceed to Step 1.
 - **`busy`** → the wait timeout elapsed without acquiring — a wedged selection
-  in another `/dispatch-propagate`. The script's **stderr** carries a one-line diagnostic
-  naming the wait duration and the holding sessionId; report those, then proceed
-  to Step 7 with `notify busy-lock-timeout` (subsumes #850) — run no sync, no
-  health gate, no selection, and no phase skill. The user-visible
-  report is mandatory: the background-session classifier reads only message
-  text, not tool output, so a silent stop would hide the wedge. Recommend the
-  user verify the recorded holder is still live with:
+  in another `/dispatch-propagate`. The script's **stderr** carries a one-line
+  diagnostic naming the wait duration and the holding sessionId; report those,
+  then proceed to Step 7 with `notify busy-lock-timeout` (subsumes #850) — run no
+  sync, no health gate, no selection, no phase skill. The user-visible report is
+  mandatory (a silent stop would hide the wedge). Recommend the user verify the
+  recorded holder is still live with:
 
   ```
   claude agents --json | jq '.[] | select(.sessionId == "<holder>")'
@@ -71,11 +54,8 @@ Route on `$LOCK`:
 
 ### Releasing the lock
 
-The lock covers **Steps 0-5 only** — target selection and worktree resolution.
-Step 6 (the worker spawn) runs with the lock **released**.
-
-Release happens at exactly two kinds of point, each with its own canonical
-command:
+The lock covers **Steps 0-5 only**; Step 6 (the worker spawn) runs with the lock
+**released**. Release happens at exactly two kinds of point:
 
 - **Proceed path** — as the final action of Step 5, run
   `dispatch-finalize-selection "$WORKTREE_PATH"`. The wrapper takes the target
@@ -87,84 +67,19 @@ command:
 - **Every Steps 1-5 stop path** — immediately before reporting the stop reason
   and proceeding to Step 7, run
   `.claude/skills/dispatch-propagate/scripts/dispatch-acquire-lock --release` directly.
-  Stop paths fire before the marker is written, so the strict
-  `CLAUDE_CODE_SESSION_ID`-match branch applies.
 
 The `main-broken` stop path is the one exception: `/dispatch-diagnose-main`
-runs `--release` itself as its Step 3, so `/dispatch-propagate` Step 3's `main-broken`
-branch must not call `--release` again.
+runs `--release` itself, so `/dispatch-propagate` Step 3's `main-broken` branch
+must not call `--release` again.
 
-Both calls need `dangerouslyDisableSandbox: true` (same reason as Step 0); no
-elevated timeout is needed — `--release` returns immediately. They print
-`released` or `noop`; both are fine — `noop` is a no-op when the lock is
-already released or recorded against a different session whose worktree has no
-marker, so the skill does not branch on the output.
+Both calls need `dangerouslyDisableSandbox: true` (same reason as Step 0); they
+print `released` or `noop`, both fine, so the skill does not branch on the output.
 
-Releasing after Step 5 is safe because (a) once the spawned worker registers a
-live session, the selection scan skips targets whose worktree a live session
-owns (#905), so no other router selects the same issue; and (b) until that
-session registers — and even if a race let two routers reach Step 6 with the
-same target — Step 6's `dispatch-spawn-worker` enforces per-worktree dedup at
-the spawn boundary, so only one worker starts. (An orphan worktree, on disk
-with no live session, no longer blocks selection — so (b) is what closes the
-lock-release-to-worker-registration window, not (a).) Later
-steps cross-reference *Releasing the lock* rather than repeating these
-commands.
-
-The `tmp/dispatch-worktree` marker is the canonical post-Step-5 reclaim signal:
-a recorded holder whose worktree carries the marker is past Step 5, so its
-lock is reclaimable by any subsequent tick regardless of session-id provenance.
-The acquire path skips the busy branch when the foreign holder's cwd has the
-marker, and `--release` succeeds (truncates and prints `released`) when EITHER
-the caller's sessionId matches the holder OR the holder's cwd has the marker.
-This closes the silent-`noop` failure mode for any post-Step-5 caller whose
-`CLAUDE_CODE_SESSION_ID` was re-derived from a different context (a subagent
-or hook). Pre-marker callers — Steps 1-4 stop paths and the Step 5 `conflict`
-stop — keep strict sessionId-match semantics by construction because the
-marker is absent.
-
-The lock is scoped to selection and self-healing. The recorded sessionId
-(`CLAUDE_CODE_SESSION_ID`) outlives any single Bash call within a tick: if a
-tick dies before its explicit release, the next tick detects that the recorded
-sessionId no longer appears in `claude agents --json` and reclaims the lock,
-and a `--wait` waiter re-checks holder liveness every poll, so a dead holder's
-lock is reclaimed automatically. Same-session re-entry (e.g. after a context
-clear that re-invokes `/dispatch-propagate`) re-acquires cleanly because the recorded
-sessionId matches the re-entering session's own `CLAUDE_CODE_SESSION_ID`.
-
-### Per-worktree invariant
-
-The selection lock above is **per-repo** and serializes the router's selection
-step (so two routers cannot race on the same target). It is one of two
-mechanisms; the other is per-worktree and enforced elsewhere.
-
-The **per-worktree invariant**: at most one live worker agent per issue
-worktree. The router's Step 6 spawn primitive (`dispatch-spawn-worker`)
-enforces this at the spawn boundary. Every worker is born with the target
-worktree's basename as its `--name` — the `dispatch-spawn-worker` script's
-own cwd stays at the spawner's cwd (`worktrees/main`), but the spawn
-subshell `cd`s into `<worktree-path>` before invoking `claude --bg`, so the
-new worker registers and runs in its target worktree. Per-worktree name
-uniqueness is automatic. The dedup query lists live sessions under
-`<worktree-path>` (not the spawner cwd — that's where every same-target
-worker registers) and checks for `name == <worktree-basename>`; if any other
-live worker matches, the spawn is `deduped` and no new worker starts. The
-worker runs in its target worktree from spawn until it exits;
-per-worktree dedup naturally serializes per-issue work without the
-selection lock having to.
-
-The two mechanisms have orthogonal scopes:
-
-- **Selection lock** (this section) — per-repo, held by the router for the
-  duration of Steps 1–5. Prevents two routers from selecting the same target.
-- **Per-worktree dedup** (`dispatch-spawn-worker`) — per-worktree-path,
-  enforced at every router-to-worker spawn. Prevents two workers from racing
-  on the same issue.
-
-N concurrent issues in flight = N concurrent workers, each in its own
-worktree, each advancing its own issue's phase without contention. Only the
-router selection step is serialized; the worker execution path is per-
-worktree-parallel.
+Releasing after Step 5 is safe, and the `tmp/dispatch-worktree` marker is the
+canonical post-Step-5 reclaim signal; see reference.md (*Releasing the lock*
+and *Per-worktree invariant*) for the safety argument, marker/reclaim
+semantics, and the two orthogonal lock scopes. Later steps cross-reference
+*Releasing the lock* rather than repeating these commands.
 
 ## 1. Sync local main with `origin/main`
 
@@ -172,42 +87,37 @@ Run this step **only when the current branch is `main`**. From an issue worktree
 skip this step — the worker's phase skills already merge `origin/main` into the
 issue branch at their own entry points.
 
-Fast-forward local `main` to `origin/main` — no push:
+Fast-forward local `main` to `origin/main` — no push (a no-op when already equal):
 
 ```bash
 git fetch origin main && git merge --ff-only origin/main
 ```
 
-It is a no-op when local `main` already equals `origin/main`.
-
-- If `git fetch` fails, or `git merge --ff-only` rejects a non-fast-forward (local
-  `main` has diverged with unexpected commits), release the lock (see *Releasing
-  the lock*), surface the error, then proceed to Step 7 with `notify sync-failed`
-  — do not proceed to target selection.
+- If `git fetch` fails, or `git merge --ff-only` rejects a non-fast-forward,
+  release the lock (see *Releasing the lock*), surface the error, then proceed to
+  Step 7 with `notify sync-failed` — do not proceed to target selection.
 
 ## 2. Run the JIT Engine
 
 Generate any due just-in-time (JIT) issues before selecting a target. The JIT
-engine reads the local `dispatch.config/jit.json` and creates the recurring
-issues it configures.
+engine reads `dispatch.config/jit.json` and creates the recurring issues it
+configures.
 
-Run this **after** the `origin/main` sync and **before** the health gate, so
-jits fire even when `main` is red. It runs unconditionally — on `main` and from
+Run this **after** the `origin/main` sync and **before** the health gate (so
+jits fire even when `main` is red). It runs unconditionally — on `main` and from
 inside an issue worktree alike; its debounce makes frequent re-runs cheap.
 
     .claude/skills/dispatch-propagate/scripts/dispatch-jit-engine
 
-Run this Bash call with `dangerouslyDisableSandbox: true`: the engine writes its
-debounce state under `$PROJECT_ROOT/tmp/` (outside the sandbox write-allowlist,
-same as the lock) and calls `gh` — see `.claude/rules/sandbox.md`.
+Run this Bash call with `dangerouslyDisableSandbox: true` (tmp-state write + `gh`;
+see `.claude/rules/sandbox.md`).
 
 With no `dispatch.config/jit.json` present the engine is a no-op and prints
 nothing. Otherwise it prints one line per configured jit — `<key>: created #<n>`,
 `<key>: skipped (<reason>)`, or `<key>: debounced`. Report what it created.
 
-A non-zero exit means a jit is misconfigured or a `gh`/check-script call failed.
-JIT generation is best-effort — report the engine's stderr but do not stop;
-continue to target selection.
+JIT generation is best-effort — on a non-zero exit, report the engine's stderr
+but do not stop; continue to target selection.
 
 ## 3. Select the Target
 
@@ -227,13 +137,12 @@ continue to target selection.
     Skip the queue scan.
   - **Non-zero exit** → release the lock (see *Releasing the lock*), report the
     script's stderr message, then proceed to Step 7 with `notify resolver-failed`;
-    create no worktree. This covers a PR that closes no issue, a PR that closes
-    more than one issue, and an argument that is neither an issue nor a PR —
-    consistent with the other Steps 1-5 stop paths.
+    create no worktree. (Covers a PR that closes ≠1 issue, or an argument that is
+    neither an issue nor a PR.)
 
 - **No argument** → run target selection. A single invocation decides every
-  Step 3 outcome: JIT, main-broken gate, and the queue ladder are all internal
-  to the script and emitted on its one output line.
+  Step 3 outcome (JIT, main-broken gate, queue ladder all internal) and emits
+  the result on its one output line.
 
   ```bash
   SELECTED=$(.claude/skills/dispatch-propagate/scripts/dispatch-select-target)
@@ -251,59 +160,24 @@ continue to target selection.
     `help wanted` issue). Proceed to Step 5 with mode `queue`.
   - `main-broken <sha>` — invoke `/dispatch-diagnose-main <sha>`, then proceed
     to Step 7 with `notify main-broken`. The skill owns the failing-check
-    enumeration, log-fetch, summary, and lock-release; the caller-side
-    `notify main-broken` disposition keeps the session in `claude agents`
-    until the user closes it, so the diagnosis stays visible rather than
-    being buried in a closed transcript.
+    enumeration, log-fetch, summary, and lock-release.
   - `jit-reminder <repo> <num> <project> <item-id>` — invoke
     `/dispatch-jit-reminder <repo> <num> <project> <item-id>`, then stop the
-    tick directly (the skill is a Step 7 bypass — its user-visible summary must
-    stay open in the transcript for a human to read). The skill owns the claim
-    + lock-release + summarize + stop sequence; Steps 4, 5, and 6 are all
-    skipped.
+    tick directly (a Step 7 bypass). The skill owns the claim + lock-release +
+    summarize + stop sequence; Steps 4, 5, and 6 are all skipped.
   - `empty` — nothing eligible. Release the lock (see *Releasing the lock*),
     then proceed to Step 7 with `drain empty-queue` — the user-visible report
     is mandatory there ("queue empty — closing; the office-hours queue or a
     new issue will re-seed the chain"), not optional.
 
-  Priority order the script implements, top to bottom: JIT scan →
-  `origin/main` CI health gate → topic-category × priority × phase ladder.
-  A jit-reminder surfaces even when `origin/main` is red because the JIT scan
-  precedes the main-broken gate.
-
-  The topic-category × phase ladder is three-tier: a topic **category** nests
-  outside a **priority bit**, which nests outside the phase **ladder**.
-  Categories, highest first: `bug` → `testing infrastructure` → `dispatch` →
-  `other`. Within each category, items carrying the `priority` label rank above
-  items without it; the label is human-applied — `/ready` never applies it
-  automatically. A PR's category is the highest-priority topic among the labels
-  of every issue it closes; an issue's category is the highest-priority topic
-  among its own labels; anything with no topic label is `other`. The selector
-  exhausts one `(category, priority)` bucket's whole ladder before moving to
-  the next.
-
-  Within each category the ladder is (highest first; within a tier, oldest PR
-  wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
-  whose closing issue is `blocked_by` an open issue is skipped; `waiting`-phase
-  PRs are skipped entirely): oldest `security` PR → oldest
-  `review` PR → oldest `code-review` PR → oldest `verify` PR → oldest `help wanted`
-  issue → oldest `qa` PR. Non-QA PRs are ranked closest-to-done first —
-  `security` is the closest-to-done non-QA tier; `help wanted` issues rank below
-  all non-QA PRs but above QA PRs. A queue with no topic-labeled items resolves
-  entirely to `other`, reproducing the flat ladder; `empty` when no category
-  yields a task.
-
-  A `help wanted` issue is also skipped when its entire open-leaf subtree is
-  worktree-conflicted — every reachable open leaf already has a worktree owned by
-  another session — exactly as a directly-worktree'd issue is skipped; selection
-  falls through to the next tier. The tier emits the resolved startable leaf, so
-  a queue-selected `issue <num>` is always a directly-startable target.
+  The router acts only on the emitted line. The internal priority order (JIT →
+  `origin/main` health gate → topic-category × priority × phase ladder) and the
+  ladder mechanics are in reference.md (*Selection-ladder mechanics*).
 
 ## 4. Trace to an Open Leaf
 
-This step runs **only for an explicit `/dispatch-propagate <N>` argument**. A queue-selected
-`issue <num>` is already a resolved startable open leaf — `dispatch-select-target`
-traced it during selection — so re-tracing would just return the same leaf.
+This step runs **only for an explicit `/dispatch-propagate <N>` argument**; a
+queue-selected `issue <num>` is already a resolved startable open leaf.
 
 When the resolved target is an **explicitly-named open issue with no PR**, trace
 to its open leaf in `explicit` mode:
@@ -322,11 +196,10 @@ Skip leaf tracing when:
   ```bash
   .claude/skills/dispatch-propagate/scripts/dispatch-find-pr <N>
   ```
-  If it prints a PR number, implementation is already underway; skip leaf tracing.
-  This applies whether the target arrived as a `pr <num> <branch> <phase>` queue
-  result or as an explicit issue argument. **Do not infer PR existence from title
-  search or other ad-hoc `gh` queries** — `dispatch-find-pr` is the only correct
-  check (see Step 5).
+  If it prints a PR number, skip leaf tracing (whether the target arrived as a
+  `pr <num> <branch> <phase>` queue result or as an explicit issue argument).
+  **Do not infer PR existence from title search or other ad-hoc `gh` queries** —
+  `dispatch-find-pr` is the only correct check (see Step 5).
 
 If the resolved target issue `<N>` has any **open** blocker — run
 `issue-blocking <N>` and check for any entry with `state` `OPEN` — release the
@@ -371,8 +244,8 @@ an explicit `/dispatch-propagate` argument, otherwise `queue`:
 .claude/skills/dispatch-propagate/scripts/dispatch-resolve-worktree <N> <explicit|queue>
 ```
 
-It prints exactly one decision line — act on it. Each branch resolves to a
-worktree path that Step 6 will pass to `dispatch-spawn-worker`.
+It prints exactly one decision line — act on it. Each branch resolves a
+worktree path that Step 6 passes to `dispatch-spawn-worker`.
 
 - **`enter <path>`** → re-use an existing `<issue>-*` worktree
   (recycle-after-completion for an explicit argument, or recycle of an orphan
@@ -387,35 +260,29 @@ worktree path that Step 6 will pass to `dispatch-spawn-worker`.
   (cd <path> && .claude/skills/dispatch-propagate/scripts/sync-issue-context <N>)
   ```
 
-- **`create <branch>`** → no worktree exists. The router materializes it
-  explicitly. The `WorktreeCreate` hook does not fire on this path; this step
-  takes over the hook's responsibilities for the dispatch-chain case.
+- **`create <branch>`** → no worktree exists; the router materializes it
+  explicitly (the `WorktreeCreate` hook does not fire here, so this step takes
+  over its responsibilities):
 
-  1. Resolve the worktree path. The project root is the parent of
-     `--git-common-dir` (same idiom `dispatch-acquire-lock` and the hook use):
+  1. Resolve the worktree path (project root is the parent of `--git-common-dir`):
      ```bash
      GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir)
      PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
      WORKTREE_PATH="$PROJECT_ROOT/worktrees/<branch>"
      ```
-  2. Create the worktree from `origin/main` so the new branch is current:
+  2. Create the worktree from `origin/main` (sandbox-allowed under `worktrees/`;
+     see `.claude/rules/sandbox.md`):
      ```bash
      git worktree add -b <branch> "$WORKTREE_PATH" origin/main
      ```
-     This is sandbox-allowed under `worktrees/` and `.bare/worktrees/` — see
-     `.claude/rules/sandbox.md`.
   3. Authorize and pre-evaluate `.envrc` for the new tree
-     (`dangerouslyDisableSandbox: true` — direnv writes to its on-disk cache
-     outside the sandbox-allowlist):
+     (`dangerouslyDisableSandbox: true` — direnv writes its on-disk cache):
      ```bash
      direnv allow "$WORKTREE_PATH"
      direnv exec "$WORKTREE_PATH" true
      ```
-     `direnv allow` whitelists the `.envrc`; `direnv exec` pre-evaluates it so
-     direnv's on-disk cache is populated. Without this cache-warming step,
-     non-interactive subshells in the worker session (Bash tool calls) cannot
-     pick up the flake environment — `node`, `npm`, `npx`, and the TypeScript
-     compiler are missing from `PATH`.
+     `direnv allow` whitelists the `.envrc`; `direnv exec` warms the cache so the
+     worker's Bash calls pick up the flake env (`node`, `npm`, `npx`, `tsc`).
   4. Populate `CLAUDE.local.md` with full issue context
      (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`):
      ```bash
@@ -448,38 +315,19 @@ wrapper `cd`s into the target worktree, writes the recovery marker
 releases the lock in one step (see *Releasing the lock*). The worker in Step 6
 onward runs lock-free.
 
-The marker is the canonical "Step 5 completed" signal, read by the lock script
-as the post-Step-5 reclaim signal (see *Releasing the lock*). Context-clear
-recovery does **not** read it: `restore-dispatch-skill.sh` (bound to
-`SessionStart:clear`) keys on the session's `--name` shape (`<N>-<slug>` for
-workers) and emits `/dispatch-worker <N> <worktree-path>` so the worker
-re-derives the phase from PR/CI ground truth.
-`.claude/hooks/worktree-create.sh` also writes the marker as its final action
-on every successful worktree creation, so a fresh worktree is marker-bearing
-the moment the hook returns — the in-skill defense for any code path that
-bypasses the hook. The router itself never writes the marker into its own cwd
-(`worktrees/main`), so a `SessionStart:clear` there is a no-op — correct,
-since the router is short-lived and re-seeded by the #725 cap-keyed re-seed
-when a cap stall ends the chain. The marker is an empty boolean flag with no
-payload; it persists for the worktree's life and needs no cleanup — `tmp/` is
-git-ignored, and removing the worktree removes it.
+The marker is the canonical "Step 5 completed" signal used by the lock script's
+post-Step-5 reclaim path; see reference.md (*Step 5 marker deep dive*).
 
 ## 6. Spawn the Worker
 
-Spawn a `/dispatch-worker <N> <worktree-path>` background job. The
-`dispatch-spawn-worker` script runs from the router's own cwd
-(`worktrees/main` — the router stays anchored there), but spawns `claude --bg`
-with cwd = `<worktree-path>` via a subshell `cd`, so the worker is born in its
-target worktree. Trade-off: the Claude daemon's "+ new session" launcher
-default cwd tracks the most-recent worker's worktree rather than
-`worktrees/main` — a recoverable UI default, accepted in exchange for
-sessions whose cwd does not silently drift. The previous arrangement — where
-the worker `cd`'d in its own Step 0 — silently broke when subsequent `Bash` /
-`Skill` calls reset cwd back to the spawn cwd.
+Spawn a `/dispatch-worker <N> <worktree-path>` background job.
+`dispatch-spawn-worker` runs from the router's cwd (`worktrees/main`) but spawns
+`claude --bg` with cwd = `<worktree-path>`, so the worker is born in its target
+worktree (see reference.md *Step 6 spawn-cwd trade-off*).
 
 Before anything else in this step, run the **CI-status gate**. Derive the
 target's phase with `dispatch-phase <N>` (`dangerouslyDisableSandbox: true` —
-it calls `gh`, same as the other `gh`-calling script invocations):
+it calls `gh`):
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-phase <N>
@@ -488,8 +336,8 @@ it calls `gh`, same as the other `gh`-calling script invocations):
 - If it returns `waiting` — the target's CI is still in progress — **skip the
   spawn for this tick**. Do not consult the concurrency budgeter and do not run
   `dispatch-spawn-worker`. Do **not** release the lock: it is already released
-  at the end of Step 5 (#898), so — exactly like the concurrency-cap gate —
-  this gate is lock-free. Print the mandatory user-visible report verbatim:
+  at the end of Step 5, so — exactly like the concurrency-cap gate — this gate
+  is lock-free. Print the mandatory user-visible report verbatim:
 
   ```
   #<N>: CI in progress; the next router tick will re-evaluate.
@@ -497,15 +345,12 @@ it calls `gh`, same as the other `gh`-calling script invocations):
 
   Then proceed to Step 7 with disposition `drain ci-waiting`.
 - Otherwise — any non-`waiting` phase — fall through to the concurrency-budget
-  gate and the spawn below, unchanged.
+  gate and the spawn below.
 
-Before spawning, consult the
-concurrency budgeter (see
-*Concurrency budgeting* below). If the live worker count already meets the
-target, **skip the spawn** for this tick — the chain re-seeds on the next
-router tick when budget reopens. Run with `dangerouslyDisableSandbox: true` —
-both the budgeter and `lib-claude-agents.sh` reach the local Claude daemon over
-a socket; see `.claude/rules/sandbox.md`:
+Before spawning, consult the concurrency budgeter (see reference.md
+*Concurrency budgeting*); if the live worker count already meets the target,
+**skip the spawn** for this tick. Run with `dangerouslyDisableSandbox: true`
+(budgeter + `lib-claude-agents.sh` socket query; see `.claude/rules/sandbox.md`):
 
 ```bash
 source .claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh
@@ -513,130 +358,40 @@ TARGET_N=$(.claude/skills/dispatch-propagate/scripts/dispatch-target-workers)
 if LIVE_COUNT=$(claude_agents_count_by_name_prefix dispatch-worker-); then
   if (( LIVE_COUNT >= TARGET_N )); then
     echo "router: skipping spawn — $LIVE_COUNT live worker(s) >= target $TARGET_N (drain concurrency-cap)"
-    # Skip-over-cap is `drain concurrency-cap`. Before proceeding to Step 7,
-    # schedule the cap-keyed re-seed so the chain resumes at the next
-    # rate-limit window reset (see *The #725 cap-keyed re-seed* below).
+    # drain concurrency-cap: schedule the cap-keyed re-seed (see Step 7), then go to Step 7.
     .claude/skills/dispatch-propagate/scripts/dispatch-schedule-reseed
   else
     .claude/skills/dispatch-propagate/scripts/dispatch-spawn-worker <N> "$WORKTREE_PATH"
   fi
 else
-  # UNKNOWN — daemon query failed. Fail open and proceed to spawn; the
-  # per-worktree dedup inside dispatch-spawn-worker is the last-line
-  # defense if a worker is already there.
+  # UNKNOWN — daemon query failed. Fail open; dispatch-spawn-worker's dedup is the last-line defense.
   .claude/skills/dispatch-propagate/scripts/dispatch-spawn-worker <N> "$WORKTREE_PATH"
 fi
 ```
 
-When the spawn is skipped because the live worker count already meets the
-target (`drain concurrency-cap`), the chain is paused with work waiting and
-will not advance until the cap window reopens. `dispatch-schedule-reseed`
-writes a transient `systemd.user` timer that fires at the next rate-limit
-`resets_at` to re-seed the chain at the precise moment the cap reopens — see
-*The #725 cap-keyed re-seed* below. The script invokes `systemd-run --user`,
-which talks to user systemd over D-Bus, so the outer Bash call's
-`dangerouslyDisableSandbox: true` (above) covers this requirement.
+On the skip path, `dispatch-schedule-reseed` re-seeds the chain when the cap
+window reopens (see *The #725 cap-keyed re-seed* below).
 
-`dispatch-spawn-worker` prints `spawned` (a worker was started) or `deduped`
-(another live worker already has the worktree-basename `--name` — the
-per-worktree invariant prevents two workers from racing on the same worktree)
-and exits 0; it exits non-zero when a worker was spawned but did not register.
-
-The router never derives the phase, runs a phase skill, or invokes the
-pre-implementation relevance review — those are the worker's responsibilities
-(`/dispatch-worker` Steps 1–3).
+`dispatch-spawn-worker` prints `spawned` or `deduped` (per-worktree invariant —
+see reference.md *Per-worktree invariant*) and exits 0; it exits non-zero when a
+worker was spawned but did not register. The router never derives the phase,
+runs a phase skill, or invokes the pre-implementation relevance review — those
+are the worker's responsibilities (`/dispatch-worker` Steps 1–3).
 
 After the spawn (or skip) returns, **proceed to Step 7** (terminal disposition).
-
-### Concurrency budgeting
-
-`dispatch-target-workers` composes two **headroom-driven** linear ramps —
-one per axis (weekly and 5h) — and combines them with `min` to decide how
-many concurrent `dispatch-worker-*` sessions should run:
-
-```
-ramp(headroom_pp, taper_window_pp):
-  if headroom_pp <  0:                return 0
-  if headroom_pp >= taper_window_pp:  return max_workers
-  return max(1, round(max_workers * headroom_pp / taper_window_pp))
-
-target_N = min(
-  ramp(target_weekly - used_weekly, weekly_taper_window_pct),
-  ramp(target_5h     - used_5h,     five_hour_taper_window_pct),
-)
-```
-
-Each ramp returns `max_workers` while headroom comfortably exceeds the
-taper window, tapers linearly toward `1` as headroom approaches zero, floors
-at `1` when headroom is exactly zero, and returns `0` only when actual usage
-has crossed the configured target. The floor at `headroom == 0` prevents the
-`0 >= 0` deadlock the previous time-based ramp produced against Step 6's
-`LIVE_COUNT >= TARGET_N` gate — `target_N=0` now requires `used > target`.
-
-- **Weekly axis** (defaults: `target_weekly_usage_pct=90`,
-  `weekly_taper_window_pct=30`, `max_workers=8`):
-
-  | used_weekly (%) | headroom (pp) | target_N |
-  |---:|---:|---:|
-  | 60 | 30 | 8 |
-  | 70 | 20 | 5 |
-  | 80 | 10 | 3 |
-  | 85 |  5 | 1 |
-  | 89 |  1 | 1 |
-  | 90 |  0 | 1 |
-  | 91 | -1 | 0 |
-
-- **5-hour axis** (defaults: `target_five_hour_usage_pct=50`,
-  `five_hour_taper_window_pct=15`, `max_workers=8`):
-
-  | used_5h (%) | headroom (pp) | target_N |
-  |---:|---:|---:|
-  |  0 | 50 | 8 |
-  | 35 | 15 | 8 |
-  | 40 | 10 | 5 |
-  | 45 |  5 | 3 |
-  | 49 |  1 | 1 |
-  | 50 |  0 | 1 |
-  | 51 | -1 | 0 |
-
-Tunables (each optional in `dispatch.config/target-workers.json`; defaults
-baked into the script):
-
-| Field | Default | Meaning |
-|---|---|---|
-| `target_weekly_usage_pct` | 90 | Weekly ramp returns 0 when `used_weekly` strictly exceeds this; returns the floor of 1 when `used_weekly` equals it (headroom = 0). |
-| `target_five_hour_usage_pct` | 50 | Same semantics for the 5h axis. |
-| `max_concurrent_workers` | 8 | Value each ramp returns when headroom comfortably exceeds its taper window. |
-| `weekly_taper_window_pct` | 30 | Headroom band (percentage points) over which the weekly ramp tapers linearly from `max_workers` down to its floor of 1. |
-| `five_hour_taper_window_pct` | 15 | Same band for the 5h ramp. |
-
-Recalibration: narrow a taper window (e.g. `weekly_taper_window_pct=10`) to
-hold full speed until close to the cap and then taper sharply down to the
-floor; widen it to ease off concurrency earlier. Raise `target_*_usage_pct`
-to push closer to the cap before any taper kicks in. Raise
-`max_concurrent_workers` for more parallelism when headroom is comfortable on
-both axes.
-
-**Missing-telemetry fallback.** When
-`~/.local/share/productivity-tui/rate_limits.json` is missing or unreadable,
-`dispatch-target-workers` prints `1` and writes a one-line note to stderr,
-so the chain degrades to today's "spawn one per tick" behavior. The same
-fallback applies when the `seven_day` block is absent (no weekly headroom
-anchor); a missing `five_hour` block alone disables the 5h ramp but the
-weekly ramp still applies.
+The budgeter's pace-relative pipeline, tunables, and missing-telemetry
+fallback are detailed in reference.md (*Concurrency budgeting*).
 
 ## 7. Terminal Disposition
 
 The router's tick ends here. The disposition that routed it here determines
 the action.
 
-**Invariant**: the only silent terminal path is `propagate` on success.
-Every other terminal disposition — `propagate` falling through to `notify
-spawn-failed` on a failed spawn, every `notify <reason>` variance, every
-`drain <reason>` no-work case — emits a user-visible report before the
-session ends (before `dispatch-self-close` for `drain` and `propagate`;
-before this turn's text output completes for `notify`, which does not
-self-close). A silent `notify` or silent `drain` is a defect.
+**Invariant**: the only silent terminal path is `propagate` on success. Every
+other terminal disposition emits a user-visible report before the session ends
+(before `dispatch-self-close` for `drain` and `propagate`; before this turn's
+text output completes for `notify`, which does not self-close). A silent
+`notify` or silent `drain` is a defect.
 
 The three dispositions:
 
@@ -675,7 +430,7 @@ The three dispositions:
   `dispatch-phase` returned `waiting`; the chain re-evaluates the PR on the
   next router tick), or `drain concurrency-cap` (Step 6, `live_count >=
   target_N` — the chain re-seeds when the cap-keyed timer fires at the next
-  rate-limit window reset; see *The #725 cap-keyed re-seed* above). The call site has already printed a **mandatory** user-visible
+  rate-limit window reset; see *The #725 cap-keyed re-seed* below). The call site has already printed a **mandatory** user-visible
   report stating the reason and the recovery path (templates live at the
   Step 3, Step 5, and Step 6 call sites). Then self-close
   (`dangerouslyDisableSandbox: true`):
@@ -684,43 +439,19 @@ The three dispositions:
   .claude/skills/dispatch-propagate/scripts/dispatch-self-close
   ```
 
-`dispatch-self-close` removes the managed background job by its job-id (the
-basename of `$CLAUDE_JOB_DIR`). It is a no-op when `CLAUDE_JOB_DIR` is unset
-(the session is interactive, not a managed background job) — so an
-interactive `/dispatch-propagate` reaching Step 7 does not stop the user's live
-conversation.
+`dispatch-self-close` removes the managed background job by its job-id; it is a
+no-op when `CLAUDE_JOB_DIR` is unset (interactive session), so an interactive
+`/dispatch-propagate` reaching Step 7 does not stop the user's conversation.
 
-Step 3's `jit-reminder` outcome does not reach Step 7 — it is a deliberate
-bypass, since its user-visible summary must stay open in the transcript for a
-human to read, so the skill stops the tick directly.
-
-The router does **not** spawn a successor `/dispatch-propagate` itself — the
-worker's Stop hook (`.claude/hooks/dispatch-stop.sh`) spawns a fresh router
+Step 3's `jit-reminder` outcome does not reach Step 7 — it stops the tick
+directly. The router does **not** spawn a successor `/dispatch-propagate` itself;
+the worker's Stop hook (`.claude/hooks/dispatch-stop.sh`) spawns a fresh router
 back in `worktrees/main` when the worker session ends.
 
 ### The #725 cap-keyed re-seed
 
-The #725 cap-keyed re-seed is the chain's resume-from-cap-stall mechanism.
-When a tick's Step 6 decides to skip the spawn because the live worker count
-already meets the budgeter's target, that means the rate-limit cap closed
-the budget — `dispatch-target-workers` reads
-`~/.local/share/productivity-tui/rate_limits.json` and returns 0 when
-`used_percentage >= target` on either the weekly or the 5-hour window. The
-chain pauses with work waiting; the only thing that unblocks it is the cap
-window resetting.
-
-`dispatch-schedule-reseed` (invoked from Step 6's spawn-skip) reads the same
-telemetry, computes the earliest blocking `resets_at`, and writes a
-transient `systemd.user` timer (`dispatch-reseed-<resets_at>`) that fires at
-that time and runs `dispatch-spawn-router` from the main worktree. The unit
-name embeds the epoch, so a repeated call observing the same blocking cap
-collides on the unit name and is a no-op — idempotent across the many ticks
-that may observe the same stall.
-
-This mechanism only covers the cap-stall class of stall. **Empty-queue and
-all-parked stalls** are handled by the office-hours queue (#755 / #757 /
-#758): when a human engages an `office-hours`-labeled item, the Step 4
-hand-off returns it to the dispatch chain and re-seeds from human action.
-A weekly fallback heartbeat for the edge case of a manual issue filed while
-the chain is stalled with no live session to receive it can be added in a
-follow-up if it matters in practice.
+The chain's resume-from-cap-stall mechanism: when Step 6 skips the spawn at a
+rate-limit cap, `dispatch-schedule-reseed` writes a transient `systemd.user`
+timer keyed on the blocking window's `resets_at` to re-seed the chain when the
+cap reopens. See reference.md (*The #725 cap-keyed re-seed*) for the full
+mechanism, idempotency, and the office-hours fallback for non-cap stalls.
