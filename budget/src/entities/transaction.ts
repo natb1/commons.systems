@@ -266,6 +266,7 @@ export function transactionToRawJson(t: IdbTransaction): RawTransaction {
     normalizedId: t.normalizedId,
     normalizedPrimary: t.normalizedPrimary,
     normalizedDescription: t.normalizedDescription,
+    virtual: t.virtual,
   };
 }
 
