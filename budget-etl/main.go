@@ -14,6 +14,7 @@ import (
 
 	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 	"github.com/natb1/commons.systems/budget-etl/internal/export"
+	"github.com/natb1/commons.systems/budget-etl/internal/journal"
 	"github.com/natb1/commons.systems/budget-etl/internal/parse"
 	"github.com/natb1/commons.systems/budget-etl/internal/password"
 	"github.com/natb1/commons.systems/budget-etl/internal/rules"
@@ -176,6 +177,14 @@ func runOutputJSON(allTxns []budget.TransactionData, allStmts []budget.Statement
 
 	exportStmts := buildExportStatements(allStmts)
 
+	result := journal.Build(allTxns, journal.DefaultPairWindow)
+	for i := range exportTxns {
+		if id, ok := result.EntryIDByDocID[exportTxns[i].ID]; ok {
+			idCopy := id
+			exportTxns[i].JournalEntryID = &idCopy
+		}
+	}
+
 	out := export.Output{
 		Version:            1,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
@@ -187,12 +196,16 @@ func runOutputJSON(allTxns []budget.TransactionData, allStmts []budget.Statement
 		Rules:              []export.Rule{},
 		NormalizationRules: []export.NormalizationRule{},
 		WeeklyAggregates:   []export.WeeklyAggregate{},
+		JournalEntries:     result.Entries,
+		JournalLegs:        result.Legs,
+		Accounts:           result.Accounts,
 	}
 
 	if err := export.WriteFile(output.path, out, output.password); err != nil {
 		return fmt.Errorf("writing output file: %w", err)
 	}
-	log.Printf("wrote %d transactions, %d statements to %s", len(exportTxns), len(exportStmts), output.path)
+	log.Printf("wrote %d transactions, %d statements, %d journal entries, %d legs, %d accounts to %s",
+		len(exportTxns), len(exportStmts), len(result.Entries), len(result.Legs), len(result.Accounts), output.path)
 	return nil
 }
 
@@ -428,6 +441,14 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	// Append pet budget if virtual Synchrony transactions exist
 	budgets := appendPetBudgetIfNeeded(inp.Budgets, vsr.transactions)
 
+	result := journal.Build(allTxns, journal.DefaultPairWindow)
+	for i := range exportTxns {
+		if id, ok := result.EntryIDByDocID[exportTxns[i].ID]; ok {
+			idCopy := id
+			exportTxns[i].JournalEntryID = &idCopy
+		}
+	}
+
 	return writeOutputAndLog(output, export.Output{
 		Version:            inp.Version,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
@@ -440,6 +461,9 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 		Rules:              inp.Rules,
 		NormalizationRules: inp.NormalizationRules,
 		WeeklyAggregates:   weeklyAggregates,
+		JournalEntries:     result.Entries,
+		JournalLegs:        result.Legs,
+		Accounts:           result.Accounts,
 	})
 }
 
@@ -711,8 +735,9 @@ func writeOutputAndLog(output fileOpts, out export.Output) error {
 			normalized++
 		}
 	}
-	log.Printf("wrote %d transactions (%d categorized, %d budgeted, %d non-primary normalized), %d budget periods to %s",
-		len(out.Transactions), categorized, budgeted, normalized, len(out.BudgetPeriods), output.path)
+	log.Printf("wrote %d transactions (%d categorized, %d budgeted, %d non-primary normalized), %d budget periods, %d journal entries, %d legs, %d accounts to %s",
+		len(out.Transactions), categorized, budgeted, normalized, len(out.BudgetPeriods),
+		len(out.JournalEntries), len(out.JournalLegs), len(out.Accounts), output.path)
 	return nil
 }
 
@@ -1119,6 +1144,14 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 	// Append pet budget if virtual Synchrony transactions exist
 	budgets := appendPetBudgetIfNeeded(inp.Budgets, vsr.transactions)
 
+	result := journal.Build(allTxns, journal.DefaultPairWindow)
+	for i := range exportTxns {
+		if id, ok := result.EntryIDByDocID[exportTxns[i].ID]; ok {
+			idCopy := id
+			exportTxns[i].JournalEntryID = &idCopy
+		}
+	}
+
 	return writeOutputAndLog(output, export.Output{
 		Version:            inp.Version,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
@@ -1131,6 +1164,9 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 		Rules:              inp.Rules,
 		NormalizationRules: inp.NormalizationRules,
 		WeeklyAggregates:   weeklyAggregates,
+		JournalEntries:     result.Entries,
+		JournalLegs:        result.Legs,
+		Accounts:           result.Accounts,
 	})
 }
 
