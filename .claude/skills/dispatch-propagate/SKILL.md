@@ -100,6 +100,10 @@ Fast-forward local `main` to `origin/main` — no push (a no-op when already equ
 git fetch origin main && git merge --ff-only origin/main
 ```
 
+Run this Bash call with `dangerouslyDisableSandbox: true` — `origin/main` frequently
+carries `.claude/skills/**` changes, and a sandboxed merge touching those read-only paths
+partially applies (writable files written, HEAD unmoved); see `.claude/rules/sandbox.md`.
+
 - If `git fetch` fails, or `git merge --ff-only` rejects a non-fast-forward,
   release the lock (see *Releasing the lock*), surface the error, then proceed to
   Step 7 with `notify sync-failed` — do not proceed to target selection.
@@ -342,8 +346,10 @@ On every non-`conflict` (proceed) path — `enter` and `create` — merge
 `origin/main` into the resolved worktree before finalizing the selection. This
 ensures the worker session starts with up-to-date dispatch workflow instructions
 in the worktree's `.claude/` tree. The merge is **local only** — no push (see
-*Design* in `.claude/local.md`). Run the script sandboxed (`git fetch` and
-`git merge` work within the sandbox):
+*Design* in `.claude/local.md`). Run with `dangerouslyDisableSandbox: true` —
+`origin/main` frequently carries `.claude/skills/**` changes, and a sandboxed
+tree-updating merge touching those read-only paths partially applies (writable
+files written, HEAD unmoved); see `.claude/rules/sandbox.md`:
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-merge-main "$WORKTREE_PATH"
