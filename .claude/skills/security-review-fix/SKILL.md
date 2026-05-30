@@ -1,15 +1,15 @@
 ---
 name: security-review-fix
-description: Security phase — merge origin/main, fan out 9 parallel security subagents (6 domains, red team, built-in /security-review, CodeQL alerts), classify findings, apply the required fixes, post a PR comment, apply the dispatch:security-reviewed label, and mark the PR ready
+description: Security phase — fan out 9 parallel security subagents (6 domains, red team, built-in /security-review, CodeQL alerts), classify findings, apply the required fixes, post a PR comment, apply the dispatch:security-reviewed label, and mark the PR ready
 ---
 
 # Security Review and Fix
 
 The `security` phase of the issue workflow, dispatched by `/dispatch-propagate`. This skill
-owns the full structured security review for the dispatch workflow: merge current
-`main`, fan out 9 parallel security subagents directly, de-duplicate and classify
-their findings, implement the required fixes, commit and push, post a PR comment,
-apply the `dispatch:security-reviewed` label, and mark the PR ready.
+owns the full structured security review for the dispatch workflow: fan out 9
+parallel security subagents directly, de-duplicate and classify their findings,
+implement the required fixes, commit and push, post a PR comment, apply the
+`dispatch:security-reviewed` label, and mark the PR ready.
 
 This is the workflow's **terminal actionable phase** — it marks the PR ready
 itself, so there is no separate `ready` phase after it.
@@ -30,25 +30,19 @@ PR_NUM=$(echo "$PR_JSON" | jq -r .number)
 echo "$PR_JSON" | jq -r '.labels[].name'
 ```
 
-`PR_NUM` is carried through to Steps 5, 6, and 7 — do not re-resolve. If the PR
+`PR_NUM` is carried through to Steps 4, 5, and 6 — do not re-resolve. If the PR
 already carries the `dispatch:security-reviewed` label — an interrupted prior
-run — **skip Steps 1–6 entirely** and go straight to Step 7 to ensure the PR is
+run — **skip Steps 1–5 entirely** and go straight to Step 6 to ensure the PR is
 ready. Otherwise run all steps in order.
 
 ## Steps
 
-1. **Merge `origin/main` first.** Fork `/commit-merge-push` via the Agent tool to
-   merge current `main` into the branch. This first invocation runs with no
-   pending working-tree changes — `/commit-merge-push` tolerates that: it creates
-   no commit and only fetches, merges `origin/main`, and pushes. Reviewing against
-   current `main` avoids re-reviewing code `main` has already changed.
-
-2. **Fan out 9 parallel security subagents.** Review the branch's pending
+1. **Fan out 9 parallel security subagents.** Review the branch's pending
    changes — the diff against the merge-base with `origin/main` — by launching
    9 subagents directly in **a single message with 9 Agent tool calls**. Every
    subagent is a direct child of this skill; there is no intermediate orchestrator.
    Every subagent uses `subagent_type: general-purpose` and `model: sonnet`, and
-   every subagent emits findings in the **Per-finding schema** below — so Step 3
+   every subagent emits findings in the **Per-finding schema** below — so Step 2
    aggregates all nine outputs uniformly.
 
    First, capture the diff context every subagent needs. Git runs sandboxed —
@@ -66,7 +60,7 @@ ready. Otherwise run all steps in order.
    pass that fact to the CodeQL subagent so it reports "could not run" instead of
    fetching with an invalid ref.
 
-   If the diff is empty, skip the fan-out and continue to Step 3 with an empty
+   If the diff is empty, skip the fan-out and continue to Step 2 with an empty
    finding set (no required fixes).
 
    ### Shared preamble (in every subagent prompt)
@@ -112,7 +106,7 @@ ready. Otherwise run all steps in order.
    Skill tool inside the subagent and returns its output normalized to the
    **Per-finding schema**. The subagent boundary is the control-flow guarantee:
    the parent never sees the inner Skill's prompt template, so this skill
-   remains on Step 2 when the Agent call returns. The subagent passes the inner
+   remains on Step 1 when the Agent call returns. The subagent passes the inner
    skill no output contract. Keep the "once it returns, continue" wording
    inside the **subagent's** prompt as defense-in-depth for the inner Skill
    invocation; any "final reply" / "nothing else" wording in
@@ -179,27 +173,27 @@ ready. Otherwise run all steps in order.
    | `out-of-scope` | A genuine concern, but in pre-existing code the diff did not touch, or otherwise outside this PR's scope. |
    | `false-positive` | Not an actual vulnerability — a misread of the code or a non-issue. |
 
-   The classified finding set is the input to Step 3 and the audit trail for
-   the Step 5 PR comment.
+   The classified finding set is the input to Step 2 and the audit trail for
+   the Step 4 PR comment.
 
-3. **Apply the required fixes.** Implement fixes for the findings classified
-   `required` in Step 2 — launch implementation subagent(s) via the Agent tool,
+2. **Apply the required fixes.** Implement fixes for the findings classified
+   `required` in Step 1 — launch implementation subagent(s) via the Agent tool,
    constrained to **working-tree edits only — no commits, no pushes**. Choose
    each subagent's model per `/implement-unit`'s model-selection heuristic (see
    that skill — it is the canonical home; do not restate it here).
    `out-of-scope` and `false-positive` findings get no code change but are
-   still carried to the Step 5 PR comment with their disposition.
+   still carried to the Step 4 PR comment with their disposition.
 
-4. **Commit and push the fixes.** Fork `/commit-merge-push` via the Agent tool to
-   commit the Step 3 fixes and push. If Step 3 produced no code changes (no
+3. **Commit and push the fixes.** Fork `/commit-merge-push` via the Agent tool to
+   commit the Step 2 fixes and push. If Step 2 produced no code changes (no
    actionable findings), this invocation also runs with no pending changes —
    `/commit-merge-push` tolerates that and creates no commit.
 
-5. **Post a PR comment.** Reuse the `PR_NUM` captured in the preamble — do not
+4. **Post a PR comment.** Reuse the `PR_NUM` captured in the preamble — do not
    re-resolve.
 
    Write the comment body to a file under the repo's `tmp/` directory. The body
-   summarizes **every** finding from Step 2 and its disposition — fixed (with
+   summarizes **every** finding from Step 1 and its disposition — fixed (with
    the fix's commit SHA) or not fixed (with the reason). CodeQL-sourced findings
    are identified by their `rule.id` and alert `number`, linked via their
    `html_url`; there is no separate CodeQL listing. The body file **must** live
@@ -211,7 +205,7 @@ ready. Otherwise run all steps in order.
    .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
-6. **Apply the `dispatch:security-reviewed` label** via `dispatch-complete-phase`
+5. **Apply the `dispatch:security-reviewed` label** via `dispatch-complete-phase`
    (use `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash
@@ -228,7 +222,7 @@ ready. Otherwise run all steps in order.
    `/security-review`, which `/dispatch-propagate` cannot make dispatch-aware — so
    `/dispatch-propagate` does not apply the label after this skill returns.
 
-7. **Mark the PR ready.** Flip the draft to ready-for-review (use
+6. **Mark the PR ready.** Flip the draft to ready-for-review (use
    `dangerouslyDisableSandbox: true` — `gh` needs network):
 
    ```bash
@@ -237,12 +231,12 @@ ready. Otherwise run all steps in order.
 
    This is the workflow's terminal PR-state action.
 
-8. **Write the phase-completed marker (or park on deviation), then stop.**
+7. **Write the phase-completed marker (or park on deviation), then stop.**
 
    Check for deviation first: if any finding classified `required` with
-   Confidence `high` remains unresolved after the Step 3 fix pass, the
+   Confidence `high` remains unresolved after the Step 2 fix pass, the
    deviation criterion fires. `CLAUDE_JOB_DIR` unset = interactive run; skip
-   both branches. On idempotent re-entry (Steps 1–6 were skipped), the Step 3
+   both branches. On idempotent re-entry (Steps 1–5 were skipped), the Step 2
    finding set is not in context — treat the deviation criterion as not met and
    write the marker.
 
@@ -278,13 +272,13 @@ ready. Otherwise run all steps in order.
    ```
 
    Then **stop**. The Stop hook reads the marker and advances the chain.
-   `gh pr ready` (Step 7) is still the workflow's terminal *PR-state* action
+   `gh pr ready` (Step 6) is still the workflow's terminal *PR-state* action
    and runs regardless of deviation — only the marker is skipped when the
    deviation criterion fires.
 
 ## Per-finding schema
 
-Every finding — emitted by subagents in Step 2 and carried through to the
+Every finding — emitted by subagents in Step 1 and carried through to the
 classified set — has these fields:
 
 - **Location** — `path:line`.
@@ -300,11 +294,11 @@ classified set — has these fields:
 
 ## Edge cases
 
-- **Empty diff** — skip the fan-out and continue to Step 3 with no findings.
+- **Empty diff** — skip the fan-out and continue to Step 2 with no findings.
 - **A subagent finds nothing** — record that subagent as clean; it contributes
   no findings.
 - **A subagent fails** — re-launch it once. If it fails again, note partial
-  coverage in the Step 5 PR comment (name the subagent whose domain could not
+  coverage in the Step 4 PR comment (name the subagent whose domain could not
   be reviewed).
 - **`npm audit` sandbox or network failure** — retry the dependency-audit
   subagent's `npm audit` with `dangerouslyDisableSandbox: true`. If it still
@@ -317,14 +311,14 @@ classified set — has these fields:
 
 ## Notes
 
-Marking the PR ready (Step 7) is the workflow's terminal PR-state action;
-writing the phase-completed marker (Step 8) is the dispatch chain's hand-off
+Marking the PR ready (Step 6) is the workflow's terminal PR-state action;
+writing the phase-completed marker (Step 7) is the dispatch chain's hand-off
 cue. After this change the dispatch workflow has no human checkpoint before a PR
 goes ready — the per-phase PR-comment summaries are the audit trail. This is an
 intentional trade-off for an autonomous `/dispatch-propagate` background-job run.
 
 The skill is idempotent: a re-invocation with `dispatch:security-reviewed` already
-on the PR skips Steps 1–6, ensures the PR is ready (Step 7), and then runs the
-deviation check at Step 8. On re-entry the Step 3 finding set is not in context;
+on the PR skips Steps 1–5, ensures the PR is ready (Step 6), and then runs the
+deviation check at Step 7. On re-entry the Step 2 finding set is not in context;
 treat the deviation criterion as not met (no unresolved findings visible) and
 write the phase-completed marker.

@@ -31,8 +31,8 @@ planning and `/implement-unit`'s build procedure.
 dispatch is already present in context (typical after
 `showClearContextOnPlanAccept` fires — the user accepted the bug-fix plan and the
 context was cleared, causing `restore-dispatch-skill.sh` to re-enter
-`/dispatch-worker` → `/dispatch-qa`), **skip the QA walkthrough** — Step 0.5 and Steps 1–4 — and
-resume directly at the build loop (Step 5, sub-step 3: build each unit via
+`/dispatch-worker` → `/dispatch-qa`), **skip the QA walkthrough** — Steps 1–4 —
+and resume directly at the build loop (Step 5, sub-step 3: build each unit via
 `/implement-unit`). Step 0 (target resolution) still runs: it re-establishes the
 issue number `<N>` and confirms the worktree from the current branch. The plan
 persists across context clears, so the unit list remains visible even though the
@@ -88,19 +88,6 @@ The QA pass covers **public data only** — documents present in both the QA ser
 
    `<N>` is the issue number used by the remaining steps for their `tmp/`
    filenames.
-
-0.5. **Merge `origin/main` into the working branch.**
-
-   Before the QA walkthrough begins, invoke `/commit-merge-push` via the Skill tool
-   so the QA pass runs against a branch current with `main` rather than stale state.
-
-   - With no pending working-tree changes, `/commit-merge-push` creates no commit —
-     it only fetches, merges `origin/main`, and pushes.
-   - If `/commit-merge-push` reports a **merge conflict**, surface it to the user
-     and **stop** — do not begin the QA walkthrough.
-
-   This step runs on all three invocation paths. Skip it only when the idempotency
-   guard fires (a bug-fix plan is already in context).
 
 1. **Detect whether the implementation has a browser component.**
 
