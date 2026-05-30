@@ -104,7 +104,7 @@ jobs:
           cache: 'npm'
       - name: Install workspace dependencies
         if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
-        run: npm ci
+        run: .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
       - name: Verify nix playwright-driver chromium matches npm @playwright/test
         if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
         run: nix develop --command .github/scripts/check-playwright-version-sync.sh
