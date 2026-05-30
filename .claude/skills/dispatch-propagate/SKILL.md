@@ -27,9 +27,10 @@ them:
    target — a call to `dispatch-materialize-spawn`.
 3. `dispatch-materialize-spawn` — runs the explicit-path guards, resolves the
    worktree, merges `origin/main` into it (so the worker reads up-to-date skill
-   files), releases the lock, gates on CI and the concurrency budget, and spawns
-   the worker. Emits one **terminal token** (Table 2). A merge conflict is handed
-   back for an auto-resolve attempt (§2a), not parked by the script.
+   files), writes the recovery marker, gates on CI and the concurrency budget,
+   spawns the worker, and releases the lock after the worker registers (#945).
+   Emits one **terminal token** (Table 2). A merge conflict is handed back for an
+   auto-resolve attempt (§2a), not parked by the script.
 
 Run `/dispatch-propagate` from any worktree; selection ignores cwd. The router
 never enters a worktree. Run **every** Bash call here with
@@ -88,7 +89,8 @@ For a real target, call (with `dangerouslyDisableSandbox: true`):
 derived above — never the PR number). The script prints supporting detail (a
 path, a blocker list, the CI line) and the **terminal token** as its last line.
 The lock disposition is again the script's responsibility — it releases the lock
-at every stop and via `dispatch-finalize-selection` on the proceed path. Route
+at every stop, and on the proceed path only after the spawned worker has
+registered (#945), so the next tick cannot re-select during the boot gap. Route
 on the token (Table 2).
 
 ### Table 2 — routing the materialize-spawn terminal token
