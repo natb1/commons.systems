@@ -4728,6 +4728,60 @@ out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); r
 assert_eq "max_concurrent_workers 200 exits 0 (no upper bound)" "0" "$rc"
 config_teardown
 
+# --- Test 13c: weekly_increment_floor_pct > cap rejected (cross-field) -------
+
+echo "Test: weekly_increment_floor_pct > weekly_increment_cap_pct exits 1"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_increment_floor_pct": 20, "weekly_increment_cap_pct": 5}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "floor > cap exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"weekly_increment_floor_pct"* && "$err" == *"<= weekly_increment_cap_pct"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: floor > cap stderr names the ordering rule"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: floor > cap stderr names the ordering rule"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 13d: floor == cap accepted; only floor-alone (default cap) accepted -
+
+echo "Test: weekly_increment_floor_pct == cap accepted; floor alone accepted"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_increment_floor_pct": 5, "weekly_increment_cap_pct": 5}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "floor == cap exits 0" "0" "$rc"
+# Cross-check only fires when both are present: floor alone (cap defaulted) is
+# not flagged here, by design — the validator does not know the script default.
+echo '{"weekly_increment_floor_pct": 50}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "floor alone (cap absent) exits 0" "0" "$rc"
+config_teardown
+
+# --- Test 13e: five_hour_target_floor_pct > ceiling rejected (cross-field) ---
+
+echo "Test: five_hour_target_floor_pct > five_hour_target_ceiling_pct exits 1"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"five_hour_target_floor_pct": 80, "five_hour_target_ceiling_pct": 50}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "floor5 > ceil5 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"five_hour_target_floor_pct"* && "$err" == *"<= five_hour_target_ceiling_pct"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: floor5 > ceil5 stderr names the ordering rule"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: floor5 > ceil5 stderr names the ordering rule"
+  echo "    stderr: $err"
+fi
+config_teardown
+
 # ============================================================================
 # dispatch-target-workers tests
 # ============================================================================

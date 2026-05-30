@@ -82,8 +82,9 @@
 #   print N
 #
 # - The weekly increment d(x)=floor+(end-floor)*x^p rises from the floor toward
-#   (but clamped at) the cap; W reaches target_weekly only at x=1 (week end),
-#   never before.
+#   (but clamped at) the cap; W reaches target_weekly at x=1 (week end) and
+#   stays below it for every x<1 — except when wcap clamps the per-window
+#   increment, which deliberately holds W(1) below target_weekly.
 # - F=0 when ahead of pace (used_weekly >= W); the floor5..ceil5 band opens
 #   with weekly headroom.
 # - N=0 only at/over the 5h target F (includes the F=0 ahead-of-pace pause);

@@ -94,7 +94,10 @@
 # field must be a number when present; absent fields fall back to the
 # defaults baked into `dispatch-target-workers`. The seven percentage fields
 # must be in (0, 100]; weekly_curve_power and max_concurrent_workers must be
-# > 0 with no upper bound.
+# > 0 with no upper bound. When both members of a pair are present, two
+# cross-field ordering checks apply: weekly_increment_floor_pct <=
+# weekly_increment_cap_pct and five_hour_target_floor_pct <=
+# five_hour_target_ceiling_pct.
 #
 #   target_weekly_usage_pct        default 90   curve terminal W(1)
 #   weekly_increment_floor_pct     default 1    per-window floor
@@ -264,30 +267,50 @@ case "$CONFIG_TYPE" in
         "top-level value must be a JSON object, got \(type)"
       else
         . as $cfg |
-        ["target_weekly_usage_pct","weekly_increment_floor_pct",
-         "weekly_increment_cap_pct","weekly_curve_power",
-         "weekly_headroom_taper_pct","five_hour_target_floor_pct",
-         "five_hour_target_ceiling_pct","five_hour_headroom_taper_pct",
-         "max_concurrent_workers"] |
-        .[] |
-        . as $field |
-        # The percentage fields are bounded (0, 100]; the other two are
-        # unbounded above.
-        ([ "target_weekly_usage_pct","weekly_increment_floor_pct",
-           "weekly_increment_cap_pct","weekly_headroom_taper_pct",
-           "five_hour_target_floor_pct","five_hour_target_ceiling_pct",
-           "five_hour_headroom_taper_pct" ] | index($field)) as $is_pct |
-        if ($cfg | has($field)) | not then
-          empty
-        elif ($cfg[$field] | type) != "number" then
-          "\($field) must be a number if present, got \($cfg[$field] | type)"
-        elif $cfg[$field] <= 0 then
-          "\($field) must be > 0 if present, got \($cfg[$field])"
-        elif ($is_pct != null and $cfg[$field] > 100) then
-          "\($field) must be <= 100 if present, got \($cfg[$field])"
-        else
-          empty
-        end
+        (["target_weekly_usage_pct","weekly_increment_floor_pct",
+          "weekly_increment_cap_pct","weekly_curve_power",
+          "weekly_headroom_taper_pct","five_hour_target_floor_pct",
+          "five_hour_target_ceiling_pct","five_hour_headroom_taper_pct",
+          "max_concurrent_workers"] |
+         .[] |
+         . as $field |
+         # The percentage fields are bounded (0, 100]; the other two are
+         # unbounded above.
+         ([ "target_weekly_usage_pct","weekly_increment_floor_pct",
+            "weekly_increment_cap_pct","weekly_headroom_taper_pct",
+            "five_hour_target_floor_pct","five_hour_target_ceiling_pct",
+            "five_hour_headroom_taper_pct" ] | index($field)) as $is_pct |
+         if ($cfg | has($field)) | not then
+           empty
+         elif ($cfg[$field] | type) != "number" then
+           "\($field) must be a number if present, got \($cfg[$field] | type)"
+         elif $cfg[$field] <= 0 then
+           "\($field) must be > 0 if present, got \($cfg[$field])"
+         elif ($is_pct != null and $cfg[$field] > 100) then
+           "\($field) must be <= 100 if present, got \($cfg[$field])"
+         else
+           empty
+         end),
+        # Cross-field ordering checks. Only fire when both members of a pair
+        # are explicitly present and numeric — absent fields fall back to the
+        # baked-in script defaults, which the validator does not know. An
+        # inverted floor/ceiling pair otherwise validates field-by-field yet
+        # silently breaks the pace curve (floor > cap spikes W; floor5 > ceil5
+        # inverts the F band).
+        (if ($cfg | has("weekly_increment_floor_pct"))
+            and ($cfg | has("weekly_increment_cap_pct"))
+            and ($cfg.weekly_increment_floor_pct | type) == "number"
+            and ($cfg.weekly_increment_cap_pct | type) == "number"
+            and ($cfg.weekly_increment_floor_pct > $cfg.weekly_increment_cap_pct)
+         then "weekly_increment_floor_pct must be <= weekly_increment_cap_pct, got floor \($cfg.weekly_increment_floor_pct) > cap \($cfg.weekly_increment_cap_pct)"
+         else empty end),
+        (if ($cfg | has("five_hour_target_floor_pct"))
+            and ($cfg | has("five_hour_target_ceiling_pct"))
+            and ($cfg.five_hour_target_floor_pct | type) == "number"
+            and ($cfg.five_hour_target_ceiling_pct | type) == "number"
+            and ($cfg.five_hour_target_floor_pct > $cfg.five_hour_target_ceiling_pct)
+         then "five_hour_target_floor_pct must be <= five_hour_target_ceiling_pct, got floor \($cfg.five_hour_target_floor_pct) > ceiling \($cfg.five_hour_target_ceiling_pct)"
+         else empty end)
       end
     ' "$CONFIG_FILE")
     ;;

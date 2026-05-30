@@ -558,8 +558,12 @@ print N
 ```
 
 - The weekly increment `d(x) = floor + (end-floor)*x^p` rises from the floor
-  toward (but clamped at) the cap; `W` reaches `target_weekly` only at `x=1`
-  (week end), never before.
+  toward (but clamped at) the cap; `W` reaches `target_weekly` at `x=1`
+  (week end) and stays below it for every `x<1`. The exception is when
+  `weekly_increment_cap_pct` clamps the per-window increment: the cap holds the
+  terminal `W(1)` below `target_weekly` (a deliberate hard ceiling), so at the
+  defaults `W(1)=90` only because the solved increment `end≈4.3` stays under
+  the `cap=10`.
 - `F=0` when ahead of pace (`used_weekly >= W`); the `floor5..ceil5` band opens
   with weekly headroom.
 - `N=0` only at/over the 5h target F (includes the `F=0` ahead-of-pace pause);
@@ -598,7 +602,7 @@ baked into the script):
 
 | Key | Default | Role |
 |---|---:|---|
-| `target_weekly_usage_pct` | 90 | curve terminal W(1) |
+| `target_weekly_usage_pct` | 90 | curve terminal W(1), unless `weekly_increment_cap_pct` clamps it lower |
 | `weekly_increment_floor_pct` | 1 | per-window floor |
 | `weekly_increment_cap_pct` | 10 | per-window hard ceiling |
 | `weekly_curve_power` (`p`) | 1 | convexity; >1 back-loads spend later in the week |
