@@ -52,6 +52,7 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-resolve-arg" "$TMPDIR_TEST/dispatch-resolve-arg"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
+  cp "$SCRIPT_DIR/dispatch-check-blockers" "$TMPDIR_TEST/dispatch-check-blockers"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   cp "$SCRIPT_DIR/dispatch-apply-office-hours" "$TMPDIR_TEST/dispatch-apply-office-hours"
   cp "$SCRIPT_DIR/dispatch-resolve-worktree" "$TMPDIR_TEST/dispatch-resolve-worktree"
@@ -74,6 +75,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
+           "$TMPDIR_TEST/dispatch-check-blockers" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
            "$TMPDIR_TEST/dispatch-apply-office-hours" \
            "$TMPDIR_TEST/dispatch-resolve-worktree" \
@@ -182,6 +184,14 @@ case "$args" in
   api\ */dependencies/blocked_by)
     path=$(echo "$args" | awk '{print $2}')
     num=$(echo "$path" | grep -oE '[0-9]+' | tail -1)
+    # Failure injection: a marker file models a transient gh API failure on this
+    # issue's blocked_by lookup (mirrors the issue-blocking fake's contract), so
+    # count_open_blockers callers (e.g. dispatch-check-blockers) can exercise the
+    # gh_api_array failure path.
+    if [[ -f "$STUB_DIR/gh-fail-blocked_by-${num}" ]]; then
+      echo "gh: API error on issues/${num}/dependencies/blocked_by" >&2
+      exit 1
+    fi
     if [[ -f "$STUB_DIR/blockers-${num}.json" ]]; then
       cat "$STUB_DIR/blockers-${num}.json"
     else
@@ -9307,6 +9317,79 @@ for relpath in "${!CHAIN_GUARD_EXPECTED[@]}"; do
   assert_eq "chain-guard: $relpath: EnterWorktree/ExitWorktree count" \
     "$expected" "$actual"
 done
+
+# ============================================================================
+# dispatch-check-blockers tests
+# ============================================================================
+echo ""
+echo "=== dispatch-check-blockers ==="
+
+# No open blockers (no fixture → stub returns []) → exit 0, no output.
+echo "Test: no blockers → exit 0, silent"
+setup
+stdout=$("$TMPDIR_TEST/dispatch-check-blockers" 100 2>/dev/null) && rc=0 || rc=$?
+assert_eq "no blockers → exit 0" "0" "$rc"
+assert_eq "no blockers → no output" "" "$stdout"
+teardown
+
+# Only closed blockers do not gate → exit 0, no output.
+echo "Test: closed-only blockers → exit 0, silent"
+setup
+printf '[{"number":888,"state":"closed"}]\n' > "$STUB_DIR/blockers-100.json"
+stdout=$("$TMPDIR_TEST/dispatch-check-blockers" 100 2>/dev/null) && rc=0 || rc=$?
+assert_eq "closed-only blockers → exit 0" "0" "$rc"
+assert_eq "closed-only blockers → no output" "" "$stdout"
+teardown
+
+# One open blocker → exit 2, prints blocked:<num>.
+echo "Test: one open blocker → exit 2, blocked:<num>"
+setup
+printf '[{"number":999,"state":"open"}]\n' > "$STUB_DIR/blockers-100.json"
+stdout=$("$TMPDIR_TEST/dispatch-check-blockers" 100 2>/dev/null) && rc=0 || rc=$?
+assert_eq "one open blocker → exit 2" "2" "$rc"
+assert_eq "one open blocker → blocked:999" "blocked:999" "$stdout"
+teardown
+
+# Multiple open blockers → exit 2, comma-joined numbers; closed ones excluded.
+echo "Test: mixed blockers → exit 2, only open numbers"
+setup
+printf '[{"number":999,"state":"open"},{"number":888,"state":"closed"},{"number":777,"state":"OPEN"}]\n' \
+  > "$STUB_DIR/blockers-100.json"
+stdout=$("$TMPDIR_TEST/dispatch-check-blockers" 100 2>/dev/null) && rc=0 || rc=$?
+assert_eq "mixed blockers → exit 2" "2" "$rc"
+assert_eq "mixed blockers → blocked:999,777" "blocked:999,777" "$stdout"
+teardown
+
+# Missing arg → usage error on stderr, exit 1.
+echo "Test: missing arg → usage error, exit 1"
+setup
+err_out=$("$TMPDIR_TEST/dispatch-check-blockers" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"usage:"*"EXIT=1") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "missing arg → usage error, exit 1" "ok" "$status"
+teardown
+
+# Non-numeric arg → usage error, exit 1.
+echo "Test: non-numeric arg → usage error, exit 1"
+setup
+err_out=$("$TMPDIR_TEST/dispatch-check-blockers" abc 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"usage:"*"EXIT=1") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "non-numeric arg → usage error, exit 1" "ok" "$status"
+teardown
+
+# gh failure on the blocked_by lookup → hard error (exit 1), never a false "clear".
+echo "Test: gh blocked_by failure → exit 1"
+setup
+: > "$STUB_DIR/gh-fail-blocked_by-100"
+stdout=$("$TMPDIR_TEST/dispatch-check-blockers" 100 2>/dev/null) && rc=0 || rc=$?
+assert_eq "gh blocked_by failure → exit 1" "1" "$rc"
+assert_eq "gh blocked_by failure → no output" "" "$stdout"
+teardown
 
 # ============================================================================
 # summary

@@ -201,17 +201,31 @@ Skip leaf tracing when:
   **Do not infer PR existence from title search or other ad-hoc `gh` queries** —
   `dispatch-find-pr` is the only correct check (see Step 5).
 
-If the resolved target issue `<N>` has any **open** blocker — run
-`issue-blocking <N>` and check for any entry with `state` `OPEN` — release the
-lock (see *Releasing the lock*), report the open blocker, park the issue with
+Check the resolved target issue `<N>` for open blockers
+(`dangerouslyDisableSandbox: true` — the script calls `gh`):
 
 ```bash
-.claude/skills/dispatch-propagate/scripts/dispatch-apply-office-hours <N> "target has an open blocker"
+.claude/skills/dispatch-propagate/scripts/dispatch-check-blockers <N>
 ```
 
-(see *Applying `dispatch:office-hours`* below), then proceed to Step 7 with
-`notify target-blocked`. This guard applies even when a PR exists; closed
-blockers do not gate.
+Route on its exit code:
+
+- **Exit 0** (no output) — no open blockers. Continue.
+- **Exit 2** (prints `blocked:<num>[,<num>…]`) — the target has open blockers.
+  Release the lock (see *Releasing the lock*), report the listed blocker(s),
+  park the issue with
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-apply-office-hours <N> "target has an open blocker"
+  ```
+
+  (see *Applying `dispatch:office-hours`* below), then proceed to Step 7 with
+  `notify target-blocked`.
+
+This guard applies even when a PR exists; closed blockers do not gate.
+`dispatch-check-blockers` routes through `count_open_blockers` — the same helper
+the queue path (`dispatch-select-target`) uses — so the explicit and queue paths
+agree on what counts as "blocked".
 
 If a named target issue is **closed**, release the lock (see *Releasing the
 lock*), report it, park the issue with
