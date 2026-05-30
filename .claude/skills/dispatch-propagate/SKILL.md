@@ -324,18 +324,21 @@ worktree path that Step 6 passes to `dispatch-spawn-worker`.
      ```
 
 - **`conflict <path>`** → the worktree at `<path>` cannot be safely entered.
-  Either a queue-selected target already has a worktree another live session
-  owns (`dispatch-select-target` resolves the `help wanted` tier to a leaf with
-  no worktree, so for a queue selection this arises only from a race — another
-  session created the worktree between selection and worktree resolution), or
-  the reused `<issue>-*` worktree's checked-out branch carries commits not on
-  the target PR's head branch, so re-pointing it would discard work (#913).
+  Either a live Claude session owns the existing `<issue>-*` worktree — a
+  mode-independent check (#837): in explicit mode it stops the
+  recycle-after-completion path from firing into a worktree whose previous
+  worker is still live; in queue mode it is a race (`dispatch-select-target`
+  resolves the `help wanted` tier to a leaf with no worktree, so a queue-mode
+  live-session conflict arises only when another session created the worktree
+  between selection and worktree resolution). Or the reused `<issue>-*`
+  worktree's checked-out branch carries commits not on the target PR's head
+  branch, so re-pointing it would discard work (#913).
   Release the lock (see *Releasing the lock*), then proceed to
   Step 7 with `notify worktree-conflict` — the user-visible report is mandatory
   there. The message depends on which conflict case fired:
-  - Live-session race: "worktree at `<path>` owned by another live session for
-    issue `<N>`; closing — the next baton-pass or office-hours hand-off will
-    re-seed"
+  - Live session owns the worktree: "worktree at `<path>` owned by another live
+    session for issue `<N>`; closing — the next baton-pass or office-hours
+    hand-off will re-seed"
   - Unique-commits branch mismatch: "worktree at `<path>` for issue `<N>` is
     on a branch with commits not on the PR head branch; manual inspection needed
     before re-entry"
