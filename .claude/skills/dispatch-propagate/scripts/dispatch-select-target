@@ -397,6 +397,12 @@ else
   GQL_FIELDS=""
   while IFS= read -r cnum; do
     [[ -z "$cnum" ]] && continue
+    # Enforce the integers-only assumption rather than trusting it: a non-integer
+    # would be interpolated into the GraphQL query string unescaped.
+    [[ "$cnum" =~ ^[0-9]+$ ]] || {
+      echo "error: dispatch-select-target: non-integer closing issue number: $cnum" >&2
+      exit 1
+    }
     GQL_FIELDS+="    _${cnum}: issue(number: ${cnum}) { number blockedBy(first: 50) { nodes { state } } }"$'\n'
   done <<< "$CLOSING_NUMS"
   GQL_QUERY="query(\$owner: String!, \$name: String!) {
@@ -503,9 +509,16 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   # issue it closes has >0 open blockers. Placed after the done/waiting filter so
   # discarded PRs are never consulted, and before FIRST_PR is populated so --qa
   # inherits the skip.
+  #
+  # A closing issue absent from the map (null in $blk) means its blockedBy state
+  # could not be resolved — e.g. the issue was deleted or made inaccessible
+  # between the PR-list fetch and the GraphQL call, so its alias came back null
+  # and was dropped. Treat unknown as blocked (fail closed) so a gated PR is
+  # never advanced on missing data.
   pr_blocked=$(printf '%s' "$pr_closing" \
     | jq -r --argjson blk "$BLOCKER_COUNTS" \
-      'if any(.[]; ($blk[(.number|tostring)] // 0) > 0) then "true" else "false" end')
+      'if any(.[]; $blk[(.number|tostring)] as $c | $c == null or $c > 0)
+       then "true" else "false" end')
   [[ "$pr_blocked" == "true" ]] && continue
 
   # Record the oldest PR seen in this category+priority+phase. The :- guard
