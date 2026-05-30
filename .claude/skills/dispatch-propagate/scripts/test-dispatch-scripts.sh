@@ -9479,6 +9479,250 @@ assert_eq "gh blocked_by failure → no output" "" "$stdout"
 teardown
 
 # ============================================================================
+# dispatch-select-tick tests (#919)
+# ============================================================================
+# The orchestrator runs against the REAL dispatch-acquire-lock (so lock-file
+# state is genuine and the three-guard lock invariant is asserted directly via
+# DISPATCH_LOCK_FILE) and against FAKE sub-scripts for jit-engine / resolve-arg
+# / select-target (so each decision line is driven deterministically). git is
+# PATH-shimmed to control the branch and the main-sync result.
+echo ""
+echo "=== dispatch-select-tick ==="
+
+sel_tick_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  STUB_DIR="$TMPDIR_TEST/stub"
+  mkdir -p "$STUB_DIR" "$TMPDIR_TEST/bin"
+
+  cp "$SCRIPT_DIR/dispatch-select-tick" "$TMPDIR_TEST/dispatch-select-tick"
+  cp "$SCRIPT_DIR/dispatch-acquire-lock" "$TMPDIR_TEST/dispatch-acquire-lock"
+  chmod +x "$TMPDIR_TEST/dispatch-select-tick" "$TMPDIR_TEST/dispatch-acquire-lock"
+
+  export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
+  export CLAUDE_CODE_SESSION_ID="select-tick-session"
+  # Fake `claude agents --json`: our own session is live → first acquisition
+  # succeeds and a strict self-release works.
+  cat > "$TMPDIR_TEST/fake-claude" <<'FAKE'
+#!/usr/bin/env bash
+echo '[{"sessionId":"select-tick-session","pid":1,"status":"busy","name":"x","cwd":""}]'
+FAKE
+  chmod +x "$TMPDIR_TEST/fake-claude"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake-claude"
+  # Single-shot --wait so a busy test never blocks the suite.
+  export DISPATCH_LOCK_WAIT_TIMEOUT=0
+  export DISPATCH_LOCK_WAIT_INTERVAL=1
+
+  # Default fake sub-scripts (overridable per test) — land in TMPDIR_TEST so the
+  # orchestrator's SCRIPT_DIR resolution finds them.
+  cat > "$TMPDIR_TEST/dispatch-jit-engine" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+  cat > "$TMPDIR_TEST/dispatch-resolve-arg" <<'FAKE'
+#!/usr/bin/env bash
+echo "$1"
+FAKE
+  cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+echo empty
+FAKE
+  chmod +x "$TMPDIR_TEST/dispatch-jit-engine" \
+           "$TMPDIR_TEST/dispatch-resolve-arg" \
+           "$TMPDIR_TEST/dispatch-select-target"
+
+  # PATH-shimmed git: branch defaults to main; fetch/merge succeed unless a
+  # FAKE_GIT_*_FAIL env var is set.
+  cat > "$TMPDIR_TEST/bin/git" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  "rev-parse --abbrev-ref HEAD") echo "${FAKE_GIT_BRANCH:-main}" ;;
+  "fetch origin main") [[ -n "${FAKE_GIT_FETCH_FAIL:-}" ]] && exit 1 ; exit 0 ;;
+  "merge --ff-only origin/main") [[ -n "${FAKE_GIT_MERGE_FAIL:-}" ]] && exit 1 ; exit 0 ;;
+  *) exit 0 ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/git"
+  export PATH="$TMPDIR_TEST/bin:$SAVED_PATH"
+}
+
+sel_tick_teardown() {
+  export PATH="$SAVED_PATH"
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST="" ; STUB_DIR=""
+  unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
+    DISPATCH_LOCK_WAIT_TIMEOUT DISPATCH_LOCK_WAIT_INTERVAL \
+    FAKE_GIT_BRANCH FAKE_GIT_FETCH_FAIL FAKE_GIT_MERGE_FAIL
+}
+
+# Run the orchestrator, capturing full stdout; the decision is the last line.
+run_sel_tick() {
+  "$TMPDIR_TEST/dispatch-select-tick" "$@" 2>/dev/null
+}
+
+# --- empty queue → release + empty ------------------------------------------
+echo "Test: select-tick empty queue → empty, lock released"
+sel_tick_setup
+out=$(run_sel_tick) ; rc=$?
+assert_eq "empty: exit 0" "0" "$rc"
+assert_eq "empty: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "empty: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- pr selection → passthrough + lock HELD ----------------------------------
+echo "Test: select-tick pr selection → passthrough, lock held"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+echo "pr 660 660-some-branch code-review"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_sel_tick)
+assert_eq "pr: decision line" "pr 660 660-some-branch code-review" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "pr: lock held (our session)" "select-tick-session" \
+  "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- issue selection → passthrough + lock HELD -------------------------------
+echo "Test: select-tick issue selection → passthrough, lock held"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+echo "issue 707"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_sel_tick)
+assert_eq "issue: decision line" "issue 707" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "issue: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- main-broken → passthrough + lock HELD (sub-skill releases) --------------
+echo "Test: select-tick main-broken → passthrough, lock held"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+echo "main-broken abc1234"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_sel_tick)
+assert_eq "main-broken: decision line" "main-broken abc1234" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "main-broken: lock held" "select-tick-session" \
+  "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- jit-reminder → passthrough + lock HELD ----------------------------------
+echo "Test: select-tick jit-reminder → passthrough, lock held"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+echo "jit-reminder owner/repo 42 PVT_x ITEM_y"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_sel_tick)
+assert_eq "jit-reminder: decision line" "jit-reminder owner/repo 42 PVT_x ITEM_y" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "jit-reminder: lock held" "select-tick-session" \
+  "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- explicit arg resolves → explicit <num> + lock HELD ----------------------
+echo "Test: select-tick explicit arg → explicit <num>, lock held"
+sel_tick_setup
+out=$(run_sel_tick 55)
+assert_eq "explicit: decision line" "explicit 55" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "explicit: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- explicit arg leading '#' is stripped ------------------------------------
+echo "Test: select-tick explicit arg strips leading '#'"
+sel_tick_setup
+out=$(run_sel_tick '#88')
+assert_eq "explicit '#': decision line" "explicit 88" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+sel_tick_teardown
+
+# --- resolver failure (garbage arg) → release + resolver-failed --------------
+echo "Test: select-tick resolver failure → resolver-failed, lock released"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-resolve-arg" <<'FAKE'
+#!/usr/bin/env bash
+echo "error: bad arg" >&2
+exit 1
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-resolve-arg"
+out=$(run_sel_tick abc)
+assert_eq "resolver-failed: decision line" "resolver-failed" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "resolver-failed: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- sync failure on main → release + sync-failed ----------------------------
+echo "Test: select-tick sync failure on main → sync-failed, lock released"
+sel_tick_setup
+export FAKE_GIT_FETCH_FAIL=1
+out=$(run_sel_tick)
+assert_eq "sync-failed: decision line" "sync-failed" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "sync-failed: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- off-main: main-sync skipped (fetch-fail does NOT trigger sync-failed) ----
+echo "Test: select-tick off main skips sync (fetch-fail ignored)"
+sel_tick_setup
+export FAKE_GIT_BRANCH="707-some-branch"
+export FAKE_GIT_FETCH_FAIL=1
+out=$(run_sel_tick)
+assert_eq "off-main: reaches selection (empty, not sync-failed)" "empty" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+sel_tick_teardown
+
+# --- JIT created lines are passed through, prefixed --------------------------
+echo "Test: select-tick passes JIT output through prefixed"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-jit-engine" <<'FAKE'
+#!/usr/bin/env bash
+echo "weekly-review: created #42"
+echo "standup: debounced"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-jit-engine"
+out=$(run_sel_tick)
+assert_eq "jit passthrough: created line prefixed" "1" \
+  "$(printf '%s\n' "$out" | grep -cF 'jit: weekly-review: created #42')"
+assert_eq "jit passthrough: debounced line prefixed" "1" \
+  "$(printf '%s\n' "$out" | grep -cF 'jit: standup: debounced')"
+assert_eq "jit passthrough: decision still last" "empty" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+sel_tick_teardown
+
+# --- busy lock → busy, nothing acquired, nothing released --------------------
+echo "Test: select-tick busy lock → busy, foreign holder untouched"
+sel_tick_setup
+# Pre-fill the lock with a DIFFERENT, live session so --wait gives up as busy.
+printf '%s\n' "other-live-session" > "$DISPATCH_LOCK_FILE"
+cat > "$TMPDIR_TEST/fake-claude" <<'FAKE'
+#!/usr/bin/env bash
+echo '[{"sessionId":"other-live-session","pid":2,"status":"busy","name":"x","cwd":""}]'
+FAKE
+chmod +x "$TMPDIR_TEST/fake-claude"
+out=$(run_sel_tick)
+assert_eq "busy: decision line" "busy" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "busy: foreign holder untouched (not released)" "other-live-session" \
+  "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- extra arguments → usage error, exit 2 -----------------------------------
+echo "Test: select-tick extra arguments → exit 2"
+sel_tick_setup
+err=$("$TMPDIR_TEST/dispatch-select-tick" 1 2 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"unexpected extra arguments"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "extra args → usage error, exit 2" "ok" "$status"
+sel_tick_teardown
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
