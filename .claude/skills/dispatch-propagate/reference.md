@@ -162,80 +162,121 @@ the worker `cd`'d in its own Step 0 — silently broke when subsequent `Bash` /
 
 ## Concurrency budgeting
 
-`dispatch-target-workers` composes two **headroom-driven** linear ramps —
-one per axis (weekly and 5h) — and combines them with `min` to decide how
-many concurrent `dispatch-worker-*` sessions should run:
+`dispatch-target-workers` runs a sequential four-stage pace-relative pipeline
+(W → F → N) to decide how many concurrent `dispatch-worker-*` sessions should
+run. Instead of a flat weekly cap, the weekly budget follows a
+**cumulative-pace curve** keyed to how far through the weekly rate-limit window
+we are (in 5-hour-window terms), so token spend spreads smoothly across the
+week rather than bursting early and idling. The controller is intentionally
+more conservative early-week than a flat-cap design — it throttles whenever
+actual usage runs ahead of the curve, even when the weekly total is far below
+the cap.
 
 ```
-ramp(headroom_pp, taper_window_pp):
-  if headroom_pp <  0:                return 0
-  if headroom_pp >= taper_window_pp:  return max_workers
-  return max(1, round(max_workers * headroom_pp / taper_window_pp))
+WEEK_SECONDS = 604800
 
-target_N = min(
-  ramp(target_weekly - used_weekly, weekly_taper_window_pct),
-  ramp(target_5h     - used_5h,     five_hour_taper_window_pct),
-)
+# Stage 1 — weekly pace curve W (weekly %)
+remaining = resets_at_weekly - now;   if remaining <= 0: print 0; exit
+x   = clamp((WEEK_SECONDS - remaining) / WEEK_SECONDS, 0, 1)  # elapsed fraction
+T   = round(WEEK_SECONDS / 18000)                             # = 34 five-hour windows
+end = floor + (p+1)*(target_weekly/T - floor)                # solve so W(1)=target_weekly
+end = min(end, cap)                                          # per-window hard ceiling
+W   = T*( floor*x + (end-floor)*x^(p+1)/(p+1) )              # cumulative target now
+
+# Stage 2 — 5h target F (% of 5h limit)
+hw = W - used_weekly
+F  = (hw <= 0) ? 0 : floor5 + (ceil5-floor5)*clamp(hw/Hw, 0, 1)
+
+# Stage 3 — workers N
+h5 = F - used_5h
+N  = (h5 <= 0) ? 0 : clamp(round(max_workers * h5/H5), 1, max_workers)
+print N
 ```
 
-Each ramp returns `max_workers` while headroom comfortably exceeds the
-taper window, tapers linearly toward `1` as headroom approaches zero, floors
-at `1` when headroom is exactly zero, and returns `0` only when actual usage
-has crossed the configured target. The floor at `headroom == 0` prevents the
-`0 >= 0` deadlock the previous time-based ramp produced against Step 6's
-`LIVE_COUNT >= TARGET_N` gate — `target_N=0` now requires `used > target`.
+- The weekly increment `d(x) = floor + (end-floor)*x^p` rises from the floor
+  toward (but clamped at) the cap; `W` reaches `target_weekly` at `x=1`
+  (week end) and stays below it for every `x<1`. The exception is when
+  `weekly_increment_cap_pct` clamps the per-window increment: the cap holds the
+  terminal `W(1)` below `target_weekly` (a deliberate hard ceiling), so at the
+  defaults `W(1)=90` only because the solved increment `end≈4.3` stays under
+  the `cap=10`.
+- `F=0` when ahead of pace (`used_weekly >= W`); the `floor5..ceil5` band opens
+  with weekly headroom.
+- `N=0` only at/over the 5h target F (includes the `F=0` ahead-of-pace pause);
+  `1..max_workers` below. No `0 >= 0` router deadlock during healthy
+  under-budget operation.
 
-- **Weekly axis** (defaults: `target_weekly_usage_pct=90`,
-  `weekly_taper_window_pct=30`, `max_workers=8`):
+**Table A — weekly curve vs. elapsed** (defaults; `used_weekly=0`, `used_5h=0`):
 
-  | used_weekly (%) | headroom (pp) | target_N |
-  |---:|---:|---:|
-  | 60 | 30 | 8 |
-  | 70 | 20 | 5 |
-  | 80 | 10 | 3 |
-  | 85 |  5 | 1 |
-  | 89 |  1 | 1 |
-  | 90 |  0 | 1 |
-  | 91 | -1 | 0 |
+| elapsed `x` | W (weekly %) | target_N |
+|---:|---:|---:|
+| 0.25 | 12 | 8 |
+| 0.50 | 31 | 8 |
+| 0.75 | 57 | 8 |
+| 0.90 | 76 | 8 |
+| ~1.0 | 90 | 8 |
 
-- **5-hour axis** (defaults: `target_five_hour_usage_pct=50`,
-  `five_hour_taper_window_pct=15`, `max_workers=8`):
+At these defaults, `W >= Hw=20` for `x >= 0.5`, so `F=ceil5=80` and
+`h5=80 > H5=15`, giving `N=max_workers=8`. At `x=0.25`, `W=12 < Hw=20`,
+so `F=68` and `N=8` (h5=68 still exceeds H5=15 × max_workers threshold).
 
-  | used_5h (%) | headroom (pp) | target_N |
-  |---:|---:|---:|
-  |  0 | 50 | 8 |
-  | 35 | 15 | 8 |
-  | 40 | 10 | 5 |
-  | 45 |  5 | 3 |
-  | 49 |  1 | 1 |
-  | 50 |  0 | 1 |
-  | 51 | -1 | 0 |
+**Table B — 5h target and workers at mid-week** (defaults; `x=0.5`, `W=31`):
+
+| used_weekly (%) | hw (=W−used_weekly) | F | used_5h (%) | target_N |
+|---:|---:|---:|---:|---:|
+| 11 | 20 | 80 |  0 | 8 |
+| 11 | 20 | 80 | 65 | 8 |
+| 11 | 20 | 80 | 80 | 0 |
+| 21 | 10 | 65 |  0 | 8 |
+| 21 | 10 | 65 | 50 | 8 |
+| 21 | 10 | 65 | 58 | 4 |
+| 31 |  0 |  0 |  0 | 0 (at pace) |
+| 40 | −9 |  0 |  0 | 0 (ahead of pace) |
 
 Tunables (each optional in `dispatch.config/target-workers.json`; defaults
 baked into the script):
 
 | Field | Default | Meaning |
-|---|---|---|
-| `target_weekly_usage_pct` | 90 | Weekly ramp returns 0 when `used_weekly` strictly exceeds this; returns the floor of 1 when `used_weekly` equals it (headroom = 0). |
-| `target_five_hour_usage_pct` | 50 | Same semantics for the 5h axis. |
-| `max_concurrent_workers` | 8 | Value each ramp returns when headroom comfortably exceeds its taper window. |
-| `weekly_taper_window_pct` | 30 | Headroom band (percentage points) over which the weekly ramp tapers linearly from `max_workers` down to its floor of 1. |
-| `five_hour_taper_window_pct` | 15 | Same band for the 5h ramp. |
+|---|---:|---|
+| `target_weekly_usage_pct` | 90 | curve terminal W(1), unless `weekly_increment_cap_pct` clamps it lower |
+| `weekly_increment_floor_pct` | 1 | per-window floor |
+| `weekly_increment_cap_pct` | 10 | per-window hard ceiling |
+| `weekly_curve_power` (`p`) | 1 | convexity; >1 back-loads spend later in the week |
+| `weekly_headroom_taper_pct` (`Hw`) | 20 | weekly headroom earning full F ceiling |
+| `five_hour_target_floor_pct` (`floor5`) | 50 | F band floor |
+| `five_hour_target_ceiling_pct` (`ceil5`) | 80 | F band ceiling |
+| `five_hour_headroom_taper_pct` (`H5`) | 15 | 5h headroom → max workers |
+| `max_concurrent_workers` | 8 | max worker count |
 
-Recalibration: narrow a taper window (e.g. `weekly_taper_window_pct=10`) to
-hold full speed until close to the cap and then taper sharply down to the
-floor; widen it to ease off concurrency earlier. Raise `target_*_usage_pct`
-to push closer to the cap before any taper kicks in. Raise
-`max_concurrent_workers` for more parallelism when headroom is comfortable on
-both axes.
+Recalibration: raise `weekly_curve_power` to back-load spend later in the
+week (a higher `p` makes the curve concave up, so `W` grows slowly early and
+accelerates toward the end). `weekly_increment_cap_pct` hard-caps any single
+5h window's share regardless of curve shape — raise it only if early spending
+is acceptable. Raise `max_concurrent_workers` for more parallelism when
+headroom is comfortable.
+
+Keep `weekly_increment_floor_pct <= target_weekly_usage_pct / T` (with `T=34`
+five-hour windows, i.e. `target_weekly_usage_pct >= 34 * floor`). Below that the
+solved increment `end` falls under `floor`, inverting `d(x)` into a *decreasing*
+per-window allocation — the curve still terminates correctly at
+`target_weekly_usage_pct`, but it front-loads spend instead of pacing it. So if
+you lower `target_weekly_usage_pct` substantially, lower
+`weekly_increment_floor_pct` to match. Likewise keep
+`weekly_increment_cap_pct >= weekly_increment_floor_pct`: an inverted floor/cap
+clamps the terminal `W(1)` below `target_weekly_usage_pct`. The config validator
+only cross-checks floor vs. cap when both appear in the same config file, so a
+floor raised against the baked-in cap default passes validation but still
+clamps.
 
 **Missing-telemetry fallback.** When
 `~/.local/share/productivity-tui/rate_limits.json` is missing or unreadable,
-`dispatch-target-workers` prints `1` and writes a one-line note to stderr,
-so the chain degrades to today's "spawn one per tick" behavior. The same
-fallback applies when the `seven_day` block is absent (no weekly headroom
-anchor); a missing `five_hour` block alone disables the 5h ramp but the
-weekly ramp still applies.
+or the `seven_day` block is absent (missing `used_weekly` or `resets_at_weekly`,
+or a malformed `now`), `dispatch-target-workers` prints `1` and writes a
+one-line note to stderr — the chain degrades to "spawn one per tick". When only
+`five_hour` is absent while `seven_day` is present, Stages 1–3 run with
+`used_5h` treated as 0 (N scales from F alone). Non-numeric `used_*` values
+are treated as missing (fail-closed). The stdout contract — a single integer —
+and the router gate `LIVE_COUNT >= TARGET_N` are unchanged.
 
 ## The #725 cap-keyed re-seed
 

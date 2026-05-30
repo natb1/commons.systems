@@ -29,7 +29,7 @@ PR_NUM=$(echo "$PR_JSON" | jq -r .number)
 echo "$PR_JSON" | jq -r '.labels[].name'
 ```
 
-`PR_NUM` is reused in Steps 3, 7, and 8 — do not re-resolve. The PR body stays in
+`PR_NUM` is reused in Steps 3, 7, 8, and 11 — do not re-resolve. The PR body stays in
 `PR_JSON` (`echo "$PR_JSON" | jq -r .body`); Step 5 parses its `Closes #N`
 line(s) to resolve the issue(s) this PR implements. If the printed labels include
 `dispatch:reviewed` — an interrupted prior run — **skip Steps 1–10 entirely** and
@@ -216,22 +216,45 @@ already applied, so re-entry is a true no-op. Otherwise run all steps in order.
     `/commit-merge-push` to commit and push it, and document it on the PR with
     a comment using Step 7's mechanism.
 
-11. **Write the phase-completed marker (autonomous path only), then stop.**
-    The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads this to decide
-    propagate vs park. Atomic via tempfile + mv. `CLAUDE_JOB_DIR` unset =
-    interactive run; the marker write is a no-op and the skill simply stops
-    (which is correct — interactive Step 10 just ran).
+11. **Write the phase-completed marker or deviation reason (autonomous path
+    only), then stop.** The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads
+    this to decide propagate vs park. `CLAUDE_JOB_DIR` unset = interactive run;
+    the write is a no-op and the skill simply stops (which is correct —
+    interactive Step 10 just ran). On idempotent re-entry (Steps 1–10 were
+    skipped), the Step 3 bucket data is not in context — treat the deviation
+    criterion as not met and write the phase-completed marker.
 
-    ```bash
-    if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-      printf 'phase=review\npr=%s\n' "$PR_NUM" \
-        > "$CLAUDE_JOB_DIR/phase-completed.tmp"
-      mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
-         "$CLAUDE_JOB_DIR/phase-completed"
-    fi
-    ```
+    **Deviation criterion:** the Deferred bucket dominated — nearly all findings
+    were Deferred and none were Fixed.
 
-    Then **stop**. The Stop hook reads the marker and advances the chain.
+    - **Deviation fires** — do NOT write `phase-completed`. Instead write a
+      one-line reason to `$CLAUDE_JOB_DIR/office-hours-reason`, atomic via
+      tempfile + mv. The Stop hook reads marker-absence as Branch A and applies
+      `dispatch:office-hours` to the issue, parking it for human review.
+
+      ```bash
+      if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+        printf '%s\n' "/review-fix: findings dominated by Deferred (out-of-scope) items; none fixed" \
+          > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+        mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" \
+           "$CLAUDE_JOB_DIR/office-hours-reason"
+      fi
+      ```
+
+    - **No deviation** — write the `phase-completed` marker exactly as before,
+      atomic via tempfile + mv.
+
+      ```bash
+      if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+        printf 'phase=review\npr=%s\n' "$PR_NUM" \
+          > "$CLAUDE_JOB_DIR/phase-completed.tmp"
+        mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
+           "$CLAUDE_JOB_DIR/phase-completed"
+      fi
+      ```
+
+    Then **stop**. The Stop hook reads the marker (or its absence) and advances
+    or parks the chain.
 
 ## Autonomous vs. attended
 
