@@ -91,23 +91,29 @@ ready. Otherwise run all steps in order.
       First check whether the diff touches `package.json` or
       `package-lock.json`; if neither changed, report no findings (pre-existing
       CVEs in unchanged dependencies are out of scope). If dependency files
-      changed, produce a differential audit:
+      changed, produce a differential audit (use a private temp dir so parallel
+      subagent runs do not collide on shared paths):
 
       ```bash
+      AUDIT_DIR=$(mktemp -d)
+      MERGE_BASE=$(git merge-base HEAD origin/main)
+
       # Audit HEAD (current working tree)
-      npm audit --json > /tmp/audit-head.json
+      npm audit --json > "$AUDIT_DIR/audit-head.json"
 
       # Audit MERGE_BASE lockfile without modifying the working tree
-      mkdir -p /tmp/audit-baseline
-      git show "$MERGE_BASE":package-lock.json > /tmp/audit-baseline/package-lock.json
-      git show "$MERGE_BASE":package.json      > /tmp/audit-baseline/package.json
-      npm audit --package-lock-only --json --prefix /tmp/audit-baseline \
-        > /tmp/audit-baseline.json
+      mkdir -p "$AUDIT_DIR/baseline"
+      git show "$MERGE_BASE":package-lock.json > "$AUDIT_DIR/baseline/package-lock.json"
+      git show "$MERGE_BASE":package.json      > "$AUDIT_DIR/baseline/package.json"
+      npm audit --package-lock-only --json --prefix "$AUDIT_DIR/baseline" \
+        > "$AUDIT_DIR/audit-baseline.json"
       ```
 
-      Report only advisories whose advisory ID appears in `/tmp/audit-head.json`
-      but not in `/tmp/audit-baseline.json` — these are CVEs the PR's dependency
-      changes newly expose.
+      Report only advisories whose advisory ID appears in
+      `$AUDIT_DIR/audit-head.json` but not in `$AUDIT_DIR/audit-baseline.json` —
+      these are CVEs the PR's dependency changes newly expose. Also flag any
+      dependency the PR adds or upgrades whose resolved version skips a
+      published security-patch release for that package.
    5. **Firebase-specific** — Firestore rules permissiveness (overly broad
       `allow` conditions, missing field constraints), emulator-only code
       reachable on production paths, Firebase API key or config exposure.
