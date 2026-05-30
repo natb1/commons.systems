@@ -51,6 +51,7 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-find-pr" "$TMPDIR_TEST/dispatch-find-pr"
   cp "$SCRIPT_DIR/dispatch-resolve-arg" "$TMPDIR_TEST/dispatch-resolve-arg"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
+  cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-check-blockers" "$TMPDIR_TEST/dispatch-check-blockers"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
@@ -74,6 +75,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
+           "$TMPDIR_TEST/office-hours-select-target" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
            "$TMPDIR_TEST/dispatch-check-blockers" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
@@ -141,6 +143,14 @@ case "$args" in
   "issue list --state open --limit 300 --json number,createdAt,labels")
     if [[ -f "$STUB_DIR/issue-list.json" ]]; then
       cat "$STUB_DIR/issue-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  "issue list --label dispatch:office-hours --state open --json number,createdAt")
+    # office-hours-select-target: the office-hours queue (labeled open issues).
+    if [[ -f "$STUB_DIR/oh-issue-list.json" ]]; then
+      cat "$STUB_DIR/oh-issue-list.json"
     else
       echo "[]"
     fi
@@ -2194,6 +2204,81 @@ printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "draft PR does not gate issue 55; issue 55 chosen" "issue 55" "$result"
+teardown
+
+# ============================================================================
+# office-hours-select-target tests
+# ============================================================================
+echo ""
+echo "=== office-hours-select-target ==="
+#
+# Selects the oldest open issue carrying dispatch:office-hours whose <N>-*
+# worktree has no live session. Output: `office-hours <issue> <phase> <pr|->`.
+# Reuses the select-target gh/git/claude fakes (oh-issue-list.json seeds the
+# office-hours queue; pr-list-full.json drives dispatch-phase/dispatch-find-pr).
+
+# OHST1. Oldest labeled sessionless item wins; no PR → phase implement, pr `-`.
+echo "Test: oldest labeled item with no PR → implement, dash PR"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # orphan world: no live sessions
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "oldest labeled item selected (implement, no PR)" "office-hours 42 implement -" "$result"
+teardown
+
+# OHST2. A qa item — draft PR, CI green, no dispatch:* label → phase qa, PR num.
+echo "Test: labeled item with green draft PR → qa, PR number"
+setup
+printf '[{"number":50,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf '[{"number":7,"headRefName":"50-feat","isDraft":true,"statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"}],"labels":[]}]\n' \
+  > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "qa item selected with its PR number" "office-hours 50 qa 7" "$result"
+teardown
+
+# OHST3. A labeled item whose <N>-* worktree has a live session is skipped; the
+# next labeled item wins.
+echo "Test: labeled item with a live session is skipped"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "42-x"   # 42's worktree has a live session
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "live-session item skipped; next labeled item selected" "office-hours 99 implement -" "$result"
+teardown
+
+# OHST4. An empty office-hours queue prints `empty`.
+echo "Test: empty office-hours queue → empty"
+setup
+echo '[]' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "empty queue prints empty" "empty" "$result"
+teardown
+
+# OHST5. Unknown daemon (UNKNOWN liveness) folds to occupied → the item with a
+# worktree is skipped; an item with no worktree (fast-path miss) still wins.
+echo "Test: UNKNOWN daemon skips worktree-bearing item, picks worktree-free one"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+# 42 has a worktree (liveness UNKNOWN → occupied → skipped); 99 has none.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# setup's default CLAUDE_AGENTS_CMD points at a non-existent binary (UNKNOWN).
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "UNKNOWN-liveness worktree item skipped; worktree-free item selected" "office-hours 99 implement -" "$result"
 teardown
 
 # ============================================================================
