@@ -33,6 +33,10 @@ gh issue list --state closed --json number,title,closedAt --limit 100
 echo ""
 echo "=== Repo Stats ==="
 gh api "repos/$OWNER_REPO" --jq '{stargazers_count, forks_count, watchers_count}'
+
+echo ""
+echo "=== Analytics (GA4 + Search Console) ==="
+"$REPO_ROOT/.claude/skills/roadmap-debate/scripts/fetch-analytics.sh" || true
 } > "$OUTPUT"
 
 echo "$OUTPUT"
