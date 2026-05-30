@@ -6321,6 +6321,7 @@ case "\${1:-}" in
     cat "$SPAWN_ROUTER_REGISTRY"
     ;;
   --bg)
+    pwd >> "$SPAWN_ROUTER_PWD_LOG"
     printf '%s\n' "\$@" > "$SPAWN_ROUTER_BG_ARGV"
     name=""
     while [[ \$# -gt 0 ]]; do
@@ -6360,6 +6361,7 @@ spawn_router_setup() {
 
   SPAWN_ROUTER_REGISTRY="$TMPDIR_TEST/registry.json"
   SPAWN_ROUTER_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_ROUTER_PWD_LOG="$TMPDIR_TEST/pwd-log"
   SPAWN_ROUTER_RM_LOG="$TMPDIR_TEST/rm-log"
   SPAWN_ROUTER_STOP_LOG="$TMPDIR_TEST/stop-log"
   SPAWN_ROUTER_PENDING="$TMPDIR_TEST/pending"
@@ -6375,6 +6377,7 @@ spawn_router_teardown() {
   TMPDIR_TEST=""
   SPAWN_ROUTER_REGISTRY=""
   SPAWN_ROUTER_BG_ARGV=""
+  SPAWN_ROUTER_PWD_LOG=""
   SPAWN_ROUTER_RM_LOG=""
   SPAWN_ROUTER_STOP_LOG=""
   SPAWN_ROUTER_PENDING=""
@@ -6404,6 +6407,39 @@ assert_eq "spawn: argv[2] is a dispatch-* agent name" "yes" "$name_ok"
 assert_eq "spawn: argv[3] is --permission-mode" "--permission-mode" "${bg_argv[3]:-}"
 assert_eq "spawn: argv[4] is auto" "auto" "${bg_argv[4]:-}"
 assert_eq "spawn: argv[5] is /dispatch-propagate" "/dispatch-propagate" "${bg_argv[5]:-}"
+spawn_router_teardown
+
+# --- Test 1b: spawn cwd is the main worktree path ----------------------------
+
+echo "Test: dispatch-spawn-router invokes 'claude --bg' from the main worktree path"
+spawn_router_setup
+write_fake_spawn_router_claude
+# Run from a deliberately different caller cwd so the negative assertion (cwd is
+# NOT the caller's) is meaningful. The spawn subshell cd's into the main worktree.
+SPAWN_ROUTER_CALLER_CWD="$TMPDIR_TEST"
+if out=$( cd "$SPAWN_ROUTER_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-router-cwd: exits 0" "0" "$rc"
+# Read the first line of the pwd-log and compare it (via realpath) to the main
+# worktree path. realpath is used to normalize platform-specific path
+# differences (e.g. macOS /private/ prefix on /tmp).
+sr_pwd_line=$(head -1 "$SPAWN_ROUTER_PWD_LOG" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$(realpath "$sr_pwd_line" 2>/dev/null)" == "$(realpath "$DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-router-cwd: 'claude --bg' ran with cwd = main worktree path"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-router-cwd: 'claude --bg' ran with cwd = main worktree path"
+  echo "    pwd-log:  '$sr_pwd_line'"
+  echo "    expected: '$DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE'"
+fi
+# Independently assert the cwd is NOT the caller's cwd — that is the regression
+# the fix prevents (router born in the wrong worktree).
+TOTAL=$((TOTAL + 1))
+if [[ "$(realpath "$sr_pwd_line" 2>/dev/null)" != "$(realpath "$SPAWN_ROUTER_CALLER_CWD")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-router-cwd: 'claude --bg' did NOT run from the caller's cwd"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-router-cwd: 'claude --bg' did NOT run from the caller's cwd"
+  echo "    pwd-log: '$sr_pwd_line'"
+fi
 spawn_router_teardown
 
 # --- Test 2: dedup -----------------------------------------------------------
