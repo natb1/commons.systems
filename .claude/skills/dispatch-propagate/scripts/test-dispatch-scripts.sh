@@ -3090,6 +3090,52 @@ assert_eq "active_paths holds every full worktree path" \
 teardown
 
 # ============================================================================
+# resolve_project_root (lib.sh) tests
+# ============================================================================
+echo ""
+echo "=== resolve_project_root ==="
+
+# resolve_project_root calls `git rev-parse --path-format=absolute
+# --git-common-dir`, so each test creates a stub `git` in a temp bin dir
+# and exports it onto PATH before sourcing lib.sh in a subshell.
+
+# 1. git reports a .bare dir → resolve_project_root prints the parent (project root)
+#    and exits 0.
+echo "Test: git reports .bare dir → prints parent and exits 0"
+_rpr_stub=$(mktemp -d)
+cat > "$_rpr_stub/git" <<'GIT_STUB'
+#!/usr/bin/env bash
+case "$*" in
+  "rev-parse --path-format=absolute --git-common-dir") echo "/project/.bare" ;;
+  *) exit 1 ;;
+esac
+GIT_STUB
+chmod +x "$_rpr_stub/git"
+result=$(PATH="$_rpr_stub:$SAVED_PATH" bash -c '
+  source "'"$SCRIPT_DIR"'/lib.sh"
+  resolve_project_root
+')
+assert_eq "git reports .bare → prints project root" "/project" "$result"
+rm -rf "$_rpr_stub"
+
+# 2. git rev-parse exits non-zero (not in a git repo) → resolve_project_root
+#    returns non-zero and prints nothing to stdout.
+echo "Test: git rev-parse fails → non-zero return, no stdout"
+_rpr_stub=$(mktemp -d)
+cat > "$_rpr_stub/git" <<'GIT_STUB'
+#!/usr/bin/env bash
+exit 1
+GIT_STUB
+chmod +x "$_rpr_stub/git"
+if result=$(PATH="$_rpr_stub:$SAVED_PATH" bash -c '
+  source "'"$SCRIPT_DIR"'/lib.sh"
+  resolve_project_root
+'); then rc=0; else rc=$?; fi
+assert_eq "git rev-parse fails → non-zero return" "1" "$rc"
+assert_eq "git rev-parse fails → no stdout" "" "$result"
+rm -rf "$_rpr_stub"
+
+# ============================================================================
 # dispatch-sweep tests
 # ============================================================================
 echo ""
