@@ -346,7 +346,7 @@ On every non-`conflict` (proceed) path — `enter` and `create` — merge
 `origin/main` into the resolved worktree before finalizing the selection. This
 ensures the worker session starts with up-to-date dispatch workflow instructions
 in the worktree's `.claude/` tree. The merge is **local only** — no push (see
-*Design* in `.claude/local.md`). Run with `dangerouslyDisableSandbox: true` —
+*Design* in `CLAUDE.local.md`). Run with `dangerouslyDisableSandbox: true` —
 `origin/main` frequently carries `.claude/skills/**` changes, and a sandboxed
 tree-updating merge touching those read-only paths partially applies (writable
 files written, HEAD unmoved); see `.claude/rules/sandbox.md`:

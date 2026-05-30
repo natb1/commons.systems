@@ -95,7 +95,7 @@ steps in order.
    finding text, the files the finding names, the PR backlink `#<PR_NUM>`
    (reuse `PR_NUM` from the idempotency preamble), and a short rationale for
    why the finding is out of scope for this PR. This is the same `$INPUT`
-   shape and parse contract as `/review-fix` Step 5. Pass the assessed blocker
+   shape and parse contract as `/review-fix` Step 4. Pass the assessed blocker
    issue number(s) — or an explicit `independent` marker — into the subagent's
    prompt alongside `$INPUT`. The subagent:
 
