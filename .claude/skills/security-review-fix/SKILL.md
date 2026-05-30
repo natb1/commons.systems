@@ -93,8 +93,14 @@ ready. Otherwise run all steps in order.
    3. **Data exposure** — API responses returning more fields than the caller
       needs, PII in logs (`console.log` and similar), internal details (stack
       traces, config, paths) leaked in error messages.
-   4. **Dependency audit** — run `npm audit`; check for known CVEs and outdated
-      packages with security patches.
+   4. **Dependency audit** — scope to dependency changes the PR introduces.
+      First check whether the diff touches `package.json` or
+      `package-lock.json`; if neither changed, report no findings (pre-existing
+      CVEs in unchanged dependencies are out of scope). If dependency files
+      changed, run `npm audit --json` on HEAD and again against the lockfile at
+      `MERGE_BASE`, then report only advisories present in the HEAD audit but
+      absent from the baseline. Also flag any dependency the PR adds or upgrades
+      that skips a known security-patch release.
    5. **Firebase-specific** — Firestore rules permissiveness (overly broad
       `allow` conditions, missing field constraints), emulator-only code
       reachable on production paths, Firebase API key or config exposure.
