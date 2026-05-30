@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+# dispatch-materialize-spawn — the /dispatch-propagate router's
+# materialize-and-spawn orchestrator (the deterministic Steps 4-6 of the old
+# SKILL.md, bundled into one script).
+#
+# Usage: dispatch-materialize-spawn <issue-N> <explicit|queue> [--bypass-cap]
+#
+# Picks up after dispatch-select-tick has chosen a target. Runs the explicit-
+# path guards (leaf trace, closed-target, open-blocker), resolves the target
+# worktree (entering or creating it), writes the recovery marker + releases the
+# lock via dispatch-finalize-selection, runs the waiting-CI gate, consults the
+# concurrency budgeter, and spawns the worker. Prints exactly ONE terminal
+# token as its LAST stdout line; supporting detail (a path, a blocker list, the
+# CI line) precedes the token.
+#
+# <issue-N> is always the ISSUE number (the model derives N=${branch%%-*} for a
+# `pr` row before calling). The two literal `[branch phase]` positionals the
+# queue selection carries are dropped — no sub-script consumes them; the CI gate
+# re-derives the phase via dispatch-phase.
+#
+# Terminal tokens (the last stdout line is always exactly one of):
+#   propagate              the worker spawned (or deduped); the chain advances.
+#                          Lock already released by finalize-selection.
+#   notify target-blocked  explicit target is closed or has an open blocker; the
+#                          issue is parked via dispatch-apply-office-hours and
+#                          the lock released at the guard.
+#   notify spawn-failed    dispatch-spawn-worker exited non-zero. Lock already
+#                          released by finalize-selection.
+#   drain worktree-conflict  the target worktree cannot be safely entered; the
+#                          lock is released at the guard. The conflict path
+#                          precedes this token.
+#   drain ci-waiting       the target PR's CI is still in progress; no spawn this
+#                          tick. Lock already released by finalize-selection.
+#   drain concurrency-cap  the live worker count already meets the budget; a
+#                          cap-keyed re-seed is scheduled. Lock already released.
+#
+# Lock-release points: `notify target-blocked` and `drain worktree-conflict`
+# release explicitly at the guard (the marker does not exist yet on these
+# pre-finalize stop paths). `propagate` / `notify spawn-failed` /
+# `drain ci-waiting` / `drain concurrency-cap` are all reached AFTER
+# dispatch-finalize-selection has released the lock, so they do not re-release.
+#
+# Requires `dangerouslyDisableSandbox: true` — sub-scripts call `gh`, query the
+# Claude daemon over a Unix socket, and write tmp state; `git worktree add` and
+# `direnv` write to disk. See .claude/rules/sandbox.md.
+#
+# Exit code: 0 on every terminal token; 2 on a usage / internal error surfaced
+# on stderr.
+#
+# NOT set -e: exits are handled explicitly (matching the sibling dispatch
+# scripts).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+N="${1:-}"
+MODE="${2:-}"
+BYPASS_CAP=0
+if [[ "${3:-}" == "--bypass-cap" ]]; then
+  BYPASS_CAP=1
+elif [[ -n "${3:-}" ]]; then
+  echo "dispatch-materialize-spawn: unexpected argument '$3'" >&2
+  exit 2
+fi
+
+if [[ ! "$N" =~ ^[1-9][0-9]*$ ]] || { [[ "$MODE" != "explicit" && "$MODE" != "queue" ]]; }; then
+  echo "dispatch-materialize-spawn: usage: dispatch-materialize-spawn <issue-N> <explicit|queue> [--bypass-cap]" >&2
+  exit 2
+fi
+
+release_lock() {
+  "$SCRIPT_DIR/dispatch-acquire-lock" --release >/dev/null 2>&1 || true
+}
+
+# --- Step 4: explicit-path guards (skipped entirely in queue mode) -----------
+# Queue rows were already vetted by dispatch-select-target (leaf, blockers,
+# liveness), so the guards run only when the target was explicitly named.
+if [[ "$MODE" == "explicit" ]]; then
+  # Leaf trace, unless a PR already exists for the target (then the PR is the
+  # unit of work and the issue tree is irrelevant).
+  PR=$("$SCRIPT_DIR/dispatch-find-pr" "$N" 2>/dev/null) || PR=""
+  if [[ -z "$PR" ]]; then
+    if LEAF=$("$SCRIPT_DIR/dispatch-trace-leaf" "$N" explicit); then
+      N="$LEAF"
+    fi
+  fi
+
+  # Closed-target guard. gh issue view returns OPEN/CLOSED (uppercase).
+  ISSUE_STATE=$(gh issue view "$N" --json state -q .state 2>/dev/null) || ISSUE_STATE=""
+  if [[ "$ISSUE_STATE" == "CLOSED" ]]; then
+    release_lock
+    "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" "named target issue is closed" 1>&2 || true
+    echo "target #$N is closed"
+    echo "notify target-blocked"
+    exit 0
+  fi
+
+  # Open-blocker guard. Exit 2 → blocked:<nums> on stdout.
+  if BLOCKERS=$("$SCRIPT_DIR/dispatch-check-blockers" "$N"); then
+    : # exit 0, no open blockers
+  else
+    rc=$?
+    if [[ "$rc" -eq 2 ]]; then
+      release_lock
+      "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" "target has an open blocker" 1>&2 || true
+      echo "$BLOCKERS"
+      echo "notify target-blocked"
+      exit 0
+    fi
+    echo "dispatch-materialize-spawn: dispatch-check-blockers failed (exit $rc) for #$N" >&2
+    exit 2
+  fi
+fi
+
+# --- Step 5: resolve the worktree --------------------------------------------
+WT_DECISION=$("$SCRIPT_DIR/dispatch-resolve-worktree" "$N" "$MODE") || {
+  echo "dispatch-materialize-spawn: dispatch-resolve-worktree failed for #$N ($MODE)" >&2
+  exit 2
+}
+WT_ACTION="${WT_DECISION%% *}"
+WT_REST="${WT_DECISION#* }"
+
+case "$WT_ACTION" in
+  enter)
+    WORKTREE_PATH="$WT_REST"
+    ( cd "$WORKTREE_PATH" && "$SCRIPT_DIR/sync-issue-context" "$N" ) 1>&2 || true
+    ;;
+  create)
+    BRANCH="$WT_REST"
+    GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir)
+    PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
+    WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
+    git worktree add -b "$BRANCH" "$WORKTREE_PATH" origin/main 1>&2
+    direnv allow "$WORKTREE_PATH" 1>&2 || true
+    direnv exec "$WORKTREE_PATH" true 1>&2 || true
+    ( cd "$WORKTREE_PATH" && "$SCRIPT_DIR/sync-issue-context" "$N" ) 1>&2 || true
+    ;;
+  conflict)
+    release_lock
+    echo "path: $WT_REST"
+    echo "drain worktree-conflict"
+    exit 0
+    ;;
+  *)
+    echo "dispatch-materialize-spawn: dispatch-resolve-worktree emitted unexpected '$WT_DECISION'" >&2
+    exit 2
+    ;;
+esac
+
+# Write the recovery marker into the target worktree and release the lock in one
+# step. Lock-free from here. Its stdout (released/noop) goes to stderr.
+"$SCRIPT_DIR/dispatch-finalize-selection" "$WORKTREE_PATH" 1>&2
+
+# --- Step 6a: waiting-CI gate (#906) -----------------------------------------
+PHASE=$("$SCRIPT_DIR/dispatch-phase" "$N") || PHASE=""
+if [[ "$PHASE" == "waiting" ]]; then
+  echo "#$N: CI in progress; the next router tick will re-evaluate."
+  echo "drain ci-waiting"
+  exit 0
+fi
+
+# --- Step 6b: concurrency gate (skipped under --bypass-cap) ------------------
+if (( ! BYPASS_CAP )); then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-claude-agents.sh"
+  TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")
+  if LIVE_COUNT=$(claude_agents_count_by_name_prefix dispatch-worker-); then
+    if (( LIVE_COUNT >= TARGET_N )); then
+      "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+      echo "router: $LIVE_COUNT live worker(s) >= target $TARGET_N"
+      echo "drain concurrency-cap"
+      exit 0
+    fi
+    # under cap → fall through to spawn
+  fi
+  # daemon UNKNOWN (if-condition false) → fail open → fall through to spawn;
+  # dispatch-spawn-worker's per-worktree dedup is the last-line defense.
+fi
+
+# --- Step 6c: spawn the worker -----------------------------------------------
+if "$SCRIPT_DIR/dispatch-spawn-worker" "$N" "$WORKTREE_PATH" 1>&2; then
+  echo "propagate"
+  exit 0
+fi
+echo "notify spawn-failed"
+exit 0

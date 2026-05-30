@@ -9723,6 +9723,328 @@ assert_eq "extra args → usage error, exit 2" "ok" "$status"
 sel_tick_teardown
 
 # ============================================================================
+# dispatch-materialize-spawn tests (#919)
+# ============================================================================
+# Runs against the REAL dispatch-materialize-spawn / dispatch-finalize-selection
+# / dispatch-acquire-lock (so the marker-write + lock-release are genuine and
+# asserted via DISPATCH_LOCK_FILE and the on-disk marker) and FAKE sub-scripts
+# for every guard / resolve / phase / budget / spawn step (so each terminal
+# token is driven deterministically). git/direnv/gh are PATH-shimmed.
+echo ""
+echo "=== dispatch-materialize-spawn ==="
+
+mat_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  STUB_DIR="$TMPDIR_TEST/stub"
+  mkdir -p "$STUB_DIR" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/logs"
+
+  for s in dispatch-materialize-spawn dispatch-finalize-selection dispatch-acquire-lock; do
+    cp "$SCRIPT_DIR/$s" "$TMPDIR_TEST/$s"
+    chmod +x "$TMPDIR_TEST/$s"
+  done
+
+  # Real lock under our control; we hold it so finalize-selection / release do a
+  # strict self-release.
+  export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
+  export CLAUDE_CODE_SESSION_ID="mat-session"
+  printf '%s\n' "mat-session" > "$DISPATCH_LOCK_FILE"
+  cat > "$TMPDIR_TEST/fake-claude" <<'FAKE'
+#!/usr/bin/env bash
+echo '[{"sessionId":"mat-session","pid":1,"status":"busy","name":"x","cwd":""}]'
+FAKE
+  chmod +x "$TMPDIR_TEST/fake-claude"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake-claude"
+
+  # Fake sub-scripts (defaults; per-test overrides via MAT_* env vars).
+  cat > "$TMPDIR_TEST/dispatch-find-pr" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${MAT_PR:-}" ]] && echo "$MAT_PR"
+exit 0
+FAKE
+  cat > "$TMPDIR_TEST/dispatch-trace-leaf" <<FAKE
+#!/usr/bin/env bash
+echo "trace \$*" >> "$TMPDIR_TEST/logs/trace-leaf.log"
+echo "\${MAT_LEAF:-\$1}"
+FAKE
+  cat > "$TMPDIR_TEST/dispatch-check-blockers" <<'FAKE'
+#!/usr/bin/env bash
+if [[ -n "${MAT_BLOCKED:-}" ]]; then echo "blocked:$MAT_BLOCKED"; exit 2; fi
+exit 0
+FAKE
+  cat > "$TMPDIR_TEST/dispatch-apply-office-hours" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/apply-office-hours.log"
+exit 0
+FAKE
+  cat > "$TMPDIR_TEST/dispatch-resolve-worktree" <<FAKE
+#!/usr/bin/env bash
+echo "\${MAT_WT_DECISION:-create \$1-test}"
+FAKE
+  cat > "$TMPDIR_TEST/dispatch-phase" <<'FAKE'
+#!/usr/bin/env bash
+echo "${MAT_PHASE:-implement}"
+FAKE
+  cat > "$TMPDIR_TEST/dispatch-target-workers" <<'FAKE'
+#!/usr/bin/env bash
+echo "${MAT_TARGET_N:-1}"
+FAKE
+  cat > "$TMPDIR_TEST/dispatch-schedule-reseed" <<FAKE
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/schedule-reseed.log"
+exit 0
+FAKE
+  cat > "$TMPDIR_TEST/dispatch-spawn-worker" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/spawn-worker.log"
+echo spawned
+exit \${MAT_SPAWN_RC:-0}
+FAKE
+  cat > "$TMPDIR_TEST/sync-issue-context" <<FAKE
+#!/usr/bin/env bash
+echo "cwd=\$PWD argv=\$*" >> "$TMPDIR_TEST/logs/sync-issue-context.log"
+FAKE
+  # Sourced helper: provides claude_agents_count_by_name_prefix.
+  cat > "$TMPDIR_TEST/lib-claude-agents.sh" <<'FAKE'
+claude_agents_count_by_name_prefix() {
+  [[ -n "${MAT_LIVE_COUNT_FAIL:-}" ]] && return 1
+  echo "${MAT_LIVE_COUNT:-0}"
+}
+FAKE
+  chmod +x "$TMPDIR_TEST"/dispatch-find-pr "$TMPDIR_TEST"/dispatch-trace-leaf \
+    "$TMPDIR_TEST"/dispatch-check-blockers "$TMPDIR_TEST"/dispatch-apply-office-hours \
+    "$TMPDIR_TEST"/dispatch-resolve-worktree "$TMPDIR_TEST"/dispatch-phase \
+    "$TMPDIR_TEST"/dispatch-target-workers "$TMPDIR_TEST"/dispatch-schedule-reseed \
+    "$TMPDIR_TEST"/dispatch-spawn-worker "$TMPDIR_TEST"/sync-issue-context
+
+  mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
+  cat > "$TMPDIR_TEST/bin/git" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/git.log"
+case "\$*" in
+  "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/project/.bare" ;;
+  "worktree add -b "*) mkdir -p "\$5" ;;
+  *) : ;;
+esac
+STUB
+  cat > "$TMPDIR_TEST/bin/direnv" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/direnv.log"
+STUB
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+# Only the explicit closed-check uses gh here.
+echo "${MAT_ISSUE_STATE:-OPEN}"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/git" "$TMPDIR_TEST/bin/direnv" "$TMPDIR_TEST/bin/gh"
+  export PATH="$TMPDIR_TEST/bin:$SAVED_PATH"
+}
+
+mat_teardown() {
+  export PATH="$SAVED_PATH"
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST="" ; STUB_DIR=""
+  unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
+    MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_PHASE MAT_TARGET_N \
+    MAT_LIVE_COUNT MAT_LIVE_COUNT_FAIL MAT_SPAWN_RC MAT_ISSUE_STATE
+}
+
+run_mat() { "$TMPDIR_TEST/dispatch-materialize-spawn" "$@" 2>/dev/null; }
+
+# --- queue happy path → propagate (spawn called, lock released) --------------
+echo "Test: materialize-spawn queue happy path → propagate"
+mat_setup
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "queue happy: exit 0" "0" "$rc"
+assert_eq "queue happy: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "queue happy: spawn-worker called with issue + worktree" \
+  "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+assert_eq "queue happy: lock released by finalize" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "queue happy: marker written into target worktree" "1" \
+  "$([ -f "$TMPDIR_TEST/project/worktrees/839-test/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- queue mode skips guards (CLOSED issue still proceeds) -------------------
+echo "Test: materialize-spawn queue mode skips guards (closed state ignored)"
+mat_setup
+export MAT_ISSUE_STATE=CLOSED
+export MAT_BLOCKED="999"
+out=$(run_mat 839 queue)
+assert_eq "queue skips guards: terminal token" "propagate" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "queue skips guards: no office-hours park" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/apply-office-hours.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- explicit happy path → propagate -----------------------------------------
+echo "Test: materialize-spawn explicit happy path → propagate"
+mat_setup
+out=$(run_mat 839 explicit)
+assert_eq "explicit happy: terminal token" "propagate" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+
+# --- explicit closed target → notify target-blocked --------------------------
+echo "Test: materialize-spawn explicit closed target → notify target-blocked"
+mat_setup
+export MAT_ISSUE_STATE=CLOSED
+out=$(run_mat 839 explicit)
+assert_eq "explicit closed: terminal token" "notify target-blocked" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "explicit closed: office-hours park reason" "839 named target issue is closed" \
+  "$(cat "$TMPDIR_TEST/logs/apply-office-hours.log")"
+assert_eq "explicit closed: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "explicit closed: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- explicit open blocker → notify target-blocked ---------------------------
+echo "Test: materialize-spawn explicit open blocker → notify target-blocked"
+mat_setup
+export MAT_BLOCKED="777,888"
+out=$(run_mat 839 explicit)
+assert_eq "explicit blocked: detail line" "blocked:777,888" \
+  "$(printf '%s\n' "$out" | grep '^blocked:')"
+assert_eq "explicit blocked: terminal token" "notify target-blocked" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "explicit blocked: office-hours park reason" "839 target has an open blocker" \
+  "$(cat "$TMPDIR_TEST/logs/apply-office-hours.log")"
+assert_eq "explicit blocked: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- explicit leaf-trace retargets N (no PR) ---------------------------------
+echo "Test: materialize-spawn explicit leaf-trace retargets the spawn issue"
+mat_setup
+export MAT_LEAF=901
+out=$(run_mat 839 explicit)
+assert_eq "explicit leaf: terminal token" "propagate" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "explicit leaf: spawn-worker keyed on the leaf 901" \
+  "901 $TMPDIR_TEST/project/worktrees/901-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+mat_teardown
+
+# --- explicit PR exists → leaf trace skipped ---------------------------------
+echo "Test: materialize-spawn explicit with a PR skips leaf trace"
+mat_setup
+export MAT_PR=665
+export MAT_LEAF=99999   # would retarget if trace ran
+out=$(run_mat 839 explicit)
+assert_eq "explicit PR: terminal token" "propagate" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "explicit PR: leaf trace not consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/trace-leaf.log" ] && echo 1 || echo 0)"
+assert_eq "explicit PR: spawn keyed on original 839" \
+  "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+mat_teardown
+
+# --- enter path → sync-issue-context runs in the worktree --------------------
+echo "Test: materialize-spawn enter path syncs context + spawns"
+mat_setup
+EXISTING_WT="$TMPDIR_TEST/existing-wt"
+mkdir -p "$EXISTING_WT"
+export MAT_WT_DECISION="enter $EXISTING_WT"
+out=$(run_mat 839 queue)
+assert_eq "enter: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "enter: sync-issue-context ran in the worktree" "cwd=$EXISTING_WT argv=839" \
+  "$(cat "$TMPDIR_TEST/logs/sync-issue-context.log")"
+assert_eq "enter: marker written into the entered worktree" "1" \
+  "$([ -f "$EXISTING_WT/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- conflict → drain worktree-conflict --------------------------------------
+echo "Test: materialize-spawn conflict → drain worktree-conflict"
+mat_setup
+export MAT_WT_DECISION="conflict $TMPDIR_TEST/some/path"
+out=$(run_mat 839 queue)
+assert_eq "conflict: path detail line" "path: $TMPDIR_TEST/some/path" \
+  "$(printf '%s\n' "$out" | grep '^path:')"
+assert_eq "conflict: terminal token" "drain worktree-conflict" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "conflict: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "conflict: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- waiting CI → drain ci-waiting -------------------------------------------
+echo "Test: materialize-spawn waiting CI → drain ci-waiting"
+mat_setup
+export MAT_PHASE=waiting
+out=$(run_mat 839 queue)
+assert_eq "ci-waiting: CI line present" "#839: CI in progress; the next router tick will re-evaluate." \
+  "$(printf '%s\n' "$out" | grep '^#839:')"
+assert_eq "ci-waiting: terminal token" "drain ci-waiting" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "ci-waiting: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "ci-waiting: lock already released by finalize" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- concurrency cap → drain concurrency-cap, schedule-reseed called ---------
+echo "Test: materialize-spawn live count >= target → drain concurrency-cap"
+mat_setup
+export MAT_LIVE_COUNT=2
+export MAT_TARGET_N=1
+out=$(run_mat 839 queue)
+assert_eq "concurrency-cap: terminal token" "drain concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "concurrency-cap: reseed scheduled" "called" \
+  "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log")"
+assert_eq "concurrency-cap: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- --bypass-cap skips the concurrency gate (spawns even over budget) -------
+echo "Test: materialize-spawn --bypass-cap spawns even when live count >= target"
+mat_setup
+export MAT_LIVE_COUNT=5
+export MAT_TARGET_N=1
+out=$(run_mat 839 queue --bypass-cap)
+assert_eq "bypass-cap: terminal token" "propagate" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "bypass-cap: spawn called despite over budget" \
+  "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+assert_eq "bypass-cap: no reseed scheduled" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- daemon UNKNOWN → fail open and spawn ------------------------------------
+echo "Test: materialize-spawn daemon-query failure fails open and spawns"
+mat_setup
+export MAT_LIVE_COUNT_FAIL=1
+out=$(run_mat 839 queue)
+assert_eq "fail-open: terminal token" "propagate" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fail-open: spawn called" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- spawn failure → notify spawn-failed -------------------------------------
+echo "Test: materialize-spawn spawn failure → notify spawn-failed"
+mat_setup
+export MAT_SPAWN_RC=1
+out=$(run_mat 839 queue)
+assert_eq "spawn-failed: terminal token" "notify spawn-failed" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+
+# --- usage errors → exit 2 ---------------------------------------------------
+echo "Test: materialize-spawn bad/missing args → exit 2"
+mat_setup
+err=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 bogus 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in *"usage:"*"EXIT=2") s1=ok ;; *) s1="bad: $err" ;; esac
+assert_eq "bad mode → usage error, exit 2" "ok" "$s1"
+err=$("$TMPDIR_TEST/dispatch-materialize-spawn" abc queue 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in *"usage:"*"EXIT=2") s2=ok ;; *) s2="bad: $err" ;; esac
+assert_eq "non-numeric issue → usage error, exit 2" "ok" "$s2"
+err=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue --nope 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in *"unexpected argument"*"EXIT=2") s3=ok ;; *) s3="bad: $err" ;; esac
+assert_eq "unexpected 3rd arg → usage error, exit 2" "ok" "$s3"
+mat_teardown
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
