@@ -1,14 +1,14 @@
 ---
 name: dispatch-diagnose-main
-description: Diagnose origin/main's failing CI when /dispatch detects a red main; enumerates failing checks, fetches logs, summarizes likely cause, releases the dispatch lock, and returns so the caller can apply notify main-broken.
+description: Diagnose origin/main's failing CI when /dispatch-propagate detects a red main; enumerates failing checks, fetches logs, summarizes likely cause, releases the dispatch lock, and returns so the caller can apply notify main-broken.
 ---
 
 # Dispatch: Diagnose Main
 
-Invoked by `/dispatch` Step 3 when `dispatch-select-target` reports
+Invoked by `/dispatch-propagate` Step 3 when `dispatch-select-target` reports
 `main-broken <sha>` — `origin/main` itself is red, so no new work is safe to
 start. Diagnose main, release the dispatch lock, and return. On this skill's
-return, the caller (`/dispatch` Step 3) proceeds to Step 7 with `notify
+return, the caller (`/dispatch-propagate` Step 3) proceeds to Step 7 with `notify
 main-broken` — the session stays in `claude agents` until the user closes it,
 so the diagnosis remains visible rather than buried in a closed transcript.
 The skill does **not** run the sweep, create a worktree, branch, PR, or
@@ -46,7 +46,7 @@ These diagnostic `gh` calls run before the lock-release — keep them.
 As the action immediately before the final report:
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-acquire-lock --release
+.claude/skills/dispatch-propagate/scripts/dispatch-acquire-lock --release
 ```
 
 ## 4. Summarize and stop

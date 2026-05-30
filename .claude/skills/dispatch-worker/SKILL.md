@@ -1,25 +1,28 @@
 ---
 name: dispatch-worker
-description: Worker for the dispatch chain — runs one phase skill in its target worktree, then hands off to a fresh `/dispatch` router
+description: Worker for the dispatch chain — runs one phase skill in its target worktree, then hands off to a fresh `/dispatch-propagate` router
 ---
 
 # Dispatch Worker
 
 The worker is the per-worktree execution half of the dispatch chain. The other
-half — `/dispatch` — is the router: it selects a target, resolves its worktree,
-and spawns this worker. The worker then enters the target worktree, derives
-the phase, runs exactly one phase skill, and hands off.
+half — `/dispatch-propagate` — is the router: it selects a target, resolves its
+worktree, and spawns this worker into that worktree. The worker derives the
+phase, runs exactly one phase skill, and hands off.
 
-The worker is spawned from `worktrees/main` (the router's cwd) — not from the
-target worktree. Spawning from the target worktree would pollute the Claude
-daemon's "+ new session" launcher default cwd; spawning from `worktrees/main`
-keeps that default anchored at the router's worktree. The worker enters its
-target worktree as the first action of Step 0 by `cd`-ing into the
-`<worktree-path>` it receives as a positional argument. After that initial
-entry, the worker's cwd is anchored to the target worktree for its entire
-lifetime — it never calls `EnterWorktree` or `ExitWorktree`. That means
-`SessionStart`-derived attributes (title, restored skill set) and per-worktree
-sandbox concerns all naturally key on the right worktree once Step 0 runs.
+The worker is spawned **into** its target worktree by `dispatch-spawn-worker`
+— the script invokes `claude --bg` from a subshell that has `cd`'d into
+`<worktree-path>`, so the new worker is born in that worktree. It runs there
+from spawn through its entire lifetime; it never calls `EnterWorktree` or
+`ExitWorktree`. `SessionStart`-derived attributes (title, restored skill set)
+and per-worktree sandbox concerns all naturally key on the spawn cwd, which
+is the target worktree.
+
+Trade-off: the Claude daemon's "+ new session" launcher default cwd tracks
+the most-recent worker's worktree rather than `worktrees/main` — a
+recoverable UI default, accepted in exchange for sessions whose cwd does not
+silently drift mid-tick when subsequent `Bash` / `Skill` tool calls reset to
+the spawn cwd.
 
 The worker takes `<N> <worktree-path>` arguments — the issue number and the
 absolute path to its target worktree — and ends after one phase. The router
@@ -28,14 +31,15 @@ is the one who decides what to work on next; the worker just executes.
 Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 `gh`) with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 
-## 0. Enter the Worker's Worktree
+## 0. Cross-check the Worker's Worktree
 
-The worker is spawned from `worktrees/main` and `cd`s into its target
-worktree itself as the first action. `ARGUMENTS` has the shape
-`<N> <worktree-path>` (e.g. `860 /home/n8/natb1/commons.systems/worktrees/860-dispatch-spawn-worker-from-m`).
-Parse both, `cd` into the worktree, then run the branch-name sanity check —
-the assertion is the contract enforcement that the spawner passed a coherent
-worktree path for the named issue.
+The worker is born in its target worktree via spawn cwd (`dispatch-spawn-worker`
+runs `claude --bg` from a subshell `cd`'d into `<worktree-path>`). This step
+is a defensive cross-check that the spawner passed a coherent
+`<worktree-path>` matching the named issue and matching the session's actual
+spawn cwd. `ARGUMENTS` has the shape `<N> <worktree-path>` (e.g.
+`860 /home/n8/natb1/commons.systems/worktrees/860-dispatch-spawn-worker-from-m`).
+Parse both, then assert the current worktree matches.
 
 ```bash
 read -r ISSUE_NUM WORKTREE_PATH <<<"$ARGUMENTS"
@@ -43,34 +47,35 @@ if [[ -z "${ISSUE_NUM:-}" || -z "${WORKTREE_PATH:-}" ]]; then
   echo "dispatch-worker: expected ARGUMENTS '<N> <worktree-path>', got '$ARGUMENTS'" >&2
   exit 1
 fi
-if ! cd "$WORKTREE_PATH"; then
-  echo "dispatch-worker: cd to '$WORKTREE_PATH' failed" >&2
-  exit 1
-fi
+ACTUAL_TOPLEVEL=$(git rev-parse --show-toplevel)
+ACTUAL_BRANCH=$(basename "$ACTUAL_TOPLEVEL")
 EXPECTED="${ISSUE_NUM}-"
-ACTUAL_BRANCH=$(basename "$(git rev-parse --show-toplevel)")
 case "$ACTUAL_BRANCH" in
   ${EXPECTED}*) ;;
   *)
     echo "dispatch-worker invoked with wrong worktree: expected branch '${EXPECTED}…' under worktrees/, got '${ACTUAL_BRANCH}'" >&2
-    echo "The spawner must pass <worktree-path> matching the issue number <N>." >&2
+    echo "The spawner must spawn the worker with cwd matching <worktree-path>." >&2
     exit 1
     ;;
 esac
+if [[ "$ACTUAL_TOPLEVEL" != "$WORKTREE_PATH" ]]; then
+  echo "dispatch-worker invoked with mismatched <worktree-path>: spawn cwd '$ACTUAL_TOPLEVEL' != argument '$WORKTREE_PATH'" >&2
+  exit 1
+fi
 ```
 
 The bash above exits 1 to signal the wrong-worktree disposition — either the
-`cd` to `<worktree-path>` failed, or the branch-name sanity check rejected the
-resulting worktree. When that exit fires, the worker session ends; the Stop
-hook applies `dispatch:office-hours` to the issue because no marker was
-written.
+branch-name sanity check rejected the spawn cwd, or the positional
+`<worktree-path>` disagreed with `git rev-parse --show-toplevel`. When that
+exit fires, the worker session ends; the Stop hook applies
+`dispatch:office-hours` to the issue because no marker was written.
 
 ## 1. Derive the Phase
 
 Derive the phase via `dispatch-phase <N>`:
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-phase <N>
+.claude/skills/dispatch-propagate/scripts/dispatch-phase <N>
 ```
 
 It prints exactly one phase name. CI status is checked **before** labels — a
@@ -89,7 +94,6 @@ Map the phase:
 |---|---|---|
 | `implement` | no PR on the target | relevance review (Step 3), then dispatch its verdict |
 | `verify` | draft PR, CI completed and failed | `/verify-pr` |
-| `waiting` | draft PR, CI in progress (running/queued/not started) | monitor CI to completion with a `sonnet` subagent, then re-derive the phase and dispatch it (Step 2) |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` |
 | `code-review` | draft PR + `dispatch:qa-done` | `/code-review-fix` (applies `dispatch:code-reviewed` itself) |
 | `review` | draft PR + `dispatch:code-reviewed` | `/review-fix` (applies `dispatch:reviewed` itself) |
@@ -101,31 +105,23 @@ Map the phase:
 Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 `/dispatch-worker` invocation.
 
+**Race-window check first.** If `dispatch-phase <N>` returns `waiting` — CI
+transitioned back to in-progress since the router selected this target (e.g. a
+new push between selection and worker derivation) — stop with no marker and
+print the user-visible report verbatim: `#<N>: CI transitioned back to waiting
+since router selection; next router tick will re-derive.` Apply no
+`dispatch:office-hours` and spawn no babysitter — `waiting` is not
+worker-actionable; the router owns the CI gate. The Stop hook's marker-absent
+branch recognizes a re-derived `waiting` phase and hands the issue back to the
+router (spawns a fresh router **without** applying `dispatch:office-hours`),
+which re-gates it and picks it up once CI concludes.
+
 - **`implement`** — run the Step 3 relevance review and dispatch the verdict it
   returns (`proceed` / `adjust` / `stop` — see Step 3). The draft PR's existence
   plus its CI status is its own marker — `/plan-implement` gets **no**
   `dispatch:*` label.
 - **`verify`** — invoke `/verify-pr`. It runs a single pass: fix one set of
   failed CI checks, record the outcome, post it, stop. No label.
-- **`waiting`** — CI checks are still running or queued. Monitor them to
-  completion, then re-derive and dispatch the resolved phase within this same
-  `/dispatch-worker` invocation:
-  1. Resolve the draft PR number for the target.
-  2. Spawn a subagent via the Agent tool (`subagent_type: general-purpose`,
-     `model: sonnet`) that:
-     - first waits for CI to register at least one check — a freshly-pushed
-       branch can briefly have an empty check rollup;
-     - then runs `.claude/skills/dispatch/scripts/run-pr-checks-wait.sh
-       <pr-num>` with `dangerouslyDisableSandbox: true`, which blocks until
-       every check concludes;
-     - returns once all checks have completed.
-  3. After the subagent returns, re-run Step 1 (`dispatch-phase`) to re-derive
-     the phase from the now-complete CI, then dispatch the resolved phase per
-     this step — `/verify-pr` if any check failed, otherwise the green-CI
-     phases (`qa` / `code-review` / `review` / `security` / `ready`).
-  4. If the re-derived phase is still `waiting` (CI never registered any
-     check), stop; the Stop hook applies `dispatch:office-hours` to the
-     issue because no marker was written. Do not loop.
 - **`qa`** — invoke `/dispatch-qa`. It owns and applies `dispatch:qa-done`
   itself on a clean pass; `/dispatch-worker` applies no label.
 - **`code-review`** — invoke `/code-review-fix`. It runs `/code-review max`,
@@ -169,7 +165,7 @@ Before invoking `/plan-implement` on an `implement`-phase issue, confirm no PR
 exists for the target by running:
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-find-pr <N>
+.claude/skills/dispatch-propagate/scripts/dispatch-find-pr <N>
 ```
 
 If it prints a PR number, **skip this relevance review** and advance directly to
@@ -247,8 +243,8 @@ current PR/CI state to decide propagate vs park.
 
 ### The #725 cap-keyed re-seed
 
-See `/dispatch` Step 7's *The #725 cap-keyed re-seed* subsection — the
-worker's relationship to the re-seed is the same as the router's. The
-cap-keyed re-seed covers chain stalls caused by a rate-limit cap hit; an
-empty queue or all-parked stall is handled by the office-hours queue, not
-this mechanism.
+See `/dispatch-propagate` Step 7's *The #725 cap-keyed re-seed* subsection
+— the worker's relationship to the re-seed is the same as the router's.
+The cap-keyed re-seed covers chain stalls caused by a rate-limit cap hit;
+an empty queue or all-parked stall is handled by the office-hours queue,
+not this mechanism.

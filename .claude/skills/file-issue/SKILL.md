@@ -8,7 +8,7 @@ description: File a new GitHub issue from a structured title+body — runs dupli
 Single-purpose: file one follow-up GitHub issue from a caller-supplied title
 and body. Owns duplicate detection, issue creation, `@me` assignment, and the
 `help wanted` label — the minimum logic needed to file an issue that
-`/dispatch`'s queue scan will pick up.
+`/dispatch-propagate`'s queue scan will pick up.
 
 Callers (e.g. `/review-fix` Step 5 for deferred findings, `/ready`
 description-mode Step 5) supply fully formed title and body text. This skill
@@ -58,7 +58,7 @@ number; do not rely on stdout positioning beyond the URL itself.
 ## Step 4. Post-processing
 
 Assign the issue to the current GitHub user and apply the `help wanted`
-label, so `/dispatch`'s queue scan picks it up:
+label, so `/dispatch-propagate`'s queue scan picks it up:
 
 ```bash
 gh issue edit <N> --add-assignee @me --add-label "help wanted"

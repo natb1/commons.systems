@@ -5,7 +5,7 @@ description: Security phase — merge origin/main, fan out 9 parallel security s
 
 # Security Review and Fix
 
-The `security` phase of the issue workflow, dispatched by `/dispatch`. This skill
+The `security` phase of the issue workflow, dispatched by `/dispatch-propagate`. This skill
 owns the full structured security review for the dispatch workflow: merge current
 `main`, fan out 9 parallel security subagents directly, de-duplicate and classify
 their findings, implement the required fixes, commit and push, post a PR comment,
@@ -208,14 +208,14 @@ ready. Otherwise run all steps in order.
    `gh`):
 
    ```bash
-   .claude/skills/dispatch/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
+   .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
 6. **Apply the `dispatch:security-reviewed` label** via `dispatch-complete-phase`
    (use `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash
-   .claude/skills/dispatch/scripts/dispatch-complete-phase "$PR_NUM" security
+   .claude/skills/dispatch-propagate/scripts/dispatch-complete-phase "$PR_NUM" security
    ```
 
    The PR number passed here is **expected** to differ from the worktree's
@@ -225,8 +225,8 @@ ready. Otherwise run all steps in order.
    re-confirm the mismatch.
 
    This skill **owns** its `dispatch:security-reviewed` label — unlike the generic
-   `/security-review`, which `/dispatch` cannot make dispatch-aware — so
-   `/dispatch` does not apply the label after this skill returns.
+   `/security-review`, which `/dispatch-propagate` cannot make dispatch-aware — so
+   `/dispatch-propagate` does not apply the label after this skill returns.
 
 7. **Mark the PR ready.** Flip the draft to ready-for-review (use
    `dangerouslyDisableSandbox: true` — `gh` needs network):
@@ -237,9 +237,36 @@ ready. Otherwise run all steps in order.
 
    This is the workflow's terminal PR-state action.
 
-8. **Write the phase-completed marker, then stop.** The Stop hook
-   (`.claude/hooks/dispatch-stop.sh`) reads this to decide propagate vs park.
-   Atomic via tempfile + mv. `CLAUDE_JOB_DIR` unset = interactive run; skip.
+8. **Write the phase-completed marker (or park on deviation), then stop.**
+
+   Check for deviation first: if any finding classified `required` with
+   Confidence `high` remains unresolved after the Step 3 fix pass, the
+   deviation criterion fires. `CLAUDE_JOB_DIR` unset = interactive run; skip
+   both branches. On idempotent re-entry (Steps 1–6 were skipped), the Step 3
+   finding set is not in context — treat the deviation criterion as not met and
+   write the marker.
+
+   **Deviation fires** (a high-confidence `required` finding is still
+   unresolved) — skip the phase-completed marker. Write a one-line reason
+   instead, atomic via tempfile + mv:
+
+   ```bash
+   if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+     printf '%s\n' "/security-review-fix: high-confidence required finding(s) left unresolved after fixes" \
+       > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+     mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" \
+        "$CLAUDE_JOB_DIR/office-hours-reason"
+   fi
+   ```
+
+   The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads marker-absence as
+   Branch A and applies `dispatch:office-hours` to the issue, surfacing the
+   reason in the why-comment, so the parked item explains which criterion
+   fired. Do not apply the `dispatch:office-hours` label inline — the
+   Stop hook owns label application.
+
+   **No deviation** (all high-confidence `required` findings resolved, or none
+   existed) — write the phase-completed marker, atomic via tempfile + mv:
 
    ```bash
    if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
@@ -251,8 +278,9 @@ ready. Otherwise run all steps in order.
    ```
 
    Then **stop**. The Stop hook reads the marker and advances the chain.
-   `gh pr ready` (Step 7) is still the workflow's terminal *PR-state* action,
-   but the marker write is the dispatch chain's hand-off cue.
+   `gh pr ready` (Step 7) is still the workflow's terminal *PR-state* action
+   and runs regardless of deviation — only the marker is skipped when the
+   deviation criterion fires.
 
 ## Per-finding schema
 
@@ -293,7 +321,10 @@ Marking the PR ready (Step 7) is the workflow's terminal PR-state action;
 writing the phase-completed marker (Step 8) is the dispatch chain's hand-off
 cue. After this change the dispatch workflow has no human checkpoint before a PR
 goes ready — the per-phase PR-comment summaries are the audit trail. This is an
-intentional trade-off for an autonomous `/dispatch` background-job run.
+intentional trade-off for an autonomous `/dispatch-propagate` background-job run.
 
 The skill is idempotent: a re-invocation with `dispatch:security-reviewed` already
-on the PR skips Steps 1–6 and only ensures the PR is ready (Step 7).
+on the PR skips Steps 1–6, ensures the PR is ready (Step 7), and then runs the
+deviation check at Step 8. On re-entry the Step 3 finding set is not in context;
+treat the deviation criterion as not met (no unresolved findings visible) and
+write the phase-completed marker.
