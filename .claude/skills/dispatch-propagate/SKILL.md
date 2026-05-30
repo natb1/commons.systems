@@ -100,6 +100,10 @@ Fast-forward local `main` to `origin/main` — no push (a no-op when already equ
 git fetch origin main && git merge --ff-only origin/main
 ```
 
+Run this Bash call with `dangerouslyDisableSandbox: true` — `origin/main` frequently
+carries `.claude/skills/**` changes, and a sandboxed merge touching those read-only paths
+partially applies (writable files written, HEAD unmoved); see `.claude/rules/sandbox.md`.
+
 - If `git fetch` fails, or `git merge --ff-only` rejects a non-fast-forward,
   release the lock (see *Releasing the lock*), surface the error, then proceed to
   Step 7 with `notify sync-failed` — do not proceed to target selection.
