@@ -4187,6 +4187,31 @@ assert_eq "empty-marker holder blocks: lock file unchanged" \
   "sess-2525-foreign" "$lock_contents"
 lock_teardown
 
+# --- Test 25b: live foreign holder with FIFO marker → busy (no deadlock) -----
+#
+# marker_names_holder reads the marker's content; a non-regular file (here a
+# FIFO) at that path would block the read indefinitely while the flock is held,
+# deadlocking all routing. The regular-file guard must reject it and stay busy
+# rather than reclaim or hang. A `timeout` bounds the call so a regression
+# (reverting to a blocking read) surfaces as a hang, not a silent pass.
+
+echo "Test: live foreign holder with FIFO marker → busy (no deadlock)"
+lock_setup
+printf '%s\n' "sess-25b-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-25b-self"
+foreign_cwd="$TMPDIR_TEST/foreign-worktree-fifo-marker"
+mkdir -p "$foreign_cwd/tmp"
+mkfifo "$foreign_cwd/tmp/dispatch-worktree"
+lock_fake_claude_sessions "sess-25b-foreign=$foreign_cwd" "sess-25b-self=$TMPDIR_TEST"
+out=$(timeout 10 "$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "fifo-marker holder blocks: exits 0 (no timeout/hang)" "0" "$rc"
+assert_eq "fifo-marker holder blocks: prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "fifo-marker holder blocks: lock file unchanged" \
+  "sess-25b-foreign" "$lock_contents"
+rm -f "$foreign_cwd/tmp/dispatch-worktree"
+lock_teardown
+
 # --- Test 26: --release with MISMATCHED marker → noop (#928) -----------------
 #
 # Symmetry with Test 24: a lenient --release must not fire when the marker

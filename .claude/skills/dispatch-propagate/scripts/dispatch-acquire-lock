@@ -192,7 +192,9 @@ marker_names_holder() {
   local cwd="$1" sid="$2" marker content=""
   [[ -n "$cwd" ]] || return 1
   marker="$cwd/tmp/dispatch-worktree"
-  [[ -e "$marker" ]] || return 1
+  # Require a regular file: a FIFO or device node at this path would block the
+  # read below indefinitely while the flock is held, deadlocking all routing.
+  [[ -f "$marker" ]] || return 1
   IFS= read -r content <"$marker" 2>/dev/null || true
   [[ -n "$content" && "$content" == "$sid" ]]
 }
