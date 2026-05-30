@@ -330,45 +330,37 @@ Skip leaf tracing when:
 
 If the resolved target issue `<N>` has any **open** blocker — run
 `issue-blocking <N>` and check for any entry with `state` `OPEN` — release the
-lock (see *Releasing the lock*), report the open blocker, apply
-`dispatch:office-hours` to the target's PR if one exists (see *Applying
-`dispatch:office-hours`* below), then proceed to Step 7 with
+lock (see *Releasing the lock*), report the open blocker, park the issue with
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-apply-office-hours <N> "target has an open blocker"
+```
+
+(see *Applying `dispatch:office-hours`* below), then proceed to Step 7 with
 `notify target-blocked`. This guard applies even when a PR exists; closed
 blockers do not gate.
 
 If a named target issue is **closed**, release the lock (see *Releasing the
-lock*), report it, apply `dispatch:office-hours` to the target's PR if one
-exists (see *Applying `dispatch:office-hours`* below), then proceed to Step 7
-with `notify target-blocked`.
+lock*), report it, park the issue with
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-apply-office-hours <N> "named target issue is closed"
+```
+
+(see *Applying `dispatch:office-hours`* below), then proceed to Step 7 with
+`notify target-blocked`.
 
 ### Applying `dispatch:office-hours`
 
-`notify target-blocked` queues the target for human review by applying
-`dispatch:office-hours` to its PR when one exists. Resolve the PR with
-`.claude/skills/dispatch-propagate/scripts/dispatch-find-pr <N>`; if it prints a PR
-number, apply the label with the apply-first / create-on-"not found" idiom
-(`gh`, `dangerouslyDisableSandbox: true`):
+`notify target-blocked` queues the target for human review.
+`dispatch-apply-office-hours <N> <reason>` is the single write path: it applies
+the label to the **issue** (never a PR), creates the label on first use with
+the canonical color and description, is idempotent (a second call posts no
+duplicate comment), and posts a why-comment carrying the reason. Run it with
+`dangerouslyDisableSandbox: true` — `gh` needs network.
 
-```bash
-gh pr edit <pr-num> --add-label dispatch:office-hours
-```
-
-If the first call fails because the label does not exist yet, create it and
-retry — the same idiom `dispatch-complete-phase` uses:
-
-```bash
-gh label create dispatch:office-hours \
-  --description "dispatch workflow: blocked on a human — awaiting input or review"
-gh pr edit <pr-num> --add-label dispatch:office-hours
-```
-
-Pass no `--color`: `dispatch-complete-phase` is the single source of the
-`dispatch:*` label-colour metadata, and #757 owns `dispatch:office-hours`'s
-canonical definition — this call site only needs the label to exist.
-
-If `dispatch-find-pr` prints nothing, print a clear diagnostic to stderr
-without applying the label; the disposition still proceeds to Step 7 as
-`notify target-blocked` and the session stays open in `claude agents`.
+No PR resolution is needed to park a target; the label always lands on the
+issue, where the office-hours queue readers anchor their skip.
 
 ## 5. Resolve the Worktree
 
@@ -384,8 +376,12 @@ worktree path that Step 6 will pass to `dispatch-spawn-worker`.
 
 - **`enter <path>`** → re-use an existing `<issue>-*` worktree
   (recycle-after-completion for an explicit argument, or recycle of an orphan
-  worktree — on disk, no live session — for a queue selection, #905). Set
-  `WORKTREE_PATH=<path>` for Step 6. Re-sync issue context from the worktree
+  worktree — on disk, no live session — for a queue selection, #905). A reused
+  worktree whose checked-out branch differs from the target PR's head branch
+  (resolved by `dispatch-find-pr`) is re-pointed to the PR head branch by the
+  resolver before it emits `enter` — lossless, since the case where the existing
+  branch carries commits not on the PR head yields `conflict` instead (#913).
+  Set `WORKTREE_PATH=<path>` for Step 6. Re-sync issue context from the worktree
   (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`):
   ```bash
   (cd <path> && .claude/skills/dispatch-propagate/scripts/sync-issue-context <N>)
@@ -426,15 +422,24 @@ worktree path that Step 6 will pass to `dispatch-spawn-worker`.
      (cd "$WORKTREE_PATH" && .claude/skills/dispatch-propagate/scripts/sync-issue-context <N>)
      ```
 
-- **`conflict <path>`** → a queue-selected target already has a worktree, so
-  another session owns it. (`dispatch-select-target` resolves the `help wanted`
-  tier to a leaf with no worktree, so for a queue selection this arises only from
-  a race — another session created the worktree between selection and worktree
-  resolution.) Release the lock (see *Releasing the lock*), then proceed to
+- **`conflict <path>`** → the worktree at `<path>` cannot be safely entered.
+  Either a queue-selected target already has a worktree another live session
+  owns (`dispatch-select-target` resolves the `help wanted` tier to a leaf with
+  no worktree, so for a queue selection this arises only from a race — another
+  session created the worktree between selection and worktree resolution), or
+  the reused `<issue>-*` worktree's checked-out branch carries commits not on
+  the target PR's head branch, so re-pointing it would discard work (#913).
+  Release the lock (see *Releasing the lock*), then proceed to
   Step 7 with `notify worktree-conflict` — the user-visible report is mandatory
-  there ("worktree at `<path>` owned by another live session for issue `<N>`;
-  closing — the next baton-pass or office-hours hand-off will re-seed"), not
-  optional. Do not spawn a worker.
+  there. The message depends on which conflict case fired:
+  - Live-session race: "worktree at `<path>` owned by another live session for
+    issue `<N>`; closing — the next baton-pass or office-hours hand-off will
+    re-seed"
+  - Unique-commits branch mismatch: "worktree at `<path>` for issue `<N>` is
+    on a branch with commits not on the PR head branch; manual inspection needed
+    before re-entry"
+
+  Not optional. Do not spawn a worker.
 
 As the **final action of this step on every non-`conflict` (proceed) path** —
 before Step 6 — run `dispatch-finalize-selection "$WORKTREE_PATH"`. The
@@ -622,8 +627,9 @@ The three dispositions:
 - **`notify <reason>`** — `notify spawn-failed` (Step 6's spawn exited
   non-zero) or any Steps 0–5 variance. The call site has already printed a
   user-visible report; for `notify target-blocked` it has also applied
-  `dispatch:office-hours` to the target's PR when one is resolvable (see
-  Step 4's *Applying `dispatch:office-hours`* subsection). Do **not**
+  `dispatch:office-hours` to the target's **issue** via
+  `dispatch-apply-office-hours` (see Step 4's *Applying
+  `dispatch:office-hours`* subsection). Do **not**
   self-close — the session stays in `claude agents` until the user closes
   it, so the variance is visible rather than buried in a closed transcript.
 
@@ -638,8 +644,10 @@ The three dispositions:
   | `notify target-blocked` | Step 4 — named target is closed or has an open blocker |
 
 - **`drain <reason>`** — `drain empty-queue` (Step 3, queue empty),
-  `drain worktree-conflict` (Step 5, target's worktree is owned by another
-  live session), or `drain concurrency-cap` (Step 6, `live_count >=
+  `drain worktree-conflict` (Step 5, target's worktree cannot be safely
+  entered — either a live session owns it, or the worktree's branch carries
+  commits not on the PR head branch; see the `conflict` case in Step 5), or
+  `drain concurrency-cap` (Step 6, `live_count >=
   target_N` — the chain re-seeds when the cap-keyed timer fires at the next
   rate-limit window reset; see *The #725 cap-keyed re-seed* above). The call site has already printed a **mandatory** user-visible
   report stating the reason and the recovery path (templates live at the

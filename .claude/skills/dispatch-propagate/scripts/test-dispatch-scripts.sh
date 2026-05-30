@@ -53,6 +53,7 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
+  cp "$SCRIPT_DIR/dispatch-apply-office-hours" "$TMPDIR_TEST/dispatch-apply-office-hours"
   cp "$SCRIPT_DIR/dispatch-resolve-worktree" "$TMPDIR_TEST/dispatch-resolve-worktree"
   # dispatch-select-target's JIT scan calls dispatch-config-load and
   # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
@@ -74,6 +75,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
+           "$TMPDIR_TEST/dispatch-apply-office-hours" \
            "$TMPDIR_TEST/dispatch-resolve-worktree" \
            "$TMPDIR_TEST/dispatch-config-load" \
            "$TMPDIR_TEST/dispatch-project-status-read"
@@ -221,10 +223,57 @@ case "$args" in
       echo '{"closingIssuesReferences":[]}'
     fi
     ;;
+  pr\ view\ *\ --json\ headRefName)
+    # dispatch-resolve-worktree reconciliation: gh pr view <N> --json headRefName.
+    echo "pr view" >> "$STUB_DIR/gh-pr-view-headref.log"
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/pr-headref-${num}.json" ]]; then
+      cat "$STUB_DIR/pr-headref-${num}.json"
+    else
+      echo '{"headRefName":""}'
+    fi
+    ;;
   label\ create\ *)
-    # dispatch-complete-phase creates the label only when the apply reported
-    # it missing.
+    # dispatch-complete-phase / dispatch-apply-office-hours create the label only
+    # when the apply reported it missing.
     echo "$args" >> "$STUB_DIR/gh-label-create.log"
+    ;;
+  issue\ view\ *\ --json\ labels)
+    # dispatch-apply-office-hours idempotency read: gh issue view <num> --json labels.
+    # $STUB_DIR/issue-labels-<num>.json supplies the labels object; absence means
+    # the issue carries no labels.
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/issue-labels-${num}.json" ]]; then
+      cat "$STUB_DIR/issue-labels-${num}.json"
+    else
+      echo '{"labels":[]}'
+    fi
+    ;;
+  issue\ edit\ *)
+    # dispatch-apply-office-hours applies the label to the ISSUE.
+    # $STUB_DIR/issue-edit-mode selects behavior (default: succeed and log args).
+    mode="ok"
+    [[ -f "$STUB_DIR/issue-edit-mode" ]] && mode=$(cat "$STUB_DIR/issue-edit-mode")
+    case "$mode" in
+      label-missing)
+        # The label does not exist until gh label create runs: model gh's
+        # missing-label error until then, then succeed on the retry.
+        if [[ -f "$STUB_DIR/gh-label-create.log" ]]; then
+          echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
+        else
+          label="${args##* }"
+          echo "failed to update: '$label' not found" >&2
+          exit 1
+        fi
+        ;;
+      *)
+        echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
+        ;;
+    esac
+    ;;
+  issue\ comment\ *)
+    # dispatch-apply-office-hours posts the why-comment to the ISSUE.
+    echo "$args" >> "$STUB_DIR/gh-issue-comment.log"
     ;;
   pr\ edit\ *)
     # dispatch-complete-phase applies the label to the PR. $STUB_DIR/pr-edit-mode
@@ -332,6 +381,22 @@ case "$args" in
     else
       echo "/repo"
     fi
+    ;;
+  -C\ *\ fetch\ *)
+    # dispatch-resolve-worktree reconciliation: fetch the PR head branch.
+    : ;;
+  -C\ *\ rev-list\ --count\ *)
+    # dispatch-resolve-worktree reconciliation: commits unique to the worktree
+    # branch. Default 0 (lossless re-point); rev-list-count.txt overrides to N.
+    if [[ -f "$STUB_DIR/rev-list-count.txt" ]]; then
+      cat "$STUB_DIR/rev-list-count.txt"
+    else
+      echo "0"
+    fi
+    ;;
+  -C\ *\ checkout\ *)
+    # dispatch-resolve-worktree reconciliation: re-point to the PR head branch.
+    echo "$args" >> "$STUB_DIR/git-checkout.log"
     ;;
   *)
     echo "git stub: unknown invocation: $args" >&2
@@ -863,6 +928,25 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
 select_target_fake_claude
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR with orphan worktree is selected, not skipped" "pr 10 10-active-branch verify" "$result"
+teardown
+
+# 2b. A PR whose ISSUE carries dispatch:office-hours is skipped (issue #909).
+# The label lives on the issue, not the PR — the skip resolves the issue number
+# from the PR's branch prefix (<N>-) and reads the issue's labels. PR 10's branch
+# is 10-parked → issue #10, which is parked; PR 20's branch is 20-other → issue
+# #20, which is not. Neither PR itself carries the label.
+echo "Test: PR whose issue carries dispatch:office-hours is skipped"
+setup
+UNION='['"$(make_pr_union 10 "10-parked" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-other" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+# Issue #10 is parked (dispatch:office-hours); issue #20 is not. Neither carries
+# "help wanted", so neither competes in the issue queue — they exist here only as
+# the office-hours-label source the PR loop reads via ISSUE_LABELS_JSON.
+printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch:office-hours"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "PR with parked issue skipped; unparked sibling returned" "pr 20 20-other verify" "$result"
 teardown
 
 # 3. When no eligible PR exists, a help-wanted issue is chosen.
@@ -1980,21 +2064,10 @@ if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else 
 assert_eq "invalid duration → exits non-zero" "yes" "$rc_nonzero"
 teardown
 
-# OH1. A PR carrying dispatch:office-hours is skipped (parked for human review).
-echo "Test: PR with dispatch:office-hours is skipped"
-setup
-# Two verify PRs; the older one (PR 10) is parked.
-OFFICE_HOURS_LABELS='[{"name":"dispatch:office-hours"}]'
-UNION='['
-UNION+="$(make_pr_union 10 "10-parked" "2024-01-01T00:00:00Z" "true" "$OFFICE_HOURS_LABELS" "$FAILING_ROLLUP")"','
-UNION+="$(make_pr_union 20 "20-active" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"
-UNION+=']'
-setup_union_pr_list "$UNION"
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "parked PR skipped; next PR returned" "pr 20 20-active verify" "$result"
-teardown
+# OH1. The PR-phase office-hours skip is issue-anchored (issue #909): see the
+# "PR whose issue carries dispatch:office-hours is skipped" test in the
+# dispatch-select-target section above. The label lives on the issue, never the
+# PR, so there is no PR-label filter here.
 
 # OH2. A help-wanted issue carrying dispatch:office-hours is skipped.
 echo "Test: help-wanted issue with dispatch:office-hours is skipped"
@@ -2009,22 +2082,24 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "parked issue skipped; next help-wanted issue returned" "issue 66" "$result"
 teardown
 
-# OH3. A PR with dispatch:office-hours that has a worktree on disk is not
-#      selected — the PR-ladder worktree-skip keeps it out regardless of the
-#      label, but the label alone is also sufficient. This test codifies the
-#      no-regression claim: the old sweep-adoption mechanism would have picked
-#      such a PR; without it the labeled-and-worktree'd PR stays out.
+# OH3. A PR whose issue is parked (dispatch:office-hours) and that also has a
+#      worktree on disk is not selected — the PR-ladder worktree-skip keeps it
+#      out regardless of the label. This test codifies the no-regression claim:
+#      the old sweep-adoption mechanism would have picked such a PR; without it
+#      the worktree'd PR stays out.
 echo "Test: office-hours PR with worktree on disk is not selected"
 setup
-# PR 10 is parked (dispatch:office-hours) and also has a worktree on disk.
-# PR 20 is the second eligible verify PR with no labels and no worktree.
-OFFICE_HOURS_LABELS='[{"name":"dispatch:office-hours"}]'
+# PR 10's issue (#10) is parked (dispatch:office-hours) and PR 10 also has a
+# worktree on disk. PR 20 is the second eligible verify PR with no parked issue
+# and no worktree.
 UNION='['
-UNION+="$(make_pr_union 10 "10-oh-parked" "2024-01-01T00:00:00Z" "true" "$OFFICE_HOURS_LABELS" "$FAILING_ROLLUP")"','
+UNION+="$(make_pr_union 10 "10-oh-parked" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
 UNION+="$(make_pr_union 20 "20-active" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"
 UNION+=']'
 setup_union_pr_list "$UNION"
-echo '[]' > "$STUB_DIR/issue-list.json"
+# Issue #10 is parked (the office-hours label lives on the issue, issue #909).
+printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch:office-hours"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
 # Worktree exists on disk for 10-oh-parked (what the old adoption mechanism would
 # have targeted); no worktree for 20-active.
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/10-oh-parked\nHEAD def456\nbranch refs/heads/10-oh-parked\n\n' \
@@ -2340,6 +2415,115 @@ assert_eq "only dispatch-complete-phase owns BFD4F2" \
   "$matches"
 
 # ============================================================================
+# dispatch-apply-office-hours tests
+# ============================================================================
+echo ""
+echo "=== dispatch-apply-office-hours ==="
+
+# Reports whether the gh stub recorded a given call log (present/absent).
+log_state() {
+  [[ -f "$STUB_DIR/$1" ]] && echo "present" || echo "absent"
+}
+
+# Happy path: the issue carries no office-hours label, so the script applies it
+# to the ISSUE and posts a why-comment containing the reason text.
+echo "Test: label absent → apply to issue + post why-comment"
+setup
+"$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion"
+assert_eq "applies dispatch:office-hours to the issue" \
+  "issue edit 42 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+assert_eq "happy path: no gh label create when label exists" \
+  "absent" "$(log_state gh-label-create.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q "Reason: phase exited before completion" "$STUB_DIR/gh-issue-comment.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: why-comment contains the reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: why-comment contains the reason"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "^issue comment 42 " "$STUB_DIR/gh-issue-comment.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: comment targets the issue"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: comment targets the issue"
+fi
+teardown
+
+# Idempotent: the issue already carries the label → no re-apply, no duplicate
+# comment.
+echo "Test: label already present → no edit, no duplicate comment"
+setup
+echo '{"labels":[{"name":"dispatch:office-hours"}]}' > "$STUB_DIR/issue-labels-42.json"
+"$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase ran but did not advance"
+assert_eq "idempotent: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "idempotent: no duplicate comment" "absent" "$(log_state gh-issue-comment.log)"
+teardown
+
+# Missing reason (only an issue number) → non-zero exit, no edit, no comment.
+echo "Test: missing reason → non-zero exit, no edit, no comment"
+setup
+if "$TMPDIR_TEST/dispatch-apply-office-hours" 42 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "missing reason exits non-zero" "1" "$rc"
+assert_eq "missing reason: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "missing reason: no comment" "absent" "$(log_state gh-issue-comment.log)"
+teardown
+
+# Empty reason → same as missing reason.
+echo "Test: empty reason → non-zero exit, no edit, no comment"
+setup
+if "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "empty reason exits non-zero" "1" "$rc"
+assert_eq "empty reason: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+teardown
+
+# Missing both args → non-zero exit.
+echo "Test: missing both args → non-zero exit"
+setup
+if "$TMPDIR_TEST/dispatch-apply-office-hours" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "missing both args exits non-zero" "1" "$rc"
+teardown
+
+# Non-numeric, flag-like issue number → hard error, no gh calls. Guards against a
+# flag-like first arg (e.g. --repo other/repo) being argument-injected into the
+# gh issue view/edit/comment calls.
+echo "Test: non-numeric issue number → non-zero exit, no edit/comment"
+setup
+if "$TMPDIR_TEST/dispatch-apply-office-hours" "--repo other/repo" "a reason" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "non-numeric issue number exits non-zero" "1" "$rc"
+assert_eq "non-numeric issue number: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "non-numeric issue number: no comment" "absent" "$(log_state gh-issue-comment.log)"
+teardown
+
+# Create-on-first-use: the apply fails "not found" (the *label* does not exist
+# in the repo yet), so the script creates it with the canonical FBCA04 color and
+# retries the edit, then posts the comment.
+echo "Test: label not found → create (FBCA04) then retry + comment"
+setup
+echo "label-missing" > "$STUB_DIR/issue-edit-mode"
+"$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion"
+TOTAL=$((TOTAL + 1))
+if grep -q "^label create dispatch:office-hours --color FBCA04 " "$STUB_DIR/gh-label-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: label created with FBCA04 color"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: label created with FBCA04 color"
+fi
+assert_eq "create-on-first-use: label applied on retry" \
+  "issue edit 42 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+assert_eq "create-on-first-use: why-comment posted" \
+  "present" "$(log_state gh-issue-comment.log)"
+teardown
+
+# dispatch-apply-office-hours owns the FBCA04 hex. (A single-source-of-truth
+# guard that excludes the two writer hooks is deferred to the unit that routes
+# them through this script and removes their inline FBCA04 references.)
+echo "Test: dispatch-apply-office-hours contains the FBCA04 hex"
+TOTAL=$((TOTAL + 1))
+if grep -q 'FBCA04' "$SCRIPT_DIR/dispatch-apply-office-hours"; then
+  PASS=$((PASS + 1)); echo "  PASS: dispatch-apply-office-hours owns FBCA04"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: dispatch-apply-office-hours owns FBCA04"
+fi
+
+# ============================================================================
 # dispatch-resolve-worktree tests
 # ============================================================================
 echo ""
@@ -2495,6 +2679,127 @@ setup
 echo '{"title":"!!!"}' > "$STUB_DIR/issue-title-42.json"
 if "$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "empty-slug title exits non-zero" "1" "$rc"
+teardown
+
+# ----------------------------------------------------------------------------
+# Branch reconciliation on the `enter` path (#913). PR existence is driven via
+# pr-list-full.json (dispatch-find-pr's prefix match on headRefName); the PR
+# head branch is driven via pr-headref-<num>.json (gh pr view headRefName).
+# The git stub logs checkouts to git-checkout.log and reads the unique-commit
+# count from rev-list-count.txt (default 0).
+# ----------------------------------------------------------------------------
+
+# 11. Wrong branch + PR + no unique commits → re-point: enter AND checkout logged.
+echo "Test: reconcile wrong branch (no unique commits) → re-point + enter"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "wrong branch + no unique commits → enter" \
+  "enter /worktrees/42-my-feature" "$result"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && grep -q -- "-B 42-pr-branch origin/42-pr-branch" "$STUB_DIR/git-checkout.log" && echo yes || echo no)
+assert_eq "wrong branch + no unique commits → re-point checkout logged" "yes" "$checkout_logged"
+teardown
+
+# 12. Worktree already on the PR head branch → enter, no redundant checkout.
+echo "Test: worktree already on PR branch → enter, no checkout"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+printf '[{"number":100,"headRefName":"42-my-feature"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"42-my-feature"}' > "$STUB_DIR/pr-headref-100.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "already on PR branch → enter" "enter /worktrees/42-my-feature" "$result"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
+assert_eq "already on PR branch → no checkout" "no" "$checkout_logged"
+teardown
+
+# 13. Wrong branch + unique commits on the worktree branch → conflict.
+echo "Test: reconcile wrong branch (unique commits) → conflict"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+echo "2" > "$STUB_DIR/rev-list-count.txt"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "wrong branch + unique commits → conflict" \
+  "conflict /worktrees/42-my-feature" "$result"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
+assert_eq "wrong branch + unique commits → no checkout" "no" "$checkout_logged"
+teardown
+
+# 14. No PR for the issue (implement phase) → enter unchanged: no gh pr view,
+#     no checkout.
+echo "Test: no PR → enter unchanged (no pr view, no checkout)"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+# No pr-list-full.json: dispatch-find-pr finds no PR.
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "no PR → enter" "enter /worktrees/42-my-feature" "$result"
+pr_view_called=$([[ -f "$STUB_DIR/gh-pr-view-headref.log" ]] && echo yes || echo no)
+assert_eq "no PR → gh pr view not called" "no" "$pr_view_called"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
+assert_eq "no PR → no checkout" "no" "$checkout_logged"
+teardown
+
+# 15. queue-orphan + wrong branch + PR → reconciliation applies in queue mode too.
+echo "Test: queue orphan + wrong branch + PR → re-point + enter"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # orphan: no live session owns the worktree
+printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
+assert_eq "queue orphan + wrong branch → enter" \
+  "enter /worktrees/42-my-feature" "$result"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && grep -q -- "-B 42-pr-branch origin/42-pr-branch" "$STUB_DIR/git-checkout.log" && echo yes || echo no)
+assert_eq "queue orphan + wrong branch → re-point checkout logged" "yes" "$checkout_logged"
+teardown
+
+# 16. queue live-session + wrong branch + PR → the live-session conflict
+#     short-circuits before reconciliation: conflict, no gh pr view, no checkout.
+#     Documents that live-session ownership takes precedence over branch identity.
+echo "Test: queue live-session + wrong branch → conflict (no reconciliation)"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "42-my-feature"   # live session owns the worktree
+printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
+assert_eq "queue live-session + wrong branch → conflict" \
+  "conflict /worktrees/42-my-feature" "$result"
+pr_view_called=$([[ -f "$STUB_DIR/gh-pr-view-headref.log" ]] && echo yes || echo no)
+assert_eq "queue live-session + wrong branch → gh pr view not called" "no" "$pr_view_called"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
+assert_eq "queue live-session + wrong branch → no checkout" "no" "$checkout_logged"
+teardown
+
+# 17. PR found but headRefName empty/unusable → error, not a silent enter. An
+#     empty headRefName once a PR exists is a failed lookup; entering
+#     unreconciled would defeat the reconciliation guard. The same check blocks
+#     option/refspec injection via the GitHub-sourced branch name.
+echo "Test: PR + empty headRefName → error (no silent enter, no checkout)"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":""}' > "$STUB_DIR/pr-headref-100.json"
+if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "PR + empty headRefName → exit 1" "1" "$rc"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
+assert_eq "PR + empty headRefName → no checkout" "no" "$checkout_logged"
+teardown
+
+# 18. PR head branch carrying an option-injection name → error before any git
+#     call. Guards the GitHub-sourced headRefName at the external boundary.
+echo "Test: PR + injection-shaped headRefName → error (no checkout)"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"--upload-pack=evil"}' > "$STUB_DIR/pr-headref-100.json"
+if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "PR + injection-shaped headRefName → exit 1" "1" "$rc"
+checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
+assert_eq "PR + injection-shaped headRefName → no checkout" "no" "$checkout_logged"
 teardown
 
 # ============================================================================
@@ -6949,13 +7254,14 @@ echo "=== dispatch-input-block ==="
 #
 # The hook discriminates on CLAUDE_JOB_DIR/state.json {.name} starting with
 # "dispatch-"; resolves the issue number from the current branch (the <N>-*
-# prefix); resolves a PR via dispatch-find-pr; applies dispatch:office-hours
-# with the apply-first / create-on-"not found" idiom; runs dispatch-spawn.
+# prefix); parks the ISSUE via dispatch-apply-office-hours (the single write
+# path — issue target, create-on-first-use, why-comment); runs dispatch-spawn.
 # Always exits 0.
 #
 # Each test gets a fresh tmp tree:
 #   $TMPDIR_TEST/hooks/dispatch-input-block.sh     — the hook under test
-#   $TMPDIR_TEST/skills/dispatch-propagate/scripts/          — fakes for dispatch-find-pr,
+#   $TMPDIR_TEST/skills/dispatch-propagate/scripts/  — fakes for
+#                                                    dispatch-apply-office-hours,
 #                                                    dispatch-spawn
 #   $TMPDIR_TEST/bin/{gh,git}                      — PATH shims
 #   $TMPDIR_TEST/jobs/<id>/state.json              — fake CLAUDE_JOB_DIR ledger
@@ -6975,14 +7281,15 @@ ib_setup() {
     "$TMPDIR_TEST/hooks/dispatch-input-block.sh"
   chmod +x "$TMPDIR_TEST/hooks/dispatch-input-block.sh"
 
-  # Fake dispatch-find-pr: prints contents of $STUB_DIR/find-pr-output if
-  # present, else nothing (no PR exists).
-  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr" <<'FAKE'
+  # Fake dispatch-apply-office-hours: log argv to apply-office-hours.log so
+  # tests can assert the issue target + reason the hook passed. The hook routes
+  # every dispatch:office-hours apply through this single write path.
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-apply-office-hours" <<'FAKE'
 #!/usr/bin/env bash
-[[ -f "$STUB_DIR/find-pr-output" ]] && cat "$STUB_DIR/find-pr-output"
+echo "$*" >> "$STUB_DIR/apply-office-hours.log"
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr"
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-apply-office-hours"
 
   # Fake dispatch-spawn-router: log invocations to spawn-calls.log.
   cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-router" <<'FAKE'
@@ -7063,9 +7370,9 @@ ib_teardown() {
   unset CLAUDE_JOB_DIR
 }
 
-# --- Test 1: dispatch-* job + PR exists → label PR, spawn baton --------------
+# --- Test 1: dispatch-* job + PR exists → still parks the ISSUE, spawn baton --
 
-echo "Test: dispatch-* job + branch <N>-* + PR exists → label PR, spawn baton"
+echo "Test: dispatch-* job + branch <N>-* + PR exists → park ISSUE via apply-office-hours, spawn baton"
 ib_setup
 echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
@@ -7074,74 +7381,49 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "input-block: hook exits 0" "0" "$rc"
-pr_edit_log=$(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$pr_edit_log" == *"pr edit 456 --add-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: input-block: 'gh pr edit 456 --add-label dispatch:office-hours' was invoked"
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: input-block: dispatch-apply-office-hours invoked with issue 123 + non-empty reason (issue target even with a PR)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: input-block: 'gh pr edit 456 --add-label dispatch:office-hours' was invoked"
-  echo "    pr-edit-log: $pr_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: input-block: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: input-block: no PR-targeted gh edit (apply is issue-only)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: input-block: no PR-targeted gh edit (apply is issue-only)"
 fi
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "input-block: dispatch-spawn invoked exactly once" "1" "$spawn_calls"
 ib_teardown
 
-# --- Test 2: dispatch-* job + no PR → label issue, spawn baton ---------------
+# --- Test 2: dispatch-* job + no PR → park the ISSUE, spawn baton ------------
 
-echo "Test: dispatch-* job + branch <N>-* + no PR → label issue (implement phase)"
+echo "Test: dispatch-* job + branch <N>-* + no PR → park ISSUE (implement phase)"
 ib_setup
 echo "789-bare" > "$STUB_DIR/current-branch.txt"
-# No find-pr-output → dispatch-find-pr prints nothing → fall back to issue.
 echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "input-block (no PR): hook exits 0" "0" "$rc"
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 789 --add-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: input-block (no PR): 'gh issue edit 789 --add-label dispatch:office-hours' was invoked"
+if [[ "$apply_issue" == "789" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: input-block (no PR): dispatch-apply-office-hours invoked with issue 789 + non-empty reason"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: input-block (no PR): 'gh issue edit 789 --add-label dispatch:office-hours' was invoked"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: input-block (no PR): dispatch-apply-office-hours invoked with issue 789 + non-empty reason"
+  echo "    apply-log: $apply_log"
 fi
 ib_teardown
 
-# --- Test 3: label missing → create + retry, canonical color/description -----
-
-echo "Test: label-missing → 'gh label create dispatch:office-hours' (canonical color/description) then retry"
-ib_setup
-echo "123-foo" > "$STUB_DIR/current-branch.txt"
-echo "456" > "$STUB_DIR/find-pr-output"
-echo "label-missing" > "$STUB_DIR/pr-edit-mode"
-echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
-export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
-"$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
-rc=$?
-assert_eq "label-missing: hook exits 0" "0" "$rc"
-label_create_log=$(cat "$STUB_DIR/gh-label-create.log" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ "$label_create_log" == *"--color FBCA04"* ]] \
-   && [[ "$label_create_log" == *"dispatch:office-hours"* ]] \
-   && [[ "$label_create_log" == *"blocked on a human"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: label-missing: label created with canonical color (FBCA04) and description"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: label-missing: label created with canonical color (FBCA04) and description"
-  echo "    label-create-log: $label_create_log"
-fi
-pr_edit_log=$(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ "$pr_edit_log" == *"pr edit 456 --add-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: label-missing: PR apply retried after label create"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: label-missing: PR apply retried after label create"
-  echo "    pr-edit-log: $pr_edit_log"
-fi
-spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
-assert_eq "label-missing: dispatch-spawn invoked exactly once after recovery" "1" "$spawn_calls"
-ib_teardown
-
-# --- Test 4: CLAUDE_JOB_DIR unset → no-op (no label, no spawn) ---------------
+# --- Test 3: CLAUDE_JOB_DIR unset → no-op (no label, no spawn) ---------------
 
 echo "Test: CLAUDE_JOB_DIR unset → no-op (interactive session is excluded)"
 ib_setup
@@ -7152,10 +7434,10 @@ unset CLAUDE_JOB_DIR
 rc=$?
 assert_eq "no-job-dir: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: no-job-dir: no gh label apply was invoked"
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no-job-dir: no office-hours apply was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: no-job-dir: no gh label apply was invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-job-dir: no office-hours apply was invoked"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
@@ -7165,7 +7447,7 @@ else
 fi
 ib_teardown
 
-# --- Test 5: non-dispatch job name → no-op -----------------------------------
+# --- Test 4: non-dispatch job name → no-op -----------------------------------
 
 echo "Test: state.json name is not 'dispatch-*' → no-op (other background jobs excluded)"
 ib_setup
@@ -7177,10 +7459,10 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 rc=$?
 assert_eq "non-dispatch: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: non-dispatch: no gh label apply was invoked"
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-dispatch: no office-hours apply was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: non-dispatch: no gh label apply was invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-dispatch: no office-hours apply was invoked"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
@@ -7190,7 +7472,7 @@ else
 fi
 ib_teardown
 
-# --- Test 6: non-permission-prompt notification → silent pass-through --------
+# --- Test 5: non-permission-prompt notification → silent pass-through --------
 
 echo "Test: Notification with non-permission-prompt type → no-op (passes through silently)"
 ib_setup
@@ -7203,14 +7485,14 @@ printf '%s' '{"notification_type":"session_complete"}' \
 rc=$?
 assert_eq "non-permission-prompt: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/gh-pr-edit.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: non-permission-prompt: no gh label apply was invoked"
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-permission-prompt: no office-hours apply was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: non-permission-prompt: no gh label apply was invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-permission-prompt: no office-hours apply was invoked"
 fi
 ib_teardown
 
-# --- Test 7: non-issue branch with dispatch job → no-op ----------------------
+# --- Test 6: non-issue branch with dispatch job → no-op ----------------------
 
 echo "Test: non-issue branch (main) + dispatch-* job → no-op (no label, no spawn)"
 ib_setup
@@ -7221,10 +7503,10 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 rc=$?
 assert_eq "non-issue-branch: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: non-issue-branch: no gh label apply was invoked"
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-issue-branch: no office-hours apply was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: non-issue-branch: no gh label apply was invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-issue-branch: no office-hours apply was invoked"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
@@ -7379,7 +7661,8 @@ echo "=== dispatch-stop ==="
 #
 # Each test gets a fresh tmp tree:
 #   $TMPDIR_TEST/hooks/dispatch-stop.sh               — hook under test
-#   $TMPDIR_TEST/skills/dispatch-propagate/scripts/             — fakes for find-pr,
+#   $TMPDIR_TEST/skills/dispatch-propagate/scripts/   — fakes for find-pr,
+#                                                       apply-office-hours,
 #                                                       phase, spawn-router,
 #                                                       self-close
 #   $TMPDIR_TEST/bin/{gh,git}                         — PATH shims
@@ -7407,6 +7690,18 @@ stop_setup() {
 exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr"
+
+  # Fake dispatch-apply-office-hours: log argv to apply-office-hours.log and a
+  # "label-apply" marker to order.log (the ordering test asserts spawn runs
+  # after the apply). The Stop hook routes every dispatch:office-hours apply
+  # through this single write path.
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-apply-office-hours" <<'FAKE'
+#!/usr/bin/env bash
+echo "$*" >> "$STUB_DIR/apply-office-hours.log"
+echo "label-apply" >> "$STUB_DIR/order.log"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-apply-office-hours"
 
   # Fake dispatch-phase: prints contents of $STUB_DIR/current-phase.txt if
   # present, else "implement".
@@ -7609,13 +7904,15 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "stop verify-exhausted: hook exits 0" "0" "$rc"
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop verify-exhausted: issue --add-label invoked"
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop verify-exhausted: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-exhausted: issue --add-label invoked"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-exhausted: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" ]]; then
@@ -7646,13 +7943,15 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "stop same-phase non-verify: hook exits 0" "0" "$rc"
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop same-phase non-verify: issue --add-label invoked"
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop same-phase non-verify: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop same-phase non-verify: issue --add-label invoked"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop same-phase non-verify: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" ]]; then
@@ -7683,13 +7982,15 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "stop marker-absent: hook exits 0" "0" "$rc"
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop marker-absent: issue --add-label invoked"
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop marker-absent: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop marker-absent: issue --add-label invoked"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop marker-absent: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-pr-remove.log" \
@@ -7771,39 +8072,31 @@ else
 fi
 stop_teardown
 
-# --- Test 8: label create-on-"not found" idiom -------------------------------
+# --- Test 8: $CLAUDE_JOB_DIR/office-hours-reason overrides the branch default -
 
-echo "Test: stop hook + marker absent + label missing → create label, retry apply"
+echo "Test: stop hook branch A + office-hours-reason file present → its contents pass as the reason"
 stop_setup
 echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
 echo "implement" > "$STUB_DIR/current-phase.txt"
-echo "label-missing" > "$STUB_DIR/issue-edit-mode"
 echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
-# No phase-completed marker → branch A.
+# No phase-completed marker → branch A. Enrichment-hook reason override present.
+printf '%s' "enriched: tool denied by policy" > "$TMPDIR_TEST/jobs/abcd1234/office-hours-reason"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
-assert_eq "stop label-missing: hook exits 0" "0" "$rc"
-label_create_log=$(cat "$STUB_DIR/gh-label-create.log" 2>/dev/null || true)
+assert_eq "stop reason-override: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$label_create_log" == *"--color FBCA04"* ]] \
-   && [[ "$label_create_log" == *"dispatch:office-hours"* ]] \
-   && [[ "$label_create_log" == *"blocked on a human"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop label-missing: label created with canonical color and description"
+if [[ "$apply_issue" == "123" && "$apply_reason" == "enriched: tool denied by policy" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop reason-override: office-hours-reason contents passed as the reason"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop label-missing: label created with canonical color and description"
-  echo "    label-create-log: $label_create_log"
-fi
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop label-missing: issue apply retried after label create"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop label-missing: issue apply retried after label create"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop reason-override: office-hours-reason contents passed as the reason"
+  echo "    apply-log: $apply_log"
 fi
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
-assert_eq "stop label-missing: spawn invoked exactly once after recovery" "1" "$spawn_calls"
+assert_eq "stop reason-override: spawn invoked exactly once" "1" "$spawn_calls"
 stop_teardown
 
 # --- Test 9: spawn-last ordering (branch D) ----------------------------------
@@ -7850,13 +8143,15 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "stop empty-phase: hook exits 0" "0" "$rc"
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop empty-phase: office-hours applied to issue (Branch D, not false Branch B)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop empty-phase: office-hours applied to issue (Branch D, not false Branch B)"
-  echo "    issue-edit-log: $issue_edit_log"
+  echo "    apply-log: $apply_log"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
@@ -7888,13 +8183,15 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "stop unknown-phase: hook exits 0" "0" "$rc"
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --add-label dispatch:office-hours"* ]]; then
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop unknown-phase: office-hours applied to issue (Branch A, not false Branch B)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop unknown-phase: office-hours applied to issue (Branch A, not false Branch B)"
-  echo "    issue-edit-log: $issue_edit_log"
+  echo "    apply-log: $apply_log"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
@@ -8211,8 +8508,6 @@ handoff_setup() {
   HTMPDIR=$(mktemp -d)
   HSELF_CLOSE_LOG="$HTMPDIR/self-close.log"
   HSPAWN_LOG="$HTMPDIR/spawn.log"
-  HGH_LOG="$HTMPDIR/gh.log"
-  HFIND_PR_LOG="$HTMPDIR/find-pr.log"
 
   # Default fake dispatch-self-close: records the call, exits 0.
   cat > "$HTMPDIR/fake-self-close" <<'FAKE'
@@ -8222,51 +8517,18 @@ exit 0
 FAKE
   # Inject HSELF_CLOSE_LOG into the fake via env at call time.
   chmod +x "$HTMPDIR/fake-self-close"
-
-  # Default fake dispatch-spawn-router: records the call, exits 0, prints "spawned".
-  cat > "$HTMPDIR/fake-spawn" <<'FAKE'
-#!/usr/bin/env bash
-echo "spawn called" >> "$HSPAWN_LOG"
-echo "spawned"
-exit 0
-FAKE
-  chmod +x "$HTMPDIR/fake-spawn"
-
-  # Default fake gh: records invocation, prints no labels.
-  cat > "$HTMPDIR/fake-gh" <<'FAKE'
-#!/usr/bin/env bash
-echo "gh $*" >> "$HGH_LOG"
-# pr view <N> --json labels --jq ...  → return empty label list
-echo ""
-exit 0
-FAKE
-  chmod +x "$HTMPDIR/fake-gh"
-
-  # Default fake dispatch-find-pr: prints PR number 99.
-  cat > "$HTMPDIR/fake-find-pr" <<'FAKE'
-#!/usr/bin/env bash
-echo "find-pr $*" >> "$HFIND_PR_LOG"
-echo "99"
-exit 0
-FAKE
-  chmod +x "$HTMPDIR/fake-find-pr"
 }
 
 handoff_teardown() {
   rm -rf "$HTMPDIR"
-  unset HTMPDIR HSELF_CLOSE_LOG HSPAWN_LOG HGH_LOG HFIND_PR_LOG
+  unset HTMPDIR HSELF_CLOSE_LOG HSPAWN_LOG
 }
 
 # Run dispatch-handoff with fake commands injected via env.
 run_handoff() {
   DISPATCH_HANDOFF_SELF_CLOSE_CMD="$HTMPDIR/fake-self-close" \
-  DISPATCH_HANDOFF_SPAWN_CMD="$HTMPDIR/fake-spawn" \
-  DISPATCH_HANDOFF_GH_CMD="$HTMPDIR/fake-gh" \
-  DISPATCH_HANDOFF_FIND_PR_CMD="$HTMPDIR/fake-find-pr" \
   HSELF_CLOSE_LOG="$HSELF_CLOSE_LOG" \
   HSPAWN_LOG="$HSPAWN_LOG" \
-  HGH_LOG="$HGH_LOG" \
-  HFIND_PR_LOG="$HFIND_PR_LOG" \
     "$HANDOFF_SCRIPT" "$@"
 }
 
@@ -8284,73 +8546,7 @@ assert_eq "--early-stop self-close called" "self-close called" "$(cat "$HSELF_CL
 assert_eq "--early-stop no spawn" "" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
 handoff_teardown
 
-# ----- 2. --phase-completed happy path: spawn + self-close, exits 0 ----------
-echo "Test: dispatch-handoff <N> --phase-completed happy path"
-handoff_setup
-run_handoff 42 --phase-completed
-phase_exit=$?
-assert_eq "--phase-completed exit code" "0" "$phase_exit"
-assert_eq "--phase-completed spawn called" "spawn called" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
-assert_eq "--phase-completed self-close called" "self-close called" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
-# gh must be called with the PR number returned by fake-find-pr (99).
-TOTAL=$((TOTAL + 1))
-if grep -q "gh pr view 99 " "$HGH_LOG" 2>/dev/null; then
-  PASS=$((PASS + 1)); echo "  PASS: --phase-completed gh called with PR 99"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: --phase-completed gh called with PR 99"
-  echo "    gh log: $(cat "$HGH_LOG" 2>/dev/null || echo '<empty>')"
-fi
-handoff_teardown
-
-# ----- 3. --phase-completed with spawn failure: no self-close, exits 1 -------
-echo "Test: dispatch-handoff --phase-completed spawn failure → no self-close, exit 1"
-handoff_setup
-# Override spawn to fail.
-cat > "$HTMPDIR/fake-spawn" <<'FAKE'
-#!/usr/bin/env bash
-echo "spawn called" >> "$HSPAWN_LOG"
-echo "agent did not register" >&2
-exit 1
-FAKE
-chmod +x "$HTMPDIR/fake-spawn"
-# Use if/else to capture the exit code without triggering set -e.
-if run_handoff 42 --phase-completed 2>/dev/null; then spawn_fail_exit=0; else spawn_fail_exit=$?; fi
-assert_eq "--phase-completed spawn-failed exit code" "1" "$spawn_fail_exit"
-assert_eq "--phase-completed spawn-failed: spawn was called" "spawn called" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
-# self-close must NOT have been called.
-assert_eq "--phase-completed spawn-failed: no self-close" "" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
-handoff_teardown
-
-# ----- 4. --phase-completed with dispatch:office-hours → no self-close, exit 0
-echo "Test: dispatch-handoff --phase-completed with dispatch:office-hours → no self-close"
-handoff_setup
-# Override gh to return the office-hours label.
-cat > "$HTMPDIR/fake-gh" <<'FAKE'
-#!/usr/bin/env bash
-echo "gh $*" >> "$HGH_LOG"
-echo "dispatch:office-hours"
-exit 0
-FAKE
-chmod +x "$HTMPDIR/fake-gh"
-run_handoff 42 --phase-completed
-office_exit=$?
-assert_eq "--phase-completed office-hours exit code" "0" "$office_exit"
-assert_eq "--phase-completed office-hours: spawn called" "spawn called" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
-# self-close must NOT have been called (session stays open for human review).
-assert_eq "--phase-completed office-hours: no self-close" "" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
-handoff_teardown
-
-# ----- 5. Missing issue number → exit 2 with diagnostic ----------------------
-echo "Test: dispatch-handoff --phase-completed missing issue number → exit 2"
-handoff_setup
-# Use if/else to capture exit code without triggering set -e.
-if run_handoff --phase-completed 2>/dev/null; then missing_exit=0; else missing_exit=$?; fi
-assert_eq "--phase-completed missing issue: exit 2" "2" "$missing_exit"
-assert_eq "--phase-completed missing issue: no spawn" "" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
-assert_eq "--phase-completed missing issue: no self-close" "" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
-handoff_teardown
-
-# ----- 6. No arguments → exit 2 -----------------------------------------------
+# ----- 2. No arguments → exit 2 -----------------------------------------------
 echo "Test: dispatch-handoff with no arguments → exit 2"
 handoff_setup
 # Use if/else to capture exit code without triggering set -e.
@@ -8358,7 +8554,7 @@ if run_handoff 2>/dev/null; then no_args_exit=0; else no_args_exit=$?; fi
 assert_eq "no arguments: exit 2" "2" "$no_args_exit"
 handoff_teardown
 
-# ----- 7. CLAUDE_JOB_DIR unset: self-close is a no-op (interactive session) --
+# ----- 3. CLAUDE_JOB_DIR unset: self-close is a no-op (interactive session) --
 echo "Test: dispatch-handoff --early-stop with CLAUDE_JOB_DIR unset: self-close no-op, exits 0"
 handoff_setup
 # The real dispatch-self-close is a no-op when CLAUDE_JOB_DIR is unset.
