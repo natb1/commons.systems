@@ -29,7 +29,7 @@ PR_NUM=$(echo "$PR_JSON" | jq -r .number)
 echo "$PR_JSON" | jq -r '.labels[].name'
 ```
 
-`PR_NUM` is reused in Steps 3, 7, and 8 — do not re-resolve. The PR body stays in
+`PR_NUM` is reused in Steps 3, 7, 8, and 11 — do not re-resolve. The PR body stays in
 `PR_JSON` (`echo "$PR_JSON" | jq -r .body`); Step 5 parses its `Closes #N`
 line(s) to resolve the issue(s) this PR implements. If the printed labels include
 `dispatch:reviewed` — an interrupted prior run — **skip Steps 1–10 entirely** and
@@ -220,7 +220,9 @@ already applied, so re-entry is a true no-op. Otherwise run all steps in order.
     only), then stop.** The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads
     this to decide propagate vs park. `CLAUDE_JOB_DIR` unset = interactive run;
     the write is a no-op and the skill simply stops (which is correct —
-    interactive Step 10 just ran).
+    interactive Step 10 just ran). On idempotent re-entry (Steps 1–10 were
+    skipped), the Step 3 bucket data is not in context — treat the deviation
+    criterion as not met and write the phase-completed marker.
 
     **Deviation criterion:** the Deferred bucket dominated — nearly all findings
     were Deferred and none were Fixed.

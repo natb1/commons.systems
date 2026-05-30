@@ -31,7 +31,7 @@ PR_NUM=$(echo "$PR_JSON" | jq -r .number)
 echo "$PR_JSON" | jq -r '.labels[].name'
 ```
 
-`PR_NUM` is carried through to Steps 5, 6, and 7 — do not re-resolve. The PR body
+`PR_NUM` is carried through to Steps 5, 6, 7, and 8 — do not re-resolve. The PR body
 stays in `PR_JSON` (`echo "$PR_JSON" | jq -r .body`); Step 5 parses its
 `Closes #N` line(s) to resolve the issue(s) this PR implements. If the PR
 already carries the `dispatch:code-reviewed` label — an interrupted prior run —
