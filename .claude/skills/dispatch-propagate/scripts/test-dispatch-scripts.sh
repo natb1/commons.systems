@@ -3126,6 +3126,7 @@ sweep_setup() {
            "$TMPDIR_TEST/project/tmp" "$TMPDIR_TEST/fake"
 
   cp "$SCRIPT_DIR/dispatch-sweep" "$TMPDIR_TEST/scripts/dispatch-sweep"
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/scripts/lib-worktree-in-sync.sh"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
@@ -3581,6 +3582,88 @@ if grep -q "REMOVE_MERGED: '$WT_PATH' branch=71-no-live-merged pr=#301" \
   PASS=$((PASS + 1)); echo "  PASS: REMOVE_MERGED log line present"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_MERGED log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test 17: detached-HEAD worktree is skipped by Step 2 --------------------
+#
+# A worktree with no branch line (detached HEAD) has an empty WT_BRANCH after
+# split_worktree_record. Step 2's [[ -z "$WT_BRANCH" ]] guard must skip it, so
+# no worktree-remove or branch-D call is recorded for it.
+
+echo "Test: detached-HEAD worktree in worktrees/ is skipped (not removed)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/80-detached"
+mkdir -p "$WT_PATH"
+# Write a branchless porcelain record directly (no branch line).
+printf 'worktree %s\nHEAD deadbeef\n\n' "$WT_PATH" >> "$STUB_DIR/worktree-list.txt"
+# No merged PRs.
+echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "detached-HEAD sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: detached-HEAD worktree not removed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: detached-HEAD worktree not removed"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "branch-D"; then
+  PASS=$((PASS + 1)); echo "  PASS: detached-HEAD worktree no branch-D call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: detached-HEAD worktree no branch-D call"
+  echo "    calls: $calls"
+fi
+sweep_teardown
+
+# --- Test 18: non-issue branch in merged map is reaped via merged-cleanup path --
+#
+# A worktree with a non-issue branch (empty WT_NUM) that appears MERGED in the
+# PR list must still be removed + branch deleted — the merged-cleanup path
+# operates on branch names, not issue numbers, so empty WT_NUM is no obstacle.
+# This confirms list_worktree_records' empty-WT_NUM records flow through the
+# merged-cleanup path correctly.
+
+echo "Test: non-issue branch (hotfix-login) in merged map is reaped"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/hotfix-login"
+sweep_register_wt "$WT_PATH" "hotfix-login"
+echo '[{"number":400,"headRefName":"hotfix-login","state":"MERGED"}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+# Clean tree + zero unpushed.
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "non-issue-branch merged sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH"; then
+  PASS=$((PASS + 1)); echo "  PASS: non-issue merged worktree removed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-issue merged worktree removed"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "branch-D:hotfix-login"; then
+  PASS=$((PASS + 1)); echo "  PASS: non-issue merged branch deleted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-issue merged branch deleted"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "REMOVE_MERGED: '$WT_PATH' branch=hotfix-login pr=#400" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: REMOVE_MERGED log line present for non-issue branch"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_MERGED log line present for non-issue branch"
   echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
 sweep_teardown
