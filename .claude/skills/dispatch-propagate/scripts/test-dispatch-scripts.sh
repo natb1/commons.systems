@@ -1046,8 +1046,8 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "oldest review PR wins within phase" "pr 30 30-review-a review" "$result"
 teardown
 
-# 10. Any non-QA PR beats a help-wanted issue; help-wanted issue beats a QA PR.
-echo "Test: verify PR beats issue; issue beats QA PR"
+# 10. A non-QA PR (verify) beats both a QA PR and a help-wanted issue.
+echo "Test: verify PR beats QA PR and help-wanted issue"
 setup
 # verify PR (10), QA PR (20), help-wanted issue (55).
 UNION='['
@@ -1058,18 +1058,18 @@ setup_union_pr_list "$UNION"
 printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "verify PR beats issue (non-QA > issue > qa)" "pr 10 10-verify verify" "$result"
+assert_eq "verify PR beats QA PR and issue (verify > qa > issue)" "pr 10 10-verify verify" "$result"
 teardown
 
-# 10b. No non-QA PR: help-wanted issue beats QA PR.
-echo "Test: help-wanted issue beats QA PR"
+# 10b. No non-QA PR: QA PR beats help-wanted issue (qa ranks above implement).
+echo "Test: QA PR beats help-wanted issue"
 setup
 UNION='['"$(make_pr_union 20 "20-qa" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
 printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "help-wanted issue beats QA PR" "issue 55" "$result"
+assert_eq "QA PR beats help-wanted issue" "pr 20 20-qa qa" "$result"
 teardown
 
 # 11. --qa mode returns only the oldest QA PR (ignores non-QA PRs).
