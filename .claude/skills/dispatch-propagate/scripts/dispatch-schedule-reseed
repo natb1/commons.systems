@@ -1,0 +1,329 @@
+#!/usr/bin/env bash
+# dispatch-schedule-reseed — schedule a one-shot re-seed of the
+# /dispatch-propagate chain at the next rate-limit cap reset.
+#
+# The /dispatch-propagate chain is a self-perpetuating baton-pass of
+# background jobs:
+# each worker finishes its phase, the baton-pass spawns the next tick, and the
+# chain keeps moving until something stops it. When a tick observes a
+# rate-limit cap-hit (used_percentage >= target on the weekly or 5-hour
+# window), the budgeter returns 0 concurrent workers and the chain pauses
+# with work waiting. This script schedules a transient systemd.user timer to
+# fire at the cap's resets_at — the precise moment the cap opens — so the
+# chain resumes immediately when the window resets, rather than waiting on a
+# coarse static heartbeat.
+#
+# Stalls for the *other* class of reason (empty queue, all items parked on a
+# human via dispatch:office-hours) are NOT this script's concern; the
+# office-hours queue (#755/#757/#758) re-seeds the chain when a human engages
+# a parked item.
+#
+# Behavior, in order:
+#   1. Load tunables (target_weekly_usage_pct, five_hour_target_floor_pct)
+#      from dispatch-config-load target-workers — same defaults as
+#      dispatch-target-workers. The 5h cap-hit threshold uses
+#      five_hour_target_floor_pct (the floor of the pace controller's 5h band).
+#   2. Read telemetry from rate_limits.json (or env overrides). Missing
+#      telemetry → no-op with stderr diagnostic (mirrors
+#      dispatch-target-workers's fallback). The signal is opt-in by
+#      telemetry presence.
+#   3. Compute candidate reset times for whichever cap(s) are tripped at the
+#      absolute >= target threshold (NOT the linear 5h-cap-tripped condition
+#      the budgeter uses, which can trip momentarily at window-start and clear
+#      within seconds — a static reseed-at-resets_at schedule for that case
+#      would be wrong).
+#   4. reseed_at = min(cand_weekly, cand_5h) — earliest blocking reset wins.
+#      If reseed_at <= now, no-op (the window already reopened; the next tick
+#      will re-evaluate against fresh telemetry).
+#   5. Write a transient systemd.user timer via systemd-run --user
+#      --on-calendar=@<reseed_at>, naming the unit
+#      dispatch-reseed-<reseed_at>. The epoch suffix gives idempotency: a
+#      repeated call observing the same blocking cap collides on the unit
+#      name and systemd refuses to recreate — safe re-call from every tick.
+#
+# Stdout protocol:
+#   scheduled <unit-name> at <reseed_at>   timer was created.
+#   (stderr diagnostic + exit 0)           no-op (already-passed reset,
+#                                          missing telemetry, or idempotent
+#                                          re-call). Silent only: no cap hit.
+#
+# Exit codes:
+#   0  always on no-op or successful schedule.
+#   non-zero — `systemd-run` failed for a reason other than the
+#              already-exists collision; the exit code is passed through.
+#
+# Environment overrides for testability:
+#
+#   DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH
+#     Override the rate_limits.json path. Default:
+#     ~/.local/share/productivity-tui/rate_limits.json.
+#
+#   DISPATCH_SCHEDULE_RESEED_NOW
+#     Override the current epoch seconds. Default: date +%s.
+#
+#   DISPATCH_SCHEDULE_RESEED_USED_WEEKLY
+#   DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY
+#   DISPATCH_SCHEDULE_RESEED_USED_5H
+#   DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H
+#     Override each individual telemetry field. When set, they win over the
+#     value parsed from the rate_limits.json file. Per-field, so a test can
+#     supply some fields and let the file supply the rest. Mirrors
+#     dispatch-target-workers's convention.
+#
+#   DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE
+#     Override the main worktree path. When set, the script does NOT require
+#     a git repo. Default: <project-root>/worktrees/main, where project-root
+#     is the parent of git --git-common-dir. Mirrors
+#     dispatch-spawn-router's idiom.
+#
+#   DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD
+#     Override the `systemd-run` binary. Default: `systemd-run`.
+#
+# Sandbox: `systemd-run --user` talks to the user's systemd over D-Bus; this
+# script is not sandbox-safe and callers must invoke it with
+# `dangerouslyDisableSandbox: true`.
+
+set -uo pipefail
+
+# ---- Step 0: defaults & config ----------------------------------------------
+
+TARGET_WEEKLY=90
+TARGET_5H=50
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Pull tunables from dispatch-config-load target-workers when present.
+# Same shape as dispatch-target-workers — read each field with `// empty` so a
+# missing field falls through to the baked-in default.
+CONFIG_JSON=""
+if CONFIG_OUT=$("$SCRIPT_DIR/dispatch-config-load" target-workers 2>/dev/null); then
+  if [[ "$CONFIG_OUT" != "no-config" ]]; then
+    CONFIG_JSON="$CONFIG_OUT"
+  fi
+fi
+
+if [[ -n "$CONFIG_JSON" ]]; then
+  val=$(jq -r '.target_weekly_usage_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && TARGET_WEEKLY="$val"
+  val=$(jq -r '.five_hour_target_floor_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && TARGET_5H="$val"
+fi
+
+# Defense-in-depth: TARGET_* flow into `awk -v` (safe, but kept tight) and the
+# defaults are integers, so require a non-negative number with optional decimal.
+# A misconfigured config file aborts loudly rather than silently no-op'ing.
+for var in TARGET_WEEKLY TARGET_5H; do
+  if ! [[ "${!var}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    echo "dispatch-schedule-reseed: $var must be a non-negative number, got '${!var}'; aborting" >&2
+    exit 2
+  fi
+done
+
+# ---- Step 1: load telemetry -------------------------------------------------
+
+RL_PATH="${DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH:-$HOME/.local/share/productivity-tui/rate_limits.json}"
+NOW="${DISPATCH_SCHEDULE_RESEED_NOW:-$(date +%s)}"
+
+# NOW reaches `(( RESEED_AT <= NOW ))` — bash arithmetic context evaluates
+# array-index command substitution (e.g. `a[$(touch /tmp/pwn)]`), so any value
+# entering `(( ))` must be a literal integer. The default (`date +%s`) is
+# always safe; the env-override path is the surface that requires validation.
+if ! [[ "$NOW" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-schedule-reseed: NOW must be an integer epoch, got '$NOW'; aborting" >&2
+  exit 2
+fi
+
+WEEKLY_USED=""
+WEEKLY_RESETS=""
+FIVEH_USED=""
+FIVEH_RESETS=""
+FILE_OK=0
+
+if [[ -r "$RL_PATH" ]]; then
+  if PARSED=$(jq -r '
+      "\(.seven_day.used_percentage // "")|",
+      "\(.seven_day.resets_at // "")|",
+      "\(.five_hour.used_percentage // "")|",
+      "\(.five_hour.resets_at // "")|"
+    ' "$RL_PATH" 2>/dev/null); then
+    {
+      IFS= read -r line; WEEKLY_USED="${line%|}"
+      IFS= read -r line; WEEKLY_RESETS="${line%|}"
+      IFS= read -r line; FIVEH_USED="${line%|}"
+      IFS= read -r line; FIVEH_RESETS="${line%|}"
+    } <<<"$PARSED"
+    FILE_OK=1
+  fi
+fi
+
+# Per-field env overrides (test-injectable).
+[[ -n "${DISPATCH_SCHEDULE_RESEED_USED_WEEKLY:-}" ]] && WEEKLY_USED="$DISPATCH_SCHEDULE_RESEED_USED_WEEKLY"
+[[ -n "${DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY:-}" ]] && WEEKLY_RESETS="$DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY"
+[[ -n "${DISPATCH_SCHEDULE_RESEED_USED_5H:-}" ]] && FIVEH_USED="$DISPATCH_SCHEDULE_RESEED_USED_5H"
+[[ -n "${DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H:-}" ]] && FIVEH_RESETS="$DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H"
+
+# Sanitize telemetry before it reaches arithmetic or `awk -v` contexts. The
+# *_RESETS values flow into `(( CAND_WEEKLY <= CAND_5H ))` and
+# `(( RESEED_AT <= NOW ))` — bash arithmetic evaluates array-index command
+# substitution, so a string like `a[$(touch /tmp/pwn)]` from a tampered
+# rate_limits.json (or a hostile env override) would trigger RCE. *_USED only
+# feeds `awk -v` (which does not shell-eval), but the same fail-closed posture
+# applies for consistency. Any malformed value is treated as missing → the
+# WEEKLY_PRESENT / FIVEH_PRESENT guard catches it as the missing-telemetry case
+# and the script no-ops with a stderr diagnostic.
+for var in WEEKLY_USED FIVEH_USED; do
+  if [[ -n "${!var}" && ! "${!var}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    echo "dispatch-schedule-reseed: $var has non-numeric value '${!var}'; treating as missing" >&2
+    printf -v "$var" ""
+  fi
+done
+for var in WEEKLY_RESETS FIVEH_RESETS; do
+  if [[ -n "${!var}" && ! "${!var}" =~ ^[0-9]+$ ]]; then
+    echo "dispatch-schedule-reseed: $var has non-integer value '${!var}'; treating as missing" >&2
+    printf -v "$var" ""
+  fi
+done
+
+WEEKLY_PRESENT=0
+FIVEH_PRESENT=0
+[[ -n "$WEEKLY_USED" && -n "$WEEKLY_RESETS" ]] && WEEKLY_PRESENT=1
+[[ -n "$FIVEH_USED" && -n "$FIVEH_RESETS" ]] && FIVEH_PRESENT=1
+
+# ---- Step 2: missing-telemetry no-op ----------------------------------------
+#
+# Without either telemetry block (and no env overrides), the script cannot
+# decide whether the chain is stalled. Silent no-op with a stderr diagnostic —
+# mirrors dispatch-target-workers's fallback behavior, just without the "1"
+# sentinel since this script has nothing to print on the no-op path.
+
+if (( WEEKLY_PRESENT == 0 && FIVEH_PRESENT == 0 )); then
+  if (( FILE_OK == 0 )); then
+    echo "dispatch-schedule-reseed: rate_limits.json missing or unreadable at $RL_PATH; no-op" >&2
+  else
+    echo "dispatch-schedule-reseed: telemetry incomplete in $RL_PATH; no-op" >&2
+  fi
+  exit 0
+fi
+
+# ---- Step 3: detect cap hits ------------------------------------------------
+#
+# Absolute cap-hit only: used_percentage >= target. The budgeter
+# (dispatch-target-workers) also closes on a linear 5h cap as the window
+# fills, but that signal is transient — it can trip at window-start and clear
+# within seconds — so a static reseed-at-resets_at schedule for that case is
+# not useful. The reseed mechanism targets only the durable cap-hit stall.
+#
+# awk handles the numeric compare (the percentages may be floats).
+
+CAND_WEEKLY=""
+CAND_5H=""
+
+if (( WEEKLY_PRESENT == 1 )); then
+  if awk -v u="$WEEKLY_USED" -v t="$TARGET_WEEKLY" \
+       'BEGIN { exit !(u + 0 >= t + 0) }'; then
+    CAND_WEEKLY="$WEEKLY_RESETS"
+  fi
+fi
+
+if (( FIVEH_PRESENT == 1 )); then
+  if awk -v u="$FIVEH_USED" -v t="$TARGET_5H" \
+       'BEGIN { exit !(u + 0 >= t + 0) }'; then
+    CAND_5H="$FIVEH_RESETS"
+  fi
+fi
+
+# ---- Step 4: pick the earliest blocking reset -------------------------------
+#
+# If neither cap is hit, the chain is not stalled by a cap and there is
+# nothing to schedule. Silent no-op (exit 0).
+
+if [[ -z "$CAND_WEEKLY" && -z "$CAND_5H" ]]; then
+  exit 0
+fi
+
+RESEED_AT=""
+if [[ -n "$CAND_WEEKLY" && -n "$CAND_5H" ]]; then
+  if (( CAND_WEEKLY <= CAND_5H )); then
+    RESEED_AT="$CAND_WEEKLY"
+  else
+    RESEED_AT="$CAND_5H"
+  fi
+elif [[ -n "$CAND_WEEKLY" ]]; then
+  RESEED_AT="$CAND_WEEKLY"
+else
+  RESEED_AT="$CAND_5H"
+fi
+
+# Already-passed reset → no-op. The next tick will re-evaluate against fresh
+# telemetry; scheduling a timer for a past time would fire immediately and
+# either re-hit the cap (because telemetry hasn't refreshed yet) or duplicate
+# the next tick's spawn.
+if (( RESEED_AT <= NOW )); then
+  echo "dispatch-schedule-reseed: cap reset already passed (resets_at=$RESEED_AT <= now=$NOW); no-op" >&2
+  exit 0
+fi
+
+# ---- Step 5: resolve the main worktree --------------------------------------
+#
+# Same idiom as dispatch-spawn-router. The spawned re-seed runs from the main
+# worktree.
+
+if [[ -n "${DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE:-}" ]]; then
+  MAIN_WORKTREE="$DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE"
+else
+  GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+    || { echo "dispatch-schedule-reseed: not in a git repo and DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE is unset" >&2; exit 2; }
+  PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
+  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+fi
+
+# ---- Step 6: schedule the transient timer -----------------------------------
+#
+# The unit name embeds the epoch resets_at — a repeated call with the same
+# resets_at collides, and systemd refuses to recreate the unit. That gives
+# idempotency without coordinating across callers.
+#
+# Persistent=true covers a WSL-down window that crosses fire time — a tick
+# missed while WSL was down runs on the next start. Matches the legacy 9 AM
+# timer's behavior.
+#
+# ExecStart is dispatch-spawn-router — the worker→router baton-pass primitive
+# that dedup-guards, prunes stopped agents, and spawns
+# `claude --bg --name dispatch-<id> --permission-mode auto "/dispatch-propagate"`
+# from the main worktree.
+
+SYSTEMD_RUN_CMD="${DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD:-systemd-run}"
+UNIT_NAME="dispatch-reseed-${RESEED_AT}"
+
+RUN_STDERR=$(mktemp)
+trap 'rm -f "$RUN_STDERR"' EXIT
+# Capture the exit code directly — after `if cmd; then ... fi`, `$?` is the
+# exit status of the `if` construct (0 when the condition was evaluated
+# successfully, even if it returned non-zero), NOT the exit code of `cmd`.
+# Running `cmd` outside an `if` and capturing `$?` immediately preserves the
+# real exit code so the "pass-through on unexpected failure" contract holds.
+"$SYSTEMD_RUN_CMD" --user \
+     --unit="$UNIT_NAME" \
+     --on-calendar="@$RESEED_AT" \
+     --working-directory="$MAIN_WORKTREE" \
+     --timer-property=Persistent=true \
+     "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-spawn-router" \
+     2>"$RUN_STDERR"
+RC=$?
+if (( RC == 0 )); then
+  echo "scheduled $UNIT_NAME at $RESEED_AT"
+  exit 0
+fi
+
+err=$(cat "$RUN_STDERR")
+# systemd's already-exists message varies slightly across versions
+# ("Unit ... already exists" / "Failed to start transient timer unit: Unit
+# ... already exists"). Match on the substring rather than the full phrase.
+if [[ "$err" == *"already exists"* ]]; then
+  echo "dispatch-schedule-reseed: $UNIT_NAME already scheduled; no-op" >&2
+  exit 0
+fi
+
+# Some other failure — surface stderr and pass the exit code through.
+echo "$err" >&2
+exit "$RC"

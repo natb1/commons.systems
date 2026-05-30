@@ -101,6 +101,17 @@ These tiers describe depth of engagement with the philosophy, not headcount or l
 
 Skipping tiers does not just produce hollow claims — it accumulates teeth before the previous tier proves they are required. Building for practitioners before users find artifacts useful creates documentation and conventions serving an unvalidated audience. Building for collaborators before practitioners exist creates legitimacy and cultural identity around undemonstrated practice.
 
+#### Audience surfaces
+
+Each tier lands at a distinct surface. Future content decisions should consult this mapping before duplicating or misrouting information across surfaces.
+
+| Audience | Tier | Surface | Notes |
+|---|---|---|---|
+| Users | Tier 2 | [commons.systems](https://commons.systems) landing | Apps serve directly; landing aggregates and routes |
+| Institutional practitioners | Tier 3 | [commons.systems/about](https://commons.systems/about) | Engagement-shaped, business register |
+| Individual practitioners | Tier 3 | [README.md](https://github.com/natb1/commons.systems/blob/main/README.md) | Workflow reference for forkers |
+| Collaborators | Tier 4 | [CHARTER.md](CHARTER.md) | Self-service for the philosophically invested |
+
 ### Dependency Self-Assessment
 
 The project applies its own framework to its own dependencies. The current dependency self-assessment lives as structured data in `landing/src/site-config.ts`, awaiting a dedicated place alongside the app showcase. Revisit as conditions change; prune if it becomes a compliance exercise rather than a genuine assessment.

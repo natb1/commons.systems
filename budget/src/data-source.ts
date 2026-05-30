@@ -61,6 +61,21 @@ export interface ReconciliationNoteFields {
  */
 export type ReconciliationEventFields = Omit<IdbReconciliationEvent, "id" | "legIds">;
 
+/** Fields for a new journal entry; the document `id` is generated on write. */
+export interface JournalEntryFields {
+  timestampMs: number;
+  description: string;
+  note?: string | null;
+}
+
+/** Fields for a new journal leg; the document `id` is generated on write. */
+export interface JournalLegFields {
+  accountId: string;
+  debit: number;
+  credit: number;
+  cleared: boolean;
+}
+
 export interface DataSource {
   getTransactions(query?: TransactionQuery): Promise<Transaction[]>;
   getStatements(): Promise<Statement[]>;
@@ -84,6 +99,11 @@ export interface DataSource {
   deleteReconciliationNote(entityType: ReconciliationEntityType, entityId: string): Promise<void>;
   updateJournalLegCleared(legId: string, cleared: boolean): Promise<void>;
   createReconciliationEvent(fields: ReconciliationEventFields, legIds: string[]): Promise<ReconciliationEvent>;
+  /**
+   * Creates a balanced journal entry with its legs in one operation.
+   * `legIds[i]` in the result corresponds to `legs[i]` (same order).
+   */
+  createJournalEntry(entry: JournalEntryFields, legs: JournalLegFields[]): Promise<{ entryId: string; legIds: string[] }>;
   updateBudget(
     id: BudgetId,
     fields: Partial<Pick<Budget, "name" | "allowance" | "allowancePeriod" | "rollover">>,
@@ -163,6 +183,9 @@ export class SeedDataSource implements DataSource {
     throw new Error("Seed data is read-only");
   }
   async createReconciliationEvent(): Promise<ReconciliationEvent> {
+    throw new Error("Seed data is read-only");
+  }
+  async createJournalEntry(): Promise<{ entryId: string; legIds: string[] }> {
     throw new Error("Seed data is read-only");
   }
   async updateBudget(): Promise<void> {
@@ -340,6 +363,46 @@ export class IdbDataSource implements DataSource {
       ),
     );
     return idbToReconciliationEvent(record);
+  }
+
+  async createJournalEntry(
+    entry: JournalEntryFields,
+    legs: JournalLegFields[],
+  ): Promise<{ entryId: string; legIds: string[] }> {
+    if (legs.length < 2) throw new Error("A journal entry requires at least 2 legs");
+    const totalDebit = legs.reduce((s, l) => s + l.debit, 0);
+    const totalCredit = legs.reduce((s, l) => s + l.credit, 0);
+    if (Math.abs(totalDebit - totalCredit) > 0.005) {
+      throw new Error(`Unbalanced journal entry: debits ${totalDebit} != credits ${totalCredit}`);
+    }
+    const entryId = crypto.randomUUID();
+    const entryRecord: IdbJournalEntry = {
+      id: entryId,
+      timestampMs: entry.timestampMs,
+      description: entry.description,
+      note: entry.note ?? null,
+      legCount: legs.length,
+    };
+    await put("journalEntries", entryRecord as unknown as Record<string, unknown>);
+    const legIds: string[] = [];
+    for (const leg of legs) {
+      const legId = crypto.randomUUID();
+      legIds.push(legId);
+      const legRecord: IdbJournalLeg = {
+        id: legId,
+        entryId,
+        accountId: leg.accountId,
+        debit: leg.debit,
+        credit: leg.credit,
+        timestampMs: entry.timestampMs,
+        cleared: leg.cleared,
+        reconciledAtMs: null,
+        reconciledEventId: null,
+        statementItemId: null,
+      };
+      await put("journalLegs", legRecord as unknown as Record<string, unknown>);
+    }
+    return { entryId, legIds };
   }
 
   async updateBudget(

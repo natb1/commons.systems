@@ -16,7 +16,7 @@ Invoke whenever the user revises a previously-understood requirement — in a di
 3. **Re-sync local context.** If Step 2 produced any remote edits, refresh the auto-loaded context:
 
    ```bash
-   .claude/skills/dispatch/scripts/sync-issue-context <issue-number>
+   .claude/skills/dispatch-propagate/scripts/sync-issue-context <issue-number>
    ```
 
    Pass the issue number explicitly. This rewrites `CLAUDE.local.md` in the worktree.

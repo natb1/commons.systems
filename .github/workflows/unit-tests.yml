@@ -17,7 +17,7 @@ jobs:
           fetch-depth: 0
       - name: Detect changed file categories
         id: changes
-        run: .claude/skills/dispatch/scripts/detect-changes.sh
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
       - name: Install nix (if nix files changed)
         if: steps.changes.outputs.nix == 'true'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
@@ -30,8 +30,9 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
+          cache: 'npm'
       - name: Run unit tests
-        run: .claude/skills/dispatch/scripts/run-unit-tests.sh
+        run: .claude/skills/dispatch-propagate/scripts/run-unit-tests.sh
 
   lint:
     runs-on: ubuntu-latest
@@ -41,7 +42,7 @@ jobs:
           fetch-depth: 0
       - name: Detect changed file categories
         id: changes
-        run: .claude/skills/dispatch/scripts/detect-changes.sh
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
       - name: Install nix (if nix files changed)
         if: steps.changes.outputs.nix == 'true'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
@@ -54,8 +55,9 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
+          cache: 'npm'
       - name: Run lint
-        run: .claude/skills/dispatch/scripts/run-lint.sh
+        run: .claude/skills/dispatch-propagate/scripts/run-lint.sh
 
   typecheck:
     runs-on: ubuntu-latest
@@ -66,8 +68,9 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
+          cache: 'npm'
       - name: Run typecheck
-        run: .claude/skills/dispatch/scripts/run-typecheck.sh
+        run: .claude/skills/dispatch-propagate/scripts/run-typecheck.sh
 
   hook-tests:
     runs-on: ubuntu-latest
@@ -76,7 +79,7 @@ jobs:
       - name: Run approve-workflow-commands hook tests
         run: .claude/hooks/test-approve-workflow-commands.sh
       - name: Run dispatch script tests
-        run: .claude/skills/dispatch/scripts/test-dispatch-scripts.sh
+        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
       - name: Run worktree-remove hook tests
         run: .claude/hooks/test-worktree-remove.sh
       - name: Run statusline hook tests
@@ -90,7 +93,7 @@ jobs:
           fetch-depth: 0
       - name: Detect changed file categories
         id: changes
-        run: .claude/skills/dispatch/scripts/detect-changes.sh
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
       - name: Install nix (only when flake or package-lock changed)
         if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
@@ -98,6 +101,7 @@ jobs:
         if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
         with:
           node-version-file: .node-version
+          cache: 'npm'
       - name: Install workspace dependencies
         if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
         run: npm ci
@@ -113,7 +117,7 @@ jobs:
           fetch-depth: 0
       - name: Detect changed file categories
         id: changes
-        run: .claude/skills/dispatch/scripts/detect-changes.sh
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
       - name: Set up Go (if Go files changed)
         if: steps.changes.outputs.go == 'true'
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -126,7 +130,7 @@ jobs:
           # Capture the module list first: a discovery failure aborts under
           # set -e, and an empty result fails explicitly — feeding the loop
           # via process substitution would instead pass the job silently.
-          modules=$(.claude/skills/dispatch/scripts/list-go-modules.sh)
+          modules=$(.claude/skills/dispatch-propagate/scripts/list-go-modules.sh)
           if [ -z "$modules" ]; then
             echo "::error::No Go modules discovered by list-go-modules.sh"
             exit 1
