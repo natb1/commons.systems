@@ -45,17 +45,26 @@
 # Marker-based reclaim. The dispatch lock covers Steps 0–5 of /dispatch-propagate only
 # (target selection + worktree resolution); phase skills run lock-free. The
 # marker file `tmp/dispatch-worktree` is written in the selected worktree at
-# the end of Step 5 on every proceed path, so its presence in the recorded
-# holder's cwd authoritatively means "Step 5 completed — past the lock-
-# covered region". Both acquire and `--release` honor this signal:
-#   - Acquire reclaims a marker-bearing foreign holder regardless of session
-#     liveness (the holder is past Step 5; the lock no longer serves it).
+# the end of Step 5 by dispatch-finalize-selection, which stamps the finalizing
+# holder's CLAUDE_CODE_SESSION_ID into it. The marker is session-scoped: it
+# reclaims a live foreign holder ONLY when the marker's content equals the
+# RECORDED HOLDER's sessionId (see marker_names_holder). Both acquire and
+# `--release` honor this signal:
+#   - Acquire reclaims a foreign holder regardless of session liveness when the
+#     holder's cwd carries a marker naming that recorded holder (it is past
+#     Step 5; the lock no longer serves it).
 #   - `--release` succeeds for any caller when the recorded holder's cwd
-#     carries the marker, in addition to the strict self-release branch.
+#     carries a marker naming that recorded holder, in addition to the strict
+#     self-release branch.
 # This closes the silent-noop leak when a child context's
-# CLAUDE_CODE_SESSION_ID differs from the recorded holder. Pre-marker stop
-# paths (Steps 1–4 stop, Step 5 `conflict`) fire before the marker exists, so
-# the lenient branch correctly does not engage and strict semantics apply.
+# CLAUDE_CODE_SESSION_ID differs from the recorded holder, while a content-match
+# guard prevents a stale marker from reclaiming a LIVE mid-selection holder.
+# An empty marker — the `touch` stamped by .claude/hooks/worktree-create.sh on
+# every worktree creation — names no session and is inert. A marker naming an
+# older, since-finalized session likewise does not reclaim a different live
+# holder. Pre-marker stop paths (Steps 1–4 stop, Step 5 `conflict`) fire before
+# the marker exists, so the lenient branch does not engage and strict semantics
+# apply.
 #
 # Usage:
 #   dispatch-acquire-lock            — single-shot: print "acquired" or "busy".
@@ -174,6 +183,22 @@ resolve_holder_state() {
   return 0
 }
 
+# marker_names_holder <cwd> <sid> — 0 iff <cwd> is non-empty, carries the
+# tmp/dispatch-worktree marker, and the marker's first line equals <sid>.
+# Empty cwd, missing/empty marker, or a marker naming any other session → 1
+# (no reclaim): a stale empty marker (worktree-create.sh) or a marker naming
+# an older finalized session never reclaims a live mid-selection holder.
+marker_names_holder() {
+  local cwd="$1" sid="$2" marker content=""
+  [[ -n "$cwd" ]] || return 1
+  marker="$cwd/tmp/dispatch-worktree"
+  # Require a regular file: a FIFO or device node at this path would block the
+  # read below indefinitely while the flock is held, deadlocking all routing.
+  [[ -f "$marker" ]] || return 1
+  IFS= read -r content <"$marker" 2>/dev/null || true
+  [[ -n "$content" && "$content" == "$sid" ]]
+}
+
 # ---- Step 1: resolve the lock file ------------------------------------------
 # An explicit DISPATCH_LOCK_FILE is authoritative and bypasses the git lookup —
 # tests rely on this. Otherwise the lock lives at the shared project-root tmp/
@@ -219,17 +244,19 @@ try_acquire() {            # 0 = acquired, 1 = contended; sets CONTENDED_SID
     local recorded="" cwd="" live=0
     IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
     # Busy iff a different sessionId is recorded AND it is still a live
-    # session per `claude agents --json` AND its cwd does NOT carry the
-    # tmp/dispatch-worktree marker (i.e. it is still in the lock-covered
-    # Steps 0–5 region). Otherwise — no record, a stale record (sessionId
-    # not in the registry), our own session re-entering, or a marker-bearing
-    # foreign holder past Step 5 — we claim the lock. An empty cwd on a
-    # live return (opaque-failure path) skips the marker check → stay strict.
+    # session per `claude agents --json` AND its cwd does NOT carry a
+    # tmp/dispatch-worktree marker naming the recorded holder (i.e. it is
+    # still in the lock-covered Steps 0–5 region). Otherwise — no record, a
+    # stale record (sessionId not in the registry), our own session
+    # re-entering, or a foreign holder past Step 5 whose marker names it — we
+    # claim the lock. An empty cwd on a live return (opaque-failure path), an
+    # empty marker (worktree-create.sh's touch), or a marker naming an older
+    # session all fail marker_names_holder → stay strict (BUSY).
     if [[ -n "$recorded" && "$recorded" != "$SESSION_ID" ]]; then
       if cwd=$(resolve_holder_state "$recorded"); then
         live=1
       fi
-      if (( live )) && [[ -z "$cwd" || ! -e "$cwd/tmp/dispatch-worktree" ]]; then
+      if (( live )) && ! marker_names_holder "$cwd" "$recorded"; then
         printf 'BUSY %s' "$recorded"
       else
         printf '%s\n' "$SESSION_ID" >"$LOCK_FILE"
@@ -274,12 +301,13 @@ case "$MODE" in
   release)
     # Re-read the recorded sessionId under flock and clear it when EITHER
     # (a) it is our own session (strict self-release), OR (b) the recorded
-    # holder's cwd carries the tmp/dispatch-worktree marker (lenient post-
-    # Step-5 release — closes the silent-noop leak when a child context's
-    # CLAUDE_CODE_SESSION_ID differs from the recorded holder). A not-live
-    # foreign holder without a marker stays a noop; its lock will be
-    # reclaimed by the next acquire anyway. Truncate with `:` rather than
-    # `rm` — `rm` would orphan a concurrent acquire's already-open fd.
+    # holder's cwd carries a tmp/dispatch-worktree marker naming that recorded
+    # holder (lenient post-Step-5 release — closes the silent-noop leak when a
+    # child context's CLAUDE_CODE_SESSION_ID differs from the recorded holder).
+    # A not-live foreign holder without a holder-naming marker stays a noop; its
+    # lock will be reclaimed by the next acquire anyway. Truncate with `:`
+    # rather than `rm` — `rm` would orphan a concurrent acquire's already-open
+    # fd.
     result=$(
       exec 9>>"$LOCK_FILE"
       flock 9
@@ -290,12 +318,13 @@ case "$MODE" in
       if [[ -n "$recorded" && "$recorded" == "$SESSION_ID" ]]; then
         should_release=1
       elif [[ -n "$recorded" && "$recorded" != "$SESSION_ID" ]]; then
-        # Foreign holder: lenient release iff its cwd carries the marker.
-        # A not-live holder (resolve_holder_state returns 1, empty cwd) or
-        # an opaque-failure holder (returns 0 with empty cwd) stays strict —
-        # the marker check fails on empty cwd, so should_release stays 0.
+        # Foreign holder: lenient release iff its cwd carries a marker naming
+        # the recorded holder. A not-live holder (resolve_holder_state returns
+        # 1, empty cwd) or an opaque-failure holder (returns 0 with empty cwd)
+        # stays strict — marker_names_holder fails on empty cwd. An empty or
+        # mismatched marker likewise fails, so should_release stays 0.
         if cwd=$(resolve_holder_state "$recorded"); then
-          if [[ -n "$cwd" && -e "$cwd/tmp/dispatch-worktree" ]]; then
+          if marker_names_holder "$cwd" "$recorded"; then
             should_release=1
           fi
         fi

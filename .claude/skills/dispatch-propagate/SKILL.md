@@ -60,10 +60,11 @@ The lock covers **Steps 0-5 only**; Step 6 (the worker spawn) runs with the lock
 - **Proceed path** — as the final action of Step 5, run
   `dispatch-finalize-selection "$WORKTREE_PATH"`. The wrapper takes the target
   worktree path as its one required argument, `cd`s into it, writes the
-  `tmp/dispatch-worktree` marker (see *Step 5* and the marker paragraph below),
-  and execs `dispatch-acquire-lock --release` in one step. The `cd`-first
-  contract is why the router never accidentally writes the marker into its
-  own cwd — the wrapper is the sole Step-5 marker writer on the proceed path.
+  `tmp/dispatch-worktree` marker carrying the finalizing holder's
+  `CLAUDE_CODE_SESSION_ID` (see *Step 5* and the marker paragraph below), and
+  execs `dispatch-acquire-lock --release` in one step. The `cd`-first contract
+  is why the router never accidentally writes the marker into its own cwd —
+  the wrapper is the sole Step-5 marker writer on the proceed path.
 - **Every Steps 1-5 stop path** — immediately before reporting the stop reason
   and proceeding to Step 7, run
   `.claude/skills/dispatch-propagate/scripts/dispatch-acquire-lock --release` directly.
@@ -76,10 +77,16 @@ Both calls need `dangerouslyDisableSandbox: true` (same reason as Step 0); they
 print `released` or `noop`, both fine, so the skill does not branch on the output.
 
 Releasing after Step 5 is safe, and the `tmp/dispatch-worktree` marker is the
-canonical post-Step-5 reclaim signal; see reference.md (*Releasing the lock*
-and *Per-worktree invariant*) for the safety argument, marker/reclaim
-semantics, and the two orthogonal lock scopes. Later steps cross-reference
-*Releasing the lock* rather than repeating these commands.
+canonical post-Step-5 reclaim signal. The marker is session-scoped: a later
+tick reclaims a foreign holder via the marker **only** when the marker's
+content equals the recorded holder's `CLAUDE_CODE_SESSION_ID`. A marker naming
+an older, since-finalized session — or an empty marker (the `touch` stamped by
+`.claude/hooks/worktree-create.sh` on every worktree creation) — never reclaims
+a live mid-selection holder, so a stale marker cannot defeat the lock for
+co-located sessions. See reference.md (*Releasing the lock* and *Per-worktree
+invariant*) for the safety argument, marker/reclaim semantics, and the two
+orthogonal lock scopes. Later steps cross-reference *Releasing the lock* rather
+than repeating these commands.
 
 ## 1. Sync local main with `origin/main`
 
@@ -334,12 +341,16 @@ worktree path that Step 6 passes to `dispatch-spawn-worker`.
 As the **final action of this step on every non-`conflict` (proceed) path** —
 before Step 6 — run `dispatch-finalize-selection "$WORKTREE_PATH"`. The
 wrapper `cd`s into the target worktree, writes the recovery marker
-**inside the target worktree** (`$WORKTREE_PATH/tmp/dispatch-worktree`), and
-releases the lock in one step (see *Releasing the lock*). The worker in Step 6
-onward runs lock-free.
+**inside the target worktree** (`$WORKTREE_PATH/tmp/dispatch-worktree`) with the
+finalizing holder's `CLAUDE_CODE_SESSION_ID` as its content, and releases the
+lock in one step (see *Releasing the lock*). The worker in Step 6 onward runs
+lock-free.
 
 The marker is the canonical "Step 5 completed" signal used by the lock script's
-post-Step-5 reclaim path; see reference.md (*Step 5 marker deep dive*).
+post-Step-5 reclaim path. It is session-scoped: reclaim fires only when the
+marker's content equals the recorded holder's sessionId, so a stale or empty
+marker never reclaims a live holder. See reference.md (*Step 5 marker deep
+dive*).
 
 ## 6. Spawn the Worker
 
