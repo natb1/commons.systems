@@ -9,15 +9,46 @@ in `.claude/settings.json` — both relative to a worktree's project root:
   deletes a worktree's *working directory* in addition to its `.bare/`
   registration, so the container of all worktrees must be writable too.
 
-So git operations work **without** `dangerouslyDisableSandbox`: `git add`,
-`git commit`, `git merge`, `git checkout`, `git rebase`, and
-`git worktree add`/`remove`. `git push` / `git fetch` work sandboxed too — the
-`origin` remote is HTTPS to `github.com`, an allowlisted host.
+Most git operations work **without** `dangerouslyDisableSandbox`:
 
-If either entry is missing, the matching write fails read-only — e.g.
+- `git add` / `git commit` — write to the index and objects under the writable `../../.bare` common dir.
+- `git worktree add` / `git worktree remove` — operate on the writable `../../worktrees` container and `../../.bare`.
+- `git push` / `git fetch` — use HTTPS to `github.com`, an allowlisted host.
+
+Tree-updating ops (`merge`, `checkout`, `rebase`, `reset`) require care — see the next section.
+
+If either allowlisted entry is missing, the matching write fails read-only — e.g.
 `Unable to create '.bare/worktrees/<branch>/index.lock': Read-only file system`
 on a commit, or `failed to delete '.../worktrees/<branch>': Read-only file
 system` from `git worktree remove`.
+
+## Tree-updating git ops touching read-only paths
+
+`git merge`, `git checkout`, `git rebase`, and `git reset` update the working tree
+**non-transactionally**: they write files one at a time and abort on the first
+failure. When such an op touches files under the sandbox's read-only
+`denyWithinAllow` carve-out paths — `.claude/skills/`, `config/`, and `.git`
+(read-only even on the `main` worktree) — it:
+
+1. Writes the writable files successfully.
+2. Aborts with an error like:
+
+```
+error: unable to unlink old '.claude/skills/...': Read-only file system
+```
+
+3. Leaves HEAD unmoved.
+
+The result: the already-written writable files are left modified-but-uncommitted,
+indistinguishable from a stray manual edit.
+
+**Such ops must run with `dangerouslyDisableSandbox: true`.**
+
+Canonical case: `/dispatch-propagate` Step 1 runs
+`git fetch origin main && git merge --ff-only origin/main` on the `main` worktree.
+`origin/main` frequently carries `.claude/skills/**` changes (the dispatch skills
+are actively developed), so this sync routinely hits the hazard. It must run with
+`dangerouslyDisableSandbox: true`.
 
 ## gh CLI (GitHub API)
 
