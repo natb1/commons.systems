@@ -6265,6 +6265,7 @@ echo "=== dispatch-spawn-router ==="
 #   $TMPDIR_TEST/fake-claude     the multi-subcommand fake `claude`
 #   $TMPDIR_TEST/registry.json   the `claude agents --json` fixture
 #   $TMPDIR_TEST/bg-argv         recorded argv of each `claude --bg` call
+#   $TMPDIR_TEST/pwd-log         records the spawn subshell's $PWD (used by Test 1b)
 #   $TMPDIR_TEST/rm-log          recorded job-ids of each `claude rm` call
 #   $TMPDIR_TEST/stop-log        recorded job-ids of each `claude stop` call
 #
@@ -6273,6 +6274,7 @@ echo "=== dispatch-spawn-router ==="
 
 SPAWN_ROUTER_REGISTRY=""
 SPAWN_ROUTER_BG_ARGV=""
+SPAWN_ROUTER_PWD_LOG=""
 SPAWN_ROUTER_RM_LOG=""
 SPAWN_ROUTER_STOP_LOG=""
 SPAWN_ROUTER_PENDING=""
