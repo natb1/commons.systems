@@ -10,6 +10,10 @@ PROJECT="commons-systems"
 # Targets production only -- no environment parameter by design
 COLLECTION_PATH="print/prod/media"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../../scaffolding/scripts/upload-media-core.sh
+source "$SCRIPT_DIR/../../scaffolding/scripts/upload-media-core.sh"
+
 usage() {
   cat >&2 <<EOF
 Usage: attach-markdown.sh <docId> <mdFile>
@@ -52,9 +56,12 @@ if ! TOKEN="$(gcloud auth print-access-token 2>&1)"; then
 fi
 
 # Verify document exists
-DOC_URL="https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${COLLECTION_PATH}/${DOC_ID}"
+ENCODED_PROJECT="$(core::url_encode_path "$PROJECT")"
+ENCODED_COLLECTION_PATH="$(core::url_encode_path "$COLLECTION_PATH")"
+ENCODED_DOC_ID="$(core::url_encode_segment "$DOC_ID")"
+DOC_URL="https://firestore.googleapis.com/v1/projects/${ENCODED_PROJECT}/databases/(default)/documents/${ENCODED_COLLECTION_PATH}/${ENCODED_DOC_ID}"
 DOC_RESP_FILE=$(mktemp)
-trap 'rm -f "$DOC_RESP_FILE"' EXIT
+core::register_temp_file "$DOC_RESP_FILE"
 DOC_HTTP=$(curl -sS -o "$DOC_RESP_FILE" -w '%{http_code}' "$DOC_URL" \
   --config <(echo "header = \"Authorization: Bearer ${TOKEN}\""))
 
@@ -100,7 +107,7 @@ PATCH_BODY=$(jq -n --arg mp "$STORAGE_PATH" '{
 }')
 
 RESP_FILE=$(mktemp)
-trap 'rm -f "$DOC_RESP_FILE" "$RESP_FILE"' EXIT
+core::register_temp_file "$RESP_FILE"
 HTTP_CODE=$(curl -sS -o "$RESP_FILE" -w '%{http_code}' -X PATCH \
   "${DOC_URL}?updateMask.fieldPaths=markdownPath" \
   --config <(echo "header = \"Authorization: Bearer ${TOKEN}\"") \
