@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# dispatch-merge-main <worktree-path> — bring the resolved target worktree's
+# branch up to origin/main before the worker is spawned, so the worker session
+# reads up-to-date dispatch workflow skill files from that worktree's `.claude/`
+# tree. The router calls this after worktree resolution (Step 5) and before the
+# worker spawn. See `.claude/skills/dispatch-propagate/SKILL.md` Step 5.
+#
+# This is a LOCAL merge only — it NEVER pushes. The merge commit is carried to
+# origin later by each phase skill's own push points: `/commit-merge-push` for
+# fix phases, and `/verify-pr`'s all-green-after-merge push. Keeping the merge
+# local here preserves the uniform "never push a bare merge commit" contract.
+#
+# Exit-code contract:
+#   0 — clean merge or already-up-to-date.
+#   2 — usage error (missing/extra/flag-shaped arg, or un-cd-able path).
+#   3 — merge conflict; the merge has been aborted and the tree is left clean.
+#   1 — fetch failure, or a non-conflict merge failure.
+set -euo pipefail
+
+if [[ $# -lt 1 ]]; then
+  echo "dispatch-merge-main: missing required <worktree-path> argument" >&2
+  exit 2
+fi
+if [[ $# -gt 1 ]]; then
+  echo "dispatch-merge-main: unexpected extra arguments after <worktree-path>" >&2
+  exit 2
+fi
+if [[ "$1" == -* ]]; then
+  echo "dispatch-merge-main: flag-shaped argument '$1' is not a worktree path" >&2
+  exit 2
+fi
+
+WORKTREE="$1"
+cd "$WORKTREE" || {
+  echo "dispatch-merge-main: cannot cd to '$WORKTREE'" >&2
+  exit 2
+}
+
+if ! git fetch origin main; then
+  echo "dispatch-merge-main: git fetch origin main failed in '$WORKTREE'" >&2
+  exit 1
+fi
+
+# Guard the merge with `if` so a non-zero exit does not trip `set -e` before we
+# can classify it. A clean merge or an already-up-to-date branch returns 0.
+if git merge origin/main; then
+  exit 0
+fi
+
+# The merge failed. Try to abort it: a successful abort means the failure was a
+# conflict (now rolled back to a clean tree); a failed abort means the merge
+# failed for some non-conflict reason.
+if git merge --abort 2>/dev/null; then
+  echo "dispatch-merge-main: merge of origin/main conflicts in '$WORKTREE'; aborted" >&2
+  exit 3
+fi
+
+echo "dispatch-merge-main: git merge origin/main failed in '$WORKTREE'" >&2
+exit 1

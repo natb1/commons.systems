@@ -91,8 +91,8 @@ than repeating these commands.
 ## 1. Sync local main with `origin/main`
 
 Run this step **only when the current branch is `main`**. From an issue worktree,
-skip this step — the worker's phase skills already merge `origin/main` into the
-issue branch at their own entry points.
+skip this step — the router merges `origin/main` into the issue branch in Step 5
+before spawning the worker.
 
 Fast-forward local `main` to `origin/main` — no push (a no-op when already equal):
 
@@ -338,6 +338,32 @@ worktree path that Step 6 passes to `dispatch-spawn-worker`.
 
   Not optional. Do not spawn a worker.
 
+On every non-`conflict` (proceed) path — `enter` and `create` — merge
+`origin/main` into the resolved worktree before finalizing the selection. This
+ensures the worker session starts with up-to-date dispatch workflow instructions
+in the worktree's `.claude/` tree. The merge is **local only** — no push (see
+*Design* in `.claude/local.md`). Run the script sandboxed (`git fetch` and
+`git merge` work within the sandbox):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-merge-main "$WORKTREE_PATH"
+```
+
+Route on the exit code:
+
+- **Exit 0** — clean merge or already-up-to-date. Continue to `dispatch-finalize-selection`.
+- **Exit 3** — merge conflict; the merge was aborted and the tree is clean.
+  Release the lock (see *Releasing the lock*), park the issue:
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-apply-office-hours <N> "origin/main merge conflict before worker spawn"
+  ```
+  Then proceed to Step 7 with `notify merge-conflict`. The user-visible report
+  is mandatory: "merge of origin/main into `$WORKTREE_PATH` conflicted; parked
+  for manual resolution". Do not spawn a worker.
+- **Exit 1 or 2** — fetch failure or unexpected merge error. Release the lock
+  (see *Releasing the lock*), surface the error, then proceed to Step 7 with
+  `notify merge-failed`. Do not spawn a worker.
+
 As the **final action of this step on every non-`conflict` (proceed) path** —
 before Step 6 — run `dispatch-finalize-selection "$WORKTREE_PATH"`. The
 wrapper `cd`s into the target worktree, writes the recovery marker
@@ -455,6 +481,8 @@ The three dispositions:
   | `notify resolver-failed` | Step 3 — `dispatch-resolve-arg` non-zero (PR closes ≠1 issue, bad argument) |
   | `notify main-broken` | Step 3 — `/dispatch-diagnose-main` ran and returned (`origin/main` is red) |
   | `notify target-blocked` | Step 4 — named target is closed or has an open blocker |
+  | `notify merge-conflict` | Step 5 — `dispatch-merge-main` exit 3; merge of `origin/main` conflicted; parked with `dispatch:office-hours` |
+  | `notify merge-failed` | Step 5 — `dispatch-merge-main` exit 1 or 2; fetch failure or unexpected merge error |
 
 - **`drain <reason>`** — `drain empty-queue` (Step 3, queue empty),
   `drain worktree-conflict` (Step 5, target's worktree cannot be safely
