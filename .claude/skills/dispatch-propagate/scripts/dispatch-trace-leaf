@@ -10,7 +10,8 @@
 #   explicit — descent is not worktree-aware. An existing <N>-* worktree on a
 #              child is fine (the dispatch caller resolves it via
 #              dispatch-resolve-worktree's explicit mode, which yields `enter`
-#              for the recycle-after-completion case).
+#              for the recycle-after-completion case, or `conflict` if a live
+#              session still owns the worktree — #837).
 #   queue    — descent filters out children whose <N>-* branch is an existing
 #              local worktree (owned by another session). If a node has open
 #              children but every one is filtered out, the descent bubbles up

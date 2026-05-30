@@ -2628,17 +2628,44 @@ branch refs/heads/42-my-feature
 
 '
 
-# 1. explicit mode + an existing <N>-* worktree → enter <path>.
-echo "Test: explicit + existing <N>-* worktree → enter"
+# 1. explicit mode + an existing <N>-* worktree + no live session → enter <path>.
+#    The liveness check is mode-independent (#837); a sessionless worktree
+#    recycles after completion.
+echo "Test: explicit + sessionless <N>-* worktree → enter"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # orphan world: no live sessions
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
-assert_eq "explicit + existing worktree → enter <path>" \
+assert_eq "explicit + sessionless worktree → enter <path>" \
   "enter /worktrees/42-my-feature" "$result"
 teardown
 
-# 3. queue mode + a live-session-owned worktree → conflict <path>. Acceptance
-#    criterion 3: same target, explicit → enter, queue (live) → conflict.
+# 2. explicit mode + a live-session-owned worktree → conflict <path> (#837). The
+#    recycle path no longer fires into a worktree whose previous worker is live.
+echo "Test: explicit + live-session <N>-* worktree → conflict"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "42-my-feature"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "explicit + live-session worktree → conflict <path>" \
+  "conflict /worktrees/42-my-feature" "$result"
+teardown
+
+# 2b. explicit mode + an UNKNOWN daemon (claude unqueryable) → conflict <path>.
+#     worktree_has_live_session folds UNKNOWN into occupied, so explicit resolve
+#     fails safe to conflict, exactly as queue mode does (3c).
+echo "Test: explicit + unqueryable daemon → conflict (fail-safe)"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+# setup's default CLAUDE_AGENTS_CMD points at a non-existent binary (UNKNOWN).
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "explicit + unqueryable daemon → conflict <path>" \
+  "conflict /worktrees/42-my-feature" "$result"
+teardown
+
+# 3. queue mode + a live-session-owned worktree → conflict <path>. The liveness
+#    check is mode-independent (#837): both modes yield conflict for a live
+#    session — see test 2 for the explicit-mode counterpart.
 echo "Test: queue + live-session <N>-* worktree → conflict"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
@@ -2719,6 +2746,7 @@ teardown
 echo "Test: explicit from issue-branch cwd with matching worktree → enter (not here)"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # sessionless so the #837 liveness check proceeds to enter
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "explicit from issue-branch cwd, matching worktree → enter (not here)" \
   "enter /worktrees/42-my-feature" "$result"
@@ -2781,6 +2809,7 @@ teardown
 echo "Test: reconcile wrong branch (no unique commits) → re-point + enter"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
 echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
@@ -2794,6 +2823,7 @@ teardown
 echo "Test: worktree already on PR branch → enter, no checkout"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-my-feature"}]\n' > "$STUB_DIR/pr-list-full.json"
 echo '{"headRefName":"42-my-feature"}' > "$STUB_DIR/pr-headref-100.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
@@ -2806,6 +2836,7 @@ teardown
 echo "Test: reconcile wrong branch (unique commits) → conflict"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # sessionless: conflict here is from unique commits, not liveness (#837)
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
 echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
 echo "2" > "$STUB_DIR/rev-list-count.txt"
@@ -2821,6 +2852,7 @@ teardown
 echo "Test: no PR → enter unchanged (no pr view, no checkout)"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 # No pr-list-full.json: dispatch-find-pr finds no PR.
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "no PR → enter" "enter /worktrees/42-my-feature" "$result"
@@ -2869,6 +2901,7 @@ teardown
 echo "Test: PR + empty headRefName → error (no silent enter, no checkout)"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
 echo '{"headRefName":""}' > "$STUB_DIR/pr-headref-100.json"
 if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null); then rc=0; else rc=$?; fi
@@ -2882,6 +2915,7 @@ teardown
 echo "Test: PR + injection-shaped headRefName → error (no checkout)"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
 echo '{"headRefName":"--upload-pack=evil"}' > "$STUB_DIR/pr-headref-100.json"
 if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null); then rc=0; else rc=$?; fi
@@ -9703,6 +9737,135 @@ stdout=$("$TMPDIR_TEST/dispatch-check-blockers" 100 2>/dev/null) && rc=0 || rc=$
 assert_eq "gh blocked_by failure → exit 1" "1" "$rc"
 assert_eq "gh blocked_by failure → no output" "" "$stdout"
 teardown
+
+# ---------------------------------------------------------------------------
+# Tests for detect-changes.sh
+# ---------------------------------------------------------------------------
+#
+# Integration tests that run the REAL detect-changes.sh and the REAL
+# list-go-modules.sh against a stubbed `git` and a fake repo tree. The fake
+# tree carries go.mod files at the three module roots so list-go-modules.sh
+# performs genuine module discovery and detect-changes.sh builds its runtime
+# `grep -E` alternation regex from that discovery (PR #745). Nothing here
+# re-implements the detection logic.
+
+dc_setup() {
+  TEST_TMP="$(mktemp -d)"
+  cp "$SCRIPT_DIR/detect-changes.sh" "$TEST_TMP/"
+  cp "$SCRIPT_DIR/list-go-modules.sh" "$TEST_TMP/"
+  chmod +x "$TEST_TMP/detect-changes.sh" "$TEST_TMP/list-go-modules.sh"
+
+  # Fake repo root whose go.mod files drive genuine module discovery.
+  FAKE_REPO="$TEST_TMP/repo"
+  mkdir -p "$FAKE_REPO/budget-etl" \
+           "$FAKE_REPO/scaffolding/firebase" \
+           "$FAKE_REPO/productivity-tui"
+  : > "$FAKE_REPO/budget-etl/go.mod"
+  : > "$FAKE_REPO/scaffolding/firebase/go.mod"
+  : > "$FAKE_REPO/productivity-tui/go.mod"
+
+  # Per-test inputs/outputs.
+  DC_CHANGED="$TEST_TMP/changed.txt"
+  : > "$DC_CHANGED"
+  GITHUB_OUTPUT="$TEST_TMP/github_output.txt"
+  export GITHUB_OUTPUT
+  : > "$GITHUB_OUTPUT"
+
+  STUB_BIN="$TEST_TMP/bin"
+  mkdir -p "$STUB_BIN"
+  ORIG_PATH="$PATH"
+  export PATH="$STUB_BIN:$PATH"
+
+  # Stub git: diff cats the per-test changed-files list; show-toplevel echoes
+  # the fake repo root (so list-go-modules.sh discovers the fake modules).
+  cat > "$STUB_BIN/git" <<GITEOF
+#!/usr/bin/env bash
+set -euo pipefail
+cmd="\$1"; shift || true
+case "\$cmd" in
+  diff)
+    cat "$DC_CHANGED"
+    ;;
+  rev-parse)
+    echo "$FAKE_REPO"
+    ;;
+  *)
+    echo "unexpected git: \$cmd \$*" >&2
+    exit 1
+    ;;
+esac
+GITEOF
+  chmod +x "$STUB_BIN/git"
+}
+
+dc_teardown() {
+  export PATH="$ORIG_PATH"
+  unset GITHUB_OUTPUT
+  rm -rf "$TEST_TMP"
+}
+
+# Write a changed-files list, run detect-changes.sh, then print "true" if the
+# given output key was emitted as "<key>=true", else "false".
+dc_run() {
+  local key="$1"; shift
+  printf '%s\n' "$@" > "$DC_CHANGED"
+  : > "$GITHUB_OUTPUT"
+  "$TEST_TMP/detect-changes.sh" >/dev/null 2>&1
+  if grep -qx "${key}=true" "$GITHUB_OUTPUT"; then
+    echo "true"
+  else
+    echo "false"
+  fi
+}
+
+# --- nix ---
+dc_setup
+assert_eq "detect-changes: nix=true for *.nix file"        "true"  "$(dc_run nix 'nix/foo.nix')"
+assert_eq "detect-changes: nix=true for flake.nix"         "true"  "$(dc_run nix 'flake.nix')"
+assert_eq "detect-changes: nix=true for flake.lock"        "true"  "$(dc_run nix 'flake.lock')"
+assert_eq "detect-changes: nix absent for unrelated path"  "false" "$(dc_run nix 'README.md')"
+dc_teardown
+
+# --- playwright ---
+dc_setup
+assert_eq "detect-changes: playwright=true for package-lock.json"    "true"  "$(dc_run playwright 'package-lock.json')"
+assert_eq "detect-changes: playwright=true for flake.lock"           "true"  "$(dc_run playwright 'flake.lock')"
+assert_eq "detect-changes: playwright=true for version-sync script"  "true"  "$(dc_run playwright '.github/scripts/check-playwright-version-sync.sh')"
+assert_eq "detect-changes: playwright absent for unrelated path"     "false" "$(dc_run playwright 'README.md')"
+dc_teardown
+
+# --- rules ---
+dc_setup
+assert_eq "detect-changes: rules=true for firestore.rules"         "true"  "$(dc_run rules 'firestore.rules')"
+assert_eq "detect-changes: rules=true for storage.rules"           "true"  "$(dc_run rules 'storage.rules')"
+assert_eq "detect-changes: rules=true for rules-test/ path"        "true"  "$(dc_run rules 'rules-test/x')"
+assert_eq "detect-changes: rules=true for detect-changes.sh self"  "true"  "$(dc_run rules '.claude/skills/dispatch-propagate/scripts/detect-changes.sh')"
+assert_eq "detect-changes: rules=true for firebase.json"           "true"  "$(dc_run rules 'firebase.json')"
+assert_eq "detect-changes: rules=true for package.json"            "true"  "$(dc_run rules 'package.json')"
+assert_eq "detect-changes: rules absent for unrelated path"        "false" "$(dc_run rules 'README.md')"
+dc_teardown
+
+# --- go (the core of #749: regex must cover every discovered module root) ---
+dc_setup
+assert_eq "detect-changes: go=true for budget-etl module"           "true"  "$(dc_run go 'budget-etl/main.go')"
+assert_eq "detect-changes: go=true for scaffolding/firebase module" "true"  "$(dc_run go 'scaffolding/firebase/x.go')"
+assert_eq "detect-changes: go=true for productivity-tui module"     "true"  "$(dc_run go 'productivity-tui/y.go')"
+assert_eq "detect-changes: go absent for non-Go path"               "false" "$(dc_run go 'README.md')"
+dc_teardown
+
+# --- combined multi-file diff sets multiple categories ---
+dc_setup
+assert_eq "detect-changes: combined diff sets nix=true" "true" "$(dc_run nix 'flake.nix' 'budget-etl/main.go')"
+assert_eq "detect-changes: combined diff sets go=true"  "true" "$(dc_run go  'flake.nix' 'budget-etl/main.go')"
+dc_teardown
+
+# --- empty diff sets none of the four keys ---
+dc_setup
+assert_eq "detect-changes: empty diff leaves nix unset"        "false" "$(dc_run nix)"
+assert_eq "detect-changes: empty diff leaves playwright unset" "false" "$(dc_run playwright)"
+assert_eq "detect-changes: empty diff leaves rules unset"      "false" "$(dc_run rules)"
+assert_eq "detect-changes: empty diff leaves go unset"         "false" "$(dc_run go)"
+dc_teardown
 
 # ============================================================================
 # summary
