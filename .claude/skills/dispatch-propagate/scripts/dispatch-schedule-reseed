@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# dispatch-schedule-reseed — schedule a one-shot re-seed of the /dispatch chain
-# at the next rate-limit cap reset.
+# dispatch-schedule-reseed — schedule a one-shot re-seed of the
+# /dispatch-propagate chain at the next rate-limit cap reset.
 #
-# The /dispatch chain is a self-perpetuating baton-pass of background jobs:
+# The /dispatch-propagate chain is a self-perpetuating baton-pass of
+# background jobs:
 # each worker finishes its phase, the baton-pass spawns the next tick, and the
 # chain keeps moving until something stops it. When a tick observes a
 # rate-limit cap-hit (used_percentage >= target on the weekly or 5-hour
@@ -18,9 +19,10 @@
 # a parked item.
 #
 # Behavior, in order:
-#   1. Load tunables (target_weekly_usage_pct, target_five_hour_usage_pct)
+#   1. Load tunables (target_weekly_usage_pct, five_hour_target_floor_pct)
 #      from dispatch-config-load target-workers — same defaults as
-#      dispatch-target-workers.
+#      dispatch-target-workers. The 5h cap-hit threshold uses
+#      five_hour_target_floor_pct (the floor of the pace controller's 5h band).
 #   2. Read telemetry from rate_limits.json (or env overrides). Missing
 #      telemetry → no-op with stderr diagnostic (mirrors
 #      dispatch-target-workers's fallback). The signal is opt-in by
@@ -103,7 +105,7 @@ fi
 if [[ -n "$CONFIG_JSON" ]]; then
   val=$(jq -r '.target_weekly_usage_pct // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && TARGET_WEEKLY="$val"
-  val=$(jq -r '.target_five_hour_usage_pct // empty' <<<"$CONFIG_JSON")
+  val=$(jq -r '.five_hour_target_floor_pct // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && TARGET_5H="$val"
 fi
 
@@ -287,8 +289,8 @@ fi
 #
 # ExecStart is dispatch-spawn-router — the worker→router baton-pass primitive
 # that dedup-guards, prunes stopped agents, and spawns
-# `claude --bg --name dispatch-<id> --permission-mode auto "/dispatch"` from
-# the main worktree.
+# `claude --bg --name dispatch-<id> --permission-mode auto "/dispatch-propagate"`
+# from the main worktree.
 
 SYSTEMD_RUN_CMD="${DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD:-systemd-run}"
 UNIT_NAME="dispatch-reseed-${RESEED_AT}"
@@ -305,7 +307,7 @@ trap 'rm -f "$RUN_STDERR"' EXIT
      --on-calendar="@$RESEED_AT" \
      --working-directory="$MAIN_WORKTREE" \
      --timer-property=Persistent=true \
-     "$MAIN_WORKTREE/.claude/skills/dispatch/scripts/dispatch-spawn-router" \
+     "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-spawn-router" \
      2>"$RUN_STDERR"
 RC=$?
 if (( RC == 0 )); then

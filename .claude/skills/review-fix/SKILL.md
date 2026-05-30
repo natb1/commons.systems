@@ -5,7 +5,7 @@ description: Review phase — merge origin/main, run the generic /review, classi
 
 # Review and Fix
 
-The `review` phase of the issue workflow, dispatched by `/dispatch`. This is the
+The `review` phase of the issue workflow, dispatched by `/dispatch-propagate`. This is the
 dispatch-specific wrapper around the generic built-in `/review` skill. `/review`
 only produces findings — it applies no fixes, commits nothing, and posts no
 summary. This skill wraps it: merge current `main`, run `/review`, classify the
@@ -29,7 +29,7 @@ PR_NUM=$(echo "$PR_JSON" | jq -r .number)
 echo "$PR_JSON" | jq -r '.labels[].name'
 ```
 
-`PR_NUM` is reused in Steps 3, 7, and 8 — do not re-resolve. The PR body stays in
+`PR_NUM` is reused in Steps 3, 7, 8, and 11 — do not re-resolve. The PR body stays in
 `PR_JSON` (`echo "$PR_JSON" | jq -r .body`); Step 5 parses its `Closes #N`
 line(s) to resolve the issue(s) this PR implements. If the printed labels include
 `dispatch:reviewed` — an interrupted prior run — **skip Steps 1–10 entirely** and
@@ -183,14 +183,14 @@ already applied, so re-entry is a true no-op. Otherwise run all steps in order.
    script invokes `gh`):
 
    ```bash
-   .claude/skills/dispatch/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
+   .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
 8. **Apply the `dispatch:reviewed` label** via `dispatch-complete-phase` (use
    `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash
-   .claude/skills/dispatch/scripts/dispatch-complete-phase "$PR_NUM" review
+   .claude/skills/dispatch-propagate/scripts/dispatch-complete-phase "$PR_NUM" review
    ```
 
    The PR number passed here is **expected** to differ from the worktree's
@@ -200,7 +200,7 @@ already applied, so re-entry is a true no-op. Otherwise run all steps in order.
    re-confirm the mismatch.
 
    This skill **owns** its `dispatch:reviewed` label — unlike the generic
-   `/review`, which `/dispatch` cannot make dispatch-aware — so `/dispatch`
+   `/review`, which `/dispatch-propagate` cannot make dispatch-aware — so `/dispatch-propagate`
    does not apply the label after this skill returns. The label is applied
    regardless of whether any fixes were made, so a no-findings run still
    advances the workflow.
@@ -216,30 +216,53 @@ already applied, so re-entry is a true no-op. Otherwise run all steps in order.
     `/commit-merge-push` to commit and push it, and document it on the PR with
     a comment using Step 7's mechanism.
 
-11. **Write the phase-completed marker (autonomous path only), then stop.**
-    The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads this to decide
-    propagate vs park. Atomic via tempfile + mv. `CLAUDE_JOB_DIR` unset =
-    interactive run; the marker write is a no-op and the skill simply stops
-    (which is correct — interactive Step 10 just ran).
+11. **Write the phase-completed marker or deviation reason (autonomous path
+    only), then stop.** The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads
+    this to decide propagate vs park. `CLAUDE_JOB_DIR` unset = interactive run;
+    the write is a no-op and the skill simply stops (which is correct —
+    interactive Step 10 just ran). On idempotent re-entry (Steps 1–10 were
+    skipped), the Step 3 bucket data is not in context — treat the deviation
+    criterion as not met and write the phase-completed marker.
 
-    ```bash
-    if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-      printf 'phase=review\npr=%s\n' "$PR_NUM" \
-        > "$CLAUDE_JOB_DIR/phase-completed.tmp"
-      mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
-         "$CLAUDE_JOB_DIR/phase-completed"
-    fi
-    ```
+    **Deviation criterion:** the Deferred bucket dominated — nearly all findings
+    were Deferred and none were Fixed.
 
-    Then **stop**. The Stop hook reads the marker and advances the chain.
+    - **Deviation fires** — do NOT write `phase-completed`. Instead write a
+      one-line reason to `$CLAUDE_JOB_DIR/office-hours-reason`, atomic via
+      tempfile + mv. The Stop hook reads marker-absence as Branch A and applies
+      `dispatch:office-hours` to the issue, parking it for human review.
+
+      ```bash
+      if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+        printf '%s\n' "/review-fix: findings dominated by Deferred (out-of-scope) items; none fixed" \
+          > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+        mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" \
+           "$CLAUDE_JOB_DIR/office-hours-reason"
+      fi
+      ```
+
+    - **No deviation** — write the `phase-completed` marker exactly as before,
+      atomic via tempfile + mv.
+
+      ```bash
+      if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+        printf 'phase=review\npr=%s\n' "$PR_NUM" \
+          > "$CLAUDE_JOB_DIR/phase-completed.tmp"
+        mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
+           "$CLAUDE_JOB_DIR/phase-completed"
+      fi
+      ```
+
+    Then **stop**. The Stop hook reads the marker (or its absence) and advances
+    or parks the chain.
 
 ## Autonomous vs. attended
 
-In an autonomous `/dispatch` background job there is no user to drive Step 10 —
-the skill applies the `dispatch:reviewed` label (Step 8), writes the
+In an autonomous `/dispatch-propagate` background job there is no user to drive
+Step 10 — the skill applies the `dispatch:reviewed` label (Step 8), writes the
 phase-completed marker (Step 11), and stops; the Step 9 4-section report is
 informational. The label is applied regardless of whether any fixes were made,
-so `/dispatch` can always advance to the next phase.
+so `/dispatch-propagate` can always advance to the next phase.
 
 ## Notes
 

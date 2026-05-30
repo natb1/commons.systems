@@ -18,6 +18,11 @@ const mockWriteBatch = vi.fn(() => ({
   update: (...args: unknown[]) => mockBatchUpdate(...args),
   commit: (...args: unknown[]) => mockBatchCommit(...args),
 }));
+const mockTxGet = vi.fn();
+const mockTxUpdate = vi.fn();
+const mockRunTransaction = vi.fn((_, cb: (tx: { get: typeof mockTxGet; update: typeof mockTxUpdate }) => Promise<unknown>) =>
+  cb({ get: mockTxGet, update: mockTxUpdate }),
+);
 
 vi.mock("firebase/firestore", () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
@@ -30,6 +35,7 @@ vi.mock("firebase/firestore", () => ({
   deleteDoc: (...args: unknown[]) => mockDeleteDoc(...args),
   setDoc: (...args: unknown[]) => mockSetDoc(...args),
   writeBatch: (...args: unknown[]) => mockWriteBatch(...args),
+  runTransaction: (...args: unknown[]) => mockRunTransaction(...(args as Parameters<typeof mockRunTransaction>)),
   increment: (n: number) => mockIncrement(n),
   Timestamp: class Timestamp {
     _date: Date;
@@ -46,7 +52,7 @@ vi.mock("../src/firebase.js", () => ({
 }));
 
 import { Timestamp } from "firebase/firestore";
-import { getTransactions, updateTransaction, updateBudget, updateBudgetPeriod, adjustBudgetPeriodTotal, getBudgets, getBudgetPeriods, getGroupMembers, createJournalEntry, assertLegStateTransition } from "../src/firestore";
+import { getTransactions, updateTransaction, updateBudget, updateBudgetPeriod, adjustBudgetPeriodTotal, getBudgets, getBudgetPeriods, getGroupMembers, createJournalEntry, assertLegStateTransition, updateJournalLegCleared } from "../src/firestore";
 
 describe("getTransactions", () => {
   beforeEach(() => {
@@ -1114,5 +1120,59 @@ describe("assertLegStateTransition", () => {
     const reconciledAt = Timestamp.fromDate(new Date("2025-03-15"));
     expect(() => assertLegStateTransition({ cleared: true, reconciledAt }, true)).toThrow(/reconciled/i);
     expect(() => assertLegStateTransition({ cleared: true, reconciledAt }, false)).toThrow(/reconciled/i);
+  });
+});
+
+describe("updateJournalLegCleared", () => {
+  const legTs = Timestamp.fromDate(new Date("2025-04-01"));
+
+  function makeLegSnap(overrides: { cleared?: boolean; reconciledAt?: Timestamp | null } = {}) {
+    return {
+      exists: () => true,
+      id: "leg-abc",
+      data: () => ({
+        entryId: "entry-1",
+        accountId: "acct-1",
+        debit: 100,
+        credit: 0,
+        timestamp: legTs,
+        cleared: overrides.cleared ?? false,
+        reconciledAt: overrides.reconciledAt ?? null,
+        reconciledEventId: null,
+        statementItemId: null,
+        groupId: null,
+      }),
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDoc.mockReturnValue("mock-leg-ref");
+    mockCollection.mockReturnValue("mock-collection-ref");
+  });
+
+  it("happy path: calls tx.update with { cleared: true } and resolves", async () => {
+    mockTxGet.mockResolvedValue(makeLegSnap({ cleared: false }));
+
+    await expect(updateJournalLegCleared("leg-abc", true)).resolves.toBeUndefined();
+
+    expect(mockRunTransaction).toHaveBeenCalledTimes(1);
+    expect(mockTxUpdate).toHaveBeenCalledTimes(1);
+    expect(mockTxUpdate).toHaveBeenCalledWith("mock-leg-ref", { cleared: true });
+  });
+
+  it("rejects when the leg is reconciled and does not call tx.update", async () => {
+    const reconciledAt = Timestamp.fromDate(new Date("2025-03-15"));
+    mockTxGet.mockResolvedValue(makeLegSnap({ cleared: true, reconciledAt }));
+
+    await expect(updateJournalLegCleared("leg-abc", false)).rejects.toThrow(/reconciled/i);
+    expect(mockTxUpdate).not.toHaveBeenCalled();
+  });
+
+  it("rejects with 'not found' when the snapshot does not exist and does not call tx.update", async () => {
+    mockTxGet.mockResolvedValue({ exists: () => false });
+
+    await expect(updateJournalLegCleared("leg-abc", true)).rejects.toThrow(/not found/i);
+    expect(mockTxUpdate).not.toHaveBeenCalled();
   });
 });
