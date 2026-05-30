@@ -97,8 +97,14 @@ if [[ "$MODE" == "explicit" ]]; then
     fi
   fi
 
-  # Closed-target guard. gh issue view returns OPEN/CLOSED (uppercase).
-  ISSUE_STATE=$(gh issue view "$N" --json state -q .state 2>/dev/null) || ISSUE_STATE=""
+  # Closed-target guard. gh issue view returns OPEN/CLOSED (uppercase). A gh
+  # failure must not fail open (silently dispatching to a possibly-closed
+  # issue) — surface it as a hard error and release the lock.
+  ISSUE_STATE=$(gh issue view "$N" --json state -q .state 2>/dev/null) || {
+    release_lock
+    echo "dispatch-materialize-spawn: failed to fetch state for issue #$N" >&2
+    exit 2
+  }
   if [[ "$ISSUE_STATE" == "CLOSED" ]]; then
     release_lock
     "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" "named target issue is closed" 1>&2 || true
@@ -141,10 +147,18 @@ case "$WT_ACTION" in
     ;;
   create)
     BRANCH="$WT_REST"
-    GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir)
+    GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir) || {
+      release_lock
+      echo "dispatch-materialize-spawn: git rev-parse --git-common-dir failed for #$N" >&2
+      exit 2
+    }
     PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
     WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
-    git worktree add -b "$BRANCH" "$WORKTREE_PATH" origin/main 1>&2
+    if ! git worktree add -b "$BRANCH" "$WORKTREE_PATH" origin/main 1>&2; then
+      release_lock
+      echo "dispatch-materialize-spawn: git worktree add failed for $BRANCH" >&2
+      exit 2
+    fi
     direnv allow "$WORKTREE_PATH" 1>&2 || true
     direnv exec "$WORKTREE_PATH" true 1>&2 || true
     ( cd "$WORKTREE_PATH" && "$SCRIPT_DIR/sync-issue-context" "$N" ) 1>&2 || true
@@ -164,7 +178,13 @@ esac
 
 # Write the recovery marker into the target worktree and release the lock in one
 # step. Lock-free from here. Its stdout (released/noop) goes to stderr.
-"$SCRIPT_DIR/dispatch-finalize-selection" "$WORKTREE_PATH" 1>&2
+if ! "$SCRIPT_DIR/dispatch-finalize-selection" "$WORKTREE_PATH" 1>&2; then
+  # finalize-selection failed before its --release step, so the lock is still
+  # held — release it explicitly so a stuck holder does not wedge the next tick.
+  release_lock
+  echo "dispatch-materialize-spawn: dispatch-finalize-selection failed for $WORKTREE_PATH" >&2
+  exit 2
+fi
 
 # --- Step 6a: waiting-CI gate (#906) -----------------------------------------
 PHASE=$("$SCRIPT_DIR/dispatch-phase" "$N") || PHASE=""

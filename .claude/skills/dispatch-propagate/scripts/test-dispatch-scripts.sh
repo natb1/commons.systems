@@ -10241,6 +10241,72 @@ case "$err" in *"unexpected argument"*"EXIT=2") s3=ok ;; *) s3="bad: $err" ;; es
 assert_eq "unexpected 3rd arg → usage error, exit 2" "ok" "$s3"
 mat_teardown
 
+# --- create-path git worktree add failure → exit 2 + lock released -----------
+# git worktree add runs unchecked under `set -uo pipefail` (no -e); a non-zero
+# exit must release the lock, else the holder wedges every subsequent tick (the
+# lock never frees). Regression for the unchecked-exit lock-leak.
+echo "Test: materialize-spawn git worktree add failure → exit 2 + lock released"
+mat_setup
+cat > "$TMPDIR_TEST/bin/git" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/git.log"
+case "\$*" in
+  "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/project/.bare" ;;
+  "worktree add -b "*) echo "fatal: branch already checked out" >&2; exit 128 ;;
+  *) : ;;
+esac
+STUB
+chmod +x "$TMPDIR_TEST/bin/git"
+out=$(run_mat 839 queue) && rc=0 || rc=$?
+assert_eq "wt-add fail: exit 2" "2" "$rc"
+assert_eq "wt-add fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "wt-add fail: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- finalize-selection failure (worktree path missing) → exit 2 + lock released
+# dispatch-finalize-selection cd's into the target worktree; if that path does
+# not exist its cd fails (exit 2). The caller must release the lock rather than
+# proceed lock-held into the spawn. Here git worktree add "succeeds" but does NOT
+# create the directory, so finalize's cd fails. Regression for the unchecked
+# finalize exit.
+echo "Test: materialize-spawn finalize-selection failure → exit 2 + lock released"
+mat_setup
+cat > "$TMPDIR_TEST/bin/git" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/git.log"
+case "\$*" in
+  "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/project/.bare" ;;
+  "worktree add -b "*) : ;;
+  *) : ;;
+esac
+STUB
+chmod +x "$TMPDIR_TEST/bin/git"
+out=$(run_mat 839 queue) && rc=0 || rc=$?
+assert_eq "finalize fail: exit 2" "2" "$rc"
+assert_eq "finalize fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "finalize fail: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- explicit closed-check gh failure → exit 2 + lock released ---------------
+# The closed-target guard must not fail open on a gh error (silently dispatching
+# to a possibly-closed issue). A gh failure is a hard error: release + exit 2.
+echo "Test: materialize-spawn explicit gh issue view failure → exit 2 + lock released"
+mat_setup
+cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+echo "gh: simulated failure" >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/bin/gh"
+out=$(run_mat 839 explicit) && rc=0 || rc=$?
+assert_eq "gh fail: exit 2" "2" "$rc"
+assert_eq "gh fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "gh fail: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
 # ============================================================================
 # summary
 # ============================================================================
