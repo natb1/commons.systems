@@ -8141,6 +8141,37 @@ else
 fi
 stop_teardown
 
+# --- Test 5b: marker absent + CURRENT_PHASE waiting → spawn only, no office-hours
+
+echo "Test: stop hook + marker absent + phase waiting → spawn only, no office-hours (router-defer, not worker-actionable)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "waiting" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker → branch A; CURRENT_PHASE waiting → exemption.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop waiting-exempt: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" && ! -e "$STUB_DIR/gh-pr-edit.log" \
+   && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop waiting-exempt: no office-hours apply (no add-label)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop waiting-exempt: no office-hours apply (no add-label)"
+  echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop waiting-exempt: spawn invoked exactly once" "1" "$spawn_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop waiting-exempt: self-close not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop waiting-exempt: self-close not invoked"
+fi
+stop_teardown
+
 # --- Test 6: CLAUDE_JOB_DIR unset → no-op ------------------------------------
 
 echo "Test: stop hook + CLAUDE_JOB_DIR unset → no-op (interactive session excluded)"
