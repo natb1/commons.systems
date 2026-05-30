@@ -1726,6 +1726,47 @@ assert_eq "dispatch-trace-leaf exit 1 → select-target exits non-zero" "yes" "$
 assert_eq "dispatch-trace-leaf exit 1 → no issue line emitted" "yes" "$no_issue"
 teardown
 
+# --- ready-PR gate (#920) ---
+# An open help-wanted issue whose closing PR is non-draft (ready) is excluded
+# from the issue queue. The gate uses closingIssuesReferences from PR_LIST —
+# no extra gh call. A *draft* closing PR must NOT gate the issue.
+
+# 40. An open issue closed by a non-draft (ready) PR is excluded from the issue
+#     queue. The non-draft PR itself is skipped at the phase level (done), but
+#     the issue must also be excluded so no worker is wasted deriving "done".
+echo "Test: open issue closed by non-draft PR is excluded from issue queue (#920)"
+setup
+# Non-draft PR 10 closes issue 55 (help-wanted). PR phase will be "done" and
+# skipped in the PR loop; issue 55 must also be gated out by READY_PR_CLOSED_ISSUES.
+# Issue 66 is also help-wanted and not closed by any PR — it should be selected.
+UNION='['"$(make_pr_union 10 "10-ready-pr" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":55}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "issue closed by non-draft PR excluded; next issue selected" "issue 66" "$result"
+teardown
+
+# 41. A draft closing PR does NOT gate the issue — a stalled/orphaned draft is
+#     the normal in-flight dispatch state and must leave the issue selectable so
+#     the chain can resume by recycling the worktree.
+#     To observe the issue-queue path: the draft PR is in waiting phase (pending
+#     CI), so it is skipped in the PR loop, leaving only the issue queue.
+echo "Test: open issue closed only by a draft PR is still selected (#920)"
+setup
+# Draft PR 10 (pending CI → waiting phase, skipped) closes issue 55 (help-wanted).
+# isDraft=true → must NOT gate issue 55. Waiting phase skip clears the PR from
+# the ladder, so issue 55 is the only remaining candidate.
+UNION='['"$(make_pr_union 10 "10-draft-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":55}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "issue closed only by draft PR is still selectable" "issue 55" "$result"
+teardown
+
 # ============================================================================
 # --- JIT scan ---
 # dispatch-select-target's JIT scan runs before the main-broken health gate.
