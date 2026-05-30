@@ -50,9 +50,9 @@
 # pre-finalize stop paths). `propagate` and `notify spawn-failed` release AFTER
 # dispatch-spawn-worker returns (the worker is verified-registered on success).
 # `drain ci-waiting` and `drain concurrency-cap` release at their respective
-# stops. An internal `exit 2` failure before dispatch-finalize-selection (a hard
-# trace-leaf / check-blockers / resolve-worktree error) also releases the lock so
-# a stuck holder does not wedge the next tick. Crash safety: a router that dies
+# stops. An internal `exit 2` failure before dispatch-finalize-selection (a usage
+# error, or a hard trace-leaf / check-blockers / resolve-worktree error) also
+# releases the lock so a stuck holder does not wedge the next tick. Crash safety: a router that dies
 # mid-spawn holding the lock is recovered by the lock's existing dead-holder
 # reclaim on the next --wait.
 #
@@ -70,24 +70,32 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
+# Defined before argument parsing so the usage-error exits below release the lock
+# too. The lock is acquired by dispatch-select-tick in the same router session,
+# so a malformed materialize-spawn call would otherwise leave it held until
+# self-healing reclaim, wedging the next tick — the same hazard every other
+# internal exit-2 path in this script guards against. A noop when the caller does
+# not hold the lock (strict self-release), so it is safe on standalone misuse.
+release_lock() {
+  "$SCRIPT_DIR/dispatch-acquire-lock" --release >/dev/null 2>&1 || true
+}
+
 N="${1:-}"
 MODE="${2:-}"
 BYPASS_CAP=0
 if [[ "${3:-}" == "--bypass-cap" ]]; then
   BYPASS_CAP=1
 elif [[ -n "${3:-}" ]]; then
+  release_lock
   echo "dispatch-materialize-spawn: unexpected argument '$3'" >&2
   exit 2
 fi
 
 if [[ ! "$N" =~ ^[1-9][0-9]*$ ]] || { [[ "$MODE" != "explicit" && "$MODE" != "queue" ]]; }; then
+  release_lock
   echo "dispatch-materialize-spawn: usage: dispatch-materialize-spawn <issue-N> <explicit|queue> [--bypass-cap]" >&2
   exit 2
 fi
-
-release_lock() {
-  "$SCRIPT_DIR/dispatch-acquire-lock" --release >/dev/null 2>&1 || true
-}
 
 # --- Step 4: explicit-path guards (skipped entirely in queue mode) -----------
 # Queue rows were already vetted by dispatch-select-target (leaf, blockers,

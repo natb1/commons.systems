@@ -11562,18 +11562,30 @@ assert_eq "unexpected resolve-worktree → error + exit 2" "ok" "$status"
 assert_eq "unexpected resolve-worktree: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
-# --- usage errors → exit 2 ---------------------------------------------------
-echo "Test: materialize-spawn bad/missing args → exit 2"
+# --- usage errors → exit 2 + lock released -----------------------------------
+# A malformed call must release the lock, not just exit 2: the lock is acquired
+# by dispatch-select-tick in the same router session, so a usage error that left
+# it held would wedge every subsequent tick until self-healing reclaim. mat_setup
+# pre-fills the lock with our sessionId, so each assertion below confirms the
+# usage-error path empties it — matching every other internal exit-2 path.
+echo "Test: materialize-spawn bad/missing args → exit 2 + lock released"
 mat_setup
 err=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 bogus 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
 case "$err" in *"usage:"*"EXIT=2") s1=ok ;; *) s1="bad: $err" ;; esac
 assert_eq "bad mode → usage error, exit 2" "ok" "$s1"
+assert_eq "bad mode → lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+mat_setup
 err=$("$TMPDIR_TEST/dispatch-materialize-spawn" abc queue 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
 case "$err" in *"usage:"*"EXIT=2") s2=ok ;; *) s2="bad: $err" ;; esac
 assert_eq "non-numeric issue → usage error, exit 2" "ok" "$s2"
+assert_eq "non-numeric issue → lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+mat_setup
 err=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue --nope 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
 case "$err" in *"unexpected argument"*"EXIT=2") s3=ok ;; *) s3="bad: $err" ;; esac
 assert_eq "unexpected 3rd arg → usage error, exit 2" "ok" "$s3"
+assert_eq "unexpected 3rd arg → lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
 # --- create-path git worktree add failure → exit 2 + lock released -----------
