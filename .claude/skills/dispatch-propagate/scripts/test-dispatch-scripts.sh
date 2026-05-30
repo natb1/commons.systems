@@ -11245,18 +11245,23 @@ assert_eq "conflict: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- merge conflict → notify merge-conflict, office-hours, no spawn (#944) ----
-# dispatch-merge-main exits 3 on a conflicting merge; the router must abort the
-# spawn, park the issue via dispatch-apply-office-hours, release the lock, and
-# emit notify merge-conflict — the worker is never spawned into a conflicted
-# tree.
-echo "Test: materialize-spawn merge conflict → notify merge-conflict"
+# --- merge conflict → resolve merge-conflict, no park, no spawn (#829) --------
+# dispatch-merge-main exits 3 on a conflicting merge; the router script no longer
+# parks. It releases the lock, prints `issue:` / `worktree:` detail, and emits
+# `resolve merge-conflict` — handing the conflict back to the router AGENT for an
+# opus-subagent auto-resolve attempt before any office-hours park. The agent-side
+# attempt is SKILL.md prose, not script logic, so it is not tested here.
+echo "Test: materialize-spawn merge conflict → resolve merge-conflict"
 mat_setup
 export MAT_MERGE_RC=3
 out=$(run_mat 839 queue)
-assert_eq "merge-conflict: terminal token" "notify merge-conflict" \
+assert_eq "merge-conflict: terminal token" "resolve merge-conflict" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "merge-conflict: office-hours applied to the issue" "1" \
+assert_eq "merge-conflict: issue detail line" "issue: 839" \
+  "$(printf '%s\n' "$out" | grep '^issue:')"
+assert_eq "merge-conflict: worktree detail line present" "1" \
+  "$([ -n "$(printf '%s\n' "$out" | grep '^worktree:')" ] && echo 1 || echo 0)"
+assert_eq "merge-conflict: office-hours NOT applied" "0" \
   "$([ -f "$TMPDIR_TEST/logs/apply-office-hours.log" ] && echo 1 || echo 0)"
 assert_eq "merge-conflict: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "merge-conflict: no spawn" "0" \

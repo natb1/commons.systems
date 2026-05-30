@@ -28,7 +28,8 @@ them:
 3. `dispatch-materialize-spawn` — runs the explicit-path guards, resolves the
    worktree, merges `origin/main` into it (so the worker reads up-to-date skill
    files), releases the lock, gates on CI and the concurrency budget, and spawns
-   the worker. Emits one **terminal token** (Table 2).
+   the worker. Emits one **terminal token** (Table 2). A merge conflict is handed
+   back for an auto-resolve attempt (§2a), not parked by the script.
 
 Run `/dispatch-propagate` from any worktree; selection ignores cwd. The router
 never enters a worktree. Run **every** Bash call here with
@@ -96,11 +97,48 @@ on the token (Table 2).
 |---|---|---|
 | `propagate` | none — the chain moved forward silently | `propagate` |
 | `notify target-blocked` | The named target is closed or has an open blocker (the script printed which and already applied `dispatch:office-hours` to the issue). | `notify` |
-| `notify merge-conflict` | `origin/main` does not merge cleanly into the resolved worktree (the script printed the conflicting path); the merge was aborted, the worker not spawned, and the script already applied `dispatch:office-hours` to the issue. | `notify` |
+| `resolve merge-conflict` | `origin/main` does not merge cleanly into the resolved worktree; `dispatch-merge-main` aborted the merge (tree left clean) and the script printed `issue:` / `worktree:` detail. Run the auto-resolve attempt (§2a). | `propagate` (resolved, after re-spawn) or `notify` (ambiguous) |
 | `notify spawn-failed` | `dispatch-spawn-worker` exited non-zero — a worker was spawned but did not register. | `notify` |
 | `drain worktree-conflict` | The target worktree cannot be safely entered (the script printed the `path:` detail): "worktree at `<path>` for issue `<N>` cannot be entered; closing — the next baton-pass or office-hours hand-off will re-seed". | `drain` |
 | `drain ci-waiting` | The target PR's CI is still in progress (the script printed the `#<N>:` line); echo it. | `drain` |
 | `drain concurrency-cap` | The live worker count already meets the budget; a cap-keyed re-seed is scheduled (see reference.md *The #725 cap-keyed re-seed*). | `drain` |
+
+## 2a. Auto-resolve a merge conflict (before parking)
+
+The `resolve merge-conflict` token means `dispatch-merge-main` found
+`origin/main` does not merge cleanly into the resolved worktree and aborted the
+merge, leaving the tree clean. Attempt an `opus`-subagent auto-resolve before
+parking. The script printed `issue: <N>` and `worktree: <path>` — use them. Run
+every Bash call here with `dangerouslyDisableSandbox: true`.
+
+1. Reproduce the conflict: `git -C <worktree> merge origin/main` (re-creates the
+   markers `dispatch-merge-main` aborted; a non-zero exit is expected).
+2. Gather context for the subagent: the conflicting hunks (the conflicted files /
+   `git -C <worktree> diff`), both sides' commit messages (`git -C <worktree> log`
+   on `HEAD` and on `origin/main` since their merge-base), the PR description if
+   one exists (`dispatch-find-pr <N>` → `gh pr view`; there may be none in the
+   `implement` phase), and the issue body (`gh issue view <N>`, or
+   `CLAUDE.local.md`).
+3. Launch an `opus` subagent (Agent tool, `model: opus`) with that context and an
+   explicit two-state output contract — it must end its reply with exactly one of:
+   - `resolved` — it removed all conflict markers, saved the files, and left a
+     clean working-tree resolution.
+   - `ambiguous <reason>` — the conflict needs human judgment; it made **no**
+     edits. `<reason>` is a one-line explanation.
+   Judgment criteria stay informal — the subagent's own call given the full
+   context, not a codified rule list.
+4. Route on the verdict:
+   - **`resolved`** → `git -C <worktree> commit --no-edit` (completes the merge
+     commit locally; no push — consistent with `dispatch-merge-main`'s local-only
+     contract), then re-run `dispatch-materialize-spawn <N> <explicit|queue>`
+     (same issue `N` and the same mode this tick used) and route on its Table-2
+     token. It now sails through: `dispatch-merge-main` returns up-to-date →
+     `propagate`.
+   - **`ambiguous <reason>`** → `git -C <worktree> merge --abort` (restore the
+     clean tree), `dispatch-apply-office-hours <N> "<reason>"`, then apply the
+     `notify merge-conflict` disposition (§3): report the variance and do **not**
+     self-close. This is #944's escalation, now triggered on the ambiguous
+     verdict; the worker is never spawned into a conflicted tree.
 
 ## 3. Terminal disposition
 
@@ -116,8 +154,9 @@ silent `notify` or `drain` is a defect).
 - **`notify <reason>`** — report the variance, then **do not self-close**. The
   session stays in `claude agents` until the user closes it, so the variance is
   visible rather than buried in a closed transcript. For `notify target-blocked`
-  and `notify merge-conflict` the script already parked the issue with
-  `dispatch:office-hours`.
+  the script already parked the issue with `dispatch:office-hours`;
+  `notify merge-conflict` is reached via §2a's ambiguous branch, where the agent
+  applied `dispatch:office-hours` before this disposition.
 
 - **`drain <reason>`** — emit the mandatory report, then self-close (same
   command as `propagate`).
