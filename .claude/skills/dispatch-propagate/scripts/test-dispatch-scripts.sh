@@ -2842,6 +2842,22 @@ assert_eq "PR closing-issue number → enter real worktree" \
   "enter /worktrees/918-dispatch-move" "$result"
 teardown
 
+# 19c. PR number passed as issue key with a stale <pr-num>-* worktree on disk.
+#      The guard fires BEFORE the worktree scan, so the stale 922-* worktree is
+#      never entered — this is the main correctness rationale for placing the guard
+#      before the scan rather than only before the create path.
+echo "Test: PR number as issue key + stale stray worktree → reject (no enter)"
+setup
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/922-stray\nHEAD fff999\nbranch refs/heads/922-stray\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+echo '{"number":922,"pull_request":{"url":"https://api.github.com/repos/o/r/pulls/922"}}' \
+  > "$STUB_DIR/arg-issue-922.json"
+select_target_fake_claude   # orphan: no live session (liveness is irrelevant — guard fires first)
+if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 922 queue 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "PR number + stale stray worktree → exit 1" "1" "$rc"
+assert_eq "PR number + stale stray worktree → no decision line" "" "$result"
+teardown
+
 # ============================================================================
 # list_worktree_records (lib.sh) tests
 # ============================================================================
