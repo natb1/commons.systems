@@ -5182,6 +5182,57 @@ else
 fi
 config_teardown
 
+# --- Test 13f: weekly_terminal_pct: 100 accepted and round-trips -------------
+
+echo "Test: weekly_terminal_pct: 100 accepted and round-trips"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_terminal_pct": 100}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "weekly_terminal_pct 100 exits 0" "0" "$rc"
+tw_terminal=$(printf '%s' "$out" | jq -r '.weekly_terminal_pct')
+assert_eq "weekly_terminal_pct 100 round-trips" "100" "$tw_terminal"
+config_teardown
+
+# --- Test 13g: weekly_terminal_pct: 150 rejected (must be <= 100) ------------
+
+echo "Test: weekly_terminal_pct: 150 exits 1 and stderr says must be <= 100"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_terminal_pct": 150}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "weekly_terminal_pct 150 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"weekly_terminal_pct"* && "$err" == *"<= 100"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_terminal_pct 150 stderr says <= 100"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_terminal_pct 150 stderr says <= 100"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 13h: weekly_terminal_pct: 0 rejected (must be > 0) ----------------
+
+echo "Test: weekly_terminal_pct: 0 exits 1 and stderr says must be > 0"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_terminal_pct": 0}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "weekly_terminal_pct 0 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"weekly_terminal_pct"* && "$err" == *"must be > 0"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_terminal_pct 0 stderr says must be > 0"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_terminal_pct 0 stderr says must be > 0"
+  echo "    stderr: $err"
+fi
+config_teardown
+
 # ============================================================================
 # dispatch-target-workers tests
 # ============================================================================
