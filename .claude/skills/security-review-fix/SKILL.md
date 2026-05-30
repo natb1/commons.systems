@@ -237,9 +237,34 @@ ready. Otherwise run all steps in order.
 
    This is the workflow's terminal PR-state action.
 
-8. **Write the phase-completed marker, then stop.** The Stop hook
-   (`.claude/hooks/dispatch-stop.sh`) reads this to decide propagate vs park.
-   Atomic via tempfile + mv. `CLAUDE_JOB_DIR` unset = interactive run; skip.
+8. **Write the phase-completed marker (or park on deviation), then stop.**
+
+   Check for deviation first: if any finding classified `required` with
+   Confidence `high` remains unresolved after the Step 3 fix pass, the
+   deviation criterion fires. `CLAUDE_JOB_DIR` unset = interactive run; skip
+   both branches.
+
+   **Deviation fires** (a high-confidence `required` finding is still
+   unresolved) — skip the phase-completed marker. Write a one-line reason
+   instead, atomic via tempfile + mv:
+
+   ```bash
+   if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+     printf '%s\n' "/security-review-fix: high-confidence required finding(s) left unresolved after fixes" \
+       > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+     mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" \
+        "$CLAUDE_JOB_DIR/office-hours-reason"
+   fi
+   ```
+
+   The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads marker-absence as
+   Branch A and applies `dispatch:office-hours` to the issue, surfacing the
+   reason in the why-comment, so the parked item explains which criterion
+   fired. Do not call `gh pr edit --add-label dispatch:office-hours` — the
+   Stop hook owns label application.
+
+   **No deviation** (all high-confidence `required` findings resolved, or none
+   existed) — write the phase-completed marker, atomic via tempfile + mv:
 
    ```bash
    if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
@@ -251,8 +276,9 @@ ready. Otherwise run all steps in order.
    ```
 
    Then **stop**. The Stop hook reads the marker and advances the chain.
-   `gh pr ready` (Step 7) is still the workflow's terminal *PR-state* action,
-   but the marker write is the dispatch chain's hand-off cue.
+   `gh pr ready` (Step 7) is still the workflow's terminal *PR-state* action
+   and runs regardless of deviation — only the marker is skipped when the
+   deviation criterion fires.
 
 ## Per-finding schema
 
