@@ -61,36 +61,14 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    `dispatch:reviewed`, `dispatch:security-reviewed`). The verify-attempt label is local
    to `/verify-pr`.
 
-   The PR number resolved here is also used in Steps 4, 5 (the Flake sub-path's
-   `gh pr view <pr-num>` body read), and 8 — carry it forward.
+   The PR number resolved here is also used in Steps 3, 4 (the Flake sub-path's
+   `gh pr view <pr-num>` body read), and 7 — carry it forward.
 
-2. **Merge `origin/main` first.** Before any CI failure is read or reproduced, merge
-   current `main` into the working tree. Run the `git merge` with
-   `dangerouslyDisableSandbox: true` — `origin/main` frequently carries
-   `.claude/skills/**` changes, and a sandboxed tree-updating op touching those
-   read-only paths partially applies (writable files written, HEAD unmoved),
-   corrupting the working tree (see `.claude/rules/sandbox.md`):
-
-   ```bash
-   git fetch origin main
-   git merge origin/main
-   ```
-
-   This is a **local merge, NOT `/commit-merge-push`**. Pushing a bare merge commit
-   here would re-trigger CI and discard the concluded-failure state that routed
-   `/dispatch-propagate` to the `verify` phase. The merge is pushed only when the fix step
-   (Step 6) invokes `/implement-unit`, whose `/commit-merge-push` pushes the fix
-   commit together with this merge. Diagnosing and fixing against current `main`
-   avoids re-fixing a failure `main` already resolved.
-
-   If the merge **conflicts**, surface the conflict to the user and **halt** —
-   `/verify-pr` does not continue past a conflicted merge.
-
-3. **Read the accumulator.** Read `tmp/verify-summary.md` if it exists — it holds the
+2. **Read the accumulator.** Read `tmp/verify-summary.md` if it exists — it holds the
    prior iterations' records. On the first verify pass the file does not yet exist;
    that is expected.
 
-4. **Read the failed checks.** Run (use `dangerouslyDisableSandbox: true`):
+3. **Read the failed checks.** Run (use `dangerouslyDisableSandbox: true`):
 
    ```bash
    .claude/skills/dispatch-propagate/scripts/run-pr-checks-wait.sh <pr-num>
@@ -100,7 +78,7 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    complete-and-failed — so this returns immediately with a per-check summary:
    name, conclusion, and a failure-log excerpt for each failing check.
 
-5. **Reproduce locally.** Launch a `sonnet` subagent with the failing check name and
+4. **Reproduce locally.** Launch a `sonnet` subagent with the failing check name and
    failure excerpt. The subagent maps the check to a local reproduce command and runs
    it (use `dangerouslyDisableSandbox: true` when network or npm cache is needed):
 
@@ -127,19 +105,19 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    fix — an unverified fix is still never pushed.
 
    - **Generic no-repro** — `is_flake == false` and the failure simply does not
-     reproduce, with no identified cause. Record it in the accumulator (Step 7),
-     post the accumulator (Step 8), and stop. Push nothing.
+     reproduce, with no identified cause. Record it in the accumulator (Step 6),
+     post the accumulator (Step 7), and stop. Push nothing.
    - **Main already fixed it** — `is_flake == false` and the `why_not_caught`
-     diagnosis is that current `main` (merged in Step 2) already resolved the
-     failure. Record it in the accumulator (Step 7), post the accumulator
-     (Step 8), and then push the Step 2 merge **alone** — no fix — so CI re-runs
-     against the merged state. What gets pushed is the already-completed,
-     deterministic merge of `main`, not a fix. Without this push the stale failed
-     CI keeps routing `/dispatch-propagate` back to the `verify` phase forever. Step 2's
-     `git merge origin/main` is always a clean merge here — a conflict would have
-     halted the skill back in Step 2 — and a clean `git merge` auto-creates the
-     merge commit, so the merge commit already exists; just push it (`git push`
-     runs sandboxed — see `.claude/rules/sandbox.md`):
+     diagnosis is that `origin/main` (merged into this worktree by the router
+     before spawning this worker) already resolved the failure. Record it in the
+     accumulator (Step 6), post the accumulator (Step 7), and then push that
+     merge commit **alone** — no fix — so CI re-runs against the merged state.
+     What gets pushed is the already-completed, deterministic merge of `main`,
+     not a fix. Without this push the stale failed CI keeps routing
+     `/dispatch-propagate` back to the `verify` phase forever. The router's
+     pre-spawn `dispatch-merge-main` always produces a clean merge — a conflict
+     would have aborted the spawn — so the merge commit already exists locally;
+     just push it (`git push` runs sandboxed — see `.claude/rules/sandbox.md`):
 
      ```bash
      git push origin HEAD
@@ -182,30 +160,30 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
         the flake issue is already present, so a re-run against the same
         fingerprint does not re-add the dependency or error.
      4. **Record a flake iteration in the accumulator** (the skill's top-level
-        Step 7) — see [Accumulator](#accumulator); a flake entry is visually
+        Step 6) — see [Accumulator](#accumulator); a flake entry is visually
         distinct from a generic no-repro one.
-     5. **Post the accumulator (Step 8) and stop (Step 9). Push nothing** — the
+     5. **Post the accumulator (Step 7) and stop (Step 8). Push nothing** — the
         same terminal behavior as the generic no-repro outcome. On the next
         `/dispatch-propagate` run the PR's tracked issue carries a `blocked_by` against the
         flake issue; `/dispatch-propagate`'s queue scan skips blocked issues, so the PR is
         no longer re-routed to the `verify` phase. The flake issue stands on its
         own in the queue for independent triage.
 
-6. **Fix the failure.** If reproduced, fix it by invoking `/implement-unit` via the
+5. **Fix the failure.** If reproduced, fix it by invoking `/implement-unit` via the
    Skill tool — pass `model` (chosen per `/implement-unit`'s heuristic), `scope` (the
    fix), `context` (the failing check and reproduce command), and `commit_intent`.
    `/implement-unit` builds the fix, commits, merges, and pushes it.
 
-7. **Append a record to the accumulator.** Append one `## Iteration <n>` section to
+6. **Append a record to the accumulator.** Append one `## Iteration <n>` section to
    `tmp/verify-summary.md` (see [Accumulator](#accumulator)).
 
-8. **Post the accumulator as a PR comment** (use `dangerouslyDisableSandbox: true`):
+7. **Post the accumulator as a PR comment** (use `dangerouslyDisableSandbox: true`):
 
    ```bash
    .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh <pr-num> tmp/verify-summary.md
    ```
 
-9. **Write the phase-completed marker, then stop.** The Stop hook
+8. **Write the phase-completed marker, then stop.** The Stop hook
    (`.claude/hooks/dispatch-stop.sh`) reads this to decide propagate vs park.
    Atomic via tempfile + mv. `CLAUDE_JOB_DIR` unset = interactive run; skip.
 
@@ -220,8 +198,7 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
 
    Then **stop**. The `/dispatch-propagate` background-job chain drives the
    next iteration — the next `/dispatch-propagate` job re-derives the phase
-   from CI ground
-   truth and re-invokes `/verify-pr` if checks still fail.
+   from CI ground truth and re-invokes `/verify-pr` if checks still fail.
 
 ## Accumulator
 
