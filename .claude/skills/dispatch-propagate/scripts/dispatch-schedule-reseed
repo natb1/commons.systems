@@ -91,6 +91,7 @@ TARGET_WEEKLY=90
 TARGET_5H=50
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 # Pull tunables from dispatch-config-load target-workers when present.
 # Same shape as dispatch-target-workers — read each field with `// empty` so a
@@ -271,9 +272,8 @@ fi
 if [[ -n "${DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE:-}" ]]; then
   MAIN_WORKTREE="$DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE"
 else
-  GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+  PROJECT_ROOT=$(resolve_project_root) \
     || { echo "dispatch-schedule-reseed: not in a git repo and DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE is unset" >&2; exit 2; }
-  PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
   MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
 fi
 
