@@ -65,8 +65,11 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    `gh pr view <pr-num>` body read), and 8 — carry it forward.
 
 2. **Merge `origin/main` first.** Before any CI failure is read or reproduced, merge
-   current `main` into the working tree. `git fetch` and `git merge` run sandboxed —
-   no `dangerouslyDisableSandbox` (see `.claude/rules/sandbox.md`):
+   current `main` into the working tree. Run the `git merge` with
+   `dangerouslyDisableSandbox: true` — `origin/main` frequently carries
+   `.claude/skills/**` changes, and a sandboxed tree-updating op touching those
+   read-only paths partially applies (writable files written, HEAD unmoved),
+   corrupting the working tree (see `.claude/rules/sandbox.md`):
 
    ```bash
    git fetch origin main
