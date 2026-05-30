@@ -64,7 +64,7 @@ export GOOGLE_ANALYTICS_REFRESH_TOKEN="$(pass show google-analytics/refresh-toke
 
 **One-time refresh-token bootstrap:** use the Google OAuth 2.0 Playground at `developers.google.com/oauthplayground`, configured with your own client id/secret, requesting both scopes `https://www.googleapis.com/auth/analytics.readonly` and `https://www.googleapis.com/auth/webmasters.readonly`. See the `fetch-analytics.sh` header comment for the full step-by-step.
 
-**Graceful degradation:** when any required OAuth env var is unset, `fetch-analytics.sh` prints `analytics: skipped (OAuth env not configured)` to stderr and exits 0. The analytics context block in the output file is empty; personas note the absence rather than guessing.
+**Graceful degradation:** when any required OAuth env var is unset, `fetch-analytics.sh` prints a parenthetical note to stdout (captured in the context file) explaining that credentials are not configured, then exits 0. Personas see the explanation in the analytics section rather than a silent empty block. When `ROADMAP_GA4_PROPERTY_IDS` is unset but credentials are set, a similar inline note marks the GA4 section as skipped; Search Console data still runs.
 
 ## Phase 2: Independent Assessments
 

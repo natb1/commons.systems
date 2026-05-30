@@ -71,7 +71,7 @@ set -euo pipefail
 if [[ -z "${GOOGLE_ANALYTICS_CLIENT_ID:-}" \
    || -z "${GOOGLE_ANALYTICS_CLIENT_SECRET:-}" \
    || -z "${GOOGLE_ANALYTICS_REFRESH_TOKEN:-}" ]]; then
-  echo "analytics: skipped (OAuth env not configured)" >&2
+  echo "(analytics: credentials not configured — set GOOGLE_ANALYTICS_CLIENT_ID, GOOGLE_ANALYTICS_CLIENT_SECRET, and GOOGLE_ANALYTICS_REFRESH_TOKEN)"
   exit 0
 fi
 
@@ -109,18 +109,18 @@ api_error_reason() {
 # Read the app→property map from ROADMAP_GA4_PROPERTY_IDS. When unset, skip ONLY
 # the GA4 section — Search Console still runs.
 if [[ -z "$ROADMAP_GA4_PROPERTY_IDS" ]]; then
-  echo "analytics: GA4 skipped (ROADMAP_GA4_PROPERTY_IDS not set)" >&2
+  echo "(GA4: skipped — ROADMAP_GA4_PROPERTY_IDS not set)"
 else
   IFS=',' read -r -a GA4_PAIRS <<<"$ROADMAP_GA4_PROPERTY_IDS"
   for pair in "${GA4_PAIRS[@]}"; do
     [[ -z "$pair" ]] && continue
     APP="${pair%%:*}"
     PROPERTY_ID="${pair#*:}"
-    echo "--- GA4: ${APP} ---"
     if [[ -z "$APP" || -z "$PROPERTY_ID" || "$APP" == "$pair" ]]; then
       echo "(GA4 skipped for '${pair}': not a valid app:propertyId pair)"
       continue
     fi
+    echo "--- GA4: ${APP} ---"
     RUN_REPORT_URL="https://analyticsdata.googleapis.com/v1beta/properties/${PROPERTY_ID}:runReport"
 
     # (a) Overview metrics: page views, sessions, bounce rate (30-day window).
@@ -201,9 +201,12 @@ else
 fi
 
 # ---- Step 4: Search Console -------------------------------------------------
-# URL-encode the site string (the ':' must become %3A). Only the colon needs
-# encoding for the sc-domain:/https://-form site identifiers Search Console uses.
+# URL-encode the site string. Colons become %3A; forward slashes become %2F.
+# Both are required: sc-domain:commons.systems has only colons (no slashes), while
+# https:// URL properties also have slashes that must be percent-encoded for the
+# site identifier to be a valid single URL path segment.
 ENCODED_SITE="${ROADMAP_SEARCH_CONSOLE_SITE//:/%3A}"
+ENCODED_SITE="${ENCODED_SITE//\//%2F}"
 SC_URL="https://searchconsole.googleapis.com/webmasters/v3/sites/${ENCODED_SITE}/searchAnalytics/query"
 
 # 28-day window, computed with GNU date in YYYY-MM-DD.
