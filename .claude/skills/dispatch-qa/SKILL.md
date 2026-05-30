@@ -5,15 +5,17 @@ description: Post-implementation user-acceptance QA — single self-verifying pa
 
 # Dispatch: User-Acceptance QA
 
-Runs a single user-acceptance QA pass on an implemented PR. Invoked three ways:
+Runs a single user-acceptance QA pass on an implemented PR. Invoked two ways:
 
-- By the `/dispatch` skill — the session is already inside the target worktree.
-- Standalone with no argument — `/dispatch-qa` self-selects the highest-priority
-  QA-phase PR.
-- Standalone with an explicit `#<issue>` argument.
+- By the `/dispatch-worker` skill — the session is already inside the target
+  worktree (the worker enters its target worktree via spawn cwd, not via Step 0
+  `cd`; `dispatch-spawn-worker` invokes `claude --bg` from a subshell `cd`'d
+  into `<worktree-path>` and still passes the path as the worker's second
+  positional argument).
+- Standalone from inside a target worktree with an optional `#<issue>` argument.
 
-**Step 0** resolves the target issue and its worktree for all three paths. The
-remaining steps use the Step-0-resolved issue number `<N>`.
+**Step 0** verifies the current worktree and derives the target issue number
+`<N>`. The remaining steps use that issue number.
 
 This skill is a **single QA pass** — the QA walkthrough runs once, with no
 iteration. (Step 5's bug-fix build loop iterates over plan units; that is a
@@ -28,8 +30,8 @@ planning and `/implement-unit`'s build procedure.
 **Idempotency guard — check this first.** If an approved bug-fix plan for this
 dispatch is already present in context (typical after
 `showClearContextOnPlanAccept` fires — the user accepted the bug-fix plan and the
-context was cleared, causing `restore-dispatch-skill.sh` to re-enter `/dispatch`
-→ `/dispatch-qa`), **skip the QA walkthrough** — Step 0.5 and Steps 1–4 — and
+context was cleared, causing `restore-dispatch-skill.sh` to re-enter
+`/dispatch-worker` → `/dispatch-qa`), **skip the QA walkthrough** — Step 0.5 and Steps 1–4 — and
 resume directly at the build loop (Step 5, sub-step 3: build each unit via
 `/implement-unit`). Step 0 (target resolution) still runs: it re-establishes the
 issue number `<N>` and confirms the worktree from the current branch. The plan
@@ -49,41 +51,43 @@ The QA pass covers **public data only** — documents present in both the QA ser
 
 0. **Target resolution.**
 
-   Establish the target issue number `<N>` and ensure the session is in the
-   target's worktree. Precedence:
+   `/dispatch-qa` operates in place — the **current worktree dictates the target**.
+   The session must be in a target worktree: the current branch is `<N>-…`,
+   where `<N>` is the issue number. The router (`/dispatch-propagate`) is responsible
+   for entering a target worktree; this skill never switches.
 
-   1. **An issue/PR number argument is given** (leading `#` optional) → that issue
-      is the target. This overrides the `dispatch-select-target --qa`
-      prioritization below.
-   2. **Else the current branch matches `<issue>-*`** (the session is already inside
-      a target worktree) → use that issue number.
-   3. **Else** (standalone: no argument, not in a target worktree) → run:
-      ```bash
-      .claude/skills/dispatch/scripts/dispatch-select-target --qa
-      ```
-      It prints `pr <num> <branch>` (the highest-priority QA-phase PR) or `empty`.
-      On `empty`, report that there is no QA-phase work and **stop**. Otherwise the
-      printed PR's issue number is the target.
+   Verify the worktree and derive the issue number `<N>`:
 
-   Then, **when the session is not already in the target's worktree**, resolve or
-   create it via `EnterWorktree`, matching `/dispatch` Step 4. `EnterWorktree`
-   accepts exactly one of `path` (switch to an existing worktree) or `name`
-   (create a new one):
+   ```bash
+   BRANCH=$(basename "$(git rev-parse --show-toplevel)")
+   case "$BRANCH" in
+     [0-9]*-*) N="${BRANCH%%-*}" ;;
+     *)
+       echo "/dispatch-qa: current branch '$BRANCH' is not a target worktree (expected '<N>-…')" >&2
+       echo "Run '/dispatch <issue>' first to enter a target worktree." >&2
+       exit 1
+       ;;
+   esac
+   ```
 
-   - **Already in the target's worktree** (current branch starts with `<issue>-`) →
-     proceed to Step 0.5.
-   - **An existing worktree matches** `<issue>-*` (parse `git worktree list
-     --porcelain` as blank-line-delimited records) → `EnterWorktree` with `path:`
-     set to that path.
-   - **No existing worktree** → generate a sanitized branch name `<issue>-<slug>`:
-     lowercase the issue title, replace non-alphanumeric runs with `-`, collapse
-     repeated `-`, strip leading/trailing `-`, and truncate so the full branch name
-     is ≤ 32 characters. `EnterWorktree` with `name:` set to that branch name.
-     Creating via `name:` fires the `WorktreeCreate` hook, which runs
-     `sync-issue-context` and populates `CLAUDE.local.md` with full issue context.
+   If an `#<issue>` argument was given, confirm it matches the cwd:
 
-   Step 0 establishes the issue number `<N>` that the remaining steps use for their
-   `tmp/` filenames.
+   ```bash
+   # When $ARG is set (the argument, stripped of any leading '#'):
+   if [[ -n "${ARG:-}" && "$ARG" != "$N" ]]; then
+     echo "/dispatch-qa: argument '#$ARG' does not match current worktree's issue '#$N'" >&2
+     exit 1
+   fi
+   ```
+
+   If no argument was given and the current branch is not in a worktree
+   (the cwd assertion above already covered this), the skill bails out.
+   To pick a QA target without specifying one, run `/dispatch` from
+   `worktrees/main` — it selects the next QA-phase target and enters its
+   worktree, then dispatches this skill.
+
+   `<N>` is the issue number used by the remaining steps for their `tmp/`
+   filenames.
 
 0.5. **Merge `origin/main` into the working branch.**
 
@@ -144,18 +148,18 @@ The QA pass covers **public data only** — documents present in both the QA ser
 
    a. **Start the QA server in the background.** Use a Bash tool call with `run_in_background: true`:
       ```bash
-      .claude/skills/dispatch/scripts/run-qa-server.sh <app-dir>
+      .claude/skills/dispatch-propagate/scripts/run-qa-server.sh <app-dir>
       ```
       Capture the App URL printed to stdout. The QA server seeds public data only — do not re-run it or any seed step with `SEED_TEST_ONLY=true` (see [QA data policy](#qa-data-policy)).
 
    b. **Wait for the server:**
       ```bash
-      .claude/skills/dispatch/scripts/wait-for-url.sh <url>
+      .claude/skills/dispatch-propagate/scripts/wait-for-url.sh <url>
       ```
 
    c. **Pre-QA acceptance check:**
       ```bash
-      .claude/skills/dispatch/scripts/run-acceptance-tests.sh <app-dir> <url>
+      .claude/skills/dispatch-propagate/scripts/run-acceptance-tests.sh <app-dir> <url>
       ```
 
       - **If the check fails** → A failed pre-QA acceptance check is a bug. Go to
@@ -234,7 +238,7 @@ The QA pass covers **public data only** — documents present in both the QA ser
       **Model** (per `/implement-unit`'s model-selection heuristic), and
       **Dependencies**. Include the `ref-memory-management` Clean Context Planning
       preface (the plan assumes a clean context and records that the active
-      workflow step is the `qa` phase of `/dispatch`). The idempotency guard at the top of
+      workflow step is the `qa` phase of `/dispatch-propagate`). The idempotency guard at the top of
       this skill resumes here after the plan is accepted and context is cleared.
    3. **Build the fix.** Follow `/plan-implement` Step 2: for each approved unit, in
       dependency order, invoke `/implement-unit` via the Skill tool, passing
@@ -244,16 +248,37 @@ The QA pass covers **public data only** — documents present in both the QA ser
    4. **Stop without labeling.** Do **not** apply `dispatch:qa-done`. The fix
       commits change the PR; the user re-runs `/dispatch`, which re-derives the
       phase from CI/labels (→ `waiting`/`verify` while CI runs, → `qa` once green)
-      and re-QAs the fixed build. The skill ends here — Steps 6 and 7 already ran
+      and re-QAs the fixed build.
+
+      Also do **not** write the phase-completed marker. The Stop hook
+      (`.claude/hooks/dispatch-stop.sh`) reads marker absence as
+      "park this issue" and applies `dispatch:office-hours` to the issue,
+      so the bug-fix path parks for human review until the fix is QA'd
+      again on the next `/dispatch` tick.
+
+      Write a one-line reason to `$CLAUDE_JOB_DIR/office-hours-reason` so the
+      office-hours why-comment names the criterion that fired:
+
+      ```bash
+      if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+        printf '%s\n' "/dispatch-qa: QA found a bug, fixed in-session; parking for re-QA on the next tick" \
+          > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+        mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" \
+           "$CLAUDE_JOB_DIR/office-hours-reason"
+      fi
+      ```
+
+      The skill ends here — Steps 6 and 7 already ran
       inline in sub-step 1, and Step 8 does not run on the bug-fix path.
 
 6. **Post the PR comment summary.**
 
    Resolve the PR number (use `dangerouslyDisableSandbox: true` — `gh` needs network):
    ```bash
-   gh pr view "$BRANCH" --json number -q .number
+   PR_NUM=$(gh pr view "$BRANCH" --json number -q .number)
    ```
    where `$BRANCH` is the current branch (`git rev-parse --abbrev-ref HEAD`).
+   `PR_NUM` is reused in Steps 8 and the phase-completed marker write.
 
    Write a markdown summary to `tmp/dispatch-qa-summary-<n>.md` (where `<n>` is the Step-0-resolved issue number `<N>`). Include:
    - Items walked.
@@ -264,14 +289,14 @@ The QA pass covers **public data only** — documents present in both the QA ser
 
    Post via (use `dangerouslyDisableSandbox: true` — script invokes `gh`):
    ```bash
-   .claude/skills/dispatch/scripts/post-pr-comment.sh <pr-num> tmp/dispatch-qa-summary-<n>.md
+   .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh <pr-num> tmp/dispatch-qa-summary-<n>.md
    ```
 
 7. **Cleanup.**
 
    On the browser path (server was started), always run on exit:
    ```bash
-   .claude/skills/dispatch/scripts/run-qa-cleanup.sh
+   .claude/skills/dispatch-propagate/scripts/run-qa-cleanup.sh
    ```
 
    Use this script — never broad `pkill`. The user's standing rule (project memory): `run-qa-cleanup.sh` avoids permission errors and worktree conflicts.
@@ -291,10 +316,31 @@ The QA pass covers **public data only** — documents present in both the QA ser
    (run with `dangerouslyDisableSandbox: true` — it invokes `gh`):
 
    ```bash
-   .claude/skills/dispatch/scripts/dispatch-complete-phase <pr-num> qa
+   .claude/skills/dispatch-propagate/scripts/dispatch-complete-phase <pr-num> qa
    ```
+
+   The PR number passed here is **expected** to differ from the worktree's
+   `<issue>-…` branch issue number — the PR↔issue linkage was established
+   earlier in the tick (by `dispatch-resolve-arg`, `dispatch-find-pr`, or
+   `dispatch-select-target`), so this session must **not** pause to re-confirm
+   the mismatch. ("This session" covers all three invocation paths: the
+   `/dispatch`-invoked path and both standalone paths above.)
 
    The script applies the label, creating it first only if it does not yet exist
    (e.g. on a fork where it has not been created).
 
-   Then **stop**. `/loop /dispatch` advances to the next phase.
+   Then write the phase-completed marker as the final action so the Stop
+   hook (`.claude/hooks/dispatch-stop.sh`) can propagate the dispatch chain.
+   Atomic via tempfile + mv. `CLAUDE_JOB_DIR` unset = interactive run; skip.
+   The PR number was resolved in Step 6.
+
+   ```bash
+   if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+     printf 'phase=qa\npr=%s\n' "$PR_NUM" \
+       > "$CLAUDE_JOB_DIR/phase-completed.tmp"
+     mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
+        "$CLAUDE_JOB_DIR/phase-completed"
+   fi
+   ```
+
+   Then **stop**. The Stop hook reads the marker and advances the chain.

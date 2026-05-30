@@ -28,7 +28,7 @@ STUB_BIN=$(mktemp -d)
 cat >"$STUB_BIN/claude" <<'STUB'
 #!/usr/bin/env bash
 set -uo pipefail
-# Accept any args (agents --json --cwd <path>) — just emit the canned response.
+# Accept any args (agents --json) — just emit the canned response.
 printf '%s\n' "${STUB_CLAUDE_JSON:-[]}"
 exit "${STUB_CLAUDE_RC:-0}"
 STUB
@@ -279,8 +279,10 @@ assert_log            "robustness: git worktree remove rc!=0: log shows failure"
 # --- Live-session guard cases -----------------------------------------------
 
 # (a) live session present + in sync → kept
+# The session name must match the worktree basename ("42-foo") for the
+# name-keyed predicate to detect it as occupied.
 setup_root
-export STUB_CLAUDE_JSON='[{"sessionId":"s1","pid":1,"status":"running","name":"x"}]'
+export STUB_CLAUDE_JSON='[{"sessionId":"s1","pid":1,"status":"running","name":"42-foo"}]'
 run_hook "$(jq -nc --arg p "$WT" '{worktree_path: $p}')"
 assert_exit0              "live session: in-sync + occupied -> exit 0"
 assert_remove_not_called  "live session: in-sync + occupied -> not removed"
@@ -303,6 +305,17 @@ assert_exit0              "live session: daemon unreachable -> exit 0"
 assert_remove_not_called  "live session: daemon unreachable -> not removed"
 assert_log                "live session: daemon unreachable -> log shows KEEP" "KEEP:"
 assert_log                "live session: daemon unreachable -> log names reason" "has a live Claude session"
+
+# (d) live session with a different name (not the worktree basename) → removed
+# Regression guard: name-keyed predicate must NOT match a session whose name
+# differs from basename(worktree_path). A cwd-based implementation would use
+# --cwd and could still block; name-keyed correctly treats this as unoccupied.
+setup_root
+export STUB_CLAUDE_JSON='[{"sessionId":"s2","pid":2,"status":"running","name":"something-else"}]'
+run_hook "$(jq -nc --arg p "$WT" '{worktree_path: $p}')"
+assert_exit0          "live session: session name mismatch -> exit 0"
+assert_remove_called  "live session: session name mismatch -> removed (name-keyed, not cwd)"
+assert_log            "live session: session name mismatch -> log shows IN SYNC" "IN SYNC: removing"
 
 # --- Summary ----------------------------------------------------------------
 

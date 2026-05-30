@@ -1,22 +1,16 @@
 #!/usr/bin/env bash
 # Select the single highest-priority task from the queue.
-# Usage: dispatch-select-target [--qa | --health-only] [--no-sweep] [--cleanup-confirm <path>]
+# Usage: dispatch-select-target [--qa | --health-only]
+#
+# Selection is a pure function of GitHub state plus local-worktree existence.
+# The router's cwd carries no priority signal; invoking this script from any
+# worktree (main, an issue worktree, or elsewhere) produces the same result.
 #
 # Output: exactly one line:
 #   pr <num> <branch> <phase>   — a PR to work on, with its already-derived phase
 #   issue <num>                 — a help-wanted issue, resolved to a startable
 #                                 open leaf (may differ from the top-level issue)
 #   empty                       — nothing eligible
-#   worktree <N> <branch>       — the current worktree's own open issue (short-circuits the queue scan)
-#   worktree-closed <N> <branch>— the current worktree's issue is closed or unknown
-#   worktree-adopted <N> <branch>
-#                               — dispatch-sweep adopted an orphaned worktree
-#                                 elsewhere on disk; SKILL.md routes this exactly
-#                                 like an explicit /dispatch <N>
-#   cleanup-unknown <path>      — dispatch-sweep halted on an orphan worktree
-#                                 with no open PR and no inferable issue number;
-#                                 SKILL.md confirms with the user before destroying
-#                                 potentially-unmerged work
 #   jit-reminder <repo> <num> <project> <item-id>
 #                               — a configured JIT issue due for a reminder.
 #                                 Emitted before the main-broken gate, ahead of
@@ -24,23 +18,17 @@
 #                                 dispatch.config/jit.json is present.
 #   main-broken <sha>           — origin/main's HEAD CI has a failing check; no task selected
 #
-# Default-mode priority, top to bottom — current-worktree continuation runs
-# first so a session inside an <issue>-* worktree always continues there, even
-# when the sweep finds an orphan elsewhere on disk:
-#   1. current-worktree continuation (worktree / worktree-closed)
-#   2. JIT scan (jit-reminder)
-#   3. origin/main CI health gate (main-broken)
-#   4. dispatch-sweep (worktree-adopted / cleanup-unknown), unless --no-sweep
-#   5. the topic-category × phase ladder over open PRs and help-wanted issues
+# Default-mode priority, top to bottom:
+#   1. JIT scan (jit-reminder)
+#   2. origin/main CI health gate (main-broken)
+#   3. the topic-category × priority × phase ladder over open PRs and
+#      help-wanted issues
 #
-# --health-only mode runs the pre-ladder bypasses (current-worktree continuation),
-# the JIT scan, and the origin/main CI health gate, then exits — no sweep,
-# no queue scan, no PR/issue fetches. /dispatch SKILL.md uses it to re-seed the
-# dispatch chain heartbeat cheaply.
+# --health-only mode runs the JIT scan and the origin/main CI health gate, then
+# exits — no queue scan, no PR/issue fetches. /dispatch-propagate SKILL.md uses
+# it to re-seed the dispatch chain heartbeat cheaply.
 # Output is exactly one line:
-#   ok                          — safe to proceed (either main is healthy or the
-#                                 current branch is an <N>-* worktree that
-#                                 bypasses the gate)
+#   ok                          — safe to proceed (main is healthy)
 #   jit-reminder <repo> <num> <project> <item-id>
 #                               — a configured JIT issue due for a reminder;
 #                                 emitted before the main-broken gate
@@ -49,83 +37,80 @@
 # --qa mode omits the <phase> field — there it is always "qa":
 #   pr <num> <branch>           — the QA PR to work on
 #
-# --no-sweep (default mode only) skips the internal dispatch-sweep invocation.
-# SKILL.md uses this after the user declines a cleanup-unknown confirmation,
-# so the next call doesn't immediately re-halt on the same unknown orphan.
-#
-# --cleanup-confirm <path> (default mode only) executes the user-confirmed
-# cleanup of an unknown orphan, then resumes selection in the same call —
-# replacing the SKILL.md chain of "dispatch-sweep --cleanup-unknown <path>"
-# followed by a re-invocation of this script. On a successful cleanup the
-# script re-runs the internal sweep+route exactly as default mode does; if a
-# second unknown orphan exists it halts again with cleanup-unknown <path2>,
-# letting SKILL.md re-confirm with the user.
-#
-# Selection is two-tier: a topic *category* nests outside the phase *ladder*.
-# Categories, highest priority first:
+# Selection is three-tier: topic *category* nests outside a *priority* sub-axis,
+# which nests outside the phase *ladder*. Topic categories, highest priority
+# first:
 #   bug → testing infrastructure → dispatch → other
-# The selector exhausts every tier of one category before moving to the next.
+# Within each topic category, items carrying the `priority` label rank above
+# items without it; the phase ladder runs innermost. The selector exhausts the
+# `(priority=1, phase ladder)` sub-tier of one topic category, then the
+# `(priority=0, phase ladder)` sub-tier of the same topic, before moving to the
+# next topic category.
 #
 # A PR's category is the highest-priority topic among the labels of every issue
 # it closes (closingIssuesReferences); a PR that closes no issue, or whose
 # closing issues carry no topic label, is "other". An issue's category is the
-# highest-priority topic among its own labels, else "other".
+# highest-priority topic among its own labels, else "other". A PR's priority
+# bit is 1 if the union of its closing issues' labels carries `priority`, else
+# 0; an issue's priority bit is 1 if its own labels carry `priority`, else 0.
 #
-# Within each category, default-mode priority (oldest PR wins within a tier):
+# Within each (topic, priority) bucket, default-mode priority (oldest PR wins
+# within a tier):
 #   1. Oldest "security"    PR (draft + dispatch:reviewed or dispatch:security-reviewed)
 #   2. Oldest "review"      PR (draft + dispatch:code-reviewed)
 #   3. Oldest "code-review" PR (draft + dispatch:qa-done)
 #   4. Oldest "verify"      PR (draft, CI completed and failed)
-#   5. Oldest open help-wanted issue with no local git worktree, resolved to a
-#      startable open leaf (an issue whose entire open-leaf subtree is
-#      worktree-conflicted is skipped, exactly as a direct worktree is)
+#   5. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
+#      by a live Claude session, and which is not already closed by a non-draft
+#      (ready) PR (#920), resolved to a startable open leaf (an issue whose
+#      entire open-leaf subtree is worktree-conflicted is skipped, exactly as a
+#      live-session-owned worktree is)
 #   6. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
 #
-# PRs and help-wanted issues with a local git worktree are skipped (a session is
-# actively working them).
+# A PR or help-wanted issue is skipped only when a live Claude session owns its
+# worktree — the row's branch worktree (PR) or any <N>-* worktree (issue). The
+# check sources lib-claude-agents.sh and keys on worktree_has_live_session,
+# which is fail-safe: an unqueryable daemon counts as owned. An orphan worktree
+# (on disk, no live session) does NOT skip the row — it is a reuse signal for
+# dispatch-resolve-worktree, not a priority skip (#905). Worktree existence is a
+# fast-path miss: a row whose branch / <N>-* has no worktree at all never pays
+# the daemon round-trip.
 # A PR is also skipped when an issue it closes is blocked_by an open issue.
 # "done" (non-draft) PRs are skipped entirely.
 # "waiting" PRs (draft, CI still running/queued/not started) are skipped entirely.
+# An open help-wanted issue is also skipped when a non-draft (ready) PR closes it
+# (#920). A *draft* closing PR does NOT gate the issue — a stalled/orphaned draft
+# is the normal in-flight dispatch state and must leave the issue selectable so
+# the chain can resume by recycling the worktree.
 # A queue with no topic-labeled items resolves entirely to "other", reproducing
 # the flat ladder exactly.
 #
 # --qa mode priority:
-#   1. Oldest QA PR in the highest-priority category that has one
+#   1. Oldest QA PR in the highest-priority (topic, priority) bucket that has
+#      one — same outer iteration as default mode (topic category, then
+#      priority sub-axis), restricted to the qa phase
 #   2. empty
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+# worktree_has_live_session — a worktree-bearing PR/issue row is skipped only
+# when a live Claude session owns the matching worktree (#905). Sourced here so
+# the queue-scan loops below can ask the liveness question.
+source "$SCRIPT_DIR/lib-claude-agents.sh"
 QA_MODE=false
 HEALTH_ONLY=false
-NO_SWEEP=false
-CLEANUP_CONFIRM_PATH=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --qa) QA_MODE=true; shift ;;
     --health-only) HEALTH_ONLY=true; shift ;;
-    --no-sweep) NO_SWEEP=true; shift ;;
-    --cleanup-confirm)
-      if [[ -z "${2:-}" ]]; then
-        echo "error: --cleanup-confirm requires a <path> argument" >&2
-        exit 1
-      fi
-      CLEANUP_CONFIRM_PATH="$2"; shift 2 ;;
     *) echo "error: unknown argument: $1" >&2; exit 1 ;;
   esac
 done
 
 if [[ "$QA_MODE" == "true" && "$HEALTH_ONLY" == "true" ]]; then
   echo "error: --qa and --health-only are mutually exclusive" >&2
-  exit 1
-fi
-if [[ -n "$CLEANUP_CONFIRM_PATH" ]] && [[ "$QA_MODE" == "true" || "$HEALTH_ONLY" == "true" ]]; then
-  echo "error: --cleanup-confirm is only valid in default mode" >&2
-  exit 1
-fi
-if [[ -n "$CLEANUP_CONFIRM_PATH" ]] && [[ "$NO_SWEEP" == "true" ]]; then
-  echo "error: --cleanup-confirm and --no-sweep are mutually exclusive" >&2
   exit 1
 fi
 
@@ -159,15 +144,6 @@ main_broken_sha() {
   if [[ "$cr_fail" -gt 0 || "$wf_fail" -gt 0 ]]; then
     echo "$sha"
   fi
-}
-
-# Current branch shared by --health-only and default modes; computed once.
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-
-# Current-worktree continuation bypasses the main-broken gate: a session
-# continuing its own in-progress work doesn't care about main's state.
-on_worktree_branch() {
-  [[ "$CURRENT_BRANCH" =~ ^([0-9]+)- ]]
 }
 
 # Convert a duration string ("12h", "7d", "30m") to whole seconds. Units:
@@ -293,45 +269,7 @@ jit_scan() {
   echo "jit-reminder $winner"
 }
 
-# Run dispatch-sweep once and route its outcome. On a routed outcome
-# (worktree-adopted or cleanup-unknown) this exits the script directly; on a
-# fall-through outcome (empty stdout or a non-3 non-zero exit) it returns so
-# the caller can proceed to the topic-category × phase ladder. Used by both
-# default mode and --cleanup-confirm — they diverge only in whether they run
-# dispatch-sweep --cleanup-unknown first.
-sweep_and_route() {
-  local sweep_err sweep_out sweep_rc path
-  sweep_err=$(mktemp)
-  if sweep_out=$("$SCRIPT_DIR/dispatch-sweep" 2>"$sweep_err"); then
-    # Exit 0: empty stdout → fall through to the ladder; "worktree <N> <branch>"
-    # → adopted.
-    if [[ "$sweep_out" =~ ^worktree[[:space:]]+([0-9]+)[[:space:]]+(.+)$ ]]; then
-      echo "worktree-adopted ${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
-      rm -f "$sweep_err"
-      exit 0
-    fi
-  else
-    sweep_rc=$?
-    if [[ "$sweep_rc" -eq 3 ]] && grep -q '^cleanup-unknown:' "$sweep_err"; then
-      path=$(grep -m1 '^cleanup-unknown:' "$sweep_err" | sed 's/^cleanup-unknown://')
-      echo "cleanup-unknown $path"
-      rm -f "$sweep_err"
-      exit 0
-    fi
-    # Other non-zero exits: log diagnostic, fall through to the ladder.
-    # The sweep is best-effort; a malformed invocation or transient gh/git
-    # failure should not stall the workflow.
-    echo "warning: dispatch-sweep exited $sweep_rc; falling through to ladder" >&2
-    [[ -s "$sweep_err" ]] && cat "$sweep_err" >&2
-  fi
-  rm -f "$sweep_err"
-}
-
 if [[ "$HEALTH_ONLY" == "true" ]]; then
-  if on_worktree_branch; then
-    echo "ok"
-    exit 0
-  fi
   JIT_LINE=$(jit_scan)
   if [[ -n "$JIT_LINE" ]]; then
     echo "$JIT_LINE"
@@ -346,25 +284,8 @@ if [[ "$HEALTH_ONLY" == "true" ]]; then
   exit 0
 fi
 
-# Default mode: current-worktree detection first, then the main-broken gate.
+# Default mode: JIT scan, then the main-broken gate.
 if [[ "$QA_MODE" == "false" ]]; then
-  if on_worktree_branch; then
-    N="${BASH_REMATCH[1]}"
-    if STATE=$(gh issue view "$N" --json state 2>/dev/null | jq -r '.state'); then
-      if [[ "$STATE" == "OPEN" ]]; then
-        echo "worktree $N $CURRENT_BRANCH"
-      else
-        echo "worktree-closed $N $CURRENT_BRANCH"
-      fi
-    else
-      # A failed `gh issue view` (nonexistent issue, transient API/auth error)
-      # is intentionally conflated with a genuinely closed issue: both yield
-      # worktree-closed, and /dispatch reports and stops on either.
-      echo "worktree-closed $N $CURRENT_BRANCH"
-    fi
-    exit 0
-  fi
-
   JIT_LINE=$(jit_scan)
   if [[ -n "$JIT_LINE" ]]; then
     echo "$JIT_LINE"
@@ -377,54 +298,49 @@ if [[ "$QA_MODE" == "false" ]]; then
     exit 0
   fi
 
-  # Internal sweep: adopt an orphaned worktree elsewhere on disk, or halt on
-  # an unknown orphan. Runs after current-worktree continuation (above) so a
-  # session inside an <issue>-* worktree always continues there. --no-sweep
-  # skips this so a re-call after a declined cleanup-unknown doesn't re-halt
-  # on the same unknown orphan. --cleanup-confirm runs the user-confirmed
-  # cleanup first, then re-enters this same sweep+route block (so a second
-  # unknown orphan, if any, halts the script the same way).
-  if [[ -n "$CLEANUP_CONFIRM_PATH" ]]; then
-    # Cleanup itself is fail-loud: a non-zero exit (invalid path, registration
-    # race) propagates with stderr intact, matching the cleanup-unknown
-    # detection path's posture. SKILL.md prose stops and reports just like any
-    # other dispatch-script error.
-    "$SCRIPT_DIR/dispatch-sweep" --cleanup-unknown "$CLEANUP_CONFIRM_PATH"
-  fi
-  if [[ "$NO_SWEEP" == "false" ]]; then
-    sweep_and_route
-  fi
 fi
 
-# Collect branches that already have a local worktree (a session is working them).
-WORKTREE_BRANCHES=()
-while IFS= read -r line; do
-  # git worktree list --porcelain emits "branch refs/heads/<name>" lines.
-  if [[ "$line" == branch\ * ]]; then
-    branch_ref="${line#branch }"
-    WORKTREE_BRANCHES+=("${branch_ref#refs/heads/}")
+# Map each registered worktree's branch — and its <issue>-number prefix — to its
+# on-disk path. A PR/issue row is skipped only when a *live* Claude session owns
+# the matching worktree (#905): an orphan worktree (on disk, no session) is a
+# reuse signal for dispatch-resolve-worktree, not a priority skip here. Built
+# once via the shared lib.sh record parser so the path is on hand for the
+# liveness query; a bare / detached / non-issue record contributes nothing.
+declare -A WORKTREE_PATH_BY_BRANCH=()
+declare -A WORKTREE_PATHS_BY_NUM=()
+while IFS= read -r wt_record; do
+  split_worktree_record "$wt_record"
+  [[ -z "$WT_PATH" ]] && continue
+  [[ -n "$WT_BRANCH" ]] && WORKTREE_PATH_BY_BRANCH["$WT_BRANCH"]="$WT_PATH"
+  if [[ -n "$WT_NUM" ]]; then
+    WORKTREE_PATHS_BY_NUM["$WT_NUM"]="${WORKTREE_PATHS_BY_NUM[$WT_NUM]:-}$WT_PATH"$'\n'
   fi
-done < <(git worktree list --porcelain)
+done < <(list_worktree_records)
 
-has_worktree() {
+# True when a live session owns the worktree checked out at <branch>. No
+# worktree for <branch> → fast-path miss (return 1), no daemon round-trip. A
+# worktree exists → defer to worktree_has_live_session, which is fail-safe: an
+# unqueryable daemon counts as owned, so the row is skipped rather than
+# double-claimed.
+pr_branch_has_live_worktree() {
   local branch="$1"
-  local b
-  for b in "${WORKTREE_BRANCHES[@]}"; do
-    if [[ "$b" == "$branch" ]]; then
-      return 0
-    fi
-  done
-  return 1
+  local path="${WORKTREE_PATH_BY_BRANCH[$branch]:-}"
+  [[ -z "$path" ]] && return 1
+  worktree_has_live_session "$path"
 }
 
-issue_has_worktree() {
-  local num="$1"
-  local b
-  for b in "${WORKTREE_BRANCHES[@]}"; do
-    if [[ "$b" == "$num-"* ]]; then
+# True when a live session owns any <num>-* worktree. No such worktree →
+# fast-path miss. Several matches → owned if any one is live.
+issue_has_live_worktree() {
+  local num="$1" p
+  local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
+  [[ -z "$paths" ]] && return 1
+  while IFS= read -r p; do
+    [[ -z "$p" ]] && continue
+    if worktree_has_live_session "$p"; then
       return 0
     fi
-  done
+  done <<< "$paths"
   return 1
 }
 
@@ -434,7 +350,14 @@ issue_has_worktree() {
 # closingIssuesReferences drives topic-category resolution: a PR inherits the
 # highest-priority topic among the labels of every issue it closes.
 PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences)
-PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r 'sort_by(.createdAt) | .[] | [.number, .createdAt, .headRefName, (.closingIssuesReferences // [] | tojson)] | @tsv')
+# The office-hours skip is ISSUE-anchored (issue #909): dispatch:office-hours
+# lives on the issue, not the PR, so it is not filtered here on PR labels.
+# Instead the main PR loop below resolves each candidate PR's issue from its
+# branch prefix (<N>-<slug>) and skips the PR when that issue carries the label.
+# A later strip clears the label and the item re-enters the queue.
+PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r '
+  sort_by(.createdAt) | .[]
+  | [.number, .createdAt, .headRefName, (.closingIssuesReferences // [] | tojson)] | @tsv')
 
 # Fetch every open issue once, carrying labels. This single list serves two
 # roles: filtered client-side to "help wanted" it is the issue queue; indexed
@@ -444,19 +367,23 @@ PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r 'sort_by(.createdAt) | .[] | [.number
 ISSUE_LIST=$(gh issue list --state open --limit 300 --json number,createdAt,labels)
 
 # number → labels-array map as a JSON object, built once from the open-issue
-# list above. pr_category indexes it to resolve each PR's closing issues'
-# labels. Assigned to a variable first so a jq failure aborts here (set -e +
-# pipefail); mirrors PR_SORTED.
+# list above. pr_combined_labels indexes it to resolve each PR's closing
+# issues' labels. Assigned to a variable first so a jq failure aborts here
+# (set -e + pipefail); mirrors PR_SORTED.
 ISSUE_LABELS_JSON=$(printf '%s' "$ISSUE_LIST" \
   | jq -c 'reduce .[] as $i ({}; .[$i.number | tostring] = ($i.labels // []))')
 
 # Topic categories in priority order; "other" is the implicit fallback for any
-# label set with no topic label. A category tier nests *outside* the phase
-# ladder: the selector exhausts every phase of "bug" before considering
-# "testing infrastructure", and so on. TOPIC_CATEGORIES is the single source of
-# the ordering — category_of_labels resolves against it and the default-mode
-# loop iterates CATEGORIES. The companion classifier that *applies* these
-# labels is ref-ready SKILL.md Step 6; keep the two label sets in sync.
+# label set with no topic label. A topic-category tier nests *outside* the
+# phase ladder, and a `priority` sub-axis nests *between* them: within each
+# topic category, items carrying `priority` rank above items without it, and
+# the phase ladder runs innermost. TOPIC_CATEGORIES is the single source of the
+# topic ordering — category_of_labels resolves against it and the default-mode
+# loop iterates CATEGORIES. `priority` is an orthogonal escalation sub-axis
+# nested inside each topic category, derived alongside the category via the
+# has_priority_in_labels helper rather than competing with it for the top
+# slot. The companion classifier that *applies* these labels is ref-ready
+# SKILL.md Step 6; keep the two label sets in sync.
 TOPIC_CATEGORIES=(bug "testing infrastructure" dispatch)
 CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
 # Same priority list as a JSON array, for category_of_labels' jq filter.
@@ -472,23 +399,29 @@ category_of_labels() {
     | first($cats[] | select(. as $c | $names | index($c))) // "other"'
 }
 
-# Topic category of a PR: the union of its closing issues' labels, resolved by
-# category_of_labels. A PR that closes no issue — or whose closing issues carry
-# no topic label — resolves to "other".
-pr_category() {
-  local combined
-  combined=$(printf '%s' "$1" | jq -c --argjson map "$ISSUE_LABELS_JSON" \
-    '[.[].number | tostring as $n | $map[$n] // [] | .[]]')
-  category_of_labels "$combined"
+# Union of a PR's closing issues' labels into a JSON array of {name:...} label
+# objects, looked up in ISSUE_LABELS_JSON. A PR that closes no issue — or whose
+# closing issues are absent from the map — yields an empty array, which
+# category_of_labels resolves to "other" and has_priority_in_labels to 0.
+pr_combined_labels() {
+  printf '%s' "$1" | jq -c --argjson map "$ISSUE_LABELS_JSON" \
+    '[.[].number | tostring as $n | $map[$n] // [] | .[]]'
 }
 
-# First-seen PR per (category, phase): key = "<category>|<phase>", value =
-# "<num> <branch>". The "|" separator is collision-free — phase names are fixed
-# identifiers and no TOPIC_CATEGORIES name contains "|". Both lists are
-# pre-sorted oldest-first, so the first PR captured for a key is the oldest in
-# that category+phase.
+# 1 if the label set contains an exact "priority" label, else 0.
+has_priority_in_labels() {
+  printf '%s' "$1" | jq -r '[.[].name] | if index("priority") then 1 else 0 end'
+}
+
+# First-seen PR per (category, priority-bit, phase): key =
+# "<category>|<priority-bit>|<phase>", value = "<num> <branch>". The "|"
+# separator is collision-free — priority bits are literal `0`/`1`, phase names
+# are fixed identifiers, and no TOPIC_CATEGORIES name contains "|". Both lists
+# are pre-sorted oldest-first, so the first PR captured for a key is the oldest
+# in that bucket.
 declare -A FIRST_PR
-# First-seen help-wanted issue per category: key = category, value = "<num>".
+# First-seen help-wanted issue per (category, priority-bit): key =
+# "<category>|<priority-bit>", value = "<num>".
 declare -A FIRST_ISSUE
 
 # Within-category phase ladder, highest priority first.
@@ -497,8 +430,9 @@ PHASE_PRIORITY=(security review code-review verify)
 while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "$pr_num" ]] && continue
 
-  # Skip PRs with a local worktree.
-  if has_worktree "$pr_branch"; then
+  # Skip a PR whose branch worktree is owned by a live session. An orphan
+  # worktree does not skip — it is recycled at dispatch-resolve-worktree (#905).
+  if pr_branch_has_live_worktree "$pr_branch"; then
     continue
   fi
 
@@ -509,6 +443,16 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   case "$phase" in
     done|waiting) continue ;;
   esac
+
+  # Skip PRs whose ISSUE is parked on a human (dispatch:office-hours). The label
+  # lives on the issue (issue #909), so resolve the issue number from the PR's
+  # branch prefix (<N>-<slug>) and check the issue's labels in ISSUE_LABELS_JSON.
+  pr_issue_num="${pr_branch%%-*}"
+  if [[ -n "$pr_issue_num" ]] && printf '%s' "$ISSUE_LABELS_JSON" \
+      | jq -e --arg n "$pr_issue_num" \
+        '(.[$n] // []) | any(.name == "dispatch:office-hours")' >/dev/null; then
+    continue
+  fi
 
   # Skip PRs gated by an open blocker. Placed after the done/waiting filter so
   # PRs that would be discarded anyway don't pay the per-closing-issue gh-api
@@ -527,59 +471,84 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   done < <(printf '%s' "$pr_closing" | jq -r '.[].number')
   [[ "$pr_blocked" == "true" ]] && continue
 
-  # Record the oldest PR seen in this category+phase. The :- guard keeps the
-  # unset-key read from aborting under set -u.
-  pr_cat=$(pr_category "$pr_closing")
-  pr_key="$pr_cat|$phase"
+  # Record the oldest PR seen in this category+priority+phase. The :- guard
+  # keeps the unset-key read from aborting under set -u.
+  pr_combined=$(pr_combined_labels "$pr_closing")
+  pr_cat=$(category_of_labels "$pr_combined")
+  pr_pri=$(has_priority_in_labels "$pr_combined")
+  pr_key="$pr_cat|$pr_pri|$phase"
   [[ -z "${FIRST_PR[$pr_key]:-}" ]] && FIRST_PR[$pr_key]="$pr_num $pr_branch"
 done <<< "$PR_SORTED"
 
 if [[ "$QA_MODE" == "true" ]]; then
-  # --qa mode: oldest QA PR in the highest-priority category that has one,
-  # without the <phase> field. The issue queue is irrelevant here, so the
-  # leaf-resolution loop below is skipped entirely.
+  # --qa mode: oldest QA PR in the highest-priority (topic, priority) bucket
+  # that has one, without the <phase> field. The issue queue is irrelevant
+  # here, so the leaf-resolution loop below is skipped entirely.
   for category in "${CATEGORIES[@]}"; do
-    qa_key="$category|qa"
-    if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
-      echo "pr ${FIRST_PR[$qa_key]}"
-      exit 0
-    fi
+    for pri in 1 0; do
+      qa_key="$category|$pri|qa"
+      if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
+        echo "pr ${FIRST_PR[$qa_key]}"
+        exit 0
+      fi
+    done
   done
   echo "empty"
   exit 0
 fi
 
+# Issue numbers closed by a non-draft (ready) open PR (#920). Such an issue has
+# reached a ready PR — the dispatch chain has terminated for it (no live worker)
+# yet GitHub keeps it open + help-wanted until the PR merges. Re-selecting it only
+# spawns a worker that derives phase "done" and wastes a tick. A *draft* closing
+# PR is deliberately excluded: a stalled/orphaned draft must leave its issue
+# selectable so the chain can resume by recycling the worktree.
+declare -A READY_PR_CLOSED_ISSUES
+while IFS= read -r closed_num; do
+  [[ -z "$closed_num" ]] && continue
+  READY_PR_CLOSED_ISSUES["$closed_num"]=1
+done < <(printf '%s' "$PR_LIST" | jq -r '
+  .[] | select(.isDraft == false)
+  | (.closingIssuesReferences // [])[].number')
+
 # First-seen help-wanted issue per category. The queue is the open-issue list
-# filtered client-side to "help wanted"; issues whose <N>-* worktree exists
-# (a session is working them) are skipped. Each candidate is resolved to a
+# filtered client-side to "help wanted"; issues whose <N>-* worktree is owned
+# by a live session are skipped. Each candidate is resolved to a
 # startable open leaf within its subtree, and the leaf — not the top-level
 # help-wanted issue — is what gets recorded; the category is still the
 # top-level issue's own.
 ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r '
   sort_by(.createdAt) | .[]
   | select((.labels // []) | any(.name == "help wanted"))
+  | select((.labels // []) | any(.name == "dispatch:office-hours") | not)
   | [.number, ((.labels // []) | tojson)] | @tsv')
 while IFS=$'\t' read -r issue_num issue_labels; do
   [[ -z "$issue_num" ]] && continue
-  # Skip issues whose <N>-* worktree exists (a session is working them).
-  if issue_has_worktree "$issue_num"; then
+  # Skip an open issue already closed by a non-draft (ready) PR (#920).
+  [[ -n "${READY_PR_CLOSED_ISSUES[$issue_num]:-}" ]] && continue
+  # Skip an issue whose <N>-* worktree is owned by a live session. An orphan
+  # <N>-* worktree does not skip — it is recycled at dispatch-resolve-worktree
+  # (#905).
+  if issue_has_live_worktree "$issue_num"; then
     continue
   fi
-  # Category is the top-level help-wanted issue's own labels. Once a category
-  # has a winner the remaining issues in it are skipped — including the
-  # expensive leaf trace.
+  # Category is the top-level help-wanted issue's own labels. Priority bit is
+  # derived alongside it. Once a (category, priority) bucket has a winner the
+  # remaining issues in it are skipped — including the expensive leaf trace.
   issue_cat=$(category_of_labels "$issue_labels")
-  [[ -n "${FIRST_ISSUE[$issue_cat]:-}" ]] && continue
+  issue_pri=$(has_priority_in_labels "$issue_labels")
+  issue_bucket="$issue_cat|$issue_pri"
+  [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]] && continue
   # Resolve a startable open leaf within the issue's subtree. dispatch-trace-leaf
   # in queue mode descends open blockers and sub-issues, skipping any child whose
   # <N>-* branch is an existing local worktree (owned by another session):
-  #   exit 0 — a startable open leaf was found; record it for this category.
+  #   exit 0 — a startable open leaf was found; record it for this bucket.
   #   exit 2 — every reachable open leaf is worktree-conflicted. Skip this issue
   #            exactly as a direct worktree is skipped; a later issue in the
-  #            same category may still fill the slot.
+  #            same bucket may still fill the slot.
   #   exit 1 — usage error; propagate as a hard failure, never swallow as a skip.
   if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue); then
-    FIRST_ISSUE[$issue_cat]="$leaf"
+    FIRST_ISSUE[$issue_bucket]="$leaf"
   else
     trace_status=$?
     [[ "$trace_status" -eq 2 ]] && continue
@@ -588,27 +557,33 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   fi
 done <<< "$ISSUE_SORTED"
 
-# Default mode: the first category with an eligible task wins (see the header
-# for the full two-tier order).
+# Default mode: the first (topic-category, priority-bit) bucket with an
+# eligible task wins (see the header for the full three-tier order). Within
+# each topic category, the priority sub-axis (1 then 0) runs above the phase
+# ladder; within each (category, priority) bucket, the phase ladder runs
+# innermost.
 for category in "${CATEGORIES[@]}"; do
-  for phase in "${PHASE_PRIORITY[@]}"; do
-    pr_key="$category|$phase"
-    if [[ -n "${FIRST_PR[$pr_key]:-}" ]]; then
-      echo "pr ${FIRST_PR[$pr_key]} $phase"
+  for pri in 1 0; do
+    for phase in "${PHASE_PRIORITY[@]}"; do
+      pr_key="$category|$pri|$phase"
+      if [[ -n "${FIRST_PR[$pr_key]:-}" ]]; then
+        echo "pr ${FIRST_PR[$pr_key]} $phase"
+        exit 0
+      fi
+    done
+
+    issue_bucket="$category|$pri"
+    if [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]]; then
+      echo "issue ${FIRST_ISSUE[$issue_bucket]}"
+      exit 0
+    fi
+
+    qa_key="$category|$pri|qa"
+    if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
+      echo "pr ${FIRST_PR[$qa_key]} qa"
       exit 0
     fi
   done
-
-  if [[ -n "${FIRST_ISSUE[$category]:-}" ]]; then
-    echo "issue ${FIRST_ISSUE[$category]}"
-    exit 0
-  fi
-
-  qa_key="$category|qa"
-  if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
-    echo "pr ${FIRST_PR[$qa_key]} qa"
-    exit 0
-  fi
 done
 
 echo "empty"

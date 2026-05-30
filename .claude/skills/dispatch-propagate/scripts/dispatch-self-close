@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# dispatch-self-close — delete this background job.
+#
+# Invoked by the dispatch-stop Stop hook on a clean phase advance, by
+# dispatch-handoff (the scripted terminal-disposition entrypoint for
+# /dispatch-propagate phase completions and early-stop paths), and by
+# /dispatch-propagate's router on its terminal-disposition paths (drain
+# concurrency-cap, propagate-success). `claude rm <id>` wants the *job-id*
+# — the 8-hex-char basename of $CLAUDE_JOB_DIR — not the conversation
+# session UUID and not the registry's .sessionId.
+# CLAUDE_JOB_DIR is set only in managed background jobs, so its presence
+# doubles as the foreground-safe gate: an interactive session reaching this
+# script is a no-op — the user's live conversation is not deleted.
+#
+# Behavior:
+#   $CLAUDE_JOB_DIR set    → `claude rm $(basename "$CLAUDE_JOB_DIR")`,
+#                            exit with that command's status.
+#   $CLAUDE_JOB_DIR unset  → diagnostic to stderr, exit 0 (no-op).
+#
+# Environment override for testability (mirroring dispatch-spawn-router's
+# DISPATCH_SPAWN_ROUTER_CLAUDE_CMD):
+#   DISPATCH_SELF_CLOSE_CLAUDE_CMD  The `claude` command. Default: `claude`.
+#
+# Sandbox: `claude rm` reaches the local Claude daemon over a Unix socket;
+# callers must invoke this script with `dangerouslyDisableSandbox: true` —
+# see `.claude/rules/sandbox.md § claude agents --json`.
+set -uo pipefail
+
+CLAUDE_CMD="${DISPATCH_SELF_CLOSE_CLAUDE_CMD:-claude}"
+JOB_ID=$(basename "${CLAUDE_JOB_DIR:-}")
+
+if [[ -z "$JOB_ID" || "$JOB_ID" == "." ]]; then
+  echo "dispatch-self-close: not a managed background job (CLAUDE_JOB_DIR unset); skipping self-close" >&2
+  exit 0
+fi
+
+exec "$CLAUDE_CMD" rm "$JOB_ID"
