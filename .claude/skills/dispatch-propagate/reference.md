@@ -49,33 +49,32 @@ path after `dispatch-spawn-worker` returns success (worker verified-registered),
 on `notify spawn-failed` after the failed spawn returns, and on `drain
 ci-waiting` / `drain concurrency-cap` at their respective stops.
 `dispatch-finalize-selection` writes the recovery marker but no longer releases.
-The pre-finalize stop paths — `notify target-blocked` and `drain
-worktree-conflict`, plus the internal `exit 2` error paths — release at the
-guard, unchanged. Crash safety: a router that dies mid-spawn holding the lock is
+The pre-finalize stop paths — `notify target-blocked`, `notify merge-conflict`,
+and `drain worktree-conflict`, plus the internal `exit 2` error paths — release
+at the guard, unchanged. Crash safety: a router that dies mid-spawn holding the lock is
 recovered by the lock's existing dead-holder reclaim (the recorded sessionId
 absent from `claude agents --json`) on the next `--wait`; the marker-reclaim path
 is belt-and-suspenders rather than load-bearing.
 
-The `tmp/dispatch-worktree` marker is the canonical post-Step-5 reclaim signal,
-and it is **session-scoped**: `dispatch-finalize-selection` stamps the
-finalizing holder's `CLAUDE_CODE_SESSION_ID` into the marker, and the lock
-reclaims a foreign holder via the marker **only** when the marker's content
-equals the recorded holder's sessionId. The acquire path skips the busy branch
-when the foreign holder's cwd has a marker naming that recorded holder, and
-`--release` succeeds (truncates and prints `released`) when EITHER the caller's
-sessionId matches the holder OR the holder's cwd has a marker naming the
-recorded holder. This closes the silent-`noop` failure mode for any post-Step-5
-caller whose `CLAUDE_CODE_SESSION_ID` was re-derived from a different context (a
-subagent or hook) — the marker still names the recorded holder, so reclaim
-fires.
+The `tmp/dispatch-worktree` marker is the post-Step-5 reclaim signal for
+**dead** holders, and it is **session-scoped**: `dispatch-finalize-selection`
+stamps the finalizing holder's `CLAUDE_CODE_SESSION_ID` into the marker. As of
+#945 the lock extends through Step 6 (spawn), so a **live** holder with a marker
+is mid-spawn and legitimately owns the lock — the marker alone no longer implies
+the lock has been released. The acquire path blocks on a live foreign holder
+regardless of marker presence; it reclaims only when the holder is dead (absent
+from `claude agents --json`). Similarly, `--release` from a different-sessionId
+caller is always a noop for a live foreign holder; only strict self-release
+(`SESSION_ID == recorded`) clears the lock. The primary recovery path for a
+dead-holder-with-marker is the next tick's dead-holder reclaim in try_acquire
+(the marker is belt-and-suspenders for that path).
 
-The content-match guard is what prevents a stale marker from reclaiming a
-**live, mid-selection** holder. An empty marker (the `touch` stamped by
+The content-match guard prevents a stale marker from triggering an unintended
+reclaim of a different live holder. An empty marker (the `touch` stamped by
 `.claude/hooks/worktree-create.sh` on every worktree creation) names no session,
 and a marker naming an older, since-finalized session names the wrong session;
-neither matches the recorded holder, so neither reclaims a live holder that
-happens to share that worktree. Pre-marker callers — Steps 1-4 stop paths and
-the Step 5 `conflict` stop — keep strict sessionId-match semantics by
+neither matches the recorded holder. Pre-marker callers — Steps 1–4 stop paths
+and the Step 5 `conflict` stop — keep strict sessionId-match semantics by
 construction because the marker is absent.
 
 The lock is scoped to selection and self-healing. The recorded sessionId
