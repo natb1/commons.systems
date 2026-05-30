@@ -21,7 +21,7 @@
 # Default-mode priority, top to bottom:
 #   1. JIT scan (jit-reminder)
 #   2. origin/main CI health gate (main-broken)
-#   3. the topic-category × priority × phase ladder over open PRs and
+#   3. the priority × topic-category × phase ladder over open PRs and
 #      help-wanted issues
 #
 # --health-only mode runs the JIT scan and the origin/main CI health gate, then
@@ -37,15 +37,14 @@
 # --qa mode omits the <phase> field — there it is always "qa":
 #   pr <num> <branch>           — the QA PR to work on
 #
-# Selection is three-tier: topic *category* nests outside a *priority* sub-axis,
-# which nests outside the phase *ladder*. Topic categories, highest priority
-# first:
+# Selection is three-tier: the `priority` label is the *outermost* axis, topic
+# *category* nests inside it, and the phase *ladder* runs innermost. The
+# selector exhausts the entire `priority=1` tier — every topic category, every
+# phase — before considering any `priority=0` item, so a `priority` item in a
+# low-ranked topic still outranks every non-priority item in a higher-ranked
+# topic. Within one priority level, topic categories run highest priority first:
 #   bug → testing infrastructure → dispatch → other
-# Within each topic category, items carrying the `priority` label rank above
-# items without it; the phase ladder runs innermost. The selector exhausts the
-# `(priority=1, phase ladder)` sub-tier of one topic category, then the
-# `(priority=0, phase ladder)` sub-tier of the same topic, before moving to the
-# next topic category.
+# and within each (priority, topic) bucket the phase ladder runs innermost.
 #
 # A PR's category is the highest-priority topic among the labels of every issue
 # it closes (closingIssuesReferences); a PR that closes no issue, or whose
@@ -54,7 +53,7 @@
 # bit is 1 if the union of its closing issues' labels carries `priority`, else
 # 0; an issue's priority bit is 1 if its own labels carry `priority`, else 0.
 #
-# Within each (topic, priority) bucket, default-mode priority (oldest PR wins
+# Within each (priority, topic) bucket, default-mode priority (oldest PR wins
 # within a tier):
 #   1. Oldest "security"    PR (draft + dispatch:reviewed or dispatch:security-reviewed)
 #   2. Oldest "review"      PR (draft + dispatch:code-reviewed)
@@ -86,9 +85,9 @@
 # the flat ladder exactly.
 #
 # --qa mode priority:
-#   1. Oldest QA PR in the highest-priority (topic, priority) bucket that has
-#      one — same outer iteration as default mode (topic category, then
-#      priority sub-axis), restricted to the qa phase
+#   1. Oldest QA PR in the highest-priority (priority, topic) bucket that has
+#      one — same outer iteration as default mode (priority axis outermost,
+#      then topic category), restricted to the qa phase
 #   2. empty
 set -euo pipefail
 
@@ -424,16 +423,16 @@ ${GQL_FIELDS}  }
 fi
 
 # Topic categories in priority order; "other" is the implicit fallback for any
-# label set with no topic label. A topic-category tier nests *outside* the
-# phase ladder, and a `priority` sub-axis nests *between* them: within each
-# topic category, items carrying `priority` rank above items without it, and
-# the phase ladder runs innermost. TOPIC_CATEGORIES is the single source of the
-# topic ordering — category_of_labels resolves against it and the default-mode
-# loop iterates CATEGORIES. `priority` is an orthogonal escalation sub-axis
-# nested inside each topic category, derived alongside the category via the
-# has_priority_in_labels helper rather than competing with it for the top
-# slot. The companion classifier that *applies* these labels is ref-ready
-# SKILL.md Step 6; keep the two label sets in sync.
+# label set with no topic label. The `priority` label is the *outermost* axis:
+# every `priority` item ranks above every non-priority item, regardless of
+# topic. Topic category nests *inside* the priority axis, and the phase ladder
+# runs innermost. TOPIC_CATEGORIES is the single source of the topic ordering —
+# category_of_labels resolves against it and the default-mode loop iterates
+# CATEGORIES within each priority level. `priority` is derived alongside the
+# category via the has_priority_in_labels helper; topic category is the
+# tie-break among items at the same priority level. The companion classifier
+# that *applies* these labels is ref-ready SKILL.md Step 6; keep the two label
+# sets in sync.
 TOPIC_CATEGORIES=(bug "testing infrastructure" dispatch)
 CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
 # Same priority list as a JSON array, for category_of_labels' jq filter.
@@ -531,11 +530,12 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
 done <<< "$PR_SORTED"
 
 if [[ "$QA_MODE" == "true" ]]; then
-  # --qa mode: oldest QA PR in the highest-priority (topic, priority) bucket
-  # that has one, without the <phase> field. The issue queue is irrelevant
+  # --qa mode: oldest QA PR in the highest-priority (priority, topic) bucket
+  # that has one — priority is the outermost axis (1 then 0), topic category
+  # nested inside — without the <phase> field. The issue queue is irrelevant
   # here, so the leaf-resolution loop below is skipped entirely.
-  for category in "${CATEGORIES[@]}"; do
-    for pri in 1 0; do
+  for pri in 1 0; do
+    for category in "${CATEGORIES[@]}"; do
       qa_key="$category|$pri|qa"
       if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
         echo "pr ${FIRST_PR[$qa_key]}"
@@ -607,13 +607,14 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   fi
 done <<< "$ISSUE_SORTED"
 
-# Default mode: the first (topic-category, priority-bit) bucket with an
-# eligible task wins (see the header for the full three-tier order). Within
-# each topic category, the priority sub-axis (1 then 0) runs above the phase
-# ladder; within each (category, priority) bucket, the phase ladder runs
-# innermost.
-for category in "${CATEGORIES[@]}"; do
-  for pri in 1 0; do
+# Default mode: priority is the outermost axis (1 then 0), topic category nests
+# inside it, and the phase ladder runs innermost (see the header for the full
+# three-tier order). The entire priority=1 tier — every topic category, every
+# phase — is exhausted before any priority=0 item is considered; within one
+# priority level topic category is the tie-break, and within each
+# (priority, category) bucket the phase ladder runs innermost.
+for pri in 1 0; do
+  for category in "${CATEGORIES[@]}"; do
     for phase in "${PHASE_PRIORITY[@]}"; do
       pr_key="$category|$pri|$phase"
       if [[ -n "${FIRST_PR[$pr_key]:-}" ]]; then
