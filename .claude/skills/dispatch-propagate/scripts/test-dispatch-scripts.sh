@@ -8803,15 +8803,7 @@ chmod +x "$STUB_DIR/sleep"
 export PATH="$STUB_DIR:$SAVED_PATH"
 rc=0
 "$SCRIPT_DIR/npm-ci-with-retry.sh" || rc=$?
-TOTAL=$((TOTAL + 1))
-if [ "$rc" -ne 0 ]; then
-  PASS=$((PASS + 1))
-  echo "  PASS: npm-ci-with-retry.sh returns non-zero after 3 failed attempts"
-else
-  FAIL=$((FAIL + 1))
-  echo "  FAIL: npm-ci-with-retry.sh returns non-zero after 3 failed attempts"
-  echo "    expected non-zero, got 0"
-fi
+assert_eq "npm-ci-with-retry.sh returns non-zero after 3 failed attempts" "1" "$rc"
 npm_count=0
 [ -f "$STUB_DIR/npm-count" ] && npm_count=$(cat "$STUB_DIR/npm-count")
 assert_eq "npm-ci-with-retry.sh tried npm exactly 3 times before giving up" "3" "$npm_count"
