@@ -4173,35 +4173,37 @@ assert_eq "--release missing-session-id leaves the foreign lock intact" \
   "sess-6c-foreign" "$lock_contents"
 lock_teardown
 
-# --- Test 20: live foreign holder with marker → reclaim ----------------------
+# --- Test 20: live foreign holder with marker → busy (#945) ------------------
 #
-# A foreign holder's session is still live AND its cwd carries the
-# tmp/dispatch-worktree marker, meaning it has completed Step 5. acquire must
-# reclaim the lock (lenient branch) rather than block.
+# After #945 the lock extends through Step 6 (spawn). A foreign holder's session
+# is still live AND its cwd carries the tmp/dispatch-worktree marker — this now
+# means it is mid-spawn (Steps 5–6), NOT that it has released the lock. acquire
+# must block (busy), not reclaim. The marker no longer implies lock-released for
+# a live holder.
 
-echo "Test: live foreign holder with marker → reclaim"
+echo "Test: live foreign holder with marker → busy (#945, mid-spawn)"
 lock_setup
 printf '%s\n' "sess-2020-foreign" > "$DISPATCH_LOCK_FILE"
 export CLAUDE_CODE_SESSION_ID="sess-2020-self"
 # Build the foreign holder's marker-bearing cwd inside the test tmp tree.
 foreign_cwd="$TMPDIR_TEST/foreign-worktree"
 mkdir -p "$foreign_cwd/tmp"
-# The marker names the recorded holder (sess-2020-foreign) → reclaim.
+# The marker names the recorded holder (sess-2020-foreign) — but since the holder
+# is still live (mid-spawn), the lock must NOT be reclaimed (#945).
 printf '%s\n' "sess-2020-foreign" > "$foreign_cwd/tmp/dispatch-worktree"
 lock_fake_claude_sessions "sess-2020-foreign=$foreign_cwd" "sess-2020-self=$TMPDIR_TEST"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
-assert_eq "past-Step-5 holder reclaim exits 0" "0" "$rc"
-assert_eq "past-Step-5 holder reclaim prints acquired" "acquired" "$out"
+assert_eq "mid-spawn holder busy exits 0" "0" "$rc"
+assert_eq "mid-spawn holder busy prints busy" "busy" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "past-Step-5 holder reclaim rewrites lock to caller's sessionId" \
-  "sess-2020-self" "$lock_contents"
+assert_eq "mid-spawn holder busy: lock file unchanged (still the foreign holder)" \
+  "sess-2020-foreign" "$lock_contents"
 lock_teardown
 
 # --- Test 21: live foreign holder WITHOUT marker → busy (regression) ---------
 #
-# Today's strict blocking behavior on an in-flight Step 0–5 holder MUST be
-# preserved: a live foreign holder whose cwd has no marker is still in
-# selection and the lock must hold it.
+# A live foreign holder with no marker is still in-flight (Steps 0–5) and the
+# lock must hold it.
 
 echo "Test: live foreign holder without marker → busy (in-flight)"
 lock_setup
@@ -4218,33 +4220,34 @@ assert_eq "in-flight holder blocks: lock file unchanged" \
   "sess-2121-foreign" "$lock_contents"
 lock_teardown
 
-# --- Test 22: --release with marker present → released (lenient) ------------
+# --- Test 22: --release with live foreign holder and marker → noop (#945) ----
 #
 # A caller whose CLAUDE_CODE_SESSION_ID differs from the recorded holder can
-# still --release when the holder's cwd carries the marker. Closes the silent
-# `noop` leak that today blocks subsequent /dispatch-propagate ticks.
+# no longer --release a live foreign holder — the lock extends through Step 6 (#945).
+# Live foreign holders are always noop for --release.
 
-echo "Test: --release with marker present from a different-sessionId caller → released"
+echo "Test: --release with live foreign holder and marker → noop (#945, mid-spawn)"
 lock_setup
 printf '%s\n' "sess-2222-foreign" > "$DISPATCH_LOCK_FILE"
 export CLAUDE_CODE_SESSION_ID="sess-2222-self"
 foreign_cwd="$TMPDIR_TEST/foreign-worktree-with-marker"
 mkdir -p "$foreign_cwd/tmp"
-# The marker names the recorded holder (sess-2222-foreign) → lenient release.
+# The marker names the recorded holder (sess-2222-foreign) — but the holder is
+# live (mid-spawn), so --release must not release (#945).
 printf '%s\n' "sess-2222-foreign" > "$foreign_cwd/tmp/dispatch-worktree"
 lock_fake_claude_sessions "sess-2222-foreign=$foreign_cwd" "sess-2222-self=$TMPDIR_TEST"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
-assert_eq "lenient --release exits 0" "0" "$rc"
-assert_eq "lenient --release prints released" "released" "$out"
+assert_eq "live-foreign --release exits 0" "0" "$rc"
+assert_eq "live-foreign --release prints noop" "noop" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "lenient --release empties the lock file" "" "$lock_contents"
+assert_eq "live-foreign --release leaves lock file unchanged" "sess-2222-foreign" "$lock_contents"
 lock_teardown
 
 # --- Test 23: --release with NO marker → noop (strict pre-marker) -----------
 #
-# Refinement of Test 12: the marker is what flips the verdict to released.
-# Without a marker, a different-sessionId caller's --release stays a noop and
-# the lock file is left intact for the in-flight holder.
+# Refinement of Test 12: without a marker, a different-sessionId caller stays noop.
+# A live foreign holder — regardless of marker — is always noop for --release (#945).
+# This test confirms the no-marker path.
 
 echo "Test: --release with foreign holder and NO marker → noop (pre-marker stop path)"
 lock_setup
@@ -4335,8 +4338,8 @@ lock_teardown
 
 # --- Test 26: --release with MISMATCHED marker → noop (#928) -----------------
 #
-# Symmetry with Test 24: a lenient --release must not fire when the marker
-# names a session other than the recorded holder. The lock stays intact.
+# After #945 all foreign --release calls are noop; this test still passes because
+# the assertion (noop) now matches the unconditional foreign-holder policy.
 
 echo "Test: --release with mismatched marker → noop (#928)"
 lock_setup
@@ -4352,6 +4355,40 @@ assert_eq "mismatched --release prints noop" "noop" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
 assert_eq "mismatched --release leaves the lock file unchanged" \
   "sess-2626-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 27: mid-spawn-died holder (marker present, holder dead) → reclaim (#945)
+#
+# Crash-safety AC for #945: dispatch-materialize-spawn now holds the lock
+# through the spawn, so a router that dies mid-spawn leaves the lock recorded to
+# a now-dead session — with the tmp/dispatch-worktree marker already written by
+# dispatch-finalize-selection. The next tick's --wait must NOT wedge: the
+# dead-holder reclaim (recorded sessionId absent from `claude agents --json`)
+# frees the lock regardless of the marker. This is the load-bearing recovery
+# path; the marker-reclaim is belt-and-suspenders.
+echo "Test: mid-spawn-died holder (marker present, holder absent from registry) → reclaim (#945)"
+lock_setup
+printf '%s\n' "sess-2727-dead" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-2727-self"
+# The dead holder's marker is present and names it (finalize-selection ran
+# before the crash) — but the holder is gone from the registry.
+foreign_cwd="$TMPDIR_TEST/dead-holder-worktree"
+mkdir -p "$foreign_cwd/tmp"
+printf '%s\n' "sess-2727-dead" > "$foreign_cwd/tmp/dispatch-worktree"
+# Registry omits the dead holder; only the waiter's own session is live.
+lock_fake_claude_sessions "sess-2727-self=$TMPDIR_TEST"
+export DISPATCH_LOCK_WAIT_TIMEOUT=1
+export DISPATCH_LOCK_WAIT_INTERVAL=0.2
+if out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --wait 2>/dev/null); then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "mid-spawn-died reclaim exits 0" "0" "$rc"
+assert_eq "mid-spawn-died reclaim prints acquired (not busy)" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "mid-spawn-died reclaim rewrites lock to caller's sessionId" \
+  "sess-2727-self" "$lock_contents"
 lock_teardown
 
 # ============================================================================
@@ -8939,7 +8976,7 @@ export PATH="$SAVED_PATH"
 #   direnv allow "$WORKTREE_PATH"
 #   direnv exec "$WORKTREE_PATH" true
 #   (cd "$WORKTREE_PATH" && sync-issue-context <N>)
-#   dispatch-finalize-selection "$WORKTREE_PATH"   # cds in, writes marker, releases lock
+#   dispatch-finalize-selection "$WORKTREE_PATH"   # cds in, writes marker (no release — #945)
 #   dispatch-spawn-worker <N> "$WORKTREE_PATH"
 echo ""
 echo "=== /dispatch-propagate router smoke (Step 5 create + Step 6 spawn) ==="
@@ -9021,17 +9058,18 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
 # dispatch-finalize-selection wrapper's marker write succeed.
 mkdir -p "$WORKTREE_PATH"
 
-# Stub the router-cwd context so dispatch-finalize-selection's --release call
-# resolves a lock file we control rather than the real repo's lock, succeeds
-# strict-self-release (no foreign holder, no `claude agents --json` query),
-# and we can assert the regression: the marker does NOT land in the router's
-# starting cwd (the cwd-vs-target asymmetry that fixes #896).
+# Stub the router-cwd context so we control the lock file rather than the real
+# repo's lock, and we can assert the regression: the marker does NOT land in the
+# router's starting cwd (the cwd-vs-target asymmetry that fixes #896). Since
+# #945, dispatch-finalize-selection writes the marker but does NOT release the
+# lock — the caller holds it through the spawn — so we assert the lock is STILL
+# held after finalize.
 ROUTER_CWD="$TMPDIR_TEST/router-cwd"
 mkdir -p "$ROUTER_CWD"
 export DISPATCH_LOCK_FILE="$TMPDIR_TEST/dispatch.lock"
 export CLAUDE_CODE_SESSION_ID="router-smoke-session"
-# Pre-fill the lock with our own sessionId so `--release` is a strict self-
-# release (truncates the file and prints `released`).
+# Pre-fill the lock with our own sessionId; finalize-selection must leave it
+# untouched (#945).
 echo "$CLAUDE_CODE_SESSION_ID" > "$DISPATCH_LOCK_FILE"
 
 # cd into the router-equivalent cwd so the regression assertion below is
@@ -9065,9 +9103,9 @@ assert_eq "recovery marker created in target worktree" "1" \
 # router's starting cwd.
 assert_eq "no marker leaked into router cwd" "0" \
   "$([ -f "$ROUTER_CWD/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
-# The wrapper's exec dispatch-acquire-lock --release should have truncated
-# the lock file (strict self-release).
-assert_eq "lock released by finalize-selection" "" \
+# Since #945 the wrapper no longer releases the lock — it must remain held
+# (the caller releases after the worker registers).
+assert_eq "lock still held after finalize-selection (#945)" "$CLAUDE_CODE_SESSION_ID" \
   "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "sync-issue-context cwd + arg" \
   "cwd=$WORKTREE_PATH argv=839" \
@@ -9156,26 +9194,28 @@ handoff_teardown
 # dispatch-finalize-selection tests (#896)
 # ============================================================================
 # Pin the cd-first contract introduced for #896. The wrapper takes one
-# required <worktree-path> argument, cds into it, writes the
-# tmp/dispatch-worktree marker, then execs dispatch-acquire-lock --release.
-# The cd-first contract is what keeps the marker out of the router's cwd
-# (worktrees/main); the previous implementation wrote into PWD and leaked
-# the marker into the router's cwd, defeating the selection lock.
+# required <worktree-path> argument, cds into it, and writes the
+# tmp/dispatch-worktree marker. Since #945 it does NOT release the lock — the
+# caller (dispatch-materialize-spawn) holds it through the spawn and releases
+# after the worker registers. The cd-first contract is what keeps the marker
+# out of the router's cwd (worktrees/main); the previous implementation wrote
+# into PWD and leaked the marker into the router's cwd, defeating the selection
+# lock.
 echo ""
 echo "=== dispatch-finalize-selection ==="
 
 FINALIZE_SCRIPT="$SCRIPT_DIR/dispatch-finalize-selection"
 
 # ----- Test A (happy path / #896 regression) ---------------------------------
-echo "Test: dispatch-finalize-selection writes marker into target worktree, not caller's cwd, and releases the lock"
+echo "Test: dispatch-finalize-selection writes the marker into target worktree, not caller's cwd, and does NOT release the lock (#945)"
 lock_setup
 # Set up two distinct dirs: A (caller's cwd) and B (target worktree).
 ROUTER_CWD="$TMPDIR_TEST/A"
 TARGET_WT="$TMPDIR_TEST/B"
 mkdir -p "$ROUTER_CWD" "$TARGET_WT"
 export CLAUDE_CODE_SESSION_ID="finalize-self-session"
-# Pre-fill the lock with our own sessionId so the wrapper's --release is a
-# strict self-release: it truncates the file and prints `released`.
+# Pre-fill the lock with our own sessionId; since #945 the wrapper must leave
+# the lock untouched (no release).
 echo "$CLAUDE_CODE_SESSION_ID" > "$DISPATCH_LOCK_FILE"
 
 FIN_ORIG_PWD="$PWD"
@@ -9202,9 +9242,11 @@ assert_eq "happy path: marker content names the finalizing session" \
 # caller's cwd. This is the load-bearing assertion.
 assert_eq "happy path: no marker in caller cwd" "0" \
   "$([ -f "$ROUTER_CWD/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
-# Strict self-release truncates the lock file.
-assert_eq "happy path: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
-assert_eq "happy path: stdout reports released" "released" \
+# Since #945 the wrapper no longer releases the lock — it must remain held.
+assert_eq "happy path: lock still held (#945)" "$CLAUDE_CODE_SESSION_ID" \
+  "$(cat "$DISPATCH_LOCK_FILE")"
+# And it emits no `released` output (it no longer execs --release).
+assert_eq "happy path: stdout empty (no release output)" "" \
   "$(cat "$TMPDIR_TEST/finalize.out")"
 lock_teardown
 
@@ -11219,9 +11261,36 @@ assert_eq "queue happy: terminal token" "propagate" "$(printf '%s\n' "$out" | ta
 assert_eq "queue happy: spawn-worker called with issue + worktree" \
   "839 $TMPDIR_TEST/project/worktrees/839-test" \
   "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
-assert_eq "queue happy: lock released by finalize" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "queue happy: lock released after spawn" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "queue happy: marker written into target worktree" "1" \
   "$([ -f "$TMPDIR_TEST/project/worktrees/839-test/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- #945 boot-gap: propagate releases the lock ONLY after spawn -------------
+# The headline #945 assertion: the lock must be HELD while dispatch-spawn-worker
+# runs (i.e. through the worker's boot/registration) and released only after it
+# returns. Override the spawn-worker fake to snapshot the live lock contents at
+# spawn time, then assert the snapshot equals the held session id AND the final
+# lock file is empty (released after spawn).
+echo "Test: materialize-spawn holds the lock during spawn, releases after (#945)"
+mat_setup
+cat > "$TMPDIR_TEST/dispatch-spawn-worker" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/spawn-worker.log"
+# Snapshot the lock contents AT spawn time — this is the boot-gap window.
+cat "\$DISPATCH_LOCK_FILE" > "$TMPDIR_TEST/logs/lock-at-spawn.log"
+echo spawned
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-spawn-worker"
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "boot-gap: exit 0" "0" "$rc"
+assert_eq "boot-gap: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+# Lock was HELD during spawn (worker registers under <basename> in this window).
+assert_eq "boot-gap: lock held during spawn (== session id)" "mat-session" \
+  "$(cat "$TMPDIR_TEST/logs/lock-at-spawn.log")"
+# Lock released after the spawn returned.
+assert_eq "boot-gap: lock released after spawn" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
 # --- queue mode skips guards (CLOSED issue still proceeds) -------------------
@@ -11422,7 +11491,7 @@ assert_eq "ci-waiting: terminal token" "drain ci-waiting" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "ci-waiting: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
-assert_eq "ci-waiting: lock already released by finalize" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "ci-waiting: lock released at ci-waiting stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
 # --- concurrency cap → drain concurrency-cap, schedule-reseed called ---------
@@ -11437,6 +11506,8 @@ assert_eq "concurrency-cap: reseed scheduled" "called" \
   "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log")"
 assert_eq "concurrency-cap: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+# #945: the lock is released at the concurrency-cap stop (no worker spawned).
+assert_eq "concurrency-cap: lock released at cap stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
 # --- --bypass-cap skips the concurrency gate (spawns even over budget) -------
@@ -11472,9 +11543,9 @@ export MAT_SPAWN_RC=1
 out=$(run_mat 839 queue)
 assert_eq "spawn-failed: terminal token" "notify spawn-failed" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-# spawn-failed is post-finalize: dispatch-finalize-selection already released
-# the lock before the spawn attempt, so the lock must be empty here.
-assert_eq "spawn-failed: lock already released by finalize" "" \
+# #945: spawn-failed releases the lock after the failed spawn returns, so the
+# lock must be empty here.
+assert_eq "spawn-failed: lock released at spawn-failed stop" "" \
   "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
@@ -11491,18 +11562,30 @@ assert_eq "unexpected resolve-worktree → error + exit 2" "ok" "$status"
 assert_eq "unexpected resolve-worktree: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
-# --- usage errors → exit 2 ---------------------------------------------------
-echo "Test: materialize-spawn bad/missing args → exit 2"
+# --- usage errors → exit 2 + lock released -----------------------------------
+# A malformed call must release the lock, not just exit 2: the lock is acquired
+# by dispatch-select-tick in the same router session, so a usage error that left
+# it held would wedge every subsequent tick until self-healing reclaim. mat_setup
+# pre-fills the lock with our sessionId, so each assertion below confirms the
+# usage-error path empties it — matching every other internal exit-2 path.
+echo "Test: materialize-spawn bad/missing args → exit 2 + lock released"
 mat_setup
 err=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 bogus 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
 case "$err" in *"usage:"*"EXIT=2") s1=ok ;; *) s1="bad: $err" ;; esac
 assert_eq "bad mode → usage error, exit 2" "ok" "$s1"
+assert_eq "bad mode → lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+mat_setup
 err=$("$TMPDIR_TEST/dispatch-materialize-spawn" abc queue 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
 case "$err" in *"usage:"*"EXIT=2") s2=ok ;; *) s2="bad: $err" ;; esac
 assert_eq "non-numeric issue → usage error, exit 2" "ok" "$s2"
+assert_eq "non-numeric issue → lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+mat_setup
 err=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue --nope 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
 case "$err" in *"unexpected argument"*"EXIT=2") s3=ok ;; *) s3="bad: $err" ;; esac
 assert_eq "unexpected 3rd arg → usage error, exit 2" "ok" "$s3"
+assert_eq "unexpected 3rd arg → lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
 # --- create-path git worktree add failure → exit 2 + lock released -----------
