@@ -450,8 +450,10 @@ The three dispositions:
   entered — either a live session owns it, or the worktree's branch carries
   commits not on the PR head branch; see the `conflict` case in Step 5),
   `drain ci-waiting` (Step 6, the target PR's CI is still in progress —
-  `dispatch-phase` returned `waiting`; the chain re-evaluates the PR on the
-  next router tick), or `drain concurrency-cap` (Step 6, `live_count >=
+  `dispatch-phase` returned `waiting`; unlike `drain concurrency-cap` this
+  schedules no re-seed — the chain re-evaluates the PR on the next router tick
+  from an existing source: a worker's Stop hook, the #725 cap-keyed timer, or a
+  manual `/dispatch`), or `drain concurrency-cap` (Step 6, `live_count >=
   target_N` — the chain re-seeds when the cap-keyed timer fires at the next
   rate-limit window reset; see *The #725 cap-keyed re-seed* below). The call site has already printed a **mandatory** user-visible
   report stating the reason and the recovery path (templates live at the
