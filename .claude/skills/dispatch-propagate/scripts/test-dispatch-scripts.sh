@@ -1625,6 +1625,13 @@ printf '[{"number":999,"state":"open"}]\n' > "$STUB_DIR/blockers-100.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR closing a blocked issue skipped → next PR chosen" "pr 20 20-clear-pr verify" "$result"
+# Guard the batched path itself: blocker state must come from the single
+# `api graphql` call (#794), not the per-PR REST blocked_by round-trip. Without
+# this, a regression routing back through REST would still pass the skip
+# assertion above. The stub logs each graphql call to gh-graphql-calls.log.
+graphql_calls=0
+[[ -f "$STUB_DIR/gh-graphql-calls.log" ]] && graphql_calls=$(grep -c . "$STUB_DIR/gh-graphql-calls.log")
+assert_eq "blocker state fetched via batched graphql, not REST" "1" "$graphql_calls"
 teardown
 
 # 32. A PR whose closing issue is blocked only by an already-closed issue is
