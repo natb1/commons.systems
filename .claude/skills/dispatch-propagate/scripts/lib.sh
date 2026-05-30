@@ -136,6 +136,15 @@ get_worktree_id() {
   fi
 }
 
+# Print the project root (parent of git --git-common-dir) to stdout.
+# Returns non-zero if not in a git repo. Prints no error and does not exit —
+# the caller supplies its own message/cleanup via `|| { … }`.
+resolve_project_root() {
+  local common_dir
+  common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+  dirname "$common_dir"
+}
+
 # Return the project ID for Firebase emulators.
 # Appends worktree name to prevent hub file collisions across worktrees.
 get_emulator_project_id() {
