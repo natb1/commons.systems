@@ -84,12 +84,6 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 # unreadable — defensive against a packaging error breaking recovery.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 DISPATCH_SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
-# An office-hours-<N> session restores the /office-hours skill body, not a phase
-# skill — matched by session --name ahead of the phase routing so its plan-mode
-# paths (a plan accept inside /office-hours) resume /office-hours after a context
-# clear, regardless of the item's dispatch phase. Inert until #759 starts
-# office-hours-* sessions. ISSUE_NUM / WORKTREE_BASENAME already derived from the
-# branch above (the name does not match the ^[0-9]+- worker shape).
 if printf '%s\n' "$NAME" | grep -qE '^office-hours-[0-9]+$'; then
   SKILL_DIR_NAME="office-hours"
   SKILL_ARGS=""

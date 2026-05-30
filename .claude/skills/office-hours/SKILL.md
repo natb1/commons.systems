@@ -73,10 +73,10 @@ hand-off and no Stop-hook action — the Stop hook ignores non-`<N>-` session na
 
    - `implement` (no PR) → **plan-approval residue** (Step 2).
    - `qa` (draft PR, CI green, no `dispatch:qa-done`) → **QA residue** (Step 3).
-   - anything past `qa` (`code-review`, `review`, `security`, `done`) →
-     **deviation-review** (Step 4). The autonomous phase already ran; an
-     office-hours label this far along the ladder means a surfaced deviation, not
-     unfinished autonomous work.
+   - anything else (`verify`, `code-review`, `review`, `security`, `done`) →
+     **deviation-review** (Step 4). The autonomous phase already ran; the
+     office-hours label means a surfaced deviation or an unexpected input block
+     during an autonomous phase, not unfinished autonomous work.
 
 2. **Plan-approval residue (`implement`).**
 

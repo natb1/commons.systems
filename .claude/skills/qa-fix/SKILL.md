@@ -44,7 +44,7 @@ PR_NUM=$(echo "$PR_JSON" | jq -r .number)
 echo "$PR_JSON" | jq -r '.labels[].name'
 ```
 
-`PR_NUM` is carried through to Steps 6, 7, and the terminal disposition — do not
+`PR_NUM` is carried through to Steps 5, 6, and 7 — do not
 re-resolve. If the PR already carries the `dispatch:qa-done` label — an
 interrupted prior run — **skip Steps 0.5–7 entirely** and return; the label is
 this skill's terminal action and is already applied, so re-entry is a true no-op.
@@ -150,8 +150,8 @@ Otherwise run all steps in order.
 
       - **If the check fails** → a failed pre-QA acceptance check is a bug. A bug
         needs an in-session plan-mode fix, which is a user-input blocker. Record
-        it, finalize the QA session (post the Step 6 summary including the bug,
-        run cleanup Step 7), and escalate per the **Escalation** section.
+        it, finalize the QA session (post the Step 5 summary including the bug,
+        run cleanup Step 6), and escalate per the **Escalation** section.
       - **If the check passes** → continue to the walkthrough.
 
    d. **Walk through only the machine-verifiable QA-plan items via the Chrome
@@ -177,7 +177,7 @@ Otherwise run all steps in order.
             - 3 consecutive SKIPs → stop the walkthrough early.
             - Stay on the App URL domain — do not follow external links.
             - **On the first FAIL** → a bug. Stop the walkthrough, finalize the QA
-              session (Steps 6 and 7), and escalate per the **Escalation** section.
+              session (Steps 5 and 6), and escalate per the **Escalation** section.
       8. Stop GIF recording: `gif_creator` with `action: "stop_recording"`. Export to `tmp/qa-fix-walkthrough-<n>.gif` (where `<n>` is the Step-0-resolved issue number `<N>`).
       9. Write per-item results (PASS/FAIL/SKIP, console errors, network failures, deferred judgment items, summary counts) to `tmp/qa-fix-results-<n>.txt`.
 
@@ -191,7 +191,7 @@ Otherwise run all steps in order.
    - **Item needing a manual action this skill cannot script** → this is a
      needs-human-judgment item: record it as deferred-to-office-hours; do not
      prompt the user.
-   - **On the first FAIL** → a bug. Stop the walkthrough, finalize (Steps 6/7),
+   - **On the first FAIL** → a bug. Stop the walkthrough, finalize (Steps 5/6),
      and escalate per the **Escalation** section.
    - Otherwise continue to the next item.
 
