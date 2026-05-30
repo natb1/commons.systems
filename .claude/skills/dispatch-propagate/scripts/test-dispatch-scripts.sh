@@ -181,6 +181,32 @@ case "$args" in
       echo '{"closedByPullRequestsReferences":[]}'
     fi
     ;;
+  api\ graphql\ *)
+    # Batched blockedBy lookup for dispatch-select-target (#794). The query text
+    # arrives in $args as the -f query= value; extract each issue number and
+    # project the existing blockers-<num>.json fixture (default []) into the
+    # GraphQL alias shape _<num>: { number, blockedBy { nodes { state } } }. This
+    # reuses the same fixtures the REST blocked_by case serves, so the
+    # select-target blocked-skip tests pass via either delivery mechanism.
+    echo "api graphql" >> "$STUB_DIR/gh-graphql-calls.log"
+    nums=$(printf '%s' "$args" | grep -oE 'issue\(number: [0-9]+' | grep -oE '[0-9]+')
+    aliases="{}"
+    while IFS= read -r n; do
+      [[ -z "$n" ]] && continue
+      if [[ -f "$STUB_DIR/blockers-${n}.json" ]]; then
+        fixture=$(cat "$STUB_DIR/blockers-${n}.json")
+      else
+        fixture="[]"
+      fi
+      node=$(printf '%s' "$fixture" | jq -c '{nodes: [.[] | {state: .state}]}')
+      aliases=$(printf '%s' "$aliases" | jq -c --arg k "_${n}" --argjson num "$n" --argjson bb "$node" \
+        '.[$k] = {number: $num, blockedBy: $bb}')
+    done <<< "$nums"
+    printf '{"data":{"repository":%s}}\n' "$aliases"
+    ;;
+  "repo view --json nameWithOwner -q .nameWithOwner")
+    echo "natb1/commons.systems"
+    ;;
   api\ */dependencies/blocked_by)
     path=$(echo "$args" | awk '{print $2}')
     num=$(echo "$path" | grep -oE '[0-9]+' | tail -1)
@@ -1578,8 +1604,10 @@ teardown
 # dispatch-select-target skips a PR from every PR-ladder tier when any issue it
 # closes is blocked_by an open issue; a closing issue blocked only by
 # already-closed issues does not gate. The skip runs before FIRST_PR is
-# populated, so --qa mode inherits it. The gh stub serves
-# api */dependencies/blocked_by from blockers-<num>.json (default []).
+# populated, so --qa mode inherits it. For select-target the blocker state is
+# now served via the gh stub's `api graphql` case (#794), which projects the
+# same blockers-<num>.json fixtures into the batched blockedBy response; the REST
+# `api */dependencies/blocked_by` case remains for dispatch-check-blockers.
 
 # 31. A PR whose closing issue is blocked_by an open issue is skipped; the
 #     next eligible PR is selected.
@@ -1597,6 +1625,13 @@ printf '[{"number":999,"state":"open"}]\n' > "$STUB_DIR/blockers-100.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR closing a blocked issue skipped → next PR chosen" "pr 20 20-clear-pr verify" "$result"
+# Guard the batched path itself: blocker state must come from the single
+# `api graphql` call (#794), not the per-PR REST blocked_by round-trip. Without
+# this, a regression routing back through REST would still pass the skip
+# assertion above. The stub logs each graphql call to gh-graphql-calls.log.
+graphql_calls=0
+[[ -f "$STUB_DIR/gh-graphql-calls.log" ]] && graphql_calls=$(grep -c . "$STUB_DIR/gh-graphql-calls.log")
+assert_eq "blocker state fetched via batched graphql, not REST" "1" "$graphql_calls"
 teardown
 
 # 32. A PR whose closing issue is blocked only by an already-closed issue is
@@ -3090,6 +3125,52 @@ assert_eq "active_paths holds every full worktree path" \
 teardown
 
 # ============================================================================
+# resolve_project_root (lib.sh) tests
+# ============================================================================
+echo ""
+echo "=== resolve_project_root ==="
+
+# resolve_project_root calls `git rev-parse --path-format=absolute
+# --git-common-dir`, so each test creates a stub `git` in a temp bin dir
+# and exports it onto PATH before sourcing lib.sh in a subshell.
+
+# 1. git reports a .bare dir → resolve_project_root prints the parent (project root)
+#    and exits 0.
+echo "Test: git reports .bare dir → prints parent and exits 0"
+_rpr_stub=$(mktemp -d)
+cat > "$_rpr_stub/git" <<'GIT_STUB'
+#!/usr/bin/env bash
+case "$*" in
+  "rev-parse --path-format=absolute --git-common-dir") echo "/project/.bare" ;;
+  *) exit 1 ;;
+esac
+GIT_STUB
+chmod +x "$_rpr_stub/git"
+result=$(PATH="$_rpr_stub:$SAVED_PATH" bash -c '
+  source "'"$SCRIPT_DIR"'/lib.sh"
+  resolve_project_root
+')
+assert_eq "git reports .bare → prints project root" "/project" "$result"
+rm -rf "$_rpr_stub"
+
+# 2. git rev-parse exits non-zero (not in a git repo) → resolve_project_root
+#    returns non-zero and prints nothing to stdout.
+echo "Test: git rev-parse fails → non-zero return, no stdout"
+_rpr_stub=$(mktemp -d)
+cat > "$_rpr_stub/git" <<'GIT_STUB'
+#!/usr/bin/env bash
+exit 1
+GIT_STUB
+chmod +x "$_rpr_stub/git"
+if result=$(PATH="$_rpr_stub:$SAVED_PATH" bash -c '
+  source "'"$SCRIPT_DIR"'/lib.sh"
+  resolve_project_root
+'); then rc=0; else rc=$?; fi
+assert_eq "git rev-parse fails → non-zero return" "1" "$rc"
+assert_eq "git rev-parse fails → no stdout" "" "$result"
+rm -rf "$_rpr_stub"
+
+# ============================================================================
 # dispatch-sweep tests
 # ============================================================================
 echo ""
@@ -3126,6 +3207,9 @@ sweep_setup() {
            "$TMPDIR_TEST/project/tmp" "$TMPDIR_TEST/fake"
 
   cp "$SCRIPT_DIR/dispatch-sweep" "$TMPDIR_TEST/scripts/dispatch-sweep"
+  # dispatch-sweep sources lib.sh via its SCRIPT_DIR (the scripts/ copy) — so
+  # lib.sh must sit alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/scripts/lib-worktree-in-sync.sh"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
@@ -3605,6 +3689,9 @@ lock_setup() {
   mkdir -p "$STUB_DIR" "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/fake"
 
   cp "$SCRIPT_DIR/dispatch-acquire-lock" "$TMPDIR_TEST/scripts/dispatch-acquire-lock"
+  # dispatch-acquire-lock sources lib.sh via its SCRIPT_DIR — so lib.sh must
+  # sit alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-acquire-lock"
 
   export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
@@ -4720,6 +4807,9 @@ config_setup() {
   mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/config"
 
   cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  # dispatch-config-load sources lib.sh via its SCRIPT_DIR — so lib.sh must sit
+  # alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-config-load"
 
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
@@ -5141,6 +5231,9 @@ tw_setup() {
 
   cp "$SCRIPT_DIR/dispatch-target-workers" "$TMPDIR_TEST/scripts/dispatch-target-workers"
   cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  # dispatch-config-load sources lib.sh via its SCRIPT_DIR — so lib.sh must sit
+  # alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-target-workers" \
            "$TMPDIR_TEST/scripts/dispatch-config-load"
 
@@ -5628,6 +5721,10 @@ sr_setup() {
 
   cp "$SCRIPT_DIR/dispatch-schedule-reseed" "$TMPDIR_TEST/scripts/dispatch-schedule-reseed"
   cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  # dispatch-schedule-reseed and dispatch-config-load source lib.sh via their
+  # SCRIPT_DIR — so lib.sh must sit alongside them. Sourced, not executed — no
+  # chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-schedule-reseed" \
            "$TMPDIR_TEST/scripts/dispatch-config-load"
 
@@ -6096,6 +6193,9 @@ proj_setup() {
     "$TMPDIR_TEST/config"
 
   cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  # dispatch-config-load sources lib.sh via its SCRIPT_DIR — so lib.sh must sit
+  # alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   cp "$SCRIPT_DIR/dispatch-project-item-add" \
     "$TMPDIR_TEST/scripts/dispatch-project-item-add"
   cp "$SCRIPT_DIR/dispatch-project-status-read" \
@@ -6393,6 +6493,9 @@ spawn_router_setup() {
   # helper must sit alongside the copy. It is sourced, not executed — no chmod.
   cp "$SCRIPT_DIR/dispatch-spawn-router" "$TMPDIR_TEST/scripts/dispatch-spawn-router"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  # dispatch-spawn-router also sources lib.sh via its SCRIPT_DIR — so lib.sh
+  # must sit alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-router"
 
   SPAWN_ROUTER_REGISTRY="$TMPDIR_TEST/registry.json"
@@ -7118,6 +7221,10 @@ jit_setup() {
   cp "$SCRIPT_DIR/dispatch-jit-engine" "$TMPDIR_TEST/scripts/dispatch-jit-engine"
   cp "$SCRIPT_DIR/dispatch-config-load" \
     "$TMPDIR_TEST/scripts/dispatch-config-load"
+  # dispatch-jit-engine and dispatch-config-load source lib.sh via their
+  # SCRIPT_DIR — so lib.sh must sit alongside them. Sourced, not executed — no
+  # chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   cp "$SCRIPT_DIR/dispatch-project-item-add" \
     "$TMPDIR_TEST/scripts/dispatch-project-item-add"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-jit-engine" \
@@ -9827,6 +9934,10 @@ cal_setup() {
     "$TMPDIR_TEST/scripts/dispatch-jit-calendar-import"
   cp "$SCRIPT_DIR/dispatch-config-load" \
     "$TMPDIR_TEST/scripts/dispatch-config-load"
+  # dispatch-jit-calendar-import and dispatch-config-load source lib.sh via
+  # their SCRIPT_DIR — so lib.sh must sit alongside them. Sourced, not
+  # executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   cp "$SCRIPT_DIR/dispatch-project-item-add" \
     "$TMPDIR_TEST/scripts/dispatch-project-item-add"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-jit-calendar-import" \
@@ -10756,6 +10867,10 @@ sel_tick_setup() {
 
   cp "$SCRIPT_DIR/dispatch-select-tick" "$TMPDIR_TEST/dispatch-select-tick"
   cp "$SCRIPT_DIR/dispatch-acquire-lock" "$TMPDIR_TEST/dispatch-acquire-lock"
+  # dispatch-acquire-lock sources lib.sh via its SCRIPT_DIR, which resolves to
+  # TMPDIR_TEST for this copy — so lib.sh must sit alongside it. Sourced, not
+  # executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
   chmod +x "$TMPDIR_TEST/dispatch-select-tick" "$TMPDIR_TEST/dispatch-acquire-lock"
 
   export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
@@ -11019,6 +11134,10 @@ mat_setup() {
     cp "$SCRIPT_DIR/$s" "$TMPDIR_TEST/$s"
     chmod +x "$TMPDIR_TEST/$s"
   done
+  # dispatch-materialize-spawn and dispatch-acquire-lock source lib.sh via their
+  # SCRIPT_DIR, which resolves to TMPDIR_TEST for these copies — so lib.sh must
+  # sit alongside them. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
 
   # Real lock under our control; we hold it so finalize-selection / release do a
   # strict self-release.

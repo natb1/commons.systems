@@ -107,6 +107,8 @@
 # NOT set -e: exits are handled explicitly (matching the sibling dispatch-sweep).
 set -uo pipefail
 
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
 # ---- Step 0: parse the mode -------------------------------------------------
 # Done before any side effect so an unknown argument exits 2 cleanly: no lock
 # file resolved, no daemon queried, no file touched.
@@ -201,14 +203,13 @@ marker_names_holder() {
 # An explicit DISPATCH_LOCK_FILE is authoritative and bypasses the git lookup —
 # tests rely on this. Otherwise the lock lives at the shared project-root tmp/
 # (not a per-worktree tmp/) so concurrent ticks in different worktrees contend
-# on the same file. The parent of --git-common-dir is the project root in both
-# classic (.git) and bare (.bare) layouts, same idiom as dispatch-sweep.
+# on the same file. resolve_project_root (lib.sh) returns the project root in
+# both classic (.git) and bare (.bare) layouts.
 if [[ -n "${DISPATCH_LOCK_FILE:-}" ]]; then
   LOCK_FILE="$DISPATCH_LOCK_FILE"
 else
-  GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+  PROJECT_ROOT=$(resolve_project_root) \
     || { echo "ERROR: not in a git repo and DISPATCH_LOCK_FILE is unset" >&2; exit 2; }
-  PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
   LOCK_FILE="$PROJECT_ROOT/tmp/dispatch.lock"
 fi
 

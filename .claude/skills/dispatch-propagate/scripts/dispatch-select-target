@@ -373,6 +373,56 @@ ISSUE_LIST=$(gh issue list --state open --limit 300 --json number,createdAt,labe
 ISSUE_LABELS_JSON=$(printf '%s' "$ISSUE_LIST" \
   | jq -c 'reduce .[] as $i ({}; .[$i.number | tostring] = ($i.labels // []))')
 
+# Prefetch open-blocker state for every closing issue across all open PRs in a
+# single batched GraphQL call, replacing the former per-PR/per-closing-issue REST
+# round-trip (#794). GitHub exposes blockedBy on the Issue type as an
+# IssueConnection; open blockers are counted client-side by filtering state==OPEN.
+# Computing the union over ALL PRs (not just post-filter actionable ones) costs one
+# query regardless; a few unused map entries are negligible.
+CLOSING_NUMS=$(printf '%s' "$PR_LIST" \
+  | jq -r '[.[].closingIssuesReferences[]?.number] | unique | .[]')
+if [[ -z "$CLOSING_NUMS" ]]; then
+  BLOCKER_COUNTS='{}'
+else
+  # owner/repo for the GraphQL variables (same pattern as post-pr-comment.sh).
+  REPO_NWO=$(gh repo view --json nameWithOwner -q .nameWithOwner) || {
+    echo "error: dispatch-select-target: gh repo view failed" >&2
+    exit 1
+  }
+  REPO_OWNER="${REPO_NWO%%/*}"
+  REPO_NAME="${REPO_NWO##*/}"
+  # One alias per issue number: _<num>: issue(number: <num>) { ... }. Issue numbers
+  # are integers, so the alias name is a valid GraphQL name and there is no
+  # injection surface.
+  GQL_FIELDS=""
+  while IFS= read -r cnum; do
+    [[ -z "$cnum" ]] && continue
+    # Enforce the integers-only assumption rather than trusting it: a non-integer
+    # would be interpolated into the GraphQL query string unescaped.
+    [[ "$cnum" =~ ^[0-9]+$ ]] || {
+      echo "error: dispatch-select-target: non-integer closing issue number: $cnum" >&2
+      exit 1
+    }
+    GQL_FIELDS+="    _${cnum}: issue(number: ${cnum}) { number blockedBy(first: 50) { nodes { state } } }"$'\n'
+  done <<< "$CLOSING_NUMS"
+  GQL_QUERY="query(\$owner: String!, \$name: String!) {
+  repository(owner: \$owner, name: \$name) {
+${GQL_FIELDS}  }
+}"
+  BLOCKER_COUNTS=$(gh api graphql -F owner="$REPO_OWNER" -F name="$REPO_NAME" -f query="$GQL_QUERY" \
+    | jq -c '.data.repository
+             | to_entries
+             | map(select(.value != null)
+                   | {key: (.value.number|tostring),
+                      value: ([.value.blockedBy.nodes[]
+                               | select(.state=="OPEN" or .state=="open")]
+                              | length)})
+             | from_entries') || {
+    echo "error: dispatch-select-target: batched blockedBy GraphQL query failed" >&2
+    exit 1
+  }
+fi
+
 # Topic categories in priority order; "other" is the implicit fallback for any
 # label set with no topic label. A topic-category tier nests *outside* the
 # phase ladder, and a `priority` sub-axis nests *between* them: within each
@@ -454,21 +504,21 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
     continue
   fi
 
-  # Skip PRs gated by an open blocker. Placed after the done/waiting filter so
-  # PRs that would be discarded anyway don't pay the per-closing-issue gh-api
-  # round-trip, and before FIRST_PR is populated so --qa inherits the skip.
-  pr_blocked=false
-  while IFS= read -r closing_num; do
-    [[ -z "$closing_num" ]] && continue
-    open_blockers=$(count_open_blockers "$closing_num") || {
-      echo "error: dispatch-select-target: blocked_by lookup failed for issue #$closing_num" >&2
-      exit 1
-    }
-    if [[ "$open_blockers" -gt 0 ]]; then
-      pr_blocked=true
-      break
-    fi
-  done < <(printf '%s' "$pr_closing" | jq -r '.[].number')
+  # Skip PRs gated by an open blocker, using the prefetched BLOCKER_COUNTS map
+  # (#794) instead of a per-closing-issue REST round-trip. A PR is skipped if any
+  # issue it closes has >0 open blockers. Placed after the done/waiting filter so
+  # discarded PRs are never consulted, and before FIRST_PR is populated so --qa
+  # inherits the skip.
+  #
+  # A closing issue absent from the map (null in $blk) means its blockedBy state
+  # could not be resolved — e.g. the issue was deleted or made inaccessible
+  # between the PR-list fetch and the GraphQL call, so its alias came back null
+  # and was dropped. Treat unknown as blocked (fail closed) so a gated PR is
+  # never advanced on missing data.
+  pr_blocked=$(printf '%s' "$pr_closing" \
+    | jq -r --argjson blk "$BLOCKER_COUNTS" \
+      'if any(.[]; $blk[(.number|tostring)] as $c | $c == null or $c > 0)
+       then "true" else "false" end')
   [[ "$pr_blocked" == "true" ]] && continue
 
   # Record the oldest PR seen in this category+priority+phase. The :- guard
