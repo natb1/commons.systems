@@ -39,6 +39,9 @@
 # pre-finalize stop paths). `propagate` / `notify spawn-failed` /
 # `drain ci-waiting` / `drain concurrency-cap` are all reached AFTER
 # dispatch-finalize-selection has released the lock, so they do not re-release.
+# An internal `exit 2` failure before dispatch-finalize-selection (a hard
+# trace-leaf / check-blockers / resolve-worktree error) also releases the lock
+# so a stuck holder does not wedge the next tick.
 #
 # Requires `dangerouslyDisableSandbox: true` — sub-scripts call `gh`, query the
 # Claude daemon over a Unix socket, and write tmp state; `git worktree add` and
@@ -82,6 +85,15 @@ if [[ "$MODE" == "explicit" ]]; then
   if [[ -z "$PR" ]]; then
     if LEAF=$("$SCRIPT_DIR/dispatch-trace-leaf" "$N" explicit); then
       N="$LEAF"
+    else
+      # explicit-mode dispatch-trace-leaf exits non-zero only on a hard
+      # sibling-gh failure (its exit 1) — never "no work". Per its contract the
+      # caller must not swallow it and dispatch the un-traced N; release the
+      # lock and surface the error (mirrors dispatch-select-target's exit-1
+      # propagation in queue mode).
+      release_lock
+      echo "dispatch-materialize-spawn: dispatch-trace-leaf failed for #$N (explicit)" >&2
+      exit 2
     fi
   fi
 
@@ -107,6 +119,7 @@ if [[ "$MODE" == "explicit" ]]; then
       echo "notify target-blocked"
       exit 0
     fi
+    release_lock
     echo "dispatch-materialize-spawn: dispatch-check-blockers failed (exit $rc) for #$N" >&2
     exit 2
   fi
@@ -114,6 +127,7 @@ fi
 
 # --- Step 5: resolve the worktree --------------------------------------------
 WT_DECISION=$("$SCRIPT_DIR/dispatch-resolve-worktree" "$N" "$MODE") || {
+  release_lock
   echo "dispatch-materialize-spawn: dispatch-resolve-worktree failed for #$N ($MODE)" >&2
   exit 2
 }
@@ -142,6 +156,7 @@ case "$WT_ACTION" in
     exit 0
     ;;
   *)
+    release_lock
     echo "dispatch-materialize-spawn: dispatch-resolve-worktree emitted unexpected '$WT_DECISION'" >&2
     exit 2
     ;;

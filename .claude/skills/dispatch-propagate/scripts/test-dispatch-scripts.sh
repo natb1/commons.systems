@@ -10065,6 +10065,43 @@ assert_eq "explicit PR: spawn keyed on original 839" \
   "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
 mat_teardown
 
+# --- explicit trace-leaf hard failure → exit 2, lock released, no spawn -------
+# dispatch-trace-leaf's exit 1 is a hard sibling-gh failure the caller must NOT
+# swallow as "no work" (its documented contract). A swallowed failure would
+# dispatch the un-traced N; instead the script releases the lock and exits 2.
+echo "Test: materialize-spawn explicit trace-leaf hard failure → exit 2 + lock released"
+mat_setup
+cat > "$TMPDIR_TEST/dispatch-trace-leaf" <<'STUB'
+#!/usr/bin/env bash
+echo "trace-leaf gh failure" >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-trace-leaf"
+out=$(run_mat 839 explicit) && rc=0 || rc=$?
+assert_eq "trace-leaf fail: exit 2" "2" "$rc"
+assert_eq "trace-leaf fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "trace-leaf fail: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- resolve-worktree internal failure → exit 2, lock released, no spawn ------
+# An internal sub-script failure before dispatch-finalize-selection must release
+# the lock so a stuck holder does not wedge the next tick.
+echo "Test: materialize-spawn resolve-worktree failure → exit 2 + lock released"
+mat_setup
+cat > "$TMPDIR_TEST/dispatch-resolve-worktree" <<'STUB'
+#!/usr/bin/env bash
+echo "resolve-worktree gh failure" >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-resolve-worktree"
+out=$(run_mat 839 queue) && rc=0 || rc=$?
+assert_eq "resolve-wt fail: exit 2" "2" "$rc"
+assert_eq "resolve-wt fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "resolve-wt fail: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
 # --- enter path → sync-issue-context runs in the worktree --------------------
 echo "Test: materialize-spawn enter path syncs context + spawns"
 mat_setup
