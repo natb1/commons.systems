@@ -19,9 +19,10 @@
 # a parked item.
 #
 # Behavior, in order:
-#   1. Load tunables (target_weekly_usage_pct, target_five_hour_usage_pct)
+#   1. Load tunables (target_weekly_usage_pct, five_hour_target_floor_pct)
 #      from dispatch-config-load target-workers — same defaults as
-#      dispatch-target-workers.
+#      dispatch-target-workers. The 5h cap-hit threshold uses
+#      five_hour_target_floor_pct (the floor of the pace controller's 5h band).
 #   2. Read telemetry from rate_limits.json (or env overrides). Missing
 #      telemetry → no-op with stderr diagnostic (mirrors
 #      dispatch-target-workers's fallback). The signal is opt-in by
@@ -104,7 +105,7 @@ fi
 if [[ -n "$CONFIG_JSON" ]]; then
   val=$(jq -r '.target_weekly_usage_pct // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && TARGET_WEEKLY="$val"
-  val=$(jq -r '.target_five_hour_usage_pct // empty' <<<"$CONFIG_JSON")
+  val=$(jq -r '.five_hour_target_floor_pct // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && TARGET_5H="$val"
 fi
 

@@ -4719,15 +4719,21 @@ config_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
 {
   "target_weekly_usage_pct": 85,
-  "weekly_taper_window_pct": 40
+  "weekly_increment_cap_pct": 8,
+  "five_hour_target_floor_pct": 55,
+  "weekly_curve_power": 2
 }
 EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
 assert_eq "valid target-workers.json exits 0" "0" "$rc"
 tw_target=$(printf '%s' "$out" | jq -r '.target_weekly_usage_pct')
 assert_eq "valid target-workers.json target_weekly_usage_pct" "85" "$tw_target"
-tw_taper=$(printf '%s' "$out" | jq -r '.weekly_taper_window_pct')
-assert_eq "valid target-workers.json weekly_taper_window_pct" "40" "$tw_taper"
+tw_cap=$(printf '%s' "$out" | jq -r '.weekly_increment_cap_pct')
+assert_eq "valid target-workers.json weekly_increment_cap_pct" "8" "$tw_cap"
+tw_floor5=$(printf '%s' "$out" | jq -r '.five_hour_target_floor_pct')
+assert_eq "valid target-workers.json five_hour_target_floor_pct" "55" "$tw_floor5"
+tw_power=$(printf '%s' "$out" | jq -r '.weekly_curve_power')
+assert_eq "valid target-workers.json weekly_curve_power" "2" "$tw_power"
 config_teardown
 
 # --- Test 9: absent target-workers.json prints no-config and exits 0 --------
@@ -4770,40 +4776,72 @@ out_compact=$(printf '%s' "$out" | jq -c '.')
 assert_eq "empty object prints {}" "{}" "$out_compact"
 config_teardown
 
-# --- Test 12: weekly_taper_window_pct: 0 is rejected (must be > 0) ----------
+# --- Test 12: weekly_headroom_taper_pct: 0 is rejected (must be > 0) --------
 
-echo "Test: weekly_taper_window_pct: 0 exits 1 and stderr says must be > 0"
+echo "Test: weekly_headroom_taper_pct: 0 exits 1 and stderr says must be > 0"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"weekly_taper_window_pct": 0}
+{"weekly_headroom_taper_pct": 0}
 EOF
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
-assert_eq "weekly_taper_window_pct 0 exits 1" "1" "$rc"
+assert_eq "weekly_headroom_taper_pct 0 exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"weekly_taper_window_pct"* && "$err" == *"must be > 0"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: weekly_taper_window_pct 0 stderr says must be > 0"
+if [[ "$err" == *"weekly_headroom_taper_pct"* && "$err" == *"must be > 0"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_headroom_taper_pct 0 stderr says must be > 0"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_taper_window_pct 0 stderr says must be > 0"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_headroom_taper_pct 0 stderr says must be > 0"
   echo "    stderr: $err"
 fi
 config_teardown
 
-# --- Test 12b: weekly_taper_window_pct: 101 is rejected (must be <= 100) -----
+# --- Test 12b: five_hour_target_ceiling_pct: 101 rejected (must be <= 100) ---
 
-echo "Test: weekly_taper_window_pct: 101 exits 1 and stderr says must be <= 100"
+echo "Test: five_hour_target_ceiling_pct: 101 exits 1 and stderr says must be <= 100"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"weekly_taper_window_pct": 101}
+{"five_hour_target_ceiling_pct": 101}
 EOF
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
-assert_eq "weekly_taper_window_pct 101 exits 1" "1" "$rc"
+assert_eq "five_hour_target_ceiling_pct 101 exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"weekly_taper_window_pct"* && "$err" == *"<= 100"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: weekly_taper_window_pct 101 stderr says <= 100"
+if [[ "$err" == *"five_hour_target_ceiling_pct"* && "$err" == *"<= 100"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: five_hour_target_ceiling_pct 101 stderr says <= 100"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_taper_window_pct 101 stderr says <= 100"
+  FAIL=$((FAIL + 1)); echo "  FAIL: five_hour_target_ceiling_pct 101 stderr says <= 100"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 12c: weekly_curve_power: 200 accepted (no upper bound) ------------
+
+echo "Test: weekly_curve_power: 200 accepted (unbounded above)"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_curve_power": 200}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "weekly_curve_power 200 exits 0 (no upper bound)" "0" "$rc"
+tw_power=$(printf '%s' "$out" | jq -r '.weekly_curve_power')
+assert_eq "weekly_curve_power 200 preserved" "200" "$tw_power"
+config_teardown
+
+# --- Test 12d: weekly_curve_power: 0 rejected (must be > 0) -----------------
+
+echo "Test: weekly_curve_power: 0 exits 1 and stderr says must be > 0"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_curve_power": 0}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "weekly_curve_power 0 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"weekly_curve_power"* && "$err" == *"must be > 0"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_curve_power 0 stderr says must be > 0"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_curve_power 0 stderr says must be > 0"
   echo "    stderr: $err"
 fi
 config_teardown
@@ -4827,6 +4865,71 @@ else
 fi
 config_teardown
 
+# --- Test 13b: max_concurrent_workers: 200 accepted (no upper bound) --------
+
+echo "Test: max_concurrent_workers: 200 accepted (unbounded above)"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"max_concurrent_workers": 200}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "max_concurrent_workers 200 exits 0 (no upper bound)" "0" "$rc"
+config_teardown
+
+# --- Test 13c: weekly_increment_floor_pct > cap rejected (cross-field) -------
+
+echo "Test: weekly_increment_floor_pct > weekly_increment_cap_pct exits 1"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_increment_floor_pct": 20, "weekly_increment_cap_pct": 5}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "floor > cap exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"weekly_increment_floor_pct"* && "$err" == *"<= weekly_increment_cap_pct"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: floor > cap stderr names the ordering rule"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: floor > cap stderr names the ordering rule"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 13d: floor == cap accepted; only floor-alone (default cap) accepted -
+
+echo "Test: weekly_increment_floor_pct == cap accepted; floor alone accepted"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_increment_floor_pct": 5, "weekly_increment_cap_pct": 5}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "floor == cap exits 0" "0" "$rc"
+# Cross-check only fires when both are present: floor alone (cap defaulted) is
+# not flagged here, by design — the validator does not know the script default.
+echo '{"weekly_increment_floor_pct": 50}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "floor alone (cap absent) exits 0" "0" "$rc"
+config_teardown
+
+# --- Test 13e: five_hour_target_floor_pct > ceiling rejected (cross-field) ---
+
+echo "Test: five_hour_target_floor_pct > five_hour_target_ceiling_pct exits 1"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"five_hour_target_floor_pct": 80, "five_hour_target_ceiling_pct": 50}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "floor5 > ceil5 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"five_hour_target_floor_pct"* && "$err" == *"<= five_hour_target_ceiling_pct"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: floor5 > ceil5 stderr names the ordering rule"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: floor5 > ceil5 stderr names the ordering rule"
+  echo "    stderr: $err"
+fi
+config_teardown
+
 # ============================================================================
 # dispatch-target-workers tests
 # ============================================================================
@@ -4838,11 +4941,37 @@ config_teardown
 #
 # All telemetry inputs are env-overridable; tests rely on the overrides rather
 # than fixture files when shape matters more than the file path. The script
-# defaults are baked in (target_weekly=90, target_5h=50, max_workers=8,
-# weekly_taper_window=30, five_hour_taper_window=15); tests that vary tunables
-# write a target-workers.json into the config dir.
+# defaults are baked in (target_weekly=90, weekly_increment_floor=1,
+# weekly_increment_cap=10, weekly_curve_power=1, weekly_headroom_taper=20,
+# five_hour_target_floor=50, five_hour_target_ceiling=80,
+# five_hour_headroom_taper=15, max_workers=8); tests that vary tunables write a
+# target-workers.json into the config dir.
+#
+# The pace curve needs the elapsed fraction x of the weekly window. With
+# WEEK_SECONDS=604800, x = (WEEK_SECONDS - (resets_at_weekly - now)) /
+# WEEK_SECONDS. Tests place x precisely by fixing NOW and choosing resets_at so
+# remaining = resets_at - NOW lands at the desired fraction of WEEK_SECONDS:
+#   x=0.5  → remaining=302400 → resets_at = NOW + 302400
+#   x=0.25 → remaining=453600 → resets_at = NOW + 453600
+#   x=1.0  → remaining≈0      → resets_at = NOW + 1 (still > now so not the
+#                               "window already reset" path)
+# Verified canonical curve at defaults (target_weekly=90, T=34, p=1, end=4.294):
+#   W(0.25)=12, W(0.5)=31, W(0.75)=57, W(0.9)=75.96, W(1.0)=90.
 echo ""
 echo "=== dispatch-target-workers ==="
+
+# Helper: epoch math for placing x. WEEK_SECONDS=604800.
+TW_NOW=1000000
+# remaining for a target x: (1 - x) * WEEK_SECONDS.
+tw_resets_for_x() {
+  # $1 = x as a decimal; print resets_at = NOW + max(1, round((1-x)*604800)).
+  # The max(1,...) keeps remaining strictly positive at x=1.0 so Stage 1 does
+  # NOT take the "window already reset" (remaining<=0) early-exit; the curve
+  # then evaluates at x≈1.0 where W≈target_weekly. (At remaining=1 second,
+  # x = (604800-1)/604800 ≈ 0.9999983, so W is within ~0.0002% of W(1)=90.)
+  awk -v now="$TW_NOW" -v x="$1" '
+    BEGIN { rem = int((1 - x) * 604800 + 0.5); if (rem < 1) rem = 1; printf "%d\n", now + rem }'
+}
 
 tw_setup() {
   TMPDIR_TEST=$(mktemp -d)
@@ -4894,62 +5023,201 @@ write_rl() {
   export DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH="$path"
 }
 
-# --- Test 1: weekly usage over target → 0 -----------------------------------
+# --- Test 1: curve reaches target_weekly only at x=1 ------------------------
 
-echo "Test: weekly-over-target prints 0"
+echo "Test: weekly curve reaches target only at week end (W < target for x<1)"
 tw_setup
-# used_weekly=91, target_weekly=90 → weekly headroom=-1 → weekly ramp returns 0.
-# used_5h=0 → 5h ramp = max_workers=8. min(0,8)=0.
-export DISPATCH_TARGET_WORKERS_NOW=10000
-write_rl "rl.json" 91 99999999 0 99999999
-out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "weekly over target → 0" "0" "$out"
+# At x<1 the cumulative curve W is below target_weekly=90, so used_weekly just
+# under the curve value yields F>0/N>=1, while used_weekly just over the
+# week-end target only stays under-pace once x reaches 1. Probe by setting
+# used_weekly = 89 (just below the 90 terminal) at several x:
+#   x=0.5  → W=31  → used_weekly=89 is far ahead of pace → F=0 → N=0
+#   x=0.99 → W=88.5→ used_weekly=89 still ahead of pace  → F=0 → N=0
+#   x=1.0  → W=90  → used_weekly=89 → hw=1 → F>0 → N>=1   (only now under pace)
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+for spec in "0.5:0" "0.99:0" "1.0:ge1"; do
+  x="${spec%%:*}"; want="${spec##*:}"
+  r=$(tw_resets_for_x "$x")
+  write_rl "curve.json" 89 "$r" 0 99999999
+  result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+  if [[ "$want" == "ge1" ]]; then
+    TOTAL=$((TOTAL + 1))
+    if (( result >= 1 )); then
+      PASS=$((PASS + 1)); echo "  PASS: x=$x used_weekly=89 under pace → N=$result (>=1)"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: x=$x used_weekly=89 expected N>=1, got $result"
+    fi
+  else
+    assert_eq "curve x=$x used_weekly=89 ahead of pace → N=0" "$want" "$result"
+  fi
+done
 tw_teardown
 
-# --- Test 2: weekly comfortable headroom → max_workers ----------------------
+# --- Test 2: W matches the canonical curve at x=0.5 -------------------------
 
-echo "Test: weekly-comfortable-headroom prints max_workers"
+echo "Test: weekly curve value W(0.5)=31 gates F=0 at the boundary"
 tw_setup
-# used_weekly=10 → headroom=80 > taper=30 → weekly ramp = max_workers=8.
-# used_5h=0 → 5h ramp=8. min(8,8)=8.
-export DISPATCH_TARGET_WORKERS_NOW=10000
-write_rl "rl.json" 10 99999999 0 99999999
+# x=0.5 → W=31. used_weekly=31 → hw=0 → F=0 → N=0 (exactly at pace).
+# used_weekly=30 → hw=1 → F>0 → N>=1 (just under pace).
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 31 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "weekly comfortable headroom → 8" "8" "$out"
+assert_eq "W(0.5)=31; used_weekly=31 at pace → N=0" "0" "$out"
+write_rl "rl.json" 30 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: used_weekly=30 just under pace → N=$out (>=1)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: used_weekly=30 expected N>=1, got $out"
+fi
 tw_teardown
 
-# --- Test 3: 5h usage over target → 0 ---------------------------------------
+# --- Test 3: increment cap clamp lowers the terminal W(1) -------------------
 
-echo "Test: 5h-over-target prints 0"
+echo "Test: weekly_increment_cap_pct clamp makes W(1) < target_weekly"
 tw_setup
-# used_5h=51, target_5h=50 → 5h headroom=-1 → 5h ramp returns 0.
-# used_weekly=10 → weekly ramp = 8. min(8,0)=0.
-export DISPATCH_TARGET_WORKERS_NOW=10000
-write_rl "rl.json" 10 99999999 51 99999999
+# With cap=3: end = clamp(1+2*(90/34-1), .., 3) = 3, so W(1) = 34*(1*1 +
+# (3-1)*1/2) = 34*2 = 68 < target_weekly=90. At x=1, used_weekly=69 (> 68) is
+# ahead of the clamped pace → F=0 → N=0; used_weekly=67 (< 68) is under pace →
+# N>=1. This proves the cap hard-ceils the curve below target.
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_increment_cap_pct": 3}
+EOF
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 1.0)
+write_rl "rl.json" 69 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "5h over target → 0" "0" "$out"
+assert_eq "cap=3 → W(1)=68; used_weekly=69 ahead → N=0" "0" "$out"
+write_rl "rl.json" 67 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: cap=3 W(1)=68; used_weekly=67 under pace → N=$out (>=1)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cap=3 used_weekly=67 expected N>=1, got $out"
+fi
 tw_teardown
 
-# --- Test 4: both ramps in linear region → min picks the lower side ---------
+# --- Test 4: increment floor sets the early-week minimum --------------------
 
-echo "Test: both-in-linear-region picks min"
+echo "Test: weekly_increment_floor_pct sets the curve's early-week minimum"
 tw_setup
-# used_weekly=70 → weekly headroom=20, in taper region (< 30).
-#   raw = max(1, round(8 * 20/30)) = max(1, round(5.33)) = max(1, 5) = 5.
-# used_5h=35 → 5h headroom=15 == taper=15 → 5h ramp returns max_workers=8.
-# min(5,8)=5.
-export DISPATCH_TARGET_WORKERS_NOW=10000
-write_rl "rl.json" 70 99999999 35 99999999
+# Raising the floor lifts the early-week curve. With floor=5, cap=5: end =
+# clamp(1+2*(90/34-5)? no — end = floor + 2*(90/34 - floor) = 5 + 2*(2.647-5)
+# = 5 - 4.706 = 0.294, then clamped to <=cap=5 (stays 0.294). The increment
+# d(x) = floor + (end-floor)*x = 5 - 4.706*x stays near 5 early-week, so W
+# rises fast at first. W(0.25) = 34*(5*0.25 + (0.294-5)*0.0625/2) =
+# 34*(1.25 - 0.1471) = 34*1.1029 = 37.5. used_weekly=37 (< 37.5) under pace →
+# N>=1; used_weekly=38 (> 37.5) ahead → N=0. (Default floor=1 gives W(0.25)=12,
+# so the higher floor lifts early W from 12 to 37.5.)
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_increment_floor_pct": 5, "weekly_increment_cap_pct": 5}
+EOF
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.25)
+write_rl "rl.json" 37 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "weekly linear region → min(5,8)=5" "5" "$out"
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: floor=5 W(0.25)=37.5; used_weekly=37 under pace → N=$out"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: floor=5 used_weekly=37 expected N>=1, got $out"
+fi
+write_rl "rl.json" 38 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "floor=5 W(0.25)=37.5; used_weekly=38 ahead → N=0" "0" "$out"
 tw_teardown
 
-# --- Test 5: missing rate_limits.json file → 1 + stderr note ----------------
+# --- Test 5: remaining <= 0 (window already reset) prints 0 -----------------
+
+echo "Test: weekly window already reset (remaining<=0) prints 0"
+tw_setup
+# resets_at_weekly <= now → remaining<=0 → Stage 1 prints 0 and exits.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+write_rl "rl.json" 0 "$TW_NOW" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "remaining==0 → 0" "0" "$out"
+# Strictly negative remaining too.
+write_rl "rl.json" 0 $((TW_NOW - 100)) 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "remaining<0 → 0" "0" "$out"
+tw_teardown
+
+# --- Test 6: F = 0 when used_weekly >= W (ahead of pace) → N=0 --------------
+
+echo "Test: F=0 ahead-of-pace pause yields N=0 even with 5h headroom"
+tw_setup
+# x=0.5 → W=31. used_weekly=40 (>31) → hw<0 → F=0. used_5h=0 (full 5h
+# headroom) but h5 = 0 - 0 = 0 → N=0. The ahead-of-pace pause overrides 5h
+# headroom — this is the intentional early-week throttle.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 40 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "ahead of pace (used_weekly=40 > W=31) → F=0 → N=0" "0" "$out"
+tw_teardown
+
+# --- Test 7: F linear band floor5..ceil5 over weekly headroom Hw ------------
+
+echo "Test: F scales floor5..ceil5 over weekly headroom Hw (observed via N)"
+tw_setup
+# x=0.5 → W=31, defaults floor5=50, ceil5=80, Hw=20.
+#   used_weekly=11 → hw=20 (>=Hw) → F=80 (ceiling)
+#   used_weekly=21 → hw=10        → F=50+(30)*(10/20)=65
+#   used_weekly=26 → hw=5         → F=50+(30)*(5/20)=57.5
+#   used_weekly=31 → hw=0         → F=0
+# Observe F through N with used_5h chosen so N tracks the band. Hold used_5h=65:
+#   F=80   → h5=15 → N=clamp(round(8*15/15),1,8)=8
+#   F=65   → h5=0  → N=0
+#   F=57.5 → h5<0  → N=0
+# That only distinguishes ceiling vs below-65; to see the full F linear band,
+# read F at the ceiling boundary (hw>=Hw → F=80) vs interior (hw=15 → F=72.5):
+#   used_weekly=11 → hw=20 → F=80,   used_5h=72 → h5=8  → N=round(8*8/15)=4
+#   used_weekly=16 → hw=15 → F=72.5, used_5h=72 → h5=0.5→ N=round(8*.5/15)=1
+#   used_weekly=21 → hw=10 → F=65,   used_5h=72 → h5<0 → N=0
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 11 "$r" 72 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "F-band hw=20 → F=80, used_5h=72 → N=4" "4" "$out"
+write_rl "rl.json" 16 "$r" 72 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "F-band hw=15 → F=72.5, used_5h=72 → N=1" "1" "$out"
+write_rl "rl.json" 21 "$r" 72 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "F-band hw=10 → F=65, used_5h=72 ahead → N=0" "0" "$out"
+tw_teardown
+
+# --- Test 8: N=0 when used_5h >= F; floor(1)/ceiling(max) over H5 -----------
+
+echo "Test: N floor/ceiling over five_hour_headroom_taper, F held at 80"
+tw_setup
+# x=0.5, used_weekly=11 → hw=20 → F=80 (ceiling). H5=15, max_workers=8.
+# Sweep used_5h; h5 = 80 - used_5h:
+#   used_5h=80 → h5=0  → N=0          (at target)
+#   used_5h=79 → h5=1  → N=clamp(round(8*1/15),1,8)=1   (floor)
+#   used_5h=71 → h5=9  → N=round(8*9/15)=5
+#   used_5h=65 → h5=15 → N=8          (ceiling)
+#   used_5h=50 → h5=30 → N=8          (clamped at ceiling)
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+declare -A n_expected=([80]=0 [79]=1 [71]=5 [65]=8 [50]=8)
+for u5 in 80 79 71 65 50; do
+  write_rl "nsweep.json" 11 "$r" "$u5" 99999999
+  result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+  assert_eq "N-sweep F=80 used_5h=$u5 → ${n_expected[$u5]}" "${n_expected[$u5]}" "$result"
+done
+unset n_expected
+tw_teardown
+
+# --- Test 9: missing rate_limits.json file → 1 + stderr note ----------------
 
 echo "Test: missing-telemetry-fallback prints 1 with a stderr note"
 tw_setup
 # Default rate-limits path points at a non-existent file.
-export DISPATCH_TARGET_WORKERS_NOW=10000
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
 err=$(cat "$TMPDIR_TEST/stderr")
 assert_eq "missing rate_limits.json → 1" "1" "$out"
@@ -4962,252 +5230,124 @@ else
 fi
 tw_teardown
 
-# --- Test 6: only five_hour present → fallback (no weekly anchor) -----------
+# --- Test 10: only five_hour present → fallback (no weekly anchor) ----------
 
 echo "Test: missing-seven-day-fallback prints 1"
 tw_setup
-export DISPATCH_TARGET_WORKERS_NOW=10000
-# seven_day omitted.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+# seven_day omitted → no weekly anchor → fallback 1.
 write_rl "rl.json" absent absent 30 13600
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
 assert_eq "seven_day absent → fallback 1" "1" "$out"
 err=$(cat "$TMPDIR_TEST/stderr")
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"seven_day"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: seven_day-absent stderr names seven_day"
+if [[ "$err" == *"weekly anchor"* || "$err" == *"seven_day"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: seven_day-absent stderr names the weekly anchor"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: seven_day-absent stderr names seven_day"
+  FAIL=$((FAIL + 1)); echo "  FAIL: seven_day-absent stderr names the weekly anchor"
   echo "    stderr: $err"
 fi
 tw_teardown
 
-# --- Test 7: only seven_day present → 5h ramp skipped, weekly ramp applies --
+# --- Test 11: only seven_day present → 5h gate uses used_5h=0 ---------------
 
-echo "Test: missing-five-hour-skips-cap applies the weekly ramp"
+echo "Test: missing-five-hour treats used_5h=0; N scales from F alone"
 tw_setup
-# seven_day only: used_weekly=50 → headroom=40 > taper=30 → weekly ramp = 8.
-# 5h block absent → 5h ramp disabled → target_N = weekly ramp = 8.
-export DISPATCH_TARGET_WORKERS_NOW=10000
-write_rl "rl.json" 50 99999999 absent absent
+# seven_day only at x=0.5 (W=31): used_weekly=11 → hw=20 → F=80. 5h block absent
+# → used_5h treated as 0 → h5=80 → N=8.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 11 "$r" absent absent
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "five_hour absent; weekly ramp → 8" "8" "$out"
+assert_eq "five_hour absent; F=80 used_5h=0 → N=8" "8" "$out"
 tw_teardown
 
-# --- Test 8: comfortable headroom on both axes → max_workers ----------------
-
-echo "Test: comfortable-headroom-both-axes clamps to max_workers"
-tw_setup
-# used_weekly=10, used_5h=0: headroom comfortable on both axes → both ramps
-# saturate at max_workers=8 → target_N=8.
-export DISPATCH_TARGET_WORKERS_NOW=10000
-write_rl "rl.json" 10 99999999 0 99999999
-out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "comfortable headroom on both axes → 8" "8" "$out"
-tw_teardown
-
-# --- Test 9: weekly-headroom sweep over the boundary table ------------------
-
-echo "Test: weekly-headroom-sweep matches the boundary table"
-tw_setup
-# Walk used_weekly through the issue body's weekly boundary table values
-# (5h ramp held at 8 by used_5h=0):
-#   used_weekly=60 → target_N=8
-#   used_weekly=70 → target_N=5
-#   used_weekly=80 → target_N=3
-#   used_weekly=85 → target_N=1
-#   used_weekly=89 → target_N=1
-#   used_weekly=90 → target_N=1
-#   used_weekly=91 → target_N=0
-NOW=10000
-export DISPATCH_TARGET_WORKERS_NOW="$NOW"
-expected_for_60=8
-expected_for_70=5
-expected_for_80=3
-expected_for_85=1
-expected_for_89=1
-expected_for_90=1
-expected_for_91=0
-for used in 60 70 80 85 89 90 91; do
-  write_rl "sweep.json" "$used" 99999999 0 99999999
-  result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-  var="expected_for_$used"
-  expected="${!var}"
-  assert_eq "weekly-headroom-sweep used_weekly=$used → $expected" "$expected" "$result"
-done
-tw_teardown
-
-# --- Test 10: 5h-headroom sweep over the boundary table ---------------------
-
-echo "Test: 5h-headroom-sweep matches the boundary table"
-tw_setup
-# Walk used_5h through the 5h boundary table values (weekly ramp held at 8 by
-# used_weekly=0):
-#   used_5h=0  → target_N=8
-#   used_5h=35 → target_N=8
-#   used_5h=40 → target_N=5
-#   used_5h=45 → target_N=3
-#   used_5h=49 → target_N=1
-#   used_5h=50 → target_N=1
-#   used_5h=51 → target_N=0
-NOW=10000
-export DISPATCH_TARGET_WORKERS_NOW="$NOW"
-expected_for_0=8
-expected_for_35=8
-expected_for_40=5
-expected_for_45=3
-expected_for_49=1
-expected_for_50=1
-expected_for_51=0
-for used in 0 35 40 45 49 50 51; do
-  write_rl "cap-sweep.json" 0 99999999 "$used" 99999999
-  result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-  var="expected_for_$used"
-  expected="${!var}"
-  assert_eq "5h-headroom-sweep used_5h=$used → $expected" "$expected" "$result"
-done
-tw_teardown
-
-# --- Test 11: config tunable max_concurrent_workers raises the cap ---------
+# --- Test 12: config-file tunables are honored ------------------------------
 
 echo "Test: config max_concurrent_workers tunable raises the absolute cap"
 tw_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
 {"max_concurrent_workers": 16}
 EOF
-# Headroom comfortable on both axes → both ramps saturate at max_workers=16.
-export DISPATCH_TARGET_WORKERS_NOW=10000
-write_rl "rl.json" 10 99999999 0 99999999
+# x=0.5, used_weekly=11 → F=80, used_5h=0 → h5=80 → N=clamp(round(16*80/15),1,16)
+# = clamp(85,1,16) = 16.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 11 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "config max_concurrent_workers=16 → 16" "16" "$out"
 tw_teardown
 
-# --- Test 12: per-field env override wins over file ------------------------
+# --- Test 13: config five_hour_headroom_taper widens the N ramp -------------
+
+echo "Test: config five_hour_headroom_taper_pct scales the N ramp"
+tw_setup
+# H5=30 (default 15). x=0.5, used_weekly=11 → F=80, used_5h=72 → h5=8.
+# N=clamp(round(8*8/30),1,8)=clamp(round(2.13),1,8)=2 (vs N=4 at default H5=15).
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"five_hour_headroom_taper_pct": 30}
+EOF
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 11 "$r" 72 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "H5=30; F=80 used_5h=72 h5=8 → N=2" "2" "$out"
+tw_teardown
+
+# --- Test 14: per-field env override wins over file -------------------------
 
 echo "Test: per-field env override wins over rate_limits.json"
 tw_setup
-export DISPATCH_TARGET_WORKERS_NOW=10000
-# File says used_5h=99 (over target → 5h ramp returns 0); env override
-# replaces with used_5h=0 → 5h headroom=50 > taper=15 → 5h ramp = 8.
-# used_weekly=50 → weekly headroom=40 > taper=30 → weekly ramp = 8. min=8.
-write_rl "rl.json" 50 99999999 99 99999999
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+# File says used_5h=99 (over F → N=0); env override replaces with used_5h=0.
+# used_weekly=11 → F=80, used_5h=0 → h5=80 → N=8.
+write_rl "rl.json" 11 "$r" 99 99999999
 export DISPATCH_TARGET_WORKERS_USED_5H=0
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "env override replaces used_5h; both ramps saturate → 8" "8" "$out"
+assert_eq "env override replaces used_5h → N=8" "8" "$out"
 tw_teardown
 
-# --- Test 13: weekly_taper_window_pct=0 rejected; defaults used -------------
+# --- Test 15: per-field env override of resets_at_weekly places x -----------
 
-echo "Test: weekly_taper_window_pct=0 rejected by config validator; defaults used"
+echo "Test: per-field env override of resets_at_weekly drives the curve"
+tw_setup
+# File supplies used_weekly; env override supplies resets_at_weekly to place
+# x=0.5. used_weekly=31 = W(0.5) → at pace → F=0 → N=0.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+write_rl "rl.json" 31 99999999 0 99999999
+export DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY=$(tw_resets_for_x 0.5)
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "env resets override x=0.5; used_weekly=31 at pace → N=0" "0" "$out"
+tw_teardown
+
+# --- Test 16: rejected config field → defaults used -------------------------
+
+echo "Test: out-of-range config field rejected; baked-in defaults used"
 tw_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"weekly_taper_window_pct": 0}
+{"weekly_headroom_taper_pct": 0}
 EOF
-# weekly_taper_window_pct=0 is rejected by dispatch-config-load (must be > 0).
+# weekly_headroom_taper_pct=0 is rejected by dispatch-config-load (must be > 0).
 # dispatch-target-workers silently ignores a failed config-load and uses the
-# baked-in default weekly_taper_window=30. used_weekly=50 → headroom=40 >
-# taper=30 → weekly ramp = 8; used_5h=0 → 5h headroom=50 > taper=15 → 5h
-# ramp = 8. min(8,8)=8.
-export DISPATCH_TARGET_WORKERS_NOW=10000
-write_rl "rl.json" 50 99999999 0 99999999
+# baked-in defaults (Hw=20). x=0.5, used_weekly=11 → hw=20 → F=80, used_5h=0 →
+# N=8.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 11 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "weekly_taper_window_pct=0 rejected; defaults used → 8" "8" "$out"
+assert_eq "rejected config → defaults → N=8" "8" "$out"
 tw_teardown
 
-# --- Test 14: headroom == taper_window boundary returns max_workers ---------
-
-echo "Test: headroom == taper_window returns max_workers"
-tw_setup
-# used_weekly=60 → headroom=30 == default taper=30 → weekly ramp = max_workers.
-# used_5h=0 → 5h ramp = max_workers. min(8,8)=8.
-export DISPATCH_TARGET_WORKERS_NOW=10000
-write_rl "rl.json" 60 99999999 0 99999999
-out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "headroom == taper_window → max_workers (8)" "8" "$out"
-tw_teardown
-
-# --- Test 15: headroom == 0 floors to 1 on weekly axis ----------------------
-
-echo "Test: headroom == 0 floors to 1 on weekly axis"
-tw_setup
-# used_weekly=90 → headroom=0 → weekly ramp floors to 1.
-# used_5h=0 → 5h ramp = 8. min(1,8)=1.
-export DISPATCH_TARGET_WORKERS_NOW=10000
-write_rl "rl.json" 90 99999999 0 99999999
-out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "weekly headroom == 0 floors to 1" "1" "$out"
-tw_teardown
-
-# --- Test 16: headroom == 0 floors to 1 on 5h axis --------------------------
-
-echo "Test: headroom == 0 floors to 1 on 5h axis"
-tw_setup
-# used_weekly=0 → weekly ramp = 8.
-# used_5h=50 → headroom=0 → 5h ramp floors to 1. min(8,1)=1.
-export DISPATCH_TARGET_WORKERS_NOW=10000
-write_rl "rl.json" 0 99999999 50 99999999
-out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "5h headroom == 0 floors to 1" "1" "$out"
-tw_teardown
-
-# --- Test 17: headroom < 0 returns 0 on weekly axis -------------------------
-
-echo "Test: headroom < 0 returns 0 on weekly axis"
-tw_setup
-# used_weekly=91 → headroom=-1 → weekly ramp returns 0.
-# used_5h=0 → 5h ramp = 8. min(0,8)=0.
-export DISPATCH_TARGET_WORKERS_NOW=10000
-write_rl "rl.json" 91 99999999 0 99999999
-out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "weekly headroom < 0 → 0" "0" "$out"
-tw_teardown
-
-# --- Test 18: headroom < 0 returns 0 on 5h axis -----------------------------
-
-echo "Test: headroom < 0 returns 0 on 5h axis"
-tw_setup
-# used_weekly=0 → weekly ramp = 8.
-# used_5h=51 → headroom=-1 → 5h ramp returns 0. min(8,0)=0.
-export DISPATCH_TARGET_WORKERS_NOW=10000
-write_rl "rl.json" 0 99999999 51 99999999
-out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "5h headroom < 0 → 0" "0" "$out"
-tw_teardown
-
-# --- Test 19: min-combination picks the lower side --------------------------
-
-echo "Test: min-combination picks the lower side"
-tw_setup
-# used_weekly=83 → headroom=7, raw weekly = max(1, round(8*7/30))
-#                                       = max(1, round(1.867)) = max(1, 2) = 2.
-# used_5h=49    → headroom=1, raw 5h = max(1, round(8*1/15))
-#                                       = max(1, round(0.533)) = max(1, 1) = 1.
-# min(2,1)=1.
-export DISPATCH_TARGET_WORKERS_NOW=10000
-write_rl "rl.json" 83 99999999 49 99999999
-out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "min(2,1) → 1" "1" "$out"
-tw_teardown
-
-# --- Test 20: real-world AC smoke at defaults -------------------------------
-
-echo "Test: real-world AC smoke at defaults"
-tw_setup
-# Issue's stated end-to-end AC: at used_weekly=20, used_5h=2, both ramps
-# saturate at max_workers=8 → target_N=8.
-export DISPATCH_TARGET_WORKERS_NOW=10000
-write_rl "rl.json" 20 99999999 2 99999999
-out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "AC smoke used_weekly=20, used_5h=2 → 8" "8" "$out"
-tw_teardown
-
-# --- Test 21: non-numeric telemetry is sanitized fail-closed ----------------
+# --- Test 17: non-numeric used_weekly sanitized fail-closed → 1 -------------
 
 echo "Test: non-numeric used_weekly is treated as missing → conservative fallback"
 tw_setup
-# A corrupt/tampered used_weekly ("abc") must NOT coerce to 0 and spawn at the
-# cap. It is sanitized to missing, dropping the weekly anchor → fallback 1.
-export DISPATCH_TARGET_WORKERS_NOW=10000
+# A corrupt/tampered used_weekly ("abc") must NOT coerce to 0. It is sanitized
+# to missing, dropping the weekly anchor → fallback 1.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 export DISPATCH_TARGET_WORKERS_USED_WEEKLY=abc
+export DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY=$(tw_resets_for_x 0.5)
 export DISPATCH_TARGET_WORKERS_USED_5H=2
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
 assert_eq "non-numeric used_weekly → fallback 1 (not max_workers)" "1" "$out"
@@ -5218,6 +5358,83 @@ if [[ "$err" == *"non-numeric value"* && "$err" == *"WEEKLY_USED"* ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: non-numeric used_weekly stderr names the field"
   echo "    stderr: $err"
+fi
+tw_teardown
+
+# --- Test 18: non-integer NOW sanitized → weekly anchor missing → 1 ---------
+
+echo "Test: non-integer NOW drops the weekly anchor → fallback 1"
+tw_setup
+# A malformed NOW must not let awk coerce garbage; the weekly anchor is dropped
+# and the script falls back to 1.
+export DISPATCH_TARGET_WORKERS_NOW="not-a-number"
+write_rl "rl.json" 11 99999999 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "non-integer NOW → fallback 1" "1" "$out"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"NOW"* && "$err" == *"non-integer"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-integer NOW stderr names NOW"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-integer NOW stderr names NOW"
+  echo "    stderr: $err"
+fi
+tw_teardown
+
+# --- Test 19: non-numeric resets_at_weekly → weekly anchor missing → 1 ------
+
+echo "Test: non-numeric resets_at_weekly drops the weekly anchor → fallback 1"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+export DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY="garbage"
+export DISPATCH_TARGET_WORKERS_USED_WEEKLY=11
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "non-numeric resets_at_weekly → fallback 1" "1" "$out"
+tw_teardown
+
+# --- Test 20: weekly_curve_power back-loads the curve (p=2) -----------------
+
+echo "Test: weekly_curve_power=2 back-loads spend (lower W early-week)"
+tw_setup
+# With p=2: end = 1 + 3*(90/34 - 1) = 1 + 3*1.647 = 5.941 (< cap 10).
+# W(x) = 34*(1*x + (5.941-1)*x^3/3). At x=0.5:
+#   W = 34*(0.5 + 4.941*0.125/3) = 34*(0.5 + 0.2059) = 34*0.7059 = 24.0.
+# Lower than the p=1 W(0.5)=31 — back-loaded. used_weekly=23 (<24) under pace →
+# N>=1; used_weekly=25 (>24) ahead → N=0.
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_curve_power": 2}
+EOF
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 23 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: p=2 W(0.5)=24; used_weekly=23 under pace → N=$out"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: p=2 used_weekly=23 expected N>=1, got $out"
+fi
+write_rl "rl.json" 25 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "p=2 W(0.5)=24; used_weekly=25 ahead → N=0" "0" "$out"
+tw_teardown
+
+# --- Test 21: end-to-end AC smoke — early-week no stall ---------------------
+
+echo "Test: early-week AC smoke used_weekly=20, used_5h=2 → N>=1 (no stall)"
+tw_setup
+# Issue AC: at x≈0.5 (mid-week) with used_weekly=20, used_5h=2, the chain must
+# not stall. x=0.5 → W=31, hw=11 → F=50+(30)*(11/20)=66.5, h5=66.5-2=64.5 →
+# N=clamp(round(8*64.5/15),1,8)=8 (>=1).
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 20 "$r" 2 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: early-week smoke used_weekly=20 used_5h=2 → N=$out (>=1)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: early-week smoke expected N>=1, got $out"
 fi
 tw_teardown
 
