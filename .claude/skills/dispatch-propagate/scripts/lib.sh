@@ -114,26 +114,7 @@ ensure_deps() {
   if [ ! -d "$REPO_ROOT/node_modules" ]; then
     (
       cd "$REPO_ROOT"
-      export npm_config_fetch_retries=5
-      export npm_config_fetch_retry_mintimeout=20000
-      export npm_config_fetch_retry_maxtimeout=120000
-      export npm_config_fetch_timeout=600000
-      attempt=1
-      while [ "$attempt" -le 3 ]; do
-        if [ "$attempt" -gt 1 ]; then
-          echo "ensure_deps: npm ci attempt $attempt/3" >&2
-        fi
-        if npm ci; then
-          exit 0
-        fi
-        case "$attempt" in
-          1) sleep 5 ;;
-          2) sleep 15 ;;
-        esac
-        attempt=$((attempt + 1))
-      done
-      echo "ensure_deps: npm ci failed after 3 attempts" >&2
-      exit 1
+      "$(dirname "${BASH_SOURCE[0]}")/npm-ci-with-retry.sh"
     )
   fi
 }
