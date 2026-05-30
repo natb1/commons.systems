@@ -2628,17 +2628,44 @@ branch refs/heads/42-my-feature
 
 '
 
-# 1. explicit mode + an existing <N>-* worktree → enter <path>.
-echo "Test: explicit + existing <N>-* worktree → enter"
+# 1. explicit mode + an existing <N>-* worktree + no live session → enter <path>.
+#    The liveness check is mode-independent (#837); a sessionless worktree
+#    recycles after completion.
+echo "Test: explicit + sessionless <N>-* worktree → enter"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # orphan world: no live sessions
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
-assert_eq "explicit + existing worktree → enter <path>" \
+assert_eq "explicit + sessionless worktree → enter <path>" \
   "enter /worktrees/42-my-feature" "$result"
 teardown
 
-# 3. queue mode + a live-session-owned worktree → conflict <path>. Acceptance
-#    criterion 3: same target, explicit → enter, queue (live) → conflict.
+# 2. explicit mode + a live-session-owned worktree → conflict <path> (#837). The
+#    recycle path no longer fires into a worktree whose previous worker is live.
+echo "Test: explicit + live-session <N>-* worktree → conflict"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "42-my-feature"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "explicit + live-session worktree → conflict <path>" \
+  "conflict /worktrees/42-my-feature" "$result"
+teardown
+
+# 2b. explicit mode + an UNKNOWN daemon (claude unqueryable) → conflict <path>.
+#     worktree_has_live_session folds UNKNOWN into occupied, so explicit resolve
+#     fails safe to conflict, exactly as queue mode does (3c).
+echo "Test: explicit + unqueryable daemon → conflict (fail-safe)"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+# setup's default CLAUDE_AGENTS_CMD points at a non-existent binary (UNKNOWN).
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "explicit + unqueryable daemon → conflict <path>" \
+  "conflict /worktrees/42-my-feature" "$result"
+teardown
+
+# 3. queue mode + a live-session-owned worktree → conflict <path>. The liveness
+#    check is mode-independent (#837): both modes yield conflict for a live
+#    session — see test 2 for the explicit-mode counterpart.
 echo "Test: queue + live-session <N>-* worktree → conflict"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
@@ -2719,6 +2746,7 @@ teardown
 echo "Test: explicit from issue-branch cwd with matching worktree → enter (not here)"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # sessionless so the #837 liveness check proceeds to enter
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "explicit from issue-branch cwd, matching worktree → enter (not here)" \
   "enter /worktrees/42-my-feature" "$result"
@@ -2781,6 +2809,7 @@ teardown
 echo "Test: reconcile wrong branch (no unique commits) → re-point + enter"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
 echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
@@ -2794,6 +2823,7 @@ teardown
 echo "Test: worktree already on PR branch → enter, no checkout"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-my-feature"}]\n' > "$STUB_DIR/pr-list-full.json"
 echo '{"headRefName":"42-my-feature"}' > "$STUB_DIR/pr-headref-100.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
@@ -2806,6 +2836,7 @@ teardown
 echo "Test: reconcile wrong branch (unique commits) → conflict"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # sessionless: conflict here is from unique commits, not liveness (#837)
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
 echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
 echo "2" > "$STUB_DIR/rev-list-count.txt"
@@ -2821,6 +2852,7 @@ teardown
 echo "Test: no PR → enter unchanged (no pr view, no checkout)"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 # No pr-list-full.json: dispatch-find-pr finds no PR.
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "no PR → enter" "enter /worktrees/42-my-feature" "$result"
@@ -2869,6 +2901,7 @@ teardown
 echo "Test: PR + empty headRefName → error (no silent enter, no checkout)"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
 echo '{"headRefName":""}' > "$STUB_DIR/pr-headref-100.json"
 if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null); then rc=0; else rc=$?; fi
@@ -2882,6 +2915,7 @@ teardown
 echo "Test: PR + injection-shaped headRefName → error (no checkout)"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
 echo '{"headRefName":"--upload-pack=evil"}' > "$STUB_DIR/pr-headref-100.json"
 if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null); then rc=0; else rc=$?; fi
