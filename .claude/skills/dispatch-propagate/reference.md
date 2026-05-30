@@ -255,6 +255,19 @@ accelerates toward the end). `weekly_increment_cap_pct` hard-caps any single
 is acceptable. Raise `max_concurrent_workers` for more parallelism when
 headroom is comfortable.
 
+Keep `weekly_increment_floor_pct <= target_weekly_usage_pct / T` (with `T=34`
+five-hour windows, i.e. `target_weekly_usage_pct >= 34 * floor`). Below that the
+solved increment `end` falls under `floor`, inverting `d(x)` into a *decreasing*
+per-window allocation — the curve still terminates correctly at
+`target_weekly_usage_pct`, but it front-loads spend instead of pacing it. So if
+you lower `target_weekly_usage_pct` substantially, lower
+`weekly_increment_floor_pct` to match. Likewise keep
+`weekly_increment_cap_pct >= weekly_increment_floor_pct`: an inverted floor/cap
+clamps the terminal `W(1)` below `target_weekly_usage_pct`. The config validator
+only cross-checks floor vs. cap when both appear in the same config file, so a
+floor raised against the baked-in cap default passes validation but still
+clamps.
+
 **Missing-telemetry fallback.** When
 `~/.local/share/productivity-tui/rate_limits.json` is missing or unreadable,
 or the `seven_day` block is absent (missing `used_weekly` or `resets_at_weekly`,
