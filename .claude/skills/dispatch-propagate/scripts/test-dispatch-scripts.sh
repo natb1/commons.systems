@@ -2460,6 +2460,25 @@ esac
 assert_eq "queue: all children live-owned → exit 2 with stderr message" "ok" "$status"
 teardown
 
+# 12d. Queue mode: a child with two <N>-* worktrees — one orphan, one live —
+#      is skipped (any live match counts as owned), exercising the multi-path
+#      branch of child_has_live_worktree's loop (#914).
+echo "Test: queue mode → child with orphan+live worktrees is skipped (multi-path)"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+# 701 has two worktrees: 701-feature (orphan) and 701-other (live-owned).
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\nworktree /worktrees/701-other\nHEAD def457\nbranch refs/heads/701-other\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# Only 701-other is live; 701-feature is an orphan. Any live match → 701 skipped.
+select_target_fake_claude "701-other"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: child with one live worktree among many skipped → sibling 702" "702" "$result"
+teardown
+
 # 13. issue-blocking failure → hard error (exit 1), never emits N as a leaf.
 echo "Test: issue-blocking failure → exit 1, no leaf emitted"
 setup
