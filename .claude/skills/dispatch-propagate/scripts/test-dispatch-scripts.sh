@@ -3175,6 +3175,52 @@ assert_eq "active_paths holds every full worktree path" \
 teardown
 
 # ============================================================================
+# resolve_project_root (lib.sh) tests
+# ============================================================================
+echo ""
+echo "=== resolve_project_root ==="
+
+# resolve_project_root calls `git rev-parse --path-format=absolute
+# --git-common-dir`, so each test creates a stub `git` in a temp bin dir
+# and exports it onto PATH before sourcing lib.sh in a subshell.
+
+# 1. git reports a .bare dir → resolve_project_root prints the parent (project root)
+#    and exits 0.
+echo "Test: git reports .bare dir → prints parent and exits 0"
+_rpr_stub=$(mktemp -d)
+cat > "$_rpr_stub/git" <<'GIT_STUB'
+#!/usr/bin/env bash
+case "$*" in
+  "rev-parse --path-format=absolute --git-common-dir") echo "/project/.bare" ;;
+  *) exit 1 ;;
+esac
+GIT_STUB
+chmod +x "$_rpr_stub/git"
+result=$(PATH="$_rpr_stub:$SAVED_PATH" bash -c '
+  source "'"$SCRIPT_DIR"'/lib.sh"
+  resolve_project_root
+')
+assert_eq "git reports .bare → prints project root" "/project" "$result"
+rm -rf "$_rpr_stub"
+
+# 2. git rev-parse exits non-zero (not in a git repo) → resolve_project_root
+#    returns non-zero and prints nothing to stdout.
+echo "Test: git rev-parse fails → non-zero return, no stdout"
+_rpr_stub=$(mktemp -d)
+cat > "$_rpr_stub/git" <<'GIT_STUB'
+#!/usr/bin/env bash
+exit 1
+GIT_STUB
+chmod +x "$_rpr_stub/git"
+if result=$(PATH="$_rpr_stub:$SAVED_PATH" bash -c '
+  source "'"$SCRIPT_DIR"'/lib.sh"
+  resolve_project_root
+'); then rc=0; else rc=$?; fi
+assert_eq "git rev-parse fails → non-zero return" "1" "$rc"
+assert_eq "git rev-parse fails → no stdout" "" "$result"
+rm -rf "$_rpr_stub"
+
+# ============================================================================
 # dispatch-sweep tests
 # ============================================================================
 echo ""
@@ -3211,6 +3257,9 @@ sweep_setup() {
            "$TMPDIR_TEST/project/tmp" "$TMPDIR_TEST/fake"
 
   cp "$SCRIPT_DIR/dispatch-sweep" "$TMPDIR_TEST/scripts/dispatch-sweep"
+  # dispatch-sweep sources lib.sh via its SCRIPT_DIR (the scripts/ copy) — so
+  # lib.sh must sit alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/scripts/lib-worktree-in-sync.sh"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
@@ -3690,6 +3739,9 @@ lock_setup() {
   mkdir -p "$STUB_DIR" "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/fake"
 
   cp "$SCRIPT_DIR/dispatch-acquire-lock" "$TMPDIR_TEST/scripts/dispatch-acquire-lock"
+  # dispatch-acquire-lock sources lib.sh via its SCRIPT_DIR — so lib.sh must
+  # sit alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-acquire-lock"
 
   export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
@@ -4768,6 +4820,9 @@ config_setup() {
   mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/config"
 
   cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  # dispatch-config-load sources lib.sh via its SCRIPT_DIR — so lib.sh must sit
+  # alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-config-load"
 
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
@@ -5189,6 +5244,9 @@ tw_setup() {
 
   cp "$SCRIPT_DIR/dispatch-target-workers" "$TMPDIR_TEST/scripts/dispatch-target-workers"
   cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  # dispatch-config-load sources lib.sh via its SCRIPT_DIR — so lib.sh must sit
+  # alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-target-workers" \
            "$TMPDIR_TEST/scripts/dispatch-config-load"
 
@@ -5676,6 +5734,10 @@ sr_setup() {
 
   cp "$SCRIPT_DIR/dispatch-schedule-reseed" "$TMPDIR_TEST/scripts/dispatch-schedule-reseed"
   cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  # dispatch-schedule-reseed and dispatch-config-load source lib.sh via their
+  # SCRIPT_DIR — so lib.sh must sit alongside them. Sourced, not executed — no
+  # chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-schedule-reseed" \
            "$TMPDIR_TEST/scripts/dispatch-config-load"
 
@@ -6144,6 +6206,9 @@ proj_setup() {
     "$TMPDIR_TEST/config"
 
   cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  # dispatch-config-load sources lib.sh via its SCRIPT_DIR — so lib.sh must sit
+  # alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   cp "$SCRIPT_DIR/dispatch-project-item-add" \
     "$TMPDIR_TEST/scripts/dispatch-project-item-add"
   cp "$SCRIPT_DIR/dispatch-project-status-read" \
@@ -6441,6 +6506,9 @@ spawn_router_setup() {
   # helper must sit alongside the copy. It is sourced, not executed — no chmod.
   cp "$SCRIPT_DIR/dispatch-spawn-router" "$TMPDIR_TEST/scripts/dispatch-spawn-router"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  # dispatch-spawn-router also sources lib.sh via its SCRIPT_DIR — so lib.sh
+  # must sit alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-router"
 
   SPAWN_ROUTER_REGISTRY="$TMPDIR_TEST/registry.json"
@@ -7166,6 +7234,10 @@ jit_setup() {
   cp "$SCRIPT_DIR/dispatch-jit-engine" "$TMPDIR_TEST/scripts/dispatch-jit-engine"
   cp "$SCRIPT_DIR/dispatch-config-load" \
     "$TMPDIR_TEST/scripts/dispatch-config-load"
+  # dispatch-jit-engine and dispatch-config-load source lib.sh via their
+  # SCRIPT_DIR — so lib.sh must sit alongside them. Sourced, not executed — no
+  # chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   cp "$SCRIPT_DIR/dispatch-project-item-add" \
     "$TMPDIR_TEST/scripts/dispatch-project-item-add"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-jit-engine" \
@@ -9909,6 +9981,10 @@ cal_setup() {
     "$TMPDIR_TEST/scripts/dispatch-jit-calendar-import"
   cp "$SCRIPT_DIR/dispatch-config-load" \
     "$TMPDIR_TEST/scripts/dispatch-config-load"
+  # dispatch-jit-calendar-import and dispatch-config-load source lib.sh via
+  # their SCRIPT_DIR — so lib.sh must sit alongside them. Sourced, not
+  # executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   cp "$SCRIPT_DIR/dispatch-project-item-add" \
     "$TMPDIR_TEST/scripts/dispatch-project-item-add"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-jit-calendar-import" \
@@ -10838,6 +10914,10 @@ sel_tick_setup() {
 
   cp "$SCRIPT_DIR/dispatch-select-tick" "$TMPDIR_TEST/dispatch-select-tick"
   cp "$SCRIPT_DIR/dispatch-acquire-lock" "$TMPDIR_TEST/dispatch-acquire-lock"
+  # dispatch-acquire-lock sources lib.sh via its SCRIPT_DIR, which resolves to
+  # TMPDIR_TEST for this copy — so lib.sh must sit alongside it. Sourced, not
+  # executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
   chmod +x "$TMPDIR_TEST/dispatch-select-tick" "$TMPDIR_TEST/dispatch-acquire-lock"
 
   export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
@@ -11101,6 +11181,10 @@ mat_setup() {
     cp "$SCRIPT_DIR/$s" "$TMPDIR_TEST/$s"
     chmod +x "$TMPDIR_TEST/$s"
   done
+  # dispatch-materialize-spawn and dispatch-acquire-lock source lib.sh via their
+  # SCRIPT_DIR, which resolves to TMPDIR_TEST for these copies — so lib.sh must
+  # sit alongside them. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
 
   # Real lock under our control; we hold it so finalize-selection / release do a
   # strict self-release.

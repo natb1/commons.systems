@@ -76,21 +76,20 @@ export CLAUDE_AGENTS_CMD="$CLAUDE_CMD"
 SESSION_ID="${DISPATCH_SPAWN_ROUTER_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 
 # Every /dispatch-propagate job is started from the main worktree, so that is the cwd of
 # a spawned successor and the path the dedup/verify queries filter on. An
 # explicit DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE is authoritative and bypasses the git
-# lookup — tests rely on this. Otherwise the parent of --git-common-dir is the
-# project root in both classic (.git) and bare (.bare) layouts, same idiom as
-# dispatch-acquire-lock / dispatch-sweep.
+# lookup — tests rely on this. Otherwise resolve_project_root (lib.sh) returns the
+# project root in both classic (.git) and bare (.bare) layouts.
 if [[ -n "${DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE:-}" ]]; then
   MAIN_WORKTREE="$DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE"
 else
-  GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+  PROJECT_ROOT=$(resolve_project_root) \
     || { echo "dispatch-spawn-router: not in a git repo and DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE is unset" >&2; exit 2; }
-  PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
   MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
 fi
 

@@ -10,7 +10,7 @@
 #   dispatch-config-load <projects|jit|target-workers>
 #
 # Config files live in <project-root>/dispatch.config/. The project root is
-# the parent of git --git-common-dir (same idiom as dispatch-acquire-lock).
+# resolved via resolve_project_root (lib.sh).
 #
 # Stdout protocol:
 #   <normalized JSON>   file present and valid — prints jq-normalized JSON.
@@ -123,6 +123,8 @@
 #   }
 set -euo pipefail
 
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
 # ---- Step 0: parse arguments ------------------------------------------------
 
 CONFIG_TYPE="${1:-}"
@@ -138,14 +140,13 @@ esac
 # An explicit DISPATCH_CONFIG_DIR is authoritative and bypasses the git lookup —
 # tests rely on this. Otherwise the config lives at the shared project-root
 # dispatch.config/ (not a per-worktree path) so all worktrees share one config.
-# The parent of --git-common-dir is the project root in both classic (.git) and
-# bare (.bare) layouts, same idiom as dispatch-acquire-lock.
+# resolve_project_root (lib.sh) returns the project root in both classic (.git)
+# and bare (.bare) layouts.
 if [[ -n "${DISPATCH_CONFIG_DIR:-}" ]]; then
   CONFIG_DIR="$DISPATCH_CONFIG_DIR"
 else
-  GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+  PROJECT_ROOT=$(resolve_project_root) \
     || { echo "error: not in a git repo and DISPATCH_CONFIG_DIR is unset" >&2; exit 2; }
-  PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
   CONFIG_DIR="$PROJECT_ROOT/dispatch.config"
 fi
 
