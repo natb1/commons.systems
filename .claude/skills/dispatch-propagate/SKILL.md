@@ -159,9 +159,13 @@ but do not stop; continue to target selection.
 
   Route on `$SELECTED`:
 
-  - `pr <num> <branch> <phase>` — a PR to work on; `<phase>` is pre-derived by
-    the selection scan, so Step 6 reuses it instead of re-deriving. Proceed to
-    Step 5 with mode `queue`.
+  - `pr <num> <branch> <phase>` — a PR to work on; `<num>` is the **PR** number
+    and `<phase>` is pre-derived by the selection scan, so Step 6 reuses it
+    instead of re-deriving. The worktree-resolution key is the **issue** the PR
+    closes, not the PR number: set `N=${branch%%-*}` (the branch's `<issue>-`
+    prefix, mirroring `dispatch-select-target`'s own `${pr_branch%%-*}`) and use
+    that `N` — never the PR `<num>` — for Steps 5 and 6. Proceed to Step 5 with
+    mode `queue`.
   - `issue <num>` — a `help wanted` issue to implement, pre-resolved by the
     selection scan to a startable open leaf (not necessarily the top-level
     `help wanted` issue). Proceed to Step 5 with mode `queue`.
@@ -208,17 +212,31 @@ Skip leaf tracing when:
   **Do not infer PR existence from title search or other ad-hoc `gh` queries** —
   `dispatch-find-pr` is the only correct check (see Step 5).
 
-If the resolved target issue `<N>` has any **open** blocker — run
-`issue-blocking <N>` and check for any entry with `state` `OPEN` — release the
-lock (see *Releasing the lock*), report the open blocker, park the issue with
+Check the resolved target issue `<N>` for open blockers
+(`dangerouslyDisableSandbox: true` — the script calls `gh`):
 
 ```bash
-.claude/skills/dispatch-propagate/scripts/dispatch-apply-office-hours <N> "target has an open blocker"
+.claude/skills/dispatch-propagate/scripts/dispatch-check-blockers <N>
 ```
 
-(see *Applying `dispatch:office-hours`* below), then proceed to Step 7 with
-`notify target-blocked`. This guard applies even when a PR exists; closed
-blockers do not gate.
+Route on its exit code:
+
+- **Exit 0** (no output) — no open blockers. Continue.
+- **Exit 2** (prints `blocked:<num>[,<num>…]`) — the target has open blockers.
+  Release the lock (see *Releasing the lock*), report the listed blocker(s),
+  park the issue with
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-apply-office-hours <N> "target has an open blocker"
+  ```
+
+  (see *Applying `dispatch:office-hours`* below), then proceed to Step 7 with
+  `notify target-blocked`.
+
+This guard applies even when a PR exists; closed blockers do not gate.
+`dispatch-check-blockers` routes through `count_open_blockers` — the same helper
+the queue path (`dispatch-select-target`) uses — so the explicit and queue paths
+agree on what counts as "blocked".
 
 If a named target issue is **closed**, release the lock (see *Releasing the
 lock*), report it, park the issue with
@@ -250,6 +268,11 @@ an explicit `/dispatch-propagate` argument, otherwise `queue`:
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-resolve-worktree <N> <explicit|queue>
 ```
+
+Here `<N>` is always the **issue** number, never a PR number. For a `pr` row it
+is the branch-prefix `N` set in Step 3, not the row's PR `<num>`;
+`dispatch-resolve-worktree` rejects a PR number with a clear error rather than
+fabricate a stray `<pr-num>-*` worktree from `origin/main` (#926).
 
 It prints exactly one decision line — act on it. Each branch resolves a
 worktree path that Step 6 passes to `dispatch-spawn-worker`.

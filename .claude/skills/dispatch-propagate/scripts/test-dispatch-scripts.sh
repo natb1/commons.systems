@@ -52,6 +52,7 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-resolve-arg" "$TMPDIR_TEST/dispatch-resolve-arg"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
+  cp "$SCRIPT_DIR/dispatch-check-blockers" "$TMPDIR_TEST/dispatch-check-blockers"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   cp "$SCRIPT_DIR/dispatch-apply-office-hours" "$TMPDIR_TEST/dispatch-apply-office-hours"
   cp "$SCRIPT_DIR/dispatch-resolve-worktree" "$TMPDIR_TEST/dispatch-resolve-worktree"
@@ -74,6 +75,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
+           "$TMPDIR_TEST/dispatch-check-blockers" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
            "$TMPDIR_TEST/dispatch-apply-office-hours" \
            "$TMPDIR_TEST/dispatch-resolve-worktree" \
@@ -182,6 +184,14 @@ case "$args" in
   api\ */dependencies/blocked_by)
     path=$(echo "$args" | awk '{print $2}')
     num=$(echo "$path" | grep -oE '[0-9]+' | tail -1)
+    # Failure injection: a marker file models a transient gh API failure on this
+    # issue's blocked_by lookup (mirrors the issue-blocking fake's contract), so
+    # count_open_blockers callers (e.g. dispatch-check-blockers) can exercise the
+    # gh_api_array failure path.
+    if [[ -f "$STUB_DIR/gh-fail-blocked_by-${num}" ]]; then
+      echo "gh: API error on issues/${num}/dependencies/blocked_by" >&2
+      exit 1
+    fi
     if [[ -f "$STUB_DIR/blockers-${num}.json" ]]; then
       cat "$STUB_DIR/blockers-${num}.json"
     else
@@ -2878,6 +2888,62 @@ if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null); t
 assert_eq "PR + injection-shaped headRefName → exit 1" "1" "$rc"
 checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
 assert_eq "PR + injection-shaped headRefName → no checkout" "no" "$checkout_logged"
+teardown
+
+# ----------------------------------------------------------------------------
+# PR-number-as-issue-key rejection (#926). The REST issues endpoint serves PRs
+# too; a PR's JSON carries a "pull_request" key (the same discriminator
+# dispatch-resolve-arg uses). A PR number passed as the issue key must be
+# rejected up front — never slugged into a stray <pr-num>-* worktree. The #922
+# scenario: PR 922 lives on branch 918-dispatch-move and closes issue 918, so
+# PR number and closing-issue number differ.
+# ----------------------------------------------------------------------------
+
+# 19a. PR number passed as the issue key → reject before the create-path slug.
+#      arg-issue-922.json carries "pull_request"; an issue-title-922.json is also
+#      seeded so the test proves the guard fires *before* the create path (no
+#      decision line despite a usable title fixture).
+echo "Test: PR number as issue key → reject (no stray <pr-num>-* worktree)"
+setup
+echo '{"number":922,"pull_request":{"url":"https://api.github.com/repos/o/r/pulls/922"}}' \
+  > "$STUB_DIR/arg-issue-922.json"
+echo '{"title":"some pr title"}' > "$STUB_DIR/issue-title-922.json"
+if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 922 queue 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "PR number as issue key → exit 1" "1" "$rc"
+assert_eq "PR number as issue key → no decision line" "" "$result"
+teardown
+
+# 19b. The PR's closing-issue number (918) resolves the real <issue>-* worktree.
+#      arg-issue-918.json has NO "pull_request" key, so the guard is skipped; the
+#      orphan 918-dispatch-move worktree is entered (PR 922's headRefName matches
+#      the worktree branch, so reconciliation is a no-op).
+echo "Test: PR closing-issue number → enter the real <issue>-* worktree"
+setup
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/918-dispatch-move\nHEAD def456\nbranch refs/heads/918-dispatch-move\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # orphan: no live session owns the worktree
+echo '{"number":918}' > "$STUB_DIR/arg-issue-918.json"
+printf '[{"number":922,"headRefName":"918-dispatch-move"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"918-dispatch-move"}' > "$STUB_DIR/pr-headref-922.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 918 queue)
+assert_eq "PR closing-issue number → enter real worktree" \
+  "enter /worktrees/918-dispatch-move" "$result"
+teardown
+
+# 19c. PR number passed as issue key with a stale <pr-num>-* worktree on disk.
+#      The guard fires BEFORE the worktree scan, so the stale 922-* worktree is
+#      never entered — this is the main correctness rationale for placing the guard
+#      before the scan rather than only before the create path.
+echo "Test: PR number as issue key + stale stray worktree → reject (no enter)"
+setup
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/922-stray\nHEAD fff999\nbranch refs/heads/922-stray\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+echo '{"number":922,"pull_request":{"url":"https://api.github.com/repos/o/r/pulls/922"}}' \
+  > "$STUB_DIR/arg-issue-922.json"
+select_target_fake_claude   # orphan: no live session (liveness is irrelevant — guard fires first)
+if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 922 queue 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "PR number + stale stray worktree → exit 1" "1" "$rc"
+assert_eq "PR number + stale stray worktree → no decision line" "" "$result"
 teardown
 
 # ============================================================================
@@ -9408,6 +9474,79 @@ for relpath in "${!CHAIN_GUARD_EXPECTED[@]}"; do
   assert_eq "chain-guard: $relpath: EnterWorktree/ExitWorktree count" \
     "$expected" "$actual"
 done
+
+# ============================================================================
+# dispatch-check-blockers tests
+# ============================================================================
+echo ""
+echo "=== dispatch-check-blockers ==="
+
+# No open blockers (no fixture → stub returns []) → exit 0, no output.
+echo "Test: no blockers → exit 0, silent"
+setup
+stdout=$("$TMPDIR_TEST/dispatch-check-blockers" 100 2>/dev/null) && rc=0 || rc=$?
+assert_eq "no blockers → exit 0" "0" "$rc"
+assert_eq "no blockers → no output" "" "$stdout"
+teardown
+
+# Only closed blockers do not gate → exit 0, no output.
+echo "Test: closed-only blockers → exit 0, silent"
+setup
+printf '[{"number":888,"state":"closed"}]\n' > "$STUB_DIR/blockers-100.json"
+stdout=$("$TMPDIR_TEST/dispatch-check-blockers" 100 2>/dev/null) && rc=0 || rc=$?
+assert_eq "closed-only blockers → exit 0" "0" "$rc"
+assert_eq "closed-only blockers → no output" "" "$stdout"
+teardown
+
+# One open blocker → exit 2, prints blocked:<num>.
+echo "Test: one open blocker → exit 2, blocked:<num>"
+setup
+printf '[{"number":999,"state":"open"}]\n' > "$STUB_DIR/blockers-100.json"
+stdout=$("$TMPDIR_TEST/dispatch-check-blockers" 100 2>/dev/null) && rc=0 || rc=$?
+assert_eq "one open blocker → exit 2" "2" "$rc"
+assert_eq "one open blocker → blocked:999" "blocked:999" "$stdout"
+teardown
+
+# Multiple open blockers → exit 2, comma-joined numbers; closed ones excluded.
+echo "Test: mixed blockers → exit 2, only open numbers"
+setup
+printf '[{"number":999,"state":"open"},{"number":888,"state":"closed"},{"number":777,"state":"OPEN"}]\n' \
+  > "$STUB_DIR/blockers-100.json"
+stdout=$("$TMPDIR_TEST/dispatch-check-blockers" 100 2>/dev/null) && rc=0 || rc=$?
+assert_eq "mixed blockers → exit 2" "2" "$rc"
+assert_eq "mixed blockers → blocked:999,777" "blocked:999,777" "$stdout"
+teardown
+
+# Missing arg → usage error on stderr, exit 1.
+echo "Test: missing arg → usage error, exit 1"
+setup
+err_out=$("$TMPDIR_TEST/dispatch-check-blockers" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"usage:"*"EXIT=1") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "missing arg → usage error, exit 1" "ok" "$status"
+teardown
+
+# Non-numeric arg → usage error, exit 1.
+echo "Test: non-numeric arg → usage error, exit 1"
+setup
+err_out=$("$TMPDIR_TEST/dispatch-check-blockers" abc 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"usage:"*"EXIT=1") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "non-numeric arg → usage error, exit 1" "ok" "$status"
+teardown
+
+# gh failure on the blocked_by lookup → hard error (exit 1), never a false "clear".
+echo "Test: gh blocked_by failure → exit 1"
+setup
+: > "$STUB_DIR/gh-fail-blocked_by-100"
+stdout=$("$TMPDIR_TEST/dispatch-check-blockers" 100 2>/dev/null) && rc=0 || rc=$?
+assert_eq "gh blocked_by failure → exit 1" "1" "$rc"
+assert_eq "gh blocked_by failure → no output" "" "$stdout"
+teardown
 
 # ============================================================================
 # summary
