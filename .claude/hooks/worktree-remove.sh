@@ -2,8 +2,9 @@
 # WorktreeRemove hook: tear down a worktree created by worktree-create.sh.
 # Symmetric with WorktreeCreate (which performs creation); this performs removal.
 #
-# Removes the worktree ONLY if "in sync": clean working tree AND all commits
-# pushed. Otherwise the worktree is kept. No PR-state check.
+# Removes the worktree ONLY if "in sync" (clean working tree AND all commits
+# pushed) AND no live Claude session is running in it. Otherwise the worktree
+# is kept. No PR-state check.
 #
 # CONTRACT: WorktreeRemove has no decision control — exit code and stdout are
 # ignored, failures surface only in debug mode. A broken hook fails SILENTLY,
@@ -17,8 +18,10 @@ err() { log "ERROR: $*"; }
 trap 'err "unexpected error on line $LINENO (exit $?)"; exit 0' ERR
 trap 'exit 0' EXIT
 
-# shellcheck source=../skills/dispatch/scripts/lib-worktree-in-sync.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../skills/dispatch/scripts/lib-worktree-in-sync.sh"
+# shellcheck source=../skills/dispatch-propagate/scripts/lib-worktree-in-sync.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../skills/dispatch-propagate/scripts/lib-worktree-in-sync.sh"
+# shellcheck source=../skills/dispatch-propagate/scripts/lib-claude-agents.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../skills/dispatch-propagate/scripts/lib-claude-agents.sh"
 
 PAYLOAD=$(cat 2>/dev/null) || PAYLOAD=""
 log "raw payload: ${PAYLOAD:-<empty>}"   # first real fire reveals the schema
@@ -72,8 +75,14 @@ done <<<"$WT_LIST"
 # In-sync check — any error or ambiguity => keep.
 if ! worktree_in_sync "$CANON" "$LOG_FILE"; then exit 0; fi
 
-# In sync — remove (plain, not --force: clean check passed; let git's own
-# safety net catch anything missed).
+# Live-session guard — occupied or unknown => keep.
+if worktree_has_live_session "$CANON"; then
+  log "KEEP: '$CANON' has a live Claude session"
+  exit 0
+fi
+
+# In sync, no live session — remove (plain, not --force: clean check passed;
+# let git's own safety net catch anything missed).
 log "IN SYNC: removing '$CANON'"
 if git worktree remove "$CANON" 2>>"$LOG_FILE"; then
   git worktree prune 2>/dev/null || true

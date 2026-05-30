@@ -52,7 +52,7 @@
 #                           the engine's own directory.
 #
 # Dependency: invokes the `gh` CLI directly. Per .claude/rules/sandbox.md the
-# caller (the /dispatch SKILL step) must wrap this script with
+# caller (the /dispatch-propagate SKILL step) must wrap this script with
 # dangerouslyDisableSandbox — gh's TLS validation is blocked by the sandbox.
 # This script sets nothing sandbox-related; that is the caller's responsibility.
 #

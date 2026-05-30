@@ -1,42 +1,29 @@
 # commons.systems: Nate's Agentic Coding Workflow
 
-This repository serves as a monorepo for Nate's agentic coding workflows and proof-of-concept (POC) applications. This is built to my own specification and it is not intended to be a platform or a distributed library. This can be used as a reference for bootstrapping your own agentic coding workflow.
-
-- [commons.systems](https://commons.systems): More info about this project.
-- [budget.commons.systems](https://budget.commons.systems): Personal finance demo.
-- [print.commons.systems](https://print.commons.systems): Print media reader and library.
+A reference workflow for individual practitioners who want to fork and adapt an agentic coding setup for their own projects. Built to Nate's own specification — not a platform, not a library. The dispatch queue runs autonomously; the office hours queue handles human-driven work. Fork it, argue with it, discard the parts that don't serve you.
 
 ## Table of Contents
 
-- [Pre-requisites](#pre-requisites)
 - [Design Principles](#design-principles)
 - [Agentic Coding Workflow](#agentic-coding-workflow)
-  - [Cross Cutting Artifacts](#cross-cutting-artifacts)
   - [PR Control Flow](#pr-control-flow)
+  - [Two queues, two control paths](#two-queues-two-control-paths)
+  - [Dispatch Queue](#dispatch-queue)
+  - [Office Hours Queue](#office-hours-queue)
+  - [Key design decisions for adopters](#key-design-decisions-for-adopters)
 - [CI/CD](#cicd)
+- [Pre-requisites](#pre-requisites)
+- [Where to go next](#where-to-go-next)
 - [Usage and Contributing](#usage-and-contributing)
-
-## Pre-requisites
-
-- **Project Management** (github): Created a [project](https://github.com/users/natb1/projects/2).
-- **Version Control** (git): Created a repo.
-- **Agentic Coding Tools** (Claude Code): `nix flake update && home-manager switch --flake .#default --impure`
-- **Infrastructure** (Firebase): Hosting and storage.
 
 ## Design Principles
 
-- Agentic patterns for both augmented and delegated coding workflows.
-- Augmented workflows focus on requirements management and design, while delegated workflows focus on implementation.
-- Delegated workflows have well defined break points for human quality control (QC).
+- Work flows through two queues: the **dispatch queue** (autonomous, runs unattended) and the **office hours queue** (human-driven, for requirement changes and judgment calls).
+- Delegated workflows have well-defined break points for human quality control (QC).
 - Prefer [skills](https://code.claude.com/docs/en/skills) over other agentic artifacts (system instructions, hooks, sub-agents, agent teams, etc.) due to portability and ease of maintenance.
-- Keep [focused context windows](.claude/skills/ref-memory-management/SKILL.md) with frequent planning and QC steps.
 - Workflow state is derived from PR/CI ground truth — no external state machine required.
 
 ## Agentic Coding Workflow
-
-### Cross Cutting Artifacts
-- [dispatch skill](.claude/skills/dispatch/SKILL.md): orchestrates the issue workflow — selects the next task, derives the phase from PR/CI status, and dispatches exactly one phase skill per invocation.
-- [ref-memory-management](.claude/skills/ref-memory-management/SKILL.md): smart management of the conversation context using skills and ["plan mode"](https://code.claude.com/docs/en/how-claude-code-works#explore-before-implementing).
 
 ### PR Control Flow
 
@@ -45,41 +32,99 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 | implement | No PR on the target | [plan-implement](.claude/skills/plan-implement/SKILL.md) |
 | verify | Draft PR, CI failed | [verify-pr](.claude/skills/verify-pr/SKILL.md) |
 | waiting | Draft PR, CI in progress | (nothing — wait) |
-| qa | Draft PR, CI green | [dispatch-qa](.claude/skills/dispatch-qa/SKILL.md) |
-| code-review | Post-QA code quality | `/code-review` (built-in) |
-| review | Post-code-review pass | `/review` (built-in) |
-| security | Post-review security | `/security-review` (built-in) |
+| qa | Draft PR, CI green | [qa-fix](.claude/skills/qa-fix/SKILL.md) (autonomous) or [office-hours](.claude/skills/office-hours/SKILL.md) (human-driven; see #758) |
+| code-review | Post-QA code quality | [code-review-fix](.claude/skills/code-review-fix/SKILL.md) (wraps `/code-review`) |
+| review | Post-code-review pass | [review-fix](.claude/skills/review-fix/SKILL.md) (wraps `/review`) |
+| security | Post-review security | [security-review-fix](.claude/skills/security-review-fix/SKILL.md) (wraps `/security-review`) |
 | ready | All reviews complete | flip draft PR to ready |
 
-**Agent patterns:** *Augmented* = human-in-the-loop, Claude assists. *Delegated* = Claude drives autonomously. *QC* = human quality gate before proceeding.
+### Two queues, two control paths
 
-#### Dispatch Architecture
+Issues and PRs flow through two parallel queues (see #755 for the framing):
 
-```
-Entry points               Dispatcher                    Phase skills
-─────────────              ──────────                    ────────────
-/dispatch     ──────────>  dispatch        ──────────>  plan-implement  (implement)
-(re-invoked                (derives phase               verify-pr       (verify)
- each phase)               from PR/CI                   dispatch-qa     (qa)
-                           ground truth)                code-review     (code-review)
-                                                        review          (review)
-                                                        security-review (security)
-                                                        gh pr ready     (ready)
-```
+- **Dispatch queue** — autonomous work, advanced by the `/dispatch-propagate` router and its `/dispatch-worker` background jobs. Once a target is selected, the chain runs unattended, one phase at a time.
+- **Office hours queue** — human-driven work. Items here wait for live human attention: requirement changes, judgment calls during QA, or deviations flagged by phase skills.
 
-#### Phase Derivation
+The `dispatch:office-hours` label is the transition signal between the two. Input-block hooks apply it when a phase skill requests user input mid-run (see #757); phase skills apply it on a deviation (see #826). The office-hours queue surfaces labeled items for a human; the label clears once the user engages the worktree.
 
-`/dispatch` derives the current phase from live PR/CI status — no persisted state machine:
+Ground truth lives in PR state (draft vs. ready), CI status, the accumulating `dispatch:*` label set, and `claude agents --json` for the live session list. There is no persisted state machine and no side file — every router invocation re-derives the world from GitHub and the live agent list.
 
-1. No PR → `implement`
-2. Draft PR + CI failed → `verify`
-3. Draft PR + CI running → `waiting`
-4. Draft PR + CI green + no label → `qa`
-5. Draft PR + `dispatch:qa-done` label → `code-review`
-6. Draft PR + `dispatch:code-reviewed` label → `review`
-7. Draft PR + `dispatch:reviewed` label → `security`
-8. Draft PR + `dispatch:security-reviewed` label → `ready`
-9. Non-draft (ready) PR → `done`
+JIT (just-in-time) reminders seed both queues. Each dispatch tick fires a JIT scan that creates due reminders from `dispatch.config/jit.json` (see #769); some surface as dispatch-queue work that the chain picks up next tick, while others run as office-hours sessions for a human to read.
+
+This section describes the **target** dispatch model. The current implementation lives in [.claude/skills/dispatch-propagate/SKILL.md](.claude/skills/dispatch-propagate/SKILL.md); inline issue references below mark the open work that ages the README forward as it merges.
+
+### Dispatch Queue
+
+#### 1. Entry points
+
+- [`/dispatch-propagate`](.claude/skills/dispatch-propagate/SKILL.md) — the router. Runs in `worktrees/main`. Selects the next target, resolves its worktree, releases the selection lock, spawns a worker, and exits.
+- [`/dispatch-worker <N>`](.claude/skills/dispatch-worker/SKILL.md) — the worker. Runs in `worktrees/<N>-…`, one per in-flight issue. Runs exactly one phase skill, then hands off.
+
+See #839 for the router/worker split.
+
+#### 2. The chaining procedure
+
+Each router tick:
+
+1. Acquires the per-repo selection lock.
+2. Runs the JIT engine (see Section 4) and the `origin/main` health gate.
+3. Selects a target via the selection ladder (Section 3).
+4. Resolves the target's worktree (creating one for an `implement`-phase issue).
+5. Releases the lock.
+6. Spawns a `/dispatch-worker <N>` background job (`claude --bg`) with `cwd` set to that worktree, and exits.
+
+The worker, inside its worktree:
+
+1. Derives the phase from PR/CI state via [`dispatch-phase`](.claude/skills/dispatch-propagate/scripts/dispatch-phase).
+2. Runs exactly one phase skill — the skill named in the [PR Control Flow](#pr-control-flow) table for that phase.
+3. Hands off with one of two dispositions:
+   - `--phase-completed` — spawns a fresh `/dispatch-propagate` router back in `worktrees/main` and self-deletes (`claude rm`). If `dispatch:office-hours` is on the PR, the worker still spawns the router but **skips** self-delete, so the parked transcript stays visible for human review.
+   - `--early-stop` — skips the router spawn and self-deletes. The #725 heartbeat re-seeds the chain when the queue drains.
+
+Workers and phase skills call [`/commit-merge-push`](.claude/skills/commit-merge-push/SKILL.md) inline to commit, merge `origin/main`, and push. See #824, #826, #831 for the worker contract, deviation handling, and lock semantics.
+
+#### 3. Prioritization
+
+The router runs a single selection ladder, top to bottom. The ladder spans both queues; the [Office Hours Queue](#office-hours-queue) spine cross-references it rather than restating it.
+
+1. **Current-worktree continuation** — if the router was started inside an `<N>-…` worktree on an open issue, continue there.
+2. **JIT scan** — surface the most-overdue jit-reminder. Bypasses the `origin/main` health gate so reminders fire even when main is red.
+3. **`origin/main` health gate** — if main is red, stop; do not start new work. [`/dispatch-diagnose-main`](.claude/skills/dispatch-diagnose-main/SKILL.md) reports the failing checks.
+4. **Sweep orphan adoption** — adopt a stray `<N>-…` worktree with no live session (see #847).
+5. **Topic-category × priority × phase ladder.** Three tiers nest from outermost to innermost. Topic categories, highest first: `bug` → `testing infrastructure` → `dispatch` → `other`. Within each topic category, items carrying the `priority` label rank above items without it (`priority` is human-applied; the selector never adds it automatically). Within each `(topic, priority)` bucket, the phase ladder is, highest first: `security` → `review` → `code-review` → `qa` → `implement`. The selector exhausts one bucket's full phase ladder before moving to the next.
+
+The QA reorder (`qa` above `implement` rather than at the bottom of the ladder) lands with #758; the README documents the post-#758 target. Concurrent worker count scales with the rate-limit window per #845.
+
+#### 4. JIT-on-dispatch
+
+Local `dispatch.config/jit.json` declares recurring "just-in-time" issues. The engine runs at every router tick:
+
+1. Debounce by `lastTickAt`.
+2. Open-issue guard — skip if the previous jit issue for that key is still open.
+3. Create the next issue when its `remindAfterClose` (or `dueAfterCreate`) cadence has elapsed.
+
+Every jit issue carries a `jit:<key>` label and is tracked in its configured GitHub project. Jit-reminders that produce dispatch-queue work surface ahead of the queue ladder; jit-reminders that run as office-hours sessions are covered in the [Office Hours Queue](#office-hours-queue) spine. See #769.
+
+With no `dispatch.config/jit.json` present the engine is a no-op.
+
+#### 5. Token-budget pacing
+
+The router paces worker spawning against a cumulative weekly token-budget curve (#917, building on #845 and #878). Rather than a flat cap, the weekly target at any moment is proportional to how far through the weekly rate-limit window you are — so token spend is spread smoothly across the week instead of burning early and idling. The controller is more conservative early-week than a simple headroom check: it pauses spawning whenever actual usage runs ahead of the curve, even when the weekly total is still low. A separate 5-hour headroom ramp then maps the remaining budget into a live worker count (0..`max_concurrent_workers`).
+
+Tunables live in `dispatch.config/target-workers.json` (see `dispatch-propagate/SKILL.md` for the full formula and table). When no telemetry file is present, the router falls back to spawning one worker per tick.
+
+### Office Hours Queue
+
+*See #858 for the office-hours queue spine.*
+
+### Key design decisions for adopters
+
+- **Ground truth is PR/CI + label state.** No persisted state machine; [`dispatch-phase`](.claude/skills/dispatch-propagate/scripts/dispatch-phase) derives the phase from draft state, CI status, and the accumulating `dispatch:*` labels.
+- **Per-worktree concurrency.** N issues in flight equals N concurrent worker sessions in N worktrees. The per-repo selection lock serializes router *selection* only — the worker holds no lock.
+- **Self-perpetuating background-job chain.** Each `/dispatch-worker` runs as a `claude --bg` background session that self-deletes on clean completion and spawns its successor router. The #725 heartbeat re-seeds the chain if it drains.
+- **Transient escalation via `dispatch:office-hours`.** One label, two writers (input-block hooks per #757, phase-skill deviation detection per #826), one reader (the office-hours queue). The label clears when the user engages the worktree.
+- **JIT is a reminder layer, not an autonomous executor.** Office-hours jit-reminders are surfaced for a human to read.
+- **Local config sits outside every worktree.** `dispatch.config/` lives beside `worktrees/main/` so it is shared across worktrees and physically cannot be committed.
 
 ## CI/CD
 
@@ -127,6 +172,19 @@ run-all-cleanup-preview.sh <pr-number>
   get-changed-apps.sh --base HEAD~1
   run-cleanup-preview.sh <app> <pr-number>
 ```
+
+## Pre-requisites
+
+- **Project Management** (github): Created a [project](https://github.com/users/natb1/projects/2).
+- **Version Control** (git): Created a repo.
+- **Agentic Coding Tools** (Claude Code): `nix flake update && home-manager switch --flake .#default --impure`
+- **Infrastructure** (Firebase): Hosting and storage.
+
+## Where to go next
+
+- **Landing page** — [commons.systems](https://commons.systems): the deployed apps and project overview.
+- **Charter** — [CHARTER.md](CHARTER.md): audiences, principles, and the philosophy behind the workflow.
+- **License** — CC-BY-SA; forking is encouraged.
 
 ## Usage and Contributing
 <a href="https://creativecommons.org/licenses/by-sa/4.0/"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" width="117" height="41"></a>

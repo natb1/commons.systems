@@ -18,6 +18,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
+          cache: 'npm'
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: "temurin"
@@ -31,7 +32,7 @@ jobs:
           VITE_GITHUB_BRANCH: ${{ github.head_ref }}
           VITE_FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
           VITE_RECAPTCHA_SITE_KEY: ${{ secrets.RECAPTCHA_SITE_KEY }}
-        run: .claude/skills/dispatch/scripts/run-all-acceptance-tests.sh
+        run: .claude/skills/dispatch-propagate/scripts/run-all-acceptance-tests.sh
 
   preview-and-smoke:
     runs-on: ubuntu-latest
@@ -42,6 +43,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
+          cache: 'npm'
       - name: Authenticate with Firebase
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -61,7 +63,7 @@ jobs:
           VITE_RECAPTCHA_SITE_KEY: ${{ secrets.RECAPTCHA_SITE_KEY }}
         run: |
           set -o pipefail
-          OUTPUT=$(.claude/skills/dispatch/scripts/run-all-preview-deploy-smoke.sh "pr-${{ github.event.pull_request.number }}" | tee /dev/stderr)
+          OUTPUT=$(.claude/skills/dispatch-propagate/scripts/run-all-preview-deploy-smoke.sh "pr-${{ github.event.pull_request.number }}" | tee /dev/stderr)
           # Extract multi-line preview comment from output
           COMMENT=$(echo "$OUTPUT" | sed -n '/^PREVIEW_COMMENT<<EOF$/,/^EOF$/{ /^PREVIEW_COMMENT<<EOF$/d; /^EOF$/d; p; }')
           if [ -n "$COMMENT" ]; then

@@ -63,6 +63,35 @@
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/approve-workflow-commands.sh"
           }
         ]
+      },
+      {
+        "matcher": "^(ExitPlanMode|AskUserQuestion)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dispatch-input-block.sh"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dispatch-input-block.sh"
+          }
+        ]
+      }
+    ],
+    "Elicitation": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dispatch-input-block.sh"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -73,6 +102,14 @@
             "command": "\"$CLAUDE_PROJECT_DIR\"/productivity-tui/hooks/on-active.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dispatch-office-hours-strip.sh"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -81,6 +118,14 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/productivity-tui/hooks/on-idle.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dispatch-stop.sh"
           }
         ]
       }
