@@ -8728,6 +8728,128 @@ STUB_DIR=""
 export PATH="$SAVED_PATH"
 
 # ============================================================================
+# npm-ci-with-retry.sh tests
+# ============================================================================
+echo ""
+echo "=== npm-ci-with-retry.sh ==="
+
+# These tests stub npm and sleep on PATH, then invoke the script directly.
+
+# 1. npm-ci-with-retry.sh succeeds on first attempt.
+echo "Test: npm-ci-with-retry.sh succeeds on first attempt"
+TMPDIR_TEST=$(mktemp -d)
+STUB_DIR="$TMPDIR_TEST/stub"
+mkdir -p "$STUB_DIR"
+
+cat > "$STUB_DIR/npm" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")" && pwd)"
+count_file="$STUB_DIR/npm-count"
+count=0
+[ -f "$count_file" ] && count=$(cat "$count_file")
+count=$((count + 1))
+echo "$count" > "$count_file"
+exit 0
+STUB
+chmod +x "$STUB_DIR/npm"
+
+cat > "$STUB_DIR/sleep" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$STUB_DIR/sleep"
+
+export PATH="$STUB_DIR:$SAVED_PATH"
+rc=0
+"$SCRIPT_DIR/npm-ci-with-retry.sh" || rc=$?
+assert_eq "npm-ci-with-retry.sh succeeds on attempt 1 (exit code)" "0" "$rc"
+npm_count=0
+[ -f "$STUB_DIR/npm-count" ] && npm_count=$(cat "$STUB_DIR/npm-count")
+assert_eq "npm-ci-with-retry.sh called npm exactly 1 time" "1" "$npm_count"
+
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+STUB_DIR=""
+export PATH="$SAVED_PATH"
+
+# 2. npm-ci-with-retry.sh retries and succeeds on attempt 3.
+echo "Test: npm-ci-with-retry.sh retries and succeeds on attempt 3"
+TMPDIR_TEST=$(mktemp -d)
+STUB_DIR="$TMPDIR_TEST/stub"
+mkdir -p "$STUB_DIR"
+
+cat > "$STUB_DIR/npm" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")" && pwd)"
+count_file="$STUB_DIR/npm-count"
+count=0
+[ -f "$count_file" ] && count=$(cat "$count_file")
+count=$((count + 1))
+echo "$count" > "$count_file"
+if [ "$count" -lt 3 ]; then
+  exit 1
+fi
+exit 0
+STUB
+chmod +x "$STUB_DIR/npm"
+
+cat > "$STUB_DIR/sleep" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$STUB_DIR/sleep"
+
+export PATH="$STUB_DIR:$SAVED_PATH"
+rc=0
+"$SCRIPT_DIR/npm-ci-with-retry.sh" || rc=$?
+assert_eq "npm-ci-with-retry.sh succeeds on attempt 3 (exit code)" "0" "$rc"
+npm_count=0
+[ -f "$STUB_DIR/npm-count" ] && npm_count=$(cat "$STUB_DIR/npm-count")
+assert_eq "npm-ci-with-retry.sh called npm exactly 3 times" "3" "$npm_count"
+
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+STUB_DIR=""
+export PATH="$SAVED_PATH"
+
+# 3. npm-ci-with-retry.sh fails after exhausting all 3 attempts.
+echo "Test: npm-ci-with-retry.sh fails after exhausting all 3 attempts"
+TMPDIR_TEST=$(mktemp -d)
+STUB_DIR="$TMPDIR_TEST/stub"
+mkdir -p "$STUB_DIR"
+
+cat > "$STUB_DIR/npm" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")" && pwd)"
+count_file="$STUB_DIR/npm-count"
+count=0
+[ -f "$count_file" ] && count=$(cat "$count_file")
+count=$((count + 1))
+echo "$count" > "$count_file"
+exit 1
+STUB
+chmod +x "$STUB_DIR/npm"
+
+cat > "$STUB_DIR/sleep" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$STUB_DIR/sleep"
+
+export PATH="$STUB_DIR:$SAVED_PATH"
+rc=0
+"$SCRIPT_DIR/npm-ci-with-retry.sh" || rc=$?
+assert_eq "npm-ci-with-retry.sh returns non-zero after 3 failed attempts" "1" "$rc"
+npm_count=0
+[ -f "$STUB_DIR/npm-count" ] && npm_count=$(cat "$STUB_DIR/npm-count")
+assert_eq "npm-ci-with-retry.sh tried npm exactly 3 times before giving up" "3" "$npm_count"
+
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+STUB_DIR=""
+export PATH="$SAVED_PATH"
+
+# ============================================================================
 # /dispatch-propagate router smoke (Step 5 create + Step 6 spawn)
 # ============================================================================
 # Pin the shell sequence documented in /dispatch-propagate SKILL.md Step 5's `create`
@@ -10497,6 +10619,120 @@ assert_eq "detect-changes: empty diff leaves go unset"         "false" "$(dc_run
 dc_teardown
 
 # ============================================================================
+# dispatch-merge-main
+# ============================================================================
+# These tests use real git repos (no shared stub harness) because
+# dispatch-merge-main runs actual git fetch/merge commands.
+echo ""
+echo "============================================================"
+echo "dispatch-merge-main tests"
+echo "============================================================"
+
+MERGE_MAIN="$SCRIPT_DIR/dispatch-merge-main"
+
+# Helper: create an isolated git test environment.
+# Sets MERGE_MAIN_TMPDIR, ORIGIN_REPO, WORKTREE_REPO.
+merge_main_setup() {
+  MERGE_MAIN_TMPDIR=$(mktemp -d)
+  ORIGIN_REPO="$MERGE_MAIN_TMPDIR/origin"
+  WORKTREE_REPO="$MERGE_MAIN_TMPDIR/worktree"
+
+  # Create a bare-like origin with an initial commit on main.
+  git init -q "$ORIGIN_REPO"
+  git -C "$ORIGIN_REPO" config user.email "test@test"
+  git -C "$ORIGIN_REPO" config user.name "Test"
+  git -C "$ORIGIN_REPO" checkout -q -b main 2>/dev/null || true
+  touch "$ORIGIN_REPO/seed.txt"
+  git -C "$ORIGIN_REPO" add seed.txt
+  git -C "$ORIGIN_REPO" commit -q -m "initial"
+
+  # Clone the origin to create the local worktree repo.
+  git clone -q "$ORIGIN_REPO" "$WORKTREE_REPO"
+  git -C "$WORKTREE_REPO" config user.email "test@test"
+  git -C "$WORKTREE_REPO" config user.name "Test"
+}
+
+merge_main_teardown() {
+  rm -rf "$MERGE_MAIN_TMPDIR"
+  unset MERGE_MAIN_TMPDIR ORIGIN_REPO WORKTREE_REPO
+}
+
+# Usage errors — exit 2.
+echo "Test: missing arg → exit 2"
+merge_main_setup
+err=$("$MERGE_MAIN" 2>&1) && rc=0 || rc=$?
+assert_eq "missing arg → exit 2" "2" "$rc"
+merge_main_teardown
+
+echo "Test: extra arg → exit 2"
+merge_main_setup
+err=$("$MERGE_MAIN" "$WORKTREE_REPO" extra 2>&1) && rc=0 || rc=$?
+assert_eq "extra arg → exit 2" "2" "$rc"
+merge_main_teardown
+
+echo "Test: flag-shaped arg → exit 2"
+merge_main_setup
+err=$("$MERGE_MAIN" "--worktree" 2>&1) && rc=0 || rc=$?
+assert_eq "flag-shaped arg → exit 2" "2" "$rc"
+merge_main_teardown
+
+echo "Test: non-existent path → exit 2"
+merge_main_setup
+err=$("$MERGE_MAIN" "/no/such/path/$(date +%s)" 2>&1) && rc=0 || rc=$?
+assert_eq "non-existent path → exit 2" "2" "$rc"
+merge_main_teardown
+
+# Already up-to-date → exit 0.
+echo "Test: already up-to-date → exit 0"
+merge_main_setup
+out=$("$MERGE_MAIN" "$WORKTREE_REPO" 2>&1) && rc=0 || rc=$?
+assert_eq "already up-to-date → exit 0" "0" "$rc"
+merge_main_teardown
+
+# New commit on origin; worktree is behind → clean merge, exit 0.
+echo "Test: worktree behind origin → clean merge, exit 0"
+merge_main_setup
+# Add a commit to origin/main that the worktree hasn't fetched yet.
+touch "$ORIGIN_REPO/new.txt"
+git -C "$ORIGIN_REPO" add new.txt
+git -C "$ORIGIN_REPO" commit -q -m "origin advance"
+out=$("$MERGE_MAIN" "$WORKTREE_REPO" 2>&1) && rc=0 || rc=$?
+assert_eq "worktree behind → exit 0" "0" "$rc"
+# Confirm the worktree now has the new file.
+new_present="no"
+[[ -f "$WORKTREE_REPO/new.txt" ]] && new_present="yes"
+assert_eq "worktree behind → new file present after merge" "yes" "$new_present"
+merge_main_teardown
+
+# Conflicting merge → abort, exit 3, tree is clean.
+echo "Test: merge conflict → abort, exit 3, tree clean"
+merge_main_setup
+# Make conflicting edits to the same file on both origin and worktree.
+printf 'origin line\n' > "$ORIGIN_REPO/conflict.txt"
+git -C "$ORIGIN_REPO" add conflict.txt
+git -C "$ORIGIN_REPO" commit -q -m "origin conflict"
+git -C "$WORKTREE_REPO" fetch -q origin
+# Make a diverging local commit on the worktree branch.
+printf 'worktree line\n' > "$WORKTREE_REPO/conflict.txt"
+git -C "$WORKTREE_REPO" add conflict.txt
+git -C "$WORKTREE_REPO" commit -q -m "worktree conflict"
+err=$("$MERGE_MAIN" "$WORKTREE_REPO" 2>&1) && rc=0 || rc=$?
+assert_eq "conflict → exit 3" "3" "$rc"
+# Tree must be clean (merge was aborted).
+status_out=$(git -C "$WORKTREE_REPO" status --porcelain)
+assert_eq "conflict → tree clean after abort" "" "$status_out"
+merge_main_teardown
+
+# Fetch failure → exit 1. Point origin at a non-existent path so `git fetch
+# origin main` cannot reach a remote, exercising the pre-merge fetch guard.
+echo "Test: fetch failure → exit 1"
+merge_main_setup
+git -C "$WORKTREE_REPO" remote set-url origin "$MERGE_MAIN_TMPDIR/no-such-origin-$(date +%s)"
+err=$("$MERGE_MAIN" "$WORKTREE_REPO" 2>&1) && rc=0 || rc=$?
+assert_eq "fetch failure → exit 1" "1" "$rc"
+merge_main_teardown
+
+# ============================================================================
 # dispatch-select-tick tests (#919)
 # ============================================================================
 # The orchestrator runs against the REAL dispatch-acquire-lock (so lock-file
@@ -10815,6 +11051,11 @@ FAKE
 #!/usr/bin/env bash
 echo "\${MAT_WT_DECISION:-create \$1-test}"
 FAKE
+  cat > "$TMPDIR_TEST/dispatch-merge-main" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/merge-main.log"
+exit \${MAT_MERGE_RC:-0}
+FAKE
   cat > "$TMPDIR_TEST/dispatch-phase" <<'FAKE'
 #!/usr/bin/env bash
 echo "${MAT_PHASE:-implement}"
@@ -10847,7 +11088,8 @@ claude_agents_count_by_name_prefix() {
 FAKE
   chmod +x "$TMPDIR_TEST"/dispatch-find-pr "$TMPDIR_TEST"/dispatch-trace-leaf \
     "$TMPDIR_TEST"/dispatch-check-blockers "$TMPDIR_TEST"/dispatch-apply-office-hours \
-    "$TMPDIR_TEST"/dispatch-resolve-worktree "$TMPDIR_TEST"/dispatch-phase \
+    "$TMPDIR_TEST"/dispatch-resolve-worktree "$TMPDIR_TEST"/dispatch-merge-main \
+    "$TMPDIR_TEST"/dispatch-phase \
     "$TMPDIR_TEST"/dispatch-target-workers "$TMPDIR_TEST"/dispatch-schedule-reseed \
     "$TMPDIR_TEST"/dispatch-spawn-worker "$TMPDIR_TEST"/sync-issue-context
 
@@ -10879,7 +11121,7 @@ mat_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
-    MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_PHASE MAT_TARGET_N \
+    MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_MERGE_RC MAT_PHASE MAT_TARGET_N \
     MAT_LIVE_COUNT MAT_LIVE_COUNT_FAIL MAT_SPAWN_RC MAT_ISSUE_STATE
 }
 
@@ -11037,6 +11279,53 @@ assert_eq "conflict: terminal token" "drain worktree-conflict" \
 assert_eq "conflict: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "conflict: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- merge conflict → notify merge-conflict, office-hours, no spawn (#944) ----
+# dispatch-merge-main exits 3 on a conflicting merge; the router must abort the
+# spawn, park the issue via dispatch-apply-office-hours, release the lock, and
+# emit notify merge-conflict — the worker is never spawned into a conflicted
+# tree.
+echo "Test: materialize-spawn merge conflict → notify merge-conflict"
+mat_setup
+export MAT_MERGE_RC=3
+out=$(run_mat 839 queue)
+assert_eq "merge-conflict: terminal token" "notify merge-conflict" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "merge-conflict: office-hours applied to the issue" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/apply-office-hours.log" ] && echo 1 || echo 0)"
+assert_eq "merge-conflict: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "merge-conflict: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- merge fetch/other failure → exit 2 + lock released (#944) ----------------
+# A non-conflict dispatch-merge-main failure (exit 1) is a hard error: release
+# the lock and exit 2, do not park or spawn.
+echo "Test: materialize-spawn merge non-conflict failure → exit 2 + lock released"
+mat_setup
+export MAT_MERGE_RC=1
+err=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"dispatch-merge-main failed"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "merge fail: error + exit 2" "ok" "$status"
+assert_eq "merge fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "merge fail: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- merge clean → merge ran before spawn (#944) -----------------------------
+# On the happy path dispatch-merge-main is invoked with the resolved worktree
+# path before the worker spawns.
+echo "Test: materialize-spawn happy path invokes dispatch-merge-main pre-spawn"
+mat_setup
+out=$(run_mat 839 queue)
+assert_eq "merge clean: terminal token" "propagate" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "merge clean: dispatch-merge-main was called" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/merge-main.log" ] && echo 1 || echo 0)"
 mat_teardown
 
 # --- waiting CI → drain ci-waiting -------------------------------------------

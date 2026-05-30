@@ -26,8 +26,9 @@ them:
    a `main-broken` / `jit-reminder` sub-skill invocation, or — for a real
    target — a call to `dispatch-materialize-spawn`.
 3. `dispatch-materialize-spawn` — runs the explicit-path guards, resolves the
-   worktree, releases the lock, gates on CI and the concurrency budget, and
-   spawns the worker. Emits one **terminal token** (Table 2).
+   worktree, merges `origin/main` into it (so the worker reads up-to-date skill
+   files), releases the lock, gates on CI and the concurrency budget, and spawns
+   the worker. Emits one **terminal token** (Table 2).
 
 Run `/dispatch-propagate` from any worktree; selection ignores cwd. The router
 never enters a worktree. Run **every** Bash call here with
@@ -95,6 +96,7 @@ on the token (Table 2).
 |---|---|---|
 | `propagate` | none — the chain moved forward silently | `propagate` |
 | `notify target-blocked` | The named target is closed or has an open blocker (the script printed which and already applied `dispatch:office-hours` to the issue). | `notify` |
+| `notify merge-conflict` | `origin/main` does not merge cleanly into the resolved worktree (the script printed the conflicting path); the merge was aborted, the worker not spawned, and the script already applied `dispatch:office-hours` to the issue. | `notify` |
 | `notify spawn-failed` | `dispatch-spawn-worker` exited non-zero — a worker was spawned but did not register. | `notify` |
 | `drain worktree-conflict` | The target worktree cannot be safely entered (the script printed the `path:` detail): "worktree at `<path>` for issue `<N>` cannot be entered; closing — the next baton-pass or office-hours hand-off will re-seed". | `drain` |
 | `drain ci-waiting` | The target PR's CI is still in progress (the script printed the `#<N>:` line); echo it. | `drain` |
@@ -114,7 +116,8 @@ silent `notify` or `drain` is a defect).
 - **`notify <reason>`** — report the variance, then **do not self-close**. The
   session stays in `claude agents` until the user closes it, so the variance is
   visible rather than buried in a closed transcript. For `notify target-blocked`
-  the script already parked the issue with `dispatch:office-hours`.
+  and `notify merge-conflict` the script already parked the issue with
+  `dispatch:office-hours`.
 
 - **`drain <reason>`** — emit the mandatory report, then self-close (same
   command as `propagate`).
