@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# dispatch-handoff — scripted terminal disposition for /dispatch router early-stop paths.
+#
+# Invocation form:
+#
+#   dispatch-handoff --early-stop
+#     Router early-stop path. No spawn — the chain re-seeds via the #725
+#     cap-keyed timer when a rate-limit window reopens, or via office-hours
+#     engagement when a parked item is picked up. Exec dispatch-self-close.
+#
+# Requires dangerouslyDisableSandbox: true — this script calls dispatch-self-close
+# (which calls `claude rm`). See .claude/rules/sandbox.md.
+#
+# Environment overrides for testability:
+#   DISPATCH_HANDOFF_SELF_CLOSE_CMD  The dispatch-self-close command. Default:
+#                                    resolved relative to this script.
+#
+# Exit codes:
+#   0   self-close was exec'd.
+#   2   bad arguments.
+#
+# NOT set -e: exits are handled explicitly.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+SELF_CLOSE_CMD="${DISPATCH_HANDOFF_SELF_CLOSE_CMD:-$SCRIPT_DIR/dispatch-self-close}"
+
+# --- argument parsing ---------------------------------------------------------
+
+case "${1:-}" in
+  --early-stop)
+    if [[ $# -ne 1 ]]; then
+      echo "dispatch-handoff: --early-stop takes no arguments" >&2
+      exit 2
+    fi
+    ;;
+  *)
+    echo "dispatch-handoff: usage: dispatch-handoff --early-stop" >&2
+    exit 2
+    ;;
+esac
+
+# --- early-stop path ----------------------------------------------------------
+
+exec "$SELF_CLOSE_CMD"
+# exec replaces the process; the line below is unreachable.
+exit 1

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Resolve a /dispatch argument (issue or PR number) to an issue number.
+# Resolve a /dispatch-propagate argument (issue or PR number) to an issue number.
 # Usage: dispatch-resolve-arg <number>
 #
 # Accepts a bare integer or one with a leading '#' (stripped). Validates that

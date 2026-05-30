@@ -92,23 +92,22 @@
 #
 # Top-level object with optional tunables for `dispatch-target-workers`. Each
 # field must be a number when present; absent fields fall back to the
-# defaults baked into `dispatch-target-workers`.
+# defaults baked into `dispatch-target-workers`. The two taper-window fields
+# must be in (0, 100]; the other three fields must be > 0 with no upper bound.
 #
 #   target_weekly_usage_pct      default 90
 #   target_five_hour_usage_pct   default 50
 #   max_concurrent_workers       default 8
-#   ramp_tau_seconds             default 86400
-#   ramp_shape_k                 default 2
-#   five_hour_window_seconds     default 18000
+#   weekly_taper_window_pct      default 30
+#   five_hour_taper_window_pct   default 15
 #
 # Example (see target-workers.example.json):
 #   {
 #     "target_weekly_usage_pct": 90,
 #     "target_five_hour_usage_pct": 50,
 #     "max_concurrent_workers": 8,
-#     "ramp_tau_seconds": 86400,
-#     "ramp_shape_k": 2,
-#     "five_hour_window_seconds": 18000
+#     "weekly_taper_window_pct": 30,
+#     "five_hour_taper_window_pct": 15
 #   }
 set -euo pipefail
 
@@ -249,15 +248,16 @@ case "$CONFIG_TYPE" in
     # top-level value must be an object; all tunables are optional numbers.
     # `dispatch-target-workers` substitutes a baked-in default for any field
     # absent here, so absence is silent — only the type of present fields is
-    # checked.
+    # checked. The two taper-window fields carry an additional `<= 100` bound;
+    # the other three fields have no upper bound.
     ERRORS=$(jq -r '
       if type != "object" then
         "top-level value must be a JSON object, got \(type)"
       else
         . as $cfg |
         ["target_weekly_usage_pct","target_five_hour_usage_pct",
-         "max_concurrent_workers","ramp_tau_seconds","ramp_shape_k",
-         "five_hour_window_seconds"] |
+         "max_concurrent_workers","weekly_taper_window_pct",
+         "five_hour_taper_window_pct"] |
         .[] |
         . as $field |
         if ($cfg | has($field)) | not then
@@ -266,6 +266,8 @@ case "$CONFIG_TYPE" in
           "\($field) must be a number if present, got \($cfg[$field] | type)"
         elif $cfg[$field] <= 0 then
           "\($field) must be > 0 if present, got \($cfg[$field])"
+        elif (($field == "weekly_taper_window_pct" or $field == "five_hour_taper_window_pct") and $cfg[$field] > 100) then
+          "\($field) must be <= 100 if present, got \($cfg[$field])"
         else
           empty
         end
