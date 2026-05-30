@@ -7,9 +7,10 @@
 #
 # Picks up after dispatch-select-tick has chosen a target. Runs the explicit-
 # path guards (leaf trace, closed-target, open-blocker), resolves the target
-# worktree (entering or creating it), writes the recovery marker + releases the
-# lock via dispatch-finalize-selection, runs the waiting-CI gate, consults the
-# concurrency budgeter, and spawns the worker. Prints exactly ONE terminal
+# worktree (entering or creating it), writes the recovery marker via
+# dispatch-finalize-selection (which no longer releases the lock — #945), runs
+# the waiting-CI gate, consults the concurrency budgeter, spawns the worker, and
+# releases the lock after the worker registers. Prints exactly ONE terminal
 # token as its LAST stdout line; supporting detail (a path, a blocker list, the
 # CI line) precedes the token.
 #
@@ -20,28 +21,35 @@
 #
 # Terminal tokens (the last stdout line is always exactly one of):
 #   propagate              the worker spawned (or deduped); the chain advances.
-#                          Lock already released by finalize-selection.
+#                          Lock released AFTER dispatch-spawn-worker confirms the
+#                          worker registered under its <basename> (#945).
 #   notify target-blocked  explicit target is closed or has an open blocker; the
 #                          issue is parked via dispatch-apply-office-hours and
 #                          the lock released at the guard.
-#   notify spawn-failed    dispatch-spawn-worker exited non-zero. Lock already
-#                          released by finalize-selection.
+#   notify spawn-failed    dispatch-spawn-worker exited non-zero; lock released
+#                          after the failed spawn returns.
 #   drain worktree-conflict  the target worktree cannot be safely entered; the
 #                          lock is released at the guard. The conflict path
 #                          precedes this token.
 #   drain ci-waiting       the target PR's CI is still in progress; no spawn this
-#                          tick. Lock already released by finalize-selection.
+#                          tick. Lock released at this stop.
 #   drain concurrency-cap  the live worker count already meets the budget; a
-#                          cap-keyed re-seed is scheduled. Lock already released.
+#                          cap-keyed re-seed is scheduled. Lock released at this
+#                          stop.
 #
-# Lock-release points: `notify target-blocked` and `drain worktree-conflict`
-# release explicitly at the guard (the marker does not exist yet on these
-# pre-finalize stop paths). `propagate` / `notify spawn-failed` /
-# `drain ci-waiting` / `drain concurrency-cap` are all reached AFTER
-# dispatch-finalize-selection has released the lock, so they do not re-release.
-# An internal `exit 2` failure before dispatch-finalize-selection (a hard
-# trace-leaf / check-blockers / resolve-worktree error) also releases the lock
-# so a stuck holder does not wedge the next tick.
+# Lock-release points (#945): the lock is held THROUGH the spawn so the next
+# tick cannot re-select the target during the worker's boot gap.
+# dispatch-finalize-selection writes the recovery marker but no longer releases.
+# `notify target-blocked` and `drain worktree-conflict` release explicitly at
+# the guard (the marker does not exist yet on these pre-finalize stop paths).
+# `propagate` and `notify spawn-failed` release AFTER dispatch-spawn-worker
+# returns (the worker is verified-registered on success). `drain ci-waiting` and
+# `drain concurrency-cap` release at their respective stops. An internal
+# `exit 2` failure before dispatch-finalize-selection (a hard trace-leaf /
+# check-blockers / resolve-worktree error) also releases the lock so a stuck
+# holder does not wedge the next tick. Crash safety: a router that dies
+# mid-spawn holding the lock is recovered by the lock's existing dead-holder
+# reclaim on the next --wait.
 #
 # Requires `dangerouslyDisableSandbox: true` — sub-scripts call `gh`, query the
 # Claude daemon over a Unix socket, and write tmp state; `git worktree add` and
@@ -176,11 +184,12 @@ case "$WT_ACTION" in
     ;;
 esac
 
-# Write the recovery marker into the target worktree and release the lock in one
-# step. Lock-free from here. Its stdout (released/noop) goes to stderr.
+# Write the recovery marker into the target worktree. The lock is STILL HELD
+# from here through the spawn (#945) — each terminal path below releases it at
+# its own stop point.
 if ! "$SCRIPT_DIR/dispatch-finalize-selection" "$WORKTREE_PATH" 1>&2; then
-  # finalize-selection failed before its --release step, so the lock is still
-  # held — release it explicitly so a stuck holder does not wedge the next tick.
+  # finalize-selection failed, so the lock is still held — release it explicitly
+  # so a stuck holder does not wedge the next tick.
   release_lock
   echo "dispatch-materialize-spawn: dispatch-finalize-selection failed for $WORKTREE_PATH" >&2
   exit 2
@@ -189,6 +198,7 @@ fi
 # --- Step 6a: waiting-CI gate (#906) -----------------------------------------
 PHASE=$("$SCRIPT_DIR/dispatch-phase" "$N") || PHASE=""
 if [[ "$PHASE" == "waiting" ]]; then
+  release_lock
   echo "#$N: CI in progress; the next router tick will re-evaluate."
   echo "drain ci-waiting"
   exit 0
@@ -201,6 +211,7 @@ if (( ! BYPASS_CAP )); then
   TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")
   if LIVE_COUNT=$(claude_agents_count_by_name_prefix dispatch-worker-); then
     if (( LIVE_COUNT >= TARGET_N )); then
+      release_lock
       "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
       echo "router: $LIVE_COUNT live worker(s) >= target $TARGET_N"
       echo "drain concurrency-cap"
@@ -213,9 +224,16 @@ if (( ! BYPASS_CAP )); then
 fi
 
 # --- Step 6c: spawn the worker -----------------------------------------------
+# The lock is still held here (#945). dispatch-spawn-worker returns success only
+# after the worker is verified-registered under its <basename>, at which point
+# dispatch-select-target skips the now-owned worktree — so release the lock only
+# after a successful return, closing the boot-gap re-selection race. On a failed
+# spawn no worker registered; release the lock so the next tick can re-select.
 if "$SCRIPT_DIR/dispatch-spawn-worker" "$N" "$WORKTREE_PATH" 1>&2; then
+  release_lock
   echo "propagate"
   exit 0
 fi
+release_lock
 echo "notify spawn-failed"
 exit 0

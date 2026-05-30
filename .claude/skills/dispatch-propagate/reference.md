@@ -26,14 +26,35 @@ concurrency-budget cap (see *The #725 cap-keyed re-seed*).
 
 ## Releasing the lock
 
-Releasing after Step 5 is safe because (a) once the spawned worker registers a
-live session, the selection scan skips targets whose worktree a live session
-owns (#905), so no other router selects the same issue; and (b) until that
-session registers — and even if a race let two routers reach Step 6 with the
-same target — Step 6's `dispatch-spawn-worker` enforces per-worktree dedup at
-the spawn boundary, so only one worker starts. (An orphan worktree, on disk
-with no live session, no longer blocks selection — so (b) is what closes the
-lock-release-to-worker-registration window, not (a).)
+The lock is released **after the spawned worker registers**, not at Step 5
+(#945). Once the worker registers a live session, the selection scan skips
+targets whose worktree a live session owns (#905), so no other router selects
+the same issue. Releasing earlier — as the original `dispatch-finalize-selection`
+did, with a trailing `--release` at the end of worktree resolution — reopened a
+boot-gap re-selection race: a `claude --bg` worker takes ~1s to boot and register
+under its `--name=<worktree-basename>`, and during that gap the target worktree
+sits on disk with no live session, which `dispatch-select-target` treats as a
+recyclable orphan (#905), not a skip. A concurrent tick that acquired the freed
+lock would re-select the same target and only discover the collision one step
+later at `dispatch-resolve-worktree`, wasting a `drain worktree-conflict` tick.
+Holding the lock through the spawn closes that window: the next tick blocks on
+the lock until the worker is registered, then the orphan-recycle check sees a
+live session and skips. With the lock held through registration,
+`dispatch-spawn-worker`'s per-worktree dedup at the spawn boundary is now
+belt-and-suspenders rather than the load-bearing guard it was during the old
+early-release window.
+
+`dispatch-materialize-spawn` releases at each terminal point: on the `propagate`
+path after `dispatch-spawn-worker` returns success (worker verified-registered),
+on `notify spawn-failed` after the failed spawn returns, and on `drain
+ci-waiting` / `drain concurrency-cap` at their respective stops.
+`dispatch-finalize-selection` writes the recovery marker but no longer releases.
+The pre-finalize stop paths — `notify target-blocked` and `drain
+worktree-conflict`, plus the internal `exit 2` error paths — release at the
+guard, unchanged. Crash safety: a router that dies mid-spawn holding the lock is
+recovered by the lock's existing dead-holder reclaim (the recorded sessionId
+absent from `claude agents --json`) on the next `--wait`; the marker-reclaim path
+is belt-and-suspenders rather than load-bearing.
 
 The `tmp/dispatch-worktree` marker is the canonical post-Step-5 reclaim signal,
 and it is **session-scoped**: `dispatch-finalize-selection` stamps the
