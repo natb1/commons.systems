@@ -356,8 +356,8 @@ runs a phase skill, or invokes the pre-implementation relevance review — those
 are the worker's responsibilities (`/dispatch-worker` Steps 1–3).
 
 After the spawn (or skip) returns, **proceed to Step 7** (terminal disposition).
-The budgeter's ramps, tunables, and missing-telemetry fallback are detailed
-in reference.md (*Concurrency budgeting*).
+The budgeter's pace-relative pipeline, tunables, and missing-telemetry
+fallback are detailed in reference.md (*Concurrency budgeting*).
 
 ## 7. Terminal Disposition
 
