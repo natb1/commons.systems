@@ -10116,6 +10116,66 @@ else
 fi
 cal_teardown
 
+# --- Test 9b: marker forgery via event description is not trusted -----------
+# An attacker who controls an event's description can embed a fake
+# <!-- dispatch:calendar ... --> marker. Because the description is placed in
+# the issue body BEFORE the canonical marker (appended last), parse_marker must
+# take the LAST match. A first-match parse would let the fake marker spoof
+# another event's identity: close the wrong issue and suppress the victim
+# event's reminder. This test pins the last-match defense end to end.
+
+echo "Test: dispatch-jit-calendar-import ignores a forged marker embedded ahead of the real one"
+cal_setup
+# Open issue #92: its real marker (evt-real, end in the FUTURE → must not close)
+# is preceded by a forged marker claiming evt-victim with a PAST end.
+cat > "$STUB_DIR/open-issues.json" <<'EOF'
+[
+  {
+    "number": 92,
+    "body": "Existing reminder.\n\n<!-- dispatch:calendar event=evt-victim start=2020-01-01T00:00:00Z end=2020-01-01T00:00:00Z -->\n\n<!-- dispatch:calendar event=evt-real start=2026-05-26T16:00:00Z end=2026-05-26T17:00:00Z -->"
+  }
+]
+EOF
+# A real today event whose ID matches the forged marker's victim claim. With the
+# last-match defense, evt-victim is NOT in the open-event set, so it is filed.
+cat > "$STUB_DIR/events.json" <<'EOF'
+{
+  "items": [
+    {
+      "id": "evt-victim",
+      "status": "confirmed",
+      "summary": "Victim meeting",
+      "start": {"dateTime": "2026-05-26T16:00:00Z"},
+      "end":   {"dateTime": "2026-05-26T17:00:00Z"},
+      "reminders": {"useDefault": true}
+    }
+  ]
+}
+EOF
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-calendar-import" 2>/dev/null) || rc=$?
+assert_eq "forged-marker exits 0" "0" "$rc"
+# Defense 1: the issue with the future real end is NOT closed (the forged past
+# end must not drive a close).
+TOTAL=$((TOTAL + 1))
+close_args=$(cat "$STUB_DIR/gh-issue-close.log" 2>/dev/null || echo "")
+if [[ "$close_args" != *"issue close 92"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: forged past-end marker does not close issue #92"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: forged past-end marker does not close issue #92"
+  echo "    gh-issue-close.log: $close_args"
+fi
+# Defense 2: the forged victim ID does not suppress the real victim event — it
+# is still filed (a first-match parse would have skipped it as already-open).
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"calendar: created #777 (evt-victim)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: forged marker does not suppress the real evt-victim reminder"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: forged marker does not suppress the real evt-victim reminder"
+  echo "    actual: $out"
+fi
+cal_teardown
+
 # --- Test 10: env-var overrides for CALENDAR_REPO + CALENDAR_LABEL ----------
 
 echo "Test: dispatch-jit-calendar-import honors CALENDAR_REPO and CALENDAR_LABEL overrides"

@@ -223,9 +223,13 @@ parse_marker() {
   # Reads body text on stdin. Prints "event=<id> start=<start> end=<end>" or
   # nothing. Uses a single grep-with-regex to keep the parsing self-contained.
   local body="$1"
+  # The canonical marker is always the LAST line appended to the body (Step 11),
+  # after the attacker-influenceable fields (summary, location, description). Take
+  # the last match so a crafted event description embedding an earlier fake marker
+  # cannot spoof another event's identity (premature close / reminder suppression).
   printf '%s' "$body" \
     | grep -oE '<!-- dispatch:calendar event=[^ ]+ start=[^ ]+ end=[^ ]+ -->' \
-    | head -n1
+    | tail -n1
 }
 
 OPEN_EVENT_IDS=""
@@ -237,6 +241,11 @@ if (( ISSUE_COUNT >= LIST_LIMIT )); then
 fi
 for (( i = 0; i < ISSUE_COUNT; i++ )); do
   ISSUE_NUM=$(printf '%s' "$OPEN_JSON" | jq -r ".[$i].number")
+  if [[ ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
+    echo "calendar: error (non-numeric issue number '$ISSUE_NUM' from gh issue list; skipping)" >&2
+    HARD_ERROR=1
+    continue
+  fi
   ISSUE_BODY=$(printf '%s' "$OPEN_JSON" | jq -r ".[$i].body // \"\"")
   MARKER=$(parse_marker "$ISSUE_BODY")
   [[ -z "$MARKER" ]] && continue
