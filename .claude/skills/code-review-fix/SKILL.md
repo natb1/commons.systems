@@ -51,8 +51,8 @@ steps in order.
    (`subagent_type: general-purpose`, `model: sonnet`) that invokes the
    built-in `/code-review` skill via the Skill tool with the `max` effort
    argument (the highest thoroughness available) and the `--fix` flag
-   (apply in-scope fixes to the working tree) inside the subagent and
-   returns its output verbatim. It applies in-scope fixes to the working tree
+   inside the subagent and returns its output verbatim. It applies
+   in-scope fixes to the working tree
    and surfaces findings with the skill's own (fixed vs skipped) disposition.
    The subagent boundary is the control-flow guarantee: the parent never sees
    the inner Skill's prompt template, so it remains on this step when the
