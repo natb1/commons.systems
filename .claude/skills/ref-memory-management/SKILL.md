@@ -23,7 +23,7 @@ This script consolidates all context types into a single invocation:
 | **Parent issue** (if primary is a sub-issue) | Full |
 | **Sibling issues** (if primary is a sub-issue) | Full for open siblings; Summary for closed |
 
-Full = `title, body, comments, number, state`. Summary = `title, number, state`. Consumers that need additional fields (e.g., `ref-ready` uses `labels, assignees, projectItems` for evaluation) extend the base set.
+Full = `title, body, comments, number, state`. Summary = `title, number, state`. Consumers that need additional fields (e.g., `ref-ready` uses `labels, assignees` for evaluation) extend the base set.
 
 Individual scripts for standalone use are in `.claude/skills/dispatch-propagate/scripts/`. Each accepts an optional issue number argument; otherwise it derives the number from the branch name.
 
