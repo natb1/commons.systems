@@ -4086,35 +4086,37 @@ assert_eq "--release missing-session-id leaves the foreign lock intact" \
   "sess-6c-foreign" "$lock_contents"
 lock_teardown
 
-# --- Test 20: live foreign holder with marker → reclaim ----------------------
+# --- Test 20: live foreign holder with marker → busy (#945) ------------------
 #
-# A foreign holder's session is still live AND its cwd carries the
-# tmp/dispatch-worktree marker, meaning it has completed Step 5. acquire must
-# reclaim the lock (lenient branch) rather than block.
+# After #945 the lock extends through Step 6 (spawn). A foreign holder's session
+# is still live AND its cwd carries the tmp/dispatch-worktree marker — this now
+# means it is mid-spawn (Steps 5–6), NOT that it has released the lock. acquire
+# must block (busy), not reclaim. The marker no longer implies lock-released for
+# a live holder.
 
-echo "Test: live foreign holder with marker → reclaim"
+echo "Test: live foreign holder with marker → busy (#945, mid-spawn)"
 lock_setup
 printf '%s\n' "sess-2020-foreign" > "$DISPATCH_LOCK_FILE"
 export CLAUDE_CODE_SESSION_ID="sess-2020-self"
 # Build the foreign holder's marker-bearing cwd inside the test tmp tree.
 foreign_cwd="$TMPDIR_TEST/foreign-worktree"
 mkdir -p "$foreign_cwd/tmp"
-# The marker names the recorded holder (sess-2020-foreign) → reclaim.
+# The marker names the recorded holder (sess-2020-foreign) — but since the holder
+# is still live (mid-spawn), the lock must NOT be reclaimed (#945).
 printf '%s\n' "sess-2020-foreign" > "$foreign_cwd/tmp/dispatch-worktree"
 lock_fake_claude_sessions "sess-2020-foreign=$foreign_cwd" "sess-2020-self=$TMPDIR_TEST"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
-assert_eq "past-Step-5 holder reclaim exits 0" "0" "$rc"
-assert_eq "past-Step-5 holder reclaim prints acquired" "acquired" "$out"
+assert_eq "mid-spawn holder busy exits 0" "0" "$rc"
+assert_eq "mid-spawn holder busy prints busy" "busy" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "past-Step-5 holder reclaim rewrites lock to caller's sessionId" \
-  "sess-2020-self" "$lock_contents"
+assert_eq "mid-spawn holder busy: lock file unchanged (still the foreign holder)" \
+  "sess-2020-foreign" "$lock_contents"
 lock_teardown
 
 # --- Test 21: live foreign holder WITHOUT marker → busy (regression) ---------
 #
-# Today's strict blocking behavior on an in-flight Step 0–5 holder MUST be
-# preserved: a live foreign holder whose cwd has no marker is still in
-# selection and the lock must hold it.
+# A live foreign holder with no marker is still in-flight (Steps 0–5) and the
+# lock must hold it.
 
 echo "Test: live foreign holder without marker → busy (in-flight)"
 lock_setup
@@ -4131,33 +4133,34 @@ assert_eq "in-flight holder blocks: lock file unchanged" \
   "sess-2121-foreign" "$lock_contents"
 lock_teardown
 
-# --- Test 22: --release with marker present → released (lenient) ------------
+# --- Test 22: --release with live foreign holder and marker → noop (#945) ----
 #
 # A caller whose CLAUDE_CODE_SESSION_ID differs from the recorded holder can
-# still --release when the holder's cwd carries the marker. Closes the silent
-# `noop` leak that today blocks subsequent /dispatch-propagate ticks.
+# no longer --release a live foreign holder — the lock extends through Step 6 (#945).
+# Live foreign holders are always noop for --release.
 
-echo "Test: --release with marker present from a different-sessionId caller → released"
+echo "Test: --release with live foreign holder and marker → noop (#945, mid-spawn)"
 lock_setup
 printf '%s\n' "sess-2222-foreign" > "$DISPATCH_LOCK_FILE"
 export CLAUDE_CODE_SESSION_ID="sess-2222-self"
 foreign_cwd="$TMPDIR_TEST/foreign-worktree-with-marker"
 mkdir -p "$foreign_cwd/tmp"
-# The marker names the recorded holder (sess-2222-foreign) → lenient release.
+# The marker names the recorded holder (sess-2222-foreign) — but the holder is
+# live (mid-spawn), so --release must not release (#945).
 printf '%s\n' "sess-2222-foreign" > "$foreign_cwd/tmp/dispatch-worktree"
 lock_fake_claude_sessions "sess-2222-foreign=$foreign_cwd" "sess-2222-self=$TMPDIR_TEST"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
-assert_eq "lenient --release exits 0" "0" "$rc"
-assert_eq "lenient --release prints released" "released" "$out"
+assert_eq "live-foreign --release exits 0" "0" "$rc"
+assert_eq "live-foreign --release prints noop" "noop" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "lenient --release empties the lock file" "" "$lock_contents"
+assert_eq "live-foreign --release leaves lock file unchanged" "sess-2222-foreign" "$lock_contents"
 lock_teardown
 
 # --- Test 23: --release with NO marker → noop (strict pre-marker) -----------
 #
-# Refinement of Test 12: the marker is what flips the verdict to released.
-# Without a marker, a different-sessionId caller's --release stays a noop and
-# the lock file is left intact for the in-flight holder.
+# Refinement of Test 12: without a marker, a different-sessionId caller stays noop.
+# A live foreign holder — regardless of marker — is always noop for --release (#945).
+# This test confirms the no-marker path.
 
 echo "Test: --release with foreign holder and NO marker → noop (pre-marker stop path)"
 lock_setup
@@ -4248,8 +4251,8 @@ lock_teardown
 
 # --- Test 26: --release with MISMATCHED marker → noop (#928) -----------------
 #
-# Symmetry with Test 24: a lenient --release must not fire when the marker
-# names a session other than the recorded holder. The lock stays intact.
+# After #945 all foreign --release calls are noop; this test still passes because
+# the assertion (noop) now matches the unconditional foreign-holder policy.
 
 echo "Test: --release with mismatched marker → noop (#928)"
 lock_setup
