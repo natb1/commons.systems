@@ -346,11 +346,34 @@ post-Step-5 reclaim path; see reference.md (*Step 5 marker deep dive*).
 Spawn a `/dispatch-worker <N> <worktree-path>` background job.
 `dispatch-spawn-worker` runs from the router's cwd (`worktrees/main`) but spawns
 `claude --bg` with cwd = `<worktree-path>`, so the worker is born in its target
-worktree (see reference.md *Step 6 spawn-cwd trade-off*). Before spawning,
-consult the concurrency budgeter (see reference.md *Concurrency budgeting*); if
-the live worker count already meets the target, **skip the spawn** for this tick.
-Run with `dangerouslyDisableSandbox: true` (budgeter + `lib-claude-agents.sh`
-socket query; see `.claude/rules/sandbox.md`):
+worktree (see reference.md *Step 6 spawn-cwd trade-off*).
+
+Before anything else in this step, run the **CI-status gate**. Derive the
+target's phase with `dispatch-phase <N>` (`dangerouslyDisableSandbox: true` —
+it calls `gh`):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-phase <N>
+```
+
+- If it returns `waiting` — the target's CI is still in progress — **skip the
+  spawn for this tick**. Do not consult the concurrency budgeter and do not run
+  `dispatch-spawn-worker`. Do **not** release the lock: it is already released
+  at the end of Step 5, so — exactly like the concurrency-cap gate — this gate
+  is lock-free. Print the mandatory user-visible report verbatim:
+
+  ```
+  #<N>: CI in progress; the next router tick will re-evaluate.
+  ```
+
+  Then proceed to Step 7 with disposition `drain ci-waiting`.
+- Otherwise — any non-`waiting` phase — fall through to the concurrency-budget
+  gate and the spawn below.
+
+Before spawning, consult the concurrency budgeter (see reference.md
+*Concurrency budgeting*); if the live worker count already meets the target,
+**skip the spawn** for this tick. Run with `dangerouslyDisableSandbox: true`
+(budgeter + `lib-claude-agents.sh` socket query; see `.claude/rules/sandbox.md`):
 
 ```bash
 source .claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh
@@ -425,8 +448,12 @@ The three dispositions:
 - **`drain <reason>`** — `drain empty-queue` (Step 3, queue empty),
   `drain worktree-conflict` (Step 5, target's worktree cannot be safely
   entered — either a live session owns it, or the worktree's branch carries
-  commits not on the PR head branch; see the `conflict` case in Step 5), or
-  `drain concurrency-cap` (Step 6, `live_count >=
+  commits not on the PR head branch; see the `conflict` case in Step 5),
+  `drain ci-waiting` (Step 6, the target PR's CI is still in progress —
+  `dispatch-phase` returned `waiting`; unlike `drain concurrency-cap` this
+  schedules no re-seed — the chain re-evaluates the PR on the next router tick
+  from an existing source: a worker's Stop hook, the #725 cap-keyed timer, or a
+  manual `/dispatch`), or `drain concurrency-cap` (Step 6, `live_count >=
   target_N` — the chain re-seeds when the cap-keyed timer fires at the next
   rate-limit window reset; see *The #725 cap-keyed re-seed* below). The call site has already printed a **mandatory** user-visible
   report stating the reason and the recovery path (templates live at the
