@@ -10,11 +10,10 @@
 # Fires only for a dispatch-* background job. On fire:
 #   1. resolves the issue number from the current branch name
 #      (the <N>-* prefix idiom restore-dispatch-skill.sh already uses);
-#   2. resolves a PR (via dispatch-find-pr) or falls back to the issue;
-#   3. applies dispatch:office-hours, creating the label on first use with the
-#      canonical color/description (this script is the single source of those
-#      defaults);
-#   4. spawns the next /dispatch-propagate via dispatch-spawn-router, so the chain keeps moving
+#   2. parks the ISSUE on a human via dispatch-apply-office-hours — the single
+#      write path for dispatch:office-hours. It applies the label to the issue
+#      (never a PR), creates the label on first use, and posts a why-comment;
+#   3. spawns the next /dispatch-propagate via dispatch-spawn-router, so the chain keeps moving
 #      around the blocked item.
 #
 # Never blocks the session — every failure logs to stderr and the script exits
@@ -70,31 +69,13 @@ ISSUE_NUM=$(printf '%s\n' "$BRANCH" | grep -oE '^[0-9]+') || exit 0
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
 
-# Resolve PR for this issue; fall back to the issue itself when no PR exists
-# (the implement phase has no PR yet).
-PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
-
-apply_label() {
-  if [ -n "$PR_NUM" ]; then
-    gh pr edit "$PR_NUM" --add-label dispatch:office-hours 2>&1
-  else
-    gh issue edit "$ISSUE_NUM" --add-label dispatch:office-hours 2>&1
-  fi
-}
-
-# Apply-first / create-on-"not found" idiom (mirrors dispatch-complete-phase).
-if apply_output=$(apply_label); then
-  :
-elif [[ "$apply_output" == *"not found"* ]]; then
-  gh label create dispatch:office-hours --color FBCA04 \
-    --description "dispatch workflow: blocked on a human — awaiting input or review" \
-    >/dev/null 2>&1 \
-    || echo "[dispatch-input-block] WARNING: gh label create dispatch:office-hours failed" >&2
-  apply_label >/dev/null 2>&1 \
-    || echo "[dispatch-input-block] WARNING: gh apply dispatch:office-hours (retry) failed" >&2
-else
-  echo "[dispatch-input-block] WARNING: gh apply dispatch:office-hours failed: $apply_output" >&2
-fi
+# Park the issue on a human via the single write path. This hook fires on four
+# event kinds (ExitPlanMode / AskUserQuestion / permission_prompt / elicitation)
+# and does not branch on which fired, so one static reason naming all four is
+# correct. dispatch-apply-office-hours owns the issue target, create-on-first-use,
+# idempotency, and the why-comment.
+"$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" "blocked on user input (ExitPlanMode / AskUserQuestion / permission prompt / elicitation)" \
+  || echo "[dispatch-input-block] WARNING: dispatch-apply-office-hours failed" >&2
 
 # Pass the baton so the chain keeps moving. dispatch-spawn-router is dedup-guarded —
 # safe whether or not another dispatch-* session is live.
