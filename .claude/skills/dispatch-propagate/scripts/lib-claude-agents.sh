@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # lib-claude-agents.sh — sourceable helper for Claude session liveness.
 #
-# /dispatch must know whether a git worktree currently has a live Claude
+# /dispatch-propagate must know whether a git worktree currently has a live Claude
 # session in it, so it never opens a second session on a worktree another
 # session owns. This helper answers that against `claude agents --json`, the
 # daemon-backed registry of live sessions (Claude Code >= 2.1.146), replacing
@@ -12,6 +12,7 @@
 #   claude_sessions_with_name          <name>
 #   worktree_has_live_session          <worktree-path>
 #   claude_agents_count_by_name_prefix <name-prefix>
+#   verify_agent_registered_under      <agent-name> <cwd>
 #
 # claude_sessions_under <path>
 #   The cwd-based low-level primitive. Runs `claude agents --json --cwd <path>`,
@@ -65,9 +66,33 @@
 #               should fail open (proceed to spawn) — the per-worktree dedup
 #               inside `dispatch-spawn-worker` is the last-line defense.
 #
+# verify_agent_registered_under <agent-name> <cwd>
+#   Bounded retry of `claude_sessions_under` that closes the async-registration
+#   race between `claude --bg` returning and the daemon adding the new agent to
+#   `claude agents --json`. Polls the registry up to 5 times at 200 ms spacing —
+#   4 sleeps, not 5, since the last attempt is not followed by a sleep
+#   (≈0.8 s total budget). On any attempt where a non-`stopped` row appears whose
+#   `name` column equals `<agent-name>`, returns 0 immediately — a `stopped` row
+#   is skipped so only a live successor counts (mirrors the spawn-script dedup
+#   guards). A non-numeric interval override (e.g. `inf`) is rejected in favour
+#   of the 0.2 s default so a malformed value cannot hang the verify. UNKNOWN
+#   results from
+#   `claude_sessions_under` are treated as "not yet" and retried — a daemon
+#   momentarily unresponsive during async registration is exactly the case the
+#   retry is meant to absorb. On exhaustion, returns 1 — the conservative-fail
+#   semantic is preserved so the caller still surfaces its `did not register`
+#   diagnostic and exits non-zero.
+#     return 0 — a row with the given <agent-name> was observed.
+#     return 1 — exhaustion: the agent never appeared within the budget.
+#   Used by `dispatch-spawn-router` and `dispatch-spawn-worker` Step 4 verify.
+#
 # Test override: CLAUDE_AGENTS_CMD replaces the `claude` invocation with an
 # arbitrary command (e.g. an absolute path to a fake script), so the helper is
 # testable with no real daemon. Default: `claude`.
+#
+# Test override: LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S overrides the
+# `verify_agent_registered_under` inter-attempt sleep (default 0.2 s). Tests that
+# exercise the full exhaustion path set it to 0 to skip the real sleeps.
 #
 # Sandbox: `claude agents --json` reaches the local daemon over a Unix socket;
 # a sandboxed call returns `[]` indistinguishable from "no sessions". Callers
@@ -223,6 +248,39 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     fi
     printf '%s\n' "$count"
     return 0
+  }
+
+  # verify_agent_registered_under <agent-name> <cwd> — bounded-retry verify
+  # that closes the async-registration race after `claude --bg` returns.
+  # See the header comment for the return-code contract.
+  verify_agent_registered_under() {
+    local agent_name="${1:-}"
+    local cwd="${2:-}"
+    if [[ -z "$agent_name" || -z "$cwd" ]]; then
+      printf 'lib-claude-agents: verify_agent_registered_under requires <agent-name> <cwd>\n' >&2
+      return 1
+    fi
+    local max_attempts=5
+    local interval_s="${LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S:-0.2}"
+    # Reject a non-numeric interval (e.g. `inf`, which GNU sleep accepts and
+    # would hang the verify indefinitely) and fall back to the default.
+    if [[ ! "$interval_s" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+      printf 'lib-claude-agents: LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=%s is not a non-negative number; using 0.2\n' "$interval_s" >&2
+      interval_s=0.2
+    fi
+    local i sessions status name
+    for (( i = 0; i < max_attempts; i++ )); do
+      if sessions=$(claude_sessions_under "$cwd"); then
+        while IFS=$'\t' read -r _ _ status name; do
+          # Confirm only a live successor: a "stopped" row with the target name
+          # must not count as registered (mirrors the spawn-script dedup guards).
+          [[ "$status" == "stopped" ]] && continue
+          [[ "$name" == "$agent_name" ]] && return 0
+        done <<<"$sessions"
+      fi
+      (( i + 1 < max_attempts )) && sleep "$interval_s"
+    done
+    return 1
   }
 
 fi

@@ -62,7 +62,7 @@ trusts that `[]` would wrongly conclude a worktree is free.
 
 Use `dangerouslyDisableSandbox: true` on every Bash call that runs
 `claude agents --json` directly, or that runs a script sourcing
-`.claude/skills/dispatch/scripts/lib-claude-agents.sh` (whose
+`.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh` (whose
 `claude_sessions_under` / `worktree_has_live_session` helpers shell out to it).
 
 ## pass / GPG pinentry
@@ -116,9 +116,9 @@ to a directory under the worktrees root and the git subcommand is permitted by
 VITE_GITHUB_BRANCH="75-prototype-print-viewer" npm run build --prefix print
 
 # Good — use wrapper scripts that set env vars internally
-.claude/skills/dispatch/scripts/run-qa-server.sh print
-.claude/skills/dispatch/scripts/run-preview-deploy.sh print pr-146
-.claude/skills/dispatch/scripts/run-acceptance-tests.sh print
+.claude/skills/dispatch-propagate/scripts/run-qa-server.sh print
+.claude/skills/dispatch-propagate/scripts/run-preview-deploy.sh print pr-146
+.claude/skills/dispatch-propagate/scripts/run-acceptance-tests.sh print
 ```
 
 ### Avoid double quotes spanning newlines in heredoc commit messages
