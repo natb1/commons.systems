@@ -101,5 +101,6 @@ func parseOFX(path string) (ParseResult, error) {
 		}
 	}
 
-	return ParseResult{Transactions: txns, Balance: balance, BalanceDate: balanceDate}, nil
+	isCreditCard := len(doc.CCTxns) > 0 && len(doc.BankTxns) == 0
+	return ParseResult{Transactions: txns, Balance: balance, BalanceDate: balanceDate, IsCreditCard: isCreditCard}, nil
 }

@@ -832,6 +832,7 @@ func parseAndClassify(input *export.Output, dir string, disc parse.DiscoverOpts)
 				Timestamp:     t.Date,
 				StatementID:   pf.sf.StatementID(),
 				TransactionID: t.TransactionID,
+				IsCreditCard:  pf.result.IsCreditCard,
 			})
 			newDocIDs = append(newDocIDs, docID)
 		}
