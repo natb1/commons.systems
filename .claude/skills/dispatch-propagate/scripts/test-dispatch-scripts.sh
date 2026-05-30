@@ -10565,6 +10565,15 @@ status_out=$(git -C "$WORKTREE_REPO" status --porcelain)
 assert_eq "conflict → tree clean after abort" "" "$status_out"
 merge_main_teardown
 
+# Fetch failure → exit 1. Point origin at a non-existent path so `git fetch
+# origin main` cannot reach a remote, exercising the pre-merge fetch guard.
+echo "Test: fetch failure → exit 1"
+merge_main_setup
+git -C "$WORKTREE_REPO" remote set-url origin "$MERGE_MAIN_TMPDIR/no-such-origin-$(date +%s)"
+err=$("$MERGE_MAIN" "$WORKTREE_REPO" 2>&1) && rc=0 || rc=$?
+assert_eq "fetch failure → exit 1" "1" "$rc"
+merge_main_teardown
+
 # ============================================================================
 # dispatch-select-tick tests (#919)
 # ============================================================================
