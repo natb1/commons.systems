@@ -181,6 +181,32 @@ case "$args" in
       echo '{"closedByPullRequestsReferences":[]}'
     fi
     ;;
+  api\ graphql\ *)
+    # Batched blockedBy lookup for dispatch-select-target (#794). The query text
+    # arrives in $args as the -f query= value; extract each issue number and
+    # project the existing blockers-<num>.json fixture (default []) into the
+    # GraphQL alias shape _<num>: { number, blockedBy { nodes { state } } }. This
+    # reuses the same fixtures the REST blocked_by case serves, so the
+    # select-target blocked-skip tests pass via either delivery mechanism.
+    echo "api graphql" >> "$STUB_DIR/gh-graphql-calls.log"
+    nums=$(printf '%s' "$args" | grep -oE 'issue\(number: [0-9]+' | grep -oE '[0-9]+')
+    aliases="{}"
+    while IFS= read -r n; do
+      [[ -z "$n" ]] && continue
+      if [[ -f "$STUB_DIR/blockers-${n}.json" ]]; then
+        fixture=$(cat "$STUB_DIR/blockers-${n}.json")
+      else
+        fixture="[]"
+      fi
+      node=$(printf '%s' "$fixture" | jq -c '{nodes: [.[] | {state: .state}]}')
+      aliases=$(printf '%s' "$aliases" | jq -c --arg k "_${n}" --argjson num "$n" --argjson bb "$node" \
+        '.[$k] = {number: $num, blockedBy: $bb}')
+    done <<< "$nums"
+    printf '{"data":{"repository":%s}}\n' "$aliases"
+    ;;
+  "repo view --json nameWithOwner -q .nameWithOwner")
+    echo "natb1/commons.systems"
+    ;;
   api\ */dependencies/blocked_by)
     path=$(echo "$args" | awk '{print $2}')
     num=$(echo "$path" | grep -oE '[0-9]+' | tail -1)
@@ -1578,8 +1604,10 @@ teardown
 # dispatch-select-target skips a PR from every PR-ladder tier when any issue it
 # closes is blocked_by an open issue; a closing issue blocked only by
 # already-closed issues does not gate. The skip runs before FIRST_PR is
-# populated, so --qa mode inherits it. The gh stub serves
-# api */dependencies/blocked_by from blockers-<num>.json (default []).
+# populated, so --qa mode inherits it. For select-target the blocker state is
+# now served via the gh stub's `api graphql` case (#794), which projects the
+# same blockers-<num>.json fixtures into the batched blockedBy response; the REST
+# `api */dependencies/blocked_by` case remains for dispatch-check-blockers.
 
 # 31. A PR whose closing issue is blocked_by an open issue is skipped; the
 #     next eligible PR is selected.
