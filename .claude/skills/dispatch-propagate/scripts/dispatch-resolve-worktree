@@ -37,6 +37,12 @@
 # accepted form ^[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$, full name <= 32 characters.
 #
 # A bad argument or a failed `gh issue view` is a clear error, not a fallback.
+#
+# This script is issue-keyed. A PR number passed as `<issue-num>` is rejected up
+# front (#926): the REST issues endpoint serves PRs too, and a PR's JSON carries
+# a "pull_request" key (the same discriminator dispatch-resolve-arg uses). Caller
+# must pass the PR's closing-issue number, not the PR number — otherwise the
+# create path would fabricate a stray <pr-num>-* worktree from origin/main.
 set -euo pipefail
 
 ISSUE="${1:-}"
@@ -44,6 +50,14 @@ MODE="${2:-}"
 
 if [[ ! "$ISSUE" =~ ^[1-9][0-9]*$ ]] || [[ "$MODE" != "explicit" && "$MODE" != "queue" ]]; then
   echo "error: usage: dispatch-resolve-worktree <issue-num> <explicit|queue>" >&2
+  exit 1
+fi
+
+# Reject a PR number passed as the issue key (#926). The gh call's stderr is
+# suppressed and a gh failure (404 / network) falls through to downstream
+# handling — only a definitive "pull_request" key trips the guard.
+if gh api "repos/{owner}/{repo}/issues/$ISSUE" 2>/dev/null | jq -e 'has("pull_request")' > /dev/null; then
+  echo "error: #$ISSUE is a PR, not an issue; pass the PR's closing-issue number to dispatch-resolve-worktree" >&2
   exit 1
 fi
 

@@ -2802,6 +2802,46 @@ checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
 assert_eq "PR + injection-shaped headRefName → no checkout" "no" "$checkout_logged"
 teardown
 
+# ----------------------------------------------------------------------------
+# PR-number-as-issue-key rejection (#926). The REST issues endpoint serves PRs
+# too; a PR's JSON carries a "pull_request" key (the same discriminator
+# dispatch-resolve-arg uses). A PR number passed as the issue key must be
+# rejected up front — never slugged into a stray <pr-num>-* worktree. The #922
+# scenario: PR 922 lives on branch 918-dispatch-move and closes issue 918, so
+# PR number and closing-issue number differ.
+# ----------------------------------------------------------------------------
+
+# 19a. PR number passed as the issue key → reject before the create-path slug.
+#      arg-issue-922.json carries "pull_request"; an issue-title-922.json is also
+#      seeded so the test proves the guard fires *before* the create path (no
+#      decision line despite a usable title fixture).
+echo "Test: PR number as issue key → reject (no stray <pr-num>-* worktree)"
+setup
+echo '{"number":922,"pull_request":{"url":"https://api.github.com/repos/o/r/pulls/922"}}' \
+  > "$STUB_DIR/arg-issue-922.json"
+echo '{"title":"some pr title"}' > "$STUB_DIR/issue-title-922.json"
+if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 922 queue 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "PR number as issue key → exit 1" "1" "$rc"
+assert_eq "PR number as issue key → no decision line" "" "$result"
+teardown
+
+# 19b. The PR's closing-issue number (918) resolves the real <issue>-* worktree.
+#      arg-issue-918.json has NO "pull_request" key, so the guard is skipped; the
+#      orphan 918-dispatch-move worktree is entered (PR 922's headRefName matches
+#      the worktree branch, so reconciliation is a no-op).
+echo "Test: PR closing-issue number → enter the real <issue>-* worktree"
+setup
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/918-dispatch-move\nHEAD def456\nbranch refs/heads/918-dispatch-move\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # orphan: no live session owns the worktree
+echo '{"number":918}' > "$STUB_DIR/arg-issue-918.json"
+printf '[{"number":922,"headRefName":"918-dispatch-move"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"918-dispatch-move"}' > "$STUB_DIR/pr-headref-922.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 918 queue)
+assert_eq "PR closing-issue number → enter real worktree" \
+  "enter /worktrees/918-dispatch-move" "$result"
+teardown
+
 # ============================================================================
 # list_worktree_records (lib.sh) tests
 # ============================================================================
