@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Explicit-path open-blocker gate for /dispatch-propagate Step 4.
+# Usage: dispatch-check-blockers <issue-num>
+#
+# Exit 0, no output         — target <N> has no open blockers; dispatch may proceed.
+# Exit 2, "blocked:<n>[,<n>…]" on stdout — target has one or more open blockers.
+# Exit 1                    — usage error or gh/API failure.
+#
+# The gate decision routes through count_open_blockers (lib.sh) — the same
+# helper the queue path (dispatch-select-target) uses — so the explicit and
+# queue paths can never diverge on what counts as "blocked". Closed blockers do
+# not gate; count_open_blockers already filters them out.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+ARG="${1:-}"
+if [[ -z "$ARG" || ! "$ARG" =~ ^[0-9]+$ ]]; then
+  echo "error: usage: dispatch-check-blockers <issue-num>" >&2
+  exit 1
+fi
+
+count=$(count_open_blockers "$ARG")
+if [[ "$count" -eq 0 ]]; then
+  exit 0
+fi
+
+# Blocked: name the open blockers for the caller's report. Same endpoint and
+# open-state filter count_open_blockers uses, so the listed numbers agree with
+# the gate decision.
+nums=$(gh_api_array "/repos/{owner}/{repo}/issues/$ARG/dependencies/blocked_by" \
+  '[.[] | select(.state == "open" or .state == "OPEN") | .number] | join(",")')
+echo "blocked:$nums"
+exit 2
