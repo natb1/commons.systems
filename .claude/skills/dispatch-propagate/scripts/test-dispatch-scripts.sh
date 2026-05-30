@@ -9309,7 +9309,7 @@ restore_setup() {
     "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts" \
     "$TMPDIR_TEST/bin" \
     "$STUB_DIR"
-  for skill in plan-implement verify-pr dispatch-qa code-review-fix \
+  for skill in plan-implement verify-pr qa-fix office-hours code-review-fix \
                review-fix security-review-fix dispatch-worker; do
     mkdir -p "$TMPDIR_TEST/.claude/skills/$skill"
     cat > "$TMPDIR_TEST/.claude/skills/$skill/SKILL.md" <<EOF
@@ -9482,14 +9482,16 @@ else
 fi
 restore_teardown
 
-# --- Test 3: qa → dispatch-qa body + ARGUMENTS: <N> --------------------------
-echo "Test: restore-dispatch-skill phase=qa → dispatch-qa body + args"
+# --- Test 3: qa → qa-fix body, no ARGUMENTS ---------------------------------
+# qa now routes to /qa-fix (the autonomous QA phase skill), which — like
+# /code-review-fix — resolves its target from the worktree and takes no arg.
+echo "Test: restore-dispatch-skill phase=qa → qa-fix body, no ARGUMENTS"
 restore_setup
 set_agents_name "903-foo"
 echo "qa" > "$STUB_DIR/current-phase.txt"
 output=$(run_restore)
 TOTAL=$((TOTAL + 1))
-expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/dispatch-qa"
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/qa-fix"
 if [[ "$output" == *"$expected_dir"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: qa: base directory line emitted"
 else
@@ -9497,16 +9499,52 @@ else
   echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"RESTORE_MARKER_dispatch-qa"* ]]; then
+if [[ "$output" == *"RESTORE_MARKER_qa-fix"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: qa: SKILL.md body marker emitted"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: qa: SKILL.md body marker emitted"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"ARGUMENTS: 903"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: qa: ARGUMENTS line emitted"
+if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
+  PASS=$((PASS + 1)); echo "  PASS: qa: no ARGUMENTS line"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: qa: ARGUMENTS line emitted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: qa: no ARGUMENTS line"
+  echo "    output: $output"
+fi
+restore_teardown
+
+# --- Test 3b: office-hours-<N> session → office-hours body, no ARGUMENTS -----
+# An office-hours-<N> session restores the /office-hours skill body regardless
+# of the item's dispatch phase (matched by session --name ahead of phase
+# routing). The branch supplies ISSUE_NUM; the phase here is qa but the name
+# wins.
+echo "Test: restore-dispatch-skill office-hours-<N> name → office-hours body, no ARGUMENTS"
+restore_setup
+set_agents_name "office-hours-903"
+# The name is not the ^[0-9]+- worker shape, so ISSUE_NUM / WORKTREE_BASENAME
+# come from the branch — supply a <N>-* branch for the fallback.
+echo "903-foo" > "$STUB_DIR/current-branch.txt"
+echo "qa" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/office-hours"
+if [[ "$output" == *"$expected_dir"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours: base directory line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: base directory line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"RESTORE_MARKER_office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours: SKILL.md body marker emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: SKILL.md body marker emitted"
+fi
+TOTAL=$((TOTAL + 1))
+if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours: no ARGUMENTS line"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: no ARGUMENTS line"
   echo "    output: $output"
 fi
 restore_teardown
@@ -9749,7 +9787,8 @@ declare -A CHAIN_GUARD_EXPECTED=(
   # phase-completed marker and stop; the Stop hook (`.claude/hooks/dispatch-stop.sh`)
   # owns post-phase disposition (label management, router spawn, self-close).
   # This supersedes #824's terminal ExitWorktree action:"keep" pattern.
-  [".claude/skills/dispatch-qa/SKILL.md"]=0
+  [".claude/skills/qa-fix/SKILL.md"]=0
+  [".claude/skills/office-hours/SKILL.md"]=0
   [".claude/skills/plan-implement/SKILL.md"]=0
   [".claude/skills/code-review-fix/SKILL.md"]=0
   [".claude/skills/review-fix/SKILL.md"]=0

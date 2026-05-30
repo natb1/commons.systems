@@ -69,54 +69,72 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 # when it fires, so the phase skill's full instructions are present in context
 # regardless of whether the Skill tool was invoked.
 #
-# Routing: implement→plan-implement; verify→verify-pr; qa→dispatch-qa;
+# Routing: implement→plan-implement; verify→verify-pr; qa→qa-fix;
 # code-review→code-review-fix; review→review-fix; security→security-review-fix;
 # waiting/done/unknown/dispatch-phase failure→dispatch-worker (the worker's
 # Step 2 CI-monitor loop and Step 2 done variance handling still run).
+#
+# An office-hours-<N> session (started by the /office-hours entry point, #759)
+# is not a phase worker — it restores the /office-hours skill body, not a phase
+# skill, so its plan-mode paths survive a context clear. This case is matched by
+# session --name ahead of the phase routing below; it is inert until
+# office-hours-* sessions exist.
 #
 # Falls back to the one-line Reload directive if SKILL.md is missing or
 # unreadable — defensive against a packaging error breaking recovery.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 DISPATCH_SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
-PHASE=$("$DISPATCH_SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || PHASE=""
+# An office-hours-<N> session restores the /office-hours skill body, not a phase
+# skill — matched by session --name ahead of the phase routing so its plan-mode
+# paths (a plan accept inside /office-hours) resume /office-hours after a context
+# clear, regardless of the item's dispatch phase. Inert until #759 starts
+# office-hours-* sessions. ISSUE_NUM / WORKTREE_BASENAME already derived from the
+# branch above (the name does not match the ^[0-9]+- worker shape).
+if printf '%s\n' "$NAME" | grep -qE '^office-hours-[0-9]+$'; then
+  SKILL_DIR_NAME="office-hours"
+  SKILL_ARGS=""
+  DIRECTIVE="/office-hours"
+else
+  PHASE=$("$DISPATCH_SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || PHASE=""
 
-case "$PHASE" in
-  implement)
-    SKILL_DIR_NAME="plan-implement"
-    SKILL_ARGS="$ISSUE_NUM"
-    DIRECTIVE="/plan-implement $ISSUE_NUM"
-    ;;
-  verify)
-    SKILL_DIR_NAME="verify-pr"
-    SKILL_ARGS=""
-    DIRECTIVE="/verify-pr"
-    ;;
-  qa)
-    SKILL_DIR_NAME="dispatch-qa"
-    SKILL_ARGS="$ISSUE_NUM"
-    DIRECTIVE="/dispatch-qa $ISSUE_NUM"
-    ;;
-  code-review)
-    SKILL_DIR_NAME="code-review-fix"
-    SKILL_ARGS=""
-    DIRECTIVE="/code-review-fix"
-    ;;
-  review)
-    SKILL_DIR_NAME="review-fix"
-    SKILL_ARGS=""
-    DIRECTIVE="/review-fix"
-    ;;
-  security)
-    SKILL_DIR_NAME="security-review-fix"
-    SKILL_ARGS=""
-    DIRECTIVE="/security-review-fix"
-    ;;
-  *)
-    SKILL_DIR_NAME="dispatch-worker"
-    SKILL_ARGS="$ISSUE_NUM $WORKTREE_PATH"
-    DIRECTIVE="/dispatch-worker $ISSUE_NUM $WORKTREE_PATH"
-    ;;
-esac
+  case "$PHASE" in
+    implement)
+      SKILL_DIR_NAME="plan-implement"
+      SKILL_ARGS="$ISSUE_NUM"
+      DIRECTIVE="/plan-implement $ISSUE_NUM"
+      ;;
+    verify)
+      SKILL_DIR_NAME="verify-pr"
+      SKILL_ARGS=""
+      DIRECTIVE="/verify-pr"
+      ;;
+    qa)
+      SKILL_DIR_NAME="qa-fix"
+      SKILL_ARGS=""
+      DIRECTIVE="/qa-fix"
+      ;;
+    code-review)
+      SKILL_DIR_NAME="code-review-fix"
+      SKILL_ARGS=""
+      DIRECTIVE="/code-review-fix"
+      ;;
+    review)
+      SKILL_DIR_NAME="review-fix"
+      SKILL_ARGS=""
+      DIRECTIVE="/review-fix"
+      ;;
+    security)
+      SKILL_DIR_NAME="security-review-fix"
+      SKILL_ARGS=""
+      DIRECTIVE="/security-review-fix"
+      ;;
+    *)
+      SKILL_DIR_NAME="dispatch-worker"
+      SKILL_ARGS="$ISSUE_NUM $WORKTREE_PATH"
+      DIRECTIVE="/dispatch-worker $ISSUE_NUM $WORKTREE_PATH"
+      ;;
+  esac
+fi
 
 # Canonicalize the skill directory. On cd failure fall back to the legacy
 # one-line Reload directive — recovery still works, just without inlining.
