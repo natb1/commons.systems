@@ -110,8 +110,11 @@ transitioned back to in-progress since the router selected this target (e.g. a
 new push between selection and worker derivation) — stop with no marker and
 print the user-visible report verbatim: `#<N>: CI transitioned back to waiting
 since router selection; next router tick will re-derive.` Apply no
-`dispatch:office-hours` and spawn no babysitter — the router's queue skips
-`waiting` PRs until CI concludes, and the Stop hook spawns a fresh router.
+`dispatch:office-hours` and spawn no babysitter — `waiting` is not
+worker-actionable; the router owns the CI gate. The Stop hook's marker-absent
+branch recognizes a re-derived `waiting` phase and hands the issue back to the
+router (spawns a fresh router **without** applying `dispatch:office-hours`),
+which re-gates it and picks it up once CI concludes.
 
 - **`implement`** — run the Step 3 relevance review and dispatch the verdict it
   returns (`proceed` / `adjust` / `stop` — see Step 3). The draft PR's existence
