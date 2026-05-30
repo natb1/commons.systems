@@ -50,10 +50,7 @@ if [[ "$MD_FILE" != *.md ]]; then
 fi
 
 # Get auth token
-if ! TOKEN="$(gcloud auth print-access-token 2>&1)"; then
-  echo "error: failed to get auth token. Run 'gcloud auth login' first." >&2
-  exit 1
-fi
+TOKEN="$(core::get_auth_token)"
 
 # Verify document exists
 ENCODED_PROJECT="$(core::url_encode_path "$PROJECT")"
@@ -77,16 +74,7 @@ GCS_DEST="${BUCKET}/${COLLECTION_PATH}/${FILENAME}"
 STORAGE_PATH="media/${FILENAME}"
 
 # Check for existing object at destination
-if STAT_OUTPUT=$(gsutil stat "$GCS_DEST" 2>&1); then
-  echo "error: object already exists at ${GCS_DEST}" >&2
-  echo "Rename the file or remove the existing object: gsutil rm ${GCS_DEST}" >&2
-  exit 1
-fi
-if ! echo "$STAT_OUTPUT" | grep -q "No URLs matched"; then
-  echo "error: could not verify object status at ${GCS_DEST}:" >&2
-  echo "$STAT_OUTPUT" >&2
-  exit 1
-fi
+core::check_gcs_no_collision "$GCS_DEST"
 
 # Upload markdown file to GCS
 echo "Uploading ${FILENAME} to GCS..."

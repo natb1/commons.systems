@@ -152,10 +152,16 @@ assert_not_contains() {
 
 echo "Test 1: docId with slash -> percent-encoded in Firestore URL"
 setup
-bash "$ATTACH_SCRIPT" 'has/slash' "$TMPDIR_TEST/stub/test-file.md" >/dev/null 2>&1
-curl_urls=$(cat "$TMPDIR_TEST/stub/curl-urls.log")
-assert_contains "URL contains percent-encoded doc ID" "documents/print/prod/media/has%2Fslash" "$curl_urls"
-assert_not_contains "URL does not contain raw slash in doc ID" "media/has/slash" "$curl_urls"
+run_exit=0
+bash "$ATTACH_SCRIPT" 'has/slash' "$TMPDIR_TEST/stub/test-file.md" >/dev/null 2>&1 || run_exit=$?
+if [ "$run_exit" -ne 0 ]; then
+  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+  echo "  FAIL: attach-markdown.sh unexpectedly exited $run_exit"
+else
+  curl_urls=$(cat "$TMPDIR_TEST/stub/curl-urls.log")
+  assert_contains "URL contains percent-encoded doc ID" "documents/print/prod/media/has%2Fslash" "$curl_urls"
+  assert_not_contains "URL does not contain raw slash in doc ID" "media/has/slash" "$curl_urls"
+fi
 teardown
 
 echo "Test 2: docId with slash, doc verify 404 -> error quotes raw doc ID"
@@ -165,6 +171,34 @@ exit_code=0
 stderr=$(bash "$ATTACH_SCRIPT" 'has/slash' "$TMPDIR_TEST/stub/test-file.md" 2>&1) || exit_code=$?
 assert_eq "exits 1" "1" "$exit_code"
 assert_contains "error quotes original unencoded doc ID" "document 'has/slash' not found" "$stderr"
+teardown
+
+echo "Test 3: docId with question mark -> percent-encoded in Firestore URL"
+setup
+run_exit=0
+bash "$ATTACH_SCRIPT" 'has?param' "$TMPDIR_TEST/stub/test-file.md" >/dev/null 2>&1 || run_exit=$?
+if [ "$run_exit" -ne 0 ]; then
+  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+  echo "  FAIL: attach-markdown.sh unexpectedly exited $run_exit"
+else
+  curl_urls=$(cat "$TMPDIR_TEST/stub/curl-urls.log")
+  assert_contains "URL contains percent-encoded '?'" "documents/print/prod/media/has%3Fparam" "$curl_urls"
+  assert_not_contains "URL does not contain raw '?'" "media/has?param" "$curl_urls"
+fi
+teardown
+
+echo "Test 4: docId with hash -> percent-encoded in Firestore URL"
+setup
+run_exit=0
+bash "$ATTACH_SCRIPT" 'has#frag' "$TMPDIR_TEST/stub/test-file.md" >/dev/null 2>&1 || run_exit=$?
+if [ "$run_exit" -ne 0 ]; then
+  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+  echo "  FAIL: attach-markdown.sh unexpectedly exited $run_exit"
+else
+  curl_urls=$(cat "$TMPDIR_TEST/stub/curl-urls.log")
+  assert_contains "URL contains percent-encoded '#'" "documents/print/prod/media/has%23frag" "$curl_urls"
+  assert_not_contains "URL does not contain raw '#'" "media/has#frag" "$curl_urls"
+fi
 teardown
 
 echo ""
