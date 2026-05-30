@@ -20,7 +20,7 @@ Detect input mode from `$INPUT`:
 
 - Matches `^#?[0-9]+$` → **issue number mode**: extract the number (strip `#`), fetch the issue:
   ```bash
-  gh issue view <N> --json title,body,labels,assignees,projectItems,state
+  gh issue view <N> --json title,body,labels,assignees,state
   ```
   Store title and body for evaluation.
 
@@ -31,7 +31,7 @@ Detect input mode from `$INPUT`:
 
   For each sub-issue number returned, fetch its full content:
   ```bash
-  gh issue view <sub-N> --json title,body,labels,assignees,projectItems,state
+  gh issue view <sub-N> --json title,body,labels,assignees,state
   ```
 
   Store all fetched issues (primary + sub-issues + parent + siblings) for evaluation.
@@ -42,7 +42,7 @@ Detect input mode from `$INPUT`:
   ```
   If a parent exists, fetch its full content:
   ```bash
-  gh issue view <parent-N> --json title,body,labels,assignees,projectItems,state
+  gh issue view <parent-N> --json title,body,labels,assignees,state
   ```
 
   Then fetch sibling issues (other sub-issues of the same parent):
@@ -50,10 +50,10 @@ Detect input mode from `$INPUT`:
   gh api "/repos/{owner}/{repo}/issues/<parent-N>/sub_issues" --jq '.[] | {number, state}'
   ```
   For each sibling (excluding `<N>`), fetch content based on state:
-  - Open siblings: full content (`title,body,labels,assignees,projectItems,state`)
+  - Open siblings: full content (`title,body,labels,assignees,state`)
   - Closed siblings: summary only (`title,number,state`)
 
-  > See `ref-memory-management` Issue Context Loading for the authoritative list of content types. This skill extends the base field set with `labels, assignees, projectItems` for evaluation.
+  > See `ref-memory-management` Issue Context Loading for the authoritative list of content types. This skill extends the base field set with `labels, assignees` for evaluation.
   > See `ref-github-issues` for write operations (add/remove sub-issues and dependencies) and the critical distinction between database IDs and GraphQL node IDs.
 
 - Otherwise → **description mode**: treat `$INPUT` as the issue body text. Prompt user for a title if not provided.
@@ -93,7 +93,6 @@ Extract 3–5 representative keywords from the issue title and body. Present can
 Verify the issue meets project standards:
 
 - **Type classification**: is this a new feature, enhancement, or bug? Flag if unclear.
-- **New features**: must be assigned to a project (`projectItems` field non-empty).
 - **Enhancements**: must have the `enhancement` label.
 - **Bugs**: must have the `bug` label.
 - **Acceptance criteria**: body must include a checklist (`- [ ]` items). Each criterion must be testable with a clear pass/fail outcome. Flag vague criteria.
