@@ -31,7 +31,7 @@ PR_NUM=$(echo "$PR_JSON" | jq -r .number)
 echo "$PR_JSON" | jq -r '.labels[].name'
 ```
 
-`PR_NUM` is carried through to Steps 5, 6, and 7 — do not re-resolve. The PR body
+`PR_NUM` is carried through to Steps 5, 6, 7, and 8 — do not re-resolve. The PR body
 stays in `PR_JSON` (`echo "$PR_JSON" | jq -r .body`); Step 5 parses its
 `Closes #N` line(s) to resolve the issue(s) this PR implements. If the PR
 already carries the `dispatch:code-reviewed` label — an interrupted prior run —
@@ -171,20 +171,39 @@ steps in order.
    `dispatch:security-reviewed` — so `/dispatch-propagate` does not apply the label after
    this skill returns.
 
-8. **Write the phase-completed marker, then stop.** The Stop hook
-   (`.claude/hooks/dispatch-stop.sh`) reads this to decide propagate vs park.
-   Atomic via tempfile + mv. `CLAUDE_JOB_DIR` unset = interactive run; skip.
+8. **Check for deviation, then write the marker (or reason) and stop.**
 
-   ```bash
-   if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-     printf 'phase=code-review\npr=%s\n' "$PR_NUM" \
-       > "$CLAUDE_JOB_DIR/phase-completed.tmp"
-     mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
-        "$CLAUDE_JOB_DIR/phase-completed"
-   fi
-   ```
+   **Deviation criterion:** the Deferred bucket dominated — nearly all findings
+   were Deferred and none were Fixed.
 
-   Then **stop**. The Stop hook reads the marker and advances the chain.
+   - **Deviation fires** → do NOT write `phase-completed`. Instead write a
+     one-line reason so the Stop hook can surface it in the office-hours
+     comment. The Stop hook reads marker-absence as Branch A and applies
+     `dispatch:office-hours` to the issue, parking it for human review.
+
+     ```bash
+     if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+       printf '%s\n' "/code-review-fix: findings dominated by Deferred (out-of-scope) items; none fixed" \
+         > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+       mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" \
+          "$CLAUDE_JOB_DIR/office-hours-reason"
+     fi
+     ```
+
+   - **No deviation** → write the `phase-completed` marker as normal.
+     Atomic via tempfile + mv. `CLAUDE_JOB_DIR` unset = interactive run; skip.
+
+     ```bash
+     if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+       printf 'phase=code-review\npr=%s\n' "$PR_NUM" \
+         > "$CLAUDE_JOB_DIR/phase-completed.tmp"
+       mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
+          "$CLAUDE_JOB_DIR/phase-completed"
+     fi
+     ```
+
+   Then **stop**. The Stop hook reads the marker (or its absence) and either
+   advances the chain or parks the issue.
 
 ## Finding classification
 

@@ -72,11 +72,35 @@ The body has one `Closes #N` line per issue implemented in this PR — the prima
 issue plus any implemented sub-issues or blockers. This draft PR is the
 implement→verify transition marker.
 
-### 4. Write the phase-completed marker, then stop
+### 4. Check for deviation, then write the marker (or skip it), then stop
 
-Write the phase-completed marker as the final action so the Stop hook
-(`.claude/hooks/dispatch-stop.sh`) can read it and propagate the dispatch
-chain. Atomic via tempfile + mv so the hook never sees a partial file.
+Before writing the marker, judge whether the implementation deviated from the
+approved plan — scope shifted mid-implementation, or the plan could not be
+fully implemented as approved. Base this on the `/implement-unit` outcomes
+observed in Step 2.
+
+**Deviation fires** — skip the `phase-completed` marker. Instead write a
+one-line deviation reason to `$CLAUDE_JOB_DIR/office-hours-reason`, atomic via
+tempfile + mv, under the same `CLAUDE_JOB_DIR` guard. The draft PR opened in
+Step 3 stays open. The Stop hook reads marker-absence as Branch A, applies
+`dispatch:office-hours` to the issue (surfacing this reason in the
+why-comment), and parks the issue for human review.
+
+```bash
+if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+  printf '%s\n' "/plan-implement: implementation deviated from the approved plan" \
+    > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+  mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" \
+     "$CLAUDE_JOB_DIR/office-hours-reason"
+fi
+```
+
+Use the default phrasing above, or make it more specific when the nature of
+the shift is clear (e.g. `/plan-implement: unit 3 scope expanded to cover
+auth; approved plan did not include auth changes`).
+
+**No deviation** — write the `phase-completed` marker as the final action.
+Atomic via tempfile + mv so the hook never sees a partial file.
 `CLAUDE_JOB_DIR` unset = interactive run; skip.
 
 ```bash
