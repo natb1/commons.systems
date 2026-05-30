@@ -156,7 +156,7 @@ export function idbToStatement(row: IdbStatement): Statement {
 
 // ── IdbStatement → RawStatement (export) ──────────────────────────────────────
 
-export function statementToRawJson(s: IdbStatement): object {
+export function statementToRawJson(s: IdbStatement): RawStatement {
   return {
     id: s.id,
     statementId: s.statementId,
@@ -168,6 +168,7 @@ export function statementToRawJson(s: IdbStatement): object {
     lastTransactionDate: s.lastTransactionDateMs != null
       ? new Date(s.lastTransactionDateMs).toISOString()
       : null,
+    virtual: s.virtual,
   };
 }
 
