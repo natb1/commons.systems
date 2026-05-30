@@ -9837,6 +9837,23 @@ assert_eq "busy: foreign holder untouched (not released)" "other-live-session" \
   "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
+# --- unexpected select-target line → release + exit 2 ------------------------
+echo "Test: select-tick unexpected select-target line → exit 2, lock released"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+echo "garbage unexpected line"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+err=$("$TMPDIR_TEST/dispatch-select-tick" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"emitted unexpected"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "unexpected select-target → error + exit 2" "ok" "$status"
+assert_eq "unexpected select-target: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
 # --- extra arguments → usage error, exit 2 -----------------------------------
 echo "Test: select-tick extra arguments → exit 2"
 sel_tick_setup
@@ -10191,6 +10208,23 @@ export MAT_SPAWN_RC=1
 out=$(run_mat 839 queue)
 assert_eq "spawn-failed: terminal token" "notify spawn-failed" \
   "$(printf '%s\n' "$out" | tail -n 1)"
+# spawn-failed is post-finalize: dispatch-finalize-selection already released
+# the lock before the spawn attempt, so the lock must be empty here.
+assert_eq "spawn-failed: lock already released by finalize" "" \
+  "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- unexpected resolve-worktree line → release + exit 2 ---------------------
+echo "Test: materialize-spawn unexpected resolve-worktree line → exit 2, lock released"
+mat_setup
+export MAT_WT_DECISION="bogus unexpected"
+err=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"emitted unexpected"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "unexpected resolve-worktree → error + exit 2" "ok" "$status"
+assert_eq "unexpected resolve-worktree: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
 # --- usage errors → exit 2 ---------------------------------------------------
