@@ -8892,6 +8892,32 @@ assert_eq "flag arg: no marker created in $TMPDIR_TEST" "" \
   "$(find "$TMPDIR_TEST" -name dispatch-worktree -print 2>/dev/null)"
 lock_teardown
 
+# ----- Test F (unset CLAUDE_CODE_SESSION_ID) ---------------------------------
+# #928: the marker is session-scoped, so an unset CLAUDE_CODE_SESSION_ID is a
+# misconfigured environment — the wrapper must fail clear (exit 2) rather than
+# write an inert empty marker that could never reclaim a live holder. Mirrors
+# dispatch-acquire-lock's Test 6b guard.
+echo "Test: dispatch-finalize-selection with unset CLAUDE_CODE_SESSION_ID exits 2"
+lock_setup
+UNSET_WT="$TMPDIR_TEST/unset-wt"
+mkdir -p "$UNSET_WT"
+# `set -e` is in effect: capture the exit code with an if/else. env -u strips
+# CLAUDE_CODE_SESSION_ID for just this invocation.
+if ( env -u CLAUDE_CODE_SESSION_ID \
+       "$FINALIZE_SCRIPT" "$UNSET_WT" ) > "$TMPDIR_TEST/unset.out" 2> "$TMPDIR_TEST/unset.err"; then
+  unset_exit=0
+else
+  unset_exit=$?
+fi
+assert_eq "unset session: exit 2" "2" "$unset_exit"
+assert_eq "unset session: stderr names script and 'is unset'" "1" \
+  "$(grep -c 'dispatch-finalize-selection.*CLAUDE_CODE_SESSION_ID is unset' "$TMPDIR_TEST/unset.err")"
+# The guard fires after the cd but before the marker write — no inert empty
+# marker must land in the target worktree.
+assert_eq "unset session: no marker created in target worktree" "0" \
+  "$([ -f "$UNSET_WT/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
+lock_teardown
+
 # ============================================================================
 # restore-dispatch-skill tests (#903)
 # ============================================================================
