@@ -2663,8 +2663,9 @@ assert_eq "explicit + unqueryable daemon → conflict <path>" \
   "conflict /worktrees/42-my-feature" "$result"
 teardown
 
-# 3. queue mode + a live-session-owned worktree → conflict <path>. Acceptance
-#    criterion 3: same target, explicit → enter, queue (live) → conflict.
+# 3. queue mode + a live-session-owned worktree → conflict <path>. The liveness
+#    check is mode-independent (#837): both modes yield conflict for a live
+#    session — see test 2 for the explicit-mode counterpart.
 echo "Test: queue + live-session <N>-* worktree → conflict"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
