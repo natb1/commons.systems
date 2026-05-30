@@ -5,9 +5,10 @@
 # Usage: dispatch-select-tick [<issue-or-PR-number>]
 #
 # Runs the lock acquisition, origin/main sync (only on `main`), the JIT engine,
-# and target selection as one deterministic sequence and prints exactly ONE
-# decision line as its LAST stdout line. Any JIT `created`/`skipped`/`debounced`
-# lines are passed through first, each prefixed `jit: `. The router (SKILL.md)
+# the Calendar JIT importer, and target selection as one deterministic sequence
+# and prints exactly ONE decision line as its LAST stdout line. Any JIT
+# `created`/`skipped`/`debounced` lines are passed through first, each prefixed
+# `jit: `, followed by any `calendar: ...` lines. The router (SKILL.md)
 # routes on the final decision line; a model-decision seam (`main-broken` /
 # `jit-reminder`) and the worktree materialization (`dispatch-materialize-spawn`)
 # live on the other side of the seam, not here.
@@ -84,6 +85,17 @@ if [[ -n "$JIT_OUT" ]]; then
   while IFS= read -r jit_line; do
     [[ -n "$jit_line" ]] && echo "jit: $jit_line"
   done <<< "$JIT_OUT"
+fi
+
+# --- Step 2b: run the Calendar JIT importer (best-effort) --------------------
+# Files one reminder issue per pressing Google Calendar event and closes
+# ended-event issues. Its own `calendar: ...` lines already carry the prefix;
+# pass them through. A silent no-op when the OAuth env vars are unset.
+CAL_OUT=$("$SCRIPT_DIR/dispatch-jit-calendar-import") || true
+if [[ -n "$CAL_OUT" ]]; then
+  while IFS= read -r cal_line; do
+    [[ -n "$cal_line" ]] && echo "$cal_line"
+  done <<< "$CAL_OUT"
 fi
 
 # --- Step 3: select the target -----------------------------------------------

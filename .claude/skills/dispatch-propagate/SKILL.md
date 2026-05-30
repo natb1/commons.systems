@@ -20,7 +20,8 @@ A tick is two scripted orchestrator calls with one model-decision seam between
 them:
 
 1. `dispatch-select-tick` — acquires the lock, syncs `main`, runs the JIT
-   engine, and selects the target. Emits one **decision line**.
+   engine and the Calendar JIT importer, and selects the target. Emits one
+   **decision line**.
 2. The model routes on that line (Table 1). Only three outcomes need the model:
    a `main-broken` / `jit-reminder` sub-skill invocation, or — for a real
    target — a call to `dispatch-materialize-spawn`.
@@ -46,8 +47,9 @@ script's lock acquisition uses `--wait`, which blocks on contention up to
 timeout.
 
 The script passes through any JIT `created`/`skipped`/`debounced` lines
-(prefixed `jit: `) and prints the decision as its **last** line. Report any
-`jit:` lines, then route on the decision (Table 1).
+(prefixed `jit: `) and any Calendar importer `calendar: ...` lines, then prints
+the decision as its **last** line. Report any `jit:` and `calendar:` lines, then
+route on the decision (Table 1).
 
 The **lock disposition is the script's responsibility**: it holds the lock on
 the four target lines plus `main-broken`/`jit-reminder`, releases it on
