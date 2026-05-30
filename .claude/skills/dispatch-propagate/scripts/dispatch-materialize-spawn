@@ -24,6 +24,11 @@
 #   notify target-blocked  explicit target is closed or has an open blocker; the
 #                          issue is parked via dispatch-apply-office-hours and
 #                          the lock released at the guard.
+#   notify merge-conflict  origin/main does not merge cleanly into the resolved
+#                          worktree; the merge is aborted, the issue parked via
+#                          dispatch-apply-office-hours, and the lock released at
+#                          the guard. The worker is never spawned into a
+#                          conflicted tree.
 #   notify spawn-failed    dispatch-spawn-worker exited non-zero. Lock already
 #                          released by finalize-selection.
 #   drain worktree-conflict  the target worktree cannot be safely entered; the
@@ -34,9 +39,9 @@
 #   drain concurrency-cap  the live worker count already meets the budget; a
 #                          cap-keyed re-seed is scheduled. Lock already released.
 #
-# Lock-release points: `notify target-blocked` and `drain worktree-conflict`
-# release explicitly at the guard (the marker does not exist yet on these
-# pre-finalize stop paths). `propagate` / `notify spawn-failed` /
+# Lock-release points: `notify target-blocked`, `notify merge-conflict`, and
+# `drain worktree-conflict` release explicitly at the guard (the marker does not
+# exist yet on these pre-finalize stop paths). `propagate` / `notify spawn-failed` /
 # `drain ci-waiting` / `drain concurrency-cap` are all reached AFTER
 # dispatch-finalize-selection has released the lock, so they do not re-release.
 # An internal `exit 2` failure before dispatch-finalize-selection (a hard
@@ -175,6 +180,30 @@ case "$WT_ACTION" in
     exit 2
     ;;
 esac
+
+# --- Step 5b: merge origin/main into the resolved worktree (#944) ------------
+# Bring the worktree's branch up to origin/main BEFORE the worker is spawned, so
+# the worker session reads up-to-date dispatch skill files from this worktree's
+# `.claude/` tree (the `enter` path may reuse a worktree whose branch is behind).
+# Local merge only — never pushes; each phase skill's own push points carry the
+# merge commit to origin. A no-op on the `create` path (the worktree was just
+# branched from origin/main). A conflict aborts the spawn and parks the issue for
+# a human via office-hours, mirroring the `notify target-blocked` path; the
+# worker is never spawned into a conflicted tree. Still pre-finalize, so the lock
+# is released explicitly here.
+"$SCRIPT_DIR/dispatch-merge-main" "$WORKTREE_PATH" 1>&2
+MERGE_RC=$?
+if (( MERGE_RC == 3 )); then
+  release_lock
+  "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" "origin/main does not merge cleanly into the target worktree" 1>&2 || true
+  echo "merge of origin/main into $WORKTREE_PATH conflicts; spawn aborted"
+  echo "notify merge-conflict"
+  exit 0
+elif (( MERGE_RC != 0 )); then
+  release_lock
+  echo "dispatch-materialize-spawn: dispatch-merge-main failed (exit $MERGE_RC) for $WORKTREE_PATH" >&2
+  exit 2
+fi
 
 # Write the recovery marker into the target worktree and release the lock in one
 # step. Lock-free from here. Its stdout (released/noop) goes to stderr.
