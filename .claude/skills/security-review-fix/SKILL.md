@@ -91,10 +91,23 @@ ready. Otherwise run all steps in order.
       First check whether the diff touches `package.json` or
       `package-lock.json`; if neither changed, report no findings (pre-existing
       CVEs in unchanged dependencies are out of scope). If dependency files
-      changed, run `npm audit --json` on HEAD and again against the lockfile at
-      `MERGE_BASE`, then report only advisories present in the HEAD audit but
-      absent from the baseline. Also flag any dependency the PR adds or upgrades
-      that skips a known security-patch release.
+      changed, produce a differential audit:
+
+      ```bash
+      # Audit HEAD (current working tree)
+      npm audit --json > /tmp/audit-head.json
+
+      # Audit MERGE_BASE lockfile without modifying the working tree
+      mkdir -p /tmp/audit-baseline
+      git show "$MERGE_BASE":package-lock.json > /tmp/audit-baseline/package-lock.json
+      git show "$MERGE_BASE":package.json      > /tmp/audit-baseline/package.json
+      npm audit --package-lock-only --json --prefix /tmp/audit-baseline \
+        > /tmp/audit-baseline.json
+      ```
+
+      Report only advisories whose advisory ID appears in `/tmp/audit-head.json`
+      but not in `/tmp/audit-baseline.json` — these are CVEs the PR's dependency
+      changes newly expose.
    5. **Firebase-specific** — Firestore rules permissiveness (overly broad
       `allow` conditions, missing field constraints), emulator-only code
       reachable on production paths, Firebase API key or config exposure.
