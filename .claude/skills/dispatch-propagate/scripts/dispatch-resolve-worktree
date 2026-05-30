@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# Resolve the worktree action for a dispatch target issue.
+# Usage: dispatch-resolve-worktree <issue-num> <explicit|queue>
+#
+# Prints exactly one decision line to stdout:
+#   enter <path>    — an existing <issue>-* worktree exists; the caller
+#                     uses <path>.
+#   create <branch> — no <issue>-* worktree exists; the caller materializes
+#                     <branch> and uses its path.
+#   conflict <path> — a queue-selected target's worktree is owned by another
+#                     live Claude session; /dispatch-propagate reports <path> and stops.
+#
+# The mode argument decides what an existing <issue>-* worktree means:
+#   explicit — the target was named by an explicit /dispatch-propagate argument
+#              (recycle-after-completion); an existing worktree yields `enter`.
+#   queue    — the target was queue-selected. An existing worktree yields
+#              `conflict` only when a live Claude session owns it; an orphan
+#              worktree (on disk, no live session) yields `enter` so the
+#              queue target recycles it instead of stalling the tick (#905).
+#              Liveness is checked via worktree_has_live_session
+#              (lib-claude-agents.sh), which is fail-safe: an unqueryable
+#              daemon counts as owned and yields `conflict`.
+#
+# Branch reconciliation on the `enter` path (#913): a reused <issue>-* worktree
+# is matched by branch-name prefix, but the target's PR (resolved by
+# dispatch-find-pr via GitHub closing-linkage) may live on a different
+# <issue>-* branch. Before entering, the worktree's checked-out branch is
+# reconciled against the PR head branch:
+#   - no PR for <issue> (the implement phase) → enter unchanged.
+#   - worktree already on the PR head branch → enter unchanged (no checkout).
+#   - worktree on a different branch with no commits unique to it → the
+#     worktree is re-pointed to the PR head branch (lossless), then `enter`.
+#   - worktree on a different branch carrying unique commits → `conflict`,
+#     rather than silently discarding them.
+#
+# The branch name printed by `create` matches the WorktreeCreate hook's
+# accepted form ^[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$, full name <= 32 characters.
+#
+# A bad argument or a failed `gh issue view` is a clear error, not a fallback.
+set -euo pipefail
+
+ISSUE="${1:-}"
+MODE="${2:-}"
+
+if [[ ! "$ISSUE" =~ ^[1-9][0-9]*$ ]] || [[ "$MODE" != "explicit" && "$MODE" != "queue" ]]; then
+  echo "error: usage: dispatch-resolve-worktree <issue-num> <explicit|queue>" >&2
+  exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+# worktree_has_live_session — queue mode distinguishes a live-session-owned
+# worktree (conflict) from an orphan one (enter / recycle) (#905).
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+# Reconcile a reused worktree's checked-out branch against the target PR's head
+# branch, then emit the `enter`/`conflict` decision (#913). Called on every
+# `enter`-bound path (explicit, and queue-orphan recycle).
+emit_enter_reconciled() {
+  local wt_path="$1" wt_branch="$2" pr pr_head unique
+  if ! pr=$("$SCRIPT_DIR/dispatch-find-pr" "$ISSUE"); then
+    echo "error: dispatch-find-pr failed for issue $ISSUE; cannot reconcile branch" >&2
+    exit 1
+  fi
+  if [[ -z "$pr" ]]; then echo "enter $wt_path"; return 0; fi   # no PR → unchanged
+  pr_head=$(gh pr view "$pr" --json headRefName | jq -r '.headRefName // empty')
+  # A PR was found, so an empty/malformed headRefName is a failed lookup, not a
+  # no-op — surfacing it as an error beats silently entering unreconciled. The
+  # format guard also blocks option/refspec injection (leading '-', '..') via
+  # this GitHub-sourced name before it reaches git fetch/rev-list/checkout.
+  if [[ -z "$pr_head" || "$pr_head" == -* || "$pr_head" == *..* || ! "$pr_head" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+    echo "error: PR #$pr returned an unusable head branch name '$pr_head' for issue $ISSUE" >&2
+    exit 1
+  fi
+  if [[ "$pr_head" == "$wt_branch" ]]; then     # already on PR head branch → no-op
+    echo "enter $wt_path"; return 0
+  fi
+  git -C "$wt_path" fetch --quiet origin "$pr_head"
+  unique=$(git -C "$wt_path" rev-list --count "origin/${pr_head}..${wt_branch}")
+  if [[ "$unique" -ne 0 ]]; then echo "conflict $wt_path"; return 0; fi  # unique commits → conflict
+  git -C "$wt_path" checkout --quiet -B "$pr_head" "origin/${pr_head}"   # lossless re-point
+  echo "enter $wt_path"
+}
+
+# `enter` / `conflict` — scan local worktrees for one whose branch carries the
+# <issue>-* prefix, via the shared list_worktree_records helper (lib.sh).
+# Records arrive in `git worktree list` order, so the first matching record wins.
+while IFS= read -r line; do
+  split_worktree_record "$line"
+  if [[ "$WT_NUM" == "$ISSUE" ]]; then
+    if [[ "$MODE" == "queue" ]] && worktree_has_live_session "$WT_PATH"; then
+      # Queue target whose worktree a live session owns — a genuine race.
+      echo "conflict $WT_PATH"
+    else
+      # explicit-enter, or queue-orphan recycle: reconcile the reused
+      # worktree's branch against the target PR's head branch before entering.
+      emit_enter_reconciled "$WT_PATH" "$WT_BRANCH"
+    fi
+    exit 0
+  fi
+done < <(list_worktree_records)
+
+# `create` — no worktree matched. Build a sanitized <issue>-<slug> branch name
+# from the issue title. `jq -e` exits non-zero on a null/missing .title, so the
+# guard catches a malformed response instead of slugging the literal "null".
+if ! TITLE=$(gh issue view "$ISSUE" --json title | jq -er '.title'); then
+  echo "error: failed to fetch title for issue $ISSUE" >&2
+  exit 1
+fi
+
+# Lowercase, then collapse non-alphanumeric runs to single dashes and strip
+# leading/trailing dashes.
+slug=$(printf '%s' "$TITLE" \
+  | tr '[:upper:]' '[:lower:]' \
+  | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
+
+# Truncate so the full <issue>-<slug> name is <= 32 chars, then drop a trailing
+# `-` the cut may have left (runs were already collapsed, so at most one).
+slug="${slug:0:$((32 - ${#ISSUE} - 1))}"
+slug="${slug%-}"
+
+if [[ -z "$slug" ]]; then
+  echo "error: issue $ISSUE title produced an empty branch slug: '$TITLE'" >&2
+  exit 1
+fi
+
+echo "create $ISSUE-$slug"
