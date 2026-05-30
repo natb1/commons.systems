@@ -61,9 +61,10 @@
 #   3. Oldest "code-review" PR (draft + dispatch:qa-done)
 #   4. Oldest "verify"      PR (draft, CI completed and failed)
 #   5. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
-#      by a live Claude session, resolved to a startable open leaf (an issue
-#      whose entire open-leaf subtree is worktree-conflicted is skipped, exactly
-#      as a live-session-owned worktree is)
+#      by a live Claude session, and which is not already closed by a non-draft
+#      (ready) PR (#920), resolved to a startable open leaf (an issue whose
+#      entire open-leaf subtree is worktree-conflicted is skipped, exactly as a
+#      live-session-owned worktree is)
 #   6. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
 #
 # A PR or help-wanted issue is skipped only when a live Claude session owns its
@@ -77,6 +78,10 @@
 # A PR is also skipped when an issue it closes is blocked_by an open issue.
 # "done" (non-draft) PRs are skipped entirely.
 # "waiting" PRs (draft, CI still running/queued/not started) are skipped entirely.
+# An open help-wanted issue is also skipped when a non-draft (ready) PR closes it
+# (#920). A *draft* closing PR does NOT gate the issue — a stalled/orphaned draft
+# is the normal in-flight dispatch state and must leave the issue selectable so
+# the chain can resume by recycling the worktree.
 # A queue with no topic-labeled items resolves entirely to "other", reproducing
 # the flat ladder exactly.
 #
@@ -492,6 +497,20 @@ if [[ "$QA_MODE" == "true" ]]; then
   exit 0
 fi
 
+# Issue numbers closed by a non-draft (ready) open PR (#920). Such an issue has
+# reached a ready PR — the dispatch chain has terminated for it (no live worker)
+# yet GitHub keeps it open + help-wanted until the PR merges. Re-selecting it only
+# spawns a worker that derives phase "done" and wastes a tick. A *draft* closing
+# PR is deliberately excluded: a stalled/orphaned draft must leave its issue
+# selectable so the chain can resume by recycling the worktree.
+declare -A READY_PR_CLOSED_ISSUES
+while IFS= read -r closed_num; do
+  [[ -z "$closed_num" ]] && continue
+  READY_PR_CLOSED_ISSUES["$closed_num"]=1
+done < <(printf '%s' "$PR_LIST" | jq -r '
+  .[] | select(.isDraft == false)
+  | (.closingIssuesReferences // [])[].number')
+
 # First-seen help-wanted issue per category. The queue is the open-issue list
 # filtered client-side to "help wanted"; issues whose <N>-* worktree is owned
 # by a live session are skipped. Each candidate is resolved to a
@@ -505,6 +524,8 @@ ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r '
   | [.number, ((.labels // []) | tojson)] | @tsv')
 while IFS=$'\t' read -r issue_num issue_labels; do
   [[ -z "$issue_num" ]] && continue
+  # Skip an open issue already closed by a non-draft (ready) PR (#920).
+  [[ -n "${READY_PR_CLOSED_ISSUES[$issue_num]:-}" ]] && continue
   # Skip an issue whose <N>-* worktree is owned by a live session. An orphan
   # <N>-* worktree does not skip — it is recycled at dispatch-resolve-worktree
   # (#905).
