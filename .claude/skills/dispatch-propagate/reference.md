@@ -35,17 +35,27 @@ the spawn boundary, so only one worker starts. (An orphan worktree, on disk
 with no live session, no longer blocks selection — so (b) is what closes the
 lock-release-to-worker-registration window, not (a).)
 
-The `tmp/dispatch-worktree` marker is the canonical post-Step-5 reclaim signal:
-a recorded holder whose worktree carries the marker is past Step 5, so its
-lock is reclaimable by any subsequent tick regardless of session-id provenance.
-The acquire path skips the busy branch when the foreign holder's cwd has the
-marker, and `--release` succeeds (truncates and prints `released`) when EITHER
-the caller's sessionId matches the holder OR the holder's cwd has the marker.
-This closes the silent-`noop` failure mode for any post-Step-5 caller whose
-`CLAUDE_CODE_SESSION_ID` was re-derived from a different context (a subagent
-or hook). Pre-marker callers — Steps 1-4 stop paths and the Step 5 `conflict`
-stop — keep strict sessionId-match semantics by construction because the
-marker is absent.
+The `tmp/dispatch-worktree` marker is the canonical post-Step-5 reclaim signal,
+and it is **session-scoped**: `dispatch-finalize-selection` stamps the
+finalizing holder's `CLAUDE_CODE_SESSION_ID` into the marker, and the lock
+reclaims a foreign holder via the marker **only** when the marker's content
+equals the recorded holder's sessionId. The acquire path skips the busy branch
+when the foreign holder's cwd has a marker naming that recorded holder, and
+`--release` succeeds (truncates and prints `released`) when EITHER the caller's
+sessionId matches the holder OR the holder's cwd has a marker naming the
+recorded holder. This closes the silent-`noop` failure mode for any post-Step-5
+caller whose `CLAUDE_CODE_SESSION_ID` was re-derived from a different context (a
+subagent or hook) — the marker still names the recorded holder, so reclaim
+fires.
+
+The content-match guard is what prevents a stale marker from reclaiming a
+**live, mid-selection** holder. An empty marker (the `touch` stamped by
+`.claude/hooks/worktree-create.sh` on every worktree creation) names no session,
+and a marker naming an older, since-finalized session names the wrong session;
+neither matches the recorded holder, so neither reclaims a live holder that
+happens to share that worktree. Pre-marker callers — Steps 1-4 stop paths and
+the Step 5 `conflict` stop — keep strict sessionId-match semantics by
+construction because the marker is absent.
 
 The lock is scoped to selection and self-healing. The recorded sessionId
 (`CLAUDE_CODE_SESSION_ID`) outlives any single Bash call within a tick: if a
@@ -137,16 +147,21 @@ recovery does **not** read it: `restore-dispatch-skill.sh` (bound to
 `SessionStart:clear`) keys on the session's `--name` shape (`<N>-<slug>` for
 workers) and emits `/dispatch-worker <N> <worktree-path>` so the worker
 re-derives the phase from PR/CI ground truth.
-`.claude/hooks/worktree-create.sh` also writes the marker as its final action
-on every successful worktree creation, so a fresh worktree is marker-bearing
-the moment the hook returns — the router's explicit marker write here is the
-in-skill defense for any code path that bypasses the hook. The router itself
-never writes the marker into its own cwd (`worktrees/main`), so a
+`.claude/hooks/worktree-create.sh` also stamps the marker (an empty `touch`) as
+its final action on every successful worktree creation, so a fresh worktree
+carries a content-less marker the moment the hook returns. That empty marker is
+**inert** for reclaim: it names no session, so it never matches a recorded
+holder and never reclaims a live holder co-located in that worktree. Only
+`dispatch-finalize-selection`'s session-scoped write — the finalizing holder's
+`CLAUDE_CODE_SESSION_ID` — is a reclaim-capable marker. The router itself never
+writes the marker into its own cwd (`worktrees/main`), so a
 `SessionStart:clear` there is a no-op — correct, since the router is
 short-lived and re-seeded by the #725 cap-keyed re-seed when a cap stall ends
-the chain. The marker is an empty
-boolean flag with no payload; it persists for the worktree's life and needs no
-cleanup — `tmp/` is git-ignored, and removing the worktree removes it.
+the chain. The marker's content is the finalizing holder's sessionId; it
+persists for the worktree's life and needs no cleanup — `tmp/` is git-ignored,
+and removing the worktree removes it. A stale marker naming an older session
+cannot reclaim a different live holder, so no active cleanup is required to
+keep the lock correct.
 
 ## Step 6 spawn-cwd trade-off
 

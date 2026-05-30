@@ -3921,7 +3921,8 @@ export CLAUDE_CODE_SESSION_ID="sess-2020-self"
 # Build the foreign holder's marker-bearing cwd inside the test tmp tree.
 foreign_cwd="$TMPDIR_TEST/foreign-worktree"
 mkdir -p "$foreign_cwd/tmp"
-touch "$foreign_cwd/tmp/dispatch-worktree"
+# The marker names the recorded holder (sess-2020-foreign) → reclaim.
+printf '%s\n' "sess-2020-foreign" > "$foreign_cwd/tmp/dispatch-worktree"
 lock_fake_claude_sessions "sess-2020-foreign=$foreign_cwd" "sess-2020-self=$TMPDIR_TEST"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
 assert_eq "past-Step-5 holder reclaim exits 0" "0" "$rc"
@@ -3964,7 +3965,8 @@ printf '%s\n' "sess-2222-foreign" > "$DISPATCH_LOCK_FILE"
 export CLAUDE_CODE_SESSION_ID="sess-2222-self"
 foreign_cwd="$TMPDIR_TEST/foreign-worktree-with-marker"
 mkdir -p "$foreign_cwd/tmp"
-touch "$foreign_cwd/tmp/dispatch-worktree"
+# The marker names the recorded holder (sess-2222-foreign) → lenient release.
+printf '%s\n' "sess-2222-foreign" > "$foreign_cwd/tmp/dispatch-worktree"
 lock_fake_claude_sessions "sess-2222-foreign=$foreign_cwd" "sess-2222-self=$TMPDIR_TEST"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
 assert_eq "lenient --release exits 0" "0" "$rc"
@@ -3992,6 +3994,74 @@ assert_eq "pre-marker --release prints noop" "noop" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
 assert_eq "pre-marker --release leaves the lock file unchanged" \
   "sess-2323-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 24: live foreign holder with MISMATCHED marker → busy (#928) -------
+#
+# The marker exists but names a DIFFERENT (older, since-finalized) session, not
+# the recorded holder. A live mid-selection holder launched from a previously-
+# marked worktree must NOT have its lock reclaimed: marker_names_holder rejects
+# the content mismatch, so acquire stays busy.
+
+echo "Test: live foreign holder with mismatched marker → busy (#928)"
+lock_setup
+printf '%s\n' "sess-2424-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-2424-self"
+foreign_cwd="$TMPDIR_TEST/foreign-worktree-stale-marker"
+mkdir -p "$foreign_cwd/tmp"
+# Marker names an unrelated, older session — not the recorded holder.
+printf '%s\n' "sess-2424-some-older-session" > "$foreign_cwd/tmp/dispatch-worktree"
+lock_fake_claude_sessions "sess-2424-foreign=$foreign_cwd" "sess-2424-self=$TMPDIR_TEST"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "mismatched-marker holder blocks: exits 0" "0" "$rc"
+assert_eq "mismatched-marker holder blocks: prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "mismatched-marker holder blocks: lock file unchanged" \
+  "sess-2424-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 25: live foreign holder with EMPTY marker → busy (#928) ------------
+#
+# An empty marker is the shape stamped by .claude/hooks/worktree-create.sh's
+# `touch` on every worktree creation. It names no session, so it must never
+# reclaim a live holder co-located in that worktree.
+
+echo "Test: live foreign holder with empty (touch) marker → busy (#928)"
+lock_setup
+printf '%s\n' "sess-2525-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-2525-self"
+foreign_cwd="$TMPDIR_TEST/foreign-worktree-empty-marker"
+mkdir -p "$foreign_cwd/tmp"
+# The hook's shape: a content-less marker.
+touch "$foreign_cwd/tmp/dispatch-worktree"
+lock_fake_claude_sessions "sess-2525-foreign=$foreign_cwd" "sess-2525-self=$TMPDIR_TEST"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "empty-marker holder blocks: exits 0" "0" "$rc"
+assert_eq "empty-marker holder blocks: prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "empty-marker holder blocks: lock file unchanged" \
+  "sess-2525-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 26: --release with MISMATCHED marker → noop (#928) -----------------
+#
+# Symmetry with Test 24: a lenient --release must not fire when the marker
+# names a session other than the recorded holder. The lock stays intact.
+
+echo "Test: --release with mismatched marker → noop (#928)"
+lock_setup
+printf '%s\n' "sess-2626-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-2626-self"
+foreign_cwd="$TMPDIR_TEST/foreign-worktree-mismatch-release"
+mkdir -p "$foreign_cwd/tmp"
+printf '%s\n' "sess-2626-some-older-session" > "$foreign_cwd/tmp/dispatch-worktree"
+lock_fake_claude_sessions "sess-2626-foreign=$foreign_cwd" "sess-2626-self=$TMPDIR_TEST"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
+assert_eq "mismatched --release exits 0" "0" "$rc"
+assert_eq "mismatched --release prints noop" "noop" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "mismatched --release leaves the lock file unchanged" \
+  "sess-2626-foreign" "$lock_contents"
 lock_teardown
 
 # ============================================================================
@@ -8443,6 +8513,11 @@ cd "$FIN_ORIG_PWD"
 assert_eq "happy path: exit 0" "0" "$finalize_exit"
 assert_eq "happy path: marker in target worktree" "1" \
   "$([ -f "$TARGET_WT/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
+# #928: the marker is session-scoped — it carries the finalizing holder's
+# CLAUDE_CODE_SESSION_ID, not an empty flag.
+assert_eq "happy path: marker content names the finalizing session" \
+  "$CLAUDE_CODE_SESSION_ID" \
+  "$(cat "$TARGET_WT/tmp/dispatch-worktree")"
 # Regression for #896: the wrapper must not write the marker into the
 # caller's cwd. This is the load-bearing assertion.
 assert_eq "happy path: no marker in caller cwd" "0" \
