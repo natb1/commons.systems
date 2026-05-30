@@ -11,8 +11,9 @@
 #
 # Branches (driven by marker presence + CURRENT_PHASE relative to MARKER_PHASE):
 #   A. marker absent — phase skill did not run to completion (mid-phase exit
-#      or context compaction). Apply dispatch:office-hours to the ISSUE, spawn
-#      router, exit 0 — session parks "stopped" for human review.
+#      or context compaction). Park the ISSUE on a human via
+#      dispatch-apply-office-hours (label + why-comment), spawn router, exit 0 —
+#      session parks "stopped" for human review.
 #   B. marker present + CURRENT_PHASE non-empty + MARKER_PHASE != CURRENT_PHASE
 #      — phase advanced. Strip dispatch:office-hours from BOTH the PR (if any)
 #      and the ISSUE, spawn router, self-close. Empty CURRENT_PHASE (e.g.
@@ -22,8 +23,9 @@
 #      counter < 3 — CI re-runs still possible. Spawn router, exit 0 (no label,
 #      no self-close — session parks "stopped"; transcript is the diagnostic).
 #   D. marker present + same phase + NOT (verify AND counter < 3) — true
-#      non-advancement (or a hypothetical same-phase non-verify case). Apply
-#      dispatch:office-hours to the ISSUE, spawn router, exit 0.
+#      non-advancement (or a hypothetical same-phase non-verify case). Park the
+#      ISSUE on a human via dispatch-apply-office-hours (label + why-comment),
+#      spawn router, exit 0.
 #
 # Discriminator: only acts for a /dispatch-worker job. Skipped when
 # CLAUDE_JOB_DIR is unset (interactive session), state.json is missing, or the
@@ -80,30 +82,28 @@ if [ -f "$MARKER_FILE" ]; then
   esac
 fi
 
-apply_office_hours_to_issue() {
-  gh issue edit "$ISSUE_NUM" --add-label dispatch:office-hours 2>&1
-}
-
-# Apply targets the issue only — a PR may not exist yet (implement phase exits
-# before /plan-implement opens the draft). Strip targets both, since the
-# UserPromptSubmit hook may run from either an implement-phase or a
-# post-implement worktree and the label could be on either side.
-apply_office_hours_label() {
-  local apply_output
-  if apply_output=$(apply_office_hours_to_issue); then
-    :
-  elif [[ "$apply_output" == *"not found"* ]]; then
-    gh label create dispatch:office-hours --color FBCA04 \
-      --description "dispatch workflow: blocked on a human — awaiting input or review" \
-      >/dev/null 2>&1 \
-      || echo "[dispatch-stop] WARNING: gh label create dispatch:office-hours failed" >&2
-    apply_office_hours_to_issue >/dev/null 2>&1 \
-      || echo "[dispatch-stop] WARNING: gh apply dispatch:office-hours (retry) failed" >&2
-  else
-    echo "[dispatch-stop] WARNING: gh apply dispatch:office-hours failed: $apply_output" >&2
+# Resolve the why-comment reason. The #826 enrichment hook may write a
+# context-specific reason to $CLAUDE_JOB_DIR/office-hours-reason; when present
+# and non-empty it wins over the caller-supplied branch default.
+resolve_office_hours_reason() {
+  local default_reason="$1"
+  local reason_file="$CLAUDE_JOB_DIR/office-hours-reason"
+  local file_reason
+  if [ -n "${CLAUDE_JOB_DIR:-}" ] && [ -s "$reason_file" ]; then
+    # Command substitution strips trailing newlines; a file that contains only
+    # whitespace/newlines produces an empty string — fall through to the default.
+    file_reason="$(cat "$reason_file")"
+    if [ -n "$file_reason" ]; then
+      printf '%s' "$file_reason"
+      return
+    fi
   fi
+  printf '%s' "$default_reason"
 }
 
+# Strip targets both the PR (if any) and the issue, since this runs from either
+# an implement-phase or a post-implement worktree and the label could be on
+# either side. (Apply is issue-only, via dispatch-apply-office-hours.)
 strip_office_hours_label() {
   if [ -n "$PR_NUM" ]; then
     gh pr edit "$PR_NUM" --remove-label dispatch:office-hours >/dev/null 2>&1 \
@@ -125,7 +125,9 @@ self_close() {
 
 if [ -z "$MARKER_PHASE" ]; then
   # Branch A — marker absent.
-  apply_office_hours_label
+  "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
+    "$(resolve_office_hours_reason "phase exited before completion (mid-phase exit or context compaction)")" \
+    || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
   spawn_router
   exit 0
 fi
@@ -150,6 +152,8 @@ if [ "$CURRENT_PHASE" = "verify" ] && [ -n "$PR_NUM" ]; then
 fi
 
 # Branch D — true non-advancement.
-apply_office_hours_label
+"$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
+  "$(resolve_office_hours_reason "phase ran but did not advance")" \
+  || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
 spawn_router
 exit 0

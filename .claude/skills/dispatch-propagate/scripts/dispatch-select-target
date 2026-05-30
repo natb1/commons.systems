@@ -350,13 +350,13 @@ issue_has_live_worktree() {
 # closingIssuesReferences drives topic-category resolution: a PR inherits the
 # highest-priority topic among the labels of every issue it closes.
 PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences)
-# Skip PRs carrying dispatch:office-hours — the item is parked for human review
-# (either an input-block recorded by dispatch-input-block.sh, or a phase that
-# completed but surfaced a deviation, recorded by /dispatch-propagate Step 7). A later
-# UserPromptSubmit clears the label and the item re-enters the queue.
+# The office-hours skip is ISSUE-anchored (issue #909): dispatch:office-hours
+# lives on the issue, not the PR, so it is not filtered here on PR labels.
+# Instead the main PR loop below resolves each candidate PR's issue from its
+# branch prefix (<N>-<slug>) and skips the PR when that issue carries the label.
+# A later strip clears the label and the item re-enters the queue.
 PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r '
   sort_by(.createdAt) | .[]
-  | select((.labels // []) | any(.name == "dispatch:office-hours") | not)
   | [.number, .createdAt, .headRefName, (.closingIssuesReferences // [] | tojson)] | @tsv')
 
 # Fetch every open issue once, carrying labels. This single list serves two
@@ -443,6 +443,16 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   case "$phase" in
     done|waiting) continue ;;
   esac
+
+  # Skip PRs whose ISSUE is parked on a human (dispatch:office-hours). The label
+  # lives on the issue (issue #909), so resolve the issue number from the PR's
+  # branch prefix (<N>-<slug>) and check the issue's labels in ISSUE_LABELS_JSON.
+  pr_issue_num="${pr_branch%%-*}"
+  if [[ -n "$pr_issue_num" ]] && printf '%s' "$ISSUE_LABELS_JSON" \
+      | jq -e --arg n "$pr_issue_num" \
+        '(.[$n] // []) | any(.name == "dispatch:office-hours")' >/dev/null; then
+    continue
+  fi
 
   # Skip PRs gated by an open blocker. Placed after the done/waiting filter so
   # PRs that would be discarded anyway don't pay the per-closing-issue gh-api
