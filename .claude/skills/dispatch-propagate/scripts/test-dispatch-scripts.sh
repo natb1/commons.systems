@@ -6677,6 +6677,261 @@ fi
 sr_teardown
 
 # ============================================================================
+# dispatch-schedule-target-reseed tests
+# ============================================================================
+#
+# Exercises the target-keyed CI-wait reseed: under-cap reseed bumps the
+# dispatch:ci-wait-attempt counter and schedules a transient timer whose
+# ExecStart re-runs dispatch-spawn-router <N>; at-cap escalates to
+# dispatch:office-hours and schedules no timer; bad <N> / missing PR are misuse.
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/      copy of dispatch-schedule-target-reseed + lib.sh
+#   $TMPDIR_TEST/bin/          systemd-run stub
+#   $TMPDIR_TEST/systemd-log   recorded systemd-run argv (one line per call)
+#   $TMPDIR_TEST/gh-edit-log   recorded fake-gh pr-edit / label-create argv
+#   $TMPDIR_TEST/oh-log        recorded fake dispatch-apply-office-hours argv
+#   $TMPDIR_TEST/main/         a synthetic main worktree path
+echo ""
+echo "=== dispatch-schedule-target-reseed ==="
+
+tr_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/main"
+
+  cp "$SCRIPT_DIR/dispatch-schedule-target-reseed" \
+    "$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed"
+  # The script sources lib.sh via its SCRIPT_DIR — so lib.sh must sit alongside.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed"
+
+  export DISPATCH_TARGET_RESEED_MAIN_WORKTREE="$TMPDIR_TEST/main"
+  export DISPATCH_TARGET_RESEED_NOW=10000
+  export DISPATCH_TARGET_RESEED_DELAY=300
+  export DISPATCH_TARGET_RESEED_CAP=3
+
+  # systemd-run stub: records its argv (one line per call), exits 0.
+  cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/systemd-log"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemd-run"
+  export DISPATCH_TARGET_RESEED_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
+
+  # fake gh: `pr view ... --jq ...` echoes the test-controlled current attempt
+  # count ($FAKE_CUR_ATTEMPT, default 0 — the script consumes the jq result as
+  # the integer counter). `pr edit` / `label create` record their argv to a log
+  # and exit 0.
+  cat > "$TMPDIR_TEST/bin/fake-gh" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "pr" && "\$2" == "view" ]]; then
+  echo "\${FAKE_CUR_ATTEMPT:-0}"
+  exit 0
+fi
+echo "\$*" >> "$TMPDIR_TEST/gh-edit-log"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-gh"
+  export DISPATCH_TARGET_RESEED_GH_CMD="$TMPDIR_TEST/bin/fake-gh"
+
+  # fake dispatch-find-pr: echoes a fixed PR number.
+  cat > "$TMPDIR_TEST/bin/fake-find-pr" <<STUB
+#!/usr/bin/env bash
+# Default 1234 only when FAKE_PR_NUM is unset — a set-but-empty value echoes
+# nothing, modelling the no-PR case.
+echo "\${FAKE_PR_NUM-1234}"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-find-pr"
+  export DISPATCH_TARGET_RESEED_FIND_PR_CMD="$TMPDIR_TEST/bin/fake-find-pr"
+
+  # fake dispatch-apply-office-hours: records its argv to a log, exits 0.
+  cat > "$TMPDIR_TEST/bin/fake-oh" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/oh-log"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-oh"
+  export DISPATCH_TARGET_RESEED_OFFICE_HOURS_CMD="$TMPDIR_TEST/bin/fake-oh"
+}
+
+tr_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_TARGET_RESEED_MAIN_WORKTREE
+  unset DISPATCH_TARGET_RESEED_NOW
+  unset DISPATCH_TARGET_RESEED_DELAY
+  unset DISPATCH_TARGET_RESEED_CAP
+  unset DISPATCH_TARGET_RESEED_SYSTEMD_RUN_CMD
+  unset DISPATCH_TARGET_RESEED_GH_CMD
+  unset DISPATCH_TARGET_RESEED_FIND_PR_CMD
+  unset DISPATCH_TARGET_RESEED_OFFICE_HOURS_CMD
+  unset FAKE_CUR_ATTEMPT
+  unset FAKE_PR_NUM
+}
+
+# --- Test 1: under-cap reseed (CUR=0 → 1) ------------------------------------
+
+echo "Test: under-cap reseed (CUR=0) schedules a timer and applies attempt-1"
+tr_setup
+export FAKE_CUR_ATTEMPT=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "under-cap reseed exits 0" "0" "$rc"
+assert_eq "under-cap reseed stdout names the unit + fire" \
+  "reseeded dispatch-reseed-target-979-10300 at 10300" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-reseed-target-979-10300"* \
+   && "$log" == *"--on-calendar=@10300"* \
+   && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
+   && "$log" == *"--setenv=PATH="* \
+   && "$log" == *"dispatch-spawn-router 979"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: under-cap systemd-run argv (unit + calendar + cwd + setenv + spawn-router 979)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap systemd-run argv (unit + calendar + cwd + setenv + spawn-router 979)"
+  echo "    log: $log"
+fi
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--add-label dispatch:ci-wait-attempt-1"* \
+   && "$edits" != *"--remove-label"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: under-cap applies attempt-1 with no remove (CUR was 0)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap applies attempt-1 with no remove (CUR was 0)"
+  echo "    edits: $edits"
+fi
+tr_teardown
+
+# --- Test 2: counter bump (CUR=1 → 2) ----------------------------------------
+
+echo "Test: counter bump (CUR=1) removes attempt-1, applies attempt-2, schedules timer"
+tr_setup
+export FAKE_CUR_ATTEMPT=1
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "counter-bump exits 0" "0" "$rc"
+assert_eq "counter-bump stdout names the unit + fire" \
+  "reseeded dispatch-reseed-target-979-10300 at 10300" "$out"
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--remove-label dispatch:ci-wait-attempt-1"* \
+   && "$edits" == *"--add-label dispatch:ci-wait-attempt-2"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: counter-bump removes attempt-1 and adds attempt-2"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: counter-bump removes attempt-1 and adds attempt-2"
+  echo "    edits: $edits"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: counter-bump schedules a timer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: counter-bump schedules a timer"
+fi
+tr_teardown
+
+# --- Test 3: at cap (CUR == CAP = 3) → escalate, no timer --------------------
+
+echo "Test: at cap (CUR==CAP) escalates to office-hours and schedules no timer"
+tr_setup
+export FAKE_CUR_ATTEMPT=3
+export DISPATCH_TARGET_RESEED_CAP=3
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "at-cap exits 0" "0" "$rc"
+assert_eq "at-cap stdout is 'escalated'" "escalated" "$out"
+oh=$(cat "$TMPDIR_TEST/oh-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$oh" == "979 "* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: at-cap office-hours fake records 979 as arg1"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: at-cap office-hours fake records 979 as arg1"
+  echo "    oh-log: $oh"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: at-cap schedules no timer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: at-cap schedules no timer"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+tr_teardown
+
+# --- Test 4: bad <N> (flag-like) → exit 2, no side effects -------------------
+
+echo "Test: flag-like <N> exits 2 with no timer and no side effects"
+tr_setup
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" --repo 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "flag-like <N> exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" && ! -s "$TMPDIR_TEST/gh-edit-log" && ! -s "$TMPDIR_TEST/oh-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: flag-like <N>; no timer / no label edit / no escalate"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: flag-like <N>; no timer / no label edit / no escalate"
+fi
+tr_teardown
+
+# --- Test 5: missing PR → exit 2, no timer -----------------------------------
+
+echo "Test: missing PR (find-pr empty) exits 2 with no timer"
+tr_setup
+export FAKE_PR_NUM=""
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "missing PR exits 2" "2" "$rc"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"no PR found for issue #979"* && ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing PR; stderr diagnostic + no timer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing PR; stderr diagnostic + no timer"
+  echo "    stderr: $err"
+fi
+tr_teardown
+
+# --- Test 5b: non-numeric PR from find-pr → exit 2, no timer ------------------
+# PR_NUM flows into the same `gh pr view/edit "$PR_NUM"` calls N is guarded
+# against; a flag-like find-pr result must fail closed rather than reach gh.
+
+echo "Test: non-numeric PR (find-pr returns a flag) exits 2 with no timer"
+tr_setup
+export FAKE_PR_NUM="--repo evil/repo"
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "non-numeric PR exits 2" "2" "$rc"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"non-numeric PR"* && ! -s "$TMPDIR_TEST/systemd-log" && ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-numeric PR; stderr diagnostic + no timer / no label edit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-numeric PR; stderr diagnostic + no timer / no label edit"
+  echo "    stderr: $err"
+fi
+tr_teardown
+
+# --- Test 6: already-exists idempotency → exit 0, stdout 'reseeded …' ---------
+# A repeated call within the same fire-window produces the same UNIT_NAME; systemd
+# refuses to recreate it. The script must still print the 'reseeded' stdout line so
+# dispatch-materialize-spawn routes to 'drain ci-reseeded' and not the error fallback.
+
+echo "Test: already-exists collision → exit 0 and stdout 'reseeded ...'"
+tr_setup
+export FAKE_CUR_ATTEMPT=0
+# Replace the systemd-run stub with one that simulates the already-exists collision.
+cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "Unit dispatch-reseed-target-979-10300.timer already exists." >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/bin/systemd-run"
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "already-exists: exits 0" "0" "$rc"
+assert_eq "already-exists: stdout is reseeded line" \
+  "reseeded dispatch-reseed-target-979-10300 at 10300" "$out"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"already scheduled"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: already-exists: stderr notes already-scheduled"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-exists: stderr notes already-scheduled"
+  echo "    stderr: $err"
+fi
+tr_teardown
+
+# ============================================================================
 # dispatch project-helper tests (item-add / status-read / status-write)
 # ============================================================================
 #
@@ -7225,6 +7480,48 @@ if [[ -z "${err//[[:space:]]/}" ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: last-attempt-register: no diagnostic on stderr"
   echo "    stderr: $err"
+fi
+spawn_router_teardown
+
+# --- Test 8: an explicit target makes the spawn target-keyed ------------------
+
+echo "Test: an explicit target <N> spawns '/dispatch-propagate <N>'"
+spawn_router_setup
+write_fake_spawn_router_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 979 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "target: dispatch-spawn-router exits 0" "0" "$rc"
+assert_eq "target: stdout is 'spawned'" "spawned" "$out"
+# The final argv element is the target-keyed prompt rather than the bare form.
+mapfile -t bg_argv < "$SPAWN_ROUTER_BG_ARGV"
+assert_eq "target: argv[5] is '/dispatch-propagate 979'" "/dispatch-propagate 979" "${bg_argv[5]:-}"
+spawn_router_teardown
+
+# --- Test 9: the no-arg path still spawns the bare prompt --------------------
+
+echo "Test: no target argument still spawns the bare '/dispatch-propagate'"
+spawn_router_setup
+write_fake_spawn_router_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "no-target: dispatch-spawn-router exits 0" "0" "$rc"
+assert_eq "no-target: stdout is 'spawned'" "spawned" "$out"
+mapfile -t bg_argv < "$SPAWN_ROUTER_BG_ARGV"
+assert_eq "no-target: argv[5] is the bare '/dispatch-propagate'" "/dispatch-propagate" "${bg_argv[5]:-}"
+spawn_router_teardown
+
+# --- Test 10: a non-numeric target argument is rejected ----------------------
+
+echo "Test: a non-numeric target argument exits 2 and spawns nothing"
+spawn_router_setup
+write_fake_spawn_router_claude
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" --repo 2>&1 1>/dev/null) || rc=$?
+assert_eq "bad-target: dispatch-spawn-router exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_ROUTER_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: bad-target: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: bad-target: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_ROUTER_BG_ARGV")"
 fi
 spawn_router_teardown
 
@@ -12016,6 +12313,12 @@ echo "\$*" >> "$TMPDIR_TEST/logs/spawn-worker.log"
 echo spawned
 exit \${MAT_SPAWN_RC:-0}
 FAKE
+  cat > "$TMPDIR_TEST/dispatch-schedule-target-reseed" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/schedule-target-reseed.log"
+printf '%s\n' "\${MAT_RESEED_OUT:-reseeded dispatch-reseed-target-\$1-10300 at 10300}"
+exit \${MAT_RESEED_RC:-0}
+FAKE
   cat > "$TMPDIR_TEST/sync-issue-context" <<FAKE
 #!/usr/bin/env bash
 echo "cwd=\$PWD argv=\$*" >> "$TMPDIR_TEST/logs/sync-issue-context.log"
@@ -12024,7 +12327,8 @@ FAKE
     "$TMPDIR_TEST"/dispatch-check-blockers "$TMPDIR_TEST"/dispatch-apply-office-hours \
     "$TMPDIR_TEST"/dispatch-resolve-worktree "$TMPDIR_TEST"/dispatch-merge-main \
     "$TMPDIR_TEST"/dispatch-phase "$TMPDIR_TEST"/dispatch-select-target \
-    "$TMPDIR_TEST"/dispatch-spawn-worker "$TMPDIR_TEST"/sync-issue-context
+    "$TMPDIR_TEST"/dispatch-spawn-worker "$TMPDIR_TEST"/dispatch-schedule-target-reseed \
+    "$TMPDIR_TEST"/sync-issue-context
 
   mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
   cat > "$TMPDIR_TEST/bin/git" <<STUB
@@ -12055,7 +12359,8 @@ mat_teardown() {
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_MERGE_RC MAT_PHASE \
-    MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE MAT_MERGE_CONFLICT_N
+    MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE MAT_MERGE_CONFLICT_N \
+    MAT_RESEED_OUT MAT_RESEED_RC
 }
 
 run_mat() { "$TMPDIR_TEST/dispatch-materialize-spawn" "$@" 2>/dev/null; }
@@ -12295,18 +12600,90 @@ assert_eq "merge clean: dispatch-merge-main was called" "1" \
   "$([ -f "$TMPDIR_TEST/logs/merge-main.log" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- waiting CI → drain ci-waiting -------------------------------------------
-echo "Test: materialize-spawn waiting CI → drain ci-waiting"
+# --- single-target waiting CI → reseed scheduled → drain ci-reseeded (#979) ---
+echo "Test: materialize-spawn single-target waiting CI → drain ci-reseeded (reseed scheduled)"
 mat_setup
 export MAT_PHASE=waiting
 out=$(run_mat 839 queue)
-assert_eq "ci-waiting: CI line present" "#839: CI in progress; the next router tick will re-evaluate." \
+assert_eq "ci-reseeded: CI line still present" "#839: CI in progress; the next router tick will re-evaluate." \
   "$(printf '%s\n' "$out" | grep '^#839:')"
-assert_eq "ci-waiting: terminal token" "drain ci-waiting" \
+assert_eq "ci-reseeded: terminal token" "drain ci-reseeded" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "ci-waiting: no spawn" "0" \
+assert_eq "ci-reseeded: scheduler called with target" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
+assert_eq "ci-reseeded: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
-assert_eq "ci-waiting: lock released at ci-waiting stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "ci-reseeded: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- explicit-mode waiting CI → reseed scheduled → drain ci-reseeded (#979) ----
+# The headline `/dispatch <N>` path is MODE=explicit. The reseed test above runs
+# MODE=queue and so enters the single-target branch via the `GAP <= 1` disjunct;
+# this test exercises the other disjunct (`MODE == explicit`) directly, confirming
+# an explicit single target also schedules the target-keyed reseed.
+echo "Test: materialize-spawn explicit-mode waiting CI → drain ci-reseeded (reseed scheduled)"
+mat_setup
+export MAT_PHASE=waiting
+out=$(run_mat 839 explicit)
+assert_eq "explicit-ci-reseeded: terminal token" "drain ci-reseeded" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "explicit-ci-reseeded: scheduler called with target" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
+assert_eq "explicit-ci-reseeded: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "explicit-ci-reseeded: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- single-target waiting CI → attempt cap → notify ci-wait-exhausted (#979) -
+echo "Test: materialize-spawn single-target waiting CI at cap → notify ci-wait-exhausted"
+mat_setup
+export MAT_PHASE=waiting
+export MAT_RESEED_OUT=escalated
+out=$(run_mat 839 queue)
+assert_eq "ci-exhausted: terminal token" "notify ci-wait-exhausted" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "ci-exhausted: scheduler called with target" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
+assert_eq "ci-exhausted: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "ci-exhausted: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- fan-out unchanged: ci-waiting target is skipped, scheduler NOT called -----
+# Multi-item fan-out (--gap N>1) must keep the pre-#979 behavior: a ci-waiting
+# target is a `skipped` outcome and the scheduler is never invoked (other live
+# workers' Stop-hooks bring the chain back to the target later).
+echo "Test: materialize-spawn fan-out ci-waiting target skipped, scheduler not called (#979)"
+mat_setup
+export MAT_PHASE=waiting
+export MAT_QUEUE="840 841"
+out=$(run_mat 839 queue --gap 3)
+assert_eq "fanout-ci-waiting: skip detail present" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'skipped #839 (ci-waiting)')"
+assert_eq "fanout-ci-waiting: terminal token" "drain" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fanout-ci-waiting: scheduler NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && echo 1 || echo 0)"
+assert_eq "fanout-ci-waiting: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- single-target waiting CI → scheduler fails → fallback drain ci-waiting ----
+# When dispatch-schedule-target-reseed exits non-zero (e.g. systemd-run fails for
+# a reason other than 'already exists'), materialize-spawn must fall back to the
+# plain 'drain ci-waiting' token so the tick never wedges.
+echo "Test: materialize-spawn single-target waiting CI scheduler failure → drain ci-waiting fallback"
+mat_setup
+export MAT_PHASE=waiting
+export MAT_RESEED_RC=1
+out=$(run_mat 839 queue)
+assert_eq "ci-wait-fallback: terminal token is drain ci-waiting" "drain ci-waiting" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "ci-wait-fallback: scheduler was called" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
+assert_eq "ci-wait-fallback: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "ci-wait-fallback: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
 # --- --gap 1 → propagate (single target, default behavior) -------------------
