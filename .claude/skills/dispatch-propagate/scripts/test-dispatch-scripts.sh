@@ -4711,46 +4711,52 @@ assert_eq "cwd-arg: claude invoked as 'agents --json --cwd <path>'" \
   "$(printf 'agents\n--json\n--cwd\n%s' "$CA_DIR")" "$(cat "$CA_DIR/argv")"
 ca_teardown
 
-# --- Test 10: claude_agents_count_by_name_prefix counts prefix-matching ----
+# --- Test 10: claude_agents_count_busy_workers counts busy real workers ----
 
-echo "Test: claude_agents_count_by_name_prefix matches 2 of 3 sessions"
+echo "Test: claude_agents_count_busy_workers matches 2 busy real workers"
 ca_setup
+# Two busy real workers (824-foo, 720-bar → counted), one idle real worker
+# (508-bar → NOT counted, busy-only), one busy router (dispatch-abcd → NOT
+# counted, wrong name shape), one busy non-worker (some-human-session → NOT
+# counted, wrong name shape).
 write_fake_claude '[
-  {"sessionId":"a","pid":1,"status":"busy","name":"dispatch-worker-845-foo"},
-  {"sessionId":"b","pid":2,"status":"busy","name":"dispatch-worker-720-bar"},
-  {"sessionId":"c","pid":3,"status":"idle","name":"dispatch-router-baz"}
+  {"sessionId":"a","pid":1,"status":"busy","name":"824-foo"},
+  {"sessionId":"b","pid":2,"status":"busy","name":"720-bar"},
+  {"sessionId":"c","pid":3,"status":"idle","name":"508-bar"},
+  {"sessionId":"d","pid":4,"status":"busy","name":"dispatch-abcd"},
+  {"sessionId":"e","pid":5,"status":"busy","name":"some-human-session"}
 ]' 0
-if out=$(claude_agents_count_by_name_prefix dispatch-worker-); then rc=0; else rc=$?; fi
+if out=$(claude_agents_count_busy_workers); then rc=0; else rc=$?; fi
 assert_eq "count: exits 0" "0" "$rc"
-assert_eq "count: 2 of 3 match dispatch-worker-" "2" "$out"
+assert_eq "count: 2 busy real workers" "2" "$out"
 ca_teardown
 
-# --- Test 11: claude_agents_count_by_name_prefix returns 0 for no matches --
+# --- Test 11: claude_agents_count_busy_workers returns 0 for no matches ----
 
-echo "Test: claude_agents_count_by_name_prefix returns 0 for no matches"
+echo "Test: claude_agents_count_busy_workers returns 0 for no matches"
 ca_setup
-write_fake_claude '[{"sessionId":"a","pid":1,"status":"busy","name":"other-thing"}]' 0
-if out=$(claude_agents_count_by_name_prefix dispatch-worker-); then rc=0; else rc=$?; fi
+write_fake_claude '[{"sessionId":"a","pid":1,"status":"busy","name":"dispatch-abcd"}]' 0
+if out=$(claude_agents_count_busy_workers); then rc=0; else rc=$?; fi
 assert_eq "no-match: exits 0" "0" "$rc"
 assert_eq "no-match: prints 0" "0" "$out"
 ca_teardown
 
-# --- Test 12: claude_agents_count_by_name_prefix reports UNKNOWN on failure-
+# --- Test 12: claude_agents_count_busy_workers reports UNKNOWN on failure --
 
-echo "Test: claude_agents_count_by_name_prefix returns rc 1 on daemon failure"
+echo "Test: claude_agents_count_busy_workers returns rc 1 on daemon failure"
 ca_setup
 write_fake_claude '' 1
-if out=$(claude_agents_count_by_name_prefix dispatch-worker-); then rc=0; else rc=$?; fi
+if out=$(claude_agents_count_busy_workers); then rc=0; else rc=$?; fi
 assert_eq "daemon-fail: exits non-zero (UNKNOWN)" "1" "$rc"
 assert_eq "daemon-fail: prints nothing" "" "$out"
 ca_teardown
 
-# --- Test 13: claude_agents_count_by_name_prefix rejects non-array output --
+# --- Test 13: claude_agents_count_busy_workers rejects non-array output ----
 
-echo "Test: claude_agents_count_by_name_prefix returns rc 1 on non-array output"
+echo "Test: claude_agents_count_busy_workers returns rc 1 on non-array output"
 ca_setup
 write_fake_claude '{}' 0
-if out=$(claude_agents_count_by_name_prefix dispatch-worker-); then rc=0; else rc=$?; fi
+if out=$(claude_agents_count_busy_workers); then rc=0; else rc=$?; fi
 assert_eq "non-array: exits non-zero (UNKNOWN)" "1" "$rc"
 ca_teardown
 
@@ -4758,15 +4764,15 @@ ca_teardown
 
 echo "Test: router gate skips spawn when live_count >= target_N"
 ca_setup
-# Three live dispatch-worker-* agents, target = 2 → skip branch.
+# Three busy real workers, target = 2 → skip branch.
 write_fake_claude '[
-  {"sessionId":"a","pid":1,"status":"busy","name":"dispatch-worker-1"},
-  {"sessionId":"b","pid":2,"status":"busy","name":"dispatch-worker-2"},
-  {"sessionId":"c","pid":3,"status":"busy","name":"dispatch-worker-3"}
+  {"sessionId":"a","pid":1,"status":"busy","name":"824-a"},
+  {"sessionId":"b","pid":2,"status":"busy","name":"720-b"},
+  {"sessionId":"c","pid":3,"status":"busy","name":"508-c"}
 ]' 0
 TARGET_N=2
 ROUTE=""
-if LIVE_COUNT=$(claude_agents_count_by_name_prefix dispatch-worker-); then
+if LIVE_COUNT=$(claude_agents_count_busy_workers); then
   if (( LIVE_COUNT >= TARGET_N )); then
     ROUTE="skip"
   else
@@ -4782,10 +4788,10 @@ ca_teardown
 
 echo "Test: router gate spawns when live_count < target_N"
 ca_setup
-write_fake_claude '[{"sessionId":"a","pid":1,"status":"busy","name":"dispatch-worker-1"}]' 0
+write_fake_claude '[{"sessionId":"a","pid":1,"status":"busy","name":"824-a"}]' 0
 TARGET_N=2
 ROUTE=""
-if LIVE_COUNT=$(claude_agents_count_by_name_prefix dispatch-worker-); then
+if LIVE_COUNT=$(claude_agents_count_busy_workers); then
   if (( LIVE_COUNT >= TARGET_N )); then
     ROUTE="skip"
   else
@@ -4804,7 +4810,7 @@ ca_setup
 write_fake_claude '' 1
 TARGET_N=2
 ROUTE=""
-if LIVE_COUNT=$(claude_agents_count_by_name_prefix dispatch-worker-); then
+if LIVE_COUNT=$(claude_agents_count_busy_workers); then
   if (( LIVE_COUNT >= TARGET_N )); then
     ROUTE="skip"
   else
@@ -11372,9 +11378,9 @@ FAKE
 #!/usr/bin/env bash
 echo "cwd=\$PWD argv=\$*" >> "$TMPDIR_TEST/logs/sync-issue-context.log"
 FAKE
-  # Sourced helper: provides claude_agents_count_by_name_prefix.
+  # Sourced helper: provides claude_agents_count_busy_workers.
   cat > "$TMPDIR_TEST/lib-claude-agents.sh" <<'FAKE'
-claude_agents_count_by_name_prefix() {
+claude_agents_count_busy_workers() {
   [[ -n "${MAT_LIVE_COUNT_FAIL:-}" ]] && return 1
   echo "${MAT_LIVE_COUNT:-0}"
 }

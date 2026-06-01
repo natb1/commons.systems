@@ -246,7 +246,7 @@ if (( ! BYPASS_CAP )); then
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-claude-agents.sh"
   TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")
-  if LIVE_COUNT=$(claude_agents_count_by_name_prefix dispatch-worker-); then
+  if LIVE_COUNT=$(claude_agents_count_busy_workers); then
     if (( LIVE_COUNT >= TARGET_N )); then
       release_lock
       "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
