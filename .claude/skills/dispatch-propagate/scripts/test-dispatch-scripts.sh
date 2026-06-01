@@ -6225,10 +6225,11 @@ TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-20000"* \
    && "$log" == *"--on-calendar=@20000"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
+   && "$log" == *"--setenv=PATH="* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-spawn-router"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + cwd + exec)"
+  PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + cwd + setenv + exec)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + cwd + exec)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + cwd + setenv + exec)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -7003,9 +7004,14 @@ else
   echo "    expected: '$DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE'"
 fi
 # Independently assert the cwd is NOT the caller's cwd — that is the regression
-# the fix prevents (router born in the wrong worktree).
+# the fix prevents (router born in the wrong worktree). Only meaningful when
+# pwd-log is non-empty (i.e. --bg was actually called); an empty pwd-log would
+# make realpath "" return "" and the != comparison would silently pass.
 TOTAL=$((TOTAL + 1))
-if [[ "$(realpath "$sr_pwd_line" 2>/dev/null)" != "$(realpath "$SPAWN_ROUTER_CALLER_CWD")" ]]; then
+if [[ -z "$sr_pwd_line" ]]; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-router-cwd: 'claude --bg' did NOT run from the caller's cwd"
+  echo "    pwd-log is empty — 'claude --bg' was never called"
+elif [[ "$(realpath "$sr_pwd_line" 2>/dev/null)" != "$(realpath "$SPAWN_ROUTER_CALLER_CWD")" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: spawn-router-cwd: 'claude --bg' did NOT run from the caller's cwd"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: spawn-router-cwd: 'claude --bg' did NOT run from the caller's cwd"
