@@ -583,22 +583,26 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "draft + failing CI → verify" "verify" "$result"
 teardown
 
-# 3. Draft + pending CI → waiting
-echo "Test: draft + pending CI → waiting"
+# 3. Draft + pending CI → not a phase: exit 3, empty stdout (no `waiting`).
+# dispatch-phase is phase-only; CI-not-ready is signalled by an error exit, not
+# a pseudo-phase. Callers gate on dispatch-ci-ready before reaching here.
+echo "Test: draft + pending CI → error (exit 3, empty stdout)"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$PENDING_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
-result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + pending CI → waiting" "waiting" "$result"
+result=$("$TMPDIR_TEST/dispatch-phase" "42" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "draft + pending CI → exit 3" "3" "$rc"
+assert_eq "draft + pending CI → empty stdout" "" "$result"
 teardown
 
-# 4. Draft + empty rollup → waiting
-echo "Test: draft + empty rollup → waiting"
+# 4. Draft + empty rollup → not a phase: exit 3, empty stdout (no `waiting`).
+echo "Test: draft + empty rollup → error (exit 3, empty stdout)"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$EMPTY_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
-result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + empty rollup → waiting" "waiting" "$result"
+result=$("$TMPDIR_TEST/dispatch-phase" "42" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "draft + empty rollup → exit 3" "3" "$rc"
+assert_eq "draft + empty rollup → empty stdout" "" "$result"
 teardown
 
 # 4b. Draft + mixed rollup (failing + pending) → verify (failure wins)
@@ -2430,6 +2434,19 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
 # setup's default CLAUDE_AGENTS_CMD points at a non-existent binary (UNKNOWN).
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "UNKNOWN-liveness worktree item skipped; worktree-free item selected" "office-hours 99 implement -" "$result"
+teardown
+
+# OHST6. A labeled item whose draft PR has CI still in progress (pending rollup)
+# → dispatch-ci-ready returns not-ready → phase=waiting, PR number present.
+echo "Test: labeled item with pending-CI draft PR → waiting, PR number"
+setup
+printf '[{"number":50,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf '[%s]\n' "$(make_pr 7 "50-feat" "true" "$NO_LABELS" "$PENDING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "pending-CI draft PR → waiting, PR number" "office-hours 50 waiting 7" "$result"
 teardown
 
 # ============================================================================
@@ -10036,11 +10053,19 @@ EOF
     "$TMPDIR_TEST/.claude/hooks/restore-dispatch-skill.sh"
   chmod +x "$TMPDIR_TEST/.claude/hooks/restore-dispatch-skill.sh"
 
-  # dispatch-phase shim: read $STUB_DIR/current-phase.txt.
+  # dispatch-phase shim: read $STUB_DIR/current-phase.txt. The sentinel ERROR
+  # models the real dispatch-phase's not-ready contract (a draft PR whose CI has
+  # no verdict yet): empty stdout, exit 3. The hook's `|| PHASE=""` then routes
+  # to the dispatch-worker fallback.
   cat > "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts/dispatch-phase" <<'FAKE'
 #!/usr/bin/env bash
 if [[ -f "$STUB_DIR/current-phase.txt" ]]; then
-  cat "$STUB_DIR/current-phase.txt"
+  phase=$(cat "$STUB_DIR/current-phase.txt")
+  if [[ "$phase" == "ERROR" ]]; then
+    echo "error: no CI verdict yet — gate on dispatch-ci-ready first" >&2
+    exit 3
+  fi
+  printf '%s\n' "$phase"
 else
   echo "implement"
 fi
@@ -10344,32 +10369,35 @@ else
 fi
 restore_teardown
 
-# --- Test 7: fallback (waiting) → dispatch-worker body + ARGUMENTS: <N> <path>
-echo "Test: restore-dispatch-skill phase=waiting → dispatch-worker fallback"
+# --- Test 7: dispatch-phase error (not-ready CI, exit 3 → empty PHASE) →
+# dispatch-worker fallback body + ARGUMENTS: <N> <path>. dispatch-phase no longer
+# emits a `waiting` phase; a not-ready draft PR makes it exit 3 with empty stdout,
+# and the hook's `|| PHASE=""` routes the empty phase to the worker fallback.
+echo "Test: restore-dispatch-skill dispatch-phase error (exit 3) → dispatch-worker fallback"
 restore_setup
 set_agents_name "903-foo"
-echo "waiting" > "$STUB_DIR/current-phase.txt"
+echo "ERROR" > "$STUB_DIR/current-phase.txt"
 output=$(run_restore)
 TOTAL=$((TOTAL + 1))
 expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/dispatch-worker"
 if [[ "$output" == *"$expected_dir"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: waiting: base directory line emitted"
+  PASS=$((PASS + 1)); echo "  PASS: phase-error fallback: base directory line emitted"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: waiting: base directory line emitted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error fallback: base directory line emitted"
   echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ "$output" == *"RESTORE_MARKER_dispatch-worker"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: waiting: SKILL.md body marker emitted"
+  PASS=$((PASS + 1)); echo "  PASS: phase-error fallback: SKILL.md body marker emitted"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: waiting: SKILL.md body marker emitted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error fallback: SKILL.md body marker emitted"
 fi
 TOTAL=$((TOTAL + 1))
 expected_args="ARGUMENTS: 903 $TMPDIR_TEST/worktrees/903-foo"
 if [[ "$output" == *"$expected_args"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: waiting: ARGUMENTS line with worktree path"
+  PASS=$((PASS + 1)); echo "  PASS: phase-error fallback: ARGUMENTS line with worktree path"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: waiting: ARGUMENTS line with worktree path"
+  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error fallback: ARGUMENTS line with worktree path"
   echo "    output: $output"
   echo "    expected to contain: $expected_args"
 fi

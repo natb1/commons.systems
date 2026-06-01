@@ -11,10 +11,12 @@
 # Output (one line on success):
 #   office-hours <issue> <phase> <pr-or-dash>
 #     <issue> — the selected issue number.
-#     <phase> — dispatch-phase <issue>: implement | qa | code-review | review |
-#               security | verify | waiting | done. /office-hours branches on
-#               this: implement → plan-approval residue; qa → QA walkthrough
-#               residue; anything past qa → deviation-review.
+#     <phase> — implement | qa | code-review | review | security | verify |
+#               waiting | done. `waiting` comes from dispatch-ci-ready (draft PR
+#               with CI still pending); all other values come from dispatch-phase.
+#               /office-hours branches on this: implement → plan-approval
+#               residue; qa → QA walkthrough residue; anything past qa →
+#               deviation-review.
 #     <pr-or-dash> — the issue's open PR number, or `-` when none exists.
 # Prints `empty` when no sessionless labeled item exists.
 #
@@ -79,7 +81,14 @@ while IFS= read -r issue_num; do
   if issue_has_live_worktree "$issue_num"; then
     continue
   fi
-  phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$issue_num")
+  # Readiness gate: dispatch-phase no longer emits `waiting`; check CI readiness
+  # first. A not-ready draft PR (exit non-zero) maps to phase=waiting, preserving
+  # the byte-identical output contract callers expect.
+  if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$issue_num" >/dev/null; then
+    phase="waiting"
+  else
+    phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$issue_num")
+  fi
   pr=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-find-pr" "$issue_num")
   printf 'office-hours %s %s %s\n' "$issue_num" "$phase" "${pr:--}"
   exit 0
