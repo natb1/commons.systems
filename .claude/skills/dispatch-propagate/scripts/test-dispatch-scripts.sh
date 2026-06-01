@@ -11913,6 +11913,17 @@ FAKE
 #!/usr/bin/env bash
 echo "${MAT_PHASE:-implement}"
 FAKE
+  # Readiness predicate fake: MAT_CI_READY controls the verdict (default ready).
+  # `ready` → exit 0 / prints ready; anything else → exit 1 / prints waiting.
+  cat > "$TMPDIR_TEST/dispatch-ci-ready" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "${MAT_CI_READY:-ready}" == "ready" ]]; then
+  echo ready
+  exit 0
+fi
+echo waiting
+exit 1
+FAKE
   cat > "$TMPDIR_TEST/dispatch-spawn-worker" <<FAKE
 #!/usr/bin/env bash
 echo "\$*" >> "$TMPDIR_TEST/logs/spawn-worker.log"
@@ -11926,7 +11937,8 @@ FAKE
   chmod +x "$TMPDIR_TEST"/dispatch-find-pr "$TMPDIR_TEST"/dispatch-trace-leaf \
     "$TMPDIR_TEST"/dispatch-check-blockers "$TMPDIR_TEST"/dispatch-apply-office-hours \
     "$TMPDIR_TEST"/dispatch-resolve-worktree "$TMPDIR_TEST"/dispatch-merge-main \
-    "$TMPDIR_TEST"/dispatch-phase "$TMPDIR_TEST"/dispatch-select-target \
+    "$TMPDIR_TEST"/dispatch-phase "$TMPDIR_TEST"/dispatch-ci-ready \
+    "$TMPDIR_TEST"/dispatch-select-target \
     "$TMPDIR_TEST"/dispatch-spawn-worker "$TMPDIR_TEST"/sync-issue-context
 
   mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
@@ -11958,7 +11970,7 @@ mat_teardown() {
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_MERGE_RC MAT_PHASE \
-    MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE MAT_MERGE_CONFLICT_N
+    MAT_CI_READY MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE MAT_MERGE_CONFLICT_N
 }
 
 run_mat() { "$TMPDIR_TEST/dispatch-materialize-spawn" "$@" 2>/dev/null; }
@@ -12198,11 +12210,13 @@ assert_eq "merge clean: dispatch-merge-main was called" "1" \
   "$([ -f "$TMPDIR_TEST/logs/merge-main.log" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- waiting CI → drain ci-waiting -------------------------------------------
-echo "Test: materialize-spawn waiting CI → drain ci-waiting"
+# --- explicit not-ready CI → drain ci-waiting --------------------------------
+# The readiness gate (Step 6a) is now explicit-target-only and runs
+# dispatch-ci-ready (not dispatch-phase); a not-ready verdict drains ci-waiting.
+echo "Test: materialize-spawn explicit not-ready CI → drain ci-waiting"
 mat_setup
-export MAT_PHASE=waiting
-out=$(run_mat 839 queue)
+export MAT_CI_READY=waiting
+out=$(run_mat 839 explicit)
 assert_eq "ci-waiting: CI line present" "#839: CI in progress; the next router tick will re-evaluate." \
   "$(printf '%s\n' "$out" | grep '^#839:')"
 assert_eq "ci-waiting: terminal token" "drain ci-waiting" \
@@ -12210,6 +12224,19 @@ assert_eq "ci-waiting: terminal token" "drain ci-waiting" \
 assert_eq "ci-waiting: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
 assert_eq "ci-waiting: lock released at ci-waiting stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- queue not-ready CI → NOT re-gated (pre-vetted by selection) -------------
+# Queue/fan-out targets were already filtered by dispatch-select-target's
+# dispatch-ci-ready gate, so materialize-spawn does NOT re-run it: even with a
+# not-ready verdict forced, a queue target spawns normally.
+echo "Test: materialize-spawn queue mode skips the readiness re-gate"
+mat_setup
+export MAT_CI_READY=waiting
+out=$(run_mat 839 queue)
+assert_eq "queue-no-regate: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "queue-no-regate: spawn called once" "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
 mat_teardown
 
 # --- --gap 1 → propagate (single target, default behavior) -------------------

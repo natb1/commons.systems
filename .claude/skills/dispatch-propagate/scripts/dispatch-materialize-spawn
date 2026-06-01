@@ -9,8 +9,9 @@
 # path guards (leaf trace, closed-target, open-blocker), resolves the target
 # worktree (entering or creating it), writes the recovery marker via
 # dispatch-finalize-selection (which no longer releases the lock — #945), runs
-# the waiting-CI gate, spawns the worker, and releases the lock after the worker
-# registers. Prints exactly ONE terminal token as its LAST stdout line;
+# the explicit-target readiness gate (dispatch-ci-ready), spawns the worker, and
+# releases the lock after the worker registers. Prints exactly ONE terminal
+# token as its LAST stdout line;
 # supporting detail (a path, a blocker list, the CI line) precedes the token.
 #
 # With `--gap <N>` and `queue` mode, the script FANS OUT: it spawns up to N
@@ -23,8 +24,8 @@
 #
 # <issue-N> is always the ISSUE number (the model derives N=${branch%%-*} for a
 # `pr` row before calling). The two literal `[branch phase]` positionals the
-# queue selection carries are dropped — no sub-script consumes them; the CI gate
-# re-derives the phase via dispatch-phase.
+# queue selection carries are dropped — no sub-script consumes them; the spawn
+# never needs the phase (the worker re-derives it).
 #
 # Terminal tokens (the last stdout line is always exactly one of):
 #   propagate              the worker spawned (or deduped); the chain advances.
@@ -46,8 +47,10 @@
 #   drain worktree-conflict  the target worktree cannot be safely entered; the
 #                          lock is released at the guard. The conflict path
 #                          precedes this token.
-#   drain ci-waiting       the target PR's CI is still in progress; no spawn this
-#                          tick. Lock released at this stop.
+#   drain ci-waiting       an explicit target's PR CI is still in progress
+#                          (dispatch-ci-ready not-ready); no spawn this tick.
+#                          Lock released at this stop. Queue/fan-out targets are
+#                          pre-gated by selection, so this token is explicit-only.
 #
 # Fan-out summary tokens (queue mode with --gap N>1; the last stdout line is one
 # of these instead of a per-target token):
@@ -137,14 +140,15 @@ CONFLICT_MODE=""
 
 # process_one_target <issue-N> <explicit|queue>
 # Runs the per-target sequence (Step 4 guards, Step 5 resolve, Step 5b merge,
-# recovery marker, Step 6a CI gate, Step 6b spawn) for ONE target. Does NOT
+# recovery marker, Step 6a explicit-only readiness gate, Step 6b spawn) for ONE
+# target. Does NOT
 # release the lock and does NOT exit — the caller owns lock release and process
 # exit. Sets the global OUTCOME on every soft path and returns 0; returns 2 on a
 # hard error (the caller maps that to release_lock; exit 2).
 process_one_target() {
   local n="$1" mode="$2"
   local PR LEAF ISSUE_STATE BLOCKERS WT_DECISION WT_ACTION WT_REST
-  local WORKTREE_PATH BRANCH PROJECT_ROOT MERGE_RC PHASE rc
+  local WORKTREE_PATH BRANCH PROJECT_ROOT MERGE_RC rc
 
   # --- Step 4: explicit-path guards (skipped entirely in queue mode) ---------
   # Queue rows were already vetted by dispatch-select-target (leaf, blockers,
@@ -271,9 +275,13 @@ process_one_target() {
     return 2
   fi
 
-  # --- Step 6a: waiting-CI gate (#906) ---------------------------------------
-  PHASE=$("$SCRIPT_DIR/dispatch-phase" "$n") || PHASE=""
-  if [[ "$PHASE" == "waiting" ]]; then
+  # --- Step 6a: readiness gate — explicit targets only (#906, #980) ----------
+  # Queue/fan-out targets were already vetted by dispatch-select-target's
+  # dispatch-ci-ready gate, so they need no recheck here. Only the explicit
+  # /dispatch <N> path bypasses selection, so it alone re-runs the readiness
+  # predicate: dispatch-ci-ready exits non-zero only for a draft PR whose CI is
+  # still in progress.
+  if [[ "$mode" == "explicit" ]] && ! "$SCRIPT_DIR/dispatch-ci-ready" "$n" >/dev/null; then
     echo "#$n: CI in progress; the next router tick will re-evaluate."
     OUTCOME=ci-waiting
     return 0
@@ -341,9 +349,11 @@ while :; do
     target-blocked)     echo "propagate: parked #$cur_n ($OUTCOME)" ;;
     *)
       echo "propagate: skipped #$cur_n ($OUTCOME)"
-      # ci-waiting is an expected skip (the next router tick re-gates the PR).
-      # spawn-failed / worktree-conflict are real failures the single-target
-      # path surfaces via `notify spawn-failed` / `drain worktree-conflict`; in
+      # ci-waiting never occurs in fan-out: the readiness gate is explicit-only
+      # (Step 6a), and queue targets are pre-gated by dispatch-select-target's
+      # dispatch-ci-ready check. spawn-failed / worktree-conflict are real
+      # failures the single-target path surfaces via `notify spawn-failed` /
+      # `drain worktree-conflict`; in
       # fan-out the loop deliberately continues to fill the gap from other
       # targets, but the failure must not be buried — log it to stderr so a
       # systemic spawn problem is visible in the router logs.
