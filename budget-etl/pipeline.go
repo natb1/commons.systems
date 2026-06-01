@@ -92,6 +92,7 @@ func buildTransactions(
 				Timestamp:     t.Date,
 				StatementID:   pf.sf.StatementID(),
 				TransactionID: t.TransactionID,
+				IsCreditCard:  pf.result.IsCreditCard,
 			})
 			allDocIDs = append(allDocIDs, docID)
 			if visit != nil {
