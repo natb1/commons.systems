@@ -27,14 +27,7 @@
 
       # Per-system outputs
       systemOutputs = {
-        packages = forAllSystems ({ pkgs, ... }: {
-          productivity-tui = pkgs.callPackage ./nix/packages/productivity-tui.nix { };
-        });
-
         devShells = forAllSystems ({ pkgs, ... }:
-          let
-            productivity-tui = pkgs.callPackage ./nix/packages/productivity-tui.nix { };
-          in
           {
             default = pkgs.mkShell {
               packages = with pkgs; [
@@ -49,7 +42,6 @@
               ];
               shellHook = ''
                 export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
-                export PATH="${productivity-tui}/bin:$PATH"
               '';
             };
           });
