@@ -291,6 +291,14 @@ fi
 # that dedup-guards, prunes stopped agents, and spawns
 # `claude --bg --name dispatch-<id> --permission-mode auto "/dispatch-propagate"`
 # from the main worktree.
+#
+# --setenv=PATH="$PATH" propagates the scheduling caller's PATH into the
+# transient unit. Without it the unit inherits the systemd user manager's
+# minimal default PATH, which omits the nix store — so on NixOS/WSL hosts
+# /usr/bin/env can't resolve bash (exit 127) and the router can't find
+# claude/git/jq. The caller (a /dispatch-propagate tick) always carries the
+# full nix-store PATH, so capturing it at schedule time makes the unit
+# self-sufficient when the timer later fires.
 
 SYSTEMD_RUN_CMD="${DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD:-systemd-run}"
 UNIT_NAME="dispatch-reseed-${RESEED_AT}"
@@ -307,6 +315,7 @@ trap 'rm -f "$RUN_STDERR"' EXIT
      --on-calendar="@$RESEED_AT" \
      --working-directory="$MAIN_WORKTREE" \
      --timer-property=Persistent=true \
+     --setenv=PATH="$PATH" \
      "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-spawn-router" \
      2>"$RUN_STDERR"
 RC=$?
