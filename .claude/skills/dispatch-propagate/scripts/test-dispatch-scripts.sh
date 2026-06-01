@@ -11435,7 +11435,23 @@ FAKE
   cat > "$TMPDIR_TEST/dispatch-merge-main" <<FAKE
 #!/usr/bin/env bash
 echo "\$*" >> "$TMPDIR_TEST/logs/merge-main.log"
+if [[ -n "\${MAT_MERGE_CONFLICT_N:-}" && "\$1" == *"/\${MAT_MERGE_CONFLICT_N}-test" ]]; then
+  exit 3
+fi
 exit \${MAT_MERGE_RC:-0}
+FAKE
+  cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+read -r -a Q <<< "\${MAT_QUEUE:-}"
+idx_file="$TMPDIR_TEST/logs/select-target.idx"
+i=\$(cat "\$idx_file" 2>/dev/null || echo 0)
+echo "called \$i \${Q[\$i]:-empty}" >> "$TMPDIR_TEST/logs/select-target.log"
+if (( i < \${#Q[@]} )); then
+  echo "issue \${Q[\$i]}"
+  echo \$(( i + 1 )) > "\$idx_file"
+else
+  echo empty
+fi
 FAKE
   cat > "$TMPDIR_TEST/dispatch-phase" <<'FAKE'
 #!/usr/bin/env bash
@@ -11454,7 +11470,7 @@ FAKE
   chmod +x "$TMPDIR_TEST"/dispatch-find-pr "$TMPDIR_TEST"/dispatch-trace-leaf \
     "$TMPDIR_TEST"/dispatch-check-blockers "$TMPDIR_TEST"/dispatch-apply-office-hours \
     "$TMPDIR_TEST"/dispatch-resolve-worktree "$TMPDIR_TEST"/dispatch-merge-main \
-    "$TMPDIR_TEST"/dispatch-phase \
+    "$TMPDIR_TEST"/dispatch-phase "$TMPDIR_TEST"/dispatch-select-target \
     "$TMPDIR_TEST"/dispatch-spawn-worker "$TMPDIR_TEST"/sync-issue-context
 
   mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
@@ -11486,7 +11502,7 @@ mat_teardown() {
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_MERGE_RC MAT_PHASE \
-    MAT_SPAWN_RC MAT_ISSUE_STATE
+    MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE MAT_MERGE_CONFLICT_N
 }
 
 run_mat() { "$TMPDIR_TEST/dispatch-materialize-spawn" "$@" 2>/dev/null; }
@@ -11871,6 +11887,70 @@ assert_eq "gh fail: exit 2" "2" "$rc"
 assert_eq "gh fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "gh fail: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- fan-out: gap 5, 5 distinct spawns, lock released once, summary ----------
+echo "Test: materialize-spawn --gap 5 fans out to 5 distinct spawns"
+mat_setup
+export MAT_QUEUE="720 508 991 644"
+out=$(run_mat 839 queue --gap 5)
+assert_eq "fanout5: spawn count" "5" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "fanout5: distinct worktrees" "5" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
+assert_eq "fanout5: summary line" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 5 of gap 5')"
+assert_eq "fanout5: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fanout5: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- fan-out: gap 5, queue exhausted after 2 → 2 spawns, propagate -----------
+echo "Test: materialize-spawn --gap 5 queue exhausted after 2 → propagate"
+mat_setup
+export MAT_QUEUE="720"
+out=$(run_mat 839 queue --gap 5)
+assert_eq "exhaust: spawn count" "2" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "exhaust: summary" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 2 of gap 5 (queue exhausted)')"
+assert_eq "exhaust: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+
+# --- fan-out: gap 5, target #508 (3rd) merge-conflicts → parked, continues ---
+echo "Test: materialize-spawn --gap 5 mid-loop merge-conflict parks and continues"
+mat_setup
+export MAT_QUEUE="720 508 991 644"
+export MAT_MERGE_CONFLICT_N=508
+out=$(run_mat 839 queue --gap 5)
+# 839,720,991,644 spawn (4); 508 parked → office-hours logged for 508.
+assert_eq "midconflict: spawn count" "4" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "midconflict: 508 parked via office-hours" "1" \
+  "$(grep -c '^508 ' "$TMPDIR_TEST/logs/apply-office-hours.log")"
+assert_eq "midconflict: parked detail line" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'parked #508 (merge-conflict)')"
+assert_eq "midconflict: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+
+# --- fan-out: gap 3, all targets merge-conflict, 0 spawned → drain -----------
+echo "Test: materialize-spawn --gap 3 all parked → drain"
+mat_setup
+export MAT_QUEUE="720 508"
+export MAT_MERGE_RC=3
+out=$(run_mat 839 queue --gap 3)
+assert_eq "allparked: zero spawns" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ' || echo 0)"
+assert_eq "allparked: summary 0 spawned" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 0 of gap 3')"
+assert_eq "allparked: terminal token" "drain" "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+
+# --- fan-out: dispatch-select-target invoked between spawns ------------------
+echo "Test: materialize-spawn fan-out invokes dispatch-select-target between spawns"
+mat_setup
+export MAT_QUEUE="720 508"
+out=$(run_mat 839 queue --gap 3)
+# 3 spawns (839 + 720 + 508); select-target invoked at least twice (for targets 2 and 3).
+assert_eq "distinct: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "distinct: select-target invoked >=2" "1" \
+  "$([ "$(wc -l < "$TMPDIR_TEST/logs/select-target.log")" -ge 2 ] && echo 1 || echo 0)"
+assert_eq "distinct: worktrees all unique" "3" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
 mat_teardown
 
 # ============================================================================

@@ -87,13 +87,17 @@ For a real target, call (with `dangerouslyDisableSandbox: true`):
 
 `<N>` is always the **issue** number (for a `pr` row, the branch-prefix `N`
 derived above — never the PR number). `<gap>` is the run-scoped spawn budget
-carried on the select-tick decision line — always 1 today; a larger gap drives
-the fan-out loop documented in reference.md. The script prints supporting detail (a
-path, a blocker list, the CI line) and the **terminal token** as its last line.
-The lock disposition is again the script's responsibility — it releases the lock
-at every stop, and on the proceed path only after the spawned worker has
-registered (#945), so the next tick cannot re-select during the boot gap. Route
-on the token (Table 2).
+carried on the select-tick decision line. A gap of 1 processes a single target
+(Table 2); a gap >1 in queue mode drives the fan-out loop — the script spawns up
+to `<gap>` workers in one held-lock run, selecting a distinct next target each
+iteration (see the Fan-out summary contract above and reference.md *Fan-out*).
+The script prints supporting detail (a path, a blocker list, the CI line) and
+the **terminal token** as its last line. The lock disposition is again the
+script's responsibility — it holds the lock across the whole fan-out loop and
+releases it once at the end, on the proceed path only after each spawned worker
+has registered (#945), so the next tick cannot re-select during the boot gap.
+Route on the token (Table 2 for a single target, or the aggregate summary token
+for a fan-out run).
 
 ### Table 2 — routing the materialize-spawn terminal token
 
@@ -105,6 +109,23 @@ on the token (Table 2).
 | `notify spawn-failed` | `dispatch-spawn-worker` exited non-zero — a worker was spawned but did not register. | `notify` |
 | `drain worktree-conflict` | The target worktree cannot be safely entered (the script printed the `path:` detail): "worktree at `<path>` for issue `<N>` cannot be entered; closing — the next baton-pass or office-hours hand-off will re-seed". | `drain` |
 | `drain ci-waiting` | The target PR's CI is still in progress (the script printed the `#<N>:` line); echo it. | `drain` |
+
+#### Fan-out summary contract
+
+The token depends on the run's `--gap`:
+
+- **`--gap 1`** (explicit targets, manual `/dispatch`, or a run where the budget
+  left one slot) — the script processes a single target and emits one of the
+  Table 2 tokens exactly as above. One target, one token; route as the table says.
+- **`--gap N>1`** (queue mode) — the script fans out internally, spawning up to
+  `N` workers and selecting a distinct next target each iteration. Its **last**
+  stdout line is an aggregate terminal token — `propagate` (≥1 worker spawned)
+  or `drain` (0 spawned) — preceded by a `propagate: spawned <k> of gap <N>
+  [(<stop-reason>)]` summary line and one `propagate: spawned/parked/skipped
+  #<n>` detail line per processed target. Route **once** on the final token
+  (`propagate` → self-close; `drain` → report + self-close), exactly as the
+  Section 3 dispositions prescribe. Parked targets (`merge-conflict` /
+  `target-blocked`) were already labeled `dispatch:office-hours` by the script.
 
 ## 3. Terminal disposition
 

@@ -9,10 +9,17 @@
 # path guards (leaf trace, closed-target, open-blocker), resolves the target
 # worktree (entering or creating it), writes the recovery marker via
 # dispatch-finalize-selection (which no longer releases the lock — #945), runs
-# the waiting-CI gate, spawns the worker, and
-# releases the lock after the worker registers. Prints exactly ONE terminal
-# token as its LAST stdout line; supporting detail (a path, a blocker list, the
-# CI line) precedes the token.
+# the waiting-CI gate, spawns the worker, and releases the lock after the worker
+# registers. Prints exactly ONE terminal token as its LAST stdout line;
+# supporting detail (a path, a blocker list, the CI line) precedes the token.
+#
+# With `--gap <N>` and `queue` mode, the script FANS OUT: it spawns up to N
+# workers in one held-lock run, selecting a distinct next target each iteration
+# via dispatch-select-target. The first target is the passed-in <issue-N>;
+# targets 2..N come from successive dispatch-select-target calls (each spawned
+# worker registers before the next selection — #945/#905 — so the next
+# selection skips its now-live-owned worktree and yields a distinct target).
+# `explicit` mode and `--gap 1` process a single target (backward-compatible).
 #
 # <issue-N> is always the ISSUE number (the model derives N=${branch%%-*} for a
 # `pr` row before calling). The two literal `[branch phase]` positionals the
@@ -39,8 +46,22 @@
 #   drain ci-waiting       the target PR's CI is still in progress; no spawn this
 #                          tick. Lock released at this stop.
 #
+# Fan-out summary tokens (queue mode with --gap N>1; the last stdout line is one
+# of these instead of a per-target token):
+#   propagate              the fan-out spawned at least one worker. Preceded by a
+#                          `propagate: spawned <k> of gap <G> [(<stop-reason>)]`
+#                          summary line and one `propagate: spawned/parked/skipped
+#                          #<n>` detail line per processed target.
+#   drain                  the gap could not be filled and NOTHING spawned (every
+#                          processed target parked/skipped, or the queue emptied
+#                          before any spawn). Same detail/summary lines precede
+#                          it. Parked issues are visible via dispatch:office-hours.
+#
 # Lock-release points (#945): the lock is held THROUGH the spawn so the next
-# tick cannot re-select the target during the worker's boot gap.
+# tick cannot re-select the target during the worker's boot gap. In a fan-out
+# run the lock is held across the WHOLE loop and released ONCE at the end (or on
+# a hard `exit 2`); per-target park/skip outcomes do NOT release between
+# iterations.
 # dispatch-finalize-selection writes the recovery marker but no longer releases.
 # `notify target-blocked`, `notify merge-conflict`, and `drain worktree-conflict`
 # release explicitly at the guard (the marker does not exist yet on these
@@ -98,161 +119,221 @@ if [[ ! "$N" =~ ^[1-9][0-9]*$ ]] || { [[ "$MODE" != "explicit" && "$MODE" != "qu
   exit 2
 fi
 
-# --- Step 4: explicit-path guards (skipped entirely in queue mode) -----------
-# Queue rows were already vetted by dispatch-select-target (leaf, blockers,
-# liveness), so the guards run only when the target was explicitly named.
-if [[ "$MODE" == "explicit" ]]; then
-  # Leaf trace, unless a PR already exists for the target (then the PR is the
-  # unit of work and the issue tree is irrelevant).
-  PR=$("$SCRIPT_DIR/dispatch-find-pr" "$N" 2>/dev/null) || PR=""
-  if [[ -z "$PR" ]]; then
-    if LEAF=$("$SCRIPT_DIR/dispatch-trace-leaf" "$N" explicit); then
-      N="$LEAF"
-    else
-      # explicit-mode dispatch-trace-leaf exits non-zero only on a hard
-      # sibling-gh failure (its exit 1) — never "no work". Per its contract the
-      # caller must not swallow it and dispatch the un-traced N; release the
-      # lock and surface the error (mirrors dispatch-select-target's exit-1
-      # propagation in queue mode).
-      release_lock
-      echo "dispatch-materialize-spawn: dispatch-trace-leaf failed for #$N (explicit)" >&2
-      exit 2
+# Per-target outcome, set by process_one_target on every soft (return 0) path.
+# The caller routes on it. Hard errors return 2 (caller maps to release+exit 2).
+OUTCOME=""
+
+# process_one_target <issue-N> <explicit|queue>
+# Runs the per-target sequence (Step 4 guards, Step 5 resolve, Step 5b merge,
+# recovery marker, Step 6a CI gate, Step 6b spawn) for ONE target. Does NOT
+# release the lock and does NOT exit — the caller owns lock release and process
+# exit. Sets the global OUTCOME on every soft path and returns 0; returns 2 on a
+# hard error (the caller maps that to release_lock; exit 2).
+process_one_target() {
+  local n="$1" mode="$2"
+  local PR LEAF ISSUE_STATE BLOCKERS WT_DECISION WT_ACTION WT_REST
+  local WORKTREE_PATH BRANCH PROJECT_ROOT MERGE_RC PHASE rc
+
+  # --- Step 4: explicit-path guards (skipped entirely in queue mode) ---------
+  # Queue rows were already vetted by dispatch-select-target (leaf, blockers,
+  # liveness), so the guards run only when the target was explicitly named.
+  if [[ "$mode" == "explicit" ]]; then
+    # Leaf trace, unless a PR already exists for the target (then the PR is the
+    # unit of work and the issue tree is irrelevant).
+    PR=$("$SCRIPT_DIR/dispatch-find-pr" "$n" 2>/dev/null) || PR=""
+    if [[ -z "$PR" ]]; then
+      if LEAF=$("$SCRIPT_DIR/dispatch-trace-leaf" "$n" explicit); then
+        n="$LEAF"
+      else
+        # explicit-mode dispatch-trace-leaf exits non-zero only on a hard
+        # sibling-gh failure (its exit 1) — never "no work". Per its contract
+        # the caller must not swallow it and dispatch the un-traced n; surface
+        # the error (mirrors dispatch-select-target's exit-1 propagation in
+        # queue mode).
+        echo "dispatch-materialize-spawn: dispatch-trace-leaf failed for #$n (explicit)" >&2
+        return 2
+      fi
     fi
-  fi
 
-  # Closed-target guard. gh issue view returns OPEN/CLOSED (uppercase). A gh
-  # failure must not fail open (silently dispatching to a possibly-closed
-  # issue) — surface it as a hard error and release the lock.
-  ISSUE_STATE=$(gh issue view "$N" --json state -q .state 2>/dev/null) || {
-    release_lock
-    echo "dispatch-materialize-spawn: failed to fetch state for issue #$N" >&2
-    exit 2
-  }
-  if [[ "$ISSUE_STATE" == "CLOSED" ]]; then
-    release_lock
-    "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" "named target issue is closed" 1>&2 || true
-    echo "target #$N is closed"
-    echo "notify target-blocked"
-    exit 0
-  fi
-
-  # Open-blocker guard. Exit 2 → blocked:<nums> on stdout.
-  if BLOCKERS=$("$SCRIPT_DIR/dispatch-check-blockers" "$N"); then
-    : # exit 0, no open blockers
-  else
-    rc=$?
-    if [[ "$rc" -eq 2 ]]; then
-      release_lock
-      "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" "target has an open blocker" 1>&2 || true
-      echo "$BLOCKERS"
-      echo "notify target-blocked"
-      exit 0
-    fi
-    release_lock
-    echo "dispatch-materialize-spawn: dispatch-check-blockers failed (exit $rc) for #$N" >&2
-    exit 2
-  fi
-fi
-
-# --- Step 5: resolve the worktree --------------------------------------------
-WT_DECISION=$("$SCRIPT_DIR/dispatch-resolve-worktree" "$N" "$MODE") || {
-  release_lock
-  echo "dispatch-materialize-spawn: dispatch-resolve-worktree failed for #$N ($MODE)" >&2
-  exit 2
-}
-WT_ACTION="${WT_DECISION%% *}"
-WT_REST="${WT_DECISION#* }"
-
-case "$WT_ACTION" in
-  enter)
-    WORKTREE_PATH="$WT_REST"
-    ( cd "$WORKTREE_PATH" && "$SCRIPT_DIR/sync-issue-context" "$N" ) 1>&2 || true
-    ;;
-  create)
-    BRANCH="$WT_REST"
-    PROJECT_ROOT=$(resolve_project_root) || {
-      release_lock
-      echo "dispatch-materialize-spawn: resolve_project_root failed for #$N" >&2
-      exit 2
+    # Closed-target guard. gh issue view returns OPEN/CLOSED (uppercase). A gh
+    # failure must not fail open (silently dispatching to a possibly-closed
+    # issue) — surface it as a hard error.
+    ISSUE_STATE=$(gh issue view "$n" --json state -q .state 2>/dev/null) || {
+      echo "dispatch-materialize-spawn: failed to fetch state for issue #$n" >&2
+      return 2
     }
-    WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
-    if ! git worktree add -b "$BRANCH" "$WORKTREE_PATH" origin/main 1>&2; then
-      release_lock
-      echo "dispatch-materialize-spawn: git worktree add failed for $BRANCH" >&2
-      exit 2
+    if [[ "$ISSUE_STATE" == "CLOSED" ]]; then
+      "$SCRIPT_DIR/dispatch-apply-office-hours" "$n" "named target issue is closed" 1>&2 || true
+      echo "target #$n is closed"
+      OUTCOME=target-blocked
+      return 0
     fi
-    direnv allow "$WORKTREE_PATH" 1>&2 || true
-    direnv exec "$WORKTREE_PATH" true 1>&2 || true
-    ( cd "$WORKTREE_PATH" && "$SCRIPT_DIR/sync-issue-context" "$N" ) 1>&2 || true
-    ;;
-  conflict)
-    release_lock
-    echo "path: $WT_REST"
-    echo "drain worktree-conflict"
-    exit 0
-    ;;
-  *)
-    release_lock
-    echo "dispatch-materialize-spawn: dispatch-resolve-worktree emitted unexpected '$WT_DECISION'" >&2
-    exit 2
-    ;;
-esac
 
-# --- Step 5b: merge origin/main into the resolved worktree (#944) ------------
-# Bring the worktree's branch up to origin/main BEFORE the worker is spawned, so
-# the worker session reads up-to-date dispatch skill files from this worktree's
-# `.claude/` tree (the `enter` path may reuse a worktree whose branch is behind).
-# Local merge only — never pushes; each phase skill's own push points carry the
-# merge commit to origin. A no-op on the `create` path (the worktree was just
-# branched from origin/main). A conflict aborts the spawn and parks the issue for
-# a human via office-hours, mirroring the `notify target-blocked` path; the
-# worker is never spawned into a conflicted tree. Still pre-finalize, so the lock
-# is released explicitly here.
-"$SCRIPT_DIR/dispatch-merge-main" "$WORKTREE_PATH" 1>&2
-MERGE_RC=$?
-if (( MERGE_RC == 3 )); then
+    # Open-blocker guard. Exit 2 → blocked:<nums> on stdout.
+    if BLOCKERS=$("$SCRIPT_DIR/dispatch-check-blockers" "$n"); then
+      : # exit 0, no open blockers
+    else
+      rc=$?
+      if [[ "$rc" -eq 2 ]]; then
+        "$SCRIPT_DIR/dispatch-apply-office-hours" "$n" "target has an open blocker" 1>&2 || true
+        echo "$BLOCKERS"
+        OUTCOME=target-blocked
+        return 0
+      fi
+      echo "dispatch-materialize-spawn: dispatch-check-blockers failed (exit $rc) for #$n" >&2
+      return 2
+    fi
+  fi
+
+  # --- Step 5: resolve the worktree ------------------------------------------
+  WT_DECISION=$("$SCRIPT_DIR/dispatch-resolve-worktree" "$n" "$mode") || {
+    echo "dispatch-materialize-spawn: dispatch-resolve-worktree failed for #$n ($mode)" >&2
+    return 2
+  }
+  WT_ACTION="${WT_DECISION%% *}"
+  WT_REST="${WT_DECISION#* }"
+
+  case "$WT_ACTION" in
+    enter)
+      WORKTREE_PATH="$WT_REST"
+      ( cd "$WORKTREE_PATH" && "$SCRIPT_DIR/sync-issue-context" "$n" ) 1>&2 || true
+      ;;
+    create)
+      BRANCH="$WT_REST"
+      PROJECT_ROOT=$(resolve_project_root) || {
+        echo "dispatch-materialize-spawn: resolve_project_root failed for #$n" >&2
+        return 2
+      }
+      WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
+      if ! git worktree add -b "$BRANCH" "$WORKTREE_PATH" origin/main 1>&2; then
+        echo "dispatch-materialize-spawn: git worktree add failed for $BRANCH" >&2
+        return 2
+      fi
+      direnv allow "$WORKTREE_PATH" 1>&2 || true
+      direnv exec "$WORKTREE_PATH" true 1>&2 || true
+      ( cd "$WORKTREE_PATH" && "$SCRIPT_DIR/sync-issue-context" "$n" ) 1>&2 || true
+      ;;
+    conflict)
+      echo "path: $WT_REST"
+      OUTCOME=worktree-conflict
+      return 0
+      ;;
+    *)
+      echo "dispatch-materialize-spawn: dispatch-resolve-worktree emitted unexpected '$WT_DECISION'" >&2
+      return 2
+      ;;
+  esac
+
+  # --- Step 5b: merge origin/main into the resolved worktree (#944) ----------
+  # Bring the worktree's branch up to origin/main BEFORE the worker is spawned,
+  # so the worker session reads up-to-date dispatch skill files from this
+  # worktree's `.claude/` tree (the `enter` path may reuse a worktree whose
+  # branch is behind). Local merge only — never pushes; each phase skill's own
+  # push points carry the merge commit to origin. A no-op on the `create` path
+  # (the worktree was just branched from origin/main). A conflict aborts the
+  # spawn and parks the issue for a human via office-hours, mirroring the
+  # `notify target-blocked` path; the worker is never spawned into a conflicted
+  # tree.
+  "$SCRIPT_DIR/dispatch-merge-main" "$WORKTREE_PATH" 1>&2
+  MERGE_RC=$?
+  if (( MERGE_RC == 3 )); then
+    "$SCRIPT_DIR/dispatch-apply-office-hours" "$n" "origin/main does not merge cleanly into the target worktree" 1>&2 || true
+    echo "merge of origin/main into $WORKTREE_PATH conflicts; spawn aborted"
+    OUTCOME=merge-conflict
+    return 0
+  elif (( MERGE_RC != 0 )); then
+    echo "dispatch-materialize-spawn: dispatch-merge-main failed (exit $MERGE_RC) for $WORKTREE_PATH" >&2
+    return 2
+  fi
+
+  # Write the recovery marker into the target worktree. The lock is STILL HELD
+  # from here through the spawn (#945) — the caller releases it after the loop.
+  if ! "$SCRIPT_DIR/dispatch-finalize-selection" "$WORKTREE_PATH" 1>&2; then
+    echo "dispatch-materialize-spawn: dispatch-finalize-selection failed for $WORKTREE_PATH" >&2
+    return 2
+  fi
+
+  # --- Step 6a: waiting-CI gate (#906) ---------------------------------------
+  PHASE=$("$SCRIPT_DIR/dispatch-phase" "$n") || PHASE=""
+  if [[ "$PHASE" == "waiting" ]]; then
+    echo "#$n: CI in progress; the next router tick will re-evaluate."
+    OUTCOME=ci-waiting
+    return 0
+  fi
+
+  # --- Step 6b: spawn the worker ---------------------------------------------
+  # The lock is still held here (#945). dispatch-spawn-worker returns success
+  # only after the worker is verified-registered under its <basename>, at which
+  # point dispatch-select-target skips the now-owned worktree — so the next
+  # in-loop selection yields a distinct target. On a failed spawn no worker
+  # registered.
+  if "$SCRIPT_DIR/dispatch-spawn-worker" "$n" "$WORKTREE_PATH" 1>&2; then
+    OUTCOME=spawned
+    return 0
+  fi
+  OUTCOME=spawn-failed
+  return 0
+}
+
+# --- Driver ------------------------------------------------------------------
+# Single-target path: explicit targets and gap<=1 process exactly one target and
+# emit the per-target terminal token, byte-identical to the pre-fan-out script.
+if [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); then
+  process_one_target "$N" "$MODE" || { release_lock; exit 2; }
   release_lock
-  "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" "origin/main does not merge cleanly into the target worktree" 1>&2 || true
-  echo "merge of origin/main into $WORKTREE_PATH conflicts; spawn aborted"
-  echo "notify merge-conflict"
+  case "$OUTCOME" in
+    spawned)           echo "propagate" ;;
+    target-blocked)    echo "notify target-blocked" ;;
+    merge-conflict)    echo "notify merge-conflict" ;;
+    spawn-failed)      echo "notify spawn-failed" ;;
+    worktree-conflict) echo "drain worktree-conflict" ;;
+    ci-waiting)        echo "drain ci-waiting" ;;
+  esac
   exit 0
-elif (( MERGE_RC != 0 )); then
-  release_lock
-  echo "dispatch-materialize-spawn: dispatch-merge-main failed (exit $MERGE_RC) for $WORKTREE_PATH" >&2
-  exit 2
 fi
 
-# Write the recovery marker into the target worktree. The lock is STILL HELD
-# from here through the spawn (#945) — each terminal path below releases it at
-# its own stop point.
-if ! "$SCRIPT_DIR/dispatch-finalize-selection" "$WORKTREE_PATH" 1>&2; then
-  # finalize-selection failed, so the lock is still held — release it explicitly
-  # so a stuck holder does not wedge the next tick.
-  release_lock
-  echo "dispatch-materialize-spawn: dispatch-finalize-selection failed for $WORKTREE_PATH" >&2
-  exit 2
-fi
-
-# --- Step 6a: waiting-CI gate (#906) -----------------------------------------
-PHASE=$("$SCRIPT_DIR/dispatch-phase" "$N") || PHASE=""
-if [[ "$PHASE" == "waiting" ]]; then
-  release_lock
-  echo "#$N: CI in progress; the next router tick will re-evaluate."
-  echo "drain ci-waiting"
-  exit 0
-fi
-
-# --- Step 6b: spawn the worker -----------------------------------------------
-# The lock is still held here (#945). dispatch-spawn-worker returns success only
-# after the worker is verified-registered under its <basename>, at which point
-# dispatch-select-target skips the now-owned worktree — so release the lock only
-# after a successful return, closing the boot-gap re-selection race. On a failed
-# spawn no worker registered; release the lock so the next tick can re-select.
-if "$SCRIPT_DIR/dispatch-spawn-worker" "$N" "$WORKTREE_PATH" 1>&2; then
-  release_lock
-  echo "propagate"
-  exit 0
-fi
+# Fan out: fill up to GAP slots in one held-lock run. Target 1 is the passed-in
+# N; targets 2..GAP come from successive dispatch-select-target calls. Each
+# spawned worker registers before the next selection (#945/#905), so the next
+# dispatch-select-target skips its now-live-owned worktree and yields a distinct
+# target. A SEEN guard additionally stops the run if selection ever returns an
+# already-processed target (a non-spawning outcome that did not remove the
+# target from the queue), bounding the loop. Per-target park/skip outcomes are
+# recorded and the loop continues; the lock is released ONCE at the end.
+declare -A SEEN=()
+spawned=0
+stop_reason="gap filled"
+cur_n="$N"
+cur_mode="$MODE"
+while :; do
+  process_one_target "$cur_n" "$cur_mode" || { release_lock; exit 2; }
+  SEEN["$cur_n"]=1
+  case "$OUTCOME" in
+    spawned)            spawned=$(( spawned + 1 )); echo "propagate: spawned #$cur_n" ;;
+    merge-conflict|target-blocked) echo "propagate: parked #$cur_n ($OUTCOME)" ;;
+    *)                  echo "propagate: skipped #$cur_n ($OUTCOME)" ;;
+  esac
+  (( spawned >= GAP )) && break
+  SELECTED=$("$SCRIPT_DIR/dispatch-select-target") || true
+  case "$SELECTED" in
+    pr\ *)    set -- $SELECTED; cur_n="${3%%-*}"; cur_mode=queue ;;
+    issue\ *) cur_n="${SELECTED#issue }"; cur_mode=queue ;;
+    empty)    stop_reason="queue exhausted"; break ;;
+    main-broken\ *|jit-reminder\ *) stop_reason="selection deferred (${SELECTED%% *})"; break ;;
+    *) release_lock
+       echo "dispatch-materialize-spawn: dispatch-select-target emitted unexpected '$SELECTED' in fan-out" >&2
+       exit 2 ;;
+  esac
+  if [[ -n "${SEEN[$cur_n]:-}" ]]; then
+    stop_reason="no further distinct targets"
+    break
+  fi
+done
 release_lock
-echo "notify spawn-failed"
+if [[ "$stop_reason" == "gap filled" ]]; then
+  echo "propagate: spawned $spawned of gap $GAP"
+else
+  echo "propagate: spawned $spawned of gap $GAP ($stop_reason)"
+fi
+if (( spawned >= 1 )); then echo "propagate"; else echo "drain"; fi
 exit 0
