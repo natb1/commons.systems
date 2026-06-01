@@ -72,6 +72,23 @@ The body has one `Closes #N` line per issue implemented in this PR — the prima
 issue plus any implemented sub-issues or blockers. This draft PR is the
 implement→verify transition marker.
 
+Then verify GitHub parsed exactly the intended close set — narrative prose in
+the body can carry a stray closing keyword that GitHub reads as an extra close
+directive (see `.claude/rules/issue-references.md`). Compare the parsed set to
+the `Closes #N` lines you deliberately wrote (`gh` still needs
+`dangerouslyDisableSandbox: true`):
+
+```bash
+gh pr view "$PR_NUM" --json closingIssuesReferences \
+  -q '.closingIssuesReferences[].number' | sort
+```
+
+If a parsed number is not in your intended `Closes #N` set, the body contains a
+stray `<keyword> #N` in narrative prose. Find it, rewrite it to a bare `#N`
+(drop the preceding closing keyword — e.g. `Closes #905` → `#905`, `resolved
+#905` → `#905`), update the body with `gh pr edit "$PR_NUM" --body ...`, and
+re-run the check until the parsed set equals the intended set.
+
 ### 4. Check for deviation, then write the marker (or skip it), then stop
 
 Before writing the marker, judge whether the implementation deviated from the
