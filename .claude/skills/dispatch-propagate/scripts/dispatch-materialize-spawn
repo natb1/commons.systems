@@ -127,6 +127,14 @@ fi
 # The caller routes on it. Hard errors return 2 (caller maps to release+exit 2).
 OUTCOME=""
 
+# Merge-conflict detail, surfaced by process_one_target when OUTCOME=merge-conflict.
+# The disposition differs by driver, so the function neither parks nor prints —
+# it exposes the resolved issue/worktree/mode and the caller routes (single-target
+# hands back via `resolve merge-conflict`; fan-out parks via office-hours).
+CONFLICT_N=""
+CONFLICT_WORKTREE=""
+CONFLICT_MODE=""
+
 # process_one_target <issue-N> <explicit|queue>
 # Runs the per-target sequence (Step 4 guards, Step 5 resolve, Step 5b merge,
 # recovery marker, Step 6a CI gate, Step 6b spawn) for ONE target. Does NOT
@@ -241,9 +249,15 @@ process_one_target() {
   "$SCRIPT_DIR/dispatch-merge-main" "$WORKTREE_PATH" 1>&2
   MERGE_RC=$?
   if (( MERGE_RC == 3 )); then
-    "$SCRIPT_DIR/dispatch-apply-office-hours" "$n" "origin/main does not merge cleanly into the target worktree" 1>&2 || true
-    echo "merge of origin/main into $WORKTREE_PATH conflicts; spawn aborted"
+    # Surface the conflict detail and let the caller route. The single-target
+    # path hands the conflict back to the router AGENT via `resolve merge-conflict`
+    # (no park) for an opus-subagent auto-resolve attempt (#960); the fan-out path
+    # parks via office-hours and continues to the next target (#966). So neither
+    # the office-hours park nor any stdout happens here.
     OUTCOME=merge-conflict
+    CONFLICT_N="$n"
+    CONFLICT_WORKTREE="$WORKTREE_PATH"
+    CONFLICT_MODE="$mode"
     return 0
   elif (( MERGE_RC != 0 )); then
     echo "dispatch-materialize-spawn: dispatch-merge-main failed (exit $MERGE_RC) for $WORKTREE_PATH" >&2
@@ -288,7 +302,11 @@ if [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); then
   case "$OUTCOME" in
     spawned)           echo "propagate" ;;
     target-blocked)    echo "notify target-blocked" ;;
-    merge-conflict)    echo "notify merge-conflict" ;;
+    merge-conflict)
+      # Hand the conflict back to the router AGENT (#960): print detail, no park.
+      printf 'issue: %s\nworktree: %s\nmode: %s\n' \
+        "$CONFLICT_N" "$CONFLICT_WORKTREE" "$CONFLICT_MODE"
+      echo "resolve merge-conflict" ;;
     spawn-failed)      echo "notify spawn-failed" ;;
     worktree-conflict) echo "drain worktree-conflict" ;;
     ci-waiting)        echo "drain ci-waiting" ;;
@@ -314,7 +332,13 @@ while :; do
   SEEN["$cur_n"]=1
   case "$OUTCOME" in
     spawned)            spawned=$(( spawned + 1 )); echo "propagate: spawned #$cur_n" ;;
-    merge-conflict|target-blocked) echo "propagate: parked #$cur_n ($OUTCOME)" ;;
+    merge-conflict)
+      # Fan-out parks the conflicting target and continues (#966). target-blocked
+      # already parked inside process_one_target; merge-conflict parks here so the
+      # single-target path can hand back via `resolve merge-conflict` instead.
+      "$SCRIPT_DIR/dispatch-apply-office-hours" "$CONFLICT_N" "origin/main does not merge cleanly into the target worktree" 1>&2 || true
+      echo "propagate: parked #$cur_n ($OUTCOME)" ;;
+    target-blocked)     echo "propagate: parked #$cur_n ($OUTCOME)" ;;
     *)                  echo "propagate: skipped #$cur_n ($OUTCOME)" ;;
   esac
   (( spawned >= GAP )) && break
