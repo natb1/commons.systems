@@ -11037,7 +11037,7 @@ echo "=== dispatch-select-tick ==="
 sel_tick_setup() {
   TMPDIR_TEST=$(mktemp -d)
   STUB_DIR="$TMPDIR_TEST/stub"
-  mkdir -p "$STUB_DIR" "$TMPDIR_TEST/bin"
+  mkdir -p "$STUB_DIR" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/logs"
 
   cp "$SCRIPT_DIR/dispatch-select-tick" "$TMPDIR_TEST/dispatch-select-tick"
   cp "$SCRIPT_DIR/dispatch-acquire-lock" "$TMPDIR_TEST/dispatch-acquire-lock"
@@ -11071,13 +11071,33 @@ FAKE
 #!/usr/bin/env bash
 echo "$1"
 FAKE
-  cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+  cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/select-target.log"
 echo empty
+FAKE
+  # Run-scoped concurrency gate fakes (overridable per test via SEL_* env vars).
+  cat > "$TMPDIR_TEST/dispatch-target-workers" <<'FAKE'
+#!/usr/bin/env bash
+echo "${SEL_TARGET_N:-1}"
+FAKE
+  cat > "$TMPDIR_TEST/dispatch-schedule-reseed" <<FAKE
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/schedule-reseed.log"
+exit 0
+FAKE
+  # Sourced helper: provides claude_agents_count_busy_workers.
+  cat > "$TMPDIR_TEST/lib-claude-agents.sh" <<'FAKE'
+claude_agents_count_busy_workers() {
+  [[ -n "${SEL_LIVE_COUNT_FAIL:-}" ]] && return 1
+  echo "${SEL_LIVE_COUNT:-0}"
+}
 FAKE
   chmod +x "$TMPDIR_TEST/dispatch-jit-engine" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
-           "$TMPDIR_TEST/dispatch-select-target"
+           "$TMPDIR_TEST/dispatch-select-target" \
+           "$TMPDIR_TEST/dispatch-target-workers" \
+           "$TMPDIR_TEST/dispatch-schedule-reseed"
 
   # PATH-shimmed git: branch defaults to main; fetch/merge succeed unless a
   # FAKE_GIT_*_FAIL env var is set.
@@ -11100,7 +11120,8 @@ sel_tick_teardown() {
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     DISPATCH_LOCK_WAIT_TIMEOUT DISPATCH_LOCK_WAIT_INTERVAL \
-    FAKE_GIT_BRANCH FAKE_GIT_FETCH_FAIL FAKE_GIT_MERGE_FAIL
+    FAKE_GIT_BRANCH FAKE_GIT_FETCH_FAIL FAKE_GIT_MERGE_FAIL \
+    SEL_TARGET_N SEL_LIVE_COUNT SEL_LIVE_COUNT_FAIL
 }
 
 # Run the orchestrator, capturing full stdout; the decision is the last line.
@@ -11120,13 +11141,14 @@ sel_tick_teardown
 # --- pr selection → passthrough + lock HELD ----------------------------------
 echo "Test: select-tick pr selection → passthrough, lock held"
 sel_tick_setup
-cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/select-target.log"
 echo "pr 660 660-some-branch code-review"
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_sel_tick)
-assert_eq "pr: decision line" "pr 660 660-some-branch code-review" \
+assert_eq "pr: decision line" "pr 660 660-some-branch code-review 1" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "pr: lock held (our session)" "select-tick-session" \
   "$(cat "$DISPATCH_LOCK_FILE")"
@@ -11135,21 +11157,23 @@ sel_tick_teardown
 # --- issue selection → passthrough + lock HELD -------------------------------
 echo "Test: select-tick issue selection → passthrough, lock held"
 sel_tick_setup
-cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/select-target.log"
 echo "issue 707"
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_sel_tick)
-assert_eq "issue: decision line" "issue 707" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "issue: decision line" "issue 707 1" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "issue: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
 # --- main-broken → passthrough + lock HELD (sub-skill releases) --------------
 echo "Test: select-tick main-broken → passthrough, lock held"
 sel_tick_setup
-cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/select-target.log"
 echo "main-broken abc1234"
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-select-target"
@@ -11163,8 +11187,9 @@ sel_tick_teardown
 # --- jit-reminder → passthrough + lock HELD ----------------------------------
 echo "Test: select-tick jit-reminder → passthrough, lock held"
 sel_tick_setup
-cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/select-target.log"
 echo "jit-reminder owner/repo 42 PVT_x ITEM_y"
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-select-target"
@@ -11179,7 +11204,7 @@ sel_tick_teardown
 echo "Test: select-tick explicit arg → explicit <num>, lock held"
 sel_tick_setup
 out=$(run_sel_tick 55)
-assert_eq "explicit: decision line" "explicit 55" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "explicit: decision line" "explicit 55 1" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "explicit: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
@@ -11187,7 +11212,7 @@ sel_tick_teardown
 echo "Test: select-tick explicit arg strips leading '#'"
 sel_tick_setup
 out=$(run_sel_tick '#88')
-assert_eq "explicit '#': decision line" "explicit 88" \
+assert_eq "explicit '#': decision line" "explicit 88 1" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 sel_tick_teardown
 
@@ -11263,8 +11288,9 @@ sel_tick_teardown
 # --- unexpected select-target line → release + exit 2 ------------------------
 echo "Test: select-tick unexpected select-target line → exit 2, lock released"
 sel_tick_setup
-cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/select-target.log"
 echo "garbage unexpected line"
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-select-target"
@@ -11286,6 +11312,62 @@ case "$err" in
   *) status="bad: $err" ;;
 esac
 assert_eq "extra args → usage error, exit 2" "ok" "$status"
+sel_tick_teardown
+
+# --- gate at cap → concurrency-cap, no selection work ------------------------
+echo "Test: select-tick at cap → concurrency-cap, no selection work"
+sel_tick_setup
+export SEL_LIVE_COUNT=2 SEL_TARGET_N=1
+out=$(run_sel_tick)
+assert_eq "cap: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "cap: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "cap: reseed scheduled" "called" "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
+assert_eq "cap: no selection work (select-target not called)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- gate under cap → gap = target − live on the decision line ---------------
+echo "Test: select-tick under cap → gap = target − live on the decision line"
+sel_tick_setup
+export SEL_LIVE_COUNT=1 SEL_TARGET_N=4
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/select-target.log"
+echo "issue 707"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_sel_tick)
+assert_eq "under-cap: gap on issue line" "issue 707 3" "$(printf '%s\n' "$out" | tail -n 1)"
+sel_tick_teardown
+
+# --- daemon UNKNOWN → fail open, gap=1 ---------------------------------------
+echo "Test: select-tick daemon UNKNOWN → fail open, gap=1"
+sel_tick_setup
+export SEL_LIVE_COUNT_FAIL=1 SEL_TARGET_N=4
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/select-target.log"
+echo "issue 707"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_sel_tick)
+assert_eq "fail-open: gap=1 on issue line" "issue 707 1" "$(printf '%s\n' "$out" | tail -n 1)"
+sel_tick_teardown
+
+# --- --bypass-cap skips the gate, gap=1 even over budget ---------------------
+echo "Test: select-tick --bypass-cap skips gate, gap=1 over budget"
+sel_tick_setup
+export SEL_LIVE_COUNT=5 SEL_TARGET_N=1
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/select-target.log"
+echo "issue 707"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_sel_tick --bypass-cap)
+assert_eq "bypass-cap: not capped, issue line w/ gap 1" "issue 707 1" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "bypass-cap: no reseed scheduled" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
 # ============================================================================
@@ -11359,15 +11441,6 @@ FAKE
 #!/usr/bin/env bash
 echo "${MAT_PHASE:-implement}"
 FAKE
-  cat > "$TMPDIR_TEST/dispatch-target-workers" <<'FAKE'
-#!/usr/bin/env bash
-echo "${MAT_TARGET_N:-1}"
-FAKE
-  cat > "$TMPDIR_TEST/dispatch-schedule-reseed" <<FAKE
-#!/usr/bin/env bash
-echo called >> "$TMPDIR_TEST/logs/schedule-reseed.log"
-exit 0
-FAKE
   cat > "$TMPDIR_TEST/dispatch-spawn-worker" <<FAKE
 #!/usr/bin/env bash
 echo "\$*" >> "$TMPDIR_TEST/logs/spawn-worker.log"
@@ -11378,18 +11451,10 @@ FAKE
 #!/usr/bin/env bash
 echo "cwd=\$PWD argv=\$*" >> "$TMPDIR_TEST/logs/sync-issue-context.log"
 FAKE
-  # Sourced helper: provides claude_agents_count_busy_workers.
-  cat > "$TMPDIR_TEST/lib-claude-agents.sh" <<'FAKE'
-claude_agents_count_busy_workers() {
-  [[ -n "${MAT_LIVE_COUNT_FAIL:-}" ]] && return 1
-  echo "${MAT_LIVE_COUNT:-0}"
-}
-FAKE
   chmod +x "$TMPDIR_TEST"/dispatch-find-pr "$TMPDIR_TEST"/dispatch-trace-leaf \
     "$TMPDIR_TEST"/dispatch-check-blockers "$TMPDIR_TEST"/dispatch-apply-office-hours \
     "$TMPDIR_TEST"/dispatch-resolve-worktree "$TMPDIR_TEST"/dispatch-merge-main \
     "$TMPDIR_TEST"/dispatch-phase \
-    "$TMPDIR_TEST"/dispatch-target-workers "$TMPDIR_TEST"/dispatch-schedule-reseed \
     "$TMPDIR_TEST"/dispatch-spawn-worker "$TMPDIR_TEST"/sync-issue-context
 
   mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
@@ -11420,8 +11485,8 @@ mat_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
-    MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_MERGE_RC MAT_PHASE MAT_TARGET_N \
-    MAT_LIVE_COUNT MAT_LIVE_COUNT_FAIL MAT_SPAWN_RC MAT_ISSUE_STATE
+    MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_MERGE_RC MAT_PHASE \
+    MAT_SPAWN_RC MAT_ISSUE_STATE
 }
 
 run_mat() { "$TMPDIR_TEST/dispatch-materialize-spawn" "$@" 2>/dev/null; }
@@ -11668,46 +11733,26 @@ assert_eq "ci-waiting: no spawn" "0" \
 assert_eq "ci-waiting: lock released at ci-waiting stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
-# --- concurrency cap → drain concurrency-cap, schedule-reseed called ---------
-echo "Test: materialize-spawn live count >= target → drain concurrency-cap"
+# --- --gap 1 → propagate (single target, default behavior) -------------------
+# The gate now lives in dispatch-select-tick; materialize-spawn parses --gap but
+# this unit still processes exactly one target.
+echo "Test: materialize-spawn --gap 1 → propagate (single target, default behavior)"
 mat_setup
-export MAT_LIVE_COUNT=2
-export MAT_TARGET_N=1
-out=$(run_mat 839 queue)
-assert_eq "concurrency-cap: terminal token" "drain concurrency-cap" \
-  "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "concurrency-cap: reseed scheduled" "called" \
-  "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log")"
-assert_eq "concurrency-cap: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
-# #945: the lock is released at the concurrency-cap stop (no worker spawned).
-assert_eq "concurrency-cap: lock released at cap stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
-mat_teardown
-
-# --- --bypass-cap skips the concurrency gate (spawns even over budget) -------
-echo "Test: materialize-spawn --bypass-cap spawns even when live count >= target"
-mat_setup
-export MAT_LIVE_COUNT=5
-export MAT_TARGET_N=1
-out=$(run_mat 839 queue --bypass-cap)
-assert_eq "bypass-cap: terminal token" "propagate" \
-  "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "bypass-cap: spawn called despite over budget" \
-  "839 $TMPDIR_TEST/project/worktrees/839-test" \
+out=$(run_mat 839 queue --gap 1)
+assert_eq "gap1: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "gap1: spawn called once" "839 $TMPDIR_TEST/project/worktrees/839-test" \
   "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
-assert_eq "bypass-cap: no reseed scheduled" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- daemon UNKNOWN → fail open and spawn ------------------------------------
-echo "Test: materialize-spawn daemon-query failure fails open and spawns"
+# --- --gap non-integer → usage error exit 2 ----------------------------------
+echo "Test: materialize-spawn --gap with non-integer → usage error exit 2"
 mat_setup
-export MAT_LIVE_COUNT_FAIL=1
-out=$(run_mat 839 queue)
-assert_eq "fail-open: terminal token" "propagate" \
-  "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "fail-open: spawn called" "1" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+err=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue --gap abc 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"--gap requires a positive integer"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "gap-bad: usage error exit 2" "ok" "$status"
 mat_teardown
 
 # --- spawn failure → notify spawn-failed -------------------------------------

@@ -3,13 +3,13 @@
 # materialize-and-spawn orchestrator (the deterministic Steps 4-6 of the old
 # SKILL.md, bundled into one script).
 #
-# Usage: dispatch-materialize-spawn <issue-N> <explicit|queue> [--bypass-cap]
+# Usage: dispatch-materialize-spawn <issue-N> <explicit|queue> [--gap <N>]
 #
 # Picks up after dispatch-select-tick has chosen a target. Runs the explicit-
 # path guards (leaf trace, closed-target, open-blocker), resolves the target
 # worktree (entering or creating it), writes the recovery marker via
 # dispatch-finalize-selection (which no longer releases the lock — #945), runs
-# the waiting-CI gate, consults the concurrency budgeter, spawns the worker, and
+# the waiting-CI gate, spawns the worker, and
 # releases the lock after the worker registers. Prints exactly ONE terminal
 # token as its LAST stdout line; supporting detail (a path, a blocker list, the
 # CI line) precedes the token.
@@ -38,9 +38,6 @@
 #                          precedes this token.
 #   drain ci-waiting       the target PR's CI is still in progress; no spawn this
 #                          tick. Lock released at this stop.
-#   drain concurrency-cap  the live worker count already meets the budget; a
-#                          cap-keyed re-seed is scheduled. Lock released at this
-#                          stop.
 #
 # Lock-release points (#945): the lock is held THROUGH the spawn so the next
 # tick cannot re-select the target during the worker's boot gap.
@@ -49,8 +46,7 @@
 # release explicitly at the guard (the marker does not exist yet on these
 # pre-finalize stop paths). `propagate` and `notify spawn-failed` release AFTER
 # dispatch-spawn-worker returns (the worker is verified-registered on success).
-# `drain ci-waiting` and `drain concurrency-cap` release at their respective
-# stops. An internal `exit 2` failure before dispatch-finalize-selection (a usage
+# `drain ci-waiting` releases at its stop. An internal `exit 2` failure before dispatch-finalize-selection (a usage
 # error, or a hard trace-leaf / check-blockers / resolve-worktree error) also
 # releases the lock so a stuck holder does not wedge the next tick. Crash safety: a router that dies
 # mid-spawn holding the lock is recovered by the lock's existing dead-holder
@@ -82,9 +78,14 @@ release_lock() {
 
 N="${1:-}"
 MODE="${2:-}"
-BYPASS_CAP=0
-if [[ "${3:-}" == "--bypass-cap" ]]; then
-  BYPASS_CAP=1
+GAP=1
+if [[ "${3:-}" == "--gap" ]]; then
+  GAP="${4:-}"
+  if [[ ! "$GAP" =~ ^[1-9][0-9]*$ ]]; then
+    release_lock
+    echo "dispatch-materialize-spawn: --gap requires a positive integer, got '${4:-}'" >&2
+    exit 2
+  fi
 elif [[ -n "${3:-}" ]]; then
   release_lock
   echo "dispatch-materialize-spawn: unexpected argument '$3'" >&2
@@ -93,7 +94,7 @@ fi
 
 if [[ ! "$N" =~ ^[1-9][0-9]*$ ]] || { [[ "$MODE" != "explicit" && "$MODE" != "queue" ]]; }; then
   release_lock
-  echo "dispatch-materialize-spawn: usage: dispatch-materialize-spawn <issue-N> <explicit|queue> [--bypass-cap]" >&2
+  echo "dispatch-materialize-spawn: usage: dispatch-materialize-spawn <issue-N> <explicit|queue> [--gap <N>]" >&2
   exit 2
 fi
 
@@ -241,26 +242,7 @@ if [[ "$PHASE" == "waiting" ]]; then
   exit 0
 fi
 
-# --- Step 6b: concurrency gate (skipped under --bypass-cap) ------------------
-if (( ! BYPASS_CAP )); then
-  # shellcheck source=/dev/null
-  source "$SCRIPT_DIR/lib-claude-agents.sh"
-  TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")
-  if LIVE_COUNT=$(claude_agents_count_busy_workers); then
-    if (( LIVE_COUNT >= TARGET_N )); then
-      release_lock
-      "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
-      echo "router: $LIVE_COUNT live worker(s) >= target $TARGET_N"
-      echo "drain concurrency-cap"
-      exit 0
-    fi
-    # under cap → fall through to spawn
-  fi
-  # daemon UNKNOWN (if-condition false) → fail open → fall through to spawn;
-  # dispatch-spawn-worker's per-worktree dedup is the last-line defense.
-fi
-
-# --- Step 6c: spawn the worker -----------------------------------------------
+# --- Step 6b: spawn the worker -----------------------------------------------
 # The lock is still held here (#945). dispatch-spawn-worker returns success only
 # after the worker is verified-registered under its <basename>, at which point
 # dispatch-select-target skips the now-owned worktree — so release the lock only
