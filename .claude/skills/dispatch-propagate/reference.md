@@ -70,7 +70,7 @@ early-release window.
 `dispatch-materialize-spawn` releases at each terminal point: on the `propagate`
 path after `dispatch-spawn-worker` returns success (worker verified-registered),
 on `notify spawn-failed` after the failed spawn returns, and on `drain
-ci-waiting` / `drain concurrency-cap` at their respective stops.
+ci-waiting` at its stop.
 `dispatch-finalize-selection` writes the recovery marker but no longer releases.
 The pre-finalize stop paths — `notify target-blocked`, `notify merge-conflict`,
 and `drain worktree-conflict`, plus the internal `exit 2` error paths — release

@@ -67,9 +67,10 @@
 # release explicitly at the guard (the marker does not exist yet on these
 # pre-finalize stop paths). `propagate` and `notify spawn-failed` release AFTER
 # dispatch-spawn-worker returns (the worker is verified-registered on success).
-# `drain ci-waiting` releases at its stop. An internal `exit 2` failure before dispatch-finalize-selection (a usage
-# error, or a hard trace-leaf / check-blockers / resolve-worktree error) also
-# releases the lock so a stuck holder does not wedge the next tick. Crash safety: a router that dies
+# `drain ci-waiting` releases at its stop. An internal `exit 2` failure before
+# dispatch-finalize-selection (a usage error, or a hard trace-leaf /
+# check-blockers / resolve-worktree error) also releases the lock so a stuck
+# holder does not wedge the next tick. Crash safety: a router that dies
 # mid-spawn holding the lock is recovered by the lock's existing dead-holder
 # reclaim on the next --wait.
 #
