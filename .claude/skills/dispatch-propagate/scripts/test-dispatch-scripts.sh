@@ -5982,6 +5982,34 @@ out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "r=0 envelope W~=100; used_weekly=100 at target → N=0" "0" "$out"
 tw_teardown
 
+# --- Test 22b: non-default weekly_terminal_pct flows through end-to-end ------
+
+echo "Test: non-default weekly_terminal_pct=95 caps the envelope target at 95"
+tw_setup
+# The envelope target is the configurable weekly_terminal_pct, not a baked-in
+# 100. With weekly_terminal_pct=95 (cap=10), at r=0 the envelope = 95 - 10*0 =
+# 95 and the smooth curve W(1)=90, so W=95. used_weekly=93 under pace → N>=1;
+# used_weekly=97 ahead of the 95 target → N=0. The used_weekly=97 probe is
+# DISCRIMINATING: the default terminal=100 would lift W to 100, putting
+# used_weekly=97 under pace (N>=1) — so N=0 confirms the knob value is honored.
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_terminal_pct": 95}
+EOF
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 1.0)
+write_rl "term95.json" 93 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: terminal=95 r=0 W=95; used_weekly=93 under pace → N=$out (>=1)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: terminal=95 used_weekly=93 expected N>=1 (W=95), got $out"
+fi
+write_rl "term95.json" 97 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "terminal=95 r=0 W=95; used_weekly=97 ahead of 95 target → N=0" "0" "$out"
+tw_teardown
+
 # --- Test 23: mid-week tick unchanged from the smooth curve -----------------
 
 echo "Test: mid-week tick is byte-identical to the pre-envelope smooth curve"

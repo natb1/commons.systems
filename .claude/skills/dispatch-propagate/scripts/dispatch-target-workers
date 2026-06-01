@@ -311,7 +311,8 @@ awk -v now="$NOW" \
        # from the end so spending at most wcap per remaining window still
        # reaches terminal. Mid-week `rem_windows` is large and the term is
        # deeply negative, so the smooth curve dominates unchanged; it only
-       # lifts the final ~2 windows (term = 80 at r=2, 90 at r=1, 100 at r=0).
+       # lifts the final ~1.7 windows (envelope takes over at r≈1.7; term =
+       # 80 at r=2 [smooth 81.5 wins], 90 at r=1, 100 at r=0 with defaults).
        rem_windows = remaining / 18000
        envelope = (terminal + 0) - (wcap + 0) * rem_windows
        if (W < envelope) W = envelope
