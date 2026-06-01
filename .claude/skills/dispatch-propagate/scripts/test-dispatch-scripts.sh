@@ -6608,6 +6608,213 @@ fi
 sr_teardown
 
 # ============================================================================
+# dispatch-schedule-target-reseed tests
+# ============================================================================
+#
+# Exercises the target-keyed CI-wait reseed: under-cap reseed bumps the
+# dispatch:ci-wait-attempt counter and schedules a transient timer whose
+# ExecStart re-runs dispatch-spawn-router <N>; at-cap escalates to
+# dispatch:office-hours and schedules no timer; bad <N> / missing PR are misuse.
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/      copy of dispatch-schedule-target-reseed + lib.sh
+#   $TMPDIR_TEST/bin/          systemd-run stub
+#   $TMPDIR_TEST/systemd-log   recorded systemd-run argv (one line per call)
+#   $TMPDIR_TEST/gh-edit-log   recorded fake-gh pr-edit / label-create argv
+#   $TMPDIR_TEST/oh-log        recorded fake dispatch-apply-office-hours argv
+#   $TMPDIR_TEST/main/         a synthetic main worktree path
+echo ""
+echo "=== dispatch-schedule-target-reseed ==="
+
+tr_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/main"
+
+  cp "$SCRIPT_DIR/dispatch-schedule-target-reseed" \
+    "$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed"
+  # The script sources lib.sh via its SCRIPT_DIR — so lib.sh must sit alongside.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed"
+
+  export DISPATCH_TARGET_RESEED_MAIN_WORKTREE="$TMPDIR_TEST/main"
+  export DISPATCH_TARGET_RESEED_NOW=10000
+  export DISPATCH_TARGET_RESEED_DELAY=300
+  export DISPATCH_TARGET_RESEED_CAP=3
+
+  # systemd-run stub: records its argv (one line per call), exits 0.
+  cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/systemd-log"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemd-run"
+  export DISPATCH_TARGET_RESEED_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
+
+  # fake gh: `pr view ... --jq ...` echoes the test-controlled current attempt
+  # count ($FAKE_CUR_ATTEMPT, default 0 — the script consumes the jq result as
+  # the integer counter). `pr edit` / `label create` record their argv to a log
+  # and exit 0.
+  cat > "$TMPDIR_TEST/bin/fake-gh" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "pr" && "\$2" == "view" ]]; then
+  echo "\${FAKE_CUR_ATTEMPT:-0}"
+  exit 0
+fi
+echo "\$*" >> "$TMPDIR_TEST/gh-edit-log"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-gh"
+  export DISPATCH_TARGET_RESEED_GH_CMD="$TMPDIR_TEST/bin/fake-gh"
+
+  # fake dispatch-find-pr: echoes a fixed PR number.
+  cat > "$TMPDIR_TEST/bin/fake-find-pr" <<STUB
+#!/usr/bin/env bash
+# Default 1234 only when FAKE_PR_NUM is unset — a set-but-empty value echoes
+# nothing, modelling the no-PR case.
+echo "\${FAKE_PR_NUM-1234}"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-find-pr"
+  export DISPATCH_TARGET_RESEED_FIND_PR_CMD="$TMPDIR_TEST/bin/fake-find-pr"
+
+  # fake dispatch-apply-office-hours: records its argv to a log, exits 0.
+  cat > "$TMPDIR_TEST/bin/fake-oh" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/oh-log"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-oh"
+  export DISPATCH_TARGET_RESEED_OFFICE_HOURS_CMD="$TMPDIR_TEST/bin/fake-oh"
+}
+
+tr_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_TARGET_RESEED_MAIN_WORKTREE
+  unset DISPATCH_TARGET_RESEED_NOW
+  unset DISPATCH_TARGET_RESEED_DELAY
+  unset DISPATCH_TARGET_RESEED_CAP
+  unset DISPATCH_TARGET_RESEED_SYSTEMD_RUN_CMD
+  unset DISPATCH_TARGET_RESEED_GH_CMD
+  unset DISPATCH_TARGET_RESEED_FIND_PR_CMD
+  unset DISPATCH_TARGET_RESEED_OFFICE_HOURS_CMD
+  unset FAKE_CUR_ATTEMPT
+  unset FAKE_PR_NUM
+}
+
+# --- Test 1: under-cap reseed (CUR=0 → 1) ------------------------------------
+
+echo "Test: under-cap reseed (CUR=0) schedules a timer and applies attempt-1"
+tr_setup
+export FAKE_CUR_ATTEMPT=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "under-cap reseed exits 0" "0" "$rc"
+assert_eq "under-cap reseed stdout names the unit + fire" \
+  "reseeded dispatch-reseed-target-979-10300 at 10300" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-reseed-target-979-10300"* \
+   && "$log" == *"--on-calendar=@10300"* \
+   && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
+   && "$log" == *"--setenv=PATH="* \
+   && "$log" == *"dispatch-spawn-router 979"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: under-cap systemd-run argv (unit + calendar + cwd + setenv + spawn-router 979)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap systemd-run argv (unit + calendar + cwd + setenv + spawn-router 979)"
+  echo "    log: $log"
+fi
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--add-label dispatch:ci-wait-attempt-1"* \
+   && "$edits" != *"--remove-label"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: under-cap applies attempt-1 with no remove (CUR was 0)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap applies attempt-1 with no remove (CUR was 0)"
+  echo "    edits: $edits"
+fi
+tr_teardown
+
+# --- Test 2: counter bump (CUR=1 → 2) ----------------------------------------
+
+echo "Test: counter bump (CUR=1) removes attempt-1, applies attempt-2, schedules timer"
+tr_setup
+export FAKE_CUR_ATTEMPT=1
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "counter-bump exits 0" "0" "$rc"
+assert_eq "counter-bump stdout names the unit + fire" \
+  "reseeded dispatch-reseed-target-979-10300 at 10300" "$out"
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--remove-label dispatch:ci-wait-attempt-1"* \
+   && "$edits" == *"--add-label dispatch:ci-wait-attempt-2"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: counter-bump removes attempt-1 and adds attempt-2"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: counter-bump removes attempt-1 and adds attempt-2"
+  echo "    edits: $edits"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: counter-bump schedules a timer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: counter-bump schedules a timer"
+fi
+tr_teardown
+
+# --- Test 3: at cap (CUR == CAP = 3) → escalate, no timer --------------------
+
+echo "Test: at cap (CUR==CAP) escalates to office-hours and schedules no timer"
+tr_setup
+export FAKE_CUR_ATTEMPT=3
+export DISPATCH_TARGET_RESEED_CAP=3
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "at-cap exits 0" "0" "$rc"
+assert_eq "at-cap stdout is 'escalated'" "escalated" "$out"
+oh=$(cat "$TMPDIR_TEST/oh-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$oh" == "979 "* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: at-cap office-hours fake records 979 as arg1"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: at-cap office-hours fake records 979 as arg1"
+  echo "    oh-log: $oh"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: at-cap schedules no timer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: at-cap schedules no timer"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+tr_teardown
+
+# --- Test 4: bad <N> (flag-like) → exit 2, no side effects -------------------
+
+echo "Test: flag-like <N> exits 2 with no timer and no side effects"
+tr_setup
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" --repo 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "flag-like <N> exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" && ! -s "$TMPDIR_TEST/gh-edit-log" && ! -s "$TMPDIR_TEST/oh-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: flag-like <N>; no timer / no label edit / no escalate"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: flag-like <N>; no timer / no label edit / no escalate"
+fi
+tr_teardown
+
+# --- Test 5: missing PR → exit 2, no timer -----------------------------------
+
+echo "Test: missing PR (find-pr empty) exits 2 with no timer"
+tr_setup
+export FAKE_PR_NUM=""
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "missing PR exits 2" "2" "$rc"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"no PR found for issue #979"* && ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing PR; stderr diagnostic + no timer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing PR; stderr diagnostic + no timer"
+  echo "    stderr: $err"
+fi
+tr_teardown
+
+# ============================================================================
 # dispatch project-helper tests (item-add / status-read / status-write)
 # ============================================================================
 #
