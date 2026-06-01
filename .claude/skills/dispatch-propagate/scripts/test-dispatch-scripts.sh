@@ -5354,6 +5354,57 @@ else
 fi
 config_teardown
 
+# --- Test 13f: weekly_terminal_pct: 100 accepted and round-trips -------------
+
+echo "Test: weekly_terminal_pct: 100 accepted and round-trips"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_terminal_pct": 100}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "weekly_terminal_pct 100 exits 0" "0" "$rc"
+tw_terminal=$(printf '%s' "$out" | jq -r '.weekly_terminal_pct')
+assert_eq "weekly_terminal_pct 100 round-trips" "100" "$tw_terminal"
+config_teardown
+
+# --- Test 13g: weekly_terminal_pct: 150 rejected (must be <= 100) ------------
+
+echo "Test: weekly_terminal_pct: 150 exits 1 and stderr says must be <= 100"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_terminal_pct": 150}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "weekly_terminal_pct 150 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"weekly_terminal_pct"* && "$err" == *"<= 100"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_terminal_pct 150 stderr says <= 100"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_terminal_pct 150 stderr says <= 100"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 13h: weekly_terminal_pct: 0 rejected (must be > 0) ----------------
+
+echo "Test: weekly_terminal_pct: 0 exits 1 and stderr says must be > 0"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_terminal_pct": 0}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "weekly_terminal_pct 0 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"weekly_terminal_pct"* && "$err" == *"must be > 0"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_terminal_pct 0 stderr says must be > 0"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_terminal_pct 0 stderr says must be > 0"
+  echo "    stderr: $err"
+fi
+config_teardown
+
 # ============================================================================
 # dispatch-target-workers tests
 # ============================================================================
@@ -5450,19 +5501,23 @@ write_rl() {
   export DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH="$path"
 }
 
-# --- Test 1: curve reaches target_weekly only at x=1 ------------------------
+# --- Test 1: curve reaches its terminal only at week end --------------------
 
-echo "Test: weekly curve reaches target only at week end (W < target for x<1)"
+echo "Test: weekly curve reaches terminal only at week end (W < terminal mid-week)"
 tw_setup
-# At x<1 the cumulative curve W is below target_weekly=90, so used_weekly just
-# under the curve value yields F>0/N>=1, while used_weekly just over the
-# week-end target only stays under-pace once x reaches 1. Probe by setting
-# used_weekly = 89 (just below the 90 terminal) at several x:
-#   x=0.5  → W=31  → used_weekly=89 is far ahead of pace → F=0 → N=0
-#   x=0.99 → W=88.5→ used_weekly=89 still ahead of pace  → F=0 → N=0
-#   x=1.0  → W=90  → used_weekly=89 → hw=1 → F>0 → N>=1   (only now under pace)
+# Mid-week (envelope-inactive x), the cumulative curve W is well below the
+# week-end terminal, so used_weekly just below the terminal is far ahead of
+# pace → F=0 → N=0. Only at week end does W reach the terminal and let that
+# used_weekly come under pace. Probe with used_weekly = 89 at several x.
+# (The terminal envelope lifts W to weekly_terminal=100 in the final windows;
+# this test deliberately picks envelope-INACTIVE mid-week x so it isolates the
+# smooth curve's "below terminal until the end" shape — the envelope's
+# week-end lift is covered by the dedicated envelope test below.)
+#   x=0.5  → W=31    → used_weekly=89 is far ahead of pace → F=0 → N=0
+#   x=0.75 → W=57    → used_weekly=89 still ahead of pace  → F=0 → N=0
+#   x=1.0  → env→100 → used_weekly=89 → hw=11 → F>0 → N>=1 (only now under pace)
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
-for spec in "0.5:0" "0.99:0" "1.0:ge1"; do
+for spec in "0.5:0" "0.75:0" "1.0:ge1"; do
   x="${spec%%:*}"; want="${spec##*:}"
   r=$(tw_resets_for_x "$x")
   write_rl "curve.json" 89 "$r" 0 99999999
@@ -5501,29 +5556,35 @@ else
 fi
 tw_teardown
 
-# --- Test 3: increment cap clamp lowers the terminal W(1) -------------------
+# --- Test 3: increment cap clamp lowers the smooth curve --------------------
 
-echo "Test: weekly_increment_cap_pct clamp makes W(1) < target_weekly"
+echo "Test: weekly_increment_cap_pct clamp holds the smooth curve below target"
 tw_setup
-# With cap=3: end = clamp(1+2*(90/34-1), .., 3) = 3, so W(1) = 34*(1*1 +
-# (3-1)*1/2) = 34*2 = 68 < target_weekly=90. At x=1, used_weekly=69 (> 68) is
-# ahead of the clamped pace → F=0 → N=0; used_weekly=67 (< 68) is under pace →
-# N>=1. This proves the cap hard-ceils the curve below target.
+# With cap=3: end = clamp(1+2*(90/34-1), .., 3) = 3, so the smooth term reaches
+# only W(1) = 34*(1*1 + (3-1)*1/2) = 34*2 = 68 < target_weekly=90 at week end,
+# and W(0.5) = 34*(0.5 + 2*0.25/2) = 34*(0.5+0.25) = 25.5 mid-week. To isolate
+# the smooth term from the terminal envelope, set weekly_terminal_pct=1 so the
+# envelope (env = 1 - 3*r) stays deeply negative mid-week and never lifts W.
+# At x=0.5: used_weekly=26 (> 25.5) is ahead of the clamped pace → F=0 → N=0;
+# used_weekly=25 (< 25.5) is under pace → N>=1. This proves the cap hard-ceils
+# the smooth curve below target. (The default terminal=100 envelope would
+# otherwise dominate this low-cap curve everywhere — the dedicated envelope
+# test below covers that week-end lift.)
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"weekly_increment_cap_pct": 3}
+{"weekly_increment_cap_pct": 3, "weekly_terminal_pct": 1}
 EOF
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
-r=$(tw_resets_for_x 1.0)
-write_rl "rl.json" 69 "$r" 0 99999999
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 26 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "cap=3 → W(1)=68; used_weekly=69 ahead → N=0" "0" "$out"
-write_rl "rl.json" 67 "$r" 0 99999999
+assert_eq "cap=3 → W(0.5)=25.5; used_weekly=26 ahead → N=0" "0" "$out"
+write_rl "rl.json" 25 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 TOTAL=$((TOTAL + 1))
 if (( out >= 1 )); then
-  PASS=$((PASS + 1)); echo "  PASS: cap=3 W(1)=68; used_weekly=67 under pace → N=$out (>=1)"
+  PASS=$((PASS + 1)); echo "  PASS: cap=3 W(0.5)=25.5; used_weekly=25 under pace → N=$out (>=1)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: cap=3 used_weekly=67 expected N>=1, got $out"
+  FAIL=$((FAIL + 1)); echo "  FAIL: cap=3 used_weekly=25 expected N>=1, got $out"
 fi
 tw_teardown
 
@@ -5862,6 +5923,117 @@ if (( out >= 1 )); then
   PASS=$((PASS + 1)); echo "  PASS: early-week smoke used_weekly=20 used_5h=2 → N=$out (>=1)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: early-week smoke expected N>=1, got $out"
+fi
+tw_teardown
+
+# --- Test 22: terminal envelope floors W in the final windows ---------------
+
+echo "Test: terminal envelope pins W to weekly_terminal across the final windows"
+tw_setup
+# The terminal "you-can-still-make-it" envelope floors W from the end:
+#   W = max(smooth_curve, weekly_terminal - cap*remaining_windows)
+# with defaults (terminal=100, cap=10) it evaluates to 80 at r=2, 90 at r=1,
+# 100 at r=0 (r = remaining_seconds / 18000). Place x by remaining-window count
+# (resets_at = NOW + r*18000) and hold used_5h=0 so 5h headroom is full and
+# N>=1 whenever F>0. The r=1 and r=0 lower probes are DISCRIMINATING: the
+# pre-envelope smooth curve (W=85.7 at r=1, W=90 at r=0) would have gated N=0.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+
+# r=2: smooth W=81.51 wins (>=80). used_weekly=80 under pace → N>=1;
+# used_weekly=82 ahead → N=0. Asserts W>=80 at r=2.
+write_rl "env.json" 80 $((TW_NOW + 2 * 18000)) 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: r=2 W=81.5; used_weekly=80 under pace → N=$out (>=1)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: r=2 used_weekly=80 expected N>=1, got $out"
+fi
+write_rl "env.json" 82 $((TW_NOW + 2 * 18000)) 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "r=2 W=81.5; used_weekly=82 ahead → N=0" "0" "$out"
+
+# r=1: envelope lifts W to 90 (smooth=85.7). used_weekly=88 under pace → N>=1
+# (DISCRIMINATING: pre-envelope W=85.7 would give N=0); used_weekly=90 at the
+# envelope target → N=0. Together pin W=90 at r=1.
+write_rl "env.json" 88 $((TW_NOW + 1 * 18000)) 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: r=1 envelope W=90; used_weekly=88 under pace → N=$out (>=1)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: r=1 used_weekly=88 expected N>=1 (envelope W=90), got $out"
+fi
+write_rl "env.json" 90 $((TW_NOW + 1 * 18000)) 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "r=1 envelope W=90; used_weekly=90 at target → N=0" "0" "$out"
+
+# r=0: envelope lifts W to ~100 (smooth=90). used_weekly=95 under pace → N>=1
+# (DISCRIMINATING: pre-envelope W=90 would give N=0); used_weekly=100 at the
+# envelope target → N=0. Together pin W~=100 at r=0. Use tw_resets_for_x 1.0
+# (remaining=1s) so Stage 1 does NOT take the remaining<=0 early-exit.
+r=$(tw_resets_for_x 1.0)
+write_rl "env.json" 95 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: r=0 envelope W~=100; used_weekly=95 under pace → N=$out (>=1)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: r=0 used_weekly=95 expected N>=1 (envelope W~=100), got $out"
+fi
+write_rl "env.json" 100 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "r=0 envelope W~=100; used_weekly=100 at target → N=0" "0" "$out"
+tw_teardown
+
+# --- Test 22b: non-default weekly_terminal_pct flows through end-to-end ------
+
+echo "Test: non-default weekly_terminal_pct=95 caps the envelope target at 95"
+tw_setup
+# The envelope target is the configurable weekly_terminal_pct, not a baked-in
+# 100. With weekly_terminal_pct=95 (cap=10), at r=0 the envelope = 95 - 10*0 =
+# 95 and the smooth curve W(1)=90, so W=95. used_weekly=93 under pace → N>=1;
+# used_weekly=97 ahead of the 95 target → N=0. The used_weekly=97 probe is
+# DISCRIMINATING: the default terminal=100 would lift W to 100, putting
+# used_weekly=97 under pace (N>=1) — so N=0 confirms the knob value is honored.
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_terminal_pct": 95}
+EOF
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 1.0)
+write_rl "term95.json" 93 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: terminal=95 r=0 W=95; used_weekly=93 under pace → N=$out (>=1)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: terminal=95 used_weekly=93 expected N>=1 (W=95), got $out"
+fi
+write_rl "term95.json" 97 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "terminal=95 r=0 W=95; used_weekly=97 ahead of 95 target → N=0" "0" "$out"
+tw_teardown
+
+# --- Test 23: mid-week tick unchanged from the smooth curve -----------------
+
+echo "Test: mid-week tick is byte-identical to the pre-envelope smooth curve"
+tw_setup
+# At x=0.5 the remaining is 302400s → r=16.8 → envelope = 100 - 10*16.8 = -68,
+# deeply negative, so the envelope is inactive and the smooth curve dominates
+# unchanged. The gating boundary must match the canonical W(0.5)=31 (Test 2):
+# used_weekly=31 → hw=0 → N=0 (at pace); used_weekly=30 → hw=1 → N>=1.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "midweek.json" 31 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "mid-week W(0.5)=31 unchanged; used_weekly=31 at pace → N=0" "0" "$out"
+write_rl "midweek.json" 30 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: mid-week W(0.5)=31 unchanged; used_weekly=30 under pace → N=$out (>=1)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: mid-week used_weekly=30 expected N>=1, got $out"
 fi
 tw_teardown
 
