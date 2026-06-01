@@ -22,17 +22,18 @@
 #   explicit <num> <gap>   explicit arg resolved to issue <num>; lock HELD.
 #   pr <num> <branch> <phase> <gap>   queue selected a PR; lock HELD.
 #   issue <num> <gap>   queue selected a help-wanted leaf; lock HELD.
-#   main-broken <sha>   origin/main is red; lock HELD (the sub-skill releases).
+#   main-broken <sha>   origin/main is red; lock RELEASED (spawned as a bg job,
+#                    which runs lock-free).
 #   jit-reminder <repo> <num> <project> <item-id>   a JIT reminder is due; lock
-#                    HELD (the sub-skill releases).
+#                    RELEASED (spawned as a bg job, which runs lock-free).
 #   empty            nothing eligible; lock released.
 #
 # <gap> = max(1, TARGET_N − LIVE_COUNT) is the run-scoped spawn budget the
 # fan-out loop consumes (always >= 1 on a target line). --bypass-cap skips the
 # concurrency gate and forces <gap> = 1.
 #
-# Lock invariant (the three guards): HOLD on pr/issue/explicit/main-broken/
-# jit-reminder; RELEASE on empty/sync-failed/resolver-failed/concurrency-cap;
+# Lock invariant (the three guards): HOLD on pr/issue/explicit; RELEASE on
+# empty/sync-failed/resolver-failed/concurrency-cap/main-broken/jit-reminder;
 # NEVER release on busy (nothing was acquired).
 #
 # Requires `dangerouslyDisableSandbox: true` — sub-scripts write tmp state, call
@@ -155,7 +156,10 @@ case "$SELECTED" in
     echo "$SELECTED $GAP"
     ;;
   main-broken\ *|jit-reminder\ *)
-    # Hold the lock; the invoked sub-skill releases it at its own exit. No gap.
+    # Spawned as their own bg jobs (lock-free), so release the lock here — a
+    # fresh bg session could not release this session's lock anyway (strict
+    # self-release). No gap appended.
+    release_lock
     echo "$SELECTED"
     ;;
   empty)

@@ -22,9 +22,10 @@ them:
 1. `dispatch-select-tick` — acquires the lock, syncs `main`, applies the
    run-scoped concurrency gate, runs the JIT engine and the Calendar JIT
    importer, and selects the target. Emits one **decision line**.
-2. The model routes on that line (Table 1). Only three outcomes need the model:
-   a `main-broken` / `jit-reminder` sub-skill invocation, or — for a real
-   target — a call to `dispatch-materialize-spawn`.
+2. The model routes on that line (Table 1). No sub-skill runs in the router's
+   own session: a `main-broken` / `jit-reminder` outcome spawns a bg job via
+   `dispatch-spawn-job`, then self-closes; a real target calls
+   `dispatch-materialize-spawn`.
 3. `dispatch-materialize-spawn` — runs the explicit-path guards, resolves the
    worktree, merges `origin/main` into it (so the worker reads up-to-date skill
    files), writes the recovery marker, gates on CI,
@@ -55,9 +56,10 @@ the decision as its **last** line. Report any `jit:` and `calendar:` lines, then
 route on the decision (Table 1).
 
 The **lock disposition is the script's responsibility**: it holds the lock on
-the four target lines plus `main-broken`/`jit-reminder`, releases it on
-`empty`/`sync-failed`/`resolver-failed`/`concurrency-cap`, and never touches it
-on `busy`. The model never releases the lock for a select-tick outcome.
+the target lines (`explicit`/`pr`/`issue`), releases it on
+`empty`/`sync-failed`/`resolver-failed`/`concurrency-cap`/`main-broken`/`jit-reminder`,
+and never touches it on `busy`. The model never releases the lock for a
+select-tick outcome.
 
 ### Table 1 — routing the select-tick decision line
 
@@ -68,8 +70,8 @@ on `busy`. The model never releases the lock for a select-tick outcome.
 | `resolver-failed` | The explicit argument did not resolve to one issue; report the script's stderr. | `notify resolver-failed` |
 | `empty` | Nothing eligible. Report verbatim: "queue empty — closing; the office-hours queue or a new issue will re-seed the chain". | `drain empty-queue` |
 | `concurrency-cap` | The live busy-worker count already meets the budget; a cap-keyed re-seed is scheduled (see reference.md *The #725 cap-keyed re-seed*). | `drain concurrency-cap` |
-| `main-broken <sha>` | Invoke `/dispatch-diagnose-main <sha>` — it enumerates the failing checks, fetches logs, summarizes the likely cause, and releases the lock itself. | `notify main-broken` |
-| `jit-reminder <repo> <num> <project> <item-id>` | Invoke `/dispatch-jit-reminder <repo> <num> <project> <item-id>`. The sub-skill claims the item, releases the lock, summarizes for the user, and stops the tick — a terminal-disposition bypass. | **Stop here**: no materialize-spawn, no self-close |
+| `main-broken <sha>` | Run (`dangerouslyDisableSandbox: true`) `.claude/skills/dispatch-propagate/scripts/dispatch-spawn-job --name diagnose-main --cwd "$PWD" "/dispatch-diagnose-main <sha>"` — it spawns the diagnosis as its own bg job whose transcript holds the human-facing summary. Report the spawn result (`spawned`/`deduped`), then self-close. | `drain main-broken` |
+| `jit-reminder <repo> <num> <project> <item-id>` | Run (`dangerouslyDisableSandbox: true`) `.claude/skills/dispatch-propagate/scripts/dispatch-spawn-job --name jit-reminder-<num> --cwd "$PWD" "/dispatch-jit-reminder <repo> <num> <project> <item-id>"` — the reminder surfaces from that bg job's transcript; the per-item spawn name `jit-reminder-<num>` prevents a concurrent tick double-spawning the same reminder. Report the spawn, then self-close. | `drain jit-reminder` |
 | `explicit <num> <gap>` | `dispatch-materialize-spawn <num> explicit --gap <gap>` | route on Table 2 |
 | `pr <num> <branch> <phase> <gap>` | Set `N=${branch%%-*}` (the issue the PR closes — never the PR `<num>`), then `dispatch-materialize-spawn <N> queue --gap <gap>` | route on Table 2 |
 | `issue <num> <gap>` | `dispatch-materialize-spawn <num> queue --gap <gap>` | route on Table 2 |
@@ -212,10 +214,11 @@ no-op when `CLAUDE_JOB_DIR` is unset (interactive session), so an interactive
 `/dispatch-propagate` reaching a terminal disposition does not stop the user's
 conversation.
 
-The `jit-reminder` outcome (Table 1) does not reach this section — the sub-skill
-stops the tick directly. The router does **not** spawn a successor itself; the
-worker's Stop hook (`.claude/hooks/dispatch-stop.sh`) spawns a fresh router back
-in `worktrees/main` when the worker session ends.
+The `main-broken` and `jit-reminder` outcomes (Table 1) reach this section as
+`drain` dispositions: spawn the bg job via `dispatch-spawn-job`, report the
+spawn result, then self-close. The router does **not** spawn a successor itself;
+the worker's Stop hook (`.claude/hooks/dispatch-stop.sh`) spawns a fresh router
+back in `worktrees/main` when the worker session ends.
 
 Deep "why" — chain mechanics, the lock's two scopes and marker-based reclaim,
 the selection ladder, the Step-5 marker, the spawn-cwd trade-off, concurrency

@@ -11650,8 +11650,8 @@ assert_eq "issue: decision line" "issue 707 1" "$(printf '%s\n' "$out" | tail -n
 assert_eq "issue: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
-# --- main-broken → passthrough + lock HELD (sub-skill releases) --------------
-echo "Test: select-tick main-broken → passthrough, lock held"
+# --- main-broken → passthrough + lock RELEASED (spawned as a bg job) ---------
+echo "Test: select-tick main-broken → passthrough, lock released"
 sel_tick_setup
 cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
@@ -11662,12 +11662,12 @@ chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_sel_tick)
 assert_eq "main-broken: decision line" "main-broken abc1234" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "main-broken: lock held" "select-tick-session" \
+assert_eq "main-broken: lock released" "" \
   "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
-# --- jit-reminder → passthrough + lock HELD ----------------------------------
-echo "Test: select-tick jit-reminder → passthrough, lock held"
+# --- jit-reminder → passthrough + lock RELEASED (spawned as a bg job) --------
+echo "Test: select-tick jit-reminder → passthrough, lock released"
 sel_tick_setup
 cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
@@ -11678,7 +11678,7 @@ chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_sel_tick)
 assert_eq "jit-reminder: decision line" "jit-reminder owner/repo 42 PVT_x ITEM_y" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "jit-reminder: lock held" "select-tick-session" \
+assert_eq "jit-reminder: lock released" "" \
   "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
