@@ -7677,14 +7677,16 @@ spawn_worker_teardown
 echo "Test: a pre-existing live session with the same name deduplicates the spawn"
 spawn_worker_setup
 # Prime the registry with a different sessionId whose name matches the name the
-# spawn would use. dispatch-spawn-job's dedup keys on name == <name>.
+# spawn would use. dispatch-spawn-job's dedup keys on name == <name>. cwd matches
+# SPAWN_JOB_CWD so the fixture models production: sessions_under(SPAWN_JOB_CWD)
+# returns this row (the fake ignores --cwd, but the fixture is accurate).
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
 printf '%s' \
-  '[{"sessionId":"sess-other","pid":4242,"cwd":"/job","kind":"background","status":"busy","name":"diagnose-main"}]' \
+  "[{\"sessionId\":\"sess-other\",\"pid\":4242,\"cwd\":\"$SPAWN_JOB_CWD\",\"kind\":\"background\",\"status\":\"busy\",\"name\":\"diagnose-main\"}]" \
   > "$SPAWN_WORKER_REGISTRY"
 write_fake_spawn_worker_claude
 export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
 export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
-SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
     --name diagnose-main --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-job-dedup: dispatch-spawn-job exits 0" "0" "$rc"

@@ -132,18 +132,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 
-# The spawn subshell `cd`s into CWD before `claude --bg`, so the new job is
-# born there and the daemon registers it under that path. Dedup (Step 2) and
-# verify (Step 3) must query the registry under THIS path.
-SPAWN_CWD="$CWD"
-
 # ---- Step 2: dedup guard ----------------------------------------------------
 # If another live session already has name == <name>, spawn nothing. The
-# registry query filters by SPAWN_CWD (= CWD) because the spawn subshell `cd`s
-# there before `claude --bg`, so the new job registers under that path. Fail
-# safe: an unknown (unqueryable) registry is treated as "a dispatch agent may
-# be running", so nothing is spawned.
-if ! sessions=$(claude_sessions_under "$SPAWN_CWD"); then
+# registry query filters by CWD because the spawn subshell `cd`s there before
+# `claude --bg`, so the new job registers under that path. Fail safe: an
+# unknown (unqueryable) registry is treated as "a dispatch agent may be
+# running", so nothing is spawned.
+if ! sessions=$(claude_sessions_under "$CWD"); then
   echo deduped
   exit 0
 fi
@@ -165,7 +160,7 @@ done <<<"$sessions"
 # on the right directory directly. The subshell `cd` is scoped — this script's
 # own cwd is untouched. Capture the spawn's combined output so a failure
 # diagnostic can surface why (`claude` missing, `--bg` rejected). `|| true`
-# keeps a non-zero spawn from aborting the script — Step 3's registry check is
+# keeps a non-zero spawn from aborting the script — Step 4's registry check is
 # the source of truth for whether the agent actually came up.
 spawn_output=$(
   cd "$CWD" && "$CLAUDE_CMD" --bg --name "$NAME" \
@@ -173,10 +168,10 @@ spawn_output=$(
 ) || true
 
 # ---- Step 4: verify the new agent registered --------------------------------
-# Query under SPAWN_CWD (= CWD) — the new job's registered cwd. The bounded
+# Query under CWD — the new job's registered cwd. The bounded
 # retry in verify_agent_registered_under absorbs the async-registration race
 # between `claude --bg` returning and the daemon surfacing the new agent.
-if verify_agent_registered_under "$NAME" "$SPAWN_CWD"; then
+if verify_agent_registered_under "$NAME" "$CWD"; then
   echo spawned
   exit 0
 fi
