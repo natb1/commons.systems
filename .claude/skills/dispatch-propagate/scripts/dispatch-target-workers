@@ -69,7 +69,7 @@
 #   remaining = resets_at_weekly - now;   if remaining <= 0: print 0; exit
 #   x   = clamp((WEEK_SECONDS - remaining) / WEEK_SECONDS, 0, 1)  # elapsed frac
 #   T   = round(WEEK_SECONDS / 18000)                            # ~34 windows
-#   end = floor + (p+1)*(target_weekly/T - floor)                # W(1)=target
+#   end = floor + (p+1)*(target_weekly/T - floor)                # smooth W(1)=target_weekly
 #   end = min(end, cap)                                          # hard ceiling
 #   W   = T*( floor*x + (end-floor)*x^(p+1)/(p+1) )              # cumulative now
 #   r   = remaining / 18000                                      # windows left
@@ -90,9 +90,10 @@
 #   below target_weekly and idle the final stretch of the week. The terminal
 #   envelope floors W from the end — spending at most cap per remaining window
 #   still reaches weekly_terminal — so W reaches weekly_terminal at week end
-#   (W(1)=weekly_terminal) and the envelope dominates the final ~2 windows
-#   (term = 80 at r=2, 90 at r=1, 100 at r=0 with defaults). Mid-week r is
-#   large, the term is negative, and the smooth curve is unchanged.
+#   (W(1)=weekly_terminal) and the envelope lifts W in the final ~1.7 windows
+#   (term = 80 at r=2 [smooth 81.5 wins], 90 at r=1, 100 at r=0 with defaults;
+#   envelope takes over at r≈1.7). Mid-week r is large, the term is negative,
+#   and the smooth curve is unchanged.
 # - F=0 when ahead of pace (used_weekly >= W); the floor5..ceil5 band opens
 #   with weekly headroom.
 # - N=0 only at/over the 5h target F (includes the F=0 ahead-of-pace pause);
