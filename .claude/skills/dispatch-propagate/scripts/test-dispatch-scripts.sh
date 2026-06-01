@@ -48,6 +48,7 @@ setup() {
   # Copy the scripts under test into the tmp dir so they can call each other
   # via SCRIPT_DIR resolution without relying on the real filesystem PATH.
   cp "$SCRIPT_DIR/dispatch-phase" "$TMPDIR_TEST/dispatch-phase"
+  cp "$SCRIPT_DIR/dispatch-ci-ready" "$TMPDIR_TEST/dispatch-ci-ready"
   cp "$SCRIPT_DIR/dispatch-find-pr" "$TMPDIR_TEST/dispatch-find-pr"
   cp "$SCRIPT_DIR/dispatch-resolve-arg" "$TMPDIR_TEST/dispatch-resolve-arg"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
@@ -72,6 +73,7 @@ setup() {
   # (TMPDIR_TEST under test). Sourced, not executed — no chmod +x needed.
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
+           "$TMPDIR_TEST/dispatch-ci-ready" \
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
@@ -689,6 +691,116 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 ENV_LIST='['"$(make_pr 42 "42-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
 result=$(DISPATCH_PR_LIST="$ENV_LIST" "$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "DISPATCH_PR_LIST used over self-fetch → verify" "verify" "$result"
+teardown
+
+# ============================================================================
+# dispatch-ci-ready tests
+# ============================================================================
+echo ""
+echo "=== dispatch-ci-ready ==="
+
+# Unrecognized non-terminal rollup: a check run that is COMPLETED but carries a
+# conclusion outside the known passing/failing sets — classifies as pending.
+UNRECOGNIZED_ROLLUP='[{"status":"COMPLETED","conclusion":"WONKY"}]'
+
+# Helper: run dispatch-ci-ready, capturing both stdout and exit code so a test
+# can assert on the printed token and the exit status together.
+ci_ready_run() {
+  CI_READY_OUT=$("$TMPDIR_TEST/dispatch-ci-ready" "$@") && CI_READY_RC=0 || CI_READY_RC=$?
+}
+
+# 1. No PR → ready (phase would be implement; no CI gate)
+echo "Test: no PR → ready"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42"
+assert_eq "no PR → ready (token)" "ready" "$CI_READY_OUT"
+assert_eq "no PR → ready (exit 0)" "0" "$CI_READY_RC"
+teardown
+
+# 2. Non-draft PR → ready (phase would be done; no CI gate)
+echo "Test: non-draft PR → ready"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "false" "$NO_LABELS" "$PENDING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42"
+assert_eq "non-draft PR → ready (token)" "ready" "$CI_READY_OUT"
+assert_eq "non-draft PR → ready (exit 0)" "0" "$CI_READY_RC"
+teardown
+
+# 3. Draft + failing CI → ready (a concluded failure is actionable → verify)
+echo "Test: draft + failing → ready"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$FAILING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42"
+assert_eq "draft + failing → ready (token)" "ready" "$CI_READY_OUT"
+assert_eq "draft + failing → ready (exit 0)" "0" "$CI_READY_RC"
+teardown
+
+# 4. Draft + passing CI → ready
+echo "Test: draft + passing → ready"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42"
+assert_eq "draft + passing → ready (token)" "ready" "$CI_READY_OUT"
+assert_eq "draft + passing → ready (exit 0)" "0" "$CI_READY_RC"
+teardown
+
+# 5. Draft + pending CI → not-ready (exit 1, prints waiting)
+echo "Test: draft + pending → not-ready"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$PENDING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42"
+assert_eq "draft + pending → not-ready (token)" "waiting" "$CI_READY_OUT"
+assert_eq "draft + pending → not-ready (exit 1)" "1" "$CI_READY_RC"
+teardown
+
+# 6. Draft + empty rollup → not-ready (no verdict yet)
+echo "Test: draft + empty rollup → not-ready"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$EMPTY_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42"
+assert_eq "draft + empty rollup → not-ready (token)" "waiting" "$CI_READY_OUT"
+assert_eq "draft + empty rollup → not-ready (exit 1)" "1" "$CI_READY_RC"
+teardown
+
+# 7. Draft + unrecognized non-terminal state → not-ready
+echo "Test: draft + unrecognized state → not-ready"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$UNRECOGNIZED_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42"
+assert_eq "draft + unrecognized state → not-ready (token)" "waiting" "$CI_READY_OUT"
+assert_eq "draft + unrecognized state → not-ready (exit 1)" "1" "$CI_READY_RC"
+teardown
+
+# 8. Branch-name arg form (exact match) → not-ready for a pending draft
+echo "Test: branch arg → not-ready"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$PENDING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42-my-feature"
+assert_eq "branch arg pending draft → not-ready (token)" "waiting" "$CI_READY_OUT"
+assert_eq "branch arg pending draft → not-ready (exit 1)" "1" "$CI_READY_RC"
+teardown
+
+# 9. DISPATCH_PR_LIST reuse: predicate reads env-provided list without gh.
+echo "Test: DISPATCH_PR_LIST overrides self-fetch"
+setup
+# pr-list-full.json is empty: a self-fetch would yield ready (no PR). The
+# pending draft lives only in the env var, so a not-ready result proves the
+# env var won and no gh pr list was issued.
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+ENV_LIST='['"$(make_pr 42 "42-waiting" "true" "$NO_LABELS" "$PENDING_ROLLUP")"']'
+CI_READY_OUT=$(DISPATCH_PR_LIST="$ENV_LIST" "$TMPDIR_TEST/dispatch-ci-ready" "42") && CI_READY_RC=0 || CI_READY_RC=$?
+assert_eq "DISPATCH_PR_LIST used over self-fetch → waiting (token)" "waiting" "$CI_READY_OUT"
+assert_eq "DISPATCH_PR_LIST used over self-fetch → not-ready (exit 1)" "1" "$CI_READY_RC"
+assert_eq "DISPATCH_PR_LIST reuse issues no gh pr list" "0" \
+  "$([[ -f "$STUB_DIR/gh-pr-list-calls.log" ]] && wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ' || echo 0)"
 teardown
 
 # ============================================================================
