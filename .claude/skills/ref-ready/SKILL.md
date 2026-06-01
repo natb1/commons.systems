@@ -96,7 +96,9 @@ Verify the issue meets project standards:
 - **Enhancements**: must have the `enhancement` label.
 - **Bugs**: must have the `bug` label.
 - **Acceptance criteria**: body must include a checklist (`- [ ]` items). Each criterion must be testable with a clear pass/fail outcome. Flag vague criteria.
-- **Single-PR scope**: issue must be completable in a single PR. Flag if scope is too broad.
+- **Single-PR scope**: a leaf (implementable) issue must be completable in a single PR. A parent/epic with open sub-issues is exempt — it is not directly implemented; only its leaves are, and each leaf is exactly one PR. Surface findings here; Step 3f is the hard gate that enforces them.
+  - Flag if a leaf issue's scope is too broad for one PR.
+  - Flag body/acceptance-criteria language that describes or implies multiple PRs — e.g. "in a follow-up PR", "first PR / second PR", "N independent PRs", "one PR per X" — unless the text refers to the issue's own sub-issues.
 - **Context/motivation**: body must state why the change is needed. Flag if missing.
 - **Bug reproduction steps**: for bugs, body must include steps to reproduce, expected behavior, and actual behavior. Flag if missing.
 - **Dependencies and sub-issues**: must use the GitHub dependency/sub-issue APIs, not plain text descriptions of relationships. Flag any plain-text dependency references.
@@ -127,7 +129,11 @@ Flag any requirements already addressed by existing code.
 
 ### f. Decomposition
 
-Assess whether the issue spans more than one PR-sized chunk of work. If so, recommend a breakdown into sub-issues with distinct testability and review boundaries. Describe what each sub-issue would cover.
+Hard gate. If a leaf issue spans more than one PR, decomposition is required — do not proceed to Step 5 (apply) or Step 6 (finalize / assign + label) until the issue is split into sub-issues that are each exactly one PR. Describe what each sub-issue would cover, with distinct testability and review boundaries.
+
+The rule binds leaves: a parent/epic with open sub-issues is exempt, but every leaf is exactly one PR.
+
+Rationale: `/plan-implement` opens exactly one PR per issue (`Closes #N` is the implement→verify transition marker), so a multi-PR leaf issue breaks the 1:1 issue→PR mapping. The gate is structural, not stylistic.
 
 ### g. Recommendations
 
@@ -206,6 +212,8 @@ Wait for user approval before proceeding.
 ## Step 5. Apply Improvements
 
 This step only modifies GitHub issues (via `gh issue edit`, `/file-issue`, and related `gh` commands). Do not modify source code files.
+
+A leaf issue failing the Step 3f decomposition gate must not be applied or finalized here — decompose it into one-PR sub-issues first.
 
 Apply the approved improvements for each issue in sequence:
 
