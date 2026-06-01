@@ -29,8 +29,8 @@
 #   resolve merge-conflict origin/main does not merge cleanly into the resolved
 #                          worktree; dispatch-merge-main aborted the merge,
 #                          leaving the tree clean. The script hands the conflict
-#                          back to the router AGENT (it prints `issue:` and
-#                          `worktree:` detail first) so the agent can run an
+#                          back to the router AGENT (it prints `issue:`, `worktree:`,
+#                          and `mode:` detail first) so the agent can run an
 #                          opus-subagent auto-resolve attempt BEFORE any park;
 #                          the lock is released at the guard. The worker is never
 #                          spawned into a conflicted tree.
@@ -218,6 +218,7 @@ if (( MERGE_RC == 3 )); then
   release_lock
   echo "issue: $N"
   echo "worktree: $WORKTREE_PATH"
+  echo "mode: $MODE"
   echo "resolve merge-conflict"
   exit 0
 elif (( MERGE_RC != 0 )); then

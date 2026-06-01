@@ -11617,6 +11617,8 @@ assert_eq "merge-conflict: issue detail line" "issue: 839" \
   "$(printf '%s\n' "$out" | grep '^issue:')"
 assert_eq "merge-conflict: worktree detail line present" "1" \
   "$([ -n "$(printf '%s\n' "$out" | grep '^worktree:')" ] && echo 1 || echo 0)"
+assert_eq "merge-conflict: mode detail line" "mode: queue" \
+  "$(printf '%s\n' "$out" | grep '^mode:')"
 assert_eq "merge-conflict: office-hours NOT applied" "0" \
   "$([ -f "$TMPDIR_TEST/logs/apply-office-hours.log" ] && echo 1 || echo 0)"
 assert_eq "merge-conflict: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"

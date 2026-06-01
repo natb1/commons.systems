@@ -64,8 +64,9 @@ The caller supplies:
        why-comment — so do **not** call `gh` / `dispatch-apply-office-hours` here.
 
        ```bash
+       # Set REASON to the one-line reason from the subagent's "ambiguous <reason>" verdict.
        if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-         printf '%s\n' "<reason>" > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+         printf '%s\n' "$REASON" > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
          mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" "$CLAUDE_JOB_DIR/office-hours-reason"
        fi
        ```

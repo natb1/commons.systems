@@ -99,7 +99,7 @@ on the token (Table 2).
 |---|---|---|
 | `propagate` | none — the chain moved forward silently | `propagate` |
 | `notify target-blocked` | The named target is closed or has an open blocker (the script printed which and already applied `dispatch:office-hours` to the issue). | `notify` |
-| `resolve merge-conflict` | `origin/main` does not merge cleanly into the resolved worktree; `dispatch-merge-main` aborted the merge (tree left clean) and the script printed `issue:` / `worktree:` detail. Run the auto-resolve attempt (§2a). | `propagate` (resolved, after re-spawn) or `notify` (ambiguous) |
+| `resolve merge-conflict` | `origin/main` does not merge cleanly into the resolved worktree; `dispatch-merge-main` aborted the merge (tree left clean) and the script printed `issue:` / `worktree:` / `mode:` detail. Run the auto-resolve attempt (§2a). | `propagate` (resolved, after re-spawn) or `notify` (ambiguous) |
 | `notify spawn-failed` | `dispatch-spawn-worker` exited non-zero — a worker was spawned but did not register. | `notify` |
 | `drain worktree-conflict` | The target worktree cannot be safely entered (the script printed the `path:` detail): "worktree at `<path>` for issue `<N>` cannot be entered; closing — the next baton-pass or office-hours hand-off will re-seed". | `drain` |
 | `drain ci-waiting` | The target PR's CI is still in progress (the script printed the `#<N>:` line); echo it. | `drain` |
@@ -110,8 +110,8 @@ on the token (Table 2).
 The `resolve merge-conflict` token means `dispatch-merge-main` found
 `origin/main` does not merge cleanly into the resolved worktree and aborted the
 merge, leaving the tree clean. Attempt an `opus`-subagent auto-resolve before
-parking. The script printed `issue: <N>` and `worktree: <path>` — use them. Run
-every Bash call here with `dangerouslyDisableSandbox: true`.
+parking. The script printed `issue: <N>`, `worktree: <path>`, and `mode: <explicit|queue>`
+— use them. Run every Bash call here with `dangerouslyDisableSandbox: true`.
 
 1. Reproduce the conflict: `git -C <worktree> merge origin/main` (re-creates the
    markers `dispatch-merge-main` aborted; a non-zero exit is expected).
@@ -132,8 +132,8 @@ every Bash call here with `dangerouslyDisableSandbox: true`.
 4. Route on the verdict:
    - **`resolved`** → `git -C <worktree> commit --no-edit` (completes the merge
      commit locally; no push — consistent with `dispatch-merge-main`'s local-only
-     contract), then re-run `dispatch-materialize-spawn <N> <explicit|queue>`
-     (same issue `N` and the same mode this tick used) and route on its Table-2
+     contract), then re-run `dispatch-materialize-spawn <N> <mode>` (using the
+     `issue:` and `mode:` values printed above) and route on its Table-2
      token. It now sails through: `dispatch-merge-main` returns up-to-date →
      `propagate`.
    - **`ambiguous <reason>`** → `git -C <worktree> merge --abort` (restore the
