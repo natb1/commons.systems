@@ -12056,6 +12056,12 @@ echo "\$*" >> "$TMPDIR_TEST/logs/spawn-worker.log"
 echo spawned
 exit \${MAT_SPAWN_RC:-0}
 FAKE
+  cat > "$TMPDIR_TEST/dispatch-schedule-target-reseed" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/schedule-target-reseed.log"
+printf '%s\n' "\${MAT_RESEED_OUT:-reseeded dispatch-reseed-target-\$1-10300 at 10300}"
+exit \${MAT_RESEED_RC:-0}
+FAKE
   cat > "$TMPDIR_TEST/sync-issue-context" <<FAKE
 #!/usr/bin/env bash
 echo "cwd=\$PWD argv=\$*" >> "$TMPDIR_TEST/logs/sync-issue-context.log"
@@ -12064,7 +12070,8 @@ FAKE
     "$TMPDIR_TEST"/dispatch-check-blockers "$TMPDIR_TEST"/dispatch-apply-office-hours \
     "$TMPDIR_TEST"/dispatch-resolve-worktree "$TMPDIR_TEST"/dispatch-merge-main \
     "$TMPDIR_TEST"/dispatch-phase "$TMPDIR_TEST"/dispatch-select-target \
-    "$TMPDIR_TEST"/dispatch-spawn-worker "$TMPDIR_TEST"/sync-issue-context
+    "$TMPDIR_TEST"/dispatch-spawn-worker "$TMPDIR_TEST"/dispatch-schedule-target-reseed \
+    "$TMPDIR_TEST"/sync-issue-context
 
   mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
   cat > "$TMPDIR_TEST/bin/git" <<STUB
@@ -12095,7 +12102,8 @@ mat_teardown() {
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_MERGE_RC MAT_PHASE \
-    MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE MAT_MERGE_CONFLICT_N
+    MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE MAT_MERGE_CONFLICT_N \
+    MAT_RESEED_OUT MAT_RESEED_RC
 }
 
 run_mat() { "$TMPDIR_TEST/dispatch-materialize-spawn" "$@" 2>/dev/null; }
@@ -12335,18 +12343,54 @@ assert_eq "merge clean: dispatch-merge-main was called" "1" \
   "$([ -f "$TMPDIR_TEST/logs/merge-main.log" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- waiting CI → drain ci-waiting -------------------------------------------
-echo "Test: materialize-spawn waiting CI → drain ci-waiting"
+# --- single-target waiting CI → reseed scheduled → drain ci-reseeded (#979) ---
+echo "Test: materialize-spawn single-target waiting CI → drain ci-reseeded (reseed scheduled)"
 mat_setup
 export MAT_PHASE=waiting
 out=$(run_mat 839 queue)
-assert_eq "ci-waiting: CI line present" "#839: CI in progress; the next router tick will re-evaluate." \
+assert_eq "ci-reseeded: CI line still present" "#839: CI in progress; the next router tick will re-evaluate." \
   "$(printf '%s\n' "$out" | grep '^#839:')"
-assert_eq "ci-waiting: terminal token" "drain ci-waiting" \
+assert_eq "ci-reseeded: terminal token" "drain ci-reseeded" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "ci-waiting: no spawn" "0" \
+assert_eq "ci-reseeded: scheduler called with target" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
+assert_eq "ci-reseeded: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
-assert_eq "ci-waiting: lock released at ci-waiting stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "ci-reseeded: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- single-target waiting CI → attempt cap → notify ci-wait-exhausted (#979) -
+echo "Test: materialize-spawn single-target waiting CI at cap → notify ci-wait-exhausted"
+mat_setup
+export MAT_PHASE=waiting
+export MAT_RESEED_OUT=escalated
+out=$(run_mat 839 queue)
+assert_eq "ci-exhausted: terminal token" "notify ci-wait-exhausted" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "ci-exhausted: scheduler called with target" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
+assert_eq "ci-exhausted: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "ci-exhausted: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- fan-out unchanged: ci-waiting target is skipped, scheduler NOT called -----
+# Multi-item fan-out (--gap N>1) must keep the pre-#979 behavior: a ci-waiting
+# target is a `skipped` outcome and the scheduler is never invoked (other live
+# workers' Stop-hooks bring the chain back to the target later).
+echo "Test: materialize-spawn fan-out ci-waiting target skipped, scheduler not called (#979)"
+mat_setup
+export MAT_PHASE=waiting
+export MAT_QUEUE="840 841"
+out=$(run_mat 839 queue --gap 3)
+assert_eq "fanout-ci-waiting: skip detail present" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'skipped #839 (ci-waiting)')"
+assert_eq "fanout-ci-waiting: terminal token" "drain" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fanout-ci-waiting: scheduler NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && echo 1 || echo 0)"
+assert_eq "fanout-ci-waiting: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
 # --- --gap 1 → propagate (single target, default behavior) -------------------

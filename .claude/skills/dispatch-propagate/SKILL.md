@@ -109,7 +109,11 @@ for a fan-out run).
 | `resolve merge-conflict` | `origin/main` does not merge cleanly into the resolved worktree; `dispatch-merge-main` aborted the merge (tree left clean) and the script printed `issue:` / `worktree:` / `mode:` detail. Run the auto-resolve attempt (§2a). | `propagate` (resolved, after re-spawn) or `notify` (ambiguous) |
 | `notify spawn-failed` | `dispatch-spawn-worker` exited non-zero — a worker was spawned but did not register. | `notify` |
 | `drain worktree-conflict` | The target worktree cannot be safely entered (the script printed the `path:` detail): "worktree at `<path>` for issue `<N>` cannot be entered; closing — the next baton-pass or office-hours hand-off will re-seed". | `drain` |
-| `drain ci-waiting` | The target PR's CI is still in progress (the script printed the `#<N>:` line); echo it. | `drain` |
+| `drain ci-reseeded` | The target PR's CI is still in progress (the script printed the `#<N>:` line; echo it). A target-keyed reseed timer was scheduled, so the chain returns to `<N>` when its CI concludes: "waiting on #<N>'s CI; reseed scheduled". | `drain` |
+| `notify ci-wait-exhausted` | The CI-wait attempt cap was hit; the issue was parked on `dispatch:office-hours` and no further reseed will be scheduled: "#<N>'s CI did not conclude within the attempt cap; parked for review". | `notify` |
+
+> Fallback: if `dispatch-schedule-target-reseed` hard-fails, the single-target
+> path emits `drain ci-waiting` instead (route as `drain`); the reason is on stderr.
 
 #### Fan-out summary contract
 
