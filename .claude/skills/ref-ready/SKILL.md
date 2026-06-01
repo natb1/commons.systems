@@ -98,7 +98,7 @@ Verify the issue meets project standards:
 - **Acceptance criteria**: body must include a checklist (`- [ ]` items). Each criterion must be testable with a clear pass/fail outcome. Flag vague criteria.
 - **Single-PR scope**: a leaf (implementable) issue must be completable in a single PR. A parent/epic with open sub-issues is exempt — it is not directly implemented; only its leaves are, and each leaf is exactly one PR. Surface findings here; Step 3f is the hard gate that enforces them.
   - Flag if a leaf issue's scope is too broad for one PR.
-  - Flag body/acceptance-criteria language that describes or implies multiple PRs — e.g. "in a follow-up PR", "first PR / second PR", "N independent PRs", "one PR per X" — unless the text refers to the issue's own sub-issues (those fetched in Step 1). In description mode no issue and no sub-issues exist yet, so this exemption never applies — flag the language.
+  - Flag body/acceptance-criteria language that describes or implies multiple PRs — e.g. "in a follow-up PR", "first PR / second PR", "N independent PRs", "one PR per X" — unless, in issue number mode, the text refers to the issue's own sub-issues (those fetched in Step 1). In description mode no issue and no sub-issues exist yet, so this exemption never applies — flag the language.
 - **Context/motivation**: body must state why the change is needed. Flag if missing.
 - **Bug reproduction steps**: for bugs, body must include steps to reproduce, expected behavior, and actual behavior. Flag if missing.
 - **Dependencies and sub-issues**: must use the GitHub dependency/sub-issue APIs, not plain text descriptions of relationships. Flag any plain-text dependency references.
@@ -129,7 +129,7 @@ Flag any requirements already addressed by existing code.
 
 ### f. Decomposition
 
-Hard gate. If a leaf issue spans more than one PR, decomposition is required — do not proceed to Step 5 (apply) or Step 6 (finalize / assign + label) until the issue is split into sub-issues that are each exactly one PR. Describe what each sub-issue would cover, with distinct testability and review boundaries. When the gate fires, the Step 4 plan proposes the sub-issue split (not a single-issue body rewrite), and Step 5 creates those sub-issues in place of finalizing the leaf.
+Hard gate. If a leaf issue spans more than one PR, decomposition is required — do not proceed to Step 5 (apply) or Step 6 (finalize / assign + label) until the issue is split into sub-issues that are each exactly one PR. Describe what each sub-issue would cover, with distinct testability and review boundaries. When the gate fires, the Step 4 plan proposes the sub-issue split rather than a single-issue body rewrite. Step 5 then creates those sub-issues in place of finalizing the leaf.
 
 The rule binds leaves: a parent/epic with open sub-issues is exempt, but every leaf is exactly one PR.
 
@@ -213,7 +213,7 @@ Wait for user approval before proceeding.
 
 This step only modifies GitHub issues (via `gh issue edit`, `/file-issue`, and related `gh` commands). Do not modify source code files.
 
-A leaf issue failing the Step 3f decomposition gate must not be applied here — decompose it into one-PR sub-issues first (Step 6 carries the same gate for finalization).
+A leaf issue failing the Step 3f decomposition gate must not be applied here — decompose it into one-PR sub-issues first (Step 6 independently enforces the same gate for the resume path).
 
 Apply the approved improvements for each issue in sequence:
 
