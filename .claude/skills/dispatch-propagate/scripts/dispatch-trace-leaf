@@ -12,13 +12,17 @@
 #              dispatch-resolve-worktree's explicit mode, which yields `enter`
 #              for the recycle-after-completion case, or `conflict` if a live
 #              session still owns the worktree — #837).
-#   queue    — descent filters out children whose <N>-* branch is an existing
-#              local worktree (owned by another session). If a node has open
-#              children but every one is filtered out, the descent bubbles up
-#              too — that subtree has no ready work. If every reachable open
-#              leaf in the subtree is conflicted, the script exits non-zero
-#              with a clear message on stderr so the /dispatch-propagate caller can stop
-#              instead of dispatching on a conflict.
+#   queue    — descent filters out children whose <N>-* worktree is owned by a
+#              LIVE Claude session (#914). An orphan <N>-* worktree (on disk, no
+#              session) stays descendable — it is a reuse signal, not a skip,
+#              matching the direct-row liveness fix in dispatch-select-target
+#              (#905). A child with no worktree at all is never filtered. If a
+#              node has open children but every one is live-owned, the descent
+#              bubbles up too — that subtree has no ready work. If every
+#              reachable open leaf in the subtree is owned by a live session,
+#              the script exits non-zero with a clear message on stderr so the
+#              /dispatch-propagate caller can stop instead of dispatching on a
+#              conflict.
 #
 # Falls back to printing N in `explicit` mode if cycles block every path to a
 # leaf (preserves historical behavior).
@@ -31,11 +35,16 @@
 #   0 — a leaf was found and printed to stdout
 #   1 — usage error, or a sibling gh script (issue-blocking / issue-sub-issues)
 #       failed — a hard failure the caller must not treat as "no work"
-#   2 — queue mode only: every reachable open leaf is worktree-conflicted
+#   2 — queue mode only: every reachable open leaf is owned by a live session
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+# worktree_has_live_session — queue-mode descent skips a child only when a live
+# Claude session owns its <N>-* worktree (#914). Sourced here so the descent can
+# ask the liveness question; it sets -uo pipefail (not -e), preserving this
+# script's set -euo pipefail above.
+source "$SCRIPT_DIR/lib-claude-agents.sh"
 
 ISSUE_NUM="${1:-}"
 MODE="${2:-}"
@@ -45,18 +54,42 @@ if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]] \
   exit 1
 fi
 
-# In queue mode, build the set of issue-number prefixes that own a local
-# worktree. list_worktree_records (lib.sh) does the shared porcelain parse;
-# split_worktree_record splits each line into WT_NUM / WT_PATH / WT_BRANCH —
-# WT_NUM is the branch's issue-number prefix, empty for non-issue / branchless
-# worktrees.
-declare -A CONFLICTED=()
+# In queue mode, map each issue-number prefix to the on-disk path(s) of its
+# <N>-* worktree(s), so the descent can ask whether a live session owns one
+# (#914) rather than skipping on mere worktree existence. list_worktree_records
+# (lib.sh) does the shared porcelain parse; split_worktree_record splits each
+# line into WT_NUM / WT_PATH / WT_BRANCH — WT_NUM is the branch's issue-number
+# prefix, empty for non-issue / branchless worktrees. Mirrors the selector's
+# WORKTREE_PATHS_BY_NUM (newline-joined paths per number).
+declare -A WORKTREE_PATHS_BY_NUM=()
 if [[ "$MODE" == "queue" ]]; then
   while IFS= read -r line; do
     split_worktree_record "$line"
-    [[ -n "$WT_NUM" ]] && CONFLICTED["$WT_NUM"]=1
+    [[ -z "$WT_PATH" ]] && continue
+    if [[ -n "$WT_NUM" ]]; then
+      WORKTREE_PATHS_BY_NUM["$WT_NUM"]="${WORKTREE_PATHS_BY_NUM[$WT_NUM]:-}$WT_PATH"$'\n'
+    fi
   done < <(list_worktree_records)
 fi
+
+# True when a live Claude session owns any <num>-* worktree. No such worktree →
+# fast-path miss (return 1), no daemon round-trip. Several matches → owned if any
+# one is live. A faithful copy of dispatch-select-target's issue_has_live_worktree
+# (#905), applied here to subtree children (#914). worktree_has_live_session is
+# fail-safe: an unqueryable daemon counts as owned, so the child is skipped
+# rather than double-claimed.
+child_has_live_worktree() {
+  local num="$1" p
+  local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
+  [[ -z "$paths" ]] && return 1
+  while IFS= read -r p; do
+    [[ -z "$p" ]] && continue
+    if worktree_has_live_session "$p"; then
+      return 0
+    fi
+  done <<< "$paths"
+  return 1
+}
 
 # Collect open children of an issue: open blockers union open sub-issues.
 # Outputs sorted unique issue numbers, one per line, lowest first.
@@ -100,7 +133,7 @@ open_children() {
 # Uses global VISITED associative array for cycle protection.
 # Returns 0 and prints the leaf number on success.
 # Returns 1 if no valid leaf is reachable through this subtree (cycles, or in
-# queue mode every reachable leaf is worktree-conflicted).
+# queue mode every reachable leaf is owned by a live session).
 # Returns 3 if a blocker/sub-issue lookup hit a hard error (gh API failure);
 # re-propagated through every recursive frame so the top level can map it to a
 # clean script-level abort instead of mis-selecting the issue as startable.
@@ -125,20 +158,21 @@ find_leaf() {
   fi
 
   if [[ -z "$kids" ]]; then
-    # Topological leaf — a valid leaf. Worktree-conflicted children are filtered
+    # Topological leaf — a valid leaf. Live-session-owned children are filtered
     # before recursion (see the descent loop below), so a queue-mode leaf
-    # reached here is never itself worktree-conflicted.
+    # reached here is never itself live-owned.
     echo "$n"
     return 0
   fi
 
   # Descend into children lowest-numbered first; return the first leaf found.
-  # In queue mode, skip any child that already has a worktree — if every child
+  # In queue mode, skip any child whose <N>-* worktree is owned by a live
+  # session (#914) — an orphan child worktree stays descendable. If every child
   # is skipped the loop finds nothing and we bubble up.
   local kid leaf
   while IFS= read -r kid; do
     [[ -z "$kid" ]] && continue
-    [[ "$MODE" == "queue" && -n "${CONFLICTED[$kid]+x}" ]] && continue
+    [[ "$MODE" == "queue" ]] && child_has_live_worktree "$kid" && continue
     # Capture the status explicitly (set -e is disabled here) so a hard error
     # (rc 3) is distinguishable from "no leaf in this subtree" (rc 1).
     leaf=$(find_leaf "$kid"); rc=$?
@@ -171,11 +205,14 @@ if [[ "$trace_rc" -eq 3 ]]; then
   exit 1
 fi
 
-# In queue mode, no valid leaf is reachable — every leaf is worktree-conflicted
-# (or cycles block every path). Surface this so /dispatch-propagate can stop with a clear
-# message instead of dispatching on a conflict.
+# In queue mode, no valid leaf is reachable — every reachable open leaf is owned
+# by a live session (or cycles block every path); orphan worktrees were
+# descended through. Surface this so /dispatch-propagate can stop with a clear
+# message instead of dispatching on a conflict. The "worktree-conflicted" token
+# is retained for the pattern-matcher in test-dispatch-scripts.sh that keys on it
+# (dispatch-select-target only checks the exit code, not the message text).
 if [[ "$MODE" == "queue" ]]; then
-  echo "error: all open leaves reachable from $ISSUE_NUM are worktree-conflicted (owned by other sessions)" >&2
+  echo "error: all open leaves reachable from $ISSUE_NUM are worktree-conflicted (owned by a live session)" >&2
   exit 2
 fi
 
