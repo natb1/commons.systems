@@ -26,11 +26,14 @@
 #   notify target-blocked  explicit target is closed or has an open blocker; the
 #                          issue is parked via dispatch-apply-office-hours and
 #                          the lock released at the guard.
-#   notify merge-conflict  origin/main does not merge cleanly into the resolved
-#                          worktree; the merge is aborted, the issue parked via
-#                          dispatch-apply-office-hours, and the lock released at
-#                          the guard. The worker is never spawned into a
-#                          conflicted tree.
+#   resolve merge-conflict origin/main does not merge cleanly into the resolved
+#                          worktree; dispatch-merge-main aborted the merge,
+#                          leaving the tree clean. The script hands the conflict
+#                          back to the router AGENT (it prints `issue:`, `worktree:`,
+#                          and `mode:` detail first) so the agent can run an
+#                          opus-subagent auto-resolve attempt BEFORE any park;
+#                          the lock is released at the guard. The worker is never
+#                          spawned into a conflicted tree.
 #   notify spawn-failed    dispatch-spawn-worker exited non-zero; lock released
 #                          after the failed spawn returns.
 #   drain worktree-conflict  the target worktree cannot be safely entered; the
@@ -45,7 +48,7 @@
 # Lock-release points (#945): the lock is held THROUGH the spawn so the next
 # tick cannot re-select the target during the worker's boot gap.
 # dispatch-finalize-selection writes the recovery marker but no longer releases.
-# `notify target-blocked`, `notify merge-conflict`, and `drain worktree-conflict`
+# `notify target-blocked`, `resolve merge-conflict`, and `drain worktree-conflict`
 # release explicitly at the guard (the marker does not exist yet on these
 # pre-finalize stop paths). `propagate` and `notify spawn-failed` release AFTER
 # dispatch-spawn-worker returns (the worker is verified-registered on success).
@@ -203,17 +206,20 @@ esac
 # `.claude/` tree (the `enter` path may reuse a worktree whose branch is behind).
 # Local merge only — never pushes; each phase skill's own push points carry the
 # merge commit to origin. A no-op on the `create` path (the worktree was just
-# branched from origin/main). A conflict aborts the spawn and parks the issue for
-# a human via office-hours, mirroring the `notify target-blocked` path; the
-# worker is never spawned into a conflicted tree. Still pre-finalize, so the lock
-# is released explicitly here.
+# branched from origin/main). A conflict aborts the spawn and hands the conflict
+# back to the router agent for an opus-subagent auto-resolve attempt (emitting
+# `resolve merge-conflict` with `issue:`/`worktree:` detail) BEFORE any park —
+# the park now happens in the agent's ambiguous branch (see
+# dispatch-propagate/SKILL.md §2a), not here; the worker is never spawned into a
+# conflicted tree. Still pre-finalize, so the lock is released explicitly here.
 "$SCRIPT_DIR/dispatch-merge-main" "$WORKTREE_PATH" 1>&2
 MERGE_RC=$?
 if (( MERGE_RC == 3 )); then
   release_lock
-  "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" "origin/main does not merge cleanly into the target worktree" 1>&2 || true
-  echo "merge of origin/main into $WORKTREE_PATH conflicts; spawn aborted"
-  echo "notify merge-conflict"
+  echo "issue: $N"
+  echo "worktree: $WORKTREE_PATH"
+  echo "mode: $MODE"
+  echo "resolve merge-conflict"
   exit 0
 elif (( MERGE_RC != 0 )); then
   release_lock
