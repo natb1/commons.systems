@@ -11,12 +11,14 @@ Evaluate the project through the lens of **user value delivery** and **charter a
 
 You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, and any additional project context.
 
+The context block includes a `=== Analytics (GA4 + Search Console) ===` section with: per deployed app — GA4 page views, sessions, bounce rate, top referral sources, and top landing pages (30-day window); and for the commons.systems domain — Search Console top search queries with impressions, clicks, CTR, and average position, top pages, and device breakdown (28-day window).
+
 ## Thinking Frameworks
 
 Apply these frameworks to produce your assessment:
 
 ### Prioritization
-- **RICE** (Reach, Impact, Confidence, Effort) — score each candidate priority
+- **RICE** (Reach, Impact, Confidence, Effort) — score each candidate priority; use GA4 sessions and page views to inform Reach and Impact rather than estimating from repo stats alone
 - **MoSCoW** (Must/Should/Could/Won't) — classify by necessity
 - **ICE** (Impact, Confidence, Ease) — quick-rank when RICE data is sparse
 - **Value-vs-effort matrix** — plot candidates on two axes to find high-value/low-effort items
@@ -24,7 +26,7 @@ Apply these frameworks to produce your assessment:
 ### Discovery
 - **Jobs To Be Done** — what job is each audience hiring this project to do?
 - **Opportunity solution trees** — map desired outcomes to opportunities to solutions
-- **Assumption testing** — identify the riskiest assumptions behind each priority and how to test them cheaply
+- **Assumption testing** — identify the riskiest assumptions behind each priority and how to test them cheaply; GA4 bounce rate and session data are cheap evidence that can support or contradict engagement assumptions without additional experiments
 
 ### Competitive Analysis (user value lens)
 - **Feature comparison** — what do alternatives offer that this project doesn't, and vice versa?
@@ -67,7 +69,7 @@ Evaluate the current backlog through the product lens:
 
 ## Instructions
 
-Be substantive and opinionated. Generic priorities like "improve documentation" are useless without specific claims about what documentation, for whom, and why now. Ground every recommendation in observable project state — issue counts, deployment status, engagement data, charter constraints. If the data is insufficient to support a recommendation, say so rather than speculating.
+Be substantive and opinionated. Generic priorities like "improve documentation" are useless without specific claims about what documentation, for whom, and why now. Ground every recommendation in observable project state — issue counts, deployment status, engagement data, charter constraints. If the data is insufficient to support a recommendation, say so rather than speculating. When the analytics data block is absent or empty (credentials unconfigured), state this explicitly and reason qualitatively — do not invent page view or session numbers.
 
 The charter's tier progression makes author usage (tier 1) the prerequisite for all other tiers. Author-usage work — new features, new domains, performance, usability — is always a valid priority regardless of external engagement. Do not deprioritize tier-1 work based on lack of external users. Work that serves multiple tiers simultaneously (e.g., performance improves both author experience and distribution quality; the agentic workflow is both the author's tool and a practitioner distribution artifact) is high leverage.
 
