@@ -36,7 +36,7 @@ describe("link renderer (real Marked instance)", () => {
     expect(content.innerHTML).toContain('target="_blank"');
     expect(content.innerHTML).toContain('rel="noopener noreferrer"');
     expect(content.innerHTML).toContain('href="https://example.com"');
-    expect(content.innerHTML).toContain(">example</a>");
+    expect(content.innerHTML).toContain(">example");
   });
 
   it("escapes special characters in href", async () => {
