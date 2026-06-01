@@ -2,11 +2,12 @@
 # dispatch-select-tick — the /dispatch-propagate router's selection orchestrator
 # (the deterministic Steps 0-3 of the old SKILL.md, bundled into one script).
 #
-# Usage: dispatch-select-tick [<issue-or-PR-number>]
+# Usage: dispatch-select-tick [<issue-or-PR-number>] [--bypass-cap]
 #
-# Runs the lock acquisition, origin/main sync (only on `main`), the JIT engine,
-# the Calendar JIT importer, and target selection as one deterministic sequence
-# and prints exactly ONE decision line as its LAST stdout line. Any JIT
+# Runs the lock acquisition, origin/main sync (only on `main`), the run-scoped
+# concurrency gate, the JIT engine, the Calendar JIT importer, and target
+# selection as one deterministic sequence and prints exactly ONE decision line
+# as its LAST stdout line. Any JIT
 # `created`/`skipped`/`debounced` lines are passed through first, each prefixed
 # `jit: `, followed by any `calendar: ...` lines. The router (SKILL.md)
 # routes on the final decision line; a model-decision seam (`main-broken` /
@@ -17,17 +18,22 @@
 #   busy             lock held by another tick; nothing acquired, nothing released.
 #   sync-failed      git fetch / merge --ff-only failed on `main`; lock released.
 #   resolver-failed  explicit arg did not resolve to one issue; lock released.
-#   explicit <num>   explicit arg resolved to issue <num>; lock HELD.
-#   pr <num> <branch> <phase>   queue selected a PR; lock HELD.
-#   issue <num>      queue selected a help-wanted leaf; lock HELD.
+#   concurrency-cap  live busy-worker count >= target; #725 re-seed scheduled; lock released.
+#   explicit <num> <gap>   explicit arg resolved to issue <num>; lock HELD.
+#   pr <num> <branch> <phase> <gap>   queue selected a PR; lock HELD.
+#   issue <num> <gap>   queue selected a help-wanted leaf; lock HELD.
 #   main-broken <sha>   origin/main is red; lock HELD (the sub-skill releases).
 #   jit-reminder <repo> <num> <project> <item-id>   a JIT reminder is due; lock
 #                    HELD (the sub-skill releases).
 #   empty            nothing eligible; lock released.
 #
+# <gap> = max(1, TARGET_N − LIVE_COUNT) is the run-scoped spawn budget the
+# fan-out loop consumes (always >= 1 on a target line). --bypass-cap skips the
+# concurrency gate and forces <gap> = 1.
+#
 # Lock invariant (the three guards): HOLD on pr/issue/explicit/main-broken/
-# jit-reminder; RELEASE on empty/sync-failed/resolver-failed; NEVER release on
-# busy (nothing was acquired).
+# jit-reminder; RELEASE on empty/sync-failed/resolver-failed/concurrency-cap;
+# NEVER release on busy (nothing was acquired).
 #
 # Requires `dangerouslyDisableSandbox: true` — sub-scripts write tmp state, call
 # `gh`, and query the local Claude daemon over a Unix socket. The `--wait` lock
@@ -43,13 +49,21 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-ARG="${1:-}"
-ARG="${ARG#\#}"
-
-if [[ $# -gt 1 ]]; then
-  echo "dispatch-select-tick: unexpected extra arguments after <number>" >&2
-  exit 2
-fi
+ARG=""
+BYPASS_CAP=0
+for a in "$@"; do
+  case "$a" in
+    --bypass-cap) BYPASS_CAP=1 ;;
+    --*) echo "dispatch-select-tick: unknown flag '$a'" >&2; exit 2 ;;
+    *)
+      if [[ -n "$ARG" ]]; then
+        echo "dispatch-select-tick: unexpected extra arguments after <number>" >&2
+        exit 2
+      fi
+      ARG="${a#\#}"
+      ;;
+  esac
+done
 
 release_lock() {
   "$SCRIPT_DIR/dispatch-acquire-lock" --release >/dev/null 2>&1 || true
@@ -78,6 +92,31 @@ if [[ "$BRANCH" == "main" ]]; then
   fi
 fi
 
+# --- Step 1b: run-scoped concurrency gate (skipped under --bypass-cap) -------
+# Evaluated ONCE per run, before any selection work, so a run already at the
+# worker budget does no JIT/selection traversal. Counts only busy workers
+# (claude_agents_count_busy_workers). At cap: schedule the #725 cap-keyed
+# re-seed, release the lock, emit `concurrency-cap`. Under cap: GAP bounds how
+# many workers a fan-out run may spawn. Daemon UNKNOWN → fail open (GAP=1); the
+# per-worktree dedup in dispatch-spawn-worker is the last-line defense.
+GAP=1
+if (( ! BYPASS_CAP )); then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-claude-agents.sh"
+  TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")
+  if LIVE_COUNT=$(claude_agents_count_busy_workers); then
+    if (( LIVE_COUNT >= TARGET_N )); then
+      release_lock
+      "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+      echo "router: $LIVE_COUNT live worker(s) >= target $TARGET_N"
+      echo "concurrency-cap"
+      exit 0
+    fi
+    GAP=$(( TARGET_N - LIVE_COUNT ))
+  fi
+  # daemon UNKNOWN (if-condition false) → GAP stays 1 (fail open).
+fi
+
 # --- Step 2: run the JIT engine (best-effort) --------------------------------
 # Pass its stdout lines through, prefixed; let stderr flow on a non-zero exit.
 JIT_OUT=$("$SCRIPT_DIR/dispatch-jit-engine") || true
@@ -101,7 +140,7 @@ fi
 # --- Step 3: select the target -----------------------------------------------
 if [[ -n "$ARG" ]]; then
   if TARGET=$("$SCRIPT_DIR/dispatch-resolve-arg" "$ARG"); then
-    echo "explicit $TARGET"
+    echo "explicit $TARGET $GAP"
     exit 0
   fi
   release_lock
@@ -111,9 +150,12 @@ fi
 
 SELECTED=$("$SCRIPT_DIR/dispatch-select-target") || true
 case "$SELECTED" in
-  pr\ *|issue\ *|main-broken\ *|jit-reminder\ *)
-    # Hold the lock; pass the selection line through verbatim. For main-broken
-    # and jit-reminder the invoked sub-skill releases the lock at its own exit.
+  pr\ *|issue\ *)
+    # Hold the lock; append the run-scoped gap the fan-out loop consumes.
+    echo "$SELECTED $GAP"
+    ;;
+  main-broken\ *|jit-reminder\ *)
+    # Hold the lock; the invoked sub-skill releases it at its own exit. No gap.
     echo "$SELECTED"
     ;;
   empty)

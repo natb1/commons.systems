@@ -19,15 +19,15 @@ a PR number resolves to the issue that PR closes.
 A tick is two scripted orchestrator calls with one model-decision seam between
 them:
 
-1. `dispatch-select-tick` — acquires the lock, syncs `main`, runs the JIT
-   engine and the Calendar JIT importer, and selects the target. Emits one
-   **decision line**.
+1. `dispatch-select-tick` — acquires the lock, syncs `main`, applies the
+   run-scoped concurrency gate, runs the JIT engine and the Calendar JIT
+   importer, and selects the target. Emits one **decision line**.
 2. The model routes on that line (Table 1). Only three outcomes need the model:
    a `main-broken` / `jit-reminder` sub-skill invocation, or — for a real
    target — a call to `dispatch-materialize-spawn`.
 3. `dispatch-materialize-spawn` — runs the explicit-path guards, resolves the
    worktree, merges `origin/main` into it (so the worker reads up-to-date skill
-   files), writes the recovery marker, gates on CI and the concurrency budget,
+   files), writes the recovery marker, gates on CI,
    spawns the worker, and releases the lock after the worker registers (#945).
    Emits one **terminal token** (Table 2). A merge conflict is handed back for an
    auto-resolve attempt (§2a), not parked by the script.
@@ -56,8 +56,8 @@ route on the decision (Table 1).
 
 The **lock disposition is the script's responsibility**: it holds the lock on
 the four target lines plus `main-broken`/`jit-reminder`, releases it on
-`empty`/`sync-failed`/`resolver-failed`, and never touches it on `busy`. The
-model never releases the lock for a select-tick outcome.
+`empty`/`sync-failed`/`resolver-failed`/`concurrency-cap`, and never touches it
+on `busy`. The model never releases the lock for a select-tick outcome.
 
 ### Table 1 — routing the select-tick decision line
 
@@ -67,11 +67,12 @@ model never releases the lock for a select-tick outcome.
 | `sync-failed` | `git fetch` / `merge --ff-only` failed on `main`; report the error. | `notify sync-failed` |
 | `resolver-failed` | The explicit argument did not resolve to one issue; report the script's stderr. | `notify resolver-failed` |
 | `empty` | Nothing eligible. Report verbatim: "queue empty — closing; the office-hours queue or a new issue will re-seed the chain". | `drain empty-queue` |
+| `concurrency-cap` | The live busy-worker count already meets the budget; a cap-keyed re-seed is scheduled (see reference.md *The #725 cap-keyed re-seed*). | `drain concurrency-cap` |
 | `main-broken <sha>` | Invoke `/dispatch-diagnose-main <sha>` — it enumerates the failing checks, fetches logs, summarizes the likely cause, and releases the lock itself. | `notify main-broken` |
 | `jit-reminder <repo> <num> <project> <item-id>` | Invoke `/dispatch-jit-reminder <repo> <num> <project> <item-id>`. The sub-skill claims the item, releases the lock, summarizes for the user, and stops the tick — a terminal-disposition bypass. | **Stop here**: no materialize-spawn, no self-close |
-| `explicit <num>` | `dispatch-materialize-spawn <num> explicit` | route on Table 2 |
-| `pr <num> <branch> <phase>` | Set `N=${branch%%-*}` (the issue the PR closes — never the PR `<num>`), then `dispatch-materialize-spawn <N> queue` | route on Table 2 |
-| `issue <num>` | `dispatch-materialize-spawn <num> queue` | route on Table 2 |
+| `explicit <num> <gap>` | `dispatch-materialize-spawn <num> explicit --gap <gap>` | route on Table 2 |
+| `pr <num> <branch> <phase> <gap>` | Set `N=${branch%%-*}` (the issue the PR closes — never the PR `<num>`), then `dispatch-materialize-spawn <N> queue --gap <gap>` | route on Table 2 |
+| `issue <num> <gap>` | `dispatch-materialize-spawn <num> queue --gap <gap>` | route on Table 2 |
 
 For a `busy` stop, recommend the user verify the recorded holder is still live:
 
@@ -82,16 +83,22 @@ For a `busy` stop, recommend the user verify the recorded holder is still live:
 For a real target, call (with `dangerouslyDisableSandbox: true`):
 
 ```bash
-.claude/skills/dispatch-propagate/scripts/dispatch-materialize-spawn <N> <explicit|queue>
+.claude/skills/dispatch-propagate/scripts/dispatch-materialize-spawn <N> <explicit|queue> --gap <gap>
 ```
 
 `<N>` is always the **issue** number (for a `pr` row, the branch-prefix `N`
-derived above — never the PR number). The script prints supporting detail (a
-path, a blocker list, the CI line) and the **terminal token** as its last line.
-The lock disposition is again the script's responsibility — it releases the lock
-at every stop, and on the proceed path only after the spawned worker has
-registered (#945), so the next tick cannot re-select during the boot gap. Route
-on the token (Table 2).
+derived above — never the PR number). `<gap>` is the run-scoped spawn budget
+carried on the select-tick decision line. A gap of 1 processes a single target
+(Table 2); a gap >1 in queue mode drives the fan-out loop — the script spawns up
+to `<gap>` workers in one held-lock run, selecting a distinct next target each
+iteration (see the Fan-out summary contract above and reference.md *Fan-out*).
+The script prints supporting detail (a path, a blocker list, the CI line) and
+the **terminal token** as its last line. The lock disposition is again the
+script's responsibility — it holds the lock across the whole fan-out loop and
+releases it once at the end, on the proceed path only after each spawned worker
+has registered (#945), so the next tick cannot re-select during the boot gap.
+Route on the token (Table 2 for a single target, or the aggregate summary token
+for a fan-out run).
 
 ### Table 2 — routing the materialize-spawn terminal token
 
@@ -103,7 +110,23 @@ on the token (Table 2).
 | `notify spawn-failed` | `dispatch-spawn-worker` exited non-zero — a worker was spawned but did not register. | `notify` |
 | `drain worktree-conflict` | The target worktree cannot be safely entered (the script printed the `path:` detail): "worktree at `<path>` for issue `<N>` cannot be entered; closing — the next baton-pass or office-hours hand-off will re-seed". | `drain` |
 | `drain ci-waiting` | The target PR's CI is still in progress (the script printed the `#<N>:` line); echo it. | `drain` |
-| `drain concurrency-cap` | The live worker count already meets the budget; a cap-keyed re-seed is scheduled (see reference.md *The #725 cap-keyed re-seed*). | `drain` |
+
+#### Fan-out summary contract
+
+The token depends on the run's `--gap`:
+
+- **`--gap 1`** (explicit targets, manual `/dispatch`, or a run where the budget
+  left one slot) — the script processes a single target and emits one of the
+  Table 2 tokens exactly as above. One target, one token; route as the table says.
+- **`--gap N>1`** (queue mode) — the script fans out internally, spawning up to
+  `N` workers and selecting a distinct next target each iteration. Its **last**
+  stdout line is an aggregate terminal token — `propagate` (≥1 worker spawned)
+  or `drain` (0 spawned) — preceded by a `propagate: spawned <k> of gap <N>
+  [(<stop-reason>)]` summary line and one `propagate: spawned/parked/skipped
+  #<n>` detail line per processed target. Route **once** on the final token
+  (`propagate` → self-close; `drain` → report + self-close), exactly as the
+  Section 3 dispositions prescribe. Parked targets (`merge-conflict` /
+  `target-blocked`) were already labeled `dispatch:office-hours` by the script.
 
 ## 2a. Auto-resolve a merge conflict (before parking)
 
