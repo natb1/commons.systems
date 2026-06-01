@@ -31,15 +31,6 @@
   text-decoration-thickness: 2px;
 }
 
-.link-icon {
-  opacity: 0;
-  transition: opacity 0.15s;
-  font-size: 0.7em;
-}
-
-.post-link:hover .link-icon {
-  opacity: 1;
-}
 
 .cc-badge {
   width: 117px;

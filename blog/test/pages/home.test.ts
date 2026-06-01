@@ -48,6 +48,12 @@ describe("renderHomeHtml", () => {
     expect(html).toContain('href="/post/hello-world"');
   });
 
+  it("does not include link-icon span or link emoji in rendered titles", () => {
+    const html = renderHomeHtml([publishedPost]);
+    expect(html).not.toContain("link-icon");
+    expect(html).not.toContain("&#x1F517;");
+  });
+
   it("renders publishedAt in a time element", () => {
     const html = renderHomeHtml([publishedPost]);
     expect(html).toContain('datetime="2026-01-01T00:00:00Z"');
