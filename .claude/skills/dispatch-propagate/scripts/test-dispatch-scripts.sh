@@ -8778,6 +8778,21 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-phase"
 
+  # Fake dispatch-ci-ready: the readiness predicate. Exits 0 (ready) by default;
+  # when $STUB_DIR/ci-ready.txt contains "0", exits 1 (not-ready, prints
+  # waiting) to model a PR whose CI is back in progress. The Stop hook's early
+  # gate hands the issue back to the router on a not-ready verdict.
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-ci-ready" <<'FAKE'
+#!/usr/bin/env bash
+if [[ -f "$STUB_DIR/ci-ready.txt" && "$(cat "$STUB_DIR/ci-ready.txt")" == "0" ]]; then
+  echo "waiting"
+  exit 1
+fi
+echo "ready"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-ci-ready"
+
   # Fake dispatch-spawn-router: log to order.log + spawn-calls.log.
   cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-router" <<'FAKE'
 #!/usr/bin/env bash
@@ -9071,34 +9086,72 @@ else
 fi
 stop_teardown
 
-# --- Test 5b: marker absent + CURRENT_PHASE waiting → spawn only, no office-hours
+# --- Test 5b: not-ready (CI back in progress) → early gate: spawn only, no office-hours
 
-echo "Test: stop hook + marker absent + phase waiting → spawn only, no office-hours (router-defer, not worker-actionable)"
+echo "Test: stop hook + dispatch-ci-ready not-ready → early gate: spawn only, no office-hours (router-defer, CI back in progress)"
 stop_setup
 echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
-echo "waiting" > "$STUB_DIR/current-phase.txt"
+# Marker absent + readiness predicate reports not-ready: a push restarted CI
+# between selection and session end (TOCTOU). The marker-independent early gate
+# hands the issue back to the router without parking it on a human. Readiness is
+# driven via dispatch-ci-ready, NOT via a `waiting` phase value.
+echo "0" > "$STUB_DIR/ci-ready.txt"
 echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
-# No phase-completed marker → branch A; CURRENT_PHASE waiting → exemption.
+# No phase-completed marker.
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
-assert_eq "stop waiting-exempt: hook exits 0" "0" "$rc"
+assert_eq "stop not-ready: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" && ! -e "$STUB_DIR/gh-pr-edit.log" \
    && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop waiting-exempt: no office-hours apply (no add-label)"
+  PASS=$((PASS + 1)); echo "  PASS: stop not-ready: no office-hours apply (no add-label)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop waiting-exempt: no office-hours apply (no add-label)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop not-ready: no office-hours apply (no add-label)"
   echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)"
 fi
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
-assert_eq "stop waiting-exempt: spawn invoked exactly once" "1" "$spawn_calls"
+assert_eq "stop not-ready: spawn invoked exactly once" "1" "$spawn_calls"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop waiting-exempt: self-close not invoked"
+  PASS=$((PASS + 1)); echo "  PASS: stop not-ready: self-close not invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop waiting-exempt: self-close not invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop not-ready: self-close not invoked"
+fi
+stop_teardown
+
+# --- Test 5c: early gate fires even with a present marker (marker-independent) -
+
+echo "Test: stop hook + marker present + dispatch-ci-ready not-ready → early gate: spawn only, no self-close"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "verify" > "$STUB_DIR/current-phase.txt"
+# Marker present and a would-be advance (verify != implement), but CI is back in
+# progress: the marker-independent early gate short-circuits BEFORE any branch,
+# so no self-close and no office-hours park.
+echo "0" > "$STUB_DIR/ci-ready.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=implement" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop not-ready-marker: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" && ! -e "$STUB_DIR/gh-pr-remove.log" \
+   && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop not-ready-marker: no office-hours apply, no strip"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop not-ready-marker: no office-hours apply, no strip"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop not-ready-marker: spawn invoked exactly once" "1" "$spawn_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop not-ready-marker: self-close not invoked (early gate beat Branch B)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop not-ready-marker: self-close not invoked (early gate beat Branch B)"
 fi
 stop_teardown
 
