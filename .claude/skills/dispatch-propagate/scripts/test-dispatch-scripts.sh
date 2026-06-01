@@ -7260,12 +7260,15 @@ spawn_worker_setup() {
     "$TMPDIR_TEST/worktrees/main" \
     "$TMPDIR_TEST/worktrees/839-test-worker"
 
-  # dispatch-spawn-worker sources lib-claude-agents.sh from its own directory,
-  # so the helper must sit alongside the copy. It is sourced, not executed —
-  # no chmod.
+  # dispatch-spawn-worker sources lib-claude-agents.sh from its own directory
+  # and `exec`s dispatch-spawn-job (the generalized spawn primitive) from there
+  # too, so both must sit alongside the copy. lib-claude-agents.sh is sourced,
+  # not executed — no chmod; dispatch-spawn-job is exec'd, so it is chmod'd.
   cp "$SCRIPT_DIR/dispatch-spawn-worker" "$TMPDIR_TEST/scripts/dispatch-spawn-worker"
+  cp "$SCRIPT_DIR/dispatch-spawn-job" "$TMPDIR_TEST/scripts/dispatch-spawn-job"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-worker"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-job"
 
   SPAWN_WORKER_REGISTRY="$TMPDIR_TEST/registry.json"
   SPAWN_WORKER_BG_ARGV="$TMPDIR_TEST/bg-argv"
@@ -7287,6 +7290,7 @@ spawn_worker_teardown() {
   SPAWN_WORKER_PENDING=""
   WORKER_TARGET_WORKTREE=""
   unset DISPATCH_SPAWN_WORKER_CLAUDE_CMD DISPATCH_SPAWN_WORKER_SESSION_ID \
+    DISPATCH_SPAWN_JOB_CLAUDE_CMD DISPATCH_SPAWN_JOB_SESSION_ID \
     SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
     LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 }
@@ -7589,6 +7593,140 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: last-attempt-register-worker: no diagnostic on stderr"
   echo "    stderr: $err"
 fi
+spawn_worker_teardown
+
+# ============================================================================
+# dispatch-spawn-job tests
+# ============================================================================
+echo "=== dispatch-spawn-job ==="
+#
+# dispatch-spawn-job is the generalized `claude --bg` spawn primitive that
+# dispatch-spawn-worker `exec`s. It is exercised directly here against a fake
+# `claude`, reusing the same fake-claude harness shape as the spawn-worker
+# tests (a multi-subcommand temp script DISPATCH_SPAWN_JOB_CLAUDE_CMD points at,
+# which also backs the sourced lib-claude-agents.sh via CLAUDE_AGENTS_CMD).
+#
+# Each test gets a fresh tmp tree (reusing spawn_worker_setup, which already
+# stages dispatch-spawn-job + lib-claude-agents.sh into $TMPDIR_TEST/scripts):
+#   $TMPDIR_TEST/scripts/dispatch-spawn-job   copy of the script under test
+#   $TMPDIR_TEST/scripts/lib-claude-agents.sh sourced helper
+#   $TMPDIR_TEST/worktrees/839-test-worker/   a usable cwd for --cwd
+#   $TMPDIR_TEST/fake-claude                  the multi-subcommand fake `claude`
+#   $TMPDIR_TEST/registry.json                `claude agents --json` fixture
+#   $TMPDIR_TEST/bg-argv                      recorded argv of each --bg call
+#   $TMPDIR_TEST/pwd-log                      recorded spawn-subshell $PWD
+
+# --- Test 1: spawn success (diagnose-main) -----------------------------------
+
+echo "Test: dispatch-spawn-job spawns a /dispatch-diagnose-main background job"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+# Point the job's own env override at the fake (the wrapper's env translation
+# is not in play here — the job is invoked directly).
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job: dispatch-spawn-job exits 0" "0" "$rc"
+assert_eq "spawn-job: stdout is 'spawned'" "spawned" "$out"
+mapfile -t sj_bg_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-job: argv[0] is --bg" "--bg" "${sj_bg_argv[0]:-}"
+assert_eq "spawn-job: argv[1] is --name" "--name" "${sj_bg_argv[1]:-}"
+assert_eq "spawn-job: argv[2] is the passed name" "diagnose-main" "${sj_bg_argv[2]:-}"
+assert_eq "spawn-job: argv[3] is --permission-mode" "--permission-mode" "${sj_bg_argv[3]:-}"
+assert_eq "spawn-job: argv[4] is auto" "auto" "${sj_bg_argv[4]:-}"
+assert_eq "spawn-job: argv[5] is the prompt" "/dispatch-diagnose-main abc123" "${sj_bg_argv[5]:-}"
+# The spawn subshell `cd`d into the passed --cwd, not the caller's cwd.
+sj_pwd_line=$(head -1 "$SPAWN_WORKER_PWD_LOG" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$(realpath "$sj_pwd_line" 2>/dev/null)" == "$(realpath "$SPAWN_JOB_CWD")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-job: 'claude --bg' ran with cwd = the passed --cwd"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-job: 'claude --bg' ran with cwd = the passed --cwd"
+  echo "    pwd-log:  '$sj_pwd_line'"
+  echo "    expected: '$SPAWN_JOB_CWD'"
+fi
+spawn_worker_teardown
+
+# --- Test 2: spawn success (jit-reminder) ------------------------------------
+
+echo "Test: dispatch-spawn-job spawns a /dispatch-jit-reminder background job"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+jit_prompt="/dispatch-jit-reminder owner/repo 961 PVT_x ITEM_y"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name jit-reminder-961 --cwd "$SPAWN_JOB_CWD" "$jit_prompt" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job-jit: dispatch-spawn-job exits 0" "0" "$rc"
+assert_eq "spawn-job-jit: stdout is 'spawned'" "spawned" "$out"
+mapfile -t sj_bg_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-job-jit: argv[0] is --bg" "--bg" "${sj_bg_argv[0]:-}"
+assert_eq "spawn-job-jit: argv[1] is --name" "--name" "${sj_bg_argv[1]:-}"
+assert_eq "spawn-job-jit: argv[2] is the passed name" "jit-reminder-961" "${sj_bg_argv[2]:-}"
+assert_eq "spawn-job-jit: argv[3] is --permission-mode" "--permission-mode" "${sj_bg_argv[3]:-}"
+assert_eq "spawn-job-jit: argv[4] is auto" "auto" "${sj_bg_argv[4]:-}"
+assert_eq "spawn-job-jit: argv[5] is the prompt" "$jit_prompt" "${sj_bg_argv[5]:-}"
+spawn_worker_teardown
+
+# --- Test 3: exact-name dedup ------------------------------------------------
+
+echo "Test: a pre-existing live session with the same name deduplicates the spawn"
+spawn_worker_setup
+# Prime the registry with a different sessionId whose name matches the name the
+# spawn would use. dispatch-spawn-job's dedup keys on name == <name>.
+printf '%s' \
+  '[{"sessionId":"sess-other","pid":4242,"cwd":"/job","kind":"background","status":"busy","name":"diagnose-main"}]' \
+  > "$SPAWN_WORKER_REGISTRY"
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job-dedup: dispatch-spawn-job exits 0" "0" "$rc"
+assert_eq "spawn-job-dedup: stdout is 'deduped' (name-keyed dedup hit)" "deduped" "$out"
+# No --bg invocation was recorded — nothing was spawned.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-job-dedup: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-job-dedup: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
+fi
+spawn_worker_teardown
+
+# --- Test 4: usage errors ----------------------------------------------------
+
+echo "Test: missing --name, --cwd, or <prompt> each exit 2"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+
+# Sub-case A: missing --name
+if "$TMPDIR_TEST/scripts/dispatch-spawn-job" --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc" 2>/dev/null; then sj_rc_a=0; else sj_rc_a=$?; fi
+assert_eq "spawn-job-usage: missing --name → exit 2" "2" "$sj_rc_a"
+
+# Sub-case B: missing --cwd
+if "$TMPDIR_TEST/scripts/dispatch-spawn-job" --name diagnose-main "/dispatch-diagnose-main abc" 2>/dev/null; then sj_rc_b=0; else sj_rc_b=$?; fi
+assert_eq "spawn-job-usage: missing --cwd → exit 2" "2" "$sj_rc_b"
+
+# Sub-case C: missing <prompt>
+if "$TMPDIR_TEST/scripts/dispatch-spawn-job" --name diagnose-main --cwd "$SPAWN_JOB_CWD" 2>/dev/null; then sj_rc_c=0; else sj_rc_c=$?; fi
+assert_eq "spawn-job-usage: missing <prompt> → exit 2" "2" "$sj_rc_c"
+
+# Sub-case D: a --cwd that is not an existing directory
+if "$TMPDIR_TEST/scripts/dispatch-spawn-job" --name diagnose-main --cwd "$TMPDIR_TEST/worktrees/does-not-exist" "/dispatch-diagnose-main abc" 2>/dev/null; then sj_rc_d=0; else sj_rc_d=$?; fi
+assert_eq "spawn-job-usage: non-existent --cwd → exit 2" "2" "$sj_rc_d"
+
+# Sub-case E: an unexpected extra positional
+if "$TMPDIR_TEST/scripts/dispatch-spawn-job" --name diagnose-main --cwd "$SPAWN_JOB_CWD" "prompt-one" "prompt-two" 2>/dev/null; then sj_rc_e=0; else sj_rc_e=$?; fi
+assert_eq "spawn-job-usage: extra positional → exit 2" "2" "$sj_rc_e"
+
 spawn_worker_teardown
 
 # ============================================================================

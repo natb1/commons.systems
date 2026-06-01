@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+# dispatch-spawn-job — the generalized `claude --bg` spawn primitive.
+#
+# This is the dedup → spawn → verify core extracted from dispatch-spawn-worker,
+# parameterized by an arbitrary `--name <name>`, `--cwd <cwd>`, and a single
+# positional `<prompt>`. It spawns one `claude --bg` job that runs <prompt>,
+# born with cwd = <cwd> (via a subshell `cd`) so SessionStart-derived attributes
+# (title, restored skill set, sandbox allowlist) key on the right directory.
+#
+# Reused by:
+#   - dispatch-spawn-worker — the router → phase-worker spawn (--name is the
+#     target worktree basename, --cwd the worktree path, prompt the
+#     /dispatch-worker invocation). The worker-specific arg validation lives in
+#     that wrapper; this primitive stays generic.
+#   - the `main-broken` → /dispatch-diagnose-main and `jit-reminder` →
+#     /dispatch-jit-reminder bg-job spawns, which run those sub-skills in their
+#     own session rather than in the router's.
+#
+# Usage: dispatch-spawn-job --name <name> --cwd <cwd> <prompt>
+#
+# Arguments (all required):
+#   --name <name>   The spawned session's --name. Dedup keys on it directly:
+#                   another live session with the same name under <cwd> means
+#                   nothing is spawned.
+#   --cwd <cwd>     Existing directory the spawn subshell `cd`s into before
+#                   `claude --bg`, so the new job is born there and the daemon
+#                   registers it under that path. Must be an existing directory.
+#   <prompt>        The single positional prompt string passed to `claude --bg`.
+#
+# Behavior, in order:
+#   1. Dedup    — if another live session with name == <name> is already running
+#                 under <cwd>, spawn nothing. Fail-safe: if the registry cannot
+#                 be queried, also spawn nothing (a dispatch agent may be live).
+#   2. Spawn    — `claude --bg --name <name> --permission-mode auto "<prompt>"`,
+#                 from a subshell that `cd`s into <cwd> first.
+#   3. Verify   — re-query the registry under <cwd> (where the new job registers)
+#                 with a bounded retry (verify_agent_registered_under) to absorb
+#                 the async-registration race; confirm the new agent appears.
+#
+# Stdout protocol (exactly one word):
+#   deduped   another agent with the same name is running, or the registry
+#             could not be queried — nothing was spawned.
+#   spawned   a new job was spawned and verified.
+# A spawn that does not verify prints nothing to stdout, writes a diagnostic to
+# stderr, and exits non-zero.
+#
+# Exit codes:
+#   0  deduped or spawned (stdout disambiguates).
+#   1  the successor never registered in 'claude agents --json' — see stderr.
+#   2  the script cannot operate — usage / validation failed (missing or empty
+#      --name, --cwd, or <prompt>; an unexpected extra positional; or a --cwd
+#      that is not an existing directory).
+#
+# Environment overrides for testability:
+#   DISPATCH_SPAWN_JOB_CLAUDE_CMD   The `claude` command. The script's own
+#                                   `claude --bg` / `claude agents` calls use it,
+#                                   and it is exported as CLAUDE_AGENTS_CMD so
+#                                   the sourced lib-claude-agents.sh helper is
+#                                   faked consistently. Default: `claude`.
+#   DISPATCH_SPAWN_JOB_SESSION_ID   This session's id, for the dedup self-
+#                                   exclusion. Default: $CLAUDE_CODE_SESSION_ID.
+#
+# Sandbox: every `claude` call here reaches the local Claude daemon over a Unix
+# socket; callers must invoke this script with `dangerouslyDisableSandbox:
+# true` — see `.claude/rules/sandbox.md § claude agents --json`.
+#
+# NOT set -e: exits are handled explicitly (matching dispatch-spawn-worker /
+# dispatch-acquire-lock).
+set -uo pipefail
+
+# ---- Step 0: parse and validate arguments -----------------------------------
+NAME=""
+CWD=""
+positionals=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --name)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-spawn-job: --name requires a value" >&2
+        exit 2
+      fi
+      NAME="$2"
+      shift 2
+      ;;
+    --cwd)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-spawn-job: --cwd requires a value" >&2
+        exit 2
+      fi
+      CWD="$2"
+      shift 2
+      ;;
+    *)
+      positionals+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ ${#positionals[@]} -ne 1 ]]; then
+  echo "dispatch-spawn-job: expected exactly one positional <prompt>; usage: dispatch-spawn-job --name <name> --cwd <cwd> <prompt>" >&2
+  exit 2
+fi
+PROMPT="${positionals[0]}"
+
+if [[ -z "$NAME" ]]; then
+  echo "dispatch-spawn-job: --name is required and must be non-empty" >&2
+  exit 2
+fi
+if [[ -z "$CWD" ]]; then
+  echo "dispatch-spawn-job: --cwd is required and must be non-empty" >&2
+  exit 2
+fi
+if [[ -z "$PROMPT" ]]; then
+  echo "dispatch-spawn-job: <prompt> must be non-empty" >&2
+  exit 2
+fi
+if [[ ! -d "$CWD" ]]; then
+  echo "dispatch-spawn-job: cwd '$CWD' does not exist or is not a directory" >&2
+  exit 2
+fi
+
+# ---- Step 1: resolve config -------------------------------------------------
+CLAUDE_CMD="${DISPATCH_SPAWN_JOB_CLAUDE_CMD:-claude}"
+# The sourced helper reads CLAUDE_AGENTS_CMD for its own `claude agents --json`
+# call; point it at the same command so a faked `claude` fakes every path.
+export CLAUDE_AGENTS_CMD="$CLAUDE_CMD"
+
+SESSION_ID="${DISPATCH_SPAWN_JOB_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+# The spawn subshell `cd`s into CWD before `claude --bg`, so the new job is
+# born there and the daemon registers it under that path. Dedup (Step 2) and
+# verify (Step 3) must query the registry under THIS path.
+SPAWN_CWD="$CWD"
+
+# ---- Step 2: dedup guard ----------------------------------------------------
+# If another live session already has name == <name>, spawn nothing. The
+# registry query filters by SPAWN_CWD (= CWD) because the spawn subshell `cd`s
+# there before `claude --bg`, so the new job registers under that path. Fail
+# safe: an unknown (unqueryable) registry is treated as "a dispatch agent may
+# be running", so nothing is spawned.
+if ! sessions=$(claude_sessions_under "$SPAWN_CWD"); then
+  echo deduped
+  exit 0
+fi
+while IFS=$'\t' read -r sid _ status name; do
+  [[ -z "$sid" ]] && continue
+  [[ "$name" == "$NAME" ]] || continue       # not a same-name job
+  # Defensive: `claude agents --json` only lists live sessions, so a "stopped"
+  # row should not appear here in normal operation. The check survives a
+  # registry that nonetheless surfaces a terminal status.
+  [[ "$status" == "stopped" ]] && continue
+  [[ "$sid" == "$SESSION_ID" ]] && continue   # this very session — not "another"
+  # Another live job already owns this name; spawn nothing.
+  echo deduped
+  exit 0
+done <<<"$sessions"
+
+# ---- Step 3: spawn the job --------------------------------------------------
+# The job is born with cwd = CWD via a subshell `cd` so SessionStart hooks key
+# on the right directory directly. The subshell `cd` is scoped — this script's
+# own cwd is untouched. Capture the spawn's combined output so a failure
+# diagnostic can surface why (`claude` missing, `--bg` rejected). `|| true`
+# keeps a non-zero spawn from aborting the script — Step 3's registry check is
+# the source of truth for whether the agent actually came up.
+spawn_output=$(
+  cd "$CWD" && "$CLAUDE_CMD" --bg --name "$NAME" \
+    --permission-mode auto "$PROMPT" 2>&1
+) || true
+
+# ---- Step 4: verify the new agent registered --------------------------------
+# Query under SPAWN_CWD (= CWD) — the new job's registered cwd. The bounded
+# retry in verify_agent_registered_under absorbs the async-registration race
+# between `claude --bg` returning and the daemon surfacing the new agent.
+if verify_agent_registered_under "$NAME" "$SPAWN_CWD"; then
+  echo spawned
+  exit 0
+fi
+if [[ -n "${spawn_output//[[:space:]]/}" ]]; then
+  echo "dispatch-spawn-job: '$NAME' did not register in 'claude agents --json' after 'claude --bg'; output: $spawn_output" >&2
+else
+  echo "dispatch-spawn-job: '$NAME' did not register in 'claude agents --json' after 'claude --bg'" >&2
+fi
+exit 1
