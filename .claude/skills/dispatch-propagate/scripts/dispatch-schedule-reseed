@@ -297,7 +297,8 @@ fi
 # minimal default PATH, which omits the nix store — so on NixOS/WSL hosts
 # /usr/bin/env can't resolve bash (exit 127) and the router can't find
 # claude/git/jq. The caller (a /dispatch-propagate tick) always carries the
-# full nix-store PATH.
+# full nix-store PATH, so capturing it at schedule time makes the unit
+# self-sufficient when the timer later fires.
 
 SYSTEMD_RUN_CMD="${DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD:-systemd-run}"
 UNIT_NAME="dispatch-reseed-${RESEED_AT}"
