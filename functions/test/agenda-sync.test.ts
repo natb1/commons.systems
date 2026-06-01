@@ -106,7 +106,7 @@ function makeIssue(overrides: Partial<JitIssue> = {}): JitIssue {
     title: "Daily chore",
     body: "Recurring daily chore. Close when done.",
     jitKey: "daily-chore",
-    repo: "natb1/household",
+    repo: "natb1/agenda-nate",
     dueAt: new Date("2026-01-15T12:00:00Z"),
     ...overrides,
   };
@@ -139,7 +139,7 @@ describe("syncAgendaCore", () => {
       unknown
     > & { dueAt: { toDate: () => Date } };
     expect(written.title).toBe("Daily chore");
-    expect(written.repo).toBe("natb1/household");
+    expect(written.repo).toBe("natb1/agenda-nate");
     expect(written.issueNumber).toBe(42);
     expect(written.jitKey).toBe("daily-chore");
     expect(written.memberEmails).toEqual(["owner@example.com"]);
@@ -288,7 +288,7 @@ describe("fetchOpenJitIssuesLive", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const issues = await fetchOpenJitIssuesLive("natb1/household", "test-token");
+    const issues = await fetchOpenJitIssuesLive("natb1/agenda-nate", "test-token");
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -305,7 +305,7 @@ describe("fetchOpenJitIssuesLive", () => {
     expect(body.query).toContain("repository(owner: $owner, name: $name)");
     expect(body.variables).toEqual({
       owner: "natb1",
-      name: "household",
+      name: "agenda-nate",
       cursor: null,
     });
 
@@ -314,7 +314,7 @@ describe("fetchOpenJitIssuesLive", () => {
       number: 42,
       title: "Daily chore",
       jitKey: "daily-chore",
-      repo: "natb1/household",
+      repo: "natb1/agenda-nate",
     });
     expect(issues[0].dueAt?.toISOString()).toBe("2026-01-15T12:00:00.000Z");
     expect(issues[1]).toMatchObject({
@@ -336,7 +336,7 @@ describe("fetchOpenJitIssuesLive", () => {
     );
 
     await expect(
-      fetchOpenJitIssuesLive("natb1/household", "test-token"),
+      fetchOpenJitIssuesLive("natb1/agenda-nate", "test-token"),
     ).rejects.toThrow(/500/);
   });
 
@@ -355,7 +355,7 @@ describe("fetchOpenJitIssuesLive", () => {
     );
 
     await expect(
-      fetchOpenJitIssuesLive("natb1/household", "test-token"),
+      fetchOpenJitIssuesLive("natb1/agenda-nate", "test-token"),
     ).rejects.toThrow(/Bad credentials/);
   });
 });

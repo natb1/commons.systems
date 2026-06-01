@@ -20,10 +20,10 @@
 //     `functions/.env.commons-systems`:
 //         AGENDA_GITHUB_APP_ID=123456
 //         AGENDA_GITHUB_APP_INSTALLATION_ID=87654321
-//         AGENDA_HOUSEHOLD_REPO=natb1/household
+//         AGENDA_GROUP_REPO=natb1/agenda-nate
 //         AGENDA_MEMBER_EMAILS=owner@example.com
 //         AGENDA_FIRESTORE_NAMESPACE=agenda/prod
-//     The App must be installed on the `natb1/household` repo with read-only
+//     The App must be installed on the `natb1/agenda-nate` repo with read-only
 //     `Issues` permission.
 //   - If a required param is missing the function logs an error and returns
 //     normally so the schedule keeps running cheaply on misconfigured
@@ -38,7 +38,7 @@ import { createSign } from "node:crypto";
 const GH_APP_PRIVATE_KEY = defineSecret("AGENDA_GITHUB_APP_PRIVATE_KEY");
 const GH_APP_ID = defineString("AGENDA_GITHUB_APP_ID");
 const GH_APP_INSTALLATION_ID = defineString("AGENDA_GITHUB_APP_INSTALLATION_ID");
-const HOUSEHOLD_REPO = defineString("AGENDA_HOUSEHOLD_REPO");
+const GROUP_REPO = defineString("AGENDA_GROUP_REPO");
 const MEMBER_EMAILS = defineString("AGENDA_MEMBER_EMAILS");
 const NAMESPACE = defineString("AGENDA_FIRESTORE_NAMESPACE", { default: "agenda/prod" });
 
@@ -300,7 +300,7 @@ export const syncAgenda = onSchedule(
     timeoutSeconds: 120,
   },
   async () => {
-    const repo = HOUSEHOLD_REPO.value();
+    const repo = GROUP_REPO.value();
     const memberEmailsStr = MEMBER_EMAILS.value();
     const namespace = NAMESPACE.value();
     const appId = GH_APP_ID.value();
@@ -309,7 +309,7 @@ export const syncAgenda = onSchedule(
 
     if (!repo || !memberEmailsStr || !appId || !installationId || !privateKey) {
       console.error(
-        "syncAgenda: missing required config (AGENDA_HOUSEHOLD_REPO / AGENDA_MEMBER_EMAILS / AGENDA_GITHUB_APP_ID / AGENDA_GITHUB_APP_INSTALLATION_ID / AGENDA_GITHUB_APP_PRIVATE_KEY); skipping run.",
+        "syncAgenda: missing required config (AGENDA_GROUP_REPO / AGENDA_MEMBER_EMAILS / AGENDA_GITHUB_APP_ID / AGENDA_GITHUB_APP_INSTALLATION_ID / AGENDA_GITHUB_APP_PRIVATE_KEY); skipping run.",
       );
       return;
     }
