@@ -115,7 +115,62 @@ Tunables live in `dispatch.config/target-workers.json` (see `dispatch-propagate/
 
 ### Office Hours Queue
 
-*See #858 for the office-hours queue spine.*
+The office-hours queue is the human-driven counterpart to the dispatch queue.
+Items land here when work needs live human attention: an inbound idea to
+triage, a requirement that changed mid-flight, a roadmap reassessment, or a
+jit-reminder that runs as a session rather than autonomously. The
+`dispatch:office-hours` label is the signal an item belongs here (see [Two
+queues, two control paths](#two-queues-two-control-paths)). Prioritization
+across both queues is the dispatch router's single selection ladder — see
+[Prioritization](#3-prioritization); office-hours items are surfaced by the
+label, not by a separate ranking.
+
+#### 1. Entry point
+
+- `office-hours` — the single user entry point to the queue (see #759). It
+  resumes a blocked live session for a `dispatch:office-hours`-labeled item if
+  one exists, or starts a fresh
+  [`/office-hours`](.claude/skills/office-hours/SKILL.md) session for a
+  sessionless labeled item.
+- [`/office-hours`](.claude/skills/office-hours/SKILL.md) — the body of a fresh
+  session. It picks up a labeled item, runs the user-input portion (plan
+  approval for an `implement` item, a judgment-call walkthrough for a `qa`
+  item, or an accept/reject deviation review for a completed-but-deviating
+  item), clears the label on completion, and hands back to the dispatch chain.
+
+#### 2. Pre-dispatch intake
+
+[`/ready`](.claude/skills/ready/SKILL.md) evaluates a candidate issue or a
+plain-text description across seven quality categories and returns an
+evaluation a human can act on before the dispatch chain reaches the item. Use
+it to triage an inbound idea or a backlogged issue into ready shape before it
+competes in the selection ladder.
+
+#### 3. Mid-flight requirement changes
+
+[`/new-requirement`](.claude/skills/new-requirement/SKILL.md) handles a
+requirement introduced or amended mid-flight. It clarifies the change, updates
+the remote issues, re-syncs context, and revises the active plan — keeping the
+worktree's open work coherent with the new requirement instead of forcing a
+restart.
+
+#### 4. Periodic reassessment
+
+`/roadmap` (see #771 for the rename; currently
+[`/roadmap-debate`](.claude/skills/roadmap-debate/SKILL.md)) runs a structured
+five-persona roadmap reassessment: each persona analyzes project state, the
+synthesis is debated, the skill stops for user feedback, then proposes edits.
+Use it to step back from the queue and ask whether the priority ladder itself
+still matches the project's direction.
+
+#### 5. Skill-running JIT reminders
+
+Most jit-reminders surface a summary for a human to read; some instead run a
+skill in an office-hours session. The planned `/digest` skill (see #769) is the
+example: a periodic digest compiled in a session rather than executed
+autonomously. The jit engine itself lives in the Dispatch Queue spine's
+[JIT-on-dispatch](#4-jit-on-dispatch) subsection — this covers only the
+office-hours-side surfacing.
 
 ### Key design decisions for adopters
 
