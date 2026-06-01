@@ -12438,6 +12438,20 @@ assert_eq "surface: readme + ts → code app_or_rules=true" "surface=code
 deps=false
 app_or_rules=true" "$out"
 
+# storage.rules + package-lock.json → code + deps + app_or_rules (covers the
+# short-circuit when both flags fire from a rules file rather than app source)
+out=$(printf '%s\n' "storage.rules" "package-lock.json" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: storage.rules + package-lock → deps=true app_or_rules=true" "surface=code
+deps=true
+app_or_rules=true" "$out"
+
+# non-.claude shell script → code, no app_or_rules (APP_RE misses .sh, so
+# app_or_rules stays false independent of the .claude/ exclusion)
+out=$(printf '%s\n' "budget-etl/scripts/run.sh" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: non-.claude sh → code no app_or_rules" "surface=code
+deps=false
+app_or_rules=false" "$out"
+
 # ============================================================================
 # summary
 # ============================================================================
