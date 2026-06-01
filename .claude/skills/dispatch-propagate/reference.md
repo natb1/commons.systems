@@ -69,8 +69,10 @@ early-release window.
 
 `dispatch-materialize-spawn` releases at each terminal point: on the `propagate`
 path after `dispatch-spawn-worker` returns success (worker verified-registered),
-on `notify spawn-failed` after the failed spawn returns, and on `drain
-ci-waiting` at its stop.
+on `notify spawn-failed` after the failed spawn returns, and at the single-target
+CI-wait stop (now emitting `drain ci-reseeded` / `notify ci-wait-exhausted`, or
+`drain ci-waiting` on a scheduler hard-failure), which releases before scheduling
+the reseed.
 `dispatch-finalize-selection` writes the recovery marker but no longer releases.
 The pre-finalize stop paths — `notify target-blocked`, `resolve merge-conflict`,
 and `drain worktree-conflict`, plus the internal `exit 2` error paths — release
@@ -160,7 +162,8 @@ phase **ladder** runs innermost. The selector exhausts the entire `priority=1`
 tier — every topic category, every phase — before considering any `priority=0`
 item, so a `priority` item in a low-ranked topic outranks every non-priority
 item in a higher-ranked topic. Within one priority level, categories run
-highest first: `bug` → `testing infrastructure` → `dispatch` → `other`. The
+highest first: `security` → `bug` → `testing infrastructure` → `dispatch` →
+`other`. The
 `priority` label is human-applied — `/ready` never applies it automatically.
 A PR's category is the highest-priority topic among the labels of every issue
 it closes; an issue's category is the highest-priority topic among its own
@@ -373,3 +376,22 @@ hand-off returns it to the dispatch chain and re-seeds from human action.
 A weekly fallback heartbeat for the edge case of a manual issue filed while
 the chain is stalled with no live session to receive it can be added in a
 follow-up if it matters in practice.
+
+## Target-keyed CI-wait reseed (#979)
+
+CI-wait handling splits on available queue size, not invocation mode. In a
+multi-item fan-out run (`--gap N>1`), a `ci-waiting` target is a `skipped`
+outcome: the loop moves on to the next ready priority, and other live workers'
+Stop-hooks bring the chain back to that target later. The single-target path —
+an explicit `/dispatch <N>`, or a `--gap 1` run whose only candidate is
+not-ready — has no "next". So instead of draining as a no-op, it calls
+`dispatch-schedule-target-reseed <N>`.
+
+That schedules a transient `systemd.user` timer
+(`dispatch-reseed-target-<N>-<fire>`) a short delay out that re-runs
+`dispatch-spawn-router <N>` → `/dispatch-propagate <N>`, returning the chain to
+N. A `dispatch:ci-wait-attempt-<n>` label on the PR counts the attempts; at the
+cap (default 3) the target is parked on `dispatch:office-hours` and no further
+reseed is scheduled. Because `dispatch-phase` returns `waiting` only for
+genuinely in-progress checks — a CI *failure* resolves to `verify`, an
+actionable phase — the wait terminates on its own when CI finishes.
