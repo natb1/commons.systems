@@ -34,12 +34,12 @@ The QA pass covers **public data only** — documents present in both the QA ser
 
 ## Idempotency preamble
 
-Before running any step, resolve the PR number, its labels, and its body from the
+Before running any step, resolve the PR number and its labels from the
 current branch (use `dangerouslyDisableSandbox: true` — `gh` needs network):
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-PR_JSON=$(gh pr view "$BRANCH" --json number,labels,body)
+PR_JSON=$(gh pr view "$BRANCH" --json number,labels)
 PR_NUM=$(echo "$PR_JSON" | jq -r .number)
 echo "$PR_JSON" | jq -r '.labels[].name'
 ```
