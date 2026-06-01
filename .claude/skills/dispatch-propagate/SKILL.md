@@ -130,9 +130,12 @@ parking. The script printed `issue: <N>`, `worktree: <path>`, and `mode: <explic
    Judgment criteria stay informal — the subagent's own call given the full
    context, not a codified rule list.
 4. Route on the verdict:
-   - **`resolved`** → `git -C <worktree> commit --no-edit` (completes the merge
-     commit locally; no push — consistent with `dispatch-merge-main`'s local-only
-     contract), then re-run `dispatch-materialize-spawn <N> <mode>` (using the
+   - **`resolved`** → `git -C <worktree> add -A && git -C <worktree> commit
+     --no-edit` (the subagent edits the working tree but does not stage, and
+     `git commit` rejects a merge with unmerged index entries — so stage the
+     resolved files first, then complete the merge commit locally; no push,
+     consistent with `dispatch-merge-main`'s local-only contract), then re-run
+     `dispatch-materialize-spawn <N> <mode>` (using the
      `issue:` and `mode:` values printed above) and route on its Table-2
      token. It now sails through: `dispatch-merge-main` returns up-to-date →
      `propagate`.

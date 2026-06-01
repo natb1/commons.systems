@@ -11657,8 +11657,8 @@ assert_eq "merge-conflict: terminal token" "resolve merge-conflict" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "merge-conflict: issue detail line" "issue: 839" \
   "$(printf '%s\n' "$out" | grep '^issue:')"
-assert_eq "merge-conflict: worktree detail line present" "1" \
-  "$([ -n "$(printf '%s\n' "$out" | grep '^worktree:')" ] && echo 1 || echo 0)"
+assert_eq "merge-conflict: worktree detail line" "worktree: $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(printf '%s\n' "$out" | grep '^worktree:')"
 assert_eq "merge-conflict: mode detail line" "mode: queue" \
   "$(printf '%s\n' "$out" | grep '^mode:')"
 assert_eq "merge-conflict: office-hours NOT applied" "0" \
