@@ -1,6 +1,6 @@
 ---
 name: code-review-fix
-description: Code-review phase — merge origin/main, run the generic /code-review, commit and push the fixes, defer out-of-scope findings as tracking issues, post a PR comment, and apply the dispatch:code-reviewed label
+description: Code-review phase — run the generic /code-review, commit and push the fixes, defer out-of-scope findings as tracking issues, post a PR comment, and apply the dispatch:code-reviewed label
 ---
 
 # Code Review and Fix
@@ -10,10 +10,9 @@ dispatch-specific wrapper around the generic built-in `/code-review` skill.
 `/code-review` applies in-scope fixes to the working tree and surfaces findings with the
 skill's own (fixed vs skipped) disposition; it
 does not commit, push, post a summary, or carry follow-up actions beyond the
-current PR. This skill wraps it: merge current `main`, run `/code-review`, commit
-and push the fixes, defer important out-of-scope findings to tracking issues via
-`/file-issue` subagents, post a PR comment, and apply the `dispatch:code-reviewed`
-label.
+current PR. This skill wraps it: run `/code-review`, commit and push the fixes, defer
+important out-of-scope findings to tracking issues via `/file-issue` subagents,
+post a PR comment, and apply the `dispatch:code-reviewed` label.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
 fork `/commit-merge-push`, fork a subagent that invokes the built-in
@@ -31,55 +30,50 @@ PR_NUM=$(echo "$PR_JSON" | jq -r .number)
 echo "$PR_JSON" | jq -r '.labels[].name'
 ```
 
-`PR_NUM` is carried through to Steps 5, 6, 7, and 8 — do not re-resolve. The PR body
-stays in `PR_JSON` (`echo "$PR_JSON" | jq -r .body`); Step 5 parses its
+`PR_NUM` is carried through to Steps 4, 5, 6, and 7 — do not re-resolve. The PR body
+stays in `PR_JSON` (`echo "$PR_JSON" | jq -r .body`); Step 4 parses its
 `Closes #N` line(s) to resolve the issue(s) this PR implements. If the PR
 already carries the `dispatch:code-reviewed` label — an interrupted prior run —
-**skip Steps 1–7 entirely** and return; the label is the wrapper's terminal
+**skip Steps 1–6 entirely** and return; the label is the wrapper's terminal
 action and is already applied, so re-entry is a true no-op. Otherwise run all
 steps in order.
 
 ## Steps
 
-1. **Merge `origin/main` first.** Fork `/commit-merge-push` via the Agent tool to
-   merge current `main` into the branch. This first invocation runs with no
-   pending working-tree changes — `/commit-merge-push` tolerates that: it creates
-   no commit and only fetches, merges `origin/main`, and pushes. Reviewing
-   against current `main` avoids re-reviewing code `main` has already changed.
-
-2. **Run `/code-review max`.** Fork a subagent via the Agent tool
+1. **Run `/code-review max`.** Fork a subagent via the Agent tool
    (`subagent_type: general-purpose`, `model: sonnet`) that invokes the
    built-in `/code-review` skill via the Skill tool with the `max` effort
-   argument (the highest thoroughness available) inside the subagent and
-   returns its output verbatim. It applies in-scope fixes to the working tree
+   argument (the highest thoroughness available) and the `--fix` flag
+   inside the subagent and returns its output verbatim. It applies
+   in-scope fixes to the working tree
    and surfaces findings with the skill's own (fixed vs skipped) disposition.
    The subagent boundary is the control-flow guarantee: the parent never sees
    the inner Skill's prompt template, so it remains on this step when the
    Agent call returns. The subagent inherits the parent's worktree
    filesystem — working-tree edits made by `/code-review` inside the subagent
-   surface on disk for Step 4's `/commit-merge-push` with no additional
+   surface on disk for Step 3's `/commit-merge-push` with no additional
    plumbing. Do **not** set `isolation:` on this subagent: an isolated
    worktree would silently capture `/code-review`'s edits in a discarded
-   copy, leaving Step 4 with nothing to commit. The subagent passes the
+   copy, leaving Step 3 with nothing to commit. The subagent passes the
    inner skill no output contract and returns its natural output as-is. Keep
-   the "once it returns, continue to Step 3" wording inside the
+   the "once it returns, continue to Step 2" wording inside the
    **subagent's** prompt as defense-in-depth for the inner Skill invocation.
    Any "final reply" / "nothing else" wording in `/code-review`'s prompt
    scopes only to its findings deliverable.
 
-3. **Classify every finding into the 4-way disposition.** `/code-review` produces a
+2. **Classify every finding into the 4-way disposition.** `/code-review` produces a
    2-way split (fixed vs skipped). The wrapper extends each skipped finding into
    one of three buckets — Informational, Disregarded, or Deferred — using the
    table in **Finding classification** below. The caller of `/code-review-fix`
    makes this call; `/code-review` itself does not.
 
-4. **Commit and push the fixes.** Fork `/commit-merge-push` via the Agent tool to
-   commit the Step 2 edits and push. If `/code-review` produced no code changes,
+3. **Commit and push the fixes.** Fork `/commit-merge-push` via the Agent tool to
+   commit the Step 1 edits and push. If `/code-review` produced no code changes,
    this invocation runs with no pending changes — `/commit-merge-push` tolerates
    that and creates no commit. Capture the resulting fix commit SHA (or note the
-   no-op) for the Step 6 report.
+   no-op) for the Step 5 report.
 
-5. **File follow-up issues for the Deferred bucket — with blocked-by
+4. **File follow-up issues for the Deferred bucket — with blocked-by
    dependencies.** Skip this step only if the Deferred bucket is empty.
 
    First resolve the PR's **implementing issue(s)**: parse the `Closes #N`
@@ -102,7 +96,7 @@ steps in order.
    finding text, the files the finding names, the PR backlink `#<PR_NUM>`
    (reuse `PR_NUM` from the idempotency preamble), and a short rationale for
    why the finding is out of scope for this PR. This is the same `$INPUT`
-   shape and parse contract as `/review-fix` Step 5. Pass the assessed blocker
+   shape and parse contract as `/review-fix` Step 4. Pass the assessed blocker
    issue number(s) — or an explicit `independent` marker — into the subagent's
    prompt alongside `$INPUT`. The subagent:
 
@@ -121,14 +115,14 @@ steps in order.
       finding records no dependency.
    3. Returns `<N>` to this thread.
 
-   Capture each `<N>` and attach it to its source finding so the Step 6 report
+   Capture each `<N>` and attach it to its source finding so the Step 5 report
    can reference it.
 
    Run the per-finding subagents in parallel — fan them out in a single
    message with multiple Agent tool calls — since each one files an
    independent issue.
 
-6. **Post a PR comment with the four-section report.** Reuse the `PR_NUM`
+5. **Post a PR comment with the four-section report.** Reuse the `PR_NUM`
    captured in the preamble — do not re-resolve.
 
    Write the comment body to a file under the repo's `tmp/` directory. The body
@@ -137,7 +131,7 @@ steps in order.
    section that has no entries**:
 
    - **Findings that were fixed** — one line per finding plus the fix commit
-     SHA from Step 4.
+     SHA from Step 3.
    - **Informational findings** — surfaced for human reference, no action
      recommended (e.g. style nits, pre-existing patterns).
    - **Disregarded findings** — false positives or trivially wrong; each with
@@ -153,7 +147,7 @@ steps in order.
    .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
-7. **Apply the `dispatch:code-reviewed` label** via `dispatch-complete-phase` (use
+6. **Apply the `dispatch:code-reviewed` label** via `dispatch-complete-phase` (use
    `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash
@@ -171,7 +165,7 @@ steps in order.
    `dispatch:security-reviewed` — so `/dispatch-propagate` does not apply the label after
    this skill returns.
 
-8. **Check for deviation, then write the marker (or reason) and stop.**
+7. **Check for deviation, then write the marker (or reason) and stop.**
 
    **Deviation criterion:** the Deferred bucket dominated — nearly all findings
    were Deferred and none were Fixed.
@@ -211,14 +205,14 @@ Every `/code-review` finding lands in exactly one of four buckets:
 
 | Bucket | Meaning |
 |---|---|
-| Fixed | Implemented by `/code-review` inside the Step 2 subagent. |
+| Fixed | Implemented by `/code-review` inside the Step 1 subagent. |
 | Informational | Surfaced for human reference; no action recommended. |
 | Disregarded | False positive or trivially wrong; explicitly rejected with a one-line rationale. |
-| Deferred | Important and actionable but out of scope for this PR; a `/file-issue` subagent filed a tracking issue in Step 5. |
+| Deferred | Important and actionable but out of scope for this PR; a `/file-issue` subagent filed a tracking issue in Step 4. |
 
 `/code-review` itself produces only the 2-way split (fixed vs skipped). The caller
 of `/code-review-fix` extends the skipped findings into the three non-fixed buckets
-in Step 3 — that classification is the wrapper's responsibility, not the
+in Step 2 — that classification is the wrapper's responsibility, not the
 generic skill's.
 
 **A finding is never Disregarded purely because the change is small.** If the
@@ -227,12 +221,12 @@ Fixed and implement it — full stop — regardless of how trivial the diff is.
 Disregarded is for false positives, trivially wrong findings, or style
 preferences that are not actual improvements; smallness alone never qualifies
 (out-of-scope items go to Deferred, not Disregarded).
-If `/code-review` skipped a small in-scope improvement in Step 2, implement it
-yourself before moving on (working-tree edit only; Step 4's
+If `/code-review` skipped a small in-scope improvement in Step 1, implement it
+yourself before moving on (working-tree edit only; Step 3's
 `/commit-merge-push` picks it up).
 
 ## Notes
 
 The skill is idempotent: a re-invocation with `dispatch:code-reviewed` already on
-the PR skips Steps 1–7 and returns. The label is the wrapper's terminal action
+the PR skips Steps 1–6 and returns. The label is the wrapper's terminal action
 and is already applied, so re-entry is a true no-op.

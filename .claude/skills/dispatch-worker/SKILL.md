@@ -94,7 +94,7 @@ Map the phase:
 |---|---|---|
 | `implement` | no PR on the target | relevance review (Step 3), then dispatch its verdict |
 | `verify` | draft PR, CI completed and failed | `/verify-pr` |
-| `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` |
+| `qa` | draft PR, CI green, no `dispatch:*` label | `/qa-fix` |
 | `code-review` | draft PR + `dispatch:qa-done` | `/code-review-fix` (applies `dispatch:code-reviewed` itself) |
 | `review` | draft PR + `dispatch:code-reviewed` | `/review-fix` (applies `dispatch:reviewed` itself) |
 | `security` | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` — re-entry; `/security-review-fix` is idempotent) | `/security-review-fix` (applies `dispatch:security-reviewed` and marks ready itself) |
@@ -122,9 +122,12 @@ which re-gates it and picks it up once CI concludes.
   `dispatch:*` label.
 - **`verify`** — invoke `/verify-pr`. It runs a single pass: fix one set of
   failed CI checks, record the outcome, post it, stop. No label.
-- **`qa`** — invoke `/dispatch-qa`. It owns and applies `dispatch:qa-done`
-  itself on a clean pass; `/dispatch-worker` applies no label.
-- **`code-review`** — invoke `/code-review-fix`. It runs `/code-review max`,
+- **`qa`** — invoke `/qa-fix`. It runs the autonomous portion of QA and owns and
+  applies `dispatch:qa-done` itself on a clean pass; `/dispatch-worker` applies
+  no label. On a user-input blocker (a needs-human-judgment item, a bug, a failed
+  pre-QA check) it escalates to the office-hours queue instead, where `/office-hours`
+  runs the interactive residue.
+- **`code-review`** — invoke `/code-review-fix`. It runs `/code-review max --fix`,
   applies the recommended fixes, defers important out-of-scope findings to
   tracking issues, posts a PR comment, and applies the `dispatch:code-reviewed`
   label itself — `/dispatch-worker` applies no label.

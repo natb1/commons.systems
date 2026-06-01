@@ -61,6 +61,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 # ---- parse_duration <str> — duration string to seconds ----------------------
 # Accepts <int><unit> where unit is one of s|m|h|d|w. Prints the duration in
@@ -103,14 +104,13 @@ fi
 # An explicit DISPATCH_JIT_STATE_DIR is authoritative and bypasses the git
 # lookup — tests rely on this. Otherwise the state file lives at the shared
 # project-root tmp/ (co-located with tmp/dispatch.lock), shared across
-# worktrees. The parent of --git-common-dir is the project root in both classic
-# (.git) and bare (.bare) layouts, same idiom as dispatch-acquire-lock.
+# worktrees. resolve_project_root (lib.sh) returns the project root in both
+# classic (.git) and bare (.bare) layouts.
 if [[ -n "${DISPATCH_JIT_STATE_DIR:-}" ]]; then
   STATE_DIR="$DISPATCH_JIT_STATE_DIR"
 else
-  GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+  PROJECT_ROOT=$(resolve_project_root) \
     || { echo "error: not in a git repo and DISPATCH_JIT_STATE_DIR is unset" >&2; exit 2; }
-  PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
   STATE_DIR="$PROJECT_ROOT/tmp"
 fi
 STATE_FILE="$STATE_DIR/dispatch-jit-state.json"

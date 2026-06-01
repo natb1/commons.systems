@@ -21,7 +21,7 @@
 # Default-mode priority, top to bottom:
 #   1. JIT scan (jit-reminder)
 #   2. origin/main CI health gate (main-broken)
-#   3. the topic-category × priority × phase ladder over open PRs and
+#   3. the priority × topic-category × phase ladder over open PRs and
 #      help-wanted issues
 #
 # --health-only mode runs the JIT scan and the origin/main CI health gate, then
@@ -37,15 +37,14 @@
 # --qa mode omits the <phase> field — there it is always "qa":
 #   pr <num> <branch>           — the QA PR to work on
 #
-# Selection is three-tier: topic *category* nests outside a *priority* sub-axis,
-# which nests outside the phase *ladder*. Topic categories, highest priority
-# first:
+# Selection is three-tier: the `priority` label is the *outermost* axis, topic
+# *category* nests inside it, and the phase *ladder* runs innermost. The
+# selector exhausts the entire `priority=1` tier — every topic category, every
+# phase — before considering any `priority=0` item, so a `priority` item in a
+# low-ranked topic still outranks every non-priority item in a higher-ranked
+# topic. Within one priority level, topic categories run highest priority first:
 #   bug → testing infrastructure → dispatch → other
-# Within each topic category, items carrying the `priority` label rank above
-# items without it; the phase ladder runs innermost. The selector exhausts the
-# `(priority=1, phase ladder)` sub-tier of one topic category, then the
-# `(priority=0, phase ladder)` sub-tier of the same topic, before moving to the
-# next topic category.
+# and within each (priority, topic) bucket the phase ladder runs innermost.
 #
 # A PR's category is the highest-priority topic among the labels of every issue
 # it closes (closingIssuesReferences); a PR that closes no issue, or whose
@@ -54,18 +53,19 @@
 # bit is 1 if the union of its closing issues' labels carries `priority`, else
 # 0; an issue's priority bit is 1 if its own labels carry `priority`, else 0.
 #
-# Within each (topic, priority) bucket, default-mode priority (oldest PR wins
+# Within each (priority, topic) bucket, default-mode priority (oldest PR wins
 # within a tier):
 #   1. Oldest "security"    PR (draft + dispatch:reviewed or dispatch:security-reviewed)
 #   2. Oldest "review"      PR (draft + dispatch:code-reviewed)
 #   3. Oldest "code-review" PR (draft + dispatch:qa-done)
 #   4. Oldest "verify"      PR (draft, CI completed and failed)
-#   5. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
+#   5. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
+#   6. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
 #      by a live Claude session, and which is not already closed by a non-draft
 #      (ready) PR (#920), resolved to a startable open leaf (an issue whose
-#      entire open-leaf subtree is worktree-conflicted is skipped, exactly as a
-#      live-session-owned worktree is)
-#   6. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
+#      entire open-leaf subtree is owned by live sessions is skipped, exactly as
+#      a live-session-owned direct worktree is — an orphan child worktree stays
+#      descendable, #914)
 #
 # A PR or help-wanted issue is skipped only when a live Claude session owns its
 # worktree — the row's branch worktree (PR) or any <N>-* worktree (issue). The
@@ -86,9 +86,9 @@
 # the flat ladder exactly.
 #
 # --qa mode priority:
-#   1. Oldest QA PR in the highest-priority (topic, priority) bucket that has
-#      one — same outer iteration as default mode (topic category, then
-#      priority sub-axis), restricted to the qa phase
+#   1. Oldest QA PR in the highest-priority (priority, topic) bucket that has
+#      one — same outer iteration as default mode (priority axis outermost,
+#      then topic category), restricted to the qa phase
 #   2. empty
 set -euo pipefail
 
@@ -373,17 +373,67 @@ ISSUE_LIST=$(gh issue list --state open --limit 300 --json number,createdAt,labe
 ISSUE_LABELS_JSON=$(printf '%s' "$ISSUE_LIST" \
   | jq -c 'reduce .[] as $i ({}; .[$i.number | tostring] = ($i.labels // []))')
 
+# Prefetch open-blocker state for every closing issue across all open PRs in a
+# single batched GraphQL call, replacing the former per-PR/per-closing-issue REST
+# round-trip (#794). GitHub exposes blockedBy on the Issue type as an
+# IssueConnection; open blockers are counted client-side by filtering state==OPEN.
+# Computing the union over ALL PRs (not just post-filter actionable ones) costs one
+# query regardless; a few unused map entries are negligible.
+CLOSING_NUMS=$(printf '%s' "$PR_LIST" \
+  | jq -r '[.[].closingIssuesReferences[]?.number] | unique | .[]')
+if [[ -z "$CLOSING_NUMS" ]]; then
+  BLOCKER_COUNTS='{}'
+else
+  # owner/repo for the GraphQL variables (same pattern as post-pr-comment.sh).
+  REPO_NWO=$(gh repo view --json nameWithOwner -q .nameWithOwner) || {
+    echo "error: dispatch-select-target: gh repo view failed" >&2
+    exit 1
+  }
+  REPO_OWNER="${REPO_NWO%%/*}"
+  REPO_NAME="${REPO_NWO##*/}"
+  # One alias per issue number: _<num>: issue(number: <num>) { ... }. Issue numbers
+  # are integers, so the alias name is a valid GraphQL name and there is no
+  # injection surface.
+  GQL_FIELDS=""
+  while IFS= read -r cnum; do
+    [[ -z "$cnum" ]] && continue
+    # Enforce the integers-only assumption rather than trusting it: a non-integer
+    # would be interpolated into the GraphQL query string unescaped.
+    [[ "$cnum" =~ ^[0-9]+$ ]] || {
+      echo "error: dispatch-select-target: non-integer closing issue number: $cnum" >&2
+      exit 1
+    }
+    GQL_FIELDS+="    _${cnum}: issue(number: ${cnum}) { number blockedBy(first: 50) { nodes { state } } }"$'\n'
+  done <<< "$CLOSING_NUMS"
+  GQL_QUERY="query(\$owner: String!, \$name: String!) {
+  repository(owner: \$owner, name: \$name) {
+${GQL_FIELDS}  }
+}"
+  BLOCKER_COUNTS=$(gh api graphql -F owner="$REPO_OWNER" -F name="$REPO_NAME" -f query="$GQL_QUERY" \
+    | jq -c '.data.repository
+             | to_entries
+             | map(select(.value != null)
+                   | {key: (.value.number|tostring),
+                      value: ([.value.blockedBy.nodes[]
+                               | select(.state=="OPEN" or .state=="open")]
+                              | length)})
+             | from_entries') || {
+    echo "error: dispatch-select-target: batched blockedBy GraphQL query failed" >&2
+    exit 1
+  }
+fi
+
 # Topic categories in priority order; "other" is the implicit fallback for any
-# label set with no topic label. A topic-category tier nests *outside* the
-# phase ladder, and a `priority` sub-axis nests *between* them: within each
-# topic category, items carrying `priority` rank above items without it, and
-# the phase ladder runs innermost. TOPIC_CATEGORIES is the single source of the
-# topic ordering — category_of_labels resolves against it and the default-mode
-# loop iterates CATEGORIES. `priority` is an orthogonal escalation sub-axis
-# nested inside each topic category, derived alongside the category via the
-# has_priority_in_labels helper rather than competing with it for the top
-# slot. The companion classifier that *applies* these labels is ref-ready
-# SKILL.md Step 6; keep the two label sets in sync.
+# label set with no topic label. The `priority` label is the *outermost* axis:
+# every `priority` item ranks above every non-priority item, regardless of
+# topic. Topic category nests *inside* the priority axis, and the phase ladder
+# runs innermost. TOPIC_CATEGORIES is the single source of the topic ordering —
+# category_of_labels resolves against it and the default-mode loop iterates
+# CATEGORIES within each priority level. `priority` is derived alongside the
+# category via the has_priority_in_labels helper; topic category is the
+# tie-break among items at the same priority level. The companion classifier
+# that *applies* these labels is ref-ready SKILL.md Step 6; keep the two label
+# sets in sync.
 TOPIC_CATEGORIES=(bug "testing infrastructure" dispatch)
 CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
 # Same priority list as a JSON array, for category_of_labels' jq filter.
@@ -454,21 +504,21 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
     continue
   fi
 
-  # Skip PRs gated by an open blocker. Placed after the done/waiting filter so
-  # PRs that would be discarded anyway don't pay the per-closing-issue gh-api
-  # round-trip, and before FIRST_PR is populated so --qa inherits the skip.
-  pr_blocked=false
-  while IFS= read -r closing_num; do
-    [[ -z "$closing_num" ]] && continue
-    open_blockers=$(count_open_blockers "$closing_num") || {
-      echo "error: dispatch-select-target: blocked_by lookup failed for issue #$closing_num" >&2
-      exit 1
-    }
-    if [[ "$open_blockers" -gt 0 ]]; then
-      pr_blocked=true
-      break
-    fi
-  done < <(printf '%s' "$pr_closing" | jq -r '.[].number')
+  # Skip PRs gated by an open blocker, using the prefetched BLOCKER_COUNTS map
+  # (#794) instead of a per-closing-issue REST round-trip. A PR is skipped if any
+  # issue it closes has >0 open blockers. Placed after the done/waiting filter so
+  # discarded PRs are never consulted, and before FIRST_PR is populated so --qa
+  # inherits the skip.
+  #
+  # A closing issue absent from the map (null in $blk) means its blockedBy state
+  # could not be resolved — e.g. the issue was deleted or made inaccessible
+  # between the PR-list fetch and the GraphQL call, so its alias came back null
+  # and was dropped. Treat unknown as blocked (fail closed) so a gated PR is
+  # never advanced on missing data.
+  pr_blocked=$(printf '%s' "$pr_closing" \
+    | jq -r --argjson blk "$BLOCKER_COUNTS" \
+      'if any(.[]; $blk[(.number|tostring)] as $c | $c == null or $c > 0)
+       then "true" else "false" end')
   [[ "$pr_blocked" == "true" ]] && continue
 
   # Record the oldest PR seen in this category+priority+phase. The :- guard
@@ -481,11 +531,12 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
 done <<< "$PR_SORTED"
 
 if [[ "$QA_MODE" == "true" ]]; then
-  # --qa mode: oldest QA PR in the highest-priority (topic, priority) bucket
-  # that has one, without the <phase> field. The issue queue is irrelevant
+  # --qa mode: oldest QA PR in the highest-priority (priority, topic) bucket
+  # that has one — priority is the outermost axis (1 then 0), topic category
+  # nested inside — without the <phase> field. The issue queue is irrelevant
   # here, so the leaf-resolution loop below is skipped entirely.
-  for category in "${CATEGORIES[@]}"; do
-    for pri in 1 0; do
+  for pri in 1 0; do
+    for category in "${CATEGORIES[@]}"; do
       qa_key="$category|$pri|qa"
       if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
         echo "pr ${FIRST_PR[$qa_key]}"
@@ -541,11 +592,12 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]] && continue
   # Resolve a startable open leaf within the issue's subtree. dispatch-trace-leaf
   # in queue mode descends open blockers and sub-issues, skipping any child whose
-  # <N>-* branch is an existing local worktree (owned by another session):
+  # <N>-* worktree is owned by a live session (#914) — an orphan child worktree
+  # stays descendable:
   #   exit 0 — a startable open leaf was found; record it for this bucket.
-  #   exit 2 — every reachable open leaf is worktree-conflicted. Skip this issue
-  #            exactly as a direct worktree is skipped; a later issue in the
-  #            same bucket may still fill the slot.
+  #   exit 2 — every reachable open leaf is owned by a live session. Skip this
+  #            issue exactly as a direct live-owned worktree is skipped; a later
+  #            issue in the same bucket may still fill the slot.
   #   exit 1 — usage error; propagate as a hard failure, never swallow as a skip.
   if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue); then
     FIRST_ISSUE[$issue_bucket]="$leaf"
@@ -557,13 +609,14 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   fi
 done <<< "$ISSUE_SORTED"
 
-# Default mode: the first (topic-category, priority-bit) bucket with an
-# eligible task wins (see the header for the full three-tier order). Within
-# each topic category, the priority sub-axis (1 then 0) runs above the phase
-# ladder; within each (category, priority) bucket, the phase ladder runs
-# innermost.
-for category in "${CATEGORIES[@]}"; do
-  for pri in 1 0; do
+# Default mode: priority is the outermost axis (1 then 0), topic category nests
+# inside it, and the phase ladder runs innermost (see the header for the full
+# three-tier order). The entire priority=1 tier — every topic category, every
+# phase — is exhausted before any priority=0 item is considered; within one
+# priority level topic category is the tie-break, and within each
+# (priority, category) bucket the phase ladder runs innermost.
+for pri in 1 0; do
+  for category in "${CATEGORIES[@]}"; do
     for phase in "${PHASE_PRIORITY[@]}"; do
       pr_key="$category|$pri|$phase"
       if [[ -n "${FIRST_PR[$pr_key]:-}" ]]; then
@@ -572,15 +625,15 @@ for category in "${CATEGORIES[@]}"; do
       fi
     done
 
-    issue_bucket="$category|$pri"
-    if [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]]; then
-      echo "issue ${FIRST_ISSUE[$issue_bucket]}"
-      exit 0
-    fi
-
     qa_key="$category|$pri|qa"
     if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
       echo "pr ${FIRST_PR[$qa_key]} qa"
+      exit 0
+    fi
+
+    issue_bucket="$category|$pri"
+    if [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]]; then
+      echo "issue ${FIRST_ISSUE[$issue_bucket]}"
       exit 0
     fi
   done

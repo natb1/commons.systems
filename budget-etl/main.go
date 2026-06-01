@@ -14,6 +14,7 @@ import (
 
 	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 	"github.com/natb1/commons.systems/budget-etl/internal/export"
+	"github.com/natb1/commons.systems/budget-etl/internal/journal"
 	"github.com/natb1/commons.systems/budget-etl/internal/parse"
 	"github.com/natb1/commons.systems/budget-etl/internal/password"
 	"github.com/natb1/commons.systems/budget-etl/internal/rules"
@@ -176,6 +177,14 @@ func runOutputJSON(allTxns []budget.TransactionData, allStmts []budget.Statement
 
 	exportStmts := buildExportStatements(allStmts)
 
+	result := journal.Build(allTxns, nil, journal.DefaultPairWindow)
+	for i := range exportTxns {
+		if id, ok := result.EntryIDByDocID[exportTxns[i].ID]; ok {
+			idCopy := id
+			exportTxns[i].JournalEntryID = &idCopy
+		}
+	}
+
 	out := export.Output{
 		Version:            1,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
@@ -187,12 +196,16 @@ func runOutputJSON(allTxns []budget.TransactionData, allStmts []budget.Statement
 		Rules:              []export.Rule{},
 		NormalizationRules: []export.NormalizationRule{},
 		WeeklyAggregates:   []export.WeeklyAggregate{},
+		JournalEntries:     result.Entries,
+		JournalLegs:        result.Legs,
+		Accounts:           result.Accounts,
 	}
 
 	if err := export.WriteFile(output.path, out, output.password); err != nil {
 		return fmt.Errorf("writing output file: %w", err)
 	}
-	log.Printf("wrote %d transactions, %d statements to %s", len(exportTxns), len(exportStmts), output.path)
+	log.Printf("wrote %d transactions, %d statements, %d journal entries, %d legs, %d accounts to %s",
+		len(exportTxns), len(exportStmts), len(result.Entries), len(result.Legs), len(result.Accounts), output.path)
 	return nil
 }
 
@@ -345,6 +358,15 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 		return err
 	}
 
+	// Build a set of account IDs that were classified as liabilities in the prior run.
+	// IsCreditCard is not stored in export.Transaction, so we recover it from Accounts.
+	priorLiabilities := make(map[string]bool, len(inp.Accounts))
+	for _, a := range inp.Accounts {
+		if a.AccountType == "liability" {
+			priorLiabilities[a.ID] = true
+		}
+	}
+
 	// Convert transactions to budget.TransactionData for categorization/budget assignment.
 	// Skip virtual transactions — they are regenerated fresh each run.
 	var allTxns []budget.TransactionData
@@ -357,6 +379,7 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 		if err != nil {
 			return fmt.Errorf("transaction %s: invalid timestamp %q: %w", t.ID, t.Timestamp, err)
 		}
+		acctID := t.Institution + "_" + t.Account
 		allTxns = append(allTxns, budget.TransactionData{
 			Institution:   t.Institution,
 			Account:       t.Account,
@@ -365,6 +388,7 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 			Timestamp:     ts,
 			StatementID:   t.StatementID,
 			TransactionID: t.ID,
+			IsCreditCard:  priorLiabilities[acctID],
 		})
 		txnDocIDs = append(txnDocIDs, t.ID)
 	}
@@ -428,6 +452,14 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	// Append pet budget if virtual Synchrony transactions exist
 	budgets := appendPetBudgetIfNeeded(inp.Budgets, vsr.transactions)
 
+	result := journal.Build(allTxns, txnDocIDs, journal.DefaultPairWindow)
+	for i := range exportTxns {
+		if id, ok := result.EntryIDByDocID[exportTxns[i].ID]; ok {
+			idCopy := id
+			exportTxns[i].JournalEntryID = &idCopy
+		}
+	}
+
 	return writeOutputAndLog(output, export.Output{
 		Version:            inp.Version,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
@@ -440,6 +472,9 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 		Rules:              inp.Rules,
 		NormalizationRules: inp.NormalizationRules,
 		WeeklyAggregates:   weeklyAggregates,
+		JournalEntries:     result.Entries,
+		JournalLegs:        result.Legs,
+		Accounts:           result.Accounts,
 	})
 }
 
@@ -711,8 +746,9 @@ func writeOutputAndLog(output fileOpts, out export.Output) error {
 			normalized++
 		}
 	}
-	log.Printf("wrote %d transactions (%d categorized, %d budgeted, %d non-primary normalized), %d budget periods to %s",
-		len(out.Transactions), categorized, budgeted, normalized, len(out.BudgetPeriods), output.path)
+	log.Printf("wrote %d transactions (%d categorized, %d budgeted, %d non-primary normalized), %d budget periods, %d journal entries, %d legs, %d accounts to %s",
+		len(out.Transactions), categorized, budgeted, normalized, len(out.BudgetPeriods),
+		len(out.JournalEntries), len(out.JournalLegs), len(out.Accounts), output.path)
 	return nil
 }
 
@@ -832,6 +868,7 @@ func parseAndClassify(input *export.Output, dir string, disc parse.DiscoverOpts)
 				Timestamp:     t.Date,
 				StatementID:   pf.sf.StatementID(),
 				TransactionID: t.TransactionID,
+				IsCreditCard:  pf.result.IsCreditCard,
 			})
 			newDocIDs = append(newDocIDs, docID)
 		}
@@ -1029,6 +1066,15 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 		inputByID[t.ID] = t
 	}
 
+	// Build a set of account IDs that were classified as liabilities in the prior run.
+	// IsCreditCard is not stored in export.Transaction, so we recover it from Accounts.
+	priorLiabilities := make(map[string]bool, len(inp.Accounts))
+	for _, a := range inp.Accounts {
+		if a.AccountType == "liability" {
+			priorLiabilities[a.ID] = true
+		}
+	}
+
 	// Build TransactionData from dir, tracking which input IDs are covered.
 	// parseAndClassify does not return a transaction count, so pass 0 — the
 	// only cost is losing the pre-allocation capacity hint.
@@ -1055,6 +1101,7 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 		if err != nil {
 			return fmt.Errorf("transaction %s: invalid timestamp %q: %w", t.ID, t.Timestamp, err)
 		}
+		acctID := t.Institution + "_" + t.Account
 		allTxns = append(allTxns, budget.TransactionData{
 			Institution:   t.Institution,
 			Account:       t.Account,
@@ -1063,6 +1110,7 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 			Timestamp:     ts,
 			StatementID:   t.StatementID,
 			TransactionID: t.ID,
+			IsCreditCard:  priorLiabilities[acctID],
 		})
 		allDocIDs = append(allDocIDs, t.ID)
 		editsMap[t.ID] = txnEdits{
@@ -1118,6 +1166,14 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 	// Append pet budget if virtual Synchrony transactions exist
 	budgets := appendPetBudgetIfNeeded(inp.Budgets, vsr.transactions)
 
+	result := journal.Build(allTxns, allDocIDs, journal.DefaultPairWindow)
+	for i := range exportTxns {
+		if id, ok := result.EntryIDByDocID[exportTxns[i].ID]; ok {
+			idCopy := id
+			exportTxns[i].JournalEntryID = &idCopy
+		}
+	}
+
 	return writeOutputAndLog(output, export.Output{
 		Version:            inp.Version,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
@@ -1130,6 +1186,9 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 		Rules:              inp.Rules,
 		NormalizationRules: inp.NormalizationRules,
 		WeeklyAggregates:   weeklyAggregates,
+		JournalEntries:     result.Entries,
+		JournalLegs:        result.Legs,
+		Accounts:           result.Accounts,
 	})
 }
 

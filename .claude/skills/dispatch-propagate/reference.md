@@ -17,44 +17,87 @@ Back-link: [`SKILL.md`](./SKILL.md).
 ## Chain mechanics
 
 Each `/dispatch-propagate` is a `claude --bg` background job (#725) rooted in
-`worktrees/main`. The router selects, spawns a worker, and exits. The worker
-runs one phase in its target worktree, then spawns a fresh `/dispatch-propagate` router
-back in `worktrees/main` and self-deletes. That router → worker → router
-chain advances the workflow; the #725 cap-keyed re-seed scheduled at the
-next rate-limit window reset re-seeds it when a tick stalled on a
-concurrency-budget cap (see *The #725 cap-keyed re-seed*).
+`worktrees/main`. The router selects, spawns up to `gap` workers (see *Fan-out*
+below), and exits. Each worker runs one phase in its target worktree, then
+spawns a fresh `/dispatch-propagate` router back in `worktrees/main` and
+self-deletes. That router → workers → router chain advances the workflow; the
+#725 cap-keyed re-seed scheduled at the next rate-limit window reset re-seeds it
+when a tick stalled on a concurrency-budget cap (see *The #725 cap-keyed
+re-seed*).
+
+### Fan-out
+
+The model is **seed once → fan out to `gap` → each freed slot triggers one
+dedup'd refill router that fans out again**, replacing the old serial "one
+router, one worker, repeat". A single `dispatch-materialize-spawn` run now spawns
+up to `gap` workers in one held-lock loop, where `gap = TARGET_N − LIVE_COUNT`
+comes from the `dispatch-select-tick` concurrency gate (evaluated once per run
+before selection). Within the loop the first target is the select-tick target;
+targets 2..`gap` come from successive `dispatch-select-target` calls — each
+spawned worker registers before the next selection (#945/#905), so the next
+selection skips its now-live-owned worktree and yields a distinct target. A
+per-target block / merge-conflict parks that one issue (`dispatch:office-hours`)
+and the loop continues; the run emits an aggregate summary (`spawned <k> of gap
+<G>`) and one terminal token (`propagate` if ≥1 spawned, else `drain`).
+
+The worker→router baton-pass code in `.claude/hooks/dispatch-stop.sh` is
+**unchanged**: each completing worker still spawns one router, deduped to a
+single live router, which now fans out again to the new gap. So instead of N
+serial router→worker hops you get one run filling to `gap` and a single refill
+router per freed slot. The #725 cap-keyed re-seed remains the resume-from-cap
+path.
 
 ## Releasing the lock
 
-Releasing after Step 5 is safe because (a) once the spawned worker registers a
-live session, the selection scan skips targets whose worktree a live session
-owns (#905), so no other router selects the same issue; and (b) until that
-session registers — and even if a race let two routers reach Step 6 with the
-same target — Step 6's `dispatch-spawn-worker` enforces per-worktree dedup at
-the spawn boundary, so only one worker starts. (An orphan worktree, on disk
-with no live session, no longer blocks selection — so (b) is what closes the
-lock-release-to-worker-registration window, not (a).)
+The lock is released **after the spawned worker registers**, not at Step 5
+(#945). Once the worker registers a live session, the selection scan skips
+targets whose worktree a live session owns (#905), so no other router selects
+the same issue. Releasing earlier — as the original `dispatch-finalize-selection`
+did, with a trailing `--release` at the end of worktree resolution — reopened a
+boot-gap re-selection race: a `claude --bg` worker takes ~1s to boot and register
+under its `--name=<worktree-basename>`, and during that gap the target worktree
+sits on disk with no live session, which `dispatch-select-target` treats as a
+recyclable orphan (#905), not a skip. A concurrent tick that acquired the freed
+lock would re-select the same target and only discover the collision one step
+later at `dispatch-resolve-worktree`, wasting a `drain worktree-conflict` tick.
+Holding the lock through the spawn closes that window: the next tick blocks on
+the lock until the worker is registered, then the orphan-recycle check sees a
+live session and skips. With the lock held through registration,
+`dispatch-spawn-worker`'s per-worktree dedup at the spawn boundary is now
+belt-and-suspenders rather than the load-bearing guard it was during the old
+early-release window.
 
-The `tmp/dispatch-worktree` marker is the canonical post-Step-5 reclaim signal,
-and it is **session-scoped**: `dispatch-finalize-selection` stamps the
-finalizing holder's `CLAUDE_CODE_SESSION_ID` into the marker, and the lock
-reclaims a foreign holder via the marker **only** when the marker's content
-equals the recorded holder's sessionId. The acquire path skips the busy branch
-when the foreign holder's cwd has a marker naming that recorded holder, and
-`--release` succeeds (truncates and prints `released`) when EITHER the caller's
-sessionId matches the holder OR the holder's cwd has a marker naming the
-recorded holder. This closes the silent-`noop` failure mode for any post-Step-5
-caller whose `CLAUDE_CODE_SESSION_ID` was re-derived from a different context (a
-subagent or hook) — the marker still names the recorded holder, so reclaim
-fires.
+`dispatch-materialize-spawn` releases at each terminal point: on the `propagate`
+path after `dispatch-spawn-worker` returns success (worker verified-registered),
+on `notify spawn-failed` after the failed spawn returns, and on `drain
+ci-waiting` at its stop.
+`dispatch-finalize-selection` writes the recovery marker but no longer releases.
+The pre-finalize stop paths — `notify target-blocked`, `resolve merge-conflict`,
+and `drain worktree-conflict`, plus the internal `exit 2` error paths — release
+at the guard, unchanged. Crash safety: a router that dies mid-spawn holding the lock is
+recovered by the lock's existing dead-holder reclaim (the recorded sessionId
+absent from `claude agents --json`) on the next `--wait`; the marker-reclaim path
+is belt-and-suspenders rather than load-bearing.
 
-The content-match guard is what prevents a stale marker from reclaiming a
-**live, mid-selection** holder. An empty marker (the `touch` stamped by
+The `tmp/dispatch-worktree` marker is the post-Step-5 reclaim signal for
+**dead** holders, and it is **session-scoped**: `dispatch-finalize-selection`
+stamps the finalizing holder's `CLAUDE_CODE_SESSION_ID` into the marker. As of
+#945 the lock extends through Step 6 (spawn), so a **live** holder with a marker
+is mid-spawn and legitimately owns the lock — the marker alone no longer implies
+the lock has been released. The acquire path blocks on a live foreign holder
+regardless of marker presence; it reclaims only when the holder is dead (absent
+from `claude agents --json`). Similarly, `--release` from a different-sessionId
+caller is always a noop for a live foreign holder; only strict self-release
+(`SESSION_ID == recorded`) clears the lock. The primary recovery path for a
+dead-holder-with-marker is the next tick's dead-holder reclaim in try_acquire
+(the marker is belt-and-suspenders for that path).
+
+The content-match guard prevents a stale marker from triggering an unintended
+reclaim of a different live holder. An empty marker (the `touch` stamped by
 `.claude/hooks/worktree-create.sh` on every worktree creation) names no session,
 and a marker naming an older, since-finalized session names the wrong session;
-neither matches the recorded holder, so neither reclaims a live holder that
-happens to share that worktree. Pre-marker callers — Steps 1-4 stop paths and
-the Step 5 `conflict` stop — keep strict sessionId-match semantics by
+neither matches the recorded holder. Pre-marker callers — Steps 1–4 stop paths
+and the Step 5 `conflict` stop — keep strict sessionId-match semantics by
 construction because the marker is absent.
 
 The lock is scoped to selection and self-healing. The recorded sessionId
@@ -107,20 +150,21 @@ acts on the script's one output line; the mechanics below are reference, not
 per-tick action.
 
 Priority order the script implements, top to bottom: JIT scan →
-`origin/main` CI health gate → topic-category × priority × phase ladder.
+`origin/main` CI health gate → priority × topic-category × phase ladder.
 A jit-reminder surfaces even when `origin/main` is red because the JIT scan
 precedes the main-broken gate.
 
-The topic-category × phase ladder is three-tier: a topic **category** nests
-outside a **priority bit**, which nests outside the phase **ladder**.
-Categories, highest first: `bug` → `testing infrastructure` → `dispatch` →
-`other`. Within each category, items carrying the `priority` label rank above
-items without it; the label is human-applied — `/ready` never applies it
-automatically. A PR's category is the highest-priority topic among the labels
-of every issue it closes; an issue's category is the highest-priority topic
-among its own labels; anything with no topic label is `other`. The selector
-exhausts one `(category, priority)` bucket's whole ladder before moving to
-the next.
+The priority × topic-category × phase ladder is three-tier: the **priority
+bit** is the outermost axis, a topic **category** nests inside it, and the
+phase **ladder** runs innermost. The selector exhausts the entire `priority=1`
+tier — every topic category, every phase — before considering any `priority=0`
+item, so a `priority` item in a low-ranked topic outranks every non-priority
+item in a higher-ranked topic. Within one priority level, categories run
+highest first: `bug` → `testing infrastructure` → `dispatch` → `other`. The
+`priority` label is human-applied — `/ready` never applies it automatically.
+A PR's category is the highest-priority topic among the labels of every issue
+it closes; an issue's category is the highest-priority topic among its own
+labels; anything with no topic label is `other`.
 
 Within each category the ladder is (highest first; within a tier, oldest PR
 wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
@@ -177,9 +221,19 @@ the worker `cd`'d in its own Step 0 — silently broke when subsequent `Bash` /
 
 ## Concurrency budgeting
 
+The run-scoped concurrency gate lives in `dispatch-select-tick` (evaluated once
+per run, before selection): after lock acquisition and `main` sync it computes
+`LIVE_COUNT` and `gap = max(0, TARGET_N − LIVE_COUNT)`, short-circuiting to
+`drain concurrency-cap` when `LIVE_COUNT >= TARGET_N`. The `gap` it computes is
+carried on the decision line and bounds the `dispatch-materialize-spawn` fan-out
+(see *Fan-out*) — `materialize-spawn` no longer evaluates the gate per target.
+
 `dispatch-target-workers` runs a sequential four-stage pace-relative pipeline
-(W → F → N) to decide how many concurrent `dispatch-worker-*` sessions should
-run. Instead of a flat weekly cap, the weekly budget follows a
+(W → F → N) to decide how many concurrent busy workers should run; the live
+count is `claude_agents_count_busy_workers` — busy sessions whose name matches
+the real worker shape `^[0-9]+-` (NOT a `dispatch-worker-*` prefix, which never
+existed in production — that was the Defect-B bug this issue fixed). Instead of a
+flat weekly cap, the weekly budget follows a
 **cumulative-pace curve** keyed to how far through the weekly rate-limit window
 we are (in 5-hour-window terms), so token spend spreads smoothly across the
 week rather than bursting early and idling. The controller is intentionally

@@ -42,6 +42,7 @@ type TransactionData struct {
 	Category      string // set by categorization rules; preserved across re-imports
 	Budget        string // set by budget assignment rules; preserved across re-imports
 	Virtual       bool   // true for ETL-generated virtual transactions
+	IsCreditCard  bool   // true when the source statement is a credit-card OFX statement
 }
 
 // NormTxn is a read-only view of a transaction used by normalization rules.

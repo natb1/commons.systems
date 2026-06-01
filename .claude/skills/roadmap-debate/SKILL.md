@@ -37,7 +37,34 @@ Run the gather-context script. It writes output to a file and prints the path:
 .claude/skills/roadmap-debate/scripts/gather-context.sh
 ```
 
+This script also calls `fetch-analytics.sh` to append GA4 and Search Console data. Run it with `dangerouslyDisableSandbox: true` — both scripts make network calls to Google's OAuth and API hosts, which the sandbox's network namespace isolation blocks (see `.claude/rules/sandbox.md`).
+
 Read the output file at the printed path. Store the contents as a single block to pass to each agent.
+
+### Analytics setup
+
+`gather-context.sh` calls `fetch-analytics.sh`, which reads credentials from env vars at runtime. No credentials are stored in the repo.
+
+**Required OAuth env vars** (all three must be set or the GA4 + Search Console fetch is skipped):
+- `GOOGLE_ANALYTICS_CLIENT_ID` — OAuth 2.0 client id
+- `GOOGLE_ANALYTICS_CLIENT_SECRET` — OAuth 2.0 client secret
+- `GOOGLE_ANALYTICS_REFRESH_TOKEN` — long-lived refresh token carrying both required scopes
+
+**Config env vars** (optional, with defaults):
+- `ROADMAP_GA4_PROPERTY_IDS` — comma-separated `app:propertyId` pairs, e.g. `landing:111,budget:222,print:333`. When unset, the GA4 section is skipped (Search Console still runs).
+- `ROADMAP_SEARCH_CONSOLE_SITE` — Search Console property string. Default: `sc-domain:commons.systems`.
+
+**Exporting from `pass`:** per the pinentry guidance in `.claude/rules/sandbox.md`, warm the gpg-agent cache once in an interactive shell (`pass show google-analytics/client-id`), then export each value:
+
+```bash
+export GOOGLE_ANALYTICS_CLIENT_ID="$(pass show google-analytics/client-id)"
+export GOOGLE_ANALYTICS_CLIENT_SECRET="$(pass show google-analytics/client-secret)"
+export GOOGLE_ANALYTICS_REFRESH_TOKEN="$(pass show google-analytics/refresh-token)"
+```
+
+**One-time refresh-token bootstrap:** use the Google OAuth 2.0 Playground at `developers.google.com/oauthplayground`, configured with your own client id/secret, requesting both scopes `https://www.googleapis.com/auth/analytics.readonly` and `https://www.googleapis.com/auth/webmasters.readonly`. See the `fetch-analytics.sh` header comment for the full step-by-step.
+
+**Graceful degradation:** when any required OAuth env var is unset, `fetch-analytics.sh` prints a parenthetical note to stdout (captured in the context file) explaining that credentials are not configured, then exits 0. Personas see the explanation in the analytics section rather than a silent empty block. When `ROADMAP_GA4_PROPERTY_IDS` is unset but credentials are set, a similar inline note marks the GA4 section as skipped; Search Console data still runs.
 
 ## Phase 2: Independent Assessments
 

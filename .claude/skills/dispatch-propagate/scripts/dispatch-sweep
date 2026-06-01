@@ -25,18 +25,19 @@
 set -uo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/lib.sh"
 
+# shellcheck source=./lib.sh
+source "$SCRIPT_DIR/lib.sh"
 # shellcheck source=./lib-worktree-in-sync.sh
 source "$SCRIPT_DIR/lib-worktree-in-sync.sh"
 # shellcheck source=./lib-claude-agents.sh
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 
-# Resolve project root + worktrees root from the git common dir. The parent of
-# --git-common-dir is the project root in both classic (.git) and bare (.bare)
-# layouts — same pattern used by worktree-create.sh / worktree-remove.sh.
-GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+# Resolve project root + worktrees root via resolve_project_root (lib.sh), which
+# returns the project root in both classic (.git) and bare (.bare) layouts.
+PROJECT_ROOT=$(resolve_project_root) \
   || { echo "ERROR: not in a git repo" >&2; exit 2; }
-PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
 WORKTREES_ROOT="$PROJECT_ROOT/worktrees"
 
 LOG_FILE="${DISPATCH_SWEEP_LOG_FILE:-$PROJECT_ROOT/tmp/dispatch-sweep.log}"
@@ -72,42 +73,30 @@ while IFS=$'\t' read -r state br n; do
 done < <(printf '%s' "$PRS_JSON" | jq -r '.[] | [.state, .headRefName, .number] | @tsv' 2>/dev/null)
 
 # ---- Step 2: enumerate registered worktrees ---------------------------------
-# git worktree list --porcelain records are blank-line-delimited; each record
-# opens with a "worktree <path>" line and (for a branch checkout) carries a
-# "branch refs/heads/<name>" line. Detached HEADs omit the branch line — skip
-# those entirely (no branch -> no PR lookup, nothing to reason about here).
+# list_worktree_records (lib.sh) walks `git worktree list --porcelain` and emits
+# one tab-separated <issue-number>\t<path>\t<branch> record per worktree.
+# split_worktree_record populates WT_NUM / WT_PATH / WT_BRANCH from each record.
+# Detached HEADs and bare worktrees have an empty WT_BRANCH — skip those
+# (no branch -> no PR lookup, nothing to reason about here).
+# The path-level filtering stays at this call site: restrict to direct children
+# of $WORKTREES_ROOT, excluding main. Nested worktrees registered under
+# worktrees/main/.claude/worktrees/... (or any other inner location) are out of
+# scope: this sweep targets the standard worktree-create layout only.
 WT_PATHS=()
 WT_BRANCHES=()
+WT_NUMS=()
 
-current_path=""
-current_branch=""
-flush_record() {
-  if [[ -n "$current_path" && -n "$current_branch" ]]; then
-    # Restrict to direct children of $WORKTREES_ROOT/<name>, excluding main.
-    # Nested worktrees registered under worktrees/main/.claude/worktrees/...
-    # (or any other inner location) are out of scope: this sweep targets the
-    # standard worktree-create layout only.
-    if [[ "$(dirname "$current_path")" == "$WORKTREES_ROOT" \
-       && "$(basename "$current_path")" != "main" ]]; then
-      WT_PATHS+=("$current_path")
-      WT_BRANCHES+=("$current_branch")
-    fi
-  fi
-  current_path=""
-  current_branch=""
-}
-
-while IFS= read -r line; do
-  if [[ -z "$line" ]]; then
-    flush_record
-  elif [[ "$line" == worktree\ * ]]; then
-    current_path="${line#worktree }"
-  elif [[ "$line" == branch\ * ]]; then
-    br="${line#branch }"
-    current_branch="${br#refs/heads/}"
-  fi
-done < <(git worktree list --porcelain 2>/dev/null)
-flush_record
+while IFS= read -r wt_record; do
+  split_worktree_record "$wt_record"
+  # Skip detached-HEAD / bare records (no branch).
+  [[ -z "$WT_BRANCH" ]] && continue
+  # Restrict to direct children of $WORKTREES_ROOT/<name>, excluding main.
+  [[ "$(dirname "$WT_PATH")" == "$WORKTREES_ROOT" \
+     && "$(basename "$WT_PATH")" != "main" ]] || continue
+  WT_PATHS+=("$WT_PATH")
+  WT_BRANCHES+=("$WT_BRANCH")
+  WT_NUMS+=("$WT_NUM")
+done < <(list_worktree_records)
 
 # ---- Step 3: merged cleanup pass --------------------------------------------
 # For each worktree whose branch was squash-merged (per gh pr list), if it is
@@ -121,17 +110,19 @@ i=0
 while [[ $i -lt ${#WT_PATHS[@]} ]]; do
   wt_path="${WT_PATHS[$i]}"
   wt_branch="${WT_BRANCHES[$i]}"
+  wt_num="${WT_NUMS[$i]}"
   i=$((i + 1))
 
   pr_num="${MERGED_BY_BRANCH[$wt_branch]:-}"
   if [[ -z "$pr_num" ]]; then
-    # Not a merged-PR branch. Check if this is a dispatch-style branch (^[1-9][0-9]*-).
-    if [[ "$wt_branch" =~ ^([1-9][0-9]*)-. ]]; then
+    # Not a merged-PR branch. Check if this is a dispatch-style branch (has an
+    # issue-number prefix captured during enumeration).
+    if [[ -n "$wt_num" ]]; then
       # An open PR backs active work; never reap its worktree.
       if [[ -n "${OPEN_BY_BRANCH[$wt_branch]:-}" ]]; then
         continue
       fi
-      issue_num="${BASH_REMATCH[1]}"
+      issue_num="$wt_num"
       issue_state=$(gh issue view "$issue_num" --json state -q .state 2>/dev/null) || {
         log "ERROR_ISSUE_STATE_FETCH: branch=$wt_branch issue=$issue_num gh issue view failed"
         echo "ERROR: gh issue view $issue_num failed for branch=$wt_branch" >&2
