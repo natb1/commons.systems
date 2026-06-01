@@ -1,22 +1,25 @@
 ---
 name: security-review-fix
-description: Security phase — fan out 9 parallel security subagents (6 domains, red team, built-in /security-review, CodeQL alerts), classify findings, apply the required fixes, post a PR comment, apply the dispatch:security-reviewed label, and mark the PR ready
+description: Security phase — classify the diff's changed surface, then fan out only the relevant security subagents (skip entirely for docs-only diffs), run CodeQL and the dependency audit inline when relevant, classify findings, apply the required fixes, post a PR comment, apply the dispatch:security-reviewed label, and mark the PR ready
 ---
 
 # Security Review and Fix
 
 The `security` phase of the issue workflow, dispatched by `/dispatch-propagate`. This skill
-owns the full structured security review for the dispatch workflow: fan out 9
-parallel security subagents directly, de-duplicate and classify their findings,
-implement the required fixes, commit and push, post a PR comment, apply the
+owns the full structured security review for the dispatch workflow: classify the
+diff's changed surface, fan out the relevant security subagents directly (a
+docs-only diff skips the fan-out entirely), run CodeQL and the dependency audit
+inline when relevant, de-duplicate and classify the findings, implement the
+required fixes, commit and push, post a PR comment, apply the
 `dispatch:security-reviewed` label, and mark the PR ready.
 
 This is the workflow's **terminal actionable phase** — it marks the PR ready
 itself, so there is no separate `ready` phase after it.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
-fork `/commit-merge-push`, launch the 9 review subagents directly via the Agent
-tool, and launch implementation subagents.
+fork `/commit-merge-push`, launch the review subagents directly via the Agent
+tool, run the CodeQL and dependency-audit scans inline, and launch implementation
+subagents.
 
 ## Idempotency preamble
 
@@ -37,15 +40,14 @@ ready. Otherwise run all steps in order.
 
 ## Steps
 
-1. **Fan out 9 parallel security subagents.** Review the branch's pending
-   changes — the diff against the merge-base with `origin/main` — by launching
-   9 subagents directly in **a single message with 9 Agent tool calls**. Every
-   subagent is a direct child of this skill; there is no intermediate orchestrator.
-   Every subagent uses `subagent_type: general-purpose` and `model: sonnet`, and
-   every subagent emits findings in the **Per-finding schema** below — so Step 2
-   aggregates all nine outputs uniformly.
+1. **Classify the surface, then fan out conditionally.** Review the branch's
+   pending changes — the diff against the merge-base with `origin/main` — but
+   launch only the reviewers the changed surface warrants. A docs-only diff
+   launches none; a code diff launches the unconditional-on-code reviewers, plus
+   the app-domain reviewers when the diff touches application code or Firestore
+   rules.
 
-   First, capture the diff context every subagent needs. Git runs sandboxed —
+   First, capture the diff context every reviewer needs. Git runs sandboxed —
    `origin` is HTTPS to an allowlisted host, so no `dangerouslyDisableSandbox` is
    needed:
 
@@ -55,13 +57,41 @@ ready. Otherwise run all steps in order.
    git diff --name-only "$MERGE_BASE"...HEAD
    ```
 
-   Use the PR number resolved in the idempotency preamble for the CodeQL subagent.
-   If the branch has no open PR (`gh pr view` exited non-zero in the preamble),
-   pass that fact to the CodeQL subagent so it reports "could not run" instead of
-   fetching with an invalid ref.
+   Classify the changed-file list with `dispatch-security-surface` — a pure
+   stdin→stdout classifier (no `gh`/git/network, so it runs sandboxed-fine):
 
-   If the diff is empty, skip the fan-out and continue to Step 2 with an empty
-   finding set (no required fixes).
+   ```bash
+   SURFACE_OUT=$(git diff --name-only "$MERGE_BASE"...HEAD \
+     | .claude/skills/dispatch-propagate/scripts/dispatch-security-surface)
+   surface=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^surface=//p')
+   deps=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^deps=//p')
+   app_or_rules=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^app_or_rules=//p')
+   ```
+
+   - `surface` is `empty` (no changed files), `docs` (every changed path is
+     documentation — markdown/text/license, no executable, config, dependency,
+     or rules surface), or `code` (anything else).
+   - `deps` is `true` when the diff touches `package.json` / `package-lock.json`.
+   - `app_or_rules` is `true` when the diff touches application source
+     (`.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs`/`.go` outside `.claude/`) or a
+     Firestore / Storage rules file.
+
+   **`surface=empty` or `surface=docs`** → launch no reviewers and run no inline
+   scans. The classified finding set is empty (no required fixes). Step 4's PR
+   comment is a single line — for example: `Security review: no attack surface —
+   docs-only diff (no executable, config, dependency, or Firestore-rules
+   changes).` Continue to Steps 3–7 normally: `/commit-merge-push` is a no-op,
+   the label and ready-flip still apply, and the empty finding set means the
+   Step 7 deviation criterion is trivially not met, so the marker is written.
+
+   **`surface=code`** → fan out the reviewers below in **a single message, one
+   Agent tool call per reviewer**. Every reviewer is a direct child of this
+   skill; there is no intermediate orchestrator. Every reviewer uses
+   `subagent_type: general-purpose` and `model: sonnet`, and emits findings in
+   the **Per-finding schema** below, so the aggregation step treats every output
+   uniformly. CodeQL and the dependency audit are **not** subagents — they run
+   inline in this parent thread (see their subsections below), consistent with
+   the dispatch convention of direct subagents and no nesting.
 
    ### Shared preamble (in every subagent prompt)
 
@@ -69,86 +99,95 @@ ready. Otherwise run all steps in order.
      those fields.
    - The findings-only constraint: the subagent reports findings only. It edits
      no files, commits nothing, and posts nothing.
+   - `MERGE_BASE` and the changed-file list, plus the instruction: review only
+     the pending changes (the diff vs `MERGE_BASE`), but Read full files for the
+     context needed to judge each change.
 
-   ### Subagents 1–7 — the diff reviewers (6 domains + red team)
+   ### Reviewers that run on every code diff
 
-   Each of these seven also receives `MERGE_BASE` and the changed-file list,
-   plus the instruction: review only the pending changes (the diff vs
-   `MERGE_BASE`), but Read full files for the context needed to judge each
-   change.
+   These four launch whenever `surface=code`, regardless of `app_or_rules` —
+   command injection in a bash script and hardcoded secrets in config are real
+   attack surface even when no application code changed:
 
-   1. **Input validation** — injection in the changed code: SQL/NoSQL injection,
-      XSS, command injection, path traversal. Check that external input is
-      validated and escaped at every boundary it crosses.
-   2. **Auth & access control** — Firestore rules coverage for paths the diff
-      touches, missing auth checks, privilege escalation. Confirm each new or
-      changed Firestore path has a matching rule block and that client code does
-      not assume access the rules do not grant.
-   3. **Data exposure** — API responses returning more fields than the caller
-      needs, PII in logs (`console.log` and similar), internal details (stack
-      traces, config, paths) leaked in error messages.
-   4. **Dependency audit** — scope to dependency changes the PR introduces.
-      First check whether the diff touches `package.json` or
-      `package-lock.json`; if neither changed, report no findings (pre-existing
-      CVEs in unchanged dependencies are out of scope). If dependency files
-      changed, produce a differential audit (use a private temp dir so parallel
-      subagent runs do not collide on shared paths):
+   - **Input validation** — injection in the changed code: SQL/NoSQL injection,
+     XSS, command injection, path traversal. Check that external input is
+     validated and escaped at every boundary it crosses.
+   - **Secrets scan** — hardcoded keys/tokens/credentials in the changed code,
+     `.env` files committed to git, secrets leaking into build output.
+   - **Red team** — construct concrete attack scenarios against the changed
+     code: pick an attacker goal, trace a path through the diff to reach it, and
+     report each viable scenario as a finding. Build scenarios from the code
+     under review rather than pattern-matching a checklist of known
+     vulnerabilities.
+   - **Built-in `/security-review` scan** — fork a subagent that invokes the
+     built-in `/security-review` skill via the Skill tool inside the subagent
+     and returns its output normalized to the **Per-finding schema**. The
+     subagent boundary is the control-flow guarantee: the parent never sees the
+     inner Skill's prompt template, so this skill remains on Step 1 when the
+     Agent call returns. The subagent passes the inner skill no output contract.
+     Keep the "once it returns, continue" wording inside the **subagent's**
+     prompt as defense-in-depth for the inner Skill invocation; any "final
+     reply" / "nothing else" wording in `/security-review`'s prompt scopes only
+     to its findings deliverable.
 
-      ```bash
-      AUDIT_DIR=$(mktemp -d)
-      trap 'rm -rf "$AUDIT_DIR"' EXIT
-      MERGE_BASE=$(git merge-base HEAD origin/main)
+     Normalize each built-in finding:
 
-      # Audit HEAD (current working tree)
-      npm audit --json > "$AUDIT_DIR/audit-head.json"
+     - **Confidence** — from the built-in's severity: `high`/`medium`/`low`
+       severity maps to `high`/`medium`/`low` confidence.
+     - **OWASP** and **STRIDE** — inferred from the finding's category and
+       description.
+     - **Location**, **Description**, **Recommended fix** — carried through
+       directly.
 
-      # Audit MERGE_BASE lockfile without modifying the working tree
-      mkdir -p "$AUDIT_DIR/baseline"
-      git show "$MERGE_BASE":package-lock.json > "$AUDIT_DIR/baseline/package-lock.json"
-      git show "$MERGE_BASE":package.json      > "$AUDIT_DIR/baseline/package.json"
-      npm audit --package-lock-only --json --prefix "$AUDIT_DIR/baseline" \
-        > "$AUDIT_DIR/audit-baseline.json"
-      ```
+   ### App-domain reviewers (only when `app_or_rules=true`)
 
-      Report only advisories whose advisory ID appears in
-      `$AUDIT_DIR/audit-head.json` but not in `$AUDIT_DIR/audit-baseline.json` —
-      these are CVEs the PR's dependency changes newly expose. Also flag any
-      dependency the PR adds or upgrades whose resolved version skips a
-      published security-patch release for that package.
-   5. **Firebase-specific** — Firestore rules permissiveness (overly broad
-      `allow` conditions, missing field constraints), emulator-only code
-      reachable on production paths, Firebase API key or config exposure.
-   6. **Secrets scan** — hardcoded keys/tokens/credentials in the changed code,
-      `.env` files committed to git, secrets leaking into build output.
-   7. **Red team** — construct concrete attack scenarios against the changed
-      code: pick an attacker goal, trace a path through the diff to reach it,
-      and report each viable scenario as a finding. Build scenarios from the
-      code under review rather than pattern-matching a checklist of known
-      vulnerabilities.
+   These three are structurally N/A when the diff touches no application code or
+   Firestore rules, so launch them only when `app_or_rules=true`:
 
-   ### Subagent 8 — built-in `/security-review` scan
+   - **Auth & access control** — Firestore rules coverage for paths the diff
+     touches, missing auth checks, privilege escalation. Confirm each new or
+     changed Firestore path has a matching rule block and that client code does
+     not assume access the rules do not grant.
+   - **Data exposure** — API responses returning more fields than the caller
+     needs, PII in logs (`console.log` and similar), internal details (stack
+     traces, config, paths) leaked in error messages.
+   - **Firebase-specific** — Firestore rules permissiveness (overly broad
+     `allow` conditions, missing field constraints), emulator-only code
+     reachable on production paths, Firebase API key or config exposure.
 
-   Fork a subagent that invokes the built-in `/security-review` skill via the
-   Skill tool inside the subagent and returns its output normalized to the
-   **Per-finding schema**. The subagent boundary is the control-flow guarantee:
-   the parent never sees the inner Skill's prompt template, so this skill
-   remains on Step 1 when the Agent call returns. The subagent passes the inner
-   skill no output contract. Keep the "once it returns, continue" wording
-   inside the **subagent's** prompt as defense-in-depth for the inner Skill
-   invocation; any "final reply" / "nothing else" wording in
-   `/security-review`'s prompt scopes only to its findings deliverable.
+   ### Dependency audit (inline, when `deps=true`)
 
-   Normalize each built-in finding:
+   Run inline in this parent thread — not a subagent — when `deps=true`. The
+   `deps` gate already confirms the diff touches `package.json` /
+   `package-lock.json`, so produce the differential audit directly (use a
+   private temp dir):
 
-   - **Confidence** — from the built-in's severity: `high`/`medium`/`low`
-     severity maps to `high`/`medium`/`low` confidence.
-   - **OWASP** and **STRIDE** — inferred from the finding's category and
-     description.
-   - **Location**, **Description**, **Recommended fix** — carried through
-     directly.
+   ```bash
+   AUDIT_DIR=$(mktemp -d)
+   trap 'rm -rf "$AUDIT_DIR"' EXIT
+   MERGE_BASE=$(git merge-base HEAD origin/main)
 
-   ### Subagent 9 — CodeQL code-scanning alerts
+   # Audit HEAD (current working tree)
+   npm audit --json > "$AUDIT_DIR/audit-head.json"
 
+   # Audit MERGE_BASE lockfile without modifying the working tree
+   mkdir -p "$AUDIT_DIR/baseline"
+   git show "$MERGE_BASE":package-lock.json > "$AUDIT_DIR/baseline/package-lock.json"
+   git show "$MERGE_BASE":package.json      > "$AUDIT_DIR/baseline/package.json"
+   npm audit --package-lock-only --json --prefix "$AUDIT_DIR/baseline" \
+     > "$AUDIT_DIR/audit-baseline.json"
+   ```
+
+   Report only advisories whose advisory ID appears in
+   `$AUDIT_DIR/audit-head.json` but not in `$AUDIT_DIR/audit-baseline.json` —
+   these are CVEs the PR's dependency changes newly expose. Also flag any
+   dependency the PR adds or upgrades whose resolved version skips a published
+   security-patch release for that package. Normalize each into the
+   **Per-finding schema**.
+
+   ### CodeQL alerts (inline, when `surface=code`)
+
+   Run inline in this parent thread — not a subagent — whenever `surface=code`.
    Fetch the PR's open code-scanning alerts from GitHub Advanced Security (use
    `dangerouslyDisableSandbox: true` — `gh` needs network):
 
@@ -174,22 +213,24 @@ ready. Otherwise run all steps in order.
      collapsing them all to `low`.
    - **Recommended fix** — the rule's remediation guidance.
 
-   If the branch has no open PR, this subagent reports the CodeQL scan as
-   "could not run (no PR ref)" and returns no findings. An empty alert array is
-   normal — no open CodeQL alerts — and is not an error.
+   If the branch has no open PR (`gh pr view` exited non-zero in the idempotency
+   preamble), skip the fetch and record the CodeQL scan as "could not run (no PR
+   ref)" with no findings. An empty alert array is normal — no open CodeQL alerts
+   — and is not an error.
 
    ### Aggregate, de-duplicate, and classify
 
-   Once all 9 subagents return, merge their findings into one set.
+   Once the launched reviewers return — together with the inline CodeQL and
+   dependency-audit results — merge their findings into one set.
 
-   De-duplication matters here: subagents 8 and 9 (built-in scan, CodeQL)
-   overlap the six domain subagents, so the same issue often arrives from
-   several sources. When two or more findings name the **same root issue at the
-   same location**, collapse them into one: pick the most specific OWASP
-   category and STRIDE element across the duplicates (a single value each per
-   the Per-finding schema), take the highest confidence among them, and record
-   which subagents flagged it. Distinct issues — even in the same file — stay
-   separate.
+   De-duplication matters here: the built-in `/security-review` scan and the
+   inline CodeQL alerts overlap the domain reviewers, so the same issue often
+   arrives from several sources. When two or more findings name the **same root
+   issue at the same location**, collapse them into one: pick the most specific
+   OWASP category and STRIDE element across the duplicates (a single value each
+   per the Per-finding schema), take the highest confidence among them, and
+   record which reviewers flagged it. Distinct issues — even in the same file —
+   stay separate.
 
    Then classify each de-duplicated finding into exactly one of:
 
@@ -320,20 +361,21 @@ classified set — has these fields:
 
 ## Edge cases
 
-- **Empty diff** — skip the fan-out and continue to Step 2 with no findings.
-- **A subagent finds nothing** — record that subagent as clean; it contributes
+- **Empty or docs-only diff** — `surface` is `empty` or `docs`; launch no
+  reviewers, run no inline scans, and carry an empty finding set into Step 2.
+- **A subagent finds nothing** — record that reviewer as clean; it contributes
   no findings.
 - **A subagent fails** — re-launch it once. If it fails again, note partial
-  coverage in the Step 4 PR comment (name the subagent whose domain could not
+  coverage in the Step 4 PR comment (name the reviewer whose domain could not
   be reviewed).
-- **`npm audit` sandbox or network failure** — retry the dependency-audit
-  subagent's `npm audit` with `dangerouslyDisableSandbox: true`. If it still
+- **`npm audit` sandbox or network failure** — the dependency audit runs inline;
+  retry its `npm audit` with `dangerouslyDisableSandbox: true`. If it still
   fails, report the dependency audit as "could not run" rather than silently
   dropping that domain.
-- **CodeQL fetch failure** — retry the `gh api` fetch once with
-  `dangerouslyDisableSandbox: true`. If it still fails, report the CodeQL scan
-  as "could not run" rather than dropping it silently. An empty alert array is
-  not a failure — it means no open alerts.
+- **CodeQL fetch failure** — the CodeQL fetch runs inline; retry the `gh api`
+  fetch once with `dangerouslyDisableSandbox: true`. If it still fails, report
+  the CodeQL scan as "could not run" rather than dropping it silently. An empty
+  alert array is not a failure — it means no open alerts.
 
 ## Notes
 
