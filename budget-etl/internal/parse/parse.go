@@ -215,6 +215,7 @@ type ParseResult struct {
 	BalanceDate  time.Time // date the balance was observed; zero if absent. OFX: LEDGERBAL DTASOF. CSV: toDate.
 	Skipped      bool
 	SkipReason   string
+	IsCreditCard bool // true when the statement is a credit-card statement (OFX CREDITCARDMSGSRSV1)
 }
 
 // InferPeriod returns a YYYY-MM period derived from document data. Prefers
