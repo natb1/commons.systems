@@ -1585,6 +1585,35 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "(dispatch, priority) PR beats plain-bug PR — priority crosses topics" "pr 10 10-dispatch-priority-pr verify" "$result"
 teardown
 
+# 30e. The 2026-05-29 reproduction (#905). A queue of bug+priority PRs, all but
+#      one carrying an *orphan* worktree, alongside a lower-priority bug
+#      help-wanted issue with no worktree. Before the fix the orphan worktrees
+#      skipped every priority PR and the selector fell through to the
+#      help-wanted issue, violating the priority order. After the fix only the
+#      live-session-owned PR (#898) is skipped; the oldest remaining
+#      security-phase priority PR (#895) wins.
+echo "Test: orphan-worktree bug+priority PRs still beat a no-worktree help-wanted issue (#905)"
+setup
+UNION='['
+UNION+="$(make_pr_union 898 "898-security" "2026-05-20T00:00:00Z" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP" '[{"number":896}]')"','
+UNION+="$(make_pr_union 895 "895-security" "2026-05-21T00:00:00Z" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP" '[{"number":806}]')"','
+UNION+="$(make_pr_union 893 "893-qa" "2026-05-22T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":892}]')"','
+UNION+="$(make_pr_union 883 "883-qa" "2026-05-23T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":879}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Each PR's closing issue carries bug + priority; issue 886 is a lower-priority
+# (no `priority`) bug help-wanted issue with no worktree.
+printf '%s\n' '[{"number":896,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":806,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":892,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":879,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":886,"createdAt":"2026-05-02T00:00:00Z","labels":[{"name":"bug"},{"name":"help wanted"}]}]' \
+  > "$STUB_DIR/issue-list.json"
+# Worktrees exist for all four PR branches; none for issue 886.
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/898-security\nHEAD a1\nbranch refs/heads/898-security\n\nworktree /worktrees/895-security\nHEAD a2\nbranch refs/heads/895-security\n\nworktree /worktrees/893-qa\nHEAD a3\nbranch refs/heads/893-qa\n\nworktree /worktrees/883-qa\nHEAD a4\nbranch refs/heads/883-qa\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# Only #898's worktree has a live session; #895/#893/#883 are orphans.
+select_target_fake_claude "898-security"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "orphan priority PRs not skipped; oldest security priority PR wins" "pr 895 895-security security" "$result"
+teardown
+
 # 30f. A PR closing a `security` issue outranks a PR closing a `bug` issue, even
 #      when the bug PR is older — `security` is the first topic category, so it
 #      beats `bug` (category beats age).
@@ -1637,35 +1666,6 @@ printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"hel
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "security issue beats untopiced (other) issue" "issue 300" "$result"
-teardown
-
-# 30e. The 2026-05-29 reproduction (#905). A queue of bug+priority PRs, all but
-#      one carrying an *orphan* worktree, alongside a lower-priority bug
-#      help-wanted issue with no worktree. Before the fix the orphan worktrees
-#      skipped every priority PR and the selector fell through to the
-#      help-wanted issue, violating the priority order. After the fix only the
-#      live-session-owned PR (#898) is skipped; the oldest remaining
-#      security-phase priority PR (#895) wins.
-echo "Test: orphan-worktree bug+priority PRs still beat a no-worktree help-wanted issue (#905)"
-setup
-UNION='['
-UNION+="$(make_pr_union 898 "898-security" "2026-05-20T00:00:00Z" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP" '[{"number":896}]')"','
-UNION+="$(make_pr_union 895 "895-security" "2026-05-21T00:00:00Z" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP" '[{"number":806}]')"','
-UNION+="$(make_pr_union 893 "893-qa" "2026-05-22T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":892}]')"','
-UNION+="$(make_pr_union 883 "883-qa" "2026-05-23T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":879}]')"
-UNION+=']'
-setup_union_pr_list "$UNION"
-# Each PR's closing issue carries bug + priority; issue 886 is a lower-priority
-# (no `priority`) bug help-wanted issue with no worktree.
-printf '%s\n' '[{"number":896,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":806,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":892,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":879,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":886,"createdAt":"2026-05-02T00:00:00Z","labels":[{"name":"bug"},{"name":"help wanted"}]}]' \
-  > "$STUB_DIR/issue-list.json"
-# Worktrees exist for all four PR branches; none for issue 886.
-printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/898-security\nHEAD a1\nbranch refs/heads/898-security\n\nworktree /worktrees/895-security\nHEAD a2\nbranch refs/heads/895-security\n\nworktree /worktrees/893-qa\nHEAD a3\nbranch refs/heads/893-qa\n\nworktree /worktrees/883-qa\nHEAD a4\nbranch refs/heads/883-qa\n\n' \
-  > "$STUB_DIR/worktree-list.txt"
-# Only #898's worktree has a live session; #895/#893/#883 are orphans.
-select_target_fake_claude "898-security"
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "orphan priority PRs not skipped; oldest security priority PR wins" "pr 895 895-security security" "$result"
 teardown
 
 # --- blocked-issue PR skip (issue #786) -------------------------------------
