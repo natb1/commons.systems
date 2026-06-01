@@ -28,9 +28,10 @@
 #   export GOOGLE_ANALYTICS_REFRESH_TOKEN="$(pass show google-analytics/refresh-token)"
 #
 # (Warm the gpg-agent cache once in an interactive shell first, as that rule
-# describes.) With any of the three env vars unset the script prints a warning
-# to stderr and exits 0 with no stdout — the no-config path. Personas note the
-# absence of analytics data rather than guessing.
+# describes.) With any of the three env vars unset the script prints a
+# parenthetical note to stdout (captured in the Phase 1 context file) and exits
+# 0 — the no-config path. Personas note the absence of analytics data rather
+# than guessing.
 #
 # One-time refresh-token bootstrap (done by the user, not by this script):
 #   1. Create a Google Cloud project and an OAuth 2.0 Client ID of type
@@ -47,8 +48,8 @@
 # Config env vars (with defaults):
 #   ROADMAP_GA4_PROPERTY_IDS    App→property map, comma-separated app:propertyId
 #                               pairs, e.g. "landing:111,budget:222,print:333".
-#                               When unset, the GA4 section is skipped (warning
-#                               on stderr); Search Console still runs.
+#                               When unset, the GA4 section is skipped (note
+#                               on stdout); Search Console still runs.
 #   ROADMAP_SEARCH_CONSOLE_SITE Search Console property string.
 #                               Default: sc-domain:commons.systems.
 #
@@ -65,9 +66,10 @@
 set -euo pipefail
 
 # ---- Step 0: no-config gate -------------------------------------------------
-# Any of the three OAuth env vars unset/empty → warn on stderr, no stdout,
-# exit 0. Unlike dispatch-jit-calendar-import (which exits silently), this
-# script surfaces the skip to the parent so roadmap-debate Phase 1 can log it.
+# Any of the three OAuth env vars unset/empty → print a parenthetical note to
+# stdout, exit 0. Unlike dispatch-jit-calendar-import (which exits silently),
+# this script surfaces the skip to the parent so roadmap-debate Phase 1 can log
+# it in the context file.
 if [[ -z "${GOOGLE_ANALYTICS_CLIENT_ID:-}" \
    || -z "${GOOGLE_ANALYTICS_CLIENT_SECRET:-}" \
    || -z "${GOOGLE_ANALYTICS_REFRESH_TOKEN:-}" ]]; then
