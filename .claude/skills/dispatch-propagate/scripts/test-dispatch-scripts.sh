@@ -1460,9 +1460,11 @@ assert_eq "issue 6 not masked by 60-foo worktree" "issue 6" "$result"
 teardown
 
 # --- topic-category prioritization (issue #707) -----------------------------
-# A topic category (priority → bug → testing infrastructure → dispatch → other) nests
-# outside the phase ladder. A PR's category is resolved from the labels of the
-# issues it closes; an issue's category from its own labels.
+# The `priority` label is the outermost axis: every `priority` item ranks above
+# every non-priority item, regardless of topic. Topic category
+# (bug → testing infrastructure → dispatch → other) nests inside the priority
+# axis, and the phase ladder runs innermost. A PR's category is resolved from
+# the labels of the issues it closes; an issue's category from its own labels.
 
 # 28. A PR closing a `bug` issue outranks a PR closing a `dispatch` issue, even
 #     when the dispatch PR is older — category beats age.
@@ -1512,11 +1514,11 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR with no closing issue is 'other'; bug issue wins" "issue 500" "$result"
 teardown
 
-# 30b. A PR closing a plain `bug` issue outranks a PR closing a `priority`-only
-#      issue — `priority` is a sub-axis nested inside each topic category, not
-#      a top-level category. A `priority`-only issue resolves to topic `other`,
-#      which ranks below `bug`. The older bug-closing PR wins.
-echo "Test: PR closing a bug issue beats PR closing a priority-only issue"
+# 30b. A PR closing a `priority`-only issue outranks a PR closing a plain `bug`
+#      issue — `priority` is the outermost axis, so a `priority` item in topic
+#      `other` ranks above a non-priority `bug` item. The priority-only-closing
+#      PR wins even though it is newer and its topic (`other`) is lower-ranked.
+echo "Test: PR closing a priority-only issue beats PR closing a bug issue"
 setup
 # PR 20 (older) closes bug issue 200; PR 10 (newer) closes priority-only issue 100.
 UNION='['
@@ -1530,12 +1532,13 @@ printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"pri
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "bug-closing PR beats priority-only-closing PR" "pr 20 20-bug-pr verify" "$result"
+assert_eq "priority-only-closing PR beats bug-closing PR" "pr 10 10-priority-pr verify" "$result"
 teardown
 
 # 30c. A PR closing a `(bug, priority)` issue outranks a PR closing a plain
-#      `bug` issue, even when the plain-bug PR is older — within the `bug`
-#      topic category, `priority` items rank above non-`priority` items.
+#      `bug` issue, even when the plain-bug PR is older — `priority` is the
+#      outermost axis, so both PRs share topic `bug` and the `priority` one
+#      wins. Topic category is the tie-break only within one priority level.
 echo "Test: PR closing a (bug, priority) issue beats PR closing a plain bug issue"
 setup
 # PR 20 (older) closes plain bug issue 200; PR 10 (newer) closes (bug, priority) issue 100.
@@ -1552,10 +1555,11 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "(bug, priority)-closing PR beats plain-bug-closing PR" "pr 10 10-bug-priority-pr verify" "$result"
 teardown
 
-# 30d. A PR closing a `(dispatch, priority)` issue ranks below every PR closing
-#      a plain `bug` issue — `priority` is a sub-axis nested inside each topic
-#      category, so it does not cross topic boundaries. The bug-closing PR wins.
-echo "Test: PR closing a plain bug issue beats PR closing a (dispatch, priority) issue"
+# 30d. A PR closing a `(dispatch, priority)` issue outranks a PR closing a plain
+#      `bug` issue — `priority` is the outermost axis, so it crosses topic
+#      boundaries: a `priority` item in topic `dispatch` lifts above a
+#      non-priority `bug` item. The (dispatch, priority)-closing PR wins.
+echo "Test: PR closing a (dispatch, priority) issue beats PR closing a plain bug issue"
 setup
 # PR 10 (older) closes (dispatch, priority) issue 100; PR 20 (newer) closes plain bug issue 200.
 UNION='['
@@ -1568,7 +1572,7 @@ printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dis
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "plain-bug PR beats (dispatch, priority) PR — priority does not cross topics" "pr 20 20-bug-pr verify" "$result"
+assert_eq "(dispatch, priority) PR beats plain-bug PR — priority crosses topics" "pr 10 10-dispatch-priority-pr verify" "$result"
 teardown
 
 # 30e. The 2026-05-29 reproduction (#905). A queue of bug+priority PRs, all but
@@ -6742,6 +6746,7 @@ echo "=== dispatch-spawn-router ==="
 #   $TMPDIR_TEST/fake-claude     the multi-subcommand fake `claude`
 #   $TMPDIR_TEST/registry.json   the `claude agents --json` fixture
 #   $TMPDIR_TEST/bg-argv         recorded argv of each `claude --bg` call
+#   $TMPDIR_TEST/pwd-log         records the spawn subshell's $PWD (used by Test 1b)
 #   $TMPDIR_TEST/rm-log          recorded job-ids of each `claude rm` call
 #   $TMPDIR_TEST/stop-log        recorded job-ids of each `claude stop` call
 #
@@ -6750,6 +6755,7 @@ echo "=== dispatch-spawn-router ==="
 
 SPAWN_ROUTER_REGISTRY=""
 SPAWN_ROUTER_BG_ARGV=""
+SPAWN_ROUTER_PWD_LOG=""
 SPAWN_ROUTER_RM_LOG=""
 SPAWN_ROUTER_STOP_LOG=""
 SPAWN_ROUTER_PENDING=""
@@ -6798,6 +6804,7 @@ case "\${1:-}" in
     cat "$SPAWN_ROUTER_REGISTRY"
     ;;
   --bg)
+    pwd >> "$SPAWN_ROUTER_PWD_LOG"
     printf '%s\n' "\$@" > "$SPAWN_ROUTER_BG_ARGV"
     name=""
     while [[ \$# -gt 0 ]]; do
@@ -6840,6 +6847,7 @@ spawn_router_setup() {
 
   SPAWN_ROUTER_REGISTRY="$TMPDIR_TEST/registry.json"
   SPAWN_ROUTER_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_ROUTER_PWD_LOG="$TMPDIR_TEST/pwd-log"
   SPAWN_ROUTER_RM_LOG="$TMPDIR_TEST/rm-log"
   SPAWN_ROUTER_STOP_LOG="$TMPDIR_TEST/stop-log"
   SPAWN_ROUTER_PENDING="$TMPDIR_TEST/pending"
@@ -6855,6 +6863,7 @@ spawn_router_teardown() {
   TMPDIR_TEST=""
   SPAWN_ROUTER_REGISTRY=""
   SPAWN_ROUTER_BG_ARGV=""
+  SPAWN_ROUTER_PWD_LOG=""
   SPAWN_ROUTER_RM_LOG=""
   SPAWN_ROUTER_STOP_LOG=""
   SPAWN_ROUTER_PENDING=""
@@ -6884,6 +6893,39 @@ assert_eq "spawn: argv[2] is a dispatch-* agent name" "yes" "$name_ok"
 assert_eq "spawn: argv[3] is --permission-mode" "--permission-mode" "${bg_argv[3]:-}"
 assert_eq "spawn: argv[4] is auto" "auto" "${bg_argv[4]:-}"
 assert_eq "spawn: argv[5] is /dispatch-propagate" "/dispatch-propagate" "${bg_argv[5]:-}"
+spawn_router_teardown
+
+# --- Test 1b: spawn cwd is the main worktree path ----------------------------
+
+echo "Test: dispatch-spawn-router invokes 'claude --bg' from the main worktree path"
+spawn_router_setup
+write_fake_spawn_router_claude
+# Run from a deliberately different caller cwd so the negative assertion (cwd is
+# NOT the caller's) is meaningful. The spawn subshell cd's into the main worktree.
+SPAWN_ROUTER_CALLER_CWD="$TMPDIR_TEST"
+if out=$( cd "$SPAWN_ROUTER_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-router-cwd: exits 0" "0" "$rc"
+# Read the first line of the pwd-log and compare it (via realpath) to the main
+# worktree path. realpath is used to normalize platform-specific path
+# differences (e.g. macOS /private/ prefix on /tmp).
+sr_pwd_line=$(head -1 "$SPAWN_ROUTER_PWD_LOG" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$(realpath "$sr_pwd_line" 2>/dev/null)" == "$(realpath "$DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-router-cwd: 'claude --bg' ran with cwd = main worktree path"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-router-cwd: 'claude --bg' ran with cwd = main worktree path"
+  echo "    pwd-log:  '$sr_pwd_line'"
+  echo "    expected: '$DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE'"
+fi
+# Independently assert the cwd is NOT the caller's cwd — that is the regression
+# the fix prevents (router born in the wrong worktree).
+TOTAL=$((TOTAL + 1))
+if [[ "$(realpath "$sr_pwd_line" 2>/dev/null)" != "$(realpath "$SPAWN_ROUTER_CALLER_CWD")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-router-cwd: 'claude --bg' did NOT run from the caller's cwd"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-router-cwd: 'claude --bg' did NOT run from the caller's cwd"
+  echo "    pwd-log: '$sr_pwd_line'"
+fi
 spawn_router_teardown
 
 # --- Test 2: dedup -----------------------------------------------------------
