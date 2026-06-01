@@ -62,8 +62,9 @@
 #   5. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
 #      by a live Claude session, and which is not already closed by a non-draft
 #      (ready) PR (#920), resolved to a startable open leaf (an issue whose
-#      entire open-leaf subtree is worktree-conflicted is skipped, exactly as a
-#      live-session-owned worktree is)
+#      entire open-leaf subtree is owned by live sessions is skipped, exactly as
+#      a live-session-owned direct worktree is — an orphan child worktree stays
+#      descendable, #914)
 #   6. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
 #
 # A PR or help-wanted issue is skipped only when a live Claude session owns its
@@ -591,11 +592,12 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]] && continue
   # Resolve a startable open leaf within the issue's subtree. dispatch-trace-leaf
   # in queue mode descends open blockers and sub-issues, skipping any child whose
-  # <N>-* branch is an existing local worktree (owned by another session):
+  # <N>-* worktree is owned by a live session (#914) — an orphan child worktree
+  # stays descendable:
   #   exit 0 — a startable open leaf was found; record it for this bucket.
-  #   exit 2 — every reachable open leaf is worktree-conflicted. Skip this issue
-  #            exactly as a direct worktree is skipped; a later issue in the
-  #            same bucket may still fill the slot.
+  #   exit 2 — every reachable open leaf is owned by a live session. Skip this
+  #            issue exactly as a direct live-owned worktree is skipped; a later
+  #            issue in the same bucket may still fill the slot.
   #   exit 1 — usage error; propagate as a hard failure, never swallow as a skip.
   if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue); then
     FIRST_ISSUE[$issue_bucket]="$leaf"

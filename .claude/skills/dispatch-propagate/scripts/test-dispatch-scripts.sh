@@ -2325,20 +2325,24 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "600" "explicit")
 assert_eq "sub-issues chain 600→601 → leaf 601" "601" "$result"
 teardown
 
-# 8. Queue mode: conflicted child is skipped → sibling is returned.
-echo "Test: queue mode → skips conflicted child, returns sibling"
+# 8. Queue mode: child whose worktree exists and daemon is UNKNOWN (fail-safe → occupied)
+#    is skipped; sibling with no worktree is returned.
+#    The default CLAUDE_AGENTS_CMD points at a non-existent binary so the daemon
+#    is UNKNOWN, which worktree_has_live_session folds into occupied (fail-safe).
+#    Tests 12a/12b cover the true live-vs-orphan distinction.
+echo "Test: queue mode → skips child with worktree (daemon UNKNOWN → occupied), returns sibling"
 setup
-# 700 has two open sub-issues: 701 (worktree-owned) and 702 (clean).
+# 700 has two open sub-issues: 701 (worktree on disk, daemon unreachable) and 702 (no worktree).
 printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
 printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-701.json"
 printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-702.json"
-# Pretend another session owns 701's worktree on branch 701-feature.
+# 701's worktree exists; daemon is UNKNOWN (non-existent binary) → fail-safe → occupied.
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
-assert_eq "queue: conflicted child 701 skipped → sibling 702" "702" "$result"
+assert_eq "queue: child 701 (daemon UNKNOWN → occupied) skipped → sibling 702" "702" "$result"
 teardown
 
 # 9. Explicit mode: conflicted child returned unchanged (no worktree filtering).
@@ -2356,15 +2360,18 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "explicit")
 assert_eq "explicit: lowest leaf 701 unchanged" "701" "$result"
 teardown
 
-# 10. Queue mode: every child is worktree-conflicted → non-zero exit.
-echo "Test: queue mode → all leaves conflicted, exits non-zero"
+# 10. Queue mode: every child has a worktree and daemon is UNKNOWN (fail-safe → occupied)
+#     → exit 2 with the worktree-conflicted stderr message.
+#     The default CLAUDE_AGENTS_CMD is a non-existent binary; UNKNOWN folds to occupied.
+#     Tests 12c cover the true all-live-owned scenario.
+echo "Test: queue mode → all children have worktrees (daemon UNKNOWN → occupied), exits non-zero"
 setup
 printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
 printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-701.json"
 printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-702.json"
-# Both children's worktrees exist.
+# Both children's worktrees exist; daemon is UNKNOWN → both treated as occupied.
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\nworktree /worktrees/702-feature\nHEAD ghi789\nbranch refs/heads/702-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
@@ -2372,7 +2379,7 @@ case "$err_out" in
   *"worktree-conflicted"*"EXIT="[1-9]*) status="ok" ;;
   *) status="bad: $err_out" ;;
 esac
-assert_eq "queue: all blocked → non-zero with stderr message" "ok" "$status"
+assert_eq "queue: all children occupied (daemon UNKNOWN) → non-zero with stderr message" "ok" "$status"
 teardown
 
 # 11. Missing mode → arity error on stderr, exit 1.
@@ -2395,6 +2402,85 @@ case "$err_out" in
   *) status="bad: $err_out" ;;
 esac
 assert_eq "invalid mode → usage error, exit 1" "ok" "$status"
+teardown
+
+# 12a. Queue mode: an orphan child worktree (on disk, no live session) is NOT
+#      skipped — it stays descendable, so the lowest leaf 701 is returned rather
+#      than the sibling 702 (#914). Tests 8/10 above rely on the default-UNKNOWN
+#      daemon (which folds to occupied); here select_target_fake_claude with no
+#      args models a live-session-free world so the worktree is a true orphan.
+echo "Test: queue mode → orphan child worktree is descendable (not skipped)"
+setup
+# 700 has two open sub-issues: 701 (orphan worktree on disk) and 702 (no worktree).
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+# 701's worktree exists but no session owns it; 702 has no worktree at all.
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live sessions → 701's worktree is an orphan, descendable.
+select_target_fake_claude
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: orphan child 701 descendable → lowest leaf 701" "701" "$result"
+teardown
+
+# 12b. Queue mode: a child whose <N>-* worktree IS owned by a live session is
+#      skipped, so the sibling 702 is returned (#914).
+echo "Test: queue mode → live-owned child skipped, returns sibling"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# A live session owns 701-feature → 701 is skipped.
+select_target_fake_claude "701-feature"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: live-owned child 701 skipped → sibling 702" "702" "$result"
+teardown
+
+# 12c. Queue mode: every child's <N>-* worktree is live-owned → exit 2 with the
+#      worktree-conflicted stderr message (#914).
+echo "Test: queue mode → all leaves live-owned, exits 2"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\nworktree /worktrees/702-feature\nHEAD ghi789\nbranch refs/heads/702-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# Both children are owned by live sessions.
+select_target_fake_claude "701-feature" "702-feature"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"worktree-conflicted"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "queue: all children live-owned → exit 2 with stderr message" "ok" "$status"
+teardown
+
+# 12d. Queue mode: a child with two <N>-* worktrees — one orphan, one live —
+#      is skipped (any live match counts as owned), exercising the multi-path
+#      branch of child_has_live_worktree's loop (#914).
+echo "Test: queue mode → child with orphan+live worktrees is skipped (multi-path)"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+# 701 has two worktrees: 701-feature (orphan) and 701-other (live-owned).
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\nworktree /worktrees/701-other\nHEAD def457\nbranch refs/heads/701-other\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# Only 701-other is live; 701-feature is an orphan. Any live match → 701 skipped.
+select_target_fake_claude "701-other"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: child with one live worktree among many skipped → sibling 702" "702" "$result"
 teardown
 
 # 13. issue-blocking failure → hard error (exit 1), never emits N as a leaf.
