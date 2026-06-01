@@ -42,23 +42,21 @@
 # the recorded sessionId without waiting for self-healing to notice the
 # session has moved on.
 #
-# Marker-based reclaim. The dispatch lock covers Steps 0–5 of /dispatch-propagate only
-# (target selection + worktree resolution); phase skills run lock-free. The
-# marker file `tmp/dispatch-worktree` is written in the selected worktree at
-# the end of Step 5 by dispatch-finalize-selection, which stamps the finalizing
-# holder's CLAUDE_CODE_SESSION_ID into it. The marker is session-scoped: it
-# reclaims a live foreign holder ONLY when the marker's content equals the
-# RECORDED HOLDER's sessionId (see marker_names_holder). Both acquire and
-# `--release` honor this signal:
-#   - Acquire reclaims a foreign holder regardless of session liveness when the
-#     holder's cwd carries a marker naming that recorded holder (it is past
-#     Step 5; the lock no longer serves it).
-#   - `--release` succeeds for any caller when the recorded holder's cwd
-#     carries a marker naming that recorded holder, in addition to the strict
-#     self-release branch.
-# This closes the silent-noop leak when a child context's
-# CLAUDE_CODE_SESSION_ID differs from the recorded holder, while a content-match
-# guard prevents a stale marker from reclaiming a LIVE mid-selection holder.
+# Marker-based reclaim. The dispatch lock covers Steps 0–6 of /dispatch-propagate
+# (target selection + worktree resolution + worker spawn; phase skills run lock-
+# free). The marker file `tmp/dispatch-worktree` is written in the selected
+# worktree at the end of Step 5 by dispatch-finalize-selection, which stamps the
+# finalizing holder's CLAUDE_CODE_SESSION_ID into it. As of #945 the lock is
+# held through Step 6 (spawn), so a LIVE holder with a marker is still mid-spawn
+# and legitimately owns the lock — the marker alone is NOT sufficient to reclaim.
+# Acquire reclaims a dead foreign holder (not in the registry) regardless of
+# marker state. A live holder — even with a marker — is still in the lock-covered
+# Steps 0–6 region and stays BUSY. `--release` from a different-sessionId caller
+# is always a noop for foreign holders (live or dead); dead holders are reclaimed
+# by the next acquire's dead-holder path. Only strict self-release (the caller's
+# SESSION_ID matches the recorded holder) clears the lock. This ensures a marker
+# can never cause a mid-spawn holder's lock to be stolen or released by a
+# concurrent subagent or next-tick router.
 # An empty marker — the `touch` stamped by .claude/hooks/worktree-create.sh on
 # every worktree creation — names no session and is inert. A marker naming an
 # older, since-finalized session likewise does not reclaim a different live
@@ -108,6 +106,8 @@
 #
 # NOT set -e: exits are handled explicitly (matching the sibling dispatch-sweep).
 set -uo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 # ---- Step 0: parse the mode -------------------------------------------------
 # Done before any side effect so an unknown argument exits 2 cleanly: no lock
@@ -203,14 +203,13 @@ marker_names_holder() {
 # An explicit DISPATCH_LOCK_FILE is authoritative and bypasses the git lookup —
 # tests rely on this. Otherwise the lock lives at the shared project-root tmp/
 # (not a per-worktree tmp/) so concurrent ticks in different worktrees contend
-# on the same file. The parent of --git-common-dir is the project root in both
-# classic (.git) and bare (.bare) layouts, same idiom as dispatch-sweep.
+# on the same file. resolve_project_root (lib.sh) returns the project root in
+# both classic (.git) and bare (.bare) layouts.
 if [[ -n "${DISPATCH_LOCK_FILE:-}" ]]; then
   LOCK_FILE="$DISPATCH_LOCK_FILE"
 else
-  GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+  PROJECT_ROOT=$(resolve_project_root) \
     || { echo "ERROR: not in a git repo and DISPATCH_LOCK_FILE is unset" >&2; exit 2; }
-  PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
   LOCK_FILE="$PROJECT_ROOT/tmp/dispatch.lock"
 fi
 
@@ -244,21 +243,23 @@ try_acquire() {            # 0 = acquired, 1 = contended; sets CONTENDED_SID
     local recorded="" cwd="" live=0
     IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
     # Busy iff a different sessionId is recorded AND it is still a live
-    # session per `claude agents --json` AND its cwd does NOT carry a
-    # tmp/dispatch-worktree marker naming the recorded holder (i.e. it is
-    # still in the lock-covered Steps 0–5 region). Otherwise — no record, a
-    # stale record (sessionId not in the registry), our own session
-    # re-entering, or a foreign holder past Step 5 whose marker names it — we
-    # claim the lock. An empty cwd on a live return (opaque-failure path), an
-    # empty marker (worktree-create.sh's touch), or a marker naming an older
-    # session all fail marker_names_holder → stay strict (BUSY).
+    # session per `claude agents --json`. A live holder always blocks — even
+    # when its cwd carries a tmp/dispatch-worktree marker — because as of #945
+    # the lock is held through Step 6 (spawn): marker presence no longer implies
+    # the holder released the lock. Otherwise — no record, a stale record
+    # (sessionId not in the registry), our own session re-entering, or a dead
+    # foreign holder — we claim. An opaque-failure from resolve_holder_state
+    # (return 0, empty cwd) stays BUSY (fail safe).
     if [[ -n "$recorded" && "$recorded" != "$SESSION_ID" ]]; then
       if cwd=$(resolve_holder_state "$recorded"); then
         live=1
       fi
-      if (( live )) && ! marker_names_holder "$cwd" "$recorded"; then
+      if (( live )); then
         printf 'BUSY %s' "$recorded"
       else
+        # Dead holder (not in registry): reclaim regardless of marker state.
+        # A dead holder no longer holds the lock in any region (Steps 0–6 or
+        # beyond), so the marker does not change the reclaim decision.
         printf '%s\n' "$SESSION_ID" >"$LOCK_FILE"
         printf 'OK'
       fi
@@ -299,36 +300,32 @@ case "$MODE" in
     ;;
 
   release)
-    # Re-read the recorded sessionId under flock and clear it when EITHER
-    # (a) it is our own session (strict self-release), OR (b) the recorded
-    # holder's cwd carries a tmp/dispatch-worktree marker naming that recorded
-    # holder (lenient post-Step-5 release — closes the silent-noop leak when a
-    # child context's CLAUDE_CODE_SESSION_ID differs from the recorded holder).
-    # A not-live foreign holder without a holder-naming marker stays a noop; its
-    # lock will be reclaimed by the next acquire anyway. Truncate with `:`
-    # rather than `rm` — `rm` would orphan a concurrent acquire's already-open
-    # fd.
+    # Re-read the recorded sessionId under flock and clear it only when it is
+    # our own session (strict self-release). Foreign holders always get noop,
+    # regardless of liveness or marker: as of #945 the lock extends through
+    # Step 6 (spawn), so a live foreign holder may be mid-spawn and must not be
+    # released; a dead foreign holder is reclaimed by the next tick's try_acquire
+    # dead-holder path. Truncate with `:` rather than `rm` — `rm` would orphan
+    # a concurrent acquire's already-open fd.
+    #
+    # Caller invariant: the lenient marker-based release path is gone, so
+    # `--release` only clears the lock when SESSION_ID matches the recorded
+    # holder. A caller running under a different CLAUDE_CODE_SESSION_ID than the
+    # one that acquired (e.g. from a subagent) gets a silent noop and the lock
+    # stays held until self-healing reclaim. Every release call site must run in
+    # the acquiring session.
     result=$(
       exec 9>>"$LOCK_FILE"
       flock 9
       recorded=""    # plain var: this subshell runs at script top level
-      cwd=""
       should_release=0
       IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
       if [[ -n "$recorded" && "$recorded" == "$SESSION_ID" ]]; then
         should_release=1
-      elif [[ -n "$recorded" && "$recorded" != "$SESSION_ID" ]]; then
-        # Foreign holder: lenient release iff its cwd carries a marker naming
-        # the recorded holder. A not-live holder (resolve_holder_state returns
-        # 1, empty cwd) or an opaque-failure holder (returns 0 with empty cwd)
-        # stays strict — marker_names_holder fails on empty cwd. An empty or
-        # mismatched marker likewise fails, so should_release stays 0.
-        if cwd=$(resolve_holder_state "$recorded"); then
-          if marker_names_holder "$cwd" "$recorded"; then
-            should_release=1
-          fi
-        fi
       fi
+      # Foreign holder (recorded != SESSION_ID or empty): always noop. A live
+      # foreign holder may be mid-spawn; a dead foreign holder is handled by the
+      # next tick's dead-holder reclaim in try_acquire. should_release stays 0.
       if (( should_release )); then
         : >"$LOCK_FILE"
         printf 'RELEASED'

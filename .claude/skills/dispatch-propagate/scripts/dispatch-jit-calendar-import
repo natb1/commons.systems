@@ -111,6 +111,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 # ---- parse_duration <str> — duration string to seconds ----------------------
 # Copied inline from dispatch-jit-engine. Accepts <int><unit> where unit is one
@@ -155,9 +156,8 @@ CALENDAR_DEBOUNCE="${CALENDAR_DEBOUNCE:-15m}"
 if [[ -n "${DISPATCH_CALENDAR_STATE_DIR:-}" ]]; then
   STATE_DIR="$DISPATCH_CALENDAR_STATE_DIR"
 else
-  GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+  PROJECT_ROOT=$(resolve_project_root) \
     || { echo "calendar: error (not in a git repo and DISPATCH_CALENDAR_STATE_DIR is unset)" >&2; exit 2; }
-  PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
   STATE_DIR="$PROJECT_ROOT/tmp"
 fi
 STATE_FILE="$STATE_DIR/dispatch-jit-calendar-state.json"
