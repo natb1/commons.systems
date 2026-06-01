@@ -17,8 +17,12 @@
 #                 re-seeds the chain if a rate-limit cap-stall actually
 #                 dropped it.
 #   2. Spawn    — `claude --bg --name dispatch-<short-id> --permission-mode
-#                 auto "/dispatch-propagate"`, cwd = the main worktree (where every
-#                 /dispatch-propagate job is started).
+#                 auto "/dispatch-propagate"` (or "/dispatch-propagate <N>" when an
+#                 optional target <N> is given), cwd = the main worktree (where every
+#                 /dispatch-propagate job is started). An optional first positional <N>
+#                 (a positive integer) makes the spawned router target-keyed — the
+#                 #979 CI-wait reseed timer's ExecStart passes <N> so the chain
+#                 returns to that specific target when its CI concludes.
 #   3. Verify   — re-query the registry with a bounded retry (5 × 200 ms via
 #                 `verify_agent_registered_under`) to absorb the async-
 #                 registration race; confirm the new agent registered.
@@ -36,8 +40,9 @@
 # Exit codes:
 #   0  deduped or spawned (stdout disambiguates).
 #   1  the successor never registered in 'claude agents --json' — see stderr.
-#   2  the script cannot operate — an unexpected command-line argument, or not
-#      in a git repo with DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE unset.
+#   2  the script cannot operate — a malformed target argument (non-numeric, or
+#      more than one), or not in a git repo with DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE
+#      unset.
 #
 # Environment overrides for testability (mirroring dispatch-acquire-lock's
 # DISPATCH_LOCK_* and lib-claude-agents.sh's CLAUDE_AGENTS_CMD):
@@ -61,10 +66,24 @@
 # dispatch-sweep).
 set -uo pipefail
 
-# ---- Step 0: reject unexpected arguments ------------------------------------
-if [[ $# -gt 0 ]]; then
-  echo "dispatch-spawn-router: unknown argument '$1'" >&2
+# ---- Step 0: parse the optional target argument -----------------------------
+# An optional first positional <N> (a positive integer) makes the spawned
+# router target-keyed: it runs "/dispatch-propagate <N>" instead of the bare
+# "/dispatch-propagate". The #979 CI-wait reseed timer's ExecStart passes <N>
+# so the chain returns to that specific target when its CI concludes. Reject a
+# non-numeric/flag-like value or any extra argument with exit 2 — a malformed
+# value would otherwise be interpolated into the spawned prompt.
+TARGET_N=""
+if [[ $# -gt 1 ]]; then
+  echo "dispatch-spawn-router: too many arguments (expected at most one target <N>)" >&2
   exit 2
+fi
+if [[ $# -eq 1 ]]; then
+  if [[ ! "$1" =~ ^[0-9]+$ ]]; then
+    echo "dispatch-spawn-router: target must be a positive integer, got '$1'" >&2
+    exit 2
+  fi
+  TARGET_N="$1"
 fi
 
 # ---- Step 1: resolve config -------------------------------------------------
@@ -126,12 +145,18 @@ done <<<"$sessions"
 # one new dispatch agent at a time, so ~30 bits is ample.
 SHORT_ID=$(printf '%04x%04x' "$RANDOM" "$RANDOM")
 AGENT_NAME="dispatch-$SHORT_ID"
+# Build the prompt — target-keyed when TARGET_N is set, bare otherwise.
+if [[ -n "$TARGET_N" ]]; then
+  PROPAGATE_PROMPT="/dispatch-propagate $TARGET_N"
+else
+  PROPAGATE_PROMPT="/dispatch-propagate"
+fi
 # Capture the spawn's combined output so a failure diagnostic can surface why
 # (`cd` failed, `claude` missing, `--bg` rejected). `|| true` keeps a non-zero
 # spawn from aborting the script — Step 4's registry check is the source of
 # truth for whether the agent actually came up.
 spawn_output=$( ( cd "$MAIN_WORKTREE" && "$CLAUDE_CMD" --bg --name "$AGENT_NAME" \
-    --permission-mode auto "/dispatch-propagate" ) 2>&1 ) || true
+    --permission-mode auto "$PROPAGATE_PROMPT" ) 2>&1 ) || true
 
 # ---- Step 4: verify the new agent registered -------------------------------
 if verify_agent_registered_under "$AGENT_NAME" "$MAIN_WORKTREE"; then

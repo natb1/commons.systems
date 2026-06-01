@@ -7159,6 +7159,48 @@ else
 fi
 spawn_router_teardown
 
+# --- Test 8: an explicit target makes the spawn target-keyed ------------------
+
+echo "Test: an explicit target <N> spawns '/dispatch-propagate <N>'"
+spawn_router_setup
+write_fake_spawn_router_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 979 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "target: dispatch-spawn-router exits 0" "0" "$rc"
+assert_eq "target: stdout is 'spawned'" "spawned" "$out"
+# The final argv element is the target-keyed prompt rather than the bare form.
+mapfile -t bg_argv < "$SPAWN_ROUTER_BG_ARGV"
+assert_eq "target: argv[5] is '/dispatch-propagate 979'" "/dispatch-propagate 979" "${bg_argv[5]:-}"
+spawn_router_teardown
+
+# --- Test 9: the no-arg path still spawns the bare prompt --------------------
+
+echo "Test: no target argument still spawns the bare '/dispatch-propagate'"
+spawn_router_setup
+write_fake_spawn_router_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "no-target: dispatch-spawn-router exits 0" "0" "$rc"
+assert_eq "no-target: stdout is 'spawned'" "spawned" "$out"
+mapfile -t bg_argv < "$SPAWN_ROUTER_BG_ARGV"
+assert_eq "no-target: argv[5] is the bare '/dispatch-propagate'" "/dispatch-propagate" "${bg_argv[5]:-}"
+spawn_router_teardown
+
+# --- Test 10: a non-numeric target argument is rejected ----------------------
+
+echo "Test: a non-numeric target argument exits 2 and spawns nothing"
+spawn_router_setup
+write_fake_spawn_router_claude
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" --repo 2>&1 1>/dev/null) || rc=$?
+assert_eq "bad-target: dispatch-spawn-router exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_ROUTER_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: bad-target: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: bad-target: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_ROUTER_BG_ARGV")"
+fi
+spawn_router_teardown
+
 # ============================================================================
 # dispatch-spawn-worker tests
 # ============================================================================
