@@ -89,7 +89,10 @@ until it does:
 - **Extra number (parsed but not intended):** the body contains a stray
   `<keyword> #N` in narrative prose. Find it, rewrite it to a bare `#N`
   (drop the preceding closing keyword — e.g. `Closes #905` → `#905`,
-  `resolved #905` → `#905`), update with `gh pr edit "$PR_NUM" --body ...`.
+  `resolved #905` → `#905`). Write the corrected body to a temp file under
+  `tmp/` and apply it with `gh pr edit "$PR_NUM" --body-file tmp/<file>` —
+  never interpolate the body inline into the command, since it may carry
+  shell metacharacters from issue-sourced text.
 - **Missing number (intended but not parsed):** a `Closes #N` line was not
   recognized — check that it appears on its own line, outside any code block,
   with no leading spaces. Re-edit the body to restore the canonical form.
