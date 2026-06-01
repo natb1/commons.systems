@@ -109,7 +109,7 @@ for a fan-out run).
 | `resolve merge-conflict` | `origin/main` does not merge cleanly into the resolved worktree; `dispatch-merge-main` aborted the merge (tree left clean) and the script printed `issue:` / `worktree:` / `mode:` detail. Run the auto-resolve attempt (§2a). | `propagate` (resolved, after re-spawn) or `notify` (ambiguous) |
 | `notify spawn-failed` | `dispatch-spawn-worker` exited non-zero — a worker was spawned but did not register. | `notify` |
 | `drain worktree-conflict` | The target worktree cannot be safely entered (the script printed the `path:` detail): "worktree at `<path>` for issue `<N>` cannot be entered; closing — the next baton-pass or office-hours hand-off will re-seed". | `drain` |
-| `drain ci-waiting` | The target PR's CI is still in progress (the script printed the `#<N>:` line); echo it. | `drain` |
+| `drain ci-waiting` | **Explicit-target path only.** The single explicit `/dispatch <N>` target's PR CI is still in progress (the script printed the `#<N>:` line); echo it. In multi-target fan-out runs, not-ready targets are skipped by selection's `dispatch-ci-ready` gate before `dispatch-materialize-spawn` is called — this token is never emitted for queue-mode targets. | `drain` |
 
 #### Fan-out summary contract
 
