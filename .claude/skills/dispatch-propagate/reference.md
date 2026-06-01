@@ -72,7 +72,7 @@ path after `dispatch-spawn-worker` returns success (worker verified-registered),
 on `notify spawn-failed` after the failed spawn returns, and on `drain
 ci-waiting` at its stop.
 `dispatch-finalize-selection` writes the recovery marker but no longer releases.
-The pre-finalize stop paths — `notify target-blocked`, `notify merge-conflict`,
+The pre-finalize stop paths — `notify target-blocked`, `resolve merge-conflict`,
 and `drain worktree-conflict`, plus the internal `exit 2` error paths — release
 at the guard, unchanged. Crash safety: a router that dies mid-spawn holding the lock is
 recovered by the lock's existing dead-holder reclaim (the recorded sessionId

@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# office-hours-select-target — select one office-hours item for /office-hours.
+#
+# The office-hours queue is "open issues carrying the dispatch:office-hours
+# label" (the label is issue-anchored, #868/#909). This script selects the
+# oldest such issue whose <N>-* worktree has NO live Claude session — a
+# sessionless item that /office-hours can pick up fresh. An item that still
+# has a live session is left for the `office-hours` entry-point script (#759)
+# to resume; it is not selected here.
+#
+# Output (one line on success):
+#   office-hours <issue> <phase> <pr-or-dash>
+#     <issue> — the selected issue number.
+#     <phase> — dispatch-phase <issue>: implement | qa | code-review | review |
+#               security | verify | waiting | done. /office-hours branches on
+#               this: implement → plan-approval residue; qa → QA walkthrough
+#               residue; anything past qa → deviation-review.
+#     <pr-or-dash> — the issue's open PR number, or `-` when none exists.
+# Prints `empty` when no sessionless labeled item exists.
+#
+# Reuses dispatch-phase and dispatch-find-pr (passed a shared open-PR list to
+# avoid redundant gh calls), and the lib.sh / lib-claude-agents.sh worktree
+# helpers, exactly as dispatch-select-target does.
+#
+# Sandbox: the worktree-liveness check shells out to `claude agents --json`
+# (via lib-claude-agents.sh), which reaches the local daemon over a Unix
+# socket — run this script with `dangerouslyDisableSandbox: true`. See
+# `.claude/rules/sandbox.md`.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+# worktree_has_live_session is fail-safe: an unqueryable daemon counts as
+# occupied, so an item whose liveness cannot be determined is left for the
+# resume path rather than double-claimed by a fresh /office-hours session.
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+# Open issues carrying dispatch:office-hours, with their creation times.
+ISSUE_LIST=$(gh issue list --label dispatch:office-hours --state open --json number,createdAt)
+
+# Map each registered <N>-* worktree to its on-disk path(s), keyed by issue
+# number — the same construction dispatch-select-target uses for its liveness
+# check. A bare / detached / non-issue record contributes nothing.
+declare -A WORKTREE_PATHS_BY_NUM=()
+while IFS= read -r wt_record; do
+  split_worktree_record "$wt_record"
+  [[ -z "$WT_PATH" ]] && continue
+  if [[ -n "$WT_NUM" ]]; then
+    WORKTREE_PATHS_BY_NUM["$WT_NUM"]="${WORKTREE_PATHS_BY_NUM[$WT_NUM]:-}$WT_PATH"$'\n'
+  fi
+done < <(list_worktree_records)
+
+# True when a live session owns any <num>-* worktree. No such worktree →
+# fast-path miss (return 1). Several matches → owned if any one is live.
+issue_has_live_worktree() {
+  local num="$1" p
+  local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
+  [[ -z "$paths" ]] && return 1
+  while IFS= read -r p; do
+    [[ -z "$p" ]] && continue
+    if worktree_has_live_session "$p"; then
+      return 0
+    fi
+  done <<< "$paths"
+  return 1
+}
+
+# One shared open-PR list for the per-issue dispatch-phase / dispatch-find-pr
+# calls (mirrors dispatch-select-target passing DISPATCH_PR_LIST). The field
+# set is dispatch-phase's superset; dispatch-find-pr accepts it too.
+PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+
+# Oldest-first: the first sessionless labeled issue wins.
+SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[].number')
+while IFS= read -r issue_num; do
+  [[ -z "$issue_num" ]] && continue
+  # Skip an item whose <N>-* worktree is owned by a live session — that one is
+  # resumed by the entry point, not picked up fresh here.
+  if issue_has_live_worktree "$issue_num"; then
+    continue
+  fi
+  phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$issue_num")
+  pr=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-find-pr" "$issue_num")
+  printf 'office-hours %s %s %s\n' "$issue_num" "$phase" "${pr:--}"
+  exit 0
+done <<< "$SORTED"
+
+echo "empty"
