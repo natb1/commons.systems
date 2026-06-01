@@ -424,17 +424,28 @@ ${GQL_FIELDS}  }
 fi
 
 # Topic categories in priority order; "other" is the implicit fallback for any
-# label set with no topic label. The `priority` label is the *outermost* axis:
-# every `priority` item ranks above every non-priority item, regardless of
-# topic. Topic category nests *inside* the priority axis, and the phase ladder
-# runs innermost. TOPIC_CATEGORIES is the single source of the topic ordering —
-# category_of_labels resolves against it and the default-mode loop iterates
-# CATEGORIES within each priority level. `priority` is derived alongside the
-# category via the has_priority_in_labels helper; topic category is the
-# tie-break among items at the same priority level. The companion classifier
-# that *applies* these labels is ref-ready SKILL.md Step 6; keep the two label
-# sets in sync.
-TOPIC_CATEGORIES=(bug "testing infrastructure" dispatch)
+# label set with no topic label. `security` ranks first, so a security-labeled
+# item outranks a plain-`bug` item at the same priority level. The `priority`
+# label is the *outermost* axis: every `priority` item ranks above every
+# non-priority item, regardless of topic. Topic category nests *inside* the
+# priority axis, and the phase ladder runs innermost. TOPIC_CATEGORIES is the
+# single source of the topic ordering — category_of_labels resolves against it
+# and the default-mode loop iterates CATEGORIES within each priority level.
+# `priority` is derived alongside the category via the has_priority_in_labels
+# helper; topic category is the tie-break among items at the same priority
+# level. The companion classifier that *applies* these labels is ref-ready
+# SKILL.md Step 6; keep the two label sets in sync.
+#
+# Disambiguation: the `security` *topic* label here is distinct from two other
+# uses of the word "security" in this workflow, kept apart by exact-match
+# resolution (three separate namespaces):
+#   1. the `security` entry in PHASE_PRIORITY below — a within-category
+#      phase-ladder rung, not a topic; and
+#   2. the `dispatch:security-reviewed` phase label — a `dispatch:*` workflow
+#      marker, not a topic.
+# A bare `security` label means topic; only PHASE_PRIORITY reads it as a phase,
+# and only the `dispatch:`-prefixed form is a phase label.
+TOPIC_CATEGORIES=(security bug "testing infrastructure" dispatch)
 CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
 # Same priority list as a JSON array, for category_of_labels' jq filter.
 TOPIC_CATEGORIES_JSON=$(printf '%s\n' "${TOPIC_CATEGORIES[@]}" | jq -Rcn '[inputs]')

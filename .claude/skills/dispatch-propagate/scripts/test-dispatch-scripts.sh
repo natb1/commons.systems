@@ -1472,7 +1472,7 @@ teardown
 # --- topic-category prioritization (issue #707) -----------------------------
 # The `priority` label is the outermost axis: every `priority` item ranks above
 # every non-priority item, regardless of topic. Topic category
-# (bug → testing infrastructure → dispatch → other) nests inside the priority
+# (security → bug → testing infrastructure → dispatch → other) nests inside the priority
 # axis, and the phase ladder runs innermost. A PR's category is resolved from
 # the labels of the issues it closes; an issue's category from its own labels.
 
@@ -1583,6 +1583,60 @@ printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dis
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "(dispatch, priority) PR beats plain-bug PR — priority crosses topics" "pr 10 10-dispatch-priority-pr verify" "$result"
+teardown
+
+# 30f. A PR closing a `security` issue outranks a PR closing a `bug` issue, even
+#      when the bug PR is older — `security` is the first topic category, so it
+#      beats `bug` (category beats age).
+echo "Test: PR closing a security issue beats PR closing a bug issue"
+setup
+# PR 20 (older) closes bug issue 200; PR 10 (newer) closes security issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-security-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Issue 100 carries `security`; issue 200 carries only `bug`. No "help wanted"
+# label, so they are not themselves queue items.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"security"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "security-closing PR beats bug-closing PR" "pr 10 10-security-pr verify" "$result"
+teardown
+
+# 30g. A PR closing a `(security, priority)` issue outranks a PR closing a plain
+#      `security` issue — `priority` is the outermost axis, so both PRs share
+#      topic `security` and the `priority` one wins.
+echo "Test: PR closing a (security, priority) issue beats PR closing a plain security issue"
+setup
+# PR 20 (older) closes plain security issue 200; PR 10 (newer) closes (security, priority) issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-security-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-security-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Issue 100 carries both `security` and `priority`; issue 200 carries only `security`.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"security"},{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "(security, priority)-closing PR beats plain-security-closing PR" "pr 10 10-security-priority-pr verify" "$result"
+teardown
+
+# 30h. A help-wanted `security` issue outranks a help-wanted issue with no topic
+#      label, even when the topic-labeled issue is newer — confirms `other`
+#      remains the lowest fallback after `security` is prepended to the list.
+echo "Test: security issue beats issue with no topic label (other unchanged)"
+setup
+setup_union_pr_list '[]'
+# Issue 400 (older) has no topic label (resolves to `other`); issue 300 (newer)
+# is security.
+printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "security issue beats untopiced (other) issue" "issue 300" "$result"
 teardown
 
 # 30e. The 2026-05-29 reproduction (#905). A queue of bug+priority PRs, all but

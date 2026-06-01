@@ -298,10 +298,19 @@ and prevents the issue from transiently carrying both `bug` and
 
 Classify the issue's topic from its title and body. Topic labels mark subject
 area and are orthogonal to the `dispatch:*` phase labels, which mark workflow
-progress. Apply **at most one** topic label. The 'at most one' rule applies
-only to the topic axis — `dispatch` and `testing infrastructure`. `priority`
-is a separate axis (an escalation marker) and may be applied alongside a
-topic label.
+progress. The topic axis is also orthogonal to the `bug`/`enhancement` type
+axis above: a vulnerability follow-up is `bug` type **and** `security` topic.
+Apply **at most one** topic label. The 'at most one' rule applies
+only to the topic axis — `security`, `dispatch`, and `testing infrastructure`.
+`priority` is a separate axis (an escalation marker) and may be applied
+alongside a topic label.
+
+- **`security`** — marks a vulnerability or security-hardening follow-up, e.g.
+  a CodeQL alert or npm advisory surfaced by review. Ranks first in
+  `dispatch-select-target` queue selection, so a `security` item outranks a
+  plain-`bug` item at the same priority level. Orthogonal to the type axis: a
+  vulnerability fix is `bug` type + `security` topic. Keyword signals:
+  "vulnerability", "CodeQL", "advisory", "CVE", "security finding".
 
 - **`dispatch`** — concerns the `/dispatch` or `/dispatch-propagate` workflow,
   one of its phase skills (`/plan-implement`, `/verify-pr`, `/qa-fix`,
@@ -333,10 +342,14 @@ topic label.
   landing/budget/print/fellspiral feature work matches neither topic. There is
   no "other" sentinel label.
 
-When an issue matches both topics, apply only `dispatch` — the narrower, named
-workflow wins over `testing infrastructure`, the broad category. Most issues
-match at most one topic outright; this tie-break resolves only the rare issue
-that genuinely spans both.
+When an issue matches `security` plus another topic, apply `security` — it is
+the most urgent topic, so it wins the tie-break. This keeps the queue ranking
+reflecting the security dimension and lets the consumer (#985) rely on the
+label being applied. Otherwise, when an issue matches both `dispatch` and
+`testing infrastructure`, apply only `dispatch` — the narrower, named workflow
+wins over `testing infrastructure`, the broad category. Most issues match at
+most one topic outright; these tie-breaks resolve only the rare issue that
+genuinely spans more than one.
 
 Record the matched label as `<topic>` for the mode-specific command below, or
 leave `<topic>` empty when no topic matched.
