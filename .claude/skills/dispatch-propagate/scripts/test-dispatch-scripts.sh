@@ -12360,6 +12360,12 @@ assert_eq "surface: docs with trailing blank line" "surface=docs
 deps=false
 app_or_rules=false" "$out"
 
+# README.md + tab-only line → docs (tab whitespace filtered)
+out=$(printf 'README.md\n\t\nCHANGELOG.md\n' | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: docs with tab-only blank line" "surface=docs
+deps=false
+app_or_rules=false" "$out"
+
 # SKILL.md + .claude/skills/x/scripts/bar.sh → code (non-doc extension)
 out=$(printf '%s\n' "SKILL.md" ".claude/skills/x/scripts/bar.sh" | "$SCRIPT_DIR/dispatch-security-surface")
 assert_eq "surface: SKILL.md + .claude sh script → code, no app_or_rules" "surface=code

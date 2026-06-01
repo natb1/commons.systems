@@ -29,8 +29,8 @@ APP_RE='\.(ts|tsx|js|jsx|mjs|cjs|go)$'
 
 paths=()
 while IFS= read -r line; do
-  # Skip blank / whitespace-only lines.
-  [[ -z "${line// }" ]] && continue
+  # Skip blank / whitespace-only lines (spaces and tabs).
+  [[ -z "${line//[[:space:]]/}" ]] && continue
   paths+=("$line")
 done
 
@@ -73,6 +73,10 @@ for path in "${paths[@]}"; do
     app_or_rules=true
   elif [[ "$path" =~ $APP_RE ]] && ! [[ "$path" == .claude/* ]]; then
     app_or_rules=true
+  fi
+  # Short-circuit: no further classification possible once both are true.
+  if [[ "$deps" == true && "$app_or_rules" == true ]]; then
+    break
   fi
 done
 

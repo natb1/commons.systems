@@ -78,9 +78,11 @@ ready. Otherwise run all steps in order.
 
    **`surface=empty` or `surface=docs`** → launch no reviewers and run no inline
    scans. The classified finding set is empty (no required fixes). Step 4's PR
-   comment is a single line — for example: `Security review: no attack surface —
-   docs-only diff (no executable, config, dependency, or Firestore-rules
-   changes).` Continue to Steps 3–7 normally: `/commit-merge-push` is a no-op,
+   comment is a single line describing the surface: for `docs`, `Security review:
+   no attack surface — docs-only diff (no executable, config, dependency, or
+   Firestore-rules changes).`; for `empty`, `Security review: no attack surface —
+   diff is empty (no changed files detected).` Continue to Steps 3–7 normally:
+   `/commit-merge-push` is a no-op,
    the label and ready-flip still apply, and the empty finding set means the
    Step 7 deviation criterion is trivially not met, so the marker is written.
 
@@ -165,7 +167,7 @@ ready. Otherwise run all steps in order.
    ```bash
    AUDIT_DIR=$(mktemp -d)
    trap 'rm -rf "$AUDIT_DIR"' EXIT
-   MERGE_BASE=$(git merge-base HEAD origin/main)
+   # MERGE_BASE is already set in the Step 1 git commands above — reuse it here.
 
    # Audit HEAD (current working tree)
    npm audit --json > "$AUDIT_DIR/audit-head.json"
