@@ -11,7 +11,7 @@ export interface HeroFaq {
 }
 
 export interface HeroConfig {
-  chips: [HeroChip, HeroChip, HeroChip];
+  chips: HeroChip[];
   faq: [HeroFaq, HeroFaq];
 }
 
