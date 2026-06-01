@@ -6814,6 +6814,25 @@ else
 fi
 tr_teardown
 
+# --- Test 5b: non-numeric PR from find-pr → exit 2, no timer ------------------
+# PR_NUM flows into the same `gh pr view/edit "$PR_NUM"` calls N is guarded
+# against; a flag-like find-pr result must fail closed rather than reach gh.
+
+echo "Test: non-numeric PR (find-pr returns a flag) exits 2 with no timer"
+tr_setup
+export FAKE_PR_NUM="--repo evil/repo"
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "non-numeric PR exits 2" "2" "$rc"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"non-numeric PR"* && ! -s "$TMPDIR_TEST/systemd-log" && ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-numeric PR; stderr diagnostic + no timer / no label edit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-numeric PR; stderr diagnostic + no timer / no label edit"
+  echo "    stderr: $err"
+fi
+tr_teardown
+
 # --- Test 6: already-exists idempotency → exit 0, stdout 'reseeded …' ---------
 # A repeated call within the same fire-window produces the same UNIT_NAME; systemd
 # refuses to recreate it. The script must still print the 'reseeded' stdout line so

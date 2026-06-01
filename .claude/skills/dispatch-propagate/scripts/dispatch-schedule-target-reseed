@@ -117,6 +117,15 @@ if [[ -z "$PR_NUM" ]]; then
   echo "error: dispatch-schedule-target-reseed: no PR found for issue #$N (this script is only valid for a ci-waiting target with a draft PR)" >&2
   exit 2
 fi
+# PR_NUM flows into the same `gh pr view/edit "$PR_NUM"` calls below that N is
+# guarded against above; a non-numeric, flag-like value would be parsed by gh as
+# an option rather than a PR number. find-pr emits a bare integer, so a
+# non-numeric result is a find-pr malfunction — fail closed rather than hand it
+# to gh.
+if [[ ! "$PR_NUM" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: dispatch-schedule-target-reseed: dispatch-find-pr returned non-numeric PR '$PR_NUM' for issue #$N" >&2
+  exit 2
+fi
 
 # ---- Step 3: read the highest ci-wait-attempt counter -----------------------
 #
