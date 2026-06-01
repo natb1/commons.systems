@@ -6814,6 +6814,35 @@ else
 fi
 tr_teardown
 
+# --- Test 6: already-exists idempotency → exit 0, stdout 'reseeded …' ---------
+# A repeated call within the same fire-window produces the same UNIT_NAME; systemd
+# refuses to recreate it. The script must still print the 'reseeded' stdout line so
+# dispatch-materialize-spawn routes to 'drain ci-reseeded' and not the error fallback.
+
+echo "Test: already-exists collision → exit 0 and stdout 'reseeded ...'"
+tr_setup
+export FAKE_CUR_ATTEMPT=0
+# Replace the systemd-run stub with one that simulates the already-exists collision.
+cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "Unit dispatch-reseed-target-979-10300.timer already exists." >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/bin/systemd-run"
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "already-exists: exits 0" "0" "$rc"
+assert_eq "already-exists: stdout is reseeded line" \
+  "reseeded dispatch-reseed-target-979-10300 at 10300" "$out"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"already scheduled"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: already-exists: stderr notes already-scheduled"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-exists: stderr notes already-scheduled"
+  echo "    stderr: $err"
+fi
+tr_teardown
+
 # ============================================================================
 # dispatch project-helper tests (item-add / status-read / status-write)
 # ============================================================================
@@ -12391,6 +12420,24 @@ assert_eq "fanout-ci-waiting: scheduler NOT called" "0" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && echo 1 || echo 0)"
 assert_eq "fanout-ci-waiting: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- single-target waiting CI → scheduler fails → fallback drain ci-waiting ----
+# When dispatch-schedule-target-reseed exits non-zero (e.g. systemd-run fails for
+# a reason other than 'already exists'), materialize-spawn must fall back to the
+# plain 'drain ci-waiting' token so the tick never wedges.
+echo "Test: materialize-spawn single-target waiting CI scheduler failure → drain ci-waiting fallback"
+mat_setup
+export MAT_PHASE=waiting
+export MAT_RESEED_RC=1
+out=$(run_mat 839 queue)
+assert_eq "ci-wait-fallback: terminal token is drain ci-waiting" "drain ci-waiting" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "ci-wait-fallback: scheduler was called" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
+assert_eq "ci-wait-fallback: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "ci-wait-fallback: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
 # --- --gap 1 → propagate (single target, default behavior) -------------------

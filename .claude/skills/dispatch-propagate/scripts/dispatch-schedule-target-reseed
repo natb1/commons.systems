@@ -101,7 +101,7 @@ SYSTEMD_RUN_CMD="${DISPATCH_TARGET_RESEED_SYSTEMD_RUN_CMD:-systemd-run}"
 # Reject anything that is not a bare positive integer.
 
 N="${1:-}"
-if [[ -z "$N" || ! "$N" =~ ^[0-9]+$ ]]; then
+if [[ -z "$N" || ! "$N" =~ ^[1-9][0-9]*$ ]]; then
   echo "error: usage: dispatch-schedule-target-reseed <N> (N must be a positive integer)" >&2
   exit 2
 fi
@@ -262,6 +262,10 @@ err=$(cat "$RUN_STDERR")
 # substring rather than the full phrase.
 if [[ "$err" == *"already exists"* ]]; then
   echo "dispatch-schedule-target-reseed: $UNIT_NAME already scheduled; no-op" >&2
+  # Emit the same stdout token as a fresh schedule so the caller (dispatch-materialize-spawn)
+  # routes correctly: reseed_out matches "reseeded *" → "drain ci-reseeded" rather than
+  # falling through to the "drain ci-waiting" error fallback.
+  echo "reseeded $UNIT_NAME at $FIRE"
   exit 0
 fi
 
