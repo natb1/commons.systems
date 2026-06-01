@@ -72,12 +72,24 @@ type tentative struct {
 // Build computes the double-entry records for a batch of parsed transactions.
 // window is the maximum timestamp delta for transfer-pair detection; pass
 // DefaultPairWindow for the default.
-func Build(txns []budget.TransactionData, window time.Duration) Result {
+//
+// docIDs, if non-nil, must be a parallel slice of pre-computed document IDs (one
+// per transaction). When provided, Build uses docIDs[i] directly instead of
+// calling budget.TransactionDocID(txn.StatementID, txn.TransactionID). This is
+// required when transactions are reconstructed from an existing budget.json, where
+// TransactionID already holds the hashed document ID rather than the original FITID.
+func Build(txns []budget.TransactionData, docIDs []string, window time.Duration) Result {
 	tents := make([]*tentative, 0, len(txns))
 	for i := range txns {
 		txn := txns[i]
+		var docID string
+		if docIDs != nil {
+			docID = docIDs[i]
+		} else {
+			docID = budget.TransactionDocID(txn.StatementID, txn.TransactionID)
+		}
 		t := &tentative{
-			docID:      budget.TransactionDocID(txn.StatementID, txn.TransactionID),
+			docID:      docID,
 			txn:        txn,
 			acctID:     accountID(txn.Institution, txn.Account),
 			isTransfer: isTransfer(txn.Category),

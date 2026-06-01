@@ -63,7 +63,7 @@ func TestExpenseLine(t *testing.T) {
 			Category:      "Groceries",
 		},
 	}
-	r := Build(txns, DefaultPairWindow)
+	r := Build(txns, nil, DefaultPairWindow)
 
 	if len(r.Entries) != 1 || len(r.Legs) != 2 {
 		t.Fatalf("expected 1 entry / 2 legs, got %d / %d", len(r.Entries), len(r.Legs))
@@ -129,7 +129,7 @@ func TestIncomeLine(t *testing.T) {
 			Category:      "Income",
 		},
 	}
-	r := Build(txns, DefaultPairWindow)
+	r := Build(txns, nil, DefaultPairWindow)
 	assertBalanced(t, r.Legs)
 
 	byEntry := legsByEntry(r.Legs)
@@ -180,7 +180,7 @@ func TestMatchingPairMerge(t *testing.T) {
 			Category:      "Transfer:Savings",
 		},
 	}
-	r := Build(txns, DefaultPairWindow)
+	r := Build(txns, nil, DefaultPairWindow)
 
 	if len(r.Entries) != 1 {
 		t.Fatalf("expected 1 merged entry, got %d", len(r.Entries))
@@ -239,7 +239,7 @@ func TestUnmatchedTransferFallback(t *testing.T) {
 			Category:      "Transfer:Savings",
 		},
 	}
-	r := Build(txns, DefaultPairWindow)
+	r := Build(txns, nil, DefaultPairWindow)
 	assertBalanced(t, r.Legs)
 
 	legs := legsByEntry(r.Legs)[r.Entries[0].ID]
@@ -284,7 +284,7 @@ func TestTwoCandidatePairsNearestTime(t *testing.T) {
 			StatementID: "s", TransactionID: "inB", Category: "Transfer:Savings",
 		},
 	}
-	r := Build(txns, DefaultPairWindow)
+	r := Build(txns, nil, DefaultPairWindow)
 
 	if len(r.Entries) != 2 {
 		t.Fatalf("expected 2 merged entries, got %d", len(r.Entries))
@@ -329,7 +329,7 @@ func TestCreditCardLiabilityDerivation(t *testing.T) {
 			IsCreditCard:  true,
 		},
 	}
-	r := Build(txns, DefaultPairWindow)
+	r := Build(txns, nil, DefaultPairWindow)
 	ids := accountIDs(r.Accounts)
 	if ids["Example Bank_Credit Card"] != "liability" {
 		t.Errorf("credit-card account should be liability, got %q", ids["Example Bank_Credit Card"])
@@ -351,7 +351,7 @@ func TestPairWindowExcludesFarApart(t *testing.T) {
 			StatementID: "s", TransactionID: "in", Category: "Transfer:Savings",
 		},
 	}
-	r := Build(txns, DefaultPairWindow)
+	r := Build(txns, nil, DefaultPairWindow)
 	if len(r.Entries) != 2 {
 		t.Fatalf("expected 2 unmerged entries, got %d", len(r.Entries))
 	}
@@ -384,8 +384,8 @@ func TestIdempotency(t *testing.T) {
 			StatementID: "s", TransactionID: "in", Category: "Transfer:Savings",
 		},
 	}
-	r1 := Build(txns, DefaultPairWindow)
-	r2 := Build(txns, DefaultPairWindow)
+	r1 := Build(txns, nil, DefaultPairWindow)
+	r2 := Build(txns, nil, DefaultPairWindow)
 
 	if !reflect.DeepEqual(r1.Entries, r2.Entries) {
 		t.Errorf("entries differ across runs")
@@ -419,7 +419,7 @@ func TestIdempotency(t *testing.T) {
 }
 
 func TestEmptyInputNonNilSlices(t *testing.T) {
-	r := Build(nil, DefaultPairWindow)
+	r := Build(nil, nil, DefaultPairWindow)
 	if r.Entries == nil || r.Legs == nil || r.Accounts == nil {
 		t.Errorf("slices must be non-nil so they serialize as [] not null")
 	}
