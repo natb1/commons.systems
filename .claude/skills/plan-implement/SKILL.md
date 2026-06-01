@@ -80,14 +80,19 @@ the `Closes #N` lines you deliberately wrote (`gh` still needs
 
 ```bash
 gh pr view "$PR_NUM" --json closingIssuesReferences \
-  -q '.closingIssuesReferences[].number' | sort
+  -q '.closingIssuesReferences[].number' | sort -n
 ```
 
-If a parsed number is not in your intended `Closes #N` set, the body contains a
-stray `<keyword> #N` in narrative prose. Find it, rewrite it to a bare `#N`
-(drop the preceding closing keyword — e.g. `Closes #905` → `#905`, `resolved
-#905` → `#905`), update the body with `gh pr edit "$PR_NUM" --body ...`, and
-re-run the check until the parsed set equals the intended set.
+If the parsed set does not exactly match the intended set, fix it and re-run
+until it does:
+
+- **Extra number (parsed but not intended):** the body contains a stray
+  `<keyword> #N` in narrative prose. Find it, rewrite it to a bare `#N`
+  (drop the preceding closing keyword — e.g. `Closes #905` → `#905`,
+  `resolved #905` → `#905`), update with `gh pr edit "$PR_NUM" --body ...`.
+- **Missing number (intended but not parsed):** a `Closes #N` line was not
+  recognized — check that it appears on its own line, outside any code block,
+  with no leading spaces. Re-edit the body to restore the canonical form.
 
 ### 4. Check for deviation, then write the marker (or skip it), then stop
 
