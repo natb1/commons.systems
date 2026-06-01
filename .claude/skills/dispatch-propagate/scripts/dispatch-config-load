@@ -92,14 +92,15 @@
 #
 # Top-level object with optional tunables for `dispatch-target-workers`. Each
 # field must be a number when present; absent fields fall back to the
-# defaults baked into `dispatch-target-workers`. The seven percentage fields
+# defaults baked into `dispatch-target-workers`. The eight percentage fields
 # must be in (0, 100]; weekly_curve_power and max_concurrent_workers must be
 # > 0 with no upper bound. When both members of a pair are present, two
 # cross-field ordering checks apply: weekly_increment_floor_pct <=
 # weekly_increment_cap_pct and five_hour_target_floor_pct <=
 # five_hour_target_ceiling_pct.
 #
-#   target_weekly_usage_pct        default 90   curve terminal W(1)
+#   target_weekly_usage_pct        default 90   smooth-curve terminal
+#   weekly_terminal_pct            default 100  envelope terminal W(1)
 #   weekly_increment_floor_pct     default 1    per-window floor
 #   weekly_increment_cap_pct       default 10   per-window hard ceiling
 #   weekly_curve_power             default 1    convexity; >1 back-loads
@@ -112,6 +113,7 @@
 # Example (see target-workers.example.json):
 #   {
 #     "target_weekly_usage_pct": 90,
+#     "weekly_terminal_pct": 100,
 #     "weekly_increment_floor_pct": 1,
 #     "weekly_increment_cap_pct": 10,
 #     "weekly_curve_power": 1,
@@ -261,14 +263,15 @@ case "$CONFIG_TYPE" in
     # top-level value must be an object; all tunables are optional numbers.
     # `dispatch-target-workers` substitutes a baked-in default for any field
     # absent here, so absence is silent — only the type of present fields is
-    # checked. The seven percentage fields carry an additional `<= 100` bound;
+    # checked. The eight percentage fields carry an additional `<= 100` bound;
     # weekly_curve_power and max_concurrent_workers have no upper bound.
     ERRORS=$(jq -r '
       if type != "object" then
         "top-level value must be a JSON object, got \(type)"
       else
         . as $cfg |
-        (["target_weekly_usage_pct","weekly_increment_floor_pct",
+        (["target_weekly_usage_pct","weekly_terminal_pct",
+          "weekly_increment_floor_pct",
           "weekly_increment_cap_pct","weekly_curve_power",
           "weekly_headroom_taper_pct","five_hour_target_floor_pct",
           "five_hour_target_ceiling_pct","five_hour_headroom_taper_pct",
@@ -277,7 +280,8 @@ case "$CONFIG_TYPE" in
          . as $field |
          # The percentage fields are bounded (0, 100]; the other two are
          # unbounded above.
-         ([ "target_weekly_usage_pct","weekly_increment_floor_pct",
+         ([ "target_weekly_usage_pct","weekly_terminal_pct",
+            "weekly_increment_floor_pct",
             "weekly_increment_cap_pct","weekly_headroom_taper_pct",
             "five_hour_target_floor_pct","five_hour_target_ceiling_pct",
             "five_hour_headroom_taper_pct" ] | index($field)) as $is_pct |

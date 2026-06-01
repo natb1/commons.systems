@@ -50,7 +50,8 @@
 #
 # Config (read via dispatch-config-load target-workers; all optional):
 #
-#   target_weekly_usage_pct        default 90   curve terminal W(1)
+#   target_weekly_usage_pct        default 90   smooth-curve terminal
+#   weekly_terminal_pct            default 100  envelope terminal W(1)
 #   weekly_increment_floor_pct     default 1    per-window floor
 #   weekly_increment_cap_pct       default 10   per-window hard ceiling
 #   weekly_curve_power             default 1    convexity; >1 back-loads
@@ -68,9 +69,11 @@
 #   remaining = resets_at_weekly - now;   if remaining <= 0: print 0; exit
 #   x   = clamp((WEEK_SECONDS - remaining) / WEEK_SECONDS, 0, 1)  # elapsed frac
 #   T   = round(WEEK_SECONDS / 18000)                            # ~34 windows
-#   end = floor + (p+1)*(target_weekly/T - floor)                # W(1)=target
+#   end = floor + (p+1)*(target_weekly/T - floor)                # smooth W(1)=target_weekly
 #   end = min(end, cap)                                          # hard ceiling
 #   W   = T*( floor*x + (end-floor)*x^(p+1)/(p+1) )              # cumulative now
+#   r   = remaining / 18000                                      # windows left
+#   W   = max(W, weekly_terminal - cap*r)                        # terminal envelope
 #
 #   # Stage 2 — 5h target F (% of 5h limit, absolute)
 #   hw = W - used_weekly
@@ -82,9 +85,15 @@
 #   print N
 #
 # - The weekly increment d(x)=floor+(end-floor)*x^p rises from the floor toward
-#   (but clamped at) the cap; W reaches target_weekly at x=1 (week end) and
-#   stays below it for every x<1 — except when wcap clamps the per-window
-#   increment, which deliberately holds W(1) below target_weekly.
+#   (but clamped at) the cap; the smooth power term tops out at target_weekly
+#   and, with wcap clamping the per-window increment, would otherwise hold W
+#   below target_weekly and idle the final stretch of the week. The terminal
+#   envelope floors W from the end — spending at most cap per remaining window
+#   still reaches weekly_terminal — so W reaches weekly_terminal at week end
+#   (W(1)=weekly_terminal) and the envelope lifts W in the final ~1.7 windows
+#   (term = 80 at r=2 [smooth 81.5 wins], 90 at r=1, 100 at r=0 with defaults;
+#   envelope takes over at r≈1.7). Mid-week r is large, the term is negative,
+#   and the smooth curve is unchanged.
 # - F=0 when ahead of pace (used_weekly >= W); the floor5..ceil5 band opens
 #   with weekly headroom.
 # - N=0 only at/over the 5h target F (includes the F=0 ahead-of-pace pause);
@@ -103,6 +112,7 @@ set -euo pipefail
 # ---- Step 0: defaults & config ----------------------------------------------
 
 TARGET_WEEKLY=90
+WEEKLY_TERMINAL=100
 WEEKLY_INCREMENT_FLOOR=1
 WEEKLY_INCREMENT_CAP=10
 WEEKLY_CURVE_POWER=1
@@ -130,6 +140,8 @@ fi
 if [[ -n "$CONFIG_JSON" ]]; then
   val=$(jq -r '.target_weekly_usage_pct // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && TARGET_WEEKLY="$val"
+  val=$(jq -r '.weekly_terminal_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && WEEKLY_TERMINAL="$val"
   val=$(jq -r '.weekly_increment_floor_pct // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && WEEKLY_INCREMENT_FLOOR="$val"
   val=$(jq -r '.weekly_increment_cap_pct // empty' <<<"$CONFIG_JSON")
@@ -262,6 +274,7 @@ awk -v now="$NOW" \
     -v used_weekly="$WEEKLY_USED" \
     -v used_5h="$FIVEH_USED_FOR_AWK" \
     -v target_weekly="$TARGET_WEEKLY" \
+    -v terminal="$WEEKLY_TERMINAL" \
     -v wfloor="$WEEKLY_INCREMENT_FLOOR" \
     -v wcap="$WEEKLY_INCREMENT_CAP" \
     -v p="$WEEKLY_CURVE_POWER" \
@@ -293,6 +306,16 @@ awk -v now="$NOW" \
 
        W = T * ((wfloor + 0) * x \
                 + (end - (wfloor + 0)) * (x ^ ((p + 0) + 1)) / ((p + 0) + 1))
+
+       # Terminal "you-can-still-make-it" envelope: floor the cumulative curve
+       # from the end so spending at most wcap per remaining window still
+       # reaches terminal. Mid-week `rem_windows` is large and the term is
+       # deeply negative, so the smooth curve dominates unchanged; it only
+       # lifts the final ~1.7 windows (envelope takes over at r≈1.7; term =
+       # 80 at r=2 [smooth 81.5 wins], 90 at r=1, 100 at r=0 with defaults).
+       rem_windows = remaining / 18000
+       envelope = (terminal + 0) - (wcap + 0) * rem_windows
+       if (W < envelope) W = envelope
 
        # ---- Stage 2: 5h target F (% of 5h limit, absolute) ----
        hw = W - (used_weekly + 0)

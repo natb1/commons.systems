@@ -1,5 +1,6 @@
 {
   "target_weekly_usage_pct": 90,
+  "weekly_terminal_pct": 100,
   "weekly_increment_floor_pct": 1,
   "weekly_increment_cap_pct": 10,
   "weekly_curve_power": 1,

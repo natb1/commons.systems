@@ -1470,9 +1470,11 @@ assert_eq "issue 6 not masked by 60-foo worktree" "issue 6" "$result"
 teardown
 
 # --- topic-category prioritization (issue #707) -----------------------------
-# A topic category (priority → bug → testing infrastructure → dispatch → other) nests
-# outside the phase ladder. A PR's category is resolved from the labels of the
-# issues it closes; an issue's category from its own labels.
+# The `priority` label is the outermost axis: every `priority` item ranks above
+# every non-priority item, regardless of topic. Topic category
+# (bug → testing infrastructure → dispatch → other) nests inside the priority
+# axis, and the phase ladder runs innermost. A PR's category is resolved from
+# the labels of the issues it closes; an issue's category from its own labels.
 
 # 28. A PR closing a `bug` issue outranks a PR closing a `dispatch` issue, even
 #     when the dispatch PR is older — category beats age.
@@ -1522,11 +1524,11 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR with no closing issue is 'other'; bug issue wins" "issue 500" "$result"
 teardown
 
-# 30b. A PR closing a plain `bug` issue outranks a PR closing a `priority`-only
-#      issue — `priority` is a sub-axis nested inside each topic category, not
-#      a top-level category. A `priority`-only issue resolves to topic `other`,
-#      which ranks below `bug`. The older bug-closing PR wins.
-echo "Test: PR closing a bug issue beats PR closing a priority-only issue"
+# 30b. A PR closing a `priority`-only issue outranks a PR closing a plain `bug`
+#      issue — `priority` is the outermost axis, so a `priority` item in topic
+#      `other` ranks above a non-priority `bug` item. The priority-only-closing
+#      PR wins even though it is newer and its topic (`other`) is lower-ranked.
+echo "Test: PR closing a priority-only issue beats PR closing a bug issue"
 setup
 # PR 20 (older) closes bug issue 200; PR 10 (newer) closes priority-only issue 100.
 UNION='['
@@ -1540,12 +1542,13 @@ printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"pri
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "bug-closing PR beats priority-only-closing PR" "pr 20 20-bug-pr verify" "$result"
+assert_eq "priority-only-closing PR beats bug-closing PR" "pr 10 10-priority-pr verify" "$result"
 teardown
 
 # 30c. A PR closing a `(bug, priority)` issue outranks a PR closing a plain
-#      `bug` issue, even when the plain-bug PR is older — within the `bug`
-#      topic category, `priority` items rank above non-`priority` items.
+#      `bug` issue, even when the plain-bug PR is older — `priority` is the
+#      outermost axis, so both PRs share topic `bug` and the `priority` one
+#      wins. Topic category is the tie-break only within one priority level.
 echo "Test: PR closing a (bug, priority) issue beats PR closing a plain bug issue"
 setup
 # PR 20 (older) closes plain bug issue 200; PR 10 (newer) closes (bug, priority) issue 100.
@@ -1562,10 +1565,11 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "(bug, priority)-closing PR beats plain-bug-closing PR" "pr 10 10-bug-priority-pr verify" "$result"
 teardown
 
-# 30d. A PR closing a `(dispatch, priority)` issue ranks below every PR closing
-#      a plain `bug` issue — `priority` is a sub-axis nested inside each topic
-#      category, so it does not cross topic boundaries. The bug-closing PR wins.
-echo "Test: PR closing a plain bug issue beats PR closing a (dispatch, priority) issue"
+# 30d. A PR closing a `(dispatch, priority)` issue outranks a PR closing a plain
+#      `bug` issue — `priority` is the outermost axis, so it crosses topic
+#      boundaries: a `priority` item in topic `dispatch` lifts above a
+#      non-priority `bug` item. The (dispatch, priority)-closing PR wins.
+echo "Test: PR closing a (dispatch, priority) issue beats PR closing a plain bug issue"
 setup
 # PR 10 (older) closes (dispatch, priority) issue 100; PR 20 (newer) closes plain bug issue 200.
 UNION='['
@@ -1578,7 +1582,7 @@ printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dis
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "plain-bug PR beats (dispatch, priority) PR — priority does not cross topics" "pr 20 20-bug-pr verify" "$result"
+assert_eq "(dispatch, priority) PR beats plain-bug PR — priority crosses topics" "pr 10 10-dispatch-priority-pr verify" "$result"
 teardown
 
 # 30e. The 2026-05-29 reproduction (#905). A queue of bug+priority PRs, all but
@@ -5435,6 +5439,57 @@ else
 fi
 config_teardown
 
+# --- Test 13f: weekly_terminal_pct: 100 accepted and round-trips -------------
+
+echo "Test: weekly_terminal_pct: 100 accepted and round-trips"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_terminal_pct": 100}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "weekly_terminal_pct 100 exits 0" "0" "$rc"
+tw_terminal=$(printf '%s' "$out" | jq -r '.weekly_terminal_pct')
+assert_eq "weekly_terminal_pct 100 round-trips" "100" "$tw_terminal"
+config_teardown
+
+# --- Test 13g: weekly_terminal_pct: 150 rejected (must be <= 100) ------------
+
+echo "Test: weekly_terminal_pct: 150 exits 1 and stderr says must be <= 100"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_terminal_pct": 150}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "weekly_terminal_pct 150 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"weekly_terminal_pct"* && "$err" == *"<= 100"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_terminal_pct 150 stderr says <= 100"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_terminal_pct 150 stderr says <= 100"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 13h: weekly_terminal_pct: 0 rejected (must be > 0) ----------------
+
+echo "Test: weekly_terminal_pct: 0 exits 1 and stderr says must be > 0"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_terminal_pct": 0}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "weekly_terminal_pct 0 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"weekly_terminal_pct"* && "$err" == *"must be > 0"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_terminal_pct 0 stderr says must be > 0"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_terminal_pct 0 stderr says must be > 0"
+  echo "    stderr: $err"
+fi
+config_teardown
+
 # ============================================================================
 # dispatch-target-workers tests
 # ============================================================================
@@ -5531,19 +5586,23 @@ write_rl() {
   export DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH="$path"
 }
 
-# --- Test 1: curve reaches target_weekly only at x=1 ------------------------
+# --- Test 1: curve reaches its terminal only at week end --------------------
 
-echo "Test: weekly curve reaches target only at week end (W < target for x<1)"
+echo "Test: weekly curve reaches terminal only at week end (W < terminal mid-week)"
 tw_setup
-# At x<1 the cumulative curve W is below target_weekly=90, so used_weekly just
-# under the curve value yields F>0/N>=1, while used_weekly just over the
-# week-end target only stays under-pace once x reaches 1. Probe by setting
-# used_weekly = 89 (just below the 90 terminal) at several x:
-#   x=0.5  → W=31  → used_weekly=89 is far ahead of pace → F=0 → N=0
-#   x=0.99 → W=88.5→ used_weekly=89 still ahead of pace  → F=0 → N=0
-#   x=1.0  → W=90  → used_weekly=89 → hw=1 → F>0 → N>=1   (only now under pace)
+# Mid-week (envelope-inactive x), the cumulative curve W is well below the
+# week-end terminal, so used_weekly just below the terminal is far ahead of
+# pace → F=0 → N=0. Only at week end does W reach the terminal and let that
+# used_weekly come under pace. Probe with used_weekly = 89 at several x.
+# (The terminal envelope lifts W to weekly_terminal=100 in the final windows;
+# this test deliberately picks envelope-INACTIVE mid-week x so it isolates the
+# smooth curve's "below terminal until the end" shape — the envelope's
+# week-end lift is covered by the dedicated envelope test below.)
+#   x=0.5  → W=31    → used_weekly=89 is far ahead of pace → F=0 → N=0
+#   x=0.75 → W=57    → used_weekly=89 still ahead of pace  → F=0 → N=0
+#   x=1.0  → env→100 → used_weekly=89 → hw=11 → F>0 → N>=1 (only now under pace)
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
-for spec in "0.5:0" "0.99:0" "1.0:ge1"; do
+for spec in "0.5:0" "0.75:0" "1.0:ge1"; do
   x="${spec%%:*}"; want="${spec##*:}"
   r=$(tw_resets_for_x "$x")
   write_rl "curve.json" 89 "$r" 0 99999999
@@ -5582,29 +5641,35 @@ else
 fi
 tw_teardown
 
-# --- Test 3: increment cap clamp lowers the terminal W(1) -------------------
+# --- Test 3: increment cap clamp lowers the smooth curve --------------------
 
-echo "Test: weekly_increment_cap_pct clamp makes W(1) < target_weekly"
+echo "Test: weekly_increment_cap_pct clamp holds the smooth curve below target"
 tw_setup
-# With cap=3: end = clamp(1+2*(90/34-1), .., 3) = 3, so W(1) = 34*(1*1 +
-# (3-1)*1/2) = 34*2 = 68 < target_weekly=90. At x=1, used_weekly=69 (> 68) is
-# ahead of the clamped pace → F=0 → N=0; used_weekly=67 (< 68) is under pace →
-# N>=1. This proves the cap hard-ceils the curve below target.
+# With cap=3: end = clamp(1+2*(90/34-1), .., 3) = 3, so the smooth term reaches
+# only W(1) = 34*(1*1 + (3-1)*1/2) = 34*2 = 68 < target_weekly=90 at week end,
+# and W(0.5) = 34*(0.5 + 2*0.25/2) = 34*(0.5+0.25) = 25.5 mid-week. To isolate
+# the smooth term from the terminal envelope, set weekly_terminal_pct=1 so the
+# envelope (env = 1 - 3*r) stays deeply negative mid-week and never lifts W.
+# At x=0.5: used_weekly=26 (> 25.5) is ahead of the clamped pace → F=0 → N=0;
+# used_weekly=25 (< 25.5) is under pace → N>=1. This proves the cap hard-ceils
+# the smooth curve below target. (The default terminal=100 envelope would
+# otherwise dominate this low-cap curve everywhere — the dedicated envelope
+# test below covers that week-end lift.)
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"weekly_increment_cap_pct": 3}
+{"weekly_increment_cap_pct": 3, "weekly_terminal_pct": 1}
 EOF
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
-r=$(tw_resets_for_x 1.0)
-write_rl "rl.json" 69 "$r" 0 99999999
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 26 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "cap=3 → W(1)=68; used_weekly=69 ahead → N=0" "0" "$out"
-write_rl "rl.json" 67 "$r" 0 99999999
+assert_eq "cap=3 → W(0.5)=25.5; used_weekly=26 ahead → N=0" "0" "$out"
+write_rl "rl.json" 25 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 TOTAL=$((TOTAL + 1))
 if (( out >= 1 )); then
-  PASS=$((PASS + 1)); echo "  PASS: cap=3 W(1)=68; used_weekly=67 under pace → N=$out (>=1)"
+  PASS=$((PASS + 1)); echo "  PASS: cap=3 W(0.5)=25.5; used_weekly=25 under pace → N=$out (>=1)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: cap=3 used_weekly=67 expected N>=1, got $out"
+  FAIL=$((FAIL + 1)); echo "  FAIL: cap=3 used_weekly=25 expected N>=1, got $out"
 fi
 tw_teardown
 
@@ -5943,6 +6008,117 @@ if (( out >= 1 )); then
   PASS=$((PASS + 1)); echo "  PASS: early-week smoke used_weekly=20 used_5h=2 → N=$out (>=1)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: early-week smoke expected N>=1, got $out"
+fi
+tw_teardown
+
+# --- Test 22: terminal envelope floors W in the final windows ---------------
+
+echo "Test: terminal envelope pins W to weekly_terminal across the final windows"
+tw_setup
+# The terminal "you-can-still-make-it" envelope floors W from the end:
+#   W = max(smooth_curve, weekly_terminal - cap*remaining_windows)
+# with defaults (terminal=100, cap=10) it evaluates to 80 at r=2, 90 at r=1,
+# 100 at r=0 (r = remaining_seconds / 18000). Place x by remaining-window count
+# (resets_at = NOW + r*18000) and hold used_5h=0 so 5h headroom is full and
+# N>=1 whenever F>0. The r=1 and r=0 lower probes are DISCRIMINATING: the
+# pre-envelope smooth curve (W=85.7 at r=1, W=90 at r=0) would have gated N=0.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+
+# r=2: smooth W=81.51 wins (>=80). used_weekly=80 under pace → N>=1;
+# used_weekly=82 ahead → N=0. Asserts W>=80 at r=2.
+write_rl "env.json" 80 $((TW_NOW + 2 * 18000)) 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: r=2 W=81.5; used_weekly=80 under pace → N=$out (>=1)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: r=2 used_weekly=80 expected N>=1, got $out"
+fi
+write_rl "env.json" 82 $((TW_NOW + 2 * 18000)) 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "r=2 W=81.5; used_weekly=82 ahead → N=0" "0" "$out"
+
+# r=1: envelope lifts W to 90 (smooth=85.7). used_weekly=88 under pace → N>=1
+# (DISCRIMINATING: pre-envelope W=85.7 would give N=0); used_weekly=90 at the
+# envelope target → N=0. Together pin W=90 at r=1.
+write_rl "env.json" 88 $((TW_NOW + 1 * 18000)) 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: r=1 envelope W=90; used_weekly=88 under pace → N=$out (>=1)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: r=1 used_weekly=88 expected N>=1 (envelope W=90), got $out"
+fi
+write_rl "env.json" 90 $((TW_NOW + 1 * 18000)) 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "r=1 envelope W=90; used_weekly=90 at target → N=0" "0" "$out"
+
+# r=0: envelope lifts W to ~100 (smooth=90). used_weekly=95 under pace → N>=1
+# (DISCRIMINATING: pre-envelope W=90 would give N=0); used_weekly=100 at the
+# envelope target → N=0. Together pin W~=100 at r=0. Use tw_resets_for_x 1.0
+# (remaining=1s) so Stage 1 does NOT take the remaining<=0 early-exit.
+r=$(tw_resets_for_x 1.0)
+write_rl "env.json" 95 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: r=0 envelope W~=100; used_weekly=95 under pace → N=$out (>=1)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: r=0 used_weekly=95 expected N>=1 (envelope W~=100), got $out"
+fi
+write_rl "env.json" 100 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "r=0 envelope W~=100; used_weekly=100 at target → N=0" "0" "$out"
+tw_teardown
+
+# --- Test 22b: non-default weekly_terminal_pct flows through end-to-end ------
+
+echo "Test: non-default weekly_terminal_pct=95 caps the envelope target at 95"
+tw_setup
+# The envelope target is the configurable weekly_terminal_pct, not a baked-in
+# 100. With weekly_terminal_pct=95 (cap=10), at r=0 the envelope = 95 - 10*0 =
+# 95 and the smooth curve W(1)=90, so W=95. used_weekly=93 under pace → N>=1;
+# used_weekly=97 ahead of the 95 target → N=0. The used_weekly=97 probe is
+# DISCRIMINATING: the default terminal=100 would lift W to 100, putting
+# used_weekly=97 under pace (N>=1) — so N=0 confirms the knob value is honored.
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"weekly_terminal_pct": 95}
+EOF
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 1.0)
+write_rl "term95.json" 93 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: terminal=95 r=0 W=95; used_weekly=93 under pace → N=$out (>=1)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: terminal=95 used_weekly=93 expected N>=1 (W=95), got $out"
+fi
+write_rl "term95.json" 97 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "terminal=95 r=0 W=95; used_weekly=97 ahead of 95 target → N=0" "0" "$out"
+tw_teardown
+
+# --- Test 23: mid-week tick unchanged from the smooth curve -----------------
+
+echo "Test: mid-week tick is byte-identical to the pre-envelope smooth curve"
+tw_setup
+# At x=0.5 the remaining is 302400s → r=16.8 → envelope = 100 - 10*16.8 = -68,
+# deeply negative, so the envelope is inactive and the smooth curve dominates
+# unchanged. The gating boundary must match the canonical W(0.5)=31 (Test 2):
+# used_weekly=31 → hw=0 → N=0 (at pace); used_weekly=30 → hw=1 → N>=1.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "midweek.json" 31 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "mid-week W(0.5)=31 unchanged; used_weekly=31 at pace → N=0" "0" "$out"
+write_rl "midweek.json" 30 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: mid-week W(0.5)=31 unchanged; used_weekly=30 under pace → N=$out (>=1)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: mid-week used_weekly=30 expected N>=1, got $out"
 fi
 tw_teardown
 
@@ -6655,6 +6831,7 @@ echo "=== dispatch-spawn-router ==="
 #   $TMPDIR_TEST/fake-claude     the multi-subcommand fake `claude`
 #   $TMPDIR_TEST/registry.json   the `claude agents --json` fixture
 #   $TMPDIR_TEST/bg-argv         recorded argv of each `claude --bg` call
+#   $TMPDIR_TEST/pwd-log         records the spawn subshell's $PWD (used by Test 1b)
 #   $TMPDIR_TEST/rm-log          recorded job-ids of each `claude rm` call
 #   $TMPDIR_TEST/stop-log        recorded job-ids of each `claude stop` call
 #
@@ -6663,6 +6840,7 @@ echo "=== dispatch-spawn-router ==="
 
 SPAWN_ROUTER_REGISTRY=""
 SPAWN_ROUTER_BG_ARGV=""
+SPAWN_ROUTER_PWD_LOG=""
 SPAWN_ROUTER_RM_LOG=""
 SPAWN_ROUTER_STOP_LOG=""
 SPAWN_ROUTER_PENDING=""
@@ -6711,6 +6889,7 @@ case "\${1:-}" in
     cat "$SPAWN_ROUTER_REGISTRY"
     ;;
   --bg)
+    pwd >> "$SPAWN_ROUTER_PWD_LOG"
     printf '%s\n' "\$@" > "$SPAWN_ROUTER_BG_ARGV"
     name=""
     while [[ \$# -gt 0 ]]; do
@@ -6753,6 +6932,7 @@ spawn_router_setup() {
 
   SPAWN_ROUTER_REGISTRY="$TMPDIR_TEST/registry.json"
   SPAWN_ROUTER_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_ROUTER_PWD_LOG="$TMPDIR_TEST/pwd-log"
   SPAWN_ROUTER_RM_LOG="$TMPDIR_TEST/rm-log"
   SPAWN_ROUTER_STOP_LOG="$TMPDIR_TEST/stop-log"
   SPAWN_ROUTER_PENDING="$TMPDIR_TEST/pending"
@@ -6768,6 +6948,7 @@ spawn_router_teardown() {
   TMPDIR_TEST=""
   SPAWN_ROUTER_REGISTRY=""
   SPAWN_ROUTER_BG_ARGV=""
+  SPAWN_ROUTER_PWD_LOG=""
   SPAWN_ROUTER_RM_LOG=""
   SPAWN_ROUTER_STOP_LOG=""
   SPAWN_ROUTER_PENDING=""
@@ -6797,6 +6978,39 @@ assert_eq "spawn: argv[2] is a dispatch-* agent name" "yes" "$name_ok"
 assert_eq "spawn: argv[3] is --permission-mode" "--permission-mode" "${bg_argv[3]:-}"
 assert_eq "spawn: argv[4] is auto" "auto" "${bg_argv[4]:-}"
 assert_eq "spawn: argv[5] is /dispatch-propagate" "/dispatch-propagate" "${bg_argv[5]:-}"
+spawn_router_teardown
+
+# --- Test 1b: spawn cwd is the main worktree path ----------------------------
+
+echo "Test: dispatch-spawn-router invokes 'claude --bg' from the main worktree path"
+spawn_router_setup
+write_fake_spawn_router_claude
+# Run from a deliberately different caller cwd so the negative assertion (cwd is
+# NOT the caller's) is meaningful. The spawn subshell cd's into the main worktree.
+SPAWN_ROUTER_CALLER_CWD="$TMPDIR_TEST"
+if out=$( cd "$SPAWN_ROUTER_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-router-cwd: exits 0" "0" "$rc"
+# Read the first line of the pwd-log and compare it (via realpath) to the main
+# worktree path. realpath is used to normalize platform-specific path
+# differences (e.g. macOS /private/ prefix on /tmp).
+sr_pwd_line=$(head -1 "$SPAWN_ROUTER_PWD_LOG" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$(realpath "$sr_pwd_line" 2>/dev/null)" == "$(realpath "$DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-router-cwd: 'claude --bg' ran with cwd = main worktree path"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-router-cwd: 'claude --bg' ran with cwd = main worktree path"
+  echo "    pwd-log:  '$sr_pwd_line'"
+  echo "    expected: '$DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE'"
+fi
+# Independently assert the cwd is NOT the caller's cwd — that is the regression
+# the fix prevents (router born in the wrong worktree).
+TOTAL=$((TOTAL + 1))
+if [[ "$(realpath "$sr_pwd_line" 2>/dev/null)" != "$(realpath "$SPAWN_ROUTER_CALLER_CWD")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-router-cwd: 'claude --bg' did NOT run from the caller's cwd"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-router-cwd: 'claude --bg' did NOT run from the caller's cwd"
+  echo "    pwd-log: '$sr_pwd_line'"
+fi
 spawn_router_teardown
 
 # --- Test 2: dedup -----------------------------------------------------------
