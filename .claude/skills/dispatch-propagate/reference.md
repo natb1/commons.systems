@@ -127,20 +127,21 @@ acts on the script's one output line; the mechanics below are reference, not
 per-tick action.
 
 Priority order the script implements, top to bottom: JIT scan →
-`origin/main` CI health gate → topic-category × priority × phase ladder.
+`origin/main` CI health gate → priority × topic-category × phase ladder.
 A jit-reminder surfaces even when `origin/main` is red because the JIT scan
 precedes the main-broken gate.
 
-The topic-category × phase ladder is three-tier: a topic **category** nests
-outside a **priority bit**, which nests outside the phase **ladder**.
-Categories, highest first: `bug` → `testing infrastructure` → `dispatch` →
-`other`. Within each category, items carrying the `priority` label rank above
-items without it; the label is human-applied — `/ready` never applies it
-automatically. A PR's category is the highest-priority topic among the labels
-of every issue it closes; an issue's category is the highest-priority topic
-among its own labels; anything with no topic label is `other`. The selector
-exhausts one `(category, priority)` bucket's whole ladder before moving to
-the next.
+The priority × topic-category × phase ladder is three-tier: the **priority
+bit** is the outermost axis, a topic **category** nests inside it, and the
+phase **ladder** runs innermost. The selector exhausts the entire `priority=1`
+tier — every topic category, every phase — before considering any `priority=0`
+item, so a `priority` item in a low-ranked topic outranks every non-priority
+item in a higher-ranked topic. Within one priority level, categories run
+highest first: `bug` → `testing infrastructure` → `dispatch` → `other`. The
+`priority` label is human-applied — `/ready` never applies it automatically.
+A PR's category is the highest-priority topic among the labels of every issue
+it closes; an issue's category is the highest-priority topic among its own
+labels; anything with no topic label is `other`.
 
 Within each category the ladder is (highest first; within a tier, oldest PR
 wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
