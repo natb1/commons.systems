@@ -12291,6 +12291,26 @@ assert_eq "allparked: summary 0 spawned" "1" "$(printf '%s\n' "$out" | grep -c '
 assert_eq "allparked: terminal token" "drain" "$(printf '%s\n' "$out" | tail -n 1)"
 mat_teardown
 
+# --- fan-out: all spawns fail → 0 spawned, drain, stderr surfaces each one ---
+# Single-target mode surfaces a failed spawn via `notify spawn-failed`; the
+# fan-out loop deliberately continues to fill the gap from other targets, but a
+# failed spawn must not be silently buried. Each spawn-failed skip emits a
+# stderr warning so a systemic spawn problem is visible in the router logs.
+echo "Test: materialize-spawn --gap 3 all spawns fail → drain + per-target stderr warning"
+mat_setup
+export MAT_QUEUE="720 508"
+export MAT_SPAWN_RC=1
+out=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue --gap 3 2>"$TMPDIR_TEST/logs/mat-stderr.log")
+assert_eq "spawnfail-fanout: zero net spawns in summary" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 0 of gap 3')"
+assert_eq "spawnfail-fanout: skipped detail per target" "3" \
+  "$(printf '%s\n' "$out" | grep -c 'skipped #.* (spawn-failed)')"
+assert_eq "spawnfail-fanout: terminal token" "drain" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "spawnfail-fanout: stderr warns on each spawn-failed" "3" \
+  "$(grep -c 'spawn-failed during fan-out' "$TMPDIR_TEST/logs/mat-stderr.log")"
+assert_eq "spawnfail-fanout: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
 # --- fan-out: dispatch-select-target invoked between spawns ------------------
 echo "Test: materialize-spawn fan-out invokes dispatch-select-target between spawns"
 mat_setup

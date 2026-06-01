@@ -339,7 +339,19 @@ while :; do
       "$SCRIPT_DIR/dispatch-apply-office-hours" "$CONFLICT_N" "origin/main does not merge cleanly into the target worktree" 1>&2 || true
       echo "propagate: parked #$cur_n ($OUTCOME)" ;;
     target-blocked)     echo "propagate: parked #$cur_n ($OUTCOME)" ;;
-    *)                  echo "propagate: skipped #$cur_n ($OUTCOME)" ;;
+    *)
+      echo "propagate: skipped #$cur_n ($OUTCOME)"
+      # ci-waiting is an expected skip (the next router tick re-gates the PR).
+      # spawn-failed / worktree-conflict are real failures the single-target
+      # path surfaces via `notify spawn-failed` / `drain worktree-conflict`; in
+      # fan-out the loop deliberately continues to fill the gap from other
+      # targets, but the failure must not be buried — log it to stderr so a
+      # systemic spawn problem is visible in the router logs.
+      case "$OUTCOME" in
+        spawn-failed|worktree-conflict)
+          echo "dispatch-materialize-spawn: #$cur_n $OUTCOME during fan-out (continuing to next target)" >&2 ;;
+      esac
+      ;;
   esac
   (( spawned >= GAP )) && break
   SELECTED=$("$SCRIPT_DIR/dispatch-select-target") || true
