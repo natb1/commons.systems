@@ -140,6 +140,42 @@ describe("AppNavElement", () => {
     expect(nav.querySelector("#user-display")).toBeTruthy();
   });
 
+  it("renders the home link by default", () => {
+    const nav = createNav();
+    nav.links = [{ href: "#/", label: "Home" }];
+    const homeLink = nav.querySelector(".nav-home a")!;
+    expect(homeLink).toBeTruthy();
+    expect(homeLink.getAttribute("href")).toBe("https://commons.systems/");
+    expect(homeLink.textContent).toBe("commons.systems");
+  });
+
+  it("removes the home link when showHomeLink is false", () => {
+    const nav = createNav();
+    nav.links = [{ href: "#/", label: "Home" }];
+    nav.showHomeLink = false;
+    expect(nav.querySelector(".nav-home a")).toBeNull();
+  });
+
+  it("restores the home link when showHomeLink is set back to true", () => {
+    const nav = createNav();
+    nav.links = [{ href: "#/", label: "Home" }];
+    nav.showHomeLink = false;
+    nav.showHomeLink = true;
+    const homeLink = nav.querySelector(".nav-home a")!;
+    expect(homeLink).toBeTruthy();
+    expect(homeLink.getAttribute("href")).toBe("https://commons.systems/");
+    expect(homeLink.textContent).toBe("commons.systems");
+  });
+
+  it("orders containers as links, home, then auth", () => {
+    const nav = createNav();
+    nav.links = [{ href: "#/", label: "Home" }];
+    nav.user = null;
+    const classes = Array.from(nav.children).map((c) => c.className);
+    expect(classes.indexOf("nav-links")).toBeLessThan(classes.indexOf("nav-home"));
+    expect(classes.indexOf("nav-home")).toBeLessThan(classes.indexOf("nav-auth"));
+  });
+
   it("managed containers are span elements", () => {
     const nav = createNav();
     nav.links = [{ href: "#/", label: "Home" }];
