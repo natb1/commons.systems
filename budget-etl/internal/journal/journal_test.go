@@ -334,6 +334,28 @@ func TestCreditCardLiabilityDerivation(t *testing.T) {
 	if ids["Example Bank_Credit Card"] != "liability" {
 		t.Errorf("credit-card account should be liability, got %q", ids["Example Bank_Credit Card"])
 	}
+
+	assertBalanced(t, r.Legs)
+
+	// A positive (spending) charge on a credit card credits the liability
+	// account and debits the expense placeholder.
+	byEntry := legsByEntry(r.Legs)
+	legs := byEntry[r.Entries[0].ID]
+	var card, expense export.JournalLeg
+	for _, l := range legs {
+		switch l.AccountID {
+		case "Example Bank_Credit Card":
+			card = l
+		case acctUncategorizedExpense:
+			expense = l
+		}
+	}
+	if card.Credit != 45.00 || card.Debit != 0 {
+		t.Errorf("credit-card leg should be credit 45.00, got debit=%v credit=%v", card.Debit, card.Credit)
+	}
+	if expense.Debit != 45.00 || expense.Credit != 0 {
+		t.Errorf("expense leg should be debit 45.00, got debit=%v credit=%v", expense.Debit, expense.Credit)
+	}
 }
 
 func TestPairWindowExcludesFarApart(t *testing.T) {
