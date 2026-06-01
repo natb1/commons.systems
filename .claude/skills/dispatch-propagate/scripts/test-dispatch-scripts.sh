@@ -12388,6 +12388,24 @@ assert_eq "ci-reseeded: no spawn" "0" \
 assert_eq "ci-reseeded: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
+# --- explicit-mode waiting CI → reseed scheduled → drain ci-reseeded (#979) ----
+# The headline `/dispatch <N>` path is MODE=explicit. The reseed test above runs
+# MODE=queue and so enters the single-target branch via the `GAP <= 1` disjunct;
+# this test exercises the other disjunct (`MODE == explicit`) directly, confirming
+# an explicit single target also schedules the target-keyed reseed.
+echo "Test: materialize-spawn explicit-mode waiting CI → drain ci-reseeded (reseed scheduled)"
+mat_setup
+export MAT_PHASE=waiting
+out=$(run_mat 839 explicit)
+assert_eq "explicit-ci-reseeded: terminal token" "drain ci-reseeded" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "explicit-ci-reseeded: scheduler called with target" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
+assert_eq "explicit-ci-reseeded: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "explicit-ci-reseeded: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
 # --- single-target waiting CI → attempt cap → notify ci-wait-exhausted (#979) -
 echo "Test: materialize-spawn single-target waiting CI at cap → notify ci-wait-exhausted"
 mat_setup
