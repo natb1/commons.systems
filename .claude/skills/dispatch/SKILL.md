@@ -6,15 +6,18 @@ description: Manual override for the dispatch chain — runs /dispatch-propagate
 # Dispatch (manual override)
 
 Run `/dispatch-propagate`'s instructions exactly, with one change: when you
-reach the materialize-and-spawn call (Section 2), pass `--bypass-cap`:
+reach the select-tick call (Section 1), pass `--bypass-cap`:
 
 ```bash
-.claude/skills/dispatch-propagate/scripts/dispatch-materialize-spawn <N> <explicit|queue> --bypass-cap
+.claude/skills/dispatch-propagate/scripts/dispatch-select-tick [<N>] --bypass-cap
 ```
 
 `--bypass-cap` skips the `dispatch-target-workers` concurrency gate entirely —
-the script does not query the live worker count, never emits `drain
-concurrency-cap`, and always calls `dispatch-spawn-worker`.
+select-tick does not query the live worker count, never emits
+`concurrency-cap`, and forces the run-scoped `<gap>` to 1 so the downstream
+materialize-spawn call spawns one worker. The Section 2 materialize call then
+carries `--gap 1` (the value the bypassed select-tick emitted on its decision
+line) and no `--bypass-cap`.
 
 Use this when you want to dispatch work *now*, ignoring rate-limit pacing. You
 typed `/dispatch` because you accepted the cost; the gate that paces the

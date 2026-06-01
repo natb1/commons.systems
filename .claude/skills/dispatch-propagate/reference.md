@@ -17,12 +17,35 @@ Back-link: [`SKILL.md`](./SKILL.md).
 ## Chain mechanics
 
 Each `/dispatch-propagate` is a `claude --bg` background job (#725) rooted in
-`worktrees/main`. The router selects, spawns a worker, and exits. The worker
-runs one phase in its target worktree, then spawns a fresh `/dispatch-propagate` router
-back in `worktrees/main` and self-deletes. That router → worker → router
-chain advances the workflow; the #725 cap-keyed re-seed scheduled at the
-next rate-limit window reset re-seeds it when a tick stalled on a
-concurrency-budget cap (see *The #725 cap-keyed re-seed*).
+`worktrees/main`. The router selects, spawns up to `gap` workers (see *Fan-out*
+below), and exits. Each worker runs one phase in its target worktree, then
+spawns a fresh `/dispatch-propagate` router back in `worktrees/main` and
+self-deletes. That router → workers → router chain advances the workflow; the
+#725 cap-keyed re-seed scheduled at the next rate-limit window reset re-seeds it
+when a tick stalled on a concurrency-budget cap (see *The #725 cap-keyed
+re-seed*).
+
+### Fan-out
+
+The model is **seed once → fan out to `gap` → each freed slot triggers one
+dedup'd refill router that fans out again**, replacing the old serial "one
+router, one worker, repeat". A single `dispatch-materialize-spawn` run now spawns
+up to `gap` workers in one held-lock loop, where `gap = TARGET_N − LIVE_COUNT`
+comes from the `dispatch-select-tick` concurrency gate (evaluated once per run
+before selection). Within the loop the first target is the select-tick target;
+targets 2..`gap` come from successive `dispatch-select-target` calls — each
+spawned worker registers before the next selection (#945/#905), so the next
+selection skips its now-live-owned worktree and yields a distinct target. A
+per-target block / merge-conflict parks that one issue (`dispatch:office-hours`)
+and the loop continues; the run emits an aggregate summary (`spawned <k> of gap
+<G>`) and one terminal token (`propagate` if ≥1 spawned, else `drain`).
+
+The worker→router baton-pass code in `.claude/hooks/dispatch-stop.sh` is
+**unchanged**: each completing worker still spawns one router, deduped to a
+single live router, which now fans out again to the new gap. So instead of N
+serial router→worker hops you get one run filling to `gap` and a single refill
+router per freed slot. The #725 cap-keyed re-seed remains the resume-from-cap
+path.
 
 ## Releasing the lock
 
@@ -47,7 +70,7 @@ early-release window.
 `dispatch-materialize-spawn` releases at each terminal point: on the `propagate`
 path after `dispatch-spawn-worker` returns success (worker verified-registered),
 on `notify spawn-failed` after the failed spawn returns, and on `drain
-ci-waiting` / `drain concurrency-cap` at their respective stops.
+ci-waiting` at its stop.
 `dispatch-finalize-selection` writes the recovery marker but no longer releases.
 The pre-finalize stop paths — `notify target-blocked`, `resolve merge-conflict`,
 and `drain worktree-conflict`, plus the internal `exit 2` error paths — release
@@ -198,9 +221,19 @@ the worker `cd`'d in its own Step 0 — silently broke when subsequent `Bash` /
 
 ## Concurrency budgeting
 
+The run-scoped concurrency gate lives in `dispatch-select-tick` (evaluated once
+per run, before selection): after lock acquisition and `main` sync it computes
+`LIVE_COUNT` and `gap = max(0, TARGET_N − LIVE_COUNT)`, short-circuiting to
+`drain concurrency-cap` when `LIVE_COUNT >= TARGET_N`. The `gap` it computes is
+carried on the decision line and bounds the `dispatch-materialize-spawn` fan-out
+(see *Fan-out*) — `materialize-spawn` no longer evaluates the gate per target.
+
 `dispatch-target-workers` runs a sequential four-stage pace-relative pipeline
-(W → F → N) to decide how many concurrent `dispatch-worker-*` sessions should
-run. Instead of a flat weekly cap, the weekly budget follows a
+(W → F → N) to decide how many concurrent busy workers should run; the live
+count is `claude_agents_count_busy_workers` — busy sessions whose name matches
+the real worker shape `^[0-9]+-` (NOT a `dispatch-worker-*` prefix, which never
+existed in production — that was the Defect-B bug this issue fixed). Instead of a
+flat weekly cap, the weekly budget follows a
 **cumulative-pace curve** keyed to how far through the weekly rate-limit window
 we are (in 5-hour-window terms), so token spend spreads smoothly across the
 week rather than bursting early and idling. The controller is intentionally

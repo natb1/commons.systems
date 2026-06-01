@@ -11,7 +11,7 @@
 #   claude_sessions_under              <worktree-path>
 #   claude_sessions_with_name          <name>
 #   worktree_has_live_session          <worktree-path>
-#   claude_agents_count_by_name_prefix <name-prefix>
+#   claude_agents_count_busy_workers
 #   verify_agent_registered_under      <agent-name> <cwd>
 #
 # claude_sessions_under <path>
@@ -50,13 +50,17 @@
 #     return 1 — definitely no live session for the worktree's name.
 #   `if worktree_has_live_session <path>` is fail-safe by construction.
 #
-# claude_agents_count_by_name_prefix <prefix>
-#   Counts live sessions whose `name` starts with `<prefix>`, machine-wide (no
-#   `--cwd` filter). On a single dev machine this is acceptable; if two separate
-#   checkouts run in parallel, their `dispatch-worker-*` sessions are counted
-#   together, inflating the count and gating spawning too aggressively —
-#   fail-safe (errs toward fewer workers). Used by the dispatch router's
-#   concurrency gate to count live `dispatch-worker-*` sessions before deciding
+# claude_agents_count_busy_workers
+#   Counts live sessions that are actively working: `name` matches `^[0-9]+-`
+#   (the real worker `<N>-<slug>` shape) AND `status == "busy"`, machine-wide
+#   (no `--cwd` filter). `^[0-9]+-` excludes routers (named `dispatch-<short-id>`).
+#   `status == "busy"` excludes idle / input-blocked / stopped workers, because
+#   those do not consume the concurrency/token budget the gate paces. On a single
+#   dev machine this is acceptable; if two separate checkouts run in parallel,
+#   their busy worker sessions are counted together, inflating the count and
+#   gating spawning too aggressively — fail-safe (errs toward fewer workers). An
+#   over-count from a stray busy human session is fail-safe too (it throttles
+#   spawning). Used by the dispatch router's concurrency gate before deciding
 #   whether to spawn one more. Same UNKNOWN contract as `claude_sessions_under`:
 #   a count of `0` is a definite "no matches", non-zero return is "could not
 #   determine".
@@ -215,15 +219,14 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     return 1
   }
 
-  # claude_agents_count_by_name_prefix <prefix> — emit the count of live
-  # sessions whose `name` starts with <prefix>. See the header comment.
-  claude_agents_count_by_name_prefix() {
-    local prefix="${1:-}"
-    if [[ -z "$prefix" ]]; then
-      printf 'lib-claude-agents: claude_agents_count_by_name_prefix requires a <prefix> argument\n' >&2
-      return 1
-    fi
-
+  # claude_agents_count_busy_workers — emit the count of live sessions that are
+  # actively working: name matches `^[0-9]+-` (the real worker `<N>-<slug>`
+  # shape) AND `status == "busy"`. `^[0-9]+-` excludes routers (named
+  # `dispatch-<short-id>`). `status == "busy"` excludes idle / input-blocked /
+  # stopped workers, because those do not consume the concurrency/token budget
+  # the gate paces. An over-count from a stray busy human session is fail-safe
+  # (it throttles spawning). Same UNKNOWN contract as `claude_sessions_under`.
+  claude_agents_count_busy_workers() {
     # No --cwd here: the router needs a machine-wide count of live workers, not
     # a per-path filter. Two checkouts on the same machine share this count —
     # cross-repo inflation is fail-safe (gates spawning conservatively).
@@ -239,9 +242,11 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     # One jq pass validates the array shape and counts matches. Non-array
     # input errors out and the result is UNKNOWN.
     local count
-    if ! count=$(jq -r --arg prefix "$prefix" '
+    if ! count=$(jq -r '
       if type == "array"
-      then [ .[] | select(.name | type == "string" and startswith($prefix)) ] | length
+      then [ .[]
+        | select(.name | type == "string" and test("^[0-9]+-"))
+        | select(.status == "busy") ] | length
       else error("claude agents --json output is not a JSON array")
       end' <<<"$out" 2>/dev/null); then
       return 1
