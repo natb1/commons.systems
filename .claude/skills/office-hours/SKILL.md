@@ -73,10 +73,11 @@ hand-off and no Stop-hook action — the Stop hook ignores non-`<N>-` session na
 
    - `implement` (no PR) → **plan-approval residue** (Step 2).
    - `qa` (draft PR, CI green, no `dispatch:qa-done`) → **QA residue** (Step 3).
-   - anything else (`verify`, `code-review`, `review`, `security`, `done`) →
-     **deviation-review** (Step 4). The autonomous phase already ran; the
-     office-hours label means a surfaced deviation or an unexpected input block
-     during an autonomous phase, not unfinished autonomous work.
+   - anything else (`verify`, `waiting`, `code-review`, `review`, `security`,
+     `done`) → **deviation-review** (Step 4). The autonomous phase already ran
+     (or, for `waiting`/`verify`, is mid-run); the office-hours label means a
+     surfaced deviation or an unexpected input block during an autonomous phase,
+     not unfinished autonomous work.
 
 2. **Plan-approval residue (`implement`).**
 
@@ -138,11 +139,15 @@ hand-off and no Stop-hook action — the Stop hook ignores non-`<N>-` session na
 
       Run `run-qa-cleanup.sh` if a server was started, then **stop**.
 
-4. **Deviation-review (`code-review` / `review` / `security` / `done`).**
+4. **Deviation-review (`verify` / `waiting` / `code-review` / `review` /
+   `security` / `done`).**
 
-   The phase already ran; the office-hours label marks a surfaced deviation from
-   the approved plan or the acceptance criteria. **Do not re-run a phase skill.**
-   Present the deviation and take the user's decision.
+   The phase already ran (or, for `waiting`/`verify`, is mid-run). The
+   office-hours label marks either a surfaced deviation from the approved plan or
+   the acceptance criteria, or an unexpected input block during the autonomous
+   phase. **Do not re-run a phase skill.** Surface why the item parked — read the
+   parked reason (Step 4a) before presuming a deviation — and take the user's
+   decision.
 
    a. **Surface the deviation.** Read `$CLAUDE_JOB_DIR/office-hours-reason` if it
       is still reachable; otherwise read the latest dispatch PR comment for the
