@@ -13,8 +13,12 @@ set -euo pipefail
 
 # --- regex definitions -------------------------------------------------------
 
-# DOCS: markdown/text/plain-text documentation and license files.
-DOCS_RE='(\.(md|mdx|markdown|txt|rst|adoc)$)|((^|/)(LICENSE|NOTICE|AUTHORS|CONTRIBUTORS)(\.[A-Za-z0-9]+)?$)'
+# DOCS: markdown/text/plain-text documentation and license files. License-style
+# files are matched only as bare names (no extension); a doc-extension variant
+# like LICENSE.md already matches the first branch, so allowing an arbitrary
+# extension here would misclassify code files such as NOTICE.ts or LICENSE.sh as
+# docs and skip the security fan-out.
+DOCS_RE='(\.(md|mdx|markdown|txt|rst|adoc)$)|((^|/)(LICENSE|NOTICE|AUTHORS|CONTRIBUTORS)$)'
 
 # DEPS: npm dependency manifests.
 DEPS_RE='(^|/)package(-lock)?\.json$'

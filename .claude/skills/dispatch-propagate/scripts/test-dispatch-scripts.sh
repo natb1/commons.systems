@@ -12354,6 +12354,29 @@ assert_eq "surface: LICENSE no extension" "surface=docs
 deps=false
 app_or_rules=false" "$out"
 
+# LICENSE.md (doc extension) → docs (matched by the doc-extension branch)
+out=$(printf '%s\n' "LICENSE.md" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: LICENSE.md doc extension" "surface=docs
+deps=false
+app_or_rules=false" "$out"
+
+# A code file named like a license must NOT be classified docs — a code
+# extension on a license-style basename must not skip the security fan-out.
+out=$(printf '%s\n' "src/auth/NOTICE.ts" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: NOTICE.ts is code not docs" "surface=code
+deps=false
+app_or_rules=true" "$out"
+
+out=$(printf '%s\n' "AUTHORS.go" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: AUTHORS.go is code not docs" "surface=code
+deps=false
+app_or_rules=true" "$out"
+
+out=$(printf '%s\n' "LICENSE.sh" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: LICENSE.sh is code not docs" "surface=code
+deps=false
+app_or_rules=false" "$out"
+
 # README.md + blank line → docs (blank-line tolerance)
 out=$(printf 'README.md\n\n' | "$SCRIPT_DIR/dispatch-security-surface")
 assert_eq "surface: docs with trailing blank line" "surface=docs
