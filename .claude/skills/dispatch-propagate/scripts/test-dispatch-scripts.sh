@@ -1668,6 +1668,21 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "security issue beats untopiced (other) issue" "issue 300" "$result"
 teardown
 
+# 30i. A help-wanted `security` issue outranks a help-wanted `bug` issue at the
+#      same priority level, even when the bug issue is older — the issue-ladder
+#      counterpart of 30f (which tests the same ordering on the PR ladder).
+echo "Test: security issue beats bug issue (issue ladder)"
+setup
+setup_union_pr_list '[]'
+# Issue 400 (older) is bug; issue 300 (newer) is security. security is the first
+# topic category, so it wins regardless of age.
+printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "security issue beats bug issue" "issue 300" "$result"
+teardown
+
 # --- blocked-issue PR skip (issue #786) -------------------------------------
 # dispatch-select-target skips a PR from every PR-ladder tier when any issue it
 # closes is blocked_by an open issue; a closing issue blocked only by
