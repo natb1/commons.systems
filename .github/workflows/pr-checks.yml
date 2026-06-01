@@ -61,7 +61,7 @@ jobs:
             npm run -w functions build
             printf 'AGENDA_GITHUB_APP_ID=%s\nAGENDA_GITHUB_APP_INSTALLATION_ID=%s\nAGENDA_GROUP_REPO=%s\nAGENDA_MEMBER_EMAILS=%s\nAGENDA_FIRESTORE_NAMESPACE=agenda/prod\n' \
               "$AGENDA_GITHUB_APP_ID" "$AGENDA_GITHUB_APP_INSTALLATION_ID" "$AGENDA_GROUP_REPO" "$AGENDA_MEMBER_EMAILS" \
-              > "functions/.env.$FIREBASE_PROJECT_ID"
+              > functions/.env
             npx firebase-tools deploy --only functions --force --project "$FIREBASE_PROJECT_ID"
           fi
       - name: Deploy previews and run smoke tests
