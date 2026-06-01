@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Project-level Claude Code status line.
-# Side effect: writes ~/.local/share/productivity-tui/rate_limits.json so the
-# productivity-tui rate-limits header has data to render.
+# Side effect: writes ~/.local/share/commons-dispatch/rate_limits.json so the
+# dispatch concurrency budgeter has telemetry to read.
 # Visible output: identical to the user's global statusLine (model | cwd | tokens).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -14,7 +14,7 @@ input=$(cat)
 # Side effect — write rate_limits.json. Discard stdout (its summary line) and
 # any errors so the status line still renders if the hook fails.
 printf '%s' "$input" \
-  | "$CLAUDE_PROJECT_DIR/productivity-tui/hooks/update-rate-limits.sh" \
+  | "$CLAUDE_PROJECT_DIR/.claude/skills/dispatch-propagate/scripts/update-rate-limits.sh" \
   >/dev/null 2>&1 || true
 
 # Visible status line — matches ~/.claude/settings.json statusLine.command.

@@ -338,7 +338,7 @@ floor raised against the baked-in cap default passes validation but still
 clamps.
 
 **Missing-telemetry fallback.** When
-`~/.local/share/productivity-tui/rate_limits.json` is missing or unreadable,
+`~/.local/share/commons-dispatch/rate_limits.json` is missing or unreadable,
 or the `seven_day` block is absent (missing `used_weekly` or `resets_at_weekly`,
 or a malformed `now`), `dispatch-target-workers` prints `1` and writes a
 one-line note to stderr — the chain degrades to "spawn one per tick". When only
@@ -353,7 +353,7 @@ The #725 cap-keyed re-seed is the chain's resume-from-cap-stall mechanism.
 When a tick's Step 6 decides to skip the spawn because the live worker count
 already meets the budgeter's target, that means the rate-limit cap closed
 the budget — `dispatch-target-workers` reads
-`~/.local/share/productivity-tui/rate_limits.json` and returns 0 when
+`~/.local/share/commons-dispatch/rate_limits.json` and returns 0 when
 `used_percentage >= target` on either the weekly or the 5-hour window. The
 chain pauses with work waiting; the only thing that unblocks it is the cap
 window resetting.

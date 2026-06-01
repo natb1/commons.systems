@@ -56,7 +56,7 @@
 #
 #   DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH
 #     Override the rate_limits.json path. Default:
-#     ~/.local/share/productivity-tui/rate_limits.json.
+#     ~/.local/share/commons-dispatch/rate_limits.json.
 #
 #   DISPATCH_SCHEDULE_RESEED_NOW
 #     Override the current epoch seconds. Default: date +%s.
@@ -122,7 +122,7 @@ done
 
 # ---- Step 1: load telemetry -------------------------------------------------
 
-RL_PATH="${DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH:-$HOME/.local/share/productivity-tui/rate_limits.json}"
+RL_PATH="${DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH:-$HOME/.local/share/commons-dispatch/rate_limits.json}"
 NOW="${DISPATCH_SCHEDULE_RESEED_NOW:-$(date +%s)}"
 
 # NOW reaches `(( RESEED_AT <= NOW ))` — bash arithmetic context evaluates

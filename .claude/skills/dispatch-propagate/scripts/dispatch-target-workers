@@ -13,9 +13,9 @@
 # (used_weekly = % of weekly limit; used_5h = % of 5h limit). They couple only
 # through the SIGN of weekly headroom, so no weekly<->5h conversion is needed.
 #
-# Telemetry is read from ~/.local/share/productivity-tui/rate_limits.json
-# (written by productivity-tui/hooks/update-rate-limits.sh on every
-# statusline render). The path is overridable for tests.
+# Telemetry is read from ~/.local/share/commons-dispatch/rate_limits.json
+# (written by .claude/skills/dispatch-propagate/scripts/update-rate-limits.sh
+# on every statusline render). The path is overridable for tests.
 #
 # When telemetry is missing or unreadable, the script prints `1` (today's
 # "spawn one per tick" default) and writes a one-line note to stderr — the
@@ -31,7 +31,7 @@
 #
 #   DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH
 #     Override the rate_limits.json path. Default:
-#     ~/.local/share/productivity-tui/rate_limits.json.
+#     ~/.local/share/commons-dispatch/rate_limits.json.
 #
 #   DISPATCH_TARGET_WORKERS_NOW
 #     Override the current epoch seconds. Default: date +%s. The pace curve
@@ -162,7 +162,7 @@ fi
 
 # ---- Step 1: load telemetry -------------------------------------------------
 
-RL_PATH="${DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH:-$HOME/.local/share/productivity-tui/rate_limits.json}"
+RL_PATH="${DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH:-$HOME/.local/share/commons-dispatch/rate_limits.json}"
 NOW="${DISPATCH_TARGET_WORKERS_NOW:-$(date +%s)}"
 
 # Parse the file if it exists and is readable; otherwise WEEKLY_USED/etc stay
