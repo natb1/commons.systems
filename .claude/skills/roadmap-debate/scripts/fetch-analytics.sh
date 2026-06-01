@@ -103,8 +103,12 @@ fi
 # ---- helper: extract an .error.message reason from a JSON response ----------
 # Prints the API error message if the response carries an `.error` object,
 # otherwise prints nothing. Used to surface per-API failures at the boundary.
+# The reason is echoed into the context file the roadmap personas read, and its
+# text is server-controlled, so strip newlines/carriage returns and truncate to
+# stop a crafted API response from forging section markers (prompt injection).
 api_error_reason() {
-  printf '%s' "$1" | jq -r 'if .error then (.error.message // "unknown API error") else empty end' 2>/dev/null
+  printf '%s' "$1" | jq -r 'if .error then (.error.message // "unknown API error") else empty end' 2>/dev/null \
+    | tr '\r\n' '  ' | cut -c1-200
 }
 
 # ---- Step 3: GA4 per app ----------------------------------------------------
@@ -120,6 +124,18 @@ else
     PROPERTY_ID="${pair#*:}"
     if [[ -z "$APP" || -z "$PROPERTY_ID" || "$APP" == "$pair" ]]; then
       echo "(GA4 skipped for '${pair}': not a valid app:propertyId pair)"
+      continue
+    fi
+    # Validate both halves before they reach a curl URL or the context file.
+    # APP is echoed into headers read by the roadmap personas, so restrict it to
+    # a charset that cannot forge newlines/section markers; GA4 property IDs are
+    # always numeric, so a strict numeric guard also blocks URL-path injection.
+    if [[ ! "$APP" =~ ^[A-Za-z0-9_-]+$ ]]; then
+      echo "(GA4 skipped for '${pair}': app name must match [A-Za-z0-9_-]+)"
+      continue
+    fi
+    if [[ ! "$PROPERTY_ID" =~ ^[0-9]+$ ]]; then
+      echo "(GA4 skipped for '${pair}': property ID must be numeric)"
       continue
     fi
     echo "--- GA4: ${APP} ---"
@@ -172,7 +188,7 @@ else
     else
       echo "Top referral sources (by sessions):"
       printf '%s' "$REFERRAL_RESP" \
-        | jq -r '.rows[]? | "  \(.dimensionValues[0].value): \(.metricValues[0].value)"'
+        | jq -r '.rows[]? | "  \(((.dimensionValues[0].value // "") | gsub("[\\r\\n]"; " "))[0:200]): \(.metricValues[0].value)"'
     fi
 
     # (c) Landing-page performance.
@@ -197,12 +213,22 @@ else
     else
       echo "Top landing pages:"
       printf '%s' "$LANDING_RESP" \
-        | jq -r '.rows[]? | "  \(.dimensionValues[0].value): \(.metricValues[0].value) sessions, \(.metricValues[1].value) views"'
+        | jq -r '.rows[]? | "  \(((.dimensionValues[0].value // "") | gsub("[\\r\\n]"; " "))[0:200]): \(.metricValues[0].value) sessions, \(.metricValues[1].value) views"'
     fi
   done
 fi
 
 # ---- Step 4: Search Console -------------------------------------------------
+# Validate the site string before it becomes a URL path segment. The encoding
+# below only handles ':' and '/', so reject anything outside the two legitimate
+# Search Console property forms (sc-domain:<host> or an https:// URL) — this
+# blocks '?'/'#'/'@'/space from restructuring the request URL.
+echo "--- Search Console ---"
+if [[ ! "$ROADMAP_SEARCH_CONSOLE_SITE" =~ ^(sc-domain:[A-Za-z0-9.-]+|https://[A-Za-z0-9._/-]+)$ ]]; then
+  echo "(Search Console skipped: ROADMAP_SEARCH_CONSOLE_SITE must be 'sc-domain:<host>' or an 'https://...' URL)"
+  exit 0
+fi
+
 # URL-encode the site string. Colons become %3A; forward slashes become %2F.
 # Both are required: sc-domain:commons.systems has only colons (no slashes), while
 # https:// URL properties also have slashes that must be percent-encoded for the
@@ -214,8 +240,6 @@ SC_URL="https://searchconsole.googleapis.com/webmasters/v3/sites/${ENCODED_SITE}
 # 28-day window, computed with GNU date in YYYY-MM-DD.
 SC_START=$(date -d '28 days ago' +%F)
 SC_END=$(date -d today +%F)
-
-echo "--- Search Console ---"
 
 # Search queries — rows carry clicks/impressions/ctr/position.
 QUERY_BODY=$(jq -n --arg start "$SC_START" --arg end "$SC_END" '{
@@ -238,7 +262,7 @@ elif [[ -n "$QUERY_ERR" ]]; then
 else
   echo "Top search queries:"
   printf '%s' "$QUERY_RESP" \
-    | jq -r '.rows[]? | "  \(.keys[0]): \(.clicks) clicks, \(.impressions) impressions, CTR \(.ctr), pos \(.position)"'
+    | jq -r '.rows[]? | "  \(((.keys[0] // "") | gsub("[\\r\\n]"; " "))[0:200]): \(.clicks) clicks, \(.impressions) impressions, CTR \(.ctr), pos \(.position)"'
 fi
 
 # Pages.
@@ -262,7 +286,7 @@ elif [[ -n "$PAGE_ERR" ]]; then
 else
   echo "Top pages:"
   printf '%s' "$PAGE_RESP" \
-    | jq -r '.rows[]? | "  \(.keys[0]): \(.clicks) clicks, \(.impressions) impressions, CTR \(.ctr), pos \(.position)"'
+    | jq -r '.rows[]? | "  \(((.keys[0] // "") | gsub("[\\r\\n]"; " "))[0:200]): \(.clicks) clicks, \(.impressions) impressions, CTR \(.ctr), pos \(.position)"'
 fi
 
 # Device breakdown.
@@ -285,7 +309,7 @@ elif [[ -n "$DEVICE_ERR" ]]; then
 else
   echo "Device breakdown:"
   printf '%s' "$DEVICE_RESP" \
-    | jq -r '.rows[]? | "  \(.keys[0]): \(.clicks) clicks, \(.impressions) impressions, CTR \(.ctr), pos \(.position)"'
+    | jq -r '.rows[]? | "  \(((.keys[0] // "") | gsub("[\\r\\n]"; " "))[0:200]): \(.clicks) clicks, \(.impressions) impressions, CTR \(.ctr), pos \(.position)"'
 fi
 
 exit 0

@@ -5,6 +5,11 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
 
 OUTPUT="$REPO_ROOT/tmp/roadmap-context.txt"
+# Pre-create the file owner-only: it now holds analytics data (Search Console
+# queries, traffic) that should not be world-readable. A later '>' redirect
+# truncates but preserves the existing mode, so 0600 sticks.
+mkdir -p "$(dirname "$OUTPUT")"
+( umask 077; : > "$OUTPUT" )
 
 # Derive owner/repo from git remote
 REMOTE_URL=$(git remote get-url origin)
