@@ -51,6 +51,7 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-find-pr" "$TMPDIR_TEST/dispatch-find-pr"
   cp "$SCRIPT_DIR/dispatch-resolve-arg" "$TMPDIR_TEST/dispatch-resolve-arg"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
+  cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-check-blockers" "$TMPDIR_TEST/dispatch-check-blockers"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
@@ -74,6 +75,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
+           "$TMPDIR_TEST/office-hours-select-target" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
            "$TMPDIR_TEST/dispatch-check-blockers" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
@@ -141,6 +143,14 @@ case "$args" in
   "issue list --state open --limit 300 --json number,createdAt,labels")
     if [[ -f "$STUB_DIR/issue-list.json" ]]; then
       cat "$STUB_DIR/issue-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  "issue list --label dispatch:office-hours --state open --json number,createdAt")
+    # office-hours-select-target: the office-hours queue (labeled open issues).
+    if [[ -f "$STUB_DIR/oh-issue-list.json" ]]; then
+      cat "$STUB_DIR/oh-issue-list.json"
     else
       echo "[]"
     fi
@@ -1072,8 +1082,8 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "oldest review PR wins within phase" "pr 30 30-review-a review" "$result"
 teardown
 
-# 10. Any non-QA PR beats a help-wanted issue; help-wanted issue beats a QA PR.
-echo "Test: verify PR beats issue; issue beats QA PR"
+# 10. A non-QA PR (verify) beats both a QA PR and a help-wanted issue.
+echo "Test: verify PR beats QA PR and help-wanted issue"
 setup
 # verify PR (10), QA PR (20), help-wanted issue (55).
 UNION='['
@@ -1084,18 +1094,18 @@ setup_union_pr_list "$UNION"
 printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "verify PR beats issue (non-QA > issue > qa)" "pr 10 10-verify verify" "$result"
+assert_eq "verify PR beats QA PR and issue (verify > qa > issue)" "pr 10 10-verify verify" "$result"
 teardown
 
-# 10b. No non-QA PR: help-wanted issue beats QA PR.
-echo "Test: help-wanted issue beats QA PR"
+# 10b. No non-QA PR: QA PR beats help-wanted issue (qa ranks above implement).
+echo "Test: QA PR beats help-wanted issue"
 setup
 UNION='['"$(make_pr_union 20 "20-qa" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
 printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "help-wanted issue beats QA PR" "issue 55" "$result"
+assert_eq "QA PR beats help-wanted issue" "pr 20 20-qa qa" "$result"
 teardown
 
 # 11. --qa mode returns only the oldest QA PR (ignores non-QA PRs).
@@ -2233,6 +2243,81 @@ printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "draft PR does not gate issue 55; issue 55 chosen" "issue 55" "$result"
+teardown
+
+# ============================================================================
+# office-hours-select-target tests
+# ============================================================================
+echo ""
+echo "=== office-hours-select-target ==="
+#
+# Selects the oldest open issue carrying dispatch:office-hours whose <N>-*
+# worktree has no live session. Output: `office-hours <issue> <phase> <pr|->`.
+# Reuses the select-target gh/git/claude fakes (oh-issue-list.json seeds the
+# office-hours queue; pr-list-full.json drives dispatch-phase/dispatch-find-pr).
+
+# OHST1. Oldest labeled sessionless item wins; no PR → phase implement, pr `-`.
+echo "Test: oldest labeled item with no PR → implement, dash PR"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # orphan world: no live sessions
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "oldest labeled item selected (implement, no PR)" "office-hours 42 implement -" "$result"
+teardown
+
+# OHST2. A qa item — draft PR, CI green, no dispatch:* label → phase qa, PR num.
+echo "Test: labeled item with green draft PR → qa, PR number"
+setup
+printf '[{"number":50,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf '[{"number":7,"headRefName":"50-feat","isDraft":true,"statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"}],"labels":[]}]\n' \
+  > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "qa item selected with its PR number" "office-hours 50 qa 7" "$result"
+teardown
+
+# OHST3. A labeled item whose <N>-* worktree has a live session is skipped; the
+# next labeled item wins.
+echo "Test: labeled item with a live session is skipped"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "42-x"   # 42's worktree has a live session
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "live-session item skipped; next labeled item selected" "office-hours 99 implement -" "$result"
+teardown
+
+# OHST4. An empty office-hours queue prints `empty`.
+echo "Test: empty office-hours queue → empty"
+setup
+echo '[]' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "empty queue prints empty" "empty" "$result"
+teardown
+
+# OHST5. Unknown daemon (UNKNOWN liveness) folds to occupied → the item with a
+# worktree is skipped; an item with no worktree (fast-path miss) still wins.
+echo "Test: UNKNOWN daemon skips worktree-bearing item, picks worktree-free one"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+# 42 has a worktree (liveness UNKNOWN → occupied → skipped); 99 has none.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# setup's default CLAUDE_AGENTS_CMD points at a non-existent binary (UNKNOWN).
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "UNKNOWN-liveness worktree item skipped; worktree-free item selected" "office-hours 99 implement -" "$result"
 teardown
 
 # ============================================================================
@@ -9761,7 +9846,7 @@ restore_setup() {
     "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts" \
     "$TMPDIR_TEST/bin" \
     "$STUB_DIR"
-  for skill in plan-implement verify-pr dispatch-qa code-review-fix \
+  for skill in plan-implement verify-pr qa-fix office-hours code-review-fix \
                review-fix security-review-fix dispatch-worker; do
     mkdir -p "$TMPDIR_TEST/.claude/skills/$skill"
     cat > "$TMPDIR_TEST/.claude/skills/$skill/SKILL.md" <<EOF
@@ -9934,14 +10019,16 @@ else
 fi
 restore_teardown
 
-# --- Test 3: qa → dispatch-qa body + ARGUMENTS: <N> --------------------------
-echo "Test: restore-dispatch-skill phase=qa → dispatch-qa body + args"
+# --- Test 3: qa → qa-fix body, no ARGUMENTS ---------------------------------
+# qa now routes to /qa-fix (the autonomous QA phase skill), which — like
+# /code-review-fix — resolves its target from the worktree and takes no arg.
+echo "Test: restore-dispatch-skill phase=qa → qa-fix body, no ARGUMENTS"
 restore_setup
 set_agents_name "903-foo"
 echo "qa" > "$STUB_DIR/current-phase.txt"
 output=$(run_restore)
 TOTAL=$((TOTAL + 1))
-expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/dispatch-qa"
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/qa-fix"
 if [[ "$output" == *"$expected_dir"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: qa: base directory line emitted"
 else
@@ -9949,16 +10036,52 @@ else
   echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"RESTORE_MARKER_dispatch-qa"* ]]; then
+if [[ "$output" == *"RESTORE_MARKER_qa-fix"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: qa: SKILL.md body marker emitted"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: qa: SKILL.md body marker emitted"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"ARGUMENTS: 903"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: qa: ARGUMENTS line emitted"
+if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
+  PASS=$((PASS + 1)); echo "  PASS: qa: no ARGUMENTS line"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: qa: ARGUMENTS line emitted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: qa: no ARGUMENTS line"
+  echo "    output: $output"
+fi
+restore_teardown
+
+# --- Test 3b: office-hours-<N> session → office-hours body, no ARGUMENTS -----
+# An office-hours-<N> session restores the /office-hours skill body regardless
+# of the item's dispatch phase (matched by session --name ahead of phase
+# routing). The branch supplies ISSUE_NUM; the phase here is qa but the name
+# wins.
+echo "Test: restore-dispatch-skill office-hours-<N> name → office-hours body, no ARGUMENTS"
+restore_setup
+set_agents_name "office-hours-903"
+# The name is not the ^[0-9]+- worker shape, so ISSUE_NUM / WORKTREE_BASENAME
+# come from the branch — supply a <N>-* branch for the fallback.
+echo "903-foo" > "$STUB_DIR/current-branch.txt"
+echo "qa" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/office-hours"
+if [[ "$output" == *"$expected_dir"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours: base directory line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: base directory line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"RESTORE_MARKER_office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours: SKILL.md body marker emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: SKILL.md body marker emitted"
+fi
+TOTAL=$((TOTAL + 1))
+if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours: no ARGUMENTS line"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: no ARGUMENTS line"
   echo "    output: $output"
 fi
 restore_teardown
@@ -10201,7 +10324,8 @@ declare -A CHAIN_GUARD_EXPECTED=(
   # phase-completed marker and stop; the Stop hook (`.claude/hooks/dispatch-stop.sh`)
   # owns post-phase disposition (label management, router spawn, self-close).
   # This supersedes #824's terminal ExitWorktree action:"keep" pattern.
-  [".claude/skills/dispatch-qa/SKILL.md"]=0
+  [".claude/skills/qa-fix/SKILL.md"]=0
+  [".claude/skills/office-hours/SKILL.md"]=0
   [".claude/skills/plan-implement/SKILL.md"]=0
   [".claude/skills/code-review-fix/SKILL.md"]=0
   [".claude/skills/review-fix/SKILL.md"]=0

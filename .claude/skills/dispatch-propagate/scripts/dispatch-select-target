@@ -59,13 +59,13 @@
 #   2. Oldest "review"      PR (draft + dispatch:code-reviewed)
 #   3. Oldest "code-review" PR (draft + dispatch:qa-done)
 #   4. Oldest "verify"      PR (draft, CI completed and failed)
-#   5. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
+#   5. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
+#   6. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
 #      by a live Claude session, and which is not already closed by a non-draft
 #      (ready) PR (#920), resolved to a startable open leaf (an issue whose
 #      entire open-leaf subtree is owned by live sessions is skipped, exactly as
 #      a live-session-owned direct worktree is — an orphan child worktree stays
 #      descendable, #914)
-#   6. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
 #
 # A PR or help-wanted issue is skipped only when a live Claude session owns its
 # worktree — the row's branch worktree (PR) or any <N>-* worktree (issue). The
@@ -625,15 +625,15 @@ for pri in 1 0; do
       fi
     done
 
-    issue_bucket="$category|$pri"
-    if [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]]; then
-      echo "issue ${FIRST_ISSUE[$issue_bucket]}"
-      exit 0
-    fi
-
     qa_key="$category|$pri|qa"
     if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
       echo "pr ${FIRST_PR[$qa_key]} qa"
+      exit 0
+    fi
+
+    issue_bucket="$category|$pri"
+    if [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]]; then
+      echo "issue ${FIRST_ISSUE[$issue_bucket]}"
       exit 0
     fi
   done
