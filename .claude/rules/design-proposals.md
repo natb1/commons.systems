@@ -2,7 +2,7 @@
 
 ## Lead with the ideal greenfield design
 
-When proposing a design change, always describe the design you would choose
+When proposing a design change, always propose the design you would choose
 building from scratch — on its own terms, independent of migration cost.
 
 Additionally propose a brownfield migration path when migrating to the
