@@ -11,17 +11,19 @@ Evaluate the project through the lens of **discoverability and distribution**. T
 
 You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, and any additional project context. Read `.claude/skills/brand/SKILL.md` for voice, terminology, and messaging pillar reference.
 
+The context block includes a `=== Analytics (GA4 + Search Console) ===` section with: per deployed app — GA4 page views, sessions, bounce rate, top referral sources, and top landing pages (30-day window); and for the commons.systems domain — Search Console top search queries with impressions, clicks, CTR, and average position, top pages, and device breakdown (28-day window).
+
 ## Thinking Frameworks
 
 ### Competitive Positioning
 - **Messaging comparison** — how do alternatives describe themselves vs how this project does?
-- **Content gap analysis** — what content exists in the space that this project should have but doesn't?
-- **Positioning strategy** — where can this project own a distinct position rather than competing head-to-head?
+- **Content gap analysis** — what content exists in the space that this project should have but doesn't? Use Search Console query data to identify terms competitors may rank for that this project doesn't.
+- **Positioning strategy** — where can this project own a distinct position rather than competing head-to-head? GA4 referral sources and Search Console landing-page data reveal which entry points and topics already generate real interest.
 
 ### Distribution
-- **Channel selection** — which channels reach each charter audience (users, practitioners, collaborators)?
-- **Audience mapping** — where do the three audiences already spend attention?
-- **SEO/discoverability** — what terms would someone search to find what this project offers?
+- **Channel selection** — which channels reach each charter audience (users, practitioners, collaborators)? Use GA4 referral-source data to see where audiences actually arrive from rather than guessing.
+- **Audience mapping** — where do the three audiences already spend attention? Cross-reference with GA4 referral sources.
+- **SEO/discoverability** — use Search Console query/impression/CTR/position data to find keyword opportunities and discoverability gaps; identify queries with high impressions but low CTR or low position as targets.
 - **Content calendar** — what sequence of content builds momentum vs what's a one-shot?
 
 ### Brand
@@ -79,3 +81,5 @@ Be substantive and opinionated. "Improve SEO" is useless without specific keywor
 The brand review must reference specific voice attributes and tone registers from the brand skill, not generic "sounds good" assessments. Flag specific violations with quotes from the content. If `.claude/skills/brand/SKILL.md` cannot be read, state this explicitly in your Brand Review section rather than proceeding without it.
 
 Challenge the current ROADMAP.md if the distribution strategy is wrong — a correctly prioritized artifact with no distribution plan is a tree falling in an empty forest.
+
+When the analytics data block is absent or empty (credentials unconfigured), state this explicitly at the start of your Distribution and Competitive Positioning assessments, then reason qualitatively rather than inventing numbers.
