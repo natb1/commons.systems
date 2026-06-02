@@ -114,19 +114,22 @@ self_close() {
 # Resolve PR (may be empty for implement-phase before the draft PR opens).
 PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
 
-# Resolve current phase (used to compare against MARKER_PHASE).
-CURRENT_PHASE=$("$SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || CURRENT_PHASE=""
-
 # Early not-ready gate (marker-independent). If the target's PR CI is back in
 # progress (no verdict available), hand the issue back to the router without
 # parking or self-closing — the next tick re-gates it once CI concludes. This
 # covers the TOCTOU case where a push restarted CI between selection and session
-# end. Gating on dispatch-ci-ready (rather than CURRENT_PHASE) keeps this correct
-# regardless of how dispatch-phase represents a not-ready target.
+# end. The gate runs BEFORE dispatch-phase so CURRENT_PHASE is only derived for a
+# target that is confirmed ready — preventing a race where dispatch-phase exits 3
+# (pending) but CI becomes ready before dispatch-ci-ready runs, which would leave
+# CURRENT_PHASE="" and cause a spurious Branch D office-hours park.
 if ! "$SCRIPTS/dispatch-ci-ready" "$ISSUE_NUM" >/dev/null 2>&1; then
   spawn_router
   exit 0
 fi
+
+# Resolve current phase (used to compare against MARKER_PHASE). Called after the
+# readiness gate so CI is confirmed ready and dispatch-phase will not exit 3.
+CURRENT_PHASE=$("$SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || CURRENT_PHASE=""
 
 # Read marker (presence drives branch selection; content is for diagnostics).
 # Validate against the known phase set — a corrupt or unknown value falls
