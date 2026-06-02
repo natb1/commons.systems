@@ -86,9 +86,12 @@ fi
 # mirroring WORKTREE_PATHS_BY_NUM above, so child_is_office_hours_parked is a map
 # lookup with no per-child gh round-trip. A gh failure here is a hard error, not
 # an empty set — silently returning a parked leaf is the very bug being fixed.
+# --limit 300 matches dispatch-select-target's open-issue cap: the parked set is
+# a subset of open issues, so the default limit of 30 could silently truncate it
+# and let a parked leaf past position 30 be returned as startable.
 declare -A OFFICE_HOURS_PARKED=()
 if [[ "$MODE" == "queue" ]]; then
-  parked_json=$(gh issue list --state open --label "dispatch:office-hours" --json number) \
+  parked_json=$(gh issue list --state open --label "dispatch:office-hours" --limit 300 --json number) \
     || { echo "error: dispatch-trace-leaf $ISSUE_NUM: gh issue list for the dispatch:office-hours parked set failed; aborting rather than risk returning a parked leaf" >&2; exit 1; }
   while IFS= read -r parked_num; do
     [[ -n "$parked_num" ]] && OFFICE_HOURS_PARKED["$parked_num"]=1

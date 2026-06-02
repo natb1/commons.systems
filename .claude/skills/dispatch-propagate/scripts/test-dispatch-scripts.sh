@@ -155,7 +155,7 @@ case "$args" in
       echo "[]"
     fi
     ;;
-  "issue list --state open --label dispatch:office-hours --json number")
+  "issue list --state open --label dispatch:office-hours --limit 300 --json number")
     # dispatch-trace-leaf queue-mode parked set (#1011): open issues carrying
     # dispatch:office-hours. $STUB_DIR/trace-parked.json supplies the parked
     # numbers; absence means nothing is parked (default empty), so every
