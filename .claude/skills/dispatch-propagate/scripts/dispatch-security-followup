@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Compose security follow-up issues from classified security-review findings.
+# Usage: printf '%s' '<json-array>' | dispatch-security-followup <pr-number>
+#
+# Reads a JSON array of classified security findings on stdin. Writes a JSON
+# array of follow-ups to stdout, each object exactly:
+#   { "identifier": ..., "title": ..., "body": ... }
+# Emits [] when nothing qualifies. Qualifying findings are emitted in input
+# order.
+#
+# The PR number ($1) is used ONLY in the body provenance line — this script
+# makes NO network/git/gh calls. Pure stdin → stdout classification via jq.
+#
+# Per-finding input fields:
+#   classification — required | out-of-scope | false-positive
+#   source         — codeql | npm (anything else is ignored)
+#   CodeQL: rule_id, alert_number, security_severity_level
+#           (critical|high|medium|low|null), description, location, html_url
+#   npm:    advisory_id, severity (critical|high|moderate|low),
+#           introduced_by_diff (bool), package, title, url
+#
+# Meaningfulness predicate (a follow-up is emitted ONLY when ALL hold):
+#   CodeQL: classification == "out-of-scope" AND
+#           security_severity_level in {high, medium}
+#   npm:    classification == "out-of-scope" AND severity in {high, critical}
+#           AND introduced_by_diff == false
+#   required and false-positive are always excluded.
+#
+# Stable identifier (embedded verbatim in the title for /file-issue dedup):
+#   CodeQL: CodeQL <rule_id> alert #<alert_number>
+#   npm:    npm advisory <advisory_id>
+set -euo pipefail
+
+pr="$1"
+
+jq --arg pr "$pr" '
+  [ .[]
+    | select(
+        (.source == "codeql"
+          and .classification == "out-of-scope"
+          and (.security_severity_level == "high" or .security_severity_level == "medium"))
+        or
+        (.source == "npm"
+          and .classification == "out-of-scope"
+          and (.severity == "high" or .severity == "critical")
+          and (.introduced_by_diff == false))
+      )
+    | if .source == "codeql" then
+        {
+          source: "codeql",
+          identifier: ("CodeQL " + .rule_id + " alert #" + (.alert_number | tostring)),
+          location: .location,
+          severity: .security_severity_level,
+          urlline: ("Location: " + .location),
+          desc: .description
+        }
+      else
+        {
+          source: "npm",
+          identifier: ("npm advisory " + .advisory_id),
+          location: .package,
+          severity: .severity,
+          urlline: ("URL: " + .url),
+          desc: .title
+        }
+      end
+    | {
+        identifier: .identifier,
+        title: ("security: " + .identifier + " in " + .location),
+        body: ([
+          ("Identifier: " + .identifier),
+          ("Source: " + .source),
+          ("Severity: " + .severity),
+          .urlline,
+          ("Description: " + .desc),
+          ("Pre-existing out-of-scope finding surfaced during the security review of PR #" + $pr + ".")
+        ] | join("\n"))
+      }
+  ]
+' </dev/stdin
