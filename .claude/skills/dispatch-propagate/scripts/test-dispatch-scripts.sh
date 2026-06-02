@@ -2529,6 +2529,38 @@ result=$("$TMPDIR_TEST/office-hours")
 assert_eq "resume wins over fresh whenever any labeled item is live" "LAUNCH: --resume s-99-y" "$result"
 teardown
 
+# OH6. UNKNOWN daemon (claude unqueryable) → fall through to fresh /office-hours.
+# This is the entry-point's deliberate asymmetry with office-hours-select-target:
+# select-target (OHST5) treats UNKNOWN as occupied (left for resume); the entry
+# point treats UNKNOWN as not-resumable (fall through to fresh), so the two paths
+# never both claim an item whose liveness cannot be determined.
+echo "Test: UNKNOWN daemon → not-resumable, fall through to fresh /office-hours"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# OFFICE_HOURS_CLAUDE_CMD must be set so the script has a launch target and so
+# CLAUDE_AGENTS_CMD is overridden to a command that reports UNKNOWN (non-zero
+# exit). Re-use the office_hours_fake_claude stub but wire it with no live
+# sessions, then make the agents call fail to exercise the UNKNOWN path.
+office_hours_fake_claude   # sets OFFICE_HOURS_CLAUDE_CMD=TMPDIR_TEST/bin/claude
+# Override the claude binary so agents query always exits 1 (UNKNOWN daemon),
+# but launch invocations still print "LAUNCH: $*" so the test can assert which
+# launch fired.
+cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "agents" ]]; then
+  # Simulate an unqueryable daemon: non-zero exit, no output.
+  exit 1
+fi
+echo "LAUNCH: $*"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/claude"
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "UNKNOWN daemon → not-resumable → fresh /office-hours" "LAUNCH: /office-hours" "$result"
+teardown
+
 # ============================================================================
 # dispatch-trace-leaf tests
 # ============================================================================
