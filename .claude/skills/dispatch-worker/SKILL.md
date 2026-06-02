@@ -1,12 +1,12 @@
 ---
 name: dispatch-worker
-description: Worker for the dispatch chain — runs one phase skill in its target worktree, then hands off to a fresh `/dispatch-propagate` router
+description: Worker for the dispatch chain — runs one phase skill in its target worktree, then hands off — via the Stop hook — to a fresh headless dispatch tick
 ---
 
 # Dispatch Worker
 
 The worker is the per-worktree execution half of the dispatch chain. The other
-half — `/dispatch-propagate` — is the router: it selects a target, resolves its
+half is the headless `dispatch-tick` script: it selects a target, resolves its
 worktree, and spawns this worker into that worktree. The worker derives the
 phase, runs exactly one phase skill, and hands off.
 
@@ -248,8 +248,8 @@ current PR/CI state to decide propagate vs park.
 
 ### The #725 cap-keyed re-seed
 
-See `/dispatch-propagate` Step 7's *The #725 cap-keyed re-seed* subsection
-— the worker's relationship to the re-seed is the same as the router's.
+See `reference.md`'s *The #725 cap-keyed re-seed* section — the worker's
+relationship to the re-seed is the same as the tick's.
 The cap-keyed re-seed covers chain stalls caused by a rate-limit cap hit;
 an empty queue or all-parked stall is handled by the office-hours queue,
 not this mechanism.
