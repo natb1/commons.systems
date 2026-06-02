@@ -13311,7 +13311,7 @@ mat_teardown
 echo "=== print_remote_access_block ==="
 
 # All four emulators
-out=$(source "$SCRIPT_DIR/lib.sh" && print_remote_access_block 5173 8080 9099 9199 5001)
+out=$(unset QA_REMOTE_SSH_HOST; source "$SCRIPT_DIR/lib.sh" && print_remote_access_block 5173 8080 9099 9199 5001)
 assert_eq "all emulators: url present" "1" "$(grep -c 'http://localhost:5173/' <<<"$out")"
 ssh_line=$(grep -oE 'ssh -L .*' <<<"$out" | head -1)
 assert_eq "all emulators: ssh -L line" \
@@ -13319,7 +13319,7 @@ assert_eq "all emulators: ssh -L line" \
   "$ssh_line"
 
 # Vite only (no emulators)
-out=$(source "$SCRIPT_DIR/lib.sh" && print_remote_access_block 5173)
+out=$(unset QA_REMOTE_SSH_HOST; source "$SCRIPT_DIR/lib.sh" && print_remote_access_block 5173)
 ssh_line=$(grep -oE 'ssh -L .*' <<<"$out" | head -1)
 assert_eq "vite only: ssh -L line" "ssh -L 5173:localhost:5173 nixos" "$ssh_line"
 

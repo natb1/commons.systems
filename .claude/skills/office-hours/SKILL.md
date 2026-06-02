@@ -129,11 +129,16 @@ hand-off and no Stop-hook action — the Stop hook ignores non-`<N>-` session na
       data only; never `SEED_TEST_ONLY=true`.
 
       Before prompting the user for the first judgment item, surface the
-      **Remote access** block that `run-qa-server.sh` printed on startup (read
-      it from the background server output). A local operator on the same host
-      ignores the `ssh -L` line and opens `http://localhost:<vite>/` directly;
-      a remote tailnet operator runs the `ssh -L` command first, then opens the
-      same URL.
+      **Remote access** block that `run-qa-server.sh` printed on startup. The
+      block is in the background server's startup output; if it has scrolled
+      out of context, reproduce it from the known Vite and emulator ports
+      rather than re-parsing background output — `http://localhost:<vite>/`
+      plus an `ssh -L <vite>:localhost:<vite>` flag for the Vite port and one
+      `-L <emu>:localhost:<emu>` flag for every allocated emulator port,
+      ending with the SSH host. A local operator on the same host ignores the
+      `ssh -L` line and opens `http://localhost:<vite>/` directly; a remote
+      tailnet operator runs the `ssh -L` command first, then opens the same
+      URL.
 
    b. **On the first bug** — a user-reported FAIL or a bug already named in the
       `/qa-fix` summary — finalize the QA session (stop/export any GIF, run
