@@ -3,6 +3,11 @@
 
 export FIREBASE_PROJECT_ID="commons-systems"
 
+# Default Tailscale SSH host for remote QA port-forwarding. Static by design:
+# the Remote access block must not shell out to `tailscale` at runtime (#963).
+# Override with QA_REMOTE_SSH_HOST when the host's tailnet name differs.
+QA_REMOTE_SSH_HOST="${QA_REMOTE_SSH_HOST:-nixos}"
+
 # Resolve the issue number from an argument or the current branch name.
 # Args: $1 = issue number (optional; derived from branch if omitted)
 # Output: prints the issue number to stdout
@@ -564,4 +569,35 @@ find_available_ports() {
 # Find a single available TCP port (convenience wrapper).
 find_available_port() {
   find_available_ports 1
+}
+
+# Print the Remote access block for QA-server startup: the universal localhost
+# URL plus a copy-paste `ssh -L` command forwarding the Vite port and every
+# allocated emulator port to a remote client's localhost, so the served origin
+# stays http://localhost:<vite>/ on every machine.
+# Args: $1 = vite port; $2.. = emulator ports (may be empty)
+print_remote_access_block() {
+  local vite_port="$1"; shift
+  local ssh_cmd="ssh -L ${vite_port}:localhost:${vite_port}"
+  local p
+  for p in "$@"; do
+    ssh_cmd+=" -L ${p}:localhost:${p}"
+  done
+  ssh_cmd+=" ${QA_REMOTE_SSH_HOST}"
+  echo "========================================"
+  echo "  Remote access (Tailscale tunnel)"
+  echo "========================================"
+  echo ""
+  echo "  The QA server runs on the WSL host. The URL below is the same on"
+  echo "  every machine. On the same host, just open it. From a remote tailnet"
+  echo "  client, run the ssh command first to forward the ports, then open it."
+  echo ""
+  echo "  URL:  http://localhost:${vite_port}/"
+  echo ""
+  echo "  Remote client (run before opening the URL):"
+  echo ""
+  echo "    ${ssh_cmd}"
+  echo ""
+  echo "========================================"
+  echo ""
 }
