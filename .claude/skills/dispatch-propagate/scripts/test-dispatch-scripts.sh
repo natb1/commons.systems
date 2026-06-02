@@ -8554,6 +8554,25 @@ assert_eq "worker-named: 'claude rm abcd1234' was invoked (invariant skipped)" \
   "abcd1234" "$rm_log"
 selfclose_teardown
 
+# --- Test 8: router + UNKNOWN daemon + no reseed timer → SELF-CLOSE (#1010) ---
+
+echo "Test: router with UNKNOWN daemon (unqueryable) and no reseed timer self-closes (fail-safe)"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+selfclose_write_state "dispatch-abcd1234"
+# Model UNKNOWN: point CLAUDE_AGENTS_CMD at a non-existent binary so
+# claude_agents_count_busy_workers returns non-zero (daemon unqueryable).
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
+selfclose_set_no_timer
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-self-close" >/dev/null 2>&1 || rc=$?
+assert_eq "unknown-daemon: router self-close exits 0" "0" "$rc"
+rm_log=$(cat "$SPAWN_ROUTER_RM_LOG" 2>/dev/null || true)
+assert_eq "unknown-daemon: 'claude rm abcd1234' was invoked (fail-safe toward self-close)" \
+  "abcd1234" "$rm_log"
+selfclose_teardown
+
 # ============================================================================
 # dispatch-jit-engine tests
 # ============================================================================
