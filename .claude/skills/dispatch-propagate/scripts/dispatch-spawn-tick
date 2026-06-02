@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+# dispatch-spawn-tick — launch the headless dispatch-tick as a transient
+# systemd-run --user unit so a synchronous caller (a hook) returns immediately.
+#
+# This REPLACES the old dispatch-spawn-router. dispatch-spawn-router spawned the
+# autonomous tick as a `claude --bg "/dispatch-propagate"` *model* session whose
+# only job was to call two scripts and relay one line — pure overhead (a session
+# boot, a context load, a teardown per tick). Unit 3 of #982 makes the tick fully
+# headless: the routing now lives in the dispatch-tick bash script, so the per-
+# tick model session is gone. dispatch-spawn-tick launches that headless script
+# via systemd-run instead of via `claude --bg`.
+#
+# Usage: dispatch-spawn-tick [<N>]
+#   An optional first positional <N> (a positive integer) makes the launched tick
+#   target-keyed — it runs `dispatch-tick <N>` so the chain returns to that
+#   specific target (the #979 CI-wait reseed timer's ExecStart passes <N>). A
+#   non-numeric / flag-like value, or any extra argument, is rejected with exit 2.
+#
+# Fixed-unit-name dedup + --collect:
+#   The systemd unit name is FIXED — `dispatch-tick` (no target) or
+#   `dispatch-tick-<N>` (target-keyed). The fixed name IS the dedup mechanism:
+#   while a tick unit is running, a second `systemd-run --unit=dispatch-tick ...`
+#   collides ("already exists") and we treat that as a no-op (`deduped`) — there
+#   is no point launching a second identical tick while the first is in flight.
+#   `--collect` makes systemd garbage-collect a finished OR FAILED transient unit
+#   so the fixed name frees for the next tick. Without --collect a non-zero
+#   dispatch-tick exit would leave a lingering failed unit and the next
+#   `--unit=dispatch-tick` would collide forever — wedging all future ticks.
+#
+# Unlike dispatch-schedule-reseed (which schedules an --on-calendar TIMER), this
+# script runs the unit IMMEDIATELY: a transient .service, no --on-calendar /
+# --timer-property. The transient unit is itself the detachment — systemd runs
+# dispatch-tick in the background and the synchronous caller returns at once.
+#
+# --setenv=PATH="$PATH" propagates the launching caller's PATH into the transient
+# unit. Without it the unit inherits the systemd user manager's minimal default
+# PATH, which omits the nix store — so on NixOS/WSL hosts /usr/bin/env can't
+# resolve bash (exit 127) and dispatch-tick can't find git/jq/claude. The caller
+# (a dispatch hook or a reseed timer) carries the full nix-store PATH, so
+# capturing it at launch time makes the unit self-sufficient.
+#
+# Stdout protocol (exactly one word on the success paths):
+#   spawned   the transient unit was created (exit 0).
+#   deduped   a tick unit with this fixed name is already running — the
+#             systemd-run collision ("already exists") is treated as a no-op
+#             (exit 0).
+# Any other systemd-run failure echoes its stderr and passes the exit code
+# through.
+#
+# Exit codes:
+#   0  spawned or deduped (stdout disambiguates).
+#   2  a malformed target argument (non-numeric, flag-like, or more than one).
+#   non-zero — systemd-run failed for a reason other than the already-exists
+#              collision; the exit code is passed through.
+#
+# Environment overrides for testability (mirroring dispatch-schedule-reseed):
+#   DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD  The `systemd-run` binary. Default:
+#                                        `systemd-run`.
+#   DISPATCH_SPAWN_TICK_MAIN_WORKTREE    The main worktree path. When set, the
+#                                        script does NOT require a git repo.
+#                                        Default: <project-root>/worktrees/main,
+#                                        via resolve_project_root (lib.sh).
+#
+# Called from the dispatch hooks (the worker Stop-hook and the input-block hook)
+# and the reseed timers — all of which run OUTSIDE Claude's Bash sandbox. A
+# Bash-tool caller would need `dangerouslyDisableSandbox: true` because
+# `systemd-run --user` talks to the user's systemd over D-Bus, which the sandbox
+# blocks.
+#
+# NOT set -e: exits are handled explicitly (matching dispatch-schedule-reseed /
+# dispatch-spawn-router).
+set -uo pipefail
+
+# ---- Step 0: parse the optional target argument -----------------------------
+# An optional first positional <N> (a positive integer) makes the launched tick
+# target-keyed: it runs `dispatch-tick <N>` instead of the bare `dispatch-tick`.
+# Reject a non-numeric/flag-like value or any extra argument with exit 2 — a
+# malformed value would otherwise be interpolated into the unit name and the
+# dispatch-tick argv.
+TARGET_N=""
+if [[ $# -gt 1 ]]; then
+  echo "dispatch-spawn-tick: too many arguments (expected at most one target <N>)" >&2
+  exit 2
+fi
+if [[ $# -eq 1 ]]; then
+  if [[ ! "$1" =~ ^[1-9][0-9]*$ ]]; then
+    echo "dispatch-spawn-tick: target must be a positive integer, got '$1'" >&2
+    exit 2
+  fi
+  TARGET_N="$1"
+fi
+
+# ---- Step 1: resolve config -------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+# The headless tick runs from the main worktree (where every autonomous tick is
+# rooted). An explicit DISPATCH_SPAWN_TICK_MAIN_WORKTREE is authoritative and
+# bypasses the git lookup — tests rely on this. Otherwise resolve_project_root
+# (lib.sh) returns the project root in both classic (.git) and bare (.bare)
+# layouts.
+if [[ -n "${DISPATCH_SPAWN_TICK_MAIN_WORKTREE:-}" ]]; then
+  MAIN_WORKTREE="$DISPATCH_SPAWN_TICK_MAIN_WORKTREE"
+else
+  PROJECT_ROOT=$(resolve_project_root) \
+    || { echo "dispatch-spawn-tick: not in a git repo and DISPATCH_SPAWN_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
+  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+fi
+
+SYSTEMD_RUN_CMD="${DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD:-systemd-run}"
+TICK_PATH="$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-tick"
+
+# Fixed unit name — the dedup mechanism (see header). `dispatch-tick` when no
+# target, `dispatch-tick-<N>` when target-keyed.
+if [[ -n "$TARGET_N" ]]; then
+  UNIT_NAME="dispatch-tick-$TARGET_N"
+else
+  UNIT_NAME="dispatch-tick"
+fi
+
+# ---- Step 2: launch the transient unit immediately --------------------------
+RUN_STDERR=$(mktemp)
+trap 'rm -f "$RUN_STDERR"' EXIT
+# Capture the exit code directly — after `if cmd; then ... fi`, `$?` is the exit
+# status of the `if` construct, NOT the exit code of `cmd`. Running `cmd` outside
+# an `if` and capturing `$?` immediately preserves the real exit code so the
+# "pass-through on unexpected failure" contract holds.
+if [[ -n "$TARGET_N" ]]; then
+  "$SYSTEMD_RUN_CMD" --user \
+       --unit="$UNIT_NAME" \
+       --collect \
+       --working-directory="$MAIN_WORKTREE" \
+       --setenv=PATH="$PATH" \
+       "$TICK_PATH" "$TARGET_N" \
+       2>"$RUN_STDERR"
+  RC=$?
+else
+  "$SYSTEMD_RUN_CMD" --user \
+       --unit="$UNIT_NAME" \
+       --collect \
+       --working-directory="$MAIN_WORKTREE" \
+       --setenv=PATH="$PATH" \
+       "$TICK_PATH" \
+       2>"$RUN_STDERR"
+  RC=$?
+fi
+
+if (( RC == 0 )); then
+  echo spawned
+  exit 0
+fi
+
+err=$(cat "$RUN_STDERR")
+# systemd's already-exists message varies slightly across versions
+# ("Unit ... already exists" / "Failed to start transient service unit: Unit
+# ... already exists"). Match on the substring rather than the full phrase. A
+# collision means a tick with this fixed unit name is already running — a no-op.
+if [[ "$err" == *"already exists"* ]]; then
+  echo deduped
+  exit 0
+fi
+
+# Some other failure — surface stderr and pass the exit code through.
+echo "$err" >&2
+exit "$RC"

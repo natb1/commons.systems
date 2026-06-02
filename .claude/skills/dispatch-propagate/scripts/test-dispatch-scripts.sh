@@ -6505,7 +6505,7 @@ if [[ "$log" == *"--unit=dispatch-reseed-20000"* \
    && "$log" == *"--on-calendar=@20000"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
-   && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-spawn-router"* ]]; then
+   && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + cwd + setenv + exec)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + cwd + setenv + exec)"
@@ -6886,7 +6886,7 @@ sr_teardown
 #
 # Exercises the target-keyed CI-wait reseed: under-cap reseed bumps the
 # dispatch:ci-wait-attempt counter and schedules a transient timer whose
-# ExecStart re-runs dispatch-spawn-router <N>; at-cap escalates to
+# ExecStart re-runs dispatch-tick <N>; at-cap escalates to
 # dispatch:office-hours and schedules no timer; bad <N> / missing PR are misuse.
 #
 # Each test gets a fresh tmp tree:
@@ -6987,10 +6987,10 @@ if [[ "$log" == *"--unit=dispatch-reseed-target-979-10300"* \
    && "$log" == *"--on-calendar=@10300"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
-   && "$log" == *"dispatch-spawn-router 979"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: under-cap systemd-run argv (unit + calendar + cwd + setenv + spawn-router 979)"
+   && "$log" == *"dispatch-tick 979"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: under-cap systemd-run argv (unit + calendar + cwd + setenv + dispatch-tick 979)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap systemd-run argv (unit + calendar + cwd + setenv + spawn-router 979)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap systemd-run argv (unit + calendar + cwd + setenv + dispatch-tick 979)"
   echo "    log: $log"
 fi
 edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
@@ -7351,27 +7351,25 @@ assert_eq "writer change is visible via the reader" "In Progress" "$status"
 proj_teardown
 
 # ============================================================================
-# dispatch-spawn-router tests
+# write_fake_spawn_router_claude — retained fake-`claude` writer
 # ============================================================================
-echo "=== dispatch-spawn-router ==="
+# dispatch-spawn-router has been deleted (the autonomous tick is now the headless
+# dispatch-tick launched by dispatch-spawn-tick — see the dispatch-spawn-tick
+# tests below). Its dedicated setup/teardown and test cases are gone with it, but
+# the multi-subcommand fake-`claude` writer below is REUSED by the
+# dispatch-self-close tests (which need the fake's `rm` dispatch and the
+# SPAWN_ROUTER_RM_LOG convention). The writer and its SPAWN_ROUTER_* variable
+# conventions are kept intact here, defined before the self-close section runs.
 #
-# dispatch-spawn-router is exercised against a fake `claude` — a multi-subcommand
-# temp script DISPATCH_SPAWN_ROUTER_CLAUDE_CMD points at by absolute path, so no
-# real daemon is needed. The same fake also backs the sourced lib-claude-agents.sh
-# helper (dispatch-spawn-router exports CLAUDE_AGENTS_CMD to it).
-#
-# Each test gets a fresh tmp tree:
-#   $TMPDIR_TEST/scripts/        copies of dispatch-spawn-router + lib-claude-agents.sh
-#   $TMPDIR_TEST/worktrees/main/ the main worktree (the spawn subshell cd's here)
-#   $TMPDIR_TEST/fake-claude     the multi-subcommand fake `claude`
-#   $TMPDIR_TEST/registry.json   the `claude agents --json` fixture
-#   $TMPDIR_TEST/bg-argv         recorded argv of each `claude --bg` call
-#   $TMPDIR_TEST/pwd-log         records the spawn subshell's $PWD (used by Test 1b)
-#   $TMPDIR_TEST/rm-log          recorded job-ids of each `claude rm` call
-#   $TMPDIR_TEST/stop-log        recorded job-ids of each `claude stop` call
-#
-# The test shell runs under `set -e`; dispatch-spawn-router can exit non-zero, so
-# every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
+# write_fake_spawn_router_claude writes a multi-subcommand fake `claude` that a
+# caller points DISPATCH_*_CLAUDE_CMD / CLAUDE_AGENTS_CMD at by absolute path, so
+# no real daemon is needed. It interpolates these caller-set paths:
+#   $SPAWN_ROUTER_REGISTRY   the `claude agents --json` fixture
+#   $SPAWN_ROUTER_BG_ARGV    recorded argv of each `claude --bg` call
+#   $SPAWN_ROUTER_PWD_LOG    records the spawn subshell's $PWD
+#   $SPAWN_ROUTER_RM_LOG     recorded job-ids of each `claude rm` call
+#   $SPAWN_ROUTER_STOP_LOG   recorded job-ids of each `claude stop` call
+#   $SPAWN_ROUTER_PENDING    async-registration sidecar (delayed-register mode)
 
 SPAWN_ROUTER_REGISTRY=""
 SPAWN_ROUTER_BG_ARGV=""
@@ -7452,282 +7450,160 @@ FAKE
   chmod +x "$TMPDIR_TEST/fake-claude"
 }
 
-spawn_router_setup() {
+# ============================================================================
+# dispatch-spawn-tick tests
+# ============================================================================
+echo "=== dispatch-spawn-tick ==="
+#
+# dispatch-spawn-tick launches the headless dispatch-tick as a transient
+# `systemd-run --user` unit. It is exercised against a fake `systemd-run` — a
+# stub DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD points at by absolute path that records
+# its argv to a log file — so no real systemd is needed. DISPATCH_SPAWN_TICK_MAIN_WORKTREE
+# points at a synthetic main worktree so no git repo is required.
+#
+# The test shell runs under `set -e`; dispatch-spawn-tick can exit non-zero, so
+# every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
+
+# st_setup [systemd-stub-body]
+#   Build a fresh tmp tree with a copy of dispatch-spawn-tick + lib.sh and a fake
+#   systemd-run. The optional first arg is the body of the systemd-run stub; the
+#   default records argv to systemd-log and exits 0 (the "spawned" success path).
+st_setup() {
+  local stub_body="${1:-}"
   TMPDIR_TEST=$(mktemp -d)
-  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/worktrees/main"
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/main"
 
-  # dispatch-spawn-router sources lib-claude-agents.sh from its own directory, so the
-  # helper must sit alongside the copy. It is sourced, not executed — no chmod.
-  cp "$SCRIPT_DIR/dispatch-spawn-router" "$TMPDIR_TEST/scripts/dispatch-spawn-router"
-  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
-  # dispatch-spawn-router also sources lib.sh via its SCRIPT_DIR — so lib.sh
-  # must sit alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/dispatch-spawn-tick" "$TMPDIR_TEST/scripts/dispatch-spawn-tick"
+  # dispatch-spawn-tick sources lib.sh via its SCRIPT_DIR — so lib.sh must sit
+  # alongside it. Sourced, not executed — no chmod +x.
   cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
-  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-router"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-tick"
 
-  SPAWN_ROUTER_REGISTRY="$TMPDIR_TEST/registry.json"
-  SPAWN_ROUTER_BG_ARGV="$TMPDIR_TEST/bg-argv"
-  SPAWN_ROUTER_PWD_LOG="$TMPDIR_TEST/pwd-log"
-  SPAWN_ROUTER_RM_LOG="$TMPDIR_TEST/rm-log"
-  SPAWN_ROUTER_STOP_LOG="$TMPDIR_TEST/stop-log"
-  SPAWN_ROUTER_PENDING="$TMPDIR_TEST/pending"
-  printf '[]' > "$SPAWN_ROUTER_REGISTRY"
+  if [[ -z "$stub_body" ]]; then
+    stub_body="echo \"\$*\" >> \"$TMPDIR_TEST/systemd-log\""
+  fi
+  cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+$stub_body
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemd-run"
 
-  export DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
-  export DISPATCH_SPAWN_ROUTER_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
-  export DISPATCH_SPAWN_ROUTER_SESSION_ID="sess-self"
+  export DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
+  export DISPATCH_SPAWN_TICK_MAIN_WORKTREE="$TMPDIR_TEST/main"
 }
 
-spawn_router_teardown() {
+st_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
-  SPAWN_ROUTER_REGISTRY=""
-  SPAWN_ROUTER_BG_ARGV=""
-  SPAWN_ROUTER_PWD_LOG=""
-  SPAWN_ROUTER_RM_LOG=""
-  SPAWN_ROUTER_STOP_LOG=""
-  SPAWN_ROUTER_PENDING=""
-  unset DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE DISPATCH_SPAWN_ROUTER_CLAUDE_CMD \
-    DISPATCH_SPAWN_ROUTER_SESSION_ID SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
-    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+  unset DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD
+  unset DISPATCH_SPAWN_TICK_MAIN_WORKTREE
 }
 
-# --- Test 1: spawn success ---------------------------------------------------
+# --- Test 1: no-arg launch → spawned, exit 0, correct argv -------------------
 
-echo "Test: an empty registry spawns one /dispatch-propagate background job"
-spawn_router_setup
-write_fake_spawn_router_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "spawn: dispatch-spawn-router exits 0" "0" "$rc"
-assert_eq "spawn: stdout is 'spawned'" "spawned" "$out"
-# The recorded argv must be exactly: --bg --name dispatch-<id> \
-#   --permission-mode auto /dispatch-propagate
-mapfile -t bg_argv < "$SPAWN_ROUTER_BG_ARGV"
-assert_eq "spawn: argv[0] is --bg" "--bg" "${bg_argv[0]:-}"
-assert_eq "spawn: argv[1] is --name" "--name" "${bg_argv[1]:-}"
-case "${bg_argv[2]:-}" in
-  dispatch-*) name_ok=yes ;;
-  *)          name_ok="no: ${bg_argv[2]:-}" ;;
-esac
-assert_eq "spawn: argv[2] is a dispatch-* agent name" "yes" "$name_ok"
-assert_eq "spawn: argv[3] is --permission-mode" "--permission-mode" "${bg_argv[3]:-}"
-assert_eq "spawn: argv[4] is auto" "auto" "${bg_argv[4]:-}"
-assert_eq "spawn: argv[5] is /dispatch-propagate" "/dispatch-propagate" "${bg_argv[5]:-}"
-spawn_router_teardown
-
-# --- Test 1b: spawn cwd is the main worktree path ----------------------------
-
-echo "Test: dispatch-spawn-router invokes 'claude --bg' from the main worktree path"
-spawn_router_setup
-write_fake_spawn_router_claude
-# Run from a deliberately different caller cwd so the negative assertion (cwd is
-# NOT the caller's) is meaningful. The spawn subshell cd's into the main worktree.
-SPAWN_ROUTER_CALLER_CWD="$TMPDIR_TEST"
-if out=$( cd "$SPAWN_ROUTER_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null ); then rc=0; else rc=$?; fi
-assert_eq "spawn-router-cwd: exits 0" "0" "$rc"
-# Read the first line of the pwd-log and compare it (via realpath) to the main
-# worktree path. realpath is used to normalize platform-specific path
-# differences (e.g. macOS /private/ prefix on /tmp).
-sr_pwd_line=$(head -1 "$SPAWN_ROUTER_PWD_LOG" 2>/dev/null || true)
+echo "Test: a no-arg dispatch-spawn-tick launches the bare dispatch-tick unit"
+st_setup
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-tick" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "no-arg: dispatch-spawn-tick exits 0" "0" "$rc"
+assert_eq "no-arg: stdout is 'spawned'" "spawned" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$(realpath "$sr_pwd_line" 2>/dev/null)" == "$(realpath "$DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE")" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-router-cwd: 'claude --bg' ran with cwd = main worktree path"
+if [[ "$log" == *"--unit=dispatch-tick"* \
+   && "$log" == *"--collect"* \
+   && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
+   && "$log" == *"--setenv=PATH="* \
+   && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no-arg systemd-run argv (unit + collect + cwd + setenv + exec)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-router-cwd: 'claude --bg' ran with cwd = main worktree path"
-  echo "    pwd-log:  '$sr_pwd_line'"
-  echo "    expected: '$DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE'"
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-arg systemd-run argv (unit + collect + cwd + setenv + exec)"
+  echo "    log: $log"
 fi
-# Independently assert the cwd is NOT the caller's cwd — that is the regression
-# the fix prevents (router born in the wrong worktree). Only meaningful when
-# pwd-log is non-empty (i.e. --bg was actually called); an empty pwd-log would
-# make realpath "" return "" and the != comparison would silently pass.
+# No trailing numeric arg in the no-arg case: the exec path must be the LAST
+# token (allowing for systemd-run's `$*` space-joined trailing whitespace).
 TOTAL=$((TOTAL + 1))
-if [[ -z "$sr_pwd_line" ]]; then
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-router-cwd: 'claude --bg' did NOT run from the caller's cwd"
-  echo "    pwd-log is empty — 'claude --bg' was never called"
-elif [[ "$(realpath "$sr_pwd_line" 2>/dev/null)" != "$(realpath "$SPAWN_ROUTER_CALLER_CWD")" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-router-cwd: 'claude --bg' did NOT run from the caller's cwd"
+last_tok=$(printf '%s\n' "$log" | tail -n1 | awk '{print $NF}')
+if [[ "$last_tok" == "$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no-arg: exec path is the last argv token (no trailing <N>)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-router-cwd: 'claude --bg' did NOT run from the caller's cwd"
-  echo "    pwd-log: '$sr_pwd_line'"
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-arg: exec path is the last argv token (no trailing <N>)"
+  echo "    last token: $last_tok"
 fi
-spawn_router_teardown
+st_teardown
 
-# --- Test 2: dedup -----------------------------------------------------------
+# --- Test 2: target-keyed launch → dispatch-tick-<N> unit + trailing <N> ------
 
-echo "Test: another live dispatch-* session deduplicates the spawn"
-spawn_router_setup
-printf '%s' \
-  '[{"sessionId":"sess-other","pid":4242,"cwd":"/main","kind":"background","status":"busy","name":"dispatch-aaaa1111"}]' \
-  > "$SPAWN_ROUTER_REGISTRY"
-write_fake_spawn_router_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "dedup: dispatch-spawn-router exits 0" "0" "$rc"
-assert_eq "dedup: stdout is 'deduped'" "deduped" "$out"
-# No --bg invocation was recorded — nothing was spawned.
-TOTAL=$((TOTAL + 1))
-if [[ ! -e "$SPAWN_ROUTER_BG_ARGV" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: dedup: no 'claude --bg' invocation recorded"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: dedup: no 'claude --bg' invocation recorded"
-  echo "    bg-argv: $(cat "$SPAWN_ROUTER_BG_ARGV")"
-fi
-spawn_router_teardown
-
-# --- Test 3: self-exclusion --------------------------------------------------
-
-echo "Test: a dispatch-* session that is this session does not deduplicate"
-spawn_router_setup
-# The only dispatch-* session in the registry IS this session (sess-self).
-printf '%s' \
-  '[{"sessionId":"sess-self","pid":4242,"cwd":"/main","kind":"background","status":"busy","name":"dispatch-self0000"}]' \
-  > "$SPAWN_ROUTER_REGISTRY"
-write_fake_spawn_router_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "self-exclude: dispatch-spawn-router exits 0" "0" "$rc"
-assert_eq "self-exclude: stdout is 'spawned' (own session is not 'another')" \
-  "spawned" "$out"
-spawn_router_teardown
-
-# --- Test 4: spawn failure ---------------------------------------------------
-
-echo "Test: a spawned job that never registers exits non-zero with a diagnostic"
-spawn_router_setup
-write_fake_spawn_router_claude
-export SPAWN_BG_REGISTERS=0
-# Skip the real inter-attempt sleeps — this test exercises the full exhaustion
-# path, which would otherwise add ~0.8 s of wall-clock sleep.
-export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
-rc=0
-err=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>&1 1>/dev/null) || rc=$?
-TOTAL=$((TOTAL + 1))
-if [[ "$rc" -ne 0 ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-fail: dispatch-spawn-router exits non-zero"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-fail: dispatch-spawn-router exits non-zero (rc=$rc)"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"did not register"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-fail: stderr reports the unregistered agent"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-fail: stderr reports the unregistered agent"
-  echo "    stderr: $err"
-fi
-spawn_router_teardown
-
-# --- Test 5: unqueryable registry fails safe ---------------------------------
-
-echo "Test: an unparseable session registry fails safe — spawns nothing"
-spawn_router_setup
-# A registry that is not a JSON array: lib-claude-agents.sh's
-# claude_sessions_under cannot parse it and returns 1 (unknown). dispatch-spawn-router
-# must treat unknown as "a dispatch agent may be running" and spawn nothing —
-# the documented fail-safe in the script's Step 2 dedup guard.
-printf '%s' 'not-a-json-array' > "$SPAWN_ROUTER_REGISTRY"
-write_fake_spawn_router_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "unknown-registry: dispatch-spawn-router exits 0" "0" "$rc"
-assert_eq "unknown-registry: stdout is 'deduped'" "deduped" "$out"
-# No --bg invocation was recorded — nothing was spawned.
-TOTAL=$((TOTAL + 1))
-if [[ ! -e "$SPAWN_ROUTER_BG_ARGV" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: unknown-registry: no 'claude --bg' invocation recorded"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: unknown-registry: no 'claude --bg' invocation recorded"
-  echo "    bg-argv: $(cat "$SPAWN_ROUTER_BG_ARGV")"
-fi
-spawn_router_teardown
-
-# --- Test 6: delayed registration absorbed by verify retry -------------------
-
-echo "Test: a spawned job that registers on the 2nd 'agents' call still exits 0"
-spawn_router_setup
-write_fake_spawn_router_claude
-# SPAWN_BG_REGISTER_AFTER_N=2 means the spawned agent first appears in the
-# fake's registry on the 2nd subsequent `agents` call — modeling the daemon's
-# async-registration race the issue describes. verify_agent_registered_under
-# polls up to 5 times, so the 2nd attempt finds it and the script exits 0.
-export SPAWN_BG_REGISTER_AFTER_N=2
-err_file="$TMPDIR_TEST/stderr"
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>"$err_file"); then rc=0; else rc=$?; fi
-err=$(cat "$err_file")
-assert_eq "delayed-register: dispatch-spawn-router exits 0" "0" "$rc"
-assert_eq "delayed-register: stdout is 'spawned'" "spawned" "$out"
-TOTAL=$((TOTAL + 1))
-if [[ -z "${err//[[:space:]]/}" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: delayed-register: no diagnostic on stderr"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: delayed-register: no diagnostic on stderr"
-  echo "    stderr: $err"
-fi
-spawn_router_teardown
-
-# --- Test 7: registration on the exact last attempt still exits 0 ------------
-
-echo "Test: a spawned job that registers on the 5th (final) 'agents' call still exits 0"
-spawn_router_setup
-write_fake_spawn_router_claude
-# SPAWN_BG_REGISTER_AFTER_N=5 makes the agent first appear on the 5th
-# subsequent `agents` call — the last poll before verify_agent_registered_under
-# exhausts its 5-attempt budget. This pins the off-by-one in the retry loop:
-# the final attempt is honoured, so the script must still exit 0.
-export SPAWN_BG_REGISTER_AFTER_N=5
-export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
-err_file="$TMPDIR_TEST/stderr"
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>"$err_file"); then rc=0; else rc=$?; fi
-err=$(cat "$err_file")
-assert_eq "last-attempt-register: dispatch-spawn-router exits 0" "0" "$rc"
-assert_eq "last-attempt-register: stdout is 'spawned'" "spawned" "$out"
-TOTAL=$((TOTAL + 1))
-if [[ -z "${err//[[:space:]]/}" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: last-attempt-register: no diagnostic on stderr"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: last-attempt-register: no diagnostic on stderr"
-  echo "    stderr: $err"
-fi
-spawn_router_teardown
-
-# --- Test 8: an explicit target makes the spawn target-keyed ------------------
-
-echo "Test: an explicit target <N> spawns '/dispatch-propagate <N>'"
-spawn_router_setup
-write_fake_spawn_router_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 979 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "target: dispatch-spawn-router exits 0" "0" "$rc"
+echo "Test: a target-keyed dispatch-spawn-tick 979 launches the dispatch-tick-979 unit"
+st_setup
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-tick" 979 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "target: dispatch-spawn-tick exits 0" "0" "$rc"
 assert_eq "target: stdout is 'spawned'" "spawned" "$out"
-# The final argv element is the target-keyed prompt rather than the bare form.
-mapfile -t bg_argv < "$SPAWN_ROUTER_BG_ARGV"
-assert_eq "target: argv[5] is '/dispatch-propagate 979'" "/dispatch-propagate 979" "${bg_argv[5]:-}"
-spawn_router_teardown
-
-# --- Test 9: the no-arg path still spawns the bare prompt --------------------
-
-echo "Test: no target argument still spawns the bare '/dispatch-propagate'"
-spawn_router_setup
-write_fake_spawn_router_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "no-target: dispatch-spawn-router exits 0" "0" "$rc"
-assert_eq "no-target: stdout is 'spawned'" "spawned" "$out"
-mapfile -t bg_argv < "$SPAWN_ROUTER_BG_ARGV"
-assert_eq "no-target: argv[5] is the bare '/dispatch-propagate'" "/dispatch-propagate" "${bg_argv[5]:-}"
-spawn_router_teardown
-
-# --- Test 10: a non-numeric target argument is rejected ----------------------
-
-echo "Test: a non-numeric target argument exits 2 and spawns nothing"
-spawn_router_setup
-write_fake_spawn_router_claude
-rc=0
-err=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" --repo 2>&1 1>/dev/null) || rc=$?
-assert_eq "bad-target: dispatch-spawn-router exits 2" "2" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$SPAWN_ROUTER_BG_ARGV" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: bad-target: no 'claude --bg' invocation recorded"
+if [[ "$log" == *"--unit=dispatch-tick-979"* \
+   && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick 979"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: target systemd-run argv (unit=dispatch-tick-979 + exec path 979)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: bad-target: no 'claude --bg' invocation recorded"
-  echo "    bg-argv: $(cat "$SPAWN_ROUTER_BG_ARGV")"
+  FAIL=$((FAIL + 1)); echo "  FAIL: target systemd-run argv (unit=dispatch-tick-979 + exec path 979)"
+  echo "    log: $log"
 fi
-spawn_router_teardown
+st_teardown
+
+# --- Test 3: idempotency — already-exists collision → deduped ----------------
+
+echo "Test: an already-exists systemd-run collision yields 'deduped' (exit 0)"
+st_setup 'echo "Unit dispatch-tick.service already exists" >&2; exit 1'
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-tick" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "deduped: dispatch-spawn-tick exits 0" "0" "$rc"
+assert_eq "deduped: stdout is 'deduped'" "deduped" "$out"
+st_teardown
+
+# --- Test 4: a generic systemd-run failure passes the exit code through -------
+
+echo "Test: a generic systemd-run failure surfaces stderr and passes the code through"
+st_setup 'echo "boom" >&2; exit 1'
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn-tick" 2>&1 1>/dev/null) || rc=$?
+assert_eq "fail: dispatch-spawn-tick passes the exit code through (1)" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"boom"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: fail: systemd-run stderr is surfaced"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: fail: systemd-run stderr is surfaced"
+  echo "    stderr: $err"
+fi
+st_teardown
+
+# --- Test 5: a flag-like target argument is rejected (exit 2) ----------------
+
+echo "Test: a flag-like target argument exits 2 and launches nothing"
+st_setup
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn-tick" --repo 2>&1 1>/dev/null) || rc=$?
+assert_eq "bad-target-flag: dispatch-spawn-tick exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: bad-target-flag: no systemd-run invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: bad-target-flag: no systemd-run invocation recorded"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+st_teardown
+
+# --- Test 6: a non-numeric target argument is rejected (exit 2) --------------
+
+echo "Test: a non-numeric target argument exits 2 and launches nothing"
+st_setup
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn-tick" abc 2>&1 1>/dev/null) || rc=$?
+assert_eq "bad-target-nonnum: dispatch-spawn-tick exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: bad-target-nonnum: no systemd-run invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: bad-target-nonnum: no systemd-run invocation recorded"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+st_teardown
 
 # ============================================================================
 # dispatch-spawn-worker tests
@@ -9145,14 +9021,14 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-apply-office-hours"
 
-  # Fake dispatch-spawn-router: log invocations to spawn-calls.log.
-  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-router" <<'FAKE'
+  # Fake dispatch-spawn-tick: log invocations to spawn-calls.log.
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-tick" <<'FAKE'
 #!/usr/bin/env bash
 echo "spawn" >> "$STUB_DIR/spawn-calls.log"
 echo "spawned"
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-router"
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-tick"
 
   # gh PATH stub. pr-edit-mode/issue-edit-mode select behavior (default: ok and
   # log args). "label-missing" models the first apply failing with a missing-
@@ -9570,18 +9446,18 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-phase"
 
-  # Fake dispatch-spawn-router: log to order.log + spawn-calls.log, and the full
-  # argv to spawn-router-argv.log (so the resolver re-seed tests can assert the
+  # Fake dispatch-spawn-tick: log to order.log + spawn-calls.log, and the full
+  # argv to spawn-tick-argv.log (so the resolver re-seed tests can assert the
   # target argument without disturbing the existing `spawn` log lines).
-  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-router" <<'FAKE'
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-tick" <<'FAKE'
 #!/usr/bin/env bash
 echo "spawn" >> "$STUB_DIR/order.log"
 echo "spawn" >> "$STUB_DIR/spawn-calls.log"
-echo "$*" >> "$STUB_DIR/spawn-router-argv.log"
+echo "$*" >> "$STUB_DIR/spawn-tick-argv.log"
 echo "spawned"
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-router"
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-tick"
 
   # Fake dispatch-self-close: log to order.log + self-close-calls.log.
   cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-self-close" <<'FAKE'
@@ -10123,7 +9999,7 @@ stop_teardown
 # A /dispatch-resolve-conflict job is named <N>-slug like a worker but writes a
 # `conflict-resolver` sentinel (no phase-completed marker). With a
 # `conflict-resolved` marker present, Branch R re-seeds the chain at the issue
-# (target-keyed dispatch-spawn-router 839) and self-closes; no office-hours park.
+# (target-keyed dispatch-spawn-tick 839) and self-closes; no office-hours park.
 echo "Test: stop hook + conflict-resolver + conflict-resolved → target re-seed + self-close"
 stop_setup
 echo "839-foo" > "$STUB_DIR/current-branch.txt"
@@ -10134,13 +10010,13 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "resolver-resolved: hook exits 0" "0" "$rc"
-spawn_argv=$(cat "$STUB_DIR/spawn-router-argv.log" 2>/dev/null || true)
+spawn_argv=$(cat "$STUB_DIR/spawn-tick-argv.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$spawn_argv" == *"839"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: resolver-resolved: dispatch-spawn-router called with target 839"
+  PASS=$((PASS + 1)); echo "  PASS: resolver-resolved: dispatch-spawn-tick called with target 839"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-resolved: dispatch-spawn-router called with target 839"
-  echo "    spawn-router-argv: $spawn_argv"
+  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-resolved: dispatch-spawn-tick called with target 839"
+  echo "    spawn-tick-argv: $spawn_argv"
 fi
 self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
 assert_eq "resolver-resolved: self-close invoked exactly once" "1" "$self_close_calls"
@@ -10176,13 +10052,13 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: resolver-ambiguous: office-hours applied to 839 with the reason file's contents"
   echo "    apply-log: $apply_log"
 fi
-spawn_argv=$(cat "$STUB_DIR/spawn-router-argv.log" 2>/dev/null || true)
+spawn_argv=$(cat "$STUB_DIR/spawn-tick-argv.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$spawn_argv" == *"839"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: resolver-ambiguous: dispatch-spawn-router called with target 839"
+  PASS=$((PASS + 1)); echo "  PASS: resolver-ambiguous: dispatch-spawn-tick called with target 839"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-ambiguous: dispatch-spawn-router called with target 839"
-  echo "    spawn-router-argv: $spawn_argv"
+  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-ambiguous: dispatch-spawn-tick called with target 839"
+  echo "    spawn-tick-argv: $spawn_argv"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
@@ -10445,7 +10321,7 @@ router_smoke_setup() {
   mkdir -p "$TMPDIR_TEST/bin" "$TMPDIR_TEST/logs"
 
   # Faked PROJECT_ROOT — mock the layout `git rev-parse --git-common-dir`
-  # would return (parent is the project root by the same idiom dispatch-spawn-router /
+  # would return (parent is the project root by the same idiom dispatch-spawn-tick /
   # dispatch-acquire-lock use).
   mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
 
