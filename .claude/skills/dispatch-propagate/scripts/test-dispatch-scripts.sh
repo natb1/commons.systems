@@ -2770,6 +2770,32 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "explicit")
 assert_eq "explicit: parked leaf 701 returned unchanged" "701" "$result"
 teardown
 
+# 20. Queue mode: the ROOT issue is itself a parked topological leaf (#1011).
+#     700 has no children, so the descent loop never runs and cannot skip it;
+#     the root guard before the trace must catch it and exit 2 rather than
+#     return the parked root. This is the standalone-contract edge case — the
+#     descent child-skip alone leaves the root unguarded.
+echo "Test: queue mode → parked ROOT leaf guarded, exits 2"
+setup
+# No subissues-700.json → 700 is a topological leaf.
+printf '{"title":"Issue 700","body":"","comments":[],"number":700,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-700.json"
+printf '[{"number":700}]\n' > "$STUB_DIR/trace-parked.json"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" 2>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+assert_eq "queue: parked root leaf → exit 2, no leaf on stdout" "EXIT=2" "$err_out"
+teardown
+
+# 21. Explicit mode: a parked ROOT leaf is returned unchanged (#1011 scopes the
+#     root guard to queue mode, mirroring the descent child-skip scoping).
+echo "Test: explicit mode → parked ROOT leaf returned (no guard)"
+setup
+printf '{"title":"Issue 700","body":"","comments":[],"number":700,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-700.json"
+printf '[{"number":700}]\n' > "$STUB_DIR/trace-parked.json"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "explicit")
+assert_eq "explicit: parked root leaf 700 returned unchanged" "700" "$result"
+teardown
+
 # ============================================================================
 # dispatch-complete-phase tests
 # ============================================================================
