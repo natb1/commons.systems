@@ -51,7 +51,7 @@ jq --arg pr "$pr" '
           identifier: ("CodeQL " + .rule_id + " alert #" + (.alert_number | tostring)),
           location: .location,
           severity: .security_severity_level,
-          urlline: ("Location: " + .location),
+          urlline: ("URL: " + .html_url),
           desc: .description
         }
       else

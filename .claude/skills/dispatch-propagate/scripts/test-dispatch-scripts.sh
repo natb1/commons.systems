@@ -13506,10 +13506,15 @@ out=$(printf '%s' '[{"source":"npm","classification":"out-of-scope","advisory_id
 assert_eq "followup: npm out-of-scope high introduced-by-diff → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
 
 # 11a. CodeQL stable identifier embedded verbatim in title
-out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/sql-injection","alert_number":42,"security_severity_level":"high","description":"sqli","location":"src/db.ts","html_url":"http://x"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/sql-injection","alert_number":42,"security_severity_level":"high","description":"sqli","location":"src/db.ts","html_url":"https://github.com/org/repo/security/code-scanning/42"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
 title=$(printf '%s' "$out" | jq -r '.[0].title')
 case "$title" in *"CodeQL js/sql-injection alert #42"*) hit=yes ;; *) hit=no ;; esac
 assert_eq "followup: codeql identifier embedded in title" "yes" "$hit"
+
+# 11c. CodeQL html_url is included in body for traceability
+body=$(printf '%s' "$out" | jq -r '.[0].body')
+case "$body" in *"https://github.com/org/repo/security/code-scanning/42"*) hit=yes ;; *) hit=no ;; esac
+assert_eq "followup: codeql html_url in body" "yes" "$hit"
 
 # 11b. npm stable identifier embedded verbatim in title
 out=$(printf '%s' '[{"source":"npm","classification":"out-of-scope","advisory_id":"GHSA-xxxx-yyyy","severity":"critical","introduced_by_diff":false,"package":"react","title":"xss","url":"http://npm"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
