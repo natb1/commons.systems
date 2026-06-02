@@ -9570,11 +9570,14 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-phase"
 
-  # Fake dispatch-spawn-router: log to order.log + spawn-calls.log.
+  # Fake dispatch-spawn-router: log to order.log + spawn-calls.log, and the full
+  # argv to spawn-router-argv.log (so the resolver re-seed tests can assert the
+  # target argument without disturbing the existing `spawn` log lines).
   cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-router" <<'FAKE'
 #!/usr/bin/env bash
 echo "spawn" >> "$STUB_DIR/order.log"
 echo "spawn" >> "$STUB_DIR/spawn-calls.log"
+echo "$*" >> "$STUB_DIR/spawn-router-argv.log"
 echo "spawned"
 exit 0
 FAKE
@@ -10114,6 +10117,79 @@ spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop wrong-cwd: spawn invoked exactly once" "1" "$spawn_calls"
 self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop wrong-cwd: self-close invoked exactly once" "1" "$self_close_calls"
+stop_teardown
+
+# --- Test R1: conflict-resolver RESOLVED → target re-seed + self-close (#982) -
+# A /dispatch-resolve-conflict job is named <N>-slug like a worker but writes a
+# `conflict-resolver` sentinel (no phase-completed marker). With a
+# `conflict-resolved` marker present, Branch R re-seeds the chain at the issue
+# (target-keyed dispatch-spawn-router 839) and self-closes; no office-hours park.
+echo "Test: stop hook + conflict-resolver + conflict-resolved → target re-seed + self-close"
+stop_setup
+echo "839-foo" > "$STUB_DIR/current-branch.txt"
+echo '{"name":"839-foo"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+printf 'issue=839\nworktree=/wt/839-foo\n' > "$TMPDIR_TEST/jobs/abcd1234/conflict-resolver"
+printf 'issue=839\n' > "$TMPDIR_TEST/jobs/abcd1234/conflict-resolved"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "resolver-resolved: hook exits 0" "0" "$rc"
+spawn_argv=$(cat "$STUB_DIR/spawn-router-argv.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$spawn_argv" == *"839"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: resolver-resolved: dispatch-spawn-router called with target 839"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-resolved: dispatch-spawn-router called with target 839"
+  echo "    spawn-router-argv: $spawn_argv"
+fi
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "resolver-resolved: self-close invoked exactly once" "1" "$self_close_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: resolver-resolved: no office-hours apply"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-resolved: no office-hours apply"
+fi
+stop_teardown
+
+# --- Test R2: conflict-resolver AMBIGUOUS/crash → park + re-seed, no self-close
+# Sentinel present, NO conflict-resolved marker → Branch R parks the issue (with
+# the office-hours-reason file's reason) and re-seeds at 839, but does NOT
+# self-close (the variance stays visible).
+echo "Test: stop hook + conflict-resolver, no conflict-resolved → park + re-seed, no self-close"
+stop_setup
+echo "839-foo" > "$STUB_DIR/current-branch.txt"
+echo '{"name":"839-foo"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+printf 'issue=839\nworktree=/wt/839-foo\n' > "$TMPDIR_TEST/jobs/abcd1234/conflict-resolver"
+printf '%s' "both branches rewrote the same function body" > "$TMPDIR_TEST/jobs/abcd1234/office-hours-reason"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "resolver-ambiguous: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "839" && "$apply_reason" == "both branches rewrote the same function body" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: resolver-ambiguous: office-hours applied to 839 with the reason file's contents"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-ambiguous: office-hours applied to 839 with the reason file's contents"
+  echo "    apply-log: $apply_log"
+fi
+spawn_argv=$(cat "$STUB_DIR/spawn-router-argv.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$spawn_argv" == *"839"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: resolver-ambiguous: dispatch-spawn-router called with target 839"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-ambiguous: dispatch-spawn-router called with target 839"
+  echo "    spawn-router-argv: $spawn_argv"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: resolver-ambiguous: self-close NOT invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-ambiguous: self-close NOT invoked"
+fi
 stop_teardown
 
 # ============================================================================
@@ -10757,7 +10833,8 @@ restore_setup() {
     "$TMPDIR_TEST/bin" \
     "$STUB_DIR"
   for skill in plan-implement verify-pr qa-fix office-hours code-review-fix \
-               review-fix security-review-fix dispatch-worker; do
+               review-fix security-review-fix dispatch-worker \
+               dispatch-resolve-conflict; do
     mkdir -p "$TMPDIR_TEST/.claude/skills/$skill"
     cat > "$TMPDIR_TEST/.claude/skills/$skill/SKILL.md" <<EOF
 ---
@@ -10992,6 +11069,43 @@ if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
   PASS=$((PASS + 1)); echo "  PASS: office-hours: no ARGUMENTS line"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: no ARGUMENTS line"
+  echo "    output: $output"
+fi
+restore_teardown
+
+# --- Test 3c: conflict-resolver sentinel → dispatch-resolve-conflict body (#982)
+# A <N>-slug session with a `conflict-resolver` sentinel in CLAUDE_JOB_DIR
+# restores the /dispatch-resolve-conflict skill body (matched first, by the
+# sentinel, ahead of office-hours and phase routing) with an
+# `ARGUMENTS: <N> <worktree>` line.
+echo "Test: restore-dispatch-skill conflict-resolver sentinel → dispatch-resolve-conflict body + args"
+restore_setup
+set_agents_name "839-foo"
+echo "implement" > "$STUB_DIR/current-phase.txt"   # would route to plan-implement absent the sentinel
+mkdir -p "$TMPDIR_TEST/jobdir"
+printf 'issue=839\nworktree=%s/worktrees/839-foo\n' "$TMPDIR_TEST" > "$TMPDIR_TEST/jobdir/conflict-resolver"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobdir"
+output=$(run_restore)
+unset CLAUDE_JOB_DIR
+TOTAL=$((TOTAL + 1))
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/dispatch-resolve-conflict"
+if [[ "$output" == *"$expected_dir"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: resolver-restore: base directory line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-restore: base directory line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"RESTORE_MARKER_dispatch-resolve-conflict"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: resolver-restore: SKILL.md body marker emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-restore: SKILL.md body marker emitted"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"ARGUMENTS: 839 $TMPDIR_TEST/worktrees/839-foo"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: resolver-restore: ARGUMENTS line carries <N> <worktree>"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-restore: ARGUMENTS line carries <N> <worktree>"
   echo "    output: $output"
 fi
 restore_teardown
@@ -12733,12 +12847,21 @@ FAKE
 #!/usr/bin/env bash
 echo "cwd=\$PWD argv=\$*" >> "$TMPDIR_TEST/logs/sync-issue-context.log"
 FAKE
+  # Fake dispatch-spawn-job: the conflict-resolver spawn primitive. Logs its full
+  # argv and prints `spawned`; MAT_RESOLVER_RC controls the exit code (a non-zero
+  # value models a spawn that never registered).
+  cat > "$TMPDIR_TEST/dispatch-spawn-job" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/spawn-job.log"
+echo spawned
+exit \${MAT_RESOLVER_RC:-0}
+FAKE
   chmod +x "$TMPDIR_TEST"/dispatch-find-pr "$TMPDIR_TEST"/dispatch-trace-leaf \
     "$TMPDIR_TEST"/dispatch-check-blockers "$TMPDIR_TEST"/dispatch-apply-office-hours \
     "$TMPDIR_TEST"/dispatch-resolve-worktree "$TMPDIR_TEST"/dispatch-merge-main \
     "$TMPDIR_TEST"/dispatch-phase "$TMPDIR_TEST"/dispatch-select-target \
     "$TMPDIR_TEST"/dispatch-spawn-worker "$TMPDIR_TEST"/dispatch-schedule-target-reseed \
-    "$TMPDIR_TEST"/sync-issue-context
+    "$TMPDIR_TEST"/dispatch-spawn-job "$TMPDIR_TEST"/sync-issue-context
 
   mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
   cat > "$TMPDIR_TEST/bin/git" <<STUB
@@ -12770,7 +12893,7 @@ mat_teardown() {
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_MERGE_RC MAT_PHASE \
     MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE MAT_MERGE_CONFLICT_N \
-    MAT_RESEED_OUT MAT_RESEED_RC
+    MAT_RESEED_OUT MAT_RESEED_RC MAT_RESOLVER_RC
 }
 
 run_mat() { "$TMPDIR_TEST/dispatch-materialize-spawn" "$@" 2>/dev/null; }
@@ -12956,28 +13079,43 @@ assert_eq "conflict: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- merge conflict → resolve merge-conflict, no park, no spawn (#829) --------
-# dispatch-merge-main exits 3 on a conflicting merge; the router script no longer
-# parks. It releases the lock, prints `issue:` / `worktree:` detail, and emits
-# `resolve merge-conflict` — handing the conflict back to the router AGENT for an
-# opus-subagent auto-resolve attempt before any office-hours park. The agent-side
-# attempt is SKILL.md prose, not script logic, so it is not tested here.
-echo "Test: materialize-spawn merge conflict → resolve merge-conflict"
+# --- merge conflict → spawn /dispatch-resolve-conflict bg job, propagate (#982)
+# dispatch-merge-main exits 3 on a conflicting merge; the headless router can no
+# longer run the opus subagent itself, so it spawns a /dispatch-resolve-conflict
+# bg job named for the worktree basename (which locks the worktree AND consumes a
+# concurrency slot) and emits `propagate`. The lock is released, no phase worker
+# is spawned, and the resolver's own session owns the resolve/escalate verdict.
+echo "Test: materialize-spawn merge conflict → spawn resolver + propagate"
 mat_setup
 export MAT_MERGE_RC=3
 out=$(run_mat 839 queue)
-assert_eq "merge-conflict: terminal token" "resolve merge-conflict" \
+assert_eq "merge-conflict: terminal token" "propagate" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "merge-conflict: issue detail line" "issue: 839" \
-  "$(printf '%s\n' "$out" | grep '^issue:')"
-assert_eq "merge-conflict: worktree detail line" "worktree: $TMPDIR_TEST/project/worktrees/839-test" \
-  "$(printf '%s\n' "$out" | grep '^worktree:')"
-assert_eq "merge-conflict: mode detail line" "mode: queue" \
-  "$(printf '%s\n' "$out" | grep '^mode:')"
+assert_eq "merge-conflict: resolver spawned with name+cwd+prompt" \
+  "--name 839-test --cwd $TMPDIR_TEST/project/worktrees/839-test /dispatch-resolve-conflict 839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 assert_eq "merge-conflict: office-hours NOT applied" "0" \
   "$([ -f "$TMPDIR_TEST/logs/apply-office-hours.log" ] && echo 1 || echo 0)"
 assert_eq "merge-conflict: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
-assert_eq "merge-conflict: no spawn" "0" \
+assert_eq "merge-conflict: no phase worker spawned" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- merge conflict + resolver spawn fails → office-hours park + notify (#982) -
+# When dispatch-spawn-job exits non-zero (the resolver never registered), the
+# single-target path parks the issue on office-hours and emits `notify
+# spawn-failed` so the variance is surfaced.
+echo "Test: materialize-spawn merge conflict + resolver spawn fails → notify spawn-failed"
+mat_setup
+export MAT_MERGE_RC=3
+export MAT_RESOLVER_RC=1
+out=$(run_mat 839 queue)
+assert_eq "resolver-fail: terminal token" "notify spawn-failed" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "resolver-fail: issue 839 parked via office-hours" "1" \
+  "$(grep -c '^839 ' "$TMPDIR_TEST/logs/apply-office-hours.log")"
+assert_eq "resolver-fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "resolver-fail: no phase worker spawned" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
@@ -13260,31 +13398,43 @@ assert_eq "exhaust: summary" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 2 of
 assert_eq "exhaust: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
 mat_teardown
 
-# --- fan-out: gap 5, target #508 (3rd) merge-conflicts → parked, continues ---
-echo "Test: materialize-spawn --gap 5 mid-loop merge-conflict parks and continues"
+# --- fan-out: gap 5, target #508 (3rd) merge-conflicts → resolver, counted -----
+# A mid-loop merge conflict now spawns a /dispatch-resolve-conflict bg job that
+# fills a gap slot (counted toward `spawned`), so the loop continues and the gap
+# fills: 839,720,991,644 spawn phase workers (4) + 508 spawns a resolver (1) = 5.
+echo "Test: materialize-spawn --gap 5 mid-loop merge-conflict spawns resolver and counts it"
 mat_setup
 export MAT_QUEUE="720 508 991 644"
 export MAT_MERGE_CONFLICT_N=508
 out=$(run_mat 839 queue --gap 5)
-# 839,720,991,644 spawn (4); 508 parked → office-hours logged for 508.
-assert_eq "midconflict: spawn count" "4" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
-assert_eq "midconflict: 508 parked via office-hours" "1" \
-  "$(grep -c '^508 ' "$TMPDIR_TEST/logs/apply-office-hours.log")"
-assert_eq "midconflict: parked detail line" "1" \
-  "$(printf '%s\n' "$out" | grep -c 'parked #508 (merge-conflict)')"
+# 839,720,991,644 spawn phase workers (4); 508 spawns a resolver via spawn-job.
+assert_eq "midconflict: phase-worker spawn count" "4" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "midconflict: resolver spawned for 508 (name 508-test)" "1" \
+  "$(grep -c -- '--name 508-test ' "$TMPDIR_TEST/logs/spawn-job.log")"
+assert_eq "midconflict: 508 NOT parked via office-hours" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/apply-office-hours.log" ] && echo 1 || echo 0)"
+assert_eq "midconflict: resolver detail line" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned conflict-resolver #508')"
+assert_eq "midconflict: summary 5 of gap 5" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 5 of gap 5')"
 assert_eq "midconflict: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
 mat_teardown
 
-# --- fan-out: gap 3, all targets merge-conflict, 0 spawned → drain -----------
-echo "Test: materialize-spawn --gap 3 all parked → drain"
+# --- fan-out: gap 3, all targets merge-conflict → all spawn resolvers, propagate
+# Every target now spawns a /dispatch-resolve-conflict bg job (counted toward the
+# gap) instead of parking, so 0 phase workers but 3 resolvers fill the gap →
+# terminal token `propagate`, not `drain`.
+echo "Test: materialize-spawn --gap 3 all merge-conflict → resolvers spawned, propagate"
 mat_setup
 export MAT_QUEUE="720 508"
 export MAT_MERGE_RC=3
 out=$(run_mat 839 queue --gap 3)
-assert_eq "allparked: zero spawns" "0" \
+assert_eq "allconflict: zero phase-worker spawns" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ' || echo 0)"
-assert_eq "allparked: summary 0 spawned" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 0 of gap 3')"
-assert_eq "allparked: terminal token" "drain" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "allconflict: 3 resolvers spawned via spawn-job" "3" \
+  "$(wc -l < "$TMPDIR_TEST/logs/spawn-job.log" | tr -d ' ')"
+assert_eq "allconflict: summary 3 of gap 3" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 3 of gap 3')"
+assert_eq "allconflict: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
 mat_teardown
 
 # --- fan-out: all spawns fail → 0 spawned, drain, stderr surfaces each one ---

@@ -10,6 +10,13 @@
 # the model's last visible action.
 #
 # Branches (driven by marker presence + CURRENT_PHASE relative to MARKER_PHASE):
+#   R. conflict-resolver job (#982) — a /dispatch-resolve-conflict session is
+#      named <N>-slug like a worker but writes a `conflict-resolver` sentinel
+#      instead of a phase-completed marker. Checked BEFORE Branches A-D.
+#      `conflict-resolved` present → target-keyed re-seed + self-close (the chain
+#      returns to <N>, where materialize-spawn now sails through the resolved
+#      merge); sentinel present without `conflict-resolved` (ambiguous/crash) →
+#      park the issue (its office-hours-reason) + re-seed, no self-close.
 #   A. marker absent — phase skill did not run to completion (mid-phase exit
 #      or context compaction). Park the ISSUE on a human via
 #      dispatch-apply-office-hours (label + why-comment), spawn router, exit 0 —
@@ -127,6 +134,27 @@ self_close() {
   "$SCRIPTS/dispatch-self-close" >/dev/null 2>&1 \
     || echo "[dispatch-stop] WARNING: dispatch-self-close failed" >&2
 }
+
+# Branch R — conflict-resolver job (#982): a /dispatch-resolve-conflict session is
+# named <N>-slug like a worker but writes a `conflict-resolver` sentinel instead of
+# a phase-completed marker. resolved → target-keyed re-seed (so the chain returns to
+# <N>, where materialize-spawn now sails through the already-resolved merge) +
+# self-close. ambiguous/crash (sentinel present, no conflict-resolved marker) →
+# park the issue (its office-hours-reason) + re-seed, no self-close.
+if [ -f "$CLAUDE_JOB_DIR/conflict-resolver" ]; then
+  if [ -f "$CLAUDE_JOB_DIR/conflict-resolved" ]; then
+    "$SCRIPTS/dispatch-spawn-router" "$ISSUE_NUM" >/dev/null 2>&1 \
+      || echo "[dispatch-stop] WARNING: dispatch-spawn-router (resolved re-seed) failed" >&2
+    self_close
+    exit 0
+  fi
+  "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
+    "$(resolve_office_hours_reason "merge conflict could not be auto-resolved")" \
+    || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
+  "$SCRIPTS/dispatch-spawn-router" "$ISSUE_NUM" >/dev/null 2>&1 \
+    || echo "[dispatch-stop] WARNING: dispatch-spawn-router (ambiguous re-seed) failed" >&2
+  exit 0
+fi
 
 if [ -z "$MARKER_PHASE" ]; then
   # Branch A — marker absent.
