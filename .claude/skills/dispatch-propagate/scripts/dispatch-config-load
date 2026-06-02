@@ -7,7 +7,7 @@
 # the normalized result to stdout.
 #
 # Usage:
-#   dispatch-config-load <projects|jit|target-workers>
+#   dispatch-config-load <projects|jit|statements|target-workers>
 #
 # Config files live in <project-root>/dispatch.config/. The project root is
 # resolved via resolve_project_root (lib.sh).
@@ -88,6 +88,40 @@
 #     ]
 #   }
 #
+# ---- Schema: statements.json -----------------------------------------------
+#
+# Top-level object with a required "statements" array. Each element is an object
+# with these required fields:
+#
+#   key     string (non-empty) — local identifier for the scan entry. Also used
+#           as the issue label suffix: the scan stamps "statements:<key>" on
+#           filed parse-job issues.
+#   dir     string (non-empty) — absolute path to the shared statements folder
+#           to scan.
+#   repo    string (non-empty) — GitHub repo in "owner/repo" form.
+#   label   string (non-empty) — full label name stamped on filed parse-job
+#           issues, typically "statements:<key>".
+#   project string (non-empty) — "key" of an entry in projects.json.
+#
+# Optional fields (each must be the stated type if present):
+#
+#   debounce    string — duration string, e.g. "1h". How often the scan
+#               re-checks this entry (local rate-limiter; skips network calls
+#               within window).
+#   extensions  array  — filename extensions to scan, e.g. ["qfx","ofx","csv",
+#               "pdf"]. When absent the scan script applies its own default set.
+#
+# Example (see statements.example.json):
+#   {
+#     "statements": [
+#       { "key": "example-bank", "dir": "/home/user/statements/example-bank",
+#         "repo": "example-owner/example-repo",
+#         "label": "statements:example-bank",
+#         "project": "example-project",
+#         "debounce": "1h", "extensions": ["qfx","ofx","csv","pdf"] }
+#     ]
+#   }
+#
 # ---- Schema: target-workers.json -------------------------------------------
 #
 # Top-level object with optional tunables for `dispatch-target-workers`. Each
@@ -131,9 +165,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 CONFIG_TYPE="${1:-}"
 case "$CONFIG_TYPE" in
-  projects|jit|target-workers) ;;
+  projects|jit|statements|target-workers) ;;
   *)
-    echo "error: usage: dispatch-config-load <projects|jit|target-workers>" >&2
+    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers>" >&2
     exit 2
     ;;
 esac
@@ -255,6 +289,50 @@ case "$CONFIG_TYPE" in
           else
             empty
           end)
+        end
+      end
+    ' "$CONFIG_FILE")
+    ;;
+  statements)
+    ERRORS=$(jq -r '
+      # top-level value must be an object; .statements must be an array
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      elif (.statements | type) != "array" then
+        "top-level .statements must be an array, got \(.statements | type)"
+      else
+        .statements | to_entries[] |
+        .value as $item |
+        (.key + 1) as $idx |
+        if ($item | type) != "object" then
+          "statements[\($idx)]: must be an object, got \($item | type)"
+        else
+          # required string fields (non-empty)
+          (["key","dir","repo","label","project"] |
+          .[] |
+          . as $field |
+          if ($item | has($field)) | not then
+            "statements[\($idx)]: missing required field \($field)"
+          elif ($item[$field] | type) != "string" then
+            "statements[\($idx)]: \($field) must be a string, got \($item[$field] | type)"
+          elif ($item[$field] | length) == 0 then
+            "statements[\($idx)]: \($field) must be a non-empty string"
+          else
+            empty
+          end),
+          # optional string fields — must be strings if present
+          (["debounce"] |
+          .[] |
+          . as $field |
+          if ($item | has($field)) and ($item[$field] | type) != "string" then
+            "statements[\($idx)]: \($field) must be a string if present, got \($item[$field] | type)"
+          else
+            empty
+          end),
+          # optional array field: extensions
+          (if ($item | has("extensions")) and ($item.extensions | type) != "array" then
+            "statements[\($idx)]: extensions must be an array if present, got \($item.extensions | type)"
+          else empty end)
         end
       end
     ' "$CONFIG_FILE")

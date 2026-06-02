@@ -5500,6 +5500,97 @@ else
 fi
 config_teardown
 
+# --- Test 7b: valid statements.json round-trips ------------------------------
+
+echo "Test: valid statements.json prints normalized JSON"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/statements.json" <<'EOF'
+{
+  "statements": [
+    {
+      "key": "mybank",
+      "dir": "/home/user/statements/mybank",
+      "repo": "test-owner/test-repo",
+      "label": "statements:mybank",
+      "project": "test-project",
+      "debounce": "1h",
+      "extensions": ["qfx","csv"]
+    }
+  ]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" statements 2>/dev/null); rc=$?
+assert_eq "valid statements.json exits 0" "0" "$rc"
+stmt_key=$(printf '%s' "$out" | jq -r '.statements[0].key')
+assert_eq "valid statements.json key" "mybank" "$stmt_key"
+stmt_dir=$(printf '%s' "$out" | jq -r '.statements[0].dir')
+assert_eq "valid statements.json dir" "/home/user/statements/mybank" "$stmt_dir"
+config_teardown
+
+# --- Test 7c: statements.json missing required field exits 1 -----------------
+
+echo "Test: statements.json missing required field exits 1 and stderr names the field"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/statements.json" <<'EOF'
+{
+  "statements": [
+    {
+      "key": "mybank",
+      "repo": "test-owner/test-repo",
+      "label": "statements:mybank",
+      "project": "test-project"
+    }
+  ]
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" statements 2>&1 1>/dev/null) || rc=$?
+assert_eq "missing dir field exits 1" "1" "$rc"
+if [[ "$err" == *"dir"* ]]; then
+  assert_eq "missing-dir error names the field" "yes" "yes"
+else
+  assert_eq "missing-dir error names the field" "yes" "no: $err"
+fi
+config_teardown
+
+# --- Test 7d: statements.json extensions non-array exits 1 -------------------
+
+echo "Test: statements.json with extensions as string exits 1 and stderr mentions extensions"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/statements.json" <<'EOF'
+{
+  "statements": [
+    {
+      "key": "mybank",
+      "dir": "/home/user/statements/mybank",
+      "repo": "test-owner/test-repo",
+      "label": "statements:mybank",
+      "project": "test-project",
+      "extensions": "qfx"
+    }
+  ]
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" statements 2>&1 1>/dev/null) || rc=$?
+assert_eq "extensions non-array exits 1" "1" "$rc"
+if [[ "$err" == *"extensions"* ]]; then
+  assert_eq "extensions non-array stderr mentions extensions" "yes" "yes"
+else
+  assert_eq "extensions non-array stderr mentions extensions" "yes" "no: $err"
+fi
+config_teardown
+
+# --- Test 7e: absent statements.json prints no-config and exits 0 ------------
+
+echo "Test: absent statements.json prints no-config and exits 0"
+config_setup
+# no file written — config dir is empty
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" statements 2>/dev/null); rc=$?
+assert_eq "absent statements.json exits 0" "0" "$rc"
+assert_eq "absent statements.json prints no-config" "no-config" "$out"
+config_teardown
+
 # --- Test 8: valid target-workers.json prints normalized JSON ---------------
 
 echo "Test: valid target-workers.json prints normalized JSON"
