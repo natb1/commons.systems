@@ -373,9 +373,14 @@ This mechanism only covers the cap-stall class of stall. **Empty-queue and
 all-parked stalls** are handled by the office-hours queue (#755 / #757 /
 #758): when a human engages an `office-hours`-labeled item, the Step 4
 hand-off returns it to the dispatch chain and re-seeds from human action.
-A weekly fallback heartbeat for the edge case of a manual issue filed while
-the chain is stalled with no live session to receive it can be added in a
-follow-up if it matters in practice.
+The targeted alternative to a silent periodic heartbeat — adopted in #1010 —
+is the continuation invariant enforced at `dispatch-self-close`: a router tick
+that leaves no continuation (no worker spawned, no pending `dispatch-reseed*`
+timer, no live busy worker) parks instead of self-closing, emitting a one-line
+reason and staying visible in `claude agents`. The `office-hours-select-target`
+script surfaces the parked router via a `parked-router` line, so a human can
+resume it. This makes a stalled chain visible rather than silently losing it to
+a missed heartbeat window.
 
 ## Target-keyed CI-wait reseed (#979)
 
