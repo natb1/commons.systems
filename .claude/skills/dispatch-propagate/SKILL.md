@@ -20,8 +20,9 @@ A tick is two scripted orchestrator calls with one model-decision seam between
 them:
 
 1. `dispatch-select-tick` — acquires the lock, syncs `main`, applies the
-   run-scoped concurrency gate, runs the JIT engine and the Calendar JIT
-   importer, and selects the target. Emits one **decision line**.
+   run-scoped concurrency gate, runs the JIT engine, the Calendar JIT
+   importer, and the statements scan, and selects the target. Emits one
+   **decision line**.
 2. The model routes on that line (Table 1). No sub-skill runs in the router's
    own session: a `main-broken` / `jit-reminder` outcome spawns a bg job via
    `dispatch-spawn-job`, then self-closes; a real target calls
@@ -51,8 +52,9 @@ script's lock acquisition uses `--wait`, which blocks on contention up to
 timeout.
 
 The script passes through any JIT `created`/`skipped`/`debounced` lines
-(prefixed `jit: `) and any Calendar importer `calendar: ...` lines, then prints
-the decision as its **last** line. Report any `jit:` and `calendar:` lines, then
+(prefixed `jit: `), any Calendar importer `calendar: ...` lines, and any
+statements-scan `statements: ...` lines, then prints the decision as its
+**last** line. Report any `jit:`, `calendar:`, and `statements:` lines, then
 route on the decision (Table 1).
 
 The **lock disposition is the script's responsibility**: it holds the lock on
