@@ -4,7 +4,8 @@
 # Wired to the Stop event. Owns the post-phase disposition that used to live
 # in /dispatch-worker Step 4: read the phase-completed marker, decide whether
 # the phase advanced or stalled, manage the dispatch:office-hours label,
-# spawn the next /dispatch router, and self-close on a clean advance. Moving
+# spawn the next headless dispatch-tick (via dispatch-spawn-tick), and
+# self-close on a clean advance. Moving
 # this out of the model loop fixes a mid-phase context-compaction session
 # leak — the harness fires Stop unconditionally at session end, regardless of
 # the model's last visible action.
@@ -125,9 +126,9 @@ strip_office_hours_label() {
     || echo "[dispatch-stop] WARNING: gh issue edit --remove-label failed" >&2
 }
 
-spawn_router() {
-  "$SCRIPTS/dispatch-spawn-router" >/dev/null 2>&1 \
-    || echo "[dispatch-stop] WARNING: dispatch-spawn-router failed" >&2
+spawn_tick() {
+  "$SCRIPTS/dispatch-spawn-tick" >/dev/null 2>&1 \
+    || echo "[dispatch-stop] WARNING: dispatch-spawn-tick failed" >&2
 }
 
 self_close() {
@@ -143,16 +144,16 @@ self_close() {
 # park the issue (its office-hours-reason) + re-seed, no self-close.
 if [ -f "$CLAUDE_JOB_DIR/conflict-resolver" ]; then
   if [ -f "$CLAUDE_JOB_DIR/conflict-resolved" ]; then
-    "$SCRIPTS/dispatch-spawn-router" "$ISSUE_NUM" >/dev/null 2>&1 \
-      || echo "[dispatch-stop] WARNING: dispatch-spawn-router (resolved re-seed) failed" >&2
+    "$SCRIPTS/dispatch-spawn-tick" "$ISSUE_NUM" >/dev/null 2>&1 \
+      || echo "[dispatch-stop] WARNING: dispatch-spawn-tick (resolved re-seed) failed" >&2
     self_close
     exit 0
   fi
   "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
     "$(resolve_office_hours_reason "merge conflict could not be auto-resolved")" \
     || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
-  "$SCRIPTS/dispatch-spawn-router" "$ISSUE_NUM" >/dev/null 2>&1 \
-    || echo "[dispatch-stop] WARNING: dispatch-spawn-router (ambiguous re-seed) failed" >&2
+  "$SCRIPTS/dispatch-spawn-tick" "$ISSUE_NUM" >/dev/null 2>&1 \
+    || echo "[dispatch-stop] WARNING: dispatch-spawn-tick (ambiguous re-seed) failed" >&2
   exit 0
 fi
 
@@ -166,20 +167,20 @@ if [ -z "$MARKER_PHASE" ]; then
     # router rather than parking it on a human; the next tick re-gates it and
     # picks it up once CI concludes. (Office-hours would not self-heal — the
     # dispatch queue skips office-hours issues and nothing strips the label.)
-    spawn_router
+    spawn_tick
     exit 0
   fi
   "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
     "$(resolve_office_hours_reason "phase exited before completion (mid-phase exit or context compaction)")" \
     || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
-  spawn_router
+  spawn_tick
   exit 0
 fi
 
 if [ -n "$CURRENT_PHASE" ] && [ "$MARKER_PHASE" != "$CURRENT_PHASE" ]; then
   # Branch B — phase advanced.
   strip_office_hours_label
-  spawn_router
+  spawn_tick
   self_close
   exit 0
 fi
@@ -190,7 +191,7 @@ if [ "$CURRENT_PHASE" = "verify" ] && [ -n "$PR_NUM" ]; then
   [ -z "$N" ] && N=0
   if [ "$N" -lt 3 ]; then
     # Branch C — verify retry still possible.
-    spawn_router
+    spawn_tick
     exit 0
   fi
 fi
@@ -199,5 +200,5 @@ fi
 "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
   "$(resolve_office_hours_reason "phase ran but did not advance")" \
   || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
-spawn_router
+spawn_tick
 exit 0

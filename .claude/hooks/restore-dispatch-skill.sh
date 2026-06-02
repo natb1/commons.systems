@@ -16,8 +16,11 @@ if [ -n "$SESSION_ID" ]; then
     2>/dev/null) || NAME=""
 fi
 
-# Router sessions (dispatch-<short-id>) restart via /dispatch-propagate, not skill
-# restoration — skip them explicitly.
+# No `dispatch-<short-id>` router sessions exist anymore: after #982 Unit 3 the
+# autonomous tick is a headless `systemd-run` dispatch-tick, not a Claude session,
+# so nothing spawns `claude --bg /dispatch-propagate`. The branch is kept as a
+# defensive no-op — a stray `dispatch-*` session is not a phase worker and must
+# not have a phase skill restored.
 case "$NAME" in
   dispatch-*) exit 0 ;;
 esac
