@@ -53,6 +53,7 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-resolve-arg" "$TMPDIR_TEST/dispatch-resolve-arg"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
+  cp "$SCRIPT_DIR/office-hours" "$TMPDIR_TEST/office-hours"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-check-blockers" "$TMPDIR_TEST/dispatch-check-blockers"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
@@ -78,6 +79,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/office-hours-select-target" \
+           "$TMPDIR_TEST/office-hours" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
            "$TMPDIR_TEST/dispatch-check-blockers" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
@@ -1057,6 +1059,38 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/bin/claude"
   export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+}
+
+# office_hours_fake_claude <live-worktree-basename>... — the `office-hours`
+# entry-point fake. Reuses select_target_fake_claude's payload generation so the
+# liveness parsing matches production exactly: each named worktree basename gets
+# a live session row (sessionId `s-<name>`). The fake branches on its first arg:
+# `agents` returns the JSON payload (the liveness query); any other invocation —
+# `--resume <id>` or `/office-hours` — prints `LAUNCH: $*` so a test can assert
+# which launch fired. Wired via OFFICE_HOURS_CLAUDE_CMD (the script exports it as
+# CLAUDE_AGENTS_CMD, so a single fake covers both the query and the launch).
+office_hours_fake_claude() {
+  local payload="[" name first=1
+  for name in "$@"; do
+    if (( first )); then first=0; else payload+=","; fi
+    payload+="{\"sessionId\":\"s-$name\",\"pid\":1,\"status\":\"busy\",\"name\":\"$name\",\"cwd\":\"\"}"
+  done
+  payload+="]"
+  printf '%s' "$payload" > "$TMPDIR_TEST/claude-payload.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "agents" ]]; then
+  # Liveness query: return the full payload. The caller's jq name filter selects
+  # the matching session, as the real daemon path does.
+  cat "$(cd "$(dirname "$0")/.." && pwd)/claude-payload.json"
+  exit 0
+fi
+# A launch (`--resume <id>` or `/office-hours`): record which one fired.
+echo "LAUNCH: $*"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/claude"
+  export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
 }
 
 # 1. A non-QA PR is chosen over a QA PR and a help-wanted issue.
@@ -2513,15 +2547,20 @@ result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "live-session item skipped; next labeled item selected" "office-hours 99 implement -" "$result"
 teardown
 
-# OHST4. An empty office-hours queue prints `empty`.
-echo "Test: empty office-hours queue → empty"
+# OHST4. An empty office-hours queue with no parked router prints `empty`. The
+# fall-through reaches the parked-router block: point it at a controlled
+# main-worktree path (the stub git does not implement the rev-parse the real
+# resolve_project_root needs) where the fake daemon reports no router.
+echo "Test: empty office-hours queue, no parked router → empty"
 setup
 echo '[]' > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-select_target_fake_claude
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+select_target_fake_claude   # `[]`: no sessions under main, no parked router
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "empty queue prints empty" "empty" "$result"
+assert_eq "empty queue, no parked router prints empty" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # OHST5. Unknown daemon (UNKNOWN liveness) folds to occupied → the item with a
@@ -2539,7 +2578,93 @@ result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "UNKNOWN-liveness worktree item skipped; worktree-free item selected" "office-hours 99 implement -" "$result"
 teardown
 
-# OHST6. A labeled item whose draft PR has CI still in progress (pending rollup)
+# Install a fake `claude` whose `agents --json` returns a controllable session
+# payload (sessionId/pid/status/name per row) so the parked-router fallback can
+# be exercised: a `dispatch-*` router rooted under worktrees/main with a chosen
+# status. Each argument is a "name:status" pair. The fake ignores --cwd and
+# returns the full payload (matching the real daemon path, where the script
+# points claude_sessions_under at DISPATCH_OFFICE_HOURS_MAIN_WORKTREE).
+parked_router_fake_claude() {
+  local payload="[" pair name status first=1
+  for pair in "$@"; do
+    name="${pair%%:*}"; status="${pair#*:}"
+    if (( first )); then first=0; else payload+=","; fi
+    payload+="{\"sessionId\":\"s-$name\",\"pid\":1,\"status\":\"$status\",\"name\":\"$name\",\"cwd\":\"\"}"
+  done
+  payload+="]"
+  printf '%s' "$payload" > "$TMPDIR_TEST/claude-payload.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+# Ignore all args (including --cwd); return the full payload.
+cat "$(cd "$(dirname "$0")/.." && pwd)/claude-payload.json"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/claude"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+}
+
+# OHST6. No labeled item + an idle/`waiting` dispatch-* router under main →
+# parked-router. The continuation invariant kept the router alive; the office
+# hours reader surfaces it directly, label-free.
+echo "Test: no labeled item + idle dispatch-* router under main → parked-router"
+setup
+echo '[]' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+parked_router_fake_claude "dispatch-abc123:waiting"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "idle dispatch-* router surfaced as parked-router" "parked-router s-dispatch-abc123 dispatch-abc123" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST7. No labeled item + a `busy` dispatch-* router under main → empty. A busy
+# router is actively ticking and must NOT be surfaced.
+echo "Test: no labeled item + busy dispatch-* router under main → empty (not surfaced)"
+setup
+echo '[]' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+parked_router_fake_claude "dispatch-abc123:busy"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "busy dispatch-* router not surfaced; empty" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST8. A sessionless labeled item AND a parked dispatch-* router both present →
+# the labeled item wins; the parked-router fallback runs only when no labeled
+# item exists.
+echo "Test: labeled item present alongside parked router → labeled item wins"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+# The fake reports no worker session named 42-* (so the labeled item is
+# sessionless) plus a parked dispatch-* router under main.
+parked_router_fake_claude "dispatch-abc123:waiting"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "labeled item selected over parked router" "office-hours 42 implement -" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST9. UNKNOWN daemon query (claude_sessions_under returns non-zero) → empty:
+# no parked router is fabricated from a failed query.
+echo "Test: no labeled item + UNKNOWN daemon → empty (no fabricated parked router)"
+setup
+echo '[]' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+# setup's default CLAUDE_AGENTS_CMD points at a non-existent binary → claude
+# exits non-zero → claude_sessions_under returns 1 (UNKNOWN).
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "UNKNOWN daemon does not fabricate a parked router; empty" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST10. A labeled item whose draft PR has CI still in progress (pending rollup)
 # → dispatch-ci-ready returns not-ready → phase=waiting, PR number present.
 echo "Test: labeled item with pending-CI draft PR → waiting, PR number"
 setup
@@ -2550,6 +2675,110 @@ printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "pending-CI draft PR → waiting, PR number" "office-hours 50 waiting 7" "$result"
+teardown
+
+# ============================================================================
+# office-hours (entry point) tests
+# ============================================================================
+echo ""
+echo "=== office-hours (entry point) ==="
+#
+# The single user entry point to the office-hours queue (#759). Resumes a still-
+# live blocked session (`claude --resume <sessionId>`) if any labeled item has
+# one; otherwise starts a fresh `/office-hours` session. office_hours_fake_claude
+# serves the liveness payload on `agents` and prints `LAUNCH: $*` on launch, so
+# each case asserts which launch fired. The fake's sessionId convention is
+# `s-<worktree-basename>`.
+
+# OH1. One labeled item whose <N>-* worktree has a live session → resume it.
+echo "Test: live-session labeled item → resume its session"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_fake_claude "42-x"   # 42's worktree has a live session
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "resumes the live session by its sessionId" "LAUNCH: --resume s-42-x" "$result"
+teardown
+
+# OH2. Two labeled items both live → resume the oldest one's session.
+echo "Test: two live items → resume the oldest"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_fake_claude "42-x" "99-y"   # both worktrees live
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "resumes the oldest live item's session" "LAUNCH: --resume s-42-x" "$result"
+teardown
+
+# OH3. Labeled items but none with a live session → start fresh /office-hours.
+echo "Test: labeled items, none live → fresh /office-hours"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_fake_claude   # orphan world: no live sessions
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "no live session → fresh /office-hours" "LAUNCH: /office-hours" "$result"
+teardown
+
+# OH4. Empty office-hours queue → start fresh /office-hours.
+echo "Test: empty queue → fresh /office-hours"
+setup
+echo '[]' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+office_hours_fake_claude
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "empty queue → fresh /office-hours" "LAUNCH: /office-hours" "$result"
+teardown
+
+# OH5. Mixed: an older sessionless item + a newer live-session item → resume the
+# live one (resume wins over fresh whenever any labeled item is live).
+echo "Test: older sessionless + newer live → resume the live one"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+# 42 (older) has no worktree at all → sessionless; 99 (newer) has a live worktree.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_fake_claude "99-y"   # only 99's worktree is live
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "resume wins over fresh whenever any labeled item is live" "LAUNCH: --resume s-99-y" "$result"
+teardown
+
+# OH6. UNKNOWN daemon (claude unqueryable) → fall through to fresh /office-hours.
+# This is the entry-point's deliberate asymmetry with office-hours-select-target:
+# select-target (OHST5) treats UNKNOWN as occupied (left for resume); the entry
+# point treats UNKNOWN as not-resumable (fall through to fresh), so the two paths
+# never both claim an item whose liveness cannot be determined.
+echo "Test: UNKNOWN daemon → not-resumable, fall through to fresh /office-hours"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# OFFICE_HOURS_CLAUDE_CMD must be set so the script has a launch target and so
+# CLAUDE_AGENTS_CMD is overridden to a command that reports UNKNOWN (non-zero
+# exit). Re-use the office_hours_fake_claude stub but wire it with no live
+# sessions, then make the agents call fail to exercise the UNKNOWN path.
+office_hours_fake_claude   # sets OFFICE_HOURS_CLAUDE_CMD=TMPDIR_TEST/bin/claude
+# Override the claude binary so agents query always exits 1 (UNKNOWN daemon),
+# but launch invocations still print "LAUNCH: $*" so the test can assert which
+# launch fired.
+cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "agents" ]]; then
+  # Simulate an unqueryable daemon: non-zero exit, no output.
+  exit 1
+fi
+echo "LAUNCH: $*"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/claude"
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "UNKNOWN daemon → not-resumable → fresh /office-hours" "LAUNCH: /office-hours" "$result"
 teardown
 
 # ============================================================================
@@ -8355,6 +8584,10 @@ selfclose_setup() {
   mkdir -p "$TMPDIR_TEST/scripts"
   cp "$SCRIPT_DIR/dispatch-self-close" "$TMPDIR_TEST/scripts/dispatch-self-close"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-self-close"
+  # The router-only continuation invariant (#1010) sources lib-claude-agents.sh
+  # from its own dir for claude_agents_count_busy_workers, so the helper must sit
+  # alongside the copied script. Sourced, not executed — no chmod.
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
 
   # Reuse the dispatch-spawn-router fake `claude` writer: it already dispatches on
   # `rm` and appends $2 to SPAWN_ROUTER_RM_LOG. The unused SPAWN_ROUTER_REGISTRY /
@@ -8368,6 +8601,69 @@ selfclose_setup() {
   write_fake_spawn_router_claude
 
   export DISPATCH_SELF_CLOSE_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+
+  # Continuation-check fakes (#1010), all defaulting to "no continuation":
+  #   - The daemon query (claude_agents_count_busy_workers, via CLAUDE_AGENTS_CMD)
+  #     defaults to a successful query reporting zero busy workers.
+  #   - The systemctl probe (DISPATCH_SELF_CLOSE_SYSTEMCTL_CMD) defaults to
+  #     emitting no reseed timer.
+  # Helpers below let a test flip either to a continuation-present state.
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake-agents"
+  export DISPATCH_SELF_CLOSE_SYSTEMCTL_CMD="$TMPDIR_TEST/fake-systemctl"
+  selfclose_set_workers   # default: no workers
+  selfclose_set_no_timer  # default: no reseed timer
+}
+
+# selfclose_write_state <name> — write a state.json with the given .name into the
+# fake CLAUDE_JOB_DIR (exported by the caller as CLAUDE_JOB_DIR).
+selfclose_write_state() {
+  local name="$1"
+  printf '{"name":"%s"}\n' "$name" > "$CLAUDE_JOB_DIR/state.json"
+}
+
+# selfclose_set_workers [session-spec...] — install the fake `claude agents`
+# command. Each spec is `name:status`. With zero specs it emits an empty array.
+# Always exits 0 (a successfully-queried daemon).
+selfclose_set_workers() {
+  local payload="["
+  local first=1 spec name status
+  for spec in "$@"; do
+    name="${spec%%:*}"
+    status="${spec#*:}"
+    [[ $first -eq 1 ]] || payload+=","
+    first=0
+    payload+="{\"sessionId\":\"s-$name\",\"pid\":1,\"status\":\"$status\",\"name\":\"$name\",\"cwd\":\"\"}"
+  done
+  payload+="]"
+  cat > "$TMPDIR_TEST/fake-agents" <<FAKE
+#!/usr/bin/env bash
+# Fake \`claude\`: only the \`agents --json\` query is exercised here.
+if [[ "\${1:-}" == "agents" ]]; then
+  printf '%s\n' '$payload'
+  exit 0
+fi
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/fake-agents"
+}
+
+# selfclose_set_timer — fake systemctl emits an armed (waiting) reseed timer line.
+selfclose_set_timer() {
+  cat > "$TMPDIR_TEST/fake-systemctl" <<'FAKE'
+#!/usr/bin/env bash
+printf '%s\n' 'dispatch-reseed.timer loaded active waiting Dispatch reseed timer'
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/fake-systemctl"
+}
+
+# selfclose_set_no_timer — fake systemctl emits nothing (no reseed timer).
+selfclose_set_no_timer() {
+  cat > "$TMPDIR_TEST/fake-systemctl" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/fake-systemctl"
 }
 
 selfclose_teardown() {
@@ -8377,7 +8673,8 @@ selfclose_teardown() {
   SPAWN_ROUTER_BG_ARGV=""
   SPAWN_ROUTER_RM_LOG=""
   SPAWN_ROUTER_STOP_LOG=""
-  unset DISPATCH_SELF_CLOSE_CLAUDE_CMD CLAUDE_JOB_DIR
+  unset DISPATCH_SELF_CLOSE_CLAUDE_CMD CLAUDE_JOB_DIR \
+    CLAUDE_AGENTS_CMD DISPATCH_SELF_CLOSE_SYSTEMCTL_CMD
 }
 
 # --- Test 1: managed-job → deletes itself -------------------------------------
@@ -8415,6 +8712,132 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: interactive: no 'claude rm' invocation recorded"
   echo "    rm-log: $(cat "$SPAWN_ROUTER_RM_LOG")"
 fi
+selfclose_teardown
+
+# --- Test 3: router + no continuation → PARK (#1010) --------------------------
+
+echo "Test: router with no continuation (no busy worker, no reseed timer) parks"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+selfclose_write_state "dispatch-abcd1234"
+selfclose_set_workers   # no workers
+selfclose_set_no_timer
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-self-close" 2>"$TMPDIR_TEST/park-err") || rc=$?
+err=$(cat "$TMPDIR_TEST/park-err")
+assert_eq "park: router no-continuation exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_ROUTER_RM_LOG" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: park: no 'claude rm' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: park: no 'claude rm' invocation recorded"
+  echo "    rm-log: $(cat "$SPAWN_ROUTER_RM_LOG")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"parking — no continuation"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: park: parking reason on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: park: parking reason on stderr"
+  echo "    stderr: $err"
+fi
+selfclose_teardown
+
+# --- Test 4: router + live busy worker → SELF-CLOSE (#1010) -------------------
+
+echo "Test: router with a live busy ^[0-9]+- worker self-closes"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+selfclose_write_state "dispatch-abcd1234"
+selfclose_set_workers "824-foo:busy"
+selfclose_set_no_timer
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-self-close" >/dev/null 2>&1 || rc=$?
+assert_eq "busy-worker: router self-close exits 0" "0" "$rc"
+rm_log=$(cat "$SPAWN_ROUTER_RM_LOG" 2>/dev/null || true)
+assert_eq "busy-worker: 'claude rm abcd1234' was invoked" "abcd1234" "$rm_log"
+selfclose_teardown
+
+# --- Test 5: router + pending reseed timer → SELF-CLOSE (#1010) ---------------
+
+echo "Test: router with a pending dispatch-reseed timer self-closes"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+selfclose_write_state "dispatch-abcd1234"
+selfclose_set_workers   # no workers
+selfclose_set_timer     # armed reseed timer
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-self-close" >/dev/null 2>&1 || rc=$?
+assert_eq "reseed-timer: router self-close exits 0" "0" "$rc"
+rm_log=$(cat "$SPAWN_ROUTER_RM_LOG" 2>/dev/null || true)
+assert_eq "reseed-timer: 'claude rm abcd1234' was invoked" "abcd1234" "$rm_log"
+selfclose_teardown
+
+# --- Test 6: router + only a non-busy worker → PARK (#1010) -------------------
+
+echo "Test: router whose only worker is non-busy (waiting) parks"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+selfclose_write_state "dispatch-abcd1234"
+selfclose_set_workers "824-foo:waiting"   # idle/waiting → not busy
+selfclose_set_no_timer
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-self-close" 2>"$TMPDIR_TEST/park-err") || rc=$?
+err=$(cat "$TMPDIR_TEST/park-err")
+assert_eq "non-busy-worker: router parks, exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_ROUTER_RM_LOG" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-busy-worker: no 'claude rm' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-busy-worker: no 'claude rm' invocation recorded"
+  echo "    rm-log: $(cat "$SPAWN_ROUTER_RM_LOG")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"parking — no continuation"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-busy-worker: parking reason on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-busy-worker: parking reason on stderr"
+  echo "    stderr: $err"
+fi
+selfclose_teardown
+
+# --- Test 7: worker-named session → invariant skipped, SELF-CLOSE (#1010) -----
+
+echo "Test: worker-named session (123-foo) self-closes (invariant skipped)"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+selfclose_write_state "123-foo"
+selfclose_set_workers   # no continuation at all
+selfclose_set_no_timer
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-self-close" >/dev/null 2>&1 || rc=$?
+assert_eq "worker-named: self-close exits 0" "0" "$rc"
+rm_log=$(cat "$SPAWN_ROUTER_RM_LOG" 2>/dev/null || true)
+assert_eq "worker-named: 'claude rm abcd1234' was invoked (invariant skipped)" \
+  "abcd1234" "$rm_log"
+selfclose_teardown
+
+# --- Test 8: router + UNKNOWN daemon + no reseed timer → SELF-CLOSE (#1010) ---
+
+echo "Test: router with UNKNOWN daemon (unqueryable) and no reseed timer self-closes (fail-safe)"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+selfclose_write_state "dispatch-abcd1234"
+# Model UNKNOWN: point CLAUDE_AGENTS_CMD at a non-existent binary so
+# claude_agents_count_busy_workers returns non-zero (daemon unqueryable).
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
+selfclose_set_no_timer
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-self-close" >/dev/null 2>&1 || rc=$?
+assert_eq "unknown-daemon: router self-close exits 0" "0" "$rc"
+rm_log=$(cat "$SPAWN_ROUTER_RM_LOG" 2>/dev/null || true)
+assert_eq "unknown-daemon: 'claude rm abcd1234' was invoked (fail-safe toward self-close)" \
+  "abcd1234" "$rm_log"
 selfclose_teardown
 
 # ============================================================================
@@ -13244,6 +13667,26 @@ assert_eq "distinct: select-target invoked >=2" "1" \
 assert_eq "distinct: worktrees all unique" "3" \
   "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
 mat_teardown
+
+echo "=== print_remote_access_block ==="
+
+# All four emulators
+out=$(unset QA_REMOTE_SSH_HOST; source "$SCRIPT_DIR/lib.sh" && print_remote_access_block 5173 8080 9099 9199 5001)
+assert_eq "all emulators: url present" "1" "$(grep -c 'http://localhost:5173/' <<<"$out")"
+ssh_line=$(grep -oE 'ssh -L .*' <<<"$out" | head -1)
+assert_eq "all emulators: ssh -L line" \
+  "ssh -L 5173:localhost:5173 -L 8080:localhost:8080 -L 9099:localhost:9099 -L 9199:localhost:9199 -L 5001:localhost:5001 nixos" \
+  "$ssh_line"
+
+# Vite only (no emulators)
+out=$(unset QA_REMOTE_SSH_HOST; source "$SCRIPT_DIR/lib.sh" && print_remote_access_block 5173)
+ssh_line=$(grep -oE 'ssh -L .*' <<<"$out" | head -1)
+assert_eq "vite only: ssh -L line" "ssh -L 5173:localhost:5173 nixos" "$ssh_line"
+
+# Env override of the SSH host
+out=$(export QA_REMOTE_SSH_HOST=myhost; source "$SCRIPT_DIR/lib.sh" && print_remote_access_block 5173)
+ssh_line=$(grep -oE 'ssh -L .*' <<<"$out" | head -1)
+assert_eq "env override: ssh -L line ends with myhost" "ssh -L 5173:localhost:5173 myhost" "$ssh_line"
 
 # ============================================================================
 # === dispatch-security-surface ===

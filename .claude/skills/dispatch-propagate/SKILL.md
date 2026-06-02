@@ -219,6 +219,20 @@ no-op when `CLAUDE_JOB_DIR` is unset (interactive session), so an interactive
 `/dispatch-propagate` reaching a terminal disposition does not stop the user's
 conversation.
 
+**Continuation invariant (router sessions only).** Before self-closing, a
+router tick (name matching `dispatch-*`) checks that a continuation exists —
+defined as: at least one pending `dispatch-reseed*` systemd timer, OR at least
+one live worker (name `^[0-9]+-`) that is not parked on `dispatch:office-hours`.
+Workers and legacy callers keep their unconditional self-close; the gate applies
+only to router sessions. If no continuation exists, the router **parks** instead
+of closing: it stays alive, emits a one-line reason to the user, and skips
+`claude rm`. If the Claude daemon is unqueryable, the check fails safe toward
+self-close. A parked router is surfaced by the office-hours entry point:
+`office-hours-select-target` emits a `parked-router <sessionId> <name>` line
+(after labeled items, before `empty`); a human resumes it by re-engaging that
+session and re-running `/dispatch-propagate` inside it. No
+`dispatch:office-hours` label is involved.
+
 The `main-broken` and `jit-reminder` outcomes (Table 1) reach this section as
 `drain` dispositions: spawn the bg job via `dispatch-spawn-job`, report the
 spawn result, then self-close. The router does **not** spawn a successor itself;
