@@ -12204,20 +12204,32 @@ out=$(run_sel_tick)
 assert_eq "fail-open: gap=1 on issue line" "issue 707 1" "$(printf '%s\n' "$out" | tail -n 1)"
 sel_tick_teardown
 
-# --- --bypass-cap skips the gate, gap=1 even over budget ---------------------
-echo "Test: select-tick --bypass-cap skips gate, gap=1 over budget"
+# --- explicit arg skips the gate, gap=1 even over budget ---------------------
+# The deleted --bypass-cap's purpose now lives on the explicit-arg path: a
+# deliberately-named target is not paced by the autonomous concurrency budget, so
+# even with LIVE_COUNT (5) >= TARGET_N (1) the gate is skipped — no cap, no
+# reseed — and gap is forced to 1.
+echo "Test: select-tick explicit arg skips gate, gap=1 over budget"
 sel_tick_setup
 export SEL_LIVE_COUNT=5 SEL_TARGET_N=1
-cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
-#!/usr/bin/env bash
-echo called >> "$TMPDIR_TEST/logs/select-target.log"
-echo "issue 707"
-FAKE
-chmod +x "$TMPDIR_TEST/dispatch-select-target"
-out=$(run_sel_tick --bypass-cap)
-assert_eq "bypass-cap: not capped, issue line w/ gap 1" "issue 707 1" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "bypass-cap: no reseed scheduled" "0" \
+out=$(run_sel_tick 707)
+assert_eq "explicit-skip: gate skipped, explicit line w/ gap 1" "explicit 707 1" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "explicit-skip: not capped (no concurrency-cap)" "0" \
+  "$(printf '%s\n' "$out" | grep -cF 'concurrency-cap')"
+assert_eq "explicit-skip: no reseed scheduled" "0" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- --bypass-cap is gone: unknown flag → usage error, exit 2 ----------------
+echo "Test: select-tick --bypass-cap removed → unknown flag, exit 2"
+sel_tick_setup
+err=$("$TMPDIR_TEST/dispatch-select-tick" --bypass-cap 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"unknown flag"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "removed flag → unknown flag error, exit 2" "ok" "$status"
 sel_tick_teardown
 
 # ============================================================================
@@ -12909,6 +12921,203 @@ assert_eq "distinct: select-target invoked >=2" "1" \
 assert_eq "distinct: worktrees all unique" "3" \
   "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
 mat_teardown
+
+# ============================================================================
+# dispatch-tick tests (#982)
+# ============================================================================
+# The headless tick sequencer runs against FAKE dispatch-select-tick /
+# dispatch-materialize-spawn / dispatch-spawn-job scripts (each landed in
+# TMPDIR_TEST so dispatch-tick's SCRIPT_DIR resolution finds them). The fake
+# select-tick prints a test-controlled decision line as its LAST stdout line; the
+# fake materialize-spawn records its argv to a log file and prints a
+# test-controlled terminal token; the fake spawn-job logs its argv. Each routing
+# branch gets at least one assertion.
+echo ""
+echo "=== dispatch-tick ==="
+
+tick_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/logs"
+  cp "$SCRIPT_DIR/dispatch-tick" "$TMPDIR_TEST/dispatch-tick"
+  chmod +x "$TMPDIR_TEST/dispatch-tick"
+
+  # Fake dispatch-select-tick: echoes any TICK_SEL_PRE passthrough lines, then
+  # the test-controlled decision line (TICK_DECISION) as the LAST line. Exits
+  # TICK_SEL_RC (default 0).
+  cat > "$TMPDIR_TEST/dispatch-select-tick" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/select-tick.log"
+[[ -n "\${TICK_SEL_PRE:-}" ]] && printf '%s\n' "\$TICK_SEL_PRE"
+printf '%s\n' "\${TICK_DECISION:-empty}"
+exit \${TICK_SEL_RC:-0}
+FAKE
+  # Fake dispatch-materialize-spawn: records its full argv, echoes any
+  # TICK_MAT_PRE detail lines, then the test-controlled terminal token
+  # (TICK_TOKEN) as the LAST line. Exits TICK_MAT_RC (default 0).
+  cat > "$TMPDIR_TEST/dispatch-materialize-spawn" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/materialize.log"
+[[ -n "\${TICK_MAT_PRE:-}" ]] && printf '%s\n' "\$TICK_MAT_PRE"
+printf '%s\n' "\${TICK_TOKEN:-propagate}"
+exit \${TICK_MAT_RC:-0}
+FAKE
+  # Fake dispatch-spawn-job: records its full argv, prints a spawn result.
+  cat > "$TMPDIR_TEST/dispatch-spawn-job" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/spawn-job.log"
+echo "\${TICK_SPAWN_RESULT:-spawned}"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/dispatch-select-tick" \
+           "$TMPDIR_TEST/dispatch-materialize-spawn" \
+           "$TMPDIR_TEST/dispatch-spawn-job"
+}
+
+tick_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset TICK_DECISION TICK_TOKEN TICK_SEL_RC TICK_MAT_RC \
+    TICK_SEL_PRE TICK_MAT_PRE TICK_SPAWN_RESULT
+}
+
+run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
+
+# --- busy → exit 0, no materialize, no spawn-job -----------------------------
+echo "Test: dispatch-tick busy → exit 0, no materialize/spawn"
+tick_setup
+export TICK_DECISION="busy"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "busy: exit 0" "0" "$rc"
+assert_eq "busy: no materialize call" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
+assert_eq "busy: no spawn-job call" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- empty / sync-failed / concurrency-cap → exit 0, no materialize ----------
+for d in empty sync-failed concurrency-cap; do
+  echo "Test: dispatch-tick $d → exit 0, no materialize"
+  tick_setup
+  export TICK_DECISION="$d"
+  out=$(run_tick) && rc=0 || rc=$?
+  assert_eq "$d: exit 0" "0" "$rc"
+  assert_eq "$d: no materialize call" "0" \
+    "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
+  tick_teardown
+done
+
+# --- main-broken → spawn-job /dispatch-diagnose-main, exit 0 -----------------
+echo "Test: dispatch-tick main-broken → spawn-job diagnose-main"
+tick_setup
+export TICK_DECISION="main-broken abc1234"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "main-broken: exit 0" "0" "$rc"
+assert_eq "main-broken: spawn-job argv" \
+  "--name diagnose-main --cwd $PWD /dispatch-diagnose-main abc1234" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
+assert_eq "main-broken: no materialize call" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- jit-reminder → spawn-job /dispatch-jit-reminder, exit 0 -----------------
+echo "Test: dispatch-tick jit-reminder → spawn-job jit-reminder-<num>"
+tick_setup
+export TICK_DECISION="jit-reminder owner/repo 42 PVT_x ITEM_y"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "jit-reminder: exit 0" "0" "$rc"
+assert_eq "jit-reminder: spawn-job argv" \
+  "--name jit-reminder-42 --cwd $PWD /dispatch-jit-reminder owner/repo 42 PVT_x ITEM_y" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
+tick_teardown
+
+# --- explicit <num> <gap> → materialize <num> explicit --gap <gap> -----------
+echo "Test: dispatch-tick explicit → materialize explicit --gap"
+tick_setup
+export TICK_DECISION="explicit 55 1" TICK_TOKEN="propagate"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "explicit: exit 0" "0" "$rc"
+assert_eq "explicit: materialize argv" "55 explicit --gap 1" \
+  "$(cat "$TMPDIR_TEST/logs/materialize.log")"
+tick_teardown
+
+# --- pr <num> <branch> <phase> <gap> → derives N, materialize queue ----------
+echo "Test: dispatch-tick pr → derives N from branch, materialize queue --gap"
+tick_setup
+export TICK_DECISION="pr 660 660-some-branch code-review 3" TICK_TOKEN="propagate"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "pr: exit 0" "0" "$rc"
+assert_eq "pr: materialize argv (N=660 from branch prefix)" "660 queue --gap 3" \
+  "$(cat "$TMPDIR_TEST/logs/materialize.log")"
+tick_teardown
+
+# --- issue <num> <gap> → materialize <num> queue --gap <gap> -----------------
+echo "Test: dispatch-tick issue → materialize queue --gap"
+tick_setup
+export TICK_DECISION="issue 707 2" TICK_TOKEN="propagate"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "issue: exit 0" "0" "$rc"
+assert_eq "issue: materialize argv" "707 queue --gap 2" \
+  "$(cat "$TMPDIR_TEST/logs/materialize.log")"
+tick_teardown
+
+# --- terminal token routing: every recognized token → exit 0 -----------------
+for t in "propagate" "notify target-blocked" "drain worktree-conflict" "drain" "resolve merge-conflict"; do
+  echo "Test: dispatch-tick token '$t' → exit 0"
+  tick_setup
+  export TICK_DECISION="issue 707 1" TICK_TOKEN="$t"
+  out=$(run_tick) && rc=0 || rc=$?
+  assert_eq "token '$t': exit 0" "0" "$rc"
+  tick_teardown
+done
+
+# --- materialize-spawn exits non-zero → dispatch-tick exits 2 ----------------
+echo "Test: dispatch-tick materialize non-zero exit → exit 2"
+tick_setup
+export TICK_DECISION="issue 707 1" TICK_TOKEN="propagate" TICK_MAT_RC=2
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "mat non-zero: exit 2" "2" "$rc"
+tick_teardown
+
+# --- select-tick passthrough lines are echoed through ------------------------
+echo "Test: dispatch-tick echoes select-tick passthrough + decision"
+tick_setup
+export TICK_DECISION="empty" TICK_SEL_PRE="jit: weekly-review: created #42"
+out=$(run_tick)
+assert_eq "passthrough: jit line echoed" "1" \
+  "$(printf '%s\n' "$out" | grep -cF 'jit: weekly-review: created #42')"
+assert_eq "passthrough: decision echoed" "1" \
+  "$(printf '%s\n' "$out" | grep -cF 'empty')"
+tick_teardown
+
+# --- unrecognized decision line → exit 2 -------------------------------------
+echo "Test: dispatch-tick unrecognized decision → exit 2"
+tick_setup
+export TICK_DECISION="garbage unexpected"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "unrecognized: exit 2" "2" "$rc"
+assert_eq "unrecognized: no materialize call" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- unknown flag → usage error, exit 2 --------------------------------------
+echo "Test: dispatch-tick unknown flag → exit 2"
+tick_setup
+err=$("$TMPDIR_TEST/dispatch-tick" --nope 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"unknown flag"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "unknown flag → usage error, exit 2" "ok" "$status"
+tick_teardown
+
+# --- explicit arg is forwarded to select-tick --------------------------------
+echo "Test: dispatch-tick forwards explicit arg to select-tick"
+tick_setup
+export TICK_DECISION="explicit 88 1" TICK_TOKEN="propagate"
+out=$(run_tick '#88')
+assert_eq "arg forward: select-tick got the stripped arg" "88" \
+  "$(cat "$TMPDIR_TEST/logs/select-tick.log")"
+tick_teardown
 
 # ============================================================================
 # === dispatch-security-surface ===

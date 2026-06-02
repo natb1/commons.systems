@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+# dispatch-tick — the headless /dispatch-propagate tick: a thin bash sequencer
+# over dispatch-select-tick → dispatch-materialize-spawn, with NO model session.
+#
+# Usage: dispatch-tick [<issue-or-PR-number>]
+#
+# This is the scripted equivalent of the routing the dispatch-propagate SKILL.md
+# (Tables 1 and 2) used to describe for a model router session. Replacing that
+# model session is the point: a tick has no remaining model-decision seam — every
+# branch is deterministic — so the per-tick `claude --bg` router session (a boot,
+# a context load, and a teardown whose only job was to call two scripts and relay
+# one line) is pure overhead. dispatch-tick runs the same two orchestrators
+# headlessly.
+#
+# Because it is NOT itself a managed `claude --bg` job, there is nothing to
+# self-close: where the model router would have called dispatch-self-close on a
+# `propagate`/`drain` disposition, dispatch-tick simply exits 0. The autonomous
+# tick is launched by systemd (the #725 heartbeat) and by the worker Stop-hook in
+# a later unit; a human-typed `/dispatch` is a thin shim that runs one tick and
+# relays its stdout for live UX. The audit record is this script's journal output
+# (every captured stdout line is echoed through) plus the spawned workers'
+# transcripts plus durable GitHub side effects (PR comments, `dispatch:*`
+# labels) — so relay survives only on the human shim, not on the autonomous tick.
+#
+# Behavior:
+#   1. Run dispatch-select-tick [<N>], echoing all of its stdout through (the
+#      jit:/calendar: passthrough lines AND the decision line) so journald and a
+#      live relay both see the narrative. The decision is its LAST stdout line.
+#   2. Route on the decision line (mirrors SKILL.md Table 1):
+#        busy / sync-failed / resolver-failed / empty / concurrency-cap
+#                          → log a one-line note; exit 0. (select-tick already
+#                            released the lock / scheduled any reseed.)
+#        main-broken <sha> → spawn /dispatch-diagnose-main <sha> as a bg job via
+#                            dispatch-spawn-job (--name diagnose-main); exit 0.
+#        jit-reminder ...  → spawn /dispatch-jit-reminder ... as a bg job via
+#                            dispatch-spawn-job (--name jit-reminder-<num>); exit 0.
+#        explicit <num> <gap>            → dispatch-materialize-spawn <num> explicit --gap <gap>
+#        pr <num> <branch> <phase> <gap> → N=${branch%%-*}; dispatch-materialize-spawn <N> queue --gap <gap>
+#        issue <num> <gap>               → dispatch-materialize-spawn <num> queue --gap <gap>
+#                            then route the terminal token (step 3).
+#        anything else     → diagnostic to stderr; exit 2.
+#   3. Route the materialize-spawn terminal token (its LAST stdout line). Every
+#      recognized token — `propagate`, `notify <reason>`, `drain <reason>`,
+#      `drain`, and (for now) `resolve merge-conflict` — is a log-and-exit-0
+#      disposition: the token was already echoed via the stdout passthrough, so
+#      the journal IS the disposition record; there is no self-close. A non-zero
+#      materialize-spawn exit → exit 2.
+#
+#      NOTE on `resolve merge-conflict`: in the current codebase the single-target
+#      path of dispatch-materialize-spawn still emits `resolve merge-conflict`
+#      (the model router used to auto-resolve via an opus subagent). dispatch-tick
+#      is headless and cannot do that, so it just logs the token and exits 0 (a
+#      transient no-op). A later unit changes materialize-spawn to spawn a
+#      resolver bg job instead, after which this token stops reaching dispatch-tick.
+#
+# Requires `dangerouslyDisableSandbox: true` — the sub-scripts call `gh`, query
+# the local Claude daemon over a Unix socket, and write tmp state (see
+# `.claude/rules/sandbox.md`). dispatch-select-tick's `--wait` lock acquisition
+# also needs an elevated Bash `timeout` (see SKILL.md Step 0).
+#
+# Manual inspection of the autonomous tick's journal (once systemd drives it):
+#   journalctl --user -u dispatch-tick
+#
+# Exit codes: 0 on a routed disposition (any select-tick decision or
+# materialize-spawn terminal token); 2 on an internal/usage error surfaced on
+# stderr.
+#
+# NOT set -e: exits are handled explicitly (matching the sibling dispatch scripts).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# --- Step 0: parse the single optional positional <N> ------------------------
+ARG=""
+for a in "$@"; do
+  case "$a" in
+    --*)
+      echo "dispatch-tick: unknown flag '$a'" >&2
+      echo "usage: dispatch-tick [<issue-or-PR-number>]" >&2
+      exit 2
+      ;;
+    *)
+      if [[ -n "$ARG" ]]; then
+        echo "dispatch-tick: unexpected extra arguments after <number>" >&2
+        echo "usage: dispatch-tick [<issue-or-PR-number>]" >&2
+        exit 2
+      fi
+      ARG="${a#\#}"
+      ;;
+  esac
+done
+
+# --- Step 1: select the target ------------------------------------------------
+# Capture select-tick's full stdout and echo every line through (jit:/calendar:
+# passthrough AND the decision line) so journald and a live relay see it all.
+if [[ -n "$ARG" ]]; then
+  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" "$ARG")
+else
+  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick")
+fi
+SEL_RC=$?
+if [[ -n "$SEL_OUT" ]]; then
+  printf '%s\n' "$SEL_OUT"
+fi
+if (( SEL_RC != 0 )); then
+  echo "dispatch-tick: dispatch-select-tick exited $SEL_RC" >&2
+  exit 2
+fi
+
+DECISION=$(printf '%s\n' "$SEL_OUT" | tail -n 1)
+
+# --- Step 2: route the decision line (SKILL.md Table 1) ----------------------
+# Run materialize-spawn for a real target, then route its terminal token.
+# Echoes the materialize-spawn stdout through (supporting detail + token) and
+# routes on the LAST line (step 3 helper).
+run_materialize() {
+  local mat_out mat_rc token
+  mat_out=$("$SCRIPT_DIR/dispatch-materialize-spawn" "$@")
+  mat_rc=$?
+  if [[ -n "$mat_out" ]]; then
+    printf '%s\n' "$mat_out"
+  fi
+  if (( mat_rc != 0 )); then
+    echo "dispatch-tick: dispatch-materialize-spawn exited $mat_rc" >&2
+    exit 2
+  fi
+  token=$(printf '%s\n' "$mat_out" | tail -n 1)
+  # Every recognized terminal token is a log-and-exit-0 disposition for a headless
+  # tick: the token is already in the journal via the passthrough above, and there
+  # is no managed job to self-close. `resolve merge-conflict` is a transient no-op
+  # here until a later unit moves conflict resolution into materialize-spawn.
+  case "$token" in
+    propagate|drain|drain\ *|notify\ *|resolve\ merge-conflict)
+      exit 0
+      ;;
+    *)
+      echo "dispatch-tick: dispatch-materialize-spawn emitted unexpected token '$token'" >&2
+      exit 2
+      ;;
+  esac
+}
+
+# shellcheck disable=SC2086  # decision fields are intentionally word-split
+set -- $DECISION
+case "${1:-}" in
+  busy)
+    echo "dispatch-tick: another tick holds the lock (busy); nothing to do" >&2
+    exit 0
+    ;;
+  sync-failed|resolver-failed|empty|concurrency-cap)
+    echo "dispatch-tick: select-tick disposition '$1'; nothing spawned" >&2
+    exit 0
+    ;;
+  main-broken)
+    sha="${2:-}"
+    if [[ -z "$sha" ]]; then
+      echo "dispatch-tick: main-broken decision missing <sha>" >&2
+      exit 2
+    fi
+    "$SCRIPT_DIR/dispatch-spawn-job" --name diagnose-main --cwd "$PWD" \
+      "/dispatch-diagnose-main $sha"
+    exit 0
+    ;;
+  jit-reminder)
+    repo="${2:-}" num="${3:-}" project="${4:-}" item="${5:-}"
+    if [[ -z "$repo" || -z "$num" || -z "$project" || -z "$item" ]]; then
+      echo "dispatch-tick: jit-reminder decision missing fields" >&2
+      exit 2
+    fi
+    "$SCRIPT_DIR/dispatch-spawn-job" --name "jit-reminder-$num" --cwd "$PWD" \
+      "/dispatch-jit-reminder $repo $num $project $item"
+    exit 0
+    ;;
+  explicit)
+    num="${2:-}" gap="${3:-}"
+    if [[ -z "$num" || -z "$gap" ]]; then
+      echo "dispatch-tick: explicit decision missing <num>/<gap>" >&2
+      exit 2
+    fi
+    run_materialize "$num" explicit --gap "$gap"
+    ;;
+  pr)
+    branch="${3:-}" gap="${5:-}"
+    if [[ -z "$branch" || -z "$gap" ]]; then
+      echo "dispatch-tick: pr decision missing <branch>/<gap>" >&2
+      exit 2
+    fi
+    # N is the issue the PR closes — the branch prefix, NEVER the PR number ($2).
+    N="${branch%%-*}"
+    run_materialize "$N" queue --gap "$gap"
+    ;;
+  issue)
+    num="${2:-}" gap="${3:-}"
+    if [[ -z "$num" || -z "$gap" ]]; then
+      echo "dispatch-tick: issue decision missing <num>/<gap>" >&2
+      exit 2
+    fi
+    run_materialize "$num" queue --gap "$gap"
+    ;;
+  *)
+    echo "dispatch-tick: unrecognized select-tick decision line '$DECISION'" >&2
+    exit 2
+    ;;
+esac
