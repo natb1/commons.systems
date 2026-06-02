@@ -9330,6 +9330,379 @@ assert_eq "idempotency run 2 made no second issue create" \
 jit_teardown
 
 # ============================================================================
+# dispatch-statements-scan tests
+# ============================================================================
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/        copies of the scan + loader + project-item-add
+#   $TMPDIR_TEST/config/         synthetic config dir (DISPATCH_CONFIG_DIR)
+#   $TMPDIR_TEST/state/          state-file dir (DISPATCH_STATEMENTS_STATE_DIR)
+#   $TMPDIR_TEST/statements-dir/ the scanned shared statements folder
+#   $TMPDIR_TEST/stub/           gh stub fixtures + the gh-calls.log
+#   $TMPDIR_TEST/bin/            the gh PATH stub
+#
+# The scan resolves dispatch-config-load and dispatch-project-item-add via its
+# own SCRIPT_DIR — which becomes $TMPDIR_TEST/scripts for the copy — so all
+# three scripts are co-located. The gh stub logs EVERY matched invocation to
+# gh-calls.log so a test can assert "zero gh calls" (the debounce case). The
+# `search issues` arm reads a stub/search-result.json fixture if present (lets a
+# test inject an open or closed hit), else "[]". "now" is pinned via
+# DISPATCH_STATEMENTS_NOW so the debounce math is deterministic.
+
+# A fixed reference epoch — 2026-01-01T00:00:00Z.
+STMT_NOW_EPOCH=1767225600
+
+statements_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  STUB_DIR="$TMPDIR_TEST/stub"
+  mkdir -p "$TMPDIR_TEST/scripts" "$STUB_DIR" "$TMPDIR_TEST/bin" \
+    "$TMPDIR_TEST/config" "$TMPDIR_TEST/state" "$TMPDIR_TEST/statements-dir"
+
+  cp "$SCRIPT_DIR/dispatch-statements-scan" \
+    "$TMPDIR_TEST/scripts/dispatch-statements-scan"
+  cp "$SCRIPT_DIR/dispatch-config-load" \
+    "$TMPDIR_TEST/scripts/dispatch-config-load"
+  # The scan and the loader source lib.sh via their SCRIPT_DIR — so lib.sh must
+  # sit alongside them. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
+  cp "$SCRIPT_DIR/dispatch-project-item-add" \
+    "$TMPDIR_TEST/scripts/dispatch-project-item-add"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-statements-scan" \
+           "$TMPDIR_TEST/scripts/dispatch-config-load" \
+           "$TMPDIR_TEST/scripts/dispatch-project-item-add"
+
+  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+  export DISPATCH_STATEMENTS_STATE_DIR="$TMPDIR_TEST/state"
+  export DISPATCH_STATEMENTS_NOW="$STMT_NOW_EPOCH"
+
+  # gh PATH stub. Every matched subcommand is appended to gh-calls.log so the
+  # debounce test can assert the log is absent (zero gh calls). `search issues`
+  # reads search-result.json if present, else "[]". `issue create` logs its full
+  # args (including --body) to gh-issue-create.log so the body can be asserted,
+  # and echoes a deterministic issue URL. `project item-add` matches the gh
+  # subcommand that dispatch-project-item-add invokes internally.
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+echo "$args" >> "$STUB_DIR/gh-calls.log"
+case "$args" in
+  "label create "*)
+    # Idempotent label create — default success.
+    ;;
+  *"search issues "*)
+    if [[ -f "$STUB_DIR/search-result.json" ]]; then
+      cat "$STUB_DIR/search-result.json"
+    else
+      echo '[]'
+    fi
+    ;;
+  "issue create "*)
+    # Capture the full args (including --body) so body content can be asserted.
+    echo "$args" >> "$STUB_DIR/gh-issue-create.log"
+    echo "https://github.com/test-owner/test-repo/issues/777"
+    ;;
+  *"project item-add "*)
+    echo '{"id":"PVTI_stmt001","title":"Parse statement","type":"Issue"}'
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+  PATH="$TMPDIR_TEST/bin:$PATH"
+}
+
+statements_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  PATH="$SAVED_PATH"
+  TMPDIR_TEST=""
+  STUB_DIR=""
+  unset DISPATCH_CONFIG_DIR
+  unset DISPATCH_STATEMENTS_STATE_DIR
+  unset DISPATCH_STATEMENTS_NOW
+}
+
+# statements_write_projects — projects.json fixture with one project whose key
+# matches the statements `project` field (dispatch-project-item-add reads it).
+statements_write_projects() {
+  cat > "$TMPDIR_TEST/config/projects.json" <<'EOF'
+{
+  "projects": [
+    {
+      "key": "test-project",
+      "owner": "test-owner",
+      "number": 1,
+      "statusField": "Status",
+      "statusInProgress": "In Progress",
+      "statusDone": "Done"
+    }
+  ]
+}
+EOF
+}
+
+# statements_write_config — statements.json fixture with one entry keyed "bank"
+# pointing at the scanned statements-dir. Args, if given, override dir (1) and
+# extra entry fields (2, raw JSON merged into the entry).
+statements_write_config() {
+  local dir="${1:-$TMPDIR_TEST/statements-dir}"
+  local extra="${2:-}"
+  local base
+  base=$(cat <<EOF
+{
+  "statements": [
+    {
+      "key": "bank",
+      "dir": "$dir",
+      "repo": "test-owner/test-repo",
+      "label": "statements:bank",
+      "project": "test-project",
+      "extensions": ["qfx", "csv"]
+    }
+  ]
+}
+EOF
+)
+  if [[ -n "$extra" ]]; then
+    printf '%s' "$base" | jq -c ".statements[0] += $extra" \
+      > "$TMPDIR_TEST/config/statements.json"
+  else
+    printf '%s\n' "$base" > "$TMPDIR_TEST/config/statements.json"
+  fi
+}
+
+# --- Test 1: no config — silent no-op ---------------------------------------
+
+echo "Test: dispatch-statements-scan with no config is a silent no-op"
+statements_setup
+# No statements.json written in $DISPATCH_CONFIG_DIR.
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
+assert_eq "no-config exits 0" "0" "$rc"
+assert_eq "no-config prints nothing" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no-config made zero gh calls"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-config made zero gh calls"
+  echo "    gh-calls.log: $(cat "$STUB_DIR/gh-calls.log")"
+fi
+statements_teardown
+
+# --- Test 2: new file → filed ------------------------------------------------
+
+echo "Test: dispatch-statements-scan files a parse-job issue for a new statement"
+statements_setup
+statements_write_projects
+statements_write_config
+printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
+# search-result.json absent → search returns "[]" (not found) → file the issue.
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
+assert_eq "new-file exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"bank: filed #777 acct.qfx"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: new-file reports filed #777 acct.qfx"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: new-file reports filed #777 acct.qfx"
+  echo "    actual: $out"
+fi
+calls=$(cat "$STUB_DIR/gh-calls.log")
+TOTAL=$((TOTAL + 1))
+if [[ "$calls" == *"search issues "* && "$calls" == *"issue create"* \
+   && "$calls" == *"project item-add"* ]]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: new-file invoked search / issue create / project item-add"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: new-file invoked search / issue create / project item-add"
+  echo "    gh-calls.log: $calls"
+fi
+statements_teardown
+
+# --- Test 3: open hit → skipped ----------------------------------------------
+
+echo "Test: dispatch-statements-scan skips when an open issue carries the hash"
+statements_setup
+statements_write_projects
+statements_write_config
+printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
+echo '[{"number":42,"state":"open"}]' > "$STUB_DIR/search-result.json"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
+assert_eq "open-hit exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"bank: skipped (#42 for acct.qfx)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: open-hit reports skipped (#42 for acct.qfx)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: open-hit reports skipped (#42 for acct.qfx)"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: open-hit made no issue create call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: open-hit made no issue create call"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+statements_teardown
+
+# --- Test 4: closed hit → skipped (proves open-OR-closed dedup) --------------
+
+echo "Test: dispatch-statements-scan skips when a CLOSED issue carries the hash"
+statements_setup
+statements_write_projects
+statements_write_config
+printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
+echo '[{"number":43,"state":"closed"}]' > "$STUB_DIR/search-result.json"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
+assert_eq "closed-hit exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"bank: skipped (#43 for acct.qfx)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: closed-hit reports skipped (#43 for acct.qfx)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: closed-hit reports skipped (#43 for acct.qfx)"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: closed-hit made no issue create call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: closed-hit made no issue create call"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+statements_teardown
+
+# --- Test 5: body carries filename + full sha256, NOT statement contents -----
+
+echo "Test: dispatch-statements-scan body carries filename + sha256, not contents"
+statements_setup
+statements_write_projects
+statements_write_config
+content="SECRET-STATEMENT-LINE-12345"
+printf '%s\n' "$content" > "$TMPDIR_TEST/statements-dir/acct.qfx"
+expected_hash=$(sha256sum "$TMPDIR_TEST/statements-dir/acct.qfx" | awk '{print $1}')
+# search-result.json absent → not found → file the issue.
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
+assert_eq "body-check exits 0" "0" "$rc"
+body=$(cat "$STUB_DIR/gh-issue-create.log")
+TOTAL=$((TOTAL + 1))
+if [[ "$body" == *"acct.qfx"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: body contains the filename acct.qfx"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: body contains the filename acct.qfx"
+  echo "    issue-create args: $body"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$body" == *"$expected_hash"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: body contains the full sha256"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: body contains the full sha256"
+  echo "    expected hash: $expected_hash"
+  echo "    issue-create args: $body"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$body" != *"$content"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: body does NOT contain the statement contents"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: body does NOT contain the statement contents"
+  echo "    leaked content: $content"
+fi
+statements_teardown
+
+# --- Test 6: two byte-identical files → one filed + one skipped (seen-set) ---
+
+echo "Test: dispatch-statements-scan dedups two byte-identical files in one run"
+statements_setup
+statements_write_projects
+statements_write_config
+printf 'IDENTICAL\n' > "$TMPDIR_TEST/statements-dir/a.qfx"
+printf 'IDENTICAL\n' > "$TMPDIR_TEST/statements-dir/b.qfx"
+# search-result.json absent → not found.
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
+assert_eq "in-run-dup exits 0" "0" "$rc"
+filed_count=$(printf '%s\n' "$out" | grep -c "bank: filed #" || true)
+skipped_count=$(printf '%s\n' "$out" | grep -c "bank: skipped " || true)
+assert_eq "in-run-dup filed exactly one issue (stdout)" "1" "$filed_count"
+assert_eq "in-run-dup skipped exactly one file (stdout)" "1" "$skipped_count"
+# The body is multi-line, so counting lines of gh-issue-create.log overcounts.
+# Count the distinct `issue create ` invocations recorded in gh-calls.log.
+create_count=0
+[[ -f "$STUB_DIR/gh-calls.log" ]] \
+  && create_count=$(grep -c "^issue create " "$STUB_DIR/gh-calls.log" || true)
+assert_eq "in-run-dup made exactly one issue create" "1" "$create_count"
+TOTAL=$((TOTAL + 1))
+# Sorted order: a.qfx files #777, b.qfx is skipped referencing #777.
+if [[ "$out" == *"bank: filed #777 a.qfx"* \
+   && "$out" == *"bank: skipped (#777 for b.qfx)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: in-run-dup filed a.qfx and skipped b.qfx via seen-set"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: in-run-dup filed a.qfx and skipped b.qfx via seen-set"
+  echo "    actual: $out"
+fi
+statements_teardown
+
+# --- Test 7: debounce active → zero gh calls ---------------------------------
+
+echo "Test: dispatch-statements-scan debounce active skips with no gh call"
+statements_setup
+statements_write_projects
+statements_write_config "$TMPDIR_TEST/statements-dir" '{"debounce":"1h"}'
+printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
+# Pre-seed the state file: last check 5 minutes ago — within the 1h debounce.
+printf '{"bank": %s}\n' "$((STMT_NOW_EPOCH - 300))" \
+  > "$TMPDIR_TEST/state/dispatch-statements-state.json"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
+assert_eq "debounce-active exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"bank: debounced"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: debounce-active reports debounced"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: debounce-active reports debounced"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$STUB_DIR/gh-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: debounce-active made zero gh calls"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: debounce-active made zero gh calls"
+  echo "    gh-calls.log: $(cat "$STUB_DIR/gh-calls.log")"
+fi
+statements_teardown
+
+# --- Test 8: dir absent → skipped, no error ----------------------------------
+
+echo "Test: dispatch-statements-scan skips a non-existent dir without error"
+statements_setup
+statements_write_projects
+statements_write_config "$TMPDIR_TEST/does-not-exist"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
+assert_eq "dir-absent exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"bank: skipped (dir not present)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: dir-absent reports skipped (dir not present)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: dir-absent reports skipped (dir not present)"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: dir-absent made no issue create call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: dir-absent made no issue create call"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+statements_teardown
+
+# ============================================================================
 # dispatch-input-block hook tests
 # ============================================================================
 echo ""
