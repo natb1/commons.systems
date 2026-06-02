@@ -52,6 +52,7 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-resolve-arg" "$TMPDIR_TEST/dispatch-resolve-arg"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
+  cp "$SCRIPT_DIR/office-hours" "$TMPDIR_TEST/office-hours"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-check-blockers" "$TMPDIR_TEST/dispatch-check-blockers"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
@@ -76,6 +77,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/office-hours-select-target" \
+           "$TMPDIR_TEST/office-hours" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
            "$TMPDIR_TEST/dispatch-check-blockers" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
@@ -941,6 +943,38 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/bin/claude"
   export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+}
+
+# office_hours_fake_claude <live-worktree-basename>... — the `office-hours`
+# entry-point fake. Reuses select_target_fake_claude's payload generation so the
+# liveness parsing matches production exactly: each named worktree basename gets
+# a live session row (sessionId `s-<name>`). The fake branches on its first arg:
+# `agents` returns the JSON payload (the liveness query); any other invocation —
+# `--resume <id>` or `/office-hours` — prints `LAUNCH: $*` so a test can assert
+# which launch fired. Wired via OFFICE_HOURS_CLAUDE_CMD (the script exports it as
+# CLAUDE_AGENTS_CMD, so a single fake covers both the query and the launch).
+office_hours_fake_claude() {
+  local payload="[" name first=1
+  for name in "$@"; do
+    if (( first )); then first=0; else payload+=","; fi
+    payload+="{\"sessionId\":\"s-$name\",\"pid\":1,\"status\":\"busy\",\"name\":\"$name\",\"cwd\":\"\"}"
+  done
+  payload+="]"
+  printf '%s' "$payload" > "$TMPDIR_TEST/claude-payload.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "agents" ]]; then
+  # Liveness query: return the full payload. The caller's jq name filter selects
+  # the matching session, as the real daemon path does.
+  cat "$(cd "$(dirname "$0")/.." && pwd)/claude-payload.json"
+  exit 0
+fi
+# A launch (`--resume <id>` or `/office-hours`): record which one fired.
+echo "LAUNCH: $*"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/claude"
+  export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
 }
 
 # 1. A non-QA PR is chosen over a QA PR and a help-wanted issue.
@@ -2512,6 +2546,110 @@ export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "UNKNOWN daemon does not fabricate a parked router; empty" "empty" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# ============================================================================
+# office-hours (entry point) tests
+# ============================================================================
+echo ""
+echo "=== office-hours (entry point) ==="
+#
+# The single user entry point to the office-hours queue (#759). Resumes a still-
+# live blocked session (`claude --resume <sessionId>`) if any labeled item has
+# one; otherwise starts a fresh `/office-hours` session. office_hours_fake_claude
+# serves the liveness payload on `agents` and prints `LAUNCH: $*` on launch, so
+# each case asserts which launch fired. The fake's sessionId convention is
+# `s-<worktree-basename>`.
+
+# OH1. One labeled item whose <N>-* worktree has a live session → resume it.
+echo "Test: live-session labeled item → resume its session"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_fake_claude "42-x"   # 42's worktree has a live session
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "resumes the live session by its sessionId" "LAUNCH: --resume s-42-x" "$result"
+teardown
+
+# OH2. Two labeled items both live → resume the oldest one's session.
+echo "Test: two live items → resume the oldest"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_fake_claude "42-x" "99-y"   # both worktrees live
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "resumes the oldest live item's session" "LAUNCH: --resume s-42-x" "$result"
+teardown
+
+# OH3. Labeled items but none with a live session → start fresh /office-hours.
+echo "Test: labeled items, none live → fresh /office-hours"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_fake_claude   # orphan world: no live sessions
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "no live session → fresh /office-hours" "LAUNCH: /office-hours" "$result"
+teardown
+
+# OH4. Empty office-hours queue → start fresh /office-hours.
+echo "Test: empty queue → fresh /office-hours"
+setup
+echo '[]' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+office_hours_fake_claude
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "empty queue → fresh /office-hours" "LAUNCH: /office-hours" "$result"
+teardown
+
+# OH5. Mixed: an older sessionless item + a newer live-session item → resume the
+# live one (resume wins over fresh whenever any labeled item is live).
+echo "Test: older sessionless + newer live → resume the live one"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+# 42 (older) has no worktree at all → sessionless; 99 (newer) has a live worktree.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_fake_claude "99-y"   # only 99's worktree is live
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "resume wins over fresh whenever any labeled item is live" "LAUNCH: --resume s-99-y" "$result"
+teardown
+
+# OH6. UNKNOWN daemon (claude unqueryable) → fall through to fresh /office-hours.
+# This is the entry-point's deliberate asymmetry with office-hours-select-target:
+# select-target (OHST5) treats UNKNOWN as occupied (left for resume); the entry
+# point treats UNKNOWN as not-resumable (fall through to fresh), so the two paths
+# never both claim an item whose liveness cannot be determined.
+echo "Test: UNKNOWN daemon → not-resumable, fall through to fresh /office-hours"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# OFFICE_HOURS_CLAUDE_CMD must be set so the script has a launch target and so
+# CLAUDE_AGENTS_CMD is overridden to a command that reports UNKNOWN (non-zero
+# exit). Re-use the office_hours_fake_claude stub but wire it with no live
+# sessions, then make the agents call fail to exercise the UNKNOWN path.
+office_hours_fake_claude   # sets OFFICE_HOURS_CLAUDE_CMD=TMPDIR_TEST/bin/claude
+# Override the claude binary so agents query always exits 1 (UNKNOWN daemon),
+# but launch invocations still print "LAUNCH: $*" so the test can assert which
+# launch fired.
+cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "agents" ]]; then
+  # Simulate an unqueryable daemon: non-zero exit, no output.
+  exit 1
+fi
+echo "LAUNCH: $*"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/claude"
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "UNKNOWN daemon → not-resumable → fresh /office-hours" "LAUNCH: /office-hours" "$result"
 teardown
 
 # ============================================================================
@@ -13398,6 +13536,26 @@ assert_eq "distinct: select-target invoked >=2" "1" \
 assert_eq "distinct: worktrees all unique" "3" \
   "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
 mat_teardown
+
+echo "=== print_remote_access_block ==="
+
+# All four emulators
+out=$(unset QA_REMOTE_SSH_HOST; source "$SCRIPT_DIR/lib.sh" && print_remote_access_block 5173 8080 9099 9199 5001)
+assert_eq "all emulators: url present" "1" "$(grep -c 'http://localhost:5173/' <<<"$out")"
+ssh_line=$(grep -oE 'ssh -L .*' <<<"$out" | head -1)
+assert_eq "all emulators: ssh -L line" \
+  "ssh -L 5173:localhost:5173 -L 8080:localhost:8080 -L 9099:localhost:9099 -L 9199:localhost:9199 -L 5001:localhost:5001 nixos" \
+  "$ssh_line"
+
+# Vite only (no emulators)
+out=$(unset QA_REMOTE_SSH_HOST; source "$SCRIPT_DIR/lib.sh" && print_remote_access_block 5173)
+ssh_line=$(grep -oE 'ssh -L .*' <<<"$out" | head -1)
+assert_eq "vite only: ssh -L line" "ssh -L 5173:localhost:5173 nixos" "$ssh_line"
+
+# Env override of the SSH host
+out=$(export QA_REMOTE_SSH_HOST=myhost; source "$SCRIPT_DIR/lib.sh" && print_remote_access_block 5173)
+ssh_line=$(grep -oE 'ssh -L .*' <<<"$out" | head -1)
+assert_eq "env override: ssh -L line ends with myhost" "ssh -L 5173:localhost:5173 myhost" "$ssh_line"
 
 # ============================================================================
 # === dispatch-security-surface ===
