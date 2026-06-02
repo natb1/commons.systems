@@ -312,9 +312,9 @@ test.describe("transactions", () => {
     const filterInput = page.locator("#sankey-budget-filter");
     await filterInput.fill("Food");
     await filterInput.blur();
+    await expect.poll(async () => visibleRows.count()).toBeLessThan(countBefore);
     const countAfter = await visibleRows.count();
     expect(countAfter).toBeGreaterThan(0);
-    expect(countAfter).toBeLessThan(countBefore);
     for (let i = 0; i < countAfter; i++) {
       const budgetName = await visibleRows.nth(i).getAttribute("data-budget-name");
       expect(budgetName).toBe("Food");
@@ -330,12 +330,10 @@ test.describe("transactions", () => {
     const filterInput = page.locator("#sankey-budget-filter");
     await filterInput.fill("Food");
     await filterInput.blur();
-    const countFiltered = await visibleRows.count();
-    expect(countFiltered).toBeLessThan(countBefore);
+    await expect.poll(async () => visibleRows.count()).toBeLessThan(countBefore);
     await filterInput.fill("");
     await filterInput.blur();
-    const countRestored = await visibleRows.count();
-    expect(countRestored).toEqual(countBefore);
+    await expect(visibleRows).toHaveCount(countBefore);
   });
 
   test("budget filter composes with category filter", async ({ page }) => {
