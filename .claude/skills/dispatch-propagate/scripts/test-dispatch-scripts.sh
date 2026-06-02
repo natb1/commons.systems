@@ -155,6 +155,17 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  "issue list --state open --label dispatch:office-hours --limit 300 --json number")
+    # dispatch-trace-leaf queue-mode parked set (#1011): open issues carrying
+    # dispatch:office-hours. $STUB_DIR/trace-parked.json supplies the parked
+    # numbers; absence means nothing is parked (default empty), so every
+    # pre-existing trace-leaf test stays green.
+    if [[ -f "$STUB_DIR/trace-parked.json" ]]; then
+      cat "$STUB_DIR/trace-parked.json"
+    else
+      echo "[]"
+    fi
+    ;;
   issue\ view\ *\ --json\ state)
     # dispatch-select-target worktree detection: gh issue view <num> --json state
     num=$(echo "$args" | awk '{print $3}')
@@ -1472,7 +1483,7 @@ teardown
 # --- topic-category prioritization (issue #707) -----------------------------
 # The `priority` label is the outermost axis: every `priority` item ranks above
 # every non-priority item, regardless of topic. Topic category
-# (bug → testing infrastructure → dispatch → other) nests inside the priority
+# (security → bug → testing infrastructure → dispatch → other) nests inside the priority
 # axis, and the phase ladder runs innermost. A PR's category is resolved from
 # the labels of the issues it closes; an issue's category from its own labels.
 
@@ -1612,6 +1623,75 @@ printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/898-security\nHEAD a1
 select_target_fake_claude "898-security"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "orphan priority PRs not skipped; oldest security priority PR wins" "pr 895 895-security security" "$result"
+teardown
+
+# 30f. A PR closing a `security` issue outranks a PR closing a `bug` issue, even
+#      when the bug PR is older — `security` is the first topic category, so it
+#      beats `bug` (category beats age).
+echo "Test: PR closing a security issue beats PR closing a bug issue"
+setup
+# PR 20 (older) closes bug issue 200; PR 10 (newer) closes security issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-security-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Issue 100 carries `security`; issue 200 carries only `bug`. No "help wanted"
+# label, so they are not themselves queue items.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"security"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "security-closing PR beats bug-closing PR" "pr 10 10-security-pr verify" "$result"
+teardown
+
+# 30g. A PR closing a `(security, priority)` issue outranks a PR closing a plain
+#      `security` issue — `priority` is the outermost axis, so both PRs share
+#      topic `security` and the `priority` one wins.
+echo "Test: PR closing a (security, priority) issue beats PR closing a plain security issue"
+setup
+# PR 20 (older) closes plain security issue 200; PR 10 (newer) closes (security, priority) issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-security-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-security-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Issue 100 carries both `security` and `priority`; issue 200 carries only `security`.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"security"},{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "(security, priority)-closing PR beats plain-security-closing PR" "pr 10 10-security-priority-pr verify" "$result"
+teardown
+
+# 30h. A help-wanted `security` issue outranks a help-wanted issue with no topic
+#      label, even when the topic-labeled issue is newer — confirms `other`
+#      remains the lowest fallback after `security` is prepended to the list.
+echo "Test: security issue beats issue with no topic label (other unchanged)"
+setup
+setup_union_pr_list '[]'
+# Issue 400 (older) has no topic label (resolves to `other`); issue 300 (newer)
+# is security.
+printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "security issue beats untopiced (other) issue" "issue 300" "$result"
+teardown
+
+# 30i. A help-wanted `security` issue outranks a help-wanted `bug` issue at the
+#      same priority level, even when the bug issue is older — the issue-ladder
+#      counterpart of 30f (which tests the same ordering on the PR ladder).
+echo "Test: security issue beats bug issue (issue ladder)"
+setup
+setup_union_pr_list '[]'
+# Issue 400 (older) is bug; issue 300 (newer) is security. security is the first
+# topic category, so it wins regardless of age.
+printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "security issue beats bug issue" "issue 300" "$result"
 teardown
 
 # --- blocked-issue PR skip (issue #786) -------------------------------------
@@ -1763,6 +1843,29 @@ printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPE
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "help-wanted issue 55 resolves to leaf 5500" "issue 5500" "$result"
+teardown
+
+# 38a. A help-wanted issue whose lowest open leaf is parked on
+#      dispatch:office-hours resolves to the next startable (unparked) leaf, not
+#      the parked one (#1011). Issue 55 has sub-issues 5500 (parked) and 5501
+#      (unparked), neither worktree'd; the selector must emit 5501. This is the
+#      end-to-end form of the wedged-queue bug — a parked leaf under an unparked
+#      help-wanted parent previously occupied its bucket and starved the queue.
+echo "Test: help-wanted issue's parked leaf skipped → next leaf selected"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500},{"number":5501}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5500.json"
+printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5501.json"
+# No worktrees — only the office-hours label distinguishes the leaves.
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# 5500 is parked on dispatch:office-hours.
+printf '[{"number":5500}]\n' > "$STUB_DIR/trace-parked.json"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "parked leaf 5500 skipped → leaf 5501 selected" "issue 5501" "$result"
 teardown
 
 # 39. dispatch-trace-leaf exit 1 (usage error) is a hard failure, never a skip.
@@ -2612,6 +2715,85 @@ printf '[{"number":801}]\n' > "$STUB_DIR/subissues-800.json"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "queue" 2>/dev/null) && rc=0 || rc=$?
 assert_eq "deep gh failure → exit 1" "1" "$rc"
 assert_eq "deep gh failure → no leaf on stdout" "" "$stdout"
+teardown
+
+# 17. Queue mode: a topological leaf parked on dispatch:office-hours is skipped
+#     in favor of an unparked sibling leaf (#1011). 700 has open sub-issues 701
+#     (parked) and 702 (unparked); neither has a worktree, so only the label
+#     distinguishes them. Without the skip, the lowest leaf 701 would be
+#     returned — this is the wedged-queue repro.
+echo "Test: queue mode → office-hours-parked leaf skipped, returns unparked sibling"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+# 701 is parked on dispatch:office-hours; 702 is not.
+printf '[{"number":701}]\n' > "$STUB_DIR/trace-parked.json"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: parked leaf 701 skipped → unparked sibling 702" "702" "$result"
+teardown
+
+# 18. Queue mode: every reachable open leaf is parked on dispatch:office-hours →
+#     exit 2 with the worktree-conflicted stderr message, exactly as the
+#     all-live-owned case (#1011 mirrors #914).
+echo "Test: queue mode → all leaves office-hours-parked, exits 2"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/trace-parked.json"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"worktree-conflicted"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "queue: all leaves parked → exit 2 with stderr message" "ok" "$status"
+teardown
+
+# 19. Explicit mode: the office-hours skip does not apply — a parked leaf is
+#     returned unchanged (#1011 scopes the skip to queue mode). The parked-set
+#     gh query runs only in queue mode, so trace-parked.json is irrelevant here;
+#     explicit descent returns the lowest leaf 701 regardless of its label.
+echo "Test: explicit mode → office-hours-parked leaf returned (no skip)"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf '[{"number":701}]\n' > "$STUB_DIR/trace-parked.json"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "explicit")
+assert_eq "explicit: parked leaf 701 returned unchanged" "701" "$result"
+teardown
+
+# 20. Queue mode: the ROOT issue is itself a parked topological leaf (#1011).
+#     700 has no children, so the descent loop never runs and cannot skip it;
+#     the root guard before the trace must catch it and exit 2 rather than
+#     return the parked root. This is the standalone-contract edge case — the
+#     descent child-skip alone leaves the root unguarded.
+echo "Test: queue mode → parked ROOT leaf guarded, exits 2"
+setup
+# No subissues-700.json → 700 is a topological leaf.
+printf '{"title":"Issue 700","body":"","comments":[],"number":700,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-700.json"
+printf '[{"number":700}]\n' > "$STUB_DIR/trace-parked.json"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" 2>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+assert_eq "queue: parked root leaf → exit 2, no leaf on stdout" "EXIT=2" "$err_out"
+teardown
+
+# 21. Explicit mode: a parked ROOT leaf is returned unchanged (#1011 scopes the
+#     root guard to queue mode, mirroring the descent child-skip scoping).
+echo "Test: explicit mode → parked ROOT leaf returned (no guard)"
+setup
+printf '{"title":"Issue 700","body":"","comments":[],"number":700,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-700.json"
+printf '[{"number":700}]\n' > "$STUB_DIR/trace-parked.json"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "explicit")
+assert_eq "explicit: parked root leaf 700 returned unchanged" "700" "$result"
 teardown
 
 # ============================================================================
@@ -6608,6 +6790,261 @@ fi
 sr_teardown
 
 # ============================================================================
+# dispatch-schedule-target-reseed tests
+# ============================================================================
+#
+# Exercises the target-keyed CI-wait reseed: under-cap reseed bumps the
+# dispatch:ci-wait-attempt counter and schedules a transient timer whose
+# ExecStart re-runs dispatch-spawn-router <N>; at-cap escalates to
+# dispatch:office-hours and schedules no timer; bad <N> / missing PR are misuse.
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/      copy of dispatch-schedule-target-reseed + lib.sh
+#   $TMPDIR_TEST/bin/          systemd-run stub
+#   $TMPDIR_TEST/systemd-log   recorded systemd-run argv (one line per call)
+#   $TMPDIR_TEST/gh-edit-log   recorded fake-gh pr-edit / label-create argv
+#   $TMPDIR_TEST/oh-log        recorded fake dispatch-apply-office-hours argv
+#   $TMPDIR_TEST/main/         a synthetic main worktree path
+echo ""
+echo "=== dispatch-schedule-target-reseed ==="
+
+tr_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/main"
+
+  cp "$SCRIPT_DIR/dispatch-schedule-target-reseed" \
+    "$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed"
+  # The script sources lib.sh via its SCRIPT_DIR — so lib.sh must sit alongside.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed"
+
+  export DISPATCH_TARGET_RESEED_MAIN_WORKTREE="$TMPDIR_TEST/main"
+  export DISPATCH_TARGET_RESEED_NOW=10000
+  export DISPATCH_TARGET_RESEED_DELAY=300
+  export DISPATCH_TARGET_RESEED_CAP=3
+
+  # systemd-run stub: records its argv (one line per call), exits 0.
+  cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/systemd-log"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemd-run"
+  export DISPATCH_TARGET_RESEED_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
+
+  # fake gh: `pr view ... --jq ...` echoes the test-controlled current attempt
+  # count ($FAKE_CUR_ATTEMPT, default 0 — the script consumes the jq result as
+  # the integer counter). `pr edit` / `label create` record their argv to a log
+  # and exit 0.
+  cat > "$TMPDIR_TEST/bin/fake-gh" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "pr" && "\$2" == "view" ]]; then
+  echo "\${FAKE_CUR_ATTEMPT:-0}"
+  exit 0
+fi
+echo "\$*" >> "$TMPDIR_TEST/gh-edit-log"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-gh"
+  export DISPATCH_TARGET_RESEED_GH_CMD="$TMPDIR_TEST/bin/fake-gh"
+
+  # fake dispatch-find-pr: echoes a fixed PR number.
+  cat > "$TMPDIR_TEST/bin/fake-find-pr" <<STUB
+#!/usr/bin/env bash
+# Default 1234 only when FAKE_PR_NUM is unset — a set-but-empty value echoes
+# nothing, modelling the no-PR case.
+echo "\${FAKE_PR_NUM-1234}"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-find-pr"
+  export DISPATCH_TARGET_RESEED_FIND_PR_CMD="$TMPDIR_TEST/bin/fake-find-pr"
+
+  # fake dispatch-apply-office-hours: records its argv to a log, exits 0.
+  cat > "$TMPDIR_TEST/bin/fake-oh" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/oh-log"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-oh"
+  export DISPATCH_TARGET_RESEED_OFFICE_HOURS_CMD="$TMPDIR_TEST/bin/fake-oh"
+}
+
+tr_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_TARGET_RESEED_MAIN_WORKTREE
+  unset DISPATCH_TARGET_RESEED_NOW
+  unset DISPATCH_TARGET_RESEED_DELAY
+  unset DISPATCH_TARGET_RESEED_CAP
+  unset DISPATCH_TARGET_RESEED_SYSTEMD_RUN_CMD
+  unset DISPATCH_TARGET_RESEED_GH_CMD
+  unset DISPATCH_TARGET_RESEED_FIND_PR_CMD
+  unset DISPATCH_TARGET_RESEED_OFFICE_HOURS_CMD
+  unset FAKE_CUR_ATTEMPT
+  unset FAKE_PR_NUM
+}
+
+# --- Test 1: under-cap reseed (CUR=0 → 1) ------------------------------------
+
+echo "Test: under-cap reseed (CUR=0) schedules a timer and applies attempt-1"
+tr_setup
+export FAKE_CUR_ATTEMPT=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "under-cap reseed exits 0" "0" "$rc"
+assert_eq "under-cap reseed stdout names the unit + fire" \
+  "reseeded dispatch-reseed-target-979-10300 at 10300" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-reseed-target-979-10300"* \
+   && "$log" == *"--on-calendar=@10300"* \
+   && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
+   && "$log" == *"--setenv=PATH="* \
+   && "$log" == *"dispatch-spawn-router 979"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: under-cap systemd-run argv (unit + calendar + cwd + setenv + spawn-router 979)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap systemd-run argv (unit + calendar + cwd + setenv + spawn-router 979)"
+  echo "    log: $log"
+fi
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--add-label dispatch:ci-wait-attempt-1"* \
+   && "$edits" != *"--remove-label"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: under-cap applies attempt-1 with no remove (CUR was 0)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap applies attempt-1 with no remove (CUR was 0)"
+  echo "    edits: $edits"
+fi
+tr_teardown
+
+# --- Test 2: counter bump (CUR=1 → 2) ----------------------------------------
+
+echo "Test: counter bump (CUR=1) removes attempt-1, applies attempt-2, schedules timer"
+tr_setup
+export FAKE_CUR_ATTEMPT=1
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "counter-bump exits 0" "0" "$rc"
+assert_eq "counter-bump stdout names the unit + fire" \
+  "reseeded dispatch-reseed-target-979-10300 at 10300" "$out"
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--remove-label dispatch:ci-wait-attempt-1"* \
+   && "$edits" == *"--add-label dispatch:ci-wait-attempt-2"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: counter-bump removes attempt-1 and adds attempt-2"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: counter-bump removes attempt-1 and adds attempt-2"
+  echo "    edits: $edits"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: counter-bump schedules a timer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: counter-bump schedules a timer"
+fi
+tr_teardown
+
+# --- Test 3: at cap (CUR == CAP = 3) → escalate, no timer --------------------
+
+echo "Test: at cap (CUR==CAP) escalates to office-hours and schedules no timer"
+tr_setup
+export FAKE_CUR_ATTEMPT=3
+export DISPATCH_TARGET_RESEED_CAP=3
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "at-cap exits 0" "0" "$rc"
+assert_eq "at-cap stdout is 'escalated'" "escalated" "$out"
+oh=$(cat "$TMPDIR_TEST/oh-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$oh" == "979 "* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: at-cap office-hours fake records 979 as arg1"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: at-cap office-hours fake records 979 as arg1"
+  echo "    oh-log: $oh"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: at-cap schedules no timer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: at-cap schedules no timer"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+tr_teardown
+
+# --- Test 4: bad <N> (flag-like) → exit 2, no side effects -------------------
+
+echo "Test: flag-like <N> exits 2 with no timer and no side effects"
+tr_setup
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" --repo 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "flag-like <N> exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" && ! -s "$TMPDIR_TEST/gh-edit-log" && ! -s "$TMPDIR_TEST/oh-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: flag-like <N>; no timer / no label edit / no escalate"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: flag-like <N>; no timer / no label edit / no escalate"
+fi
+tr_teardown
+
+# --- Test 5: missing PR → exit 2, no timer -----------------------------------
+
+echo "Test: missing PR (find-pr empty) exits 2 with no timer"
+tr_setup
+export FAKE_PR_NUM=""
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "missing PR exits 2" "2" "$rc"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"no PR found for issue #979"* && ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing PR; stderr diagnostic + no timer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing PR; stderr diagnostic + no timer"
+  echo "    stderr: $err"
+fi
+tr_teardown
+
+# --- Test 5b: non-numeric PR from find-pr → exit 2, no timer ------------------
+# PR_NUM flows into the same `gh pr view/edit "$PR_NUM"` calls N is guarded
+# against; a flag-like find-pr result must fail closed rather than reach gh.
+
+echo "Test: non-numeric PR (find-pr returns a flag) exits 2 with no timer"
+tr_setup
+export FAKE_PR_NUM="--repo evil/repo"
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "non-numeric PR exits 2" "2" "$rc"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"non-numeric PR"* && ! -s "$TMPDIR_TEST/systemd-log" && ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-numeric PR; stderr diagnostic + no timer / no label edit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-numeric PR; stderr diagnostic + no timer / no label edit"
+  echo "    stderr: $err"
+fi
+tr_teardown
+
+# --- Test 6: already-exists idempotency → exit 0, stdout 'reseeded …' ---------
+# A repeated call within the same fire-window produces the same UNIT_NAME; systemd
+# refuses to recreate it. The script must still print the 'reseeded' stdout line so
+# dispatch-materialize-spawn routes to 'drain ci-reseeded' and not the error fallback.
+
+echo "Test: already-exists collision → exit 0 and stdout 'reseeded ...'"
+tr_setup
+export FAKE_CUR_ATTEMPT=0
+# Replace the systemd-run stub with one that simulates the already-exists collision.
+cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "Unit dispatch-reseed-target-979-10300.timer already exists." >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/bin/systemd-run"
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-target-reseed" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "already-exists: exits 0" "0" "$rc"
+assert_eq "already-exists: stdout is reseeded line" \
+  "reseeded dispatch-reseed-target-979-10300 at 10300" "$out"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"already scheduled"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: already-exists: stderr notes already-scheduled"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-exists: stderr notes already-scheduled"
+  echo "    stderr: $err"
+fi
+tr_teardown
+
+# ============================================================================
 # dispatch project-helper tests (item-add / status-read / status-write)
 # ============================================================================
 #
@@ -7159,6 +7596,48 @@ else
 fi
 spawn_router_teardown
 
+# --- Test 8: an explicit target makes the spawn target-keyed ------------------
+
+echo "Test: an explicit target <N> spawns '/dispatch-propagate <N>'"
+spawn_router_setup
+write_fake_spawn_router_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 979 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "target: dispatch-spawn-router exits 0" "0" "$rc"
+assert_eq "target: stdout is 'spawned'" "spawned" "$out"
+# The final argv element is the target-keyed prompt rather than the bare form.
+mapfile -t bg_argv < "$SPAWN_ROUTER_BG_ARGV"
+assert_eq "target: argv[5] is '/dispatch-propagate 979'" "/dispatch-propagate 979" "${bg_argv[5]:-}"
+spawn_router_teardown
+
+# --- Test 9: the no-arg path still spawns the bare prompt --------------------
+
+echo "Test: no target argument still spawns the bare '/dispatch-propagate'"
+spawn_router_setup
+write_fake_spawn_router_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "no-target: dispatch-spawn-router exits 0" "0" "$rc"
+assert_eq "no-target: stdout is 'spawned'" "spawned" "$out"
+mapfile -t bg_argv < "$SPAWN_ROUTER_BG_ARGV"
+assert_eq "no-target: argv[5] is the bare '/dispatch-propagate'" "/dispatch-propagate" "${bg_argv[5]:-}"
+spawn_router_teardown
+
+# --- Test 10: a non-numeric target argument is rejected ----------------------
+
+echo "Test: a non-numeric target argument exits 2 and spawns nothing"
+spawn_router_setup
+write_fake_spawn_router_claude
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" --repo 2>&1 1>/dev/null) || rc=$?
+assert_eq "bad-target: dispatch-spawn-router exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_ROUTER_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: bad-target: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: bad-target: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_ROUTER_BG_ARGV")"
+fi
+spawn_router_teardown
+
 # ============================================================================
 # dispatch-spawn-worker tests
 # ============================================================================
@@ -7260,12 +7739,15 @@ spawn_worker_setup() {
     "$TMPDIR_TEST/worktrees/main" \
     "$TMPDIR_TEST/worktrees/839-test-worker"
 
-  # dispatch-spawn-worker sources lib-claude-agents.sh from its own directory,
-  # so the helper must sit alongside the copy. It is sourced, not executed —
-  # no chmod.
+  # dispatch-spawn-worker sources lib-claude-agents.sh from its own directory
+  # and `exec`s dispatch-spawn-job (the generalized spawn primitive) from there
+  # too, so both must sit alongside the copy. lib-claude-agents.sh is sourced,
+  # not executed — no chmod; dispatch-spawn-job is exec'd, so it is chmod'd.
   cp "$SCRIPT_DIR/dispatch-spawn-worker" "$TMPDIR_TEST/scripts/dispatch-spawn-worker"
+  cp "$SCRIPT_DIR/dispatch-spawn-job" "$TMPDIR_TEST/scripts/dispatch-spawn-job"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-worker"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-job"
 
   SPAWN_WORKER_REGISTRY="$TMPDIR_TEST/registry.json"
   SPAWN_WORKER_BG_ARGV="$TMPDIR_TEST/bg-argv"
@@ -7287,6 +7769,7 @@ spawn_worker_teardown() {
   SPAWN_WORKER_PENDING=""
   WORKER_TARGET_WORKTREE=""
   unset DISPATCH_SPAWN_WORKER_CLAUDE_CMD DISPATCH_SPAWN_WORKER_SESSION_ID \
+    DISPATCH_SPAWN_JOB_CLAUDE_CMD DISPATCH_SPAWN_JOB_SESSION_ID \
     SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
     LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 }
@@ -7589,6 +8072,142 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: last-attempt-register-worker: no diagnostic on stderr"
   echo "    stderr: $err"
 fi
+spawn_worker_teardown
+
+# ============================================================================
+# dispatch-spawn-job tests
+# ============================================================================
+echo "=== dispatch-spawn-job ==="
+#
+# dispatch-spawn-job is the generalized `claude --bg` spawn primitive that
+# dispatch-spawn-worker `exec`s. It is exercised directly here against a fake
+# `claude`, reusing the same fake-claude harness shape as the spawn-worker
+# tests (a multi-subcommand temp script DISPATCH_SPAWN_JOB_CLAUDE_CMD points at,
+# which also backs the sourced lib-claude-agents.sh via CLAUDE_AGENTS_CMD).
+#
+# Each test gets a fresh tmp tree (reusing spawn_worker_setup, which already
+# stages dispatch-spawn-job + lib-claude-agents.sh into $TMPDIR_TEST/scripts):
+#   $TMPDIR_TEST/scripts/dispatch-spawn-job   copy of the script under test
+#   $TMPDIR_TEST/scripts/lib-claude-agents.sh sourced helper
+#   $TMPDIR_TEST/worktrees/839-test-worker/   a usable cwd for --cwd
+#   $TMPDIR_TEST/fake-claude                  the multi-subcommand fake `claude`
+#   $TMPDIR_TEST/registry.json                `claude agents --json` fixture
+#   $TMPDIR_TEST/bg-argv                      recorded argv of each --bg call
+#   $TMPDIR_TEST/pwd-log                      recorded spawn-subshell $PWD
+
+# --- Test 1: spawn success (diagnose-main) -----------------------------------
+
+echo "Test: dispatch-spawn-job spawns a /dispatch-diagnose-main background job"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+# Point the job's own env override at the fake (the wrapper's env translation
+# is not in play here — the job is invoked directly).
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job: dispatch-spawn-job exits 0" "0" "$rc"
+assert_eq "spawn-job: stdout is 'spawned'" "spawned" "$out"
+mapfile -t sj_bg_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-job: argv[0] is --bg" "--bg" "${sj_bg_argv[0]:-}"
+assert_eq "spawn-job: argv[1] is --name" "--name" "${sj_bg_argv[1]:-}"
+assert_eq "spawn-job: argv[2] is the passed name" "diagnose-main" "${sj_bg_argv[2]:-}"
+assert_eq "spawn-job: argv[3] is --permission-mode" "--permission-mode" "${sj_bg_argv[3]:-}"
+assert_eq "spawn-job: argv[4] is auto" "auto" "${sj_bg_argv[4]:-}"
+assert_eq "spawn-job: argv[5] is the prompt" "/dispatch-diagnose-main abc123" "${sj_bg_argv[5]:-}"
+# The spawn subshell `cd`d into the passed --cwd, not the caller's cwd.
+sj_pwd_line=$(head -1 "$SPAWN_WORKER_PWD_LOG" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$(realpath "$sj_pwd_line" 2>/dev/null)" == "$(realpath "$SPAWN_JOB_CWD")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-job: 'claude --bg' ran with cwd = the passed --cwd"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-job: 'claude --bg' ran with cwd = the passed --cwd"
+  echo "    pwd-log:  '$sj_pwd_line'"
+  echo "    expected: '$SPAWN_JOB_CWD'"
+fi
+spawn_worker_teardown
+
+# --- Test 2: spawn success (jit-reminder) ------------------------------------
+
+echo "Test: dispatch-spawn-job spawns a /dispatch-jit-reminder background job"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+jit_prompt="/dispatch-jit-reminder owner/repo 961 PVT_x ITEM_y"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name jit-reminder-961 --cwd "$SPAWN_JOB_CWD" "$jit_prompt" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job-jit: dispatch-spawn-job exits 0" "0" "$rc"
+assert_eq "spawn-job-jit: stdout is 'spawned'" "spawned" "$out"
+mapfile -t sj_bg_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-job-jit: argv[0] is --bg" "--bg" "${sj_bg_argv[0]:-}"
+assert_eq "spawn-job-jit: argv[1] is --name" "--name" "${sj_bg_argv[1]:-}"
+assert_eq "spawn-job-jit: argv[2] is the passed name" "jit-reminder-961" "${sj_bg_argv[2]:-}"
+assert_eq "spawn-job-jit: argv[3] is --permission-mode" "--permission-mode" "${sj_bg_argv[3]:-}"
+assert_eq "spawn-job-jit: argv[4] is auto" "auto" "${sj_bg_argv[4]:-}"
+assert_eq "spawn-job-jit: argv[5] is the prompt" "$jit_prompt" "${sj_bg_argv[5]:-}"
+spawn_worker_teardown
+
+# --- Test 3: exact-name dedup ------------------------------------------------
+
+echo "Test: a pre-existing live session with the same name deduplicates the spawn"
+spawn_worker_setup
+# Prime the registry with a different sessionId whose name matches the name the
+# spawn would use. dispatch-spawn-job's dedup keys on name == <name>. cwd matches
+# SPAWN_JOB_CWD so the fixture models production: sessions_under(SPAWN_JOB_CWD)
+# returns this row (the fake ignores --cwd, but the fixture is accurate).
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+printf '%s' \
+  "[{\"sessionId\":\"sess-other\",\"pid\":4242,\"cwd\":\"$SPAWN_JOB_CWD\",\"kind\":\"background\",\"status\":\"busy\",\"name\":\"diagnose-main\"}]" \
+  > "$SPAWN_WORKER_REGISTRY"
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job-dedup: dispatch-spawn-job exits 0" "0" "$rc"
+assert_eq "spawn-job-dedup: stdout is 'deduped' (name-keyed dedup hit)" "deduped" "$out"
+# No --bg invocation was recorded — nothing was spawned.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-job-dedup: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-job-dedup: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
+fi
+spawn_worker_teardown
+
+# --- Test 4: usage errors ----------------------------------------------------
+
+echo "Test: missing --name, --cwd, or <prompt> each exit 2"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+
+# Sub-case A: missing --name
+if "$TMPDIR_TEST/scripts/dispatch-spawn-job" --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc" 2>/dev/null; then sj_rc_a=0; else sj_rc_a=$?; fi
+assert_eq "spawn-job-usage: missing --name → exit 2" "2" "$sj_rc_a"
+
+# Sub-case B: missing --cwd
+if "$TMPDIR_TEST/scripts/dispatch-spawn-job" --name diagnose-main "/dispatch-diagnose-main abc" 2>/dev/null; then sj_rc_b=0; else sj_rc_b=$?; fi
+assert_eq "spawn-job-usage: missing --cwd → exit 2" "2" "$sj_rc_b"
+
+# Sub-case C: missing <prompt>
+if "$TMPDIR_TEST/scripts/dispatch-spawn-job" --name diagnose-main --cwd "$SPAWN_JOB_CWD" 2>/dev/null; then sj_rc_c=0; else sj_rc_c=$?; fi
+assert_eq "spawn-job-usage: missing <prompt> → exit 2" "2" "$sj_rc_c"
+
+# Sub-case D: a --cwd that is not an existing directory
+if "$TMPDIR_TEST/scripts/dispatch-spawn-job" --name diagnose-main --cwd "$TMPDIR_TEST/worktrees/does-not-exist" "/dispatch-diagnose-main abc" 2>/dev/null; then sj_rc_d=0; else sj_rc_d=$?; fi
+assert_eq "spawn-job-usage: non-existent --cwd → exit 2" "2" "$sj_rc_d"
+
+# Sub-case E: an unexpected extra positional
+if "$TMPDIR_TEST/scripts/dispatch-spawn-job" --name diagnose-main --cwd "$SPAWN_JOB_CWD" "prompt-one" "prompt-two" 2>/dev/null; then sj_rc_e=0; else sj_rc_e=$?; fi
+assert_eq "spawn-job-usage: extra positional → exit 2" "2" "$sj_rc_e"
+
 spawn_worker_teardown
 
 # ============================================================================
@@ -11512,8 +12131,8 @@ assert_eq "issue: decision line" "issue 707 1" "$(printf '%s\n' "$out" | tail -n
 assert_eq "issue: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
-# --- main-broken → passthrough + lock HELD (sub-skill releases) --------------
-echo "Test: select-tick main-broken → passthrough, lock held"
+# --- main-broken → passthrough + lock RELEASED (spawned as a bg job) ---------
+echo "Test: select-tick main-broken → passthrough, lock released"
 sel_tick_setup
 cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
@@ -11524,12 +12143,12 @@ chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_sel_tick)
 assert_eq "main-broken: decision line" "main-broken abc1234" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "main-broken: lock held" "select-tick-session" \
+assert_eq "main-broken: lock released" "" \
   "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
-# --- jit-reminder → passthrough + lock HELD ----------------------------------
-echo "Test: select-tick jit-reminder → passthrough, lock held"
+# --- jit-reminder → passthrough + lock RELEASED (spawned as a bg job) --------
+echo "Test: select-tick jit-reminder → passthrough, lock released"
 sel_tick_setup
 cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
@@ -11540,7 +12159,7 @@ chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_sel_tick)
 assert_eq "jit-reminder: decision line" "jit-reminder owner/repo 42 PVT_x ITEM_y" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "jit-reminder: lock held" "select-tick-session" \
+assert_eq "jit-reminder: lock released" "" \
   "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
@@ -11807,6 +12426,12 @@ echo "\$*" >> "$TMPDIR_TEST/logs/spawn-worker.log"
 echo spawned
 exit \${MAT_SPAWN_RC:-0}
 FAKE
+  cat > "$TMPDIR_TEST/dispatch-schedule-target-reseed" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/schedule-target-reseed.log"
+printf '%s\n' "\${MAT_RESEED_OUT:-reseeded dispatch-reseed-target-\$1-10300 at 10300}"
+exit \${MAT_RESEED_RC:-0}
+FAKE
   cat > "$TMPDIR_TEST/sync-issue-context" <<FAKE
 #!/usr/bin/env bash
 echo "cwd=\$PWD argv=\$*" >> "$TMPDIR_TEST/logs/sync-issue-context.log"
@@ -11815,7 +12440,8 @@ FAKE
     "$TMPDIR_TEST"/dispatch-check-blockers "$TMPDIR_TEST"/dispatch-apply-office-hours \
     "$TMPDIR_TEST"/dispatch-resolve-worktree "$TMPDIR_TEST"/dispatch-merge-main \
     "$TMPDIR_TEST"/dispatch-phase "$TMPDIR_TEST"/dispatch-select-target \
-    "$TMPDIR_TEST"/dispatch-spawn-worker "$TMPDIR_TEST"/sync-issue-context
+    "$TMPDIR_TEST"/dispatch-spawn-worker "$TMPDIR_TEST"/dispatch-schedule-target-reseed \
+    "$TMPDIR_TEST"/sync-issue-context
 
   mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
   cat > "$TMPDIR_TEST/bin/git" <<STUB
@@ -11846,7 +12472,8 @@ mat_teardown() {
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_MERGE_RC MAT_PHASE \
-    MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE MAT_MERGE_CONFLICT_N
+    MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE MAT_MERGE_CONFLICT_N \
+    MAT_RESEED_OUT MAT_RESEED_RC
 }
 
 run_mat() { "$TMPDIR_TEST/dispatch-materialize-spawn" "$@" 2>/dev/null; }
@@ -12086,18 +12713,90 @@ assert_eq "merge clean: dispatch-merge-main was called" "1" \
   "$([ -f "$TMPDIR_TEST/logs/merge-main.log" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- waiting CI → drain ci-waiting -------------------------------------------
-echo "Test: materialize-spawn waiting CI → drain ci-waiting"
+# --- single-target waiting CI → reseed scheduled → drain ci-reseeded (#979) ---
+echo "Test: materialize-spawn single-target waiting CI → drain ci-reseeded (reseed scheduled)"
 mat_setup
 export MAT_PHASE=waiting
 out=$(run_mat 839 queue)
-assert_eq "ci-waiting: CI line present" "#839: CI in progress; the next router tick will re-evaluate." \
+assert_eq "ci-reseeded: CI line still present" "#839: CI in progress; the next router tick will re-evaluate." \
   "$(printf '%s\n' "$out" | grep '^#839:')"
-assert_eq "ci-waiting: terminal token" "drain ci-waiting" \
+assert_eq "ci-reseeded: terminal token" "drain ci-reseeded" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "ci-waiting: no spawn" "0" \
+assert_eq "ci-reseeded: scheduler called with target" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
+assert_eq "ci-reseeded: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
-assert_eq "ci-waiting: lock released at ci-waiting stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "ci-reseeded: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- explicit-mode waiting CI → reseed scheduled → drain ci-reseeded (#979) ----
+# The headline `/dispatch <N>` path is MODE=explicit. The reseed test above runs
+# MODE=queue and so enters the single-target branch via the `GAP <= 1` disjunct;
+# this test exercises the other disjunct (`MODE == explicit`) directly, confirming
+# an explicit single target also schedules the target-keyed reseed.
+echo "Test: materialize-spawn explicit-mode waiting CI → drain ci-reseeded (reseed scheduled)"
+mat_setup
+export MAT_PHASE=waiting
+out=$(run_mat 839 explicit)
+assert_eq "explicit-ci-reseeded: terminal token" "drain ci-reseeded" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "explicit-ci-reseeded: scheduler called with target" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
+assert_eq "explicit-ci-reseeded: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "explicit-ci-reseeded: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- single-target waiting CI → attempt cap → notify ci-wait-exhausted (#979) -
+echo "Test: materialize-spawn single-target waiting CI at cap → notify ci-wait-exhausted"
+mat_setup
+export MAT_PHASE=waiting
+export MAT_RESEED_OUT=escalated
+out=$(run_mat 839 queue)
+assert_eq "ci-exhausted: terminal token" "notify ci-wait-exhausted" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "ci-exhausted: scheduler called with target" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
+assert_eq "ci-exhausted: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "ci-exhausted: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- fan-out unchanged: ci-waiting target is skipped, scheduler NOT called -----
+# Multi-item fan-out (--gap N>1) must keep the pre-#979 behavior: a ci-waiting
+# target is a `skipped` outcome and the scheduler is never invoked (other live
+# workers' Stop-hooks bring the chain back to the target later).
+echo "Test: materialize-spawn fan-out ci-waiting target skipped, scheduler not called (#979)"
+mat_setup
+export MAT_PHASE=waiting
+export MAT_QUEUE="840 841"
+out=$(run_mat 839 queue --gap 3)
+assert_eq "fanout-ci-waiting: skip detail present" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'skipped #839 (ci-waiting)')"
+assert_eq "fanout-ci-waiting: terminal token" "drain" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fanout-ci-waiting: scheduler NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && echo 1 || echo 0)"
+assert_eq "fanout-ci-waiting: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- single-target waiting CI → scheduler fails → fallback drain ci-waiting ----
+# When dispatch-schedule-target-reseed exits non-zero (e.g. systemd-run fails for
+# a reason other than 'already exists'), materialize-spawn must fall back to the
+# plain 'drain ci-waiting' token so the tick never wedges.
+echo "Test: materialize-spawn single-target waiting CI scheduler failure → drain ci-waiting fallback"
+mat_setup
+export MAT_PHASE=waiting
+export MAT_RESEED_RC=1
+out=$(run_mat 839 queue)
+assert_eq "ci-wait-fallback: terminal token is drain ci-waiting" "drain ci-waiting" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "ci-wait-fallback: scheduler was called" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
+assert_eq "ci-wait-fallback: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "ci-wait-fallback: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
 # --- --gap 1 → propagate (single target, default behavior) -------------------
@@ -12343,6 +13042,157 @@ assert_eq "vite only: ssh -L line" "ssh -L 5173:localhost:5173 nixos" "$ssh_line
 out=$(export QA_REMOTE_SSH_HOST=myhost; source "$SCRIPT_DIR/lib.sh" && print_remote_access_block 5173)
 ssh_line=$(grep -oE 'ssh -L .*' <<<"$out" | head -1)
 assert_eq "env override: ssh -L line ends with myhost" "ssh -L 5173:localhost:5173 myhost" "$ssh_line"
+
+# ============================================================================
+# === dispatch-security-surface ===
+# ============================================================================
+
+echo "Test: dispatch-security-surface"
+
+# empty input → surface=empty
+out=$(printf '' | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: empty input" "surface=empty
+deps=false
+app_or_rules=false" "$out"
+
+# README.md → docs
+out=$(printf '%s\n' "README.md" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: docs-only README" "surface=docs
+deps=false
+app_or_rules=false" "$out"
+
+# .claude/skills/foo/SKILL.md + docs/guide.md → docs
+out=$(printf '%s\n' ".claude/skills/foo/SKILL.md" "docs/guide.md" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: .claude skill md + docs md both docs" "surface=docs
+deps=false
+app_or_rules=false" "$out"
+
+# LICENSE (no extension) → docs
+out=$(printf '%s\n' "LICENSE" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: LICENSE no extension" "surface=docs
+deps=false
+app_or_rules=false" "$out"
+
+# LICENSE.md (doc extension) → docs (matched by the doc-extension branch)
+out=$(printf '%s\n' "LICENSE.md" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: LICENSE.md doc extension" "surface=docs
+deps=false
+app_or_rules=false" "$out"
+
+# A code file named like a license must NOT be classified docs — a code
+# extension on a license-style basename must not skip the security fan-out.
+out=$(printf '%s\n' "src/auth/NOTICE.ts" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: NOTICE.ts is code not docs" "surface=code
+deps=false
+app_or_rules=true" "$out"
+
+out=$(printf '%s\n' "AUTHORS.go" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: AUTHORS.go is code not docs" "surface=code
+deps=false
+app_or_rules=true" "$out"
+
+out=$(printf '%s\n' "LICENSE.sh" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: LICENSE.sh is code not docs" "surface=code
+deps=false
+app_or_rules=false" "$out"
+
+# README.md + blank line → docs (blank-line tolerance)
+out=$(printf 'README.md\n\n' | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: docs with trailing blank line" "surface=docs
+deps=false
+app_or_rules=false" "$out"
+
+# README.md + tab-only line → docs (tab whitespace filtered)
+out=$(printf 'README.md\n\t\nCHANGELOG.md\n' | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: docs with tab-only blank line" "surface=docs
+deps=false
+app_or_rules=false" "$out"
+
+# SKILL.md + .claude/skills/x/scripts/bar.sh → code (non-doc extension)
+out=$(printf '%s\n' "SKILL.md" ".claude/skills/x/scripts/bar.sh" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: SKILL.md + .claude sh script → code, no app_or_rules" "surface=code
+deps=false
+app_or_rules=false" "$out"
+
+# package.json → code + deps
+out=$(printf '%s\n' "package.json" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: package.json → deps=true" "surface=code
+deps=true
+app_or_rules=false" "$out"
+
+# package-lock.json → code + deps
+out=$(printf '%s\n' "package-lock.json" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: package-lock.json → deps=true" "surface=code
+deps=true
+app_or_rules=false" "$out"
+
+# functions/package.json (nested) → code + deps
+out=$(printf '%s\n' "functions/package.json" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: functions/package.json nested → deps=true" "surface=code
+deps=true
+app_or_rules=false" "$out"
+
+# budget/src/index.ts → code + app_or_rules
+out=$(printf '%s\n' "budget/src/index.ts" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: budget ts → app_or_rules=true" "surface=code
+deps=false
+app_or_rules=true" "$out"
+
+# budget-etl/main.go → code + app_or_rules
+out=$(printf '%s\n' "budget-etl/main.go" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: go file → app_or_rules=true" "surface=code
+deps=false
+app_or_rules=true" "$out"
+
+# firestore.rules → code + app_or_rules
+out=$(printf '%s\n' "firestore.rules" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: firestore.rules → app_or_rules=true" "surface=code
+deps=false
+app_or_rules=true" "$out"
+
+# storage.rules → code + app_or_rules
+out=$(printf '%s\n' "storage.rules" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: storage.rules → app_or_rules=true" "surface=code
+deps=false
+app_or_rules=true" "$out"
+
+# .claude/foo.ts → code but NOT app_or_rules (.claude/ exclusion)
+out=$(printf '%s\n' ".claude/foo.ts" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: .claude ts excluded from app_or_rules" "surface=code
+deps=false
+app_or_rules=false" "$out"
+
+# .github/workflows/ci.yml → code, no deps, no app_or_rules
+out=$(printf '%s\n' ".github/workflows/ci.yml" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: github workflow yml → code no app_or_rules" "surface=code
+deps=false
+app_or_rules=false" "$out"
+
+# landing/src/app.tsx + package-lock.json → code + deps + app_or_rules
+out=$(printf '%s\n' "landing/src/app.tsx" "package-lock.json" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: tsx + package-lock → deps=true app_or_rules=true" "surface=code
+deps=true
+app_or_rules=true" "$out"
+
+# README.md + print/src/x.ts → code + app_or_rules (mixed doc + source)
+out=$(printf '%s\n' "README.md" "print/src/x.ts" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: readme + ts → code app_or_rules=true" "surface=code
+deps=false
+app_or_rules=true" "$out"
+
+# storage.rules + package-lock.json → code + deps + app_or_rules (covers the
+# short-circuit when both flags fire from a rules file rather than app source)
+out=$(printf '%s\n' "storage.rules" "package-lock.json" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: storage.rules + package-lock → deps=true app_or_rules=true" "surface=code
+deps=true
+app_or_rules=true" "$out"
+
+# non-.claude shell script → code, no app_or_rules (APP_RE misses .sh, so
+# app_or_rules stays false independent of the .claude/ exclusion)
+out=$(printf '%s\n' "budget-etl/scripts/run.sh" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: non-.claude sh → code no app_or_rules" "surface=code
+deps=false
+app_or_rules=false" "$out"
 
 # ============================================================================
 # summary
