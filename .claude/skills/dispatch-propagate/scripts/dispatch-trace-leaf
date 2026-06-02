@@ -16,13 +16,18 @@
 #              LIVE Claude session (#914). An orphan <N>-* worktree (on disk, no
 #              session) stays descendable — it is a reuse signal, not a skip,
 #              matching the direct-row liveness fix in dispatch-select-target
-#              (#905). A child with no worktree at all is never filtered. If a
-#              node has open children but every one is live-owned, the descent
-#              bubbles up too — that subtree has no ready work. If every
-#              reachable open leaf in the subtree is owned by a live session,
-#              the script exits non-zero with a clear message on stderr so the
-#              /dispatch-propagate caller can stop instead of dispatching on a
-#              conflict.
+#              (#905). A child with no worktree at all is never filtered.
+#              Queue mode also filters out a child parked on
+#              dispatch:office-hours (#1011): the label parks an item for human
+#              review and must remove it from autonomous selection (#757), so a
+#              parked child is treated exactly like a live-session-owned one —
+#              neither descended into nor returned as a startable leaf. If a
+#              node has open children but every one is live-owned or parked, the
+#              descent bubbles up too — that subtree has no ready work. If every
+#              reachable open leaf in the subtree is owned by a live session or
+#              parked, the script exits non-zero with a clear message on stderr
+#              so the /dispatch-propagate caller can stop instead of dispatching
+#              on a conflict.
 #
 # Falls back to printing N in `explicit` mode if cycles block every path to a
 # leaf (preserves historical behavior).
@@ -36,6 +41,7 @@
 #   1 — usage error, or a sibling gh script (issue-blocking / issue-sub-issues)
 #       failed — a hard failure the caller must not treat as "no work"
 #   2 — queue mode only: every reachable open leaf is owned by a live session
+#       or parked on dispatch:office-hours
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -72,6 +78,26 @@ if [[ "$MODE" == "queue" ]]; then
   done < <(list_worktree_records)
 fi
 
+# In queue mode, gather the set of open issues parked on dispatch:office-hours
+# (#1011), keyed by issue number. The label parks an item for human review and
+# must remove it from autonomous selection (#757); dispatch-select-target
+# already filters it on top-level queue issues, but a parked leaf reachable from
+# an unparked parent slipped through this descent. Gathered once up front,
+# mirroring WORKTREE_PATHS_BY_NUM above, so child_is_office_hours_parked is a map
+# lookup with no per-child gh round-trip. A gh failure here is a hard error, not
+# an empty set — silently returning a parked leaf is the very bug being fixed.
+# --limit 300 matches dispatch-select-target's open-issue cap: the parked set is
+# a subset of open issues, so the default limit of 30 could silently truncate it
+# and let a parked leaf past position 30 be returned as startable.
+declare -A OFFICE_HOURS_PARKED=()
+if [[ "$MODE" == "queue" ]]; then
+  parked_json=$(gh issue list --state open --label "dispatch:office-hours" --limit 300 --json number) \
+    || { echo "error: dispatch-trace-leaf $ISSUE_NUM: gh issue list for the dispatch:office-hours parked set failed; aborting rather than risk returning a parked leaf" >&2; exit 1; }
+  while IFS= read -r parked_num; do
+    [[ -n "$parked_num" ]] && OFFICE_HOURS_PARKED["$parked_num"]=1
+  done < <(printf '%s' "$parked_json" | jq -r '.[].number')
+fi
+
 # True when a live Claude session owns any <num>-* worktree. No such worktree →
 # fast-path miss (return 1), no daemon round-trip. Several matches → owned if any
 # one is live. A faithful copy of dispatch-select-target's issue_has_live_worktree
@@ -89,6 +115,17 @@ child_has_live_worktree() {
     fi
   done <<< "$paths"
   return 1
+}
+
+# True when the given issue number is parked on dispatch:office-hours (#1011).
+# A parked node is filtered from queue-mode descent exactly like a
+# live-session-owned child (child_has_live_worktree, #914): neither descended
+# into nor returned as a startable leaf. The descent then falls through to the
+# next startable sibling, or bubbles up (exit 2) when every reachable open leaf
+# is parked or live-owned. Map lookup against OFFICE_HOURS_PARKED, populated
+# once in queue mode above.
+child_is_office_hours_parked() {
+  [[ -n "${OFFICE_HOURS_PARKED[$1]:-}" ]]
 }
 
 # Collect open children of an issue: open blockers union open sub-issues.
@@ -167,12 +204,14 @@ find_leaf() {
 
   # Descend into children lowest-numbered first; return the first leaf found.
   # In queue mode, skip any child whose <N>-* worktree is owned by a live
-  # session (#914) — an orphan child worktree stays descendable. If every child
-  # is skipped the loop finds nothing and we bubble up.
+  # session (#914) — an orphan child worktree stays descendable — and any child
+  # parked on dispatch:office-hours (#1011). If every child is skipped the loop
+  # finds nothing and we bubble up.
   local kid leaf
   while IFS= read -r kid; do
     [[ -z "$kid" ]] && continue
     [[ "$MODE" == "queue" ]] && child_has_live_worktree "$kid" && continue
+    [[ "$MODE" == "queue" ]] && child_is_office_hours_parked "$kid" && continue
     # Capture the status explicitly (set -e is disabled here) so a hard error
     # (rc 3) is distinguishable from "no leaf in this subtree" (rc 1).
     leaf=$(find_leaf "$kid"); rc=$?
@@ -186,7 +225,16 @@ find_leaf() {
   return 1
 }
 
-if LEAF=$(find_leaf "$ISSUE_NUM"); then
+# In queue mode the root issue is filtered exactly like a descended child
+# (#1011): if the starting issue is itself a parked topological leaf, the
+# descent loop never gets a chance to skip it, so guard it here before the
+# trace. This keeps dispatch-trace-leaf's standalone contract — "queue mode
+# never returns a leaf carrying dispatch:office-hours" — true for the root, not
+# just for children. Force the no-startable-leaf path (rc 2) so it flows into
+# the exit-2 surface below, matching the all-children-parked case.
+if [[ "$MODE" == "queue" ]] && child_is_office_hours_parked "$ISSUE_NUM"; then
+  trace_rc=2
+elif LEAF=$(find_leaf "$ISSUE_NUM"); then
   trace_rc=0
 else
   trace_rc=$?
@@ -206,13 +254,14 @@ if [[ "$trace_rc" -eq 3 ]]; then
 fi
 
 # In queue mode, no valid leaf is reachable — every reachable open leaf is owned
-# by a live session (or cycles block every path); orphan worktrees were
-# descended through. Surface this so /dispatch-propagate can stop with a clear
-# message instead of dispatching on a conflict. The "worktree-conflicted" token
-# is retained for the pattern-matcher in test-dispatch-scripts.sh that keys on it
-# (dispatch-select-target only checks the exit code, not the message text).
+# by a live session or parked on dispatch:office-hours (#1011) (or cycles block
+# every path); orphan worktrees were descended through. Surface this so
+# /dispatch-propagate can stop with a clear message instead of dispatching on a
+# conflict. The "worktree-conflicted" token is retained for the pattern-matcher
+# in test-dispatch-scripts.sh that keys on it (dispatch-select-target only checks
+# the exit code, not the message text).
 if [[ "$MODE" == "queue" ]]; then
-  echo "error: all open leaves reachable from $ISSUE_NUM are worktree-conflicted (owned by a live session)" >&2
+  echo "error: all open leaves reachable from $ISSUE_NUM are worktree-conflicted (owned by a live session or parked on dispatch:office-hours)" >&2
   exit 2
 fi
 
