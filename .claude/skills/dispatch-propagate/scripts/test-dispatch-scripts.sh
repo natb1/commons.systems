@@ -157,6 +157,17 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  "issue list --state open --label dispatch:office-hours --limit 300 --json number")
+    # dispatch-trace-leaf queue-mode parked set (#1011): open issues carrying
+    # dispatch:office-hours. $STUB_DIR/trace-parked.json supplies the parked
+    # numbers; absence means nothing is parked (default empty), so every
+    # pre-existing trace-leaf test stays green.
+    if [[ -f "$STUB_DIR/trace-parked.json" ]]; then
+      cat "$STUB_DIR/trace-parked.json"
+    else
+      echo "[]"
+    fi
+    ;;
   issue\ view\ *\ --json\ state)
     # dispatch-select-target worktree detection: gh issue view <num> --json state
     num=$(echo "$args" | awk '{print $3}')
@@ -1950,6 +1961,29 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "help-wanted issue 55 resolves to leaf 5500" "issue 5500" "$result"
 teardown
 
+# 38a. A help-wanted issue whose lowest open leaf is parked on
+#      dispatch:office-hours resolves to the next startable (unparked) leaf, not
+#      the parked one (#1011). Issue 55 has sub-issues 5500 (parked) and 5501
+#      (unparked), neither worktree'd; the selector must emit 5501. This is the
+#      end-to-end form of the wedged-queue bug — a parked leaf under an unparked
+#      help-wanted parent previously occupied its bucket and starved the queue.
+echo "Test: help-wanted issue's parked leaf skipped → next leaf selected"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500},{"number":5501}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5500.json"
+printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5501.json"
+# No worktrees — only the office-hours label distinguishes the leaves.
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# 5500 is parked on dispatch:office-hours.
+printf '[{"number":5500}]\n' > "$STUB_DIR/trace-parked.json"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "parked leaf 5500 skipped → leaf 5501 selected" "issue 5501" "$result"
+teardown
+
 # 39. dispatch-trace-leaf exit 1 (usage error) is a hard failure, never a skip.
 echo "Test: dispatch-trace-leaf exit 1 → dispatch-select-target hard-fails"
 setup
@@ -2810,6 +2844,85 @@ printf '[{"number":801}]\n' > "$STUB_DIR/subissues-800.json"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "queue" 2>/dev/null) && rc=0 || rc=$?
 assert_eq "deep gh failure → exit 1" "1" "$rc"
 assert_eq "deep gh failure → no leaf on stdout" "" "$stdout"
+teardown
+
+# 17. Queue mode: a topological leaf parked on dispatch:office-hours is skipped
+#     in favor of an unparked sibling leaf (#1011). 700 has open sub-issues 701
+#     (parked) and 702 (unparked); neither has a worktree, so only the label
+#     distinguishes them. Without the skip, the lowest leaf 701 would be
+#     returned — this is the wedged-queue repro.
+echo "Test: queue mode → office-hours-parked leaf skipped, returns unparked sibling"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+# 701 is parked on dispatch:office-hours; 702 is not.
+printf '[{"number":701}]\n' > "$STUB_DIR/trace-parked.json"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: parked leaf 701 skipped → unparked sibling 702" "702" "$result"
+teardown
+
+# 18. Queue mode: every reachable open leaf is parked on dispatch:office-hours →
+#     exit 2 with the worktree-conflicted stderr message, exactly as the
+#     all-live-owned case (#1011 mirrors #914).
+echo "Test: queue mode → all leaves office-hours-parked, exits 2"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/trace-parked.json"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"worktree-conflicted"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "queue: all leaves parked → exit 2 with stderr message" "ok" "$status"
+teardown
+
+# 19. Explicit mode: the office-hours skip does not apply — a parked leaf is
+#     returned unchanged (#1011 scopes the skip to queue mode). The parked-set
+#     gh query runs only in queue mode, so trace-parked.json is irrelevant here;
+#     explicit descent returns the lowest leaf 701 regardless of its label.
+echo "Test: explicit mode → office-hours-parked leaf returned (no skip)"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf '[{"number":701}]\n' > "$STUB_DIR/trace-parked.json"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "explicit")
+assert_eq "explicit: parked leaf 701 returned unchanged" "701" "$result"
+teardown
+
+# 20. Queue mode: the ROOT issue is itself a parked topological leaf (#1011).
+#     700 has no children, so the descent loop never runs and cannot skip it;
+#     the root guard before the trace must catch it and exit 2 rather than
+#     return the parked root. This is the standalone-contract edge case — the
+#     descent child-skip alone leaves the root unguarded.
+echo "Test: queue mode → parked ROOT leaf guarded, exits 2"
+setup
+# No subissues-700.json → 700 is a topological leaf.
+printf '{"title":"Issue 700","body":"","comments":[],"number":700,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-700.json"
+printf '[{"number":700}]\n' > "$STUB_DIR/trace-parked.json"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" 2>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+assert_eq "queue: parked root leaf → exit 2, no leaf on stdout" "EXIT=2" "$err_out"
+teardown
+
+# 21. Explicit mode: a parked ROOT leaf is returned unchanged (#1011 scopes the
+#     root guard to queue mode, mirroring the descent child-skip scoping).
+echo "Test: explicit mode → parked ROOT leaf returned (no guard)"
+setup
+printf '{"title":"Issue 700","body":"","comments":[],"number":700,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-700.json"
+printf '[{"number":700}]\n' > "$STUB_DIR/trace-parked.json"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "explicit")
+assert_eq "explicit: parked root leaf 700 returned unchanged" "700" "$result"
 teardown
 
 # ============================================================================
