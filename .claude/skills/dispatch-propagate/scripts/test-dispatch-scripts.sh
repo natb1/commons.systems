@@ -2363,15 +2363,20 @@ result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "live-session item skipped; next labeled item selected" "office-hours 99 implement -" "$result"
 teardown
 
-# OHST4. An empty office-hours queue prints `empty`.
-echo "Test: empty office-hours queue → empty"
+# OHST4. An empty office-hours queue with no parked router prints `empty`. The
+# fall-through reaches the parked-router block: point it at a controlled
+# main-worktree path (the stub git does not implement the rev-parse the real
+# resolve_project_root needs) where the fake daemon reports no router.
+echo "Test: empty office-hours queue, no parked router → empty"
 setup
 echo '[]' > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-select_target_fake_claude
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+select_target_fake_claude   # `[]`: no sessions under main, no parked router
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "empty queue prints empty" "empty" "$result"
+assert_eq "empty queue, no parked router prints empty" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # OHST5. Unknown daemon (UNKNOWN liveness) folds to occupied → the item with a
@@ -2387,6 +2392,92 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
 # setup's default CLAUDE_AGENTS_CMD points at a non-existent binary (UNKNOWN).
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "UNKNOWN-liveness worktree item skipped; worktree-free item selected" "office-hours 99 implement -" "$result"
+teardown
+
+# Install a fake `claude` whose `agents --json` returns a controllable session
+# payload (sessionId/pid/status/name per row) so the parked-router fallback can
+# be exercised: a `dispatch-*` router rooted under worktrees/main with a chosen
+# status. Each argument is a "name:status" pair. The fake ignores --cwd and
+# returns the full payload (matching the real daemon path, where the script
+# points claude_sessions_under at DISPATCH_OFFICE_HOURS_MAIN_WORKTREE).
+parked_router_fake_claude() {
+  local payload="[" pair name status first=1
+  for pair in "$@"; do
+    name="${pair%%:*}"; status="${pair#*:}"
+    if (( first )); then first=0; else payload+=","; fi
+    payload+="{\"sessionId\":\"s-$name\",\"pid\":1,\"status\":\"$status\",\"name\":\"$name\",\"cwd\":\"\"}"
+  done
+  payload+="]"
+  printf '%s' "$payload" > "$TMPDIR_TEST/claude-payload.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+# Ignore all args (including --cwd); return the full payload.
+cat "$(cd "$(dirname "$0")/.." && pwd)/claude-payload.json"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/claude"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+}
+
+# OHST6. No labeled item + an idle/`waiting` dispatch-* router under main →
+# parked-router. The continuation invariant kept the router alive; the office
+# hours reader surfaces it directly, label-free.
+echo "Test: no labeled item + idle dispatch-* router under main → parked-router"
+setup
+echo '[]' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+parked_router_fake_claude "dispatch-abc123:waiting"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "idle dispatch-* router surfaced as parked-router" "parked-router s-dispatch-abc123 dispatch-abc123" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST7. No labeled item + a `busy` dispatch-* router under main → empty. A busy
+# router is actively ticking and must NOT be surfaced.
+echo "Test: no labeled item + busy dispatch-* router under main → empty (not surfaced)"
+setup
+echo '[]' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+parked_router_fake_claude "dispatch-abc123:busy"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "busy dispatch-* router not surfaced; empty" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST8. A sessionless labeled item AND a parked dispatch-* router both present →
+# the labeled item wins; the parked-router fallback runs only when no labeled
+# item exists.
+echo "Test: labeled item present alongside parked router → labeled item wins"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+# The fake reports no worker session named 42-* (so the labeled item is
+# sessionless) plus a parked dispatch-* router under main.
+parked_router_fake_claude "dispatch-abc123:waiting"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "labeled item selected over parked router" "office-hours 42 implement -" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST9. UNKNOWN daemon query (claude_sessions_under returns non-zero) → empty:
+# no parked router is fabricated from a failed query.
+echo "Test: no labeled item + UNKNOWN daemon → empty (no fabricated parked router)"
+setup
+echo '[]' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+# setup's default CLAUDE_AGENTS_CMD points at a non-existent binary → claude
+# exits non-zero → claude_sessions_under returns 1 (UNKNOWN).
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "UNKNOWN daemon does not fabricate a parked router; empty" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # ============================================================================
