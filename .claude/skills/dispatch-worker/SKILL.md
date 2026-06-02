@@ -153,11 +153,13 @@ picks the target up once CI concludes.
 - **`review`** — invoke `/review-fix`. It runs `/review`, applies the
   recommended fixes, posts a PR comment, and applies the `dispatch:reviewed`
   label itself — `/dispatch-worker` applies no label.
-- **`security`** — invoke `/security-review-fix`. Its Step 2 directly fans out
-  9 parallel subagents — 6 security domains, a red team, the built-in
-  `/security-review` scan (subagent-wrapped Skill invocation), and the PR's
-  CodeQL alerts — then applies the required fixes, posts a PR comment, applies
-  the `dispatch:security-reviewed` label, and marks the PR ready. It is
+- **`security`** — invoke `/security-review-fix`. Its Step 1 classifies the
+  diff's changed surface: a docs-only diff skips the fan-out with a one-line
+  "no attack surface" PR comment; a code diff fans out the relevant domain
+  subagents (plus a red team and the built-in `/security-review` scan,
+  subagent-wrapped Skill invocation) and runs CodeQL and the dependency audit
+  inline when relevant. It then applies the required fixes, posts a PR comment,
+  applies the `dispatch:security-reviewed` label, and marks the PR ready. It is
   idempotent on re-entry — `/dispatch-worker` applies no label.
 - **`done`** — stop without invoking a phase skill; the Stop hook applies
   `dispatch:office-hours` to the issue. No phase skill ran; the slip past

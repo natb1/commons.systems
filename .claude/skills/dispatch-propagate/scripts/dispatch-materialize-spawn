@@ -47,10 +47,26 @@
 #   drain worktree-conflict  the target worktree cannot be safely entered; the
 #                          lock is released at the guard. The conflict path
 #                          precedes this token.
-#   drain ci-waiting       an explicit target's PR CI is still in progress
-#                          (dispatch-ci-ready not-ready); no spawn this tick.
-#                          Lock released at this stop. Queue/fan-out targets are
-#                          pre-gated by selection, so this token is explicit-only.
+#   drain ci-reseeded      explicit single-target path (#979/#980): the target
+#                          PR's CI is still in progress (dispatch-ci-ready
+#                          not-ready); a target-keyed reseed timer was scheduled
+#                          via dispatch-schedule-target-reseed so the chain returns
+#                          to N when its CI concludes. Lock released at this stop
+#                          (before scheduling the reseed). Queue/fan-out targets
+#                          are pre-gated by selection's dispatch-ci-ready check, so
+#                          this path is explicit-only.
+#   notify ci-wait-exhausted explicit single-target path (#979): the CI-wait
+#                          attempt cap was hit; the issue was parked on
+#                          dispatch:office-hours and no further reseed is
+#                          scheduled. Lock released at this stop.
+#   drain ci-waiting       explicit single-target FALLBACK only: the target PR's
+#                          CI is still in progress (dispatch-ci-ready not-ready)
+#                          but dispatch-schedule-target-reseed hard-failed (or
+#                          emitted unrecognized output), so the tick drains as a
+#                          no-op instead of wedging; the reason is on stderr. Lock
+#                          released at this stop. (In a fan-out run a ci-waiting
+#                          target is a `skipped` outcome — see below — and the
+#                          scheduler is never called.)
 #
 # Fan-out summary tokens (queue mode with --gap N>1; the last stdout line is one
 # of these instead of a per-target token):
@@ -73,7 +89,10 @@
 # release explicitly at the guard (the marker does not exist yet on these
 # pre-finalize stop paths). `propagate` and `notify spawn-failed` release AFTER
 # dispatch-spawn-worker returns (the worker is verified-registered on success).
-# `drain ci-waiting` releases at its stop. An internal `exit 2` failure before
+# The single-target ci-waiting stop (now `drain ci-reseeded` / `notify
+# ci-wait-exhausted`, or the fallback `drain ci-waiting` on a scheduler hard-
+# failure) releases the lock at its stop, BEFORE dispatch-schedule-target-reseed
+# is invoked. An internal `exit 2` failure before
 # dispatch-finalize-selection (a usage error, or a hard trace-leaf /
 # check-blockers / resolve-worktree error) also releases the lock so a stuck
 # holder does not wedge the next tick. Crash safety: a router that dies
@@ -137,6 +156,11 @@ OUTCOME=""
 CONFLICT_N=""
 CONFLICT_WORKTREE=""
 CONFLICT_MODE=""
+
+# Resolved ci-waiting target, surfaced by process_one_target when OUTCOME=ci-waiting.
+# The single-target driver passes it to dispatch-schedule-target-reseed — the
+# resolved `n` may differ from the passed-in `N` after an explicit leaf-trace.
+WAITING_N=""
 
 # process_one_target <issue-N> <explicit|queue>
 # Runs the per-target sequence (Step 4 guards, Step 5 resolve, Step 5b merge,
@@ -283,6 +307,7 @@ process_one_target() {
   # still in progress.
   if [[ "$mode" == "explicit" ]] && ! "$SCRIPT_DIR/dispatch-ci-ready" "$n" >/dev/null; then
     echo "#$n: CI in progress; the next router tick will re-evaluate."
+    WAITING_N="$n"
     OUTCOME=ci-waiting
     return 0
   fi
@@ -317,7 +342,25 @@ if [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); then
       echo "resolve merge-conflict" ;;
     spawn-failed)      echo "notify spawn-failed" ;;
     worktree-conflict) echo "drain worktree-conflict" ;;
-    ci-waiting)        echo "drain ci-waiting" ;;
+    ci-waiting)
+      # Single-target path (#979): instead of draining as a no-op, schedule a
+      # target-keyed reseed so the chain returns to #$WAITING_N when its CI
+      # concludes — bounded by an attempt counter that dispatch-schedule-target-reseed
+      # escalates to dispatch:office-hours at the cap. The `#<N>: CI in progress`
+      # line was already printed inside process_one_target. A hard scheduler
+      # failure (or any unrecognized output) falls back to the plain `drain
+      # ci-waiting` so the tick never wedges; the reason is surfaced on stderr.
+      reseed_rc=0
+      reseed_out=$("$SCRIPT_DIR/dispatch-schedule-target-reseed" "$WAITING_N") || reseed_rc=$?
+      if (( reseed_rc == 0 )) && [[ "$reseed_out" == "escalated" ]]; then
+        echo "notify ci-wait-exhausted"
+      elif (( reseed_rc == 0 )) && [[ "$reseed_out" == reseeded\ * ]]; then
+        echo "drain ci-reseeded"
+      else
+        echo "dispatch-materialize-spawn: dispatch-schedule-target-reseed failed for #$WAITING_N (rc=$reseed_rc): $reseed_out" >&2
+        echo "drain ci-waiting"
+      fi
+      ;;
   esac
   exit 0
 fi
