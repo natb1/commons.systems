@@ -53,6 +53,14 @@ hand-off and no Stop-hook action — the Stop hook ignores non-`<N>-` session na
    - `office-hours <N> <phase> <pr-or-dash>` — the selected issue `<N>`, its
      phase, and its PR number (or `-`). Carry `<N>`, `<phase>`, and the PR
      through the rest of the skill.
+   - `parked-router <sessionId> <name>` — the dispatch chain has a target-less
+     parked router (#1010): a router tick left no continuation, so the
+     `dispatch-self-close` continuation invariant kept the session alive rather
+     than orphaning the chain. There is **no** `dispatch:office-hours` label
+     involved — the parked artifact is the router session itself, not an
+     issue/PR. Resume it by re-engaging that exact session: re-run
+     `/dispatch-propagate` inside the `<name>` session (`<sessionId>`). Report
+     that and **stop**.
 
    **Enter the item's worktree.** If the current branch is already `<N>-…`, you
    are in place — proceed. Otherwise resolve the worktree (use
