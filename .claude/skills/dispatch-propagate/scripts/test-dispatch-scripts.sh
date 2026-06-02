@@ -13308,6 +13308,26 @@ assert_eq "distinct: worktrees all unique" "3" \
   "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
 mat_teardown
 
+echo "=== print_remote_access_block ==="
+
+# All four emulators
+out=$(unset QA_REMOTE_SSH_HOST; source "$SCRIPT_DIR/lib.sh" && print_remote_access_block 5173 8080 9099 9199 5001)
+assert_eq "all emulators: url present" "1" "$(grep -c 'http://localhost:5173/' <<<"$out")"
+ssh_line=$(grep -oE 'ssh -L .*' <<<"$out" | head -1)
+assert_eq "all emulators: ssh -L line" \
+  "ssh -L 5173:localhost:5173 -L 8080:localhost:8080 -L 9099:localhost:9099 -L 9199:localhost:9199 -L 5001:localhost:5001 nixos" \
+  "$ssh_line"
+
+# Vite only (no emulators)
+out=$(unset QA_REMOTE_SSH_HOST; source "$SCRIPT_DIR/lib.sh" && print_remote_access_block 5173)
+ssh_line=$(grep -oE 'ssh -L .*' <<<"$out" | head -1)
+assert_eq "vite only: ssh -L line" "ssh -L 5173:localhost:5173 nixos" "$ssh_line"
+
+# Env override of the SSH host
+out=$(export QA_REMOTE_SSH_HOST=myhost; source "$SCRIPT_DIR/lib.sh" && print_remote_access_block 5173)
+ssh_line=$(grep -oE 'ssh -L .*' <<<"$out" | head -1)
+assert_eq "env override: ssh -L line ends with myhost" "ssh -L 5173:localhost:5173 myhost" "$ssh_line"
+
 # ============================================================================
 # === dispatch-security-surface ===
 # ============================================================================
