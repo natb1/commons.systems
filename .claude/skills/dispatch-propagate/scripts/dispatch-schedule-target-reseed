@@ -1,0 +1,283 @@
+#!/usr/bin/env bash
+# dispatch-schedule-target-reseed — schedule a target-keyed re-seed of the
+# /dispatch-propagate chain when an explicit single-target /dispatch <N> finds
+# its draft PR's CI still in progress.
+#
+# /dispatch <N> targets one explicit issue/PR — an effective queue of size one.
+# When N's PR has CI in progress, dispatch-phase returns `waiting` (an
+# in-progress, not-yet-actionable state). The multi-item queue handles this by
+# skipping the waiting PR and selecting the next ready priority — but the
+# single-target path has no "next", so skipping equals doing nothing and the
+# run silently drains. Instead of draining, this script schedules a transient
+# systemd.user timer that, after a short delay, re-runs `dispatch-spawn-router
+# <N>` — re-seeding `/dispatch-propagate <N>` so the chain returns to the target
+# when its CI completes (a CI *failure* resolves to `verify`, an actionable
+# phase, so the wait terminates on its own once CI concludes).
+#
+# The wait is bounded by an attempt counter — `dispatch:ci-wait-attempt-<n>`
+# labels on the PR — that escalates the target to `dispatch:office-hours` after
+# a cap, so a genuinely-hung CI does not reseed forever.
+#
+# Behavior, in order:
+#   1. Validate <N> is a positive integer (the ci-waiting target always has a
+#      draft PR). Reject empty / flag-like / non-numeric input → exit 2.
+#   2. Resolve the draft PR for N via dispatch-find-pr. No PR is a misuse for
+#      this script (the caller only invokes it for a ci-waiting target, which by
+#      definition has a draft PR) → stderr diagnostic + exit 2.
+#   3. Read the highest extant dispatch:ci-wait-attempt-<n> label on the PR →
+#      CUR (max // 0), via the verify-pr jq capture idiom.
+#   4. Cap check: if CUR >= CAP, park the ISSUE on dispatch:office-hours via
+#      dispatch-apply-office-hours, print `escalated`, schedule NO timer, exit 0.
+#   5. Otherwise (under cap): NEXT=CUR+1. Remove the prior counter label (if
+#      CUR>0) and apply dispatch:ci-wait-attempt-<NEXT> (apply-first /
+#      create-on-"not found"). A label failure warns but does NOT abort the
+#      reseed — the timer matters more than the bookkeeping label.
+#   6. Schedule a transient systemd.user timer at NOW+DELAY whose ExecStart is
+#      `dispatch-spawn-router <N>`. The unit name embeds N and the fire epoch —
+#      a repeated call with the same fire time collides on the unit name and
+#      systemd refuses to recreate, giving idempotency.
+#
+# Stdout protocol (exactly one line on the action paths):
+#   reseeded <unit> at <FIRE>   timer was scheduled.
+#   escalated                   cap hit; target parked on dispatch:office-hours.
+#
+# Exit codes:
+#   0  on a scheduled reseed, an escalate, or an idempotent already-exists no-op.
+#   2  on a bad <N>, a missing PR, or a bad env-integer override.
+#   non-zero — `systemd-run` failed for a reason other than the already-exists
+#              collision; the exit code is passed through.
+#
+# Environment overrides for testability:
+#
+#   DISPATCH_TARGET_RESEED_FIND_PR_CMD
+#     Override the dispatch-find-pr binary. Default: <script-dir>/dispatch-find-pr.
+#
+#   DISPATCH_TARGET_RESEED_GH_CMD
+#     Override the `gh` binary used for label reads/edits. Default: `gh`.
+#
+#   DISPATCH_TARGET_RESEED_OFFICE_HOURS_CMD
+#     Override the dispatch-apply-office-hours binary. Default:
+#     <script-dir>/dispatch-apply-office-hours.
+#
+#   DISPATCH_TARGET_RESEED_CAP
+#     Override the attempt cap (positive integer). Default: 3.
+#
+#   DISPATCH_TARGET_RESEED_NOW
+#     Override the current epoch seconds. Default: date +%s.
+#
+#   DISPATCH_TARGET_RESEED_DELAY
+#     Override the reseed delay in seconds. Default: 300.
+#
+#   DISPATCH_TARGET_RESEED_MAIN_WORKTREE
+#     Override the main worktree path. When set, the script does NOT require a
+#     git repo. Default: <project-root>/worktrees/main, where project-root is
+#     the parent of git --git-common-dir. Mirrors dispatch-schedule-reseed.
+#
+#   DISPATCH_TARGET_RESEED_SYSTEMD_RUN_CMD
+#     Override the `systemd-run` binary. Default: `systemd-run`.
+#
+# Sandbox: `systemd-run --user` talks to the user's systemd over D-Bus, and the
+# label reads/edits use `gh` (macOS Security-framework TLS); this script is not
+# sandbox-safe and callers must invoke it with `dangerouslyDisableSandbox: true`.
+
+set -uo pipefail
+
+# ---- Step 0: defaults & config ----------------------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+FIND_PR_CMD="${DISPATCH_TARGET_RESEED_FIND_PR_CMD:-$SCRIPT_DIR/dispatch-find-pr}"
+GH_CMD="${DISPATCH_TARGET_RESEED_GH_CMD:-gh}"
+OFFICE_HOURS_CMD="${DISPATCH_TARGET_RESEED_OFFICE_HOURS_CMD:-$SCRIPT_DIR/dispatch-apply-office-hours}"
+SYSTEMD_RUN_CMD="${DISPATCH_TARGET_RESEED_SYSTEMD_RUN_CMD:-systemd-run}"
+
+# ---- Step 1: validate <N> ---------------------------------------------------
+#
+# N is interpolated into the unit name, the ExecStart argv, and gh issue/PR
+# calls, and reaches `(( CUR >= CAP ))` indirectly only via the label read
+# below. A non-numeric, flag-like value (e.g. --repo other/repo) would be parsed
+# by gh as an option rather than an issue number, or by systemd as a flag.
+# Reject anything that is not a bare positive integer.
+
+N="${1:-}"
+if [[ -z "$N" || ! "$N" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: usage: dispatch-schedule-target-reseed <N> (N must be a positive integer)" >&2
+  exit 2
+fi
+
+# ---- Step 2: resolve the draft PR -------------------------------------------
+#
+# The caller only invokes this script for a ci-waiting target, which by
+# definition has a draft PR. An empty result is therefore a misuse, not a
+# recoverable condition — hard error.
+
+PR_NUM=$("$FIND_PR_CMD" "$N" 2>/dev/null || true)
+if [[ -z "$PR_NUM" ]]; then
+  echo "error: dispatch-schedule-target-reseed: no PR found for issue #$N (this script is only valid for a ci-waiting target with a draft PR)" >&2
+  exit 2
+fi
+# PR_NUM flows into the same `gh pr view/edit "$PR_NUM"` calls below that N is
+# guarded against above; a non-numeric, flag-like value would be parsed by gh as
+# an option rather than a PR number. find-pr emits a bare integer, so a
+# non-numeric result is a find-pr malfunction — fail closed rather than hand it
+# to gh.
+if [[ ! "$PR_NUM" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: dispatch-schedule-target-reseed: dispatch-find-pr returned non-numeric PR '$PR_NUM' for issue #$N" >&2
+  exit 2
+fi
+
+# ---- Step 3: read the highest ci-wait-attempt counter -----------------------
+#
+# Same label-capture idiom as /verify-pr's verify-attempt counter, adapted to
+# the dispatch:ci-wait-attempt- prefix. `max // 0` yields 0 when no counter
+# label is present yet.
+
+CUR=$("$GH_CMD" pr view "$PR_NUM" --json labels \
+  --jq '[.labels[].name | capture("^dispatch:ci-wait-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0' \
+  2>/dev/null || true)
+
+# CUR feeds `(( CUR >= CAP ))` and `(( CUR > 0 ))` — bash arithmetic context
+# evaluates array-index command substitution, so any value entering `(( ))`
+# must be a literal integer. A label-read flake or tampered label set could
+# yield a non-integer; fail closed.
+if [[ ! "$CUR" =~ ^[0-9]+$ ]]; then
+  echo "error: dispatch-schedule-target-reseed: ci-wait attempt counter is not an integer, got '$CUR'; aborting" >&2
+  exit 2
+fi
+
+# ---- Step 4: cap check ------------------------------------------------------
+
+CAP="${DISPATCH_TARGET_RESEED_CAP:-3}"
+if [[ ! "$CAP" =~ ^[0-9]+$ ]] || (( CAP < 1 )); then
+  echo "error: dispatch-schedule-target-reseed: CAP must be a positive integer, got '$CAP'; aborting" >&2
+  exit 2
+fi
+
+if (( CUR >= CAP )); then
+  # Cap hit — park the ISSUE on a human and schedule no further reseed. A
+  # failure here is surfaced by dispatch-apply-office-hours (which warns and
+  # exits 0 on gh failures); we still report `escalated` since the wait is over.
+  "$OFFICE_HOURS_CMD" "$N" "CI has not concluded after $CAP reseed attempts" || true
+  echo "escalated"
+  exit 0
+fi
+
+# ---- Step 5: bump the attempt counter ---------------------------------------
+#
+# Apply-first / create-on-"not found" — the label may not exist yet on a fresh
+# repo. A gh label failure warns on stderr but does NOT abort the reseed: the
+# timer is the load-bearing side effect; the bookkeeping label is best-effort.
+
+NEXT=$(( CUR + 1 ))
+
+if (( CUR > 0 )); then
+  if ! rm_out=$("$GH_CMD" pr edit "$PR_NUM" --remove-label "dispatch:ci-wait-attempt-$CUR" 2>&1); then
+    echo "dispatch-schedule-target-reseed: warning: could not remove dispatch:ci-wait-attempt-$CUR from PR #$PR_NUM: $rm_out" >&2
+  fi
+fi
+
+if ! add_out=$("$GH_CMD" pr edit "$PR_NUM" --add-label "dispatch:ci-wait-attempt-$NEXT" 2>&1); then
+  if [[ "$add_out" != *"not found"* ]]; then
+    echo "dispatch-schedule-target-reseed: warning: could not apply dispatch:ci-wait-attempt-$NEXT to PR #$PR_NUM: $add_out" >&2
+  else
+    if ! create_out=$("$GH_CMD" label create "dispatch:ci-wait-attempt-$NEXT" \
+        --description "dispatch workflow: ci-wait reseed attempt $NEXT of $CAP" 2>&1); then
+      echo "dispatch-schedule-target-reseed: warning: could not create label dispatch:ci-wait-attempt-$NEXT: $create_out" >&2
+    elif ! retry_out=$("$GH_CMD" pr edit "$PR_NUM" --add-label "dispatch:ci-wait-attempt-$NEXT" 2>&1); then
+      echo "dispatch-schedule-target-reseed: warning: could not apply dispatch:ci-wait-attempt-$NEXT to PR #$PR_NUM after create: $retry_out" >&2
+    fi
+  fi
+fi
+
+# ---- Step 6: compute the fire time ------------------------------------------
+#
+# NOW and DELAY both reach `(( NOW + DELAY ))`; bash arithmetic context
+# evaluates array-index command substitution, so each must be a literal integer.
+# The defaults (`date +%s`, 300) are always safe; the env-override path is the
+# surface that requires validation.
+
+NOW="${DISPATCH_TARGET_RESEED_NOW:-$(date +%s)}"
+if [[ ! "$NOW" =~ ^[0-9]+$ ]]; then
+  echo "error: dispatch-schedule-target-reseed: NOW must be an integer epoch, got '$NOW'; aborting" >&2
+  exit 2
+fi
+
+DELAY="${DISPATCH_TARGET_RESEED_DELAY:-300}"
+if [[ ! "$DELAY" =~ ^[0-9]+$ ]]; then
+  echo "error: dispatch-schedule-target-reseed: DELAY must be an integer, got '$DELAY'; aborting" >&2
+  exit 2
+fi
+
+FIRE=$(( NOW + DELAY ))
+
+# ---- Step 7: resolve the main worktree --------------------------------------
+#
+# Same idiom as dispatch-schedule-reseed. The spawned re-seed runs from the
+# main worktree.
+
+if [[ -n "${DISPATCH_TARGET_RESEED_MAIN_WORKTREE:-}" ]]; then
+  MAIN_WORKTREE="$DISPATCH_TARGET_RESEED_MAIN_WORKTREE"
+else
+  PROJECT_ROOT=$(resolve_project_root) \
+    || { echo "dispatch-schedule-target-reseed: not in a git repo and DISPATCH_TARGET_RESEED_MAIN_WORKTREE is unset" >&2; exit 2; }
+  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+fi
+
+# ---- Step 8: schedule the transient timer -----------------------------------
+#
+# The unit name embeds N and the epoch fire time — a repeated call with the same
+# (N, FIRE) collides, and systemd refuses to recreate the unit. That gives
+# idempotency without coordinating across callers.
+#
+# Persistent=true covers a WSL-down window that crosses fire time — a reseed
+# missed while WSL was down runs on the next start.
+#
+# ExecStart is dispatch-spawn-router with a trailing <N> arg — the optional
+# target that re-seeds `/dispatch-propagate <N>` so the chain returns to this
+# specific target when its CI completes.
+#
+# --setenv=PATH="$PATH" propagates the scheduling caller's PATH into the
+# transient unit. Without it the unit inherits the systemd user manager's
+# minimal default PATH, which omits the nix store — so on NixOS/WSL hosts
+# /usr/bin/env can't resolve bash (exit 127) and the router can't find
+# claude/git/jq. The caller (a /dispatch tick) always carries the full
+# nix-store PATH, so capturing it at schedule time makes the unit self-sufficient.
+
+UNIT_NAME="dispatch-reseed-target-${N}-${FIRE}"
+
+RUN_STDERR=$(mktemp)
+trap 'rm -f "$RUN_STDERR"' EXIT
+# Capture the exit code directly — after `if cmd; then ... fi`, `$?` is the
+# exit status of the `if` construct, NOT the exit code of `cmd`. Running `cmd`
+# outside an `if` and capturing `$?` immediately preserves the real exit code so
+# the "pass-through on unexpected failure" contract holds.
+"$SYSTEMD_RUN_CMD" --user \
+     --unit="$UNIT_NAME" \
+     --on-calendar="@$FIRE" \
+     --working-directory="$MAIN_WORKTREE" \
+     --timer-property=Persistent=true \
+     --setenv=PATH="$PATH" \
+     "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-spawn-router" "$N" \
+     2>"$RUN_STDERR"
+RC=$?
+if (( RC == 0 )); then
+  echo "reseeded $UNIT_NAME at $FIRE"
+  exit 0
+fi
+
+err=$(cat "$RUN_STDERR")
+# systemd's already-exists message varies slightly across versions. Match on the
+# substring rather than the full phrase.
+if [[ "$err" == *"already exists"* ]]; then
+  echo "dispatch-schedule-target-reseed: $UNIT_NAME already scheduled; no-op" >&2
+  # Emit the same stdout token as a fresh schedule so the caller (dispatch-materialize-spawn)
+  # routes correctly: reseed_out matches "reseeded *" → "drain ci-reseeded" rather than
+  # falling through to the "drain ci-waiting" error fallback.
+  echo "reseeded $UNIT_NAME at $FIRE"
+  exit 0
+fi
+
+# Some other failure — surface stderr and pass the exit code through.
+echo "$err" >&2
+exit "$RC"
