@@ -14231,6 +14231,80 @@ assert_eq "arg forward: select-tick got the stripped arg" "88" \
   "$(cat "$TMPDIR_TEST/logs/select-tick.log")"
 tick_teardown
 
+# --- headless tick (no CLAUDE_CODE_SESSION_ID) synthesizes a stable id --------
+# Regression guard for #1054: since the tick went headless (#1043) a
+# systemd-launched tick inherits no CLAUDE_CODE_SESSION_ID, and
+# dispatch-acquire-lock hard-requires one (exit 2 if unset). dispatch-tick now
+# synthesizes a synthetic, stable id at its entry point, exported so every
+# sub-script (select-tick → acquire-lock acquire+release, materialize-spawn)
+# sees one consistent holder id. This test drives the REAL dispatch-acquire-lock
+# through fakes that invoke it, stubbing its `claude agents --json` registry to
+# `[]` (no live foreign holder) via CLAUDE_AGENTS_CMD and pointing its lock file
+# under TMPDIR_TEST via DISPATCH_LOCK_FILE.
+echo "Test: dispatch-tick headless (no session id) acquires the lock and proceeds"
+tick_setup
+# Copy the real acquire-lock + lib.sh next to the tick copy so the fakes below
+# can invoke it. (lib.sh is already present from tick_setup; copy acquire-lock.)
+cp "$SCRIPT_DIR/dispatch-acquire-lock" "$TMPDIR_TEST/dispatch-acquire-lock"
+chmod +x "$TMPDIR_TEST/dispatch-acquire-lock"
+# Fake `claude` whose `agents --json` returns `[]` deterministically — no live
+# foreign holder, so acquire-lock's dead-holder/unheld path claims the lock.
+cat > "$TMPDIR_TEST/fake-claude" <<'FAKE'
+#!/usr/bin/env bash
+printf '[]'
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/fake-claude"
+# acquire-lock env contract (read from the script): DISPATCH_LOCK_FILE overrides
+# the lock path; CLAUDE_AGENTS_CMD overrides the registry command; bare invoke
+# prints acquired/busy; --release prints released/noop.
+export DISPATCH_LOCK_FILE="$TMPDIR_TEST/dispatch.lock"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake-claude"
+# Replace the select-tick fake: log its inherited session id, then drive the
+# REAL acquire-lock (acquire, then --release), logging each outcome string, then
+# print the decision line the tick routes on.
+cat > "$TMPDIR_TEST/dispatch-select-tick" <<FAKE
+#!/usr/bin/env bash
+printf '%s' "\${CLAUDE_CODE_SESSION_ID:-}" > "$TMPDIR_TEST/logs/sel-id.log"
+"$TMPDIR_TEST/dispatch-acquire-lock" > "$TMPDIR_TEST/logs/acquire.log" 2>/dev/null
+"$TMPDIR_TEST/dispatch-acquire-lock" --release > "$TMPDIR_TEST/logs/release.log" 2>/dev/null
+printf '%s\n' "issue 707 1"
+exit 0
+FAKE
+# Replace the materialize fake: log its inherited session id, then print a
+# normal terminal token so the tick routes to exit 0.
+cat > "$TMPDIR_TEST/dispatch-materialize-spawn" <<FAKE
+#!/usr/bin/env bash
+printf '%s' "\${CLAUDE_CODE_SESSION_ID:-}" > "$TMPDIR_TEST/logs/mat-id.log"
+printf '%s\n' "propagate"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-tick" "$TMPDIR_TEST/dispatch-materialize-spawn"
+
+# Run the tick with NO inherited session id (as systemd-run --user does).
+env -u CLAUDE_CODE_SESSION_ID "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "headless: tick exit 0 (not the old 2)" "0" "$rc"
+assert_eq "headless: acquire outcome is 'acquired'" "acquired" \
+  "$(cat "$TMPDIR_TEST/logs/acquire.log")"
+assert_eq "headless: release outcome is 'released' (stable id across acquire+release)" \
+  "released" "$(cat "$TMPDIR_TEST/logs/release.log")"
+sel_id=$(cat "$TMPDIR_TEST/logs/sel-id.log")
+mat_id=$(cat "$TMPDIR_TEST/logs/mat-id.log")
+assert_eq "headless: synthetic id is stable across select-tick and materialize" \
+  "$sel_id" "$mat_id"
+assert_eq "headless: synthetic id is non-empty" "1" \
+  "$([ -n "$sel_id" ] && echo 1 || echo 0)"
+
+# Companion: a real session keeps its own id — the `:-` fallback never fires.
+# Fresh id logs so this run does not cross-contaminate the headless run above.
+rm -f "$TMPDIR_TEST/logs/sel-id.log" "$TMPDIR_TEST/logs/mat-id.log"
+export CLAUDE_CODE_SESSION_ID="sess-real-1054"
+"$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1
+assert_eq "real session: select-tick sees the inherited id, not a synthetic one" \
+  "sess-real-1054" "$(cat "$TMPDIR_TEST/logs/sel-id.log")"
+unset CLAUDE_CODE_SESSION_ID DISPATCH_LOCK_FILE CLAUDE_AGENTS_CMD
+tick_teardown
+
 # ============================================================================
 # === dispatch-security-surface ===
 # ============================================================================
