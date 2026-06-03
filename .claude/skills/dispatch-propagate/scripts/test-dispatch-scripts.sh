@@ -7335,6 +7335,38 @@ else
 fi
 sr_teardown
 
+# --- Test 17b: crossing exactly at NOW → short-delay floor (boundary) --------
+#
+# When the budgeter returns a crossing epoch equal to NOW (not strictly in the past),
+# the condition RESEED_AT <= NOW is still satisfied (equality), so the short-delay
+# floor applies. This covers the boundary between "past crossing" and "future crossing".
+
+echo "Test: pace crossing exactly at NOW → short-delay floor (boundary case)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+export DISPATCH_SCHEDULE_RESEED_SHORT_DELAY=300
+sr_write_rl "rl.json" 14 99999 10 88888
+cat > "$TMPDIR_TEST/tw-stub" <<'STUB'
+#!/usr/bin/env bash
+echo 10000
+STUB
+chmod +x "$TMPDIR_TEST/tw-stub"
+export DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD="$TMPDIR_TEST/tw-stub"
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+# Crossing 10000 == NOW 10000 → floor to NOW + 300 = 10300.
+assert_eq "crossing==NOW → short-delay floor" \
+  "scheduled dispatch-reseed-10300 at 10300" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-reseed-10300"* \
+   && "$log" == *"--on-calendar=@10300"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: crossing==NOW short-delay systemd-run argv (unit + calendar)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: crossing==NOW short-delay systemd-run argv (unit + calendar)"
+  echo "    log: $log"
+fi
+sr_teardown
+
 # --- Test 18: end-to-end with the real budgeter ------------------------------
 #
 # No CMD override — sr_setup already points DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD

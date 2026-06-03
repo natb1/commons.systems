@@ -317,8 +317,12 @@ if [[ -z "$CAND_WEEKLY" && -z "$CAND_5H" ]]; then
   if [[ "$REOPEN_AT" =~ ^[0-9]+$ ]]; then
     RESEED_AT="$REOPEN_AT"
     PACE_PATH=1
+  elif [[ "$REOPEN_AT" == "none" ]]; then
+    echo "dispatch-schedule-reseed: no absolute cap hit and pace curve permits (reopen-at='none'); no-op" >&2
+    exit 0
   else
-    echo "dispatch-schedule-reseed: no absolute cap hit and pace curve permits (reopen-at='$REOPEN_AT'); no-op" >&2
+    # Empty string means the budgeter failed (non-zero exit or unexpected output).
+    echo "dispatch-schedule-reseed: no absolute cap hit and budgeter returned unexpected result (reopen-at='$REOPEN_AT'); no-op" >&2
     exit 0
   fi
 elif [[ -n "$CAND_WEEKLY" && -n "$CAND_5H" ]]; then
