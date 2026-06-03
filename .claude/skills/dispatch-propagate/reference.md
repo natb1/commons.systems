@@ -16,36 +16,38 @@ Back-link: [`SKILL.md`](./SKILL.md).
 
 ## Chain mechanics
 
-Each `/dispatch-propagate` is a `claude --bg` background job (#725) rooted in
-`worktrees/main`. The router selects, spawns up to `gap` workers (see *Fan-out*
-below), and exits. Each worker runs one phase in its target worktree, then
-spawns a fresh `/dispatch-propagate` router back in `worktrees/main` and
-self-deletes. That router → workers → router chain advances the workflow; the
-#725 cap-keyed re-seed scheduled at the next rate-limit window reset re-seeds it
-when a tick stalled on a concurrency-budget cap (see *The #725 cap-keyed
-re-seed*).
+The autonomous tick is a headless bash script (`dispatch-tick`) launched inside
+a transient `systemd-run --user` unit by `dispatch-spawn-tick` — not a `claude
+--bg` model session. `dispatch-spawn-tick` fixes the unit name (`dispatch-tick`
+/ `dispatch-tick-<N>`) for one-at-a-time dedup; `--collect` ensures a finished
+or failed unit is garbage-collected so the fixed name frees for the next tick.
+The tick selects, spawns up to `gap` workers (see *Fan-out* below), and exits.
+Each worker runs one phase in its target worktree, then the worker Stop-hook
+launches a fresh headless tick via `dispatch-spawn-tick` (back in
+`worktrees/main`). That tick → workers → tick chain advances the workflow; the
+#725 cap-keyed re-seed re-seeds it when a tick stalled on a concurrency-budget
+cap or pace-curve pause (see *The #725 cap-keyed re-seed*).
 
 ### Fan-out
 
-The model is **seed once → fan out to `gap` → each freed slot triggers one
-dedup'd refill router that fans out again**, replacing the old serial "one
-router, one worker, repeat". A single `dispatch-materialize-spawn` run now spawns
-up to `gap` workers in one held-lock loop, where `gap = TARGET_N − LIVE_COUNT`
-comes from the `dispatch-select-tick` concurrency gate (evaluated once per run
-before selection). Within the loop the first target is the select-tick target;
-targets 2..`gap` come from successive `dispatch-select-target` calls — each
-spawned worker registers before the next selection (#945/#905), so the next
-selection skips its now-live-owned worktree and yields a distinct target. A
-per-target block / merge-conflict parks that one issue (`dispatch:office-hours`)
-and the loop continues; the run emits an aggregate summary (`spawned <k> of gap
-<G>`) and one terminal token (`propagate` if ≥1 spawned, else `drain`).
+The pattern is **seed once → fan out to `gap` → each freed slot triggers one
+dedup'd refill tick that fans out again**, replacing the old serial "one tick,
+one worker, repeat". A single `dispatch-materialize-spawn` run now spawns up to
+`gap` workers in one held-lock loop, where `gap = TARGET_N − LIVE_COUNT` comes
+from the `dispatch-select-tick` concurrency gate (evaluated once per run before
+selection). Within the loop the first target is the select-tick target; targets
+2..`gap` come from successive `dispatch-select-target` calls — each spawned
+worker registers before the next selection (#945/#905), so the next selection
+skips its now-live-owned worktree and yields a distinct target. A per-target
+block / merge-conflict parks that one issue (`dispatch:office-hours`) and the
+loop continues; the run emits an aggregate summary (`spawned <k> of gap <G>`)
+and one terminal token (`propagate` if ≥1 spawned, else `drain`).
 
-The worker→router baton-pass code in `.claude/hooks/dispatch-stop.sh` is
-**unchanged**: each completing worker still spawns one router, deduped to a
-single live router, which now fans out again to the new gap. So instead of N
-serial router→worker hops you get one run filling to `gap` and a single refill
-router per freed slot. The #725 cap-keyed re-seed remains the resume-from-cap
-path.
+The worker Stop-hook baton-pass code in `.claude/hooks/dispatch-stop.sh` calls
+`dispatch-spawn-tick`, deduped to a single live tick unit, which now fans out
+again to the new gap. So instead of N serial tick→worker hops you get one run
+filling to `gap` and a single refill tick per freed slot. The #725 cap-keyed
+re-seed remains the resume-from-cap path.
 
 ## Releasing the lock
 
@@ -74,9 +76,13 @@ CI-wait stop (now emitting `drain ci-reseeded` / `notify ci-wait-exhausted`, or
 `drain ci-waiting` on a scheduler hard-failure), which releases before scheduling
 the reseed.
 `dispatch-finalize-selection` writes the recovery marker but no longer releases.
-The pre-finalize stop paths — `notify target-blocked`, `resolve merge-conflict`,
-and `drain worktree-conflict`, plus the internal `exit 2` error paths — release
-at the guard, unchanged. Crash safety: a router that dies mid-spawn holding the lock is
+The pre-finalize stop paths — `notify target-blocked`, `drain worktree-conflict`,
+plus the internal `exit 2` error paths — release at the guard, unchanged. A
+merge conflict detected during materialize-spawn spawns a
+`/dispatch-resolve-conflict <N> <worktree>` bg job (named for the worktree
+basename `<N>-slug`, which locks the worktree via the existing name-keyed
+liveness skip and consumes a concurrency slot); the lock is released before the
+resolver job is spawned. Crash safety: a router that dies mid-spawn holding the lock is
 recovered by the lock's existing dead-holder reclaim (the recorded sessionId
 absent from `claude agents --json`) on the next `--wait`; the marker-reclaim path
 is belt-and-suspenders rather than load-bearing.
@@ -107,9 +113,9 @@ The lock is scoped to selection and self-healing. The recorded sessionId
 tick dies before its explicit release, the next tick detects that the recorded
 sessionId no longer appears in `claude agents --json` and reclaims the lock,
 and a `--wait` waiter re-checks holder liveness every poll, so a dead holder's
-lock is reclaimed automatically. Same-session re-entry (e.g. after a context
-clear that re-invokes `/dispatch-propagate`) re-acquires cleanly because the recorded
-sessionId matches the re-entering session's own `CLAUDE_CODE_SESSION_ID`.
+lock is reclaimed automatically. Same-session re-entry (e.g. after a context clear in a worker session) re-acquires
+cleanly because the recorded sessionId matches the re-entering session's own
+`CLAUDE_CODE_SESSION_ID`.
 
 ## Per-worktree invariant
 
@@ -171,8 +177,8 @@ labels; anything with no topic label is `other`.
 
 Within each category the ladder is (highest first; within a tier, oldest PR
 wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
-whose closing issue is `blocked_by` an open issue is skipped; `waiting`-phase
-PRs are skipped entirely): oldest `security` PR → oldest
+whose closing issue is `blocked_by` an open issue is skipped; not-ready PRs
+(no CI verdict yet, per `dispatch-ci-ready`) are skipped entirely): oldest `security` PR → oldest
 `review` PR → oldest `code-review` PR → oldest `verify` PR → oldest `help wanted`
 issue → oldest `qa` PR. Non-QA PRs are ranked closest-to-done first —
 `security` is the closest-to-done non-QA tier; `help wanted` issues rank below
@@ -225,11 +231,10 @@ carries a content-less marker the moment the hook returns. That empty marker is
 **inert** for reclaim: it names no session, so it never matches a recorded
 holder and never reclaims a live holder co-located in that worktree. Only
 `dispatch-finalize-selection`'s session-scoped write — the finalizing holder's
-`CLAUDE_CODE_SESSION_ID` — is a reclaim-capable marker. The router itself never
-writes the marker into its own cwd (`worktrees/main`), so a
-`SessionStart:clear` there is a no-op — correct, since the router is
-short-lived and re-seeded by the #725 cap-keyed re-seed when a cap stall ends
-the chain. The marker's content is the finalizing holder's sessionId; it
+`CLAUDE_CODE_SESSION_ID` — is a reclaim-capable marker. The headless tick itself never
+writes the marker into `worktrees/main` — it is a bash script with no session,
+so no `SessionStart:clear` can fire for it. The #725 cap-keyed re-seed
+re-launches the tick via `dispatch-spawn-tick` when a cap stall ends the chain. The marker's content is the finalizing holder's sessionId; it
 persists for the worktree's life and needs no cleanup — `tmp/` is git-ignored,
 and removing the worktree removes it. A stale marker naming an older session
 cannot reclaim a different live holder, so no active cleanup is required to
@@ -377,35 +382,61 @@ and the router gate `LIVE_COUNT >= TARGET_N` are unchanged.
 
 ## The #725 cap-keyed re-seed
 
-The #725 cap-keyed re-seed is the chain's resume-from-cap-stall mechanism.
-When a tick's Step 6 decides to skip the spawn because the live worker count
-already meets the budgeter's target, that means the rate-limit cap closed
-the budget — `dispatch-target-workers` reads
-`~/.local/share/productivity-tui/rate_limits.json` and returns 0 when
-`used_percentage >= target` on either the weekly or the 5-hour window. The
-chain pauses with work waiting; the only thing that unblocks it is the cap
-window resetting.
+The #725 re-seed is the chain's resume-from-stall mechanism. When a tick's
+Step 6 skips the spawn because the live worker count already meets the
+budgeter's target of 0, `dispatch-schedule-reseed` arms a transient
+`systemd.user` timer (`dispatch-reseed-<fire>`) that fires at the earliest
+epoch the budget reopens and runs the headless `dispatch-tick` from the main
+worktree. `dispatch-target-workers` returns 0 in two distinct stall classes:
 
-`dispatch-schedule-reseed` (invoked from Step 6's spawn-skip) reads the same
-telemetry, computes the earliest blocking `resets_at`, and writes a
-transient `systemd.user` timer (`dispatch-reseed-<resets_at>`) that fires at
-that time and runs `dispatch-spawn-router` from the main worktree. The unit
-name embeds the epoch, so a repeated call observing the same blocking cap
-collides on the unit name and is a no-op — idempotent across the many ticks
-that may observe the same stall.
+**Absolute cap-hit** — `used_percentage >= target` on the weekly (default
+90%) or 5-hour (50% floor) window. The chain is hard-capped; the budget
+reopens at the blocking window's `resets_at`. `dispatch-schedule-reseed` reads
+the telemetry, identifies the earliest blocking `resets_at`, and arms the
+timer there.
 
-This mechanism only covers the cap-stall class of stall. **Empty-queue and
-all-parked stalls** are handled by the office-hours queue (#755 / #757 /
-#758): when a human engages an `office-hours`-labeled item, the Step 4
-hand-off returns it to the dispatch chain and re-seeds from human action.
-The targeted alternative to a silent periodic heartbeat — adopted in #1010 —
-is the continuation invariant enforced at `dispatch-self-close`: a router tick
-that leaves no continuation (no worker spawned, no pending `dispatch-reseed*`
-timer, no live busy worker) parks instead of self-closing, emitting a one-line
-reason and staying visible in `claude agents`. The `office-hours-select-target`
-script surfaces the parked router via a `parked-router` line, so a human can
-resume it. This makes a stalled chain visible rather than silently losing it to
-a missed heartbeat window.
+**Pace-curve pause** — `used_weekly >= W(x)` (usage running ahead of the
+smooth cumulative curve — the `F=0 ahead-of-pace` row in Stage 2; see the
+*Concurrency budgeting* section). The 5h target band collapses to `F=0` so
+the target is 0, even when `used_weekly` is far below the absolute weekly cap.
+This stall is **transient and self-clearing**: `W` rises monotonically over
+time while `used_weekly` stays flat (no workers spending), so the budget
+reopens on its own at the curve-crossing epoch where `W(x) = used_weekly`.
+When no absolute cap is hit but weekly telemetry is present,
+`dispatch-schedule-reseed` consults `dispatch-target-workers --reopen-at`,
+which solves `W(x) = used_weekly` by bisection over the monotonic Stage-1
+curve and returns the curve-crossing epoch. The reseed arms a
+`dispatch-reseed-<fire>` timer at that crossing. `--reopen-at` returns `none`
+(a genuine no-op) when the pace curve is not the blocker — target already ≥ 1,
+a transient 5h fill, or missing weekly anchor.
+
+**Short-delay floor** — when the computed crossing epoch is at or before now
+(the pause has effectively already cleared), the reseed arms a
+`NOW + 300s` timer instead of a past-dated one, reusing the #979
+short-delay pattern.
+
+The unit name embeds the epoch (`dispatch-reseed-<fire>`), so a repeated call
+observing the same stall collides on the unit name and is a no-op — idempotent
+across the many ticks that may observe the same stall. The #1010 continuation
+invariant's `dispatch-reseed*` pending-timer detection recognizes both
+absolute-cap and pace-path timers by the same name prefix, so a pace pause
+always leaves a pending reseed. A router tick that spawns no worker but has a
+pending reseed timer self-closes cleanly knowing the timer resumes it.
+
+**Empty-queue and all-parked stalls** are handled by the office-hours queue
+(#755 / #757 / #758): when a human engages an `office-hours`-labeled item, the
+Step 4 hand-off returns it to the dispatch chain and re-seeds from human
+action. The continuation invariant (#1010) fires only for genuinely terminal
+stalls — empty queue, all-parked — because a pace-curve pause (and an
+absolute cap-hit) always leaves a pending reseed. The targeted alternative to
+a silent periodic heartbeat — adopted in #1010 — is enforced at
+`dispatch-self-close`: a router tick that leaves no continuation (no worker
+spawned, no pending `dispatch-reseed*` timer, no live busy worker) parks
+instead of self-closing, emitting a one-line reason and staying visible in
+`claude agents`. The `office-hours-select-target` script surfaces the parked
+router via a `parked-router` line, so a human can resume it. This makes a
+genuinely terminal stall visible rather than silently losing it to a missed
+heartbeat window.
 
 ## Target-keyed CI-wait reseed (#979)
 
@@ -418,10 +449,10 @@ not-ready — has no "next". So instead of draining as a no-op, it calls
 `dispatch-schedule-target-reseed <N>`.
 
 That schedules a transient `systemd.user` timer
-(`dispatch-reseed-target-<N>-<fire>`) a short delay out that re-runs
-`dispatch-spawn-router <N>` → `/dispatch-propagate <N>`, returning the chain to
-N. A `dispatch:ci-wait-attempt-<n>` label on the PR counts the attempts; at the
+(`dispatch-reseed-target-<N>-<fire>`) a short delay out whose ExecStart runs
+`dispatch-tick <N>`, returning the chain to target N. A `dispatch:ci-wait-attempt-<n>` label on the PR counts the attempts; at the
 cap (default 3) the target is parked on `dispatch:office-hours` and no further
-reseed is scheduled. Because `dispatch-phase` returns `waiting` only for
-genuinely in-progress checks — a CI *failure* resolves to `verify`, an
-actionable phase — the wait terminates on its own when CI finishes.
+reseed is scheduled. Because `dispatch-ci-ready` reports not-ready only for
+genuinely in-progress checks — a CI *failure* is a verdict, so the PR reports
+ready and `dispatch-phase` resolves it to `verify`, an actionable phase — the
+wait terminates on its own when CI finishes.

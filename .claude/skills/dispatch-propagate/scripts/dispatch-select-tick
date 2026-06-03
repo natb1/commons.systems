@@ -2,7 +2,7 @@
 # dispatch-select-tick — the /dispatch-propagate router's selection orchestrator
 # (the deterministic Steps 0-3 of the old SKILL.md, bundled into one script).
 #
-# Usage: dispatch-select-tick [<issue-or-PR-number>] [--bypass-cap]
+# Usage: dispatch-select-tick [<issue-or-PR-number>]
 #
 # Runs the lock acquisition, origin/main sync (only on `main`), the run-scoped
 # concurrency gate, the JIT engine, the Calendar JIT importer, the statements
@@ -30,8 +30,10 @@
 #   empty            nothing eligible; lock released.
 #
 # <gap> = max(1, TARGET_N − LIVE_COUNT) is the run-scoped spawn budget the
-# fan-out loop consumes (always >= 1 on a target line). --bypass-cap skips the
-# concurrency gate and forces <gap> = 1.
+# fan-out loop consumes (always >= 1 on a target line). An explicit-target run
+# (a positional <number> is given) skips the concurrency gate entirely and forces
+# <gap> = 1 — a deliberately-named target is not paced by the autonomous budget.
+# The no-arg queue path keeps the full gate.
 #
 # Lock invariant (the three guards): HOLD on pr/issue/explicit; RELEASE on
 # empty/sync-failed/resolver-failed/concurrency-cap/main-broken/jit-reminder;
@@ -52,10 +54,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 ARG=""
-BYPASS_CAP=0
 for a in "$@"; do
   case "$a" in
-    --bypass-cap) BYPASS_CAP=1 ;;
     --*) echo "dispatch-select-tick: unknown flag '$a'" >&2; exit 2 ;;
     *)
       if [[ -n "$ARG" ]]; then
@@ -94,15 +94,20 @@ if [[ "$BRANCH" == "main" ]]; then
   fi
 fi
 
-# --- Step 1b: run-scoped concurrency gate (skipped under --bypass-cap) -------
-# Evaluated ONCE per run, before any selection work, so a run already at the
-# worker budget does no JIT/selection traversal. Counts only busy workers
-# (claude_agents_count_busy_workers). At cap: schedule the #725 cap-keyed
-# re-seed, release the lock, emit `concurrency-cap`. Under cap: GAP bounds how
-# many workers a fan-out run may spawn. Daemon UNKNOWN → fail open (GAP=1); the
-# per-worktree dedup in dispatch-spawn-worker is the last-line defense.
+# --- Step 1b: run-scoped concurrency gate (no-arg queue path only) -----------
+# Runs ONLY on the no-arg queue path. An explicit-target run (a positional
+# <number> was given) skips the gate entirely — no live-count query, never emits
+# `concurrency-cap`, and GAP stays 1: a deliberately-named target is not paced by
+# the autonomous concurrency budget.
+# On the queue path the gate is evaluated ONCE per run, before any selection
+# work, so a run already at the worker budget does no JIT/selection traversal.
+# Counts only busy workers (claude_agents_count_busy_workers). At cap: schedule
+# the #725 cap-keyed re-seed, release the lock, emit `concurrency-cap`. Under
+# cap: GAP bounds how many workers a fan-out run may spawn. Daemon UNKNOWN →
+# fail open (GAP=1); the per-worktree dedup in dispatch-spawn-worker is the
+# last-line defense.
 GAP=1
-if (( ! BYPASS_CAP )); then
+if [[ -z "$ARG" ]]; then
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-claude-agents.sh"
   TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")

@@ -69,6 +69,99 @@ count_open_blockers() {
     '[.[] | select(.state == "open" or .state == "OPEN")] | length'
 }
 
+# Classify a PR's statusCheckRollup into a CI verdict.
+# Args: $1 = the statusCheckRollup JSON array (e.g. `gh pr view --json
+#   statusCheckRollup | jq '.statusCheckRollup'`).
+# Output: prints exactly one of `failing` | `passing` | `pending` to stdout.
+#   failing — at least one check run/status context has concluded in a failing
+#             state (a concluded failure is actionable even while other checks
+#             are still running, so a mixed rollup resolves to `failing`).
+#   passing — every entry has concluded passing.
+#   pending — no verdict yet: empty rollup, in-progress checks, or any
+#             unrecognized non-terminal state.
+# This is the classification logic that dispatch-phase applies inline; it is
+# factored here so the readiness predicate can reuse it verbatim.
+dispatch_classify_rollup() {
+  local rollup="$1"
+  local rollup_len
+  rollup_len=$(printf '%s' "$rollup" | jq 'length')
+
+  # Empty rollup — checks not yet started, nothing actionable.
+  if [[ "$rollup_len" -eq 0 ]]; then
+    echo "pending"
+    return 0
+  fi
+
+  # Check for any failing entries first: a concluded failure is actionable even
+  # while other checks are still running, so a mixed rollup (some failing, some
+  # pending) resolves to failing, not pending.
+  local failing
+  failing=$(printf '%s' "$rollup" | jq '
+    map(
+      if has("conclusion") then
+        # Check run: failing conclusions
+        (.conclusion // "") as $c |
+        ($c == "FAILURE" or $c == "TIMED_OUT" or $c == "CANCELLED" or
+         $c == "ACTION_REQUIRED" or $c == "STARTUP_FAILURE" or $c == "STALE")
+      else
+        # Status context: failing states
+        (.state // "") as $s |
+        ($s == "FAILURE" or $s == "ERROR")
+      end
+    ) | any
+  ')
+
+  if [[ "$failing" == "true" ]]; then
+    echo "failing"
+    return 0
+  fi
+
+  # Check for any pending entries (check runs not yet COMPLETED, or status
+  # contexts with state PENDING/EXPECTED). No failures found above, so pending
+  # means checks are still running — nothing actionable yet.
+  local pending
+  pending=$(printf '%s' "$rollup" | jq '
+    map(
+      if has("conclusion") then
+        # Check run: pending if status != COMPLETED
+        .status != "COMPLETED"
+      else
+        # Status context: pending if state is PENDING or EXPECTED
+        (.state == "PENDING" or .state == "EXPECTED")
+      end
+    ) | any
+  ')
+
+  if [[ "$pending" == "true" ]]; then
+    echo "pending"
+    return 0
+  fi
+
+  # All entries are passing — check that all passing conditions hold.
+  # An entry passes if: check run with conclusion in {SUCCESS,NEUTRAL,SKIPPED},
+  # or status context with state SUCCESS.
+  local all_passing
+  all_passing=$(printf '%s' "$rollup" | jq '
+    map(
+      if has("conclusion") then
+        (.conclusion // "") as $c |
+        ($c == "SUCCESS" or $c == "NEUTRAL" or $c == "SKIPPED")
+      else
+        (.state // "") == "SUCCESS"
+      end
+    ) | all
+  ')
+
+  if [[ "$all_passing" != "true" ]]; then
+    # Non-empty rollup with no failures, no pending, but not all passing —
+    # unrecognized state, nothing actionable.
+    echo "pending"
+    return 0
+  fi
+
+  echo "passing"
+}
+
 # Detect what Firebase features the app uses.
 # Sets global variables: USES_FIRESTORE, USES_AUTH, USES_STORAGE, USES_FUNCTIONS
 # Args: $1 = path to app src/ directory, $2 = repo root, $3 = app name
