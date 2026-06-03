@@ -5594,6 +5594,212 @@ fi
 unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 ca_teardown
 
+# --- Test 26: claude_agents_list_all UNKNOWN on a missing claude binary -------
+
+echo "Test: claude_agents_list_all returns rc 1 (UNKNOWN) when claude binary is missing"
+ca_setup
+CLAUDE_AGENTS_CMD="$CA_DIR/no-such-claude"
+if out=$(claude_agents_list_all); then rc=0; else rc=$?; fi
+assert_eq "list-all missing-claude: exits 1 (UNKNOWN)" "1" "$rc"
+assert_eq "list-all missing-claude: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 27: claude_agents_list_all — empty [] is success with no lines ------
+
+echo "Test: claude_agents_list_all returns 0 with empty stdout for an empty registry"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(claude_agents_list_all); then rc=0; else rc=$?; fi
+assert_eq "list-all empty: exits 0 (definite zero, not UNKNOWN)" "0" "$rc"
+assert_eq "list-all empty: prints no session lines" "" "$out"
+ca_teardown
+
+# --- Test 28: claude_agents_list_all — multi-session 3-column TSV (no pid) ----
+
+echo "Test: claude_agents_list_all emits a 3-column sessionId/status/name TSV per session"
+ca_setup
+write_fake_claude '[{"sessionId":"id1","pid":11,"status":"busy","name":"name1"},{"sessionId":"id2","pid":22,"status":"idle","name":"name2"}]' 0
+if out=$(claude_agents_list_all); then rc=0; else rc=$?; fi
+assert_eq "list-all multi: exits 0" "0" "$rc"
+assert_eq "list-all multi: prints 3-column TSV (sessionId/status/name, no pid)" \
+  "$(printf 'id1\tbusy\tname1\nid2\tidle\tname2')" "$out"
+ca_teardown
+
+# --- Test 29: claude_agents_list_all — non-array output is UNKNOWN ------------
+
+echo "Test: claude_agents_list_all returns rc 1 (UNKNOWN) on non-array JSON output"
+ca_setup
+write_fake_claude '{}' 0
+if out=$(claude_agents_list_all); then rc=0; else rc=$?; fi
+assert_eq "list-all non-array: exits 1 (UNKNOWN)" "1" "$rc"
+ca_teardown
+
+# ============================================================================
+# lib-reservation-ledger.sh tests
+# ============================================================================
+echo ""
+echo "=== lib-reservation-ledger.sh ==="
+#
+# The ledger primitives (reservation_write / _clear / _count / _sweep) are
+# sourced directly from the REAL helper. Sourcing it re-sources the REAL
+# lib-claude-agents.sh, so the sweep's liveness query is the real
+# claude_agents_list_all reading CLAUDE_AGENTS_CMD — a fake `claude` script.
+# DISPATCH_RESERVATION_DIR points the ledger at a scratch dir, and
+# DISPATCH_RESERVATION_NOW pins the timestamp for exact-content assertions.
+# The test shell runs under `set -e`, so calls whose non-zero return is under
+# test are wrapped in an `if`.
+
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+
+RL_DIR=""
+RL_FAKE=""
+
+rl_setup() {
+  RL_DIR=$(mktemp -d)
+  RL_FAKE="$RL_DIR/fake-claude"
+  export DISPATCH_RESERVATION_DIR="$RL_DIR/ledger"
+  export DISPATCH_RESERVATION_NOW="2026-01-01T00:00:00Z"
+}
+
+rl_teardown() {
+  rm -rf "$RL_DIR"
+  RL_DIR=""
+  RL_FAKE=""
+  unset DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_NOW
+}
+
+# rl_write_fake_claude <json-array> — install a fake `claude` that prints the
+# given JSON array verbatim and exits 0, and point CLAUDE_AGENTS_CMD at it (so
+# the real claude_agents_list_all sees it as the live-session registry).
+rl_write_fake_claude() {
+  local payload="$1"
+  printf '%s' "$payload" > "$RL_DIR/payload.json"
+  cat > "$RL_FAKE" <<FAKE
+#!/usr/bin/env bash
+cat "$RL_DIR/payload.json"
+exit 0
+FAKE
+  chmod +x "$RL_FAKE"
+  CLAUDE_AGENTS_CMD="$RL_FAKE"
+}
+
+# --- Test 1: reservation_write creates a 3-line marker; reservation_count -----
+
+echo "Test: reservation_write writes the session/issue/timestamp marker; reservation_count counts files"
+rl_setup
+if reservation_write "900-slug" "900" "sess-abc"; then rc=0; else rc=$?; fi
+assert_eq "rl-write: exits 0" "0" "$rc"
+assert_eq "rl-write: marker file named by basename exists" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/900-slug" ] && echo 1 || echo 0)"
+assert_eq "rl-write: marker content is the 3 documented lines" \
+  "$(printf 'session=sess-abc\nissue=900\ntimestamp=2026-01-01T00:00:00Z')" \
+  "$(cat "$DISPATCH_RESERVATION_DIR/900-slug")"
+cnt=$(reservation_count)
+assert_eq "rl-write: reservation_count is 1" "1" "$cnt"
+reservation_write "901-other" "901" "sess-def"
+cnt=$(reservation_count)
+assert_eq "rl-write: reservation_count is 2 after a second marker" "2" "$cnt"
+rl_teardown
+
+# --- Test 2: reservation_clear removes the marker and is idempotent -----------
+
+echo "Test: reservation_clear removes the marker and is idempotent"
+rl_setup
+reservation_write "900-slug" "900" "sess-abc"
+if reservation_clear "900-slug"; then rc=0; else rc=$?; fi
+assert_eq "rl-clear: exits 0" "0" "$rc"
+assert_eq "rl-clear: marker file removed" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/900-slug" ] && echo 1 || echo 0)"
+cnt=$(reservation_count)
+assert_eq "rl-clear: reservation_count drops to 0" "0" "$cnt"
+# Idempotent: clearing an already-absent marker still returns 0.
+if reservation_clear "900-slug"; then rc=0; else rc=$?; fi
+assert_eq "rl-clear: idempotent re-clear exits 0" "0" "$rc"
+rl_teardown
+
+# --- Test 3: sweep reclaims a marker whose reserving session is DEAD ----------
+
+echo "Test: reservation_sweep reclaims a marker whose reserving session is dead and never converted"
+rl_setup
+reservation_write "910-slug" "910" "dead-sess"
+# A live session that is neither the reserving session nor a worker on this
+# worktree → the reservation is stranded and must be reclaimed.
+rl_write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+err=$(reservation_sweep 2>&1 1>/dev/null)
+cnt=$(reservation_count)
+assert_eq "rl-sweep-dead: stranded marker reclaimed (count 0)" "0" "$cnt"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'dead-session-stranded'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-dead: note mentions dead-session-stranded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-dead: note mentions dead-session-stranded"
+fi
+rl_teardown
+
+# --- Test 4: sweep keeps a marker whose reserving session is LIVE -------------
+
+echo "Test: reservation_sweep keeps an in-flight marker whose reserving session is live with no worker yet"
+rl_setup
+reservation_write "920-slug" "920" "live-sess"
+# The reserving session is live; no live worker owns the worktree yet → KEEP.
+rl_write_fake_claude '[{"sessionId":"live-sess","pid":1,"status":"busy","name":"someworker"}]'
+reservation_sweep 2>/dev/null
+cnt=$(reservation_count)
+assert_eq "rl-sweep-live: in-flight marker kept (count 1)" "1" "$cnt"
+rl_teardown
+
+# --- Test 5: sweep reclaims a marker whose worktree has a LIVE worker ---------
+
+echo "Test: reservation_sweep reclaims a redundant marker whose worktree already has a live worker"
+rl_setup
+reservation_write "930-slug" "930" "whatever-sess"
+# A live session whose NAME equals the worktree basename → the worker already
+# registered; the marker is redundant (crash-after-register backstop).
+rl_write_fake_claude '[{"sessionId":"x","pid":1,"status":"busy","name":"930-slug"}]'
+err=$(reservation_sweep 2>&1 1>/dev/null)
+cnt=$(reservation_count)
+assert_eq "rl-sweep-redundant: redundant marker reclaimed (count 0)" "0" "$cnt"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'live-worker-redundant'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-redundant: note mentions live-worker-redundant"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-redundant: note mentions live-worker-redundant"
+fi
+rl_teardown
+
+# --- Test 6: sweep reclaims NOTHING when the daemon is UNKNOWN ----------------
+
+echo "Test: reservation_sweep reclaims nothing (fail safe) when the daemon is UNKNOWN"
+rl_setup
+reservation_write "940-slug" "940" "dead-sess"
+# A missing claude binary → claude_agents_list_all returns 1 (UNKNOWN) → the
+# sweep must touch nothing.
+CLAUDE_AGENTS_CMD="$RL_DIR/no-such-claude"
+if reservation_sweep 2>/dev/null; then rc=0; else rc=$?; fi
+cnt=$(reservation_count)
+assert_eq "rl-sweep-unknown: returns 0 (fail safe)" "0" "$rc"
+assert_eq "rl-sweep-unknown: marker survives (count unchanged)" "1" "$cnt"
+rl_teardown
+
+# --- Test 7: sweep is a no-op on an empty/absent ledger ----------------------
+
+echo "Test: reservation_sweep is a no-op on an empty or absent ledger"
+rl_setup
+rl_write_fake_claude '[]'
+# Empty ledger dir (never written): nothing to reclaim.
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+if reservation_sweep 2>/dev/null; then rc=0; else rc=$?; fi
+cnt=$(reservation_count)
+assert_eq "rl-sweep-empty: empty ledger → returns 0" "0" "$rc"
+assert_eq "rl-sweep-empty: count stays 0" "0" "$cnt"
+# Absent ledger dir (DISPATCH_RESERVATION_DIR points at a path that does not
+# exist): the sweep still returns 0 with no reclaim.
+export DISPATCH_RESERVATION_DIR="$RL_DIR/does-not-exist"
+if reservation_sweep 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "rl-sweep-absent: absent ledger dir → returns 0" "0" "$rc"
+rl_teardown
+
 # ============================================================================
 # dispatch-config-load tests
 # ============================================================================
@@ -12916,6 +13122,12 @@ sel_tick_setup() {
   # TMPDIR_TEST for this copy — so lib.sh must sit alongside it. Sourced, not
   # executed — no chmod +x.
   cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
+  # dispatch-select-tick's autonomous (no-arg) path sources the REAL
+  # lib-reservation-ledger.sh via its SCRIPT_DIR (= TMPDIR_TEST), so the real
+  # library must sit alongside it. It in turn sources lib-claude-agents.sh — the
+  # FAKE copy written below — so the sweep's liveness query is driven by the
+  # SEL_AGENTS_* env vars rather than a real daemon. Sourced, not executed.
+  cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/lib-reservation-ledger.sh"
   chmod +x "$TMPDIR_TEST/dispatch-select-tick" "$TMPDIR_TEST/dispatch-acquire-lock"
 
   export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
@@ -12957,13 +13169,25 @@ FAKE
 echo called >> "$TMPDIR_TEST/logs/schedule-reseed.log"
 exit 0
 FAKE
-  # Sourced helper: provides claude_agents_count_busy_workers.
+  # Sourced helper: provides claude_agents_count_busy_workers (driven by
+  # SEL_LIVE_COUNT*) and claude_agents_list_all (driven by SEL_AGENTS_*, used by
+  # the reservation-ledger sweep the gate runs before counting). The heredoc is
+  # quoted so the env vars are read at call time, not at write time.
   cat > "$TMPDIR_TEST/lib-claude-agents.sh" <<'FAKE'
 claude_agents_count_busy_workers() {
   [[ -n "${SEL_LIVE_COUNT_FAIL:-}" ]] && return 1
   echo "${SEL_LIVE_COUNT:-0}"
 }
+claude_agents_list_all() {
+  [[ -n "${SEL_AGENTS_LIST_FAIL:-}" ]] && return 1
+  [[ -n "${SEL_AGENTS_TSV:-}" ]] && printf '%s\n' "${SEL_AGENTS_TSV}"
+  return 0
+}
 FAKE
+  # Default empty reservation ledger: the sweep no-ops, reservation_count is 0,
+  # and the gap is unchanged from the pre-ledger gate (behavior-preserving).
+  export DISPATCH_RESERVATION_DIR="$TMPDIR_TEST/reservations"
+  mkdir -p "$TMPDIR_TEST/reservations"
   chmod +x "$TMPDIR_TEST/dispatch-jit-engine" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
@@ -12992,7 +13216,8 @@ sel_tick_teardown() {
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     DISPATCH_LOCK_WAIT_TIMEOUT DISPATCH_LOCK_WAIT_INTERVAL \
     FAKE_GIT_BRANCH FAKE_GIT_FETCH_FAIL FAKE_GIT_MERGE_FAIL \
-    SEL_TARGET_N SEL_LIVE_COUNT SEL_LIVE_COUNT_FAIL
+    SEL_TARGET_N SEL_LIVE_COUNT SEL_LIVE_COUNT_FAIL \
+    DISPATCH_RESERVATION_DIR SEL_AGENTS_TSV SEL_AGENTS_LIST_FAIL
 }
 
 # Run the orchestrator, capturing full stdout; the decision is the last line.
@@ -13225,6 +13450,67 @@ out=$(run_sel_tick)
 assert_eq "fail-open: gap=1 on issue line" "issue 707 1" "$(printf '%s\n' "$out" | tail -n 1)"
 sel_tick_teardown
 
+# --- effective_live = busy + reservations drives the gap --------------------
+# The gate counts reservation markers on top of busy workers. With 1 busy and 1
+# surviving reservation against target 4, gap = 4 − 2 = 2. The reservation only
+# survives the pre-count sweep because its session= id appears as a live session
+# in SEL_AGENTS_TSV and its basename is NOT a live session name.
+echo "Test: select-tick gap counts busy + reservations (effective_live)"
+sel_tick_setup
+export SEL_LIVE_COUNT=1 SEL_TARGET_N=4
+printf 'session=resv-1\nissue=900\ntimestamp=2026-01-01T00:00:00Z\n' \
+  > "$DISPATCH_RESERVATION_DIR/900-test"
+export SEL_AGENTS_TSV=$'resv-1\tbusy\tworkerX'
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/select-target.log"
+echo "issue 707"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_sel_tick)
+assert_eq "effective-live: gap = 4 − (1 busy + 1 reserved) = 2" "issue 707 2" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+sel_tick_teardown
+
+# --- effective_live short-circuits the concurrency cap -----------------------
+# 1 busy + 1 surviving reservation == target 2 → concurrency-cap, no selection
+# work, lock released, reseed scheduled, and the router message surfaces the
+# busy/reserved split.
+echo "Test: select-tick effective_live (busy + reserved) hits the concurrency cap"
+sel_tick_setup
+export SEL_LIVE_COUNT=1 SEL_TARGET_N=2
+printf 'session=resv-1\nissue=900\ntimestamp=2026-01-01T00:00:00Z\n' \
+  > "$DISPATCH_RESERVATION_DIR/900-test"
+export SEL_AGENTS_TSV=$'resv-1\tbusy\tworkerX'
+out=$(run_sel_tick)
+assert_eq "effective-cap: decision line" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "effective-cap: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "effective-cap: reseed scheduled" "called" \
+  "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
+assert_eq "effective-cap: router message surfaces the busy/reserved split" "1" \
+  "$(printf '%s\n' "$out" | grep -cF 'effective live (1 busy + 1 reserved)')"
+assert_eq "effective-cap: no selection work (select-target not called)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- empty ledger is behavior-preserving (gap == pre-ledger gate) ------------
+# With no reservations and an empty live-session list, RESV=0, so the gap is
+# exactly target − busy — identical to the pre-ledger gate.
+echo "Test: select-tick empty ledger → gap unchanged from pre-ledger gate"
+sel_tick_setup
+export SEL_LIVE_COUNT=1 SEL_TARGET_N=4
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/select-target.log"
+echo "issue 707"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_sel_tick)
+assert_eq "empty-ledger: gap = 4 − 1 (RESV=0)" "issue 707 3" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+sel_tick_teardown
+
 # --- explicit arg skips the gate, gap=1 even over budget ---------------------
 # The deleted --bypass-cap's purpose now lives on the explicit-arg path: a
 # deliberately-named target is not paced by the autonomous concurrency budget, so
@@ -13357,11 +13643,21 @@ mat_setup() {
   # SCRIPT_DIR, which resolves to TMPDIR_TEST for these copies — so lib.sh must
   # sit alongside them. Sourced, not executed — no chmod +x.
   cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
+  # dispatch-materialize-spawn also sources the REAL lib-reservation-ledger.sh
+  # (Step 6b reserve/clear) via its SCRIPT_DIR, and that library sources
+  # lib-claude-agents.sh — both must sit alongside the script copy. Sourced, not
+  # executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/lib-reservation-ledger.sh"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
 
   # Real lock under our control; we hold it so finalize-selection / release do a
   # strict self-release.
   export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
   export CLAUDE_CODE_SESSION_ID="mat-session"
+  # Scratch reservation ledger so Step 6b's reserve/clear writes a real marker
+  # under our control.
+  export DISPATCH_RESERVATION_DIR="$TMPDIR_TEST/reservations"
+  mkdir -p "$TMPDIR_TEST/reservations"
   printf '%s\n' "mat-session" > "$DISPATCH_LOCK_FILE"
   cat > "$TMPDIR_TEST/fake-claude" <<'FAKE'
 #!/usr/bin/env bash
@@ -13492,6 +13788,7 @@ mat_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
+    DISPATCH_RESERVATION_DIR \
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_MERGE_RC MAT_PHASE \
     MAT_CI_READY MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE MAT_MERGE_CONFLICT_N \
     MAT_RESEED_OUT MAT_RESEED_RC MAT_RESOLVER_RC
@@ -13538,6 +13835,57 @@ assert_eq "boot-gap: lock held during spawn (== session id)" "mat-session" \
   "$(cat "$TMPDIR_TEST/logs/lock-at-spawn.log")"
 # Lock released after the spawn returned.
 assert_eq "boot-gap: lock released after spawn" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- reservation written before spawn, cleared after a successful spawn -------
+# Step 6b writes the marker the instant before dispatch-spawn-worker and clears
+# it the instant the spawn returns. Snapshot the marker presence AT spawn time
+# (must be present), then assert it is gone after a successful spawn.
+echo "Test: materialize-spawn writes the reservation before spawn, clears it after success"
+mat_setup
+cat > "$TMPDIR_TEST/dispatch-spawn-worker" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/spawn-worker.log"
+# Snapshot whether the reservation marker exists AT spawn time.
+[ -f "\$DISPATCH_RESERVATION_DIR/839-test" ] && echo present > "$TMPDIR_TEST/logs/resv-at-spawn.log" || echo absent > "$TMPDIR_TEST/logs/resv-at-spawn.log"
+echo spawned
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-spawn-worker"
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "resv-success: exit 0" "0" "$rc"
+assert_eq "resv-success: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "resv-success: reservation present AT spawn time" "present" \
+  "$(cat "$TMPDIR_TEST/logs/resv-at-spawn.log")"
+assert_eq "resv-success: reservation cleared after a successful spawn" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- reservation cleared after a FAILED spawn --------------------------------
+# On a non-zero spawn the worker never registered, so the marker must still be
+# cleared (no leaked budget).
+echo "Test: materialize-spawn clears the reservation after a failed spawn"
+mat_setup
+export MAT_SPAWN_RC=1
+out=$(run_mat 839 queue)
+assert_eq "resv-fail: terminal token" "notify spawn-failed" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "resv-fail: reservation cleared after a failed spawn" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- pre-spawn (blocked) return path writes NO reservation -------------------
+# A target-blocked outcome returns before Step 6b, so no marker is ever written.
+echo "Test: materialize-spawn writes no reservation on a pre-spawn blocked return"
+mat_setup
+export MAT_BLOCKED="777,888"
+out=$(run_mat 839 explicit)
+assert_eq "resv-blocked: terminal token" "notify target-blocked" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "resv-blocked: no reservation marker for the target" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
+assert_eq "resv-blocked: ledger empty (no marker ever written)" "0" \
+  "$(find "$DISPATCH_RESERVATION_DIR" -type f 2>/dev/null | wc -l | tr -d ' ')"
 mat_teardown
 
 # --- queue mode skips guards (CLOSED issue still proceeds) -------------------
