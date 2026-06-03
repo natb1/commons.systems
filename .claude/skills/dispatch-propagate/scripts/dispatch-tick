@@ -2,7 +2,7 @@
 # dispatch-tick — the headless /dispatch-propagate tick: a thin bash sequencer
 # over dispatch-select-tick → dispatch-materialize-spawn, with NO model session.
 #
-# Usage: dispatch-tick [<issue-or-PR-number>]
+# Usage: dispatch-tick [--manual] [<issue-or-PR-number>]
 #
 # This is the scripted equivalent of the routing the dispatch-propagate SKILL.md
 # (Tables 1 and 2) used to describe for a model router session. Replacing that
@@ -16,8 +16,11 @@
 # self-close: where the model router would have called dispatch-self-close on a
 # `propagate`/`drain` disposition, dispatch-tick simply exits 0. The autonomous
 # tick is launched by systemd (the #725 heartbeat) and by the worker Stop-hook in
-# a later unit; a human-typed `/dispatch` is a thin shim that runs one tick and
-# relays its stdout for live UX. The audit record is this script's journal output
+# a later unit; it runs bare and keeps the concurrency gate. A human-typed
+# `/dispatch` is a thin shim that runs one tick and relays its stdout for live
+# UX; it passes `--manual` for the ungated unbounded fan-out (exempt from the
+# pace curve and the MAX_WORKERS ceiling), bounded only by queue availability.
+# The audit record is this script's journal output
 # (every captured stdout line is echoed through) plus the spawned workers'
 # transcripts plus durable GitHub side effects (PR comments, `dispatch:*`
 # labels) — so relay survives only on the human shim, not on the autonomous tick.
@@ -92,28 +95,37 @@ fi
 
 # --- Step 0: parse the single optional positional <N> ------------------------
 ARG=""
+MANUAL=""
 for a in "$@"; do
   case "$a" in
+    --manual) MANUAL=1 ;;
     --*)
       echo "dispatch-tick: unknown flag '$a'" >&2
-      echo "usage: dispatch-tick [<issue-or-PR-number>]" >&2
+      echo "usage: dispatch-tick [--manual] [<issue-or-PR-number>]" >&2
       exit 2
       ;;
     *)
       if [[ -n "$ARG" ]]; then
         echo "dispatch-tick: unexpected extra arguments after <number>" >&2
-        echo "usage: dispatch-tick [<issue-or-PR-number>]" >&2
+        echo "usage: dispatch-tick [--manual] [<issue-or-PR-number>]" >&2
         exit 2
       fi
       ARG="${a#\#}"
       ;;
   esac
 done
+if [[ -n "$MANUAL" && -n "$ARG" ]]; then
+  echo "dispatch-tick: --manual cannot be combined with an explicit <number>" >&2
+  echo "usage: dispatch-tick [--manual] [<issue-or-PR-number>]" >&2
+  exit 2
+fi
 
 # --- Step 1: select the target ------------------------------------------------
 # Capture select-tick's full stdout and echo every line through (jit:/calendar:
 # passthrough AND the decision line) so journald and a live relay see it all.
-if [[ -n "$ARG" ]]; then
+if [[ -n "$MANUAL" ]]; then
+  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" --manual)
+elif [[ -n "$ARG" ]]; then
   SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" "$ARG")
 else
   SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick")
