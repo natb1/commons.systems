@@ -88,7 +88,7 @@ parse_duration() {
   num="${BASH_REMATCH[1]}"
   unit="${BASH_REMATCH[2]}"
   case "$unit" in
-    s) printf '%s\n' "$(( num * 1 ))" ;;
+    s) printf '%s\n' "$num" ;;
     m) printf '%s\n' "$(( num * 60 ))" ;;
     h) printf '%s\n' "$(( num * 3600 ))" ;;
     d) printf '%s\n' "$(( num * 86400 ))" ;;
@@ -157,6 +157,9 @@ state_set() {
   updated=$(printf '%s' "$current" | jq -c --arg k "$key" --argjson v "$epoch" \
     '.[$k] = $v')
   mkdir -p "$STATE_DIR"
+  # Non-atomic write: a crash mid-write can leave a corrupt/empty state file.
+  # That only loses the debounce timestamp — the next run reads it as "no state"
+  # and overwrites it. Idempotency is keyed on GitHub state, not this file.
   printf '%s\n' "$updated" >"$STATE_FILE"
 }
 
@@ -231,7 +234,7 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
     EXTS=(qfx ofx csv pdf)
   fi
   # Lowercase the configured extensions once for case-insensitive comparison.
-  declare -a EXTS_LC=()
+  EXTS_LC=()
   for e in "${EXTS[@]}"; do
     EXTS_LC+=("${e,,}")
   done
@@ -239,7 +242,7 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
   # ---- 4e: enumerate matching files (NON-RECURSIVE, sorted) -----------------
   # Collect regular files directly in $DIR whose extension is in the filter,
   # then sort for deterministic ordering.
-  declare -a MATCHED=()
+  MATCHED=()
   for f in "$DIR"/*; do
     [[ -f "$f" ]] || continue
     base="$(basename "$f")"
@@ -289,6 +292,12 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
       --limit 1 --json number,state 2>&1) || SEARCH_RC=$?
     if [[ "$SEARCH_RC" -ne 0 ]]; then
       echo "$KEY: error (gh search issues failed: $SEARCH_JSON)" >&2
+      HARD_ERROR=1
+      ENTRY_HARD_ERROR=1
+      break
+    fi
+    if ! printf '%s' "$SEARCH_JSON" | jq -e . >/dev/null 2>&1; then
+      echo "$KEY: error (gh search issues returned non-JSON: $SEARCH_JSON)" >&2
       HARD_ERROR=1
       ENTRY_HARD_ERROR=1
       break

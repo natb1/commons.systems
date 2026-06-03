@@ -10002,6 +10002,35 @@ else
 fi
 statements_teardown
 
+# --- Test 9: malformed gh search issues output → hard error, no issue create --
+
+echo "Test: dispatch-statements-scan surfaces hard error on malformed search output, does not file"
+statements_setup
+statements_write_projects
+statements_write_config
+printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
+# Inject a TLS-error-like non-JSON message as the search result (gh exits 0).
+printf 'tls: failed to verify certificate: x509: certificate signed by unknown authority\n' \
+  > "$STUB_DIR/search-result.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>&1 >/dev/null) || rc=$?
+assert_eq "malformed-search exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"bank: error"* && "$err" == *"non-JSON"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: malformed-search emits hard error to stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed-search emits hard error to stderr"
+  echo "    actual stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: malformed-search made no issue create call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed-search made no issue create call"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+statements_teardown
+
 # ============================================================================
 # dispatch-input-block hook tests
 # ============================================================================
