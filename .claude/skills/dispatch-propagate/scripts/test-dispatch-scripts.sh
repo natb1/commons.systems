@@ -10361,16 +10361,18 @@ else
 fi
 stop_teardown
 
-# --- Test 5c: early gate fires even with a present marker (marker-independent) -
+# --- Test 5c: early gate + present marker → spawn tick AND self-close ---------
 
-echo "Test: stop hook + marker present + dispatch-ci-ready not-ready → early gate: spawn only, no self-close"
+echo "Test: stop hook + marker present + dispatch-ci-ready not-ready → early gate: marker present → self-close after spawning tick"
 stop_setup
 echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
 echo "verify" > "$STUB_DIR/current-phase.txt"
-# Marker present and a would-be advance (verify != implement), but CI is back in
-# progress: the marker-independent early gate short-circuits BEFORE any branch,
-# so no self-close and no office-hours park.
+# Marker present but CI is back in progress: the phase already did its job
+# (marker written, label applied, fix pushed) and only the draft PR's CI is
+# still running. The early gate spawns the next tick (which re-gates once CI
+# concludes) and self-closes the session so it does not leak idle — no
+# office-hours park, no strip.
 echo "0" > "$STUB_DIR/ci-ready.txt"
 echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 echo "phase=implement" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
@@ -10387,12 +10389,8 @@ else
 fi
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop not-ready-marker: spawn invoked exactly once" "1" "$spawn_calls"
-TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop not-ready-marker: self-close not invoked (early gate beat Branch B)"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop not-ready-marker: self-close not invoked (early gate beat Branch B)"
-fi
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop not-ready-marker: self-close invoked exactly once (marker present → self-close after spawning tick)" "1" "$self_close_calls"
 stop_teardown
 
 # --- Test 6: CLAUDE_JOB_DIR unset → no-op ------------------------------------

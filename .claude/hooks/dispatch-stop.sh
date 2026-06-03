@@ -10,13 +10,20 @@
 # leak — the harness fires Stop unconditionally at session end, regardless of
 # the model's last visible action.
 #
-# Early not-ready gate (marker-independent): when dispatch-ci-ready reports the
-# target's PR CI is back in progress (a push restarted CI between selection and
-# session end — the TOCTOU race), there is no actionable verdict for any branch
-# below to act on. Hand the issue back to the router and exit 0 rather than
-# parking it on a human; the next tick re-gates it and picks it up once CI
-# concludes. (Office-hours would not self-heal: the dispatch queue skips
-# office-hours issues and nothing strips the label.) The router owns the CI gate.
+# Early not-ready gate (marker-dependent disposition): when dispatch-ci-ready
+# reports the target's PR CI is back in progress, there is no actionable verdict
+# for any branch below to act on. Spawn the next tick (it re-gates the issue once
+# CI concludes), then decide by marker:
+#   - Marker present: the phase already completed (marker written, label applied,
+#     fix pushed) and only CI is still running — the common case, since a draft
+#     PR's CI runs for minutes after the model work finishes in seconds.
+#     Self-close the session so it does not leak idle on a held daemon slot.
+#   - Marker absent: a genuine mid-phase exit during a CI restart (a push
+#     restarted CI between selection and session end — the TOCTOU race). Hand the
+#     issue back to the router and exit 0 without parking it on a human or
+#     self-closing; the next tick picks it up once CI concludes. (Office-hours
+#     would not self-heal: the dispatch queue skips office-hours issues and
+#     nothing strips the label.) The router owns the CI gate.
 #
 # Branches (driven by marker presence + CURRENT_PHASE relative to MARKER_PHASE):
 #   R. conflict-resolver job (#982) — a /dispatch-resolve-conflict session is
@@ -152,23 +159,6 @@ DISPATCH_PR_LIST=$(gh pr list --state open \
   || DISPATCH_PR_LIST=""
 export DISPATCH_PR_LIST
 
-# Early not-ready gate (marker-independent). If the target's PR CI is back in
-# progress (no verdict available), hand the issue back to the tick without
-# parking or self-closing — the next tick re-gates it once CI concludes. This
-# covers the TOCTOU case where a push restarted CI between selection and session
-# end. The gate runs BEFORE dispatch-phase so CURRENT_PHASE is only derived for a
-# target confirmed ready: without this early gate, a pending dispatch-phase would
-# exit 3, leave CURRENT_PHASE="" via the `|| CURRENT_PHASE=""` fallback below, and
-# drive a spurious Branch D office-hours park.
-if ! "$SCRIPTS/dispatch-ci-ready" "$ISSUE_NUM" >/dev/null 2>&1; then
-  spawn_tick
-  exit 0
-fi
-
-# Resolve current phase (used to compare against MARKER_PHASE). Called after the
-# readiness gate so CI is confirmed ready and dispatch-phase will not exit 3.
-CURRENT_PHASE=$("$SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || CURRENT_PHASE=""
-
 # Read marker (presence drives branch selection; content is for diagnostics).
 # Validate against the known phase set — a corrupt or unknown value falls
 # through to Branch A (treat as absent) rather than driving Branch B's
@@ -182,6 +172,38 @@ if [ -f "$MARKER_FILE" ]; then
     *) MARKER_PHASE="" ;;
   esac
 fi
+
+# Early not-ready gate. If the target's PR CI is back in progress (no verdict
+# available), spawn the next tick and decide disposition by marker:
+#   - Marker present: the phase already did its job (marker written, label
+#     applied, fix pushed) — only CI is still running. Self-close the session;
+#     the spawned tick re-gates the issue once CI concludes and continues the
+#     chain in a fresh session. (Without this, the session leaks: idle, holding
+#     a daemon slot, even though its phase completed.)
+#   - Marker absent: a genuine mid-phase exit during a CI restart (the TOCTOU
+#     case where a push restarted CI between selection and session end). Hand the
+#     issue back to the tick without parking or self-closing — the next tick
+#     re-gates it once CI concludes. Parking is avoided because the gate runs
+#     BEFORE dispatch-phase: a pending dispatch-phase would exit 3, leave
+#     CURRENT_PHASE="" via the `|| CURRENT_PHASE=""` fallback below, and drive a
+#     spurious Branch D office-hours park.
+if ! "$SCRIPTS/dispatch-ci-ready" "$ISSUE_NUM" >/dev/null 2>&1; then
+  spawn_tick
+  if [ -n "$MARKER_PHASE" ]; then
+    # A valid phase-completed marker is present: the phase did its job
+    # (marker written, label applied, fix pushed) — only CI is still
+    # running. Self-close the session; the spawned tick re-gates the issue
+    # once CI concludes and continues the chain in a fresh session.
+    self_close
+  fi
+  # No marker: a genuine mid-phase exit during a CI restart — hand back to
+  # the router without parking or self-closing (TOCTOU protection).
+  exit 0
+fi
+
+# Resolve current phase (used to compare against MARKER_PHASE). Called after the
+# readiness gate so CI is confirmed ready and dispatch-phase will not exit 3.
+CURRENT_PHASE=$("$SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || CURRENT_PHASE=""
 
 if [ -z "$MARKER_PHASE" ]; then
   # Branch A — marker absent.
