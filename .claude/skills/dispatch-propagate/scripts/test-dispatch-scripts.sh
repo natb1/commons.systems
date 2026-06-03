@@ -9618,6 +9618,96 @@ else
 fi
 jit_teardown
 
+# --- Test 12: cadence jit with dueAfterCreate → cross-key validation error ---
+# A cadence jit must use dueAfterClose; supplying dueAfterCreate is a config
+# mistake the engine rejects (HARD_ERROR → exit 1) before creating any issue.
+
+echo "Test: dispatch-jit-engine cadence jit with dueAfterCreate is rejected"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "daily-chore",
+      "repo": "test-owner/test-repo",
+      "label": "jit:daily-chore",
+      "title": "Daily chore",
+      "body": "Recurring daily chore. Close when done.",
+      "project": "test-project",
+      "remindAfterClose": "12h",
+      "dueAfterCreate": "24h"
+    }
+  ]
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>&1 >/dev/null) || rc=$?
+assert_eq "cadence+dueAfterCreate exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"cadence jit must use dueAfterClose, not dueAfterCreate"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: cadence+dueAfterCreate reports the cross-key error"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cadence+dueAfterCreate reports the cross-key error"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: cadence+dueAfterCreate created no issue"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cadence+dueAfterCreate created no issue"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+jit_teardown
+
+# --- Test 13: check-script jit with dueAfterClose → cross-key validation err -
+# A check-script jit must use dueAfterCreate; supplying dueAfterClose is a
+# config mistake the engine rejects (HARD_ERROR → exit 1) before creating any
+# issue, even though the check itself fired.
+
+echo "Test: dispatch-jit-engine check-script jit with dueAfterClose is rejected"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "email-review",
+      "repo": "test-owner/test-repo",
+      "label": "jit:email-review",
+      "title": "Review the inbox",
+      "body": "The inbox needs attention.",
+      "project": "test-project",
+      "check": { "script": "mock-check" },
+      "dueAfterClose": "24h"
+    }
+  ]
+}
+EOF
+cat > "$TMPDIR_TEST/checkdir/mock-check" <<'CHK'
+#!/usr/bin/env bash
+exit "${MOCK_CHECK_RC:-0}"
+CHK
+chmod +x "$TMPDIR_TEST/checkdir/mock-check"
+rc=0
+err=$(MOCK_CHECK_RC=0 "$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>&1 >/dev/null) || rc=$?
+assert_eq "check+dueAfterClose exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"check-script jit must use dueAfterCreate, not dueAfterClose"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: check+dueAfterClose reports the cross-key error"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: check+dueAfterClose reports the cross-key error"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: check+dueAfterClose created no issue"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: check+dueAfterClose created no issue"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+jit_teardown
+
 # ============================================================================
 # dispatch-input-block hook tests
 # ============================================================================
