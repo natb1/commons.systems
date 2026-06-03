@@ -157,20 +157,35 @@ fi
 # file and install a single EXIT/INT/TERM trap to remove it; resolve_holder_state
 # treats the holder as live iff the sentinel exists and its PID is alive. Only a
 # synthesized id writes a sentinel — a real inherited session id is governed by
-# the daemon path and writes none. Best-effort: if the lock-file path cannot be
-# resolved (not in a git repo and DISPATCH_LOCK_FILE unset), skip silently rather
-# than exit — the daemon path still governs real ids, and a headless tick that
-# cannot resolve the lock file also cannot acquire the lock. $$ is the tick PID,
-# recorded in the sentinel content regardless of whether the id token uses it.
+# the daemon path and writes none. $$ is the tick PID, recorded in the sentinel
+# content regardless of whether the id token uses it.
+#
+# Two failure modes, two dispositions (#1068):
+#   - The lock-file path cannot be resolved (not in a git repo and
+#     DISPATCH_LOCK_FILE unset): skip the sentinel silently. The daemon path
+#     still governs real ids, and a headless tick that cannot resolve the lock
+#     file also cannot acquire the lock (dispatch-acquire-lock exits 2), so it
+#     never reaches selection — there is nothing to serialize.
+#   - The path resolves but the sentinel write fails (e.g. an over-long token
+#     yielding ENAMETOOLONG while the short dispatch.lock stays writable): fail
+#     clear with exit 2. Continuing here would let this tick acquire the lock
+#     with no liveness sentinel, so a concurrent tick reads this LIVE holder as
+#     dead and reclaims mid-selection — the exact duplicate-spawn defect #1068
+#     closes. Per .claude/rules/code-style.md, fail clear rather than degrade
+#     the concurrency guarantee silently; the chain self-heals on the next tick.
 export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_ID:-$(openssl rand -hex 16 2>/dev/null || echo "$$")}}"
 if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
   if SENTINEL_LOCK_FILE=$(dispatch_lock_file); then
     SENTINEL=$(headless_sentinel_path "$CLAUDE_CODE_SESSION_ID" "$SENTINEL_LOCK_FILE")
     mkdir -p "$(dirname "$SENTINEL")" 2>/dev/null || true
-    printf '%s\n' "$$" >"$SENTINEL" \
-      || echo "dispatch-tick: WARNING: failed to write headless sentinel '$SENTINEL'; liveness signaling disabled" >&2
-    # A single EXIT trap covers every `exit` below this point — intended.
+    # Install the trap before the write so it also clears any partial sentinel
+    # if the write fails and we abort. A single EXIT trap covers every `exit`
+    # below this point — intended.
     trap 'rm -f "$SENTINEL"' EXIT INT TERM
+    if ! printf '%s\n' "$$" >"$SENTINEL"; then
+      echo "dispatch-tick: ERROR: failed to write headless sentinel '$SENTINEL'; cannot signal liveness — aborting so a concurrent tick does not reclaim this lock mid-selection (#1068)" >&2
+      exit 2
+    fi
   fi
 fi
 

@@ -15406,6 +15406,41 @@ assert_eq "sentinel: removed by the EXIT trap (no .live left behind)" "0" \
   "${#leftover[@]}"
 tick_teardown
 
+# --- headless tick fails clear when the sentinel write fails (#1068) ----------
+# When the lock-file path resolves but the sentinel write fails (here forced via
+# an over-long-but-hex INVOCATION_ID → a >255-byte sentinel filename →
+# ENAMETOOLONG, while the short dispatch.lock stays writable), dispatch-tick must
+# exit 2 *before* selecting a target rather than warn-and-continue. Continuing
+# would acquire the lock with no liveness sentinel, so a concurrent tick reads
+# this LIVE holder as dead and reclaims mid-selection — the exact duplicate-spawn
+# defect #1068 closes. The select-tick fake drops a marker if it runs; the test
+# asserts the tick exited non-zero and never reached selection.
+echo "Test: dispatch-tick headless fails clear (exit 2, no selection) when the sentinel write fails"
+tick_setup
+LOCK_DIR="$(dirname "$DISPATCH_LOCK_FILE")"
+cat > "$TMPDIR_TEST/dispatch-select-tick" <<FAKE
+#!/usr/bin/env bash
+printf 'ran\n' > "$TMPDIR_TEST/logs/select-ran.log"
+printf '%s\n' "empty"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-tick"
+rm -f "$TMPDIR_TEST/logs/select-ran.log"
+# 250 hex chars: passes the INVOCATION_ID guard, yields a sentinel filename
+# (dispatch-tick-<250>.live = 269 bytes) that exceeds NAME_MAX (255) → write fails.
+long_inv=$(printf 'a%.0s' {1..250})
+env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="$long_inv" \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "sentinel-write-fail: tick exits 2 (fail clear)" "2" "$rc"
+assert_eq "sentinel-write-fail: selection never ran (aborted before select-tick)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-ran.log" ] && echo 1 || echo 0)"
+shopt -s nullglob
+leftover=( "$LOCK_DIR"/dispatch-tick-*.live )
+shopt -u nullglob
+assert_eq "sentinel-write-fail: no stale .live left behind (trap cleaned partial)" "0" \
+  "${#leftover[@]}"
+tick_teardown
+
 # --- --manual is forwarded to select-tick; one gate-exempt worker (gap=1) -----
 # A bare human-typed /dispatch passes --manual to dispatch-tick, which must
 # forward it to dispatch-select-tick. The fake select-tick records its argv.
