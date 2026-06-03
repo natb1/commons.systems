@@ -2070,6 +2070,73 @@ assert_eq "dispatch-trace-leaf exit 1 → select-target exits non-zero" "yes" "$
 assert_eq "dispatch-trace-leaf exit 1 → no issue line emitted" "yes" "$no_issue"
 teardown
 
+# --- --exclude set (#1062) ----------------------------------------------------
+# The fan-out caller passes its SEEN set as --exclude so the selector never
+# re-returns an already-processed target; it surfaces the next distinct one. The
+# harness copies the REAL dispatch-trace-leaf into TMPDIR_TEST, so these run end
+# to end through the Unit-1 trace.
+
+# 39a. A help-wanted issue in the --exclude set is skipped via the trace root;
+#      the next help-wanted issue is selected. Issue 55 (older) is excluded, so
+#      the trace exits 2 for it and issue 66 (newer) surfaces.
+echo "Test: excluded help-wanted issue skipped → next issue chosen"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 55)
+assert_eq "excluded issue 55 skipped → issue 66 chosen" "issue 66" "$result"
+teardown
+
+# 39b. A multi-leaf subtree whose first leaf is excluded descends to the next
+#      startable leaf (AC (b)): the exclusion threads into the trace. Issue 55
+#      has sub-issues 5500 and 5501, neither worktree'd nor parked; --exclude
+#      5500 must yield 5501, not skip the whole subtree.
+echo "Test: excluded first leaf → next startable leaf in subtree selected"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500},{"number":5501}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5500.json"
+printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5501.json"
+# No worktrees — only the exclusion distinguishes the leaves.
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 5500)
+assert_eq "excluded leaf 5500 → leaf 5501 selected" "issue 5501" "$result"
+teardown
+
+# 39c. A whole-frontier exclusion drains to empty: the only help-wanted issue's
+#      only leaf is excluded and there is no QA PR, so the selector returns
+#      empty (a genuine empty, not a re-selection).
+echo "Test: whole frontier excluded, no QA PR → empty"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5500.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 5500)
+assert_eq "whole frontier excluded → empty" "empty" "$result"
+teardown
+
+# 39d. A PR row whose issue is excluded is filtered during the scan (before
+#      FIRST_PR), so a single ready PR on branch 20-feature plus --exclude 20
+#      and an empty issue list yields empty — the excluded PR is not selected and
+#      nothing else exists.
+echo "Test: excluded PR row filtered during scan → empty"
+setup
+UNION='['"$(make_pr_union 20 "20-feature" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 20)
+assert_eq "excluded PR 20 filtered → empty" "empty" "$result"
+teardown
+
 # --- ready-PR gate (#920) ---
 # An open help-wanted issue whose closing PR is non-draft (ready) is excluded
 # from the issue queue. The gate uses closingIssuesReferences from PR_LIST —
@@ -3184,6 +3251,79 @@ printf '{"title":"Issue 700","body":"","comments":[],"number":700,"state":"OPEN"
 printf '[{"number":700}]\n' > "$STUB_DIR/trace-parked.json"
 result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "explicit")
 assert_eq "explicit: parked root leaf 700 returned unchanged" "700" "$result"
+teardown
+
+# 22. Queue mode: --exclude names an already-processed leaf; the trace refuses to
+#     return it and descends past it to the next startable sibling (#1062). 700
+#     has open sub-issues 701 and 702, neither with a worktree, so only the
+#     exclusion distinguishes them. Without --exclude the lowest leaf 701 would
+#     be returned; with --exclude 701 the trace yields 702.
+echo "Test: queue mode → --exclude leaf skipped, returns next startable sibling"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" --exclude 701)
+assert_eq "queue: --exclude 701 → next startable leaf 702" "702" "$result"
+teardown
+
+# 23. Queue mode: the only reachable leaf is excluded → exit 2 with the
+#     worktree-conflicted stderr surface, exactly as an all-live-owned subtree
+#     (#1062 reuses the #914/#1011 no-startable-leaf path). 700 → single sub 701
+#     (leaf); --exclude 701 leaves nothing startable.
+echo "Test: queue mode → single leaf excluded, exits 2"
+setup
+printf '[{"number":701}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" --exclude 701 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"worktree-conflicted"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "queue: single leaf excluded → exit 2 with stderr message" "ok" "$status"
+teardown
+
+# 24. Queue mode: --exclude covers every reachable leaf (variadic integer run) →
+#     exit 2 (#1062). Exercises the multi-token --exclude 701 702 parse and the
+#     whole-frontier-excluded bubble-up.
+echo "Test: queue mode → all leaves excluded (variadic), exits 2"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" --exclude 701 702 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"worktree-conflicted"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "queue: all leaves excluded → exit 2 with stderr message" "ok" "$status"
+teardown
+
+# 25. Queue mode: a multi-leaf subtree whose FIRST leaf is excluded drains to the
+#     next startable leaf in the same subtree (#1062 AC (b)). Parent 700 has two
+#     leaf sub-issues 701 and 702; excluding 701 (an already-spawned leaf whose
+#     worktree is an orphan, not live-owned, so the liveness filter does not skip
+#     it) must still advance to the parent's other startable leaf 702 rather than
+#     abandon the subtree.
+echo "Test: queue mode → multi-leaf subtree, first leaf excluded drains to next leaf"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+# 701's worktree exists but no live session owns it → orphan, descendable; only
+# the --exclude set removes it from the startable frontier.
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" --exclude 701)
+assert_eq "queue: multi-leaf subtree, --exclude 701 (orphan) → next leaf 702" "702" "$result"
 teardown
 
 # ============================================================================
@@ -14938,6 +15078,126 @@ assert_eq "distinct: select-target invoked >=2" "1" \
   "$([ "$(wc -l < "$TMPDIR_TEST/logs/select-target.log")" -ge 2 ] && echo 1 || echo 0)"
 assert_eq "distinct: worktrees all unique" "3" \
   "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
+mat_teardown
+
+# --- fan-out exclusion (#1062): the loop passes its SEEN set as --exclude so ---
+# dispatch-select-target yields the NEXT distinct target instead of re-returning
+# an already-processed one. Each of the following tests overrides the default
+# (arg-ignoring) select-target fake with an EXCLUDE-HONORING fake that returns
+# the first MAT_QUEUE entry NOT in the passed --exclude set. WITHOUT --exclude
+# this fake returns the queue HEAD on every call — re-surfacing an already-
+# spawned target — the exact scenario the loop's exclusion must defeat. The
+# helper below writes that fake into the live TMPDIR_TEST.
+write_exclude_honoring_select_target() {
+  cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+# Exclude-honoring fake (#1062): returns the first MAT_QUEUE entry NOT in the
+# passed --exclude set, modelling a real selector yielding the next distinct
+# target. WITHOUT --exclude it returns the first entry every call — re-surfacing
+# an already-spawned target (registration lag / orphan self-close), the exact
+# scenario the loop's exclusion must defeat.
+declare -A EX=()
+while [[ \$# -gt 0 ]]; do
+  case "\$1" in
+    --exclude) shift; while [[ \$# -gt 0 && "\$1" =~ ^[0-9]+\$ ]]; do EX["\$1"]=1; shift; done ;;
+    *) shift ;;
+  esac
+done
+read -r -a Q <<< "\${MAT_QUEUE:-}"
+echo "called exclude=\${!EX[*]:-}" >> "$TMPDIR_TEST/logs/select-target.log"
+for n in "\${Q[@]}"; do
+  if [[ -z "\${EX[\$n]:-}" ]]; then echo "issue \$n"; exit 0; fi
+done
+echo empty
+FAKE
+  chmod +x "$TMPDIR_TEST/dispatch-select-target"
+}
+
+# (a) lagged-live re-surface: queue HEAD 839 is the already-spawned arg, re-
+# surfacing because its live ownership is not yet visible to the next selection
+# (mechanism 1). Without the loop's --exclude the fake would re-return 839 every
+# call and the run would stall at 1 spawn. With it, selection advances 720, 508.
+echo "Test: materialize-spawn fan-out excludes lagged-live re-surfaced target (#1062)"
+mat_setup
+write_exclude_honoring_select_target
+export MAT_QUEUE="839 720 508"
+out=$(run_mat 839 queue --gap 3)
+assert_eq "fanout-lag: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "fanout-lag: distinct worktrees" "3" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
+assert_eq "fanout-lag: summary 3 of gap 3" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 3 of gap 3')"
+assert_eq "fanout-lag: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fanout-lag: no 'no further distinct targets' stop" "0" \
+  "$(printf '%s\n' "$out" | grep -c 'no further distinct targets')"
+mat_teardown
+
+# (a') orphan (self-closed) re-surface: 720 re-surfaces because it self-closed
+# fast, leaving an orphan worktree selection does not skip (mechanism 2). The
+# duplicate 720 in the queue is spawned once; the exclusion carries it past.
+echo "Test: materialize-spawn fan-out excludes orphan self-closed re-surfaced target (#1062)"
+mat_setup
+write_exclude_honoring_select_target
+export MAT_QUEUE="720 720 508"
+out=$(run_mat 839 queue --gap 3)
+assert_eq "fanout-orphan: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "fanout-orphan: distinct worktrees (839,720,508)" "3" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
+assert_eq "fanout-orphan: summary 3 of gap 3" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 3 of gap 3')"
+assert_eq "fanout-orphan: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fanout-orphan: no 'no further distinct targets' stop" "0" \
+  "$(printf '%s\n' "$out" | grep -c 'no further distinct targets')"
+mat_teardown
+
+# (b) multi-leaf subtree, first leaf excluded drains to the next: the exclusion
+# threads into the leaf trace, so a subtree whose first startable leaf (5500) was
+# already processed advances to its sibling (5501) rather than abandoning the
+# parent's remaining leaves.
+echo "Test: materialize-spawn fan-out drains multi-leaf subtree past excluded first leaf (#1062)"
+mat_setup
+write_exclude_honoring_select_target
+export MAT_QUEUE="5500 5501"
+out=$(run_mat 5500 queue --gap 2)
+assert_eq "fanout-subtree: spawn count" "2" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "fanout-subtree: distinct worktrees (5500,5501)" "2" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
+assert_eq "fanout-subtree: summary 2 of gap 2" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 2 of gap 2')"
+assert_eq "fanout-subtree: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+
+# (c) genuinely empty frontier: once 839 is excluded the queue has nothing left,
+# so selection returns `empty` and the loop stops cleanly on a real empty — not
+# on a re-selection.
+echo "Test: materialize-spawn fan-out stops cleanly on a genuinely empty frontier (#1062)"
+mat_setup
+write_exclude_honoring_select_target
+export MAT_QUEUE=""
+out=$(run_mat 839 queue --gap 5)
+assert_eq "fanout-empty: spawn count" "1" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "fanout-empty: summary 1 of gap 5 (queue exhausted)" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 5 (queue exhausted)')"
+assert_eq "fanout-empty: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fanout-empty: no 'no further distinct targets' stop" "0" \
+  "$(printf '%s\n' "$out" | grep -c 'no further distinct targets')"
+mat_teardown
+
+# (backstop) contract violation: dispatch-select-target ALWAYS returns 839 (the
+# already-processed arg) regardless of --exclude. The loop's defensive backstop
+# (#1062) must break rather than spin forever: it records SEEN[839] for target 1,
+# the fake re-returns 839, SEEN[839] is set → backstop fires.
+echo "Test: materialize-spawn fan-out backstop breaks on selector contract violation (#1062)"
+mat_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+echo "issue 839"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue --gap 5 2>"$TMPDIR_TEST/logs/mat-stderr.log")
+assert_eq "backstop: spawn count (only the arg)" "1" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "backstop: summary 1 of gap 5 (unexpected re-selection)" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 5 (selection re-returned an excluded target (unexpected))')"
+assert_eq "backstop: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "backstop: stderr names the contract violation" "1" \
+  "$(grep -c 'contract violation' "$TMPDIR_TEST/logs/mat-stderr.log")"
 mat_teardown
 
 # --- --gap unbounded is removed → usage error exit 2 -------------------------
