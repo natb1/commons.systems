@@ -250,7 +250,7 @@ case "$CONFIG_TYPE" in
           else
             empty
           end),
-          # optional timing fields — must be strings if present
+          # optional string fields — must be strings if present
           (["remindAfterClose","dueAfterClose","dueAfterCreate","debounce","skill"] |
           .[] |
           . as $field |
