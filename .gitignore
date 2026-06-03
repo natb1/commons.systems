@@ -1,6 +1,8 @@
 worktrees/
 CLAUDE.local.md
 .env
+.env.*
+!**/.env.example
 node_modules/
 dist/
 functions/lib/

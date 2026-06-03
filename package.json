@@ -4,6 +4,7 @@
   "workspaces": [
     "config",
     "analyticsutil",
+    "agenda",
     "audio",
     "authutil",
     "blog",
