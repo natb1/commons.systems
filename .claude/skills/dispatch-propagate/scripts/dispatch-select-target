@@ -55,12 +55,10 @@
 #
 # Within each (priority, topic) bucket, default-mode priority (oldest PR wins
 # within a tier):
-#   1. Oldest "security"    PR (draft + dispatch:reviewed or dispatch:security-reviewed)
-#   2. Oldest "review"      PR (draft + dispatch:code-reviewed)
-#   3. Oldest "code-review" PR (draft + dispatch:qa-done)
-#   4. Oldest "verify"      PR (draft, CI completed and failed)
-#   5. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
-#   6. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
+#   1. Oldest "review"      PR (draft + dispatch:qa-done)
+#   2. Oldest "verify"      PR (draft, CI completed and failed)
+#   3. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
+#   4. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
 #      by a live Claude session, and which is not already closed by a non-draft
 #      (ready) PR (#920), resolved to a startable open leaf (an issue whose
 #      entire open-leaf subtree is owned by live sessions is skipped, exactly as
@@ -437,15 +435,10 @@ fi
 # level. The companion classifier that *applies* these labels is ref-ready
 # SKILL.md Step 6; keep the two label sets in sync.
 #
-# Disambiguation: the `security` *topic* label here is distinct from two other
-# uses of the word "security" in this workflow, kept apart by exact-match
-# resolution (three separate namespaces):
-#   1. the `security` entry in PHASE_PRIORITY below — a within-category
-#      phase-ladder rung, not a topic; and
-#   2. the `dispatch:security-reviewed` phase label — a `dispatch:*` workflow
-#      marker, not a topic.
-# A bare `security` label means topic; only PHASE_PRIORITY reads it as a phase,
-# and only the `dispatch:`-prefixed form is a phase label.
+# Disambiguation: the `security` *topic* label here is its own namespace, kept
+# apart from any `dispatch:*` workflow marker by exact-match resolution. A bare
+# `security` label means topic; only the `dispatch:`-prefixed form is a phase
+# label, and the single review phase has no `security` rung in PHASE_PRIORITY.
 TOPIC_CATEGORIES=(security bug "testing infrastructure" dispatch budget)
 CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
 # Same priority list as a JSON array, for category_of_labels' jq filter.
@@ -487,7 +480,7 @@ declare -A FIRST_PR
 declare -A FIRST_ISSUE
 
 # Within-category phase ladder, highest priority first.
-PHASE_PRIORITY=(security review code-review verify)
+PHASE_PRIORITY=(review verify)
 
 while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "$pr_num" ]] && continue

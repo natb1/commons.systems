@@ -636,40 +636,40 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "draft + green + no label → qa" "qa" "$result"
 teardown
 
-# 6. Draft + green + dispatch:qa-done → code-review
-echo "Test: draft + green + dispatch:qa-done → code-review"
+# 6. Draft + green + dispatch:qa-done → review
+echo "Test: draft + green + dispatch:qa-done → review"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:qa-done → code-review" "code-review" "$result"
+assert_eq "draft + green + dispatch:qa-done → review" "review" "$result"
 teardown
 
-# 7. Draft + green + dispatch:code-reviewed → review
-echo "Test: draft + green + dispatch:code-reviewed → review"
-setup
-printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:code-reviewed"}]' "$GREEN_ROLLUP")" \
-  > "$STUB_DIR/pr-list-full.json"
-result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:code-reviewed → review" "review" "$result"
-teardown
-
-# 8. Draft + green + dispatch:reviewed → security
-echo "Test: draft + green + dispatch:reviewed → security"
+# 7. Draft + green + dispatch:reviewed → review (idempotent re-entry)
+echo "Test: draft + green + dispatch:reviewed → review (idempotent re-entry)"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:reviewed"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:reviewed → security" "security" "$result"
+assert_eq "draft + green + dispatch:reviewed → review (idempotent)" "review" "$result"
 teardown
 
-# 9. Draft + green + dispatch:security-reviewed → security (re-entry)
-echo "Test: draft + green + dispatch:security-reviewed → security (re-entry)"
+# 8. Draft + green + legacy dispatch:code-reviewed → review (in-flight tolerance)
+echo "Test: draft + green + legacy dispatch:code-reviewed → review"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:code-reviewed"}]' "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "draft + green + legacy dispatch:code-reviewed → review" "review" "$result"
+teardown
+
+# 9. Draft + green + legacy dispatch:security-reviewed → review (in-flight tolerance)
+echo "Test: draft + green + legacy dispatch:security-reviewed → review"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:security-reviewed → security (re-entry)" "security" "$result"
+assert_eq "draft + green + legacy dispatch:security-reviewed → review" "review" "$result"
 teardown
 
 # 10. Non-draft PR → done
@@ -1208,30 +1208,26 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "done PRs skipped; help-wanted issue returned" "issue 33" "$result"
 teardown
 
-# 8. security is the top non-QA tier: it beats review, code-review, and verify.
-echo "Test: security beats review/code-review/verify"
+# 8. review is the top non-QA tier: it beats verify.
+echo "Test: review beats verify"
 setup
-SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
-REVIEW_LABELS='[{"name":"dispatch:code-reviewed"}]'
-CODE_REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
+REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
 UNION='['
 UNION+="$(make_pr_union 10 "10-verify" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
-UNION+="$(make_pr_union 20 "20-code-review" "2024-01-02T00:00:00Z" "true" "$CODE_REVIEW_LABELS" "$GREEN_ROLLUP")"','
-UNION+="$(make_pr_union 30 "30-review" "2024-01-03T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
-UNION+="$(make_pr_union 40 "40-security" "2024-01-04T00:00:00Z" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"
+UNION+="$(make_pr_union 30 "30-review" "2024-01-03T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"
 UNION+=']'
 setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "security beats review/code-review/verify" "pr 40 40-security security" "$result"
+assert_eq "review beats verify" "pr 30 30-review review" "$result"
 teardown
 
 # 9. Within one phase, the oldest PR wins.
 echo "Test: within same phase, oldest PR wins"
 setup
 # Two review-phase PRs; PR 30 is older.
-REVIEW_LABELS='[{"name":"dispatch:code-reviewed"}]'
+REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
 UNION='['
 UNION+="$(make_pr_union 30 "30-review-a" "2024-01-01T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
 UNION+="$(make_pr_union 31 "31-review-b" "2024-01-02T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"
@@ -1272,9 +1268,9 @@ teardown
 # 11. --qa mode returns only the oldest QA PR (ignores non-QA PRs).
 echo "Test: --qa mode ignores non-QA PRs and returns oldest QA PR"
 setup
-SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
+REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
 UNION='['
-UNION+="$(make_pr_union 10 "10-security" "2024-01-01T00:00:00Z" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"','
+UNION+="$(make_pr_union 10 "10-review" "2024-01-01T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
 UNION+="$(make_pr_union 20 "20-qa-old" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"','
 UNION+="$(make_pr_union 30 "30-qa-new" "2024-01-03T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"
 UNION+=']'
@@ -1282,7 +1278,7 @@ setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
-assert_eq "--qa returns oldest QA PR (ignores security PR)" "pr 20 20-qa-old" "$result"
+assert_eq "--qa returns oldest QA PR (ignores review PR)" "pr 20 20-qa-old" "$result"
 teardown
 
 # 12. waiting PR is skipped in favor of a help-wanted issue.
@@ -1536,16 +1532,16 @@ count=$(wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ')
 assert_eq "exactly one gh pr list call regardless of PR count" "1" "$count"
 teardown
 
-# 22. A code-review-phase PR winning emits the code-review phase on the result line.
-echo "Test: code-review PR winner → pr <n> <branch> code-review"
+# 22. A review-phase PR winning emits the review phase on the result line.
+echo "Test: review PR winner → pr <n> <branch> review"
 setup
-CODE_REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
-UNION='['"$(make_pr_union 25 "25-code-review-me" "2024-01-01T00:00:00Z" "true" "$CODE_REVIEW_LABELS" "$GREEN_ROLLUP")"']'
+REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
+UNION='['"$(make_pr_union 25 "25-review-me" "2024-01-01T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "code-review PR winner emits phase" "pr 25 25-code-review-me code-review" "$result"
+assert_eq "review PR winner emits phase" "pr 25 25-review-me review" "$result"
 teardown
 
 # 23. A lone QA PR with no help-wanted issue emits the qa phase on the result line.
@@ -1752,12 +1748,12 @@ teardown
 #      skipped every priority PR and the selector fell through to the
 #      help-wanted issue, violating the priority order. After the fix only the
 #      live-session-owned PR (#898) is skipped; the oldest remaining
-#      security-phase priority PR (#895) wins.
+#      review-phase priority PR (#895) wins.
 echo "Test: orphan-worktree bug+priority PRs still beat a no-worktree help-wanted issue (#905)"
 setup
 UNION='['
-UNION+="$(make_pr_union 898 "898-security" "2026-05-20T00:00:00Z" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP" '[{"number":896}]')"','
-UNION+="$(make_pr_union 895 "895-security" "2026-05-21T00:00:00Z" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP" '[{"number":806}]')"','
+UNION+="$(make_pr_union 898 "898-review" "2026-05-20T00:00:00Z" "true" '[{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP" '[{"number":896}]')"','
+UNION+="$(make_pr_union 895 "895-review" "2026-05-21T00:00:00Z" "true" '[{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP" '[{"number":806}]')"','
 UNION+="$(make_pr_union 893 "893-qa" "2026-05-22T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":892}]')"','
 UNION+="$(make_pr_union 883 "883-qa" "2026-05-23T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":879}]')"
 UNION+=']'
@@ -1767,12 +1763,12 @@ setup_union_pr_list "$UNION"
 printf '%s\n' '[{"number":896,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":806,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":892,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":879,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":886,"createdAt":"2026-05-02T00:00:00Z","labels":[{"name":"bug"},{"name":"help wanted"}]}]' \
   > "$STUB_DIR/issue-list.json"
 # Worktrees exist for all four PR branches; none for issue 886.
-printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/898-security\nHEAD a1\nbranch refs/heads/898-security\n\nworktree /worktrees/895-security\nHEAD a2\nbranch refs/heads/895-security\n\nworktree /worktrees/893-qa\nHEAD a3\nbranch refs/heads/893-qa\n\nworktree /worktrees/883-qa\nHEAD a4\nbranch refs/heads/883-qa\n\n' \
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/898-review\nHEAD a1\nbranch refs/heads/898-review\n\nworktree /worktrees/895-review\nHEAD a2\nbranch refs/heads/895-review\n\nworktree /worktrees/893-qa\nHEAD a3\nbranch refs/heads/893-qa\n\nworktree /worktrees/883-qa\nHEAD a4\nbranch refs/heads/883-qa\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 # Only #898's worktree has a live session; #895/#893/#883 are orphans.
-select_target_fake_claude "898-security"
+select_target_fake_claude "898-review"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "orphan priority PRs not skipped; oldest security priority PR wins" "pr 895 895-security security" "$result"
+assert_eq "orphan priority PRs not skipped; oldest review priority PR wins" "pr 895 895-review review" "$result"
 teardown
 
 # 30f. A PR closing a `security` issue outranks a PR closing a `bug` issue, even
@@ -3207,28 +3203,12 @@ assert_eq "qa applies dispatch:qa-done" \
 assert_eq "qa: no gh label create when label exists" "absent" "$(label_create_state)"
 teardown
 
-echo "Test: code-review → dispatch:code-reviewed (apply only, no label create)"
-setup
-"$TMPDIR_TEST/dispatch-complete-phase" 25 code-review
-assert_eq "code-review applies dispatch:code-reviewed" \
-  "pr edit 25 --add-label dispatch:code-reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
-assert_eq "code-review: no gh label create when label exists" "absent" "$(label_create_state)"
-teardown
-
 echo "Test: review → dispatch:reviewed (apply only, no label create)"
 setup
 "$TMPDIR_TEST/dispatch-complete-phase" 30 review
 assert_eq "review applies dispatch:reviewed" \
   "pr edit 30 --add-label dispatch:reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
 assert_eq "review: no gh label create when label exists" "absent" "$(label_create_state)"
-teardown
-
-echo "Test: security → dispatch:security-reviewed (apply only, no label create)"
-setup
-"$TMPDIR_TEST/dispatch-complete-phase" 40 security
-assert_eq "security applies dispatch:security-reviewed" \
-  "pr edit 40 --add-label dispatch:security-reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
-assert_eq "security: no gh label create when label exists" "absent" "$(label_create_state)"
 teardown
 
 # Label missing: the apply fails "not found", so the script creates the
@@ -11375,7 +11355,7 @@ exit 1
 FAKE
 chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-phase"
 echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
-echo "phase=code-review" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+echo "phase=review" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
@@ -12181,8 +12161,8 @@ restore_setup() {
     "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts" \
     "$TMPDIR_TEST/bin" \
     "$STUB_DIR"
-  for skill in plan-implement verify-pr qa-fix office-hours code-review-fix \
-               review-fix security-review-fix dispatch-worker \
+  for skill in plan-implement verify-pr qa-fix office-hours \
+               review-fix dispatch-worker \
                dispatch-resolve-conflict; do
     mkdir -p "$TMPDIR_TEST/.claude/skills/$skill"
     cat > "$TMPDIR_TEST/.claude/skills/$skill/SKILL.md" <<EOF
@@ -12365,7 +12345,7 @@ restore_teardown
 
 # --- Test 3: qa → qa-fix body, no ARGUMENTS ---------------------------------
 # qa now routes to /qa-fix (the autonomous QA phase skill), which — like
-# /code-review-fix — resolves its target from the worktree and takes no arg.
+# /review-fix — resolves its target from the worktree and takes no arg.
 echo "Test: restore-dispatch-skill phase=qa → qa-fix body, no ARGUMENTS"
 restore_setup
 set_agents_name "903-foo"
@@ -12467,35 +12447,6 @@ else
 fi
 restore_teardown
 
-# --- Test 4: code-review → code-review-fix body, no ARGUMENTS ----------------
-echo "Test: restore-dispatch-skill phase=code-review → code-review-fix body, no ARGUMENTS"
-restore_setup
-set_agents_name "903-foo"
-echo "code-review" > "$STUB_DIR/current-phase.txt"
-output=$(run_restore)
-TOTAL=$((TOTAL + 1))
-expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/code-review-fix"
-if [[ "$output" == *"$expected_dir"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: code-review: base directory line emitted"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: code-review: base directory line emitted"
-  echo "    output: $output"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"RESTORE_MARKER_code-review-fix"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: code-review: SKILL.md body marker emitted"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: code-review: SKILL.md body marker emitted"
-fi
-TOTAL=$((TOTAL + 1))
-if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
-  PASS=$((PASS + 1)); echo "  PASS: code-review: no ARGUMENTS line"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: code-review: no ARGUMENTS line"
-  echo "    output: $output"
-fi
-restore_teardown
-
 # --- Test 5: review → review-fix body, no ARGUMENTS --------------------------
 echo "Test: restore-dispatch-skill phase=review → review-fix body, no ARGUMENTS"
 restore_setup
@@ -12521,35 +12472,6 @@ if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
   PASS=$((PASS + 1)); echo "  PASS: review: no ARGUMENTS line"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: review: no ARGUMENTS line"
-  echo "    output: $output"
-fi
-restore_teardown
-
-# --- Test 6: security → security-review-fix body, no ARGUMENTS ---------------
-echo "Test: restore-dispatch-skill phase=security → security-review-fix body, no ARGUMENTS"
-restore_setup
-set_agents_name "903-foo"
-echo "security" > "$STUB_DIR/current-phase.txt"
-output=$(run_restore)
-TOTAL=$((TOTAL + 1))
-expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/security-review-fix"
-if [[ "$output" == *"$expected_dir"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: security: base directory line emitted"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: security: base directory line emitted"
-  echo "    output: $output"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"RESTORE_MARKER_security-review-fix"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: security: SKILL.md body marker emitted"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: security: SKILL.md body marker emitted"
-fi
-TOTAL=$((TOTAL + 1))
-if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
-  PASS=$((PASS + 1)); echo "  PASS: security: no ARGUMENTS line"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: security: no ARGUMENTS line"
   echo "    output: $output"
 fi
 restore_teardown
@@ -12711,9 +12633,7 @@ declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/qa-fix/SKILL.md"]=0
   [".claude/skills/office-hours/SKILL.md"]=0
   [".claude/skills/plan-implement/SKILL.md"]=0
-  [".claude/skills/code-review-fix/SKILL.md"]=0
   [".claude/skills/review-fix/SKILL.md"]=0
-  [".claude/skills/security-review-fix/SKILL.md"]=0
   [".claude/skills/verify-pr/SKILL.md"]=0
   [".claude/skills/implement-unit/SKILL.md"]=0
   [".claude/skills/commit-merge-push/SKILL.md"]=0
@@ -13866,11 +13786,11 @@ sel_tick_setup
 cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
 echo called >> "$TMPDIR_TEST/logs/select-target.log"
-echo "pr 660 660-some-branch code-review"
+echo "pr 660 660-some-branch review"
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_sel_tick)
-assert_eq "pr: decision line" "pr 660 660-some-branch code-review 1" \
+assert_eq "pr: decision line" "pr 660 660-some-branch review 1" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "pr: lock held (our session)" "select-tick-session" \
   "$(cat "$DISPATCH_LOCK_FILE")"
@@ -15102,7 +15022,7 @@ tick_teardown
 # --- pr <num> <branch> <phase> <gap> → derives N, materialize queue ----------
 echo "Test: dispatch-tick pr → derives N from branch, materialize queue --gap"
 tick_setup
-export TICK_DECISION="pr 660 660-some-branch code-review 3" TICK_TOKEN="propagate"
+export TICK_DECISION="pr 660 660-some-branch review 3" TICK_TOKEN="propagate"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "pr: exit 0" "0" "$rc"
 assert_eq "pr: materialize argv (N=660 from branch prefix)" "660 queue --gap 3" \
