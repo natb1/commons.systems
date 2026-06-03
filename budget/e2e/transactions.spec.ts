@@ -247,6 +247,8 @@ test.describe("transactions", () => {
     const filterInput = page.locator("#sankey-category-filter");
     await filterInput.fill("Food");
     await filterInput.blur();
+    // count() is a one-shot snapshot with no auto-wait; poll until the
+    // blur-triggered filter re-render settles before reading the count.
     await expect.poll(async () => visibleRows.count()).toBeLessThan(countBefore);
     const countAfter = await visibleRows.count();
     expect(countAfter).toBeGreaterThan(0);
