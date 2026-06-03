@@ -5711,6 +5711,96 @@ jit_label=$(printf '%s' "$out" | jq -r '.jits[0].label')
 assert_eq "valid jit.json label" "jit:test-chore" "$jit_label"
 config_teardown
 
+# --- Test 2a: jit.json with a string skill field validates -------------------
+
+echo "Test: jit.json with a string skill field validates"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "digest",
+      "repo": "test-owner/test-repo",
+      "label": "jit:digest",
+      "title": "Digest",
+      "body": "Recurring digest checkpoint.",
+      "project": "test-project",
+      "remindAfterClose": "24h",
+      "dueAfterClose": "48h",
+      "debounce": "1h",
+      "skill": "digest"
+    }
+  ]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>/dev/null); rc=$?
+assert_eq "jit.json string skill exits 0" "0" "$rc"
+skill=$(printf '%s' "$out" | jq -r '.jits[0].skill')
+assert_eq "jit.json string skill value" "digest" "$skill"
+config_teardown
+
+# --- Test 2b: jit.json with a non-string skill field is rejected -------------
+
+echo "Test: jit.json with a non-string skill field is rejected"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "digest",
+      "repo": "test-owner/test-repo",
+      "label": "jit:digest",
+      "title": "Digest",
+      "body": "Recurring digest checkpoint.",
+      "project": "test-project",
+      "skill": 123
+    }
+  ]
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>&1 1>/dev/null) || rc=$?
+assert_eq "jit.json non-string skill exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"must be a string if present"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-string skill stderr mentions 'must be a string if present'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-string skill stderr mentions 'must be a string if present'"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 2c: jit.json with a malformed (non-slug) skill field is rejected ---
+
+echo "Test: jit.json with a malformed (non-slug) skill field is rejected"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "digest",
+      "repo": "test-owner/test-repo",
+      "label": "jit:digest",
+      "title": "Digest",
+      "body": "Recurring digest checkpoint.",
+      "project": "test-project",
+      "skill": "Digest; rm -rf /"
+    }
+  ]
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>&1 1>/dev/null) || rc=$?
+assert_eq "jit.json malformed skill exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"must be a lowercase skill-name slug"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: malformed skill stderr mentions 'must be a lowercase skill-name slug'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed skill stderr mentions 'must be a lowercase skill-name slug'"
+  echo "    stderr: $err"
+fi
+config_teardown
+
 # --- Test 3: absent file prints no-config and exits 0 ------------------------
 
 echo "Test: absent file prints no-config and exits 0"
@@ -15286,6 +15376,346 @@ assert_eq "followup: empty input → 0" "0" "$(printf '%s' "$out" | jq -r 'lengt
 # 14. Unknown/missing source → ignored
 out=$(printf '%s' '[{"source":"sonarqube","classification":"out-of-scope","security_severity_level":"high"},{"classification":"out-of-scope","severity":"critical"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
 assert_eq "followup: unknown/missing source → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# dispatch-jit-skill tests
+# ============================================================================
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   copies of dispatch-jit-skill, dispatch-config-load, lib.sh
+#   $TMPDIR_TEST/config/    synthetic config directory (DISPATCH_CONFIG_DIR)
+#   $TMPDIR_TEST/bin/       gh stub (prepended to PATH)
+#
+# DISPATCH_CONFIG_DIR is exported so dispatch-config-load never touches the
+# real dispatch.config/ directory and does not require a git repo.
+
+jit_skill_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/config" "$TMPDIR_TEST/bin"
+
+  cp "$SCRIPT_DIR/dispatch-jit-skill" "$TMPDIR_TEST/scripts/dispatch-jit-skill"
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  # dispatch-config-load sources lib.sh via its SCRIPT_DIR — sits alongside it.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-jit-skill" \
+           "$TMPDIR_TEST/scripts/dispatch-config-load"
+
+  # gh stub: handles `issue view <num> --repo <repo> --json labels`.
+  # Reads the labels fixture from $TMPDIR_TEST/labels.json; defaults to empty.
+  # Unknown invocations → stderr + exit 1.
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+args="$*"
+TREE="$(cd "$(dirname "$0")/.." && pwd)"
+case "$args" in
+  issue\ view\ *\ --repo\ *\ --json\ labels)
+    if [[ -f "$TREE/labels.json" ]]; then
+      cat "$TREE/labels.json"
+    else
+      echo '{"labels":[]}'
+    fi
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  SAVED_PATH_JIT="$PATH"
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+}
+
+jit_skill_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  export PATH="$SAVED_PATH_JIT"
+  unset DISPATCH_CONFIG_DIR
+}
+
+# --- Test: dispatch-jit-skill returns the configured skill for a matching jit label ---
+
+echo "Test: dispatch-jit-skill returns the configured skill for a matching jit label"
+jit_skill_setup
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "digest",
+      "repo": "some-owner/some-repo",
+      "label": "jit:digest",
+      "title": "Digest",
+      "body": "Recurring digest checkpoint.",
+      "project": "example-project",
+      "remindAfterClose": "24h",
+      "dueAfterClose": "48h",
+      "debounce": "1h",
+      "skill": "digest"
+    }
+  ]
+}
+EOF
+cat > "$TMPDIR_TEST/labels.json" <<'EOF'
+{"labels":[{"name":"jit:digest"},{"name":"help wanted"}]}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-skill" some-owner/some-repo 42); rc=$?
+assert_eq "dispatch-jit-skill: matched jit with skill exits 0" "0" "$rc"
+assert_eq "dispatch-jit-skill: matched jit prints skill name" "digest" "$out"
+jit_skill_teardown
+
+# --- Test: dispatch-jit-skill prints nothing when the matched jit defines no skill ---
+
+echo "Test: dispatch-jit-skill prints nothing when the matched jit defines no skill"
+jit_skill_setup
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "plain",
+      "repo": "some-owner/some-repo",
+      "label": "jit:plain",
+      "title": "Plain reminder",
+      "body": "A plain jit with no skill field.",
+      "project": "example-project",
+      "remindAfterClose": "12h",
+      "dueAfterClose": "24h",
+      "debounce": "1h"
+    }
+  ]
+}
+EOF
+cat > "$TMPDIR_TEST/labels.json" <<'EOF'
+{"labels":[{"name":"jit:plain"}]}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-skill" some-owner/some-repo 7); rc=$?
+assert_eq "dispatch-jit-skill: matched jit without skill exits 0" "0" "$rc"
+assert_eq "dispatch-jit-skill: matched jit without skill prints nothing" "" "$out"
+jit_skill_teardown
+
+# --- Test: dispatch-jit-skill prints nothing with no jit.json (no-config) ---
+
+echo "Test: dispatch-jit-skill prints nothing with no jit.json (no-config)"
+jit_skill_setup
+# No jit.json written into config/ — dispatch-config-load returns "no-config".
+# The labels fixture is present but should never be consulted.
+cat > "$TMPDIR_TEST/labels.json" <<'EOF'
+{"labels":[{"name":"jit:digest"}]}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-skill" some-owner/some-repo 99); rc=$?
+assert_eq "dispatch-jit-skill: no-config exits 0" "0" "$rc"
+assert_eq "dispatch-jit-skill: no-config prints nothing" "" "$out"
+jit_skill_teardown
+
+# --- Test: dispatch-jit-skill prints nothing when the issue has no jit:* label ---
+
+echo "Test: dispatch-jit-skill prints nothing when issue has no jit:* label"
+jit_skill_setup
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "digest",
+      "repo": "some-owner/some-repo",
+      "label": "jit:digest",
+      "title": "Digest",
+      "body": "Recurring digest checkpoint.",
+      "project": "example-project",
+      "remindAfterClose": "24h",
+      "dueAfterClose": "48h",
+      "debounce": "1h",
+      "skill": "digest"
+    }
+  ]
+}
+EOF
+cat > "$TMPDIR_TEST/labels.json" <<'EOF'
+{"labels":[{"name":"help wanted"},{"name":"bug"}]}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-skill" some-owner/some-repo 55); rc=$?
+assert_eq "dispatch-jit-skill: no jit:* label exits 0" "0" "$rc"
+assert_eq "dispatch-jit-skill: no jit:* label prints nothing" "" "$out"
+jit_skill_teardown
+
+# --- Test: dispatch-jit-skill prints nothing when the jit:* label matches no jit entry ---
+
+echo "Test: dispatch-jit-skill prints nothing when the jit:* label matches no jit entry"
+jit_skill_setup
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "digest",
+      "repo": "some-owner/some-repo",
+      "label": "jit:digest",
+      "title": "Digest",
+      "body": "Recurring digest checkpoint.",
+      "project": "example-project",
+      "remindAfterClose": "24h",
+      "dueAfterClose": "48h",
+      "debounce": "1h",
+      "skill": "digest"
+    }
+  ]
+}
+EOF
+# The issue carries jit:stale, which no jit entry defines — the jq select emits
+# nothing and the script exits 0 with empty output.
+cat > "$TMPDIR_TEST/labels.json" <<'EOF'
+{"labels":[{"name":"jit:stale"},{"name":"help wanted"}]}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-skill" some-owner/some-repo 66); rc=$?
+assert_eq "dispatch-jit-skill: unmatched jit label exits 0" "0" "$rc"
+assert_eq "dispatch-jit-skill: unmatched jit label prints nothing" "" "$out"
+jit_skill_teardown
+
+# --- Test: dispatch-jit-skill rejects a <repo> that is not owner/repo ---------
+
+echo "Test: dispatch-jit-skill rejects a malformed <repo> argument"
+jit_skill_setup
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-jit-skill" "--config /tmp/evil" 42 2>&1 1>/dev/null) || rc=$?
+assert_eq "dispatch-jit-skill: malformed repo exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"must be owner/repo"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: malformed repo stderr mentions 'must be owner/repo'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed repo stderr mentions 'must be owner/repo'"
+  echo "    stderr: $err"
+fi
+jit_skill_teardown
+
+# dispatch-digest-window tests
+# ============================================================================
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   copy of dispatch-digest-window
+#   $TMPDIR_TEST/bin/       gh stub (prepended to PATH)
+#
+# The gh stub handles the two queries dispatch-digest-window issues:
+#   issue view <num> --repo <repo> --json createdAt,labels  → cat issue.json
+#   issue list --repo <repo> --label <label> --state closed --limit <n> --json number,closedAt
+#                                                            → cat closed.json
+# Fixtures default to a minimal jit issue and an empty closed list.
+
+digest_window_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
+
+  cp "$SCRIPT_DIR/dispatch-digest-window" "$TMPDIR_TEST/scripts/dispatch-digest-window"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-digest-window"
+
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+args="$*"
+TREE="$(cd "$(dirname "$0")/.." && pwd)"
+case "$args" in
+  issue\ view\ *\ --repo\ *\ --json\ createdAt,labels)
+    if [[ -f "$TREE/issue.json" ]]; then
+      cat "$TREE/issue.json"
+    else
+      echo '{"createdAt":"2026-01-01T00:00:00Z","labels":[{"name":"jit:digest"}]}'
+    fi
+    ;;
+  issue\ list\ --repo\ *\ --label\ *\ --state\ closed\ --limit\ *\ --json\ number,closedAt)
+    if [[ -f "$TREE/closed.json" ]]; then
+      cat "$TREE/closed.json"
+    else
+      echo '[]'
+    fi
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  SAVED_PATH_DIGEST="$PATH"
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+}
+
+digest_window_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  export PATH="$SAVED_PATH_DIGEST"
+}
+
+# --- Test: prints the prior closed digest closedAt (steady state) ---
+
+echo "Test: dispatch-digest-window prints the prior closed digest closedAt (steady state)"
+digest_window_setup
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"jit:digest"}]}
+EOF
+cat > "$TMPDIR_TEST/closed.json" <<'EOF'
+[{"number":10,"closedAt":"2026-05-20T00:00:00Z"},{"number":11,"closedAt":"2026-05-25T12:00:00Z"}]
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-digest-window" some-owner/some-repo 30); rc=$?
+assert_eq "dispatch-digest-window: steady state exits 0" "0" "$rc"
+assert_eq "dispatch-digest-window: steady state prints max prior closedAt" "2026-05-25T12:00:00Z" "$out"
+digest_window_teardown
+
+# --- Test: falls back to createdAt on cold start (no prior closed) ---
+
+echo "Test: dispatch-digest-window falls back to createdAt on cold start (no prior closed)"
+digest_window_setup
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-01T09:00:00Z","labels":[{"name":"jit:digest"}]}
+EOF
+# No closed.json — the stub's default empty list applies.
+out=$("$TMPDIR_TEST/scripts/dispatch-digest-window" some-owner/some-repo 40); rc=$?
+assert_eq "dispatch-digest-window: cold start exits 0" "0" "$rc"
+assert_eq "dispatch-digest-window: cold start prints createdAt" "2026-06-01T09:00:00Z" "$out"
+digest_window_teardown
+
+# --- Test: excludes the issue's own closedAt ---
+
+echo "Test: dispatch-digest-window excludes the issue's own closedAt"
+digest_window_setup
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"jit:digest"}]}
+EOF
+# Issue 30 is itself closed with a later closedAt than the real prior (20).
+# The script must ignore its own entry and anchor on the prior digest's closedAt.
+cat > "$TMPDIR_TEST/closed.json" <<'EOF'
+[{"number":20,"closedAt":"2026-05-15T00:00:00Z"},{"number":30,"closedAt":"2026-05-28T00:00:00Z"}]
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-digest-window" some-owner/some-repo 30); rc=$?
+assert_eq "dispatch-digest-window: exclude-self exits 0" "0" "$rc"
+assert_eq "dispatch-digest-window: exclude-self ignores own closedAt" "2026-05-15T00:00:00Z" "$out"
+digest_window_teardown
+
+# --- Test: exits 1 when the issue carries no jit:* label ---
+
+echo "Test: dispatch-digest-window exits 1 when the issue carries no jit:* label"
+digest_window_setup
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]}
+EOF
+# Capture with the set -e-safe pattern: a bare `cmd; rc=$?` would abort the
+# suite when the command exits nonzero.
+out=$("$TMPDIR_TEST/scripts/dispatch-digest-window" some-owner/some-repo 50 2>/dev/null) && rc=0 || rc=$?
+assert_eq "dispatch-digest-window: no jit:* label exits 1" "1" "$rc"
+assert_eq "dispatch-digest-window: no jit:* label prints nothing on stdout" "" "$out"
+digest_window_teardown
+
+# --- Test: rejects a <repo> that is not owner/repo ---
+
+echo "Test: dispatch-digest-window rejects a malformed <repo> argument"
+digest_window_setup
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-digest-window" "--config /tmp/evil" 30 2>&1 1>/dev/null) || rc=$?
+assert_eq "dispatch-digest-window: malformed repo exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"must be owner/repo"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: malformed repo stderr mentions 'must be owner/repo'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed repo stderr mentions 'must be owner/repo'"
+  echo "    stderr: $err"
+fi
+digest_window_teardown
 
 # ============================================================================
 # summary

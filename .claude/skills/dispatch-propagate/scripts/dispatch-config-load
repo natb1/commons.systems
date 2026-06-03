@@ -77,6 +77,10 @@
 # Timing-field semantics (cadence vs check-script) are validated by the JIT
 # engine, not here. This loader only checks types.
 #
+#   skill   string — optional; names a skill to run when this jit's reminder
+#           is selected. Absent → the reminder is summarized and the job
+#           stops. Not a timing field.
+#
 # Example (see jit.example.json):
 #   {
 #     "jits": [
@@ -280,12 +284,21 @@ case "$CONFIG_TYPE" in
           else
             empty
           end),
-          # optional timing fields — must be strings if present
-          (["remindAfterClose","dueAfterClose","dueAfterCreate","debounce"] |
+          # optional string fields — must be strings if present
+          (["remindAfterClose","dueAfterClose","dueAfterCreate","debounce","skill"] |
           .[] |
           . as $field |
           if ($item | has($field)) and ($item[$field] | type) != "string" then
             "jits[\($idx)]: \($field) must be a string if present, got \($item[$field] | type)"
+          else
+            empty
+          end),
+          # skill, if present, names a skill the jit-reminder path invokes via
+          # the Skill tool — constrain it to a skill-name slug so a malformed
+          # value is rejected at config load rather than reaching the caller.
+          (if ($item | has("skill")) and (($item.skill | type) == "string")
+              and (($item.skill | test("^[a-z][a-z0-9-]*$")) | not) then
+            "jits[\($idx)]: skill must be a lowercase skill-name slug (^[a-z][a-z0-9-]*$), got \"\($item.skill)\""
           else
             empty
           end)
