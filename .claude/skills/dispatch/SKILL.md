@@ -1,6 +1,6 @@
 ---
 name: dispatch
-description: Manual entry point for the dispatch chain — runs one headless dispatch-tick and relays its output live. `/dispatch <N>` targets one issue/PR and skips the concurrency gate; bare `/dispatch` runs the gated fan-out.
+description: Manual entry point for the dispatch chain — runs one headless dispatch-tick and relays its output live. `/dispatch <N>` targets one issue/PR and skips the concurrency gate; bare `/dispatch` runs an ungated fan-out, exempt from the autonomous bounds — it fans out over the eligible queue and is never capped.
 ---
 
 # Dispatch (manual shim)
@@ -8,7 +8,10 @@ description: Manual entry point for the dispatch chain — runs one headless dis
 Run the headless tick and relay its output live:
 
 ```bash
-.claude/skills/dispatch-propagate/scripts/dispatch-tick [<N>]
+# bare /dispatch (manual fan-out):
+.claude/skills/dispatch-propagate/scripts/dispatch-tick --manual
+# /dispatch <N> (explicit target):
+.claude/skills/dispatch-propagate/scripts/dispatch-tick <N>
 ```
 
 Run with `dangerouslyDisableSandbox: true` and `timeout: 600000` — the tick's
@@ -31,8 +34,11 @@ waiting (reseed scheduled), conflict-resolver job spawned, etc.
 processes that one target (gap=1). A human forcing a specific target is never
 paced by the autonomous budget.
 
-`/dispatch` (no argument): the tick runs the gated fan-out — gap = TARGET_N −
-live busy workers — respecting the autonomous pacing budget.
+`/dispatch` (no argument): a bare manual `/dispatch` is exempt from BOTH the
+pace-curve budget (`dispatch-target-workers`, which a budget pause can drop to 0)
+AND the `MAX_WORKERS` concurrency ceiling — it fans out one worker per eligible
+distinct target until the queue is exhausted and NEVER emits `concurrency-cap`.
+The only bound is queue availability.
 
 ## Selection lock
 
