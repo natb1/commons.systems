@@ -103,7 +103,7 @@ Local `dispatch.config/jit.json` declares recurring "just-in-time" issues. The e
 2. Open-issue guard — skip if the previous jit issue for that key is still open.
 3. Create the next issue when its `remindAfterClose` (or `dueAfterCreate`) cadence has elapsed.
 
-Every jit issue carries a `jit:<key>` label and is tracked in its configured GitHub project. Jit-reminders that produce dispatch-queue work surface ahead of the queue ladder; jit-reminders that run as office-hours sessions are covered in the [Office Hours Queue](#office-hours-queue) spine. See #769.
+Every jit issue carries a `jit:<key>` label and is tracked in its configured GitHub project. Jit-reminders that produce dispatch-queue work surface ahead of the queue ladder; jit-reminders that run as office-hours sessions are covered in the [Office Hours Queue](#office-hours-queue) spine. A jit may carry an optional `skill` field: when selected, the reminder job runs that named skill as an office-hours session instead of only summarizing; absent → summarize-and-stop (unchanged). See #769.
 
 With no `dispatch.config/jit.json` present the engine is a no-op.
 
