@@ -43,7 +43,7 @@
 # phase — before considering any `priority=0` item, so a `priority` item in a
 # low-ranked topic still outranks every non-priority item in a higher-ranked
 # topic. Within one priority level, topic categories run highest priority first:
-#   security → bug → testing infrastructure → dispatch → other
+#   security → bug → testing infrastructure → dispatch → budget → other
 # and within each (priority, topic) bucket the phase ladder runs innermost.
 #
 # A PR's category is the highest-priority topic among the labels of every issue
@@ -446,7 +446,7 @@ fi
 #      marker, not a topic.
 # A bare `security` label means topic; only PHASE_PRIORITY reads it as a phase,
 # and only the `dispatch:`-prefixed form is a phase label.
-TOPIC_CATEGORIES=(security bug "testing infrastructure" dispatch)
+TOPIC_CATEGORIES=(security bug "testing infrastructure" dispatch budget)
 CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
 # Same priority list as a JSON array, for category_of_labels' jq filter.
 TOPIC_CATEGORIES_JSON=$(printf '%s\n' "${TOPIC_CATEGORIES[@]}" | jq -Rcn '[inputs]')
