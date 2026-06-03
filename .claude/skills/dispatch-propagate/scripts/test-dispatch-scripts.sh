@@ -9892,6 +9892,13 @@ case "$args" in
       echo "0"
     fi
     ;;
+  pr\ list\ *)
+    # The hook fetches the open-PR list once and shares it via DISPATCH_PR_LIST.
+    # The ci-ready / phase fakes read $STUB_DIR files, not the list, so an empty
+    # array is sufficient to model a successful fetch.
+    echo "$args" >> "$STUB_DIR/gh-pr-list.log"
+    echo "[]"
+    ;;
   issue\ edit\ *--add-label*)
     mode="ok"
     [[ -f "$STUB_DIR/issue-edit-mode" ]] && mode=$(cat "$STUB_DIR/issue-edit-mode")

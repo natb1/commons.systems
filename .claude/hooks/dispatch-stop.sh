@@ -114,14 +114,23 @@ self_close() {
 # Resolve PR (may be empty for implement-phase before the draft PR opens).
 PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
 
+# Fetch the open-PR list once and share it with both the readiness gate and the
+# phase derivation below via DISPATCH_PR_LIST, avoiding a redundant `gh pr list`
+# per predicate. On fetch failure DISPATCH_PR_LIST stays empty and each script
+# falls back to its own self-fetch.
+DISPATCH_PR_LIST=$(gh pr list --state open \
+  --json number,headRefName,isDraft,statusCheckRollup,labels 2>/dev/null) \
+  || DISPATCH_PR_LIST=""
+export DISPATCH_PR_LIST
+
 # Early not-ready gate (marker-independent). If the target's PR CI is back in
 # progress (no verdict available), hand the issue back to the router without
 # parking or self-closing — the next tick re-gates it once CI concludes. This
 # covers the TOCTOU case where a push restarted CI between selection and session
 # end. The gate runs BEFORE dispatch-phase so CURRENT_PHASE is only derived for a
-# target that is confirmed ready — preventing a race where dispatch-phase exits 3
-# (pending) but CI becomes ready before dispatch-ci-ready runs, which would leave
-# CURRENT_PHASE="" and cause a spurious Branch D office-hours park.
+# target confirmed ready: without this early gate, a pending dispatch-phase would
+# exit 3, leave CURRENT_PHASE="" via the `|| CURRENT_PHASE=""` fallback below, and
+# drive a spurious Branch D office-hours park.
 if ! "$SCRIPTS/dispatch-ci-ready" "$ISSUE_NUM" >/dev/null 2>&1; then
   spawn_router
   exit 0
