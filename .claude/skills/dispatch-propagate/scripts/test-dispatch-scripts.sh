@@ -14845,6 +14845,108 @@ assert_eq "dispatch-jit-skill: no jit:* label exits 0" "0" "$rc"
 assert_eq "dispatch-jit-skill: no jit:* label prints nothing" "" "$out"
 jit_skill_teardown
 
+# dispatch-digest-window tests
+# ============================================================================
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   copy of dispatch-digest-window
+#   $TMPDIR_TEST/bin/       gh stub (prepended to PATH)
+#
+# The gh stub handles the two queries dispatch-digest-window issues:
+#   issue view <num> --repo <repo> --json createdAt,labels  → cat issue.json
+#   issue list --repo <repo> --label <label> --state closed --json number,closedAt
+#                                                            → cat closed.json
+# Fixtures default to a minimal jit issue and an empty closed list.
+
+digest_window_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
+
+  cp "$SCRIPT_DIR/dispatch-digest-window" "$TMPDIR_TEST/scripts/dispatch-digest-window"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-digest-window"
+
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+args="$*"
+TREE="$(cd "$(dirname "$0")/.." && pwd)"
+case "$args" in
+  issue\ view\ *\ --repo\ *\ --json\ createdAt,labels)
+    if [[ -f "$TREE/issue.json" ]]; then
+      cat "$TREE/issue.json"
+    else
+      echo '{"createdAt":"2026-01-01T00:00:00Z","labels":[{"name":"jit:digest"}]}'
+    fi
+    ;;
+  issue\ list\ --repo\ *\ --label\ *\ --state\ closed\ --json\ number,closedAt)
+    if [[ -f "$TREE/closed.json" ]]; then
+      cat "$TREE/closed.json"
+    else
+      echo '[]'
+    fi
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  SAVED_PATH_DIGEST="$PATH"
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+}
+
+digest_window_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  export PATH="$SAVED_PATH_DIGEST"
+}
+
+# --- Test: prints the prior closed digest closedAt (steady state) ---
+
+echo "Test: dispatch-digest-window prints the prior closed digest closedAt (steady state)"
+digest_window_setup
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"jit:digest"}]}
+EOF
+cat > "$TMPDIR_TEST/closed.json" <<'EOF'
+[{"number":10,"closedAt":"2026-05-20T00:00:00Z"},{"number":11,"closedAt":"2026-05-25T12:00:00Z"}]
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-digest-window" some-owner/some-repo 30); rc=$?
+assert_eq "dispatch-digest-window: steady state exits 0" "0" "$rc"
+assert_eq "dispatch-digest-window: steady state prints max prior closedAt" "2026-05-25T12:00:00Z" "$out"
+digest_window_teardown
+
+# --- Test: falls back to createdAt on cold start (no prior closed) ---
+
+echo "Test: dispatch-digest-window falls back to createdAt on cold start (no prior closed)"
+digest_window_setup
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-01T09:00:00Z","labels":[{"name":"jit:digest"}]}
+EOF
+# No closed.json — the stub's default empty list applies.
+out=$("$TMPDIR_TEST/scripts/dispatch-digest-window" some-owner/some-repo 40); rc=$?
+assert_eq "dispatch-digest-window: cold start exits 0" "0" "$rc"
+assert_eq "dispatch-digest-window: cold start prints createdAt" "2026-06-01T09:00:00Z" "$out"
+digest_window_teardown
+
+# --- Test: excludes the issue's own closedAt ---
+
+echo "Test: dispatch-digest-window excludes the issue's own closedAt"
+digest_window_setup
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"jit:digest"}]}
+EOF
+# Issue 30 is itself closed with a later closedAt than the real prior (20).
+# The script must ignore its own entry and anchor on the prior digest's closedAt.
+cat > "$TMPDIR_TEST/closed.json" <<'EOF'
+[{"number":20,"closedAt":"2026-05-15T00:00:00Z"},{"number":30,"closedAt":"2026-05-28T00:00:00Z"}]
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-digest-window" some-owner/some-repo 30); rc=$?
+assert_eq "dispatch-digest-window: exclude-self exits 0" "0" "$rc"
+assert_eq "dispatch-digest-window: exclude-self ignores own closedAt" "2026-05-15T00:00:00Z" "$out"
+digest_window_teardown
+
 # ============================================================================
 # summary
 # ============================================================================

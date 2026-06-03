@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# dispatch-digest-window — print the window-start ISO-8601 timestamp for a
+# digest jit issue: the closedAt of the most-recent prior closed issue carrying
+# the same jit: label (steady state), or the digest issue's own createdAt when
+# no prior closed issue exists (cold start).
+#
+# Usage:
+#   dispatch-digest-window <repo> <num>
+#
+#   <repo>   GitHub repo in "owner/repo" form.
+#   <num>    Digest issue number (digits only).
+#
+# Stdout protocol:
+#   <iso-8601 timestamp>   the window-start time.
+#
+# Exit codes:
+#   0  window start printed.
+#   1  the issue carries no jit: label — it is not a jit issue.
+#   2  usage error (missing or invalid arguments).
+#   non-zero   propagated from gh on hard error.
+#
+# Note: callers invoke this with dangerouslyDisableSandbox: true — it calls
+# gh (see .claude/rules/sandbox.md).
+
+set -euo pipefail
+
+# ---- Step 0: parse arguments ------------------------------------------------
+
+REPO="${1:-}"
+NUM="${2:-}"
+
+if [[ -z "$REPO" || -z "$NUM" ]]; then
+  echo "error: usage: dispatch-digest-window <repo> <num>" >&2
+  exit 2
+fi
+
+if [[ ! "$NUM" =~ ^[0-9]+$ ]]; then
+  echo "error: usage: dispatch-digest-window <repo> <num> — <num> must be digits" >&2
+  exit 2
+fi
+
+# ---- Step 1: fetch the digest issue's label and createdAt -------------------
+
+ISSUE_JSON=$(gh issue view "$NUM" --repo "$REPO" --json createdAt,labels)
+
+JIT_LABEL=$(printf '%s' "$ISSUE_JSON" \
+  | jq -r '.labels[].name | select(startswith("jit:"))' \
+  | head -n1)
+
+if [[ -z "$JIT_LABEL" ]]; then
+  echo "error: issue $REPO#$NUM carries no jit: label — not a jit issue" >&2
+  exit 1
+fi
+
+CREATED_AT=$(printf '%s' "$ISSUE_JSON" | jq -r '.createdAt')
+
+# ---- Step 2: find the newest prior closed issue with the same jit label -----
+# Exclude <num> itself: a digest issue may be closed mid-run, but it must never
+# anchor the window on its own closedAt. Guard the empty list so jq yields the
+# empty string rather than the literal "null".
+
+CLOSED_JSON=$(gh issue list --repo "$REPO" --label "$JIT_LABEL" \
+  --state closed --json number,closedAt)
+
+PRIOR_CLOSED_AT=$(printf '%s' "$CLOSED_JSON" \
+  | jq -r --arg num "$NUM" \
+    'map(select(.number != ($num | tonumber)))
+     | (max_by(.closedAt) // {}) | .closedAt // empty')
+
+# ---- Step 3: print the window start -----------------------------------------
+
+if [[ -n "$PRIOR_CLOSED_AT" ]]; then
+  printf '%s\n' "$PRIOR_CLOSED_AT"   # steady state
+else
+  printf '%s\n' "$CREATED_AT"        # cold start
+fi
