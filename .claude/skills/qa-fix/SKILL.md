@@ -6,8 +6,7 @@ description: QA phase — merge origin/main, run the autonomous portion of user-
 # QA and Fix
 
 The `qa` phase of the issue workflow, dispatched by `/dispatch-propagate`. This is
-the **autonomous** half of user-acceptance QA — sibling to `/code-review-fix`,
-`/review-fix`, and `/security-review-fix`.
+the **autonomous** half of user-acceptance QA — sibling to `/review-fix`.
 
 QA was historically a single user-triggered skill (`/dispatch-qa`) that bundled
 two responsibilities: the autonomous part (select target, plan items, run
@@ -242,7 +241,7 @@ Otherwise run all steps in order.
    `<issue>-…` branch issue number — the PR↔issue linkage was established earlier
    in the tick, so this session must **not** pause to re-confirm the mismatch.
    This skill **owns** its `dispatch:qa-done` label — parallel to how
-   `/code-review-fix` owns `dispatch:code-reviewed` — so `/dispatch-propagate`
+   `/review-fix` owns `dispatch:reviewed` — so `/dispatch-propagate`
    does not apply the label after this skill returns.
 
    Then write the `phase-completed` marker as the final action. Atomic via

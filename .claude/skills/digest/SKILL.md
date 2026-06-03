@@ -53,9 +53,8 @@ Each PR's `closingIssuesReferences` lists the issues it closed. Identify which
 PRs are dispatch-queue work via two signals — both stamped onto a PR as it
 advances through the chain:
 
-- **The `dispatch:*` labels** accumulated on the PR — `dispatch:security-reviewed`,
-  `dispatch:reviewed`, `dispatch:code-reviewed`, `dispatch:qa-done`. A PR that
-  rode the chain carries one or more of these.
+- **The `dispatch:*` labels** accumulated on the PR — `dispatch:reviewed`,
+  `dispatch:qa-done`. A PR that rode the chain carries one or more of these.
 - **Membership on the commons.systems project board** — the dispatch chain
   tracks its work there.
 

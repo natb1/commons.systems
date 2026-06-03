@@ -178,13 +178,12 @@ labels; anything with no topic label is `other`.
 Within each category the ladder is (highest first; within a tier, oldest PR
 wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
 whose closing issue is `blocked_by` an open issue is skipped; not-ready PRs
-(no CI verdict yet, per `dispatch-ci-ready`) are skipped entirely): oldest `security` PR → oldest
-`review` PR → oldest `code-review` PR → oldest `verify` PR → oldest `help wanted`
-issue → oldest `qa` PR. Non-QA PRs are ranked closest-to-done first —
-`security` is the closest-to-done non-QA tier; `help wanted` issues rank below
-all non-QA PRs but above QA PRs. A queue with no topic-labeled items resolves
-entirely to `other`, reproducing the flat ladder; `empty` when no category
-yields a task.
+(no CI verdict yet, per `dispatch-ci-ready`) are skipped entirely): oldest `review` PR → oldest
+`verify` PR → oldest `help wanted` issue → oldest `qa` PR. Non-QA PRs are
+ranked closest-to-done first — `review` is the closest-to-done non-QA tier;
+`help wanted` issues rank below all non-QA PRs but above QA PRs. A queue with
+no topic-labeled items resolves entirely to `other`, reproducing the flat
+ladder; `empty` when no category yields a task.
 
 A `help wanted` issue is also skipped when its entire open-leaf subtree is
 worktree-conflicted — every reachable open leaf already has a worktree owned by
