@@ -10930,8 +10930,7 @@ export PATH="$SAVED_PATH"
 #   PROJECT_ROOT=...
 #   WORKTREE_PATH="$PROJECT_ROOT/worktrees/<branch>"
 #   git worktree add -b <branch> "$WORKTREE_PATH" origin/main
-#   direnv allow "$WORKTREE_PATH"
-#   direnv exec "$WORKTREE_PATH" true
+#   # direnv/npm provisioning and merge-main are deferred to the worker (#1047)
 #   (cd "$WORKTREE_PATH" && sync-issue-context <N>)
 #   dispatch-finalize-selection "$WORKTREE_PATH"   # cds in, writes marker (no release — #945)
 #   dispatch-spawn-worker <N> "$WORKTREE_PATH"
@@ -10970,13 +10969,6 @@ esac
 STUB
   chmod +x "$TMPDIR_TEST/bin/git"
 
-  # Fake `direnv` — record its argv only.
-  cat > "$TMPDIR_TEST/bin/direnv" <<STUB
-#!/usr/bin/env bash
-echo "\$*" >> "$TMPDIR_TEST/logs/direnv.log"
-STUB
-  chmod +x "$TMPDIR_TEST/bin/direnv"
-
   # Fake `sync-issue-context` — record cwd + argv.
   cat > "$TMPDIR_TEST/bin/sync-issue-context" <<STUB
 #!/usr/bin/env bash
@@ -11001,10 +10993,12 @@ router_smoke_teardown() {
   export PATH="$SAVED_PATH"
 }
 
-echo "Test: Step 5 create + Step 6 sequence invokes git, direnv, sync, finalize-selection, and spawn-worker with the right args"
+echo "Test: Step 5 create + Step 6 sequence invokes git, sync, finalize-selection, and spawn-worker with the right args"
 router_smoke_setup
 
 # Run the documented shell sequence inline. The variable names match SKILL.md.
+# direnv/npm provisioning and dispatch-merge-main are deferred to the worker
+# (#1047/#1044) and are NOT part of the held-lock router sequence.
 BRANCH="839-test"
 ISSUE_NUM="839"
 GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir)
@@ -11035,8 +11029,6 @@ SMOKE_ORIG_PWD="$PWD"
 cd "$ROUTER_CWD"
 
 git worktree add -b "$BRANCH" "$WORKTREE_PATH" origin/main
-direnv allow "$WORKTREE_PATH"
-direnv exec "$WORKTREE_PATH" true
 (cd "$WORKTREE_PATH" && sync-issue-context "$ISSUE_NUM")
 "$SCRIPT_DIR/dispatch-finalize-selection" "$WORKTREE_PATH"
 dispatch-spawn-worker "$ISSUE_NUM" "$WORKTREE_PATH"
@@ -11048,12 +11040,6 @@ cd "$SMOKE_ORIG_PWD"
 assert_eq "git worktree add args" \
   "worktree add -b 839-test $WORKTREE_PATH origin/main" \
   "$(grep '^worktree add' "$TMPDIR_TEST/logs/git.log")"
-assert_eq "direnv allow args" \
-  "allow $WORKTREE_PATH" \
-  "$(grep '^allow' "$TMPDIR_TEST/logs/direnv.log")"
-assert_eq "direnv exec args" \
-  "exec $WORKTREE_PATH true" \
-  "$(grep '^exec' "$TMPDIR_TEST/logs/direnv.log")"
 assert_eq "recovery marker created in target worktree" "1" \
   "$([ -f "$WORKTREE_PATH/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
 # Regression for #896: the wrapper must not leak the marker into the
@@ -12895,6 +12881,107 @@ assert_eq "fetch failure → exit 1" "1" "$rc"
 merge_main_teardown
 
 # ============================================================================
+# dispatch-provision-worktree (#1047)
+# ============================================================================
+# dispatch-provision-worktree runs direnv allow/exec then execs into
+# dispatch-merge-main. It resolves dispatch-merge-main via its OWN SCRIPT_DIR,
+# so to intercept the merge we copy the script under test into a tmpdir next to
+# a FAKE dispatch-merge-main (the "copy script alongside fakes" pattern used by
+# mat_setup). A PATH-shim provides a fake `direnv` that logs its argv; the fake
+# dispatch-merge-main logs its argv and exits with a controllable RC
+# (PROV_MERGE_RC, default 0).
+echo ""
+echo "============================================================"
+echo "dispatch-provision-worktree tests (#1047)"
+echo "============================================================"
+
+# Sets PROV_TMPDIR, PROV_SCRIPT, PROV_DIRENV_LOG, PROV_MERGE_LOG.
+prov_setup() {
+  PROV_TMPDIR=$(mktemp -d)
+  PROV_DIRENV_LOG="$PROV_TMPDIR/direnv.log"
+  PROV_MERGE_LOG="$PROV_TMPDIR/merge-main.log"
+
+  # Copy the script under test alongside a fake dispatch-merge-main, so the
+  # script's SCRIPT_DIR-relative exec hits the fake.
+  cp "$SCRIPT_DIR/dispatch-provision-worktree" "$PROV_TMPDIR/dispatch-provision-worktree"
+  cat > "$PROV_TMPDIR/dispatch-merge-main" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$PROV_MERGE_LOG"
+exit \${PROV_MERGE_RC:-0}
+FAKE
+  chmod +x "$PROV_TMPDIR/dispatch-provision-worktree" "$PROV_TMPDIR/dispatch-merge-main"
+
+  # PATH-shim a fake direnv that logs its argv (in its own bin dir so only direnv
+  # is shadowed).
+  mkdir -p "$PROV_TMPDIR/bin"
+  cat > "$PROV_TMPDIR/bin/direnv" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$PROV_DIRENV_LOG"
+exit 0
+FAKE
+  chmod +x "$PROV_TMPDIR/bin/direnv"
+
+  PROV_SCRIPT="$PROV_TMPDIR/dispatch-provision-worktree"
+  export PATH="$PROV_TMPDIR/bin:$SAVED_PATH"
+}
+
+prov_teardown() {
+  export PATH="$SAVED_PATH"
+  rm -rf "$PROV_TMPDIR"
+  unset PROV_TMPDIR PROV_SCRIPT PROV_DIRENV_LOG PROV_MERGE_LOG PROV_MERGE_RC
+}
+
+# direnv argv capture + worktree forwarded to dispatch-merge-main (happy run).
+echo "Test: provision invokes direnv allow/exec then forwards to merge-main"
+prov_setup
+WT="/home/n8/natb1/commons.systems/worktrees/77-example"
+out=$("$PROV_SCRIPT" "$WT" 2>&1) && rc=0 || rc=$?
+assert_eq "happy run → exit 0" "0" "$rc"
+direnv_lines=$(cat "$PROV_DIRENV_LOG")
+assert_eq "direnv allow <wt> captured" "allow $WT" "$(sed -n '1p' "$PROV_DIRENV_LOG")"
+assert_eq "direnv exec <wt> true captured" "exec $WT true" "$(sed -n '2p' "$PROV_DIRENV_LOG")"
+assert_eq "worktree forwarded to merge-main" "$WT" "$(cat "$PROV_MERGE_LOG")"
+prov_teardown
+
+# Exit-code passthrough from the fake dispatch-merge-main.
+echo "Test: merge RC 0 → provision exits 0"
+prov_setup
+PROV_MERGE_RC=0 "$PROV_SCRIPT" "/wt/a" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "merge RC 0 → exit 0" "0" "$rc"
+prov_teardown
+
+echo "Test: merge RC 3 (conflict) → provision exits 3"
+prov_setup
+PROV_MERGE_RC=3 "$PROV_SCRIPT" "/wt/a" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "merge RC 3 → exit 3" "3" "$rc"
+prov_teardown
+
+echo "Test: merge RC 1 (fetch/other) → provision exits 1"
+prov_setup
+PROV_MERGE_RC=1 "$PROV_SCRIPT" "/wt/a" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "merge RC 1 → exit 1" "1" "$rc"
+prov_teardown
+
+# Usage errors — exit 2 (the script's own guards, before any exec).
+echo "Test: no arg → exit 2"
+prov_setup
+"$PROV_SCRIPT" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "no arg → exit 2" "2" "$rc"
+prov_teardown
+
+echo "Test: flag-shaped arg → exit 2"
+prov_setup
+"$PROV_SCRIPT" "-x" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "flag-shaped arg → exit 2" "2" "$rc"
+prov_teardown
+
+echo "Test: extra arg → exit 2"
+prov_setup
+"$PROV_SCRIPT" "/wt/a" extra >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "extra arg → exit 2" "2" "$rc"
+prov_teardown
+
+# ============================================================================
 # dispatch-select-tick tests (#919)
 # ============================================================================
 # The orchestrator runs against the REAL dispatch-acquire-lock (so lock-file
@@ -13340,7 +13427,7 @@ sel_tick_teardown
 # / dispatch-acquire-lock (so the marker-write + lock-release are genuine and
 # asserted via DISPATCH_LOCK_FILE and the on-disk marker) and FAKE sub-scripts
 # for every guard / resolve / phase / budget / spawn step (so each terminal
-# token is driven deterministically). git/direnv/gh are PATH-shimmed.
+# token is driven deterministically). git/gh are PATH-shimmed.
 echo ""
 echo "=== dispatch-materialize-spawn ==="
 
@@ -13395,14 +13482,6 @@ FAKE
 #!/usr/bin/env bash
 echo "\${MAT_WT_DECISION:-create \$1-test}"
 FAKE
-  cat > "$TMPDIR_TEST/dispatch-merge-main" <<FAKE
-#!/usr/bin/env bash
-echo "\$*" >> "$TMPDIR_TEST/logs/merge-main.log"
-if [[ -n "\${MAT_MERGE_CONFLICT_N:-}" && "\$1" == *"/\${MAT_MERGE_CONFLICT_N}-test" ]]; then
-  exit 3
-fi
-exit \${MAT_MERGE_RC:-0}
-FAKE
   cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
 read -r -a Q <<< "\${MAT_QUEUE:-}"
@@ -13447,22 +13526,13 @@ FAKE
 #!/usr/bin/env bash
 echo "cwd=\$PWD argv=\$*" >> "$TMPDIR_TEST/logs/sync-issue-context.log"
 FAKE
-  # Fake dispatch-spawn-job: the conflict-resolver spawn primitive. Logs its full
-  # argv and prints `spawned`; MAT_RESOLVER_RC controls the exit code (a non-zero
-  # value models a spawn that never registered).
-  cat > "$TMPDIR_TEST/dispatch-spawn-job" <<FAKE
-#!/usr/bin/env bash
-echo "\$*" >> "$TMPDIR_TEST/logs/spawn-job.log"
-echo spawned
-exit \${MAT_RESOLVER_RC:-0}
-FAKE
   chmod +x "$TMPDIR_TEST"/dispatch-find-pr "$TMPDIR_TEST"/dispatch-trace-leaf \
     "$TMPDIR_TEST"/dispatch-check-blockers "$TMPDIR_TEST"/dispatch-apply-office-hours \
-    "$TMPDIR_TEST"/dispatch-resolve-worktree "$TMPDIR_TEST"/dispatch-merge-main \
+    "$TMPDIR_TEST"/dispatch-resolve-worktree \
     "$TMPDIR_TEST"/dispatch-phase "$TMPDIR_TEST"/dispatch-ci-ready \
     "$TMPDIR_TEST"/dispatch-select-target \
     "$TMPDIR_TEST"/dispatch-spawn-worker "$TMPDIR_TEST"/dispatch-schedule-target-reseed \
-    "$TMPDIR_TEST"/dispatch-spawn-job "$TMPDIR_TEST"/sync-issue-context
+    "$TMPDIR_TEST"/sync-issue-context
 
   mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
   cat > "$TMPDIR_TEST/bin/git" <<STUB
@@ -13474,16 +13544,12 @@ case "\$*" in
   *) : ;;
 esac
 STUB
-  cat > "$TMPDIR_TEST/bin/direnv" <<STUB
-#!/usr/bin/env bash
-echo "\$*" >> "$TMPDIR_TEST/logs/direnv.log"
-STUB
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 # Only the explicit closed-check uses gh here.
 echo "${MAT_ISSUE_STATE:-OPEN}"
 STUB
-  chmod +x "$TMPDIR_TEST/bin/git" "$TMPDIR_TEST/bin/direnv" "$TMPDIR_TEST/bin/gh"
+  chmod +x "$TMPDIR_TEST/bin/git" "$TMPDIR_TEST/bin/gh"
   export PATH="$TMPDIR_TEST/bin:$SAVED_PATH"
 }
 
@@ -13492,9 +13558,9 @@ mat_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
-    MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_MERGE_RC MAT_PHASE \
-    MAT_CI_READY MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE MAT_MERGE_CONFLICT_N \
-    MAT_RESEED_OUT MAT_RESEED_RC MAT_RESOLVER_RC
+    MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_PHASE \
+    MAT_CI_READY MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE \
+    MAT_RESEED_OUT MAT_RESEED_RC
 }
 
 run_mat() { "$TMPDIR_TEST/dispatch-materialize-spawn" "$@" 2>/dev/null; }
@@ -13680,72 +13746,16 @@ assert_eq "conflict: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- merge conflict → spawn /dispatch-resolve-conflict bg job, propagate (#982)
-# dispatch-merge-main exits 3 on a conflicting merge; the headless router can no
-# longer run the opus subagent itself, so it spawns a /dispatch-resolve-conflict
-# bg job named for the worktree basename (which locks the worktree AND consumes a
-# concurrency slot) and emits `propagate`. The lock is released, no phase worker
-# is spawned, and the resolver's own session owns the resolve/escalate verdict.
-echo "Test: materialize-spawn merge conflict → spawn resolver + propagate"
-mat_setup
-export MAT_MERGE_RC=3
-out=$(run_mat 839 queue)
-assert_eq "merge-conflict: terminal token" "propagate" \
-  "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "merge-conflict: resolver spawned with name+cwd+prompt" \
-  "--name 839-test --cwd $TMPDIR_TEST/project/worktrees/839-test /dispatch-resolve-conflict 839 $TMPDIR_TEST/project/worktrees/839-test" \
-  "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
-assert_eq "merge-conflict: office-hours NOT applied" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/apply-office-hours.log" ] && echo 1 || echo 0)"
-assert_eq "merge-conflict: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
-assert_eq "merge-conflict: no phase worker spawned" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
-mat_teardown
-
-# --- merge conflict + resolver spawn fails → office-hours park + notify (#982) -
-# When dispatch-spawn-job exits non-zero (the resolver never registered), the
-# single-target path parks the issue on office-hours and emits `notify
-# spawn-failed` so the variance is surfaced.
-echo "Test: materialize-spawn merge conflict + resolver spawn fails → notify spawn-failed"
-mat_setup
-export MAT_MERGE_RC=3
-export MAT_RESOLVER_RC=1
-out=$(run_mat 839 queue)
-assert_eq "resolver-fail: terminal token" "notify spawn-failed" \
-  "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "resolver-fail: issue 839 parked via office-hours" "1" \
-  "$(grep -c '^839 ' "$TMPDIR_TEST/logs/apply-office-hours.log")"
-assert_eq "resolver-fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
-assert_eq "resolver-fail: no phase worker spawned" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
-mat_teardown
-
-# --- merge fetch/other failure → exit 2 + lock released (#944) ----------------
-# A non-conflict dispatch-merge-main failure (exit 1) is a hard error: release
-# the lock and exit 2, do not park or spawn.
-echo "Test: materialize-spawn merge non-conflict failure → exit 2 + lock released"
-mat_setup
-export MAT_MERGE_RC=1
-err=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
-case "$err" in
-  *"dispatch-merge-main failed"*"EXIT=2") status="ok" ;;
-  *) status="bad: $err" ;;
-esac
-assert_eq "merge fail: error + exit 2" "ok" "$status"
-assert_eq "merge fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
-assert_eq "merge fail: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
-mat_teardown
-
-# --- merge clean → merge ran before spawn (#944) -----------------------------
-# On the happy path dispatch-merge-main is invoked with the resolved worktree
-# path before the worker spawns.
-echo "Test: materialize-spawn happy path invokes dispatch-merge-main pre-spawn"
+# --- dispatch-merge-main NOT called by materialize-spawn (#1047) -------------
+# direnv/npm provisioning and dispatch-merge-main are deferred to the worker's
+# startup (dispatch-provision-worktree). The router's held-lock loop must not
+# call dispatch-merge-main — verify no merge-main.log is created on a happy run.
+echo "Test: materialize-spawn happy path does NOT call dispatch-merge-main (#1047)"
 mat_setup
 out=$(run_mat 839 queue)
-assert_eq "merge clean: terminal token" "propagate" \
+assert_eq "no-merge-main: terminal token" "propagate" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "merge clean: dispatch-merge-main was called" "1" \
+assert_eq "no-merge-main: dispatch-merge-main NOT called" "0" \
   "$([ -f "$TMPDIR_TEST/logs/merge-main.log" ] && echo 1 || echo 0)"
 mat_teardown
 
@@ -14014,45 +14024,6 @@ out=$(run_mat 839 queue --gap 5)
 assert_eq "exhaust: spawn count" "2" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
 assert_eq "exhaust: summary" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 2 of gap 5 (queue exhausted)')"
 assert_eq "exhaust: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-mat_teardown
-
-# --- fan-out: gap 5, target #508 (3rd) merge-conflicts → resolver, counted -----
-# A mid-loop merge conflict now spawns a /dispatch-resolve-conflict bg job that
-# fills a gap slot (counted toward `spawned`), so the loop continues and the gap
-# fills: 839,720,991,644 spawn phase workers (4) + 508 spawns a resolver (1) = 5.
-echo "Test: materialize-spawn --gap 5 mid-loop merge-conflict spawns resolver and counts it"
-mat_setup
-export MAT_QUEUE="720 508 991 644"
-export MAT_MERGE_CONFLICT_N=508
-out=$(run_mat 839 queue --gap 5)
-# 839,720,991,644 spawn phase workers (4); 508 spawns a resolver via spawn-job.
-assert_eq "midconflict: phase-worker spawn count" "4" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
-assert_eq "midconflict: resolver spawned for 508 (name 508-test)" "1" \
-  "$(grep -c -- '--name 508-test ' "$TMPDIR_TEST/logs/spawn-job.log")"
-assert_eq "midconflict: 508 NOT parked via office-hours" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/apply-office-hours.log" ] && echo 1 || echo 0)"
-assert_eq "midconflict: resolver detail line" "1" \
-  "$(printf '%s\n' "$out" | grep -c 'spawned conflict-resolver #508')"
-assert_eq "midconflict: summary 5 of gap 5" "1" \
-  "$(printf '%s\n' "$out" | grep -c 'spawned 5 of gap 5')"
-assert_eq "midconflict: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-mat_teardown
-
-# --- fan-out: gap 3, all targets merge-conflict → all spawn resolvers, propagate
-# Every target now spawns a /dispatch-resolve-conflict bg job (counted toward the
-# gap) instead of parking, so 0 phase workers but 3 resolvers fill the gap →
-# terminal token `propagate`, not `drain`.
-echo "Test: materialize-spawn --gap 3 all merge-conflict → resolvers spawned, propagate"
-mat_setup
-export MAT_QUEUE="720 508"
-export MAT_MERGE_RC=3
-out=$(run_mat 839 queue --gap 3)
-assert_eq "allconflict: zero phase-worker spawns" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ' || echo 0)"
-assert_eq "allconflict: 3 resolvers spawned via spawn-job" "3" \
-  "$(wc -l < "$TMPDIR_TEST/logs/spawn-job.log" | tr -d ' ')"
-assert_eq "allconflict: summary 3 of gap 3" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 3 of gap 3')"
-assert_eq "allconflict: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
 mat_teardown
 
 # --- fan-out: all spawns fail → 0 spawned, drain, stderr surfaces each one ---
