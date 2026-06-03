@@ -14106,10 +14106,10 @@ assert_eq "unbounded: terminal token" "propagate" "$(printf '%s\n' "$out" | tail
 assert_eq "unbounded: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
-# --- fan-out: --gap unbounded with empty queue → drain -----------------------
-# When the queue is empty on the first target's first selection pass, the
-# unbounded fan-out emits drain (nothing spawned), just like a bounded run.
-echo "Test: materialize-spawn --gap unbounded empty queue after first → drain"
+# --- fan-out: --gap unbounded first target spawned, queue then empty → propagate ---
+# When the first target (the passed-in N) is spawned and dispatch-select-target
+# then returns empty, the unbounded fan-out emits propagate (one spawn completed).
+echo "Test: materialize-spawn --gap unbounded first spawn then empty queue → propagate"
 mat_setup
 # MAT_QUEUE is unset → select-target returns empty immediately after first target.
 out=$(run_mat 839 queue --gap unbounded)
@@ -14353,12 +14353,12 @@ tick_teardown
 echo "Test: dispatch-tick --manual forwards --manual to select-tick"
 tick_setup
 export TICK_DECISION="issue 707 unbounded" TICK_TOKEN="propagate"
-out=$(run_tick --manual)
+out=$(run_tick --manual) && rc=0 || rc=$?
 assert_eq "manual-fwd: select-tick received --manual flag" "--manual" \
   "$(cat "$TMPDIR_TEST/logs/select-tick.log")"
 assert_eq "manual-fwd: materialize called with unbounded gap" "707 queue --gap unbounded" \
   "$(cat "$TMPDIR_TEST/logs/materialize.log")"
-assert_eq "manual-fwd: exit 0" "0" "$?"
+assert_eq "manual-fwd: exit 0" "0" "$rc"
 tick_teardown
 
 # --- --manual + explicit number → usage error, exit 2 -----------------------
