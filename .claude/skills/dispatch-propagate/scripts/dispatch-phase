@@ -2,8 +2,15 @@
 # Print the current workflow phase for an issue or branch.
 # Usage: dispatch-phase <issue-num|branch>
 #
-# Prints exactly one phase name to stdout:
-#   implement | verify | waiting | qa | code-review | review | security | done
+# Prints exactly one actionable phase name to stdout:
+#   implement | verify | qa | code-review | review | security | done
+#
+# This script answers ONLY "which phase skill runs." It does NOT report CI
+# readiness. When a draft PR's CI has no verdict yet (checks still in progress),
+# there is no actionable phase: the script prints an error to stderr and exits 3
+# (a distinct non-zero code) rather than emitting a phase. Callers MUST gate on
+# dispatch-ci-ready first — only invoke dispatch-phase for a target that
+# dispatch-ci-ready reports as `ready`.
 #
 # Argument resolution:
 #   - All-digit arg: treated as an issue number. The matching PR is the one
@@ -17,6 +24,9 @@
 #     self-issued gh pr list. Must include the fields
 #     number,headRefName,isDraft,statusCheckRollup,labels.
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 ARG="${1:-}"
 if [[ -z "$ARG" ]]; then
@@ -58,81 +68,25 @@ if [[ "$IS_DRAFT" == "false" ]]; then
   exit 0
 fi
 
-# Draft PR — check CI via statusCheckRollup.
+# Draft PR — classify CI via statusCheckRollup.
 ROLLUP=$(printf '%s' "$PR" | jq '.statusCheckRollup')
-ROLLUP_LEN=$(printf '%s' "$ROLLUP" | jq 'length')
+VERDICT=$(dispatch_classify_rollup "$ROLLUP")
 
-# Empty rollup — checks not yet started, nothing actionable.
-if [[ "$ROLLUP_LEN" -eq 0 ]]; then
-  echo "waiting"
-  exit 0
-fi
-
-# Check for any failing entries first: a concluded failure is actionable even
-# while other checks are still running, so a mixed rollup (some failing, some
-# pending) resolves to verify, not waiting.
-FAILING=$(printf '%s' "$ROLLUP" | jq '
-  map(
-    if has("conclusion") then
-      # Check run: failing conclusions
-      (.conclusion // "") as $c |
-      ($c == "FAILURE" or $c == "TIMED_OUT" or $c == "CANCELLED" or
-       $c == "ACTION_REQUIRED" or $c == "STARTUP_FAILURE" or $c == "STALE")
-    else
-      # Status context: failing states
-      (.state // "") as $s |
-      ($s == "FAILURE" or $s == "ERROR")
-    end
-  ) | any
-')
-
-if [[ "$FAILING" == "true" ]]; then
+# A concluded failure is actionable: it resolves to verify (a mixed rollup with
+# some failing and some pending also classifies as failing — failure wins).
+if [[ "$VERDICT" == "failing" ]]; then
   echo "verify"
   exit 0
 fi
 
-# Check for any pending entries (check runs not yet COMPLETED, or status
-# contexts with state PENDING/EXPECTED). No failures found above, so pending
-# means checks are still running — nothing actionable yet.
-PENDING=$(printf '%s' "$ROLLUP" | jq '
-  map(
-    if has("conclusion") then
-      # Check run: pending if status != COMPLETED
-      .status != "COMPLETED"
-    else
-      # Status context: pending if state is PENDING or EXPECTED
-      (.state == "PENDING" or .state == "EXPECTED")
-    end
-  ) | any
-')
-
-if [[ "$PENDING" == "true" ]]; then
-  echo "waiting"
-  exit 0
+# Pending is NOT a phase: CI has no verdict yet, so there is no actionable phase
+# skill to run. Callers must gate on dispatch-ci-ready before reaching here.
+if [[ "$VERDICT" == "pending" ]]; then
+  echo "error: no CI verdict yet for $ARG — gate on dispatch-ci-ready first" >&2
+  exit 3
 fi
 
-# All entries are passing — check that all passing conditions hold.
-# An entry passes if: check run with conclusion in {SUCCESS,NEUTRAL,SKIPPED},
-# or status context with state SUCCESS.
-ALL_PASSING=$(printf '%s' "$ROLLUP" | jq '
-  map(
-    if has("conclusion") then
-      (.conclusion // "") as $c |
-      ($c == "SUCCESS" or $c == "NEUTRAL" or $c == "SKIPPED")
-    else
-      (.state // "") == "SUCCESS"
-    end
-  ) | all
-')
-
-if [[ "$ALL_PASSING" != "true" ]]; then
-  # Non-empty rollup with no failures, no pending, but not all passing —
-  # unrecognized state, nothing actionable.
-  echo "waiting"
-  exit 0
-fi
-
-# CI is green — map the highest dispatch:* label to the next phase.
+# VERDICT == passing — CI is green; map the highest dispatch:* label to the next phase.
 # Label chain: qa-done < code-reviewed < reviewed < security-reviewed.
 # dispatch:security-reviewed is a /security-review-fix re-entry marker — it maps
 # back to "security"; the skill is idempotent and just finishes "gh pr ready".
