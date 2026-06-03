@@ -14409,6 +14409,16 @@ assert_eq "headless: synthetic id is non-empty" "1" \
 assert_eq "headless: synthetic id has headless: prefix (not a bare sentinel)" "1" \
   "$([[ "$sel_id" == headless:* ]] && echo 1 || echo 0)"
 
+# Companion: under systemd the id derives from INVOCATION_ID (the primary
+# headless path), not the bare-PID fallback the run above exercised. Set
+# INVOCATION_ID for one run and assert the synthesized id is exactly
+# headless:<INVOCATION_ID>. Fresh id logs so this run does not cross-contaminate.
+rm -f "$TMPDIR_TEST/logs/sel-id.log" "$TMPDIR_TEST/logs/mat-id.log"
+env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="inv-1054" \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1
+assert_eq "headless: id derives from INVOCATION_ID when set (systemd path)" \
+  "headless:inv-1054" "$(cat "$TMPDIR_TEST/logs/sel-id.log")"
+
 # Companion: a real session keeps its own id — the `:-` fallback never fires.
 # Fresh id logs so this run does not cross-contaminate the headless run above.
 rm -f "$TMPDIR_TEST/logs/sel-id.log" "$TMPDIR_TEST/logs/mat-id.log"
