@@ -89,6 +89,10 @@ if [[ $# -gt 0 ]]; then
     EXCLUDED["$1"]=1
     shift
   done
+  if [[ $# -gt 0 ]]; then
+    echo "error: usage: dispatch-trace-leaf <issue-num> <queue|explicit> [--exclude <n>...]" >&2
+    exit 1
+  fi
 fi
 
 # In queue mode, map each issue-number prefix to the on-disk path(s) of its
