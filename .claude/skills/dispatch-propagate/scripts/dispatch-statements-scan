@@ -209,12 +209,14 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
 
   # ---- 4c: ensure the label exists ------------------------------------------
   # Idempotent: `gh label create` exits non-zero with an "already exists"
-  # message when the label is present — tolerate ONLY that case.
+  # message when the label is present — tolerate ONLY that case. Match
+  # case-insensitively so a future gh capitalization change does not turn a
+  # benign duplicate into a hard error.
   LABEL_RC=0
   LABEL_OUT=$(gh label create "$LABEL" --repo "$REPO" --color "ededed" \
     --description "Statement parse-job issue" 2>&1) || LABEL_RC=$?
   if [[ "$LABEL_RC" -ne 0 ]]; then
-    if [[ "$LABEL_OUT" != *"already exists"* ]]; then
+    if [[ "${LABEL_OUT,,}" != *"already exists"* ]]; then
       echo "$KEY: error (gh label create failed: $LABEL_OUT)" >&2
       HARD_ERROR=1
       continue
@@ -252,7 +254,9 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
       fi
     done
   done
-  mapfile -t MATCHED < <(printf '%s\n' "${MATCHED[@]:-}" | grep -v '^$' | sort)
+  if [[ "${#MATCHED[@]}" -gt 0 ]]; then
+    mapfile -d '' -t MATCHED < <(printf '%s\0' "${MATCHED[@]}" | sort -z)
+  fi
 
   # ---- 4f: per-file dedup-and-file ------------------------------------------
   # SEEN_HASHES maps a content hash seen this run → the issue number that covers
@@ -282,7 +286,7 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
     # dedup requirement.
     SEARCH_RC=0
     SEARCH_JSON=$(gh search issues "$HASH" --repo "$REPO" --label "$LABEL" \
-      --json number,state 2>&1) || SEARCH_RC=$?
+      --limit 1 --json number,state 2>&1) || SEARCH_RC=$?
     if [[ "$SEARCH_RC" -ne 0 ]]; then
       echo "$KEY: error (gh search issues failed: $SEARCH_JSON)" >&2
       HARD_ERROR=1
