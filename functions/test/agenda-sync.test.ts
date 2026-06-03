@@ -202,6 +202,28 @@ describe("syncAgendaCore", () => {
     expect(store._docs.has("agenda/prod/items/daily-chore")).toBe(true);
   });
 
+  it("skips an issue whose jitKey would escape the items collection", async () => {
+    const store = createInMemoryFirestore();
+    const valid = makeIssue({ number: 1, jitKey: "daily-chore" });
+    const slash = makeIssue({ number: 2, jitKey: "a/b/c" });
+    const dotdot = makeIssue({ number: 3, jitKey: ".." });
+    const empty = makeIssue({ number: 4, jitKey: "" });
+
+    const result = await syncAgendaCore({
+      fetchOpenJitIssues: async () => [valid, slash, dotdot, empty],
+      firestore: store as unknown as Firestore,
+      namespace: "agenda/prod",
+      memberEmails: ["owner@example.com"],
+    });
+
+    // Only the valid key is written; the path-escaping / invalid keys are
+    // skipped before any Firestore write, so no nested doc is created.
+    expect(result.written).toBe(1);
+    expect(store._docs.has("agenda/prod/items/daily-chore")).toBe(true);
+    expect(store._docs.has("agenda/prod/items/a/b/c")).toBe(false);
+    expect([...store._docs.keys()]).toEqual(["agenda/prod/items/daily-chore"]);
+  });
+
   it("propagates memberEmails onto each written item", async () => {
     const store = createInMemoryFirestore();
     const issue = makeIssue({ number: 7, jitKey: "daily-chore" });

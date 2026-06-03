@@ -72,6 +72,24 @@ export function parseJitDueMarker(body: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+// A jitKey is the `jit:<key>` label suffix and becomes a Firestore document ID.
+// The label name is external input from the scanned repo, so guard it: a key
+// containing a slash would make `collection.doc(key)` resolve to a nested path
+// outside the items collection, and empty / `.` / `..` keys are invalid IDs.
+// Keys the JIT engine emits (e.g. `daily-chore`, `budget-review`) match this.
+const JIT_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+export function isValidJitKey(key: string): boolean {
+  return JIT_KEY_RE.test(key);
+}
+
+// Truncates a third-party HTTP response body before it enters an Error message
+// (and thus the function logs). Bounds the blast radius of a verbose or
+// reflected GitHub error response without dropping the leading diagnostic text.
+function truncateForLog(text: string, max = 200): string {
+  return text.length > max ? `${text.slice(0, max)}…[truncated]` : text;
+}
+
 export async function syncAgendaCore(deps: {
   fetchOpenJitIssues: () => Promise<JitIssue[]>;
   firestore: Firestore;
@@ -89,6 +107,13 @@ export async function syncAgendaCore(deps: {
   let skippedNoDate = 0;
 
   for (const issue of issues) {
+    if (!isValidJitKey(issue.jitKey)) {
+      console.warn(
+        `syncAgenda: issue #${issue.number} has invalid jitKey "${issue.jitKey}"; skipping`,
+      );
+      continue;
+    }
+
     if (!issue.dueAt) {
       skippedNoDate += 1;
       console.warn(
@@ -174,7 +199,7 @@ export async function mintInstallationToken(opts: {
   if (!res.ok) {
     const text = await res.text();
     throw new Error(
-      `GitHub App installation-token exchange failed: ${res.status} ${text}`,
+      `GitHub App installation-token exchange failed: ${res.status} ${truncateForLog(text)}`,
     );
   }
 
@@ -221,7 +246,9 @@ async function githubGraphQL<T>(
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`GitHub GraphQL request failed: ${res.status} ${text}`);
+    throw new Error(
+      `GitHub GraphQL request failed: ${res.status} ${truncateForLog(text)}`,
+    );
   }
 
   const json = (await res.json()) as GraphQLResponse<T>;
@@ -315,10 +342,38 @@ export const syncAgenda = onSchedule(
       return;
     }
 
+    // installationId is interpolated into the token-exchange URL path; require a
+    // bare numeric id so a misconfigured value cannot redirect the request.
+    if (!/^\d+$/.test(installationId)) {
+      console.error(
+        `syncAgenda: AGENDA_GITHUB_APP_INSTALLATION_ID "${installationId}" is not numeric; skipping run.`,
+      );
+      return;
+    }
+
+    // namespace prefixes the Firestore collection path. Pin it to the agenda
+    // app so a misconfigured value cannot write into another app's collection.
+    if (!/^agenda\/[A-Za-z0-9][A-Za-z0-9-]*$/.test(namespace)) {
+      console.error(
+        `syncAgenda: AGENDA_FIRESTORE_NAMESPACE "${namespace}" is not a valid agenda/<env> path; skipping run.`,
+      );
+      return;
+    }
+
     const memberEmails = memberEmailsStr
       .split(",")
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
+
+    // A whitespace-only AGENDA_MEMBER_EMAILS survives the truthy check above but
+    // trims to an empty owner list, which would lock the owner out of every
+    // written document — fail closed instead of writing unreadable data.
+    if (memberEmails.length === 0) {
+      console.error(
+        "syncAgenda: AGENDA_MEMBER_EMAILS resolved to an empty list; skipping run.",
+      );
+      return;
+    }
 
     const token = await mintInstallationToken({ appId, installationId, privateKey });
 
