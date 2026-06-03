@@ -13253,11 +13253,12 @@ esac
 assert_eq "removed flag → unknown flag error, exit 2" "ok" "$status"
 sel_tick_teardown
 
-# --- --manual with TARGET_N=0 (pace pause) → no concurrency-cap, unbounded gap ---
+# --- --manual with TARGET_N=0 (pace pause) → no concurrency-cap, gap=1 --------
 # A bare human-typed /dispatch is exempt from the pace-curve budget: even when
 # TARGET_N drops to 0 (budget pause) the --manual path skips the concurrency gate
-# entirely and emits an issue line with gap=unbounded, never emitting concurrency-cap.
-echo "Test: select-tick --manual with TARGET_N=0 → no concurrency-cap, unbounded gap"
+# entirely and emits an issue line with gap=1 (one gate-exempt worker), never
+# emitting concurrency-cap.
+echo "Test: select-tick --manual with TARGET_N=0 → no concurrency-cap, gap=1"
 sel_tick_setup
 export SEL_LIVE_COUNT=3 SEL_TARGET_N=0
 cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
@@ -13269,7 +13270,7 @@ chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_sel_tick --manual)
 assert_eq "manual-pace0: no concurrency-cap emitted" "0" \
   "$(printf '%s\n' "$out" | grep -cF 'concurrency-cap')"
-assert_eq "manual-pace0: decision line shows unbounded gap" "issue 707 unbounded" \
+assert_eq "manual-pace0: decision line shows gap=1 (one gate-exempt worker)" "issue 707 1" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "manual-pace0: no reseed scheduled" "0" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
@@ -13278,11 +13279,11 @@ assert_eq "manual-pace0: select-target invoked (selection ran)" "1" \
   "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
-# --- --manual with LIVE_COUNT >= MAX_WORKERS → no cap, unbounded gap ----------
+# --- --manual with LIVE_COUNT >= MAX_WORKERS → no cap, gap=1 ------------------
 # A bare human-typed /dispatch is also exempt from the MAX_WORKERS concurrency
 # ceiling: even when LIVE_COUNT exceeds the target the --manual path skips the
 # gate entirely.
-echo "Test: select-tick --manual with LIVE_COUNT >= MAX_WORKERS → no cap"
+echo "Test: select-tick --manual with LIVE_COUNT >= MAX_WORKERS → no cap, gap=1"
 sel_tick_setup
 export SEL_LIVE_COUNT=10 SEL_TARGET_N=1
 cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
@@ -13300,7 +13301,7 @@ chmod +x "$TMPDIR_TEST/dispatch-target-workers"
 out=$(run_sel_tick --manual)
 assert_eq "manual-overcap: no concurrency-cap emitted" "0" \
   "$(printf '%s\n' "$out" | grep -cF 'concurrency-cap')"
-assert_eq "manual-overcap: decision line shows unbounded gap" "issue 839 unbounded" \
+assert_eq "manual-overcap: decision line shows gap=1 (one gate-exempt worker)" "issue 839 1" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "manual-overcap: no reseed scheduled" "0" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
@@ -14088,36 +14089,19 @@ assert_eq "distinct: worktrees all unique" "3" \
   "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
 mat_teardown
 
-# --- fan-out: --gap unbounded fans out over the entire queue, summary says 'unbounded' ---
-# The bare human-typed /dispatch passes --gap unbounded; materialize-spawn fans out
-# one worker per eligible target until the queue is exhausted, with no numeric cap.
-# The summary line prints 'of gap unbounded' and the terminal token is propagate.
-echo "Test: materialize-spawn --gap unbounded fans out over whole queue"
+# --- --gap unbounded is removed → usage error exit 2 -------------------------
+# The unbounded fan-out machinery is gone (#1061): a manual /dispatch now spawns
+# exactly one gate-exempt worker (arriving as --gap 1, the single-target path),
+# and fan-out is autonomous-only. The dead `unbounded` token no longer parses —
+# it falls through to the positive-integer validation and exits 2.
+echo "Test: materialize-spawn --gap unbounded removed → usage error exit 2"
 mat_setup
-export MAT_QUEUE="720 508 991"
-out=$(run_mat 839 queue --gap unbounded)
-# 839 (first target) + 720 + 508 + 991 from the queue = 4 total spawns.
-assert_eq "unbounded: spawn count" "4" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
-assert_eq "unbounded: summary shows 'of gap unbounded'" "1" \
-  "$(printf '%s\n' "$out" | grep -cF 'of gap unbounded')"
-assert_eq "unbounded: stop reason is queue exhausted" "1" \
-  "$(printf '%s\n' "$out" | grep -cF 'queue exhausted')"
-assert_eq "unbounded: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "unbounded: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
-mat_teardown
-
-# --- fan-out: --gap unbounded first target spawned, queue then empty → propagate ---
-# When the first target (the passed-in N) is spawned and dispatch-select-target
-# then returns empty, the unbounded fan-out emits propagate (one spawn completed).
-echo "Test: materialize-spawn --gap unbounded first spawn then empty queue → propagate"
-mat_setup
-# MAT_QUEUE is unset → select-target returns empty immediately after first target.
-out=$(run_mat 839 queue --gap unbounded)
-# Only the first passed-in target (839) is spawned; select-target then returns empty.
-assert_eq "unbounded-exhaust: one spawn" "1" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
-assert_eq "unbounded-exhaust: summary shows unbounded queue exhausted" "1" \
-  "$(printf '%s\n' "$out" | grep -cF 'of gap unbounded (queue exhausted)')"
-assert_eq "unbounded-exhaust: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+err=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue --gap unbounded 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"--gap requires a positive integer"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "gap-unbounded-removed: usage error exit 2" "ok" "$status"
 mat_teardown
 
 echo "=== print_remote_access_block ==="
@@ -14343,20 +14327,20 @@ assert_eq "arg forward: select-tick got the stripped arg" "88" \
   "$(cat "$TMPDIR_TEST/logs/select-tick.log")"
 tick_teardown
 
-# --- --manual is forwarded to select-tick, unbounded fan-out, never concurrency-cap ---
+# --- --manual is forwarded to select-tick; one gate-exempt worker (gap=1) -----
 # A bare human-typed /dispatch passes --manual to dispatch-tick, which must
 # forward it to dispatch-select-tick. The fake select-tick records its argv.
-# The decision line uses 'issue <N> unbounded' (from --manual → GAP=unbounded in
-# real select-tick); here the fake select-tick emits whatever TICK_DECISION says,
-# so we set it to 'issue 707 unbounded' to drive the materialize call as the
-# real path would.
+# The decision line uses 'issue <N> 1' (from --manual → GAP=1 in real
+# select-tick, #1061); here the fake select-tick emits whatever TICK_DECISION
+# says, so we set it to 'issue 707 1' to drive the materialize call as the real
+# path would — a manual run spawns one worker, not an unbounded fan-out.
 echo "Test: dispatch-tick --manual forwards --manual to select-tick"
 tick_setup
-export TICK_DECISION="issue 707 unbounded" TICK_TOKEN="propagate"
+export TICK_DECISION="issue 707 1" TICK_TOKEN="propagate"
 out=$(run_tick --manual) && rc=0 || rc=$?
 assert_eq "manual-fwd: select-tick received --manual flag" "--manual" \
   "$(cat "$TMPDIR_TEST/logs/select-tick.log")"
-assert_eq "manual-fwd: materialize called with unbounded gap" "707 queue --gap unbounded" \
+assert_eq "manual-fwd: materialize called with gap 1" "707 queue --gap 1" \
   "$(cat "$TMPDIR_TEST/logs/materialize.log")"
 assert_eq "manual-fwd: exit 0" "0" "$rc"
 tick_teardown
