@@ -16322,6 +16322,58 @@ assert_eq "dispatch-drift-scan: no-path-refs exits 0" "0" "$rc"
 assert_contains_local "dispatch-drift-scan: notes commit scan skipped" "commit scan skipped" "$out"
 drift_scan_teardown
 
+# --- Regression: present name ref found even when grep_out is large ---
+# Guards defect 1: under `set -o pipefail` the old `printf … | grep -qF` test
+# SIGPIPEs printf when grep -q short-circuits on the first match, flagging every
+# present name [NOT FOUND] once grep_out is large. The here-string fix avoids the
+# upstream process entirely. The bug only manifests at scale, so build a large
+# fixture file containing many lines with the present name token.
+
+echo "Test: dispatch-drift-scan finds a present name ref under a large grep_out (pipefail regression)"
+drift_scan_setup
+printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
+# Build a large fixture without a `yes | head` pipeline: under this suite's
+# `set -o pipefail`, head closing the pipe SIGPIPEs yes (exit 141) and would
+# abort the suite. awk writes all 20000 lines itself, no broken pipe.
+awk 'BEGIN { for (i = 0; i < 20000; i++) print "scalename_tok appears here" }' \
+  > "$TMPDIR_TEST/tree/big.txt"
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-03T00:00:00Z","body":"Uses `scalename_tok` across `present.sh`."}
+EOF
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[]
+EOF
+cat > "$TMPDIR_TEST/commits.txt" <<'EOF'
+abc1234 some commit
+EOF
+cd "$TMPDIR_TEST/tree"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
+assert_eq "dispatch-drift-scan: large-grep_out scan exits 0" "0" "$rc"
+assert_not_contains_local "dispatch-drift-scan: present name ref found even when grep_out is large (pipefail regression)" "scalename_tok [NOT FOUND]" "$out"
+drift_scan_teardown
+
+# --- Regression: slash-commands are not classified as path refs ---
+# Guards defect 2: tokens like /ready and /dispatch-worker contain `/`, so the
+# old is_path_token treated them as filesystem paths and existence-checked them,
+# flagging [ABSENT]. They are skill references and must fall through to name refs.
+
+echo "Test: dispatch-drift-scan does not classify slash-commands as path refs"
+drift_scan_setup
+printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-03T00:00:00Z","body":"Run `/dispatch-worker` and `/ready` then `present.sh`."}
+EOF
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[]
+EOF
+: > "$TMPDIR_TEST/commits.txt"
+cd "$TMPDIR_TEST/tree"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
+assert_eq "dispatch-drift-scan: slash-command scan exits 0" "0" "$rc"
+assert_not_contains_local "dispatch-drift-scan: /ready not existence-checked as a path" "/ready [ABSENT]" "$out"
+assert_not_contains_local "dispatch-drift-scan: /dispatch-worker not existence-checked as a path" "/dispatch-worker [ABSENT]" "$out"
+drift_scan_teardown
+
 # ============================================================================
 # summary
 # ============================================================================

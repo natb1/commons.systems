@@ -76,6 +76,10 @@ declare -a NAME_REFS=()
 
 is_path_token() {
   local t="$1"
+  # Slash-commands (/ready, /dispatch-worker) are leading-slash single-segment
+  # tokens — skill references, not filesystem paths. Let them fall through to
+  # the name-ref branch instead of being treated as paths.
+  [[ "$t" =~ ^/[A-Za-z][A-Za-z0-9._-]*$ ]] && return 1
   [[ "$t" == */* ]] && return 0
   case "$t" in
     *.sh|*.md|*.ts|*.tsx|*.js|*.mjs|*.cjs|*.json|*.yml|*.yaml|*.rules) return 0 ;;
@@ -120,13 +124,23 @@ echo ""
 # ---- Step C: Input 1 — commits since createdAt ------------------------------
 
 echo "=== Input 1: commits since $CREATED_AT ==="
-if [[ "${#PATH_REFS[@]}" -gt 0 ]]; then
-  commits=$(git log --since="$CREATED_AT" --oneline -- "${PATH_REFS[@]}" || true)
+# git log treats an absolute path as outside the repo and aborts the whole
+# command; issue bodies cite repo-relative paths, so pass only those as
+# pathspecs. (Absolute paths, if any, are still existence-checked in Input 3.)
+declare -a GIT_PATHS=()
+for p in "${PATH_REFS[@]:-}"; do
+  [[ -z "$p" || "$p" == /* ]] && continue
+  GIT_PATHS+=("$p")
+done
+if [[ "${#GIT_PATHS[@]}" -gt 0 ]]; then
+  commits=$(git log --since="$CREATED_AT" --oneline -- "${GIT_PATHS[@]}" 2>/dev/null || true)
   if [[ -n "$commits" ]]; then
     echo "$commits"
   else
     echo "(none)"
   fi
+elif [[ "${#PATH_REFS[@]}" -gt 0 ]]; then
+  echo "(commit scan skipped — the issue named no repo-relative path references)"
 else
   echo "(commit scan skipped — the issue named no path references)"
 fi
@@ -188,7 +202,11 @@ if [[ "${#NAME_REFS[@]}" -gt 0 ]]; then
   done
   grep_out=$(grep -rIE --exclude-dir=.git --exclude-dir=node_modules "$pattern" . || true)
   for n in "${NAME_REFS[@]}"; do
-    if printf '%s' "$grep_out" | grep -qF -- "$n"; then
+    # Membership test via here-string, NOT `printf … | grep -qF`: under
+    # `set -o pipefail`, grep -q short-circuits on the first match and SIGPIPEs
+    # the upstream printf, making the pipeline exit non-zero even on a match —
+    # which would flag every present name [NOT FOUND] at real-repo scale.
+    if grep -qF -- "$n" <<<"$grep_out"; then
       echo "  $n"
     else
       echo "  $n [NOT FOUND]"
