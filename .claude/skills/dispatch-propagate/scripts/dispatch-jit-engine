@@ -347,6 +347,19 @@ for (( i = 0; i < JIT_COUNT; i++ )); do
   # jits without a sync consumer remain valid.
   DUE_ISO=""
   if [[ "$HAS_DUE_AFTER_CLOSE" == "true" || "$HAS_DUE_AFTER_CREATE" == "true" ]]; then
+    # Validate that the dueAfter* key matches the jit type. A cadence jit uses
+    # dueAfterClose; a check-script jit uses dueAfterCreate. Using the wrong key
+    # would otherwise produce a confusing "cannot parse duration 'null'" error.
+    if [[ "$HAS_REMIND" == "true" && "$HAS_DUE_AFTER_CLOSE" != "true" ]]; then
+      echo "$KEY: error (cadence jit must use dueAfterClose, not dueAfterCreate)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    if [[ "$HAS_CHECK" == "true" && "$HAS_DUE_AFTER_CREATE" != "true" ]]; then
+      echo "$KEY: error (check-script jit must use dueAfterCreate, not dueAfterClose)" >&2
+      HARD_ERROR=1
+      continue
+    fi
     DUE_EPOCH=""
     if [[ "$HAS_REMIND" == "true" ]]; then
       DUE_AFTER_CLOSE_SPEC=$(printf '%s' "$jit" | jq -r '.dueAfterClose')

@@ -286,8 +286,9 @@ export async function fetchOpenJitIssuesLive(
       });
     }
 
-    if (!data.repository.issues.pageInfo.hasNextPage) break;
-    cursor = data.repository.issues.pageInfo.endCursor;
+    const { hasNextPage, endCursor } = data.repository.issues.pageInfo;
+    if (!hasNextPage || !endCursor) break;
+    cursor = endCursor;
   }
 
   return results;

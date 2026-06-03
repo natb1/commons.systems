@@ -358,6 +358,109 @@ describe("fetchOpenJitIssuesLive", () => {
       fetchOpenJitIssuesLive("natb1/agenda-nate", "test-token"),
     ).rejects.toThrow(/Bad credentials/);
   });
+
+  it("follows pagination and collects issues from multiple pages", async () => {
+    const page1 = {
+      data: {
+        repository: {
+          issues: {
+            pageInfo: { endCursor: "cursor-abc", hasNextPage: true },
+            nodes: [
+              {
+                number: 1,
+                title: "Page 1 issue",
+                body: "<!-- jit-due: 2026-01-15T12:00:00Z -->",
+                labels: { nodes: [{ name: "jit:page1-key" }] },
+              },
+            ],
+          },
+        },
+      },
+    };
+    const page2 = {
+      data: {
+        repository: {
+          issues: {
+            pageInfo: { endCursor: null, hasNextPage: false },
+            nodes: [
+              {
+                number: 2,
+                title: "Page 2 issue",
+                body: "<!-- jit-due: 2026-02-01T00:00:00Z -->",
+                labels: { nodes: [{ name: "jit:page2-key" }] },
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(""),
+        json: () => Promise.resolve(page1),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(""),
+        json: () => Promise.resolve(page2),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const issues = await fetchOpenJitIssuesLive("natb1/agenda-nate", "test-token");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Second call must forward the cursor from the first page.
+    const secondCall = fetchMock.mock.calls[1] as [string, RequestInit];
+    const secondBody = JSON.parse(secondCall[1].body as string) as {
+      variables: { cursor: string | null };
+    };
+    expect(secondBody.variables.cursor).toBe("cursor-abc");
+
+    expect(issues).toHaveLength(2);
+    expect(issues[0].jitKey).toBe("page1-key");
+    expect(issues[1].jitKey).toBe("page2-key");
+  });
+
+  it("stops pagination when hasNextPage is true but endCursor is null", async () => {
+    // A malformed GitHub response with hasNextPage=true but null endCursor should
+    // not loop infinitely — the guard should stop after the first page.
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve(""),
+      json: () =>
+        Promise.resolve({
+          data: {
+            repository: {
+              issues: {
+                pageInfo: { endCursor: null, hasNextPage: true },
+                nodes: [
+                  {
+                    number: 10,
+                    title: "Issue on only page",
+                    body: "<!-- jit-due: 2026-03-01T00:00:00Z -->",
+                    labels: { nodes: [{ name: "jit:solo-key" }] },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const issues = await fetchOpenJitIssuesLive("natb1/agenda-nate", "test-token");
+
+    // Must not loop — one fetch only.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].jitKey).toBe("solo-key");
+  });
 });
 
 describe("buildAppJwt", () => {
