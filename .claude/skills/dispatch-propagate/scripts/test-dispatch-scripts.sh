@@ -5738,6 +5738,37 @@ else
 fi
 config_teardown
 
+# --- Test 2c: jit.json with a malformed (non-slug) skill field is rejected ---
+
+echo "Test: jit.json with a malformed (non-slug) skill field is rejected"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "digest",
+      "repo": "test-owner/test-repo",
+      "label": "jit:digest",
+      "title": "Digest",
+      "body": "Recurring digest checkpoint.",
+      "project": "test-project",
+      "skill": "Digest; rm -rf /"
+    }
+  ]
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>&1 1>/dev/null) || rc=$?
+assert_eq "jit.json malformed skill exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"must be a lowercase skill-name slug"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: malformed skill stderr mentions 'must be a lowercase skill-name slug'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed skill stderr mentions 'must be a lowercase skill-name slug'"
+  echo "    stderr: $err"
+fi
+config_teardown
+
 # --- Test 3: absent file prints no-config and exits 0 ------------------------
 
 echo "Test: absent file prints no-config and exits 0"
@@ -14877,6 +14908,22 @@ assert_eq "dispatch-jit-skill: unmatched jit label exits 0" "0" "$rc"
 assert_eq "dispatch-jit-skill: unmatched jit label prints nothing" "" "$out"
 jit_skill_teardown
 
+# --- Test: dispatch-jit-skill rejects a <repo> that is not owner/repo ---------
+
+echo "Test: dispatch-jit-skill rejects a malformed <repo> argument"
+jit_skill_setup
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-jit-skill" "--config /tmp/evil" 42 2>&1 1>/dev/null) || rc=$?
+assert_eq "dispatch-jit-skill: malformed repo exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"must be owner/repo"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: malformed repo stderr mentions 'must be owner/repo'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed repo stderr mentions 'must be owner/repo'"
+  echo "    stderr: $err"
+fi
+jit_skill_teardown
+
 # dispatch-digest-window tests
 # ============================================================================
 #
@@ -14991,6 +15038,22 @@ EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-digest-window" some-owner/some-repo 50 2>/dev/null) && rc=0 || rc=$?
 assert_eq "dispatch-digest-window: no jit:* label exits 1" "1" "$rc"
 assert_eq "dispatch-digest-window: no jit:* label prints nothing on stdout" "" "$out"
+digest_window_teardown
+
+# --- Test: rejects a <repo> that is not owner/repo ---
+
+echo "Test: dispatch-digest-window rejects a malformed <repo> argument"
+digest_window_setup
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-digest-window" "--config /tmp/evil" 30 2>&1 1>/dev/null) || rc=$?
+assert_eq "dispatch-digest-window: malformed repo exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"must be owner/repo"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: malformed repo stderr mentions 'must be owner/repo'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed repo stderr mentions 'must be owner/repo'"
+  echo "    stderr: $err"
+fi
 digest_window_teardown
 
 # ============================================================================

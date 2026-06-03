@@ -258,6 +258,15 @@ case "$CONFIG_TYPE" in
             "jits[\($idx)]: \($field) must be a string if present, got \($item[$field] | type)"
           else
             empty
+          end),
+          # skill, if present, names a skill the jit-reminder path invokes via
+          # the Skill tool — constrain it to a skill-name slug so a malformed
+          # value is rejected at config load rather than reaching the caller.
+          (if ($item | has("skill")) and (($item.skill | type) == "string")
+              and (($item.skill | test("^[a-z][a-z0-9-]*$")) | not) then
+            "jits[\($idx)]: skill must be a lowercase skill-name slug (^[a-z][a-z0-9-]*$), got \"\($item.skill)\""
+          else
+            empty
           end)
         end
       end

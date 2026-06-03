@@ -35,6 +35,11 @@ if [[ -z "$REPO" || -z "$NUM" ]]; then
   exit 2
 fi
 
+if [[ ! "$REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+  echo "error: usage: dispatch-jit-skill <repo> <num> — <repo> must be owner/repo" >&2
+  exit 2
+fi
+
 if [[ ! "$NUM" =~ ^[0-9]+$ ]]; then
   echo "error: usage: dispatch-jit-skill <repo> <num> — <num> must be digits" >&2
   exit 2
@@ -59,8 +64,20 @@ if [[ -z "$JIT_LABEL" ]]; then
 fi
 
 # ---- Step 3: match the label to a jit and print its skill -------------------
+# The caller invokes the printed name via the Skill tool, so guard the emitted
+# value against the skill-name slug here too — defense in depth at the emission
+# boundary, in addition to dispatch-config-load's schema check.
 
-printf '%s' "$CONFIG" \
+SKILL=$(printf '%s' "$CONFIG" \
   | jq -r --arg lbl "$JIT_LABEL" \
     '.jits[] | select(.label == $lbl) | .skill // empty' \
-  | head -n1
+  | head -n1)
+
+if [[ -n "$SKILL" && ! "$SKILL" =~ ^[a-z][a-z0-9-]*$ ]]; then
+  echo "error: jit for label $JIT_LABEL defines a malformed skill name: $SKILL" >&2
+  exit 1
+fi
+
+if [[ -n "$SKILL" ]]; then
+  printf '%s\n' "$SKILL"
+fi

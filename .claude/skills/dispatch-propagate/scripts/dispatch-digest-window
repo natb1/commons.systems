@@ -34,6 +34,11 @@ if [[ -z "$REPO" || -z "$NUM" ]]; then
   exit 2
 fi
 
+if [[ ! "$REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+  echo "error: usage: dispatch-digest-window <repo> <num> — <repo> must be owner/repo" >&2
+  exit 2
+fi
+
 if [[ ! "$NUM" =~ ^[0-9]+$ ]]; then
   echo "error: usage: dispatch-digest-window <repo> <num> — <num> must be digits" >&2
   exit 2

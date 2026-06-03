@@ -37,8 +37,9 @@ exists (cold start). Capture it as `<window-start>` for the next section.
 Collect everything merged into `natb1/commons.systems` since the window start.
 The workspace repo is hardcoded here on purpose: dispatch-queue work always
 merges into `natb1/commons.systems`, whereas the `<repo>` argument names where
-the *digest issue itself* lives (`natb1/office-hours-nate` for the real digest
-jit) — a different repo. Do not substitute `<repo>` into this query.
+the *digest issue itself* lives (the repo configured in
+`dispatch.config/jit.json` for the real digest jit) — a different repo. Do not
+substitute `<repo>` into this query.
 
 ```bash
 gh pr list --repo natb1/commons.systems --state merged \
