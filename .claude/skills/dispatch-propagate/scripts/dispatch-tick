@@ -18,8 +18,9 @@
 # tick is launched by systemd (the #725 heartbeat) and by the worker Stop-hook in
 # a later unit; it runs bare and keeps the concurrency gate. A human-typed
 # `/dispatch` is a thin shim that runs one tick and relays its stdout for live
-# UX; it passes `--manual` for the ungated unbounded fan-out (exempt from the
-# pace curve and the MAX_WORKERS ceiling), bounded only by queue availability.
+# UX; it passes `--manual` to run one gate-exempt tick that spawns a single
+# worker (exempt from the pace curve and the `MAX_WORKERS` ceiling); fan-out is
+# autonomous-only.
 # The audit record is this script's journal output
 # (every captured stdout line is echoed through) plus the spawned workers'
 # transcripts plus durable GitHub side effects (PR comments, `dispatch:*`
