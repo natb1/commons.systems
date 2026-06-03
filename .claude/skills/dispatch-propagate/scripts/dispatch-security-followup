@@ -21,7 +21,7 @@
 #
 # Meaningfulness predicate (a follow-up is emitted ONLY when ALL hold):
 #   CodeQL: classification == "out-of-scope" AND
-#           security_severity_level in {high, medium}
+#           security_severity_level in {critical, high, medium}
 #   npm:    classification == "out-of-scope" AND severity in {high, critical}
 #           AND introduced_by_diff == false
 #   required and false-positive are always excluded.
@@ -38,7 +38,7 @@ jq --arg pr "$pr" '
     | select(
         (.source == "codeql"
           and .classification == "out-of-scope"
-          and (.security_severity_level == "high" or .security_severity_level == "medium"))
+          and (.security_severity_level == "critical" or .security_severity_level == "high" or .security_severity_level == "medium"))
         or
         (.source == "npm"
           and .classification == "out-of-scope"

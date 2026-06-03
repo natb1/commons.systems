@@ -13631,6 +13631,10 @@ assert_eq "followup: codeql out-of-scope high → 1" "1" "$(printf '%s' "$out" |
 out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/xss","alert_number":7,"security_severity_level":"medium","description":"xss","location":"src/y.ts","html_url":"http://y"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
 assert_eq "followup: codeql out-of-scope medium → 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
 
+# CodeQL out-of-scope critical → length 1
+out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/crit","alert_number":99,"security_severity_level":"critical","description":"crit","location":"src/c.ts","html_url":"http://c"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: codeql out-of-scope critical → 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
+
 # 3. CodeQL out-of-scope low → length 0
 out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/low","alert_number":1,"security_severity_level":"low","description":"low","location":"src/z.ts","html_url":"http://z"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
 assert_eq "followup: codeql out-of-scope low → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"

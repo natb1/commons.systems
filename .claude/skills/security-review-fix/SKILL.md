@@ -263,7 +263,7 @@ ready. Otherwise run all steps in order.
    **Meaningfulness threshold** (documented to keep follow-up noise low):
 
    - CodeQL: an alert classified `out-of-scope` with `security_severity_level`
-     of `high` or `medium`.
+     of `critical`, `high`, or `medium`.
    - npm: a pre-existing advisory classified `out-of-scope` rated `high` or
      `critical` and not introduced by the diff (`introduced_by_diff=false`).
    - `required` and `false-positive` findings are never filed.
