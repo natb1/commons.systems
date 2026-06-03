@@ -13,8 +13,8 @@
 #   2. parks the ISSUE on a human via dispatch-apply-office-hours — the single
 #      write path for dispatch:office-hours. It applies the label to the issue
 #      (never a PR), creates the label on first use, and posts a why-comment;
-#   3. spawns the next /dispatch-propagate via dispatch-spawn-router, so the chain keeps moving
-#      around the blocked item.
+#   3. spawns the next headless dispatch-tick via dispatch-spawn-tick, so the
+#      chain keeps moving around the blocked item.
 #
 # Never blocks the session — every failure logs to stderr and the script exits
 # 0. The blocked session stays parked; the dispatch:office-hours label is the
@@ -77,9 +77,10 @@ SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
 "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" "blocked on user input (ExitPlanMode / AskUserQuestion / permission prompt / elicitation)" \
   || echo "[dispatch-input-block] WARNING: dispatch-apply-office-hours failed" >&2
 
-# Pass the baton so the chain keeps moving. dispatch-spawn-router is dedup-guarded —
-# safe whether or not another dispatch-* session is live.
-"$SCRIPTS/dispatch-spawn-router" >/dev/null 2>&1 \
-  || echo "[dispatch-input-block] WARNING: dispatch-spawn-router failed" >&2
+# Pass the baton so the chain keeps moving. dispatch-spawn-tick is dedup-guarded
+# (the fixed systemd unit name collides while a tick is in flight) — safe whether
+# or not another tick is live.
+"$SCRIPTS/dispatch-spawn-tick" >/dev/null 2>&1 \
+  || echo "[dispatch-input-block] WARNING: dispatch-spawn-tick failed" >&2
 
 exit 0
