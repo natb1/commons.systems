@@ -36,16 +36,10 @@ import type { Firestore } from "firebase-admin/firestore";
 import { createSign } from "node:crypto";
 
 const GH_APP_PRIVATE_KEY = defineSecret("AGENDA_GITHUB_APP_PRIVATE_KEY");
-// Empty-string defaults keep every environment deployable: a param with a
-// default never triggers firebase-tools' non-interactive deploy prompt (cf.
-// NAMESPACE). An unset string is the "unconfigured" sentinel the runtime guards
-// already skip on, so an environment with no agenda config deploys and no-ops
-// rather than failing the deploy. Real per-project values come from
-// functions/.env.commons-systems.
-const GH_APP_ID = defineString("AGENDA_GITHUB_APP_ID", { default: "" });
-const GH_APP_INSTALLATION_ID = defineString("AGENDA_GITHUB_APP_INSTALLATION_ID", { default: "" });
-const GROUP_REPO = defineString("AGENDA_GROUP_REPO", { default: "" });
-const MEMBER_EMAILS = defineString("AGENDA_MEMBER_EMAILS", { default: "" });
+const GH_APP_ID = defineString("AGENDA_GITHUB_APP_ID");
+const GH_APP_INSTALLATION_ID = defineString("AGENDA_GITHUB_APP_INSTALLATION_ID");
+const GROUP_REPO = defineString("AGENDA_GROUP_REPO");
+const MEMBER_EMAILS = defineString("AGENDA_MEMBER_EMAILS");
 const NAMESPACE = defineString("AGENDA_FIRESTORE_NAMESPACE", { default: "agenda/prod" });
 
 const adminApp = getApps().length > 0 ? getApps()[0] : initializeApp();
