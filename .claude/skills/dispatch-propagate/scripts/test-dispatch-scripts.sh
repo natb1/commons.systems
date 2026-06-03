@@ -10333,9 +10333,10 @@ stop_setup
 echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
 # Marker absent + readiness predicate reports not-ready: a push restarted CI
-# between selection and session end (TOCTOU). The marker-independent early gate
-# hands the issue back to the router without parking it on a human. Readiness is
-# driven via dispatch-ci-ready, NOT via a `waiting` phase value.
+# between selection and session end (TOCTOU). No marker means a genuine
+# mid-phase exit — the early gate hands the issue back to the router without
+# parking it on a human and without self-closing. Readiness is driven via
+# dispatch-ci-ready, NOT via a `waiting` phase value.
 echo "0" > "$STUB_DIR/ci-ready.txt"
 echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 # No phase-completed marker.
