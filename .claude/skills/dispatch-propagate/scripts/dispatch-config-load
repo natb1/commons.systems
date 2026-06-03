@@ -77,6 +77,10 @@
 # Timing-field semantics (cadence vs check-script) are validated by the JIT
 # engine, not here. This loader only checks types.
 #
+#   skill   string — optional; names a skill to run when this jit's reminder
+#           is selected. Absent → the reminder is summarized and the job
+#           stops. Not a timing field.
+#
 # Example (see jit.example.json):
 #   {
 #     "jits": [
@@ -247,7 +251,7 @@ case "$CONFIG_TYPE" in
             empty
           end),
           # optional timing fields — must be strings if present
-          (["remindAfterClose","dueAfterClose","dueAfterCreate","debounce"] |
+          (["remindAfterClose","dueAfterClose","dueAfterCreate","debounce","skill"] |
           .[] |
           . as $field |
           if ($item | has($field)) and ($item[$field] | type) != "string" then

@@ -5679,6 +5679,65 @@ jit_label=$(printf '%s' "$out" | jq -r '.jits[0].label')
 assert_eq "valid jit.json label" "jit:test-chore" "$jit_label"
 config_teardown
 
+# --- Test 2a: jit.json with a string skill field validates -------------------
+
+echo "Test: jit.json with a string skill field validates"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "digest",
+      "repo": "test-owner/test-repo",
+      "label": "jit:digest",
+      "title": "Digest",
+      "body": "Recurring digest checkpoint.",
+      "project": "test-project",
+      "remindAfterClose": "24h",
+      "dueAfterClose": "48h",
+      "debounce": "1h",
+      "skill": "digest"
+    }
+  ]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>/dev/null); rc=$?
+assert_eq "jit.json string skill exits 0" "0" "$rc"
+skill=$(printf '%s' "$out" | jq -r '.jits[0].skill')
+assert_eq "jit.json string skill value" "digest" "$skill"
+config_teardown
+
+# --- Test 2b: jit.json with a non-string skill field is rejected -------------
+
+echo "Test: jit.json with a non-string skill field is rejected"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "digest",
+      "repo": "test-owner/test-repo",
+      "label": "jit:digest",
+      "title": "Digest",
+      "body": "Recurring digest checkpoint.",
+      "project": "test-project",
+      "skill": 123
+    }
+  ]
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>&1 1>/dev/null) || rc=$?
+assert_eq "jit.json non-string skill exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"must be a string if present"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-string skill stderr mentions 'must be a string if present'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-string skill stderr mentions 'must be a string if present'"
+  echo "    stderr: $err"
+fi
+config_teardown
+
 # --- Test 3: absent file prints no-config and exits 0 ------------------------
 
 echo "Test: absent file prints no-config and exits 0"
