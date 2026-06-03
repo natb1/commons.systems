@@ -1633,7 +1633,7 @@ teardown
 # --- topic-category prioritization (issue #707) -----------------------------
 # The `priority` label is the outermost axis: every `priority` item ranks above
 # every non-priority item, regardless of topic. Topic category
-# (security → bug → testing infrastructure → dispatch → other) nests inside the priority
+# (security → bug → testing infrastructure → dispatch → budget → other) nests inside the priority
 # axis, and the phase ladder runs innermost. A PR's category is resolved from
 # the labels of the issues it closes; an issue's category from its own labels.
 
@@ -1842,6 +1842,38 @@ printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"hel
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "security issue beats bug issue" "issue 300" "$result"
+teardown
+
+# 30j. A PR closing a `dispatch` issue outranks a PR closing a `budget` issue,
+#      even when the budget PR is newer — `dispatch` ranks above `budget` in
+#      the topic ladder (category beats age).
+echo "Test: PR closing a dispatch issue beats PR closing a budget issue"
+setup
+# PR 20 (older) closes budget issue 200; PR 10 (newer) closes dispatch issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-budget-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-dispatch-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"budget"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "dispatch-closing PR beats budget-closing PR" "pr 10 10-dispatch-pr verify" "$result"
+teardown
+
+# 30k. A help-wanted `budget` issue outranks a help-wanted issue with no topic
+#      label, even when the budget issue is newer — `budget` ranks above the
+#      `other` fallback.
+echo "Test: budget issue beats issue with no topic label"
+setup
+setup_union_pr_list '[]'
+# Issue 400 (older) has no topic label (resolves to `other`); issue 300 (newer) is budget.
+printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"budget"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "budget issue beats untopiced (other) issue" "issue 300" "$result"
 teardown
 
 # --- blocked-issue PR skip (issue #786) -------------------------------------

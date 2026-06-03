@@ -446,7 +446,7 @@ fi
 #      marker, not a topic.
 # A bare `security` label means topic; only PHASE_PRIORITY reads it as a phase,
 # and only the `dispatch:`-prefixed form is a phase label.
-TOPIC_CATEGORIES=(security bug "testing infrastructure" dispatch)
+TOPIC_CATEGORIES=(security bug "testing infrastructure" dispatch budget)
 CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
 # Same priority list as a JSON array, for category_of_labels' jq filter.
 TOPIC_CATEGORIES_JSON=$(printf '%s\n' "${TOPIC_CATEGORIES[@]}" | jq -Rcn '[inputs]')
