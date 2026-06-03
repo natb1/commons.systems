@@ -244,7 +244,13 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
   # then sort for deterministic ordering.
   MATCHED=()
   for f in "$DIR"/*; do
-    [[ -f "$f" ]] || continue
+    # Regular files only, and NOT symlinks. `-f` follows symlinks, so a symlink
+    # in the shared folder pointing outside it (e.g. at ~/.ssh/id_rsa) would
+    # otherwise be hashed and its content-hash published to GitHub. The
+    # local-first threat model treats the sync provider that populates this
+    # folder as untrusted, so skip symlinks entirely — statements are in-place
+    # regular files, never links.
+    [[ -f "$f" && ! -L "$f" ]] || continue
     base="$(basename "$f")"
     # Skip dotfiles / files with no extension.
     [[ "$base" == *.* ]] || continue
@@ -270,6 +276,18 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
   for file in "${MATCHED[@]}"; do
     [[ -n "$file" ]] || continue
     base="$(basename "$file")"
+
+    # Reject filenames containing control characters (newline, CR, tab, etc.).
+    # The filename is untrusted data — it flows into the issue title/body, which a
+    # downstream parse agent reads, and into this script's line-oriented stdout
+    # protocol. An embedded newline breaks out of the body's Markdown code span
+    # (a prompt-injection vector into the parse agent) and corrupts the per-file
+    # output lines. Reject with a clear error rather than filing a poisoned issue.
+    if [[ "$base" == *[$'\001'-$'\037']* ]]; then
+      echo "$KEY: error (filename contains control characters: skipping)" >&2
+      HARD_ERROR=1
+      continue
+    fi
 
     HASH=""
     if ! HASH=$(sha256sum "$file" 2>/dev/null | awk '{print $1}') || [[ -z "$HASH" ]]; then
