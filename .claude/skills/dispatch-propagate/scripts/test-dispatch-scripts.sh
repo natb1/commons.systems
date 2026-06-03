@@ -3186,6 +3186,79 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "explicit")
 assert_eq "explicit: parked root leaf 700 returned unchanged" "700" "$result"
 teardown
 
+# 22. Queue mode: --exclude names an already-processed leaf; the trace refuses to
+#     return it and descends past it to the next startable sibling (#1062). 700
+#     has open sub-issues 701 and 702, neither with a worktree, so only the
+#     exclusion distinguishes them. Without --exclude the lowest leaf 701 would
+#     be returned; with --exclude 701 the trace yields 702.
+echo "Test: queue mode → --exclude leaf skipped, returns next startable sibling"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" --exclude 701)
+assert_eq "queue: --exclude 701 → next startable leaf 702" "702" "$result"
+teardown
+
+# 23. Queue mode: the only reachable leaf is excluded → exit 2 with the
+#     worktree-conflicted stderr surface, exactly as an all-live-owned subtree
+#     (#1062 reuses the #914/#1011 no-startable-leaf path). 700 → single sub 701
+#     (leaf); --exclude 701 leaves nothing startable.
+echo "Test: queue mode → single leaf excluded, exits 2"
+setup
+printf '[{"number":701}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" --exclude 701 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"worktree-conflicted"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "queue: single leaf excluded → exit 2 with stderr message" "ok" "$status"
+teardown
+
+# 24. Queue mode: --exclude covers every reachable leaf (variadic integer run) →
+#     exit 2 (#1062). Exercises the multi-token --exclude 701 702 parse and the
+#     whole-frontier-excluded bubble-up.
+echo "Test: queue mode → all leaves excluded (variadic), exits 2"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" --exclude 701 702 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"worktree-conflicted"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "queue: all leaves excluded → exit 2 with stderr message" "ok" "$status"
+teardown
+
+# 25. Queue mode: a multi-leaf subtree whose FIRST leaf is excluded drains to the
+#     next startable leaf in the same subtree (#1062 AC (b)). Parent 700 has two
+#     leaf sub-issues 701 and 702; excluding 701 (an already-spawned leaf whose
+#     worktree is an orphan, not live-owned, so the liveness filter does not skip
+#     it) must still advance to the parent's other startable leaf 702 rather than
+#     abandon the subtree.
+echo "Test: queue mode → multi-leaf subtree, first leaf excluded drains to next leaf"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+# 701's worktree exists but no live session owns it → orphan, descendable; only
+# the --exclude set removes it from the startable frontier.
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" --exclude 701)
+assert_eq "queue: multi-leaf subtree, --exclude 701 (orphan) → next leaf 702" "702" "$result"
+teardown
+
 # ============================================================================
 # dispatch-complete-phase tests
 # ============================================================================
