@@ -247,9 +247,9 @@ test.describe("transactions", () => {
     const filterInput = page.locator("#sankey-category-filter");
     await filterInput.fill("Food");
     await filterInput.blur();
+    await expect.poll(async () => visibleRows.count()).toBeLessThan(countBefore);
     const countAfter = await visibleRows.count();
     expect(countAfter).toBeGreaterThan(0);
-    expect(countAfter).toBeLessThan(countBefore);
     for (let i = 0; i < countAfter; i++) {
       const category = await visibleRows.nth(i).getAttribute("data-category");
       expect(category).toMatch(/^Food/);
@@ -265,12 +265,10 @@ test.describe("transactions", () => {
     const filterInput = page.locator("#sankey-category-filter");
     await filterInput.fill("Food");
     await filterInput.blur();
-    const countFiltered = await visibleRows.count();
-    expect(countFiltered).toBeLessThan(countBefore);
+    await expect.poll(async () => visibleRows.count()).toBeLessThan(countBefore);
     await filterInput.fill("");
     await filterInput.blur();
-    const countRestored = await visibleRows.count();
-    expect(countRestored).toEqual(countBefore);
+    await expect(visibleRows).toHaveCount(countBefore);
   });
 
   test("clicking a Sankey node text label sets the category filter", async ({ page }) => {
@@ -340,14 +338,18 @@ test.describe("transactions", () => {
     await page.goto("/transactions");
     await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
     const visibleRows = page.locator('.txn-row:not([style*="display: none"])');
+    const countBefore = await visibleRows.count();
+    expect(countBefore).toBeGreaterThan(0);
     const categoryFilter = page.locator("#sankey-category-filter");
     await categoryFilter.fill("Food");
     await categoryFilter.blur();
+    await expect.poll(async () => visibleRows.count()).toBeLessThan(countBefore);
     const countCategoryOnly = await visibleRows.count();
     expect(countCategoryOnly).toBeGreaterThan(0);
     const budgetFilter = page.locator("#sankey-budget-filter");
     await budgetFilter.fill("Food");
     await budgetFilter.blur();
+    await expect.poll(async () => visibleRows.count()).toBeLessThanOrEqual(countCategoryOnly);
     const countBoth = await visibleRows.count();
     expect(countBoth).toBeGreaterThan(0);
     expect(countBoth).toBeLessThanOrEqual(countCategoryOnly);
