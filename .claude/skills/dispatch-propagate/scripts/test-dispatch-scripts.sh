@@ -6668,6 +6668,66 @@ else
 fi
 tw_teardown
 
+# --- Test: --reopen-at pace-curve crossing (#1050) --------------------------
+#
+# Reopen mode prints the epoch at which the rising pace curve W crosses the
+# flat used_weekly (when a pace-curve pause lifts), or `none` when the pace
+# curve is not the blocker (under pace, missing weekly anchor, etc.).
+
+echo "Test: --reopen-at pace pause → numeric crossing strictly inside the window"
+tw_setup
+# x=0.5 → W=31. used_weekly=35 > 31 → pace pause (F=0, target 0) while still far
+# below the absolute weekly cap (35 < 90). The reopen epoch is where W rises to
+# meet used_weekly=35, which is later than NOW but before the weekly reset.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "reopen.json" 35 "$r" 0 99999999
+result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --reopen-at 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if [[ "$result" =~ ^[0-9]+$ ]] && (( result > TW_NOW )) && (( result < r )); then
+  PASS=$((PASS + 1)); echo "  PASS: pace pause crossing $result strictly in (TW_NOW=$TW_NOW, r=$r)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: pace pause crossing expected digits in ($TW_NOW, $r), got '$result'"
+fi
+# Sanity sub-check: feeding the crossing back as NOW, the curve has caught up,
+# so reopen reports either `none` or essentially the same epoch (lenient — the
+# point is self-consistency, not exactness).
+if [[ "$result" =~ ^[0-9]+$ ]]; then
+  again=$(env DISPATCH_TARGET_WORKERS_NOW="$result" \
+    DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH="$DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH" \
+    "$TMPDIR_TEST/scripts/dispatch-target-workers" --reopen-at 2>/dev/null)
+  TOTAL=$((TOTAL + 1))
+  if [[ "$again" == "none" ]] || { [[ "$again" =~ ^[0-9]+$ ]] \
+      && (( again >= TW_NOW )) && (( again <= result + 60 )); }; then
+    PASS=$((PASS + 1)); echo "  PASS: crossing fed back is self-consistent (again='$again')"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: crossing fed back not self-consistent (again='$again', result=$result)"
+  fi
+fi
+tw_teardown
+
+echo "Test: --reopen-at under pace → none"
+tw_setup
+# x=0.75 → W=57. used_weekly=10 < 57 → under pace, target already >= 1, so the
+# pace curve is not the blocker → reopen reports none.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.75)
+write_rl "reopen.json" 10 "$r" 0 99999999
+result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --reopen-at 2>/dev/null)
+assert_eq "--reopen-at under pace → none" "none" "$result"
+tw_teardown
+
+echo "Test: --reopen-at missing weekly anchor → none"
+tw_setup
+# No weekly telemetry at all (tw_setup points the path at an absent file). The
+# crossing cannot be computed without the weekly anchor → none.
+unset DISPATCH_TARGET_WORKERS_NOW \
+      DISPATCH_TARGET_WORKERS_USED_WEEKLY \
+      DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY
+result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --reopen-at 2>/dev/null)
+assert_eq "--reopen-at missing anchor → none" "none" "$result"
+tw_teardown
+
 # ============================================================================
 # dispatch-schedule-reseed tests
 # ============================================================================
@@ -6703,10 +6763,25 @@ sr_setup() {
   chmod +x "$TMPDIR_TEST/scripts/dispatch-schedule-reseed" \
            "$TMPDIR_TEST/scripts/dispatch-config-load"
 
+  # The no-absolute-cap branch consults dispatch-target-workers --reopen-at for
+  # the pace-curve crossing. Copy the real budgeter (it needs dispatch-config-load
+  # + lib.sh, already copied alongside) and wire the override so the pace tests
+  # exercise the real curve computation.
+  cp "$SCRIPT_DIR/dispatch-target-workers" "$TMPDIR_TEST/scripts/dispatch-target-workers"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-target-workers"
+  export DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD="$TMPDIR_TEST/scripts/dispatch-target-workers"
+
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
   # Default: point at an absent file so tests without explicit telemetry get
   # the missing-telemetry no-op unless they override env vars.
   export DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH="$TMPDIR_TEST/rl/missing.json"
+  # Pin the budgeter's own rate_limits path at the same temp file. The reseed
+  # script passes telemetry to the budgeter via per-field env vars, which take
+  # precedence over any file read — so the budgeter never reads this path in
+  # practice. Exporting it anyway isolates the test from the real
+  # ~/.local/share/.../rate_limits.json if the budgeter's read/override order
+  # ever changes.
+  export DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH="$TMPDIR_TEST/rl/missing.json"
   export DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE="$TMPDIR_TEST/main"
 
   # systemd-run stub: records its argv (one line per call), exits 0.
@@ -6723,6 +6798,7 @@ sr_teardown() {
   TMPDIR_TEST=""
   unset DISPATCH_CONFIG_DIR
   unset DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH
+  unset DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH
   unset DISPATCH_SCHEDULE_RESEED_NOW
   unset DISPATCH_SCHEDULE_RESEED_USED_WEEKLY
   unset DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY
@@ -6730,6 +6806,8 @@ sr_teardown() {
   unset DISPATCH_SCHEDULE_RESEED_RESETS_AT_5H
   unset DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE
   unset DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD
+  unset DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD
+  unset DISPATCH_SCHEDULE_RESEED_SHORT_DELAY
 }
 
 # sr_write_rl <file-name> <used_weekly> <resets_weekly> <used_5h> <resets_5h>
@@ -6753,6 +6831,8 @@ sr_write_rl() {
   joined=$(IFS=,; printf '%s' "${parts[*]}")
   printf '{%s}\n' "$joined" > "$path"
   export DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH="$path"
+  # Keep the budgeter's path pinned to the same file (see sr_setup).
+  export DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH="$path"
 }
 
 # --- Test 1: weekly cap hit → schedules at weekly resets_at ------------------
@@ -6813,17 +6893,31 @@ assert_eq "both caps hit; picks earlier reset" \
   "scheduled dispatch-reseed-15000 at 15000" "$out"
 sr_teardown
 
-# --- Test 4: neither cap hit → no-op (no systemd-run invocation) -------------
-
-echo "Test: neither cap hit → silent no-op (no systemd-run call)"
+# --- Test 4: neither cap hit + pace curve permits → no-op (#1050) ------------
+#
+# No absolute cap is hit and weekly telemetry is present, so the no-cap branch
+# consults dispatch-target-workers --reopen-at. Here used_weekly=50 sits far
+# under the pace curve (x≈0.983 near week end → W≈88, 50 << 88), so reopen
+# reports `none` and the script no-ops. The no-op contract is: stdout silent,
+# exit 0, no systemd-run invocation. The landed script emits an informational
+# stderr diagnostic naming the reopen-at result on this path (matched, not
+# asserted empty — mirrors Test 5/Test 9's no-op stderr diagnostics).
+echo "Test: neither cap hit + pace curve permits → no-op (no systemd-run call)"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-# 50 < 90 weekly, 20 < 50 5h → no cap hit.
+# 50 < 90 weekly, 20 < 50 5h → no absolute cap hit. Weekly present → budgeter
+# consulted; used_weekly=50 well under pace → reopen='none' → no-op.
 sr_write_rl "rl.json" 50 20000 20 15000
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
 err=$(cat "$TMPDIR_TEST/stderr")
 assert_eq "neither cap hit; stdout silent" "" "$out"
-assert_eq "neither cap hit; stderr silent" "" "$err"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"no absolute cap hit"* && "$err" == *"reopen-at="* && "$err" == *"no-op"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: neither cap hit; stderr names the pace-permits no-op diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: neither cap hit; stderr names the pace-permits no-op diagnostic"
+  echo "    stderr: $err"
+fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: neither cap hit; no systemd-run invocation"
@@ -7005,7 +7099,17 @@ export DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH="$TMPDIR_TEST/rl/rl.json"
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
 err=$(cat "$TMPDIR_TEST/stderr")
 assert_eq "partial seven_day record; stdout silent" "" "$out"
-assert_eq "partial seven_day record; stderr silent" "" "$err"
+# Weekly block dropped (resets_at null) and 5h cap clear → no absolute cap. The
+# pace path cannot compute a crossing without the weekly anchor, so the landed
+# script no-ops with a "weekly anchor missing" stderr diagnostic (#1050). The
+# no-op contract — stdout silent, no systemd-run — still holds.
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"no absolute cap hit"* && "$err" == *"weekly anchor missing"* && "$err" == *"no-op"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: partial seven_day record; stderr names the missing-anchor no-op diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: partial seven_day record; stderr names the missing-anchor no-op diagnostic"
+  echo "    stderr: $err"
+fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: partial seven_day record; no systemd-run invocation"
@@ -7144,6 +7248,197 @@ if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: non-numeric WEEKLY_USED; no systemd-run invocation"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: non-numeric WEEKLY_USED; no systemd-run invocation"
+fi
+sr_teardown
+
+# --- Test 15: pace-curve pause arms a crossing-time timer (#1050) ------------
+#
+# When no absolute cap is hit but weekly telemetry is present, the no-cap branch
+# consults dispatch-target-workers --reopen-at and arms a reseed timer at the
+# pace-curve crossing. A stub budgeter returning a future epoch must produce a
+# dispatch-reseed-<epoch> timer at exactly that epoch.
+
+echo "Test: pace-curve pause schedules a crossing-time timer (stub future epoch)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# Both caps clear (14 < 90 weekly, 10 < 50 5h) so the absolute-cap path no-ops,
+# but weekly telemetry is present → the script consults the budgeter for the
+# pace-curve crossing. Stub it to a fixed future epoch.
+sr_write_rl "rl.json" 14 99999 10 88888
+cat > "$TMPDIR_TEST/tw-stub" <<'STUB'
+#!/usr/bin/env bash
+echo 12345
+STUB
+chmod +x "$TMPDIR_TEST/tw-stub"
+export DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD="$TMPDIR_TEST/tw-stub"
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+assert_eq "pace pause schedules crossing" \
+  "scheduled dispatch-reseed-12345 at 12345" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-reseed-12345"* \
+   && "$log" == *"--on-calendar=@12345"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: pace pause systemd-run argv (unit + calendar)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: pace pause systemd-run argv (unit + calendar)"
+  echo "    log: $log"
+fi
+sr_teardown
+
+# --- Test 16: reopen reports none → silent no-op -----------------------------
+
+echo "Test: pace path reopen=none → silent no-op (no systemd-run call)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+sr_write_rl "rl.json" 14 99999 10 88888
+cat > "$TMPDIR_TEST/tw-stub" <<'STUB'
+#!/usr/bin/env bash
+echo none
+STUB
+chmod +x "$TMPDIR_TEST/tw-stub"
+export DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD="$TMPDIR_TEST/tw-stub"
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null); then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "reopen=none; stdout silent" "" "$out"
+assert_eq "reopen=none; exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: reopen=none; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reopen=none; no systemd-run invocation"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+sr_teardown
+
+# --- Test 17: crossing in the past → short-delay floor -----------------------
+#
+# If the budgeter reports a crossing at/before NOW, the script applies a
+# short-delay floor: RESEED_AT = NOW + SHORT_DELAY, rather than arming a
+# past-dated timer.
+
+echo "Test: pace crossing in the past → short-delay floor (NOW + SHORT_DELAY)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+export DISPATCH_SCHEDULE_RESEED_SHORT_DELAY=300
+sr_write_rl "rl.json" 14 99999 10 88888
+cat > "$TMPDIR_TEST/tw-stub" <<'STUB'
+#!/usr/bin/env bash
+echo 9000
+STUB
+chmod +x "$TMPDIR_TEST/tw-stub"
+export DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD="$TMPDIR_TEST/tw-stub"
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+# Crossing 9000 < NOW 10000 → floor to NOW + 300 = 10300.
+assert_eq "past crossing → short-delay floor" \
+  "scheduled dispatch-reseed-10300 at 10300" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-reseed-10300"* \
+   && "$log" == *"--on-calendar=@10300"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: past crossing short-delay systemd-run argv (unit + calendar)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: past crossing short-delay systemd-run argv (unit + calendar)"
+  echo "    log: $log"
+fi
+sr_teardown
+
+# --- Test 17b: crossing exactly at NOW → short-delay floor (boundary) --------
+#
+# When the budgeter returns a crossing epoch equal to NOW (not strictly in the past),
+# the condition RESEED_AT <= NOW is still satisfied (equality), so the short-delay
+# floor applies. This covers the boundary between "past crossing" and "future crossing".
+
+echo "Test: pace crossing exactly at NOW → short-delay floor (boundary case)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+export DISPATCH_SCHEDULE_RESEED_SHORT_DELAY=300
+sr_write_rl "rl.json" 14 99999 10 88888
+cat > "$TMPDIR_TEST/tw-stub" <<'STUB'
+#!/usr/bin/env bash
+echo 10000
+STUB
+chmod +x "$TMPDIR_TEST/tw-stub"
+export DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD="$TMPDIR_TEST/tw-stub"
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+# Crossing 10000 == NOW 10000 → floor to NOW + 300 = 10300.
+assert_eq "crossing==NOW → short-delay floor" \
+  "scheduled dispatch-reseed-10300 at 10300" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-reseed-10300"* \
+   && "$log" == *"--on-calendar=@10300"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: crossing==NOW short-delay systemd-run argv (unit + calendar)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: crossing==NOW short-delay systemd-run argv (unit + calendar)"
+  echo "    log: $log"
+fi
+sr_teardown
+
+# --- Test 18: end-to-end with the real budgeter ------------------------------
+#
+# No CMD override — sr_setup already points DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD
+# at the copied real budgeter. A genuine pace pause (used_weekly above the
+# smooth curve, below the absolute cap) must arm a timer at the real
+# curve-crossing epoch strictly inside the weekly window.
+
+echo "Test: end-to-end pace pause with the real budgeter arms a crossing timer"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1000000
+# Weekly resets at 1302400 → remaining 302400 → x=0.5 → W=31. used_weekly=35 > 31
+# → real pace pause; 35 < 90 and 10 < 50 → no absolute cap. 5h resets at 1310000.
+sr_write_rl "rl.json" 35 1302400 10 1310000
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+E=$(printf '%s' "$out" | sed -n 's/^scheduled dispatch-reseed-\([0-9]*\) at .*/\1/p')
+TOTAL=$((TOTAL + 1))
+if [[ "$E" =~ ^[0-9]+$ ]] && (( E > 1000000 )) && (( E < 1302400 )); then
+  PASS=$((PASS + 1)); echo "  PASS: real budgeter arms crossing $E strictly in (1000000, 1302400)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: real budgeter expected crossing in (1000000, 1302400), got E='$E' out='$out'"
+fi
+sr_teardown
+
+# --- Test 18b: reopen reports an unexpected string → silent no-op ------------
+#
+# The budgeter's --reopen-at contract is numeric-epoch | `none`. If it ever
+# emits anything else (a non-numeric, non-`none` token — e.g. a future
+# diagnostic leaking to stdout), the reseed script must treat it like a
+# budgeter failure: no-op with exit 0 and a stderr diagnostic, never arming a
+# timer on a garbage value. This makes the else-branch of the
+# numeric/`none`/else triad explicit.
+
+echo "Test: pace path reopen=<unexpected string> → silent no-op (no systemd-run call)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+sr_write_rl "rl.json" 14 99999 10 88888
+cat > "$TMPDIR_TEST/tw-stub" <<'STUB'
+#!/usr/bin/env bash
+echo garbage
+STUB
+chmod +x "$TMPDIR_TEST/tw-stub"
+export DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD="$TMPDIR_TEST/tw-stub"
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr"); then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "reopen=<unexpected>; stdout silent" "" "$out"
+assert_eq "reopen=<unexpected>; exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: reopen=<unexpected>; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reopen=<unexpected>; no systemd-run invocation"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "unexpected result" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: reopen=<unexpected>; stderr diagnostic emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reopen=<unexpected>; stderr diagnostic emitted"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
 fi
 sr_teardown
 
