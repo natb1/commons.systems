@@ -1,0 +1,381 @@
+#!/usr/bin/env bash
+# dispatch-statements-scan — scan shared statements folders and file parse-job
+# issues, deduped on GitHub content-hash state.
+#
+# Reads the local statements.json config (via dispatch-config-load) and, for
+# each statements entry, scans the configured directory for bank-statement
+# files. For each file it computes the file's sha256 and asks GitHub whether a
+# parse-job issue already carries that hash (open OR closed). If one exists the
+# file is skipped; otherwise a single parse-job issue is filed whose body names
+# only the filename and the sha256 — never the statement contents. The data
+# stays in the user's folder. No statements entry is hardcoded: the scan is
+# fully driven by config.
+#
+# Idempotency is keyed on GitHub state (the content-hash dedup), NOT a side
+# file. The project-root state file is a per-machine debounce rate-limiter only.
+#
+# Per statements entry the scan:
+#   1. Debounces — skips with no network/filesystem call if the entry's last
+#      check is within its `debounce` window (tracked in a project-root state
+#      file).
+#   2. Skips (a normal, non-error skip) if the configured directory is not
+#      present on this machine — a machine that doesn't share the folder is
+#      inert.
+#   3. Ensures the entry's label exists in its repo (idempotent).
+#   4. Enumerates the regular files directly in the directory (NON-RECURSIVE),
+#      filtered by extension (case-insensitive). For each file:
+#        a. Computes its sha256.
+#        b. Asks GitHub for an issue carrying that hash under the label (open or
+#           closed). If found, skips.
+#        c. Otherwise files one parse-job issue (filename + sha256 only), adds
+#           it to the entry's project, and records the hash so a byte-identical
+#           file later in the same run is deduped without a second search.
+#   5. Records the last check time (debounce stamp).
+#
+# Usage:
+#   dispatch-statements-scan       — process every entry in statements.json.
+#
+# Stdout protocol (one line per file or per entry that ran):
+#   <key>: filed #<num> <file>      a parse-job issue was filed for <file>.
+#   <key>: skipped (<reason>)       no issue filed — reason given (existing
+#                                   issue #<n>, in-run duplicate, or dir absent).
+#   <key>: debounced                the debounce window has not elapsed.
+# Errors are written to stderr as:
+#   <key>: error (<description>)    this entry hit a hard error; others continue.
+#
+# Exit codes:
+#   0  every entry completed cleanly (filed / skipped / debounced).
+#   1  at least one entry hit a hard error (debounce parse, gh failure,
+#      sha256 failure, project-add failure). Per-entry stdout lines for the
+#      files/entries that did succeed are still printed.
+#   2  the engine itself cannot operate (the config loader exits 2, or an
+#      environment misconfiguration).
+#
+# With no statements.json present the config loader reports "no-config" and the
+# scan is a silent no-op (exit 0, no output).
+#
+# Environment overrides for testability:
+#   DISPATCH_CONFIG_DIR            Override the config directory. Read by
+#                                  dispatch-config-load (the scan sets nothing —
+#                                  it flows through the environment).
+#   DISPATCH_STATEMENTS_STATE_DIR  Override the state-file directory. When set,
+#                                  the scan does NOT require a git repo.
+#                                  Default: <project-root>/tmp.
+#   DISPATCH_STATEMENTS_NOW        Override "now" as epoch seconds. Default:
+#                                  date +%s.
+#
+# Dependency: invokes the `gh` CLI directly. Per .claude/rules/sandbox.md the
+# caller (the /dispatch-propagate SKILL step) must wrap this script with
+# dangerouslyDisableSandbox — gh's TLS validation is blocked by the sandbox.
+# This script sets nothing sandbox-related; that is the caller's responsibility.
+#
+# NOT set -e: per-entry hard errors must not abort the loop. Exit codes from gh
+# and the config loader are captured explicitly with `|| rc=$?`.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+# ---- parse_duration <str> — duration string to seconds ----------------------
+# Accepts <int><unit> where unit is one of s|m|h|d|w. Prints the duration in
+# seconds on stdout and returns 0. On unparseable input prints nothing and
+# returns 1 — the caller treats that as a hard error for the entry.
+parse_duration() {
+  local spec="$1" num unit
+  if [[ ! "$spec" =~ ^([0-9]+)([smhdw])$ ]]; then
+    return 1
+  fi
+  num="${BASH_REMATCH[1]}"
+  unit="${BASH_REMATCH[2]}"
+  case "$unit" in
+    s) printf '%s\n' "$num" ;;
+    m) printf '%s\n' "$(( num * 60 ))" ;;
+    h) printf '%s\n' "$(( num * 3600 ))" ;;
+    d) printf '%s\n' "$(( num * 86400 ))" ;;
+    w) printf '%s\n' "$(( num * 604800 ))" ;;
+  esac
+  return 0
+}
+
+# ---- Step 0: load and validate the statements config ------------------------
+# dispatch-config-load handles DISPATCH_CONFIG_DIR resolution and schema
+# validation. "no-config" → silent no-op. A non-zero exit → the loader already
+# printed its error; propagate a hard failure.
+CFG=""
+CFG_RC=0
+CFG=$("$SCRIPT_DIR/dispatch-config-load" statements) || CFG_RC=$?
+if [[ "$CFG_RC" -ne 0 ]]; then
+  # The loader exited non-zero (invalid config or environment error) and has
+  # already written a descriptive message to stderr.
+  exit "$CFG_RC"
+fi
+if [[ "$CFG" == "no-config" ]]; then
+  exit 0
+fi
+
+# ---- Step 1: resolve the state directory and file --------------------------
+# An explicit DISPATCH_STATEMENTS_STATE_DIR is authoritative and bypasses the
+# git lookup — tests rely on this. Otherwise the state file lives at the shared
+# project-root tmp/, shared across worktrees. resolve_project_root (lib.sh)
+# returns the project root in both classic (.git) and bare (.bare) layouts.
+if [[ -n "${DISPATCH_STATEMENTS_STATE_DIR:-}" ]]; then
+  STATE_DIR="$DISPATCH_STATEMENTS_STATE_DIR"
+else
+  PROJECT_ROOT=$(resolve_project_root) \
+    || { echo "error: not in a git repo and DISPATCH_STATEMENTS_STATE_DIR is unset" >&2; exit 2; }
+  STATE_DIR="$PROJECT_ROOT/tmp"
+fi
+STATE_FILE="$STATE_DIR/dispatch-statements-state.json"
+
+# ---- Step 2: resolve "now" --------------------------------------------------
+NOW="${DISPATCH_STATEMENTS_NOW:-$(date +%s)}"
+
+# ---- state-file helpers -----------------------------------------------------
+# The state file is a JSON object mapping <key> → last-check epoch (number).
+# An absent file is treated as the empty object {}.
+
+# read_state — print the current state object (compact JSON). Absent → "{}".
+read_state() {
+  if [[ -f "$STATE_FILE" ]]; then
+    jq -c '.' "$STATE_FILE"
+  else
+    printf '{}\n'
+  fi
+}
+
+# state_get <key> — print the recorded last-check epoch for <key>, or nothing.
+state_get() {
+  local key="$1"
+  read_state | jq -r --arg k "$key" '.[$k] // empty'
+}
+
+# state_set <key> <epoch> — incremental read-modify-write: set <key> to <epoch>
+# in the state object and write it back.
+state_set() {
+  local key="$1" epoch="$2" current updated
+  current=$(read_state)
+  updated=$(printf '%s' "$current" | jq -c --arg k "$key" --argjson v "$epoch" \
+    '.[$k] = $v')
+  mkdir -p "$STATE_DIR"
+  # Non-atomic write: a crash mid-write can leave a corrupt/empty state file.
+  # That only loses the debounce timestamp — the next run reads it as "no state"
+  # and overwrites it. Idempotency is keyed on GitHub state, not this file.
+  printf '%s\n' "$updated" >"$STATE_FILE"
+}
+
+# ---- Step 3: read every statements entry into a bash array ------------------
+# Reading the entries up front (rather than piping jq into a `while read` loop)
+# keeps the loop body in the current shell, so the HARD_ERROR flag and state
+# mutations survive.
+STATEMENTS_COUNT=$(printf '%s' "$CFG" | jq '.statements | length')
+mapfile -t STATEMENTS < <(printf '%s' "$CFG" | jq -c '.statements[]')
+
+HARD_ERROR=0
+
+# ---- Step 4: process each statements entry ----------------------------------
+for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
+  entry="${STATEMENTS[$i]}"
+
+  KEY=$(printf '%s' "$entry"     | jq -r '.key')
+  DIR=$(printf '%s' "$entry"     | jq -r '.dir')
+  REPO=$(printf '%s' "$entry"    | jq -r '.repo')
+  LABEL=$(printf '%s' "$entry"   | jq -r '.label')
+  PROJECT=$(printf '%s' "$entry" | jq -r '.project')
+
+  # ---- 4a: debounce ---------------------------------------------------------
+  # Skip with no gh/filesystem call when a prior last-check entry exists and
+  # now − last-check < debounce. This comes BEFORE the directory check and any
+  # gh call, so a debounced entry is fully inert. State is left unchanged.
+  HAS_DEBOUNCE=$(printf '%s' "$entry" | jq 'has("debounce")')
+  if [[ "$HAS_DEBOUNCE" == "true" ]]; then
+    DEBOUNCE_SPEC=$(printf '%s' "$entry" | jq -r '.debounce')
+    if ! DEBOUNCE_SECS=$(parse_duration "$DEBOUNCE_SPEC"); then
+      echo "$KEY: error (debounce: cannot parse duration '$DEBOUNCE_SPEC')" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    LAST_CHECK=$(state_get "$KEY")
+    if [[ -n "$LAST_CHECK" ]] && (( NOW - LAST_CHECK < DEBOUNCE_SECS )); then
+      echo "$KEY: debounced"
+      continue
+    fi
+  fi
+
+  # ---- 4b: directory-absent skip --------------------------------------------
+  # A machine that does not share the statements folder is inert: skip without
+  # error and stamp the last-check so debounce holds off the next tick.
+  if [[ ! -d "$DIR" ]]; then
+    echo "$KEY: skipped (dir not present)"
+    state_set "$KEY" "$NOW"
+    continue
+  fi
+
+  # ---- 4c: ensure the label exists ------------------------------------------
+  # Idempotent: `gh label create` exits non-zero with an "already exists"
+  # message when the label is present — tolerate ONLY that case. Match
+  # case-insensitively so a future gh capitalization change does not turn a
+  # benign duplicate into a hard error.
+  LABEL_RC=0
+  LABEL_OUT=$(gh label create "$LABEL" --repo "$REPO" --color "ededed" \
+    --description "Statement parse-job issue" 2>&1) || LABEL_RC=$?
+  if [[ "$LABEL_RC" -ne 0 ]]; then
+    if [[ "${LABEL_OUT,,}" != *"already exists"* ]]; then
+      echo "$KEY: error (gh label create failed: $LABEL_OUT)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+  fi
+
+  # ---- 4d: determine the extension filter -----------------------------------
+  # Case-insensitive match. An absent or empty `extensions` array falls back to
+  # the default bank-statement set.
+  mapfile -t EXTS < <(printf '%s' "$entry" | jq -r '.extensions // [] | .[]')
+  if [[ "${#EXTS[@]}" -eq 0 ]]; then
+    EXTS=(qfx ofx csv pdf)
+  fi
+  # Lowercase the configured extensions once for case-insensitive comparison.
+  EXTS_LC=()
+  for e in "${EXTS[@]}"; do
+    EXTS_LC+=("${e,,}")
+  done
+
+  # ---- 4e: enumerate matching files (NON-RECURSIVE, sorted) -----------------
+  # Collect regular files directly in $DIR whose extension is in the filter,
+  # then sort for deterministic ordering.
+  MATCHED=()
+  for f in "$DIR"/*; do
+    # Regular files only, and NOT symlinks. `-f` follows symlinks, so a symlink
+    # in the shared folder pointing outside it (e.g. at ~/.ssh/id_rsa) would
+    # otherwise be hashed and its content-hash published to GitHub. The
+    # local-first threat model treats the sync provider that populates this
+    # folder as untrusted, so skip symlinks entirely — statements are in-place
+    # regular files, never links.
+    [[ -f "$f" && ! -L "$f" ]] || continue
+    base="$(basename "$f")"
+    # Skip dotfiles / files with no extension.
+    [[ "$base" == *.* ]] || continue
+    ext_lc="${base##*.}"
+    ext_lc="${ext_lc,,}"
+    for want in "${EXTS_LC[@]}"; do
+      if [[ "$ext_lc" == "$want" ]]; then
+        MATCHED+=("$f")
+        break
+      fi
+    done
+  done
+  if [[ "${#MATCHED[@]}" -gt 0 ]]; then
+    mapfile -d '' -t MATCHED < <(printf '%s\0' "${MATCHED[@]}" | sort -z)
+  fi
+
+  # ---- 4f: per-file dedup-and-file ------------------------------------------
+  # SEEN_HASHES maps a content hash seen this run → the issue number that covers
+  # it (either freshly filed or an existing GitHub hit). A byte-identical file
+  # later in the same run is then deduped without a second gh search.
+  declare -A SEEN_HASHES=()
+  ENTRY_HARD_ERROR=0
+  for file in "${MATCHED[@]}"; do
+    [[ -n "$file" ]] || continue
+    base="$(basename "$file")"
+
+    # Reject filenames containing control characters (newline, CR, tab, etc.).
+    # The filename is untrusted data — it flows into the issue title/body, which a
+    # downstream parse agent reads, and into this script's line-oriented stdout
+    # protocol. An embedded newline breaks out of the body's Markdown code span
+    # (a prompt-injection vector into the parse agent) and corrupts the per-file
+    # output lines. Reject with a clear error rather than filing a poisoned issue.
+    if [[ "$base" == *[$'\001'-$'\037']* ]]; then
+      echo "$KEY: error (filename contains control characters: skipping)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+
+    HASH=""
+    if ! HASH=$(sha256sum "$file" 2>/dev/null | awk '{print $1}') || [[ -z "$HASH" ]]; then
+      echo "$KEY: error (sha256sum failed for $base)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+
+    # In-run duplicate: a prior file this run had the same content.
+    if [[ -n "${SEEN_HASHES[$HASH]:-}" ]]; then
+      echo "$KEY: skipped (#${SEEN_HASHES[$HASH]} for $base)"
+      continue
+    fi
+
+    # Query GitHub for an issue carrying this hash under the label. `gh search
+    # issues` searches open AND closed by default — satisfying the open-or-closed
+    # dedup requirement.
+    SEARCH_RC=0
+    SEARCH_JSON=$(gh search issues "$HASH" --repo "$REPO" --label "$LABEL" \
+      --limit 1 --json number,state 2>&1) || SEARCH_RC=$?
+    if [[ "$SEARCH_RC" -ne 0 ]]; then
+      echo "$KEY: error (gh search issues failed: $SEARCH_JSON)" >&2
+      HARD_ERROR=1
+      ENTRY_HARD_ERROR=1
+      break
+    fi
+    if ! printf '%s' "$SEARCH_JSON" | jq -e . >/dev/null 2>&1; then
+      echo "$KEY: error (gh search issues returned non-JSON: $SEARCH_JSON)" >&2
+      HARD_ERROR=1
+      ENTRY_HARD_ERROR=1
+      break
+    fi
+    HIT_NUM=$(printf '%s' "$SEARCH_JSON" | jq -r 'if length > 0 then .[0].number else empty end')
+    if [[ -n "$HIT_NUM" ]]; then
+      echo "$KEY: skipped (#$HIT_NUM for $base)"
+      SEEN_HASHES[$HASH]="$HIT_NUM"
+      continue
+    fi
+
+    # File the parse-job issue. The body carries only the filename and full
+    # sha256 — NEVER the statement contents.
+    TITLE="budget: parse statement '$base' (${HASH:0:8})"
+    BODY="Parse the bank statement \`$base\` from the shared statements folder and merge it into the budget snapshot. The statement contents are not included here — read the file from the shared statements folder on this machine.
+
+- File: \`$base\`
+- sha256: \`$HASH\`"
+
+    CREATE_RC=0
+    CREATE_OUT=$(gh issue create --repo "$REPO" --title "$TITLE" --body "$BODY" \
+      --label "$LABEL" 2>&1) || CREATE_RC=$?
+    if [[ "$CREATE_RC" -ne 0 ]]; then
+      echo "$KEY: error (gh issue create failed for $base: $CREATE_OUT)" >&2
+      HARD_ERROR=1
+      ENTRY_HARD_ERROR=1
+      break
+    fi
+    # gh issue create prints the new issue URL on stdout. The trailing path
+    # segment is the issue number.
+    ISSUE_URL=$(printf '%s' "$CREATE_OUT" | tail -n1)
+    ISSUE_NUM="${ISSUE_URL##*/}"
+    if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
+      echo "$KEY: error (could not parse issue number from '$CREATE_OUT')" >&2
+      HARD_ERROR=1
+      ENTRY_HARD_ERROR=1
+      break
+    fi
+    ADD_RC=0
+    ADD_OUT=$("$SCRIPT_DIR/dispatch-project-item-add" "$PROJECT" "$ISSUE_URL" 2>&1) \
+      || ADD_RC=$?
+    if [[ "$ADD_RC" -ne 0 ]]; then
+      echo "$KEY: error (could not add issue #$ISSUE_NUM to project '$PROJECT': $ADD_OUT)" >&2
+      HARD_ERROR=1
+      ENTRY_HARD_ERROR=1
+      break
+    fi
+    SEEN_HASHES[$HASH]="$ISSUE_NUM"
+    echo "$KEY: filed #$ISSUE_NUM $base"
+  done
+
+  # ---- 4g: stamp the last-check time ----------------------------------------
+  # Only when no hard error broke the entry's file loop.
+  if [[ "$ENTRY_HARD_ERROR" -eq 0 ]]; then
+    state_set "$KEY" "$NOW"
+  fi
+done
+
+# ---- Step 5: exit -----------------------------------------------------------
+if [[ "$HARD_ERROR" -ne 0 ]]; then
+  exit 1
+fi
+exit 0
