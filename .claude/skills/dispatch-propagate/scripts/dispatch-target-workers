@@ -394,7 +394,10 @@ awk -v mode="$MODE" \
            else lo = mid
          }
          fire = int(hi + 0.5)
-         if (fire < (now + 0)) fire = now + 0   # defensive: crossing is > now here
+         # Unreachable: bisect only runs when W_of(now) <= used_weekly, and W_of
+         # is monotonic increasing, so hi (and thus fire) converges to a t >= now.
+         # Kept as a defensive clamp against boundary rounding.
+         if (fire < (now + 0)) fire = now + 0
          print fire
          exit
        }

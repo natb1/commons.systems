@@ -6775,6 +6775,13 @@ sr_setup() {
   # Default: point at an absent file so tests without explicit telemetry get
   # the missing-telemetry no-op unless they override env vars.
   export DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH="$TMPDIR_TEST/rl/missing.json"
+  # Pin the budgeter's own rate_limits path at the same temp file. The reseed
+  # script passes telemetry to the budgeter via per-field env vars, which take
+  # precedence over any file read — so the budgeter never reads this path in
+  # practice. Exporting it anyway isolates the test from the real
+  # ~/.local/share/.../rate_limits.json if the budgeter's read/override order
+  # ever changes.
+  export DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH="$TMPDIR_TEST/rl/missing.json"
   export DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE="$TMPDIR_TEST/main"
 
   # systemd-run stub: records its argv (one line per call), exits 0.
@@ -6791,6 +6798,7 @@ sr_teardown() {
   TMPDIR_TEST=""
   unset DISPATCH_CONFIG_DIR
   unset DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH
+  unset DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH
   unset DISPATCH_SCHEDULE_RESEED_NOW
   unset DISPATCH_SCHEDULE_RESEED_USED_WEEKLY
   unset DISPATCH_SCHEDULE_RESEED_RESETS_AT_WEEKLY
@@ -6823,6 +6831,8 @@ sr_write_rl() {
   joined=$(IFS=,; printf '%s' "${parts[*]}")
   printf '{%s}\n' "$joined" > "$path"
   export DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH="$path"
+  # Keep the budgeter's path pinned to the same file (see sr_setup).
+  export DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH="$path"
 }
 
 # --- Test 1: weekly cap hit → schedules at weekly resets_at ------------------
@@ -7387,6 +7397,48 @@ if [[ "$E" =~ ^[0-9]+$ ]] && (( E > 1000000 )) && (( E < 1302400 )); then
   PASS=$((PASS + 1)); echo "  PASS: real budgeter arms crossing $E strictly in (1000000, 1302400)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: real budgeter expected crossing in (1000000, 1302400), got E='$E' out='$out'"
+fi
+sr_teardown
+
+# --- Test 18b: reopen reports an unexpected string → silent no-op ------------
+#
+# The budgeter's --reopen-at contract is numeric-epoch | `none`. If it ever
+# emits anything else (a non-numeric, non-`none` token — e.g. a future
+# diagnostic leaking to stdout), the reseed script must treat it like a
+# budgeter failure: no-op with exit 0 and a stderr diagnostic, never arming a
+# timer on a garbage value. This makes the else-branch of the
+# numeric/`none`/else triad explicit.
+
+echo "Test: pace path reopen=<unexpected string> → silent no-op (no systemd-run call)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+sr_write_rl "rl.json" 14 99999 10 88888
+cat > "$TMPDIR_TEST/tw-stub" <<'STUB'
+#!/usr/bin/env bash
+echo garbage
+STUB
+chmod +x "$TMPDIR_TEST/tw-stub"
+export DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD="$TMPDIR_TEST/tw-stub"
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr"); then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "reopen=<unexpected>; stdout silent" "" "$out"
+assert_eq "reopen=<unexpected>; exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: reopen=<unexpected>; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reopen=<unexpected>; no systemd-run invocation"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "unexpected result" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: reopen=<unexpected>; stderr diagnostic emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reopen=<unexpected>; stderr diagnostic emitted"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
 fi
 sr_teardown
 
