@@ -1,6 +1,6 @@
 ---
 name: security-review-fix
-description: Security phase — classify the diff's changed surface, then fan out only the relevant security subagents (skip entirely for docs-only diffs), run CodeQL and the dependency audit inline when relevant, classify findings, apply the required fixes, post a PR comment, apply the dispatch:security-reviewed label, and mark the PR ready
+description: Security phase — classify the diff's changed surface, then fan out only the relevant security subagents (skip entirely for docs-only diffs), run CodeQL and the dependency audit inline when relevant, classify findings, file security follow-ups for meaningful out-of-scope findings, apply the required fixes, post a PR comment, apply the dispatch:security-reviewed label, and mark the PR ready
 ---
 
 # Security Review and Fix
@@ -180,12 +180,19 @@ ready. Otherwise run all steps in order.
      > "$AUDIT_DIR/audit-baseline.json"
    ```
 
-   Report only advisories whose advisory ID appears in
-   `$AUDIT_DIR/audit-head.json` but not in `$AUDIT_DIR/audit-baseline.json` —
-   these are CVEs the PR's dependency changes newly expose. Also flag any
-   dependency the PR adds or upgrades whose resolved version skips a published
-   security-patch release for that package. Normalize each into the
-   **Per-finding schema**.
+   Advisories whose ID appears in `$AUDIT_DIR/audit-head.json` but **not** in
+   `$AUDIT_DIR/audit-baseline.json` are CVEs the PR's dependency changes newly
+   expose — normalize each into the **Per-finding schema** with
+   `introduced_by_diff=true`; these are in-scope and classify `required`. Also
+   flag any dependency the PR adds or upgrades whose resolved version skips a
+   published security-patch release.
+
+   Advisories whose ID appears in **both** head and baseline rated `high` or
+   `critical` are pre-existing — the diff did not introduce them. Normalize each
+   into the **Per-finding schema** with `introduced_by_diff=false` and classify
+   `out-of-scope`: they feed the follow-up-filing step below, not the PR's
+   required-fix set. Pre-existing advisories rated `moderate` or `low` are below
+   the meaningfulness threshold — do not surface them.
 
    ### CodeQL alerts (inline, when `surface=code`)
 
@@ -245,6 +252,61 @@ ready. Otherwise run all steps in order.
    The classified finding set is the input to Step 2 and the audit trail for
    the Step 4 PR comment.
 
+   ### File follow-ups for meaningful out-of-scope findings
+
+   Meaningful out-of-scope CodeQL alerts and pre-existing npm advisories are
+   filed as `security`-labeled follow-up issues — otherwise they evaporate when
+   the PR merges. The PR's own required-fix set stays scoped to the diff
+   (unchanged); this only files trackers for genuine findings the diff did not
+   introduce.
+
+   **Meaningfulness threshold** (documented to keep follow-up noise low):
+
+   - CodeQL: an alert classified `out-of-scope` with `security_severity_level`
+     of `critical`, `high`, or `medium`.
+   - npm: a pre-existing advisory classified `out-of-scope` rated `high` or
+     `critical` and not introduced by the diff (`introduced_by_diff=false`).
+   - `required` and `false-positive` findings are never filed.
+
+   Serialize the classified `codeql` and `npm` findings to a JSON array under
+   `tmp/` — one object per finding carrying `classification`, `source`, and the
+   source's fields (CodeQL: `rule_id`, `alert_number`, `security_severity_level`,
+   `description`, `location`, `html_url`; npm: `advisory_id`, `severity`,
+   `introduced_by_diff`, `package`, `title`, `url`), all already captured during
+   normalization. Findings from other sources carry no stable ID and are omitted.
+   Pipe the array through `dispatch-security-followup` with `PR_NUM` (pure — no
+   network/git/gh, so it runs sandboxed-fine):
+
+   ```bash
+   .claude/skills/dispatch-propagate/scripts/dispatch-security-followup "$PR_NUM" \
+     < tmp/security-findings.json
+   ```
+
+   It applies the threshold and emits a JSON array of `{identifier, title, body}`
+   follow-ups (empty when none qualify). Each `identifier` — CodeQL `rule.id` +
+   alert number, or the npm advisory ID — is embedded in the `title`, so
+   `/file-issue`'s title-keyword dedup prevents re-filing the same alert across
+   repeated runs or multiple PRs.
+
+   For each emitted follow-up, fork a subagent (`subagent_type: general-purpose`,
+   `model: sonnet`); run them in parallel (multiple Agent calls in one message).
+   Each subagent:
+
+   1. Invokes `/file-issue` with the follow-up's `title` on the first line and
+      its `body` after. `/file-issue` owns duplicate detection, creation, `@me`
+      assignment, and the `help wanted` label; it prints `CREATED <N>` or
+      `EXISTING <N>` on its own line — parse `<N>`.
+   2. Applies the topic and type labels (use `dangerouslyDisableSandbox: true` —
+      `gh` needs network):
+
+      ```bash
+      gh issue edit <N> --add-label security --add-label bug
+      ```
+
+   3. Returns `<N>` mapped to the follow-up's `identifier`.
+
+   Capture each `<N>` against its source finding for the Step 4 comment.
+
 2. **Apply the required fixes.** Implement fixes for the findings classified
    `required` in Step 1 — launch implementation subagent(s) via the Agent tool,
    constrained to **working-tree edits only — no commits, no pushes**. Choose
@@ -265,7 +327,9 @@ ready. Otherwise run all steps in order.
    summarizes **every** finding from Step 1 and its disposition — fixed (with
    the fix's commit SHA) or not fixed (with the reason). CodeQL-sourced findings
    are identified by their `rule.id` and alert `number`, linked via their
-   `html_url`; there is no separate CodeQL listing. The body file **must** live
+   `html_url`; there is no separate CodeQL listing. Each out-of-scope finding
+   filed as a follow-up in Step 1 links its follow-up issue `#<N>` alongside its
+   disposition. The body file **must** live
    under `tmp/` because `post-pr-comment.sh` restricts paths to that directory.
    Then post it (use `dangerouslyDisableSandbox: true` — the script invokes
    `gh`):

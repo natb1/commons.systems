@@ -38,20 +38,29 @@ fi
 # transient git/dispatch-phase/cache failure from blanking the other segments.
 print_dispatch_segment() {
   local cwd_raw="$1"
-  local branch issue cache phase_script now mtime phase
+  local branch issue cache phase_script ci_ready_script now mtime phase
   branch=$(git -C "$cwd_raw" branch --show-current 2>/dev/null) || return 0
   [[ "$branch" =~ ^([1-9][0-9]*)- ]] || return 0     # main / non-issue → nothing
   issue="${BASH_REMATCH[1]}"
   cache="$SCRIPT_DIR/../../tmp/dispatch-phase"
   phase_script="$SCRIPT_DIR/../skills/dispatch-propagate/scripts/dispatch-phase"
+  ci_ready_script="$SCRIPT_DIR/../skills/dispatch-propagate/scripts/dispatch-ci-ready"
   now=$(date +%s)
   mtime=$(stat -c %Y "$cache" 2>/dev/null || echo 0)
   if (( now - mtime >= DISPATCH_PHASE_TTL )); then
     mkdir -p "$(dirname "$cache")" 2>/dev/null
     touch "$cache" 2>/dev/null                       # bump mtime → no stampede
+    # Consult readiness first: a not-ready target (CI verdict still pending)
+    # displays `waiting`; otherwise display the actionable phase. Sourcing
+    # `waiting` from the readiness predicate rather than the phase enum keeps the
+    # display correct once dispatch-phase stops emitting `waiting`.
     setsid bash -c '
-      p=$("$1" "$2" 2>/dev/null) && [ -n "$p" ] && printf "%s" "$p" > "$3"
-    ' _ "$phase_script" "$issue" "$cache" >/dev/null 2>&1 </dev/null &
+      if "$4" "$2" >/dev/null 2>&1; then
+        p=$("$1" "$2" 2>/dev/null) && [ -n "$p" ] && printf "%s" "$p" > "$3"
+      else
+        printf "%s" waiting > "$3"
+      fi
+    ' _ "$phase_script" "$issue" "$cache" "$ci_ready_script" >/dev/null 2>&1 </dev/null &
   fi
   phase=$(cat "$cache" 2>/dev/null) || return 0
   [[ -n "$phase" ]] || return 0
