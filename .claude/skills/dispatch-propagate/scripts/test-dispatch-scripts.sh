@@ -15080,6 +15080,126 @@ assert_eq "distinct: worktrees all unique" "3" \
   "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
 mat_teardown
 
+# --- fan-out exclusion (#1062): the loop passes its SEEN set as --exclude so ---
+# dispatch-select-target yields the NEXT distinct target instead of re-returning
+# an already-processed one. Each of the following tests overrides the default
+# (arg-ignoring) select-target fake with an EXCLUDE-HONORING fake that returns
+# the first MAT_QUEUE entry NOT in the passed --exclude set. WITHOUT --exclude
+# this fake returns the queue HEAD on every call — re-surfacing an already-
+# spawned target — the exact scenario the loop's exclusion must defeat. The
+# helper below writes that fake into the live TMPDIR_TEST.
+write_exclude_honoring_select_target() {
+  cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+# Exclude-honoring fake (#1062): returns the first MAT_QUEUE entry NOT in the
+# passed --exclude set, modelling a real selector yielding the next distinct
+# target. WITHOUT --exclude it returns the first entry every call — re-surfacing
+# an already-spawned target (registration lag / orphan self-close), the exact
+# scenario the loop's exclusion must defeat.
+declare -A EX=()
+while [[ \$# -gt 0 ]]; do
+  case "\$1" in
+    --exclude) shift; while [[ \$# -gt 0 && "\$1" =~ ^[0-9]+\$ ]]; do EX["\$1"]=1; shift; done ;;
+    *) shift ;;
+  esac
+done
+read -r -a Q <<< "\${MAT_QUEUE:-}"
+echo "called exclude=\${!EX[*]:-}" >> "$TMPDIR_TEST/logs/select-target.log"
+for n in "\${Q[@]}"; do
+  if [[ -z "\${EX[\$n]:-}" ]]; then echo "issue \$n"; exit 0; fi
+done
+echo empty
+FAKE
+  chmod +x "$TMPDIR_TEST/dispatch-select-target"
+}
+
+# (a) lagged-live re-surface: queue HEAD 839 is the already-spawned arg, re-
+# surfacing because its live ownership is not yet visible to the next selection
+# (mechanism 1). Without the loop's --exclude the fake would re-return 839 every
+# call and the run would stall at 1 spawn. With it, selection advances 720, 508.
+echo "Test: materialize-spawn fan-out excludes lagged-live re-surfaced target (#1062)"
+mat_setup
+write_exclude_honoring_select_target
+export MAT_QUEUE="839 720 508"
+out=$(run_mat 839 queue --gap 3)
+assert_eq "fanout-lag: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "fanout-lag: distinct worktrees" "3" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
+assert_eq "fanout-lag: summary 3 of gap 3" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 3 of gap 3')"
+assert_eq "fanout-lag: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fanout-lag: no 'no further distinct targets' stop" "0" \
+  "$(printf '%s\n' "$out" | grep -c 'no further distinct targets')"
+mat_teardown
+
+# (a') orphan (self-closed) re-surface: 720 re-surfaces because it self-closed
+# fast, leaving an orphan worktree selection does not skip (mechanism 2). The
+# duplicate 720 in the queue is spawned once; the exclusion carries it past.
+echo "Test: materialize-spawn fan-out excludes orphan self-closed re-surfaced target (#1062)"
+mat_setup
+write_exclude_honoring_select_target
+export MAT_QUEUE="720 720 508"
+out=$(run_mat 839 queue --gap 3)
+assert_eq "fanout-orphan: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "fanout-orphan: distinct worktrees (839,720,508)" "3" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
+assert_eq "fanout-orphan: summary 3 of gap 3" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 3 of gap 3')"
+assert_eq "fanout-orphan: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fanout-orphan: no 'no further distinct targets' stop" "0" \
+  "$(printf '%s\n' "$out" | grep -c 'no further distinct targets')"
+mat_teardown
+
+# (b) multi-leaf subtree, first leaf excluded drains to the next: the exclusion
+# threads into the leaf trace, so a subtree whose first startable leaf (5500) was
+# already processed advances to its sibling (5501) rather than abandoning the
+# parent's remaining leaves.
+echo "Test: materialize-spawn fan-out drains multi-leaf subtree past excluded first leaf (#1062)"
+mat_setup
+write_exclude_honoring_select_target
+export MAT_QUEUE="5500 5501"
+out=$(run_mat 5500 queue --gap 2)
+assert_eq "fanout-subtree: spawn count" "2" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "fanout-subtree: distinct worktrees (5500,5501)" "2" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
+assert_eq "fanout-subtree: summary 2 of gap 2" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 2 of gap 2')"
+assert_eq "fanout-subtree: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+
+# (c) genuinely empty frontier: once 839 is excluded the queue has nothing left,
+# so selection returns `empty` and the loop stops cleanly on a real empty — not
+# on a re-selection.
+echo "Test: materialize-spawn fan-out stops cleanly on a genuinely empty frontier (#1062)"
+mat_setup
+write_exclude_honoring_select_target
+export MAT_QUEUE=""
+out=$(run_mat 839 queue --gap 5)
+assert_eq "fanout-empty: spawn count" "1" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "fanout-empty: summary 1 of gap 5 (queue exhausted)" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 5 (queue exhausted)')"
+assert_eq "fanout-empty: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fanout-empty: no 'no further distinct targets' stop" "0" \
+  "$(printf '%s\n' "$out" | grep -c 'no further distinct targets')"
+mat_teardown
+
+# (backstop) contract violation: dispatch-select-target ALWAYS returns 839 (the
+# already-processed arg) regardless of --exclude. The loop's defensive backstop
+# (#1062) must break rather than spin forever: it records SEEN[839] for target 1,
+# the fake re-returns 839, SEEN[839] is set → backstop fires.
+echo "Test: materialize-spawn fan-out backstop breaks on selector contract violation (#1062)"
+mat_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+echo "issue 839"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue --gap 5 2>"$TMPDIR_TEST/logs/mat-stderr.log")
+assert_eq "backstop: spawn count (only the arg)" "1" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "backstop: summary 1 of gap 5 (unexpected re-selection)" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 5 (selection re-returned an excluded target (unexpected))')"
+assert_eq "backstop: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "backstop: stderr names the contract violation" "1" \
+  "$(grep -c 'contract violation' "$TMPDIR_TEST/logs/mat-stderr.log")"
+mat_teardown
+
 # --- --gap unbounded is removed → usage error exit 2 -------------------------
 # The unbounded fan-out machinery is gone (#1061): a manual /dispatch now spawns
 # exactly one gate-exempt worker (arriving as --gap 1, the single-target path),
