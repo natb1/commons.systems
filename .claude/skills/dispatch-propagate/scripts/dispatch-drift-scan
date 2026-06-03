@@ -1,0 +1,213 @@
+#!/usr/bin/env bash
+# dispatch-drift-scan — gather the deterministic evidence for the
+# /dispatch-worker implement-phase relevance-drift review (Step 3) in a single
+# invocation, so the dispatching session only owns the verdict.
+#
+# The implement-phase relevance review asks: has the codebase drifted away from
+# what this issue assumes since the issue was filed? The *evidence* for that
+# question is mechanical — issue createdAt (the drift window anchor), commits to
+# the named paths since then, PRs merged in the window, and whether the issue's
+# named references still exist. This script emits that evidence. The model
+# caller keeps the proceed/adjust/stop verdict and the convention-drift read of
+# CLAUDE.md / .claude/rules/*.md (judgment, not scripted).
+#
+# Usage:
+#   dispatch-drift-scan <N>
+#
+#   <N>   Issue number (digits only).
+#
+# Reference-extraction heuristic (what is and isn't mined):
+#   The scan reads ONLY single-backtick inline-code spans from the issue body —
+#   the project convention is that every cited path, module, function, CLI
+#   command, env var, and npm script is wrapped in a single backtick pair.
+#   Triple-backtick fences and multi-backtick spans are OUT OF SCOPE and are not
+#   mined; if a reference lives only inside a fenced block it will not appear in
+#   the scan (acceptable — fences hold examples, not the issue's cited surface).
+#   Each span is tokenized on whitespace. Tokens are dropped when they contain
+#   `<` or `>` (placeholders like <N>), start with `--` (flags), or are empty.
+#   Surviving tokens are partitioned:
+#     PATH REFS — token contains `/`, OR ends with a known code extension
+#       (.sh .md .ts .tsx .js .mjs .cjs .json .yml .yaml .rules), OR is a known
+#       dotfile (CLAUDE.md, CLAUDE.local.md). A token with a `*` glob is kept
+#       verbatim and used as a git pathspec / compgen glob.
+#     NAME REFS — remaining identifier-shaped tokens (^[A-Za-z0-9._:/-]{3,}$).
+#
+# Stdout protocol (human-readable evidence; the model reads and judges it):
+#   === createdAt anchor ===
+#   === Input 1: commits since <createdAt> ===
+#   === Input 2: merged PRs in window ===            (or a WINDOW-TOO-WIDE marker)
+#   === Input 3: named-reference validity ===
+#   === Flagged references ===                       (consolidated advisory list)
+#
+# Exit codes:
+#   0  evidence emitted — INCLUDING the too-wide-window case (the guard is an
+#      advisory marker, not an error).
+#   2  usage error (missing or non-digit <N>).
+#   non-zero   propagated from gh on hard error.
+#
+# Note: callers invoke this with dangerouslyDisableSandbox: true — it calls
+# gh (see .claude/rules/sandbox.md).
+
+set -euo pipefail
+
+# ---- Step 0: parse arguments ------------------------------------------------
+
+N="${1:-}"
+
+if [[ -z "$N" || ! "$N" =~ ^[0-9]+$ ]]; then
+  echo "error: usage: dispatch-drift-scan <N> — <N> must be digits" >&2
+  exit 2
+fi
+
+# ---- Step A: fetch the issue (one gh call) ----------------------------------
+
+ISSUE_JSON=$(gh issue view "$N" --json createdAt,body)
+CREATED_AT=$(printf '%s' "$ISSUE_JSON" | jq -r '.createdAt')
+BODY=$(printf '%s' "$ISSUE_JSON" | jq -r '.body')
+
+# ---- Step B: extract references from single-backtick spans ------------------
+# Pull every `...` run, strip the backticks, tokenize on whitespace, partition.
+# grep -oE over the body yields one span per line (backticks included); sed
+# strips the surrounding backticks. Tolerant of triple-fence noise: a ```fence
+# line still only contributes whatever backtick-delimited runs grep finds.
+
+declare -a PATH_REFS=()
+declare -a NAME_REFS=()
+
+is_path_token() {
+  local t="$1"
+  [[ "$t" == */* ]] && return 0
+  case "$t" in
+    *.sh|*.md|*.ts|*.tsx|*.js|*.mjs|*.cjs|*.json|*.yml|*.yaml|*.rules) return 0 ;;
+    CLAUDE.md|CLAUDE.local.md) return 0 ;;
+  esac
+  return 1
+}
+
+in_array() {
+  local needle="$1"; shift
+  local e
+  for e in "$@"; do [[ "$e" == "$needle" ]] && return 0; done
+  return 1
+}
+
+# Extract spans. `|| true` so a body with no backticks doesn't abort under set -e.
+SPANS=$(printf '%s' "$BODY" | grep -oE '`[^`]+`' | sed 's/^`//; s/`$//' || true)
+
+if [[ -n "$SPANS" ]]; then
+  while IFS= read -r span; do
+    [[ -z "$span" ]] && continue
+    # Tokenize on whitespace.
+    for tok in $span; do
+      [[ -z "$tok" ]] && continue
+      [[ "$tok" == *"<"* || "$tok" == *">"* ]] && continue   # placeholder
+      [[ "$tok" == --* ]] && continue                         # flag
+      if is_path_token "$tok"; then
+        in_array "$tok" "${PATH_REFS[@]:-}" || PATH_REFS+=("$tok")
+      elif [[ "$tok" =~ ^[A-Za-z0-9._:/-]{3,}$ ]]; then
+        in_array "$tok" "${NAME_REFS[@]:-}" || NAME_REFS+=("$tok")
+      fi
+    done
+  done <<< "$SPANS"
+fi
+
+# ---- createdAt anchor -------------------------------------------------------
+
+echo "=== createdAt anchor ==="
+echo "$CREATED_AT"
+echo ""
+
+# ---- Step C: Input 1 — commits since createdAt ------------------------------
+
+echo "=== Input 1: commits since $CREATED_AT ==="
+if [[ "${#PATH_REFS[@]}" -gt 0 ]]; then
+  commits=$(git log --since="$CREATED_AT" --oneline -- "${PATH_REFS[@]}" || true)
+  if [[ -n "$commits" ]]; then
+    echo "$commits"
+  else
+    echo "(none)"
+  fi
+else
+  echo "(commit scan skipped — the issue named no path references)"
+fi
+echo ""
+
+# ---- Step D: Input 2 — merged PRs in window ---------------------------------
+
+echo "=== Input 2: merged PRs in window ==="
+PRS=$(gh pr list --state merged --search "merged:>=$CREATED_AT" --limit 100 \
+  --json number,title,mergedAt)
+PR_COUNT=$(printf '%s' "$PRS" | jq 'length')
+
+if [[ "$PR_COUNT" -ge 100 ]]; then
+  echo "WINDOW-TOO-WIDE: the merged-PR query hit the 100-result limit, so this"
+  echo "window is too wide to scan reliably. Re-run /ready on this issue to"
+  echo "narrow its window rather than trusting a partial merged-PR scan."
+  echo "(partial PR enumeration suppressed for this input)"
+elif [[ "$PR_COUNT" -eq 0 ]]; then
+  echo "(none)"
+else
+  printf '%s' "$PRS" | jq -r '.[] | "#\(.number)  \(.mergedAt)  \(.title)"'
+fi
+echo ""
+
+# ---- Step E: Input 3 — named-reference validity -----------------------------
+
+declare -a FLAGGED=()
+
+echo "=== Input 3: named-reference validity ==="
+
+# Path refs: existence-check the working tree.
+for p in "${PATH_REFS[@]:-}"; do
+  [[ -z "$p" ]] && continue
+  present=0
+  if [[ "$p" == *"*"* ]]; then
+    compgen -G "$p" >/dev/null 2>&1 && present=1
+  else
+    [[ -e "$p" ]] && present=1
+  fi
+  if [[ "$present" -eq 1 ]]; then
+    echo "  $p"
+  else
+    echo "  $p [ABSENT]"
+    FLAGGED+=("$p [ABSENT]")
+  fi
+done
+
+# Name refs: a single grep with all names alternated into one regex.
+if [[ "${#NAME_REFS[@]}" -gt 0 ]]; then
+  pattern=""
+  for n in "${NAME_REFS[@]}"; do
+    # Escape regex metacharacters so e.g. CLAUDE.md matches literally.
+    esc=$(printf '%s' "$n" | sed 's/[.[\*^$()+?{|]/\\&/g')
+    if [[ -z "$pattern" ]]; then
+      pattern="$esc"
+    else
+      pattern="$pattern|$esc"
+    fi
+  done
+  grep_out=$(grep -rIE --exclude-dir=.git --exclude-dir=node_modules "$pattern" . || true)
+  for n in "${NAME_REFS[@]}"; do
+    if printf '%s' "$grep_out" | grep -qF -- "$n"; then
+      echo "  $n"
+    else
+      echo "  $n [NOT FOUND]"
+      FLAGGED+=("$n [NOT FOUND]")
+    fi
+  done
+fi
+echo ""
+
+# ---- Consolidated flagged references ----------------------------------------
+
+echo "=== Flagged references ==="
+echo "(advisory: an absent deliverable path — a file this issue is meant to"
+echo "CREATE — or a reference to a not-yet-merged sibling can be an EXPECTED"
+echo "absence. These flags are advisory; the model judges them.)"
+if [[ "${#FLAGGED[@]}" -gt 0 ]]; then
+  for f in "${FLAGGED[@]}"; do
+    echo "  $f"
+  done
+else
+  echo "  (none)"
+fi

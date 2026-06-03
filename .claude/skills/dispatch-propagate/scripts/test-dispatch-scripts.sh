@@ -15887,6 +15887,181 @@ else
 fi
 digest_window_teardown
 
+# dispatch-drift-scan tests
+# ============================================================================
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   copy of dispatch-drift-scan
+#   $TMPDIR_TEST/bin/       gh + git stubs (prepended to PATH)
+#   $TMPDIR_TEST/tree/      the fixture working tree the script greps / stats
+#
+# The stubs key on "$*" and read fixtures from TREE = dirname/.. = $TMPDIR_TEST,
+# which is a separate dir from the fixture working tree ($TMPDIR_TEST/tree) the
+# test cds into. So stub fixtures (issue.json, prs.json, commits.txt) live at
+# $TMPDIR_TEST/*, while the real files the script existence-checks/greps live at
+# $TMPDIR_TEST/tree/*.
+
+# Local contains / not-contains helpers for the drift-scan section. (The suite
+# has only assert_eq; these mirror the inline contains-pattern used elsewhere.)
+assert_contains_local() {
+  local label="$1" needle="$2" hay="$3"
+  TOTAL=$((TOTAL + 1))
+  if [[ "$hay" == *"$needle"* ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: $label"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: $label"
+    echo "    needle: '$needle'"
+  fi
+}
+
+assert_not_contains_local() {
+  local label="$1" needle="$2" hay="$3"
+  TOTAL=$((TOTAL + 1))
+  if [[ "$hay" != *"$needle"* ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: $label"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: $label"
+    echo "    unexpected needle present: '$needle'"
+  fi
+}
+
+drift_scan_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/tree"
+
+  cp "$SCRIPT_DIR/dispatch-drift-scan" "$TMPDIR_TEST/scripts/dispatch-drift-scan"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-drift-scan"
+
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+args="$*"
+TREE="$(cd "$(dirname "$0")/.." && pwd)"
+case "$args" in
+  issue\ view\ *\ --json\ createdAt,body)
+    if [[ -f "$TREE/issue.json" ]]; then
+      cat "$TREE/issue.json"
+    else
+      echo '{"createdAt":"2026-01-01T00:00:00Z","body":"no refs"}'
+    fi
+    ;;
+  "pr list --state merged --search merged:>="*" --limit 100 --json number,title,mergedAt")
+    if [[ -f "$TREE/prs.json" ]]; then
+      cat "$TREE/prs.json"
+    else
+      echo '[]'
+    fi
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  cat > "$TMPDIR_TEST/bin/git" <<'STUB'
+#!/usr/bin/env bash
+args="$*"
+TREE="$(cd "$(dirname "$0")/.." && pwd)"
+case "$args" in
+  log\ --since=*)
+    if [[ -f "$TREE/commits.txt" ]]; then
+      cat "$TREE/commits.txt"
+    fi
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/git"
+
+  SAVED_PATH_DRIFT="$PATH"
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+}
+
+drift_scan_teardown() {
+  cd "$SCRIPT_DIR"
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  export PATH="$SAVED_PATH_DRIFT"
+}
+
+# --- Test: evidence output ---
+
+echo "Test: dispatch-drift-scan emits the four evidence inputs"
+drift_scan_setup
+# Fixture working tree: a present path and a present name ref.
+printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
+printf 'presentName_token here\n' > "$TMPDIR_TEST/tree/lib.txt"
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh` and `does/not/exist.ts`. Uses `presentName_token` and `absentName_token`."}
+EOF
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[{"number":42,"title":"some pr","mergedAt":"2026-06-02T00:00:00Z"}]
+EOF
+cat > "$TMPDIR_TEST/commits.txt" <<'EOF'
+abc1234 reworked present.sh distinctively_committed
+def5678 unrelated touch
+EOF
+cd "$TMPDIR_TEST/tree"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
+assert_eq "dispatch-drift-scan: evidence output exits 0" "0" "$rc"
+assert_contains_local "dispatch-drift-scan: prints createdAt anchor" "2026-06-03T00:00:00Z" "$out"
+assert_contains_local "dispatch-drift-scan: absent path flagged [ABSENT]" "does/not/exist.ts [ABSENT]" "$out"
+assert_not_contains_local "dispatch-drift-scan: present path not flagged [ABSENT]" "present.sh [ABSENT]" "$out"
+assert_contains_local "dispatch-drift-scan: present path line renders" "  present.sh" "$out"
+assert_contains_local "dispatch-drift-scan: absent name flagged [NOT FOUND]" "absentName_token [NOT FOUND]" "$out"
+assert_not_contains_local "dispatch-drift-scan: present name not flagged [NOT FOUND]" "presentName_token [NOT FOUND]" "$out"
+assert_contains_local "dispatch-drift-scan: a commit line renders" "distinctively_committed" "$out"
+assert_contains_local "dispatch-drift-scan: merged PR enumerated" "#42" "$out"
+drift_scan_teardown
+
+# --- Test: too-wide-window guard ---
+
+echo "Test: dispatch-drift-scan trips the too-wide-window guard at the 100-PR limit"
+drift_scan_setup
+printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh`."}
+EOF
+jq -nc '[range(100) | {number: (.+1), title: ("pr " + (.+1|tostring)), mergedAt: "2026-06-01T00:00:00Z"}]' \
+  > "$TMPDIR_TEST/prs.json"
+cd "$TMPDIR_TEST/tree"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
+assert_eq "dispatch-drift-scan: too-wide window still exits 0" "0" "$rc"
+assert_contains_local "dispatch-drift-scan: emits WINDOW-TOO-WIDE marker" "WINDOW-TOO-WIDE" "$out"
+assert_contains_local "dispatch-drift-scan: recommends re-run" "Re-run" "$out"
+assert_contains_local "dispatch-drift-scan: recommends /ready" "/ready" "$out"
+assert_contains_local "dispatch-drift-scan: anchor still prints under guard" "2026-06-03T00:00:00Z" "$out"
+assert_not_contains_local "dispatch-drift-scan: partial PR list suppressed" "pr 50" "$out"
+drift_scan_teardown
+
+# --- Test: missing / invalid argument ---
+
+echo "Test: dispatch-drift-scan rejects a missing or non-digit argument"
+drift_scan_setup
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "dispatch-drift-scan: missing arg exits 2" "2" "$rc"
+err=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 2>&1 1>/dev/null) || true
+assert_contains_local "dispatch-drift-scan: missing arg stderr mentions usage" "usage" "$err"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" abc 2>/dev/null) && rc=0 || rc=$?
+assert_eq "dispatch-drift-scan: non-digit arg exits 2" "2" "$rc"
+drift_scan_teardown
+
+# --- Test: no path references → commit scan skipped ---
+
+echo "Test: dispatch-drift-scan skips the commit scan when no path refs are named"
+drift_scan_setup
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-03T00:00:00Z","body":"Uses `somename_ref` only."}
+EOF
+cd "$TMPDIR_TEST/tree"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
+assert_eq "dispatch-drift-scan: no-path-refs exits 0" "0" "$rc"
+assert_contains_local "dispatch-drift-scan: notes commit scan skipped" "commit scan skipped" "$out"
+drift_scan_teardown
+
 # ============================================================================
 # summary
 # ============================================================================
