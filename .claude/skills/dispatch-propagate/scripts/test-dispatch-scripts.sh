@@ -14406,6 +14406,8 @@ assert_eq "headless: synthetic id is stable across select-tick and materialize" 
   "$sel_id" "$mat_id"
 assert_eq "headless: synthetic id is non-empty" "1" \
   "$([ -n "$sel_id" ] && echo 1 || echo 0)"
+assert_eq "headless: synthetic id has headless: prefix (not a bare sentinel)" "1" \
+  "$([[ "$sel_id" == headless:* ]] && echo 1 || echo 0)"
 
 # Companion: a real session keeps its own id — the `:-` fallback never fires.
 # Fresh id logs so this run does not cross-contaminate the headless run above.

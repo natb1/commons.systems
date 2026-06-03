@@ -131,9 +131,12 @@ fi
 # dispatch-acquire-lock, the materialize-spawn hold, and the release) sees one
 # consistent holder id across the acquire / hold / release of this tick. Derive
 # it from the systemd unit's INVOCATION_ID (set by systemd, identical across all
-# subprocesses of the unit and unique per tick), falling back to a fixed
-# sentinel when neither is present. Exported once so all children agree.
-export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_ID:-dispatch-tick}}"
+# subprocesses of the unit and unique per tick), falling back to the dispatch-tick
+# PID ($$, unique per process, stable once exported) when neither is present. PID
+# is evaluated once at export time and frozen into the value, so all children see
+# the same fixed string regardless of how they check $$. Exported once so all
+# children agree.
+export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_ID:-$$}}"
 
 # --- Step 1: select the target ------------------------------------------------
 # Capture select-tick's full stdout and echo every line through (jit:/calendar:
