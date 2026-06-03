@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 # Select the single highest-priority task from the queue.
-# Usage: dispatch-select-target [--qa | --health-only]
+# Usage: dispatch-select-target [--qa | --health-only] [--exclude <n>...]
+#
+# --exclude <n>... names issue numbers the caller has already processed (the
+# fan-out loop's SEEN set, #1062); the selector never returns an excluded target
+# and instead surfaces the next distinct one. The exclusion is applied during
+# the queue scan, not as a post-selection output filter: a PR row is filtered by
+# its branch issue-prefix (<N>-<slug>) before FIRST_PR is recorded, so the
+# next-oldest PR in an already-tapped bucket surfaces; and the exclusion is
+# threaded into the leaf trace for issue rows, so a multi-leaf subtree whose
+# first leaf was already processed descends to its next startable leaf. Coexists
+# with --qa / --health-only — those flags start with `-`, so the integer-run
+# consumption stops at them.
 #
 # Selection is a pure function of GitHub state plus local-worktree existence.
 # The router's cwd carries no priority signal; invoking this script from any
@@ -99,11 +110,19 @@ source "$SCRIPT_DIR/lib.sh"
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 QA_MODE=false
 HEALTH_ONLY=false
+declare -A EXCLUDED=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --qa) QA_MODE=true; shift ;;
     --health-only) HEALTH_ONLY=true; shift ;;
+    --exclude)
+      shift
+      while [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; do
+        EXCLUDED["$1"]=1
+        shift
+      done
+      ;;
     *) echo "error: unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -112,6 +131,13 @@ if [[ "$QA_MODE" == "true" && "$HEALTH_ONLY" == "true" ]]; then
   echo "error: --qa and --health-only are mutually exclusive" >&2
   exit 1
 fi
+
+# Build the leaf-trace passthrough once: the excluded numbers thread into
+# dispatch-trace-leaf (#1062) so a multi-leaf subtree descends past an excluded
+# leaf. Only constructed when non-empty so the call site passes no --exclude
+# flag at all when no exclusion was requested.
+EXCLUDE_ARGS=()
+(( ${#EXCLUDED[@]} > 0 )) && EXCLUDE_ARGS=(--exclude "${!EXCLUDED[@]}")
 
 # Print origin/main's HEAD SHA if its CI has a failing check; print nothing if
 # main is healthy or only has in-progress checks. main's CI state spans two
@@ -512,6 +538,13 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   # lives on the issue (issue #909), so resolve the issue number from the PR's
   # branch prefix (<N>-<slug>) and check the issue's labels in ISSUE_LABELS_JSON.
   pr_issue_num="${pr_branch%%-*}"
+  # Skip a PR whose issue is in the --exclude set (#1062): the fan-out caller has
+  # already processed this target. Applied during the scan, before FIRST_PR is
+  # populated, so the next-oldest PR in an already-tapped bucket surfaces. The
+  # number matches what the fan-out loop records in SEEN for a pr row
+  # (${pr_branch%%-*}). Shared loop ⇒ also covers --qa selection — harmless and
+  # consistent.
+  [[ -n "$pr_issue_num" && -n "${EXCLUDED[$pr_issue_num]:-}" ]] && continue
   if [[ -n "$pr_issue_num" ]] && printf '%s' "$ISSUE_LABELS_JSON" \
       | jq -e --arg n "$pr_issue_num" \
         '(.[$n] // []) | any(.name == "dispatch:office-hours")' >/dev/null; then
@@ -607,13 +640,17 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   # Resolve a startable open leaf within the issue's subtree. dispatch-trace-leaf
   # in queue mode descends open blockers and sub-issues, skipping any child whose
   # <N>-* worktree is owned by a live session (#914) — an orphan child worktree
-  # stays descendable:
+  # stays descendable. The --exclude set (#1062) is threaded in so a leaf the
+  # fan-out caller already processed — including this help-wanted issue itself as
+  # the trace root, and a multi-leaf subtree's first leaf that self-closed and
+  # left an orphan worktree (not live-skipped) — is descended past to the next
+  # startable leaf, rather than re-returned:
   #   exit 0 — a startable open leaf was found; record it for this bucket.
-  #   exit 2 — every reachable open leaf is owned by a live session. Skip this
-  #            issue exactly as a direct live-owned worktree is skipped; a later
-  #            issue in the same bucket may still fill the slot.
+  #   exit 2 — every reachable open leaf is owned by a live session or excluded.
+  #            Skip this issue exactly as a direct live-owned worktree is skipped;
+  #            a later issue in the same bucket may still fill the slot.
   #   exit 1 — usage error; propagate as a hard failure, never swallow as a skip.
-  if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue); then
+  if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue "${EXCLUDE_ARGS[@]}"); then
     FIRST_ISSUE[$issue_bucket]="$leaf"
   else
     trace_status=$?
