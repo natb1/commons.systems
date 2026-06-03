@@ -47,8 +47,8 @@
 #   $CLAUDE_JOB_DIR set, router with NO continuation → park: print reason, exit 0
 #                                                      WITHOUT `claude rm`.
 #
-# Environment overrides for testability (mirroring dispatch-spawn-router's
-# DISPATCH_SPAWN_ROUTER_CLAUDE_CMD):
+# Environment overrides for testability (mirroring dispatch-spawn-worker's
+# DISPATCH_SPAWN_WORKER_CLAUDE_CMD):
 #   DISPATCH_SELF_CLOSE_CLAUDE_CMD     The `claude` command. Default: `claude`.
 #   DISPATCH_SELF_CLOSE_SYSTEMCTL_CMD  The `systemctl` command used to probe for
 #                                      a pending `dispatch-reseed*` timer.

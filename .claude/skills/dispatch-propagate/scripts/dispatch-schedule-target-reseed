@@ -4,13 +4,13 @@
 # its draft PR's CI still in progress.
 #
 # /dispatch <N> targets one explicit issue/PR — an effective queue of size one.
-# When N's PR has CI in progress, dispatch-phase returns `waiting` (an
-# in-progress, not-yet-actionable state). The multi-item queue handles this by
-# skipping the waiting PR and selecting the next ready priority — but the
+# When N's PR has CI in progress, dispatch-ci-ready reports not-ready (exit 1)
+# and there is no actionable phase yet. The multi-item queue handles this by
+# skipping the not-ready PR and selecting the next ready priority — but the
 # single-target path has no "next", so skipping equals doing nothing and the
 # run silently drains. Instead of draining, this script schedules a transient
-# systemd.user timer that, after a short delay, re-runs `dispatch-spawn-router
-# <N>` — re-seeding `/dispatch-propagate <N>` so the chain returns to the target
+# systemd.user timer that, after a short delay, re-runs the headless
+# `dispatch-tick <N>` — re-seeding the chain on <N> so it returns to the target
 # when its CI completes (a CI *failure* resolves to `verify`, an actionable
 # phase, so the wait terminates on its own once CI concludes).
 #
@@ -33,7 +33,7 @@
 #      create-on-"not found"). A label failure warns but does NOT abort the
 #      reseed — the timer matters more than the bookkeeping label.
 #   6. Schedule a transient systemd.user timer at NOW+DELAY whose ExecStart is
-#      `dispatch-spawn-router <N>`. The unit name embeds N and the fire epoch —
+#      `dispatch-tick <N>`. The unit name embeds N and the fire epoch —
 #      a repeated call with the same fire time collides on the unit name and
 #      systemd refuses to recreate, giving idempotency.
 #
@@ -233,14 +233,17 @@ fi
 # Persistent=true covers a WSL-down window that crosses fire time — a reseed
 # missed while WSL was down runs on the next start.
 #
-# ExecStart is dispatch-spawn-router with a trailing <N> arg — the optional
-# target that re-seeds `/dispatch-propagate <N>` so the chain returns to this
-# specific target when its CI completes.
+# ExecStart is the headless dispatch-tick script with a trailing <N> arg — the
+# target-keyed tick that re-seeds the chain on <N> so it returns to this specific
+# target when its CI completes. The timer unit is itself the detachment; there is
+# no nested model router session. (Before Unit 3 of #982 the ExecStart was
+# dispatch-spawn-router <N>, which spawned a `/dispatch-propagate <N>` model
+# session; that per-tick session is gone — the routing now lives in dispatch-tick.)
 #
 # --setenv=PATH="$PATH" propagates the scheduling caller's PATH into the
 # transient unit. Without it the unit inherits the systemd user manager's
 # minimal default PATH, which omits the nix store — so on NixOS/WSL hosts
-# /usr/bin/env can't resolve bash (exit 127) and the router can't find
+# /usr/bin/env can't resolve bash (exit 127) and the tick can't find
 # claude/git/jq. The caller (a /dispatch tick) always carries the full
 # nix-store PATH, so capturing it at schedule time makes the unit self-sufficient.
 
@@ -258,7 +261,7 @@ trap 'rm -f "$RUN_STDERR"' EXIT
      --working-directory="$MAIN_WORKTREE" \
      --timer-property=Persistent=true \
      --setenv=PATH="$PATH" \
-     "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-spawn-router" "$N" \
+     "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-tick" "$N" \
      2>"$RUN_STDERR"
 RC=$?
 if (( RC == 0 )); then

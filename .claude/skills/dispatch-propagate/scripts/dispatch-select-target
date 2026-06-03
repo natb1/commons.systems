@@ -77,7 +77,8 @@
 # the daemon round-trip.
 # A PR is also skipped when an issue it closes is blocked_by an open issue.
 # "done" (non-draft) PRs are skipped entirely.
-# "waiting" PRs (draft, CI still running/queued/not started) are skipped entirely.
+# Not-ready PRs (draft, CI still running/queued/not started — no verdict yet,
+# per dispatch-ci-ready) are skipped entirely.
 # An open help-wanted issue is also skipped when a non-draft (ready) PR closes it
 # (#920). A *draft* closing PR does NOT gate the issue — a stalled/orphaned draft
 # is the normal in-flight dispatch state and must leave the issue selectable so
@@ -497,12 +498,21 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
     continue
   fi
 
+  # Readiness gate (the single CI-verdict check): skip a PR with no actionable
+  # CI verdict yet. dispatch-ci-ready exits non-zero only for a draft PR whose
+  # rollup is still pending; a concluded (passing/failing) rollup, a non-draft
+  # PR, or no PR all report ready. Reuses the PR list fetched above.
+  if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$pr_branch" >/dev/null; then
+    continue
+  fi
+
   # Determine phase for this PR, reusing the PR list fetched above.
   phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$pr_branch")
 
-  # "done" PRs are complete; "waiting" PRs have nothing actionable yet.
+  # "done" PRs are complete (not-ready PRs were already filtered by the
+  # dispatch-ci-ready gate above).
   case "$phase" in
-    done|waiting) continue ;;
+    done) continue ;;
   esac
 
   # Skip PRs whose ISSUE is parked on a human (dispatch:office-hours). The label
@@ -517,8 +527,8 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
 
   # Skip PRs gated by an open blocker, using the prefetched BLOCKER_COUNTS map
   # (#794) instead of a per-closing-issue REST round-trip. A PR is skipped if any
-  # issue it closes has >0 open blockers. Placed after the done/waiting filter so
-  # discarded PRs are never consulted, and before FIRST_PR is populated so --qa
+  # issue it closes has >0 open blockers. Placed after the readiness gate and the
+  # done filter so discarded PRs are never consulted, and before FIRST_PR is populated so --qa
   # inherits the skip.
   #
   # A closing issue absent from the map (null in $blk) means its blockedBy state
