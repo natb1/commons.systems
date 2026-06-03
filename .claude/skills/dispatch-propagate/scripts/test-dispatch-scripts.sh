@@ -14845,6 +14845,38 @@ assert_eq "dispatch-jit-skill: no jit:* label exits 0" "0" "$rc"
 assert_eq "dispatch-jit-skill: no jit:* label prints nothing" "" "$out"
 jit_skill_teardown
 
+# --- Test: dispatch-jit-skill prints nothing when the jit:* label matches no jit entry ---
+
+echo "Test: dispatch-jit-skill prints nothing when the jit:* label matches no jit entry"
+jit_skill_setup
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "digest",
+      "repo": "some-owner/some-repo",
+      "label": "jit:digest",
+      "title": "Digest",
+      "body": "Recurring digest checkpoint.",
+      "project": "example-project",
+      "remindAfterClose": "24h",
+      "dueAfterClose": "48h",
+      "debounce": "1h",
+      "skill": "digest"
+    }
+  ]
+}
+EOF
+# The issue carries jit:stale, which no jit entry defines — the jq select emits
+# nothing and the script exits 0 with empty output.
+cat > "$TMPDIR_TEST/labels.json" <<'EOF'
+{"labels":[{"name":"jit:stale"},{"name":"help wanted"}]}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-skill" some-owner/some-repo 66); rc=$?
+assert_eq "dispatch-jit-skill: unmatched jit label exits 0" "0" "$rc"
+assert_eq "dispatch-jit-skill: unmatched jit label prints nothing" "" "$out"
+jit_skill_teardown
+
 # dispatch-digest-window tests
 # ============================================================================
 #
@@ -14854,7 +14886,7 @@ jit_skill_teardown
 #
 # The gh stub handles the two queries dispatch-digest-window issues:
 #   issue view <num> --repo <repo> --json createdAt,labels  → cat issue.json
-#   issue list --repo <repo> --label <label> --state closed --json number,closedAt
+#   issue list --repo <repo> --label <label> --state closed --limit <n> --json number,closedAt
 #                                                            → cat closed.json
 # Fixtures default to a minimal jit issue and an empty closed list.
 
@@ -14877,7 +14909,7 @@ case "$args" in
       echo '{"createdAt":"2026-01-01T00:00:00Z","labels":[{"name":"jit:digest"}]}'
     fi
     ;;
-  issue\ list\ --repo\ *\ --label\ *\ --state\ closed\ --json\ number,closedAt)
+  issue\ list\ --repo\ *\ --label\ *\ --state\ closed\ --limit\ *\ --json\ number,closedAt)
     if [[ -f "$TREE/closed.json" ]]; then
       cat "$TREE/closed.json"
     else
@@ -14945,6 +14977,20 @@ EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-digest-window" some-owner/some-repo 30); rc=$?
 assert_eq "dispatch-digest-window: exclude-self exits 0" "0" "$rc"
 assert_eq "dispatch-digest-window: exclude-self ignores own closedAt" "2026-05-15T00:00:00Z" "$out"
+digest_window_teardown
+
+# --- Test: exits 1 when the issue carries no jit:* label ---
+
+echo "Test: dispatch-digest-window exits 1 when the issue carries no jit:* label"
+digest_window_setup
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]}
+EOF
+# Capture with the set -e-safe pattern: a bare `cmd; rc=$?` would abort the
+# suite when the command exits nonzero.
+out=$("$TMPDIR_TEST/scripts/dispatch-digest-window" some-owner/some-repo 50 2>/dev/null) && rc=0 || rc=$?
+assert_eq "dispatch-digest-window: no jit:* label exits 1" "1" "$rc"
+assert_eq "dispatch-digest-window: no jit:* label prints nothing on stdout" "" "$out"
 digest_window_teardown
 
 # ============================================================================

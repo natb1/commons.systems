@@ -58,9 +58,15 @@ CREATED_AT=$(printf '%s' "$ISSUE_JSON" | jq -r '.createdAt')
 # Exclude <num> itself: a digest issue may be closed mid-run, but it must never
 # anchor the window on its own closedAt. Guard the empty list so jq yields the
 # empty string rather than the literal "null".
+#
+# --limit 100 lifts gh's default 30-result cap so a long jit history cannot
+# silently truncate the list before max_by sees the actual newest entry.
+# max_by(.closedAt) is a lexicographic compare, which equals chronological order
+# here: GitHub returns closedAt as zero-padded UTC ISO-8601 (e.g.
+# 2026-05-25T12:00:00Z), so string order is time order — no fromdate needed.
 
 CLOSED_JSON=$(gh issue list --repo "$REPO" --label "$JIT_LABEL" \
-  --state closed --json number,closedAt)
+  --state closed --limit 100 --json number,closedAt)
 
 PRIOR_CLOSED_AT=$(printf '%s' "$CLOSED_JSON" \
   | jq -r --arg num "$NUM" \

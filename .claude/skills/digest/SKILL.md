@@ -34,7 +34,11 @@ exists (cold start). Capture it as `<window-start>` for the next section.
 
 ## 2. Enumerate dispatch-queue work completed in the window
 
-Collect everything merged into `natb1/commons.systems` since the window start:
+Collect everything merged into `natb1/commons.systems` since the window start.
+The workspace repo is hardcoded here on purpose: dispatch-queue work always
+merges into `natb1/commons.systems`, whereas the `<repo>` argument names where
+the *digest issue itself* lives (`natb1/office-hours-nate` for the real digest
+jit) — a different repo. Do not substitute `<repo>` into this query.
 
 ```bash
 gh pr list --repo natb1/commons.systems --state merged \
@@ -121,11 +125,12 @@ Compose the summary:
 - per user-facing item: the live-demo outcome, or the numbered demo steps;
 - a list of the completed-but-internal items.
 
-Write the body to a temp file under this job's tmp dir (item titles may carry
-shell metacharacters, so do not inline the body), then post it:
+Write the body to a temp file under this job's tmp dir — use
+`$CLAUDE_JOB_DIR/tmp/digest-body.md` (item titles may carry shell
+metacharacters, so do not inline the body) — then post it:
 
 ```bash
-gh issue comment <num> --repo <repo> --body-file <tmp-file>
+gh issue comment <num> --repo <repo> --body-file "$CLAUDE_JOB_DIR/tmp/digest-body.md"
 ```
 
 Run this with `dangerouslyDisableSandbox: true` — it calls `gh`.
