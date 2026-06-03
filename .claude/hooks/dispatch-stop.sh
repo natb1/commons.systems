@@ -4,21 +4,32 @@
 # Wired to the Stop event. Owns the post-phase disposition that used to live
 # in /dispatch-worker Step 4: read the phase-completed marker, decide whether
 # the phase advanced or stalled, manage the dispatch:office-hours label,
-# spawn the next /dispatch router, and self-close on a clean advance. Moving
+# spawn the next headless dispatch-tick (via dispatch-spawn-tick), and
+# self-close on a clean advance. Moving
 # this out of the model loop fixes a mid-phase context-compaction session
 # leak — the harness fires Stop unconditionally at session end, regardless of
 # the model's last visible action.
 #
+# Early not-ready gate (marker-independent): when dispatch-ci-ready reports the
+# target's PR CI is back in progress (a push restarted CI between selection and
+# session end — the TOCTOU race), there is no actionable verdict for any branch
+# below to act on. Hand the issue back to the router and exit 0 rather than
+# parking it on a human; the next tick re-gates it and picks it up once CI
+# concludes. (Office-hours would not self-heal: the dispatch queue skips
+# office-hours issues and nothing strips the label.) The router owns the CI gate.
+#
 # Branches (driven by marker presence + CURRENT_PHASE relative to MARKER_PHASE):
+#   R. conflict-resolver job (#982) — a /dispatch-resolve-conflict session is
+#      named <N>-slug like a worker but writes a `conflict-resolver` sentinel
+#      instead of a phase-completed marker. Checked BEFORE Branches A-D.
+#      `conflict-resolved` present → target-keyed re-seed + self-close (the chain
+#      returns to <N>, where materialize-spawn now sails through the resolved
+#      merge); sentinel present without `conflict-resolved` (ambiguous/crash) →
+#      park the issue (its office-hours-reason) + re-seed, no self-close.
 #   A. marker absent — phase skill did not run to completion (mid-phase exit
 #      or context compaction). Park the ISSUE on a human via
 #      dispatch-apply-office-hours (label + why-comment), spawn router, exit 0 —
-#      session parks "stopped" for human review. EXCEPTION: when the re-derived
-#      CURRENT_PHASE is `waiting`, the phase is not worker-actionable — the
-#      router owns the CI gate. Skip office-hours and just spawn the router,
-#      handing the issue back to be re-gated; the worker only reaches `waiting`
-#      via the selection/derivation race. (Office-hours would not self-heal: the
-#      dispatch queue skips office-hours issues and nothing strips the label.)
+#      session parks "stopped" for human review.
 #   B. marker present + CURRENT_PHASE non-empty + MARKER_PHASE != CURRENT_PHASE
 #      — phase advanced. Strip dispatch:office-hours from BOTH the PR (if any)
 #      and the ISSUE, spawn router, self-close. Empty CURRENT_PHASE (e.g.
@@ -67,26 +78,6 @@ ISSUE_NUM="${JOB_NAME%%-*}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
 
-# Resolve PR (may be empty for implement-phase before the draft PR opens).
-PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
-
-# Resolve current phase (used to compare against MARKER_PHASE).
-CURRENT_PHASE=$("$SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || CURRENT_PHASE=""
-
-# Read marker (presence drives branch selection; content is for diagnostics).
-# Validate against the known phase set — a corrupt or unknown value falls
-# through to Branch A (treat as absent) rather than driving Branch B's
-# self-close on an unrecognized string.
-MARKER_FILE="$CLAUDE_JOB_DIR/phase-completed"
-MARKER_PHASE=""
-if [ -f "$MARKER_FILE" ]; then
-  MARKER_PHASE=$(grep -E '^phase=' "$MARKER_FILE" | head -n1 | cut -d= -f2) || MARKER_PHASE=""
-  case "$MARKER_PHASE" in
-    implement|verify|qa|code-review|review|security|done) ;;
-    *) MARKER_PHASE="" ;;
-  esac
-fi
-
 # Resolve the why-comment reason. The #826 enrichment hook may write a
 # context-specific reason to $CLAUDE_JOB_DIR/office-hours-reason; when present
 # and non-empty it wins over the caller-supplied branch default.
@@ -118,9 +109,9 @@ strip_office_hours_label() {
     || echo "[dispatch-stop] WARNING: gh issue edit --remove-label failed" >&2
 }
 
-spawn_router() {
-  "$SCRIPTS/dispatch-spawn-router" >/dev/null 2>&1 \
-    || echo "[dispatch-stop] WARNING: dispatch-spawn-router failed" >&2
+spawn_tick() {
+  "$SCRIPTS/dispatch-spawn-tick" >/dev/null 2>&1 \
+    || echo "[dispatch-stop] WARNING: dispatch-spawn-tick failed" >&2
 }
 
 self_close() {
@@ -128,30 +119,83 @@ self_close() {
     || echo "[dispatch-stop] WARNING: dispatch-self-close failed" >&2
 }
 
-if [ -z "$MARKER_PHASE" ]; then
-  # Branch A — marker absent.
-  if [ "$CURRENT_PHASE" = "waiting" ]; then
-    # `waiting` is not worker-actionable: the router owns the CI gate (queue
-    # selection and the Step 6 gate both skip `waiting` PRs). A worker only ever
-    # reaches here through the TOCTOU race — a push restarts CI between router
-    # selection and the worker's phase derivation. Hand the issue back to the
-    # router rather than parking it on a human; the next tick re-gates it and
-    # picks it up once CI concludes. (Office-hours would not self-heal — the
-    # dispatch queue skips office-hours issues and nothing strips the label.)
-    spawn_router
+# Branch R — conflict-resolver job (#982): a /dispatch-resolve-conflict session is
+# named <N>-slug like a worker but writes a `conflict-resolver` sentinel instead of
+# a phase-completed marker. resolved → target-keyed re-seed (so the chain returns to
+# <N>, where materialize-spawn now sails through the already-resolved merge) +
+# self-close. ambiguous/crash (sentinel present, no conflict-resolved marker) →
+# park the issue (its office-hours-reason) + re-seed, no self-close.
+if [ -f "$CLAUDE_JOB_DIR/conflict-resolver" ]; then
+  if [ -f "$CLAUDE_JOB_DIR/conflict-resolved" ]; then
+    "$SCRIPTS/dispatch-spawn-tick" "$ISSUE_NUM" >/dev/null 2>&1 \
+      || echo "[dispatch-stop] WARNING: dispatch-spawn-tick (resolved re-seed) failed" >&2
+    self_close
     exit 0
   fi
   "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
+    "$(resolve_office_hours_reason "merge conflict could not be auto-resolved")" \
+    || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
+  "$SCRIPTS/dispatch-spawn-tick" "$ISSUE_NUM" >/dev/null 2>&1 \
+    || echo "[dispatch-stop] WARNING: dispatch-spawn-tick (ambiguous re-seed) failed" >&2
+  exit 0
+fi
+
+# Resolve PR (may be empty for implement-phase before the draft PR opens).
+PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
+
+# Fetch the open-PR list once and share it with both the readiness gate and the
+# phase derivation below via DISPATCH_PR_LIST, avoiding a redundant `gh pr list`
+# per predicate. On fetch failure DISPATCH_PR_LIST stays empty and each script
+# falls back to its own self-fetch.
+DISPATCH_PR_LIST=$(gh pr list --state open \
+  --json number,headRefName,isDraft,statusCheckRollup,labels 2>/dev/null) \
+  || DISPATCH_PR_LIST=""
+export DISPATCH_PR_LIST
+
+# Early not-ready gate (marker-independent). If the target's PR CI is back in
+# progress (no verdict available), hand the issue back to the tick without
+# parking or self-closing — the next tick re-gates it once CI concludes. This
+# covers the TOCTOU case where a push restarted CI between selection and session
+# end. The gate runs BEFORE dispatch-phase so CURRENT_PHASE is only derived for a
+# target confirmed ready: without this early gate, a pending dispatch-phase would
+# exit 3, leave CURRENT_PHASE="" via the `|| CURRENT_PHASE=""` fallback below, and
+# drive a spurious Branch D office-hours park.
+if ! "$SCRIPTS/dispatch-ci-ready" "$ISSUE_NUM" >/dev/null 2>&1; then
+  spawn_tick
+  exit 0
+fi
+
+# Resolve current phase (used to compare against MARKER_PHASE). Called after the
+# readiness gate so CI is confirmed ready and dispatch-phase will not exit 3.
+CURRENT_PHASE=$("$SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || CURRENT_PHASE=""
+
+# Read marker (presence drives branch selection; content is for diagnostics).
+# Validate against the known phase set — a corrupt or unknown value falls
+# through to Branch A (treat as absent) rather than driving Branch B's
+# self-close on an unrecognized string.
+MARKER_FILE="$CLAUDE_JOB_DIR/phase-completed"
+MARKER_PHASE=""
+if [ -f "$MARKER_FILE" ]; then
+  MARKER_PHASE=$(grep -E '^phase=' "$MARKER_FILE" | head -n1 | cut -d= -f2) || MARKER_PHASE=""
+  case "$MARKER_PHASE" in
+    implement|verify|qa|code-review|review|security|done) ;;
+    *) MARKER_PHASE="" ;;
+  esac
+fi
+
+if [ -z "$MARKER_PHASE" ]; then
+  # Branch A — marker absent.
+  "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
     "$(resolve_office_hours_reason "phase exited before completion (mid-phase exit or context compaction)")" \
     || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
-  spawn_router
+  spawn_tick
   exit 0
 fi
 
 if [ -n "$CURRENT_PHASE" ] && [ "$MARKER_PHASE" != "$CURRENT_PHASE" ]; then
   # Branch B — phase advanced.
   strip_office_hours_label
-  spawn_router
+  spawn_tick
   self_close
   exit 0
 fi
@@ -162,7 +206,7 @@ if [ "$CURRENT_PHASE" = "verify" ] && [ -n "$PR_NUM" ]; then
   [ -z "$N" ] && N=0
   if [ "$N" -lt 3 ]; then
     # Branch C — verify retry still possible.
-    spawn_router
+    spawn_tick
     exit 0
   fi
 fi
@@ -171,5 +215,5 @@ fi
 "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
   "$(resolve_office_hours_reason "phase ran but did not advance")" \
   || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
-spawn_router
+spawn_tick
 exit 0
