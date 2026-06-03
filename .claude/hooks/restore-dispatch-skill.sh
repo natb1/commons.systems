@@ -74,7 +74,7 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 #
 # Routing: implement→plan-implement; verify→verify-pr; qa→qa-fix;
 # code-review→code-review-fix; review→review-fix; security→security-review-fix;
-# waiting/done/unknown/dispatch-phase failure→dispatch-worker (the worker's
+# done/unknown/dispatch-phase failure (incl. not-ready CI, exit 3)→dispatch-worker (the worker's
 # Step 2 CI-monitor loop and Step 2 done variance handling still run).
 #
 # An office-hours-<N> session (started by the /office-hours entry point, #759)

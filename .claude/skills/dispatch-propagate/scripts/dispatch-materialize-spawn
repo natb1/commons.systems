@@ -9,8 +9,9 @@
 # path guards (leaf trace, closed-target, open-blocker), resolves the target
 # worktree (entering or creating it), writes the recovery marker via
 # dispatch-finalize-selection (which no longer releases the lock — #945), runs
-# the waiting-CI gate, spawns the worker, and releases the lock after the worker
-# registers. Prints exactly ONE terminal token as its LAST stdout line;
+# the explicit-target readiness gate (dispatch-ci-ready), spawns the worker, and
+# releases the lock after the worker registers. Prints exactly ONE terminal
+# token as its LAST stdout line;
 # supporting detail (a path, a blocker list, the CI line) precedes the token.
 #
 # With `--gap <N>` and `queue` mode, the script FANS OUT: it spawns up to N
@@ -23,8 +24,8 @@
 #
 # <issue-N> is always the ISSUE number (the model derives N=${branch%%-*} for a
 # `pr` row before calling). The two literal `[branch phase]` positionals the
-# queue selection carries are dropped — no sub-script consumes them; the CI gate
-# re-derives the phase via dispatch-phase.
+# queue selection carries are dropped — no sub-script consumes them; the spawn
+# never needs the phase (the worker re-derives it).
 #
 # Terminal tokens (the last stdout line is always exactly one of):
 #   propagate              the worker spawned (or deduped); the chain advances.
@@ -41,22 +42,26 @@
 #   drain worktree-conflict  the target worktree cannot be safely entered; the
 #                          lock is released at the guard. The conflict path
 #                          precedes this token.
-#   drain ci-reseeded      single-target path (#979): the target PR's CI is still
-#                          in progress; a target-keyed reseed timer was scheduled
+#   drain ci-reseeded      explicit single-target path (#979/#980): the target
+#                          PR's CI is still in progress (dispatch-ci-ready
+#                          not-ready); a target-keyed reseed timer was scheduled
 #                          via dispatch-schedule-target-reseed so the chain returns
 #                          to N when its CI concludes. Lock released at this stop
-#                          (before scheduling the reseed).
-#   notify ci-wait-exhausted single-target path (#979): the CI-wait attempt cap was
-#                          hit; the issue was parked on dispatch:office-hours and
-#                          no further reseed is scheduled. Lock released at this
-#                          stop.
-#   drain ci-waiting       single-target FALLBACK only: the target PR's CI is still
-#                          in progress but dispatch-schedule-target-reseed hard-
-#                          failed (or emitted unrecognized output), so the tick
-#                          drains as a no-op instead of wedging; the reason is on
-#                          stderr. Lock released at this stop. (In a fan-out run a
-#                          ci-waiting target is a `skipped` outcome — see below —
-#                          and the scheduler is never called.)
+#                          (before scheduling the reseed). Queue/fan-out targets
+#                          are pre-gated by selection's dispatch-ci-ready check, so
+#                          this path is explicit-only.
+#   notify ci-wait-exhausted explicit single-target path (#979): the CI-wait
+#                          attempt cap was hit; the issue was parked on
+#                          dispatch:office-hours and no further reseed is
+#                          scheduled. Lock released at this stop.
+#   drain ci-waiting       explicit single-target FALLBACK only: the target PR's
+#                          CI is still in progress (dispatch-ci-ready not-ready)
+#                          but dispatch-schedule-target-reseed hard-failed (or
+#                          emitted unrecognized output), so the tick drains as a
+#                          no-op instead of wedging; the reason is on stderr. Lock
+#                          released at this stop. (In a fan-out run a ci-waiting
+#                          target is a `skipped` outcome — see below — and the
+#                          scheduler is never called.)
 #
 # Fan-out summary tokens (queue mode with --gap N>1; the last stdout line is one
 # of these instead of a per-target token):
@@ -170,14 +175,15 @@ WAITING_N=""
 
 # process_one_target <issue-N> <explicit|queue>
 # Runs the per-target sequence (Step 4 guards, Step 5 resolve, Step 5b merge,
-# recovery marker, Step 6a CI gate, Step 6b spawn) for ONE target. Does NOT
+# recovery marker, Step 6a explicit-only readiness gate, Step 6b spawn) for ONE
+# target. Does NOT
 # release the lock and does NOT exit — the caller owns lock release and process
 # exit. Sets the global OUTCOME on every soft path and returns 0; returns 2 on a
 # hard error (the caller maps that to release_lock; exit 2).
 process_one_target() {
   local n="$1" mode="$2"
   local PR LEAF ISSUE_STATE BLOCKERS WT_DECISION WT_ACTION WT_REST
-  local WORKTREE_PATH BRANCH PROJECT_ROOT MERGE_RC PHASE rc
+  local WORKTREE_PATH BRANCH PROJECT_ROOT MERGE_RC rc
 
   # --- Step 4: explicit-path guards (skipped entirely in queue mode) ---------
   # Queue rows were already vetted by dispatch-select-target (leaf, blockers,
@@ -303,9 +309,13 @@ process_one_target() {
     return 2
   fi
 
-  # --- Step 6a: waiting-CI gate (#906) ---------------------------------------
-  PHASE=$("$SCRIPT_DIR/dispatch-phase" "$n") || PHASE=""
-  if [[ "$PHASE" == "waiting" ]]; then
+  # --- Step 6a: readiness gate — explicit targets only (#906, #980) ----------
+  # Queue/fan-out targets were already vetted by dispatch-select-target's
+  # dispatch-ci-ready gate, so they need no recheck here. Only the explicit
+  # /dispatch <N> path bypasses selection, so it alone re-runs the readiness
+  # predicate: dispatch-ci-ready exits non-zero only for a draft PR whose CI is
+  # still in progress.
+  if [[ "$mode" == "explicit" ]] && ! "$SCRIPT_DIR/dispatch-ci-ready" "$n" >/dev/null; then
     echo "#$n: CI in progress; the next router tick will re-evaluate."
     WAITING_N="$n"
     OUTCOME=ci-waiting
@@ -410,9 +420,11 @@ while :; do
     target-blocked)     echo "propagate: parked #$cur_n ($OUTCOME)" ;;
     *)
       echo "propagate: skipped #$cur_n ($OUTCOME)"
-      # ci-waiting is an expected skip (the next router tick re-gates the PR).
-      # spawn-failed / worktree-conflict are real failures the single-target
-      # path surfaces via `notify spawn-failed` / `drain worktree-conflict`; in
+      # ci-waiting never occurs in fan-out: the readiness gate is explicit-only
+      # (Step 6a), and queue targets are pre-gated by dispatch-select-target's
+      # dispatch-ci-ready check. spawn-failed / worktree-conflict are real
+      # failures the single-target path surfaces via `notify spawn-failed` /
+      # `drain worktree-conflict`; in
       # fan-out the loop deliberately continues to fill the gap from other
       # targets, but the failure must not be buried — log it to stderr so a
       # systemic spawn problem is visible in the router logs.

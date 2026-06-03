@@ -72,15 +72,32 @@ exit fires, the worker session ends; the Stop hook applies
 
 ## 1. Derive the Phase
 
-Derive the phase via `dispatch-phase <N>`:
+First confirm the target is CI-ready via `dispatch-ci-ready <N>`:
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-ci-ready <N>
+```
+
+This prints `ready` (exit 0) when there is an actionable next step — no PR,
+a non-draft PR, or a draft PR whose CI has concluded (passing or failing). It
+prints `waiting` (exit 1) when the draft PR's checks are still in progress and
+no verdict is available yet. Only proceed to `dispatch-phase` when
+`dispatch-ci-ready` exits 0. If it exits 1, stop and handle as not-ready (see
+Step 2).
+
+Then derive the phase via `dispatch-phase <N>`:
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-phase <N>
 ```
 
-It prints exactly one phase name. CI status is checked **before** labels — a
-draft PR with non-green CI is always `verify`, regardless of which `dispatch:*`
-labels are present.
+It prints exactly one actionable phase name (`implement | verify | qa |
+code-review | review | security | done`). It never prints `waiting`. For a
+draft PR whose CI has no verdict yet, it prints an error to stderr and exits 3
+— which is why the `dispatch-ci-ready` gate above must run first.
+
+CI status is checked **before** labels — a draft PR with non-green CI is always
+`verify`, regardless of which `dispatch:*` labels are present.
 
 **Do not infer the phase from hand-rolled `gh` queries.** `dispatch-phase` is
 the only valid phase-derivation path. PR existence in particular **must not** be
@@ -105,16 +122,18 @@ Map the phase:
 Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 `/dispatch-worker` invocation.
 
-**Race-window check first.** If `dispatch-phase <N>` returns `waiting` — CI
-transitioned back to in-progress since the router selected this target (e.g. a
-new push between selection and worker derivation) — stop with no marker and
-print the user-visible report verbatim: `#<N>: CI transitioned back to waiting
-since router selection; next router tick will re-derive.` Apply no
-`dispatch:office-hours` and spawn no babysitter — `waiting` is not
-worker-actionable; the router owns the CI gate. The Stop hook's marker-absent
-branch recognizes a re-derived `waiting` phase and hands the issue back to the
-router (spawns a fresh router **without** applying `dispatch:office-hours`),
-which re-gates it and picks it up once CI concludes.
+**Race-window check first.** Re-run `dispatch-ci-ready <N>` at the start of
+Step 2 — CI may have transitioned back to in-progress since the router selected
+this target (e.g. a new push between selection and worker boot). If
+`dispatch-ci-ready` now exits 1 (`waiting`), stop with no marker and print the
+user-visible report verbatim: `#<N>: CI transitioned back to in-progress since
+router selection; next router tick will re-gate.` Apply no
+`dispatch:office-hours` and spawn no babysitter — a not-ready target is not
+worker-actionable; the router owns the CI gate. The Stop hook's early
+`dispatch-ci-ready` gate runs before the marker check: it detects the not-ready
+target and hands the issue back to the router (spawns a fresh router **without**
+applying `dispatch:office-hours`), which re-gates on `dispatch-ci-ready` and
+picks the target up once CI concludes.
 
 - **`implement`** — run the Step 3 relevance review and dispatch the verdict it
   returns (`proceed` / `adjust` / `stop` — see Step 3). The draft PR's existence
