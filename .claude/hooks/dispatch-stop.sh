@@ -190,10 +190,8 @@ fi
 if ! "$SCRIPTS/dispatch-ci-ready" "$ISSUE_NUM" >/dev/null 2>&1; then
   spawn_tick
   if [ -n "$MARKER_PHASE" ]; then
-    # A valid phase-completed marker is present: the phase did its job
-    # (marker written, label applied, fix pushed) — only CI is still
-    # running. Self-close the session; the spawned tick re-gates the issue
-    # once CI concludes and continues the chain in a fresh session.
+    # Marker present (see the block above): the phase completed and only CI
+    # is still running — self-close so the session does not leak idle.
     self_close
   fi
   # No marker: a genuine mid-phase exit during a CI restart — hand back to
