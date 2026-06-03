@@ -169,7 +169,7 @@ tier — every topic category, every phase — before considering any `priority=
 item, so a `priority` item in a low-ranked topic outranks every non-priority
 item in a higher-ranked topic. Within one priority level, categories run
 highest first: `security` → `bug` → `testing infrastructure` → `dispatch` →
-`other`. The
+`budget` → `other`. The
 `priority` label is human-applied — `/ready` never applies it automatically.
 A PR's category is the highest-priority topic among the labels of every issue
 it closes; an issue's category is the highest-priority topic among its own
