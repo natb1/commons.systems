@@ -162,7 +162,10 @@ run_materialize() {
 }
 
 # shellcheck disable=SC2086  # decision fields are intentionally word-split
+set -f  # word-split only — disable glob expansion so a field containing *, ?, or
+        # [ ] (e.g. a jit `project`/`repo` config value) is not expanded against cwd
 set -- $DECISION
+set +f
 case "${1:-}" in
   busy)
     echo "dispatch-tick: another tick holds the lock (busy); nothing to do" >&2

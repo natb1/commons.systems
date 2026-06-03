@@ -154,8 +154,11 @@ err=$(cat "$RUN_STDERR")
 # systemd's already-exists message varies slightly across versions
 # ("Unit ... already exists" / "Failed to start transient service unit: Unit
 # ... already exists"). Match on the substring rather than the full phrase. A
-# collision means a tick with this fixed unit name is already running — a no-op.
-if [[ "$err" == *"already exists"* ]]; then
+# collision always names the colliding unit, so also require the unit name —
+# this keeps cross-version tolerance while preventing an unrelated failure whose
+# stderr happens to contain "already exists" from being silently treated as a
+# dedup no-op (which would mask a real launch failure and stall the chain).
+if [[ "$err" == *"already exists"* && "$err" == *"$UNIT_NAME"* ]]; then
   echo deduped
   exit 0
 fi
