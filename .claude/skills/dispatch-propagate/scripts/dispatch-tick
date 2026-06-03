@@ -46,12 +46,12 @@
 #      the journal IS the disposition record; there is no self-close. A non-zero
 #      materialize-spawn exit → exit 2.
 #
-#      NOTE on `resolve merge-conflict`: in the current codebase the single-target
-#      path of dispatch-materialize-spawn still emits `resolve merge-conflict`
-#      (the model router used to auto-resolve via an opus subagent). dispatch-tick
-#      is headless and cannot do that, so it just logs the token and exits 0 (a
-#      transient no-op). A later unit changes materialize-spawn to spawn a
-#      resolver bg job instead, after which this token stops reaching dispatch-tick.
+#      NOTE on `resolve merge-conflict`: dispatch-materialize-spawn no longer
+#      emits this token — its merge-conflict path now spawns a
+#      /dispatch-resolve-conflict bg job and emits `propagate` instead. The branch
+#      is retained as a defensive no-op (log the token, exit 0) so a future path
+#      that surfaces it again can never wedge the headless tick;
+#      test-dispatch-scripts.sh asserts it stays a safe exit-0 disposition.
 #
 # Requires `dangerouslyDisableSandbox: true` — the sub-scripts call `gh`, query
 # the local Claude daemon over a Unix socket, and write tmp state (see
@@ -147,8 +147,9 @@ run_materialize() {
   token=$(printf '%s\n' "$mat_out" | tail -n 1)
   # Every recognized terminal token is a log-and-exit-0 disposition for a headless
   # tick: the token is already in the journal via the passthrough above, and there
-  # is no managed job to self-close. `resolve merge-conflict` is a transient no-op
-  # here until a later unit moves conflict resolution into materialize-spawn.
+  # is no managed job to self-close. `resolve merge-conflict` is a defensive no-op
+  # — materialize-spawn now spawns a resolver bg job and emits `propagate`, so the
+  # token no longer reaches here, but the branch keeps it a safe exit-0 disposition.
   case "$token" in
     propagate|drain|drain\ *|notify\ *|resolve\ merge-conflict)
       exit 0
@@ -202,6 +203,7 @@ case "${1:-}" in
     run_materialize "$num" explicit --gap "$gap"
     ;;
   pr)
+    # decision line shape: `pr <pr_num> <branch> <phase> <gap>` — fields $2..$5.
     branch="${3:-}" gap="${5:-}"
     if [[ -z "$branch" || -z "$gap" ]]; then
       echo "dispatch-tick: pr decision missing <branch>/<gap>" >&2
