@@ -14685,6 +14685,166 @@ assert_eq "followup: empty input → 0" "0" "$(printf '%s' "$out" | jq -r 'lengt
 out=$(printf '%s' '[{"source":"sonarqube","classification":"out-of-scope","security_severity_level":"high"},{"classification":"out-of-scope","severity":"critical"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
 assert_eq "followup: unknown/missing source → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
 
+# dispatch-jit-skill tests
+# ============================================================================
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   copies of dispatch-jit-skill, dispatch-config-load, lib.sh
+#   $TMPDIR_TEST/config/    synthetic config directory (DISPATCH_CONFIG_DIR)
+#   $TMPDIR_TEST/bin/       gh stub (prepended to PATH)
+#
+# DISPATCH_CONFIG_DIR is exported so dispatch-config-load never touches the
+# real dispatch.config/ directory and does not require a git repo.
+
+jit_skill_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/config" "$TMPDIR_TEST/bin"
+
+  cp "$SCRIPT_DIR/dispatch-jit-skill" "$TMPDIR_TEST/scripts/dispatch-jit-skill"
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  # dispatch-config-load sources lib.sh via its SCRIPT_DIR — sits alongside it.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-jit-skill" \
+           "$TMPDIR_TEST/scripts/dispatch-config-load"
+
+  # gh stub: handles `issue view <num> --repo <repo> --json labels`.
+  # Reads the labels fixture from $TMPDIR_TEST/labels.json; defaults to empty.
+  # Unknown invocations → stderr + exit 1.
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+args="$*"
+TREE="$(cd "$(dirname "$0")/.." && pwd)"
+case "$args" in
+  issue\ view\ *\ --repo\ *\ --json\ labels)
+    if [[ -f "$TREE/labels.json" ]]; then
+      cat "$TREE/labels.json"
+    else
+      echo '{"labels":[]}'
+    fi
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  SAVED_PATH_JIT="$PATH"
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+}
+
+jit_skill_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  export PATH="$SAVED_PATH_JIT"
+  unset DISPATCH_CONFIG_DIR
+}
+
+# --- Test: dispatch-jit-skill returns the configured skill for a matching jit label ---
+
+echo "Test: dispatch-jit-skill returns the configured skill for a matching jit label"
+jit_skill_setup
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "digest",
+      "repo": "some-owner/some-repo",
+      "label": "jit:digest",
+      "title": "Digest",
+      "body": "Recurring digest checkpoint.",
+      "project": "example-project",
+      "remindAfterClose": "24h",
+      "dueAfterClose": "48h",
+      "debounce": "1h",
+      "skill": "digest"
+    }
+  ]
+}
+EOF
+cat > "$TMPDIR_TEST/labels.json" <<'EOF'
+{"labels":[{"name":"jit:digest"},{"name":"help wanted"}]}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-skill" some-owner/some-repo 42); rc=$?
+assert_eq "dispatch-jit-skill: matched jit with skill exits 0" "0" "$rc"
+assert_eq "dispatch-jit-skill: matched jit prints skill name" "digest" "$out"
+jit_skill_teardown
+
+# --- Test: dispatch-jit-skill prints nothing when the matched jit defines no skill ---
+
+echo "Test: dispatch-jit-skill prints nothing when the matched jit defines no skill"
+jit_skill_setup
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "plain",
+      "repo": "some-owner/some-repo",
+      "label": "jit:plain",
+      "title": "Plain reminder",
+      "body": "A plain jit with no skill field.",
+      "project": "example-project",
+      "remindAfterClose": "12h",
+      "dueAfterClose": "24h",
+      "debounce": "1h"
+    }
+  ]
+}
+EOF
+cat > "$TMPDIR_TEST/labels.json" <<'EOF'
+{"labels":[{"name":"jit:plain"}]}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-skill" some-owner/some-repo 7); rc=$?
+assert_eq "dispatch-jit-skill: matched jit without skill exits 0" "0" "$rc"
+assert_eq "dispatch-jit-skill: matched jit without skill prints nothing" "" "$out"
+jit_skill_teardown
+
+# --- Test: dispatch-jit-skill prints nothing with no jit.json (no-config) ---
+
+echo "Test: dispatch-jit-skill prints nothing with no jit.json (no-config)"
+jit_skill_setup
+# No jit.json written into config/ — dispatch-config-load returns "no-config".
+# The labels fixture is present but should never be consulted.
+cat > "$TMPDIR_TEST/labels.json" <<'EOF'
+{"labels":[{"name":"jit:digest"}]}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-skill" some-owner/some-repo 99); rc=$?
+assert_eq "dispatch-jit-skill: no-config exits 0" "0" "$rc"
+assert_eq "dispatch-jit-skill: no-config prints nothing" "" "$out"
+jit_skill_teardown
+
+# --- Test: dispatch-jit-skill prints nothing when the issue has no jit:* label ---
+
+echo "Test: dispatch-jit-skill prints nothing when issue has no jit:* label"
+jit_skill_setup
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "digest",
+      "repo": "some-owner/some-repo",
+      "label": "jit:digest",
+      "title": "Digest",
+      "body": "Recurring digest checkpoint.",
+      "project": "example-project",
+      "remindAfterClose": "24h",
+      "dueAfterClose": "48h",
+      "debounce": "1h",
+      "skill": "digest"
+    }
+  ]
+}
+EOF
+cat > "$TMPDIR_TEST/labels.json" <<'EOF'
+{"labels":[{"name":"help wanted"},{"name":"bug"}]}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-skill" some-owner/some-repo 55); rc=$?
+assert_eq "dispatch-jit-skill: no jit:* label exits 0" "0" "$rc"
+assert_eq "dispatch-jit-skill: no jit:* label prints nothing" "" "$out"
+jit_skill_teardown
+
 # ============================================================================
 # summary
 # ============================================================================
