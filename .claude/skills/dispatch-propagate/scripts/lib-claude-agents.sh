@@ -27,8 +27,8 @@
 #               free — a `[]` from a down daemon is indistinguishable from a
 #               `[]` of genuinely no sessions, so the detectable failures fail
 #               safe here and the rest is mitigated operationally (see below).
-#   Used by `dispatch-spawn-router` and `dispatch-spawn-worker` to filter on
-#   MAIN_WORKTREE / SPAWN_CWD — callers that want cwd-based semantics.
+#   Used by `dispatch-spawn-worker` / `dispatch-spawn-job` to filter on
+#   SPAWN_CWD — callers that want cwd-based semantics.
 #
 # claude_sessions_with_name <name>
 #   The name-based low-level primitive. Runs `claude agents --json` (NO --cwd
@@ -88,7 +88,7 @@
 #   diagnostic and exits non-zero.
 #     return 0 — a row with the given <agent-name> was observed.
 #     return 1 — exhaustion: the agent never appeared within the budget.
-#   Used by `dispatch-spawn-router` and `dispatch-spawn-worker` Step 4 verify.
+#   Used by `dispatch-spawn-worker` / `dispatch-spawn-job` Step 4 verify.
 #
 # Test override: CLAUDE_AGENTS_CMD replaces the `claude` invocation with an
 # arbitrary command (e.g. an absolute path to a fake script), so the helper is

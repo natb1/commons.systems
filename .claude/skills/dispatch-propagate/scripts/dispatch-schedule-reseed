@@ -74,7 +74,7 @@
 #     Override the main worktree path. When set, the script does NOT require
 #     a git repo. Default: <project-root>/worktrees/main, where project-root
 #     is the parent of git --git-common-dir. Mirrors
-#     dispatch-spawn-router's idiom.
+#     dispatch-spawn-tick's idiom.
 #
 #   DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD
 #     Override the `systemd-run` binary. Default: `systemd-run`.
@@ -266,7 +266,7 @@ fi
 
 # ---- Step 5: resolve the main worktree --------------------------------------
 #
-# Same idiom as dispatch-spawn-router. The spawned re-seed runs from the main
+# Same idiom as dispatch-spawn-tick. The spawned re-seed runs from the main
 # worktree.
 
 if [[ -n "${DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE:-}" ]]; then
@@ -287,17 +287,19 @@ fi
 # missed while WSL was down runs on the next start. Matches the legacy 9 AM
 # timer's behavior.
 #
-# ExecStart is dispatch-spawn-router — the worker→router baton-pass primitive
-# that dedup-guards, prunes stopped agents, and spawns
-# `claude --bg --name dispatch-<id> --permission-mode auto "/dispatch-propagate"`
-# from the main worktree.
+# ExecStart is the headless dispatch-tick script directly — the timer unit is
+# itself the detachment, so there is no nested model router session. When the
+# timer fires, systemd runs one autonomous dispatch tick (select → spawn) from
+# the main worktree. (Before Unit 3 of #982 the ExecStart was dispatch-spawn-router,
+# which spawned a `claude --bg "/dispatch-propagate"` model session; that per-tick
+# session is gone — the routing now lives in the dispatch-tick bash script.)
 #
 # --setenv=PATH="$PATH" propagates the scheduling caller's PATH into the
 # transient unit. Without it the unit inherits the systemd user manager's
 # minimal default PATH, which omits the nix store — so on NixOS/WSL hosts
-# /usr/bin/env can't resolve bash (exit 127) and the router can't find
-# claude/git/jq. The caller (a /dispatch-propagate tick) always carries the
-# full nix-store PATH, so capturing it at schedule time makes the unit
+# /usr/bin/env can't resolve bash (exit 127) and the tick can't find
+# claude/git/jq. The caller (a dispatch tick) always carries the full
+# nix-store PATH, so capturing it at schedule time makes the unit
 # self-sufficient when the timer later fires.
 
 SYSTEMD_RUN_CMD="${DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD:-systemd-run}"
@@ -316,7 +318,7 @@ trap 'rm -f "$RUN_STDERR"' EXIT
      --working-directory="$MAIN_WORKTREE" \
      --timer-property=Persistent=true \
      --setenv=PATH="$PATH" \
-     "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-spawn-router" \
+     "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-tick" \
      2>"$RUN_STDERR"
 RC=$?
 if (( RC == 0 )); then
