@@ -315,7 +315,8 @@ area and are orthogonal to the `dispatch:*` phase labels, which mark workflow
 progress. The topic axis is also orthogonal to the `bug`/`enhancement` type
 axis above: a vulnerability follow-up is `bug` type **and** `security` topic.
 Apply **at most one** topic label. The 'at most one' rule applies
-only to the topic axis — `security`, `dispatch`, and `testing infrastructure`.
+only to the topic axis — `security`, `dispatch`, `testing infrastructure`,
+and `budget`.
 `priority` is a separate axis (an escalation marker) and may be applied
 alongside a topic label.
 
@@ -346,6 +347,12 @@ alongside a topic label.
   signals: "CI", "unit test", "acceptance test", "Vitest", "Playwright",
   "fixture", "seed data", "test runner".
 
+- **`budget`** — concerns the budget app: the `budget/` frontend or the
+  `budget-etl/` pipeline. Ranks last among the topic categories in
+  `dispatch-select-target` queue selection (below `dispatch`), above the
+  `other` fallback. Keyword signals: "budget", "budget-etl", "QFX/OFX",
+  "bank statement", "categorization", "budget.json".
+
 - **`priority`** — a separate axis from the topic labels above. A
   human-applied escalation marker that routes the issue (or any PR closing it)
   ahead of non-priority items across all topic categories in `/dispatch-propagate` queue selection. Apply only
@@ -353,7 +360,7 @@ alongside a topic label.
   automatically. May be combined with any topic label.
 
 - **Neither** — apply no topic label. Most product and
-  landing/budget/print/fellspiral feature work matches neither topic. There is
+  landing/print/fellspiral feature work matches neither topic. There is
   no "other" sentinel label.
 
 When an issue matches `security` plus another topic, apply `security` — it is
