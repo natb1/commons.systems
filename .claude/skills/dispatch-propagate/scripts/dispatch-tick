@@ -69,6 +69,26 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+# Resolve the canonical main worktree — the --cwd for the advisory diagnose-main
+# and jit-reminder bg jobs. These are repo-global concerns (diagnose origin/main
+# CI; remind about a JIT issue), not feature-worktree work, so they must spawn
+# under one stable directory regardless of who invoked the tick. dispatch-spawn-job
+# dedups on `--name` *under <cwd>*: pinning --cwd to the main worktree keeps that
+# dedup consistent across the headless path (where $PWD is already the main
+# worktree) and the human-typed /dispatch shim (where $PWD is the caller's
+# worktree) — otherwise a manual /dispatch could spawn a duplicate of a job the
+# headless tick already started. Same idiom as dispatch-spawn-tick /
+# dispatch-schedule-reseed; an explicit DISPATCH_TICK_MAIN_WORKTREE is
+# authoritative and bypasses the git lookup (tests rely on this).
+if [[ -n "${DISPATCH_TICK_MAIN_WORKTREE:-}" ]]; then
+  MAIN_WORKTREE="$DISPATCH_TICK_MAIN_WORKTREE"
+else
+  PROJECT_ROOT=$(resolve_project_root) \
+    || { echo "dispatch-tick: not in a git repo and DISPATCH_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
+  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+fi
 
 # --- Step 0: parse the single optional positional <N> ------------------------
 ARG=""
@@ -157,8 +177,9 @@ case "${1:-}" in
       echo "dispatch-tick: main-broken decision missing <sha>" >&2
       exit 2
     fi
-    "$SCRIPT_DIR/dispatch-spawn-job" --name diagnose-main --cwd "$PWD" \
-      "/dispatch-diagnose-main $sha"
+    "$SCRIPT_DIR/dispatch-spawn-job" --name diagnose-main --cwd "$MAIN_WORKTREE" \
+      "/dispatch-diagnose-main $sha" \
+      || echo "dispatch-tick: WARNING: dispatch-spawn-job (diagnose-main) failed; diagnose job lost" >&2
     exit 0
     ;;
   jit-reminder)
@@ -167,8 +188,9 @@ case "${1:-}" in
       echo "dispatch-tick: jit-reminder decision missing fields" >&2
       exit 2
     fi
-    "$SCRIPT_DIR/dispatch-spawn-job" --name "jit-reminder-$num" --cwd "$PWD" \
-      "/dispatch-jit-reminder $repo $num $project $item"
+    "$SCRIPT_DIR/dispatch-spawn-job" --name "jit-reminder-$num" --cwd "$MAIN_WORKTREE" \
+      "/dispatch-jit-reminder $repo $num $project $item" \
+      || echo "dispatch-tick: WARNING: dispatch-spawn-job (jit-reminder-$num) failed; reminder job lost" >&2
     exit 0
     ;;
   explicit)

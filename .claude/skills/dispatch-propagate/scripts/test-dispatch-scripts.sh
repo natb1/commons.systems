@@ -13521,7 +13521,13 @@ tick_setup() {
   TMPDIR_TEST=$(mktemp -d)
   mkdir -p "$TMPDIR_TEST/logs"
   cp "$SCRIPT_DIR/dispatch-tick" "$TMPDIR_TEST/dispatch-tick"
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
   chmod +x "$TMPDIR_TEST/dispatch-tick"
+  # Pin the canonical main worktree so the advisory diagnose-main / jit-reminder
+  # spawns get a deterministic --cwd independent of the host repo layout and the
+  # test's $PWD (dispatch-tick's resolve_project_root would otherwise resolve the
+  # real project root). The fake spawn-job logs this value as its --cwd argv.
+  export DISPATCH_TICK_MAIN_WORKTREE="$TMPDIR_TEST"
 
   # Fake dispatch-select-tick: echoes any TICK_SEL_PRE passthrough lines, then
   # the test-controlled decision line (TICK_DECISION) as the LAST line. Exits
@@ -13559,7 +13565,7 @@ tick_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   unset TICK_DECISION TICK_TOKEN TICK_SEL_RC TICK_MAT_RC \
-    TICK_SEL_PRE TICK_MAT_PRE TICK_SPAWN_RESULT
+    TICK_SEL_PRE TICK_MAT_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -13576,8 +13582,8 @@ assert_eq "busy: no spawn-job call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
 tick_teardown
 
-# --- empty / sync-failed / concurrency-cap → exit 0, no materialize ----------
-for d in empty sync-failed concurrency-cap; do
+# --- empty / sync-failed / resolver-failed / concurrency-cap → exit 0, no materialize ---
+for d in empty sync-failed resolver-failed concurrency-cap; do
   echo "Test: dispatch-tick $d → exit 0, no materialize"
   tick_setup
   export TICK_DECISION="$d"
@@ -13595,7 +13601,7 @@ export TICK_DECISION="main-broken abc1234"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "main-broken: exit 0" "0" "$rc"
 assert_eq "main-broken: spawn-job argv" \
-  "--name diagnose-main --cwd $PWD /dispatch-diagnose-main abc1234" \
+  "--name diagnose-main --cwd $TMPDIR_TEST /dispatch-diagnose-main abc1234" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 assert_eq "main-broken: no materialize call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
@@ -13608,7 +13614,7 @@ export TICK_DECISION="jit-reminder owner/repo 42 PVT_x ITEM_y"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "jit-reminder: exit 0" "0" "$rc"
 assert_eq "jit-reminder: spawn-job argv" \
-  "--name jit-reminder-42 --cwd $PWD /dispatch-jit-reminder owner/repo 42 PVT_x ITEM_y" \
+  "--name jit-reminder-42 --cwd $TMPDIR_TEST /dispatch-jit-reminder owner/repo 42 PVT_x ITEM_y" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 tick_teardown
 
@@ -13643,7 +13649,7 @@ assert_eq "issue: materialize argv" "707 queue --gap 2" \
 tick_teardown
 
 # --- terminal token routing: every recognized token → exit 0 -----------------
-for t in "propagate" "notify target-blocked" "drain worktree-conflict" "drain" "resolve merge-conflict"; do
+for t in "propagate" "notify target-blocked" "notify spawn-failed" "notify ci-wait-exhausted" "drain worktree-conflict" "drain ci-reseeded" "drain ci-waiting" "drain" "resolve merge-conflict"; do
   echo "Test: dispatch-tick token '$t' → exit 0"
   tick_setup
   export TICK_DECISION="issue 707 1" TICK_TOKEN="$t"

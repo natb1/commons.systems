@@ -425,7 +425,11 @@ while :; do
   (( spawned >= GAP )) && break
   SELECTED=$("$SCRIPT_DIR/dispatch-select-target") || true
   case "$SELECTED" in
-    pr\ *)    set -- $SELECTED; cur_n="${3%%-*}"; cur_mode=queue ;;
+    pr\ *)
+      # Extract the branch from "pr <pr_num> <branch> <phase>" without clobbering $@.
+      { IFS=' ' read -r _f1 _f2 _pr_branch _f4 <<<"$SELECTED"; }
+      cur_n="${_pr_branch%%-*}"; cur_mode=queue
+      ;;
     issue\ *) cur_n="${SELECTED#issue }"; cur_mode=queue ;;
     empty)    stop_reason="queue exhausted"; break ;;
     main-broken\ *|jit-reminder\ *) stop_reason="selection deferred (${SELECTED%% *})"; break ;;
