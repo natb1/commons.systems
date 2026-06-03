@@ -15307,14 +15307,46 @@ assert_eq "headless: synthetic id has headless: prefix (not a bare sentinel)" "1
   "$([[ "$sel_id" == headless:* ]] && echo 1 || echo 0)"
 
 # Companion: under systemd the id derives from INVOCATION_ID (the primary
-# headless path), not the bare-PID fallback the run above exercised. Set
-# INVOCATION_ID for one run and assert the synthesized id is exactly
-# headless:<INVOCATION_ID>. Fresh id logs so this run does not cross-contaminate.
+# headless path), not the random-token fallback the run above exercised. Use a
+# realistic 32-hex INVOCATION_ID (the form systemd always produces) and assert
+# the synthesized id is exactly headless:<INVOCATION_ID>. The validation guard
+# must pass hex digits — this exercises that path. (#1068)
 rm -f "$TMPDIR_TEST/logs/sel-id.log" "$TMPDIR_TEST/logs/mat-id.log"
-env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="inv-1054" \
+env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="0123456789abcdef0123456789abcdef" \
   "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1
-assert_eq "headless: id derives from INVOCATION_ID when set (systemd path)" \
-  "headless:inv-1054" "$(cat "$TMPDIR_TEST/logs/sel-id.log")"
+assert_eq "headless: id derives from valid hex INVOCATION_ID (systemd path)" \
+  "headless:0123456789abcdef0123456789abcdef" "$(cat "$TMPDIR_TEST/logs/sel-id.log")"
+
+# Companion: polluted INVOCATION_ID — the #1068 validation guard drops a
+# non-hex value so it cannot truncate the recorded holder (via embedded newline),
+# mislead the awk -F'\t' comparison, or corrupt the sentinel path. The fallback
+# fires and the id must be single-line headless:<hex-or-pid>.
+rm -f "$TMPDIR_TEST/logs/sel-id.log" "$TMPDIR_TEST/logs/mat-id.log"
+env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="a/b" \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1
+polluted_id=$(cat "$TMPDIR_TEST/logs/sel-id.log")
+assert_eq "headless: polluted INVOCATION_ID dropped — id has headless: prefix" "1" \
+  "$([[ "$polluted_id" == headless:* ]] && echo 1 || echo 0)"
+assert_eq "headless: polluted INVOCATION_ID dropped — id is single-line (no embedded newline)" "1" \
+  "$([[ "$polluted_id" != *$'\n'* ]] && echo 1 || echo 0)"
+assert_eq "headless: polluted INVOCATION_ID dropped — token is hex (guard rejected the slash)" "1" \
+  "$([[ "$polluted_id" =~ ^headless:[0-9a-f]+$ ]] && echo 1 || echo 0)"
+
+# Companion: INVOCATION_ID absent — the random-token fallback fires (openssl
+# rand -hex 16 when available; $$ as last resort). Assert the id is headless:-
+# prefixed, single-line, and its token matches hex (openssl path). (#1068)
+rm -f "$TMPDIR_TEST/logs/sel-id.log" "$TMPDIR_TEST/logs/mat-id.log"
+env -u CLAUDE_CODE_SESSION_ID -u INVOCATION_ID \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1
+absent_id=$(cat "$TMPDIR_TEST/logs/sel-id.log")
+assert_eq "headless: absent INVOCATION_ID — id has headless: prefix" "1" \
+  "$([[ "$absent_id" == headless:* ]] && echo 1 || echo 0)"
+assert_eq "headless: absent INVOCATION_ID — id is non-empty" "1" \
+  "$([ -n "$absent_id" ] && echo 1 || echo 0)"
+assert_eq "headless: absent INVOCATION_ID — id is single-line" "1" \
+  "$([[ "$absent_id" != *$'\n'* ]] && echo 1 || echo 0)"
+assert_eq "headless: absent INVOCATION_ID — token is hex (random-token or PID fallback)" "1" \
+  "$([[ "$absent_id" =~ ^headless:[0-9a-f]+$ ]] && echo 1 || echo 0)"
 
 # Companion: a real session keeps its own id — the `:-` fallback never fires.
 # Fresh id logs so this run does not cross-contaminate the headless run above.
