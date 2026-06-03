@@ -13274,6 +13274,8 @@ assert_eq "manual-pace0: decision line shows unbounded gap" "issue 707 unbounded
 assert_eq "manual-pace0: no reseed scheduled" "0" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
 assert_eq "manual-pace0: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "manual-pace0: select-target invoked (selection ran)" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
 # --- --manual with LIVE_COUNT >= MAX_WORKERS → no cap, unbounded gap ----------
@@ -13289,6 +13291,12 @@ echo called >> "$TMPDIR_TEST/logs/select-target.log"
 echo "issue 839"
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-select-target"
+cat > "$TMPDIR_TEST/dispatch-target-workers" <<FAKE
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/target-workers.log"
+echo "\${SEL_TARGET_N:-1}"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-target-workers"
 out=$(run_sel_tick --manual)
 assert_eq "manual-overcap: no concurrency-cap emitted" "0" \
   "$(printf '%s\n' "$out" | grep -cF 'concurrency-cap')"
@@ -13296,6 +13304,8 @@ assert_eq "manual-overcap: decision line shows unbounded gap" "issue 839 unbound
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "manual-overcap: no reseed scheduled" "0" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
+assert_eq "manual-overcap: pace-curve dispatch-target-workers NOT invoked (gate skipped)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/target-workers.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
 # --- autonomous no-arg with LIVE_COUNT >= TARGET_N → concurrency-cap (unchanged) ---
