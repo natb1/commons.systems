@@ -167,7 +167,8 @@ if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
   if SENTINEL_LOCK_FILE=$(dispatch_lock_file); then
     SENTINEL=$(headless_sentinel_path "$CLAUDE_CODE_SESSION_ID" "$SENTINEL_LOCK_FILE")
     mkdir -p "$(dirname "$SENTINEL")" 2>/dev/null || true
-    printf '%s\n' "$$" >"$SENTINEL"
+    printf '%s\n' "$$" >"$SENTINEL" \
+      || echo "dispatch-tick: WARNING: failed to write headless sentinel '$SENTINEL'; liveness signaling disabled" >&2
     # A single EXIT trap covers every `exit` below this point — intended.
     trap 'rm -f "$SENTINEL"' EXIT INT TERM
   fi

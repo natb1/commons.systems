@@ -12167,7 +12167,7 @@ lock_teardown
 echo "Test: headless holder with a live-PID sentinel is busy (not reclaimed)"
 lock_setup
 printf '%s\n' "headless:tok123" > "$DISPATCH_LOCK_FILE"
-headless_sentinel="$(dirname "$DISPATCH_LOCK_FILE")/dispatch-tick-tok123.live"
+headless_sentinel=$(source "$SCRIPT_DIR/lib.sh" 2>/dev/null; headless_sentinel_path "headless:tok123" "$DISPATCH_LOCK_FILE")
 printf '%s\n' "$$" > "$headless_sentinel"   # this test process is alive
 export CLAUDE_CODE_SESSION_ID="sess-headless-A"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
@@ -12197,7 +12197,7 @@ lock_teardown
 echo "Test: headless holder with a dead-PID sentinel is reclaimed (acquired)"
 lock_setup
 printf '%s\n' "headless:tok123" > "$DISPATCH_LOCK_FILE"
-headless_sentinel="$(dirname "$DISPATCH_LOCK_FILE")/dispatch-tick-tok123.live"
+headless_sentinel=$(source "$SCRIPT_DIR/lib.sh" 2>/dev/null; headless_sentinel_path "headless:tok123" "$DISPATCH_LOCK_FILE")
 # A PID that is not running — a SIGKILL'd tick leaves this stale sentinel.
 printf '%s\n' "2147483647" > "$headless_sentinel"
 export CLAUDE_CODE_SESSION_ID="sess-headless-C"
