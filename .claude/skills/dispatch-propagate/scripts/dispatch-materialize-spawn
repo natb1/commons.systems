@@ -3,7 +3,7 @@
 # materialize-and-spawn orchestrator (the deterministic Steps 4-6 of the old
 # SKILL.md, bundled into one script).
 #
-# Usage: dispatch-materialize-spawn <issue-N> <explicit|queue> [--gap <N>]
+# Usage: dispatch-materialize-spawn <issue-N> <explicit|queue> [--gap <N>|--gap unbounded]
 #
 # Picks up after dispatch-select-tick has chosen a target. Runs the explicit-
 # path guards (leaf trace, closed-target, open-blocker), resolves the target
@@ -21,6 +21,10 @@
 # worker registers before the next selection — #945/#905 — so the next
 # selection skips its now-live-owned worktree and yields a distinct target).
 # `explicit` mode and `--gap 1` process a single target (backward-compatible).
+# `--gap unbounded` is the manual ungated fan-out (the bare human-typed
+# `/dispatch`): it fans out one worker per eligible distinct target until the
+# queue is exhausted, bounded only by queue availability — never by a numeric
+# gap ceiling.
 #
 # <issue-N> is always the ISSUE number (the model derives N=${branch%%-*} for a
 # `pr` row before calling). The two literal `[branch phase]` positionals the
@@ -68,7 +72,9 @@
 #   propagate              the fan-out spawned at least one worker. Preceded by a
 #                          `propagate: spawned <k> of gap <G> [(<stop-reason>)]`
 #                          summary line and one `propagate: spawned/parked/skipped
-#                          #<n>` detail line per processed target.
+#                          #<n>` detail line per processed target. For a manual
+#                          ungated run (--gap unbounded) the summary line prints
+#                          `of gap unbounded` instead of a numeric gap.
 #   drain                  the gap could not be filled and NOTHING spawned (every
 #                          processed target parked/skipped, or the queue emptied
 #                          before any spawn). Same detail/summary lines precede
@@ -138,11 +144,15 @@ spawn_conflict_resolver() {
 N="${1:-}"
 MODE="${2:-}"
 GAP=1
+UNBOUNDED=0
 if [[ "${3:-}" == "--gap" ]]; then
   GAP="${4:-}"
-  if [[ ! "$GAP" =~ ^[1-9][0-9]*$ ]]; then
+  if [[ "$GAP" == "unbounded" ]]; then
+    UNBOUNDED=1
+    GAP=1
+  elif [[ ! "$GAP" =~ ^[1-9][0-9]*$ ]]; then
     release_lock
-    echo "dispatch-materialize-spawn: --gap requires a positive integer, got '${4:-}'" >&2
+    echo "dispatch-materialize-spawn: --gap requires a positive integer or 'unbounded', got '${4:-}'" >&2
     exit 2
   fi
 elif [[ -n "${3:-}" ]]; then
@@ -339,7 +349,7 @@ process_one_target() {
 # --- Driver ------------------------------------------------------------------
 # Single-target path: explicit targets and gap<=1 process exactly one target and
 # emit the per-target terminal token, byte-identical to the pre-fan-out script.
-if [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); then
+if (( UNBOUNDED == 0 )) && { [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); }; then
   process_one_target "$N" "$MODE" || { release_lock; exit 2; }
   release_lock
   case "$OUTCOME" in
@@ -434,7 +444,7 @@ while :; do
       esac
       ;;
   esac
-  (( spawned >= GAP )) && break
+  (( UNBOUNDED == 0 )) && (( spawned >= GAP )) && break
   SELECTED=$("$SCRIPT_DIR/dispatch-select-target") || true
   case "$SELECTED" in
     pr\ *)
@@ -455,10 +465,12 @@ while :; do
   fi
 done
 release_lock
+gap_label=$GAP
+(( UNBOUNDED == 1 )) && gap_label=unbounded
 if [[ "$stop_reason" == "gap filled" ]]; then
-  echo "propagate: spawned $spawned of gap $GAP"
+  echo "propagate: spawned $spawned of gap $gap_label"
 else
-  echo "propagate: spawned $spawned of gap $GAP ($stop_reason)"
+  echo "propagate: spawned $spawned of gap $gap_label ($stop_reason)"
 fi
 if (( spawned >= 1 )); then echo "propagate"; else echo "drain"; fi
 exit 0
