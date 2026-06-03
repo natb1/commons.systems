@@ -13618,6 +13618,94 @@ deps=false
 app_or_rules=false" "$out"
 
 # ============================================================================
+# === dispatch-security-followup ===
+# ============================================================================
+
+echo "Test: dispatch-security-followup"
+
+# 1. CodeQL out-of-scope high → length 1
+out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/sqli","alert_number":42,"security_severity_level":"high","description":"sqli","location":"src/db.ts:10","html_url":"http://x"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: codeql out-of-scope high → 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 2. CodeQL out-of-scope medium → length 1
+out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/xss","alert_number":7,"security_severity_level":"medium","description":"xss","location":"src/y.ts","html_url":"http://y"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: codeql out-of-scope medium → 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
+
+# CodeQL out-of-scope critical → length 1
+out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/crit","alert_number":99,"security_severity_level":"critical","description":"crit","location":"src/c.ts","html_url":"http://c"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: codeql out-of-scope critical → 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 3. CodeQL out-of-scope low → length 0
+out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/low","alert_number":1,"security_severity_level":"low","description":"low","location":"src/z.ts","html_url":"http://z"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: codeql out-of-scope low → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 4. CodeQL out-of-scope null security_severity_level → length 0
+out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/null","alert_number":2,"security_severity_level":null,"description":"n","location":"src/n.ts","html_url":"http://n"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: codeql out-of-scope null sev → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 5. CodeQL required (high) → length 0
+out=$(printf '%s' '[{"source":"codeql","classification":"required","rule_id":"js/req","alert_number":3,"security_severity_level":"high","description":"r","location":"src/r.ts","html_url":"http://r"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: codeql required high → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 6. CodeQL false-positive (high) → length 0
+out=$(printf '%s' '[{"source":"codeql","classification":"false-positive","rule_id":"js/fp","alert_number":4,"security_severity_level":"high","description":"fp","location":"src/fp.ts","html_url":"http://fp"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: codeql false-positive high → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 7. npm out-of-scope high, introduced_by_diff=false → length 1
+out=$(printf '%s' '[{"source":"npm","classification":"out-of-scope","advisory_id":"GHSA-aaaa","severity":"high","introduced_by_diff":false,"package":"lodash","title":"proto pollution","url":"http://npm"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: npm out-of-scope high not-diff → 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 8. npm out-of-scope critical, introduced_by_diff=false → length 1
+out=$(printf '%s' '[{"source":"npm","classification":"out-of-scope","advisory_id":"GHSA-bbbb","severity":"critical","introduced_by_diff":false,"package":"axios","title":"ssrf","url":"http://npm2"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: npm out-of-scope critical not-diff → 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 9. npm out-of-scope moderate → length 0
+out=$(printf '%s' '[{"source":"npm","classification":"out-of-scope","advisory_id":"GHSA-cccc","severity":"moderate","introduced_by_diff":false,"package":"qs","title":"dos","url":"http://npm3"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: npm out-of-scope moderate → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 10. npm out-of-scope high but introduced_by_diff=true → length 0
+out=$(printf '%s' '[{"source":"npm","classification":"out-of-scope","advisory_id":"GHSA-dddd","severity":"high","introduced_by_diff":true,"package":"minimist","title":"proto","url":"http://npm4"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: npm out-of-scope high introduced-by-diff → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 11a. CodeQL stable identifier embedded verbatim in title
+out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/sql-injection","alert_number":42,"security_severity_level":"high","description":"sqli","location":"src/db.ts","html_url":"https://github.com/org/repo/security/code-scanning/42"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+title=$(printf '%s' "$out" | jq -r '.[0].title')
+case "$title" in *"CodeQL js/sql-injection alert #42"*) hit=yes ;; *) hit=no ;; esac
+assert_eq "followup: codeql identifier embedded in title" "yes" "$hit"
+
+# 11c. CodeQL html_url is included in body for traceability
+body=$(printf '%s' "$out" | jq -r '.[0].body')
+case "$body" in *"https://github.com/org/repo/security/code-scanning/42"*) hit=yes ;; *) hit=no ;; esac
+assert_eq "followup: codeql html_url in body" "yes" "$hit"
+
+# 11b. npm stable identifier embedded verbatim in title
+out=$(printf '%s' '[{"source":"npm","classification":"out-of-scope","advisory_id":"GHSA-xxxx-yyyy","severity":"critical","introduced_by_diff":false,"package":"react","title":"xss","url":"http://npm"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+title=$(printf '%s' "$out" | jq -r '.[0].title')
+case "$title" in *"npm advisory GHSA-xxxx-yyyy"*) hit=yes ;; *) hit=no ;; esac
+assert_eq "followup: npm identifier embedded in title" "yes" "$hit"
+
+# 12. Mixed interleaved array → only qualifying subset in input order
+out=$(printf '%s' '[
+  {"source":"codeql","classification":"out-of-scope","rule_id":"js/a","alert_number":1,"security_severity_level":"high","description":"a","location":"a.ts","html_url":"http://a"},
+  {"source":"codeql","classification":"required","rule_id":"js/b","alert_number":2,"security_severity_level":"high","description":"b","location":"b.ts","html_url":"http://b"},
+  {"source":"npm","classification":"out-of-scope","advisory_id":"GHSA-c","severity":"critical","introduced_by_diff":false,"package":"c","title":"c","url":"http://c"},
+  {"source":"npm","classification":"out-of-scope","advisory_id":"GHSA-d","severity":"moderate","introduced_by_diff":false,"package":"d","title":"d","url":"http://d"},
+  {"source":"codeql","classification":"out-of-scope","rule_id":"js/e","alert_number":5,"security_severity_level":"medium","description":"e","location":"e.ts","html_url":"http://e"}
+]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: mixed array → 3 qualifying" "3" "$(printf '%s' "$out" | jq -r 'length')"
+assert_eq "followup: mixed array → identifiers in input order" "CodeQL js/a alert #1
+npm advisory GHSA-c
+CodeQL js/e alert #5" "$(printf '%s' "$out" | jq -r '.[].identifier')"
+
+# 13. Empty input [] → length 0
+out=$(printf '%s' '[]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: empty input → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 14. Unknown/missing source → ignored
+out=$(printf '%s' '[{"source":"sonarqube","classification":"out-of-scope","security_severity_level":"high"},{"classification":"out-of-scope","severity":"critical"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: unknown/missing source → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
