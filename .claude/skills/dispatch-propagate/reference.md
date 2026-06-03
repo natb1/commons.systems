@@ -170,8 +170,8 @@ labels; anything with no topic label is `other`.
 
 Within each category the ladder is (highest first; within a tier, oldest PR
 wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
-whose closing issue is `blocked_by` an open issue is skipped; `waiting`-phase
-PRs are skipped entirely): oldest `security` PR → oldest
+whose closing issue is `blocked_by` an open issue is skipped; not-ready PRs
+(no CI verdict yet, per `dispatch-ci-ready`) are skipped entirely): oldest `security` PR → oldest
 `review` PR → oldest `code-review` PR → oldest `verify` PR → oldest `help wanted`
 issue → oldest `qa` PR. Non-QA PRs are ranked closest-to-done first —
 `security` is the closest-to-done non-QA tier; `help wanted` issues rank below
@@ -422,6 +422,7 @@ That schedules a transient `systemd.user` timer
 `dispatch-spawn-router <N>` → `/dispatch-propagate <N>`, returning the chain to
 N. A `dispatch:ci-wait-attempt-<n>` label on the PR counts the attempts; at the
 cap (default 3) the target is parked on `dispatch:office-hours` and no further
-reseed is scheduled. Because `dispatch-phase` returns `waiting` only for
-genuinely in-progress checks — a CI *failure* resolves to `verify`, an
-actionable phase — the wait terminates on its own when CI finishes.
+reseed is scheduled. Because `dispatch-ci-ready` reports not-ready only for
+genuinely in-progress checks — a CI *failure* is a verdict, so the PR reports
+ready and `dispatch-phase` resolves it to `verify`, an actionable phase — the
+wait terminates on its own when CI finishes.

@@ -48,6 +48,7 @@ setup() {
   # Copy the scripts under test into the tmp dir so they can call each other
   # via SCRIPT_DIR resolution without relying on the real filesystem PATH.
   cp "$SCRIPT_DIR/dispatch-phase" "$TMPDIR_TEST/dispatch-phase"
+  cp "$SCRIPT_DIR/dispatch-ci-ready" "$TMPDIR_TEST/dispatch-ci-ready"
   cp "$SCRIPT_DIR/dispatch-find-pr" "$TMPDIR_TEST/dispatch-find-pr"
   cp "$SCRIPT_DIR/dispatch-resolve-arg" "$TMPDIR_TEST/dispatch-resolve-arg"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
@@ -73,6 +74,7 @@ setup() {
   # (TMPDIR_TEST under test). Sourced, not executed — no chmod +x needed.
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
+           "$TMPDIR_TEST/dispatch-ci-ready" \
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
@@ -594,22 +596,26 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "draft + failing CI → verify" "verify" "$result"
 teardown
 
-# 3. Draft + pending CI → waiting
-echo "Test: draft + pending CI → waiting"
+# 3. Draft + pending CI → not a phase: exit 3, empty stdout (no `waiting`).
+# dispatch-phase is phase-only; CI-not-ready is signalled by an error exit, not
+# a pseudo-phase. Callers gate on dispatch-ci-ready before reaching here.
+echo "Test: draft + pending CI → error (exit 3, empty stdout)"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$PENDING_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
-result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + pending CI → waiting" "waiting" "$result"
+result=$("$TMPDIR_TEST/dispatch-phase" "42" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "draft + pending CI → exit 3" "3" "$rc"
+assert_eq "draft + pending CI → empty stdout" "" "$result"
 teardown
 
-# 4. Draft + empty rollup → waiting
-echo "Test: draft + empty rollup → waiting"
+# 4. Draft + empty rollup → not a phase: exit 3, empty stdout (no `waiting`).
+echo "Test: draft + empty rollup → error (exit 3, empty stdout)"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$EMPTY_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
-result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + empty rollup → waiting" "waiting" "$result"
+result=$("$TMPDIR_TEST/dispatch-phase" "42" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "draft + empty rollup → exit 3" "3" "$rc"
+assert_eq "draft + empty rollup → empty stdout" "" "$result"
 teardown
 
 # 4b. Draft + mixed rollup (failing + pending) → verify (failure wins)
@@ -702,6 +708,116 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 ENV_LIST='['"$(make_pr 42 "42-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
 result=$(DISPATCH_PR_LIST="$ENV_LIST" "$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "DISPATCH_PR_LIST used over self-fetch → verify" "verify" "$result"
+teardown
+
+# ============================================================================
+# dispatch-ci-ready tests
+# ============================================================================
+echo ""
+echo "=== dispatch-ci-ready ==="
+
+# Unrecognized non-terminal rollup: a check run that is COMPLETED but carries a
+# conclusion outside the known passing/failing sets — classifies as pending.
+UNRECOGNIZED_ROLLUP='[{"status":"COMPLETED","conclusion":"WONKY"}]'
+
+# Helper: run dispatch-ci-ready, capturing both stdout and exit code so a test
+# can assert on the printed token and the exit status together.
+ci_ready_run() {
+  CI_READY_OUT=$("$TMPDIR_TEST/dispatch-ci-ready" "$@") && CI_READY_RC=0 || CI_READY_RC=$?
+}
+
+# 1. No PR → ready (phase would be implement; no CI gate)
+echo "Test: no PR → ready"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42"
+assert_eq "no PR → ready (token)" "ready" "$CI_READY_OUT"
+assert_eq "no PR → ready (exit 0)" "0" "$CI_READY_RC"
+teardown
+
+# 2. Non-draft PR → ready (phase would be done; no CI gate)
+echo "Test: non-draft PR → ready"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "false" "$NO_LABELS" "$PENDING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42"
+assert_eq "non-draft PR → ready (token)" "ready" "$CI_READY_OUT"
+assert_eq "non-draft PR → ready (exit 0)" "0" "$CI_READY_RC"
+teardown
+
+# 3. Draft + failing CI → ready (a concluded failure is actionable → verify)
+echo "Test: draft + failing → ready"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$FAILING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42"
+assert_eq "draft + failing → ready (token)" "ready" "$CI_READY_OUT"
+assert_eq "draft + failing → ready (exit 0)" "0" "$CI_READY_RC"
+teardown
+
+# 4. Draft + passing CI → ready
+echo "Test: draft + passing → ready"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42"
+assert_eq "draft + passing → ready (token)" "ready" "$CI_READY_OUT"
+assert_eq "draft + passing → ready (exit 0)" "0" "$CI_READY_RC"
+teardown
+
+# 5. Draft + pending CI → not-ready (exit 1, prints waiting)
+echo "Test: draft + pending → not-ready"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$PENDING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42"
+assert_eq "draft + pending → not-ready (token)" "waiting" "$CI_READY_OUT"
+assert_eq "draft + pending → not-ready (exit 1)" "1" "$CI_READY_RC"
+teardown
+
+# 6. Draft + empty rollup → not-ready (no verdict yet)
+echo "Test: draft + empty rollup → not-ready"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$EMPTY_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42"
+assert_eq "draft + empty rollup → not-ready (token)" "waiting" "$CI_READY_OUT"
+assert_eq "draft + empty rollup → not-ready (exit 1)" "1" "$CI_READY_RC"
+teardown
+
+# 7. Draft + unrecognized non-terminal state → not-ready
+echo "Test: draft + unrecognized state → not-ready"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$UNRECOGNIZED_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42"
+assert_eq "draft + unrecognized state → not-ready (token)" "waiting" "$CI_READY_OUT"
+assert_eq "draft + unrecognized state → not-ready (exit 1)" "1" "$CI_READY_RC"
+teardown
+
+# 8. Branch-name arg form (exact match) → not-ready for a pending draft
+echo "Test: branch arg → not-ready"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$PENDING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42-my-feature"
+assert_eq "branch arg pending draft → not-ready (token)" "waiting" "$CI_READY_OUT"
+assert_eq "branch arg pending draft → not-ready (exit 1)" "1" "$CI_READY_RC"
+teardown
+
+# 9. DISPATCH_PR_LIST reuse: predicate reads env-provided list without gh.
+echo "Test: DISPATCH_PR_LIST overrides self-fetch"
+setup
+# pr-list-full.json is empty: a self-fetch would yield ready (no PR). The
+# pending draft lives only in the env var, so a not-ready result proves the
+# env var won and no gh pr list was issued.
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+ENV_LIST='['"$(make_pr 42 "42-waiting" "true" "$NO_LABELS" "$PENDING_ROLLUP")"']'
+CI_READY_OUT=$(DISPATCH_PR_LIST="$ENV_LIST" "$TMPDIR_TEST/dispatch-ci-ready" "42") && CI_READY_RC=0 || CI_READY_RC=$?
+assert_eq "DISPATCH_PR_LIST used over self-fetch → waiting (token)" "waiting" "$CI_READY_OUT"
+assert_eq "DISPATCH_PR_LIST used over self-fetch → not-ready (exit 1)" "1" "$CI_READY_RC"
+assert_eq "DISPATCH_PR_LIST reuse issues no gh pr list" "0" \
+  "$([[ -f "$STUB_DIR/gh-pr-list-calls.log" ]] && wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ' || echo 0)"
 teardown
 
 # ============================================================================
@@ -2546,6 +2662,19 @@ export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "UNKNOWN daemon does not fabricate a parked router; empty" "empty" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST10. A labeled item whose draft PR has CI still in progress (pending rollup)
+# → dispatch-ci-ready returns not-ready → phase=waiting, PR number present.
+echo "Test: labeled item with pending-CI draft PR → waiting, PR number"
+setup
+printf '[{"number":50,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf '[%s]\n' "$(make_pr 7 "50-feat" "true" "$NO_LABELS" "$PENDING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "pending-CI draft PR → waiting, PR number" "office-hours 50 waiting 7" "$result"
 teardown
 
 # ============================================================================
@@ -9919,6 +10048,21 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-phase"
 
+  # Fake dispatch-ci-ready: the readiness predicate. Exits 0 (ready) by default;
+  # when $STUB_DIR/ci-ready.txt contains "0", exits 1 (not-ready, prints
+  # waiting) to model a PR whose CI is back in progress. The Stop hook's early
+  # gate hands the issue back to the router on a not-ready verdict.
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-ci-ready" <<'FAKE'
+#!/usr/bin/env bash
+if [[ -f "$STUB_DIR/ci-ready.txt" && "$(cat "$STUB_DIR/ci-ready.txt")" == "0" ]]; then
+  echo "waiting"
+  exit 1
+fi
+echo "ready"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-ci-ready"
+
   # Fake dispatch-spawn-router: log to order.log + spawn-calls.log.
   cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-router" <<'FAKE'
 #!/usr/bin/env bash
@@ -9958,6 +10102,13 @@ case "$args" in
     else
       echo "0"
     fi
+    ;;
+  pr\ list\ *)
+    # The hook fetches the open-PR list once and shares it via DISPATCH_PR_LIST.
+    # The ci-ready / phase fakes read $STUB_DIR files, not the list, so an empty
+    # array is sufficient to model a successful fetch.
+    echo "$args" >> "$STUB_DIR/gh-pr-list.log"
+    echo "[]"
     ;;
   issue\ edit\ *--add-label*)
     mode="ok"
@@ -10212,34 +10363,72 @@ else
 fi
 stop_teardown
 
-# --- Test 5b: marker absent + CURRENT_PHASE waiting → spawn only, no office-hours
+# --- Test 5b: not-ready (CI back in progress) → early gate: spawn only, no office-hours
 
-echo "Test: stop hook + marker absent + phase waiting → spawn only, no office-hours (router-defer, not worker-actionable)"
+echo "Test: stop hook + dispatch-ci-ready not-ready → early gate: spawn only, no office-hours (router-defer, CI back in progress)"
 stop_setup
 echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
-echo "waiting" > "$STUB_DIR/current-phase.txt"
+# Marker absent + readiness predicate reports not-ready: a push restarted CI
+# between selection and session end (TOCTOU). The marker-independent early gate
+# hands the issue back to the router without parking it on a human. Readiness is
+# driven via dispatch-ci-ready, NOT via a `waiting` phase value.
+echo "0" > "$STUB_DIR/ci-ready.txt"
 echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
-# No phase-completed marker → branch A; CURRENT_PHASE waiting → exemption.
+# No phase-completed marker.
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
-assert_eq "stop waiting-exempt: hook exits 0" "0" "$rc"
+assert_eq "stop not-ready: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" && ! -e "$STUB_DIR/gh-pr-edit.log" \
    && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop waiting-exempt: no office-hours apply (no add-label)"
+  PASS=$((PASS + 1)); echo "  PASS: stop not-ready: no office-hours apply (no add-label)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop waiting-exempt: no office-hours apply (no add-label)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop not-ready: no office-hours apply (no add-label)"
   echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)"
 fi
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
-assert_eq "stop waiting-exempt: spawn invoked exactly once" "1" "$spawn_calls"
+assert_eq "stop not-ready: spawn invoked exactly once" "1" "$spawn_calls"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop waiting-exempt: self-close not invoked"
+  PASS=$((PASS + 1)); echo "  PASS: stop not-ready: self-close not invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop waiting-exempt: self-close not invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop not-ready: self-close not invoked"
+fi
+stop_teardown
+
+# --- Test 5c: early gate fires even with a present marker (marker-independent) -
+
+echo "Test: stop hook + marker present + dispatch-ci-ready not-ready → early gate: spawn only, no self-close"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "verify" > "$STUB_DIR/current-phase.txt"
+# Marker present and a would-be advance (verify != implement), but CI is back in
+# progress: the marker-independent early gate short-circuits BEFORE any branch,
+# so no self-close and no office-hours park.
+echo "0" > "$STUB_DIR/ci-ready.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=implement" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop not-ready-marker: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" && ! -e "$STUB_DIR/gh-pr-remove.log" \
+   && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop not-ready-marker: no office-hours apply, no strip"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop not-ready-marker: no office-hours apply, no strip"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop not-ready-marker: spawn invoked exactly once" "1" "$spawn_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop not-ready-marker: self-close not invoked (early gate beat Branch B)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop not-ready-marker: self-close not invoked (early gate beat Branch B)"
 fi
 stop_teardown
 
@@ -11124,11 +11313,19 @@ EOF
     "$TMPDIR_TEST/.claude/hooks/restore-dispatch-skill.sh"
   chmod +x "$TMPDIR_TEST/.claude/hooks/restore-dispatch-skill.sh"
 
-  # dispatch-phase shim: read $STUB_DIR/current-phase.txt.
+  # dispatch-phase shim: read $STUB_DIR/current-phase.txt. The sentinel ERROR
+  # models the real dispatch-phase's not-ready contract (a draft PR whose CI has
+  # no verdict yet): empty stdout, exit 3. The hook's `|| PHASE=""` then routes
+  # to the dispatch-worker fallback.
   cat > "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts/dispatch-phase" <<'FAKE'
 #!/usr/bin/env bash
 if [[ -f "$STUB_DIR/current-phase.txt" ]]; then
-  cat "$STUB_DIR/current-phase.txt"
+  phase=$(cat "$STUB_DIR/current-phase.txt")
+  if [[ "$phase" == "ERROR" ]]; then
+    echo "error: no CI verdict yet — gate on dispatch-ci-ready first" >&2
+    exit 3
+  fi
+  printf '%s\n' "$phase"
 else
   echo "implement"
 fi
@@ -11432,32 +11629,35 @@ else
 fi
 restore_teardown
 
-# --- Test 7: fallback (waiting) → dispatch-worker body + ARGUMENTS: <N> <path>
-echo "Test: restore-dispatch-skill phase=waiting → dispatch-worker fallback"
+# --- Test 7: dispatch-phase error (not-ready CI, exit 3 → empty PHASE) →
+# dispatch-worker fallback body + ARGUMENTS: <N> <path>. dispatch-phase no longer
+# emits a `waiting` phase; a not-ready draft PR makes it exit 3 with empty stdout,
+# and the hook's `|| PHASE=""` routes the empty phase to the worker fallback.
+echo "Test: restore-dispatch-skill dispatch-phase error (exit 3) → dispatch-worker fallback"
 restore_setup
 set_agents_name "903-foo"
-echo "waiting" > "$STUB_DIR/current-phase.txt"
+echo "ERROR" > "$STUB_DIR/current-phase.txt"
 output=$(run_restore)
 TOTAL=$((TOTAL + 1))
 expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/dispatch-worker"
 if [[ "$output" == *"$expected_dir"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: waiting: base directory line emitted"
+  PASS=$((PASS + 1)); echo "  PASS: phase-error fallback: base directory line emitted"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: waiting: base directory line emitted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error fallback: base directory line emitted"
   echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ "$output" == *"RESTORE_MARKER_dispatch-worker"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: waiting: SKILL.md body marker emitted"
+  PASS=$((PASS + 1)); echo "  PASS: phase-error fallback: SKILL.md body marker emitted"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: waiting: SKILL.md body marker emitted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error fallback: SKILL.md body marker emitted"
 fi
 TOTAL=$((TOTAL + 1))
 expected_args="ARGUMENTS: 903 $TMPDIR_TEST/worktrees/903-foo"
 if [[ "$output" == *"$expected_args"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: waiting: ARGUMENTS line with worktree path"
+  PASS=$((PASS + 1)); echo "  PASS: phase-error fallback: ARGUMENTS line with worktree path"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: waiting: ARGUMENTS line with worktree path"
+  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error fallback: ARGUMENTS line with worktree path"
   echo "    output: $output"
   echo "    expected to contain: $expected_args"
 fi
@@ -13054,6 +13254,17 @@ FAKE
 #!/usr/bin/env bash
 echo "${MAT_PHASE:-implement}"
 FAKE
+  # Readiness predicate fake: MAT_CI_READY controls the verdict (default ready).
+  # `ready` → exit 0 / prints ready; anything else → exit 1 / prints waiting.
+  cat > "$TMPDIR_TEST/dispatch-ci-ready" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "${MAT_CI_READY:-ready}" == "ready" ]]; then
+  echo ready
+  exit 0
+fi
+echo waiting
+exit 1
+FAKE
   cat > "$TMPDIR_TEST/dispatch-spawn-worker" <<FAKE
 #!/usr/bin/env bash
 echo "\$*" >> "$TMPDIR_TEST/logs/spawn-worker.log"
@@ -13073,7 +13284,8 @@ FAKE
   chmod +x "$TMPDIR_TEST"/dispatch-find-pr "$TMPDIR_TEST"/dispatch-trace-leaf \
     "$TMPDIR_TEST"/dispatch-check-blockers "$TMPDIR_TEST"/dispatch-apply-office-hours \
     "$TMPDIR_TEST"/dispatch-resolve-worktree "$TMPDIR_TEST"/dispatch-merge-main \
-    "$TMPDIR_TEST"/dispatch-phase "$TMPDIR_TEST"/dispatch-select-target \
+    "$TMPDIR_TEST"/dispatch-phase "$TMPDIR_TEST"/dispatch-ci-ready \
+    "$TMPDIR_TEST"/dispatch-select-target \
     "$TMPDIR_TEST"/dispatch-spawn-worker "$TMPDIR_TEST"/dispatch-schedule-target-reseed \
     "$TMPDIR_TEST"/sync-issue-context
 
@@ -13106,7 +13318,7 @@ mat_teardown() {
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_MERGE_RC MAT_PHASE \
-    MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE MAT_MERGE_CONFLICT_N \
+    MAT_CI_READY MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE MAT_MERGE_CONFLICT_N \
     MAT_RESEED_OUT MAT_RESEED_RC
 }
 
@@ -13347,11 +13559,14 @@ assert_eq "merge clean: dispatch-merge-main was called" "1" \
   "$([ -f "$TMPDIR_TEST/logs/merge-main.log" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- single-target waiting CI → reseed scheduled → drain ci-reseeded (#979) ---
-echo "Test: materialize-spawn single-target waiting CI → drain ci-reseeded (reseed scheduled)"
+# --- explicit not-ready CI → reseed scheduled → drain ci-reseeded (#979/#980) -
+# The readiness gate (Step 6a) is now explicit-target-only and runs
+# dispatch-ci-ready (not dispatch-phase); a not-ready verdict on the explicit
+# single-target path schedules a target-keyed reseed and drains ci-reseeded.
+echo "Test: materialize-spawn explicit not-ready CI → drain ci-reseeded (reseed scheduled)"
 mat_setup
-export MAT_PHASE=waiting
-out=$(run_mat 839 queue)
+export MAT_CI_READY=waiting
+out=$(run_mat 839 explicit)
 assert_eq "ci-reseeded: CI line still present" "#839: CI in progress; the next router tick will re-evaluate." \
   "$(printf '%s\n' "$out" | grep '^#839:')"
 assert_eq "ci-reseeded: terminal token" "drain ci-reseeded" \
@@ -13363,30 +13578,31 @@ assert_eq "ci-reseeded: no spawn" "0" \
 assert_eq "ci-reseeded: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
-# --- explicit-mode waiting CI → reseed scheduled → drain ci-reseeded (#979) ----
-# The headline `/dispatch <N>` path is MODE=explicit. The reseed test above runs
-# MODE=queue and so enters the single-target branch via the `GAP <= 1` disjunct;
-# this test exercises the other disjunct (`MODE == explicit`) directly, confirming
-# an explicit single target also schedules the target-keyed reseed.
-echo "Test: materialize-spawn explicit-mode waiting CI → drain ci-reseeded (reseed scheduled)"
+# --- queue --gap 1 not-ready CI → NOT re-gated → spawns (#979/#980) -----------
+# The single-target branch is entered by both `MODE == explicit` and the
+# `GAP <= 1` disjunct. The reseed/exhausted/fallback path is explicit-only,
+# because Step 6a's dispatch-ci-ready gate runs only for explicit targets;
+# a queue `--gap 1` target is pre-vetted by selection, so even a forced
+# not-ready verdict spawns normally rather than scheduling a reseed.
+echo "Test: materialize-spawn queue --gap 1 not-ready CI spawns (no reseed)"
 mat_setup
-export MAT_PHASE=waiting
-out=$(run_mat 839 explicit)
-assert_eq "explicit-ci-reseeded: terminal token" "drain ci-reseeded" \
+export MAT_CI_READY=waiting
+out=$(run_mat 839 queue --gap 1)
+assert_eq "gap1-no-regate: terminal token" "propagate" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "explicit-ci-reseeded: scheduler called with target" "1" \
-  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
-assert_eq "explicit-ci-reseeded: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
-assert_eq "explicit-ci-reseeded: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "gap1-no-regate: scheduler NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && echo 1 || echo 0)"
+assert_eq "gap1-no-regate: spawn called once" "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+assert_eq "gap1-no-regate: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
 # --- single-target waiting CI → attempt cap → notify ci-wait-exhausted (#979) -
 echo "Test: materialize-spawn single-target waiting CI at cap → notify ci-wait-exhausted"
 mat_setup
-export MAT_PHASE=waiting
+export MAT_CI_READY=waiting
 export MAT_RESEED_OUT=escalated
-out=$(run_mat 839 queue)
+out=$(run_mat 839 explicit)
 assert_eq "ci-exhausted: terminal token" "notify ci-wait-exhausted" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "ci-exhausted: scheduler called with target" "1" \
@@ -13396,23 +13612,23 @@ assert_eq "ci-exhausted: no spawn" "0" \
 assert_eq "ci-exhausted: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
-# --- fan-out unchanged: ci-waiting target is skipped, scheduler NOT called -----
-# Multi-item fan-out (--gap N>1) must keep the pre-#979 behavior: a ci-waiting
-# target is a `skipped` outcome and the scheduler is never invoked (other live
-# workers' Stop-hooks bring the chain back to the target later).
-echo "Test: materialize-spawn fan-out ci-waiting target skipped, scheduler not called (#979)"
+# --- fan-out not-ready CI → NOT re-gated → spawns, scheduler NOT called --------
+# Multi-item fan-out (--gap N>1) runs queue-mode targets only, which are
+# pre-vetted by dispatch-select-target's dispatch-ci-ready gate. Step 6a's
+# readiness re-gate is explicit-only (#980), so a forced not-ready verdict does
+# not produce a ci-waiting outcome in fan-out: the target spawns and the
+# target-keyed reseed scheduler is never invoked.
+echo "Test: materialize-spawn fan-out not-ready CI spawns, scheduler not called (#979/#980)"
 mat_setup
-export MAT_PHASE=waiting
+export MAT_CI_READY=waiting
 export MAT_QUEUE="840 841"
 out=$(run_mat 839 queue --gap 3)
-assert_eq "fanout-ci-waiting: skip detail present" "1" \
-  "$(printf '%s\n' "$out" | grep -c 'skipped #839 (ci-waiting)')"
-assert_eq "fanout-ci-waiting: terminal token" "drain" \
+assert_eq "fanout-no-regate: spawn detail present" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned #839')"
+assert_eq "fanout-no-regate: terminal token" "propagate" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "fanout-ci-waiting: scheduler NOT called" "0" \
+assert_eq "fanout-no-regate: scheduler NOT called" "0" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && echo 1 || echo 0)"
-assert_eq "fanout-ci-waiting: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
 # --- single-target waiting CI → scheduler fails → fallback drain ci-waiting ----
@@ -13421,9 +13637,9 @@ mat_teardown
 # plain 'drain ci-waiting' token so the tick never wedges.
 echo "Test: materialize-spawn single-target waiting CI scheduler failure → drain ci-waiting fallback"
 mat_setup
-export MAT_PHASE=waiting
+export MAT_CI_READY=waiting
 export MAT_RESEED_RC=1
-out=$(run_mat 839 queue)
+out=$(run_mat 839 explicit)
 assert_eq "ci-wait-fallback: terminal token is drain ci-waiting" "drain ci-waiting" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "ci-wait-fallback: scheduler was called" "1" \
@@ -13431,6 +13647,19 @@ assert_eq "ci-wait-fallback: scheduler was called" "1" \
 assert_eq "ci-wait-fallback: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
 assert_eq "ci-wait-fallback: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- queue not-ready CI → NOT re-gated (pre-vetted by selection) -------------
+# Queue/fan-out targets were already filtered by dispatch-select-target's
+# dispatch-ci-ready gate, so materialize-spawn does NOT re-run it: even with a
+# not-ready verdict forced, a queue target spawns normally.
+echo "Test: materialize-spawn queue mode skips the readiness re-gate"
+mat_setup
+export MAT_CI_READY=waiting
+out=$(run_mat 839 queue)
+assert_eq "queue-no-regate: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "queue-no-regate: spawn called once" "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
 mat_teardown
 
 # --- --gap 1 → propagate (single target, default behavior) -------------------
@@ -13827,6 +14056,94 @@ out=$(printf '%s\n' "budget-etl/scripts/run.sh" | "$SCRIPT_DIR/dispatch-security
 assert_eq "surface: non-.claude sh → code no app_or_rules" "surface=code
 deps=false
 app_or_rules=false" "$out"
+
+# ============================================================================
+# === dispatch-security-followup ===
+# ============================================================================
+
+echo "Test: dispatch-security-followup"
+
+# 1. CodeQL out-of-scope high → length 1
+out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/sqli","alert_number":42,"security_severity_level":"high","description":"sqli","location":"src/db.ts:10","html_url":"http://x"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: codeql out-of-scope high → 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 2. CodeQL out-of-scope medium → length 1
+out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/xss","alert_number":7,"security_severity_level":"medium","description":"xss","location":"src/y.ts","html_url":"http://y"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: codeql out-of-scope medium → 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
+
+# CodeQL out-of-scope critical → length 1
+out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/crit","alert_number":99,"security_severity_level":"critical","description":"crit","location":"src/c.ts","html_url":"http://c"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: codeql out-of-scope critical → 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 3. CodeQL out-of-scope low → length 0
+out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/low","alert_number":1,"security_severity_level":"low","description":"low","location":"src/z.ts","html_url":"http://z"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: codeql out-of-scope low → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 4. CodeQL out-of-scope null security_severity_level → length 0
+out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/null","alert_number":2,"security_severity_level":null,"description":"n","location":"src/n.ts","html_url":"http://n"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: codeql out-of-scope null sev → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 5. CodeQL required (high) → length 0
+out=$(printf '%s' '[{"source":"codeql","classification":"required","rule_id":"js/req","alert_number":3,"security_severity_level":"high","description":"r","location":"src/r.ts","html_url":"http://r"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: codeql required high → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 6. CodeQL false-positive (high) → length 0
+out=$(printf '%s' '[{"source":"codeql","classification":"false-positive","rule_id":"js/fp","alert_number":4,"security_severity_level":"high","description":"fp","location":"src/fp.ts","html_url":"http://fp"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: codeql false-positive high → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 7. npm out-of-scope high, introduced_by_diff=false → length 1
+out=$(printf '%s' '[{"source":"npm","classification":"out-of-scope","advisory_id":"GHSA-aaaa","severity":"high","introduced_by_diff":false,"package":"lodash","title":"proto pollution","url":"http://npm"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: npm out-of-scope high not-diff → 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 8. npm out-of-scope critical, introduced_by_diff=false → length 1
+out=$(printf '%s' '[{"source":"npm","classification":"out-of-scope","advisory_id":"GHSA-bbbb","severity":"critical","introduced_by_diff":false,"package":"axios","title":"ssrf","url":"http://npm2"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: npm out-of-scope critical not-diff → 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 9. npm out-of-scope moderate → length 0
+out=$(printf '%s' '[{"source":"npm","classification":"out-of-scope","advisory_id":"GHSA-cccc","severity":"moderate","introduced_by_diff":false,"package":"qs","title":"dos","url":"http://npm3"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: npm out-of-scope moderate → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 10. npm out-of-scope high but introduced_by_diff=true → length 0
+out=$(printf '%s' '[{"source":"npm","classification":"out-of-scope","advisory_id":"GHSA-dddd","severity":"high","introduced_by_diff":true,"package":"minimist","title":"proto","url":"http://npm4"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: npm out-of-scope high introduced-by-diff → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 11a. CodeQL stable identifier embedded verbatim in title
+out=$(printf '%s' '[{"source":"codeql","classification":"out-of-scope","rule_id":"js/sql-injection","alert_number":42,"security_severity_level":"high","description":"sqli","location":"src/db.ts","html_url":"https://github.com/org/repo/security/code-scanning/42"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+title=$(printf '%s' "$out" | jq -r '.[0].title')
+case "$title" in *"CodeQL js/sql-injection alert #42"*) hit=yes ;; *) hit=no ;; esac
+assert_eq "followup: codeql identifier embedded in title" "yes" "$hit"
+
+# 11c. CodeQL html_url is included in body for traceability
+body=$(printf '%s' "$out" | jq -r '.[0].body')
+case "$body" in *"https://github.com/org/repo/security/code-scanning/42"*) hit=yes ;; *) hit=no ;; esac
+assert_eq "followup: codeql html_url in body" "yes" "$hit"
+
+# 11b. npm stable identifier embedded verbatim in title
+out=$(printf '%s' '[{"source":"npm","classification":"out-of-scope","advisory_id":"GHSA-xxxx-yyyy","severity":"critical","introduced_by_diff":false,"package":"react","title":"xss","url":"http://npm"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+title=$(printf '%s' "$out" | jq -r '.[0].title')
+case "$title" in *"npm advisory GHSA-xxxx-yyyy"*) hit=yes ;; *) hit=no ;; esac
+assert_eq "followup: npm identifier embedded in title" "yes" "$hit"
+
+# 12. Mixed interleaved array → only qualifying subset in input order
+out=$(printf '%s' '[
+  {"source":"codeql","classification":"out-of-scope","rule_id":"js/a","alert_number":1,"security_severity_level":"high","description":"a","location":"a.ts","html_url":"http://a"},
+  {"source":"codeql","classification":"required","rule_id":"js/b","alert_number":2,"security_severity_level":"high","description":"b","location":"b.ts","html_url":"http://b"},
+  {"source":"npm","classification":"out-of-scope","advisory_id":"GHSA-c","severity":"critical","introduced_by_diff":false,"package":"c","title":"c","url":"http://c"},
+  {"source":"npm","classification":"out-of-scope","advisory_id":"GHSA-d","severity":"moderate","introduced_by_diff":false,"package":"d","title":"d","url":"http://d"},
+  {"source":"codeql","classification":"out-of-scope","rule_id":"js/e","alert_number":5,"security_severity_level":"medium","description":"e","location":"e.ts","html_url":"http://e"}
+]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: mixed array → 3 qualifying" "3" "$(printf '%s' "$out" | jq -r 'length')"
+assert_eq "followup: mixed array → identifiers in input order" "CodeQL js/a alert #1
+npm advisory GHSA-c
+CodeQL js/e alert #5" "$(printf '%s' "$out" | jq -r '.[].identifier')"
+
+# 13. Empty input [] → length 0
+out=$(printf '%s' '[]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: empty input → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 14. Unknown/missing source → ignored
+out=$(printf '%s' '[{"source":"sonarqube","classification":"out-of-scope","security_severity_level":"high"},{"classification":"out-of-scope","severity":"critical"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
+assert_eq "followup: unknown/missing source → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
 
 # ============================================================================
 # summary

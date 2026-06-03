@@ -4,9 +4,9 @@
 # its draft PR's CI still in progress.
 #
 # /dispatch <N> targets one explicit issue/PR — an effective queue of size one.
-# When N's PR has CI in progress, dispatch-phase returns `waiting` (an
-# in-progress, not-yet-actionable state). The multi-item queue handles this by
-# skipping the waiting PR and selecting the next ready priority — but the
+# When N's PR has CI in progress, dispatch-ci-ready reports not-ready (exit 1)
+# and there is no actionable phase yet. The multi-item queue handles this by
+# skipping the not-ready PR and selecting the next ready priority — but the
 # single-target path has no "next", so skipping equals doing nothing and the
 # run silently drains. Instead of draining, this script schedules a transient
 # systemd.user timer that, after a short delay, re-runs `dispatch-spawn-router

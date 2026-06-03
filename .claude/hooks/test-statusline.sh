@@ -72,6 +72,21 @@ printf '%s' "${STUB_PHASE:-implement}"
 DPHASE
   chmod +x "$tmp/.claude/skills/dispatch-propagate/scripts/dispatch-phase"
 
+  # Stub dispatch-ci-ready alongside dispatch-phase. The hook consults this
+  # first: a non-zero exit (not-ready) makes the bg fetch write `waiting`;
+  # a zero exit (ready) lets it fall through to dispatch-phase. STUB_CI_READY=1
+  # (default) → ready; STUB_CI_READY=0 → not-ready.
+  cat >"$tmp/.claude/skills/dispatch-propagate/scripts/dispatch-ci-ready" <<'DCIREADY'
+#!/usr/bin/env bash
+if [ "${STUB_CI_READY:-1}" = "0" ]; then
+  printf '%s' waiting
+  exit 1
+fi
+printf '%s' ready
+exit 0
+DCIREADY
+  chmod +x "$tmp/.claude/skills/dispatch-propagate/scripts/dispatch-ci-ready"
+
   # Point update-rate-limits.sh to a non-existent path under tmp; the hook
   # swallows the error with || true so there is no real side effect.
   export CLAUDE_PROJECT_DIR="$tmp"
@@ -84,6 +99,7 @@ DPHASE
   export STUB_BRANCH="main"
   export STUB_PHASE="implement"
   export STUB_FAIL="0"
+  export STUB_CI_READY="1"
 }
 
 # seed_cache <phase> <fresh|stale>
@@ -287,6 +303,33 @@ seed_cache "review" "fresh"
 run_hook "$(json_without_tokens "claude-sonnet-4" "/home/user/project")"
 assert_contains     "case6: no-token branch shows dispatch phase" "#718 review" "$HOOK_OUT"
 assert_not_contains "case6: no-token branch omits tokens text" "tokens" "$HOOK_OUT"
+
+# =============================================================================
+# Case 7: branch `718-foo`, NO cache, dispatch-ci-ready NOT-READY —
+#   background process writes `waiting` (sourced from the readiness predicate,
+#   not the phase enum), regardless of what dispatch-phase would print.
+# =============================================================================
+setup_case
+export STUB_BRANCH="718-foo"
+export STUB_PHASE="review"     # would-be phase; must be overridden by not-ready
+export STUB_CI_READY="0"       # not-ready → display waiting
+# No seed_cache call — cache does not exist
+run_hook "$(json_with_tokens "claude-sonnet-4" "/home/user/project")"
+assert_nonempty "case7: not-ready still renders model+cwd+tokens" "$HOOK_OUT"
+assert_poll     "case7: not-ready background process writes waiting" "waiting"
+
+# =============================================================================
+# Case 8: branch `718-foo`, STALE cache, dispatch-ci-ready NOT-READY —
+#   stale value renders immediately; background refresh overwrites with waiting.
+# =============================================================================
+setup_case
+export STUB_BRANCH="718-foo"
+export STUB_PHASE="review"
+export STUB_CI_READY="0"
+seed_cache "qa" "stale"
+run_hook "$(json_with_tokens "claude-sonnet-4" "/home/user/project")"
+assert_contains "case8: stale cache renders stale value immediately" "#718 qa" "$HOOK_OUT"
+assert_poll     "case8: not-ready background refresh writes waiting" "waiting"
 
 # --- Summary ------------------------------------------------------------------
 
