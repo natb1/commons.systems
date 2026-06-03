@@ -18,7 +18,7 @@
 #   busy             lock held by another tick; nothing acquired, nothing released.
 #   sync-failed      git fetch / merge --ff-only failed on `main`; lock released.
 #   resolver-failed  explicit arg did not resolve to one issue; lock released.
-#   concurrency-cap  live busy-worker count >= target; #725 re-seed scheduled; lock released.
+#   concurrency-cap  effective-live count (busy workers + outstanding reservations) >= target; #725 re-seed scheduled; lock released.
 #   explicit <num> <gap>   explicit arg resolved to issue <num>; lock HELD.
 #   pr <num> <branch> <phase> <gap>   queue selected a PR; lock HELD.
 #   issue <num> <gap>   queue selected a help-wanted leaf; lock HELD.
@@ -29,9 +29,14 @@
 #   empty            nothing eligible; lock released.
 #
 # <gap> = max(1, TARGET_N − LIVE_COUNT) is the run-scoped spawn budget the
-# fan-out loop consumes (always >= 1 on a target line). An explicit-target run
-# (a positional <number> is given) skips the concurrency gate entirely and forces
-# <gap> = 1 — a deliberately-named target is not paced by the autonomous budget.
+# fan-out loop consumes (always >= 1 on a target line). On the autonomous queue
+# path LIVE_COUNT is the effective-live count,
+# effective_live = busy_workers + outstanding_reservations — a reservation counts
+# against the budget the instant it is written, with no wait for worker
+# registration — and the tick sweeps stranded reservations before counting. An
+# explicit-target run (a positional <number> is given) skips the concurrency gate
+# entirely (no sweep, no ledger count) and forces <gap> = 1 — a deliberately-named
+# target is not paced by the autonomous budget.
 # A `--manual` run (the bare human-typed `/dispatch` shim) ALSO skips the gate,
 # but UNLIKE the explicit path it emits <gap> = unbounded and fans out over the
 # whole queue — exempt from BOTH the pace curve and the MAX_WORKERS ceiling. The
@@ -113,29 +118,41 @@ fi
 # MAX_WORKERS ceiling (distinct from the explicit path's GAP=1).
 # On the autonomous queue path the gate is evaluated ONCE per run, before any
 # selection work, so a run already at the worker budget does no JIT/selection
-# traversal. Counts only busy workers (claude_agents_count_busy_workers). At cap:
-# schedule the #725 cap-keyed re-seed, release the lock, emit `concurrency-cap`.
-# Under cap: GAP bounds how many workers a fan-out run may spawn. Daemon UNKNOWN →
-# fail open (GAP=1); the per-worktree dedup in dispatch-spawn-worker is the
-# last-line defense.
+# traversal. Before counting, the gate sweeps stranded reservations
+# (reservation_sweep) so it reconciles the ledger first. LIVE_COUNT is then the
+# effective-live count, effective_live = busy_workers + outstanding_reservations
+# (claude_agents_count_busy_workers + reservation_count), not busy workers alone
+# — a reservation counts against the budget the instant it is written, with no
+# wait for worker registration. At cap: schedule the #725 cap-keyed re-seed,
+# release the lock, emit `concurrency-cap`. Under cap: GAP bounds how many workers
+# a fan-out run may spawn. Daemon UNKNOWN (the busy-worker read fails;
+# reservation_count never fails) → fail open (GAP=1); the per-worktree dedup in
+# dispatch-spawn-worker is the last-line defense.
 GAP=1
 if [[ -n "$MANUAL" ]]; then
   GAP=unbounded
 elif [[ -z "$ARG" ]]; then
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-claude-agents.sh"
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-reservation-ledger.sh"
   TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")
-  if LIVE_COUNT=$(claude_agents_count_busy_workers); then
+  # Reconcile the ledger before counting so the gate sees no stranded
+  # reservations (sweep reclaim notes → stderr; best-effort).
+  reservation_sweep 1>&2 || true
+  if BUSY=$(claude_agents_count_busy_workers); then
+    RESV=$(reservation_count)
+    LIVE_COUNT=$(( BUSY + RESV ))
     if (( LIVE_COUNT >= TARGET_N )); then
       release_lock
       "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
-      echo "router: $LIVE_COUNT live worker(s) >= target $TARGET_N"
+      echo "router: $LIVE_COUNT effective live ($BUSY busy + $RESV reserved) >= target $TARGET_N"
       echo "concurrency-cap"
       exit 0
     fi
     GAP=$(( TARGET_N - LIVE_COUNT ))
   fi
-  # daemon UNKNOWN (if-condition false) → GAP stays 1 (fail open).
+  # daemon UNKNOWN (busy-worker read failed) → GAP stays 1 (fail open).
 fi
 
 # --- Step 2: run the JIT engine (best-effort) --------------------------------
