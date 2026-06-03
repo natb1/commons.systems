@@ -1,10 +1,21 @@
 #!/usr/bin/env bash
 # Trace from issue N to the deepest open leaf (no open children).
-# Usage: dispatch-trace-leaf <issue-num> <queue|explicit>
+# Usage: dispatch-trace-leaf <issue-num> <queue|explicit> [--exclude <n>...]
 #
 # Walks open blockers and open sub-issues depth-first, visiting the
 # lowest-numbered open child first, to find the lowest-numbered reachable
 # open leaf. Prints one issue number.
+#
+# The optional --exclude <n>... argument names already-processed leaves the
+# trace must never return (#1062). It is the fan-out caller's running SEEN set:
+# a multi-leaf subtree whose first leaf was already spawned (and whose worktree
+# is now an orphan, not a live session — so the liveness filter below does not
+# skip it) would otherwise re-return that same leaf and stall the fan-out. An
+# excluded leaf is treated exactly like a live-owned/parked child — never
+# returned, descended past — so the trace advances to the next startable leaf
+# in the same subtree. The flag consumes the run of integer tokens following it
+# (stops at the next --flag or end of args). Passed only in queue mode; explicit
+# mode never receives it, so explicit behavior is unchanged.
 #
 # The mode argument controls worktree-awareness during the descent:
 #   explicit — descent is not worktree-aware. An existing <N>-* worktree on a
@@ -40,8 +51,8 @@
 #   0 — a leaf was found and printed to stdout
 #   1 — usage error, or a sibling gh script (issue-blocking / issue-sub-issues)
 #       failed — a hard failure the caller must not treat as "no work"
-#   2 — queue mode only: every reachable open leaf is owned by a live session
-#       or parked on dispatch:office-hours
+#   2 — queue mode only: every reachable open leaf is owned by a live session,
+#       parked on dispatch:office-hours, or in the --exclude set
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -56,8 +67,32 @@ ISSUE_NUM="${1:-}"
 MODE="${2:-}"
 if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]] \
    || [[ "$MODE" != "queue" && "$MODE" != "explicit" ]]; then
-  echo "error: usage: dispatch-trace-leaf <issue-num> <queue|explicit>" >&2
+  echo "error: usage: dispatch-trace-leaf <issue-num> <queue|explicit> [--exclude <n>...]" >&2
   exit 1
+fi
+
+# Optional --exclude <n>...: a run of integer tokens naming already-processed
+# leaves the trace must never return (#1062). The topological-leaf branch in
+# find_leaf refuses to return any number in EXCLUDED, so the descent advances
+# past it. Consume the run of integer tokens following the flag (stops at the
+# next --flag or end of args), matching the variadic wire format the fan-out
+# caller uses to expand its SEEN set directly.
+declare -A EXCLUDED=()
+shift 2
+if [[ $# -gt 0 ]]; then
+  if [[ "$1" != "--exclude" ]]; then
+    echo "error: usage: dispatch-trace-leaf <issue-num> <queue|explicit> [--exclude <n>...]" >&2
+    exit 1
+  fi
+  shift
+  while [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; do
+    EXCLUDED["$1"]=1
+    shift
+  done
+  if [[ $# -gt 0 ]]; then
+    echo "error: usage: dispatch-trace-leaf <issue-num> <queue|explicit> [--exclude <n>...]" >&2
+    exit 1
+  fi
 fi
 
 # In queue mode, map each issue-number prefix to the on-disk path(s) of its
@@ -195,9 +230,19 @@ find_leaf() {
   fi
 
   if [[ -z "$kids" ]]; then
-    # Topological leaf — a valid leaf. Live-session-owned children are filtered
-    # before recursion (see the descent loop below), so a queue-mode leaf
-    # reached here is never itself live-owned.
+    # Topological leaf. An excluded leaf (#1062) — already processed by the
+    # fan-out caller — is treated exactly like a live-owned/parked child: never
+    # returned. return 1 (no valid leaf here) so the descent advances past it to
+    # the next startable sibling/leaf, or bubbles up to the exit-2 surface when
+    # the whole subtree is excluded. This single check covers both the root
+    # (passed directly to find_leaf) and every descended leaf — no separate root
+    # guard is needed.
+    if [[ -n "${EXCLUDED[$n]:-}" ]]; then
+      return 1
+    fi
+    # A valid leaf. Live-session-owned children are filtered before recursion
+    # (see the descent loop below), so a queue-mode leaf reached here is never
+    # itself live-owned.
     echo "$n"
     return 0
   fi
@@ -254,8 +299,9 @@ if [[ "$trace_rc" -eq 3 ]]; then
 fi
 
 # In queue mode, no valid leaf is reachable — every reachable open leaf is owned
-# by a live session or parked on dispatch:office-hours (#1011) (or cycles block
-# every path); orphan worktrees were descended through. Surface this so
+# by a live session, parked on dispatch:office-hours (#1011), or in the
+# --exclude set (#1062) (or cycles block every path); orphan worktrees were
+# descended through. Surface this so
 # /dispatch-propagate can stop with a clear message instead of dispatching on a
 # conflict. The "worktree-conflicted" token is retained for the pattern-matcher
 # in test-dispatch-scripts.sh that keys on it (dispatch-select-target only checks
