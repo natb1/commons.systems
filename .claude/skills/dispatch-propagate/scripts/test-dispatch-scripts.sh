@@ -8024,27 +8024,31 @@ case "$args" in
     ;;
   "project item-edit "*)
     echo "$args" >> "$STUB_DIR/gh-item-edit.log"
-    # Parse --id and --single-select-option-id out of the args.
+    # Parse --id, --single-select-option-id, and --date out of the args.
     item_id=""
     option_id=""
+    date_val=""
     set -- $args
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --id) item_id="$2"; shift 2 ;;
         --single-select-option-id) option_id="$2"; shift 2 ;;
+        --date) date_val="$2"; shift 2 ;;
         *) shift ;;
       esac
     done
-    # Map the option id back to its option name via field-list.json.
-    option_name=$(jq -r --arg oid "$option_id" \
-      '.fields[] | .options[]? | select(.id == $oid) | .name' \
-      "$STUB_DIR/field-list.json")
-    # Set the matching item's status key so a follow-up item-list reflects it.
-    tmp=$(mktemp)
-    jq --arg iid "$item_id" --arg sname "$option_name" \
-      '.items |= map(if .id == $iid then .status = $sname else . end)' \
-      "$STUB_DIR/item-list.json" > "$tmp"
-    mv "$tmp" "$STUB_DIR/item-list.json"
+    if [[ -n "$option_id" ]]; then
+      # Map the option id back to its option name via field-list.json.
+      option_name=$(jq -r --arg oid "$option_id" \
+        '.fields[] | .options[]? | select(.id == $oid) | .name' \
+        "$STUB_DIR/field-list.json")
+      # Set the matching item's status key so a follow-up item-list reflects it.
+      tmp=$(mktemp)
+      jq --arg iid "$item_id" --arg sname "$option_name" \
+        '.items |= map(if .id == $iid then .status = $sname else . end)' \
+        "$STUB_DIR/item-list.json" > "$tmp"
+      mv "$tmp" "$STUB_DIR/item-list.json"
+    fi
     ;;
   *)
     echo "gh stub: unknown invocation: $args" >&2
@@ -9272,7 +9276,9 @@ jit_setup() {
 
   # gh PATH stub. Every matched subcommand is appended to gh-calls.log so the
   # debounce test can assert the log is absent (zero gh calls). issue list reads
-  # open-issues.json / closed-issues.json fixtures if present, else "[]".
+  # open-issues.json / closed-issues.json fixtures if present, else "[]". The
+  # `issue create` case captures stdin to gh-issue-create-body.txt so tests can
+  # verify the body (including the jit-due marker) the engine sent.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
@@ -9369,7 +9375,8 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "title": "Daily chore",
       "body": "Recurring daily chore. Close when done.",
       "project": "test-project",
-      "remindAfterClose": "12h"
+      "remindAfterClose": "12h",
+      "dueAfterClose": "24h"
     }
   ]
 }
@@ -9379,10 +9386,12 @@ rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
 assert_eq "cold start exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out" == *"daily-chore: created #123"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: cold start reports created #123"
+# Cold start with remind=12h, due=24h, NOW=2026-01-01T00:00:00Z:
+# DUE = NOW + 24h - 12h = 2026-01-01T12:00:00Z.
+if [[ "$out" == *"daily-chore: created #123 (due 2026-01-01T12:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: cold start reports created #123 (due 2026-01-01T12:00:00Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: cold start reports created #123"
+  FAIL=$((FAIL + 1)); echo "  FAIL: cold start reports created #123 (due 2026-01-01T12:00:00Z)"
   echo "    actual: $out"
 fi
 calls=$(cat "$STUB_DIR/gh-calls.log")
@@ -9396,6 +9405,14 @@ else
   FAIL=$((FAIL + 1))
   echo "  FAIL: cold start invoked label create / list / create / item-add"
   echo "    gh-calls.log: $calls"
+fi
+create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$create_log" == *"<!-- jit-due: 2026-01-01T12:00:00Z -->"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: cold start embedded jit-due marker in issue body"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cold start embedded jit-due marker in issue body"
+  echo "    gh-issue-create.log: $create_log"
 fi
 jit_teardown
 
@@ -9457,7 +9474,8 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "title": "Daily chore",
       "body": "Recurring daily chore. Close when done.",
       "project": "test-project",
-      "remindAfterClose": "12h"
+      "remindAfterClose": "12h",
+      "dueAfterClose": "24h"
     }
   ]
 }
@@ -9470,11 +9488,21 @@ rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
 assert_eq "past-window exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out" == *"daily-chore: created #123"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: past-window reports created #123"
+# closedAt = NOW − 24h, dueAfterClose = 24h → DUE = closedAt + 24h = NOW =
+# 2026-01-01T00:00:00Z.
+if [[ "$out" == *"daily-chore: created #123 (due 2026-01-01T00:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: past-window reports created #123 (due 2026-01-01T00:00:00Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: past-window reports created #123"
+  FAIL=$((FAIL + 1)); echo "  FAIL: past-window reports created #123 (due 2026-01-01T00:00:00Z)"
   echo "    actual: $out"
+fi
+create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$create_log" == *"<!-- jit-due: 2026-01-01T00:00:00Z -->"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: past-window embedded jit-due marker in issue body"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: past-window embedded jit-due marker in issue body"
+  echo "    gh-issue-create.log: $create_log"
 fi
 jit_teardown
 
@@ -9533,7 +9561,8 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "title": "Review the inbox",
       "body": "The inbox needs attention.",
       "project": "test-project",
-      "check": { "script": "mock-check" }
+      "check": { "script": "mock-check" },
+      "dueAfterCreate": "24h"
     }
   ]
 }
@@ -9549,11 +9578,21 @@ out=$(MOCK_CHECK_RC=0 "$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) \
   || rc=$?
 assert_eq "check-fire exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out" == *"email-review: created #123"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: check-fire reports created #123"
+# Check-script jit, dueAfterCreate = 24h, NOW = 2026-01-01T00:00:00Z →
+# DUE = NOW + 24h = 2026-01-02T00:00:00Z.
+if [[ "$out" == *"email-review: created #123 (due 2026-01-02T00:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: check-fire reports created #123 (due 2026-01-02T00:00:00Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: check-fire reports created #123"
+  FAIL=$((FAIL + 1)); echo "  FAIL: check-fire reports created #123 (due 2026-01-02T00:00:00Z)"
   echo "    actual: $out"
+fi
+create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$create_log" == *"<!-- jit-due: 2026-01-02T00:00:00Z -->"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: check-fire embedded jit-due marker in issue body"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: check-fire embedded jit-due marker in issue body"
+  echo "    gh-issue-create.log: $create_log"
 fi
 jit_teardown
 
@@ -9702,7 +9741,8 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "title": "Daily chore",
       "body": "Recurring daily chore. Close when done.",
       "project": "test-project",
-      "remindAfterClose": "12h"
+      "remindAfterClose": "12h",
+      "dueAfterClose": "24h"
     }
   ]
 }
@@ -9712,10 +9752,10 @@ rc=0
 out1=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
 assert_eq "idempotency run 1 exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out1" == *"daily-chore: created #123"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: idempotency run 1 created #123"
+if [[ "$out1" == *"daily-chore: created #123 (due 2026-01-01T12:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: idempotency run 1 created #123 (due 2026-01-01T12:00:00Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: idempotency run 1 created #123"
+  FAIL=$((FAIL + 1)); echo "  FAIL: idempotency run 1 created #123 (due 2026-01-01T12:00:00Z)"
   echo "    actual: $out1"
 fi
 # Run 1 stamped the state file with a numeric timestamp for the jit key.
@@ -9749,6 +9789,136 @@ creates_after=0
   && creates_after=$(wc -l < "$STUB_DIR/gh-issue-create.log")
 assert_eq "idempotency run 2 made no second issue create" \
   "$creates_before" "$creates_after"
+jit_teardown
+
+# --- Test 11: cadence jit with no dueAfter* → no marker in body --------------
+
+echo "Test: dispatch-jit-engine with no dueAfter* embeds no jit-due marker"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "daily-chore",
+      "repo": "test-owner/test-repo",
+      "label": "jit:daily-chore",
+      "title": "Daily chore",
+      "body": "Recurring daily chore. Close when done.",
+      "project": "test-project",
+      "remindAfterClose": "12h"
+    }
+  ]
+}
+EOF
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
+assert_eq "no-dueAfter exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"daily-chore: created #123 (no dueAfter*; due not stamped)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no-dueAfter reports created #123 (no dueAfter*; due not stamped)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-dueAfter reports created #123 (no dueAfter*; due not stamped)"
+  echo "    actual: $out"
+fi
+create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$create_log" != *"jit-due"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no-dueAfter embedded no jit-due marker in issue body"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-dueAfter embedded no jit-due marker in issue body"
+  echo "    gh-issue-create.log: $create_log"
+fi
+jit_teardown
+
+# --- Test 12: cadence jit with dueAfterCreate → cross-key validation error ---
+# A cadence jit must use dueAfterClose; supplying dueAfterCreate is a config
+# mistake the engine rejects (HARD_ERROR → exit 1) before creating any issue.
+
+echo "Test: dispatch-jit-engine cadence jit with dueAfterCreate is rejected"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "daily-chore",
+      "repo": "test-owner/test-repo",
+      "label": "jit:daily-chore",
+      "title": "Daily chore",
+      "body": "Recurring daily chore. Close when done.",
+      "project": "test-project",
+      "remindAfterClose": "12h",
+      "dueAfterCreate": "24h"
+    }
+  ]
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>&1 >/dev/null) || rc=$?
+assert_eq "cadence+dueAfterCreate exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"cadence jit must use dueAfterClose, not dueAfterCreate"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: cadence+dueAfterCreate reports the cross-key error"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cadence+dueAfterCreate reports the cross-key error"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: cadence+dueAfterCreate created no issue"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cadence+dueAfterCreate created no issue"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+jit_teardown
+
+# --- Test 13: check-script jit with dueAfterClose → cross-key validation err -
+# A check-script jit must use dueAfterCreate; supplying dueAfterClose is a
+# config mistake the engine rejects (HARD_ERROR → exit 1) before creating any
+# issue, even though the check itself fired.
+
+echo "Test: dispatch-jit-engine check-script jit with dueAfterClose is rejected"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "email-review",
+      "repo": "test-owner/test-repo",
+      "label": "jit:email-review",
+      "title": "Review the inbox",
+      "body": "The inbox needs attention.",
+      "project": "test-project",
+      "check": { "script": "mock-check" },
+      "dueAfterClose": "24h"
+    }
+  ]
+}
+EOF
+cat > "$TMPDIR_TEST/checkdir/mock-check" <<'CHK'
+#!/usr/bin/env bash
+exit "${MOCK_CHECK_RC:-0}"
+CHK
+chmod +x "$TMPDIR_TEST/checkdir/mock-check"
+rc=0
+err=$(MOCK_CHECK_RC=0 "$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>&1 >/dev/null) || rc=$?
+assert_eq "check+dueAfterClose exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"check-script jit must use dueAfterCreate, not dueAfterClose"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: check+dueAfterClose reports the cross-key error"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: check+dueAfterClose reports the cross-key error"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: check+dueAfterClose created no issue"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: check+dueAfterClose created no issue"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
 jit_teardown
 
 # ============================================================================
