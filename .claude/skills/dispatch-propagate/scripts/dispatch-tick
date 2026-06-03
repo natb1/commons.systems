@@ -136,7 +136,31 @@ fi
 # is evaluated once at export time and frozen into the value, so all children see
 # the same fixed string regardless of how they check $$. Exported once so all
 # children agree.
+#
+# Headless-liveness sentinel (#1068). A synthetic `headless:*` id is a bash
+# string that never appears in `claude agents --json`, so dispatch-acquire-lock's
+# resolve_holder_state cannot resolve its liveness through the daemon registry —
+# a concurrent tick would read this LIVE holder as dead and reclaim the lock
+# mid-selection. To give the headless holder a daemon-independent liveness
+# signal, write a sentinel containing this tick's PID alongside the shared lock
+# file and install a single EXIT/INT/TERM trap to remove it; resolve_holder_state
+# treats the holder as live iff the sentinel exists and its PID is alive. Only a
+# synthesized id writes a sentinel — a real inherited session id is governed by
+# the daemon path and writes none. Best-effort: if the lock-file path cannot be
+# resolved (not in a git repo and DISPATCH_LOCK_FILE unset), skip silently rather
+# than exit — the daemon path still governs real ids, and a headless tick that
+# cannot resolve the lock file also cannot acquire the lock. $$ is the tick PID,
+# frozen here to match the value baked into the synthetic id above.
 export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_ID:-$$}}"
+if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
+  if SENTINEL_LOCK_FILE=$(dispatch_lock_file); then
+    SENTINEL=$(headless_sentinel_path "$CLAUDE_CODE_SESSION_ID" "$SENTINEL_LOCK_FILE")
+    mkdir -p "$(dirname "$SENTINEL")" 2>/dev/null || true
+    printf '%s\n' "$$" >"$SENTINEL"
+    # A single EXIT trap covers every `exit` below this point — intended.
+    trap 'rm -f "$SENTINEL"' EXIT INT TERM
+  fi
+fi
 
 # --- Step 1: select the target ------------------------------------------------
 # Capture select-tick's full stdout and echo every line through (jit:/calendar:
