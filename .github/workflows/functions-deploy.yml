@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "functions/**"
+      - ".github/workflows/functions-deploy.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,6 +29,25 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: .github/scripts/firebase-auth.sh
+      # syncAgenda's non-secret defineString params come from repository
+      # Variables, written into the dotenv firebase-tools reads at deploy time.
+      # Unset Variables yield empty values, which deploy the function dormant.
+      # The private key is the only secret and lives in Secret Manager, not here.
+      - name: Write agenda function config
+        env:
+          AGENDA_GITHUB_APP_ID: ${{ vars.AGENDA_GITHUB_APP_ID }}
+          AGENDA_GITHUB_APP_INSTALLATION_ID: ${{ vars.AGENDA_GITHUB_APP_INSTALLATION_ID }}
+          AGENDA_GROUP_REPO: ${{ vars.AGENDA_GROUP_REPO }}
+          AGENDA_MEMBER_EMAILS: ${{ vars.AGENDA_MEMBER_EMAILS }}
+          AGENDA_FIRESTORE_NAMESPACE: ${{ vars.AGENDA_FIRESTORE_NAMESPACE || 'agenda/prod' }}
+        run: |
+          cat > functions/.env.commons-systems <<EOF
+          AGENDA_GITHUB_APP_ID=${AGENDA_GITHUB_APP_ID}
+          AGENDA_GITHUB_APP_INSTALLATION_ID=${AGENDA_GITHUB_APP_INSTALLATION_ID}
+          AGENDA_GROUP_REPO=${AGENDA_GROUP_REPO}
+          AGENDA_MEMBER_EMAILS=${AGENDA_MEMBER_EMAILS}
+          AGENDA_FIRESTORE_NAMESPACE=${AGENDA_FIRESTORE_NAMESPACE}
+          EOF
       - name: Deploy functions
         run: npx firebase-tools deploy --only functions --force --project "$FIREBASE_PROJECT_ID"
       - name: Cleanup credentials
