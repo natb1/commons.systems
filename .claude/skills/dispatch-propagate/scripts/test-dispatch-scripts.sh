@@ -2070,6 +2070,73 @@ assert_eq "dispatch-trace-leaf exit 1 → select-target exits non-zero" "yes" "$
 assert_eq "dispatch-trace-leaf exit 1 → no issue line emitted" "yes" "$no_issue"
 teardown
 
+# --- --exclude set (#1062) ----------------------------------------------------
+# The fan-out caller passes its SEEN set as --exclude so the selector never
+# re-returns an already-processed target; it surfaces the next distinct one. The
+# harness copies the REAL dispatch-trace-leaf into TMPDIR_TEST, so these run end
+# to end through the Unit-1 trace.
+
+# 39a. A help-wanted issue in the --exclude set is skipped via the trace root;
+#      the next help-wanted issue is selected. Issue 55 (older) is excluded, so
+#      the trace exits 2 for it and issue 66 (newer) surfaces.
+echo "Test: excluded help-wanted issue skipped → next issue chosen"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 55)
+assert_eq "excluded issue 55 skipped → issue 66 chosen" "issue 66" "$result"
+teardown
+
+# 39b. A multi-leaf subtree whose first leaf is excluded descends to the next
+#      startable leaf (AC (b)): the exclusion threads into the trace. Issue 55
+#      has sub-issues 5500 and 5501, neither worktree'd nor parked; --exclude
+#      5500 must yield 5501, not skip the whole subtree.
+echo "Test: excluded first leaf → next startable leaf in subtree selected"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500},{"number":5501}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5500.json"
+printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5501.json"
+# No worktrees — only the exclusion distinguishes the leaves.
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 5500)
+assert_eq "excluded leaf 5500 → leaf 5501 selected" "issue 5501" "$result"
+teardown
+
+# 39c. A whole-frontier exclusion drains to empty: the only help-wanted issue's
+#      only leaf is excluded and there is no QA PR, so the selector returns
+#      empty (a genuine empty, not a re-selection).
+echo "Test: whole frontier excluded, no QA PR → empty"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5500.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 5500)
+assert_eq "whole frontier excluded → empty" "empty" "$result"
+teardown
+
+# 39d. A PR row whose issue is excluded is filtered during the scan (before
+#      FIRST_PR), so a single ready PR on branch 20-feature plus --exclude 20
+#      and an empty issue list yields empty — the excluded PR is not selected and
+#      nothing else exists.
+echo "Test: excluded PR row filtered during scan → empty"
+setup
+UNION='['"$(make_pr_union 20 "20-feature" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 20)
+assert_eq "excluded PR 20 filtered → empty" "empty" "$result"
+teardown
+
 # --- ready-PR gate (#920) ---
 # An open help-wanted issue whose closing PR is non-draft (ready) is excluded
 # from the issue queue. The gate uses closingIssuesReferences from PR_LIST —
