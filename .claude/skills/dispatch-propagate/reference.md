@@ -21,9 +21,8 @@ Each `/dispatch-propagate` is a `claude --bg` background job (#725) rooted in
 below), and exits. Each worker runs one phase in its target worktree, then
 spawns a fresh `/dispatch-propagate` router back in `worktrees/main` and
 self-deletes. That router → workers → router chain advances the workflow; the
-#725 cap-keyed re-seed scheduled at the next rate-limit window reset re-seeds it
-when a tick stalled on a concurrency-budget cap (see *The #725 cap-keyed
-re-seed*).
+#725 cap-keyed re-seed re-seeds it when a tick stalled on a concurrency-budget
+cap or pace-curve pause (see *The #725 cap-keyed re-seed*).
 
 ### Fan-out
 
@@ -352,35 +351,61 @@ and the router gate `LIVE_COUNT >= TARGET_N` are unchanged.
 
 ## The #725 cap-keyed re-seed
 
-The #725 cap-keyed re-seed is the chain's resume-from-cap-stall mechanism.
-When a tick's Step 6 decides to skip the spawn because the live worker count
-already meets the budgeter's target, that means the rate-limit cap closed
-the budget — `dispatch-target-workers` reads
-`~/.local/share/productivity-tui/rate_limits.json` and returns 0 when
-`used_percentage >= target` on either the weekly or the 5-hour window. The
-chain pauses with work waiting; the only thing that unblocks it is the cap
-window resetting.
+The #725 re-seed is the chain's resume-from-stall mechanism. When a tick's
+Step 6 skips the spawn because the live worker count already meets the
+budgeter's target of 0, `dispatch-schedule-reseed` arms a transient
+`systemd.user` timer (`dispatch-reseed-<fire>`) that fires at the earliest
+epoch the budget reopens and runs `dispatch-spawn-router` from the main
+worktree. `dispatch-target-workers` returns 0 in two distinct stall classes:
 
-`dispatch-schedule-reseed` (invoked from Step 6's spawn-skip) reads the same
-telemetry, computes the earliest blocking `resets_at`, and writes a
-transient `systemd.user` timer (`dispatch-reseed-<resets_at>`) that fires at
-that time and runs `dispatch-spawn-router` from the main worktree. The unit
-name embeds the epoch, so a repeated call observing the same blocking cap
-collides on the unit name and is a no-op — idempotent across the many ticks
-that may observe the same stall.
+**Absolute cap-hit** — `used_percentage >= target` on the weekly (default
+90%) or 5-hour (50% floor) window. The chain is hard-capped; the budget
+reopens at the blocking window's `resets_at`. `dispatch-schedule-reseed` reads
+the telemetry, identifies the earliest blocking `resets_at`, and arms the
+timer there.
 
-This mechanism only covers the cap-stall class of stall. **Empty-queue and
-all-parked stalls** are handled by the office-hours queue (#755 / #757 /
-#758): when a human engages an `office-hours`-labeled item, the Step 4
-hand-off returns it to the dispatch chain and re-seeds from human action.
-The targeted alternative to a silent periodic heartbeat — adopted in #1010 —
-is the continuation invariant enforced at `dispatch-self-close`: a router tick
-that leaves no continuation (no worker spawned, no pending `dispatch-reseed*`
-timer, no live busy worker) parks instead of self-closing, emitting a one-line
-reason and staying visible in `claude agents`. The `office-hours-select-target`
-script surfaces the parked router via a `parked-router` line, so a human can
-resume it. This makes a stalled chain visible rather than silently losing it to
-a missed heartbeat window.
+**Pace-curve pause** — `used_weekly >= W(x)` (usage running ahead of the
+smooth cumulative curve — the `F=0 ahead-of-pace` row in Stage 2; see the
+*Concurrency budgeting* section). The 5h target band collapses to `F=0` so
+the target is 0, even when `used_weekly` is far below the absolute weekly cap.
+This stall is **transient and self-clearing**: `W` rises monotonically over
+time while `used_weekly` stays flat (no workers spending), so the budget
+reopens on its own at the curve-crossing epoch where `W(x) = used_weekly`.
+When no absolute cap is hit but weekly telemetry is present,
+`dispatch-schedule-reseed` consults `dispatch-target-workers --reopen-at`,
+which solves `W(x) = used_weekly` by bisection over the monotonic Stage-1
+curve and returns the curve-crossing epoch. The reseed arms a
+`dispatch-reseed-<fire>` timer at that crossing. `--reopen-at` returns `none`
+(a genuine no-op) when the pace curve is not the blocker — target already ≥ 1,
+a transient 5h fill, or missing weekly anchor.
+
+**Short-delay floor** — when the computed crossing epoch is at or before now
+(the pause has effectively already cleared), the reseed arms a
+`NOW + 300s` timer instead of a past-dated one, reusing the #979
+short-delay pattern.
+
+The unit name embeds the epoch (`dispatch-reseed-<fire>`), so a repeated call
+observing the same stall collides on the unit name and is a no-op — idempotent
+across the many ticks that may observe the same stall. The #1010 continuation
+invariant's `dispatch-reseed*` pending-timer detection recognizes both
+absolute-cap and pace-path timers by the same name prefix, so a pace pause
+always leaves a pending reseed. A router tick that spawns no worker but has a
+pending reseed timer self-closes cleanly knowing the timer resumes it.
+
+**Empty-queue and all-parked stalls** are handled by the office-hours queue
+(#755 / #757 / #758): when a human engages an `office-hours`-labeled item, the
+Step 4 hand-off returns it to the dispatch chain and re-seeds from human
+action. The continuation invariant (#1010) fires only for genuinely terminal
+stalls — empty queue, all-parked — because a pace-curve pause (and an
+absolute cap-hit) always leaves a pending reseed. The targeted alternative to
+a silent periodic heartbeat — adopted in #1010 — is enforced at
+`dispatch-self-close`: a router tick that leaves no continuation (no worker
+spawned, no pending `dispatch-reseed*` timer, no live busy worker) parks
+instead of self-closing, emitting a one-line reason and staying visible in
+`claude agents`. The `office-hours-select-target` script surfaces the parked
+router via a `parked-router` line, so a human can resume it. This makes a
+genuinely terminal stall visible rather than silently losing it to a missed
+heartbeat window.
 
 ## Target-keyed CI-wait reseed (#979)
 
