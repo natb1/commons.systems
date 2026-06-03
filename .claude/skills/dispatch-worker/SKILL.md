@@ -70,7 +70,57 @@ branch-name sanity check rejected the spawn cwd, or the positional
 exit fires, the worker session ends; the Stop hook applies
 `dispatch:office-hours` to the issue because no marker was written.
 
-## 1. Derive the Phase
+## 1. Provision the Worktree and Merge origin/main
+
+The worker is born `--cwd` its worktree, but the router did only the cheap
+`git worktree add` under its selection lock — the worktree is branched from
+`origin/main` yet **not** provisioned (no `direnv`) and **not** merged up to the
+current `origin/main`. The worker re-derives its phase from PR/CI ground truth,
+so provisioning and the `origin/main` merge run **here**, before phase
+derivation, so the phase skill the worker later loads in §2+ reads up-to-date
+`.claude/` files from the merged tree. This is the worker counterpart of what
+`restore-dispatch-skill.sh` does on context-clear.
+
+Run the provisioning script with `dangerouslyDisableSandbox: true` — its
+`git merge origin/main` is a tree-updating op over the read-only
+`.claude/skills/**` carve-out, plus `direnv`/npm write the dependency cache (see
+`.claude/rules/sandbox.md`). `$WORKTREE_PATH` and `$ISSUE_NUM` are the variables
+parsed in §0.
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-provision-worktree "$WORKTREE_PATH"
+```
+
+Route on its exit code:
+
+- **`0`** (clean merge / already up-to-date) — continue to phase derivation
+  (§2).
+- **`3`** (merge conflict) — invoke `/dispatch-resolve-conflict $ISSUE_NUM
+  $WORKTREE_PATH` via the Skill tool **instead of** deriving or dispatching a
+  phase. The worker is already a session in the worktree, named `<N>-slug`, with
+  `CLAUDE_JOB_DIR` set — exactly the environment `/dispatch-resolve-conflict`
+  expects (it normally runs as a bg job the router spawns). Write **no** phase
+  marker — the Stop hook's Branch R owns the disposition (re-seed at `<N>` on
+  `resolved`, or park an ambiguous conflict to office-hours) via the
+  `conflict-resolver` / `conflict-resolved` sentinels that skill writes. Then
+  stop.
+- **any other non-zero** (fetch failure or a non-conflict merge failure) — park
+  the issue to office-hours. Write a one-line reason to
+  `$CLAUDE_JOB_DIR/office-hours-reason` atomically (tempfile + mv) under the
+  `CLAUDE_JOB_DIR` guard (the same idiom as plan-implement §4 and
+  `/dispatch-resolve-conflict`'s ambiguous branch), then stop with **no** phase
+  marker → the Stop hook's Branch A parks it.
+
+```bash
+if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+  printf '%s\n' "dispatch-worker: provisioning/merge of origin/main failed for #${ISSUE_NUM}" \
+    > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+  mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" \
+     "$CLAUDE_JOB_DIR/office-hours-reason"
+fi
+```
+
+## 2. Derive the Phase
 
 First confirm the target is CI-ready via `dispatch-ci-ready <N>`:
 
@@ -83,7 +133,7 @@ a non-draft PR, or a draft PR whose CI has concluded (passing or failing). It
 prints `waiting` (exit 1) when the draft PR's checks are still in progress and
 no verdict is available yet. Only proceed to `dispatch-phase` when
 `dispatch-ci-ready` exits 0. If it exits 1, stop and handle as not-ready (see
-Step 2).
+Step 3).
 
 Then derive the phase via `dispatch-phase <N>`:
 
@@ -109,7 +159,7 @@ Map the phase:
 
 | Phase | Meaning | Next action |
 |---|---|---|
-| `implement` | no PR on the target | relevance review (Step 3), then dispatch its verdict |
+| `implement` | no PR on the target | relevance review (Step 4), then dispatch its verdict |
 | `verify` | draft PR, CI completed and failed | `/verify-pr` |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/qa-fix` |
 | `code-review` | draft PR + `dispatch:qa-done` | `/code-review-fix` (applies `dispatch:code-reviewed` itself) |
@@ -117,13 +167,13 @@ Map the phase:
 | `security` | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` — re-entry; `/security-review-fix` is idempotent) | `/security-review-fix` (applies `dispatch:security-reviewed` and marks ready itself) |
 | `done` | non-draft (ready) PR | already complete — stop without invoking a phase skill; the Stop hook applies `dispatch:office-hours` to the issue |
 
-## 2. Dispatch One Phase, Then Hand Off
+## 3. Dispatch One Phase, Then Hand Off
 
 Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 `/dispatch-worker` invocation.
 
 **Race-window check first.** Re-run `dispatch-ci-ready <N>` at the start of
-Step 2 — CI may have transitioned back to in-progress since the router selected
+Step 3 — CI may have transitioned back to in-progress since the router selected
 this target (e.g. a new push between selection and worker boot). If
 `dispatch-ci-ready` now exits 1 (`waiting`), stop with no marker and print the
 user-visible report verbatim: `#<N>: CI transitioned back to in-progress since
@@ -135,8 +185,8 @@ target and hands the issue back to the router (spawns a fresh router **without**
 applying `dispatch:office-hours`), which re-gates on `dispatch-ci-ready` and
 picks the target up once CI concludes.
 
-- **`implement`** — run the Step 3 relevance review and dispatch the verdict it
-  returns (`proceed` / `adjust` / `stop` — see Step 3). The draft PR's existence
+- **`implement`** — run the Step 4 relevance review and dispatch the verdict it
+  returns (`proceed` / `adjust` / `stop` — see Step 4). The draft PR's existence
   plus its CI status is its own marker — `/plan-implement` gets **no**
   `dispatch:*` label.
 - **`verify`** — invoke `/verify-pr`. It runs a single pass: fix one set of
@@ -176,7 +226,7 @@ not advance to the next phase in the same tick — one phase per
 `/ultrareview` is intentionally **never** invoked: it is user-triggered and
 billed, so `/dispatch-worker` cannot launch it.
 
-## 3. Pre-Implementation Relevance Review
+## 4. Pre-Implementation Relevance Review
 
 This step runs **only** for the `implement` phase — a no-PR target. Every phase
 with an existing PR (`verify` onward) skips it: implementation is already
@@ -193,7 +243,7 @@ exists for the target by running:
 ```
 
 If it prints a PR number, **skip this relevance review** and advance directly to
-Step 1 of this skill — a PR already exists and implementation is underway.
+Step 2 of this skill — a PR already exists and implementation is underway.
 
 If `dispatch-find-pr` prints nothing, run a creation-date-anchored drift
 analysis. First, fetch the issue's creation timestamp
@@ -254,7 +304,7 @@ always owns the verdict.
   applies `dispatch:office-hours` to the issue because no marker was
   written.
 
-## 4. Stop
+## 5. Stop
 
 The Stop hook (`.claude/hooks/dispatch-stop.sh`) owns label management,
 router spawn, and self-close. The worker reaches the end of its tick by
