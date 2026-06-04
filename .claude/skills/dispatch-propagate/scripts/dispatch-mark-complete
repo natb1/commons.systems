@@ -64,6 +64,12 @@ if [[ -z "$PHASE" || -z "$PR_NUM" ]]; then
   exit 2
 fi
 
+if [[ ! "$PR_NUM" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-mark-complete: --pr must be a positive integer, got: $PR_NUM" >&2
+  echo "usage: dispatch-mark-complete --phase <phase> --pr <pr-num>" >&2
+  exit 2
+fi
+
 case "$PHASE" in
   implement|verify|qa|review) ;;
   *)

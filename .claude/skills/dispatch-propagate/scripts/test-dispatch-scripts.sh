@@ -17964,9 +17964,43 @@ if CLAUDE_JOB_DIR="$md_dir" "$MARK_DEVIATION" "" 2>/dev/null; then md_ec=0; else
 assert_eq "mark-deviation: empty arg exit 2" "2" "$md_ec"
 rm -rf "$md_dir"
 
-# ----- mark-deviation: CLAUDE_JOB_DIR unset → exit 0, no file -----
-( unset CLAUDE_JOB_DIR; "$MARK_DEVIATION" "x" ) >/dev/null 2>&1 && md_ec=0 || md_ec=$?
+# ----- mark-deviation: CLAUDE_JOB_DIR unset → exit 0, no file, stderr diagnostic -----
+md_err=$( (unset CLAUDE_JOB_DIR; "$MARK_DEVIATION" "x") 2>&1 1>/dev/null ) && md_ec=0 || md_ec=$?
 assert_eq "mark-deviation: unset CLAUDE_JOB_DIR exit 0" "0" "$md_ec"
+assert_eq "mark-deviation: unset CLAUDE_JOB_DIR emits diagnostic" "1" \
+  "$( [[ -n "$md_err" ]] && echo 1 || echo 0 )"
+
+# ----- mark-deviation: extra arg → exit 2 -----
+md_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$md_dir" "$MARK_DEVIATION" "reason1" "reason2" 2>/dev/null; then md_ec=0; else md_ec=$?; fi
+assert_eq "mark-deviation: extra arg exit 2" "2" "$md_ec"
+rm -rf "$md_dir"
+
+# ----- mark-complete: missing --phase only (--pr present) → exit 2 -----
+mc_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mc_dir" "$MARK_COMPLETE" --pr 42 2>/dev/null; then mc_ec=0; else mc_ec=$?; fi
+assert_eq "mark-complete: missing --phase exit 2" "2" "$mc_ec"
+rm -rf "$mc_dir"
+
+# ----- mark-complete: non-numeric --pr → exit 2, no file -----
+mc_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mc_dir" "$MARK_COMPLETE" --phase qa --pr bogus 2>/dev/null; then mc_ec=0; else mc_ec=$?; fi
+assert_eq "mark-complete: non-numeric --pr exit 2" "2" "$mc_ec"
+assert_eq "mark-complete: non-numeric --pr writes no file" "0" \
+  "$(ls "$mc_dir" | wc -l | tr -d ' ')"
+rm -rf "$mc_dir"
+
+# ----- mark-complete: CLAUDE_JOB_DIR set to a file (not a dir) → exit 0, no write -----
+mc_file=$(mktemp)
+if CLAUDE_JOB_DIR="$mc_file" "$MARK_COMPLETE" --phase implement --pr 42 2>/dev/null; then mc_ec=0; else mc_ec=$?; fi
+assert_eq "mark-complete: CLAUDE_JOB_DIR is a file exit 0" "0" "$mc_ec"
+rm -f "$mc_file"
+
+# ----- mark-deviation: CLAUDE_JOB_DIR set to a file (not a dir) → exit 0, no write -----
+md_file=$(mktemp)
+if CLAUDE_JOB_DIR="$md_file" "$MARK_DEVIATION" "reason" 2>/dev/null; then md_ec=0; else md_ec=$?; fi
+assert_eq "mark-deviation: CLAUDE_JOB_DIR is a file exit 0" "0" "$md_ec"
+rm -f "$md_file"
 
 # ============================================================================
 # === dispatch-open-pr ===
