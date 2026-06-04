@@ -481,32 +481,52 @@ sandboxed-fine):
 
 It applies the threshold and emits a JSON array of `{identifier, title, body}`
 follow-ups (empty when none qualify). CodeQL emits one follow-up per alert; npm
-emits one follow-up per vulnerable package. Each `identifier` — CodeQL `rule.id`
-+ alert number, or `npm advisories in <package>` — is embedded in the `title`,
-so `/file-issue`'s title-keyword dedup prevents re-filing the same alert or
-package across repeated runs or multiple PRs.
+emits one follow-up per vulnerable package. Each `identifier` — CodeQL `rule.id` + alert number, or `npm advisories in
+<package>` — is embedded verbatim in the `title`. Before filing, the
+per-follow-up subagent runs `dispatch-followup-exists "<identifier>"`, a
+deterministic exact-identifier existence check spanning all issue states
+(`--state all`, open and closed), so the same alert or package is never re-filed
+across repeated runs or multiple PRs. This deterministic guard is specific to
+this machine-keyed security-followup path; `/file-issue`'s fuzzy
+keyword+judgment dedup stays in place as defense-in-depth for free-text callers.
 
 Tradeoff: because the npm dedup key is package-scoped, a newly disclosed
 advisory on an already-filed package won't auto-file a fresh issue — the
 existing "upgrade this package" issue already covers the remediation (one
-version bump resolves every advisory on that package node).
+version bump resolves every advisory on that package node). And because
+`dispatch-followup-exists` spans `--state all`, a closed tracking issue —
+already-resolved or already-rejected — suppresses re-filing of its identifier;
+re-filing is noise either way.
 
 For each emitted follow-up, fork a subagent (`subagent_type: general-purpose`,
 `model: sonnet`); run them in parallel (multiple Agent calls in one message). Each
 subagent:
 
-1. Invokes `/file-issue` with the follow-up's `title` on the first line and its
+1. Runs the deterministic existence check (use `dangerouslyDisableSandbox: true`
+   — `gh` needs network, see `.claude/rules/sandbox.md`), passing the follow-up's
+   `identifier`:
+
+   ```bash
+   .claude/skills/dispatch-propagate/scripts/dispatch-followup-exists "<identifier>"
+   ```
+
+   If it prints an issue number, an open or closed tracking issue already covers
+   this identifier — skip `/file-issue` entirely: do not file, do not re-label.
+   Record the follow-up as already-tracked, mapping its `identifier` to the
+   existing issue `#<N>` for the Step 7 comment, and return that `<N>`. Otherwise
+   proceed to the next step.
+2. Invokes `/file-issue` with the follow-up's `title` on the first line and its
    `body` after. `/file-issue` owns duplicate detection, creation, `@me`
    assignment, and the `help wanted` label; it prints `CREATED <N>` or
    `EXISTING <N>` on its own line — parse `<N>`.
-2. Applies the topic and type labels (use `dangerouslyDisableSandbox: true` —
+3. Applies the topic and type labels (use `dangerouslyDisableSandbox: true` —
    `gh` needs network):
 
    ```bash
    gh issue edit <N> --add-label security --add-label bug
    ```
 
-3. Returns `<N>` mapped to the follow-up's `identifier`.
+4. Returns `<N>` mapped to the follow-up's `identifier`.
 
 Capture each `<N>` against its source finding for the Step 7 comment.
 
