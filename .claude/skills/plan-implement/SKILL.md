@@ -56,46 +56,33 @@ and recovers from merge / pre-commit / push errors. This is a normal in-session 
 
 ### 3. Open the draft PR
 
-After every unit is committed and pushed, create the draft PR (use
-`dangerouslyDisableSandbox: true` — `gh` needs network):
+After every unit is committed and pushed, write the PR body prose to
+`tmp/pr-body.md`, then open the draft PR with `dispatch-open-pr` (use
+`dangerouslyDisableSandbox: true` — the script calls `gh`, which needs network):
 
 ```bash
-URL=$(gh pr create --draft --title "<short summary>" --body "$(cat <<'EOF'
-Closes #<primary-issue>
-Closes #<sub-issue-or-blocker>   # repeat for each implemented issue
-EOF
-)")
-PR_NUM=$(basename "$URL")
+PR_NUM=$(.claude/skills/dispatch-propagate/scripts/dispatch-open-pr \
+  <primary-issue> \
+  --title "<short summary>" \
+  --closes "<sub-issue-or-blocker> ..." \
+  --body-file tmp/pr-body.md)
 ```
 
-The body has one `Closes #N` line per issue implemented in this PR — the primary
-issue plus any implemented sub-issues or blockers. This draft PR is the
-implement→verify transition marker.
+`<primary-issue>` is the issue this PR primarily implements; `--closes` lists
+any additional implemented sub-issues or blockers (whitespace- or
+comma-separated, with or without a leading `#`). The script writes one
+`Closes #N` line per issue, appends the prose from `--body-file` (omit the flag
+to read prose from stdin), and echoes the created PR number — the only thing it
+prints on stdout. This draft PR is the implement→verify transition marker.
 
-Then verify GitHub parsed exactly the intended close set — narrative prose in
-the body can carry a stray closing keyword that GitHub reads as an extra close
-directive (see `.claude/rules/issue-references.md`). Compare the parsed set to
-the `Closes #N` lines you deliberately wrote (`gh` still needs
-`dangerouslyDisableSandbox: true`):
-
-```bash
-gh pr view "$PR_NUM" --json closingIssuesReferences \
-  -q '.closingIssuesReferences[].number' | sort -n
-```
-
-If the parsed set does not exactly match the intended set, fix it and re-run
-until it does:
-
-- **Extra number (parsed but not intended):** the body contains a stray
-  `<keyword> #N` in narrative prose. Find it, rewrite it to a bare `#N`
-  (drop the preceding closing keyword — e.g. `Closes #905` → `#905`,
-  `resolved #905` → `#905`). Write the corrected body to a temp file under
-  `tmp/` and apply it with `gh pr edit "$PR_NUM" --body-file tmp/<file>` —
-  never interpolate the body inline into the command, since it may carry
-  shell metacharacters from issue-sourced text.
-- **Missing number (intended but not parsed):** a `Closes #N` line was not
-  recognized — check that it appears on its own line, outside any code block,
-  with no leading spaces. Re-edit the body to restore the canonical form.
+The script then verifies GitHub parsed exactly the intended close set, per
+`.claude/rules/issue-references.md`: narrative prose can carry a stray closing
+keyword that GitHub reads as an extra close directive. On an extra, the script
+strips the stray keyword and re-applies the body (bounded retries); on a number
+intended-but-missing, or an extra it cannot resolve, it exits non-zero with a
+diagnostic naming the offending number. If it exits non-zero, read the
+diagnostic and fix the body or `--closes` set rather than opening the PR by
+hand.
 
 ### 4. Check for deviation, then write the marker (or skip it), then stop
 

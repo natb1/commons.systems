@@ -1,0 +1,264 @@
+#!/usr/bin/env bash
+# dispatch-open-pr — create a draft PR with a verified close set.
+#
+# Usage:
+#   dispatch-open-pr <primary-issue> --title <title> [--closes "<N ...>"] [--body-file <path>]
+#
+# Creates a draft PR whose body opens with one `Closes #N` line per intended
+# close, then verifies — via gh's parsed closingIssuesReferences — that the PR
+# closes EXACTLY the intended set. This removes the per-run reconstruction of
+# the `gh pr create` + close-set-verify loop from /plan-implement Step 3, which
+# runs in a skill-less post-clear build session.
+#
+# Arguments:
+#   <primary-issue>     REQUIRED positional, numeric. Always first in the close
+#                       set.
+#   --title <t>         REQUIRED. The PR title.
+#   --closes "<N ...>"  OPTIONAL. Additional issues to close. Whitespace- or
+#                       comma-separated, each with an optional leading `#`.
+#                       Normalized, validated numeric, unioned with the primary,
+#                       deduped, primary-first order preserved.
+#   --body-file <path>  OPTIONAL descriptive prose. If absent, prose is read
+#                       from STDIN when stdin is not a TTY; otherwise empty.
+#
+# Behavior:
+#   1. The body is composed as one `Closes #N` line per intended entry (in
+#      order), then — if prose is non-empty — a blank line and the prose.
+#   2. The draft PR is created. gh's parsed closingIssuesReferences is compared
+#      to the intended set.
+#      - Exact match → the PR number is echoed and the script exits 0.
+#      - EXTRA closed numbers (a stray closing keyword in prose) → the offending
+#        keyword before `#E` is stripped from the body, the body is re-applied
+#        via `gh pr edit --body-file`, and the PR is re-verified. Bounded to two
+#        correction passes; an extra surviving past that exits non-zero.
+#      - MISSING numbers (intended but not closed) → exit non-zero immediately
+#        with a diagnostic naming the missing number(s). Per
+#        .claude/rules/code-style.md, this signals an unexpected condition and
+#        fails loudly rather than retrying.
+#
+# Close-set verification honors .claude/rules/issue-references.md: only the
+# deliberate `Closes #N` lines may carry a closing keyword; a closing keyword
+# adjacent to any other `#N` in the prose fires GitHub's parser and is corrected
+# (or reported) here.
+#
+# Output: the ONLY stdout output, ever, is the bare PR number on success. All
+# diagnostics go to stderr.
+#
+# Requires dangerouslyDisableSandbox: true — this script calls `gh`, whose TLS
+# validation the sandbox blocks. See .claude/rules/sandbox.md.
+#
+# Exit codes:
+#   0   PR created and close set verified; PR number on stdout.
+#   2   bad arguments.
+#   1   close-set verification failed (extra survived correction, or missing).
+set -euo pipefail
+
+usage() {
+  echo "usage: dispatch-open-pr <primary-issue> --title <title> [--closes \"<N ...>\"] [--body-file <path>]" >&2
+}
+
+# The closing keywords GitHub recognizes (.claude/rules/issue-references.md).
+# Used both for stripping a stray keyword before an extra number.
+KEYWORD_RE='close[sd]?|fix(?:e[sd])?|resolve[sd]?'
+
+# --- argument parsing ---------------------------------------------------------
+
+PRIMARY=""
+TITLE=""
+TITLE_SET=0
+CLOSES_RAW=""
+BODY_FILE_ARG=""
+BODY_FILE_SET=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --title)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-open-pr: --title requires a value" >&2
+        usage
+        exit 2
+      fi
+      TITLE="$2"
+      TITLE_SET=1
+      shift 2
+      ;;
+    --closes)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-open-pr: --closes requires a value" >&2
+        usage
+        exit 2
+      fi
+      CLOSES_RAW="$2"
+      shift 2
+      ;;
+    --body-file)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-open-pr: --body-file requires a value" >&2
+        usage
+        exit 2
+      fi
+      BODY_FILE_ARG="$2"
+      BODY_FILE_SET=1
+      shift 2
+      ;;
+    -*)
+      echo "dispatch-open-pr: unknown flag: $1" >&2
+      usage
+      exit 2
+      ;;
+    *)
+      if [[ -n "$PRIMARY" ]]; then
+        echo "dispatch-open-pr: unexpected extra argument: $1" >&2
+        usage
+        exit 2
+      fi
+      PRIMARY="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$PRIMARY" ]]; then
+  echo "dispatch-open-pr: missing required <primary-issue>" >&2
+  usage
+  exit 2
+fi
+if [[ ! "$PRIMARY" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-open-pr: primary issue must be numeric: $PRIMARY" >&2
+  usage
+  exit 2
+fi
+if [[ "$TITLE_SET" -ne 1 ]]; then
+  echo "dispatch-open-pr: missing required --title" >&2
+  usage
+  exit 2
+fi
+if [[ "$BODY_FILE_SET" -eq 1 && ! -f "$BODY_FILE_ARG" ]]; then
+  echo "dispatch-open-pr: --body-file path does not exist: $BODY_FILE_ARG" >&2
+  usage
+  exit 2
+fi
+
+# --- build the intended close set (primary-first, deduped) --------------------
+
+declare -a INTENDED=("$PRIMARY")
+intended_has() {
+  local n
+  for n in "${INTENDED[@]}"; do
+    [[ "$n" == "$1" ]] && return 0
+  done
+  return 1
+}
+
+if [[ -n "$CLOSES_RAW" ]]; then
+  # Normalize: strip '#', split on whitespace and commas.
+  normalized="${CLOSES_RAW//,/ }"
+  normalized="${normalized//\#/}"
+  # Use read -ra to split without glob expansion (unquoted $var expansion would
+  # expand shell globs like '*' to filenames in the current directory).
+  read -ra _closes_entries <<< "$normalized"
+  for entry in "${_closes_entries[@]}"; do
+    if [[ ! "$entry" =~ ^[0-9]+$ ]]; then
+      echo "dispatch-open-pr: --closes entry must be numeric: $entry" >&2
+      usage
+      exit 2
+    fi
+    if ! intended_has "$entry"; then
+      INTENDED+=("$entry")
+    fi
+  done
+fi
+
+# --- read prose ---------------------------------------------------------------
+
+PROSE=""
+if [[ "$BODY_FILE_SET" -eq 1 ]]; then
+  PROSE="$(cat "$BODY_FILE_ARG")"
+elif [[ ! -t 0 ]]; then
+  PROSE="$(cat)"
+fi
+
+# --- compose the body ---------------------------------------------------------
+
+BODY_FILE="$(mktemp)"
+trap 'rm -f "$BODY_FILE"' EXIT
+
+{
+  for n in "${INTENDED[@]}"; do
+    echo "Closes #$n"
+  done
+  if [[ -n "$PROSE" ]]; then
+    echo ""
+    printf '%s\n' "$PROSE"
+  fi
+} > "$BODY_FILE"
+
+# --- create the draft PR ------------------------------------------------------
+
+URL="$(gh pr create --draft --title "$TITLE" --body-file "$BODY_FILE")"
+PR_NUM="$(basename "$URL")"
+if [[ ! "$PR_NUM" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-open-pr: could not parse PR number from gh output: $URL" >&2
+  exit 1
+fi
+
+# --- intended set, sorted-unique, for comparison ------------------------------
+
+INTENDED_SORTED="$(printf '%s\n' "${INTENDED[@]}" | sort -n -u)"
+
+# --- verify / correct loop (bounded to 2 correction passes) -------------------
+
+MAX_PASSES=2
+pass=0
+while :; do
+  PARSED="$(gh pr view "$PR_NUM" --json closingIssuesReferences \
+    -q '.closingIssuesReferences[].number' | sort -n -u)"
+
+  if [[ "$PARSED" == "$INTENDED_SORTED" ]]; then
+    echo "$PR_NUM"
+    exit 0
+  fi
+
+  # Compute set differences by membership (not `comm`, which requires
+  # lexically-sorted input while ours is numeric-sorted).
+  # EXTRA: numbers parsed but not intended. MISSING: intended but not parsed.
+  EXTRA=""
+  while IFS= read -r p; do
+    [[ "$p" =~ ^[0-9]+$ ]] || continue
+    if ! intended_has "$p"; then
+      EXTRA+="$p"$'\n'
+    fi
+  done <<< "$PARSED"
+  EXTRA="${EXTRA%$'\n'}"
+
+  MISSING=""
+  for n in "${INTENDED[@]}"; do
+    if ! grep -qxF "$n" <<< "$PARSED"; then
+      MISSING+="$n"$'\n'
+    fi
+  done
+  MISSING="${MISSING%$'\n'}"
+
+  if [[ -n "$MISSING" ]]; then
+    echo "dispatch-open-pr: PR #$PR_NUM is missing intended close(s): $(echo "$MISSING" | tr '\n' ' ')" >&2
+    echo "dispatch-open-pr: canonical 'Closes' lines should always parse; aborting." >&2
+    exit 1
+  fi
+
+  # Only extras remain. If we've exhausted our correction budget, fail.
+  if [[ "$pass" -ge "$MAX_PASSES" ]]; then
+    echo "dispatch-open-pr: PR #$PR_NUM still closes unintended issue(s) after $MAX_PASSES correction pass(es): $(echo "$EXTRA" | tr '\n' ' ')" >&2
+    exit 1
+  fi
+
+  # Strip the stray closing keyword preceding each extra number, throughout the
+  # body. Since E is not in INTENDED, the canonical `Closes #N` block never
+  # contains #E, so a whole-body substitution targeting #E is safe.
+  while IFS= read -r E; do
+    [[ -z "$E" ]] && continue
+    perl -i -pe 's/\b(?:'"$KEYWORD_RE"')[ \t]*:?[ \t]*(?=#\Q'"$E"'\E\b)//gi' "$BODY_FILE"
+  done <<< "$EXTRA"
+
+  gh pr edit "$PR_NUM" --body-file "$BODY_FILE" >/dev/null
+  pass=$((pass + 1))
+done
