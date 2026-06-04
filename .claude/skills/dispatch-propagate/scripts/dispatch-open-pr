@@ -154,7 +154,10 @@ if [[ -n "$CLOSES_RAW" ]]; then
   # Normalize: strip '#', split on whitespace and commas.
   normalized="${CLOSES_RAW//,/ }"
   normalized="${normalized//\#/}"
-  for entry in $normalized; do
+  # Use read -ra to split without glob expansion (unquoted $var expansion would
+  # expand shell globs like '*' to filenames in the current directory).
+  read -ra _closes_entries <<< "$normalized"
+  for entry in "${_closes_entries[@]}"; do
     if [[ ! "$entry" =~ ^[0-9]+$ ]]; then
       echo "dispatch-open-pr: --closes entry must be numeric: $entry" >&2
       usage
@@ -253,7 +256,7 @@ while :; do
   # contains #E, so a whole-body substitution targeting #E is safe.
   while IFS= read -r E; do
     [[ -z "$E" ]] && continue
-    perl -i -pe 's/(?:'"$KEYWORD_RE"')[ \t]*:?[ \t]*(?=#\Q'"$E"'\E\b)//gi' "$BODY_FILE"
+    perl -i -pe 's/\b(?:'"$KEYWORD_RE"')[ \t]*:?[ \t]*(?=#\Q'"$E"'\E\b)//gi' "$BODY_FILE"
   done <<< "$EXTRA"
 
   gh pr edit "$PR_NUM" --body-file "$BODY_FILE" >/dev/null

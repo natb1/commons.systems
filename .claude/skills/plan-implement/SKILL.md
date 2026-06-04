@@ -56,9 +56,9 @@ and recovers from merge / pre-commit / push errors. This is a normal in-session 
 
 ### 3. Open the draft PR
 
-After every unit is committed and pushed, open the draft PR with
-`dispatch-open-pr` (use `dangerouslyDisableSandbox: true` — the script calls
-`gh`, which needs network):
+After every unit is committed and pushed, write the PR body prose to
+`tmp/pr-body.md`, then open the draft PR with `dispatch-open-pr` (use
+`dangerouslyDisableSandbox: true` — the script calls `gh`, which needs network):
 
 ```bash
 PR_NUM=$(.claude/skills/dispatch-propagate/scripts/dispatch-open-pr \

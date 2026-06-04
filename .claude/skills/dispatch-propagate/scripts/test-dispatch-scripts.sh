@@ -17674,6 +17674,7 @@ assert_eq "open-pr: stray fixes #999 → stdout PR number" "1500" "$out"
 assert_eq "open-pr: stray fixes #999 → rc 0" "0" "$rc"
 assert_eq "open-pr: stray fixes #999 → an edit occurred" "1" "$([[ -s "$TMPDIR_TEST/edit-calls.log" ]] && echo 1 || echo 0)"
 assert_eq "open-pr: stray fixes #999 → final close set is just 1119" "1119" "$(cat "$TMPDIR_TEST/close-set.txt")"
+assert_eq "open-pr: stray fixes #999 → keyword stripped from corrected body" "0" "$(grep -cE '(close[sd]?|fix(e[sd])?|resolve[sd]?)[ \t]*:?[ \t]*#999' "$TMPDIR_TEST/last-body.txt" || true)"
 open_pr_teardown
 
 # CASE 4 — force-extra=777: an extra the script cannot strip (no keyword in body
@@ -17710,6 +17711,18 @@ out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" --title t 2>/dev/null) && rc=0 || 
 assert_eq "open-pr: missing primary → rc non-zero" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
 out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" abc --title t 2>/dev/null) && rc=0 || rc=$?
 assert_eq "open-pr: non-numeric primary → rc non-zero" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: missing --title → rc non-zero" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+open_pr_teardown
+
+# CASE 8 — primary repeated in --closes is deduped to a single Closes line.
+open_pr_setup
+echo "Body prose." > "$TMPDIR_TEST/body.txt"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title "t" --closes "1119 1120" --body-file "$TMPDIR_TEST/body.txt" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: dedup primary → stdout PR number" "1500" "$out"
+assert_eq "open-pr: dedup primary → rc 0" "0" "$rc"
+assert_eq "open-pr: dedup primary → exactly one Closes #1119 line" "1" "$(grep -cxF 'Closes #1119' "$TMPDIR_TEST/last-body.txt")"
+assert_eq "open-pr: dedup primary → close set is 1119 1120" "$(printf '1119\n1120')" "$(cat "$TMPDIR_TEST/close-set.txt")"
 open_pr_teardown
 
 # ============================================================================
