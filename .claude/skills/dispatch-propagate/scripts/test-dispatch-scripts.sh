@@ -171,6 +171,16 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  "issue list --label dispatch:main-broken --state open --json number")
+    # main_broken_latch: the per-episode latch read (#1085). Default [] (no open
+    # latch issue → gate fires); a main-broken-issue-list.json fixture models an
+    # already-open latch issue (gate falls through).
+    if [[ -f "$STUB_DIR/main-broken-issue-list.json" ]]; then
+      cat "$STUB_DIR/main-broken-issue-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
   "issue list --label dispatch:office-hours --state open --json number,createdAt")
     # office-hours-select-target: the office-hours queue (labeled open issues).
     if [[ -f "$STUB_DIR/oh-issue-list.json" ]]; then
@@ -1697,6 +1707,49 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "main failing workflow run → main-broken" "main-broken mainhead0" "$result"
 teardown
 
+# 23b. main red + an OPEN dispatch:main-broken latch issue → gate stands down,
+#      normal selection proceeds (#1085). Same red-main setup as test 22, but the
+#      latch issue is already open, so the queue flows instead of re-preempting.
+echo "Test: main red + open latch issue → falls through to normal selection"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+printf '[{"number":99}]' > "$STUB_DIR/main-broken-issue-list.json"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "main red + open latch → normal selection (verify PR)" "pr 10 10-verify-me verify" "$result"
+teardown
+
+# 23c. --main-broken-sha flag prints the RAW broken SHA (pre-latch) and exits 0.
+#      Green main → empty; red main → the SHA, regardless of any latch issue.
+echo "Test: --main-broken-sha green → empty"
+setup
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"success"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[{"headSha":"mainhead0","conclusion":"success"}]' \
+  > "$STUB_DIR/main-run-list.json"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --main-broken-sha); then rc=0; else rc=$?; fi
+assert_eq "--main-broken-sha green → empty" "" "$result"
+assert_eq "--main-broken-sha green → exit 0" "0" "$rc"
+teardown
+
+echo "Test: --main-broken-sha red → sha"
+setup
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --main-broken-sha); then rc=0; else rc=$?; fi
+assert_eq "--main-broken-sha red → mainhead0" "mainhead0" "$result"
+assert_eq "--main-broken-sha red → exit 0" "0" "$rc"
+teardown
+
 # 24. main in-progress checks → gate not tripped, normal selection.
 echo "Test: main in-progress checks → not tripped"
 setup
@@ -1779,6 +1832,25 @@ printf '[]' > "$STUB_DIR/main-run-list.json"
 if result=$("$TMPDIR_TEST/dispatch-select-target" --health-only); then rc=0; else rc=$?; fi
 assert_eq "--health-only main red → main-broken mainhead0" "main-broken mainhead0" "$result"
 assert_eq "--health-only main red → exit 0" "0" "$rc"
+teardown
+
+# 27b-latch. --health-only, main red + an OPEN dispatch:main-broken latch issue →
+#      "ok" (the latch stands the gate down so the heartbeat reseed keeps the chain
+#      processing other issues, #1085).
+echo "Test: --health-only + main red + open latch issue → ok"
+setup
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+printf '[{"number":99}]' > "$STUB_DIR/main-broken-issue-list.json"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --health-only); then rc=0; else rc=$?; fi
+assert_eq "--health-only main red + open latch → ok" "ok" "$result"
+assert_eq "--health-only main red + open latch → exit 0" "0" "$rc"
 teardown
 
 # 27c. --health-only + <N>-* current branch + red main → main-broken (no bypass).
@@ -14819,6 +14891,32 @@ case "$*" in
 esac
 STUB
   chmod +x "$TMPDIR_TEST/bin/git"
+
+  # PATH-shimmed gh for the Step 1c latch re-arm (#1085). The open-latch query
+  # reads main-broken-open.txt (one issue number per line; absent → no open
+  # latch, the re-arm short-circuits). `issue close` is logged to
+  # gh-issue-close.log so a test can assert whether the latch was closed.
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  issue\ list\ *dispatch:main-broken*)
+    if [[ -f "$STUB_DIR/main-broken-open.txt" ]]; then
+      cat "$STUB_DIR/main-broken-open.txt"
+    fi
+    ;;
+  issue\ close\ *)
+    echo "$args" >> "$STUB_DIR/gh-issue-close.log"
+    ;;
+  *)
+    echo "gh stub (sel-tick): unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
   export PATH="$TMPDIR_TEST/bin:$SAVED_PATH"
 }
 
@@ -14891,6 +14989,58 @@ assert_eq "main-broken: decision line" "main-broken abc1234" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "main-broken: lock released" "" \
   "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- Step 1c latch re-arm: green main + open latch issue → close (#1085) ------
+echo "Test: select-tick re-arm closes open latch issue when main is green"
+sel_tick_setup
+# Fake select-target: green for --main-broken-sha (prints nothing), else `empty`.
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--main-broken-sha" ]]; then exit 0; fi
+echo empty
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+printf '99\n' > "$STUB_DIR/main-broken-open.txt"
+out=$(run_sel_tick)
+assert_eq "re-arm green+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "re-arm green+open: latch issue closed" "issue close 99 --comment origin/main is green again; closing the main-broken latch (re-arming the gate)." \
+  "$(cat "$STUB_DIR/gh-issue-close.log" 2>/dev/null || echo MISSING)"
+sel_tick_teardown
+
+# --- Step 1c latch re-arm: red main + open latch issue → NOT closed -----------
+echo "Test: select-tick re-arm leaves open latch issue while main is still red"
+sel_tick_setup
+# Fake select-target: red for --main-broken-sha (prints a sha), else `empty`.
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--main-broken-sha" ]]; then echo "redsha1"; exit 0; fi
+echo empty
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+printf '99\n' > "$STUB_DIR/main-broken-open.txt"
+out=$(run_sel_tick)
+assert_eq "re-arm red+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "re-arm red+open: latch issue NOT closed" "absent" \
+  "$([[ -e "$STUB_DIR/gh-issue-close.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Step 1c latch re-arm: green main + NO open latch issue → no-op -----------
+echo "Test: select-tick re-arm is a no-op when no latch issue is open"
+sel_tick_setup
+# Fake select-target green for --main-broken-sha; no main-broken-open.txt fixture
+# means the open-latch query returns empty, so the re-arm short-circuits before
+# the CI read.
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--main-broken-sha" ]]; then exit 0; fi
+echo empty
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_sel_tick)
+assert_eq "re-arm green+no-issue: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "re-arm green+no-issue: no close attempted" "absent" \
+  "$([[ -e "$STUB_DIR/gh-issue-close.log" ]] && echo present || echo absent)"
 sel_tick_teardown
 
 # --- jit-reminder → passthrough + lock RELEASED (spawned as a bg job) --------
@@ -16067,6 +16217,57 @@ case "$err" in
   *) status="bad: $err" ;;
 esac
 assert_eq "gap-unbounded-removed: usage error exit 2" "ok" "$status"
+mat_teardown
+
+# --- spawn-boundary done re-check (#1109): explicit done → notify target-done --
+# A target selected while its PR was a draft `review` PR can flip to ready
+# (non-draft) before the worker boots. The spawn boundary re-derives the phase
+# (dispatch-phase) before any worktree/spawn work and refuses a done target:
+# explicit dispatch emits a user-facing `notify target-done` and spawns no
+# worker. MAT_PR set so the realistic done path runs (a PR exists and went ready).
+echo "Test: materialize-spawn explicit done re-check → notify target-done, no spawn (#1109)"
+mat_setup
+export MAT_PR=665
+export MAT_PHASE=done
+out=$(run_mat 839 explicit)
+assert_eq "explicit-done: terminal token" "notify target-done" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "explicit-done: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "explicit-done: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "explicit-done: no office-hours park" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/apply-office-hours.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- spawn-boundary done re-check (#1109): queue single-target done → drain ----
+# An autonomous single-target (gap<=1) found done at the spawn boundary drains so
+# the next tick proceeds to the next priority; no worker is spawned.
+echo "Test: materialize-spawn queue single-target done re-check → drain target-done, no spawn (#1109)"
+mat_setup
+export MAT_PHASE=done
+out=$(run_mat 839 queue)
+assert_eq "queue-done: terminal token" "drain target-done" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "queue-done: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "queue-done: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- spawn-boundary done re-check (#1109): fan-out done → skip each, drain ------
+# MAT_PHASE is global, so every fan-out target reads done: each is recorded as a
+# `propagate: skipped #<n> (target-done)` and the loop continues to the next
+# distinct target until the queue drains. Nothing spawns → terminal `drain`.
+echo "Test: materialize-spawn fan-out done re-check → skip each, drain, no spawn (#1109)"
+mat_setup
+export MAT_PHASE=done
+export MAT_QUEUE="840 841"
+out=$(run_mat 839 queue --gap 3)
+assert_eq "fanout-done: skipped detail per target (839,840,841)" "3" \
+  "$(printf '%s\n' "$out" | grep -c 'skipped #.* (target-done)')"
+assert_eq "fanout-done: zero spawns in summary" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 0 of gap 3')"
+assert_eq "fanout-done: terminal token" "drain" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fanout-done: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "fanout-done: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
 echo "=== print_remote_access_block ==="
@@ -17580,6 +17781,179 @@ EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "CodeQL js/sql-injection alert #5")
 assert_eq "followup-exists: codeql alert-number prefix collision (#5 vs #50) → empty" "" "$out"
 followup_exists_teardown
+
+# ============================================================================
+# === dispatch-open-pr ===
+# ============================================================================
+
+echo "Test: dispatch-open-pr"
+
+# Dedicated setup/teardown modeled on followup_exists_setup/teardown. Builds a
+# temp tree with the script under test and a gh stub on PATH. The gh stub
+# EMULATES GitHub's close parser: it reads the body passed to `pr create` /
+# `pr edit`, extracts every `<keyword> #N`, and writes the resulting close set
+# to $TREE/close-set.txt — which `pr view` then echoes back. The force-extra /
+# force-drop knobs override the parsed set deterministically.
+open_pr_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
+
+  cp "$SCRIPT_DIR/dispatch-open-pr" "$TMPDIR_TEST/scripts/dispatch-open-pr"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-open-pr"
+
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+# gh stub emulating GitHub's close parser for dispatch-open-pr tests.
+TREE="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Locate the value following --body-file in the argument list.
+body_file=""
+prev=""
+for a in "$@"; do
+  if [[ "$prev" == "--body-file" ]]; then
+    body_file="$a"
+  fi
+  prev="$a"
+done
+
+# Parse the close set from a body file the same way GitHub does, then apply the
+# force-extra / force-drop knobs and write the sorted-unique result.
+write_close_set() {
+  local bf="$1"
+  local set=""
+  if [[ -n "$bf" && -f "$bf" ]]; then
+    # Extract "<keyword> [:] #N" → bare N, case-insensitive.
+    set="$(grep -ioE '(close[sd]?|fix(e[sd])?|resolve[sd]?)[ \t]*:?[ \t]*#[0-9]+' "$bf" \
+      | grep -oE '#[0-9]+' | tr -d '#' || true)"
+  fi
+  # force-extra: add a number.
+  if [[ -f "$TREE/force-extra" ]]; then
+    set="$set
+$(cat "$TREE/force-extra")"
+  fi
+  # force-drop: remove a number.
+  if [[ -f "$TREE/force-drop" ]]; then
+    local drop
+    drop="$(cat "$TREE/force-drop")"
+    set="$(printf '%s\n' "$set" | grep -vxF "$drop" || true)"
+  fi
+  printf '%s\n' "$set" | grep -E '^[0-9]+$' | sort -n -u > "$TREE/close-set.txt" || true
+}
+
+case "$1 $2" in
+  "pr create")
+    cp "$body_file" "$TREE/last-body.txt"
+    write_close_set "$body_file"
+    echo "https://github.com/natb1/commons.systems/pull/1500"
+    ;;
+  "pr edit")
+    cp "$body_file" "$TREE/last-body.txt"
+    write_close_set "$body_file"
+    echo "edit" >> "$TREE/edit-calls.log"
+    echo "https://github.com/natb1/commons.systems/pull/1500"
+    ;;
+  "pr view")
+    if [[ -f "$TREE/close-set.txt" ]]; then
+      cat "$TREE/close-set.txt"
+    fi
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $*" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  SAVED_PATH_OP="$PATH"
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+}
+
+open_pr_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  export PATH="$SAVED_PATH_OP"
+}
+
+# CASE 1 — clean single close: prose-only body file, no --closes.
+open_pr_setup
+echo "Some descriptive prose." > "$TMPDIR_TEST/body.txt"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title "t" --body-file "$TMPDIR_TEST/body.txt" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: clean single close → stdout PR number" "1500" "$out"
+assert_eq "open-pr: clean single close → rc 0" "0" "$rc"
+open_pr_teardown
+
+# CASE 2 — multi-close + normalization ("1120, #1121").
+open_pr_setup
+echo "Body prose." > "$TMPDIR_TEST/body.txt"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title "t" --closes "1120, #1121" --body-file "$TMPDIR_TEST/body.txt" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: multi-close → stdout PR number" "1500" "$out"
+assert_eq "open-pr: multi-close → rc 0" "0" "$rc"
+close_set="$(cat "$TMPDIR_TEST/close-set.txt")"
+assert_eq "open-pr: multi-close → close set is the three numbers" "$(printf '1119\n1120\n1121')" "$close_set"
+assert_eq "open-pr: multi-close → body has Closes #1119" "1" "$(grep -cxF 'Closes #1119' "$TMPDIR_TEST/last-body.txt")"
+assert_eq "open-pr: multi-close → body has Closes #1120" "1" "$(grep -cxF 'Closes #1120' "$TMPDIR_TEST/last-body.txt")"
+assert_eq "open-pr: multi-close → body has Closes #1121" "1" "$(grep -cxF 'Closes #1121' "$TMPDIR_TEST/last-body.txt")"
+open_pr_teardown
+
+# CASE 3 — stray "fixes #999" in prose → corrected via edit.
+open_pr_setup
+printf 'This change also fixes #999 in passing.\n' > "$TMPDIR_TEST/body.txt"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title "t" --body-file "$TMPDIR_TEST/body.txt" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: stray fixes #999 → stdout PR number" "1500" "$out"
+assert_eq "open-pr: stray fixes #999 → rc 0" "0" "$rc"
+assert_eq "open-pr: stray fixes #999 → an edit occurred" "1" "$([[ -s "$TMPDIR_TEST/edit-calls.log" ]] && echo 1 || echo 0)"
+assert_eq "open-pr: stray fixes #999 → final close set is just 1119" "1119" "$(cat "$TMPDIR_TEST/close-set.txt")"
+assert_eq "open-pr: stray fixes #999 → keyword stripped from corrected body" "0" "$(grep -cE '(close[sd]?|fix(e[sd])?|resolve[sd]?)[ \t]*:?[ \t]*#999' "$TMPDIR_TEST/last-body.txt" || true)"
+open_pr_teardown
+
+# CASE 4 — force-extra=777: an extra the script cannot strip (no keyword in body
+# produces it) → correction fails, rc non-zero, stderr names 777.
+open_pr_setup
+echo "Body prose." > "$TMPDIR_TEST/body.txt"
+echo 777 > "$TMPDIR_TEST/force-extra"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title "t" --body-file "$TMPDIR_TEST/body.txt" 2>"$TMPDIR_TEST/err.txt") && rc=0 || rc=$?
+assert_eq "open-pr: unresolvable extra → rc non-zero" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "open-pr: unresolvable extra → stderr names 777" "1" "$(grep -c '777' "$TMPDIR_TEST/err.txt")"
+open_pr_teardown
+
+# CASE 5 — force-drop=1119: an intended number missing → rc non-zero, stderr
+# names 1119.
+open_pr_setup
+echo "Body prose." > "$TMPDIR_TEST/body.txt"
+echo 1119 > "$TMPDIR_TEST/force-drop"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title "t" --body-file "$TMPDIR_TEST/body.txt" 2>"$TMPDIR_TEST/err.txt") && rc=0 || rc=$?
+assert_eq "open-pr: missing intended → rc non-zero" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "open-pr: missing intended → stderr names 1119" "1" "$(grep -c '1119' "$TMPDIR_TEST/err.txt")"
+open_pr_teardown
+
+# CASE 6 — prose via stdin (no --body-file).
+open_pr_setup
+out=$(echo "some prose" | "$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title t 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: stdin prose → stdout PR number" "1500" "$out"
+assert_eq "open-pr: stdin prose → rc 0" "0" "$rc"
+assert_eq "open-pr: stdin prose → close set is 1119" "1119" "$(cat "$TMPDIR_TEST/close-set.txt")"
+open_pr_teardown
+
+# CASE 7 — usage errors.
+open_pr_setup
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" --title t 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: missing primary → rc non-zero" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" abc --title t 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: non-numeric primary → rc non-zero" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: missing --title → rc non-zero" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+open_pr_teardown
+
+# CASE 8 — primary repeated in --closes is deduped to a single Closes line.
+open_pr_setup
+echo "Body prose." > "$TMPDIR_TEST/body.txt"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title "t" --closes "1119 1120" --body-file "$TMPDIR_TEST/body.txt" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: dedup primary → stdout PR number" "1500" "$out"
+assert_eq "open-pr: dedup primary → rc 0" "0" "$rc"
+assert_eq "open-pr: dedup primary → exactly one Closes #1119 line" "1" "$(grep -cxF 'Closes #1119' "$TMPDIR_TEST/last-body.txt")"
+assert_eq "open-pr: dedup primary → close set is 1119 1120" "$(printf '1119\n1120')" "$(cat "$TMPDIR_TEST/close-set.txt")"
+open_pr_teardown
 
 # ============================================================================
 # summary

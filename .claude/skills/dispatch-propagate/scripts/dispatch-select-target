@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Select the single highest-priority task from the queue.
-# Usage: dispatch-select-target [--qa | --health-only] [--exclude <n>...]
+# Usage: dispatch-select-target [--qa | --health-only | --main-broken-sha] [--exclude <n>...]
 #
 # --exclude <n>... names issue numbers the caller has already processed (the
 # fan-out loop's SEEN set, #1062); the selector never returns an excluded target
@@ -110,12 +110,14 @@ source "$SCRIPT_DIR/lib.sh"
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 QA_MODE=false
 HEALTH_ONLY=false
+MAIN_BROKEN_SHA_ONLY=false
 declare -A EXCLUDED=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --qa) QA_MODE=true; shift ;;
     --health-only) HEALTH_ONLY=true; shift ;;
+    --main-broken-sha) MAIN_BROKEN_SHA_ONLY=true; shift ;;
     --exclude)
       shift
       while [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; do
@@ -169,6 +171,22 @@ main_broken_sha() {
   if [[ "$cr_fail" -gt 0 || "$wf_fail" -gt 0 ]]; then
     echo "$sha"
   fi
+}
+
+# Latched broken-SHA: print origin/main's broken HEAD SHA only on FIRST detection
+# of a red episode — i.e. when no open dispatch:main-broken issue yet exists. Once
+# such an issue is open (the diagnose job filed it, #1085), the gate stands down so
+# the queue can flow while main is still red; the issue itself sorts to the top of
+# the ladder as the priority fix item. Pure gh reads, so the selector stays a pure
+# function of GitHub state. Green main → nothing (no gate).
+main_broken_latch() {
+  local sha open
+  sha=$(main_broken_sha)
+  [[ -z "$sha" ]] && return 0           # green → no gate
+  open=$(gh issue list --label "dispatch:main-broken" --state open \
+    --json number | jq 'length')
+  [[ "$open" -gt 0 ]] && return 0       # already latched → fall through
+  echo "$sha"
 }
 
 # Convert a duration string ("12h", "7d", "30m") to whole seconds. Units:
@@ -294,13 +312,21 @@ jit_scan() {
   echo "jit-reminder $winner"
 }
 
+# --main-broken-sha: print the raw (pre-latch) broken SHA and exit — exposes
+# main_broken_sha to dispatch-select-tick's latch re-arm step (#1085) without
+# duplicating the two-source CI aggregation. Empty when main is green.
+if [[ "$MAIN_BROKEN_SHA_ONLY" == "true" ]]; then
+  main_broken_sha
+  exit 0
+fi
+
 if [[ "$HEALTH_ONLY" == "true" ]]; then
   JIT_LINE=$(jit_scan)
   if [[ -n "$JIT_LINE" ]]; then
     echo "$JIT_LINE"
     exit 0
   fi
-  MAIN_BROKEN_SHA=$(main_broken_sha)
+  MAIN_BROKEN_SHA=$(main_broken_latch)
   if [[ -n "$MAIN_BROKEN_SHA" ]]; then
     echo "main-broken $MAIN_BROKEN_SHA"
   else
@@ -317,7 +343,7 @@ if [[ "$QA_MODE" == "false" ]]; then
     exit 0
   fi
 
-  MAIN_BROKEN_SHA=$(main_broken_sha)
+  MAIN_BROKEN_SHA=$(main_broken_latch)
   if [[ -n "$MAIN_BROKEN_SHA" ]]; then
     echo "main-broken $MAIN_BROKEN_SHA"
     exit 0
