@@ -103,7 +103,7 @@ deliverable.
 
 Normalize the subagent's output to the **Per-finding schema** — each finding
 carries its `disposition` of `fixed` (applied to the working tree by
-`/code-review`) or `skipped` (the wrapper classifies it in Step 3) — and serialize
+`/code-review`) or `skipped` (the wrapper classifies it in Step 2) — and serialize
 the finding set to `tmp/findings-code-review.json`.
 
 #### 1b. `/review` — a findings-only subagent
@@ -459,18 +459,20 @@ only files trackers for genuine findings the diff did not introduce.
   `critical` and not introduced by the diff (`introduced_by_diff=false`).
 - `required` and `false-positive` findings are never filed.
 
-Serialize the classified `codeql` and `npm` findings to a JSON array under `tmp/`
-— one object per finding carrying `classification`, `source`, and the source's
-fields (CodeQL: `rule_id`, `alert_number`, `security_severity_level`,
-`description`, `location`, `html_url`; npm: `advisory_id`, `severity`,
-`introduced_by_diff`, `package`, `title`, `url`), all already captured during
-normalization. Findings from other sources carry no stable ID and are omitted.
-Pipe the array through `dispatch-security-followup` with `PR_NUM` (pure — no
-network/git/gh, so it runs sandboxed-fine):
+Serialize the classified `codeql` and `npm` findings to a JSON array at
+`tmp/security-followup-input.json` — a codeql/npm subset distinct from the full
+`tmp/findings-security.json` set written in Step 1c — one object per finding
+carrying `classification`, `source`, and the source's fields (CodeQL: `rule_id`,
+`alert_number`, `security_severity_level`, `description`, `location`,
+`html_url`; npm: `advisory_id`, `severity`, `introduced_by_diff`, `package`,
+`title`, `url`), all already captured during normalization. Findings from other
+sources carry no stable ID and are omitted. Pipe the array through
+`dispatch-security-followup` with `PR_NUM` (pure — no network/git/gh, so it runs
+sandboxed-fine):
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-security-followup "$PR_NUM" \
-  < tmp/security-findings.json
+  < tmp/security-followup-input.json
 ```
 
 It applies the threshold and emits a JSON array of `{identifier, title, body}`
