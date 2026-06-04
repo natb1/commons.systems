@@ -73,7 +73,7 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 # regardless of whether the Skill tool was invoked.
 #
 # Routing: implement→plan-implement; verify→verify-pr; qa→qa-fix;
-# code-review→code-review-fix; review→review-fix; security→security-review-fix;
+# review→review-fix;
 # done/unknown/dispatch-phase failure (incl. not-ready CI, exit 3)→dispatch-worker (the worker's
 # Step 2 CI-monitor loop and Step 2 done variance handling still run).
 #
@@ -119,20 +119,10 @@ else
       SKILL_ARGS=""
       DIRECTIVE="/qa-fix"
       ;;
-    code-review)
-      SKILL_DIR_NAME="code-review-fix"
-      SKILL_ARGS=""
-      DIRECTIVE="/code-review-fix"
-      ;;
     review)
       SKILL_DIR_NAME="review-fix"
       SKILL_ARGS=""
       DIRECTIVE="/review-fix"
-      ;;
-    security)
-      SKILL_DIR_NAME="security-review-fix"
-      SKILL_ARGS=""
-      DIRECTIVE="/security-review-fix"
       ;;
     *)
       SKILL_DIR_NAME="dispatch-worker"

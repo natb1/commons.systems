@@ -57,9 +57,8 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    here; label colour is owned by the canonical definition, not the writer).
 
    Note: `dispatch-complete-phase` is not the right vehicle for this label — it handles
-   only the four canonical phase-complete labels (`dispatch:qa-done`, `dispatch:code-reviewed`,
-   `dispatch:reviewed`, `dispatch:security-reviewed`). The verify-attempt label is local
-   to `/verify-pr`.
+   only the two canonical phase-complete labels (`dispatch:qa-done`, `dispatch:reviewed`).
+   The verify-attempt label is local to `/verify-pr`.
 
    The PR number resolved here is also used in Steps 3, 4 (the Flake sub-path's
    `gh pr view <pr-num>` body read), and 7 — carry it forward.
@@ -150,8 +149,8 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
         the issue(s) this PR implements. For **each** tracked issue, record a
         `blocked_by` dependency **on that tracked issue, targeting the flake issue
         `<N>`** — the PR's own work is blocked by the unrelated flake. Note the
-        direction: this is the **reverse** of `/review-fix` and `/code-review-fix`,
-        which record `blocked_by` on the *new* issue; here the new flake issue is
+        direction: this is the **reverse** of `/review-fix`,
+        which records `blocked_by` on the *new* issue; here the new flake issue is
         the *blocker* and the PR's existing tracked issue is the *blocked* one.
         Use the `ref-github-issues` dependencies API (database-ID resolution with
         `gh api`, `--input` JSON; see `ref-github-issues`, do not restate the

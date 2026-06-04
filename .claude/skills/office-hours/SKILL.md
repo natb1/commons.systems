@@ -5,7 +5,7 @@ description: Office-hours queue worker — selects one sessionless dispatch:offi
 
 # Office Hours
 
-The office-hours counterpart of `/dispatch` — the user-facing entry into the
+The office-hours counterpart of `dispatch` — the user-facing entry into the
 **office-hours queue**, the set of items blocked on a human. An item lands here
 two ways:
 

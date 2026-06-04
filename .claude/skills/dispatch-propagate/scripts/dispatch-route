@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Collapse /dispatch-worker Steps 0–2 into one call and print one directive.
+# Usage: dispatch-route <N> <worktree-path>
+#
+# Runs the deterministic worker prelude — the worktree cross-check, the
+# dispatch-ci-ready gate, and dispatch-phase — in a single invocation, so the
+# worker model makes one Bash round-trip instead of ~3.6. Prints exactly one
+# directive line to stdout:
+#
+#   INVOKE /verify-pr            phase verify       (draft PR, CI failed)
+#   INVOKE /qa-fix               phase qa           (draft, CI green, no label)
+#   INVOKE /review-fix           phase review       (dispatch:qa-done / reviewed re-entry)
+#   RELEVANCE-REVIEW             phase implement    (no PR) — routes to SKILL.md Step 2
+#   STOP done                    phase done         (non-draft PR)
+#   STOP waiting                 dispatch-ci-ready reports not-ready (draft PR CI pending)
+#   STOP wrong-worktree          cross-check failed (diagnostic on stderr); exits non-zero
+#
+# Usage error (missing <N> or <worktree-path>) → stderr message, exit 2 (matches
+# the sibling-script convention).
+#
+# The open-PR list is fetched ONCE here and exported as DISPATCH_PR_LIST; both
+# dispatch-ci-ready and dispatch-phase honor that env contract and reuse the
+# single snapshot — no redundant gh pr list. The genuine post-selection CI race
+# (a push restarting CI between router selection and worker session end) is caught
+# by dispatch-stop.sh's early not-ready gate, not here.
+#
+# Calls gh — invoke with dangerouslyDisableSandbox: true (see .claude/rules/sandbox.md).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+N="${1:-}"
+WORKTREE_PATH="${2:-}"
+if [[ -z "$N" || -z "$WORKTREE_PATH" ]]; then
+  echo "error: usage: dispatch-route <N> <worktree-path>" >&2
+  exit 2
+fi
+if [[ ! "$N" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: <N> must be a positive integer, got '$N'" >&2
+  exit 2
+fi
+
+# Step 0 — worktree cross-check (the defensive prelude now owned by this script,
+# described in dispatch-worker SKILL.md Step 1): derive the branch from the
+# worktree toplevel's basename, assert the "<N>-" prefix and that the toplevel
+# equals the passed <worktree-path>.
+ACTUAL_TOPLEVEL=$(git rev-parse --show-toplevel)
+ACTUAL_BRANCH=$(basename "$ACTUAL_TOPLEVEL")
+EXPECTED="${N}-"
+case "$ACTUAL_BRANCH" in
+  ${EXPECTED}*) ;;
+  *)
+    echo "dispatch-route invoked with wrong worktree: expected branch '${EXPECTED}…' under worktrees/, got '${ACTUAL_BRANCH}'" >&2
+    echo "The spawner must spawn the worker with cwd matching <worktree-path>." >&2
+    echo "STOP wrong-worktree"
+    exit 1
+    ;;
+esac
+if [[ "$ACTUAL_TOPLEVEL" != "$WORKTREE_PATH" ]]; then
+  echo "dispatch-route invoked with mismatched <worktree-path>: spawn cwd '$ACTUAL_TOPLEVEL' != argument '$WORKTREE_PATH'" >&2
+  echo "STOP wrong-worktree"
+  exit 1
+fi
+
+# Fetch the open-PR list once; reuse it for every sibling call via the
+# DISPATCH_PR_LIST env contract (dispatch-ci-ready and dispatch-phase both honor it).
+DISPATCH_PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+export DISPATCH_PR_LIST
+
+# Initial CI-ready gate. exit 0 (ready) → continue; exit 1 (waiting) → STOP waiting;
+# any other exit code is a dispatch-ci-ready internal failure — propagate it.
+CI_READY_RC=0
+"$SCRIPT_DIR/dispatch-ci-ready" "$N" >/dev/null || CI_READY_RC=$?
+if [[ "$CI_READY_RC" -eq 1 ]]; then
+  echo "STOP waiting"
+  exit 0
+elif [[ "$CI_READY_RC" -ne 0 ]]; then
+  echo "dispatch-route: dispatch-ci-ready exited $CI_READY_RC for $N" >&2
+  exit "$CI_READY_RC"
+fi
+
+# Derive the phase against the same snapshot.
+PHASE=$("$SCRIPT_DIR/dispatch-phase" "$N")
+
+# Map the phase string to its directive.
+case "$PHASE" in
+  implement)    echo "RELEVANCE-REVIEW" ;;
+  verify)       echo "INVOKE /verify-pr" ;;
+  qa)           echo "INVOKE /qa-fix" ;;
+  review)       echo "INVOKE /review-fix" ;;
+  done)         echo "STOP done" ;;
+  *)
+    echo "dispatch-route: unexpected phase '$PHASE' for $N" >&2
+    exit 1
+    ;;
+esac
+exit 0

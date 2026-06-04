@@ -5,11 +5,12 @@
 # Usage: dispatch-select-tick [--manual] [<issue-or-PR-number>]
 #
 # Runs the lock acquisition, origin/main sync (only on `main`), the run-scoped
-# concurrency gate, the JIT engine, the Calendar JIT importer, and target
-# selection as one deterministic sequence and prints exactly ONE decision line
-# as its LAST stdout line. Any JIT
+# concurrency gate, the JIT engine, the Calendar JIT importer, the statements
+# scan, and target selection as one deterministic sequence and prints exactly ONE
+# decision line as its LAST stdout line. Any JIT
 # `created`/`skipped`/`debounced` lines are passed through first, each prefixed
-# `jit: `, followed by any `calendar: ...` lines. The router (SKILL.md)
+# `jit: `, followed by any `calendar: ...` lines, followed by any
+# `statements: ...` lines. The router (SKILL.md)
 # routes on the final decision line; a model-decision seam (`main-broken` /
 # `jit-reminder`) and the worktree materialization (`dispatch-materialize-spawn`)
 # live on the other side of the seam, not here.
@@ -37,10 +38,10 @@
 # explicit-target run (a positional <number> is given) skips the concurrency gate
 # entirely (no sweep, no ledger count) and forces <gap> = 1 — a deliberately-named
 # target is not paced by the autonomous budget.
-# A `--manual` run (the bare human-typed `/dispatch` shim) ALSO skips the gate,
-# but UNLIKE the explicit path it emits <gap> = unbounded and fans out over the
-# whole queue — exempt from BOTH the pace curve and the MAX_WORKERS ceiling. The
-# autonomous no-arg queue path keeps the full gate.
+# A `--manual` run (the bare human-typed `/dispatch` shim) ALSO skips the gate —
+# no live-count query, never emits `concurrency-cap` — and like the explicit path
+# emits <gap> = 1, spawning ONE gate-exempt worker. Fan-out is autonomous-only.
+# The autonomous no-arg queue path keeps the full gate.
 #
 # Lock invariant (the three guards): HOLD on pr/issue/explicit; RELEASE on
 # empty/sync-failed/resolver-failed/concurrency-cap/main-broken/jit-reminder;
@@ -108,14 +109,12 @@ if [[ "$BRANCH" == "main" ]]; then
 fi
 
 # --- Step 1b: run-scoped concurrency gate (autonomous no-arg queue path only) -
-# Runs ONLY on the autonomous no-arg queue path. An explicit-target run (a
-# positional <number> was given) skips the gate entirely — no live-count query,
-# never emits `concurrency-cap`, and GAP stays 1: a deliberately-named target is
-# not paced by the autonomous concurrency budget. A `--manual` run (the bare
-# human-typed `/dispatch` shim) ALSO skips the gate entirely — no live-count
-# query, never emits `concurrency-cap` — but sets GAP=unbounded so the fan-out
-# is bounded only by queue availability, exempt from BOTH the pace curve and the
-# MAX_WORKERS ceiling (distinct from the explicit path's GAP=1).
+# Runs ONLY on the autonomous no-arg queue path. The explicit-target run (a
+# positional <number> was given) and the `--manual` run (the bare human-typed
+# `/dispatch` shim) CONVERGE: both skip the gate entirely — no live-count query,
+# never emit `concurrency-cap` — and keep GAP=1, spawning ONE gate-exempt worker
+# that is not paced by the autonomous concurrency budget. Fan-out is
+# autonomous-only.
 # On the autonomous queue path the gate is evaluated ONCE per run, before any
 # selection work, so a run already at the worker budget does no JIT/selection
 # traversal. Before counting, the gate sweeps stranded reservations
@@ -129,9 +128,7 @@ fi
 # reservation_count never fails) → fail open (GAP=1); the per-worktree dedup in
 # dispatch-spawn-worker is the last-line defense.
 GAP=1
-if [[ -n "$MANUAL" ]]; then
-  GAP=unbounded
-elif [[ -z "$ARG" ]]; then
+if [[ -z "$MANUAL" && -z "$ARG" ]]; then
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-claude-agents.sh"
   # shellcheck source=/dev/null
@@ -173,6 +170,18 @@ if [[ -n "$CAL_OUT" ]]; then
   while IFS= read -r cal_line; do
     [[ -n "$cal_line" ]] && echo "$cal_line"
   done <<< "$CAL_OUT"
+fi
+
+# --- Step 2c: run the statements scan (best-effort) --------------------------
+# Scans each configured statements folder and files one parse-job issue per new
+# bank-statement file, deduped against GitHub state by sha256. A silent no-op
+# when no statements.json config is present (machines that don't share a
+# statements folder). Pass its stdout lines through, prefixed.
+STMT_OUT=$("$SCRIPT_DIR/dispatch-statements-scan") || true
+if [[ -n "$STMT_OUT" ]]; then
+  while IFS= read -r stmt_line; do
+    [[ -n "$stmt_line" ]] && echo "statements: $stmt_line"
+  done <<< "$STMT_OUT"
 fi
 
 # --- Step 3: select the target -----------------------------------------------

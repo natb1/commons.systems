@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# dispatch-jit-skill — print the configured skill name for the jit that owns
+# an issue, or nothing if no skill is configured / no matching jit exists.
+#
+# Usage:
+#   dispatch-jit-skill <repo> <num>
+#
+#   <repo>   GitHub repo in "owner/repo" form.
+#   <num>    Issue number (digits only).
+#
+# Stdout protocol:
+#   <skill-name>   the configured skill for the jit that owns the issue.
+#   (empty)        no jit.json config present, no matching jit, or the matched
+#                  jit defines no skill field.
+#
+# Exit codes:
+#   0  any found/not-found resolution — skill printed or nothing printed.
+#   2  usage error (missing or invalid arguments).
+#   non-zero   propagated from gh or dispatch-config-load on hard error.
+#
+# Note: callers invoke this with dangerouslyDisableSandbox: true — it calls
+# gh (see .claude/rules/sandbox.md).
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ---- Step 0: parse arguments ------------------------------------------------
+
+REPO="${1:-}"
+NUM="${2:-}"
+
+if [[ -z "$REPO" || -z "$NUM" ]]; then
+  echo "error: usage: dispatch-jit-skill <repo> <num>" >&2
+  exit 2
+fi
+
+if [[ ! "$REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+  echo "error: usage: dispatch-jit-skill <repo> <num> — <repo> must be owner/repo" >&2
+  exit 2
+fi
+
+if [[ ! "$NUM" =~ ^[0-9]+$ ]]; then
+  echo "error: usage: dispatch-jit-skill <repo> <num> — <num> must be digits" >&2
+  exit 2
+fi
+
+# ---- Step 1: load jit config -------------------------------------------------
+
+CONFIG=$("$SCRIPT_DIR/dispatch-config-load" jit)
+if [[ "$CONFIG" == "no-config" ]]; then
+  exit 0
+fi
+
+# ---- Step 2: fetch the issue's labels and find the jit: label ---------------
+
+LABELS_JSON=$(gh issue view "$NUM" --repo "$REPO" --json labels)
+JIT_LABEL=$(printf '%s' "$LABELS_JSON" \
+  | jq -r '.labels[].name | select(startswith("jit:"))' \
+  | head -n1)
+
+if [[ -z "$JIT_LABEL" ]]; then
+  exit 0
+fi
+
+# ---- Step 3: match the label to a jit and print its skill -------------------
+# The caller invokes the printed name via the Skill tool, so guard the emitted
+# value against the skill-name slug here too — defense in depth at the emission
+# boundary, in addition to dispatch-config-load's schema check.
+
+SKILL=$(printf '%s' "$CONFIG" \
+  | jq -r --arg lbl "$JIT_LABEL" \
+    '.jits[] | select(.label == $lbl) | .skill // empty' \
+  | head -n1)
+
+if [[ -n "$SKILL" && ! "$SKILL" =~ ^[a-z][a-z0-9-]*$ ]]; then
+  echo "error: jit for label $JIT_LABEL defines a malformed skill name: $SKILL" >&2
+  exit 1
+fi
+
+if [[ -n "$SKILL" ]]; then
+  printf '%s\n' "$SKILL"
+fi

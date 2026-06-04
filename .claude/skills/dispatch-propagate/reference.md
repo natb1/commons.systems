@@ -177,7 +177,7 @@ tier — every topic category, every phase — before considering any `priority=
 item, so a `priority` item in a low-ranked topic outranks every non-priority
 item in a higher-ranked topic. Within one priority level, categories run
 highest first: `security` → `bug` → `testing infrastructure` → `dispatch` →
-`other`. The
+`budget` → `other`. The
 `priority` label is human-applied — `/ready` never applies it automatically.
 A PR's category is the highest-priority topic among the labels of every issue
 it closes; an issue's category is the highest-priority topic among its own
@@ -186,19 +186,43 @@ labels; anything with no topic label is `other`.
 Within each category the ladder is (highest first; within a tier, oldest PR
 wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
 whose closing issue is `blocked_by` an open issue is skipped; not-ready PRs
-(no CI verdict yet, per `dispatch-ci-ready`) are skipped entirely): oldest `security` PR → oldest
-`review` PR → oldest `code-review` PR → oldest `verify` PR → oldest `help wanted`
-issue → oldest `qa` PR. Non-QA PRs are ranked closest-to-done first —
-`security` is the closest-to-done non-QA tier; `help wanted` issues rank below
-all non-QA PRs but above QA PRs. A queue with no topic-labeled items resolves
-entirely to `other`, reproducing the flat ladder; `empty` when no category
-yields a task.
+(no CI verdict yet, per `dispatch-ci-ready`) are skipped entirely): oldest `review` PR → oldest
+`verify` PR → oldest `help wanted` issue → oldest `qa` PR. Non-QA PRs are
+ranked closest-to-done first — `review` is the closest-to-done non-QA tier;
+`help wanted` issues rank below all non-QA PRs but above QA PRs. A queue with
+no topic-labeled items resolves entirely to `other`, reproducing the flat
+ladder; `empty` when no category yields a task.
 
 A `help wanted` issue is also skipped when its entire open-leaf subtree is
 worktree-conflicted — every reachable open leaf already has a worktree owned by
 another session — exactly as a directly-worktree'd issue is skipped; selection
 falls through to the next tier. The tier emits the resolved startable leaf, so
 a queue-selected `issue <num>` is always a directly-startable target.
+
+## Statements scan
+
+The #725 heartbeat tick runs a third config-driven scan after the JIT engine
+and Calendar importer: `dispatch-statements-scan` reads each entry in
+`statements.json` and scans the configured directory for bank-statement files.
+For each file it either files a single parse-job issue or skips — never more
+than one issue per file. The issue body carries only the filename and full
+sha256; the statement contents stay in the user's folder on disk.
+
+Idempotency is keyed on GitHub state, not a side file. For each file the scan
+computes its sha256 and runs `gh search issues` (which covers open AND closed
+issues) to check whether an issue with that hash already exists under the
+entry's label. A hit → skip; no hit → file. This is consistent with the #755
+no-drift-prone-side-file principle. The local `tmp/dispatch-statements-state.json`
+debounce timestamp is a per-machine rate-limiter only — it skips the network
+calls within the configured window so a noisy tick does not hammer GitHub, but
+it is not the idempotency record and does not violate the no-side-file
+principle. It mirrors the JIT engine's own state file in role.
+
+The scan runs with the dispatch machine's own `gh` auth — no browser GitHub
+credential and no PAT. This is why #1023 reuses the heartbeat rather than
+adding a new trigger: the dispatch machine already runs authenticated `gh`
+calls, making it the natural host for statement detection without any
+additional credential setup.
 
 ## Step 5 marker deep dive
 
