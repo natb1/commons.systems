@@ -11906,6 +11906,13 @@ if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop needs-human: self-close not invoked (Branch A park, not advance)"
 fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop needs-human: no verify-attempt label add or remove invoked (Branch A only parks via office-hours)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop needs-human: no verify-attempt label add or remove invoked (Branch A only parks via office-hours)"
+fi
 stop_teardown
 
 # --- Test 3: marker present, same phase, verify, counter >= 3 → branch D -----
