@@ -3,7 +3,7 @@
 # materialize-and-spawn orchestrator (the deterministic Steps 4-6 of the old
 # SKILL.md, bundled into one script).
 #
-# Usage: dispatch-materialize-spawn <issue-N> <explicit|queue> [--gap <N>|--gap unbounded]
+# Usage: dispatch-materialize-spawn <issue-N> <explicit|queue> [--gap <N>]
 #
 # Picks up after dispatch-select-tick has chosen a target. Runs the explicit-
 # path guards (leaf trace, closed-target, open-blocker), resolves the target
@@ -21,10 +21,8 @@
 # worker registers before the next selection — #945/#905 — so the next
 # selection skips its now-live-owned worktree and yields a distinct target).
 # `explicit` mode and `--gap 1` process a single target (backward-compatible).
-# `--gap unbounded` is the manual ungated fan-out (the bare human-typed
-# `/dispatch`): it fans out one worker per eligible distinct target until the
-# queue is exhausted, bounded only by queue availability — never by a numeric
-# gap ceiling.
+# Fan-out (`--gap N` with N>1) is autonomous-only; a manual run arrives as
+# `--gap 1` and takes the single-target path.
 #
 # <issue-N> is always the ISSUE number (the model derives N=${branch%%-*} for a
 # `pr` row before calling). The two literal `[branch phase]` positionals the
@@ -72,9 +70,7 @@
 #   propagate              the fan-out spawned at least one worker. Preceded by a
 #                          `propagate: spawned <k> of gap <G> [(<stop-reason>)]`
 #                          summary line and one `propagate: spawned/parked/skipped
-#                          #<n>` detail line per processed target. For a manual
-#                          ungated run (--gap unbounded) the summary line prints
-#                          `of gap unbounded` instead of a numeric gap.
+#                          #<n>` detail line per processed target.
 #   drain                  the gap could not be filled and NOTHING spawned (every
 #                          processed target parked/skipped, or the queue emptied
 #                          before any spawn). Same detail/summary lines precede
@@ -144,15 +140,11 @@ spawn_conflict_resolver() {
 N="${1:-}"
 MODE="${2:-}"
 GAP=1
-UNBOUNDED=0
 if [[ "${3:-}" == "--gap" ]]; then
   GAP="${4:-}"
-  if [[ "$GAP" == "unbounded" ]]; then
-    UNBOUNDED=1
-    GAP=1
-  elif [[ ! "$GAP" =~ ^[1-9][0-9]*$ ]]; then
+  if [[ ! "$GAP" =~ ^[1-9][0-9]*$ ]]; then
     release_lock
-    echo "dispatch-materialize-spawn: --gap requires a positive integer or 'unbounded', got '${4:-}'" >&2
+    echo "dispatch-materialize-spawn: --gap requires a positive integer, got '${4:-}'" >&2
     exit 2
   fi
 elif [[ -n "${3:-}" ]]; then
@@ -349,7 +341,7 @@ process_one_target() {
 # --- Driver ------------------------------------------------------------------
 # Single-target path: explicit targets and gap<=1 process exactly one target and
 # emit the per-target terminal token, byte-identical to the pre-fan-out script.
-if (( UNBOUNDED == 0 )) && { [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); }; then
+if [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); then
   process_one_target "$N" "$MODE" || { release_lock; exit 2; }
   release_lock
   case "$OUTCOME" in
@@ -396,13 +388,22 @@ if (( UNBOUNDED == 0 )) && { [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); }; t
 fi
 
 # Fan out: fill up to GAP slots in one held-lock run. Target 1 is the passed-in
-# N; targets 2..GAP come from successive dispatch-select-target calls. Each
-# spawned worker registers before the next selection (#945/#905), so the next
-# dispatch-select-target skips its now-live-owned worktree and yields a distinct
-# target. A SEEN guard additionally stops the run if selection ever returns an
-# already-processed target (a non-spawning outcome that did not remove the
-# target from the queue), bounding the loop. Per-target park/skip outcomes are
-# recorded and the loop continues; the lock is released ONCE at the end.
+# N; targets 2..GAP come from successive dispatch-select-target calls. The loop
+# passes its SEEN set as `--exclude` to dispatch-select-target so selection
+# yields the NEXT distinct target instead of re-returning an already-processed
+# one (#1062). A re-return would otherwise happen via two mechanisms: (1)
+# registration-visibility lag — a just-spawned worker is verified-registered but
+# not yet visible to the next selection's liveness query (#945/#905), so its
+# leaf re-surfaces; or (2) a fast self-close leaving an orphan worktree, which
+# selection treats as a reuse signal (not a conflict) and does not skip. The
+# exclusion defeats both: an excluded target is filtered during the queue scan
+# (and threaded into the leaf trace), so the loop advances to the next distinct
+# startable leaf. The loop stops only on a genuine `empty`, a deferred selection
+# (main-broken / jit-reminder), or a hard error — plus a defensive backstop if
+# selection ever re-returns a SEEN target despite the exclusion (a selector
+# contract violation), to prevent an infinite loop. Per-target park/skip
+# outcomes are recorded and the loop continues; the lock is released ONCE at the
+# end.
 declare -A SEEN=()
 spawned=0
 stop_reason="gap filled"
@@ -444,8 +445,10 @@ while :; do
       esac
       ;;
   esac
-  (( UNBOUNDED == 0 )) && (( spawned >= GAP )) && break
-  SELECTED=$("$SCRIPT_DIR/dispatch-select-target") || true
+  (( spawned >= GAP )) && break
+  exclude_args=()
+  (( ${#SEEN[@]} > 0 )) && exclude_args=(--exclude "${!SEEN[@]}")
+  SELECTED=$("$SCRIPT_DIR/dispatch-select-target" "${exclude_args[@]}") || true
   case "$SELECTED" in
     pr\ *)
       # Extract the branch from "pr <pr_num> <branch> <phase>" without clobbering $@.
@@ -459,18 +462,22 @@ while :; do
        echo "dispatch-materialize-spawn: dispatch-select-target emitted unexpected '$SELECTED' in fan-out" >&2
        exit 2 ;;
   esac
+  # Defensive backstop (#1062): the loop passes SEEN as --exclude, so
+  # dispatch-select-target must never return an already-processed target. If it
+  # somehow does, that is a selector contract violation — break rather than spin
+  # forever. This stop is unreachable in normal operation; the loop's real
+  # terminators are `empty`, a deferred selection, and hard errors above.
   if [[ -n "${SEEN[$cur_n]:-}" ]]; then
-    stop_reason="no further distinct targets"
+    echo "dispatch-materialize-spawn: dispatch-select-target re-returned already-processed target #$cur_n despite --exclude (contract violation); stopping fan-out to avoid an infinite loop" >&2
+    stop_reason="selection re-returned an excluded target (unexpected)"
     break
   fi
 done
 release_lock
-gap_label=$GAP
-(( UNBOUNDED == 1 )) && gap_label=unbounded
 if [[ "$stop_reason" == "gap filled" ]]; then
-  echo "propagate: spawned $spawned of gap $gap_label"
+  echo "propagate: spawned $spawned of gap $GAP"
 else
-  echo "propagate: spawned $spawned of gap $gap_label ($stop_reason)"
+  echo "propagate: spawned $spawned of gap $GAP ($stop_reason)"
 fi
 if (( spawned >= 1 )); then echo "propagate"; else echo "drain"; fi
 exit 0

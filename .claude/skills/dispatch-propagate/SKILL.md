@@ -1,6 +1,6 @@
 ---
 name: dispatch-propagate
-description: "Retired: the autonomous dispatch tick is now the headless dispatch-tick script (launched by dispatch-spawn-tick); see /dispatch for the manual entry point."
+description: "Retired: the autonomous dispatch tick is now the headless dispatch-tick script (launched by dispatch-spawn-tick); see the dispatch terminal command for the manual entry point."
 ---
 
 # Dispatch (propagate) — retired
@@ -21,5 +21,5 @@ The routing this skill used to document — selecting the target, gating on the
 concurrency budget, materializing the worktree, and spawning the worker — now
 lives in the `dispatch-tick` script header and in `reference.md`.
 
-A human runs `/dispatch [<N>]` to invoke one tick interactively and relay its
-result.
+A human runs the `dispatch` terminal command (bare, or `dispatch <N>`) to invoke one
+tick from a terminal; its stdout streams directly.

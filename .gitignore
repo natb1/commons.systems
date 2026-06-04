@@ -1,6 +1,12 @@
 worktrees/
 CLAUDE.local.md
 .env
+.env.*
+!**/.env.example
+# Tracked: non-secret syncAgenda deploy config firebase-tools reads at deploy
+# time (functions/src/agenda-sync.ts). Holds no secrets — the private key is a
+# Secret Manager secret, not a dotenv value.
+!functions/.env.commons-systems
 node_modules/
 dist/
 functions/lib/

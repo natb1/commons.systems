@@ -243,6 +243,42 @@ resolve_project_root() {
   dirname "$common_dir"
 }
 
+# Print the canonical dispatch selection-lock file path to stdout. An explicit
+# DISPATCH_LOCK_FILE is authoritative and bypasses the git lookup (tests rely on
+# this). Otherwise the lock lives at the shared project-root tmp/ (not a per-
+# worktree tmp/) so concurrent ticks in different worktrees contend on the same
+# file. Returns non-zero (no output) when DISPATCH_LOCK_FILE is unset AND
+# resolve_project_root fails (not in a git repo); the caller supplies its own
+# error message. Mirrors dispatch-acquire-lock's Step-1 logic so the tick (which
+# writes the headless liveness sentinel) and the lock script resolve the same
+# lock-file directory. See #1068.
+dispatch_lock_file() {
+  local project_root
+  if [[ -n "${DISPATCH_LOCK_FILE:-}" ]]; then
+    printf '%s\n' "$DISPATCH_LOCK_FILE"
+    return 0
+  fi
+  project_root=$(resolve_project_root) || return 1
+  printf '%s\n' "$project_root/tmp/dispatch.lock"
+}
+
+# headless_sentinel_path <holder-id> <lock-file> — print the PID-sentinel path
+# for a `headless:<token>` holder id to stdout. The sentinel lives alongside the
+# lock file (same directory) so a concurrent tick in any worktree resolves the
+# same path. The filename is `dispatch-tick-<slug>.live`, where <slug> is the
+# token (everything after the `headless:` prefix) with every character outside
+# `[0-9A-Za-z._-]` replaced by `_`. Slugging is defense-in-depth (#1068): a
+# polluted INVOCATION_ID cannot escape the lock-file directory via path
+# separators. Fed via `printf '%s'` (no trailing newline) so `tr -c` appends no
+# spurious trailing `_`.
+headless_sentinel_path() {
+  local holder="$1" lock_file="$2" token slug dir
+  token="${holder#headless:}"
+  slug="$(printf '%s' "$token" | tr -c '0-9A-Za-z._-' '_')"
+  dir="$(dirname "$lock_file")"
+  printf '%s\n' "$dir/dispatch-tick-${slug}.live"
+}
+
 # Return the project ID for Firebase emulators.
 # Appends worktree name to prevent hub file collisions across worktrees.
 get_emulator_project_id() {
