@@ -56,6 +56,7 @@ Act on the one directive:
 | `INVOKE /dispatch-resolve-conflict` | 0 | provisioning hit an `origin/main` merge conflict | invoke `/dispatch-resolve-conflict` (see below) |
 | `RELEVANCE-REVIEW` | 0 | no PR on the target (`implement`) | run the Step 2 relevance review, then dispatch its verdict |
 | `STOP done` | 0 | non-draft (ready) PR — should-never-happen; spawn boundary (#1109) prevents it upstream | stop without invoking a phase skill |
+| `PUSH-STRANDED` | 0 | `done` PR, but the worktree has commits `origin/<branch>` hasn't seen | push `origin HEAD`, write an office-hours reason, stop with no marker |
 | `STOP waiting` | 0 | draft PR's CI has no verdict yet | print the verbatim message below and stop |
 | `STOP provision-failed` | 0 | `direnv`/merge provisioning failed (non-conflict) | stop with no marker (reason already written) |
 | `STOP wrong-worktree` | non-zero | spawn cwd / branch did not match `<N>` / `<worktree-path>` | stop |
@@ -118,6 +119,35 @@ user-visible report verbatim:
 Apply no `dispatch:office-hours` and spawn no babysitter — a not-ready target is
 not worker-actionable; the router owns the CI gate. See `reference.md` for the
 Stop-hook re-gate rationale.
+
+### `PUSH-STRANDED` — push unpushed local commits, then park
+
+A `done` PR's worktree is ahead of its remote branch — unpushed
+`dispatch-merge-main` / `/dispatch-resolve-conflict` merge commits that, if
+left, keep the PR `CONFLICTING` with no later tick able to push them.
+
+Run `git push origin HEAD` to flush them. This is sandbox-safe: it uses HTTPS
+to `github.com`, an allowlisted host, so no `dangerouslyDisableSandbox` is
+needed.
+
+Then write a one-line reason to `$CLAUDE_JOB_DIR/office-hours-reason` using the
+atomic tempfile + mv pattern (only when `CLAUDE_JOB_DIR` is set and exists —
+match the pattern used in review-fix Step 8 / implement-unit), then stop with
+no marker. The push heals the `CONFLICTING` PR; stopping without a marker means
+the Stop hook applies `dispatch:office-hours`, surfacing the unexpected
+late-skip for a human.
+
+```bash
+git push origin HEAD
+if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+  printf '%s\n' "/dispatch-worker: PUSH-STRANDED — pushed unpushed local commits a done PR left behind; parking for review" \
+    > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+  mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" "$CLAUDE_JOB_DIR/office-hours-reason"
+fi
+```
+
+Note: with the `/review-fix` terminal-flush guard (#1105 Unit 1) in place, this
+path is a true backstop that should essentially never fire.
 
 ### `STOP provision-failed` — stop with no marker
 
