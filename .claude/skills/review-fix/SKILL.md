@@ -44,13 +44,12 @@ stays in `PR_JSON` (`echo "$PR_JSON" | jq -r .body`); Step 6 parses its
 `Closes #N` line(s) to resolve the issue(s) this PR implements.
 
 If the printed labels already include `dispatch:reviewed` — an interrupted prior
-run — **skip Steps 1–7 entirely**: ensure the PR is ready and then go straight to
-the deviation/marker step (Step 8). `dispatch:reviewed` is this skill's terminal
-action and is already applied, so re-entry is a true no-op beyond readying the PR:
-
-```bash
-gh pr ready "$PR_NUM"
-```
+run — **skip Steps 1–7** and go straight to Step 8, which flushes any unpushed
+commits, readies the PR, and writes the marker. `dispatch:reviewed` is this
+skill's terminal action and is already applied, so re-entry is a no-op beyond
+Step 8's terminal flush and readying the PR. Routing re-entry through Step 8
+(rather than readying the PR inline) means its flush guard also carries any
+commits an interrupted prior run left stranded.
 
 On this re-entry path the unified finding set is not in context — Step 8 treats
 the deviation criterion as not met and writes the phase-completed marker.
@@ -395,8 +394,11 @@ skip the implementation subagents.
 Then fork **one** `/commit-merge-push` via the Agent tool to commit every pending
 working-tree change — `/code-review`'s Step 1a edits plus these implementation
 edits — and push. If there were no code changes at all, `/commit-merge-push`
-tolerates the no-op and creates no commit. Capture the resulting fix commit
-SHA(s) for the Step 7 comment.
+tolerates the no-op and creates no commit. Even on that no-op it pushes `origin
+HEAD`, so it carries any pending local merge (left by `dispatch-merge-main` /
+`/dispatch-resolve-conflict`) to origin; Step 8's flush guard is the
+authoritative backstop when this fork is skipped entirely. Capture the resulting
+fix commit SHA(s) for the Step 7 comment.
 
 ### 6. File meaningful out-of-scope findings as blocked_by follow-ups
 
@@ -556,7 +558,35 @@ Then post it (use `dangerouslyDisableSandbox: true` — the script invokes `gh`)
 
 ### 8. Apply the terminal label, ready the PR, then write the marker (or park on deviation)
 
-Apply the `dispatch:reviewed` label via `dispatch-complete-phase` (use
+**First, flush any unpushed local commits — the terminal flush of the "never
+push a bare merge commit" contract.** `dispatch-merge-main` (pre-spawn) and
+`/dispatch-resolve-conflict` merge `origin/main` into this worktree **locally**
+and never push, relying on each phase skill's own push point to carry the merge
+to origin. `/review-fix` is the chain's **terminal phase**: once the PR is
+ready, every later tick routes `STOP done` and no push point ever fires again.
+So any local merge left behind must be carried to origin here, before the PR is
+readied — otherwise the remote branch stays behind local HEAD and GitHub reports
+the PR `CONFLICTING` permanently. This guard runs **unconditionally**,
+independent of whether any findings were fixed: on a zero-findings run Step 5's
+`/commit-merge-push` may be skipped entirely, so the readiness gate is the only
+place the flush is guaranteed and it cannot be reasoned away.
+
+`BRANCH` is captured in the idempotency preamble; it is in scope on both the
+normal path and the re-entry path. Git runs sandboxed here — `origin` is HTTPS
+to an allowlisted host, so **no `dangerouslyDisableSandbox`** (unlike the
+surrounding `gh` / `dispatch-complete-phase` calls in this step). The push is a
+no-op when Step 5 already pushed (HEAD `==` origin/$BRANCH) and fails safe: when
+the remote branch is up to date the count is `0` and nothing is pushed; it does
+real work only when no push point fired this run.
+
+```bash
+git fetch origin "$BRANCH"
+if [[ "$(git rev-list --count "origin/$BRANCH..HEAD")" -ne 0 ]]; then
+  git push origin HEAD
+fi
+```
+
+Then apply the `dispatch:reviewed` label via `dispatch-complete-phase` (use
 `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
 ```bash
@@ -677,6 +707,6 @@ checkpoint before a PR goes ready — the single PR-comment summary is the audit
 trail. This is an intentional trade-off for an autonomous background-job run.
 
 The skill is idempotent: a re-invocation with `dispatch:reviewed` already on the
-PR skips Steps 1–7, ensures the PR is ready, and writes the phase-completed marker
-(the unified finding set is not in context on re-entry, so the deviation criterion
-is treated as not met).
+PR skips Steps 1–7 and runs Step 8, which flushes any unpushed commits, ensures
+the PR is ready, and writes the phase-completed marker (the unified finding set
+is not in context on re-entry, so the deviation criterion is treated as not met).
