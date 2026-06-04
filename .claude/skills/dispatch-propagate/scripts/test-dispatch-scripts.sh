@@ -171,6 +171,16 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  "issue list --label dispatch:main-broken --state open --json number")
+    # main_broken_latch: the per-episode latch read (#1085). Default [] (no open
+    # latch issue → gate fires); a main-broken-issue-list.json fixture models an
+    # already-open latch issue (gate falls through).
+    if [[ -f "$STUB_DIR/main-broken-issue-list.json" ]]; then
+      cat "$STUB_DIR/main-broken-issue-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
   "issue list --label dispatch:office-hours --state open --json number,createdAt")
     # office-hours-select-target: the office-hours queue (labeled open issues).
     if [[ -f "$STUB_DIR/oh-issue-list.json" ]]; then
@@ -1697,6 +1707,49 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "main failing workflow run → main-broken" "main-broken mainhead0" "$result"
 teardown
 
+# 23b. main red + an OPEN dispatch:main-broken latch issue → gate stands down,
+#      normal selection proceeds (#1085). Same red-main setup as test 22, but the
+#      latch issue is already open, so the queue flows instead of re-preempting.
+echo "Test: main red + open latch issue → falls through to normal selection"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+printf '[{"number":99}]' > "$STUB_DIR/main-broken-issue-list.json"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "main red + open latch → normal selection (verify PR)" "pr 10 10-verify-me verify" "$result"
+teardown
+
+# 23c. --main-broken-sha flag prints the RAW broken SHA (pre-latch) and exits 0.
+#      Green main → empty; red main → the SHA, regardless of any latch issue.
+echo "Test: --main-broken-sha green → empty"
+setup
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"success"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[{"headSha":"mainhead0","conclusion":"success"}]' \
+  > "$STUB_DIR/main-run-list.json"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --main-broken-sha); then rc=0; else rc=$?; fi
+assert_eq "--main-broken-sha green → empty" "" "$result"
+assert_eq "--main-broken-sha green → exit 0" "0" "$rc"
+teardown
+
+echo "Test: --main-broken-sha red → sha"
+setup
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --main-broken-sha); then rc=0; else rc=$?; fi
+assert_eq "--main-broken-sha red → mainhead0" "mainhead0" "$result"
+assert_eq "--main-broken-sha red → exit 0" "0" "$rc"
+teardown
+
 # 24. main in-progress checks → gate not tripped, normal selection.
 echo "Test: main in-progress checks → not tripped"
 setup
@@ -1779,6 +1832,25 @@ printf '[]' > "$STUB_DIR/main-run-list.json"
 if result=$("$TMPDIR_TEST/dispatch-select-target" --health-only); then rc=0; else rc=$?; fi
 assert_eq "--health-only main red → main-broken mainhead0" "main-broken mainhead0" "$result"
 assert_eq "--health-only main red → exit 0" "0" "$rc"
+teardown
+
+# 27b-latch. --health-only, main red + an OPEN dispatch:main-broken latch issue →
+#      "ok" (the latch stands the gate down so the heartbeat reseed keeps the chain
+#      processing other issues, #1085).
+echo "Test: --health-only + main red + open latch issue → ok"
+setup
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+printf '[{"number":99}]' > "$STUB_DIR/main-broken-issue-list.json"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --health-only); then rc=0; else rc=$?; fi
+assert_eq "--health-only main red + open latch → ok" "ok" "$result"
+assert_eq "--health-only main red + open latch → exit 0" "0" "$rc"
 teardown
 
 # 27c. --health-only + <N>-* current branch + red main → main-broken (no bypass).
