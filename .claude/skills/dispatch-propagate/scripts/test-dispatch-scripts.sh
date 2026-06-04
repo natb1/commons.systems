@@ -171,6 +171,16 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  "issue list --label dispatch:main-broken --state open --json number")
+    # main_broken_latch: the per-episode latch read (#1085). Default [] (no open
+    # latch issue → gate fires); a main-broken-issue-list.json fixture models an
+    # already-open latch issue (gate falls through).
+    if [[ -f "$STUB_DIR/main-broken-issue-list.json" ]]; then
+      cat "$STUB_DIR/main-broken-issue-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
   "issue list --label dispatch:office-hours --state open --json number,createdAt")
     # office-hours-select-target: the office-hours queue (labeled open issues).
     if [[ -f "$STUB_DIR/oh-issue-list.json" ]]; then
@@ -1697,6 +1707,49 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "main failing workflow run → main-broken" "main-broken mainhead0" "$result"
 teardown
 
+# 23b. main red + an OPEN dispatch:main-broken latch issue → gate stands down,
+#      normal selection proceeds (#1085). Same red-main setup as test 22, but the
+#      latch issue is already open, so the queue flows instead of re-preempting.
+echo "Test: main red + open latch issue → falls through to normal selection"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+printf '[{"number":99}]' > "$STUB_DIR/main-broken-issue-list.json"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "main red + open latch → normal selection (verify PR)" "pr 10 10-verify-me verify" "$result"
+teardown
+
+# 23c. --main-broken-sha flag prints the RAW broken SHA (pre-latch) and exits 0.
+#      Green main → empty; red main → the SHA, regardless of any latch issue.
+echo "Test: --main-broken-sha green → empty"
+setup
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"success"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[{"headSha":"mainhead0","conclusion":"success"}]' \
+  > "$STUB_DIR/main-run-list.json"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --main-broken-sha); then rc=0; else rc=$?; fi
+assert_eq "--main-broken-sha green → empty" "" "$result"
+assert_eq "--main-broken-sha green → exit 0" "0" "$rc"
+teardown
+
+echo "Test: --main-broken-sha red → sha"
+setup
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --main-broken-sha); then rc=0; else rc=$?; fi
+assert_eq "--main-broken-sha red → mainhead0" "mainhead0" "$result"
+assert_eq "--main-broken-sha red → exit 0" "0" "$rc"
+teardown
+
 # 24. main in-progress checks → gate not tripped, normal selection.
 echo "Test: main in-progress checks → not tripped"
 setup
@@ -1779,6 +1832,25 @@ printf '[]' > "$STUB_DIR/main-run-list.json"
 if result=$("$TMPDIR_TEST/dispatch-select-target" --health-only); then rc=0; else rc=$?; fi
 assert_eq "--health-only main red → main-broken mainhead0" "main-broken mainhead0" "$result"
 assert_eq "--health-only main red → exit 0" "0" "$rc"
+teardown
+
+# 27b-latch. --health-only, main red + an OPEN dispatch:main-broken latch issue →
+#      "ok" (the latch stands the gate down so the heartbeat reseed keeps the chain
+#      processing other issues, #1085).
+echo "Test: --health-only + main red + open latch issue → ok"
+setup
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+printf '[{"number":99}]' > "$STUB_DIR/main-broken-issue-list.json"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --health-only); then rc=0; else rc=$?; fi
+assert_eq "--health-only main red + open latch → ok" "ok" "$result"
+assert_eq "--health-only main red + open latch → exit 0" "0" "$rc"
 teardown
 
 # 27c. --health-only + <N>-* current branch + red main → main-broken (no bypass).
@@ -14790,6 +14862,32 @@ case "$*" in
 esac
 STUB
   chmod +x "$TMPDIR_TEST/bin/git"
+
+  # PATH-shimmed gh for the Step 1c latch re-arm (#1085). The open-latch query
+  # reads main-broken-open.txt (one issue number per line; absent → no open
+  # latch, the re-arm short-circuits). `issue close` is logged to
+  # gh-issue-close.log so a test can assert whether the latch was closed.
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  issue\ list\ *dispatch:main-broken*)
+    if [[ -f "$STUB_DIR/main-broken-open.txt" ]]; then
+      cat "$STUB_DIR/main-broken-open.txt"
+    fi
+    ;;
+  issue\ close\ *)
+    echo "$args" >> "$STUB_DIR/gh-issue-close.log"
+    ;;
+  *)
+    echo "gh stub (sel-tick): unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
   export PATH="$TMPDIR_TEST/bin:$SAVED_PATH"
 }
 
@@ -14862,6 +14960,58 @@ assert_eq "main-broken: decision line" "main-broken abc1234" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "main-broken: lock released" "" \
   "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- Step 1c latch re-arm: green main + open latch issue → close (#1085) ------
+echo "Test: select-tick re-arm closes open latch issue when main is green"
+sel_tick_setup
+# Fake select-target: green for --main-broken-sha (prints nothing), else `empty`.
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--main-broken-sha" ]]; then exit 0; fi
+echo empty
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+printf '99\n' > "$STUB_DIR/main-broken-open.txt"
+out=$(run_sel_tick)
+assert_eq "re-arm green+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "re-arm green+open: latch issue closed" "issue close 99 --comment origin/main is green again; closing the main-broken latch (re-arming the gate)." \
+  "$(cat "$STUB_DIR/gh-issue-close.log" 2>/dev/null || echo MISSING)"
+sel_tick_teardown
+
+# --- Step 1c latch re-arm: red main + open latch issue → NOT closed -----------
+echo "Test: select-tick re-arm leaves open latch issue while main is still red"
+sel_tick_setup
+# Fake select-target: red for --main-broken-sha (prints a sha), else `empty`.
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--main-broken-sha" ]]; then echo "redsha1"; exit 0; fi
+echo empty
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+printf '99\n' > "$STUB_DIR/main-broken-open.txt"
+out=$(run_sel_tick)
+assert_eq "re-arm red+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "re-arm red+open: latch issue NOT closed" "absent" \
+  "$([[ -e "$STUB_DIR/gh-issue-close.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Step 1c latch re-arm: green main + NO open latch issue → no-op -----------
+echo "Test: select-tick re-arm is a no-op when no latch issue is open"
+sel_tick_setup
+# Fake select-target green for --main-broken-sha; no main-broken-open.txt fixture
+# means the open-latch query returns empty, so the re-arm short-circuits before
+# the CI read.
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--main-broken-sha" ]]; then exit 0; fi
+echo empty
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_sel_tick)
+assert_eq "re-arm green+no-issue: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "re-arm green+no-issue: no close attempted" "absent" \
+  "$([[ -e "$STUB_DIR/gh-issue-close.log" ]] && echo present || echo absent)"
 sel_tick_teardown
 
 # --- jit-reminder → passthrough + lock RELEASED (spawned as a bg job) --------
