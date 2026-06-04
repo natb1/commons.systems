@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# dispatch-mark-complete — scripted terminal phase-completed marker write.
+#
+# Usage: dispatch-mark-complete --phase <phase> --pr <pr-num>
+#
+# Writes the dispatch phase-completed marker that dispatch-stop.sh reads to
+# decide the chain's next disposition. The marker is written atomically
+# (tempfile + mv) under the $CLAUDE_JOB_DIR guard, exactly as the four phase
+# skills (/plan-implement, /qa-fix, /review-fix, /verify-pr) previously did
+# inline at their Step-4 terminus. Reconstructing that atomic write from model
+# memory in the post-clear, skill-less build session was the structural
+# fragility behind the #824 trailing-step leak; a one-token script call is far
+# more reliable.
+#
+# Marker contents (byte format MUST be preserved — read by dispatch-stop.sh):
+#
+#   phase=<phase>
+#   pr=<pr-num>
+#
+# <phase> is one of: implement, verify, qa, review.
+#
+# When CLAUDE_JOB_DIR is unset/empty or not a directory the script is running
+# interactively (not under a dispatch job): it prints a diagnostic and no-ops
+# (exit 0), so the same Step-4 call is harmless in an interactive run.
+#
+# A missing argument, missing flag value, or unknown phase is a clear error,
+# not a fallback (exit 2).
+set -euo pipefail
+
+PHASE=""
+PR_NUM=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --phase)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-mark-complete: --phase requires a value" >&2
+        echo "usage: dispatch-mark-complete --phase <phase> --pr <pr-num>" >&2
+        exit 2
+      fi
+      PHASE="$2"
+      shift 2
+      ;;
+    --pr)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-mark-complete: --pr requires a value" >&2
+        echo "usage: dispatch-mark-complete --phase <phase> --pr <pr-num>" >&2
+        exit 2
+      fi
+      PR_NUM="$2"
+      shift 2
+      ;;
+    *)
+      echo "dispatch-mark-complete: unexpected argument: $1" >&2
+      echo "usage: dispatch-mark-complete --phase <phase> --pr <pr-num>" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$PHASE" || -z "$PR_NUM" ]]; then
+  echo "dispatch-mark-complete: --phase and --pr are both required" >&2
+  echo "usage: dispatch-mark-complete --phase <phase> --pr <pr-num>" >&2
+  exit 2
+fi
+
+case "$PHASE" in
+  implement|verify|qa|review) ;;
+  *)
+    echo "dispatch-mark-complete: unknown phase: $PHASE (expected implement, verify, qa, or review)" >&2
+    exit 2
+    ;;
+esac
+
+# CLAUDE_JOB_DIR guard: an interactive run (no dispatch job) is a no-op.
+if [[ -z "${CLAUDE_JOB_DIR:-}" || ! -d "$CLAUDE_JOB_DIR" ]]; then
+  echo "dispatch-mark-complete: CLAUDE_JOB_DIR unset or not a directory; interactive run, skipping marker write" >&2
+  exit 0
+fi
+
+# Atomic write: tempfile + mv. The exact byte format is read by dispatch-stop.sh.
+f="$CLAUDE_JOB_DIR/phase-completed"
+printf 'phase=%s\npr=%s\n' "$PHASE" "$PR_NUM" > "$f.tmp"
+mv "$f.tmp" "$f"
