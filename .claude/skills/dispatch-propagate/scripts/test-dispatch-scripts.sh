@@ -1387,8 +1387,9 @@ FAKE
 # a live session row (sessionId `s-<name>`). The fake branches on its first arg:
 # `agents` returns the JSON payload (the liveness query); any other invocation —
 # `--resume <id>` or `/office-hours` — prints `LAUNCH: $*` so a test can assert
-# which launch fired. Wired via OFFICE_HOURS_CLAUDE_CMD (the script exports it as
-# CLAUDE_AGENTS_CMD, so a single fake covers both the query and the launch).
+# which launch fired. Wires both OFFICE_HOURS_CLAUDE_CMD (the entry script's
+# launch target) and CLAUDE_AGENTS_CMD (the selector subprocess's liveness query)
+# at the same fake, so a single binary serves both the query and the launch.
 office_hours_fake_claude() {
   local payload="[" name first=1
   for name in "$@"; do
@@ -1411,6 +1412,10 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/bin/claude"
   export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+  # The entry script no longer queries liveness itself; the selector subprocess
+  # it invokes does. Point CLAUDE_AGENTS_CMD at the same fake so a single binary
+  # serves the selector's `agents` query and the entry script's launch.
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
 }
 
 # 1. A non-QA PR is chosen over a QA PR and a help-wanted issue.
@@ -3191,18 +3196,47 @@ result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "qa item selected with its PR number" "office-hours 50 qa 7" "$result"
 teardown
 
-# OHST3. A labeled item whose <N>-* worktree has a live session is skipped; the
-# next labeled item wins.
-echo "Test: labeled item with a live session is skipped"
+# OHST3. The oldest labeled item whose <N>-* worktree has a live session is
+# RESUMED — resume wins over a sessionless newer sibling.
+echo "Test: oldest live-session item is resumed (resume wins over fresh sibling)"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-select_target_fake_claude "42-x"   # 42's worktree has a live session
+select_target_fake_claude "42-x"   # 42's worktree has a live session; 99 sessionless
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "live-session item skipped; next labeled item selected" "office-hours 99 implement -" "$result"
+assert_eq "live item resumed over sessionless sibling 99" "resume s-42-x" "$result"
+teardown
+
+# OHST3b. Two labeled items both live → resume the oldest one's session
+# (mirrors OH2 on the entry-point side).
+echo "Test: two live items → oldest resumed"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "42-x" "99-y"   # both worktrees live
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "oldest of two live items resumed" "resume s-42-x" "$result"
+teardown
+
+# OHST3c. Older sessionless item + newer live item → resume the live one
+# (mirrors OH5: resume wins regardless of age order).
+echo "Test: older sessionless + newer live → resume the live one"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+# 42 (older) has no worktree at all → sessionless; 99 (newer) has a live worktree.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "99-y"   # only 99's worktree is live
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "live item resumed regardless of age order" "resume s-99-y" "$result"
 teardown
 
 # OHST4. An empty office-hours queue with no parked router prints `empty`. The
@@ -3341,12 +3375,16 @@ teardown
 echo ""
 echo "=== office-hours (entry point) ==="
 #
-# The single user entry point to the office-hours queue (#759). Resumes a still-
-# live blocked session (`claude --resume <sessionId>`) if any labeled item has
-# one; otherwise starts a fresh `/office-hours` session. office_hours_fake_claude
-# serves the liveness payload on `agents` and prints `LAUNCH: $*` on launch, so
-# each case asserts which launch fired. The fake's sessionId convention is
-# `s-<worktree-basename>`.
+# The single user entry point to the office-hours queue (#759). It is now a thin
+# dispatcher: it calls office-hours-select-target once and switches on the verb —
+# resume / parked-router (exec `claude --resume <sessionId>`), fresh-with-args
+# (exec `claude "/office-hours <N> <phase> <pr>"`), or empty (print a queue-empty
+# message and exit WITHOUT launching). These are therefore entry+selector
+# integration tests: setup copies the real selector into TMPDIR_TEST, the
+# selector emits the disposition, and office_hours_fake_claude serves the
+# selector's `agents` liveness query and prints `LAUNCH: $*` on launch so each
+# case asserts which launch fired (or that none did). The fake's sessionId
+# convention is `s-<worktree-basename>`.
 
 # OH1. One labeled item whose <N>-* worktree has a live session → resume it.
 echo "Test: live-session labeled item → resume its session"
@@ -3371,8 +3409,11 @@ result=$("$TMPDIR_TEST/office-hours")
 assert_eq "resumes the oldest live item's session" "LAUNCH: --resume s-42-x" "$result"
 teardown
 
-# OH3. Labeled items but none with a live session → start fresh /office-hours.
-echo "Test: labeled items, none live → fresh /office-hours"
+# OH3. Labeled items but none with a live session → start fresh /office-hours,
+# with the selected target's <N> <phase> <pr> passed through as arguments. The
+# selector emits `office-hours 42 implement -`; the entry execs
+# `/office-hours 42 implement -`.
+echo "Test: labeled items, none live → fresh /office-hours with passed args"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
@@ -3380,17 +3421,20 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude   # orphan world: no live sessions
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "no live session → fresh /office-hours" "LAUNCH: /office-hours" "$result"
+assert_eq "no live session → fresh /office-hours with args" "LAUNCH: /office-hours 42 implement -" "$result"
 teardown
 
-# OH4. Empty office-hours queue → start fresh /office-hours.
-echo "Test: empty queue → fresh /office-hours"
+# OH4. Empty office-hours queue → selector emits `empty` → the entry script prints
+# the queue-empty message and exits WITHOUT launching Claude.
+echo "Test: empty queue → queue-empty message, no launch"
 setup
 echo '[]' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_fake_claude   # `[]`: no sessions under main, no parked router
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "empty queue → fresh /office-hours" "LAUNCH: /office-hours" "$result"
+assert_eq "empty queue → queue-empty message, no launch" "office-hours: queue is empty — nothing to resume or start." "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # OH5. Mixed: an older sessionless item + a newer live-session item → resume the
@@ -3407,28 +3451,25 @@ result=$("$TMPDIR_TEST/office-hours")
 assert_eq "resume wins over fresh whenever any labeled item is live" "LAUNCH: --resume s-99-y" "$result"
 teardown
 
-# OH6. UNKNOWN daemon (claude unqueryable) → fall through to fresh /office-hours.
-# This is the entry-point's deliberate asymmetry with office-hours-select-target:
-# select-target (OHST5) treats UNKNOWN as occupied (left for resume); the entry
-# point treats UNKNOWN as not-resumable (fall through to fresh), so the two paths
-# never both claim an item whose liveness cannot be determined.
-echo "Test: UNKNOWN daemon → not-resumable, fall through to fresh /office-hours"
+# OH6. UNKNOWN daemon (claude unqueryable). Under the single fail-safe convention
+# the only labeled item (42) is UNKNOWN → skipped by the selector, and the
+# parked-router fallback also reads UNKNOWN → no router, so the selector emits
+# `empty`. The entry script prints the queue-empty message and does not launch.
+# (The old entry-vs-selector asymmetry — entry treating UNKNOWN as not-resumable
+# and falling through to a fresh session — is gone; UNKNOWN is occupied
+# everywhere now that the enumeration is no longer duplicated.)
+echo "Test: UNKNOWN daemon → selector empty → queue-empty message, no launch"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-# OFFICE_HOURS_CLAUDE_CMD must be set so the script has a launch target and so
-# CLAUDE_AGENTS_CMD is overridden to a command that reports UNKNOWN (non-zero
-# exit). Re-use the office_hours_fake_claude stub but wire it with no live
-# sessions, then make the agents call fail to exercise the UNKNOWN path.
-office_hours_fake_claude   # sets OFFICE_HOURS_CLAUDE_CMD=TMPDIR_TEST/bin/claude
-# Override the claude binary so agents query always exits 1 (UNKNOWN daemon),
-# but launch invocations still print "LAUNCH: $*" so the test can assert which
-# launch fired.
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_fake_claude   # sets OFFICE_HOURS_CLAUDE_CMD + CLAUDE_AGENTS_CMD
+# Override the claude binary so the `agents` query always exits 1 (UNKNOWN
+# daemon), while launch invocations still print "LAUNCH: $*".
 cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "agents" ]]; then
-  # Simulate an unqueryable daemon: non-zero exit, no output.
   exit 1
 fi
 echo "LAUNCH: $*"
@@ -3436,7 +3477,34 @@ exit 0
 FAKE
 chmod +x "$TMPDIR_TEST/bin/claude"
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "UNKNOWN daemon → not-resumable → fresh /office-hours" "LAUNCH: /office-hours" "$result"
+assert_eq "UNKNOWN daemon → selector empty → queue-empty message, no launch" "office-hours: queue is empty — nothing to resume or start." "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OH7. The selector emits `parked-router <sessionId> <name>` (a target-less
+# parked dispatch router, #1010) → the entry script resumes that session. The
+# entry script gains the parked-router handling the selector already had.
+echo "Test: parked-router directive → entry resumes the router session"
+setup
+echo '[]' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_fake_claude   # sets OFFICE_HOURS_CLAUDE_CMD + CLAUDE_AGENTS_CMD
+# A live, idle `dispatch-*` router under main on the `agents` query; launch
+# invocations still print "LAUNCH: $*".
+cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "agents" ]]; then
+  printf '%s' '[{"sessionId":"s-dispatch-abc123","pid":1,"status":"waiting","name":"dispatch-abc123","cwd":""}]'
+  exit 0
+fi
+echo "LAUNCH: $*"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/claude"
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "parked-router directive resumes the router session" "LAUNCH: --resume s-dispatch-abc123" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # ============================================================================
@@ -7143,21 +7211,21 @@ out_compact=$(printf '%s' "$out" | jq -c '.')
 assert_eq "empty object prints {}" "{}" "$out_compact"
 config_teardown
 
-# --- Test 12: weekly_headroom_taper_pct: 0 is rejected (must be > 0) --------
+# --- Test 12: five_hour_target_floor_pct: 0 is rejected (must be > 0) --------
 
-echo "Test: weekly_headroom_taper_pct: 0 exits 1 and stderr says must be > 0"
+echo "Test: five_hour_target_floor_pct: 0 exits 1 and stderr says must be > 0"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"weekly_headroom_taper_pct": 0}
+{"five_hour_target_floor_pct": 0}
 EOF
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
-assert_eq "weekly_headroom_taper_pct 0 exits 1" "1" "$rc"
+assert_eq "five_hour_target_floor_pct 0 exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"weekly_headroom_taper_pct"* && "$err" == *"must be > 0"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: weekly_headroom_taper_pct 0 stderr says must be > 0"
+if [[ "$err" == *"five_hour_target_floor_pct"* && "$err" == *"must be > 0"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: five_hour_target_floor_pct 0 stderr says must be > 0"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_headroom_taper_pct 0 stderr says must be > 0"
+  FAIL=$((FAIL + 1)); echo "  FAIL: five_hour_target_floor_pct 0 stderr says must be > 0"
   echo "    stderr: $err"
 fi
 config_teardown
@@ -7360,9 +7428,9 @@ config_teardown
 # All telemetry inputs are env-overridable; tests rely on the overrides rather
 # than fixture files when shape matters more than the file path. The script
 # defaults are baked in (target_weekly=90, weekly_increment_floor=1,
-# weekly_increment_cap=10, weekly_curve_power=1, weekly_headroom_taper=20,
+# weekly_increment_cap=10, weekly_curve_power=1,
 # five_hour_target_floor=50, five_hour_target_ceiling=80,
-# five_hour_headroom_taper=15, max_workers=8); tests that vary tunables write a
+# max_workers=8); tests that vary tunables write a
 # target-workers.json into the config dir.
 #
 # The pace curve needs the elapsed fraction x of the weekly window. With
@@ -7450,15 +7518,15 @@ echo "Test: weekly curve reaches terminal only at week end (W < terminal mid-wee
 tw_setup
 # Mid-week (envelope-inactive x), the cumulative curve W is well below the
 # week-end terminal, so used_weekly just below the terminal is far ahead of
-# pace → F=0 → N=0. Only at week end does W reach the terminal and let that
-# used_weekly come under pace. Probe with used_weekly = 89 at several x.
+# pace → gate closed → N=0. Only at week end does W reach the terminal and let
+# that used_weekly come under pace. Probe with used_weekly = 89 at several x.
 # (The terminal envelope lifts W to weekly_terminal=100 in the final windows;
 # this test deliberately picks envelope-INACTIVE mid-week x so it isolates the
 # smooth curve's "below terminal until the end" shape — the envelope's
 # week-end lift is covered by the dedicated envelope test below.)
-#   x=0.5  → W=31    → used_weekly=89 is far ahead of pace → F=0 → N=0
-#   x=0.75 → W=57    → used_weekly=89 still ahead of pace  → F=0 → N=0
-#   x=1.0  → env→100 → used_weekly=89 → hw=11 → F>0 → N>=1 (only now under pace)
+#   x=0.5  → W=31    → used_weekly=89 is far ahead of pace → gate closed → N=0
+#   x=0.75 → W=57    → used_weekly=89 still ahead of pace  → gate closed → N=0
+#   x=1.0  → env→100 → used_weekly=89 → hw=11>0 → gate open → N>=1 (under pace)
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 for spec in "0.5:0" "0.75:0" "1.0:ge1"; do
   x="${spec%%:*}"; want="${spec##*:}"
@@ -7480,10 +7548,10 @@ tw_teardown
 
 # --- Test 2: W matches the canonical curve at x=0.5 -------------------------
 
-echo "Test: weekly curve value W(0.5)=31 gates F=0 at the boundary"
+echo "Test: weekly curve value W(0.5)=31 closes the gate at the boundary"
 tw_setup
-# x=0.5 → W=31. used_weekly=31 → hw=0 → F=0 → N=0 (exactly at pace).
-# used_weekly=30 → hw=1 → F>0 → N>=1 (just under pace).
+# x=0.5 → W=31. used_weekly=31 → hw=0 → gate closed → N=0 (exactly at pace).
+# used_weekly=30 → hw=1 → gate open → N>=1 (just under pace).
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 31 "$r" 0 99999999
@@ -7508,7 +7576,7 @@ tw_setup
 # and W(0.5) = 34*(0.5 + 2*0.25/2) = 34*(0.5+0.25) = 25.5 mid-week. To isolate
 # the smooth term from the terminal envelope, set weekly_terminal_pct=1 so the
 # envelope (env = 1 - 3*r) stays deeply negative mid-week and never lifts W.
-# At x=0.5: used_weekly=26 (> 25.5) is ahead of the clamped pace → F=0 → N=0;
+# At x=0.5: used_weekly=26 (> 25.5) is ahead of the clamped pace → gate closed → N=0;
 # used_weekly=25 (< 25.5) is under pace → N>=1. This proves the cap hard-ceils
 # the smooth curve below target. (The default terminal=100 envelope would
 # otherwise dominate this low-cap curve everywhere — the dedicated envelope
@@ -7576,69 +7644,75 @@ out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "remaining<0 → 0" "0" "$out"
 tw_teardown
 
-# --- Test 6: F = 0 when used_weekly >= W (ahead of pace) → N=0 --------------
+# --- Test 6: binary gate closed when used_weekly >= W (at/over pace) → N=0 ---
 
-echo "Test: F=0 ahead-of-pace pause yields N=0 even with 5h headroom"
+echo "Test: binary gate closed (at/over pace) yields N=0 regardless of 5h usage"
 tw_setup
-# x=0.5 → W=31. used_weekly=40 (>31) → hw<0 → F=0. used_5h=0 (full 5h
-# headroom) but h5 = 0 - 0 = 0 → N=0. The ahead-of-pace pause overrides 5h
-# headroom — this is the intentional early-week throttle.
+# x=0.5 → W=31. used_weekly=40 (>31) → hw<0 → gate closed → N=0, regardless of
+# the 5-hour ramp. The over-pace pause overrides 5h headroom — this is the
+# intentional weekly-pace throttle.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
+# Full 5h headroom (used_5h=0) — gate still closed.
 write_rl "rl.json" 40 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "ahead of pace (used_weekly=40 > W=31) → F=0 → N=0" "0" "$out"
+assert_eq "over pace (used_weekly=40 > W=31), used_5h=0 → gate closed → N=0" "0" "$out"
+# Low non-zero 5h usage (used_5h=10, deep in the max-workers band) — gate still
+# closed, so the open-gate ramp value is irrelevant.
+write_rl "rl.json" 40 "$r" 10 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "over pace (used_weekly=40 > W=31), used_5h=10 → gate closed → N=0" "0" "$out"
 tw_teardown
 
-# --- Test 7: F linear band floor5..ceil5 over weekly headroom Hw ------------
+# --- Test 7: binary gate is magnitude-independent over weekly headroom hw ----
 
-echo "Test: F scales floor5..ceil5 over weekly headroom Hw (observed via N)"
+echo "Test: open gate gives the same N for any positive hw; at-pace gives 0"
 tw_setup
-# x=0.5 → W=31, defaults floor5=50, ceil5=80, Hw=20.
-#   used_weekly=11 → hw=20 (>=Hw) → F=80 (ceiling)
-#   used_weekly=21 → hw=10        → F=50+(30)*(10/20)=65
-#   used_weekly=26 → hw=5         → F=50+(30)*(5/20)=57.5
-#   used_weekly=31 → hw=0         → F=0
-# Observe F through N with used_5h chosen so N tracks the band. Hold used_5h=65:
-#   F=80   → h5=15 → N=clamp(round(8*15/15),1,8)=8
-#   F=65   → h5=0  → N=0
-#   F=57.5 → h5<0  → N=0
-# That only distinguishes ceiling vs below-65; to see the full F linear band,
-# read F at the ceiling boundary (hw>=Hw → F=80) vs interior (hw=15 → F=72.5):
-#   used_weekly=11 → hw=20 → F=80,   used_5h=72 → h5=8  → N=round(8*8/15)=4
-#   used_weekly=16 → hw=15 → F=72.5, used_5h=72 → h5=0.5→ N=round(8*.5/15)=1
-#   used_weekly=21 → hw=10 → F=65,   used_5h=72 → h5<0 → N=0
+# The weekly gate is binary: any hw>0 opens it and the 5-hour ramp alone decides
+# N — the headroom magnitude does NOT scale N. x=0.5 → W=31, defaults floor5=50,
+# ceil5=80, span=30. Hold used_5h=65 → h5=80-65=15 → N=round(8*15/30)=4 whenever
+# the gate is open.
+#   used_weekly=11 → hw=20 (open) → N=4
+#   used_weekly=21 → hw=10 (open) → N=4   (same N — magnitude-independent)
+#   used_weekly=31 → hw=0  (at pace) → gate closed → N=0
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
-write_rl "rl.json" 11 "$r" 72 99999999
+write_rl "rl.json" 11 "$r" 65 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "F-band hw=20 → F=80, used_5h=72 → N=4" "4" "$out"
-write_rl "rl.json" 16 "$r" 72 99999999
+assert_eq "gate open hw=20, used_5h=65 → N=4" "4" "$out"
+write_rl "rl.json" 21 "$r" 65 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "F-band hw=15 → F=72.5, used_5h=72 → N=1" "1" "$out"
-write_rl "rl.json" 21 "$r" 72 99999999
+assert_eq "gate open hw=10, used_5h=65 → N=4 (magnitude-independent)" "4" "$out"
+write_rl "rl.json" 31 "$r" 65 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "F-band hw=10 → F=65, used_5h=72 ahead → N=0" "0" "$out"
+assert_eq "at pace hw=0, used_5h=65 → gate closed → N=0" "0" "$out"
 tw_teardown
 
-# --- Test 8: N=0 when used_5h >= F; floor(1)/ceiling(max) over H5 -----------
+# --- Test 8 (AC): linear 5h ramp under pace; floor(1)/ceiling(max) endpoints --
 
-echo "Test: N floor/ceiling over five_hour_headroom_taper, F held at 80"
+echo "Test: under pace, N is a linear ramp on used_5h over [floor5,ceil5]"
 tw_setup
-# x=0.5, used_weekly=11 → hw=20 → F=80 (ceiling). H5=15, max_workers=8.
-# Sweep used_5h; h5 = 80 - used_5h:
-#   used_5h=80 → h5=0  → N=0          (at target)
-#   used_5h=79 → h5=1  → N=clamp(round(8*1/15),1,8)=1   (floor)
-#   used_5h=71 → h5=9  → N=round(8*9/15)=5
-#   used_5h=65 → h5=15 → N=8          (ceiling)
-#   used_5h=50 → h5=30 → N=8          (clamped at ceiling)
+# Under pace (gate open) the 5-hour ramp alone decides N. Defaults floor5=50,
+# ceil5=80, span=30, max_workers=8; h5 = ceil5 - used_5h;
+# N = clamp(round(8*h5/30),1,8). x=0.5, used_weekly=11 → hw=20>0 → gate open.
+# Canonical curve:
+#   used_5h=50 → h5=30 → N=8     (at floor → max)
+#   used_5h=55 → h5=25 → N=round(6.67)=7
+#   used_5h=60 → h5=20 → N=round(5.33)=5
+#   used_5h=65 → h5=15 → N=4
+#   used_5h=70 → h5=10 → N=round(2.67)=3
+#   used_5h=75 → h5=5  → N=round(1.33)=1
+#   used_5h=80 → h5=0  → N=0     (at ceiling → zero)
+# Plus endpoints:
+#   used_5h=40 → h5=40 → N=clamp(round(10.67),1,8)=8  (below floor → max)
+#   used_5h=79 → h5=1  → N=clamp(round(0.27),1,8)=1   (rounds to 0 but clamps ≥1)
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
-declare -A n_expected=([80]=0 [79]=1 [71]=5 [65]=8 [50]=8)
-for u5 in 80 79 71 65 50; do
+declare -A n_expected=([40]=8 [50]=8 [55]=7 [60]=5 [65]=4 [70]=3 [75]=1 [79]=1 [80]=0)
+for u5 in 40 50 55 60 65 70 75 79 80; do
   write_rl "nsweep.json" 11 "$r" "$u5" 99999999
   result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-  assert_eq "N-sweep F=80 used_5h=$u5 → ${n_expected[$u5]}" "${n_expected[$u5]}" "$result"
+  assert_eq "ramp under pace used_5h=$u5 → ${n_expected[$u5]}" "${n_expected[$u5]}" "$result"
 done
 unset n_expected
 tw_teardown
@@ -7682,15 +7756,15 @@ tw_teardown
 
 # --- Test 11: only seven_day present → 5h gate uses used_5h=0 ---------------
 
-echo "Test: missing-five-hour treats used_5h=0; N scales from F alone"
+echo "Test: missing-five-hour treats used_5h=0 → ramp gives max workers"
 tw_setup
-# seven_day only at x=0.5 (W=31): used_weekly=11 → hw=20 → F=80. 5h block absent
-# → used_5h treated as 0 → h5=80 → N=8.
+# seven_day only at x=0.5 (W=31): used_weekly=11 → hw=20>0 → gate open. 5h block
+# absent → used_5h treated as 0 → 0 <= floor5=50 → ramp gives max workers = 8.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 11 "$r" absent absent
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "five_hour absent; F=80 used_5h=0 → N=8" "8" "$out"
+assert_eq "five_hour absent; under pace + used_5h=0 → max workers N=8" "8" "$out"
 tw_teardown
 
 # --- Test 12: config-file tunables are honored ------------------------------
@@ -7700,8 +7774,8 @@ tw_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
 {"max_concurrent_workers": 16}
 EOF
-# x=0.5, used_weekly=11 → F=80, used_5h=0 → h5=80 → N=clamp(round(16*80/15),1,16)
-# = clamp(85,1,16) = 16.
+# x=0.5, used_weekly=11 → hw=20>0 → gate open. used_5h=0 <= floor5=50 → ramp
+# gives max workers = 16.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 11 "$r" 0 99999999
@@ -7709,20 +7783,22 @@ out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "config max_concurrent_workers=16 → 16" "16" "$out"
 tw_teardown
 
-# --- Test 13: config five_hour_headroom_taper widens the N ramp -------------
+# --- Test 13: config five_hour_target_floor_pct narrows the ramp span --------
 
-echo "Test: config five_hour_headroom_taper_pct scales the N ramp"
+echo "Test: config five_hour_target_floor_pct narrows the ramp span"
 tw_setup
-# H5=30 (default 15). x=0.5, used_weekly=11 → F=80, used_5h=72 → h5=8.
-# N=clamp(round(8*8/30),1,8)=clamp(round(2.13),1,8)=2 (vs N=4 at default H5=15).
+# Raising floor5 from 50 to 60 narrows the span (ceil5 - floor5 = 80-60 = 20),
+# steepening the ramp. x=0.5, used_weekly=11 → hw=20>0 → gate open. used_5h=72 →
+# h5 = 80-72 = 8 → N=clamp(round(8*8/20),1,8)=round(3.2)=3 (vs default span=30 →
+# round(8*8/30)=round(2.13)=2).
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"five_hour_headroom_taper_pct": 30}
+{"five_hour_target_floor_pct": 60}
 EOF
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 11 "$r" 72 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "H5=30; F=80 used_5h=72 h5=8 → N=2" "2" "$out"
+assert_eq "floor5=60 span=20; under pace used_5h=72 h5=8 → N=3" "3" "$out"
 tw_teardown
 
 # --- Test 14: per-field env override wins over file -------------------------
@@ -7731,8 +7807,8 @@ echo "Test: per-field env override wins over rate_limits.json"
 tw_setup
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
-# File says used_5h=99 (over F → N=0); env override replaces with used_5h=0.
-# used_weekly=11 → F=80, used_5h=0 → h5=80 → N=8.
+# File says used_5h=99 (over ceil5 → N=0); env override replaces with used_5h=0.
+# used_weekly=11 → hw=20>0 → gate open. used_5h=0 <= floor5 → ramp → N=8.
 write_rl "rl.json" 11 "$r" 99 99999999
 export DISPATCH_TARGET_WORKERS_USED_5H=0
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
@@ -7744,7 +7820,7 @@ tw_teardown
 echo "Test: per-field env override of resets_at_weekly drives the curve"
 tw_setup
 # File supplies used_weekly; env override supplies resets_at_weekly to place
-# x=0.5. used_weekly=31 = W(0.5) → at pace → F=0 → N=0.
+# x=0.5. used_weekly=31 = W(0.5) → hw=0 → at pace → gate closed → N=0.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 write_rl "rl.json" 31 99999999 0 99999999
 export DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY=$(tw_resets_for_x 0.5)
@@ -7757,17 +7833,32 @@ tw_teardown
 echo "Test: out-of-range config field rejected; baked-in defaults used"
 tw_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"weekly_headroom_taper_pct": 0}
+{"five_hour_target_ceiling_pct": 0}
 EOF
-# weekly_headroom_taper_pct=0 is rejected by dispatch-config-load (must be > 0).
-# dispatch-target-workers silently ignores a failed config-load and uses the
-# baked-in defaults (Hw=20). x=0.5, used_weekly=11 → hw=20 → F=80, used_5h=0 →
-# N=8.
+# five_hour_target_ceiling_pct=0 is rejected by dispatch-config-load (must be
+# > 0). dispatch-target-workers silently ignores a failed config-load and uses
+# the baked-in defaults (floor5=50, ceil5=80). x=0.5, used_weekly=11 → hw=20>0 →
+# gate open. used_5h=0 <= floor5 → ramp → N=8.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 11 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "rejected config → defaults → N=8" "8" "$out"
+tw_teardown
+
+# --- Test 16b: just-under-pace + high 5h usage → ramp decides N --------------
+
+echo "Test: gate barely open (hw≈1) + high 5h usage → ramp value, not 0"
+tw_setup
+# x=0.5 → W=31. used_weekly=30 → hw=1 (>0) → gate just barely open. With the gate
+# open the 5-hour ramp alone sets N: used_5h=70 → h5=80-70=10 →
+# N=clamp(round(8*10/30),1,8)=round(2.67)=3. The thin weekly headroom does NOT
+# pull N down — this is the key behavior change from the old coupled model.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 30 "$r" 70 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "just under pace (hw=1), used_5h=70 → ramp N=3" "3" "$out"
 tw_teardown
 
 # --- Test 17: non-numeric used_weekly sanitized fail-closed → 1 -------------
@@ -7855,8 +7946,8 @@ tw_teardown
 echo "Test: early-week AC smoke used_weekly=20, used_5h=2 → N>=1 (no stall)"
 tw_setup
 # Issue AC: at x≈0.5 (mid-week) with used_weekly=20, used_5h=2, the chain must
-# not stall. x=0.5 → W=31, hw=11 → F=50+(30)*(11/20)=66.5, h5=66.5-2=64.5 →
-# N=clamp(round(8*64.5/15),1,8)=8 (>=1).
+# not stall. x=0.5 → W=31, hw=11>0 → gate open. used_5h=2 <= floor5=50 → ramp
+# gives max workers = 8 (>=1).
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 20 "$r" 2 99999999
@@ -7878,7 +7969,7 @@ tw_setup
 # with defaults (terminal=100, cap=10) it evaluates to 80 at r=2, 90 at r=1,
 # 100 at r=0 (r = remaining_seconds / 18000). Place x by remaining-window count
 # (resets_at = NOW + r*18000) and hold used_5h=0 so 5h headroom is full and
-# N>=1 whenever F>0. The r=1 and r=0 lower probes are DISCRIMINATING: the
+# N>=1 whenever the gate is open. The r=1 and r=0 lower probes are DISCRIMINATING: the
 # pre-envelope smooth curve (W=85.7 at r=1, W=90 at r=0) would have gated N=0.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 
@@ -7988,7 +8079,7 @@ tw_teardown
 
 echo "Test: --reopen-at pace pause → numeric crossing strictly inside the window"
 tw_setup
-# x=0.5 → W=31. used_weekly=35 > 31 → pace pause (F=0, target 0) while still far
+# x=0.5 → W=31. used_weekly=35 > 31 → pace pause (gate closed, target 0) while still far
 # below the absolute weekly cap (35 < 90). The reopen epoch is where W rises to
 # meet used_weekly=35, which is later than NOW but before the weekly reset.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
@@ -16607,6 +16698,7 @@ tick_setup() {
   cat > "$TMPDIR_TEST/dispatch-select-tick" <<FAKE
 #!/usr/bin/env bash
 echo "\$*" >> "$TMPDIR_TEST/logs/select-tick.log"
+echo "select" >> "$TMPDIR_TEST/logs/order.log"
 [[ -n "\${TICK_SEL_PRE:-}" ]] && printf '%s\n' "\$TICK_SEL_PRE"
 printf '%s\n' "\${TICK_DECISION:-empty}"
 exit \${TICK_SEL_RC:-0}
@@ -16628,9 +16720,19 @@ echo "\$*" >> "$TMPDIR_TEST/logs/spawn-job.log"
 echo "\${TICK_SPAWN_RESULT:-spawned}"
 exit 0
 FAKE
+  # Fake dispatch-refresh-rate-limits (#1127): records that it ran (to order.log
+  # for ordering assertions) and exits TICK_REFRESH_RC (default 0). The headless
+  # tick runs this before the budget read; tests assert it runs first and that a
+  # non-zero exit does not break the tick.
+  cat > "$TMPDIR_TEST/dispatch-refresh-rate-limits" <<FAKE
+#!/usr/bin/env bash
+echo refresh >> "$TMPDIR_TEST/logs/order.log"
+exit \${TICK_REFRESH_RC:-0}
+FAKE
   chmod +x "$TMPDIR_TEST/dispatch-select-tick" \
            "$TMPDIR_TEST/dispatch-materialize-spawn" \
-           "$TMPDIR_TEST/dispatch-spawn-job"
+           "$TMPDIR_TEST/dispatch-spawn-job" \
+           "$TMPDIR_TEST/dispatch-refresh-rate-limits"
 }
 
 tick_teardown() {
@@ -16638,7 +16740,7 @@ tick_teardown() {
   TMPDIR_TEST=""
   unset TICK_DECISION TICK_TOKEN TICK_SEL_RC TICK_MAT_RC \
     TICK_SEL_PRE TICK_MAT_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
-    DISPATCH_LOCK_FILE
+    DISPATCH_LOCK_FILE TICK_REFRESH_RC
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -17023,6 +17125,26 @@ assert_eq "auto-cap: no materialize call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
 assert_eq "auto-cap: no manual flag sent to select-tick" "0" \
   "$(grep -cF -- '--manual' "$TMPDIR_TEST/logs/select-tick.log" 2>/dev/null)"
+tick_teardown
+
+# --- #1127: refresh runs before select (budget read sees fresh telemetry) ----
+echo "Test: dispatch-tick refreshes telemetry before selecting (ordering)"
+tick_setup
+export TICK_DECISION="empty"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "refresh-ordering: exit 0" "0" "$rc"
+assert_eq "refresh-ordering: refresh runs before select" \
+  "$(printf 'refresh\nselect')" "$(cat "$TMPDIR_TEST/logs/order.log")"
+tick_teardown
+
+# --- #1127: probe failure is fail-safe — tick still routes its decision ------
+echo "Test: dispatch-tick refresh-probe failure does not break the tick"
+tick_setup
+export TICK_DECISION="empty" TICK_REFRESH_RC=1
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "refresh-failsafe: exit 0 despite probe failure" "0" "$rc"
+assert_eq "refresh-failsafe: tick still ran select after failed refresh" \
+  "$(printf 'refresh\nselect')" "$(cat "$TMPDIR_TEST/logs/order.log")"
 tick_teardown
 
 # ============================================================================
@@ -18334,6 +18456,193 @@ assert_eq "open-pr: dedup primary → rc 0" "0" "$rc"
 assert_eq "open-pr: dedup primary → exactly one Closes #1119 line" "1" "$(grep -cxF 'Closes #1119' "$TMPDIR_TEST/last-body.txt")"
 assert_eq "open-pr: dedup primary → close set is 1119 1120" "$(printf '1119\n1120')" "$(cat "$TMPDIR_TEST/close-set.txt")"
 open_pr_teardown
+
+echo ""
+echo "=== dispatch-refresh-rate-limits ==="
+
+# Headless telemetry probe for #1127. The network fetch is replaced by the
+# DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE seam — tests NEVER make a real
+# request. update-rate-limits.sh's writer-path override
+# (DISPATCH_RATE_LIMITS_STATE_FILE) points the atomic write at a temp file.
+
+rr_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/state" "$TMPDIR_TEST/fix"
+  cp "$SCRIPT_DIR/dispatch-refresh-rate-limits" "$TMPDIR_TEST/scripts/"
+  cp "$SCRIPT_DIR/update-rate-limits.sh" "$TMPDIR_TEST/scripts/"
+  cp "$SCRIPT_DIR/dispatch-target-workers" "$TMPDIR_TEST/scripts/"
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/"
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-refresh-rate-limits" \
+           "$TMPDIR_TEST/scripts/update-rate-limits.sh" \
+           "$TMPDIR_TEST/scripts/dispatch-target-workers" \
+           "$TMPDIR_TEST/scripts/dispatch-config-load"
+  export DISPATCH_RATE_LIMITS_STATE_FILE="$TMPDIR_TEST/state/rate_limits.json"
+}
+rr_teardown() {
+  rm -rf "$TMPDIR_TEST"; TMPDIR_TEST=""
+  unset DISPATCH_RATE_LIMITS_STATE_FILE DISPATCH_REFRESH_RATE_LIMITS_CREDS \
+    DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE
+}
+write_creds() {  # $1=file $2=expiresAt-ms
+  printf '{"claudeAiOauth":{"accessToken":"test-token","expiresAt":%s}}\n' "$2" > "$1"
+}
+write_headers() {  # $1=file ; remaining args are literal header lines
+  local f="$1"; : > "$f"; shift; for line in "$@"; do printf '%s\n' "$line" >> "$f"; done
+}
+
+# Canonical valid headers reused across cases.
+RR_H_5UTIL="anthropic-ratelimit-unified-5h-utilization: 0.22"
+RR_H_5RESET="anthropic-ratelimit-unified-5h-reset: 1780611000"
+RR_H_7UTIL="anthropic-ratelimit-unified-7d-utilization: 0.54"
+RR_H_7RESET="anthropic-ratelimit-unified-7d-reset: 1780880400"
+
+# CASE 1 — success: valid creds + valid headers → exit 0, canonical telemetry.
+rr_setup
+write_creds "$TMPDIR_TEST/fix/creds.json" 9999999999000
+write_headers "$TMPDIR_TEST/fix/headers.txt" \
+  "$RR_H_5UTIL" "$RR_H_5RESET" "$RR_H_7UTIL" "$RR_H_7RESET"
+export DISPATCH_REFRESH_RATE_LIMITS_CREDS="$TMPDIR_TEST/fix/creds.json"
+export DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE="$TMPDIR_TEST/fix/headers.txt"
+if out=$("$TMPDIR_TEST/scripts/dispatch-refresh-rate-limits" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "refresh success → exit 0" "0" "$rc"
+got=$(jq -S . "$DISPATCH_RATE_LIMITS_STATE_FILE")
+want=$(printf '%s' '{"five_hour":{"used_percentage":22,"resets_at":1780611000},"seven_day":{"used_percentage":54,"resets_at":1780880400}}' | jq -S .)
+assert_eq "refresh success → canonical telemetry" "$want" "$got"
+rr_teardown
+
+# CASE 2 — expired token: past expiresAt → non-zero exit, no write.
+rr_setup
+write_creds "$TMPDIR_TEST/fix/creds.json" 1
+write_headers "$TMPDIR_TEST/fix/headers.txt" \
+  "$RR_H_5UTIL" "$RR_H_5RESET" "$RR_H_7UTIL" "$RR_H_7RESET"
+export DISPATCH_REFRESH_RATE_LIMITS_CREDS="$TMPDIR_TEST/fix/creds.json"
+export DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE="$TMPDIR_TEST/fix/headers.txt"
+if out=$("$TMPDIR_TEST/scripts/dispatch-refresh-rate-limits" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "expired token → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "expired token → no state file written" "1" "$([[ ! -e "$DISPATCH_RATE_LIMITS_STATE_FILE" ]] && echo 1 || echo 0)"
+rr_teardown
+
+# CASE 3 — missing creds: nonexistent path → non-zero exit, no write.
+rr_setup
+write_headers "$TMPDIR_TEST/fix/headers.txt" \
+  "$RR_H_5UTIL" "$RR_H_5RESET" "$RR_H_7UTIL" "$RR_H_7RESET"
+export DISPATCH_REFRESH_RATE_LIMITS_CREDS="/nonexistent/creds.json"
+export DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE="$TMPDIR_TEST/fix/headers.txt"
+if out=$("$TMPDIR_TEST/scripts/dispatch-refresh-rate-limits" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "missing creds → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "missing creds → no state file written" "1" "$([[ ! -e "$DISPATCH_RATE_LIMITS_STATE_FILE" ]] && echo 1 || echo 0)"
+rr_teardown
+
+# CASE 4 — missing headers: rate-limit headers absent → non-zero exit, no write.
+rr_setup
+write_creds "$TMPDIR_TEST/fix/creds.json" 9999999999000
+write_headers "$TMPDIR_TEST/fix/headers.txt" \
+  "HTTP/2 401" "content-type: application/json"
+export DISPATCH_REFRESH_RATE_LIMITS_CREDS="$TMPDIR_TEST/fix/creds.json"
+export DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE="$TMPDIR_TEST/fix/headers.txt"
+if out=$("$TMPDIR_TEST/scripts/dispatch-refresh-rate-limits" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "missing headers → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "missing headers → no state file written" "1" "$([[ ! -e "$DISPATCH_RATE_LIMITS_STATE_FILE" ]] && echo 1 || echo 0)"
+rr_teardown
+
+# CASE 5a — malformed utilization: 5h-utilization "abc" → non-zero exit, no write.
+rr_setup
+write_creds "$TMPDIR_TEST/fix/creds.json" 9999999999000
+write_headers "$TMPDIR_TEST/fix/headers.txt" \
+  "anthropic-ratelimit-unified-5h-utilization: abc" \
+  "$RR_H_5RESET" "$RR_H_7UTIL" "$RR_H_7RESET"
+export DISPATCH_REFRESH_RATE_LIMITS_CREDS="$TMPDIR_TEST/fix/creds.json"
+export DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE="$TMPDIR_TEST/fix/headers.txt"
+if out=$("$TMPDIR_TEST/scripts/dispatch-refresh-rate-limits" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "malformed utilization → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "malformed utilization → no state file written" "1" "$([[ ! -e "$DISPATCH_RATE_LIMITS_STATE_FILE" ]] && echo 1 || echo 0)"
+rr_teardown
+
+# CASE 5b — malformed reset: 5h-reset "12.5" (non-integer) → non-zero exit, no write.
+rr_setup
+write_creds "$TMPDIR_TEST/fix/creds.json" 9999999999000
+write_headers "$TMPDIR_TEST/fix/headers.txt" \
+  "$RR_H_5UTIL" \
+  "anthropic-ratelimit-unified-5h-reset: 12.5" \
+  "$RR_H_7UTIL" "$RR_H_7RESET"
+export DISPATCH_REFRESH_RATE_LIMITS_CREDS="$TMPDIR_TEST/fix/creds.json"
+export DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE="$TMPDIR_TEST/fix/headers.txt"
+if out=$("$TMPDIR_TEST/scripts/dispatch-refresh-rate-limits" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "malformed reset → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "malformed reset → no state file written" "1" "$([[ ! -e "$DISPATCH_RATE_LIMITS_STATE_FILE" ]] && echo 1 || echo 0)"
+rr_teardown
+
+# CASE 5c — tampered token: a token with characters outside the OAuth set
+# (a space) fails the charset guard before any header is placed → no write.
+rr_setup
+printf '{"claudeAiOauth":{"accessToken":"bad token","expiresAt":9999999999000}}\n' > "$TMPDIR_TEST/fix/creds.json"
+write_headers "$TMPDIR_TEST/fix/headers.txt" \
+  "$RR_H_5UTIL" "$RR_H_5RESET" "$RR_H_7UTIL" "$RR_H_7RESET"
+export DISPATCH_REFRESH_RATE_LIMITS_CREDS="$TMPDIR_TEST/fix/creds.json"
+export DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE="$TMPDIR_TEST/fix/headers.txt"
+if out=$("$TMPDIR_TEST/scripts/dispatch-refresh-rate-limits" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "tampered token → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "tampered token → no state file written" "1" "$([[ ! -e "$DISPATCH_RATE_LIMITS_STATE_FILE" ]] && echo 1 || echo 0)"
+rr_teardown
+
+# CASE 5d — bad model override: a model name with a quote fails the charset
+# guard before the JSON body is built → no write.
+rr_setup
+write_creds "$TMPDIR_TEST/fix/creds.json" 9999999999000
+write_headers "$TMPDIR_TEST/fix/headers.txt" \
+  "$RR_H_5UTIL" "$RR_H_5RESET" "$RR_H_7UTIL" "$RR_H_7RESET"
+export DISPATCH_REFRESH_RATE_LIMITS_CREDS="$TMPDIR_TEST/fix/creds.json"
+export DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE="$TMPDIR_TEST/fix/headers.txt"
+export DISPATCH_REFRESH_RATE_LIMITS_MODEL='haiku","injected":"x'
+if out=$("$TMPDIR_TEST/scripts/dispatch-refresh-rate-limits" 2>/dev/null); then rc=0; else rc=$?; fi
+unset DISPATCH_REFRESH_RATE_LIMITS_MODEL
+assert_eq "bad model override → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "bad model override → no state file written" "1" "$([[ ! -e "$DISPATCH_RATE_LIMITS_STATE_FILE" ]] && echo 1 || echo 0)"
+rr_teardown
+
+# CASE 5e — non-https endpoint: with the network branch taken (no headers seam),
+# a non-https ENDPOINT trips the TLS guard and exits before curl runs — the
+# bearer token is never sent in cleartext, and no state file is written.
+rr_setup
+write_creds "$TMPDIR_TEST/fix/creds.json" 9999999999000
+export DISPATCH_REFRESH_RATE_LIMITS_CREDS="$TMPDIR_TEST/fix/creds.json"
+export DISPATCH_REFRESH_RATE_LIMITS_ENDPOINT="http://127.0.0.1:9/never"
+if out=$("$TMPDIR_TEST/scripts/dispatch-refresh-rate-limits" 2>/dev/null); then rc=0; else rc=$?; fi
+unset DISPATCH_REFRESH_RATE_LIMITS_ENDPOINT
+assert_eq "non-https endpoint → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "non-https endpoint → no state file written" "1" "$([[ ! -e "$DISPATCH_RATE_LIMITS_STATE_FILE" ]] && echo 1 || echo 0)"
+rr_teardown
+
+# CASE 6 — refresh→budget regression for #1127. Seed a FROZEN pre-reset file
+# (used 95%, resets_at in the past); the probe overwrites it with reopened-window
+# telemetry; the REAL dispatch-target-workers then computes a positive target
+# from the refreshed file — the end-to-end self-resume the issue requires.
+rr_setup
+printf '{"five_hour":{"used_percentage":95,"resets_at":1},"seven_day":{"used_percentage":95,"resets_at":1}}\n' > "$DISPATCH_RATE_LIMITS_STATE_FILE"
+write_creds "$TMPDIR_TEST/fix/creds.json" 9999999999000
+RR_R7=$(tw_resets_for_x 0.5)         # mid-week 7d reset
+RR_R5=$((TW_NOW + 18000))            # 5h reset comfortably in the future
+write_headers "$TMPDIR_TEST/fix/headers.txt" \
+  "anthropic-ratelimit-unified-5h-utilization: 0.05" \
+  "anthropic-ratelimit-unified-5h-reset: $RR_R5" \
+  "anthropic-ratelimit-unified-7d-utilization: 0.10" \
+  "anthropic-ratelimit-unified-7d-reset: $RR_R7"
+export DISPATCH_REFRESH_RATE_LIMITS_CREDS="$TMPDIR_TEST/fix/creds.json"
+export DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE="$TMPDIR_TEST/fix/headers.txt"
+if out=$("$TMPDIR_TEST/scripts/dispatch-refresh-rate-limits" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "regression: probe refreshed reopened window → exit 0" "0" "$rc"
+export DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH="$DISPATCH_RATE_LIMITS_STATE_FILE"
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+target=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+TOTAL=$((TOTAL + 1))
+if [[ "$target" =~ ^[0-9]+$ && "$target" -ge 1 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: regression: reopened window → target >= 1 (got $target)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: regression: reopened window → target >= 1 (got '$target')"
+fi
+unset DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH DISPATCH_TARGET_WORKERS_NOW
+rr_teardown
 
 # ============================================================================
 # summary
