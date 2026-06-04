@@ -1,85 +1,66 @@
 #!/usr/bin/env bash
 # office-hours — the single user entry point to the office-hours queue (#759).
 #
-# The office-hours queue is "open issues carrying the dispatch:office-hours
-# label" (the label is issue-anchored, #868/#909). The user runs this command
-# during their office hours; it either RESUMES a blocked session that is still
-# live, or STARTS a fresh /office-hours session for a sessionless labeled item.
+# A thin dispatcher over office-hours-select-target, which is the single source
+# of truth for the queue: it enumerates the open dispatch:office-hours issues and
+# their <N>-* worktrees once, makes one per-item liveness call, and emits exactly
+# one disposition. This script reads that disposition and acts on it — it does no
+# enumeration or liveness checking of its own.
 #
-# This is the deliberate complement to office-hours-select-target, which selects
-# the oldest labeled item whose <N>-* worktree has NO live session and skips any
-# item that still has one — naming "the office-hours entry-point script (#759)"
-# as the piece responsible for resuming those skipped live-session items.
+# Dispositions and the action each triggers:
+#   resume <sessionId>            → exec `claude --resume <sessionId>`: the user
+#                                   supplies the pending input to a still-live
+#                                   blocked session. No skill is loaded.
+#   parked-router <sessionId> ... → exec `claude --resume <sessionId>`: re-engage
+#                                   a target-less parked dispatch router (#1010),
+#                                   the artifact dispatch-self-close's continuation
+#                                   invariant keeps alive. No skill is loaded.
+#   office-hours <N> <phase> <pr> → exec `claude "/office-hours <N> <phase> <pr>"`:
+#                                   a fresh interactive session running the
+#                                   /office-hours skill, with the already-selected
+#                                   target passed as arguments so the skill skips
+#                                   re-selection. A Claude session + skill context
+#                                   is loaded only on this path — only when there
+#                                   is actual residue work.
+#   empty                         → print a queue-empty message and exit WITHOUT
+#                                   launching Claude. The empty queue is handled
+#                                   entirely in bash; no session is booted.
 #
-# Behavior, in order:
-#   1. List open issues carrying dispatch:office-hours, sorted oldest-first by
-#      createdAt — the same gh query office-hours-select-target uses.
-#   2. For each labeled issue (oldest-first), for each of its <N>-* worktree
-#      paths, ask claude_sessions_with_name "$(basename "$path")" whether a live
-#      session owns that worktree (liveness keys on session name = worktree
-#      basename, #872 — NOT cwd). The first live session found wins: take the
-#      sessionId (the first TSV field) and `exec claude --resume <sessionId>` so
-#      the user supplies the pending input. Resume wins over fresh whenever any
-#      labeled item is live.
-#   3. If no labeled item has a live session anywhere, `exec claude /office-hours`
-#      — a fresh interactive session running the /office-hours skill, which picks
-#      up a sessionless labeled item. An empty queue naturally lands here too.
+# Liveness now lives entirely in the selector, under a single UNKNOWN→skip
+# fail-safe convention — the old entry-vs-selector dual-convention coordination
+# (this script treating UNKNOWN as not-resumable while the selector treated it as
+# occupied) is gone, because the enumeration is no longer duplicated.
 #
-# A non-zero return from claude_sessions_with_name (UNKNOWN daemon) or empty
-# output means "nothing resumable here" → fall through to the next path/issue,
-# and ultimately to the fresh /office-hours session. This mirrors
-# office-hours-select-target's fail-safe convention from the other direction:
-# select-target treats UNKNOWN as occupied (left for resume); here UNKNOWN is
-# treated as not-resumable (fall through to fresh), so the two paths never both
-# claim an item whose liveness cannot be determined.
-#
-# Sandbox: the liveness check shells out to `claude agents --json` (via
+# Sandbox: the selector shells out to `claude agents --json` (via
 # lib-claude-agents.sh), which reaches the local daemon over a Unix socket — run
 # this script with `dangerouslyDisableSandbox: true`. See `.claude/rules/sandbox.md`.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "$SCRIPT_DIR/lib.sh"
-source "$SCRIPT_DIR/lib-claude-agents.sh"
 
+# Launch target only. The selector reads CLAUDE_AGENTS_CMD from the environment
+# for its own liveness queries (default `claude`); this script does not set it.
 CLAUDE_CMD="${OFFICE_HOURS_CLAUDE_CMD:-claude}"
-# The sourced helper reads CLAUDE_AGENTS_CMD for its own `claude agents --json`
-# call; point it at the same command so a single fake covers both the liveness
-# query and the launch.
-export CLAUDE_AGENTS_CMD="$CLAUDE_CMD"
 
-# Open issues carrying dispatch:office-hours, with their creation times — the
-# same query office-hours-select-target uses.
-ISSUE_LIST=$(gh issue list --label dispatch:office-hours --state open --json number,createdAt)
-
-# Map each registered <N>-* worktree to its on-disk path(s), keyed by issue
-# number — identical construction to office-hours-select-target.
-declare -A WORKTREE_PATHS_BY_NUM=()
-while IFS= read -r wt_record; do
-  split_worktree_record "$wt_record"
-  [[ -z "$WT_PATH" ]] && continue
-  if [[ -n "$WT_NUM" ]]; then
-    WORKTREE_PATHS_BY_NUM["$WT_NUM"]="${WORKTREE_PATHS_BY_NUM[$WT_NUM]:-}$WT_PATH"$'\n'
-  fi
-done < <(list_worktree_records)
-
-# Oldest-first: the first live session found wins.
-SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[].number')
-while IFS= read -r issue_num; do
-  [[ -z "$issue_num" ]] && continue
-  paths="${WORKTREE_PATHS_BY_NUM[$issue_num]:-}"
-  [[ -z "$paths" ]] && continue
-  while IFS= read -r path; do
-    [[ -z "$path" ]] && continue
-    # A non-zero return (UNKNOWN daemon) or empty output = "nothing resumable
-    # here" → continue to the next path/issue.
-    if sessions=$(claude_sessions_with_name "$(basename "$path")") && [[ -n "$sessions" ]]; then
-      # The sessionId is the first TSV field of the first line.
-      session_id=$(printf '%s\n' "$sessions" | head -n 1 | cut -f1)
-      exec "$CLAUDE_CMD" --resume "$session_id"
-    fi
-  done <<< "$paths"
-done <<< "$SORTED"
-
-# No labeled item has a live session (or the queue is empty): start fresh.
-exec "$CLAUDE_CMD" "/office-hours"
+# One call to the single source of truth; dispatch on the returned verb.
+directive=$("$SCRIPT_DIR/office-hours-select-target")
+read -r verb a b c <<< "$directive"
+case "$verb" in
+  resume|parked-router)
+    # a = the live worker / parked-router sessionId.
+    exec "$CLAUDE_CMD" --resume "$a"
+    ;;
+  office-hours)
+    # a b c = <N> <phase> <pr-or-dash>, passed through so /office-hours Step 0
+    # uses them and skips re-selection.
+    exec "$CLAUDE_CMD" "/office-hours $a $b $c"
+    ;;
+  empty)
+    echo "office-hours: queue is empty — nothing to resume or start."
+    exit 0
+    ;;
+  *)
+    echo "office-hours: unexpected directive from office-hours-select-target: $directive" >&2
+    exit 1
+    ;;
+esac
