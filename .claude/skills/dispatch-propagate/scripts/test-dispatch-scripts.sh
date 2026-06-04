@@ -16447,6 +16447,7 @@ tick_setup() {
   cat > "$TMPDIR_TEST/dispatch-select-tick" <<FAKE
 #!/usr/bin/env bash
 echo "\$*" >> "$TMPDIR_TEST/logs/select-tick.log"
+echo "select" >> "$TMPDIR_TEST/logs/order.log"
 [[ -n "\${TICK_SEL_PRE:-}" ]] && printf '%s\n' "\$TICK_SEL_PRE"
 printf '%s\n' "\${TICK_DECISION:-empty}"
 exit \${TICK_SEL_RC:-0}
@@ -16468,9 +16469,19 @@ echo "\$*" >> "$TMPDIR_TEST/logs/spawn-job.log"
 echo "\${TICK_SPAWN_RESULT:-spawned}"
 exit 0
 FAKE
+  # Fake dispatch-refresh-rate-limits (#1127): records that it ran (to order.log
+  # for ordering assertions) and exits TICK_REFRESH_RC (default 0). The headless
+  # tick runs this before the budget read; tests assert it runs first and that a
+  # non-zero exit does not break the tick.
+  cat > "$TMPDIR_TEST/dispatch-refresh-rate-limits" <<FAKE
+#!/usr/bin/env bash
+echo refresh >> "$TMPDIR_TEST/logs/order.log"
+exit \${TICK_REFRESH_RC:-0}
+FAKE
   chmod +x "$TMPDIR_TEST/dispatch-select-tick" \
            "$TMPDIR_TEST/dispatch-materialize-spawn" \
-           "$TMPDIR_TEST/dispatch-spawn-job"
+           "$TMPDIR_TEST/dispatch-spawn-job" \
+           "$TMPDIR_TEST/dispatch-refresh-rate-limits"
 }
 
 tick_teardown() {
@@ -16478,7 +16489,7 @@ tick_teardown() {
   TMPDIR_TEST=""
   unset TICK_DECISION TICK_TOKEN TICK_SEL_RC TICK_MAT_RC \
     TICK_SEL_PRE TICK_MAT_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
-    DISPATCH_LOCK_FILE
+    DISPATCH_LOCK_FILE TICK_REFRESH_RC
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -16863,6 +16874,26 @@ assert_eq "auto-cap: no materialize call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
 assert_eq "auto-cap: no manual flag sent to select-tick" "0" \
   "$(grep -cF -- '--manual' "$TMPDIR_TEST/logs/select-tick.log" 2>/dev/null)"
+tick_teardown
+
+# --- #1127: refresh runs before select (budget read sees fresh telemetry) ----
+echo "Test: dispatch-tick refreshes telemetry before selecting (ordering)"
+tick_setup
+export TICK_DECISION="empty"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "refresh-ordering: exit 0" "0" "$rc"
+assert_eq "refresh-ordering: refresh runs before select" \
+  "$(printf 'refresh\nselect')" "$(cat "$TMPDIR_TEST/logs/order.log")"
+tick_teardown
+
+# --- #1127: probe failure is fail-safe — tick still routes its decision ------
+echo "Test: dispatch-tick refresh-probe failure does not break the tick"
+tick_setup
+export TICK_DECISION="empty" TICK_REFRESH_RC=1
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "refresh-failsafe: exit 0 despite probe failure" "0" "$rc"
+assert_eq "refresh-failsafe: tick still ran select after failed refresh" \
+  "$(printf 'refresh\nselect')" "$(cat "$TMPDIR_TEST/logs/order.log")"
 tick_teardown
 
 # ============================================================================
