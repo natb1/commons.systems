@@ -38,6 +38,16 @@
 #   notify target-blocked  explicit target is closed or has an open blocker; the
 #                          issue is parked via dispatch-apply-office-hours and
 #                          the lock released at the guard.
+#   notify target-done     explicit spawn-boundary done re-check (#1109): the
+#                          resolved target's PR went ready (non-draft) before the
+#                          worker booted — no phase to run. A user-facing
+#                          notification; no worker spawned. The lock is released
+#                          right after process_one_target returns (this is a
+#                          pre-spawn soft return).
+#   drain target-done      autonomous single-target (gap<=1) spawn-boundary done
+#                          re-check (#1109): same as above but the next tick
+#                          proceeds to the next priority. Lock released after the
+#                          return.
 #   notify spawn-failed    dispatch-spawn-worker exited non-zero; lock released
 #                          after the failed spawn returns.
 #   drain worktree-conflict  the target worktree cannot be safely entered; the
@@ -74,6 +84,11 @@
 #                          processed target parked/skipped, or the queue emptied
 #                          before any spawn). Same detail/summary lines precede
 #                          it. Parked issues are visible via dispatch:office-hours.
+#                          A fan-out target found done at the spawn boundary
+#                          (#1109) is recorded as `propagate: skipped #<n>
+#                          (target-done)` and the loop continues to the next
+#                          distinct target — a normal terminal state, not a
+#                          failure.
 #
 # Lock-release points (#945): the lock is held THROUGH the spawn so the next
 # tick cannot re-select the target during the worker's boot gap. In a fan-out
@@ -152,15 +167,16 @@ OUTCOME=""
 WAITING_N=""
 
 # process_one_target <issue-N> <explicit|queue>
-# Runs the per-target sequence (Step 4 guards, Step 5 resolve, recovery marker,
-# Step 6a explicit-only readiness gate, Step 6b spawn) for ONE target. Does NOT
+# Runs the per-target sequence (Step 4 guards, the #1109 spawn-boundary done
+# re-check, Step 5 resolve, recovery marker, Step 6a explicit-only readiness
+# gate, Step 6b spawn) for ONE target. Does NOT
 # release the lock and does NOT exit — the caller owns lock release and process
 # exit. Sets the global OUTCOME on every soft path and returns 0; returns 2 on a
 # hard error (the caller maps that to release_lock; exit 2).
 process_one_target() {
   local n="$1" mode="$2"
   local PR LEAF ISSUE_STATE BLOCKERS WT_DECISION WT_ACTION WT_REST
-  local WORKTREE_PATH BRANCH PROJECT_ROOT rc wt_basename
+  local WORKTREE_PATH BRANCH PROJECT_ROOT rc wt_basename PHASE
 
   # --- Step 4: explicit-path guards (skipped entirely in queue mode) ---------
   # Queue rows were already vetted by dispatch-select-target (leaf, blockers,
@@ -211,6 +227,32 @@ process_one_target() {
       echo "dispatch-materialize-spawn: dispatch-check-blockers failed (exit $rc) for #$n" >&2
       return 2
     fi
+  fi
+
+  # --- Spawn-boundary done re-check (#1109) — both modes ----------------------
+  # Selection (dispatch-select-target) and the explicit leaf trace both ran
+  # against a possibly-stale PR state; a draft `review` PR can flip to ready
+  # (non-draft) in the worker boot gap. A worker spawned onto a done (ready) PR
+  # has no phase to run — it would route `STOP done` and trigger a spurious
+  # dispatch:office-hours flag. Re-derive the resolved target's phase HERE,
+  # before any worktree resolution / merge / spawn work, and refuse a done
+  # target. dispatch-phase prints `done` for a non-draft PR regardless of CI; a
+  # draft with pending CI exits 3 (no stdout) and any non-`done` phase falls
+  # through to normal processing — this gate catches `done` only, it does not
+  # re-gate CI (the router owns that). Exit 3 is the ONLY non-zero we tolerate:
+  # any other failure (gh/jq error) is genuine and must surface, not silently
+  # fall through onto a possibly-`done` PR — a hard return 2, like every other
+  # tool failure in this function.
+  PHASE_RC=0
+  PHASE=$("$SCRIPT_DIR/dispatch-phase" "$n" 2>/dev/null) || PHASE_RC=$?
+  if [[ "$PHASE_RC" -ne 0 && "$PHASE_RC" -ne 3 ]]; then
+    echo "dispatch-materialize-spawn: dispatch-phase failed (exit $PHASE_RC) for #$n" >&2
+    return 2
+  fi
+  if [[ "$PHASE" == "done" ]]; then
+    echo "target #$n is done (ready PR); not dispatching"
+    OUTCOME=target-done
+    return 0
   fi
 
   # --- Step 5: resolve the worktree ------------------------------------------
@@ -315,6 +357,18 @@ if [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); then
   case "$OUTCOME" in
     spawned)           echo "propagate" ;;
     target-blocked)    echo "notify target-blocked" ;;
+    target-done)
+      # Spawn-boundary done re-check (#1109): the resolved target's PR went ready
+      # before the worker booted — no phase to run. Explicit dispatch emits a
+      # user-facing notification; an autonomous single-target (gap<=1) drains so the
+      # next tick proceeds to the next priority. Both tokens pass through
+      # dispatch-tick's `notify *` / `drain *` routing unchanged.
+      if [[ "$MODE" == "explicit" ]]; then
+        echo "notify target-done"
+      else
+        echo "drain target-done"
+      fi
+      ;;
     spawn-failed)      echo "notify spawn-failed" ;;
     worktree-conflict) echo "drain worktree-conflict" ;;
     ci-waiting)
@@ -368,6 +422,12 @@ while :; do
   case "$OUTCOME" in
     spawned)        spawned=$(( spawned + 1 )); echo "propagate: spawned #$cur_n" ;;
     target-blocked) echo "propagate: parked #$cur_n ($OUTCOME)" ;;
+    target-done)
+      # Spawn-boundary done re-check (#1109): the resolved target went ready before
+      # spawn — no phase to run. Record a skip and continue filling the gap from the
+      # next distinct target. A normal terminal state, not a failure.
+      echo "propagate: skipped #$cur_n (target-done)"
+      ;;
     *)
       echo "propagate: skipped #$cur_n ($OUTCOME)"
       # ci-waiting never occurs in fan-out: the readiness gate is explicit-only

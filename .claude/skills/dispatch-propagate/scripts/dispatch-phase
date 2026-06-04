@@ -12,6 +12,12 @@
 # dispatch-ci-ready first — only invoke dispatch-phase for a target that
 # dispatch-ci-ready reports as `ready`.
 #
+# Exception — the spawn-boundary done re-check (dispatch-materialize-spawn,
+# #1109) deliberately does NOT gate on dispatch-ci-ready: it asks only "is this
+# PR done?" and relies on the exit-3/no-stdout contract above to let a draft
+# with pending CI fall through (the router owns the CI gate). Such a caller must
+# treat exit 3 as the sole tolerated non-zero and surface any other failure.
+#
 # Argument resolution:
 #   - All-digit arg: treated as an issue number. The matching PR is the one
 #     whose headRefName starts with "<issue>-".
