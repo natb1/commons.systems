@@ -294,19 +294,22 @@ nothing (fail-safe). Later #1044 sub-issues build on this ledger: #1046 extends
 provisioning out of the held-lock loop; #1048 releases the lock after
 reserve+spawn rather than after registration.
 
-`dispatch-target-workers` runs a sequential four-stage pace-relative pipeline
-(W → F → N) to decide how many concurrent busy workers should run; the live
-count used for the `busy_workers` addend is `claude_agents_count_busy_workers`
-— busy sessions whose name matches the real worker shape `^[0-9]+-` (NOT a
-`dispatch-worker-*` prefix, which never existed in production — that was the
-Defect-B bug this issue fixed). Instead of a
-flat weekly cap, the weekly budget follows a
-**cumulative-pace curve** keyed to how far through the weekly rate-limit window
-we are (in 5-hour-window terms), so token spend spreads smoothly across the
-week rather than bursting early and idling. The controller is intentionally
-more conservative early-week than a flat-cap design — it throttles whenever
-actual usage runs ahead of the curve, even when the weekly total is far below
-the cap.
+`dispatch-target-workers` decides how many concurrent busy workers should run
+through a three-stage pipeline: Stage 1 computes the weekly pace curve W;
+Stage 2 applies a binary weekly gate; Stage 3 applies a linear 5h ramp. The
+live count used for the `busy_workers` addend is
+`claude_agents_count_busy_workers` — busy sessions whose name matches the real
+worker shape `^[0-9]+-` (NOT a `dispatch-worker-*` prefix, which never existed
+in production — that was the Defect-B bug this issue fixed). Instead of a flat
+weekly cap, the weekly budget follows a **cumulative-pace curve** keyed to how
+far through the weekly rate-limit window we are (in 5-hour-window terms), so
+token spend spreads smoothly across the week rather than bursting early and
+idling. The controller is intentionally more conservative early-week than a
+flat-cap design — it throttles whenever actual usage runs ahead of the curve,
+even when the weekly total is far below the cap.
+
+Weekly pace decides *whether* to spend (binary gate); the 5h ramp decides
+*how many*.
 
 ```
 WEEK_SECONDS = 604800
@@ -319,13 +322,15 @@ end = floor + (p+1)*(target_weekly/T - floor)                # solve so W(1)=tar
 end = min(end, cap)                                          # per-window hard ceiling
 W   = T*( floor*x + (end-floor)*x^(p+1)/(p+1) )              # cumulative target now
 
-# Stage 2 — 5h target F (% of 5h limit)
+# Stage 2 — binary weekly gate
 hw = W - used_weekly
-F  = (hw <= 0) ? 0 : floor5 + (ceil5-floor5)*clamp(hw/Hw, 0, 1)
+if hw <= 0: N = 0   (pause)        # at/over pace
 
-# Stage 3 — workers N
-h5 = F - used_5h
-N  = (h5 <= 0) ? 0 : clamp(round(max_workers * h5/H5), 1, max_workers)
+# Stage 3 — 5h ramp (gate open)
+span = ceil5 - floor5
+h5   = ceil5 - used_5h
+N = (h5 <= 0) ? 0 : (span <= 0) ? max_workers
+                                : clamp(round(max_workers * h5/span), 1, max_workers)
 print N
 ```
 
@@ -336,11 +341,10 @@ print N
   terminal `W(1)` below `target_weekly` (a deliberate hard ceiling), so at the
   defaults `W(1)=90` only because the solved increment `end≈4.3` stays under
   the `cap=10`.
-- `F=0` when ahead of pace (`used_weekly >= W`); the `floor5..ceil5` band opens
-  with weekly headroom.
-- `N=0` only at/over the 5h target F (includes the `F=0` ahead-of-pace pause);
-  `1..max_workers` below. No `0 >= 0` router deadlock during healthy
-  under-budget operation.
+- Gate closed (`hw <= 0`, at or over pace) → N=0 regardless of `used_5h`.
+- Gate open (`hw > 0`) → N is a pure function of `used_5h`: max workers at/below
+  `floor5`, 0 at/above `ceil5`. The clamp keeps N≥1 for any `used_5h` strictly
+  below `ceil5`. No router deadlock during healthy under-budget operation.
 
 **Table A — weekly curve vs. elapsed** (defaults; `used_weekly=0`, `used_5h=0`):
 
@@ -352,22 +356,22 @@ print N
 | 0.90 | 76 | 8 |
 | ~1.0 | 90 | 8 |
 
-At these defaults, `W >= Hw=20` for `x >= 0.5`, so `F=ceil5=80` and
-`h5=80 > H5=15`, giving `N=max_workers=8`. At `x=0.25`, `W=12 < Hw=20`,
-so `F=68` and `N=8` (h5=68 still exceeds H5=15 × max_workers threshold).
+At these defaults, `used_5h=0` and `hw > 0` at every row, so the gate is open
+and `h5 = ceil5 - 0 = 80 > 0`, giving `N=max_workers=8` across the board.
 
-**Table B — 5h target and workers at mid-week** (defaults; `x=0.5`, `W=31`):
+**Table B — binary gate + 5h ramp at mid-week** (defaults; `x=0.5`, `W=31`):
 
-| used_weekly (%) | hw (=W−used_weekly) | F | used_5h (%) | target_N |
-|---:|---:|---:|---:|---:|
-| 11 | 20 | 80 |  0 | 8 |
-| 11 | 20 | 80 | 65 | 8 |
-| 11 | 20 | 80 | 80 | 0 |
-| 21 | 10 | 65 |  0 | 8 |
-| 21 | 10 | 65 | 50 | 8 |
-| 21 | 10 | 65 | 58 | 4 |
-| 31 |  0 |  0 |  0 | 0 (at pace) |
-| 40 | −9 |  0 |  0 | 0 (ahead of pace) |
+| used_weekly (%) | hw (=W−used_weekly) | gate | used_5h (%) | target_N |
+|---:|---:|:---:|---:|---:|
+| 20 | 11 | open | 50 | 8 |
+| 20 | 11 | open | 55 | 7 |
+| 20 | 11 | open | 60 | 5 |
+| 20 | 11 | open | 65 | 4 |
+| 20 | 11 | open | 70 | 3 |
+| 20 | 11 | open | 75 | 1 |
+| 20 | 11 | open | 80 | 0 |
+| 31 |  0 | closed | 0 | 0 (at pace) |
+| 40 | −9 | closed | 0 | 0 (over pace) |
 
 Tunables (each optional in `dispatch.config/target-workers.json`; defaults
 baked into the script):
@@ -378,18 +382,17 @@ baked into the script):
 | `weekly_increment_floor_pct` | 1 | per-window floor |
 | `weekly_increment_cap_pct` | 10 | per-window hard ceiling |
 | `weekly_curve_power` (`p`) | 1 | convexity; >1 back-loads spend later in the week |
-| `weekly_headroom_taper_pct` (`Hw`) | 20 | weekly headroom earning full F ceiling |
-| `five_hour_target_floor_pct` (`floor5`) | 50 | F band floor |
-| `five_hour_target_ceiling_pct` (`ceil5`) | 80 | F band ceiling |
-| `five_hour_headroom_taper_pct` (`H5`) | 15 | 5h headroom → max workers |
+| `five_hour_target_floor_pct` (`floor5`) | 50 | `used_5h` % at which workers reach max (gate open) |
+| `five_hour_target_ceiling_pct` (`ceil5`) | 80 | `used_5h` % at which workers reach zero (gate open) |
 | `max_concurrent_workers` | 8 | max worker count |
 
 Recalibration: raise `weekly_curve_power` to back-load spend later in the
 week (a higher `p` makes the curve concave up, so `W` grows slowly early and
 accelerates toward the end). `weekly_increment_cap_pct` hard-caps any single
 5h window's share regardless of curve shape — raise it only if early spending
-is acceptable. Raise `max_concurrent_workers` for more parallelism when
-headroom is comfortable.
+is acceptable. Raise `max_concurrent_workers` for more parallelism when under
+pace. Adjust `five_hour_target_floor_pct` and `five_hour_target_ceiling_pct`
+to shift where the 5h ramp starts and ends.
 
 Keep `weekly_increment_floor_pct <= target_weekly_usage_pct / T` (with `T=34`
 five-hour windows, i.e. `target_weekly_usage_pct >= 34 * floor`). Below that the
@@ -410,7 +413,7 @@ or the `seven_day` block is absent (missing `used_weekly` or `resets_at_weekly`,
 or a malformed `now`), `dispatch-target-workers` prints `1` and writes a
 one-line note to stderr — the chain degrades to "spawn one per tick". When only
 `five_hour` is absent while `seven_day` is present, Stages 1–3 run with
-`used_5h` treated as 0 (N scales from F alone). Non-numeric `used_*` values
+`used_5h` treated as 0 — gate-open → max workers. Non-numeric `used_*` values
 are treated as missing (fail-closed). The stdout contract — a single integer —
 and the router gate `LIVE_COUNT >= TARGET_N` are unchanged.
 
@@ -430,14 +433,13 @@ the telemetry, identifies the earliest blocking `resets_at`, and arms the
 timer there.
 
 **Pace-curve pause** — `used_weekly >= W(x)` (usage running ahead of the
-smooth cumulative curve — the `F=0 ahead-of-pace` row in Stage 2; see the
-*Concurrency budgeting* section). The 5h target band collapses to `F=0` so
-the target is 0, even when `used_weekly` is far below the absolute weekly cap.
-This stall is **transient and self-clearing**: `W` rises monotonically over
-time while `used_weekly` stays flat (no workers spending), so the budget
-reopens on its own at the curve-crossing epoch where `W(x) = used_weekly`.
-When no absolute cap is hit but weekly telemetry is present,
-`dispatch-schedule-reseed` consults `dispatch-target-workers --reopen-at`,
+smooth cumulative curve; see the *Concurrency budgeting* section). The binary
+weekly gate closes (`hw <= 0`), driving N=0 even when `used_weekly` is far
+below the absolute weekly cap. This stall is **transient and self-clearing**:
+`W` rises monotonically over time while `used_weekly` stays flat (no workers
+spending), so the budget reopens on its own at the curve-crossing epoch where
+`W(x) = used_weekly`. When no absolute cap is hit but weekly telemetry is
+present, `dispatch-schedule-reseed` consults `dispatch-target-workers --reopen-at`,
 which solves `W(x) = used_weekly` by bisection over the monotonic Stage-1
 curve and returns the curve-crossing epoch. The reseed arms a
 `dispatch-reseed-<fire>` timer at that crossing. `--reopen-at` returns `none`

@@ -7086,21 +7086,21 @@ out_compact=$(printf '%s' "$out" | jq -c '.')
 assert_eq "empty object prints {}" "{}" "$out_compact"
 config_teardown
 
-# --- Test 12: weekly_headroom_taper_pct: 0 is rejected (must be > 0) --------
+# --- Test 12: five_hour_target_floor_pct: 0 is rejected (must be > 0) --------
 
-echo "Test: weekly_headroom_taper_pct: 0 exits 1 and stderr says must be > 0"
+echo "Test: five_hour_target_floor_pct: 0 exits 1 and stderr says must be > 0"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"weekly_headroom_taper_pct": 0}
+{"five_hour_target_floor_pct": 0}
 EOF
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
-assert_eq "weekly_headroom_taper_pct 0 exits 1" "1" "$rc"
+assert_eq "five_hour_target_floor_pct 0 exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"weekly_headroom_taper_pct"* && "$err" == *"must be > 0"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: weekly_headroom_taper_pct 0 stderr says must be > 0"
+if [[ "$err" == *"five_hour_target_floor_pct"* && "$err" == *"must be > 0"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: five_hour_target_floor_pct 0 stderr says must be > 0"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_headroom_taper_pct 0 stderr says must be > 0"
+  FAIL=$((FAIL + 1)); echo "  FAIL: five_hour_target_floor_pct 0 stderr says must be > 0"
   echo "    stderr: $err"
 fi
 config_teardown
@@ -7303,9 +7303,9 @@ config_teardown
 # All telemetry inputs are env-overridable; tests rely on the overrides rather
 # than fixture files when shape matters more than the file path. The script
 # defaults are baked in (target_weekly=90, weekly_increment_floor=1,
-# weekly_increment_cap=10, weekly_curve_power=1, weekly_headroom_taper=20,
+# weekly_increment_cap=10, weekly_curve_power=1,
 # five_hour_target_floor=50, five_hour_target_ceiling=80,
-# five_hour_headroom_taper=15, max_workers=8); tests that vary tunables write a
+# max_workers=8); tests that vary tunables write a
 # target-workers.json into the config dir.
 #
 # The pace curve needs the elapsed fraction x of the weekly window. With
@@ -7393,15 +7393,15 @@ echo "Test: weekly curve reaches terminal only at week end (W < terminal mid-wee
 tw_setup
 # Mid-week (envelope-inactive x), the cumulative curve W is well below the
 # week-end terminal, so used_weekly just below the terminal is far ahead of
-# pace → F=0 → N=0. Only at week end does W reach the terminal and let that
-# used_weekly come under pace. Probe with used_weekly = 89 at several x.
+# pace → gate closed → N=0. Only at week end does W reach the terminal and let
+# that used_weekly come under pace. Probe with used_weekly = 89 at several x.
 # (The terminal envelope lifts W to weekly_terminal=100 in the final windows;
 # this test deliberately picks envelope-INACTIVE mid-week x so it isolates the
 # smooth curve's "below terminal until the end" shape — the envelope's
 # week-end lift is covered by the dedicated envelope test below.)
-#   x=0.5  → W=31    → used_weekly=89 is far ahead of pace → F=0 → N=0
-#   x=0.75 → W=57    → used_weekly=89 still ahead of pace  → F=0 → N=0
-#   x=1.0  → env→100 → used_weekly=89 → hw=11 → F>0 → N>=1 (only now under pace)
+#   x=0.5  → W=31    → used_weekly=89 is far ahead of pace → gate closed → N=0
+#   x=0.75 → W=57    → used_weekly=89 still ahead of pace  → gate closed → N=0
+#   x=1.0  → env→100 → used_weekly=89 → hw=11>0 → gate open → N>=1 (under pace)
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 for spec in "0.5:0" "0.75:0" "1.0:ge1"; do
   x="${spec%%:*}"; want="${spec##*:}"
@@ -7423,10 +7423,10 @@ tw_teardown
 
 # --- Test 2: W matches the canonical curve at x=0.5 -------------------------
 
-echo "Test: weekly curve value W(0.5)=31 gates F=0 at the boundary"
+echo "Test: weekly curve value W(0.5)=31 closes the gate at the boundary"
 tw_setup
-# x=0.5 → W=31. used_weekly=31 → hw=0 → F=0 → N=0 (exactly at pace).
-# used_weekly=30 → hw=1 → F>0 → N>=1 (just under pace).
+# x=0.5 → W=31. used_weekly=31 → hw=0 → gate closed → N=0 (exactly at pace).
+# used_weekly=30 → hw=1 → gate open → N>=1 (just under pace).
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 31 "$r" 0 99999999
@@ -7451,7 +7451,7 @@ tw_setup
 # and W(0.5) = 34*(0.5 + 2*0.25/2) = 34*(0.5+0.25) = 25.5 mid-week. To isolate
 # the smooth term from the terminal envelope, set weekly_terminal_pct=1 so the
 # envelope (env = 1 - 3*r) stays deeply negative mid-week and never lifts W.
-# At x=0.5: used_weekly=26 (> 25.5) is ahead of the clamped pace → F=0 → N=0;
+# At x=0.5: used_weekly=26 (> 25.5) is ahead of the clamped pace → gate closed → N=0;
 # used_weekly=25 (< 25.5) is under pace → N>=1. This proves the cap hard-ceils
 # the smooth curve below target. (The default terminal=100 envelope would
 # otherwise dominate this low-cap curve everywhere — the dedicated envelope
@@ -7519,69 +7519,75 @@ out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "remaining<0 → 0" "0" "$out"
 tw_teardown
 
-# --- Test 6: F = 0 when used_weekly >= W (ahead of pace) → N=0 --------------
+# --- Test 6: binary gate closed when used_weekly >= W (at/over pace) → N=0 ---
 
-echo "Test: F=0 ahead-of-pace pause yields N=0 even with 5h headroom"
+echo "Test: binary gate closed (at/over pace) yields N=0 regardless of 5h usage"
 tw_setup
-# x=0.5 → W=31. used_weekly=40 (>31) → hw<0 → F=0. used_5h=0 (full 5h
-# headroom) but h5 = 0 - 0 = 0 → N=0. The ahead-of-pace pause overrides 5h
-# headroom — this is the intentional early-week throttle.
+# x=0.5 → W=31. used_weekly=40 (>31) → hw<0 → gate closed → N=0, regardless of
+# the 5-hour ramp. The over-pace pause overrides 5h headroom — this is the
+# intentional weekly-pace throttle.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
+# Full 5h headroom (used_5h=0) — gate still closed.
 write_rl "rl.json" 40 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "ahead of pace (used_weekly=40 > W=31) → F=0 → N=0" "0" "$out"
+assert_eq "over pace (used_weekly=40 > W=31), used_5h=0 → gate closed → N=0" "0" "$out"
+# Low non-zero 5h usage (used_5h=10, deep in the max-workers band) — gate still
+# closed, so the open-gate ramp value is irrelevant.
+write_rl "rl.json" 40 "$r" 10 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "over pace (used_weekly=40 > W=31), used_5h=10 → gate closed → N=0" "0" "$out"
 tw_teardown
 
-# --- Test 7: F linear band floor5..ceil5 over weekly headroom Hw ------------
+# --- Test 7: binary gate is magnitude-independent over weekly headroom hw ----
 
-echo "Test: F scales floor5..ceil5 over weekly headroom Hw (observed via N)"
+echo "Test: open gate gives the same N for any positive hw; at-pace gives 0"
 tw_setup
-# x=0.5 → W=31, defaults floor5=50, ceil5=80, Hw=20.
-#   used_weekly=11 → hw=20 (>=Hw) → F=80 (ceiling)
-#   used_weekly=21 → hw=10        → F=50+(30)*(10/20)=65
-#   used_weekly=26 → hw=5         → F=50+(30)*(5/20)=57.5
-#   used_weekly=31 → hw=0         → F=0
-# Observe F through N with used_5h chosen so N tracks the band. Hold used_5h=65:
-#   F=80   → h5=15 → N=clamp(round(8*15/15),1,8)=8
-#   F=65   → h5=0  → N=0
-#   F=57.5 → h5<0  → N=0
-# That only distinguishes ceiling vs below-65; to see the full F linear band,
-# read F at the ceiling boundary (hw>=Hw → F=80) vs interior (hw=15 → F=72.5):
-#   used_weekly=11 → hw=20 → F=80,   used_5h=72 → h5=8  → N=round(8*8/15)=4
-#   used_weekly=16 → hw=15 → F=72.5, used_5h=72 → h5=0.5→ N=round(8*.5/15)=1
-#   used_weekly=21 → hw=10 → F=65,   used_5h=72 → h5<0 → N=0
+# The weekly gate is binary: any hw>0 opens it and the 5-hour ramp alone decides
+# N — the headroom magnitude does NOT scale N. x=0.5 → W=31, defaults floor5=50,
+# ceil5=80, span=30. Hold used_5h=65 → h5=80-65=15 → N=round(8*15/30)=4 whenever
+# the gate is open.
+#   used_weekly=11 → hw=20 (open) → N=4
+#   used_weekly=21 → hw=10 (open) → N=4   (same N — magnitude-independent)
+#   used_weekly=31 → hw=0  (at pace) → gate closed → N=0
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
-write_rl "rl.json" 11 "$r" 72 99999999
+write_rl "rl.json" 11 "$r" 65 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "F-band hw=20 → F=80, used_5h=72 → N=4" "4" "$out"
-write_rl "rl.json" 16 "$r" 72 99999999
+assert_eq "gate open hw=20, used_5h=65 → N=4" "4" "$out"
+write_rl "rl.json" 21 "$r" 65 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "F-band hw=15 → F=72.5, used_5h=72 → N=1" "1" "$out"
-write_rl "rl.json" 21 "$r" 72 99999999
+assert_eq "gate open hw=10, used_5h=65 → N=4 (magnitude-independent)" "4" "$out"
+write_rl "rl.json" 31 "$r" 65 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "F-band hw=10 → F=65, used_5h=72 ahead → N=0" "0" "$out"
+assert_eq "at pace hw=0, used_5h=65 → gate closed → N=0" "0" "$out"
 tw_teardown
 
-# --- Test 8: N=0 when used_5h >= F; floor(1)/ceiling(max) over H5 -----------
+# --- Test 8 (AC): linear 5h ramp under pace; floor(1)/ceiling(max) endpoints --
 
-echo "Test: N floor/ceiling over five_hour_headroom_taper, F held at 80"
+echo "Test: under pace, N is a linear ramp on used_5h over [floor5,ceil5]"
 tw_setup
-# x=0.5, used_weekly=11 → hw=20 → F=80 (ceiling). H5=15, max_workers=8.
-# Sweep used_5h; h5 = 80 - used_5h:
-#   used_5h=80 → h5=0  → N=0          (at target)
-#   used_5h=79 → h5=1  → N=clamp(round(8*1/15),1,8)=1   (floor)
-#   used_5h=71 → h5=9  → N=round(8*9/15)=5
-#   used_5h=65 → h5=15 → N=8          (ceiling)
-#   used_5h=50 → h5=30 → N=8          (clamped at ceiling)
+# Under pace (gate open) the 5-hour ramp alone decides N. Defaults floor5=50,
+# ceil5=80, span=30, max_workers=8; h5 = ceil5 - used_5h;
+# N = clamp(round(8*h5/30),1,8). x=0.5, used_weekly=11 → hw=20>0 → gate open.
+# Canonical curve:
+#   used_5h=50 → h5=30 → N=8     (at floor → max)
+#   used_5h=55 → h5=25 → N=round(6.67)=7
+#   used_5h=60 → h5=20 → N=round(5.33)=5
+#   used_5h=65 → h5=15 → N=4
+#   used_5h=70 → h5=10 → N=round(2.67)=3
+#   used_5h=75 → h5=5  → N=round(1.33)=1
+#   used_5h=80 → h5=0  → N=0     (at ceiling → zero)
+# Plus endpoints:
+#   used_5h=40 → h5=40 → N=clamp(round(10.67),1,8)=8  (below floor → max)
+#   used_5h=79 → h5=1  → N=clamp(round(0.27),1,8)=1   (rounds to 0 but clamps ≥1)
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
-declare -A n_expected=([80]=0 [79]=1 [71]=5 [65]=8 [50]=8)
-for u5 in 80 79 71 65 50; do
+declare -A n_expected=([40]=8 [50]=8 [55]=7 [60]=5 [65]=4 [70]=3 [75]=1 [79]=1 [80]=0)
+for u5 in 40 50 55 60 65 70 75 79 80; do
   write_rl "nsweep.json" 11 "$r" "$u5" 99999999
   result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-  assert_eq "N-sweep F=80 used_5h=$u5 → ${n_expected[$u5]}" "${n_expected[$u5]}" "$result"
+  assert_eq "ramp under pace used_5h=$u5 → ${n_expected[$u5]}" "${n_expected[$u5]}" "$result"
 done
 unset n_expected
 tw_teardown
@@ -7625,15 +7631,15 @@ tw_teardown
 
 # --- Test 11: only seven_day present → 5h gate uses used_5h=0 ---------------
 
-echo "Test: missing-five-hour treats used_5h=0; N scales from F alone"
+echo "Test: missing-five-hour treats used_5h=0 → ramp gives max workers"
 tw_setup
-# seven_day only at x=0.5 (W=31): used_weekly=11 → hw=20 → F=80. 5h block absent
-# → used_5h treated as 0 → h5=80 → N=8.
+# seven_day only at x=0.5 (W=31): used_weekly=11 → hw=20>0 → gate open. 5h block
+# absent → used_5h treated as 0 → 0 <= floor5=50 → ramp gives max workers = 8.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 11 "$r" absent absent
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "five_hour absent; F=80 used_5h=0 → N=8" "8" "$out"
+assert_eq "five_hour absent; under pace + used_5h=0 → max workers N=8" "8" "$out"
 tw_teardown
 
 # --- Test 12: config-file tunables are honored ------------------------------
@@ -7643,8 +7649,8 @@ tw_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
 {"max_concurrent_workers": 16}
 EOF
-# x=0.5, used_weekly=11 → F=80, used_5h=0 → h5=80 → N=clamp(round(16*80/15),1,16)
-# = clamp(85,1,16) = 16.
+# x=0.5, used_weekly=11 → hw=20>0 → gate open. used_5h=0 <= floor5=50 → ramp
+# gives max workers = 16.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 11 "$r" 0 99999999
@@ -7652,20 +7658,22 @@ out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "config max_concurrent_workers=16 → 16" "16" "$out"
 tw_teardown
 
-# --- Test 13: config five_hour_headroom_taper widens the N ramp -------------
+# --- Test 13: config five_hour_target_floor_pct narrows the ramp span --------
 
-echo "Test: config five_hour_headroom_taper_pct scales the N ramp"
+echo "Test: config five_hour_target_floor_pct narrows the ramp span"
 tw_setup
-# H5=30 (default 15). x=0.5, used_weekly=11 → F=80, used_5h=72 → h5=8.
-# N=clamp(round(8*8/30),1,8)=clamp(round(2.13),1,8)=2 (vs N=4 at default H5=15).
+# Raising floor5 from 50 to 60 narrows the span (ceil5 - floor5 = 80-60 = 20),
+# steepening the ramp. x=0.5, used_weekly=11 → hw=20>0 → gate open. used_5h=72 →
+# h5 = 80-72 = 8 → N=clamp(round(8*8/20),1,8)=round(3.2)=3 (vs default span=30 →
+# round(8*8/30)=round(2.13)=2).
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"five_hour_headroom_taper_pct": 30}
+{"five_hour_target_floor_pct": 60}
 EOF
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 11 "$r" 72 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "H5=30; F=80 used_5h=72 h5=8 → N=2" "2" "$out"
+assert_eq "floor5=60 span=20; under pace used_5h=72 h5=8 → N=3" "3" "$out"
 tw_teardown
 
 # --- Test 14: per-field env override wins over file -------------------------
@@ -7674,8 +7682,8 @@ echo "Test: per-field env override wins over rate_limits.json"
 tw_setup
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
-# File says used_5h=99 (over F → N=0); env override replaces with used_5h=0.
-# used_weekly=11 → F=80, used_5h=0 → h5=80 → N=8.
+# File says used_5h=99 (over ceil5 → N=0); env override replaces with used_5h=0.
+# used_weekly=11 → hw=20>0 → gate open. used_5h=0 <= floor5 → ramp → N=8.
 write_rl "rl.json" 11 "$r" 99 99999999
 export DISPATCH_TARGET_WORKERS_USED_5H=0
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
@@ -7687,7 +7695,7 @@ tw_teardown
 echo "Test: per-field env override of resets_at_weekly drives the curve"
 tw_setup
 # File supplies used_weekly; env override supplies resets_at_weekly to place
-# x=0.5. used_weekly=31 = W(0.5) → at pace → F=0 → N=0.
+# x=0.5. used_weekly=31 = W(0.5) → hw=0 → at pace → gate closed → N=0.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 write_rl "rl.json" 31 99999999 0 99999999
 export DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY=$(tw_resets_for_x 0.5)
@@ -7700,17 +7708,32 @@ tw_teardown
 echo "Test: out-of-range config field rejected; baked-in defaults used"
 tw_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"weekly_headroom_taper_pct": 0}
+{"five_hour_target_ceiling_pct": 0}
 EOF
-# weekly_headroom_taper_pct=0 is rejected by dispatch-config-load (must be > 0).
-# dispatch-target-workers silently ignores a failed config-load and uses the
-# baked-in defaults (Hw=20). x=0.5, used_weekly=11 → hw=20 → F=80, used_5h=0 →
-# N=8.
+# five_hour_target_ceiling_pct=0 is rejected by dispatch-config-load (must be
+# > 0). dispatch-target-workers silently ignores a failed config-load and uses
+# the baked-in defaults (floor5=50, ceil5=80). x=0.5, used_weekly=11 → hw=20>0 →
+# gate open. used_5h=0 <= floor5 → ramp → N=8.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 11 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "rejected config → defaults → N=8" "8" "$out"
+tw_teardown
+
+# --- Test 16b: just-under-pace + high 5h usage → ramp decides N --------------
+
+echo "Test: gate barely open (hw≈1) + high 5h usage → ramp value, not 0"
+tw_setup
+# x=0.5 → W=31. used_weekly=30 → hw=1 (>0) → gate just barely open. With the gate
+# open the 5-hour ramp alone sets N: used_5h=70 → h5=80-70=10 →
+# N=clamp(round(8*10/30),1,8)=round(2.67)=3. The thin weekly headroom does NOT
+# pull N down — this is the key behavior change from the old coupled model.
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 30 "$r" 70 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "just under pace (hw=1), used_5h=70 → ramp N=3" "3" "$out"
 tw_teardown
 
 # --- Test 17: non-numeric used_weekly sanitized fail-closed → 1 -------------
@@ -7798,8 +7821,8 @@ tw_teardown
 echo "Test: early-week AC smoke used_weekly=20, used_5h=2 → N>=1 (no stall)"
 tw_setup
 # Issue AC: at x≈0.5 (mid-week) with used_weekly=20, used_5h=2, the chain must
-# not stall. x=0.5 → W=31, hw=11 → F=50+(30)*(11/20)=66.5, h5=66.5-2=64.5 →
-# N=clamp(round(8*64.5/15),1,8)=8 (>=1).
+# not stall. x=0.5 → W=31, hw=11>0 → gate open. used_5h=2 <= floor5=50 → ramp
+# gives max workers = 8 (>=1).
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 20 "$r" 2 99999999
@@ -7821,7 +7844,7 @@ tw_setup
 # with defaults (terminal=100, cap=10) it evaluates to 80 at r=2, 90 at r=1,
 # 100 at r=0 (r = remaining_seconds / 18000). Place x by remaining-window count
 # (resets_at = NOW + r*18000) and hold used_5h=0 so 5h headroom is full and
-# N>=1 whenever F>0. The r=1 and r=0 lower probes are DISCRIMINATING: the
+# N>=1 whenever the gate is open. The r=1 and r=0 lower probes are DISCRIMINATING: the
 # pre-envelope smooth curve (W=85.7 at r=1, W=90 at r=0) would have gated N=0.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 
@@ -7931,7 +7954,7 @@ tw_teardown
 
 echo "Test: --reopen-at pace pause → numeric crossing strictly inside the window"
 tw_setup
-# x=0.5 → W=31. used_weekly=35 > 31 → pace pause (F=0, target 0) while still far
+# x=0.5 → W=31. used_weekly=35 > 31 → pace pause (gate closed, target 0) while still far
 # below the absolute weekly cap (35 < 90). The reopen epoch is where W rises to
 # meet used_weekly=35, which is later than NOW but before the weekly reset.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
