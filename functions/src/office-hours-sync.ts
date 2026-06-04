@@ -1,5 +1,5 @@
-// syncAgenda — scheduled Firebase Function that mirrors open jit issues from a
-// private GitHub repo into the `agenda/{env}/items` Firestore collection.
+// syncOfficeHours — scheduled Firebase Function that mirrors open jit issues from
+// a private GitHub repo into the `office-hours/{env}/items` Firestore collection.
 //
 // Each jit issue's due time is encoded in the issue body as a hidden HTML
 // comment of the form `<!-- jit-due: <ISO8601 UTC> -->`, stamped by the JIT
@@ -11,19 +11,19 @@
 //   - The App's private key (PEM) is the only Functions secret. It does not
 //     expire, so there is no token to rotate on a cadence. Set it once per
 //     project via the interactive prompt (paste the full PEM):
-//         firebase functions:secrets:set AGENDA_GITHUB_APP_PRIVATE_KEY
+//         firebase functions:secrets:set OFFICE_HOURS_GITHUB_APP_PRIVATE_KEY
 //   - On each run the function signs a short-lived JWT with that key and
 //     exchanges it for a ~1-hour installation access token, which it uses to
 //     call the GitHub API. The installation token self-expires; nothing
 //     long-lived is stored.
 //   - The non-secret strings live in `functions/.env.<project>`, e.g.
 //     `functions/.env.commons-systems`:
-//         AGENDA_GITHUB_APP_ID=123456
-//         AGENDA_GITHUB_APP_INSTALLATION_ID=87654321
-//         AGENDA_GROUP_REPO=natb1/agenda-nate
-//         AGENDA_MEMBER_EMAILS=owner@example.com
-//         AGENDA_FIRESTORE_NAMESPACE=agenda/prod
-//     The App must be installed on the `natb1/agenda-nate` repo with read-only
+//         OFFICE_HOURS_GITHUB_APP_ID=123456
+//         OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID=87654321
+//         OFFICE_HOURS_GROUP_REPO=natb1/office-hours-nate
+//         OFFICE_HOURS_MEMBER_EMAILS=owner@example.com
+//         OFFICE_HOURS_FIRESTORE_NAMESPACE=office-hours/prod
+//     The App must be installed on the `natb1/office-hours-nate` repo with read-only
 //     `Issues` permission.
 //   - If a required param is missing the function logs an error and returns
 //     normally so the schedule keeps running cheaply on misconfigured
@@ -35,12 +35,12 @@ import { getFirestore, Timestamp, FieldValue } from "firebase-admin/firestore";
 import type { Firestore } from "firebase-admin/firestore";
 import { createSign } from "node:crypto";
 
-const GH_APP_PRIVATE_KEY = defineSecret("AGENDA_GITHUB_APP_PRIVATE_KEY");
-const GH_APP_ID = defineString("AGENDA_GITHUB_APP_ID");
-const GH_APP_INSTALLATION_ID = defineString("AGENDA_GITHUB_APP_INSTALLATION_ID");
-const GROUP_REPO = defineString("AGENDA_GROUP_REPO");
-const MEMBER_EMAILS = defineString("AGENDA_MEMBER_EMAILS");
-const NAMESPACE = defineString("AGENDA_FIRESTORE_NAMESPACE", { default: "agenda/prod" });
+const GH_APP_PRIVATE_KEY = defineSecret("OFFICE_HOURS_GITHUB_APP_PRIVATE_KEY");
+const GH_APP_ID = defineString("OFFICE_HOURS_GITHUB_APP_ID");
+const GH_APP_INSTALLATION_ID = defineString("OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID");
+const GROUP_REPO = defineString("OFFICE_HOURS_GROUP_REPO");
+const MEMBER_EMAILS = defineString("OFFICE_HOURS_MEMBER_EMAILS");
+const NAMESPACE = defineString("OFFICE_HOURS_FIRESTORE_NAMESPACE", { default: "office-hours/prod" });
 
 const adminApp = getApps().length > 0 ? getApps()[0] : initializeApp();
 
@@ -90,7 +90,7 @@ function truncateForLog(text: string, max = 200): string {
   return text.length > max ? `${text.slice(0, max)}…[truncated]` : text;
 }
 
-export async function syncAgendaCore(deps: {
+export async function syncOfficeHoursCore(deps: {
   fetchOpenJitIssues: () => Promise<JitIssue[]>;
   firestore: Firestore;
   namespace: string;
@@ -109,7 +109,7 @@ export async function syncAgendaCore(deps: {
   for (const issue of issues) {
     if (!isValidJitKey(issue.jitKey)) {
       console.warn(
-        `syncAgenda: issue #${issue.number} has invalid jitKey "${issue.jitKey}"; skipping`,
+        `syncOfficeHours: issue #${issue.number} has invalid jitKey "${issue.jitKey}"; skipping`,
       );
       continue;
     }
@@ -117,7 +117,7 @@ export async function syncAgendaCore(deps: {
     if (!issue.dueAt) {
       skippedNoDate += 1;
       console.warn(
-        `syncAgenda: issue #${issue.number} has no jit-due marker; skipping`,
+        `syncOfficeHours: issue #${issue.number} has no jit-due marker; skipping`,
       );
       continue;
     }
@@ -191,7 +191,7 @@ export async function mintInstallationToken(opts: {
       headers: {
         Authorization: `Bearer ${jwt}`,
         Accept: "application/vnd.github+json",
-        "User-Agent": "agenda-sync/1.0",
+        "User-Agent": "office-hours-sync/1.0",
       },
     },
   );
@@ -238,7 +238,7 @@ async function githubGraphQL<T>(
     method: "POST",
     headers: {
       Authorization: `bearer ${token}`,
-      "User-Agent": "agenda-sync/1.0",
+      "User-Agent": "office-hours-sync/1.0",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ query, variables }),
@@ -321,7 +321,7 @@ export async function fetchOpenJitIssuesLive(
   return results;
 }
 
-export const syncAgenda = onSchedule(
+export const syncOfficeHours = onSchedule(
   {
     schedule: "every 30 minutes",
     secrets: [GH_APP_PRIVATE_KEY],
@@ -337,7 +337,7 @@ export const syncAgenda = onSchedule(
 
     if (!repo || !memberEmailsStr || !appId || !installationId || !privateKey) {
       console.error(
-        "syncAgenda: missing required config (AGENDA_GROUP_REPO / AGENDA_MEMBER_EMAILS / AGENDA_GITHUB_APP_ID / AGENDA_GITHUB_APP_INSTALLATION_ID / AGENDA_GITHUB_APP_PRIVATE_KEY); skipping run.",
+        "syncOfficeHours: missing required config (OFFICE_HOURS_GROUP_REPO / OFFICE_HOURS_MEMBER_EMAILS / OFFICE_HOURS_GITHUB_APP_ID / OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID / OFFICE_HOURS_GITHUB_APP_PRIVATE_KEY); skipping run.",
       );
       return;
     }
@@ -346,16 +346,16 @@ export const syncAgenda = onSchedule(
     // bare numeric id so a misconfigured value cannot redirect the request.
     if (!/^\d+$/.test(installationId)) {
       console.error(
-        `syncAgenda: AGENDA_GITHUB_APP_INSTALLATION_ID "${installationId}" is not numeric; skipping run.`,
+        `syncOfficeHours: OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID "${installationId}" is not numeric; skipping run.`,
       );
       return;
     }
 
-    // namespace prefixes the Firestore collection path. Pin it to the agenda
+    // namespace prefixes the Firestore collection path. Pin it to the office-hours
     // app so a misconfigured value cannot write into another app's collection.
-    if (!/^agenda\/[A-Za-z0-9][A-Za-z0-9-]*$/.test(namespace)) {
+    if (!/^office-hours\/[A-Za-z0-9][A-Za-z0-9-]*$/.test(namespace)) {
       console.error(
-        `syncAgenda: AGENDA_FIRESTORE_NAMESPACE "${namespace}" is not a valid agenda/<env> path; skipping run.`,
+        `syncOfficeHours: OFFICE_HOURS_FIRESTORE_NAMESPACE "${namespace}" is not a valid office-hours/<env> path; skipping run.`,
       );
       return;
     }
@@ -365,12 +365,12 @@ export const syncAgenda = onSchedule(
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
 
-    // A whitespace-only AGENDA_MEMBER_EMAILS survives the truthy check above but
-    // trims to an empty owner list, which would lock the owner out of every
+    // A whitespace-only OFFICE_HOURS_MEMBER_EMAILS survives the truthy check above
+    // but trims to an empty owner list, which would lock the owner out of every
     // written document — fail closed instead of writing unreadable data.
     if (memberEmails.length === 0) {
       console.error(
-        "syncAgenda: AGENDA_MEMBER_EMAILS resolved to an empty list; skipping run.",
+        "syncOfficeHours: OFFICE_HOURS_MEMBER_EMAILS resolved to an empty list; skipping run.",
       );
       return;
     }
@@ -379,7 +379,7 @@ export const syncAgenda = onSchedule(
 
     const firestore = getFirestore(adminApp!);
 
-    const result = await syncAgendaCore({
+    const result = await syncOfficeHoursCore({
       fetchOpenJitIssues: () => fetchOpenJitIssuesLive(repo, token),
       firestore,
       namespace,
@@ -387,7 +387,7 @@ export const syncAgenda = onSchedule(
     });
 
     console.log(
-      `syncAgenda: wrote ${result.written}, deleted ${result.deleted}, skipped ${result.skippedNoDate} (no due date)`,
+      `syncOfficeHours: wrote ${result.written}, deleted ${result.deleted}, skipped ${result.skippedNoDate} (no due date)`,
     );
   },
 );
