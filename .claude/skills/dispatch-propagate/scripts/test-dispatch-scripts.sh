@@ -7658,9 +7658,9 @@ out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "config max_concurrent_workers=16 → 16" "16" "$out"
 tw_teardown
 
-# --- Test 13: config five_hour_target_floor_pct widens the ramp span --------
+# --- Test 13: config five_hour_target_floor_pct narrows the ramp span --------
 
-echo "Test: config five_hour_target_floor_pct widens the ramp span"
+echo "Test: config five_hour_target_floor_pct narrows the ramp span"
 tw_setup
 # Raising floor5 from 50 to 60 narrows the span (ceil5 - floor5 = 80-60 = 20),
 # steepening the ramp. x=0.5, used_weekly=11 → hw=20>0 → gate open. used_5h=72 →
