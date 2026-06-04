@@ -446,6 +446,15 @@ service cloud.firestore {
         && request.auth.token.email in resource.data.memberEmails;
     }
 
+    // Agenda reminders are the synced JIT queue, scoped to the owner via a
+    // denormalized `memberEmails` field. Client writes are denied; only the
+    // Admin-SDK sync Function (functions/src/agenda-sync.ts) writes here.
+    match /agenda/{env}/items/{itemId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow write: if false;
+    }
+
     // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
     // InsertFirestoreRules inserts new rule blocks immediately above this line.
     match /{document=**} {
