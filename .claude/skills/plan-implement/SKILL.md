@@ -91,37 +91,28 @@ approved plan — scope shifted mid-implementation, or the plan could not be
 fully implemented as approved. Base this on the `/implement-unit` outcomes
 observed in Step 2.
 
-**Deviation fires** — skip the `phase-completed` marker. Instead write a
-one-line deviation reason to `$CLAUDE_JOB_DIR/office-hours-reason`, atomic via
-tempfile + mv, under the same `CLAUDE_JOB_DIR` guard. The draft PR opened in
-Step 3 stays open. The Stop hook reads marker-absence as Branch A, applies
-`dispatch:office-hours` to the issue (surfacing this reason in the
+**Deviation fires** — skip the `phase-completed` marker. Instead call
+`dispatch-mark-deviation` to write the office-hours-reason atomically. The draft
+PR opened in Step 3 stays open. The Stop hook reads marker-absence as Branch A,
+applies `dispatch:office-hours` to the issue (surfacing this reason in the
 why-comment), and parks the issue for human review.
 
 ```bash
-if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-  printf '%s\n' "/plan-implement: implementation deviated from the approved plan" \
-    > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
-  mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" \
-     "$CLAUDE_JOB_DIR/office-hours-reason"
-fi
+.claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+  "/plan-implement: implementation deviated from the approved plan"
 ```
 
 Use the default phrasing above, or make it more specific when the nature of
 the shift is clear (e.g. `/plan-implement: unit 3 scope expanded to cover
 auth; approved plan did not include auth changes`).
 
-**No deviation** — write the `phase-completed` marker as the final action.
-Atomic via tempfile + mv so the hook never sees a partial file.
-`CLAUDE_JOB_DIR` unset = interactive run; skip.
+**No deviation** — call `dispatch-mark-complete` as the final action.
+`CLAUDE_JOB_DIR` unset = interactive run; the script no-ops with a clear
+diagnostic.
 
 ```bash
-if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-  printf 'phase=implement\npr=%s\n' "$PR_NUM" \
-    > "$CLAUDE_JOB_DIR/phase-completed.tmp"
-  mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
-     "$CLAUDE_JOB_DIR/phase-completed"
-fi
+.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
+  --phase implement --pr "$PR_NUM"
 ```
 
 Stop. The Stop hook reads the marker, spawns the next `/dispatch-propagate`
