@@ -1824,7 +1824,7 @@ teardown
 # --- topic-category prioritization (issue #707) -----------------------------
 # The `priority` label is the outermost axis: every `priority` item ranks above
 # every non-priority item, regardless of topic. Topic category
-# (security → bug → testing infrastructure → dispatch → budget → other) nests inside the priority
+# (security → bug → testing infrastructure → dispatch → budget → print → audio → other) nests inside the priority
 # axis, and the phase ladder runs innermost. A PR's category is resolved from
 # the labels of the issues it closes; an issue's category from its own labels.
 
@@ -2036,7 +2036,7 @@ assert_eq "security issue beats bug issue" "issue 300" "$result"
 teardown
 
 # 30j. A PR closing a `dispatch` issue outranks a PR closing a `budget` issue,
-#      even when the budget PR is newer — `dispatch` ranks above `budget` in
+#      even when the budget PR is older — `dispatch` ranks above `budget` in
 #      the topic ladder (category beats age).
 echo "Test: PR closing a dispatch issue beats PR closing a budget issue"
 setup
@@ -2065,6 +2065,71 @@ printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"hel
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "budget issue beats untopiced (other) issue" "issue 300" "$result"
+teardown
+
+# 30l. A PR closing a `budget` issue outranks a PR closing a `print` issue,
+#      even when the print PR is older — `budget` ranks above `print` in
+#      the topic ladder (category beats age).
+echo "Test: PR closing a budget issue beats PR closing a print issue"
+setup
+# PR 20 (older) closes print issue 200; PR 10 (newer) closes budget issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-print-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-budget-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"budget"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"print"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "budget-closing PR beats print-closing PR" "pr 10 10-budget-pr verify" "$result"
+teardown
+
+# 30m. A PR closing a `print` issue outranks a PR closing an `audio` issue,
+#      even when the audio PR is older — `print` ranks above `audio` in
+#      the topic ladder (category beats age).
+echo "Test: PR closing a print issue beats PR closing an audio issue"
+setup
+# PR 20 (older) closes audio issue 200; PR 10 (newer) closes print issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-audio-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-print-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"print"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"audio"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "print-closing PR beats audio-closing PR" "pr 10 10-print-pr verify" "$result"
+teardown
+
+# 30n. A help-wanted `audio` issue outranks a help-wanted issue with no topic
+#      label, even when the audio issue is newer — `audio` ranks above the
+#      `other` fallback.
+echo "Test: audio issue beats issue with no topic label"
+setup
+setup_union_pr_list '[]'
+# Issue 400 (older) has no topic label (resolves to `other`); issue 300 (newer) is audio.
+printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "audio issue beats untopiced (other) issue" "issue 300" "$result"
+teardown
+
+# 30o. A help-wanted `print` issue outranks a help-wanted issue with no topic
+#      label, even when the print issue is newer — `print` ranks above the
+#      `other` fallback (the issue-ladder counterpart of 30l, mirroring 30k
+#      for `budget` and 30n for `audio`).
+echo "Test: print issue beats issue with no topic label"
+setup
+setup_union_pr_list '[]'
+# Issue 400 (older) has no topic label (resolves to `other`); issue 300 (newer) is print.
+printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"print"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "print issue beats untopiced (other) issue" "issue 300" "$result"
 teardown
 
 # --- blocked-issue PR skip (issue #786) -------------------------------------

@@ -316,7 +316,7 @@ progress. The topic axis is also orthogonal to the `bug`/`enhancement` type
 axis above: a vulnerability follow-up is `bug` type **and** `security` topic.
 Apply **at most one** topic label. The 'at most one' rule applies
 only to the topic axis — `security`, `dispatch`, `testing infrastructure`,
-and `budget`.
+`budget`, `print`, and `audio`.
 `priority` is a separate axis (an escalation marker) and may be applied
 alongside a topic label.
 
@@ -348,10 +348,17 @@ alongside a topic label.
   "fixture", "seed data", "test runner".
 
 - **`budget`** — concerns the budget app: the `budget/` frontend or the
-  `budget-etl/` pipeline. Ranks last among the topic categories in
-  `dispatch-select-target` queue selection (below `dispatch`), above the
-  `other` fallback. Keyword signals: "budget", "budget-etl", "QFX/OFX",
-  "bank statement", "categorization", "budget.json".
+  `budget-etl/` pipeline. Ranks below `dispatch` and above `print` in
+  `dispatch-select-target` queue selection. Keyword signals: "budget",
+  "budget-etl", "QFX/OFX", "bank statement", "categorization", "budget.json".
+
+- **`print`** — concerns the print app (`print/`). Ranks below `budget` and
+  above `audio` in `dispatch-select-target` queue selection. Keyword signals:
+  "print", "print app", "print viewer".
+
+- **`audio`** — concerns the audio app (`audio/`). Ranks below `print` and
+  above the `other` fallback in `dispatch-select-target` queue selection.
+  Keyword signals: "audio", "audio app".
 
 - **`priority`** — a separate axis from the topic labels above. A
   human-applied escalation marker that routes the issue (or any PR closing it)
@@ -360,7 +367,7 @@ alongside a topic label.
   automatically. May be combined with any topic label.
 
 - **Neither** — apply no topic label. Most product and
-  landing/print/fellspiral feature work matches neither topic. There is
+  landing/fellspiral feature work matches neither topic. There is
   no "other" sentinel label.
 
 When an issue matches `security` plus another topic, apply `security` — it is
