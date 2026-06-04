@@ -1106,6 +1106,33 @@ route_run "abc" /wt/abc-feature
 assert_eq "non-numeric N → exit 2" "2" "$ROUTE_RC"
 teardown
 
+# 15. Draft + mixed rollup (failing + pending) → INVOKE /verify-pr.
+# failure wins: dispatch-ci-ready treats mixed as ready, dispatch-phase maps to verify.
+echo "Test: draft + mixed rollup (failing+pending) → INVOKE /verify-pr"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$MIXED_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "draft + mixed rollup → INVOKE /verify-pr (directive)" "INVOKE /verify-pr" "$ROUTE_OUT"
+assert_eq "draft + mixed rollup → INVOKE /verify-pr (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 16. Zero / leading-zero <N> → exit 2. The <N> regex is ^[1-9][0-9]*$, matching
+# lib.sh:resolve_issue_number, so "0" (a nonexistent issue) and leading-zero
+# forms are rejected rather than routed against a bogus issue number.
+echo "Test: zero <N> → exit 2"
+setup
+route_run 0 /wt/0-feature
+assert_eq "zero N → exit 2" "2" "$ROUTE_RC"
+teardown
+
+echo "Test: leading-zero <N> → exit 2"
+setup
+route_run 042 /wt/042-feature
+assert_eq "leading-zero N → exit 2" "2" "$ROUTE_RC"
+teardown
+
 # ============================================================================
 # dispatch-resolve-arg tests
 # ============================================================================

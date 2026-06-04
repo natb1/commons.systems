@@ -10,7 +10,7 @@
 #   INVOKE /verify-pr            phase verify       (draft PR, CI failed)
 #   INVOKE /qa-fix               phase qa           (draft, CI green, no label)
 #   INVOKE /review-fix           phase review       (dispatch:qa-done / reviewed re-entry)
-#   RELEVANCE-REVIEW             phase implement    (no PR) — routes to SKILL.md Step 3
+#   RELEVANCE-REVIEW             phase implement    (no PR) — routes to SKILL.md Step 2
 #   STOP done                    phase done         (non-draft PR)
 #   STOP waiting                 dispatch-ci-ready reports not-ready (draft PR CI pending)
 #   STOP wrong-worktree          cross-check failed (diagnostic on stderr); exits non-zero
@@ -35,14 +35,15 @@ if [[ -z "$N" || -z "$WORKTREE_PATH" ]]; then
   echo "error: usage: dispatch-route <N> <worktree-path>" >&2
   exit 2
 fi
-if [[ ! "$N" =~ ^[0-9]+$ ]]; then
+if [[ ! "$N" =~ ^[1-9][0-9]*$ ]]; then
   echo "error: <N> must be a positive integer, got '$N'" >&2
   exit 2
 fi
 
-# Step 0 — worktree cross-check. Replicates dispatch-worker SKILL.md Step 0:
-# derive the branch from the worktree toplevel's basename, assert the "<N>-"
-# prefix and that the toplevel equals the passed <worktree-path>.
+# Step 0 — worktree cross-check (the defensive prelude now owned by this script,
+# described in dispatch-worker SKILL.md Step 1): derive the branch from the
+# worktree toplevel's basename, assert the "<N>-" prefix and that the toplevel
+# equals the passed <worktree-path>.
 ACTUAL_TOPLEVEL=$(git rev-parse --show-toplevel)
 ACTUAL_BRANCH=$(basename "$ACTUAL_TOPLEVEL")
 EXPECTED="${N}-"

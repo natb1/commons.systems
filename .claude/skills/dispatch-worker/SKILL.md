@@ -34,8 +34,12 @@ it calls `gh`), capturing both the directive on stdout and the exit code.
 
 ```bash
 read -r N WORKTREE_PATH <<<"$ARGUMENTS"
-.claude/skills/dispatch-propagate/scripts/dispatch-route "$N" "$WORKTREE_PATH"
+DIRECTIVE=$(.claude/skills/dispatch-propagate/scripts/dispatch-route "$N" "$WORKTREE_PATH"); ROUTE_RC=$?
 ```
+
+`$DIRECTIVE` holds the one directive line and `$ROUTE_RC` its exit code (non-zero
+only for `STOP wrong-worktree`). Look `$DIRECTIVE` up in the table below and act on
+the matching row.
 
 Act on the one directive:
 
