@@ -74,6 +74,10 @@ setup() {
   # dispatch-select-target sources lib-claude-agents.sh via its SCRIPT_DIR
   # (TMPDIR_TEST under test). Sourced, not executed — no chmod +x needed.
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
+  # dispatch-select-target and dispatch-trace-leaf source lib-reservation-ledger.sh
+  # via their SCRIPT_DIR (#1046), to skip a reserved-but-not-yet-live target.
+  # Sourced, not executed — no chmod +x needed.
+  cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/lib-reservation-ledger.sh"
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
            "$TMPDIR_TEST/dispatch-ci-ready" \
            "$TMPDIR_TEST/dispatch-find-pr" \
@@ -123,6 +127,12 @@ STUB
   # no test reaches the real `claude` daemon. Per-test calls to
   # select_target_fake_claude override this to model live or orphan worktrees.
   export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
+
+  # Point the reservation ledger (#1046) at a scratch dir that is absent by
+  # default — no marker files, so reservation_exists is false for every row and
+  # the reserved-skip is inert. Every existing select-target / trace-leaf test
+  # stays green; a reserved-skip test creates a marker file here to opt in.
+  export DISPATCH_RESERVATION_DIR="$TMPDIR_TEST/reservations"
 
   # dispatch-select-target calls dispatch-phase as "$SCRIPT_DIR/dispatch-phase".
   # Since we copied them all to TMPDIR_TEST, SCRIPT_DIR inside each copy will
@@ -582,6 +592,8 @@ teardown() {
   # Per-test exports for the liveness gate must not leak across tests.
   unset CLAUDE_AGENTS_CMD
   unset CLAUDE_CODE_SESSION_ID
+  # The reservation-ledger override (#1046) must not leak across tests either.
+  unset DISPATCH_RESERVATION_DIR
 }
 trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
 
@@ -1450,6 +1462,42 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR with orphan worktree is selected, not skipped" "pr 10 10-active-branch verify" "$result"
 teardown
 
+# 2c. A PR whose branch worktree is RESERVED — on disk, no live session, but a
+#     reservation marker present — is skipped, even though no live session owns
+#     it yet (#1046). Closes the spawn-gap re-selection race before registration.
+echo "Test: PR whose branch worktree is reserved (no live session) is skipped"
+setup
+UNION='['"$(make_pr_union 10 "10-active-branch" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-other" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/10-active-branch\nHEAD def456\nbranch refs/heads/10-active-branch\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live sessions: 10-active-branch's worktree is sessionless. But a reservation
+# marker named by the worktree basename is present in the ledger.
+select_target_fake_claude
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv-sess\nissue=10\ntimestamp=2026-01-01T00:00:00Z\n' > "$DISPATCH_RESERVATION_DIR/10-active-branch"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "PR with reserved worktree skipped; next PR returned" "pr 20 20-other verify" "$result"
+teardown
+
+# 2d. A PR whose branch worktree is an orphan with NO reservation marker is NOT
+#     skipped — reserved is gated strictly on the marker (#1046). Guards that the
+#     reserved-skip never broadens the orphan-recycle path.
+echo "Test: PR whose orphan worktree has no reservation marker is not skipped"
+setup
+UNION='['"$(make_pr_union 10 "10-active-branch" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-other" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/10-active-branch\nHEAD def456\nbranch refs/heads/10-active-branch\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live session and an empty ledger (default): 10-active-branch is a recyclable
+# orphan, not a skip.
+select_target_fake_claude
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "PR with orphan worktree and no marker is selected" "pr 10 10-active-branch verify" "$result"
+teardown
+
 # 2b. A PR whose ISSUE carries dispatch:office-hours is skipped (issue #909).
 # The label lives on the issue, not the PR — the skip resolves the issue number
 # from the PR's branch prefix (<N>-) and reads the issue's labels. PR 10's branch
@@ -1959,6 +2007,26 @@ printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD
 select_target_fake_claude
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "issue with orphan worktree selected, not skipped" "issue 55" "$result"
+teardown
+
+# 24c. Help-wanted issue whose <N>-* worktree is RESERVED — on disk, no live
+#      session, but a reservation marker present — is skipped in favor of the
+#      next-oldest issue (#1046). The reserved-but-not-yet-registered target must
+#      not be re-selected, racing the reservation.
+echo "Test: issue with reserved worktree (no live session) skipped; next-oldest chosen"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD def456\nbranch refs/heads/55-some-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live sessions: 55's worktree is sessionless. But a reservation marker named
+# by the worktree basename is present → 55 is claimed and skipped.
+select_target_fake_claude
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv-sess\nissue=55\ntimestamp=2026-01-01T00:00:00Z\n' > "$DISPATCH_RESERVATION_DIR/55-some-feature"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "issue with reserved worktree skipped; next issue 66 chosen" "issue 66" "$result"
 teardown
 
 # 25. A lone help-wanted issue whose worktree has a live session → empty
@@ -3647,6 +3715,46 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
 assert_eq "queue: live-owned child 701 skipped → sibling 702" "702" "$result"
 teardown
 
+# 12b-r. Queue mode: a child whose <N>-* worktree is RESERVED — on disk, no live
+#        session, but a reservation marker present — is skipped during descent, so
+#        the sibling 702 is returned (#1046). Mirrors the live-owned skip applied
+#        to subtree children.
+echo "Test: queue mode → reserved child skipped, returns sibling"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live sessions: 701's worktree is sessionless. But a reservation marker named
+# by the worktree basename is present → 701 is claimed and skipped during descent.
+select_target_fake_claude
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv-sess\nissue=701\ntimestamp=2026-01-01T00:00:00Z\n' > "$DISPATCH_RESERVATION_DIR/701-feature"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: reserved child 701 skipped → sibling 702" "702" "$result"
+teardown
+
+# 12b-o. Queue mode: a child whose <N>-* worktree is an orphan with NO reservation
+#        marker stays descendable, so the lowest leaf 701 is returned (#1046).
+#        Guards that the reserved-skip is gated strictly on the marker.
+echo "Test: queue mode → orphan child with no marker is descendable"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live session and an empty ledger (default): 701 is a recyclable orphan.
+select_target_fake_claude
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: orphan child 701 with no marker descendable → leaf 701" "701" "$result"
+teardown
+
 # 12c. Queue mode: every child's <N>-* worktree is live-owned → exit 2 with the
 #      worktree-conflicted stderr message (#914).
 echo "Test: queue mode → all leaves live-owned, exits 2"
@@ -3799,6 +3907,25 @@ printf '{"title":"Issue 700","body":"","comments":[],"number":700,"state":"OPEN"
 printf '[{"number":700}]\n' > "$STUB_DIR/trace-parked.json"
 err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" 2>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
 assert_eq "queue: parked root leaf → exit 2, no leaf on stdout" "EXIT=2" "$err_out"
+teardown
+
+# 20-r. Queue mode: the ROOT issue is itself a RESERVED topological leaf
+#       (#1046). 700 has no children, so the descent loop never runs; the root
+#       guard before the trace must catch the reservation and exit 2 rather than
+#       returning the reserved root. Mirrors the parked-root guard in test 20.
+echo "Test: queue mode → reserved ROOT leaf guarded, exits 2"
+setup
+# No subissues-700.json → 700 is a topological leaf.
+printf '{"title":"Issue 700","body":"","comments":[],"number":700,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-700.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/700-feature\nHEAD def456\nbranch refs/heads/700-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live sessions; reservation marker for the root's worktree → root is claimed.
+select_target_fake_claude
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv-sess\nissue=700\ntimestamp=2026-01-01T00:00:00Z\n' > "$DISPATCH_RESERVATION_DIR/700-feature"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" 2>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+assert_eq "queue: reserved root leaf → exit 2, no leaf on stdout" "EXIT=2" "$err_out"
 teardown
 
 # 21. Explicit mode: a parked ROOT leaf is returned unchanged (#1011 scopes the
@@ -6583,6 +6710,30 @@ if printf '%s' "$err" | grep -q 'malformed reservation'; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-malformed: note mentions malformed reservation"
 fi
+rl_teardown
+
+# --- Test 13: reservation_exists tracks write/clear and guards its arg --------
+
+echo "Test: reservation_exists is true after write, false after clear, and guards its argument"
+rl_setup
+# Absent ledger (never written) → not reserved.
+if reservation_exists "990-slug"; then rc=0; else rc=$?; fi
+assert_eq "rl-exists: absent ledger → return 1" "1" "$rc"
+reservation_write "990-slug" "990" "sess-e"
+if reservation_exists "990-slug"; then rc=0; else rc=$?; fi
+assert_eq "rl-exists: true after write (return 0)" "0" "$rc"
+# A different basename with no marker → not reserved.
+if reservation_exists "991-other"; then rc=0; else rc=$?; fi
+assert_eq "rl-exists: unrelated basename → return 1" "1" "$rc"
+reservation_clear "990-slug"
+if reservation_exists "990-slug"; then rc=0; else rc=$?; fi
+assert_eq "rl-exists: false after clear (return 1)" "1" "$rc"
+# Empty arg → return 1.
+if reservation_exists ""; then rc=0; else rc=$?; fi
+assert_eq "rl-exists: empty arg → return 1" "1" "$rc"
+# Unsafe basename → return 1 (path-safety guard).
+if reservation_exists "../escape"; then rc=0; else rc=$?; fi
+assert_eq "rl-exists: unsafe basename → return 1" "1" "$rc"
 rl_teardown
 
 # ============================================================================
