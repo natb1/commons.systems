@@ -3575,6 +3575,46 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
 assert_eq "queue: live-owned child 701 skipped → sibling 702" "702" "$result"
 teardown
 
+# 12b-r. Queue mode: a child whose <N>-* worktree is RESERVED — on disk, no live
+#        session, but a reservation marker present — is skipped during descent, so
+#        the sibling 702 is returned (#1046). Mirrors the live-owned skip applied
+#        to subtree children.
+echo "Test: queue mode → reserved child skipped, returns sibling"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live sessions: 701's worktree is sessionless. But a reservation marker named
+# by the worktree basename is present → 701 is claimed and skipped during descent.
+select_target_fake_claude
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv-sess\nissue=701\ntimestamp=2026-01-01T00:00:00Z\n' > "$DISPATCH_RESERVATION_DIR/701-feature"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: reserved child 701 skipped → sibling 702" "702" "$result"
+teardown
+
+# 12b-o. Queue mode: a child whose <N>-* worktree is an orphan with NO reservation
+#        marker stays descendable, so the lowest leaf 701 is returned (#1046).
+#        Guards that the reserved-skip is gated strictly on the marker.
+echo "Test: queue mode → orphan child with no marker is descendable"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live session and an empty ledger (default): 701 is a recyclable orphan.
+select_target_fake_claude
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: orphan child 701 with no marker descendable → leaf 701" "701" "$result"
+teardown
+
 # 12c. Queue mode: every child's <N>-* worktree is live-owned → exit 2 with the
 #      worktree-conflicted stderr message (#914).
 echo "Test: queue mode → all leaves live-owned, exits 2"
