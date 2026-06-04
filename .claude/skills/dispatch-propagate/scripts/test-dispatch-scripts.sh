@@ -6440,7 +6440,8 @@ rl_teardown() {
   rm -rf "$RL_DIR"
   RL_DIR=""
   RL_FAKE=""
-  unset DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_NOW
+  unset DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_NOW \
+    DISPATCH_RESERVATION_SWEEP_NOW_EPOCH DISPATCH_RESERVATION_BOOT_GRACE_S
 }
 
 # rl_write_fake_claude <json-array> — install a fake `claude` that prints the
@@ -6641,6 +6642,62 @@ if printf '%s' "$err" | grep -q 'malformed reservation'; then
   PASS=$((PASS + 1)); echo "  PASS: rl-sweep-malformed: note mentions malformed reservation"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-malformed: note mentions malformed reservation"
+fi
+rl_teardown
+
+# --- Test A: sweep keeps a YOUNG marker even when reserving session is dead ----
+
+echo "Test: reservation_sweep keeps a young marker even when the reserving session is dead (boot grace; #1048 regression guard)"
+rl_setup
+# DISPATCH_RESERVATION_NOW is "2026-01-01T00:00:00Z" (set by rl_setup); its
+# epoch is 1767225600 (confirmed via `date -u -d 2026-01-01T00:00:00Z +%s`).
+reservation_write "990-slug" "990" "dead-sess"
+# Sweep clock 5s after the marker timestamp → within the 30s grace.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=1767225605
+# A live session that is NEITHER the reserving session NOR a worker named by the
+# basename — without the grace this would be reclaimed as dead-session-stranded.
+rl_write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+reservation_sweep 2>/dev/null
+cnt=$(reservation_count)
+assert_eq "rl-sweep-young: young marker with dead session kept (count 1)" "1" "$cnt"
+rl_teardown
+
+# --- Test B: sweep reclaims an AGED marker whose reserving session is dead -----
+
+echo "Test: reservation_sweep reclaims an aged marker whose reserving session is dead (grace boundary)"
+rl_setup
+reservation_write "991-slug" "991" "dead-sess"
+# Sweep clock 31s after the marker timestamp → past the 30s grace.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=1767225631
+rl_write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+err=$(reservation_sweep 2>&1 1>/dev/null)
+cnt=$(reservation_count)
+assert_eq "rl-sweep-aged: aged marker with dead session reclaimed (count 0)" "0" "$cnt"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'dead-session-stranded'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-aged: note mentions dead-session-stranded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-aged: note mentions dead-session-stranded"
+fi
+rl_teardown
+
+# --- Test C: live-worker-redundant reclaim is age-independent (rule (a)) -------
+
+echo "Test: reservation_sweep reclaims a live-worker-redundant marker regardless of age (rule (a) is age-independent)"
+rl_setup
+reservation_write "992-slug" "992" "whatever-sess"
+# YOUNG marker (sweep clock within grace) — but the worktree already has a live
+# worker, so rule (a) must reclaim it ahead of the grace check.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=1767225605
+rl_write_fake_claude '[{"sessionId":"x","pid":1,"status":"busy","name":"992-slug"}]'
+err=$(reservation_sweep 2>&1 1>/dev/null)
+cnt=$(reservation_count)
+assert_eq "rl-sweep-redundant-young: live-worker-redundant reclaimed despite youth (count 0)" "0" "$cnt"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'live-worker-redundant'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-redundant-young: note mentions live-worker-redundant"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-redundant-young: note mentions live-worker-redundant"
 fi
 rl_teardown
 

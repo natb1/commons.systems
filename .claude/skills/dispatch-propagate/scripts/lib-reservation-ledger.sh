@@ -94,12 +94,20 @@
 #   reserved worktree name, `session=` line = reserving session id):
 #     a. marker basename ∈ live-session-names  → a LIVE worker already owns the
 #        worktree (counted by busy_workers); reclaim (redundant / crash-after-
-#        register backstop).
+#        register backstop). This is age-INDEPENDENT — it fires at ANY age.
 #     b. else the `session=` line is empty/absent (malformed marker) → KEEP and
 #        flag; an empty session id is not treated as "dead" so a corrupt or
 #        tampered marker never causes a still-valid slot to be reclaimed.
-#     c. else reserving session id ∉ live-session-ids → reserving session is DEAD
-#        and never converted; reclaim (stranded).
+#     (new) else the marker is younger than the boot grace
+#        (DISPATCH_RESERVATION_BOOT_GRACE_S, default 30s) → in-flight; KEEP,
+#        REGARDLESS of the reserving session's liveness. This covers an async
+#        spawn whose router (the reserving session) has already exited while the
+#        spawned worker is still booting and has not yet registered. A marker
+#        with an unparseable/absent timestamp has no age protection — it falls
+#        through to the session rules below (fail-safe to the pre-grace behavior).
+#     c. else reserving session id ∉ live-session-ids AND the marker has aged
+#        past the grace → reserving session is DEAD and never converted; reclaim
+#        (stranded).
 #     d. else (reserving session alive, no live worker yet) → in-flight; KEEP.
 #   Reclaim = `reservation_clear <basename>` plus a one-line stderr note
 #   distinguishing the two reasons (live-worker-redundant vs dead-session-
@@ -116,6 +124,15 @@
 #   DISPATCH_RESERVATION_NOW  Override the UTC timestamp stamped into a written
 #                             marker (deterministic tests). Default:
 #                             `date -u +%FT%TZ`.
+#   DISPATCH_RESERVATION_BOOT_GRACE_S
+#                             The boot-grace window in seconds (default 30); a
+#                             marker younger than this is kept as in-flight
+#                             regardless of the reserving session's liveness. A
+#                             non-numeric value falls back to 30.
+#   DISPATCH_RESERVATION_SWEEP_NOW_EPOCH
+#                             Override the sweep's "now" epoch (deterministic
+#                             grace-boundary tests). Default: `date -u +%s`. A
+#                             non-numeric value falls back to the default.
 #   CLAUDE_AGENTS_CMD         Inherited from lib-claude-agents.sh: replaces the
 #                             `claude` invocation in the sweep's liveness query
 #                             with an arbitrary command (testable with no daemon).
@@ -302,20 +319,39 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
       done <<<"$agents"
     fi
 
+    # Compute "now" (epoch) and the boot grace ONCE before the loop. A
+    # non-numeric DISPATCH_RESERVATION_SWEEP_NOW_EPOCH / _BOOT_GRACE_S falls back
+    # to its default.
+    local now
+    if [[ "${DISPATCH_RESERVATION_SWEEP_NOW_EPOCH:-}" =~ ^[0-9]+$ ]]; then
+      now="$DISPATCH_RESERVATION_SWEEP_NOW_EPOCH"
+    else
+      now=$(date -u +%s)
+    fi
+    local grace="${DISPATCH_RESERVATION_BOOT_GRACE_S:-30}"
+    [[ "$grace" =~ ^[0-9]+$ ]] || grace=30
+
     local had_nullglob=0
     shopt -q nullglob && had_nullglob=1
     shopt -s nullglob
-    local f bn marker_sid
+    local f bn marker_sid marker_ts marker_epoch
     for f in "$dir"/*; do
       [[ -f "$f" ]] || continue
       bn=$(basename "$f")
       # Read the `session=` line robustly (first match wins); independent of
       # line ordering within the marker.
       marker_sid=$(sed -n 's/^session=//p' "$f" 2>/dev/null | head -n1)
+      # Read the `timestamp=` line and parse it to epoch. The markers store UTC
+      # ISO-8601 (e.g. 2026-01-01T00:00:00Z), which GNU `date -d` parses. This
+      # may fail (empty/non-numeric marker_epoch) on an absent/unparseable
+      # timestamp, in which case the marker gets no age protection (fail-safe).
+      marker_ts=$(sed -n 's/^timestamp=//p' "$f" 2>/dev/null | head -n1)
+      marker_epoch=$(date -d "$marker_ts" +%s 2>/dev/null)
 
       if [[ -n "${live_names[$bn]:-}" ]]; then
         # (a) A live worker already owns this worktree (its session name equals
         # the worktree basename) — redundant / crash-after-register backstop.
+        # Age-independent: fires at ANY age, ahead of the grace check.
         reservation_clear "$bn"
         printf 'lib-reservation-ledger: reclaimed reservation %s (live-worker-redundant)\n' "$bn" >&2
       elif [[ -z "$marker_sid" ]]; then
@@ -325,8 +361,17 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
         # session" with "dead session" and could delete a still-valid slot — KEEP
         # it and flag it instead (fail safe, matching the sweep's conservatism).
         printf 'lib-reservation-ledger: keeping malformed reservation %s (no session= line)\n' "$bn" >&2
+      elif [[ "$marker_epoch" =~ ^[0-9]+$ ]] && (( now - marker_epoch < grace )); then
+        # (new) Boot grace: a marker younger than the grace is in-flight and KEPT
+        # regardless of the reserving session's liveness. This covers an async
+        # spawn whose reserving session (a short-lived router) has already exited
+        # while the spawned worker is still booting / not yet registered. A
+        # future-stamped marker (now - epoch < 0) is < grace, so it is kept too
+        # (the safe direction). KEEP — fall through to nothing.
+        :
       elif [[ -z "${live_ids[$marker_sid]:-}" ]]; then
-        # (c) The reserving session is not live and never converted — stranded.
+        # (c) The reserving session is not live, the marker has aged past the
+        # grace, and it never converted — stranded.
         reservation_clear "$bn"
         printf 'lib-reservation-ledger: reclaimed reservation %s (dead-session-stranded)\n' "$bn" >&2
       fi
