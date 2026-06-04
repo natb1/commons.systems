@@ -37,24 +37,20 @@ mid-tick when subsequent `Bash` / `Skill` tool calls reset to the spawn cwd.
 
 ## Race-window / Stop-hook re-gate rationale
 
-`dispatch-route` re-runs `dispatch-ci-ready` after `dispatch-phase` (the Step-2
-race window) because CI may have transitioned back to in-progress since the
-router selected this target — e.g. a new push between selection and worker boot.
-When the re-check reports `waiting`, `dispatch-route` emits `STOP waiting` and the
-worker stops with no marker, applying no `dispatch:office-hours` and spawning no
-babysitter: a not-ready target is not worker-actionable; the router owns the CI
-gate.
+`dispatch-route` emits `STOP waiting` when the initial `dispatch-ci-ready` gate
+reports the draft PR's CI has no verdict yet. The worker stops with no marker,
+applying no `dispatch:office-hours` and spawning no babysitter: a not-ready target
+is not worker-actionable; the router owns the CI gate.
 
 The Stop hook's early `dispatch-ci-ready` gate runs before the marker check: it
 detects the not-ready target and hands the issue back to the router (spawns a
 fresh router **without** applying `dispatch:office-hours`), which re-gates on
 `dispatch-ci-ready` and picks the target up once CI concludes.
 
-Within a single `dispatch-route` invocation both `dispatch-ci-ready` calls read
-the one `DISPATCH_PR_LIST` snapshot, so the in-script re-check is structurally
-parallel to the original multi-round-trip flow rather than a second live fetch;
-the genuine post-selection race is caught by the Stop-hook gate and the next
-router tick.
+The genuine post-selection CI race (a push restarting CI between router selection
+and worker session end) is caught by the Stop-hook gate and the next router tick,
+not by dispatch-route — both scripts read the same `DISPATCH_PR_LIST` snapshot,
+so dispatch-route cannot detect a live CI change that occurred after the fetch.
 
 ## The #725 cap-keyed re-seed
 

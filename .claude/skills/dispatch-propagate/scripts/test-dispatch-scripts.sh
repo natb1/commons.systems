@@ -947,8 +947,8 @@ echo ""
 echo "=== dispatch-route ==="
 
 # dispatch-route collapses the worker prelude (worktree cross-check,
-# dispatch-ci-ready gate, dispatch-phase, race-window re-check) into one call
-# and prints exactly one directive. The git stub serves the worktree toplevel
+# dispatch-ci-ready gate, dispatch-phase) into one call and prints exactly one
+# directive. The git stub serves the worktree toplevel
 # from worktree-toplevel.txt; the gh stub serves the full-field open-PR list
 # from pr-list-full.json and logs each such call to gh-pr-list-calls.log, so a
 # test can prove the single DISPATCH_PR_LIST fetch is reused, not re-issued.
@@ -1092,6 +1092,13 @@ echo "Test: no args → exit 2"
 setup
 route_run
 assert_eq "no args → exit 2" "2" "$ROUTE_RC"
+teardown
+
+# 14. Non-numeric <N> → exit 2.
+echo "Test: non-numeric <N> → exit 2"
+setup
+route_run "abc" /wt/abc-feature
+assert_eq "non-numeric N → exit 2" "2" "$ROUTE_RC"
 teardown
 
 # ============================================================================

@@ -3,10 +3,9 @@
 # Usage: dispatch-route <N> <worktree-path>
 #
 # Runs the deterministic worker prelude — the worktree cross-check, the
-# dispatch-ci-ready gate, dispatch-phase, and the Step-2 race-window
-# dispatch-ci-ready re-check — in a single invocation, so the worker model
-# makes one Bash round-trip instead of ~3.6. Prints exactly one directive line
-# to stdout:
+# dispatch-ci-ready gate, and dispatch-phase — in a single invocation, so the
+# worker model makes one Bash round-trip instead of ~3.6. Prints exactly one
+# directive line to stdout:
 #
 #   INVOKE /verify-pr            phase verify       (draft PR, CI failed)
 #   INVOKE /qa-fix               phase qa           (draft, CI green, no label)
@@ -15,17 +14,17 @@
 #   INVOKE /security-review-fix  phase security     (dispatch:reviewed / security-reviewed)
 #   RELEVANCE-REVIEW             phase implement    (no PR) — routes to SKILL.md Step 3
 #   STOP done                    phase done         (non-draft PR)
-#   STOP waiting                 dispatch-ci-ready reports waiting (initial gate or race-window)
+#   STOP waiting                 dispatch-ci-ready reports not-ready (draft PR CI pending)
 #   STOP wrong-worktree          cross-check failed (diagnostic on stderr); exits non-zero
 #
 # Usage error (missing <N> or <worktree-path>) → stderr message, exit 2 (matches
 # the sibling-script convention).
 #
 # The open-PR list is fetched ONCE here and exported as DISPATCH_PR_LIST; both
-# dispatch-ci-ready calls and dispatch-phase honor that env contract and reuse
-# the single snapshot — no redundant gh pr list. Because all readiness/phase
-# derivation runs against that one frozen snapshot, the race-window re-check is
-# structurally parallel to the original SKILL.md flow.
+# dispatch-ci-ready and dispatch-phase honor that env contract and reuse the
+# single snapshot — no redundant gh pr list. The genuine post-selection CI race
+# (a push restarting CI between router selection and worker session end) is caught
+# by dispatch-stop.sh's early not-ready gate, not here.
 #
 # Calls gh — invoke with dangerouslyDisableSandbox: true (see .claude/rules/sandbox.md).
 set -euo pipefail
@@ -36,6 +35,10 @@ N="${1:-}"
 WORKTREE_PATH="${2:-}"
 if [[ -z "$N" || -z "$WORKTREE_PATH" ]]; then
   echo "error: usage: dispatch-route <N> <worktree-path>" >&2
+  exit 2
+fi
+if [[ ! "$N" =~ ^[0-9]+$ ]]; then
+  echo "error: <N> must be a positive integer, got '$N'" >&2
   exit 2
 fi
 
@@ -65,20 +68,20 @@ fi
 DISPATCH_PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
 export DISPATCH_PR_LIST
 
-# Initial CI-ready gate. waiting (exit 1) → stop; the router owns the CI gate.
-if ! "$SCRIPT_DIR/dispatch-ci-ready" "$N" >/dev/null; then
+# Initial CI-ready gate. exit 0 (ready) → continue; exit 1 (waiting) → STOP waiting;
+# any other exit code is a dispatch-ci-ready internal failure — propagate it.
+CI_READY_RC=0
+"$SCRIPT_DIR/dispatch-ci-ready" "$N" >/dev/null || CI_READY_RC=$?
+if [[ "$CI_READY_RC" -eq 1 ]]; then
   echo "STOP waiting"
   exit 0
+elif [[ "$CI_READY_RC" -ne 0 ]]; then
+  echo "dispatch-route: dispatch-ci-ready exited $CI_READY_RC for $N" >&2
+  exit "$CI_READY_RC"
 fi
 
 # Derive the phase against the same snapshot.
 PHASE=$("$SCRIPT_DIR/dispatch-phase" "$N")
-
-# Step-2 race-window re-check.
-if ! "$SCRIPT_DIR/dispatch-ci-ready" "$N" >/dev/null; then
-  echo "STOP waiting"
-  exit 0
-fi
 
 # Map the phase string to its directive.
 case "$PHASE" in

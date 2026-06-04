@@ -27,14 +27,14 @@ with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 ## 1. Route via `dispatch-route`, Then Act on the Directive
 
 `dispatch-route` performs the entire deterministic prelude in one call — the
-worktree cross-check, the `dispatch-ci-ready` gate, `dispatch-phase`, and the
-race-window `dispatch-ci-ready` re-check — and prints exactly one directive line.
-Run it (`dangerouslyDisableSandbox: true` — it calls `gh`), capturing both the
-directive on stdout and the exit code. `ARGUMENTS` has the shape `<N>
-<worktree-path>`:
+worktree cross-check, the `dispatch-ci-ready` gate, and `dispatch-phase` — and
+prints exactly one directive line. Run it (`dangerouslyDisableSandbox: true` —
+it calls `gh`), capturing both the directive on stdout and the exit code.
+`ARGUMENTS` has the shape `<N> <worktree-path>`:
 
 ```bash
-.claude/skills/dispatch-propagate/scripts/dispatch-route <N> <worktree-path>
+read -r N WORKTREE_PATH <<<"$ARGUMENTS"
+.claude/skills/dispatch-propagate/scripts/dispatch-route "$N" "$WORKTREE_PATH"
 ```
 
 Act on the one directive:
@@ -48,7 +48,7 @@ Act on the one directive:
 | `INVOKE /security-review-fix` | 0 | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` re-entry) | invoke `/security-review-fix` |
 | `RELEVANCE-REVIEW` | 0 | no PR on the target (`implement`) | run the Step 2 relevance review, then dispatch its verdict |
 | `STOP done` | 0 | non-draft (ready) PR | stop without invoking a phase skill |
-| `STOP waiting` | 0 | draft PR's CI is back in progress | print the verbatim message below and stop |
+| `STOP waiting` | 0 | draft PR's CI has no verdict yet | print the verbatim message below and stop |
 | `STOP wrong-worktree` | non-zero | spawn cwd / branch did not match `<N>` / `<worktree-path>` | stop |
 
 ### `INVOKE` — run exactly one phase skill
@@ -93,8 +93,8 @@ its own marker — `/plan-implement` gets **no** `dispatch:*` label.
 
 ### `STOP waiting` — re-gate to the router, no marker
 
-CI transitioned back to in-progress since the router selected this target. Stop
-with no marker and print this user-visible report verbatim:
+The draft PR's CI has no verdict yet. Stop with no marker and print this
+user-visible report verbatim:
 
 ```
 #<N>: CI transitioned back to in-progress since router selection; next router tick will re-gate.
