@@ -24,6 +24,7 @@
 #   reservation_dir
 #   reservation_write   <worktree-basename> <issue-N> <session-id>
 #   reservation_clear   <worktree-basename>
+#   reservation_exists  <worktree-basename>
 #   reservation_count
 #   reservation_sweep
 #
@@ -62,6 +63,18 @@
 #     return 0 — file absent after the call (removed, or never existed, or no
 #               ledger).
 #     return 1 — missing or unsafe argument only.
+#
+# reservation_exists <worktree-basename>
+#   Fast-path membership test: return 0 if a reservation marker named exactly
+#   <worktree-basename> exists in the ledger dir, 1 otherwise. No daemon
+#   round-trip — a single stat. The basename arg is required and must pass the
+#   same path-safety guard as reservation_write/_clear (missing/unsafe → 1). An
+#   unresolvable/absent ledger dir → 1 (nothing reserved). The dot/.tmp in-flight
+#   tempfile is never matched (callers pass a clean basename; the guard rejects
+#   names with separators anyway).
+#     return 0 — a marker named <worktree-basename> exists.
+#     return 1 — a missing/unsafe argument, an unresolvable ledger dir, or no
+#               such marker.
 #
 # reservation_count
 #   Print the integer count of outstanding marker files to stdout. NEVER fails —
@@ -212,6 +225,28 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
     dir=$(reservation_dir) || return 0
     rm -f "$dir/$wt_name" 2>/dev/null || true
     return 0
+  }
+
+  # reservation_exists <worktree-basename> — fast-path marker membership test.
+  # See the header comment for the return-code contract.
+  reservation_exists() {
+    local wt_name="${1:-}"
+    if [[ -z "$wt_name" ]]; then
+      printf 'lib-reservation-ledger: reservation_exists requires a <worktree-basename> argument\n' >&2
+      return 1
+    fi
+    # Same path guard as reservation_write/_clear — never let an unsafe name
+    # stat outside the ledger dir.
+    case "$wt_name" in
+      *..*|*/*|*[[:cntrl:]]*)
+        printf 'lib-reservation-ledger: reservation_exists: unsafe worktree-basename %q\n' "$wt_name" >&2
+        return 1
+        ;;
+    esac
+    local dir
+    # Unresolvable ledger dir → nothing reserved.
+    dir=$(reservation_dir) || return 1
+    [[ -e "$dir/$wt_name" ]]
   }
 
   # reservation_count — print the count of outstanding marker files. Never fails.

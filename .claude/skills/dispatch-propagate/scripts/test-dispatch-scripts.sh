@@ -6445,6 +6445,30 @@ else
 fi
 rl_teardown
 
+# --- Test 13: reservation_exists tracks write/clear and guards its arg --------
+
+echo "Test: reservation_exists is true after write, false after clear, and guards its argument"
+rl_setup
+# Absent ledger (never written) → not reserved.
+if reservation_exists "990-slug"; then rc=0; else rc=$?; fi
+assert_eq "rl-exists: absent ledger → return 1" "1" "$rc"
+reservation_write "990-slug" "990" "sess-e"
+if reservation_exists "990-slug"; then rc=0; else rc=$?; fi
+assert_eq "rl-exists: true after write (return 0)" "0" "$rc"
+# A different basename with no marker → not reserved.
+if reservation_exists "991-other"; then rc=0; else rc=$?; fi
+assert_eq "rl-exists: unrelated basename → return 1" "1" "$rc"
+reservation_clear "990-slug"
+if reservation_exists "990-slug"; then rc=0; else rc=$?; fi
+assert_eq "rl-exists: false after clear (return 1)" "1" "$rc"
+# Empty arg → return 1.
+if reservation_exists ""; then rc=0; else rc=$?; fi
+assert_eq "rl-exists: empty arg → return 1" "1" "$rc"
+# Unsafe basename → return 1 (path-safety guard).
+if reservation_exists "../escape"; then rc=0; else rc=$?; fi
+assert_eq "rl-exists: unsafe basename → return 1" "1" "$rc"
+rl_teardown
+
 # ============================================================================
 # dispatch-config-load tests
 # ============================================================================
