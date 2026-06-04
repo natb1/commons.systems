@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# dispatch-refresh-rate-limits — headless rate-limit telemetry probe for #1127.
+#
+# The autonomous dispatch chain runs headlessly. Its budget telemetry
+# (rate_limits.json) has historically had exactly ONE writer: the statusLine
+# hook (statusline.sh -> update-rate-limits.sh), which lifts the .rate_limits
+# field Claude Code passes on stdin when a session renders its status line.
+# When the chain fully pauses with zero live sessions and no interactive
+# session open, nothing renders a status line, so rate_limits.json freezes at
+# the cap-hit snapshot — and a reseed-fired tick re-reads that frozen file,
+# computes target 0, and stalls even though the budget has reopened.
+#
+# This probe gives the headless path its own telemetry source. It fetches the
+# unified rate-limit response headers from the Anthropic messages endpoint
+# (the same 5h/7d windows Claude Code forwards into the status-line hook) and
+# writes rate_limits.json in the existing schema (five_hour/seven_day ->
+# used_percentage, resets_at), reusing update-rate-limits.sh's atomic write.
+# The status-line hook remains a valid writer — no format divergence.
+#
+# FAIL-SAFE CONTRACT (per .claude/rules/code-style.md; AC #4 of #1127 makes the
+# fall-back-to-cache-and-log degradation an explicit requirement, NOT an
+# accidental fallback): every failure path logs exactly one stderr diagnostic,
+# exits non-zero, and never touches the cached file or echoes the access token
+# in output. Exit 0 ONLY on a successful write. A probe outage (network,
+# missing creds, expired token, missing/malformed headers) therefore degrades
+# to today's behavior — the tick keeps the cached telemetry — rather than
+# erroring the tick.
+#
+# Token refresh is out of scope: this uses the stored access token as-is and
+# degrades safely on expiry (logs and exits non-zero).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+CREDS="${DISPATCH_REFRESH_RATE_LIMITS_CREDS:-$HOME/.claude/.credentials.json}"
+if [[ ! -r "$CREDS" ]]; then
+  echo "dispatch-refresh-rate-limits: credentials not found at $CREDS; keeping cached telemetry" >&2
+  exit 1
+fi
+
+TOKEN=$(jq -r '.claudeAiOauth.accessToken // empty' "$CREDS")
+EXPIRES_AT=$(jq -r '.claudeAiOauth.expiresAt // empty' "$CREDS")
+if [[ -z "$TOKEN" || -z "$EXPIRES_AT" ]]; then
+  echo "dispatch-refresh-rate-limits: access token or expiry missing from credentials; keeping cached telemetry" >&2
+  exit 1
+fi
+
+now_ms=$(( $(date +%s) * 1000 ))
+if [[ ! "$EXPIRES_AT" =~ ^[0-9]+$ ]] || (( EXPIRES_AT <= now_ms )); then
+  echo "dispatch-refresh-rate-limits: token expired; keeping cached telemetry" >&2
+  exit 1
+fi
+
+ENDPOINT="${DISPATCH_REFRESH_RATE_LIMITS_ENDPOINT:-https://api.anthropic.com/v1/messages}"
+MODEL="${DISPATCH_REFRESH_RATE_LIMITS_MODEL:-claude-haiku-4-5-20251001}"
+
+# TEST SEAM: read headers from a file instead of the network (no eval).
+if [[ -n "${DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE:-}" ]]; then
+  HEADERS="$(cat "$DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE")"
+else
+  HEADERS=$(curl -sS -D - -o /dev/null --connect-timeout 5 --max-time 10 \
+    -H "authorization: Bearer $TOKEN" \
+    -H "anthropic-version: 2023-06-01" \
+    -H "anthropic-beta: oauth-2025-04-20" \
+    -H "content-type: application/json" \
+    -d "{\"model\":\"$MODEL\",\"max_tokens\":1,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}" \
+    "$ENDPOINT") || { echo "dispatch-refresh-rate-limits: probe request failed; keeping cached telemetry" >&2; exit 1; }
+fi
+
+# Parse a header value: case-insensitive name match, last occurrence wins,
+# strip the value of surrounding whitespace and a trailing CR.
+header_val() { printf '%s\n' "$HEADERS" | grep -i "^$1:" | tail -n1 | sed 's/^[^:]*://; s/[[:space:]]//g; s/\r$//'; }
+
+U5=$(header_val "anthropic-ratelimit-unified-5h-utilization")
+R5=$(header_val "anthropic-ratelimit-unified-5h-reset")
+U7=$(header_val "anthropic-ratelimit-unified-7d-utilization")
+R7=$(header_val "anthropic-ratelimit-unified-7d-reset")
+
+# Validate: utilization is a non-negative decimal; reset is an epoch integer.
+# A 429 still carries these headers, so status is irrelevant — only
+# missing/malformed values are a failure.
+if [[ ! "$U5" =~ ^[0-9]+(\.[0-9]+)?$ ]] || \
+   [[ ! "$U7" =~ ^[0-9]+(\.[0-9]+)?$ ]] || \
+   [[ ! "$R5" =~ ^[0-9]+$ ]] || \
+   [[ ! "$R7" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-refresh-rate-limits: rate-limit headers missing or malformed; keeping cached telemetry" >&2
+  exit 1
+fi
+
+# Utilization is a fraction (0..1); convert to integer percent, rounded.
+P5=$(awk -v u="$U5" 'BEGIN{printf "%d", int(u*100 + 0.5)}')
+P7=$(awk -v u="$U7" 'BEGIN{printf "%d", int(u*100 + 0.5)}')
+
+PAYLOAD=$(printf '{"rate_limits":{"five_hour":{"used_percentage":%d,"resets_at":%d},"seven_day":{"used_percentage":%d,"resets_at":%d}}}' "$P5" "$R5" "$P7" "$R7")
+if ! printf '%s' "$PAYLOAD" | "$SCRIPT_DIR/update-rate-limits.sh" >/dev/null; then
+  echo "dispatch-refresh-rate-limits: atomic write via update-rate-limits.sh failed; cache may be unchanged" >&2
+  exit 1
+fi
+
+echo "dispatch-refresh-rate-limits: refreshed 5h=${P5}% 7d=${P7}%" >&2
+exit 0
