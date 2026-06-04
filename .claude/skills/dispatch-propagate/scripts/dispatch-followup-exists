@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Print the number of the first issue whose title contains <identifier>, or
+# nothing if none exists.
+# Usage: dispatch-followup-exists <identifier>
+#
+# WHY THIS EXISTS
+#   This is a deterministic, state-spanning, exact-identifier existence check
+#   used by /review-fix Step 6b's security-followup filing path to make
+#   re-filing idempotent. Before filing each emitted follow-up, the caller
+#   probes for an issue already tracking the same stable identifier and skips
+#   filing when one exists.
+#
+#   It complements two other pieces and replaces neither:
+#     - The PURE `dispatch-security-followup` emitter, which derives the stable
+#       identifiers but must stay free of gh/network calls. The existence check
+#       lives here, out of that pure transform.
+#     - /file-issue's fuzzy keyword+judgment dedup, which is kept as
+#       defense-in-depth for free-text callers. This deterministic guard is
+#       specific to the machine-keyed security-followup path.
+#
+# STATE SCOPE
+#   The query deliberately spans `--state all` — open AND closed issues. gh's
+#   default issue list is open-only, which is exactly the leak this guard
+#   closes: once a tracking issue is resolved-and-closed, an open-only dedup
+#   re-files the same advisory on the next review.
+#
+# TRADEOFF
+#   Because it spans closed issues too, a CLOSED tracking issue — whether the
+#   advisory was already-resolved or already-rejected — suppresses re-filing of
+#   the same identifier. Re-filing is noise either way.
+#
+# IDENTIFIERS
+#   Keyed on the emitter's stable title tokens:
+#     - npm:    `npm advisories in <package>`
+#     - CodeQL: `CodeQL <rule_id> alert #<n>`
+#
+# MATCHING
+#   gh's --search is tokenized/fuzzy, so it only narrows the candidate set
+#   server-side (wrapping the identifier in literal double-quotes and adding the
+#   `in:title` qualifier). The authoritative match is the jq post-filter, which
+#   uses `contains($id)` — a LITERAL substring test — so a mere shared-token hit
+#   does NOT match. The first matching issue number is printed; nothing if none.
+set -euo pipefail
+
+if [[ "$#" -lt 1 || -z "${1:-}" ]]; then
+  echo "error: usage: dispatch-followup-exists <identifier>" >&2
+  exit 2
+fi
+
+identifier="$1"
+
+gh issue list --search "\"$identifier\" in:title" --state all --json number,title --limit 100 \
+  | jq -r --arg id "$identifier" '[.[] | select(.title | contains($id))][0].number // empty'

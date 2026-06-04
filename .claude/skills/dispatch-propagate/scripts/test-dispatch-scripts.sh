@@ -16763,6 +16763,104 @@ assert_contains_local "dispatch-drift-scan: a legitimate sibling path still rend
 drift_scan_teardown
 
 # ============================================================================
+# === dispatch-followup-exists ===
+# ============================================================================
+
+echo "Test: dispatch-followup-exists"
+
+# Dedicated setup/teardown modeled on jit_skill_setup/teardown. Builds a temp
+# tree with the script under test and a gh stub on PATH. The stub returns the
+# WHOLE issues.json fixture array (no filtering of its own) so the script's jq
+# does the exact-substring filtering under test.
+followup_exists_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
+
+  cp "$SCRIPT_DIR/dispatch-followup-exists" "$TMPDIR_TEST/scripts/dispatch-followup-exists"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-followup-exists"
+
+  # gh stub: matches ONLY the exact invocation the script makes:
+  #   gh issue list --search "\"<id>\" in:title" --state all --json number,title --limit 100
+  # On match, cat the fixture $TREE/issues.json if present, else echo [].
+  # The stub does NOT filter — it returns the whole array; the script's jq filters.
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+args="$*"
+TREE="$(cd "$(dirname "$0")/.." && pwd)"
+case "$args" in
+  issue\ list\ *--state\ all\ --json\ number,title\ --limit\ 100)
+    if [[ -f "$TREE/issues.json" ]]; then
+      cat "$TREE/issues.json"
+    else
+      echo '[]'
+    fi
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  SAVED_PATH_FE="$PATH"
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+}
+
+followup_exists_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  export PATH="$SAVED_PATH_FE"
+}
+
+# CASE 1 — OPEN match (npm)
+followup_exists_setup
+cat > "$TMPDIR_TEST/issues.json" <<'EOF'
+[{"number":1077,"title":"security: npm advisories in lodash"}]
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "npm advisories in lodash")
+assert_eq "followup-exists: open npm match → prints number" "1077" "$out"
+followup_exists_teardown
+
+# CASE 2 — CLOSED match (npm); state irrelevant to the script (--state all)
+followup_exists_setup
+cat > "$TMPDIR_TEST/issues.json" <<'EOF'
+[{"number":1094,"title":"security: npm advisories in axios"}]
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "npm advisories in axios")
+assert_eq "followup-exists: closed npm match → prints number" "1094" "$out"
+followup_exists_teardown
+
+# CASE 3 — CodeQL match
+followup_exists_setup
+cat > "$TMPDIR_TEST/issues.json" <<'EOF'
+[{"number":1096,"title":"security: CodeQL js/sql-injection alert #42 in src/db.ts"}]
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "CodeQL js/sql-injection alert #42")
+assert_eq "followup-exists: codeql match → prints number" "1096" "$out"
+followup_exists_teardown
+
+# CASE 4 — NO match (empty fixture)
+followup_exists_setup
+cat > "$TMPDIR_TEST/issues.json" <<'EOF'
+[]
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "npm advisories in lodash")
+assert_eq "followup-exists: no match → empty" "" "$out"
+followup_exists_teardown
+
+# CASE 5 — FUZZY token overlap but NOT an exact substring.
+# Title "npm advisories in the lodash package" shares the leading tokens but
+# the intervening word "the" breaks the substring, so contains() is false.
+followup_exists_setup
+cat > "$TMPDIR_TEST/issues.json" <<'EOF'
+[{"number":1200,"title":"security: npm advisories in the lodash package"}]
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "npm advisories in lodash")
+assert_eq "followup-exists: fuzzy token overlap, no exact substring → empty" "" "$out"
+followup_exists_teardown
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
