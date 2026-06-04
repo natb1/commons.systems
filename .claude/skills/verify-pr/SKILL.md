@@ -19,50 +19,16 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
 
 ## Steps
 
-1. **Increment the verify-attempt counter.** Resolve the draft PR for the target.
-   Read the PR's labels and find the highest extant `dispatch:verify-attempt-<n>` label
+1. **Resolve the draft PR.** Resolve the draft PR for the target into `PR_NUM`
    (`dangerouslyDisableSandbox: true` — `gh`):
 
    ```bash
    PR_NUM=$(.claude/skills/dispatch-propagate/scripts/dispatch-find-pr <issue-N>)
-   N=$(gh pr view "$PR_NUM" --json labels \
-     --jq '[.labels[].name | capture("^dispatch:verify-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0')
-   NEXT=$(( N < 3 ? N + 1 : 3 ))
    ```
 
-   The cap at 3 means a fourth entry still leaves the label at `dispatch:verify-attempt-3`.
-   Step 4 of `/dispatch-worker` reads this counter: when the re-derived phase is still
-   `verify` and the counter is `>= 3`, it escalates to `dispatch:office-hours` instead
-   of self-closing.
-
-   Remove the prior label if one exists, then apply the new one. Use the apply-first /
-   create-on-"not found" idiom — the label may not exist yet on a fresh repo
-   (`dangerouslyDisableSandbox: true` on all `gh` calls):
-
-   ```bash
-   # Remove the previous counter label (skip if N=0 — none existed)
-   if [[ "$N" -gt 0 ]]; then
-     gh pr edit "$PR_NUM" --remove-label "dispatch:verify-attempt-$N"
-   fi
-
-   # Apply the new label; create it if missing, then retry
-   if ! gh pr edit "$PR_NUM" --add-label "dispatch:verify-attempt-$NEXT" 2>/dev/null; then
-     gh label create "dispatch:verify-attempt-$NEXT" \
-       --description "dispatch workflow: verify-pr attempt $NEXT of 3"
-     gh pr edit "$PR_NUM" --add-label "dispatch:verify-attempt-$NEXT"
-   fi
-   ```
-
-   Pass no `--color` — same convention as `dispatch:office-hours` (no colour metadata
-   here; label colour is owned by the canonical definition, not the writer).
-
-   Note: `dispatch-complete-phase` is not the right vehicle for this label — it handles
-   only the four canonical phase-complete labels (`dispatch:qa-done`, `dispatch:code-reviewed`,
-   `dispatch:reviewed`, `dispatch:security-reviewed`). The verify-attempt label is local
-   to `/verify-pr`.
-
-   The PR number resolved here is also used in Steps 3, 4 (the Flake sub-path's
-   `gh pr view <pr-num>` body read), and 7 — carry it forward.
+   The PR number resolved here is used in Steps 3, 4 (the Flake sub-path's
+   `gh pr view <pr-num>` body read), 5 (the verify-attempt label edit), and 8 —
+   carry it forward.
 
 2. **Read the accumulator.** Read `tmp/verify-summary.md` if it exists — it holds the
    prior iterations' records. On the first verify pass the file does not yet exist;
@@ -78,9 +44,10 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    complete-and-failed — so this returns immediately with a per-check summary:
    name, conclusion, and a failure-log excerpt for each failing check.
 
-4. **Reproduce locally.** Launch a `sonnet` subagent with the failing check name and
-   failure excerpt. The subagent maps the check to a local reproduce command and runs
-   it (use `dangerouslyDisableSandbox: true` when network or npm cache is needed):
+4. **Reproduce locally and classify.** Launch a `sonnet` subagent with the failing
+   check name and failure excerpt. The subagent maps the check to a local reproduce
+   command and runs it (use `dangerouslyDisableSandbox: true` when network or npm
+   cache is needed):
 
    - Unit test check → `.claude/skills/dispatch-propagate/scripts/run-unit-tests.sh`
    - Lint check → `.claude/skills/dispatch-propagate/scripts/run-lint.sh`
@@ -89,28 +56,70 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    - Other → best-effort map from the failing workflow name
 
    The subagent returns `{ reproduced: bool, reproduce_command, failure_excerpt,
-   why_not_caught, is_flake: bool }`. `why_not_caught` is a free-text diagnosis
-   (missing test, disabled rule, skipped hook, env drift, flake, etc.) —
-   human-readable context, not a structured branch key. `is_flake` is the
-   **structured branch key**: the subagent sets it
-   `true` only when it diagnoses the failure as a **flake** — a non-deterministic
-   failure unrelated to the PR's own changes (a pre-existing flaky test, a
-   CI-infrastructure hiccup, an upstream timing race). The flake branch below
-   reads `is_flake`; it never string-matches `why_not_caught`.
+   why_not_caught, is_flake: bool, needs_human: bool, required_action: string }`.
+   `why_not_caught` is a free-text diagnosis (missing test, disabled rule, skipped
+   hook, env drift, flake, etc.) — human-readable context, not a structured branch
+   key. `is_flake` and `needs_human` are the **structured branch keys** — never
+   string-matched from `why_not_caught`:
 
-   **If the failure does NOT reproduce** (`reproduced == false`), there are three
-   mutually exclusive outcomes. `is_flake` is the discriminator: when
-   `is_flake == true` the outcome is **Flake**; when `is_flake == false` it is
-   **Main already fixed it** or **Generic no-repro**. Never push a speculative
-   fix — an unverified fix is still never pushed.
+   - `is_flake` is set `true` only when the subagent diagnoses the failure as a
+     **flake** — a non-deterministic failure unrelated to the PR's own changes (a
+     pre-existing flaky test, a CI-infrastructure hiccup, an upstream timing race).
+   - `needs_human` is set `true` only when the subagent diagnoses a **real failure
+     unfixable in code** — a deploy/infra/permissions error where no code change
+     resolves it (secret/IAM/SA; canonical case a deploy-time GCP Secret Manager
+     403 on a renamed secret). `required_action` then names what an owner must do
+     (provision the secret, grant the deploy SA access, etc.).
 
-   - **Generic no-repro** — `is_flake == false` and the failure simply does not
-     reproduce, with no identified cause. Record it in the accumulator (Step 6),
-     post the accumulator (Step 7), and stop. Push nothing.
-   - **Main already fixed it** — `is_flake == false` and the `why_not_caught`
-     diagnosis is that `origin/main` (merged into this worktree by the router
-     before spawning this worker) already resolved the failure. Record it in the
-     accumulator (Step 6), post the accumulator (Step 7), and then push that
+   The branch logic reads these structured keys; it never string-matches
+   `why_not_caught`.
+
+   **If the failure does NOT reproduce** (`reproduced == false`), there are four
+   mutually exclusive outcomes, in this precedence: `needs_human` → `is_flake` →
+   **Main already fixed it** → **Generic no-repro**. Never push a speculative fix —
+   an unverified fix is still never pushed.
+
+   - **Needs human / infra** — `needs_human == true`: the failure is real but cannot
+     be fixed in code (a deploy/infra/permissions blocker — e.g. a GCP Secret Manager
+     403 on a renamed secret). This outcome is **terminal here** and **never touches
+     the verify-attempt counter** — retrying verify is pointless, so a human must be
+     reached on the **first** run. Push nothing. Do these inline and stop:
+
+     1. **Append the accumulator record** with outcome `needs-human` and a **Required
+        action** field naming `required_action` (see [Accumulator](#accumulator)).
+     2. **Post the accumulator** — the same `post-pr-comment.sh` command as Step 8:
+
+        ```bash
+        .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh <pr-num> tmp/verify-summary.md
+        ```
+
+     3. **Write `office-hours-reason`** atomically (tempfile + mv), under the
+        `CLAUDE_JOB_DIR` guard — the same shape as `/plan-implement` Step 4's
+        deviation block:
+
+        ```bash
+        if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+          printf '%s\n' "/verify-pr: <required_action>" > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+          mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" "$CLAUDE_JOB_DIR/office-hours-reason"
+        fi
+        ```
+
+     4. **Do NOT write the `phase=verify` marker** (do not run Step 9).
+     5. **Stop.** With the marker absent and `office-hours-reason` present, the Stop
+        hook (`.claude/hooks/dispatch-stop.sh`) takes **Branch A** and parks the issue
+        on `dispatch:office-hours` on the **first** verify run — no verify-attempt
+        cycling, no re-diagnosis. This is the same skip-marker + `office-hours-reason`
+        pattern the other phase skills use for a known human-required outcome.
+
+     Every **other** outcome continues to Step 5.
+
+   - **Generic no-repro** — `is_flake == false`, `needs_human == false`, and the
+     failure simply does not reproduce, with no identified cause. Record it in the
+     accumulator (Step 7), post the accumulator (Step 8), and stop. Push nothing.
+   - **Main already fixed it** — `is_flake == false`, `needs_human == false`, and the
+     `why_not_caught` diagnosis is that `origin/main` (merged into this worktree by
+     the router before spawning this worker) already resolved the failure. Record it
+     in the accumulator (Step 7), post the accumulator (Step 8), and then push that
      merge commit **alone** — no fix — so CI re-runs against the merged state.
      What gets pushed is the already-completed, deterministic merge of `main`,
      not a fix. Without this push the stale failed CI keeps routing
@@ -150,8 +159,8 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
         the issue(s) this PR implements. For **each** tracked issue, record a
         `blocked_by` dependency **on that tracked issue, targeting the flake issue
         `<N>`** — the PR's own work is blocked by the unrelated flake. Note the
-        direction: this is the **reverse** of `/review-fix` and `/code-review-fix`,
-        which record `blocked_by` on the *new* issue; here the new flake issue is
+        direction: this is the **reverse** of `/review-fix`,
+        which records `blocked_by` on the *new* issue; here the new flake issue is
         the *blocker* and the PR's existing tracked issue is the *blocked* one.
         Use the `ref-github-issues` dependencies API (database-ID resolution with
         `gh api`, `--input` JSON; see `ref-github-issues`, do not restate the
@@ -160,30 +169,84 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
         the flake issue is already present, so a re-run against the same
         fingerprint does not re-add the dependency or error.
      4. **Record a flake iteration in the accumulator** (the skill's top-level
-        Step 6) — see [Accumulator](#accumulator); a flake entry is visually
+        Step 7) — see [Accumulator](#accumulator); a flake entry is visually
         distinct from a generic no-repro one.
-     5. **Post the accumulator (Step 7) and stop (Step 8). Push nothing** — the
+     5. **Post the accumulator (Step 8) and stop (Step 9). Push nothing** — the
         same terminal behavior as the generic no-repro outcome. On the next
         `/dispatch-propagate` run the PR's tracked issue carries a `blocked_by` against the
         flake issue; `/dispatch-propagate`'s queue scan skips blocked issues, so the PR is
         no longer re-routed to the `verify` phase. The flake issue stands on its
         own in the queue for independent triage.
 
-5. **Fix the failure.** If reproduced, fix it by invoking `/implement-unit` via the
-   Skill tool — pass `model` (chosen per `/implement-unit`'s heuristic), `scope` (the
-   fix), `context` (the failing check and reproduce command), and `commit_intent`.
-   `/implement-unit` builds the fix, commits, merges, and pushes it.
+   Of the no-repro outcomes, **needs-human** is the only one that does its
+   accumulator-append + post + `office-hours-reason` write **inline and stops before
+   Step 5**. The other three (generic, main-fixed, flake) set their own push
+   disposition here and then fall through to the shared tail Steps 7→9.
 
-6. **Append a record to the accumulator.** Append one `## Iteration <n>` section to
+5. **Increment the verify-attempt counter.** Read the PR's labels and find the highest
+   extant `dispatch:verify-attempt-<n>` label (`dangerouslyDisableSandbox: true` —
+   `gh`):
+
+   ```bash
+   N=$(gh pr view "$PR_NUM" --json labels \
+     --jq '[.labels[].name | capture("^dispatch:verify-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0')
+   NEXT=$(( N < 3 ? N + 1 : 3 ))
+   ```
+
+   This step runs for the `fixed`, `main-fixed`, `flake`, and `generic` outcomes —
+   the ones that consume the retry budget. The needs-human outcome already stopped in
+   Step 4 and never applies a verify-attempt label.
+
+   The cap at 3 means a fourth entry still leaves the label at `dispatch:verify-attempt-3`.
+   Step 4 of `/dispatch-worker` reads this counter: when the re-derived phase is still
+   `verify` and the counter is `>= 3`, it escalates to `dispatch:office-hours` instead
+   of self-closing.
+
+   Remove the prior label if one exists, then apply the new one. Use the apply-first /
+   create-on-"not found" idiom — the label may not exist yet on a fresh repo
+   (`dangerouslyDisableSandbox: true` on all `gh` calls):
+
+   ```bash
+   # Remove the previous counter label (skip if N=0 — none existed)
+   if [[ "$N" -gt 0 ]]; then
+     gh pr edit "$PR_NUM" --remove-label "dispatch:verify-attempt-$N"
+   fi
+
+   # Apply the new label; create it if missing, then retry
+   if ! gh pr edit "$PR_NUM" --add-label "dispatch:verify-attempt-$NEXT" 2>/dev/null; then
+     gh label create "dispatch:verify-attempt-$NEXT" \
+       --description "dispatch workflow: verify-pr attempt $NEXT of 3"
+     gh pr edit "$PR_NUM" --add-label "dispatch:verify-attempt-$NEXT"
+   fi
+   ```
+
+   Pass no `--color` — same convention as `dispatch:office-hours` (no colour metadata
+   here; label colour is owned by the canonical definition, not the writer).
+
+   Note: `dispatch-complete-phase` is not the right vehicle for this label — it handles
+   only the two canonical phase-complete labels (`dispatch:qa-done`, `dispatch:reviewed`).
+   The verify-attempt label is local to `/verify-pr`.
+
+6. **Apply the outcome's action.** If the failure reproduced, fix it by invoking
+   `/implement-unit` via the Skill tool — pass `model` (chosen per
+   `/implement-unit`'s heuristic), `scope` (the fix), `context` (the failing check and
+   reproduce command), and `commit_intent`. `/implement-unit` builds the fix, commits,
+   merges, and pushes it. For the no-repro outcomes that reached this step
+   (generic, main-fixed, flake), the push disposition was already set by the Step 4
+   classification — generic and flake push nothing, main-fixed pushed the merge
+   commit — so there is nothing more to do here.
+
+7. **Append a record to the accumulator.** Append one `## Iteration <n>` section to
    `tmp/verify-summary.md` (see [Accumulator](#accumulator)).
 
-7. **Post the accumulator as a PR comment** (use `dangerouslyDisableSandbox: true`):
+8. **Post the accumulator as a PR comment** (use `dangerouslyDisableSandbox: true`):
 
    ```bash
    .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh <pr-num> tmp/verify-summary.md
    ```
 
-8. **Write the phase-completed marker, then stop.** The Stop hook
+9. **Write the phase-completed marker, then stop.** Reached by every outcome
+   **except** needs-human (which stopped in Step 4 without a marker). The Stop hook
    (`.claude/hooks/dispatch-stop.sh`) reads this to decide propagate vs park.
    Atomic via tempfile + mv. `CLAUDE_JOB_DIR` unset = interactive run; skip.
 
@@ -207,9 +270,9 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
 - **First write** — create the file with a header (e.g. `# Verify summary — PR #<n>`).
 - **Every invocation** — append a `## Iteration <n>` section containing:
   - **Failed checks** — the check names CI reported failing.
-  - **Outcome** — one of `fixed`, `generic-no-repro`, `main-fixed`, or `flake`.
-    This field is what makes a flake iteration visually distinct from a generic
-    no-repro one.
+  - **Outcome** — one of `fixed`, `generic-no-repro`, `main-fixed`, `flake`, or
+    `needs-human`. This field is what makes a flake iteration visually distinct
+    from a generic no-repro one.
   - **Reproduced** — `yes` or `no`.
   - **Reproduce command** — the command the subagent ran.
   - **Failure excerpt** — a short excerpt of the failure log.
@@ -222,6 +285,9 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
   - **Fingerprint** — *`flake` outcome only* — the dedupe key computed in the
     Flake sub-path (the failing check name plus the stable identifier). Omit for
     every other outcome.
+  - **Required action** — *`needs-human` outcome only* — the owner/infra action
+    the subagent reported (the `required_action` string, e.g. provision the
+    secret, grant the deploy SA access). Omit for every other outcome.
 
 `tmp/` is git-ignored, so the accumulator never enters a commit; it persists for the
 worktree's life.

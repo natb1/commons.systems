@@ -44,11 +44,11 @@ indistinguishable from a stray manual edit.
 
 **Such ops must run with `dangerouslyDisableSandbox: true`.**
 
-Canonical case: `/dispatch-propagate` Step 1 runs
-`git fetch origin main && git merge --ff-only origin/main` on the `main` worktree.
-`origin/main` frequently carries `.claude/skills/**` changes (the dispatch skills
-are actively developed), so this sync routinely hits the hazard. It must run with
-`dangerouslyDisableSandbox: true`.
+Canonical case: `dispatch-select-tick` (run by the headless `dispatch-tick`)
+runs `git fetch origin main && git merge --ff-only origin/main` on the `main`
+worktree. `origin/main` frequently carries `.claude/skills/**` changes (the
+dispatch skills are actively developed), so this sync routinely hits the hazard.
+It must run with `dangerouslyDisableSandbox: true`.
 
 ## gh CLI (GitHub API)
 

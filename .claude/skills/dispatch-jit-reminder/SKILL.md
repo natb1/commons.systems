@@ -1,31 +1,34 @@
 ---
 name: dispatch-jit-reminder
-description: Claim the earliest-due JIT issue, release the dispatch lock, summarize the issue for the user as a reminder, and stop the tick. Invoked by /dispatch-propagate when the JIT scan surfaces a due reminder.
+description: Claim the earliest-due JIT issue, then either run a configured skill (for skill-running jits such as digest) or summarize it for the user and stop. Runs as a spawned bg job from /dispatch-propagate when the JIT scan surfaces a due reminder.
 ---
 
 # Dispatch: JIT Reminder
 
-Invoked by `/dispatch-propagate` Step 3 when `dispatch-select-target` reports
+Runs as its own `claude --bg` job (session name `jit-reminder-<num>`) spawned by
+`/dispatch-propagate` when `dispatch-select-target` reports
 `jit-reminder <repo> <num> <project> <item-id>` — the JIT scan selected
-`<num>` in `<repo>` as the earliest-due open JIT issue.
+`<num>` in `<repo>` as the earliest-due open JIT issue. This job holds no
+dispatch lock (the router released it before spawning this job).
 
 Takes four arguments: `<repo> <num> <project> <item-id>`.
 
-Claim the issue, release the dispatch lock, summarize the issue for the
-user, and stop. The skill stops the tick directly — the summary printed here
-must stay open in the transcript for a human to read. Steps 4, 5, and 6-7 of
-`/dispatch-propagate` are all skipped — no worktree, no PR, no phase skill, no leaf
-trace.
+Claim the issue, then either run a configured skill (when the jit defines one)
+or summarize the issue for the user and stop. Either way the session output
+stays open in this job's transcript for a human to read — no worktree, no PR,
+no phase skill, no leaf trace.
+
+The per-item spawn-dedup name `jit-reminder-<num>` — assigned by the router's
+`dispatch-spawn-job` call — prevents a concurrent dispatch tick from
+double-spawning the same reminder while this claim is in flight; the In-Progress
+claim then prevents re-selection on later ticks.
 
 Run `gh`-calling commands with `dangerouslyDisableSandbox: true` — see
 `.claude/rules/sandbox.md`.
 
-## 1. Claim the issue inside the scoped lock window
+## 1. Claim the issue
 
-The lock is still held by the caller from `/dispatch-propagate` Step 0 — the reminder
-path is a Step 3 stop path and never reaches Step 5's proceed-path release,
-so the claim runs under the lock, exactly as the JIT engine does. Resolve
-the project's In-Progress status value from local config, then write it:
+Resolve the project's In-Progress status value from local config, then write it:
 
 ```bash
 IN_PROGRESS=$(.claude/skills/dispatch-propagate/scripts/dispatch-config-load projects \
@@ -38,16 +41,26 @@ IN_PROGRESS=$(.claude/skills/dispatch-propagate/scripts/dispatch-config-load pro
 The `dispatch-project-status-write` call needs `dangerouslyDisableSandbox:
 true` — it calls `gh`.
 
-## 2. Release the lock
+## 2. Resolve and run a configured skill
 
-This is a Step 3 stop path — release the lock immediately after the claim,
-before the summary:
+After claiming, resolve whether this jit is configured to run a skill:
 
 ```bash
-.claude/skills/dispatch-propagate/scripts/dispatch-acquire-lock --release
+SKILL=$(.claude/skills/dispatch-propagate/scripts/dispatch-jit-skill <repo> <num>)
 ```
 
-`dangerouslyDisableSandbox: true`.
+Run this with `dangerouslyDisableSandbox: true` — it calls `gh` (see
+`.claude/rules/sandbox.md`).
+
+If `$SKILL` is **non-empty**: invoke that skill via the **Skill tool** (skill
+name = the value of `$SKILL`), passing the issue's `<repo> <num>` as its
+arguments, and let that skill own the rest of this session. Do NOT then run
+the summarize-and-stop steps below — the configured skill produces the
+session's output and terminates it. A skill-running jit reminder is still an
+**office-hours session** (the skill runs with the user present).
+
+If `$SKILL` is **empty** (no `skill` configured, or no `jit.json`): fall
+through to the summarize-and-stop steps below, unchanged.
 
 ## 3. Summarize the issue for the user
 
@@ -62,13 +75,13 @@ reminder, framed as the most-overdue / soonest-due JIT reminder the scan
 surfaced. The `jit-reminder` line carries no due timestamp — do not state a
 precise computed due time.
 
-## 4. Stop the tick
+## 4. Stop
 
 The `In Progress` status the claim wrote stops a later `/dispatch-propagate` tick from
 re-selecting this issue.
 
-A `jit-reminder` run is a **jit summary session** — an office-hours session
-(#755): the summary is surfaced to the user for a human to read, not
-consumed as autonomous dispatch-chain work. #755's two-queue infrastructure
-is not yet built, so this skill is that documented intent plus the
-mechanical claim → release → summarize → stop branch above.
+A `jit-reminder` run is an **office-hours session** in the now-built
+two-queue model (#755): the summary (or the configured skill's output) is
+surfaced to the user for a human to read, not consumed as autonomous
+dispatch-chain work. Both the summarize-and-stop variant (§3–4) and the
+skill-running variant (§2) run as office-hours sessions with the user present.

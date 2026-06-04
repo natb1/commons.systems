@@ -312,14 +312,24 @@ and prevents the issue from transiently carrying both `bug` and
 
 Classify the issue's topic from its title and body. Topic labels mark subject
 area and are orthogonal to the `dispatch:*` phase labels, which mark workflow
-progress. Apply **at most one** topic label. The 'at most one' rule applies
-only to the topic axis — `dispatch` and `testing infrastructure`. `priority`
-is a separate axis (an escalation marker) and may be applied alongside a
-topic label.
+progress. The topic axis is also orthogonal to the `bug`/`enhancement` type
+axis above: a vulnerability follow-up is `bug` type **and** `security` topic.
+Apply **at most one** topic label. The 'at most one' rule applies
+only to the topic axis — `security`, `dispatch`, `testing infrastructure`,
+`budget`, `print`, and `audio`.
+`priority` is a separate axis (an escalation marker) and may be applied
+alongside a topic label.
+
+- **`security`** — marks a vulnerability or security-hardening follow-up, e.g.
+  a CodeQL alert or npm advisory surfaced by review. Ranks first in
+  `dispatch-select-target` queue selection, so a `security` item outranks a
+  plain-`bug` item at the same priority level. Orthogonal to the type axis: a
+  vulnerability fix is `bug` type + `security` topic. Keyword signals:
+  "vulnerability", "CodeQL", "advisory", "CVE", "security finding".
 
 - **`dispatch`** — concerns the `/dispatch` or `/dispatch-propagate` workflow,
   one of its phase skills (`/plan-implement`, `/verify-pr`, `/qa-fix`,
-  `/code-review-fix`, `/review-fix`, `/security-review-fix`), the `/office-hours`
+  `/review-fix`), the `/office-hours`
   queue worker, a `ref-*`
   reference skill those skills use (`ref-ready`, `ref-memory-management`,
   `ref-github-issues`, `ref-write-instructions`), or a `dispatch-*` script
@@ -337,6 +347,19 @@ topic label.
   signals: "CI", "unit test", "acceptance test", "Vitest", "Playwright",
   "fixture", "seed data", "test runner".
 
+- **`budget`** — concerns the budget app: the `budget/` frontend or the
+  `budget-etl/` pipeline. Ranks below `dispatch` and above `print` in
+  `dispatch-select-target` queue selection. Keyword signals: "budget",
+  "budget-etl", "QFX/OFX", "bank statement", "categorization", "budget.json".
+
+- **`print`** — concerns the print app (`print/`). Ranks below `budget` and
+  above `audio` in `dispatch-select-target` queue selection. Keyword signals:
+  "print", "print app", "print viewer".
+
+- **`audio`** — concerns the audio app (`audio/`). Ranks below `print` and
+  above the `other` fallback in `dispatch-select-target` queue selection.
+  Keyword signals: "audio", "audio app".
+
 - **`priority`** — a separate axis from the topic labels above. A
   human-applied escalation marker that routes the issue (or any PR closing it)
   ahead of non-priority items across all topic categories in `/dispatch-propagate` queue selection. Apply only
@@ -344,13 +367,17 @@ topic label.
   automatically. May be combined with any topic label.
 
 - **Neither** — apply no topic label. Most product and
-  landing/budget/print/fellspiral feature work matches neither topic. There is
+  landing/fellspiral feature work matches neither topic. There is
   no "other" sentinel label.
 
-When an issue matches both topics, apply only `dispatch` — the narrower, named
-workflow wins over `testing infrastructure`, the broad category. Most issues
-match at most one topic outright; this tie-break resolves only the rare issue
-that genuinely spans both.
+When an issue matches `security` plus another topic, apply `security` — it is
+the most urgent topic, so it wins the tie-break. This keeps the queue ranking
+reflecting the security dimension and lets the consumer (#985) rely on the
+label being applied. Otherwise, when an issue matches both `dispatch` and
+`testing infrastructure`, apply only `dispatch` — the narrower, named workflow
+wins over `testing infrastructure`, the broad category. Most issues match at
+most one topic outright; these tie-breaks resolve only the rare issue that
+genuinely spans more than one.
 
 Record the matched label as `<topic>` for the mode-specific command below, or
 leave `<topic>` empty when no topic matched.

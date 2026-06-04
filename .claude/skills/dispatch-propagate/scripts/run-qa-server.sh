@@ -267,5 +267,16 @@ echo "  Press Ctrl+C to stop"
 echo "========================================"
 echo ""
 
+# Remote access: forward ports to a remote tailnet client's localhost so the
+# served origin stays http://localhost:<vite>/ on every machine (#963). Emitted
+# unconditionally — the local operator ignores the ssh line; the remote operator
+# runs it first.
+EMU_PORTS=()
+[ -n "$FIRESTORE_PORT" ] && EMU_PORTS+=("$FIRESTORE_PORT")
+[ -n "$AUTH_PORT" ] && EMU_PORTS+=("$AUTH_PORT")
+[ -n "$STORAGE_PORT" ] && EMU_PORTS+=("$STORAGE_PORT")
+[ -n "$FUNCTIONS_PORT" ] && EMU_PORTS+=("$FUNCTIONS_PORT")
+print_remote_access_block "$VITE_PORT" "${EMU_PORTS[@]}"
+
 # Block until Ctrl+C
 wait

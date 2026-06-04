@@ -10,6 +10,7 @@
 # Usage: source this file, then call:
 #   claude_sessions_under              <worktree-path>
 #   claude_sessions_with_name          <name>
+#   claude_agents_list_all
 #   worktree_has_live_session          <worktree-path>
 #   claude_agents_count_busy_workers
 #   verify_agent_registered_under      <agent-name> <cwd>
@@ -27,8 +28,8 @@
 #               free — a `[]` from a down daemon is indistinguishable from a
 #               `[]` of genuinely no sessions, so the detectable failures fail
 #               safe here and the rest is mitigated operationally (see below).
-#   Used by `dispatch-spawn-router` and `dispatch-spawn-worker` to filter on
-#   MAIN_WORKTREE / SPAWN_CWD — callers that want cwd-based semantics.
+#   Used by `dispatch-spawn-worker` / `dispatch-spawn-job` to filter on
+#   SPAWN_CWD — callers that want cwd-based semantics.
 #
 # claude_sessions_with_name <name>
 #   The name-based low-level primitive. Runs `claude agents --json` (NO --cwd
@@ -40,6 +41,23 @@
 #     return 1 — UNKNOWN. Same contract as `claude_sessions_under`: `claude`
 #               missing, non-zero exit, non-array output, or zero exit with
 #               empty output. Stdout is empty.
+#
+# claude_agents_list_all
+#   The unfiltered machine-wide primitive. Runs `claude agents --json` (NO --cwd
+#   flag, NO name filter) and projects every live session to a three-column TSV.
+#   The reservation-ledger sweep needs the full live-session set — ids, statuses,
+#   and names — in a single daemon query, so it can reconcile every marker
+#   against both the live-session-id set and the live-session-name set without
+#   re-querying per marker.
+#     return 0 — daemon queried successfully. Stdout carries one tab-separated
+#               line per live session: sessionId<TAB>status<TAB>name (THREE
+#               columns — no pid, unlike `claude_sessions_under` /
+#               `claude_sessions_with_name`). Zero sessions (`[]`) → return 0
+#               with empty stdout: a definite "no sessions", NOT a failure.
+#     return 1 — UNKNOWN. Same contract as `claude_sessions_under`: `claude`
+#               missing, non-zero exit, non-array output, or zero exit with
+#               whitespace-only output. Stdout is empty. Callers MUST treat
+#               unknown as "cannot reconcile" and reclaim nothing (fail safe).
 #
 # worktree_has_live_session <path>
 #   The ergonomic fail-safe predicate. Now name-keyed: delegates to
@@ -88,7 +106,7 @@
 #   diagnostic and exits non-zero.
 #     return 0 — a row with the given <agent-name> was observed.
 #     return 1 — exhaustion: the agent never appeared within the budget.
-#   Used by `dispatch-spawn-router` and `dispatch-spawn-worker` Step 4 verify.
+#   Used by `dispatch-spawn-worker` / `dispatch-spawn-job` Step 4 verify.
 #
 # Test override: CLAUDE_AGENTS_CMD replaces the `claude` invocation with an
 # arbitrary command (e.g. an absolute path to a fake script), so the helper is
@@ -190,6 +208,41 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       return 1
     fi
     # `[]` or no name matches → empty $lines → emit nothing, still return 0.
+    if [[ -n "$lines" ]]; then
+      printf '%s\n' "$lines"
+    fi
+    return 0
+  }
+
+  # claude_agents_list_all — emit every live session as a 3-column TSV.
+  # See the header comment for the return-code contract.
+  claude_agents_list_all() {
+    # No --cwd flag and no name filter: the caller (the reservation-ledger
+    # sweep) needs the complete machine-wide live-session set in one query.
+    # 2>/dev/null drops daemon noise; only exit code and a well-formed JSON
+    # array on stdout are trusted.
+    local out
+    if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json 2>/dev/null); then
+      return 1
+    fi
+
+    # A zero exit with empty (or whitespace-only) output is unknown too.
+    if [[ -z "${out//[[:space:]]/}" ]]; then
+      return 1
+    fi
+
+    # One jq pass validates the JSON is an array and projects the 3-column TSV
+    # (sessionId, status, name — no pid). Non-array input errors out and the
+    # result is UNKNOWN.
+    local lines
+    if ! lines=$(jq -r '
+      if type == "array"
+      then .[] | [.sessionId, .status, .name] | @tsv
+      else error("claude agents --json output is not a JSON array")
+      end' <<<"$out" 2>/dev/null); then
+      return 1
+    fi
+    # `[]` → empty $lines → emit nothing (zero session lines), still return 0.
     if [[ -n "$lines" ]]; then
       printf '%s\n' "$lines"
     fi

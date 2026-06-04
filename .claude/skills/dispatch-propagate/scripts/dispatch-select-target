@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 # Select the single highest-priority task from the queue.
-# Usage: dispatch-select-target [--qa | --health-only]
+# Usage: dispatch-select-target [--qa | --health-only] [--exclude <n>...]
+#
+# --exclude <n>... names issue numbers the caller has already processed (the
+# fan-out loop's SEEN set, #1062); the selector never returns an excluded target
+# and instead surfaces the next distinct one. The exclusion is applied during
+# the queue scan, not as a post-selection output filter: a PR row is filtered by
+# its branch issue-prefix (<N>-<slug>) before FIRST_PR is recorded, so the
+# next-oldest PR in an already-tapped bucket surfaces; and the exclusion is
+# threaded into the leaf trace for issue rows, so a multi-leaf subtree whose
+# first leaf was already processed descends to its next startable leaf. Coexists
+# with --qa / --health-only — those flags start with `-`, so the integer-run
+# consumption stops at them.
 #
 # Selection is a pure function of GitHub state plus local-worktree existence.
 # The router's cwd carries no priority signal; invoking this script from any
@@ -43,7 +54,7 @@
 # phase — before considering any `priority=0` item, so a `priority` item in a
 # low-ranked topic still outranks every non-priority item in a higher-ranked
 # topic. Within one priority level, topic categories run highest priority first:
-#   bug → testing infrastructure → dispatch → other
+#   security → bug → testing infrastructure → dispatch → budget → print → audio → other
 # and within each (priority, topic) bucket the phase ladder runs innermost.
 #
 # A PR's category is the highest-priority topic among the labels of every issue
@@ -55,12 +66,10 @@
 #
 # Within each (priority, topic) bucket, default-mode priority (oldest PR wins
 # within a tier):
-#   1. Oldest "security"    PR (draft + dispatch:reviewed or dispatch:security-reviewed)
-#   2. Oldest "review"      PR (draft + dispatch:code-reviewed)
-#   3. Oldest "code-review" PR (draft + dispatch:qa-done)
-#   4. Oldest "verify"      PR (draft, CI completed and failed)
-#   5. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
-#   6. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
+#   1. Oldest "review"      PR (draft + dispatch:qa-done)
+#   2. Oldest "verify"      PR (draft, CI completed and failed)
+#   3. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
+#   4. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
 #      by a live Claude session, and which is not already closed by a non-draft
 #      (ready) PR (#920), resolved to a startable open leaf (an issue whose
 #      entire open-leaf subtree is owned by live sessions is skipped, exactly as
@@ -77,7 +86,8 @@
 # the daemon round-trip.
 # A PR is also skipped when an issue it closes is blocked_by an open issue.
 # "done" (non-draft) PRs are skipped entirely.
-# "waiting" PRs (draft, CI still running/queued/not started) are skipped entirely.
+# Not-ready PRs (draft, CI still running/queued/not started — no verdict yet,
+# per dispatch-ci-ready) are skipped entirely.
 # An open help-wanted issue is also skipped when a non-draft (ready) PR closes it
 # (#920). A *draft* closing PR does NOT gate the issue — a stalled/orphaned draft
 # is the normal in-flight dispatch state and must leave the issue selectable so
@@ -100,11 +110,19 @@ source "$SCRIPT_DIR/lib.sh"
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 QA_MODE=false
 HEALTH_ONLY=false
+declare -A EXCLUDED=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --qa) QA_MODE=true; shift ;;
     --health-only) HEALTH_ONLY=true; shift ;;
+    --exclude)
+      shift
+      while [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; do
+        EXCLUDED["$1"]=1
+        shift
+      done
+      ;;
     *) echo "error: unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -113,6 +131,13 @@ if [[ "$QA_MODE" == "true" && "$HEALTH_ONLY" == "true" ]]; then
   echo "error: --qa and --health-only are mutually exclusive" >&2
   exit 1
 fi
+
+# Build the leaf-trace passthrough once: the excluded numbers thread into
+# dispatch-trace-leaf (#1062) so a multi-leaf subtree descends past an excluded
+# leaf. Only constructed when non-empty so the call site passes no --exclude
+# flag at all when no exclusion was requested.
+EXCLUDE_ARGS=()
+(( ${#EXCLUDED[@]} > 0 )) && EXCLUDE_ARGS=(--exclude "${!EXCLUDED[@]}")
 
 # Print origin/main's HEAD SHA if its CI has a failing check; print nothing if
 # main is healthy or only has in-progress checks. main's CI state spans two
@@ -424,17 +449,23 @@ ${GQL_FIELDS}  }
 fi
 
 # Topic categories in priority order; "other" is the implicit fallback for any
-# label set with no topic label. The `priority` label is the *outermost* axis:
-# every `priority` item ranks above every non-priority item, regardless of
-# topic. Topic category nests *inside* the priority axis, and the phase ladder
-# runs innermost. TOPIC_CATEGORIES is the single source of the topic ordering —
-# category_of_labels resolves against it and the default-mode loop iterates
-# CATEGORIES within each priority level. `priority` is derived alongside the
-# category via the has_priority_in_labels helper; topic category is the
-# tie-break among items at the same priority level. The companion classifier
-# that *applies* these labels is ref-ready SKILL.md Step 6; keep the two label
-# sets in sync.
-TOPIC_CATEGORIES=(bug "testing infrastructure" dispatch)
+# label set with no topic label. `security` ranks first, so a security-labeled
+# item outranks a plain-`bug` item at the same priority level. The `priority`
+# label is the *outermost* axis: every `priority` item ranks above every
+# non-priority item, regardless of topic. Topic category nests *inside* the
+# priority axis, and the phase ladder runs innermost. TOPIC_CATEGORIES is the
+# single source of the topic ordering — category_of_labels resolves against it
+# and the default-mode loop iterates CATEGORIES within each priority level.
+# `priority` is derived alongside the category via the has_priority_in_labels
+# helper; topic category is the tie-break among items at the same priority
+# level. The companion classifier that *applies* these labels is ref-ready
+# SKILL.md Step 6; keep the two label sets in sync.
+#
+# Disambiguation: the `security` *topic* label here is its own namespace, kept
+# apart from any `dispatch:*` workflow marker by exact-match resolution. A bare
+# `security` label means topic; only the `dispatch:`-prefixed form is a phase
+# label, and the single review phase has no `security` rung in PHASE_PRIORITY.
+TOPIC_CATEGORIES=(security bug "testing infrastructure" dispatch budget print audio)
 CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
 # Same priority list as a JSON array, for category_of_labels' jq filter.
 TOPIC_CATEGORIES_JSON=$(printf '%s\n' "${TOPIC_CATEGORIES[@]}" | jq -Rcn '[inputs]')
@@ -475,7 +506,7 @@ declare -A FIRST_PR
 declare -A FIRST_ISSUE
 
 # Within-category phase ladder, highest priority first.
-PHASE_PRIORITY=(security review code-review verify)
+PHASE_PRIORITY=(review verify)
 
 while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "$pr_num" ]] && continue
@@ -486,18 +517,34 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
     continue
   fi
 
+  # Readiness gate (the single CI-verdict check): skip a PR with no actionable
+  # CI verdict yet. dispatch-ci-ready exits non-zero only for a draft PR whose
+  # rollup is still pending; a concluded (passing/failing) rollup, a non-draft
+  # PR, or no PR all report ready. Reuses the PR list fetched above.
+  if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$pr_branch" >/dev/null; then
+    continue
+  fi
+
   # Determine phase for this PR, reusing the PR list fetched above.
   phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$pr_branch")
 
-  # "done" PRs are complete; "waiting" PRs have nothing actionable yet.
+  # "done" PRs are complete (not-ready PRs were already filtered by the
+  # dispatch-ci-ready gate above).
   case "$phase" in
-    done|waiting) continue ;;
+    done) continue ;;
   esac
 
   # Skip PRs whose ISSUE is parked on a human (dispatch:office-hours). The label
   # lives on the issue (issue #909), so resolve the issue number from the PR's
   # branch prefix (<N>-<slug>) and check the issue's labels in ISSUE_LABELS_JSON.
   pr_issue_num="${pr_branch%%-*}"
+  # Skip a PR whose issue is in the --exclude set (#1062): the fan-out caller has
+  # already processed this target. Applied during the scan, before FIRST_PR is
+  # populated, so the next-oldest PR in an already-tapped bucket surfaces. The
+  # number matches what the fan-out loop records in SEEN for a pr row
+  # (${pr_branch%%-*}). Shared loop ⇒ also covers --qa selection — harmless and
+  # consistent.
+  [[ -n "$pr_issue_num" && -n "${EXCLUDED[$pr_issue_num]:-}" ]] && continue
   if [[ -n "$pr_issue_num" ]] && printf '%s' "$ISSUE_LABELS_JSON" \
       | jq -e --arg n "$pr_issue_num" \
         '(.[$n] // []) | any(.name == "dispatch:office-hours")' >/dev/null; then
@@ -506,8 +553,8 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
 
   # Skip PRs gated by an open blocker, using the prefetched BLOCKER_COUNTS map
   # (#794) instead of a per-closing-issue REST round-trip. A PR is skipped if any
-  # issue it closes has >0 open blockers. Placed after the done/waiting filter so
-  # discarded PRs are never consulted, and before FIRST_PR is populated so --qa
+  # issue it closes has >0 open blockers. Placed after the readiness gate and the
+  # done filter so discarded PRs are never consulted, and before FIRST_PR is populated so --qa
   # inherits the skip.
   #
   # A closing issue absent from the map (null in $blk) means its blockedBy state
@@ -593,13 +640,31 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   # Resolve a startable open leaf within the issue's subtree. dispatch-trace-leaf
   # in queue mode descends open blockers and sub-issues, skipping any child whose
   # <N>-* worktree is owned by a live session (#914) — an orphan child worktree
-  # stays descendable:
+  # stays descendable. The --exclude set (#1062) is threaded in so a leaf the
+  # fan-out caller already processed — including this help-wanted issue itself as
+  # the trace root, and a multi-leaf subtree's first leaf that self-closed and
+  # left an orphan worktree (not live-skipped) — is descended past to the next
+  # startable leaf, rather than re-returned:
   #   exit 0 — a startable open leaf was found; record it for this bucket.
-  #   exit 2 — every reachable open leaf is owned by a live session. Skip this
-  #            issue exactly as a direct live-owned worktree is skipped; a later
-  #            issue in the same bucket may still fill the slot.
+  #   exit 2 — every reachable open leaf is owned by a live session or excluded.
+  #            Skip this issue exactly as a direct live-owned worktree is skipped;
+  #            a later issue in the same bucket may still fill the slot.
   #   exit 1 — usage error; propagate as a hard failure, never swallow as a skip.
-  if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue); then
+  if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue "${EXCLUDE_ARGS[@]}"); then
+    # Readiness gate, symmetric with the PR-loop gate above (#1106). A
+    # help-wanted issue can already carry a draft PR whose CI is in progress —
+    # a draft closing PR does not evict its issue from this queue (#920), so a
+    # stalled/orphaned draft is recyclable. Skip such a leaf: spawning a worker
+    # now would only hit dispatch-route's STOP-waiting re-gate, wasting a tick.
+    # A leaf with no PR (normal implement) or a concluded-CI draft reports
+    # ready and proceeds; a concluded-CI draft is owned by the PR queue
+    # (verify/qa), which precedes the issue within a bucket and recycles the
+    # orphan worktree via `enter` just as the issue path would. dispatch-ci-ready
+    # resolves the all-digit leaf to its PR by headRefName prefix. Reuses the
+    # PR list fetched above.
+    if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$leaf" >/dev/null; then
+      continue
+    fi
     FIRST_ISSUE[$issue_bucket]="$leaf"
   else
     trace_status=$?
