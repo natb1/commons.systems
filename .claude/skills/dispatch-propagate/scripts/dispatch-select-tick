@@ -108,6 +108,32 @@ if [[ "$BRANCH" == "main" ]]; then
   fi
 fi
 
+# --- Step 1c: re-arm the main-broken latch when main has recovered -----------
+# A diagnosed red episode leaves an open dispatch:main-broken issue — the gate's
+# per-episode latch (#1085). Once origin/main goes green again, close it so the
+# next red episode re-fires the gate on first detection. Closing an issue is a
+# side effect, so it lives here in the lock-holding orchestrator, not in the pure
+# selector. The open-issue query is cheap and gates the extra CI read (via
+# dispatch-select-target --main-broken-sha) to the red/recovering window only;
+# this runs every tick — independent of the local branch — including a capped
+# tick, so recovery is observed even when no worker is spawned.
+OPEN_MB=$(gh issue list --label "dispatch:main-broken" --state open \
+  --json number -q '.[].number')
+if [[ -n "$OPEN_MB" ]]; then
+  # Use explicit exit-code capture: a failed --main-broken-sha would produce empty
+  # output, which -z would treat as "green" and incorrectly close the latch.
+  MB_SHA=""
+  if ! MB_SHA=$("$SCRIPT_DIR/dispatch-select-target" --main-broken-sha); then
+    MB_SHA="UNKNOWN"
+  fi
+  if [[ -z "$MB_SHA" ]]; then
+    for n in $OPEN_MB; do
+      gh issue close "$n" \
+        --comment "origin/main is green again; closing the main-broken latch (re-arming the gate)." 1>&2 || true
+    done
+  fi
+fi
+
 # --- Step 1b: run-scoped concurrency gate (autonomous no-arg queue path only) -
 # Runs ONLY on the autonomous no-arg queue path. The explicit-target run (a
 # positional <number> was given) and the `--manual` run (the bare human-typed
