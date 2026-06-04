@@ -24,6 +24,7 @@
 #   reservation_dir
 #   reservation_write   <worktree-basename> <issue-N> <session-id>
 #   reservation_clear   <worktree-basename>
+#   reservation_exists  <worktree-basename>
 #   reservation_count
 #   reservation_sweep
 #
@@ -62,6 +63,18 @@
 #     return 0 — file absent after the call (removed, or never existed, or no
 #               ledger).
 #     return 1 — missing or unsafe argument only.
+#
+# reservation_exists <worktree-basename>
+#   Fast-path membership test: return 0 if a reservation marker named exactly
+#   <worktree-basename> exists in the ledger dir, 1 otherwise. No daemon
+#   round-trip — a single stat. The basename arg is required and must pass the
+#   same path-safety guard as reservation_write/_clear (missing/unsafe → 1). An
+#   unresolvable/absent ledger dir → 1 (nothing reserved). The dot/.tmp in-flight
+#   tempfile is never matched (callers pass a clean basename; the guard rejects
+#   names with separators anyway).
+#     return 0 — a marker named <worktree-basename> exists.
+#     return 1 — a missing/unsafe argument, an unresolvable ledger dir, or no
+#               such marker.
 #
 # reservation_count
 #   Print the integer count of outstanding marker files to stdout. NEVER fails —
@@ -214,6 +227,28 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
     return 0
   }
 
+  # reservation_exists <worktree-basename> — fast-path marker membership test.
+  # See the header comment for the return-code contract.
+  reservation_exists() {
+    local wt_name="${1:-}"
+    if [[ -z "$wt_name" ]]; then
+      printf 'lib-reservation-ledger: reservation_exists requires a <worktree-basename> argument\n' >&2
+      return 1
+    fi
+    # Same path guard as reservation_write/_clear — never let an unsafe name
+    # stat outside the ledger dir.
+    case "$wt_name" in
+      *..*|*/*|*[[:cntrl:]]*)
+        printf 'lib-reservation-ledger: reservation_exists: unsafe worktree-basename %q\n' "$wt_name" >&2
+        return 1
+        ;;
+    esac
+    local dir
+    # Unresolvable ledger dir → nothing reserved.
+    dir=$(reservation_dir) || return 1
+    [[ -f "$dir/$wt_name" ]]
+  }
+
   # reservation_count — print the count of outstanding marker files. Never fails.
   # See the header comment for the return-code contract.
   reservation_count() {
@@ -284,18 +319,18 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
         reservation_clear "$bn"
         printf 'lib-reservation-ledger: reclaimed reservation %s (live-worker-redundant)\n' "$bn" >&2
       elif [[ -z "$marker_sid" ]]; then
-        # A marker with no readable `session=` line is malformed (truncation
+        # (b) A marker with no readable `session=` line is malformed (truncation
         # cannot happen via the atomic write, so this means external tampering or
         # corruption). Reclaiming on an empty session id would conflate "no
         # session" with "dead session" and could delete a still-valid slot — KEEP
         # it and flag it instead (fail safe, matching the sweep's conservatism).
         printf 'lib-reservation-ledger: keeping malformed reservation %s (no session= line)\n' "$bn" >&2
       elif [[ -z "${live_ids[$marker_sid]:-}" ]]; then
-        # (b) The reserving session is not live and never converted — stranded.
+        # (c) The reserving session is not live and never converted — stranded.
         reservation_clear "$bn"
         printf 'lib-reservation-ledger: reclaimed reservation %s (dead-session-stranded)\n' "$bn" >&2
       fi
-      # (c) reserving session alive, no live worker yet → in-flight → KEEP.
+      # (d) reserving session alive, no live worker yet → in-flight → KEEP.
     done
     (( had_nullglob )) || shopt -u nullglob
     return 0
