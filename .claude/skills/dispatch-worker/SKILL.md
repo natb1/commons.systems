@@ -195,7 +195,7 @@ analysis. Gather the deterministic evidence in one call
 `dispatch-drift-scan` emits, in one invocation, the three mechanical drift
 inputs anchored on the issue's `createdAt`: commits to the paths the issue body
 names since creation, PRs merged in the window, and the validity of the issue's
-named references (paths existence-checked, names greped — anything renamed,
+named references (paths existence-checked, names grepped — anything renamed,
 moved, or removed is flagged `[ABSENT]`/`[NOT FOUND]`). It mines those
 references from the single-backtick spans in the issue body; read its header for
 what the heuristic does and does not cover. When the merged-PR query hits its

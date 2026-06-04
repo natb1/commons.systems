@@ -74,6 +74,24 @@ BODY=$(printf '%s' "$ISSUE_JSON" | jq -r '.body')
 declare -a PATH_REFS=()
 declare -a NAME_REFS=()
 
+# MAX_REFS caps the combined PATH_REFS + NAME_REFS the scan will process. The
+# issue body is attacker-influenceable (public repo); without a cap a body
+# packed with thousands of tiny backtick tokens would inflate the Input-3 grep
+# alternation into an unbounded whole-repo scan. Legitimate issue bodies cite a
+# handful of references, so the cap never bites in practice.
+MAX_REFS=200
+REFS_TRUNCATED=0
+
+# Returns 0 while there is still room under MAX_REFS, 1 once the cap is reached
+# (setting REFS_TRUNCATED so the output can flag the truncation).
+under_ref_cap() {
+  if (( ${#PATH_REFS[@]} + ${#NAME_REFS[@]} >= MAX_REFS )); then
+    REFS_TRUNCATED=1
+    return 1
+  fi
+  return 0
+}
+
 is_path_token() {
   local t="$1"
   # Slash-commands (/ready, /dispatch-worker) are leading-slash single-segment
@@ -101,15 +119,32 @@ SPANS=$(printf '%s' "$BODY" | grep -oE '`[^`]+`' | sed 's/^`//; s/`$//' || true)
 if [[ -n "$SPANS" ]]; then
   while IFS= read -r span; do
     [[ -z "$span" ]] && continue
-    # Tokenize on whitespace.
-    for tok in $span; do
+    # Tokenize on whitespace WITHOUT pathname expansion: `read -ra` splits on
+    # IFS but never globs, so a span containing `*` is preserved verbatim —
+    # which is the script's documented intent (a `*` token is kept and used as
+    # a git pathspec / compgen glob downstream). An unquoted `for tok in $span`
+    # would instead glob-expand the span against the cwd, injecting matched
+    # filenames from a crafted issue body into PATH_REFS.
+    read -ra _toks <<< "$span" || true
+    for tok in "${_toks[@]:-}"; do
       [[ -z "$tok" ]] && continue
       [[ "$tok" == *"<"* || "$tok" == *">"* ]] && continue   # placeholder
       [[ "$tok" == --* ]] && continue                         # flag
+      # Reject path-traversal and git magic-pathspec tokens before they can be
+      # existence-checked, glob-expanded, or passed to `git log`: a crafted
+      # issue body must not be able to probe paths outside the worktree (e.g.
+      # `../../../etc/passwd`, `:(top)../secrets`). Legitimate references cite
+      # repo-relative paths, so neither form appears in a well-formed body.
+      [[ "$tok" == *..* ]] && continue                        # traversal
+      [[ "$tok" == :* ]] && continue                          # magic pathspec
       if is_path_token "$tok"; then
-        in_array "$tok" "${PATH_REFS[@]:-}" || PATH_REFS+=("$tok")
+        if ! in_array "$tok" "${PATH_REFS[@]:-}" && under_ref_cap; then
+          PATH_REFS+=("$tok")
+        fi
       elif [[ "$tok" =~ ^[A-Za-z0-9._:/-]{3,}$ ]]; then
-        in_array "$tok" "${NAME_REFS[@]:-}" || NAME_REFS+=("$tok")
+        if ! in_array "$tok" "${NAME_REFS[@]:-}" && under_ref_cap; then
+          NAME_REFS+=("$tok")
+        fi
       fi
     done
   done <<< "$SPANS"
@@ -222,6 +257,11 @@ echo "=== Flagged references ==="
 echo "(advisory: an absent deliverable path — a file this issue is meant to"
 echo "CREATE — or a reference to a not-yet-merged sibling can be an EXPECTED"
 echo "absence. These flags are advisory; the model judges them.)"
+if [[ "$REFS_TRUNCATED" -eq 1 ]]; then
+  echo "  NOTE: reference extraction hit the ${MAX_REFS}-ref cap — the issue body"
+  echo "  cites an unusually large number of references, so the scan was"
+  echo "  truncated. Re-run /ready to tighten the issue if this is unexpected."
+fi
 if [[ "${#FLAGGED[@]}" -gt 0 ]]; then
   for f in "${FLAGGED[@]}"; do
     echo "  $f"

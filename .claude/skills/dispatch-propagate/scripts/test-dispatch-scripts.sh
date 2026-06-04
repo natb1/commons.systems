@@ -16268,6 +16268,7 @@ assert_contains_local() {
   else
     FAIL=$((FAIL + 1)); echo "  FAIL: $label"
     echo "    needle: '$needle'"
+    echo "    actual: '$hay'"
   fi
 }
 
@@ -16279,6 +16280,7 @@ assert_not_contains_local() {
   else
     FAIL=$((FAIL + 1)); echo "  FAIL: $label"
     echo "    unexpected needle present: '$needle'"
+    echo "    actual: '$hay'"
   fi
 }
 
@@ -16469,6 +16471,52 @@ out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
 assert_eq "dispatch-drift-scan: slash-command scan exits 0" "0" "$rc"
 assert_not_contains_local "dispatch-drift-scan: /ready not existence-checked as a path" "/ready [ABSENT]" "$out"
 assert_not_contains_local "dispatch-drift-scan: /dispatch-worker not existence-checked as a path" "/dispatch-worker [ABSENT]" "$out"
+drift_scan_teardown
+
+# --- Security regression: backtick-span globs are not expanded against the cwd ---
+# Guards the unquoted-`for tok in $span` glob-injection defect: the issue body is
+# attacker-influenceable (public repo). A span of a bare `*` must NOT expand to
+# the working-tree filenames; the fix tokenizes with `read -ra` (no globbing), so
+# `*` is dropped (it is neither a path token nor a >=3-char name ref) and the
+# uniquely-named fixture file never surfaces in the output.
+
+echo "Test: dispatch-drift-scan does not glob-expand backtick spans against the cwd"
+drift_scan_setup
+printf 'echo hi\n' > "$TMPDIR_TEST/tree/globbed_unique_xyz.sh"
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `*` widely."}
+EOF
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[]
+EOF
+: > "$TMPDIR_TEST/commits.txt"
+cd "$TMPDIR_TEST/tree"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
+assert_eq "dispatch-drift-scan: glob-span scan exits 0" "0" "$rc"
+assert_not_contains_local "dispatch-drift-scan: bare-* span not glob-expanded against cwd" "globbed_unique_xyz" "$out"
+drift_scan_teardown
+
+# --- Security regression: path-traversal tokens are rejected, not probed ---
+# Guards the path-traversal defect: a backtick span citing `../../../etc/passwd`
+# must not be existence-checked (which would let a crafted issue body probe paths
+# outside the worktree). The fix drops any token containing `..`, so the
+# traversal reference never appears in the output at all.
+
+echo "Test: dispatch-drift-scan rejects path-traversal reference tokens"
+drift_scan_setup
+printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh` and `../../../etc/passwd`."}
+EOF
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[]
+EOF
+: > "$TMPDIR_TEST/commits.txt"
+cd "$TMPDIR_TEST/tree"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
+assert_eq "dispatch-drift-scan: traversal scan exits 0" "0" "$rc"
+assert_not_contains_local "dispatch-drift-scan: traversal token not existence-probed" "etc/passwd" "$out"
+assert_contains_local "dispatch-drift-scan: a legitimate sibling path still renders" "  present.sh" "$out"
 drift_scan_teardown
 
 # ============================================================================
