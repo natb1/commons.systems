@@ -455,8 +455,12 @@ only files trackers for genuine findings the diff did not introduce.
 
 - CodeQL: an alert classified `out-of-scope` with `security_severity_level` of
   `critical`, `high`, or `medium`.
-- npm: a pre-existing advisory classified `out-of-scope` rated `high` or
-  `critical` and not introduced by the diff (`introduced_by_diff=false`).
+- npm: a package qualifies if any of its `out-of-scope`,
+  not-introduced-by-diff (`introduced_by_diff=false`) advisories is rated
+  `high` or `critical`. The follow-up is grouped per package (one issue per
+  vulnerable package, listing every such advisory it resolves) — because
+  `npm audit` reports each GHSA in a coordinated disclosure as a separate
+  advisory on the same package node, all fixed by a single version bump.
 - `required` and `false-positive` findings are never filed.
 
 Serialize the classified `codeql` and `npm` findings to a JSON array at
@@ -476,10 +480,16 @@ sandboxed-fine):
 ```
 
 It applies the threshold and emits a JSON array of `{identifier, title, body}`
-follow-ups (empty when none qualify). Each `identifier` — CodeQL `rule.id` + alert
-number, or the npm advisory ID — is embedded in the `title`, so `/file-issue`'s
-title-keyword dedup prevents re-filing the same alert across repeated runs or
-multiple PRs.
+follow-ups (empty when none qualify). CodeQL emits one follow-up per alert; npm
+emits one follow-up per vulnerable package. Each `identifier` — CodeQL `rule.id`
++ alert number, or `npm advisories in <package>` — is embedded in the `title`,
+so `/file-issue`'s title-keyword dedup prevents re-filing the same alert or
+package across repeated runs or multiple PRs.
+
+Tradeoff: because the npm dedup key is package-scoped, a newly disclosed
+advisory on an already-filed package won't auto-file a fresh issue — the
+existing "upgrade this package" issue already covers the remediation (one
+version bump resolves every advisory on that package node).
 
 For each emitted follow-up, fork a subagent (`subagent_type: general-purpose`,
 `model: sonnet`); run them in parallel (multiple Agent calls in one message). Each
