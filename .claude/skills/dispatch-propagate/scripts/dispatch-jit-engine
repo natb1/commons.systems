@@ -171,6 +171,8 @@ for (( i = 0; i < JIT_COUNT; i++ )); do
 
   HAS_REMIND=$(printf '%s' "$jit" | jq 'has("remindAfterClose")')
   HAS_CHECK=$(printf '%s' "$jit"  | jq 'has("check")')
+  HAS_DUE_AFTER_CLOSE=$(printf '%s' "$jit"  | jq 'has("dueAfterClose")')
+  HAS_DUE_AFTER_CREATE=$(printf '%s' "$jit" | jq 'has("dueAfterCreate")')
 
   # ---- 4a: validate the jit shape -------------------------------------------
   # Exactly one of remindAfterClose (cadence) or check (check-script) must be
@@ -335,10 +337,67 @@ for (( i = 0; i < JIT_COUNT; i++ )); do
     fi
   fi
 
-  # ---- 4f: create the issue and add it to the project ----------------------
+  # ---- 4f: compute the due time (if configured) ----------------------------
+  # Done BEFORE issue creation so the due time can be embedded directly in the
+  # issue body. The agenda sync Function (functions/src/agenda-sync.ts) parses
+  # the body marker; the GitHub project's `Due` field is not used.
+  #
+  # A jit with neither dueAfterClose nor dueAfterCreate skips the stamp — the
+  # sync Function logs and skips a jit issue without a marker, but cadence-only
+  # jits without a sync consumer remain valid.
+  DUE_ISO=""
+  if [[ "$HAS_DUE_AFTER_CLOSE" == "true" || "$HAS_DUE_AFTER_CREATE" == "true" ]]; then
+    # Validate that the dueAfter* key matches the jit type. A cadence jit uses
+    # dueAfterClose; a check-script jit uses dueAfterCreate. Using the wrong key
+    # would otherwise produce a confusing "cannot parse duration 'null'" error.
+    if [[ "$HAS_REMIND" == "true" && "$HAS_DUE_AFTER_CLOSE" != "true" ]]; then
+      echo "$KEY: error (cadence jit must use dueAfterClose, not dueAfterCreate)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    if [[ "$HAS_CHECK" == "true" && "$HAS_DUE_AFTER_CREATE" != "true" ]]; then
+      echo "$KEY: error (check-script jit must use dueAfterCreate, not dueAfterClose)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    DUE_EPOCH=""
+    if [[ "$HAS_REMIND" == "true" ]]; then
+      DUE_AFTER_CLOSE_SPEC=$(printf '%s' "$jit" | jq -r '.dueAfterClose')
+      if ! DUE_AFTER_CLOSE_SECS=$(parse_duration "$DUE_AFTER_CLOSE_SPEC"); then
+        echo "$KEY: error (dueAfterClose: cannot parse duration '$DUE_AFTER_CLOSE_SPEC')" >&2
+        HARD_ERROR=1
+        continue
+      fi
+      if [[ -z "$MAX_CLOSED_AT" ]]; then
+        # Cold start: anchor on NOW (= the new issue's createdAt at stamp time).
+        DUE_EPOCH=$(( NOW + DUE_AFTER_CLOSE_SECS - REMIND_SECS ))
+      else
+        DUE_EPOCH=$(( CLOSED_EPOCH + DUE_AFTER_CLOSE_SECS ))
+      fi
+    else
+      DUE_AFTER_CREATE_SPEC=$(printf '%s' "$jit" | jq -r '.dueAfterCreate')
+      if ! DUE_AFTER_CREATE_SECS=$(parse_duration "$DUE_AFTER_CREATE_SPEC"); then
+        echo "$KEY: error (dueAfterCreate: cannot parse duration '$DUE_AFTER_CREATE_SPEC')" >&2
+        HARD_ERROR=1
+        continue
+      fi
+      DUE_EPOCH=$(( NOW + DUE_AFTER_CREATE_SECS ))
+    fi
+    DUE_ISO=$(date -u -d "@$DUE_EPOCH" +%Y-%m-%dT%H:%M:%SZ)
+  fi
+
+  # ---- 4g: create the issue and add it to the project ----------------------
   if [[ "$CREATE" -eq 1 ]]; then
+    # Append the due-time marker to the body when configured. The format is a
+    # hidden HTML comment so it renders invisibly in the GitHub UI; the sync
+    # Function parses it with a regex.
+    ISSUE_BODY="$BODY"
+    if [[ -n "$DUE_ISO" ]]; then
+      ISSUE_BODY="${BODY}"$'\n\n'"<!-- jit-due: $DUE_ISO -->"
+    fi
+
     CREATE_RC=0
-    CREATE_OUT=$(gh issue create --repo "$REPO" --title "$TITLE" --body "$BODY" \
+    CREATE_OUT=$(gh issue create --repo "$REPO" --title "$TITLE" --body "$ISSUE_BODY" \
       --label "$LABEL" 2>&1) || CREATE_RC=$?
     if [[ "$CREATE_RC" -ne 0 ]]; then
       echo "$KEY: error (gh issue create failed: $CREATE_OUT)" >&2
@@ -362,7 +421,12 @@ for (( i = 0; i < JIT_COUNT; i++ )); do
       HARD_ERROR=1
       continue
     fi
-    echo "$KEY: created #$ISSUE_NUM"
+
+    if [[ -n "$DUE_ISO" ]]; then
+      echo "$KEY: created #$ISSUE_NUM (due $DUE_ISO)"
+    else
+      echo "$KEY: created #$ISSUE_NUM (no dueAfter*; due not stamped)"
+    fi
     state_set "$KEY" "$NOW"
   fi
 done

@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Classify the changed-file surface for security-review gating.
+# Usage: printf '%s\n' path/to/file ... | dispatch-security-surface
+#
+# Reads newline-separated changed file paths on stdin. Prints exactly three
+# lines to stdout:
+#   surface=<empty|docs|code>
+#   deps=<true|false>
+#   app_or_rules=<true|false>
+#
+# No network access, no git, no gh — pure stdin classification.
+set -euo pipefail
+
+# --- regex definitions -------------------------------------------------------
+
+# DOCS: markdown/text/plain-text documentation and license files. License-style
+# files are matched only as bare names (no extension); a doc-extension variant
+# like LICENSE.md already matches the first branch, so allowing an arbitrary
+# extension here would misclassify code files such as NOTICE.ts or LICENSE.sh as
+# docs and skip the security fan-out.
+DOCS_RE='(\.(md|mdx|markdown|txt|rst|adoc)$)|((^|/)(LICENSE|NOTICE|AUTHORS|CONTRIBUTORS)$)'
+
+# DEPS: npm dependency manifests.
+DEPS_RE='(^|/)package(-lock)?\.json$'
+
+# RULES: Firestore/Storage security rules files.
+RULES_RE='(^|/)(firestore|storage)\.rules$'
+
+# APP: application source file extensions.
+APP_RE='\.(ts|tsx|js|jsx|mjs|cjs|go)$'
+
+# --- read stdin into array ---------------------------------------------------
+
+paths=()
+while IFS= read -r line; do
+  # Skip blank / whitespace-only lines (spaces and tabs).
+  [[ -z "${line//[[:space:]]/}" ]] && continue
+  paths+=("$line")
+done
+
+# --- empty input -------------------------------------------------------------
+
+if [[ ${#paths[@]} -eq 0 ]]; then
+  echo "surface=empty"
+  echo "deps=false"
+  echo "app_or_rules=false"
+  exit 0
+fi
+
+# --- check all-docs ----------------------------------------------------------
+
+all_docs=true
+for path in "${paths[@]}"; do
+  if ! [[ "$path" =~ $DOCS_RE ]]; then
+    all_docs=false
+    break
+  fi
+done
+
+if [[ "$all_docs" == true ]]; then
+  echo "surface=docs"
+  echo "deps=false"
+  echo "app_or_rules=false"
+  exit 0
+fi
+
+# --- surface=code: compute deps and app_or_rules ----------------------------
+
+deps=false
+app_or_rules=false
+
+for path in "${paths[@]}"; do
+  if [[ "$path" =~ $DEPS_RE ]]; then
+    deps=true
+  fi
+  if [[ "$path" =~ $RULES_RE ]]; then
+    app_or_rules=true
+  elif [[ "$path" =~ $APP_RE ]] && ! [[ "$path" == .claude/* ]]; then
+    app_or_rules=true
+  fi
+  # Short-circuit: no further classification possible once both are true.
+  if [[ "$deps" == true && "$app_or_rules" == true ]]; then
+    break
+  fi
+done
+
+echo "surface=code"
+echo "deps=$deps"
+echo "app_or_rules=$app_or_rules"

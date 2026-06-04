@@ -11,12 +11,24 @@
 # Output (one line on success):
 #   office-hours <issue> <phase> <pr-or-dash>
 #     <issue> — the selected issue number.
-#     <phase> — dispatch-phase <issue>: implement | qa | code-review | review |
-#               security | verify | waiting | done. /office-hours branches on
-#               this: implement → plan-approval residue; qa → QA walkthrough
-#               residue; anything past qa → deviation-review.
+#     <phase> — implement | qa | code-review | review | security | verify |
+#               waiting | done. `waiting` comes from dispatch-ci-ready (draft PR
+#               with CI still pending); all other values come from dispatch-phase.
+#               /office-hours branches on this: implement → plan-approval
+#               residue; qa → QA walkthrough residue; anything past qa →
+#               deviation-review.
 #     <pr-or-dash> — the issue's open PR number, or `-` when none exists.
-# Prints `empty` when no sessionless labeled item exists.
+#   parked-router <sessionId> <name>
+#     A target-less parked /dispatch-propagate router (#1010). When no labeled
+#     sessionless item exists, this fallback surfaces a live, idle/waiting
+#     `dispatch-*` router session rooted under worktrees/main — the artifact the
+#     continuation invariant in `dispatch-self-close` keeps alive rather than
+#     orphaning the chain. A parked router has no issue/PR and so no
+#     dispatch:office-hours label; the human resumes it by re-engaging that exact
+#     session (re-running /dispatch-propagate inside it). A `busy` router is
+#     actively ticking and is NOT surfaced.
+# Prints `empty` when neither a sessionless labeled item nor a parked router
+# exists.
 #
 # Reuses dispatch-phase and dispatch-find-pr (passed a shared open-PR list to
 # avoid redundant gh calls), and the lib.sh / lib-claude-agents.sh worktree
@@ -79,10 +91,46 @@ while IFS= read -r issue_num; do
   if issue_has_live_worktree "$issue_num"; then
     continue
   fi
-  phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$issue_num")
+  # Readiness gate: dispatch-phase no longer emits `waiting`; check CI readiness
+  # first. A not-ready draft PR (exit non-zero) maps to phase=waiting, preserving
+  # the byte-identical output contract callers expect.
+  if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$issue_num" >/dev/null; then
+    phase="waiting"
+  else
+    phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$issue_num")
+  fi
   pr=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-find-pr" "$issue_num")
   printf 'office-hours %s %s %s\n' "$issue_num" "$phase" "${pr:--}"
   exit 0
 done <<< "$SORTED"
+
+# No sessionless labeled item. Fall back to surfacing a target-less parked
+# router (#1010): a live, idle/waiting `dispatch-*` router session rooted under
+# worktrees/main, kept alive by dispatch-self-close's continuation invariant. It
+# carries no issue/PR, so no label anchors it — discover it directly by cwd +
+# state. The human resumes it by re-engaging that exact session.
+MAIN_WORKTREE="${DISPATCH_OFFICE_HOURS_MAIN_WORKTREE:-}"
+if [[ -z "$MAIN_WORKTREE" ]]; then
+  if ! project_root="$(resolve_project_root)"; then
+    echo "office-hours-select-target: cannot resolve project root (not in a git repo?)" >&2
+    exit 1
+  fi
+  MAIN_WORKTREE="$project_root/worktrees/main"
+fi
+
+# claude_sessions_under honors the UNKNOWN contract: a non-zero return means the
+# daemon could not be queried, so we must NOT fabricate a parked router — skip
+# the block (the `if rows=...; then` capture leaves rows unscanned) and fall
+# through to `empty`. On a successful query, scan for the first idle/waiting
+# `dispatch-*` router.
+if rows=$(claude_sessions_under "$MAIN_WORKTREE"); then
+  while IFS=$'\t' read -r session_id _ status name; do
+    [[ -z "$name" ]] && continue
+    # A `dispatch-*` router that is NOT busy — parked/idle, not actively ticking.
+    [[ "$name" == dispatch-* && "$status" != "busy" ]] || continue
+    printf 'parked-router %s %s\n' "$session_id" "$name"
+    exit 0
+  done <<< "$rows"
+fi
 
 echo "empty"

@@ -91,7 +91,7 @@ The router runs a single selection ladder, top to bottom. The ladder spans both 
 2. **JIT scan** — surface the most-overdue jit-reminder. Bypasses the `origin/main` health gate so reminders fire even when main is red.
 3. **`origin/main` health gate** — if main is red, stop; do not start new work. [`/dispatch-diagnose-main`](.claude/skills/dispatch-diagnose-main/SKILL.md) reports the failing checks.
 4. **Sweep orphan adoption** — adopt a stray `<N>-…` worktree with no live session (see #847).
-5. **Topic-category × priority × phase ladder.** Three tiers nest from outermost to innermost. Topic categories, highest first: `bug` → `testing infrastructure` → `dispatch` → `other`. Within each topic category, items carrying the `priority` label rank above items without it (`priority` is human-applied; the selector never adds it automatically). Within each `(topic, priority)` bucket, the phase ladder is, highest first: `security` → `review` → `code-review` → `qa` → `implement`. The selector exhausts one bucket's full phase ladder before moving to the next.
+5. **Topic-category × priority × phase ladder.** Three tiers nest from outermost to innermost. Topic categories, highest first: `security` → `bug` → `testing infrastructure` → `dispatch` → `other`. Within each topic category, items carrying the `priority` label rank above items without it (`priority` is human-applied; the selector never adds it automatically). Within each `(topic, priority)` bucket, the phase ladder is, highest first: `security` → `review` → `code-review` → `qa` → `implement`. The selector exhausts one bucket's full phase ladder before moving to the next.
 
 The QA reorder (`qa` above `implement` rather than at the bottom of the ladder) lands with #758; the README documents the post-#758 target. Concurrent worker count scales with the rate-limit window per #845.
 
@@ -103,7 +103,7 @@ Local `dispatch.config/jit.json` declares recurring "just-in-time" issues. The e
 2. Open-issue guard — skip if the previous jit issue for that key is still open.
 3. Create the next issue when its `remindAfterClose` (or `dueAfterCreate`) cadence has elapsed.
 
-Every jit issue carries a `jit:<key>` label and is tracked in its configured GitHub project. Jit-reminders that produce dispatch-queue work surface ahead of the queue ladder; jit-reminders that run as office-hours sessions are covered in the [Office Hours Queue](#office-hours-queue) spine. See #769.
+Every jit issue carries a `jit:<key>` label and is tracked in its configured GitHub project. Jit-reminders that produce dispatch-queue work surface ahead of the queue ladder; jit-reminders that run as office-hours sessions are covered in the [Office Hours Queue](#office-hours-queue) spine. A jit may carry an optional `skill` field: when selected, the reminder job runs that named skill as an office-hours session instead of only summarizing; absent → summarize-and-stop (unchanged). See #769.
 
 With no `dispatch.config/jit.json` present the engine is a no-op.
 

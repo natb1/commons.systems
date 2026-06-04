@@ -5,7 +5,7 @@ description: Office-hours queue worker — selects one sessionless dispatch:offi
 
 # Office Hours
 
-The office-hours counterpart of `/dispatch` — the user-facing entry into the
+The office-hours counterpart of `dispatch` — the user-facing entry into the
 **office-hours queue**, the set of items blocked on a human. An item lands here
 two ways:
 
@@ -53,6 +53,14 @@ hand-off and no Stop-hook action — the Stop hook ignores non-`<N>-` session na
    - `office-hours <N> <phase> <pr-or-dash>` — the selected issue `<N>`, its
      phase, and its PR number (or `-`). Carry `<N>`, `<phase>`, and the PR
      through the rest of the skill.
+   - `parked-router <sessionId> <name>` — the dispatch chain has a target-less
+     parked router (#1010): a router tick left no continuation, so the
+     `dispatch-self-close` continuation invariant kept the session alive rather
+     than orphaning the chain. There is **no** `dispatch:office-hours` label
+     involved — the parked artifact is the router session itself, not an
+     issue/PR. Resume it by re-engaging that exact session: re-run
+     `/dispatch-propagate` inside the `<name>` session (`<sessionId>`). Report
+     that and **stop**.
 
    **Enter the item's worktree.** If the current branch is already `<N>-…`, you
    are in place — proceed. Otherwise resolve the worktree (use
@@ -119,6 +127,18 @@ hand-off and no Stop-hook action — the Stop hook ignores non-`<N>-` session na
       screen, wait for the user's confirmation, and record PASS (user confirms)
       or FAIL (user reports a problem). Honor the [QA data policy] — public seed
       data only; never `SEED_TEST_ONLY=true`.
+
+      Before prompting the user for the first judgment item, surface the
+      **Remote access** block that `run-qa-server.sh` printed on startup. The
+      block is in the background server's startup output; if it has scrolled
+      out of context, reproduce it from the known Vite and emulator ports
+      rather than re-parsing background output — `http://localhost:<vite>/`
+      plus an `ssh -L <vite>:localhost:<vite>` flag for the Vite port and one
+      `-L <emu>:localhost:<emu>` flag for every allocated emulator port,
+      ending with the SSH host. A local operator on the same host ignores the
+      `ssh -L` line and opens `http://localhost:<vite>/` directly; a remote
+      tailnet operator runs the `ssh -L` command first, then opens the same
+      URL.
 
    b. **On the first bug** — a user-reported FAIL or a bug already named in the
       `/qa-fix` summary — finalize the QA session (stop/export any GIF, run
