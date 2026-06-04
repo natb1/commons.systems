@@ -461,6 +461,18 @@ case "$args" in
     # dispatch-resolve-worktree reconciliation: re-point to the PR head branch.
     echo "$args" >> "$STUB_DIR/git-checkout.log"
     ;;
+  fetch\ *)
+    # dispatch-route done-case: fetch the current branch from origin. No-op stub.
+    : ;;
+  rev-list\ --count\ *)
+    # dispatch-route done-case: commits the worktree is ahead of origin/<branch>.
+    # Default 0 (remote up to date → STOP done); route-ahead-count.txt overrides to N.
+    if [[ -f "$STUB_DIR/route-ahead-count.txt" ]]; then
+      cat "$STUB_DIR/route-ahead-count.txt"
+    else
+      echo "0"
+    fi
+    ;;
   *)
     echo "git stub: unknown invocation: $args" >&2
     exit 1
@@ -1050,6 +1062,18 @@ echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 route_run 42 /wt/42-my-feature
 assert_eq "non-draft PR → STOP done (directive)" "STOP done" "$ROUTE_OUT"
 assert_eq "non-draft PR → STOP done (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 8b. Non-draft PR, but the worktree is ahead of origin/<branch> → PUSH-STRANDED (#1105).
+echo "Test: non-draft PR ahead of remote → PUSH-STRANDED"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "false" "$NO_LABELS" "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+echo "2" > "$STUB_DIR/route-ahead-count.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "non-draft PR ahead of remote → PUSH-STRANDED (directive)" "PUSH-STRANDED" "$ROUTE_OUT"
+assert_eq "non-draft PR ahead of remote → PUSH-STRANDED (exit 0)" "0" "$ROUTE_RC"
 teardown
 
 # 9. Draft + pending CI → STOP waiting (the dispatch-ci-ready not-ready path).
