@@ -30,13 +30,13 @@ vi.mock("firebase-functions/params", () => ({
 }));
 
 import {
-  syncAgendaCore,
+  syncOfficeHoursCore,
   fetchOpenJitIssuesLive,
   parseJitDueMarker,
   buildAppJwt,
   mintInstallationToken,
   type JitIssue,
-} from "../src/agenda-sync";
+} from "../src/office-hours-sync";
 
 const testKeyPair = generateKeyPairSync("rsa", {
   modulusLength: 2048,
@@ -106,13 +106,13 @@ function makeIssue(overrides: Partial<JitIssue> = {}): JitIssue {
     title: "Daily chore",
     body: "Recurring daily chore. Close when done.",
     jitKey: "daily-chore",
-    repo: "natb1/agenda-nate",
+    repo: "natb1/office-hours-nate",
     dueAt: new Date("2026-01-15T12:00:00Z"),
     ...overrides,
   };
 }
 
-describe("syncAgendaCore", () => {
+describe("syncOfficeHoursCore", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -125,21 +125,21 @@ describe("syncAgendaCore", () => {
       dueAt: new Date("2026-01-15T12:00:00Z"),
     });
 
-    const result = await syncAgendaCore({
+    const result = await syncOfficeHoursCore({
       fetchOpenJitIssues: async () => [issue],
       firestore: store as unknown as Firestore,
-      namespace: "agenda/prod",
+      namespace: "office-hours/prod",
       memberEmails: ["owner@example.com"],
     });
 
     expect(result).toEqual({ written: 1, deleted: 0, skippedNoDate: 0 });
 
-    const written = store._docs.get("agenda/prod/items/daily-chore") as Record<
+    const written = store._docs.get("office-hours/prod/items/daily-chore") as Record<
       string,
       unknown
     > & { dueAt: { toDate: () => Date } };
     expect(written.title).toBe("Daily chore");
-    expect(written.repo).toBe("natb1/agenda-nate");
+    expect(written.repo).toBe("natb1/office-hours-nate");
     expect(written.issueNumber).toBe(42);
     expect(written.jitKey).toBe("daily-chore");
     expect(written.memberEmails).toEqual(["owner@example.com"]);
@@ -152,34 +152,34 @@ describe("syncAgendaCore", () => {
     const withDate = makeIssue({ number: 1, jitKey: "daily-chore" });
     const noDate = makeIssue({ number: 2, jitKey: "budget-review", dueAt: null });
 
-    const result = await syncAgendaCore({
+    const result = await syncOfficeHoursCore({
       fetchOpenJitIssues: async () => [withDate, noDate],
       firestore: store as unknown as Firestore,
-      namespace: "agenda/prod",
+      namespace: "office-hours/prod",
       memberEmails: ["owner@example.com"],
     });
 
     expect(result).toEqual({ written: 1, deleted: 0, skippedNoDate: 1 });
-    expect(store._docs.has("agenda/prod/items/daily-chore")).toBe(true);
-    expect(store._docs.has("agenda/prod/items/budget-review")).toBe(false);
+    expect(store._docs.has("office-hours/prod/items/daily-chore")).toBe(true);
+    expect(store._docs.has("office-hours/prod/items/budget-review")).toBe(false);
   });
 
   it("deletes existing items not in the open set", async () => {
     const store = createInMemoryFirestore();
-    store._docs.set("agenda/prod/items/stale-key", {
+    store._docs.set("office-hours/prod/items/stale-key", {
       title: "Stale",
       jitKey: "stale-key",
     });
 
-    const result = await syncAgendaCore({
+    const result = await syncOfficeHoursCore({
       fetchOpenJitIssues: async () => [],
       firestore: store as unknown as Firestore,
-      namespace: "agenda/prod",
+      namespace: "office-hours/prod",
       memberEmails: ["owner@example.com"],
     });
 
     expect(result).toEqual({ written: 0, deleted: 1, skippedNoDate: 0 });
-    expect(store._docs.has("agenda/prod/items/stale-key")).toBe(false);
+    expect(store._docs.has("office-hours/prod/items/stale-key")).toBe(false);
   });
 
   it("is idempotent: same input twice produces the same final state", async () => {
@@ -189,17 +189,17 @@ describe("syncAgendaCore", () => {
     const deps = {
       fetchOpenJitIssues: async () => [issue],
       firestore: store as unknown as Firestore,
-      namespace: "agenda/prod",
+      namespace: "office-hours/prod",
       memberEmails: ["owner@example.com"],
     };
 
-    const first = await syncAgendaCore(deps);
-    const second = await syncAgendaCore(deps);
+    const first = await syncOfficeHoursCore(deps);
+    const second = await syncOfficeHoursCore(deps);
 
     expect(first).toEqual({ written: 1, deleted: 0, skippedNoDate: 0 });
     expect(second).toEqual({ written: 1, deleted: 0, skippedNoDate: 0 });
     expect(store._docs.size).toBe(1);
-    expect(store._docs.has("agenda/prod/items/daily-chore")).toBe(true);
+    expect(store._docs.has("office-hours/prod/items/daily-chore")).toBe(true);
   });
 
   it("skips an issue whose jitKey would escape the items collection", async () => {
@@ -209,33 +209,33 @@ describe("syncAgendaCore", () => {
     const dotdot = makeIssue({ number: 3, jitKey: ".." });
     const empty = makeIssue({ number: 4, jitKey: "" });
 
-    const result = await syncAgendaCore({
+    const result = await syncOfficeHoursCore({
       fetchOpenJitIssues: async () => [valid, slash, dotdot, empty],
       firestore: store as unknown as Firestore,
-      namespace: "agenda/prod",
+      namespace: "office-hours/prod",
       memberEmails: ["owner@example.com"],
     });
 
     // Only the valid key is written; the path-escaping / invalid keys are
     // skipped before any Firestore write, so no nested doc is created.
     expect(result.written).toBe(1);
-    expect(store._docs.has("agenda/prod/items/daily-chore")).toBe(true);
-    expect(store._docs.has("agenda/prod/items/a/b/c")).toBe(false);
-    expect([...store._docs.keys()]).toEqual(["agenda/prod/items/daily-chore"]);
+    expect(store._docs.has("office-hours/prod/items/daily-chore")).toBe(true);
+    expect(store._docs.has("office-hours/prod/items/a/b/c")).toBe(false);
+    expect([...store._docs.keys()]).toEqual(["office-hours/prod/items/daily-chore"]);
   });
 
   it("propagates memberEmails onto each written item", async () => {
     const store = createInMemoryFirestore();
     const issue = makeIssue({ number: 7, jitKey: "daily-chore" });
 
-    await syncAgendaCore({
+    await syncOfficeHoursCore({
       fetchOpenJitIssues: async () => [issue],
       firestore: store as unknown as Firestore,
-      namespace: "agenda/prod",
+      namespace: "office-hours/prod",
       memberEmails: ["a@example.com", "b@example.com"],
     });
 
-    const written = store._docs.get("agenda/prod/items/daily-chore") as
+    const written = store._docs.get("office-hours/prod/items/daily-chore") as
       | Record<string, unknown>
       | undefined;
     expect(written?.memberEmails).toEqual(["a@example.com", "b@example.com"]);
@@ -310,7 +310,7 @@ describe("fetchOpenJitIssuesLive", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const issues = await fetchOpenJitIssuesLive("natb1/agenda-nate", "test-token");
+    const issues = await fetchOpenJitIssuesLive("natb1/office-hours-nate", "test-token");
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -318,7 +318,7 @@ describe("fetchOpenJitIssuesLive", () => {
     expect(init.method).toBe("POST");
     const headers = init.headers as Record<string, string>;
     expect(headers.Authorization).toBe("bearer test-token");
-    expect(headers["User-Agent"]).toBe("agenda-sync/1.0");
+    expect(headers["User-Agent"]).toBe("office-hours-sync/1.0");
     expect(headers["Content-Type"]).toBe("application/json");
     const body = JSON.parse(init.body as string) as {
       query: string;
@@ -327,7 +327,7 @@ describe("fetchOpenJitIssuesLive", () => {
     expect(body.query).toContain("repository(owner: $owner, name: $name)");
     expect(body.variables).toEqual({
       owner: "natb1",
-      name: "agenda-nate",
+      name: "office-hours-nate",
       cursor: null,
     });
 
@@ -336,7 +336,7 @@ describe("fetchOpenJitIssuesLive", () => {
       number: 42,
       title: "Daily chore",
       jitKey: "daily-chore",
-      repo: "natb1/agenda-nate",
+      repo: "natb1/office-hours-nate",
     });
     expect(issues[0].dueAt?.toISOString()).toBe("2026-01-15T12:00:00.000Z");
     expect(issues[1]).toMatchObject({
@@ -358,7 +358,7 @@ describe("fetchOpenJitIssuesLive", () => {
     );
 
     await expect(
-      fetchOpenJitIssuesLive("natb1/agenda-nate", "test-token"),
+      fetchOpenJitIssuesLive("natb1/office-hours-nate", "test-token"),
     ).rejects.toThrow(/500/);
   });
 
@@ -377,7 +377,7 @@ describe("fetchOpenJitIssuesLive", () => {
     );
 
     await expect(
-      fetchOpenJitIssuesLive("natb1/agenda-nate", "test-token"),
+      fetchOpenJitIssuesLive("natb1/office-hours-nate", "test-token"),
     ).rejects.toThrow(/Bad credentials/);
   });
 
@@ -433,7 +433,7 @@ describe("fetchOpenJitIssuesLive", () => {
       });
     vi.stubGlobal("fetch", fetchMock);
 
-    const issues = await fetchOpenJitIssuesLive("natb1/agenda-nate", "test-token");
+    const issues = await fetchOpenJitIssuesLive("natb1/office-hours-nate", "test-token");
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     // Second call must forward the cursor from the first page.
@@ -476,7 +476,7 @@ describe("fetchOpenJitIssuesLive", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const issues = await fetchOpenJitIssuesLive("natb1/agenda-nate", "test-token");
+    const issues = await fetchOpenJitIssuesLive("natb1/office-hours-nate", "test-token");
 
     // Must not loop — one fetch only.
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -545,7 +545,7 @@ describe("mintInstallationToken", () => {
     const headers = init.headers as Record<string, string>;
     expect(headers.Authorization).toMatch(/^Bearer .+\..+\..+$/);
     expect(headers.Accept).toBe("application/vnd.github+json");
-    expect(headers["User-Agent"]).toBe("agenda-sync/1.0");
+    expect(headers["User-Agent"]).toBe("office-hours-sync/1.0");
   });
 
   it("throws when the token exchange returns non-OK", async () => {
