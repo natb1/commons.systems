@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# dispatch-provision-worktree <worktree-path> — provision a freshly-added
+# worktree (direnv) and merge `origin/main` into it, run by the dispatch worker
+# itself BEFORE it derives its phase. The router's held-lock fan-out loop now
+# does only the cheap `git worktree add` (branched from origin/main, not yet
+# provisioned or merged); the multi-minute, budget-irrelevant provisioning and
+# merge are relocated here, out of the critical section (#1047 / part of #1044).
+#
+# The worker is born `--cwd` its worktree and re-derives its phase from PR/CI
+# ground truth, just as `restore-dispatch-skill.sh` does on context-clear — so
+# running provisioning + merge here, before phase derivation, ensures the phase
+# skill the worker later loads reads up-to-date `.claude/` files from the merged
+# tree.
+#
+# Body, in order:
+#   1. direnv allow <wt>        — re-grant the worktree's .envrc.
+#   2. direnv exec <wt> true    — trigger the .envrc (npm deps, etc.).
+#   3. exec dispatch-merge-main <wt> — fetch + merge origin/main locally.
+#
+# Exit-code contract — identical to dispatch-merge-main, because step 3 `exec`s
+# into it (this script's exit code IS dispatch-merge-main's):
+#   0 — clean merge or already-up-to-date.
+#   1 — fetch failure, or a non-conflict merge failure.
+#   2 — usage error (missing/extra/flag-shaped arg). dispatch-merge-main also
+#       exits 2 for an un-cd-able path.
+#   3 — merge conflict; the merge has been aborted and the tree is left clean.
+#
+# dispatch-merge-main lives in this script's own directory (resolved via
+# SCRIPT_DIR), so the relocation does not change which merge primitive runs.
+#
+# `dangerouslyDisableSandbox: true` REQUIREMENT: the `git merge origin/main`
+# inside dispatch-merge-main is a tree-updating op over the read-only
+# `.claude/skills/**` sandbox carve-out — the canonical hazard documented in
+# `.claude/rules/sandbox.md` ("Tree-updating git ops touching read-only paths")
+# — and `direnv`/npm write the dependency cache. This mirrors dispatch-select-tick's
+# merge precedent. Callers must run it with `dangerouslyDisableSandbox: true`.
+#
+# The `|| true` swallow on both direnv steps is a behavior-preserving relocation
+# of the router's current create-path behavior (`direnv allow … || true` /
+# `direnv exec … true || true`). Surfacing direnv failures is #855's charter,
+# not this PR's; the two changes coordinate on this same create path.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ $# -lt 1 ]]; then
+  echo "dispatch-provision-worktree: missing required <worktree-path> argument" >&2
+  exit 2
+fi
+if [[ $# -gt 1 ]]; then
+  echo "dispatch-provision-worktree: unexpected extra arguments after <worktree-path>" >&2
+  exit 2
+fi
+if [[ "$1" == -* ]]; then
+  echo "dispatch-provision-worktree: flag-shaped argument '$1' is not a worktree path" >&2
+  exit 2
+fi
+
+WT="$1"
+
+# Provision the worktree's environment. The `|| true` swallow is preserved from
+# the router's prior create-path behavior — direnv-failure surfacing is #855.
+direnv allow "$WT" || true
+direnv exec "$WT" true || true
+
+# Merge origin/main into the worktree's branch. `exec` so this script's exit
+# code IS dispatch-merge-main's (0 clean / 1 fetch-or-other / 3 conflict).
+exec "$SCRIPT_DIR/dispatch-merge-main" "$WT"

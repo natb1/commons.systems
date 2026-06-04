@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # dispatch-merge-main <worktree-path> — bring the resolved target worktree's
-# branch up to origin/main before the worker is spawned, so the worker session
-# reads up-to-date dispatch workflow skill files from that worktree's `.claude/`
-# tree. The router calls this after worktree resolution (Step 5) and before the
-# worker spawn. See `.claude/skills/dispatch-propagate/SKILL.md` Step 5.
+# branch up to origin/main, so the worker session reads up-to-date dispatch
+# workflow skill files from that worktree's `.claude/` tree. Called by
+# dispatch-provision-worktree (via `exec`), which the worker runs through
+# dispatch-route before phase derivation (#1047 / part of #1044).
 #
 # This is a LOCAL merge only — it NEVER pushes. The merge commit is carried to
 # origin later by each phase skill's own push points: `/commit-merge-push` for
