@@ -43,9 +43,7 @@ Act on the one directive:
 |---|---|---|---|
 | `INVOKE /verify-pr` | 0 | draft PR, CI completed and failed | invoke `/verify-pr` |
 | `INVOKE /qa-fix` | 0 | draft PR, CI green, no `dispatch:*` label | invoke `/qa-fix` |
-| `INVOKE /code-review-fix` | 0 | draft PR + `dispatch:qa-done` | invoke `/code-review-fix` |
-| `INVOKE /review-fix` | 0 | draft PR + `dispatch:code-reviewed` | invoke `/review-fix` |
-| `INVOKE /security-review-fix` | 0 | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` re-entry) | invoke `/security-review-fix` |
+| `INVOKE /review-fix` | 0 | draft PR + `dispatch:qa-done` (or `dispatch:reviewed` re-entry) | invoke `/review-fix` |
 | `RELEVANCE-REVIEW` | 0 | no PR on the target (`implement`) | run the Step 2 relevance review, then dispatch its verdict |
 | `STOP done` | 0 | non-draft (ready) PR | stop without invoking a phase skill |
 | `STOP waiting` | 0 | draft PR's CI has no verdict yet | print the verbatim message below and stop |
@@ -55,9 +53,9 @@ Act on the one directive:
 
 Invoke the one named phase skill via the Skill tool. Run exactly one phase per
 `/dispatch-worker` invocation. The PR stays a **draft** through every phase; the
-`security` phase's `/security-review-fix` flips it to ready as the workflow's
-terminal action. Each phase skill owns and applies its own `dispatch:*` label —
-the worker applies none:
+`review` phase's `/review-fix` flips it to ready as the workflow's terminal
+action. Each phase skill owns and applies its own `dispatch:*` label — the worker
+applies none:
 
 - **`/verify-pr`** — runs a single pass: fix one set of failed CI checks, record
   the outcome, post it, stop. No label.
@@ -65,18 +63,13 @@ the worker applies none:
   itself on a clean pass. On a user-input blocker (a needs-human-judgment item, a
   bug, a failed pre-QA check) it escalates to the office-hours queue instead,
   where `/office-hours` runs the interactive residue.
-- **`/code-review-fix`** — runs `/code-review max --fix`, applies the recommended
-  fixes, defers important out-of-scope findings to tracking issues, posts a PR
-  comment, and applies `dispatch:code-reviewed` itself.
-- **`/review-fix`** — runs `/review`, applies the recommended fixes, posts a PR
-  comment, and applies `dispatch:reviewed` itself.
-- **`/security-review-fix`** — its Step 1 classifies the diff's changed surface: a
-  docs-only diff skips the fan-out with a one-line "no attack surface" PR comment;
-  a code diff fans out the relevant domain subagents (plus a red team and the
-  built-in `/security-review` scan, subagent-wrapped Skill invocation) and runs
-  CodeQL and the dependency audit inline when relevant. It then applies the
-  required fixes, posts a PR comment, applies `dispatch:security-reviewed`, and
-  marks the PR ready. It is idempotent on re-entry.
+- **`/review-fix`** — the single terminal review pass. It runs `/code-review max
+  --fix`, `/review`, and the full surface-gated security fan-out as direct
+  subagents over the same diff, unifies and de-duplicates the findings, applies
+  the in-scope fixes via one `/commit-merge-push`, files meaningful out-of-scope
+  findings as `blocked_by` follow-ups, posts one PR comment covering every
+  finding, applies `dispatch:reviewed`, and marks the PR ready. It is idempotent
+  on re-entry.
 
 After the phase skill returns, the worker session ends; the Stop hook reads the
 marker the phase skill wrote and propagates the chain. The worker does not advance

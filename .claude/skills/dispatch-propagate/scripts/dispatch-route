@@ -9,9 +9,7 @@
 #
 #   INVOKE /verify-pr            phase verify       (draft PR, CI failed)
 #   INVOKE /qa-fix               phase qa           (draft, CI green, no label)
-#   INVOKE /code-review-fix      phase code-review  (dispatch:qa-done)
-#   INVOKE /review-fix           phase review       (dispatch:code-reviewed)
-#   INVOKE /security-review-fix  phase security     (dispatch:reviewed / security-reviewed)
+#   INVOKE /review-fix           phase review       (dispatch:qa-done / reviewed re-entry)
 #   RELEVANCE-REVIEW             phase implement    (no PR) — routes to SKILL.md Step 3
 #   STOP done                    phase done         (non-draft PR)
 #   STOP waiting                 dispatch-ci-ready reports not-ready (draft PR CI pending)
@@ -88,9 +86,7 @@ case "$PHASE" in
   implement)    echo "RELEVANCE-REVIEW" ;;
   verify)       echo "INVOKE /verify-pr" ;;
   qa)           echo "INVOKE /qa-fix" ;;
-  code-review)  echo "INVOKE /code-review-fix" ;;
   review)       echo "INVOKE /review-fix" ;;
-  security)     echo "INVOKE /security-review-fix" ;;
   done)         echo "STOP done" ;;
   *)
     echo "dispatch-route: unexpected phase '$PHASE' for $N" >&2

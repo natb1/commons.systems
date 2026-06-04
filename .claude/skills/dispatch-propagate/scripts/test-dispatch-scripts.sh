@@ -638,40 +638,40 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "draft + green + no label → qa" "qa" "$result"
 teardown
 
-# 6. Draft + green + dispatch:qa-done → code-review
-echo "Test: draft + green + dispatch:qa-done → code-review"
+# 6. Draft + green + dispatch:qa-done → review
+echo "Test: draft + green + dispatch:qa-done → review"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:qa-done → code-review" "code-review" "$result"
+assert_eq "draft + green + dispatch:qa-done → review" "review" "$result"
 teardown
 
-# 7. Draft + green + dispatch:code-reviewed → review
-echo "Test: draft + green + dispatch:code-reviewed → review"
-setup
-printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:code-reviewed"}]' "$GREEN_ROLLUP")" \
-  > "$STUB_DIR/pr-list-full.json"
-result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:code-reviewed → review" "review" "$result"
-teardown
-
-# 8. Draft + green + dispatch:reviewed → security
-echo "Test: draft + green + dispatch:reviewed → security"
+# 7. Draft + green + dispatch:reviewed → review (idempotent re-entry)
+echo "Test: draft + green + dispatch:reviewed → review (idempotent re-entry)"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:reviewed"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:reviewed → security" "security" "$result"
+assert_eq "draft + green + dispatch:reviewed → review (idempotent)" "review" "$result"
 teardown
 
-# 9. Draft + green + dispatch:security-reviewed → security (re-entry)
-echo "Test: draft + green + dispatch:security-reviewed → security (re-entry)"
+# 8. Draft + green + legacy dispatch:code-reviewed → review (in-flight tolerance)
+echo "Test: draft + green + legacy dispatch:code-reviewed → review"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:code-reviewed"}]' "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "draft + green + legacy dispatch:code-reviewed → review" "review" "$result"
+teardown
+
+# 9. Draft + green + legacy dispatch:security-reviewed → review (in-flight tolerance)
+echo "Test: draft + green + legacy dispatch:security-reviewed → review"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:security-reviewed → security (re-entry)" "security" "$result"
+assert_eq "draft + green + legacy dispatch:security-reviewed → review" "review" "$result"
 teardown
 
 # 10. Non-draft PR → done
@@ -992,48 +992,53 @@ assert_eq "dispatch-route issues exactly one gh pr list" "1" \
   "$([[ -f "$STUB_DIR/gh-pr-list-calls.log" ]] && wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ' || echo 0)"
 teardown
 
-# 4. Draft + green + dispatch:qa-done → INVOKE /code-review-fix.
-echo "Test: draft + green + dispatch:qa-done → INVOKE /code-review-fix"
+# 4. Draft + green + dispatch:qa-done → INVOKE /review-fix (the single terminal
+# review phase; #1091 consolidated code-review/review/security into one).
+echo "Test: draft + green + dispatch:qa-done → INVOKE /review-fix"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 route_run 42 /wt/42-my-feature
-assert_eq "dispatch:qa-done → INVOKE /code-review-fix (directive)" "INVOKE /code-review-fix" "$ROUTE_OUT"
-assert_eq "dispatch:qa-done → INVOKE /code-review-fix (exit 0)" "0" "$ROUTE_RC"
+assert_eq "dispatch:qa-done → INVOKE /review-fix (directive)" "INVOKE /review-fix" "$ROUTE_OUT"
+assert_eq "dispatch:qa-done → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
 teardown
 
-# 5. Draft + green + dispatch:code-reviewed → INVOKE /review-fix.
-echo "Test: draft + green + dispatch:code-reviewed → INVOKE /review-fix"
-setup
-printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:code-reviewed"}]' "$GREEN_ROLLUP")" \
-  > "$STUB_DIR/pr-list-full.json"
-echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
-route_run 42 /wt/42-my-feature
-assert_eq "dispatch:code-reviewed → INVOKE /review-fix (directive)" "INVOKE /review-fix" "$ROUTE_OUT"
-assert_eq "dispatch:code-reviewed → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
-teardown
-
-# 6. Draft + green + dispatch:reviewed → INVOKE /security-review-fix.
-echo "Test: draft + green + dispatch:reviewed → INVOKE /security-review-fix"
+# 5. Draft + green + dispatch:reviewed → INVOKE /review-fix (idempotent re-entry;
+# /review-fix just finishes "gh pr ready").
+echo "Test: draft + green + dispatch:reviewed → INVOKE /review-fix (re-entry)"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:reviewed"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 route_run 42 /wt/42-my-feature
-assert_eq "dispatch:reviewed → INVOKE /security-review-fix (directive)" "INVOKE /security-review-fix" "$ROUTE_OUT"
-assert_eq "dispatch:reviewed → INVOKE /security-review-fix (exit 0)" "0" "$ROUTE_RC"
+assert_eq "dispatch:reviewed → INVOKE /review-fix (directive)" "INVOKE /review-fix" "$ROUTE_OUT"
+assert_eq "dispatch:reviewed → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
 teardown
 
-# 7. Draft + green + dispatch:security-reviewed → INVOKE /security-review-fix (re-entry).
-echo "Test: draft + green + dispatch:security-reviewed → INVOKE /security-review-fix (re-entry)"
+# 6. Draft + green + legacy dispatch:code-reviewed → INVOKE /review-fix
+# (in-flight tolerance: a PR still carrying the old three-phase label converges
+# on the merged review pass instead of stalling — see dispatch-phase test 8).
+echo "Test: draft + green + legacy dispatch:code-reviewed → INVOKE /review-fix"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:code-reviewed"}]' "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "legacy dispatch:code-reviewed → INVOKE /review-fix (directive)" "INVOKE /review-fix" "$ROUTE_OUT"
+assert_eq "legacy dispatch:code-reviewed → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 7. Draft + green + legacy dispatch:security-reviewed → INVOKE /review-fix
+# (in-flight tolerance — see dispatch-phase test 9).
+echo "Test: draft + green + legacy dispatch:security-reviewed → INVOKE /review-fix"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 route_run 42 /wt/42-my-feature
-assert_eq "dispatch:security-reviewed → INVOKE /security-review-fix (directive)" "INVOKE /security-review-fix" "$ROUTE_OUT"
-assert_eq "dispatch:security-reviewed → INVOKE /security-review-fix (exit 0)" "0" "$ROUTE_RC"
+assert_eq "legacy dispatch:security-reviewed → INVOKE /review-fix (directive)" "INVOKE /review-fix" "$ROUTE_OUT"
+assert_eq "legacy dispatch:security-reviewed → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
 teardown
 
 # 8. Non-draft PR → STOP done.
@@ -1371,30 +1376,26 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "done PRs skipped; help-wanted issue returned" "issue 33" "$result"
 teardown
 
-# 8. security is the top non-QA tier: it beats review, code-review, and verify.
-echo "Test: security beats review/code-review/verify"
+# 8. review is the top non-QA tier: it beats verify.
+echo "Test: review beats verify"
 setup
-SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
-REVIEW_LABELS='[{"name":"dispatch:code-reviewed"}]'
-CODE_REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
+REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
 UNION='['
 UNION+="$(make_pr_union 10 "10-verify" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
-UNION+="$(make_pr_union 20 "20-code-review" "2024-01-02T00:00:00Z" "true" "$CODE_REVIEW_LABELS" "$GREEN_ROLLUP")"','
-UNION+="$(make_pr_union 30 "30-review" "2024-01-03T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
-UNION+="$(make_pr_union 40 "40-security" "2024-01-04T00:00:00Z" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"
+UNION+="$(make_pr_union 30 "30-review" "2024-01-03T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"
 UNION+=']'
 setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "security beats review/code-review/verify" "pr 40 40-security security" "$result"
+assert_eq "review beats verify" "pr 30 30-review review" "$result"
 teardown
 
 # 9. Within one phase, the oldest PR wins.
 echo "Test: within same phase, oldest PR wins"
 setup
 # Two review-phase PRs; PR 30 is older.
-REVIEW_LABELS='[{"name":"dispatch:code-reviewed"}]'
+REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
 UNION='['
 UNION+="$(make_pr_union 30 "30-review-a" "2024-01-01T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
 UNION+="$(make_pr_union 31 "31-review-b" "2024-01-02T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"
@@ -1435,9 +1436,9 @@ teardown
 # 11. --qa mode returns only the oldest QA PR (ignores non-QA PRs).
 echo "Test: --qa mode ignores non-QA PRs and returns oldest QA PR"
 setup
-SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
+REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
 UNION='['
-UNION+="$(make_pr_union 10 "10-security" "2024-01-01T00:00:00Z" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"','
+UNION+="$(make_pr_union 10 "10-review" "2024-01-01T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
 UNION+="$(make_pr_union 20 "20-qa-old" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"','
 UNION+="$(make_pr_union 30 "30-qa-new" "2024-01-03T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"
 UNION+=']'
@@ -1445,7 +1446,7 @@ setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
-assert_eq "--qa returns oldest QA PR (ignores security PR)" "pr 20 20-qa-old" "$result"
+assert_eq "--qa returns oldest QA PR (ignores review PR)" "pr 20 20-qa-old" "$result"
 teardown
 
 # 12. waiting PR is skipped in favor of a help-wanted issue.
@@ -1699,16 +1700,16 @@ count=$(wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ')
 assert_eq "exactly one gh pr list call regardless of PR count" "1" "$count"
 teardown
 
-# 22. A code-review-phase PR winning emits the code-review phase on the result line.
-echo "Test: code-review PR winner → pr <n> <branch> code-review"
+# 22. A review-phase PR winning emits the review phase on the result line.
+echo "Test: review PR winner → pr <n> <branch> review"
 setup
-CODE_REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
-UNION='['"$(make_pr_union 25 "25-code-review-me" "2024-01-01T00:00:00Z" "true" "$CODE_REVIEW_LABELS" "$GREEN_ROLLUP")"']'
+REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
+UNION='['"$(make_pr_union 25 "25-review-me" "2024-01-01T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "code-review PR winner emits phase" "pr 25 25-code-review-me code-review" "$result"
+assert_eq "review PR winner emits phase" "pr 25 25-review-me review" "$result"
 teardown
 
 # 23. A lone QA PR with no help-wanted issue emits the qa phase on the result line.
@@ -1915,12 +1916,12 @@ teardown
 #      skipped every priority PR and the selector fell through to the
 #      help-wanted issue, violating the priority order. After the fix only the
 #      live-session-owned PR (#898) is skipped; the oldest remaining
-#      security-phase priority PR (#895) wins.
+#      review-phase priority PR (#895) wins.
 echo "Test: orphan-worktree bug+priority PRs still beat a no-worktree help-wanted issue (#905)"
 setup
 UNION='['
-UNION+="$(make_pr_union 898 "898-security" "2026-05-20T00:00:00Z" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP" '[{"number":896}]')"','
-UNION+="$(make_pr_union 895 "895-security" "2026-05-21T00:00:00Z" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP" '[{"number":806}]')"','
+UNION+="$(make_pr_union 898 "898-review" "2026-05-20T00:00:00Z" "true" '[{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP" '[{"number":896}]')"','
+UNION+="$(make_pr_union 895 "895-review" "2026-05-21T00:00:00Z" "true" '[{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP" '[{"number":806}]')"','
 UNION+="$(make_pr_union 893 "893-qa" "2026-05-22T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":892}]')"','
 UNION+="$(make_pr_union 883 "883-qa" "2026-05-23T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":879}]')"
 UNION+=']'
@@ -1930,12 +1931,12 @@ setup_union_pr_list "$UNION"
 printf '%s\n' '[{"number":896,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":806,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":892,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":879,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":886,"createdAt":"2026-05-02T00:00:00Z","labels":[{"name":"bug"},{"name":"help wanted"}]}]' \
   > "$STUB_DIR/issue-list.json"
 # Worktrees exist for all four PR branches; none for issue 886.
-printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/898-security\nHEAD a1\nbranch refs/heads/898-security\n\nworktree /worktrees/895-security\nHEAD a2\nbranch refs/heads/895-security\n\nworktree /worktrees/893-qa\nHEAD a3\nbranch refs/heads/893-qa\n\nworktree /worktrees/883-qa\nHEAD a4\nbranch refs/heads/883-qa\n\n' \
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/898-review\nHEAD a1\nbranch refs/heads/898-review\n\nworktree /worktrees/895-review\nHEAD a2\nbranch refs/heads/895-review\n\nworktree /worktrees/893-qa\nHEAD a3\nbranch refs/heads/893-qa\n\nworktree /worktrees/883-qa\nHEAD a4\nbranch refs/heads/883-qa\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 # Only #898's worktree has a live session; #895/#893/#883 are orphans.
-select_target_fake_claude "898-security"
+select_target_fake_claude "898-review"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "orphan priority PRs not skipped; oldest security priority PR wins" "pr 895 895-security security" "$result"
+assert_eq "orphan priority PRs not skipped; oldest review priority PR wins" "pr 895 895-review review" "$result"
 teardown
 
 # 30f. A PR closing a `security` issue outranks a PR closing a `bug` issue, even
@@ -3510,28 +3511,12 @@ assert_eq "qa applies dispatch:qa-done" \
 assert_eq "qa: no gh label create when label exists" "absent" "$(label_create_state)"
 teardown
 
-echo "Test: code-review → dispatch:code-reviewed (apply only, no label create)"
-setup
-"$TMPDIR_TEST/dispatch-complete-phase" 25 code-review
-assert_eq "code-review applies dispatch:code-reviewed" \
-  "pr edit 25 --add-label dispatch:code-reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
-assert_eq "code-review: no gh label create when label exists" "absent" "$(label_create_state)"
-teardown
-
 echo "Test: review → dispatch:reviewed (apply only, no label create)"
 setup
 "$TMPDIR_TEST/dispatch-complete-phase" 30 review
 assert_eq "review applies dispatch:reviewed" \
   "pr edit 30 --add-label dispatch:reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
 assert_eq "review: no gh label create when label exists" "absent" "$(label_create_state)"
-teardown
-
-echo "Test: security → dispatch:security-reviewed (apply only, no label create)"
-setup
-"$TMPDIR_TEST/dispatch-complete-phase" 40 security
-assert_eq "security applies dispatch:security-reviewed" \
-  "pr edit 40 --add-label dispatch:security-reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
-assert_eq "security: no gh label create when label exists" "absent" "$(label_create_state)"
 teardown
 
 # Label missing: the apply fails "not found", so the script creates the
@@ -11678,7 +11663,7 @@ exit 1
 FAKE
 chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-phase"
 echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
-echo "phase=code-review" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+echo "phase=review" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
@@ -12456,6 +12441,63 @@ assert_eq "unset session: no marker created in target worktree" "0" \
   "$([ -f "$UNSET_WT/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
 lock_teardown
 
+# ----- Headless-holder sentinel reclaim (#1068) ------------------------------
+# A synthetic `headless:<token>` holder never appears in `claude agents --json`,
+# so resolve_holder_state resolves its liveness through the PID sentinel the tick
+# writes alongside the lock file: live iff the sentinel exists AND its PID is
+# alive. These tests drive the real dispatch-acquire-lock against a lock file
+# recording a headless holder, with a different caller sessionId. No
+# CLAUDE_AGENTS_CMD fake is needed — the headless branch returns before the
+# daemon query. Sentinel path: <dirname $DISPATCH_LOCK_FILE>/dispatch-tick-<slug>.live
+# (slug for a simple token like `tok123` is unchanged).
+
+# --- Headless A: live PID in the sentinel → caller stays busy (no reclaim) ----
+echo "Test: headless holder with a live-PID sentinel is busy (not reclaimed)"
+lock_setup
+printf '%s\n' "headless:tok123" > "$DISPATCH_LOCK_FILE"
+headless_sentinel=$(source "$SCRIPT_DIR/lib.sh" 2>/dev/null; headless_sentinel_path "headless:tok123" "$DISPATCH_LOCK_FILE")
+printf '%s\n' "$$" > "$headless_sentinel"   # this test process is alive
+export CLAUDE_CODE_SESSION_ID="sess-headless-A"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "headless-live exits 0" "0" "$rc"
+assert_eq "headless-live prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "headless-live lock file still holds the headless holder" \
+  "headless:tok123" "$lock_contents"
+rm -f "$headless_sentinel"
+lock_teardown
+
+# --- Headless B: no sentinel → caller reclaims (acquired) ---------------------
+echo "Test: headless holder with no sentinel is reclaimed (acquired)"
+lock_setup
+printf '%s\n' "headless:tok123" > "$DISPATCH_LOCK_FILE"
+# No sentinel file written → the headless holder reads dead.
+export CLAUDE_CODE_SESSION_ID="sess-headless-B"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "headless-absent exits 0" "0" "$rc"
+assert_eq "headless-absent prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "headless-absent lock file rewritten to caller" \
+  "sess-headless-B" "$lock_contents"
+lock_teardown
+
+# --- Headless C: dead PID in the sentinel → caller reclaims (stale-after-kill) -
+echo "Test: headless holder with a dead-PID sentinel is reclaimed (acquired)"
+lock_setup
+printf '%s\n' "headless:tok123" > "$DISPATCH_LOCK_FILE"
+headless_sentinel=$(source "$SCRIPT_DIR/lib.sh" 2>/dev/null; headless_sentinel_path "headless:tok123" "$DISPATCH_LOCK_FILE")
+# A PID that is not running — a SIGKILL'd tick leaves this stale sentinel.
+printf '%s\n' "2147483647" > "$headless_sentinel"
+export CLAUDE_CODE_SESSION_ID="sess-headless-C"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "headless-dead exits 0" "0" "$rc"
+assert_eq "headless-dead prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "headless-dead lock file rewritten to caller" \
+  "sess-headless-C" "$lock_contents"
+rm -f "$headless_sentinel"
+lock_teardown
+
 # ============================================================================
 # restore-dispatch-skill tests (#903)
 # ============================================================================
@@ -12484,8 +12526,8 @@ restore_setup() {
     "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts" \
     "$TMPDIR_TEST/bin" \
     "$STUB_DIR"
-  for skill in plan-implement verify-pr qa-fix office-hours code-review-fix \
-               review-fix security-review-fix dispatch-worker \
+  for skill in plan-implement verify-pr qa-fix office-hours \
+               review-fix dispatch-worker \
                dispatch-resolve-conflict; do
     mkdir -p "$TMPDIR_TEST/.claude/skills/$skill"
     cat > "$TMPDIR_TEST/.claude/skills/$skill/SKILL.md" <<EOF
@@ -12668,7 +12710,7 @@ restore_teardown
 
 # --- Test 3: qa → qa-fix body, no ARGUMENTS ---------------------------------
 # qa now routes to /qa-fix (the autonomous QA phase skill), which — like
-# /code-review-fix — resolves its target from the worktree and takes no arg.
+# /review-fix — resolves its target from the worktree and takes no arg.
 echo "Test: restore-dispatch-skill phase=qa → qa-fix body, no ARGUMENTS"
 restore_setup
 set_agents_name "903-foo"
@@ -12770,35 +12812,6 @@ else
 fi
 restore_teardown
 
-# --- Test 4: code-review → code-review-fix body, no ARGUMENTS ----------------
-echo "Test: restore-dispatch-skill phase=code-review → code-review-fix body, no ARGUMENTS"
-restore_setup
-set_agents_name "903-foo"
-echo "code-review" > "$STUB_DIR/current-phase.txt"
-output=$(run_restore)
-TOTAL=$((TOTAL + 1))
-expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/code-review-fix"
-if [[ "$output" == *"$expected_dir"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: code-review: base directory line emitted"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: code-review: base directory line emitted"
-  echo "    output: $output"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"RESTORE_MARKER_code-review-fix"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: code-review: SKILL.md body marker emitted"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: code-review: SKILL.md body marker emitted"
-fi
-TOTAL=$((TOTAL + 1))
-if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
-  PASS=$((PASS + 1)); echo "  PASS: code-review: no ARGUMENTS line"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: code-review: no ARGUMENTS line"
-  echo "    output: $output"
-fi
-restore_teardown
-
 # --- Test 5: review → review-fix body, no ARGUMENTS --------------------------
 echo "Test: restore-dispatch-skill phase=review → review-fix body, no ARGUMENTS"
 restore_setup
@@ -12824,35 +12837,6 @@ if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
   PASS=$((PASS + 1)); echo "  PASS: review: no ARGUMENTS line"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: review: no ARGUMENTS line"
-  echo "    output: $output"
-fi
-restore_teardown
-
-# --- Test 6: security → security-review-fix body, no ARGUMENTS ---------------
-echo "Test: restore-dispatch-skill phase=security → security-review-fix body, no ARGUMENTS"
-restore_setup
-set_agents_name "903-foo"
-echo "security" > "$STUB_DIR/current-phase.txt"
-output=$(run_restore)
-TOTAL=$((TOTAL + 1))
-expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/security-review-fix"
-if [[ "$output" == *"$expected_dir"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: security: base directory line emitted"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: security: base directory line emitted"
-  echo "    output: $output"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"RESTORE_MARKER_security-review-fix"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: security: SKILL.md body marker emitted"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: security: SKILL.md body marker emitted"
-fi
-TOTAL=$((TOTAL + 1))
-if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
-  PASS=$((PASS + 1)); echo "  PASS: security: no ARGUMENTS line"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: security: no ARGUMENTS line"
   echo "    output: $output"
 fi
 restore_teardown
@@ -13014,9 +12998,7 @@ declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/qa-fix/SKILL.md"]=0
   [".claude/skills/office-hours/SKILL.md"]=0
   [".claude/skills/plan-implement/SKILL.md"]=0
-  [".claude/skills/code-review-fix/SKILL.md"]=0
   [".claude/skills/review-fix/SKILL.md"]=0
-  [".claude/skills/security-review-fix/SKILL.md"]=0
   [".claude/skills/verify-pr/SKILL.md"]=0
   [".claude/skills/implement-unit/SKILL.md"]=0
   [".claude/skills/commit-merge-push/SKILL.md"]=0
@@ -14169,11 +14151,11 @@ sel_tick_setup
 cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
 echo called >> "$TMPDIR_TEST/logs/select-target.log"
-echo "pr 660 660-some-branch code-review"
+echo "pr 660 660-some-branch review"
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_sel_tick)
-assert_eq "pr: decision line" "pr 660 660-some-branch code-review 1" \
+assert_eq "pr: decision line" "pr 660 660-some-branch review 1" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "pr: lock held (our session)" "select-tick-session" \
   "$(cat "$DISPATCH_LOCK_FILE")"
@@ -15422,6 +15404,10 @@ tick_setup() {
   # test's $PWD (dispatch-tick's resolve_project_root would otherwise resolve the
   # real project root). The fake spawn-job logs this value as its --cwd argv.
   export DISPATCH_TICK_MAIN_WORKTREE="$TMPDIR_TEST"
+  # Pin the shared lock file under TMPDIR_TEST so the headless-liveness sentinel
+  # (#1068) the tick writes resolves through dispatch_lock_file to a path inside
+  # the test tree (not the host repo's tmp/).
+  export DISPATCH_LOCK_FILE="$TMPDIR_TEST/dispatch.lock"
 
   # Fake dispatch-select-tick: echoes any TICK_SEL_PRE passthrough lines, then
   # the test-controlled decision line (TICK_DECISION) as the LAST line. Exits
@@ -15459,7 +15445,8 @@ tick_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   unset TICK_DECISION TICK_TOKEN TICK_SEL_RC TICK_MAT_RC \
-    TICK_SEL_PRE TICK_MAT_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE
+    TICK_SEL_PRE TICK_MAT_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
+    DISPATCH_LOCK_FILE
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -15525,7 +15512,7 @@ tick_teardown
 # --- pr <num> <branch> <phase> <gap> → derives N, materialize queue ----------
 echo "Test: dispatch-tick pr → derives N from branch, materialize queue --gap"
 tick_setup
-export TICK_DECISION="pr 660 660-some-branch code-review 3" TICK_TOKEN="propagate"
+export TICK_DECISION="pr 660 660-some-branch review 3" TICK_TOKEN="propagate"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "pr: exit 0" "0" "$rc"
 assert_eq "pr: materialize argv (N=660 from branch prefix)" "660 queue --gap 3" \
@@ -15668,14 +15655,46 @@ assert_eq "headless: synthetic id has headless: prefix (not a bare sentinel)" "1
   "$([[ "$sel_id" == headless:* ]] && echo 1 || echo 0)"
 
 # Companion: under systemd the id derives from INVOCATION_ID (the primary
-# headless path), not the bare-PID fallback the run above exercised. Set
-# INVOCATION_ID for one run and assert the synthesized id is exactly
-# headless:<INVOCATION_ID>. Fresh id logs so this run does not cross-contaminate.
+# headless path), not the random-token fallback the run above exercised. Use a
+# realistic 32-hex INVOCATION_ID (the form systemd always produces) and assert
+# the synthesized id is exactly headless:<INVOCATION_ID>. The validation guard
+# must pass hex digits — this exercises that path. (#1068)
 rm -f "$TMPDIR_TEST/logs/sel-id.log" "$TMPDIR_TEST/logs/mat-id.log"
-env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="inv-1054" \
+env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="0123456789abcdef0123456789abcdef" \
   "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1
-assert_eq "headless: id derives from INVOCATION_ID when set (systemd path)" \
-  "headless:inv-1054" "$(cat "$TMPDIR_TEST/logs/sel-id.log")"
+assert_eq "headless: id derives from valid hex INVOCATION_ID (systemd path)" \
+  "headless:0123456789abcdef0123456789abcdef" "$(cat "$TMPDIR_TEST/logs/sel-id.log")"
+
+# Companion: polluted INVOCATION_ID — the #1068 validation guard drops a
+# non-hex value so it cannot truncate the recorded holder (via embedded newline),
+# mislead the awk -F'\t' comparison, or corrupt the sentinel path. The fallback
+# fires and the id must be single-line headless:<hex-or-pid>.
+rm -f "$TMPDIR_TEST/logs/sel-id.log" "$TMPDIR_TEST/logs/mat-id.log"
+env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="a/b" \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1
+polluted_id=$(cat "$TMPDIR_TEST/logs/sel-id.log")
+assert_eq "headless: polluted INVOCATION_ID dropped — id has headless: prefix" "1" \
+  "$([[ "$polluted_id" == headless:* ]] && echo 1 || echo 0)"
+assert_eq "headless: polluted INVOCATION_ID dropped — id is single-line (no embedded newline)" "1" \
+  "$([[ "$polluted_id" != *$'\n'* ]] && echo 1 || echo 0)"
+assert_eq "headless: polluted INVOCATION_ID dropped — token is hex (guard rejected the slash)" "1" \
+  "$([[ "$polluted_id" =~ ^headless:[0-9a-f]+$ ]] && echo 1 || echo 0)"
+
+# Companion: INVOCATION_ID absent — the random-token fallback fires (openssl
+# rand -hex 16 when available; $$ as last resort). Assert the id is headless:-
+# prefixed, single-line, and its token matches hex (openssl path). (#1068)
+rm -f "$TMPDIR_TEST/logs/sel-id.log" "$TMPDIR_TEST/logs/mat-id.log"
+env -u CLAUDE_CODE_SESSION_ID -u INVOCATION_ID \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1
+absent_id=$(cat "$TMPDIR_TEST/logs/sel-id.log")
+assert_eq "headless: absent INVOCATION_ID — id has headless: prefix" "1" \
+  "$([[ "$absent_id" == headless:* ]] && echo 1 || echo 0)"
+assert_eq "headless: absent INVOCATION_ID — id is non-empty" "1" \
+  "$([ -n "$absent_id" ] && echo 1 || echo 0)"
+assert_eq "headless: absent INVOCATION_ID — id is single-line" "1" \
+  "$([[ "$absent_id" != *$'\n'* ]] && echo 1 || echo 0)"
+assert_eq "headless: absent INVOCATION_ID — token is hex (random-token or PID fallback)" "1" \
+  "$([[ "$absent_id" =~ ^headless:[0-9a-f]+$ ]] && echo 1 || echo 0)"
 
 # Companion: a real session keeps its own id — the `:-` fallback never fires.
 # Fresh id logs so this run does not cross-contaminate the headless run above.
@@ -15685,6 +15704,89 @@ export CLAUDE_CODE_SESSION_ID="sess-real-1054"
 assert_eq "real session: select-tick sees the inherited id, not a synthetic one" \
   "sess-real-1054" "$(cat "$TMPDIR_TEST/logs/sel-id.log")"
 unset CLAUDE_CODE_SESSION_ID DISPATCH_LOCK_FILE CLAUDE_AGENTS_CMD
+tick_teardown
+
+# --- headless tick writes a PID sentinel during the run, trap removes it after -
+# #1068: a synthetic headless holder is invisible to `claude agents --json`, so
+# the tick writes a PID sentinel alongside the shared lock file for its lifetime
+# and an EXIT trap removes it. resolve_holder_state resolves the headless
+# holder's liveness from that sentinel. This test observes the sentinel directly
+# (no acquire-lock needed): the fake select-tick globs the lock dir mid-run and
+# records the matched sentinel's existence + content, then after the tick returns
+# we assert (1) a sentinel existed mid-run, (2) it held a numeric PID, (3) the
+# trap left no dispatch-tick-*.live behind. The token is the tick's $$ (no
+# INVOCATION_ID, no inherited id), unknowable in advance — hence the glob.
+echo "Test: dispatch-tick headless writes a PID sentinel mid-run and removes it on exit"
+tick_setup
+LOCK_DIR="$(dirname "$DISPATCH_LOCK_FILE")"
+# Replace the select-tick fake: glob the lock dir for the sentinel mid-run and
+# log its presence (1/0) and contents, then print a decision line so the tick
+# routes to a normal exit. mkdir -p the lock dir defensively (the tick already
+# created it before writing the sentinel).
+cat > "$TMPDIR_TEST/dispatch-select-tick" <<FAKE
+#!/usr/bin/env bash
+shopt -s nullglob
+matches=( "$LOCK_DIR"/dispatch-tick-*.live )
+if (( \${#matches[@]} > 0 )); then
+  printf '1\n' > "$TMPDIR_TEST/logs/sentinel-midrun.log"
+  cat "\${matches[0]}" >> "$TMPDIR_TEST/logs/sentinel-midrun.log"
+else
+  printf '0\n' > "$TMPDIR_TEST/logs/sentinel-midrun.log"
+fi
+printf '%s\n' "empty"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-tick"
+# Run headless with NO inherited id and NO INVOCATION_ID → token is the tick $$.
+env -u CLAUDE_CODE_SESSION_ID -u INVOCATION_ID \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "sentinel: tick exit 0" "0" "$rc"
+midrun_present=$(sed -n '1p' "$TMPDIR_TEST/logs/sentinel-midrun.log" 2>/dev/null)
+midrun_pid=$(sed -n '2p' "$TMPDIR_TEST/logs/sentinel-midrun.log" 2>/dev/null)
+assert_eq "sentinel: existed mid-run" "1" "$midrun_present"
+assert_eq "sentinel: mid-run content is a numeric PID" "1" \
+  "$([[ "$midrun_pid" =~ ^[0-9]+$ ]] && echo 1 || echo 0)"
+# The EXIT trap must have removed every sentinel from the lock dir.
+shopt -s nullglob
+leftover=( "$LOCK_DIR"/dispatch-tick-*.live )
+shopt -u nullglob
+assert_eq "sentinel: removed by the EXIT trap (no .live left behind)" "0" \
+  "${#leftover[@]}"
+tick_teardown
+
+# --- headless tick fails clear when the sentinel write fails (#1068) ----------
+# When the lock-file path resolves but the sentinel write fails (here forced via
+# an over-long-but-hex INVOCATION_ID → a >255-byte sentinel filename →
+# ENAMETOOLONG, while the short dispatch.lock stays writable), dispatch-tick must
+# exit 2 *before* selecting a target rather than warn-and-continue. Continuing
+# would acquire the lock with no liveness sentinel, so a concurrent tick reads
+# this LIVE holder as dead and reclaims mid-selection — the exact duplicate-spawn
+# defect #1068 closes. The select-tick fake drops a marker if it runs; the test
+# asserts the tick exited non-zero and never reached selection.
+echo "Test: dispatch-tick headless fails clear (exit 2, no selection) when the sentinel write fails"
+tick_setup
+LOCK_DIR="$(dirname "$DISPATCH_LOCK_FILE")"
+cat > "$TMPDIR_TEST/dispatch-select-tick" <<FAKE
+#!/usr/bin/env bash
+printf 'ran\n' > "$TMPDIR_TEST/logs/select-ran.log"
+printf '%s\n' "empty"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-tick"
+rm -f "$TMPDIR_TEST/logs/select-ran.log"
+# 250 hex chars: passes the INVOCATION_ID guard, yields a sentinel filename
+# (dispatch-tick-<250>.live = 269 bytes) that exceeds NAME_MAX (255) → write fails.
+long_inv=$(printf 'a%.0s' {1..250})
+env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="$long_inv" \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "sentinel-write-fail: tick exits 2 (fail clear)" "2" "$rc"
+assert_eq "sentinel-write-fail: selection never ran (aborted before select-tick)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-ran.log" ] && echo 1 || echo 0)"
+shopt -s nullglob
+leftover=( "$LOCK_DIR"/dispatch-tick-*.live )
+shopt -u nullglob
+assert_eq "sentinel-write-fail: no stale .live left behind (trap cleaned partial)" "0" \
+  "${#leftover[@]}"
 tick_teardown
 
 # --- --manual is forwarded to select-tick; one gate-exempt worker (gap=1) -----
