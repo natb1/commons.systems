@@ -11847,9 +11847,9 @@ else
 fi
 stop_teardown
 
-# --- Test 2: marker present, same phase, verify, counter < 3 → spawn only ----
+# --- Test 2: marker present, same phase, verify, counter < 3 → transient no-push verify outcome → spawn + self-close ----
 
-echo "Test: stop hook + same phase + verify + counter<3 → spawn only (silent variance)"
+echo "Test: stop hook + same phase + verify + counter<3 → transient no-push verify outcome → spawn + self-close"
 stop_setup
 echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
@@ -11868,14 +11868,51 @@ if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-retry: no label add or remove invoked"
 fi
-TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop verify-retry: self-close not invoked"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop verify-retry: self-close not invoked"
-fi
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop verify-retry: self-close invoked exactly once" "1" "$self_close_calls"
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop verify-retry: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
+# --- Test 2b: verify + PR present + marker absent + office-hours-reason → Branch A (needs-human)
+
+echo "Test: stop hook + verify phase + PR present + marker absent + office-hours-reason present → Branch A parks issue with the reason (needs-human verify escalation)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "verify" > "$STUB_DIR/current-phase.txt"
+# verify-pr's needs-human path writes office-hours-reason and SKIPS the marker.
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+printf '%s' "/verify-pr: provision the renamed GCP secret and grant the deploy SA access" > "$TMPDIR_TEST/jobs/abcd1234/office-hours-reason"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop needs-human: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && "$apply_reason" == "/verify-pr: provision the renamed GCP secret and grant the deploy SA access" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop needs-human: office-hours applied to issue 123 with the office-hours-reason contents (Branch A)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop needs-human: office-hours applied to issue 123 with the office-hours-reason contents (Branch A)"
+  echo "    apply-log: $apply_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop needs-human: spawn invoked exactly once" "1" "$spawn_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop needs-human: self-close not invoked (Branch A park, not advance)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop needs-human: self-close not invoked (Branch A park, not advance)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop needs-human: no verify-attempt label add or remove invoked (Branch A only parks via office-hours)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop needs-human: no verify-attempt label add or remove invoked (Branch A only parks via office-hours)"
+fi
 stop_teardown
 
 # --- Test 3: marker present, same phase, verify, counter >= 3 → branch D -----
