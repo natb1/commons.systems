@@ -60,19 +60,15 @@ The caller supplies:
        a leftover `<<<<<<<`/`=======`/`>>>>>>>` line) — if any remain, treat the
        verdict as **`ambiguous`** instead. Otherwise re-fork `/commit-merge-push`.
      - **`ambiguous <reason>`** (the subagent made **no** edits; `<reason>` is a
-       one-line explanation) → write `<reason>` to
-       `$CLAUDE_JOB_DIR/office-hours-reason` (atomic, under the `CLAUDE_JOB_DIR`
-       guard), **skip** the caller's `phase-completed` marker, and **stop**. The
+       one-line explanation) → call `dispatch-mark-deviation` with `<reason>`,
+       **skip** the caller's `phase-completed` marker, and **stop**. The
        Stop hook (`dispatch-stop.sh`, Branch A) reads the marker-absence, applies
        `dispatch:office-hours` to the issue, and surfaces `<reason>` in the
        why-comment — so do **not** call `gh` / `dispatch-apply-office-hours` here.
 
        ```bash
        # Set REASON to the one-line reason from the subagent's "ambiguous <reason>" verdict.
-       if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-         printf '%s\n' "$REASON" > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
-         mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" "$CLAUDE_JOB_DIR/office-hours-reason"
-       fi
+       .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation "$REASON"
        ```
    - **Pre-commit hook failure** → launch a `sonnet` subagent to fix the underlying
      issue with a **new commit — never `--amend`** — then re-fork `/commit-merge-push`.
