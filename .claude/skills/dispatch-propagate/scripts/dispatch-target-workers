@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # dispatch-target-workers — print the desired concurrent worker count.
 #
-# Runs a sequential four-stage pace-relative pipeline W -> F -> N to gate
-# router-side worker spawning. Instead of a flat weekly cap, the weekly budget
-# follows a cumulative-pace CURVE keyed to how far through the weekly window we
-# are (in 5-hour-window terms), so spend spreads smoothly across the week
-# rather than burning early and idling. It is intentionally more conservative
-# early-week than a flat-cap controller — it throttles whenever actual usage
-# runs ahead of the curve, even far below the weekly cap.
+# Computes a worker target from two decoupled controls: a weekly pace curve W
+# used as a BINARY gate, then a linear 5-hour worker ramp N. Weekly pace decides
+# WHETHER to spend (usage at/over the curve → pause); the 5h ramp decides HOW
+# MANY. Instead of a flat weekly cap, the weekly budget follows a cumulative-pace
+# CURVE keyed to how far through the weekly window we are (in 5-hour-window
+# terms), so spend spreads smoothly across the week rather than burning early and
+# idling. It is intentionally more conservative early-week than a flat-cap
+# controller — it pauses whenever actual usage runs ahead of the curve, even far
+# below the weekly cap.
 #
 # The two `used_*` telemetry fields stay in their own denominators
 # (used_weekly = % of weekly limit; used_5h = % of 5h limit). They couple only
@@ -69,10 +71,10 @@
 #   weekly_increment_floor_pct     default 1    per-window floor
 #   weekly_increment_cap_pct       default 10   per-window hard ceiling
 #   weekly_curve_power             default 1    convexity; >1 back-loads
-#   weekly_headroom_taper_pct      default 20   weekly headroom earning full F
-#   five_hour_target_floor_pct     default 50   F band floor
-#   five_hour_target_ceiling_pct   default 80   F band ceiling
-#   five_hour_headroom_taper_pct   default 15   5h headroom -> max workers
+#   five_hour_target_floor_pct     default 50   used_5h % at/below which workers
+#                                               are max
+#   five_hour_target_ceiling_pct   default 80   used_5h % at/above which workers
+#                                               are zero
 #   max_concurrent_workers         default 8
 #
 # ---- The algorithm ----------------------------------------------------------
@@ -89,13 +91,15 @@
 #   r   = remaining / 18000                                      # windows left
 #   W   = max(W, weekly_terminal - cap*r)                        # terminal envelope
 #
-#   # Stage 2 — 5h target F (% of 5h limit, absolute)
+#   # Stage 2 — binary weekly gate
 #   hw = W - used_weekly
-#   F  = (hw <= 0) ? 0 : floor5 + (ceil5-floor5)*clamp(hw/Hw, 0, 1)
+#   if hw <= 0: print 0; exit              # at/over pace → pause
 #
-#   # Stage 3 — workers N
-#   h5 = F - used_5h
-#   N  = (h5 <= 0) ? 0 : clamp(round(max_workers * h5/H5), 1, max_workers)
+#   # Stage 3 — workers N from the 5h ramp
+#   span = ceil5 - floor5
+#   h5   = ceil5 - used_5h
+#   N = (h5 <= 0) ? 0 : (span <= 0) ? max_workers
+#                                   : clamp(round(max_workers * h5/span), 1, max_workers)
 #   print N
 #
 # - The weekly increment d(x)=floor+(end-floor)*x^p rises from the floor toward
@@ -108,15 +112,17 @@
 #   (term = 80 at r=2 [smooth 81.5 wins], 90 at r=1, 100 at r=0 with defaults;
 #   envelope takes over at r≈1.7). Mid-week r is large, the term is negative,
 #   and the smooth curve is unchanged.
-# - F=0 when ahead of pace (used_weekly >= W); the floor5..ceil5 band opens
-#   with weekly headroom.
-# - N=0 only at/over the 5h target F (includes the F=0 ahead-of-pace pause);
-#   1..max below. No `0 >= 0` router deadlock during healthy under-budget
-#   operation.
+# - Gate closed (hw <= 0, used_weekly at/over W) → 0 workers regardless of 5h
+#   usage. The weekly pace curve simply pauses spending.
+# - Gate open (hw > 0) → N is a pure function of used_5h: max_workers at/below
+#   floor5, ramping linearly to 0 at/above ceil5. The clamp floor keeps N >= 1
+#   for any used_5h strictly under ceil5, so there is no `0 >= 0` router
+#   deadlock during healthy under-pace operation.
 #
 #   # Reopen crossing (--reopen-at mode)
-#   A pace-curve pause (F=0 from used_weekly >= W) is transient: W(t) rises over
-#   time to meet the flat (no workers spending) used_weekly, so the budget
+#   A pace-curve pause (the binary gate closing, hw<=0, from used_weekly >= W) is
+#   transient: W(t) rises over time to meet the flat (no workers spending)
+#   used_weekly, so the budget
 #   reopens on its own. Reopen mode reports WHEN. The Stage-1 curve is factored
 #   into an awk function W_of(t) returning the cumulative curve value at a
 #   candidate epoch t. With hw = W_of(now) - used_weekly:
@@ -125,7 +131,8 @@
 #     hw <= 0 → solve W_of(t) = used_weekly for the earliest t in (now,
 #               resets_weekly] by bisection. W_of is monotonic increasing in t,
 #               so the bisection converges for any weekly_curve_power.
-#   Reopen mode computes only Stage 1; it never runs Stage 2 (F) or Stage 3 (N).
+#   Reopen mode computes only Stage 1; it never runs the binary gate or the 5h
+#   ramp.
 #
 # ---- Missing-telemetry fallback --------------------------------------------
 #
@@ -133,8 +140,8 @@
 #   (count mode) / `none` (reopen mode).
 # - Weekly anchor absent (missing used_weekly OR resets_at_weekly OR a
 #   malformed now) → print 1 (count mode) / `none` (reopen mode).
-# - Only `five_hour` missing → run Stages 1-3 with used_5h treated as 0
-#   (N scales from F alone). Irrelevant to reopen mode (Stage 1 only).
+# - Only `five_hour` missing → under pace, used_5h is treated as 0 → max workers
+#   from the 5h ramp. Irrelevant to reopen mode (Stage 1 only).
 set -euo pipefail
 
 # ---- Step 0: mode argument --------------------------------------------------
@@ -161,10 +168,8 @@ WEEKLY_TERMINAL=100
 WEEKLY_INCREMENT_FLOOR=1
 WEEKLY_INCREMENT_CAP=10
 WEEKLY_CURVE_POWER=1
-WEEKLY_HEADROOM_TAPER=20
 FIVEH_TARGET_FLOOR=50
 FIVEH_TARGET_CEILING=80
-FIVEH_HEADROOM_TAPER=15
 MAX_WORKERS=8
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -193,14 +198,10 @@ if [[ -n "$CONFIG_JSON" ]]; then
   [[ -n "$val" ]] && WEEKLY_INCREMENT_CAP="$val"
   val=$(jq -r '.weekly_curve_power // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && WEEKLY_CURVE_POWER="$val"
-  val=$(jq -r '.weekly_headroom_taper_pct // empty' <<<"$CONFIG_JSON")
-  [[ -n "$val" ]] && WEEKLY_HEADROOM_TAPER="$val"
   val=$(jq -r '.five_hour_target_floor_pct // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && FIVEH_TARGET_FLOOR="$val"
   val=$(jq -r '.five_hour_target_ceiling_pct // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && FIVEH_TARGET_CEILING="$val"
-  val=$(jq -r '.five_hour_headroom_taper_pct // empty' <<<"$CONFIG_JSON")
-  [[ -n "$val" ]] && FIVEH_HEADROOM_TAPER="$val"
   val=$(jq -r '.max_concurrent_workers // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && MAX_WORKERS="$val"
 fi
@@ -308,10 +309,10 @@ if (( WEEKLY_PRESENT == 0 )); then
   exit 0
 fi
 
-# ---- Step 3: the four-stage pace pipeline -----------------------------------
+# ---- Step 3: the pace pipeline (weekly gate + 5h ramp) ----------------------
 #
 # All arithmetic is delegated to a single awk invocation. awk's printf handles
-# both float math (the curve and linear bands) and integer rounding
+# both float math (the curve and linear ramp) and integer rounding
 # (int(x + 0.5)); `^` is exponentiation. awk is POSIX-ubiquitous on the dev
 # machines (bc is not).
 
@@ -330,10 +331,8 @@ awk -v mode="$MODE" \
     -v wfloor="$WEEKLY_INCREMENT_FLOOR" \
     -v wcap="$WEEKLY_INCREMENT_CAP" \
     -v p="$WEEKLY_CURVE_POWER" \
-    -v hw_taper="$WEEKLY_HEADROOM_TAPER" \
     -v floor5="$FIVEH_TARGET_FLOOR" \
     -v ceil5="$FIVEH_TARGET_CEILING" \
-    -v h5_taper="$FIVEH_HEADROOM_TAPER" \
     -v max_workers="$MAX_WORKERS" \
     'function clamp(v, lo, hi) {
        v = v + 0
@@ -410,20 +409,24 @@ awk -v mode="$MODE" \
 
        W = W_of(now)
 
-       # ---- Stage 2: 5h target F (% of 5h limit, absolute) ----
+       # ---- Stage 2: binary weekly gate ----
+       # Weekly usage at/over the pace curve → pause (0 workers) regardless of
+       # 5h headroom. Otherwise the gate is open and the 5h ramp decides N.
        hw = W - (used_weekly + 0)
-       if (hw <= 0) {
-         F = 0
-       } else {
-         F = (floor5 + 0) + ((ceil5 + 0) - (floor5 + 0)) * clamp(hw / (hw_taper + 0), 0, 1)
-       }
+       if (hw <= 0) { print 0; exit }
 
-       # ---- Stage 3: workers N ----
-       h5 = F - (used_5h + 0)
+       # ---- Stage 3: workers N from the 5h ramp ----
+       # max_workers at/below floor5, ramping linearly to 0 at/above ceil5.
+       span = (ceil5 + 0) - (floor5 + 0)
+       h5 = (ceil5 + 0) - (used_5h + 0)
        if (h5 <= 0) {
          N = 0
+       } else if (span <= 0) {
+         # Zero-width ramp (floor5 == ceil5, validator allows equal). Below
+         # ceil5 the limit is max_workers; dividing by span=0 would crash awk.
+         N = (max_workers + 0)
        } else {
-         N = int((max_workers + 0) * h5 / (h5_taper + 0) + 0.5)
+         N = int((max_workers + 0) * h5 / span + 0.5)
          N = clamp(N, 1, max_workers + 0)
        }
 
