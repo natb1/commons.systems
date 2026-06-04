@@ -3,7 +3,7 @@
 # Usage: dispatch-phase <issue-num|branch>
 #
 # Prints exactly one actionable phase name to stdout:
-#   implement | verify | qa | code-review | review | security | done
+#   implement | verify | qa | review | done
 #
 # This script answers ONLY "which phase skill runs." It does NOT report CI
 # readiness. When a draft PR's CI has no verdict yet (checks still in progress),
@@ -87,19 +87,24 @@ if [[ "$VERDICT" == "pending" ]]; then
 fi
 
 # VERDICT == passing — CI is green; map the highest dispatch:* label to the next phase.
-# Label chain: qa-done < code-reviewed < reviewed < security-reviewed.
-# dispatch:security-reviewed is a /security-review-fix re-entry marker — it maps
-# back to "security"; the skill is idempotent and just finishes "gh pr ready".
+# The single review phase is terminal: dispatch:qa-done maps to "review".
+# dispatch:reviewed is a /review-fix re-entry marker — it maps back to "review";
+# the skill is idempotent and just finishes "gh pr ready".
+#
+# In-flight legacy tolerance: an open draft PR may still carry
+# dispatch:code-reviewed or dispatch:security-reviewed from the old three-phase
+# chain when this lands. Both route to "review" so the PR converges on the merged
+# pass instead of stalling on an orphaned label.
 LABELS=$(printf '%s' "$PR" | jq -r '[.labels[].name | select(startswith("dispatch:"))] | join(" ")')
 
 if echo "$LABELS" | grep -qF "dispatch:security-reviewed"; then
-  echo "security"
+  echo "review"
 elif echo "$LABELS" | grep -qF "dispatch:reviewed"; then
-  echo "security"
+  echo "review"
 elif echo "$LABELS" | grep -qF "dispatch:code-reviewed"; then
   echo "review"
 elif echo "$LABELS" | grep -qF "dispatch:qa-done"; then
-  echo "code-review"
+  echo "review"
 else
   echo "qa"
 fi

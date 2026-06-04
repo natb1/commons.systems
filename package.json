@@ -24,6 +24,9 @@
     "style",
     "rules-test"
   ],
+  "overrides": {
+    "@xmldom/xmldom": "^0.8.13"
+  },
   "devDependencies": {
     "@eslint/js": "^9.19.0",
     "@firebase/rules-unit-testing": "^5.0.0",

@@ -132,12 +132,62 @@ fi
 # dispatch-acquire-lock, the materialize-spawn hold, and the release) sees one
 # consistent holder id across the acquire / hold / release of this tick. Derive
 # it from the systemd unit's INVOCATION_ID (set by systemd, identical across all
-# subprocesses of the unit and unique per tick), falling back to the dispatch-tick
-# PID ($$, unique per process, stable once exported) when neither is present. PID
-# is evaluated once at export time and frozen into the value, so all children see
-# the same fixed string regardless of how they check $$. Exported once so all
-# children agree.
-export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_ID:-$$}}"
+# subprocesses of the unit and unique per tick), falling back to a random token
+# (openssl rand -hex 16) when INVOCATION_ID is absent, with the dispatch-tick PID
+# ($$) as last resort if openssl is unavailable. The random token (or PID) is
+# evaluated once at export time and frozen into the value, so all children see
+# the same fixed string. Exported once so all children agree. (#1068)
+#
+# INVOCATION_ID validation (#1068, same-user threat model): under systemd
+# INVOCATION_ID is always 32 lowercase hex chars. A manually-set value containing
+# a newline would truncate the recorded holder in the lock file (causing a
+# self-release noop → one-tick lock stall); a backslash or control sequence could
+# mislead the `awk -F'\t'` comparison in dispatch-acquire-lock or corrupt the
+# sentinel path (dispatch-tick-<token>.live). Drop any non-conforming value so
+# the random-token fallback fires instead. Hex digits plus hyphen cover both the
+# standard 32-hex form and any UUID-style variant.
+[[ "${INVOCATION_ID:-}" =~ ^[0-9a-fA-F-]+$ ]] || INVOCATION_ID=""
+#
+# Headless-liveness sentinel (#1068). A synthetic `headless:*` id is a bash
+# string that never appears in `claude agents --json`, so dispatch-acquire-lock's
+# resolve_holder_state cannot resolve its liveness through the daemon registry —
+# a concurrent tick would read this LIVE holder as dead and reclaim the lock
+# mid-selection. To give the headless holder a daemon-independent liveness
+# signal, write a sentinel containing this tick's PID alongside the shared lock
+# file and install a single EXIT/INT/TERM trap to remove it; resolve_holder_state
+# treats the holder as live iff the sentinel exists and its PID is alive. Only a
+# synthesized id writes a sentinel — a real inherited session id is governed by
+# the daemon path and writes none. $$ is the tick PID, recorded in the sentinel
+# content regardless of whether the id token uses it.
+#
+# Two failure modes, two dispositions (#1068):
+#   - The lock-file path cannot be resolved (not in a git repo and
+#     DISPATCH_LOCK_FILE unset): skip the sentinel silently. The daemon path
+#     still governs real ids, and a headless tick that cannot resolve the lock
+#     file also cannot acquire the lock (dispatch-acquire-lock exits 2), so it
+#     never reaches selection — there is nothing to serialize.
+#   - The path resolves but the sentinel write fails (e.g. an over-long token
+#     yielding ENAMETOOLONG while the short dispatch.lock stays writable): fail
+#     clear with exit 2. Continuing here would let this tick acquire the lock
+#     with no liveness sentinel, so a concurrent tick reads this LIVE holder as
+#     dead and reclaims mid-selection — the exact duplicate-spawn defect #1068
+#     closes. Per .claude/rules/code-style.md, fail clear rather than degrade
+#     the concurrency guarantee silently; the chain self-heals on the next tick.
+export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_ID:-$(openssl rand -hex 16 2>/dev/null || echo "$$")}}"
+if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
+  if SENTINEL_LOCK_FILE=$(dispatch_lock_file); then
+    SENTINEL=$(headless_sentinel_path "$CLAUDE_CODE_SESSION_ID" "$SENTINEL_LOCK_FILE")
+    mkdir -p "$(dirname "$SENTINEL")" 2>/dev/null || true
+    # Install the trap before the write so it also clears any partial sentinel
+    # if the write fails and we abort. A single EXIT trap covers every `exit`
+    # below this point — intended.
+    trap 'rm -f "$SENTINEL"' EXIT INT TERM
+    if ! printf '%s\n' "$$" >"$SENTINEL"; then
+      echo "dispatch-tick: ERROR: failed to write headless sentinel '$SENTINEL'; cannot signal liveness — aborting so a concurrent tick does not reclaim this lock mid-selection (#1068)" >&2
+      exit 2
+    fi
+  fi
+fi
 
 # --- Step 1: select the target ------------------------------------------------
 # Capture select-tick's full stdout and echo every line through (jit:/calendar:

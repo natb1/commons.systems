@@ -50,6 +50,7 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-phase" "$TMPDIR_TEST/dispatch-phase"
   cp "$SCRIPT_DIR/dispatch-ci-ready" "$TMPDIR_TEST/dispatch-ci-ready"
   cp "$SCRIPT_DIR/dispatch-find-pr" "$TMPDIR_TEST/dispatch-find-pr"
+  cp "$SCRIPT_DIR/dispatch-route" "$TMPDIR_TEST/dispatch-route"
   cp "$SCRIPT_DIR/dispatch-resolve-arg" "$TMPDIR_TEST/dispatch-resolve-arg"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
@@ -76,6 +77,7 @@ setup() {
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
            "$TMPDIR_TEST/dispatch-ci-ready" \
            "$TMPDIR_TEST/dispatch-find-pr" \
+           "$TMPDIR_TEST/dispatch-route" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/office-hours-select-target" \
@@ -636,40 +638,40 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "draft + green + no label → qa" "qa" "$result"
 teardown
 
-# 6. Draft + green + dispatch:qa-done → code-review
-echo "Test: draft + green + dispatch:qa-done → code-review"
+# 6. Draft + green + dispatch:qa-done → review
+echo "Test: draft + green + dispatch:qa-done → review"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:qa-done → code-review" "code-review" "$result"
+assert_eq "draft + green + dispatch:qa-done → review" "review" "$result"
 teardown
 
-# 7. Draft + green + dispatch:code-reviewed → review
-echo "Test: draft + green + dispatch:code-reviewed → review"
-setup
-printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:code-reviewed"}]' "$GREEN_ROLLUP")" \
-  > "$STUB_DIR/pr-list-full.json"
-result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:code-reviewed → review" "review" "$result"
-teardown
-
-# 8. Draft + green + dispatch:reviewed → security
-echo "Test: draft + green + dispatch:reviewed → security"
+# 7. Draft + green + dispatch:reviewed → review (idempotent re-entry)
+echo "Test: draft + green + dispatch:reviewed → review (idempotent re-entry)"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:reviewed"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:reviewed → security" "security" "$result"
+assert_eq "draft + green + dispatch:reviewed → review (idempotent)" "review" "$result"
 teardown
 
-# 9. Draft + green + dispatch:security-reviewed → security (re-entry)
-echo "Test: draft + green + dispatch:security-reviewed → security (re-entry)"
+# 8. Draft + green + legacy dispatch:code-reviewed → review (in-flight tolerance)
+echo "Test: draft + green + legacy dispatch:code-reviewed → review"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:code-reviewed"}]' "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "draft + green + legacy dispatch:code-reviewed → review" "review" "$result"
+teardown
+
+# 9. Draft + green + legacy dispatch:security-reviewed → review (in-flight tolerance)
+echo "Test: draft + green + legacy dispatch:security-reviewed → review"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:security-reviewed → security (re-entry)" "security" "$result"
+assert_eq "draft + green + legacy dispatch:security-reviewed → review" "review" "$result"
 teardown
 
 # 10. Non-draft PR → done
@@ -936,6 +938,199 @@ else
   call_count=0
 fi
 assert_eq "no self-fetch gh pr list calls when DISPATCH_PR_LIST set" "0" "$call_count"
+teardown
+
+# ============================================================================
+# dispatch-route tests
+# ============================================================================
+echo ""
+echo "=== dispatch-route ==="
+
+# dispatch-route collapses the worker prelude (worktree cross-check,
+# dispatch-ci-ready gate, dispatch-phase) into one call and prints exactly one
+# directive. The git stub serves the worktree toplevel
+# from worktree-toplevel.txt; the gh stub serves the full-field open-PR list
+# from pr-list-full.json and logs each such call to gh-pr-list-calls.log, so a
+# test can prove the single DISPATCH_PR_LIST fetch is reused, not re-issued.
+route_run() {
+  ROUTE_OUT=$("$TMPDIR_TEST/dispatch-route" "$@" 2>/dev/null) && ROUTE_RC=0 || ROUTE_RC=$?
+}
+
+# 1. No PR → RELEVANCE-REVIEW (implement phase).
+echo "Test: no PR → RELEVANCE-REVIEW"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR → RELEVANCE-REVIEW (directive)" "RELEVANCE-REVIEW" "$ROUTE_OUT"
+assert_eq "no PR → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 2. Draft + failing CI → INVOKE /verify-pr.
+echo "Test: draft + failing CI → INVOKE /verify-pr"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$FAILING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "draft + failing → INVOKE /verify-pr (directive)" "INVOKE /verify-pr" "$ROUTE_OUT"
+assert_eq "draft + failing → INVOKE /verify-pr (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 3. Draft + green + no label → INVOKE /qa-fix.
+# Also assert exactly one gh pr list was issued, proving DISPATCH_PR_LIST reuse
+# across both dispatch-ci-ready calls and dispatch-phase.
+echo "Test: draft + green + no label → INVOKE /qa-fix"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "draft + green → INVOKE /qa-fix (directive)" "INVOKE /qa-fix" "$ROUTE_OUT"
+assert_eq "draft + green → INVOKE /qa-fix (exit 0)" "0" "$ROUTE_RC"
+assert_eq "dispatch-route issues exactly one gh pr list" "1" \
+  "$([[ -f "$STUB_DIR/gh-pr-list-calls.log" ]] && wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ' || echo 0)"
+teardown
+
+# 4. Draft + green + dispatch:qa-done → INVOKE /review-fix (the single terminal
+# review phase; #1091 consolidated code-review/review/security into one).
+echo "Test: draft + green + dispatch:qa-done → INVOKE /review-fix"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "dispatch:qa-done → INVOKE /review-fix (directive)" "INVOKE /review-fix" "$ROUTE_OUT"
+assert_eq "dispatch:qa-done → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 5. Draft + green + dispatch:reviewed → INVOKE /review-fix (idempotent re-entry;
+# /review-fix just finishes "gh pr ready").
+echo "Test: draft + green + dispatch:reviewed → INVOKE /review-fix (re-entry)"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:reviewed"}]' "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "dispatch:reviewed → INVOKE /review-fix (directive)" "INVOKE /review-fix" "$ROUTE_OUT"
+assert_eq "dispatch:reviewed → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 6. Draft + green + legacy dispatch:code-reviewed → INVOKE /review-fix
+# (in-flight tolerance: a PR still carrying the old three-phase label converges
+# on the merged review pass instead of stalling — see dispatch-phase test 8).
+echo "Test: draft + green + legacy dispatch:code-reviewed → INVOKE /review-fix"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:code-reviewed"}]' "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "legacy dispatch:code-reviewed → INVOKE /review-fix (directive)" "INVOKE /review-fix" "$ROUTE_OUT"
+assert_eq "legacy dispatch:code-reviewed → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 7. Draft + green + legacy dispatch:security-reviewed → INVOKE /review-fix
+# (in-flight tolerance — see dispatch-phase test 9).
+echo "Test: draft + green + legacy dispatch:security-reviewed → INVOKE /review-fix"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "legacy dispatch:security-reviewed → INVOKE /review-fix (directive)" "INVOKE /review-fix" "$ROUTE_OUT"
+assert_eq "legacy dispatch:security-reviewed → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 8. Non-draft PR → STOP done.
+echo "Test: non-draft PR → STOP done"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "false" "$NO_LABELS" "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "non-draft PR → STOP done (directive)" "STOP done" "$ROUTE_OUT"
+assert_eq "non-draft PR → STOP done (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 9. Draft + pending CI → STOP waiting (the dispatch-ci-ready not-ready path).
+echo "Test: draft + pending CI → STOP waiting"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$PENDING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "draft + pending → STOP waiting (directive)" "STOP waiting" "$ROUTE_OUT"
+assert_eq "draft + pending → STOP waiting (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 10. Wrong-worktree — mismatched path: toplevel branch matches <N> but the
+# toplevel does not equal the passed <worktree-path>.
+echo "Test: wrong-worktree mismatched path → STOP wrong-worktree, non-zero"
+setup
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /tmp/nope
+assert_eq "wrong-worktree mismatched path → directive" "STOP wrong-worktree" "$ROUTE_OUT"
+assert_eq "wrong-worktree mismatched path → non-zero exit" "nonzero" \
+  "$([[ "$ROUTE_RC" != "0" ]] && echo nonzero || echo zero)"
+teardown
+
+# 11. Wrong-worktree — branch-prefix mismatch: the toplevel basename is not
+# prefixed by "<N>-".
+echo "Test: wrong-worktree branch-prefix mismatch → STOP wrong-worktree, non-zero"
+setup
+echo "/wt/99-other" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/99-other
+assert_eq "wrong-worktree branch mismatch → directive" "STOP wrong-worktree" "$ROUTE_OUT"
+assert_eq "wrong-worktree branch mismatch → non-zero exit" "nonzero" \
+  "$([[ "$ROUTE_RC" != "0" ]] && echo nonzero || echo zero)"
+teardown
+
+# 12. Missing argument: one arg (no <worktree-path>) → exit 2.
+echo "Test: missing <worktree-path> arg → exit 2"
+setup
+route_run 42
+assert_eq "missing <worktree-path> arg → exit 2" "2" "$ROUTE_RC"
+teardown
+
+# 13. Missing argument: no args at all → exit 2.
+echo "Test: no args → exit 2"
+setup
+route_run
+assert_eq "no args → exit 2" "2" "$ROUTE_RC"
+teardown
+
+# 14. Non-numeric <N> → exit 2.
+echo "Test: non-numeric <N> → exit 2"
+setup
+route_run "abc" /wt/abc-feature
+assert_eq "non-numeric N → exit 2" "2" "$ROUTE_RC"
+teardown
+
+# 15. Draft + mixed rollup (failing + pending) → INVOKE /verify-pr.
+# failure wins: dispatch-ci-ready treats mixed as ready, dispatch-phase maps to verify.
+echo "Test: draft + mixed rollup (failing+pending) → INVOKE /verify-pr"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$MIXED_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "draft + mixed rollup → INVOKE /verify-pr (directive)" "INVOKE /verify-pr" "$ROUTE_OUT"
+assert_eq "draft + mixed rollup → INVOKE /verify-pr (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 16. Zero / leading-zero <N> → exit 2. The <N> regex is ^[1-9][0-9]*$, matching
+# lib.sh:resolve_issue_number, so "0" (a nonexistent issue) and leading-zero
+# forms are rejected rather than routed against a bogus issue number.
+echo "Test: zero <N> → exit 2"
+setup
+route_run 0 /wt/0-feature
+assert_eq "zero N → exit 2" "2" "$ROUTE_RC"
+teardown
+
+echo "Test: leading-zero <N> → exit 2"
+setup
+route_run 042 /wt/042-feature
+assert_eq "leading-zero N → exit 2" "2" "$ROUTE_RC"
 teardown
 
 # ============================================================================
@@ -1208,30 +1403,26 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "done PRs skipped; help-wanted issue returned" "issue 33" "$result"
 teardown
 
-# 8. security is the top non-QA tier: it beats review, code-review, and verify.
-echo "Test: security beats review/code-review/verify"
+# 8. review is the top non-QA tier: it beats verify.
+echo "Test: review beats verify"
 setup
-SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
-REVIEW_LABELS='[{"name":"dispatch:code-reviewed"}]'
-CODE_REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
+REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
 UNION='['
 UNION+="$(make_pr_union 10 "10-verify" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
-UNION+="$(make_pr_union 20 "20-code-review" "2024-01-02T00:00:00Z" "true" "$CODE_REVIEW_LABELS" "$GREEN_ROLLUP")"','
-UNION+="$(make_pr_union 30 "30-review" "2024-01-03T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
-UNION+="$(make_pr_union 40 "40-security" "2024-01-04T00:00:00Z" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"
+UNION+="$(make_pr_union 30 "30-review" "2024-01-03T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"
 UNION+=']'
 setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "security beats review/code-review/verify" "pr 40 40-security security" "$result"
+assert_eq "review beats verify" "pr 30 30-review review" "$result"
 teardown
 
 # 9. Within one phase, the oldest PR wins.
 echo "Test: within same phase, oldest PR wins"
 setup
 # Two review-phase PRs; PR 30 is older.
-REVIEW_LABELS='[{"name":"dispatch:code-reviewed"}]'
+REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
 UNION='['
 UNION+="$(make_pr_union 30 "30-review-a" "2024-01-01T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
 UNION+="$(make_pr_union 31 "31-review-b" "2024-01-02T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"
@@ -1272,9 +1463,9 @@ teardown
 # 11. --qa mode returns only the oldest QA PR (ignores non-QA PRs).
 echo "Test: --qa mode ignores non-QA PRs and returns oldest QA PR"
 setup
-SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
+REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
 UNION='['
-UNION+="$(make_pr_union 10 "10-security" "2024-01-01T00:00:00Z" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"','
+UNION+="$(make_pr_union 10 "10-review" "2024-01-01T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
 UNION+="$(make_pr_union 20 "20-qa-old" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"','
 UNION+="$(make_pr_union 30 "30-qa-new" "2024-01-03T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"
 UNION+=']'
@@ -1282,7 +1473,7 @@ setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
-assert_eq "--qa returns oldest QA PR (ignores security PR)" "pr 20 20-qa-old" "$result"
+assert_eq "--qa returns oldest QA PR (ignores review PR)" "pr 20 20-qa-old" "$result"
 teardown
 
 # 12. waiting PR is skipped in favor of a help-wanted issue.
@@ -1536,16 +1727,16 @@ count=$(wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ')
 assert_eq "exactly one gh pr list call regardless of PR count" "1" "$count"
 teardown
 
-# 22. A code-review-phase PR winning emits the code-review phase on the result line.
-echo "Test: code-review PR winner → pr <n> <branch> code-review"
+# 22. A review-phase PR winning emits the review phase on the result line.
+echo "Test: review PR winner → pr <n> <branch> review"
 setup
-CODE_REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
-UNION='['"$(make_pr_union 25 "25-code-review-me" "2024-01-01T00:00:00Z" "true" "$CODE_REVIEW_LABELS" "$GREEN_ROLLUP")"']'
+REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
+UNION='['"$(make_pr_union 25 "25-review-me" "2024-01-01T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "code-review PR winner emits phase" "pr 25 25-code-review-me code-review" "$result"
+assert_eq "review PR winner emits phase" "pr 25 25-review-me review" "$result"
 teardown
 
 # 23. A lone QA PR with no help-wanted issue emits the qa phase on the result line.
@@ -1752,12 +1943,12 @@ teardown
 #      skipped every priority PR and the selector fell through to the
 #      help-wanted issue, violating the priority order. After the fix only the
 #      live-session-owned PR (#898) is skipped; the oldest remaining
-#      security-phase priority PR (#895) wins.
+#      review-phase priority PR (#895) wins.
 echo "Test: orphan-worktree bug+priority PRs still beat a no-worktree help-wanted issue (#905)"
 setup
 UNION='['
-UNION+="$(make_pr_union 898 "898-security" "2026-05-20T00:00:00Z" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP" '[{"number":896}]')"','
-UNION+="$(make_pr_union 895 "895-security" "2026-05-21T00:00:00Z" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP" '[{"number":806}]')"','
+UNION+="$(make_pr_union 898 "898-review" "2026-05-20T00:00:00Z" "true" '[{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP" '[{"number":896}]')"','
+UNION+="$(make_pr_union 895 "895-review" "2026-05-21T00:00:00Z" "true" '[{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP" '[{"number":806}]')"','
 UNION+="$(make_pr_union 893 "893-qa" "2026-05-22T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":892}]')"','
 UNION+="$(make_pr_union 883 "883-qa" "2026-05-23T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":879}]')"
 UNION+=']'
@@ -1767,12 +1958,12 @@ setup_union_pr_list "$UNION"
 printf '%s\n' '[{"number":896,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":806,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":892,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":879,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":886,"createdAt":"2026-05-02T00:00:00Z","labels":[{"name":"bug"},{"name":"help wanted"}]}]' \
   > "$STUB_DIR/issue-list.json"
 # Worktrees exist for all four PR branches; none for issue 886.
-printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/898-security\nHEAD a1\nbranch refs/heads/898-security\n\nworktree /worktrees/895-security\nHEAD a2\nbranch refs/heads/895-security\n\nworktree /worktrees/893-qa\nHEAD a3\nbranch refs/heads/893-qa\n\nworktree /worktrees/883-qa\nHEAD a4\nbranch refs/heads/883-qa\n\n' \
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/898-review\nHEAD a1\nbranch refs/heads/898-review\n\nworktree /worktrees/895-review\nHEAD a2\nbranch refs/heads/895-review\n\nworktree /worktrees/893-qa\nHEAD a3\nbranch refs/heads/893-qa\n\nworktree /worktrees/883-qa\nHEAD a4\nbranch refs/heads/883-qa\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 # Only #898's worktree has a live session; #895/#893/#883 are orphans.
-select_target_fake_claude "898-security"
+select_target_fake_claude "898-review"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "orphan priority PRs not skipped; oldest security priority PR wins" "pr 895 895-security security" "$result"
+assert_eq "orphan priority PRs not skipped; oldest review priority PR wins" "pr 895 895-review review" "$result"
 teardown
 
 # 30f. A PR closing a `security` issue outranks a PR closing a `bug` issue, even
@@ -2068,6 +2259,73 @@ if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else 
 assert_eq "dispatch-trace-leaf exit 1 → select-target exits non-zero" "yes" "$rc_nonzero"
 [[ "$result" != issue* ]] && no_issue=yes || no_issue=no
 assert_eq "dispatch-trace-leaf exit 1 → no issue line emitted" "yes" "$no_issue"
+teardown
+
+# --- --exclude set (#1062) ----------------------------------------------------
+# The fan-out caller passes its SEEN set as --exclude so the selector never
+# re-returns an already-processed target; it surfaces the next distinct one. The
+# harness copies the REAL dispatch-trace-leaf into TMPDIR_TEST, so these run end
+# to end through the Unit-1 trace.
+
+# 39a. A help-wanted issue in the --exclude set is skipped via the trace root;
+#      the next help-wanted issue is selected. Issue 55 (older) is excluded, so
+#      the trace exits 2 for it and issue 66 (newer) surfaces.
+echo "Test: excluded help-wanted issue skipped → next issue chosen"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 55)
+assert_eq "excluded issue 55 skipped → issue 66 chosen" "issue 66" "$result"
+teardown
+
+# 39b. A multi-leaf subtree whose first leaf is excluded descends to the next
+#      startable leaf (AC (b)): the exclusion threads into the trace. Issue 55
+#      has sub-issues 5500 and 5501, neither worktree'd nor parked; --exclude
+#      5500 must yield 5501, not skip the whole subtree.
+echo "Test: excluded first leaf → next startable leaf in subtree selected"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500},{"number":5501}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5500.json"
+printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5501.json"
+# No worktrees — only the exclusion distinguishes the leaves.
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 5500)
+assert_eq "excluded leaf 5500 → leaf 5501 selected" "issue 5501" "$result"
+teardown
+
+# 39c. A whole-frontier exclusion drains to empty: the only help-wanted issue's
+#      only leaf is excluded and there is no QA PR, so the selector returns
+#      empty (a genuine empty, not a re-selection).
+echo "Test: whole frontier excluded, no QA PR → empty"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5500.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 5500)
+assert_eq "whole frontier excluded → empty" "empty" "$result"
+teardown
+
+# 39d. A PR row whose issue is excluded is filtered during the scan (before
+#      FIRST_PR), so a single ready PR on branch 20-feature plus --exclude 20
+#      and an empty issue list yields empty — the excluded PR is not selected and
+#      nothing else exists.
+echo "Test: excluded PR row filtered during scan → empty"
+setup
+UNION='['"$(make_pr_union 20 "20-feature" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 20)
+assert_eq "excluded PR 20 filtered → empty" "empty" "$result"
 teardown
 
 # --- ready-PR gate (#920) ---
@@ -3186,6 +3444,79 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "explicit")
 assert_eq "explicit: parked root leaf 700 returned unchanged" "700" "$result"
 teardown
 
+# 22. Queue mode: --exclude names an already-processed leaf; the trace refuses to
+#     return it and descends past it to the next startable sibling (#1062). 700
+#     has open sub-issues 701 and 702, neither with a worktree, so only the
+#     exclusion distinguishes them. Without --exclude the lowest leaf 701 would
+#     be returned; with --exclude 701 the trace yields 702.
+echo "Test: queue mode → --exclude leaf skipped, returns next startable sibling"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" --exclude 701)
+assert_eq "queue: --exclude 701 → next startable leaf 702" "702" "$result"
+teardown
+
+# 23. Queue mode: the only reachable leaf is excluded → exit 2 with the
+#     worktree-conflicted stderr surface, exactly as an all-live-owned subtree
+#     (#1062 reuses the #914/#1011 no-startable-leaf path). 700 → single sub 701
+#     (leaf); --exclude 701 leaves nothing startable.
+echo "Test: queue mode → single leaf excluded, exits 2"
+setup
+printf '[{"number":701}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" --exclude 701 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"worktree-conflicted"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "queue: single leaf excluded → exit 2 with stderr message" "ok" "$status"
+teardown
+
+# 24. Queue mode: --exclude covers every reachable leaf (variadic integer run) →
+#     exit 2 (#1062). Exercises the multi-token --exclude 701 702 parse and the
+#     whole-frontier-excluded bubble-up.
+echo "Test: queue mode → all leaves excluded (variadic), exits 2"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" --exclude 701 702 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"worktree-conflicted"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "queue: all leaves excluded → exit 2 with stderr message" "ok" "$status"
+teardown
+
+# 25. Queue mode: a multi-leaf subtree whose FIRST leaf is excluded drains to the
+#     next startable leaf in the same subtree (#1062 AC (b)). Parent 700 has two
+#     leaf sub-issues 701 and 702; excluding 701 (an already-spawned leaf whose
+#     worktree is an orphan, not live-owned, so the liveness filter does not skip
+#     it) must still advance to the parent's other startable leaf 702 rather than
+#     abandon the subtree.
+echo "Test: queue mode → multi-leaf subtree, first leaf excluded drains to next leaf"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+# 701's worktree exists but no live session owns it → orphan, descendable; only
+# the --exclude set removes it from the startable frontier.
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" --exclude 701)
+assert_eq "queue: multi-leaf subtree, --exclude 701 (orphan) → next leaf 702" "702" "$result"
+teardown
+
 # ============================================================================
 # dispatch-complete-phase tests
 # ============================================================================
@@ -3207,28 +3538,12 @@ assert_eq "qa applies dispatch:qa-done" \
 assert_eq "qa: no gh label create when label exists" "absent" "$(label_create_state)"
 teardown
 
-echo "Test: code-review → dispatch:code-reviewed (apply only, no label create)"
-setup
-"$TMPDIR_TEST/dispatch-complete-phase" 25 code-review
-assert_eq "code-review applies dispatch:code-reviewed" \
-  "pr edit 25 --add-label dispatch:code-reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
-assert_eq "code-review: no gh label create when label exists" "absent" "$(label_create_state)"
-teardown
-
 echo "Test: review → dispatch:reviewed (apply only, no label create)"
 setup
 "$TMPDIR_TEST/dispatch-complete-phase" 30 review
 assert_eq "review applies dispatch:reviewed" \
   "pr edit 30 --add-label dispatch:reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
 assert_eq "review: no gh label create when label exists" "absent" "$(label_create_state)"
-teardown
-
-echo "Test: security → dispatch:security-reviewed (apply only, no label create)"
-setup
-"$TMPDIR_TEST/dispatch-complete-phase" 40 security
-assert_eq "security applies dispatch:security-reviewed" \
-  "pr edit 40 --add-label dispatch:security-reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
-assert_eq "security: no gh label create when label exists" "absent" "$(label_create_state)"
 teardown
 
 # Label missing: the apply fails "not found", so the script creates the
@@ -11375,7 +11690,7 @@ exit 1
 FAKE
 chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-phase"
 echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
-echo "phase=code-review" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+echo "phase=review" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
@@ -12153,6 +12468,63 @@ assert_eq "unset session: no marker created in target worktree" "0" \
   "$([ -f "$UNSET_WT/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
 lock_teardown
 
+# ----- Headless-holder sentinel reclaim (#1068) ------------------------------
+# A synthetic `headless:<token>` holder never appears in `claude agents --json`,
+# so resolve_holder_state resolves its liveness through the PID sentinel the tick
+# writes alongside the lock file: live iff the sentinel exists AND its PID is
+# alive. These tests drive the real dispatch-acquire-lock against a lock file
+# recording a headless holder, with a different caller sessionId. No
+# CLAUDE_AGENTS_CMD fake is needed — the headless branch returns before the
+# daemon query. Sentinel path: <dirname $DISPATCH_LOCK_FILE>/dispatch-tick-<slug>.live
+# (slug for a simple token like `tok123` is unchanged).
+
+# --- Headless A: live PID in the sentinel → caller stays busy (no reclaim) ----
+echo "Test: headless holder with a live-PID sentinel is busy (not reclaimed)"
+lock_setup
+printf '%s\n' "headless:tok123" > "$DISPATCH_LOCK_FILE"
+headless_sentinel=$(source "$SCRIPT_DIR/lib.sh" 2>/dev/null; headless_sentinel_path "headless:tok123" "$DISPATCH_LOCK_FILE")
+printf '%s\n' "$$" > "$headless_sentinel"   # this test process is alive
+export CLAUDE_CODE_SESSION_ID="sess-headless-A"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "headless-live exits 0" "0" "$rc"
+assert_eq "headless-live prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "headless-live lock file still holds the headless holder" \
+  "headless:tok123" "$lock_contents"
+rm -f "$headless_sentinel"
+lock_teardown
+
+# --- Headless B: no sentinel → caller reclaims (acquired) ---------------------
+echo "Test: headless holder with no sentinel is reclaimed (acquired)"
+lock_setup
+printf '%s\n' "headless:tok123" > "$DISPATCH_LOCK_FILE"
+# No sentinel file written → the headless holder reads dead.
+export CLAUDE_CODE_SESSION_ID="sess-headless-B"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "headless-absent exits 0" "0" "$rc"
+assert_eq "headless-absent prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "headless-absent lock file rewritten to caller" \
+  "sess-headless-B" "$lock_contents"
+lock_teardown
+
+# --- Headless C: dead PID in the sentinel → caller reclaims (stale-after-kill) -
+echo "Test: headless holder with a dead-PID sentinel is reclaimed (acquired)"
+lock_setup
+printf '%s\n' "headless:tok123" > "$DISPATCH_LOCK_FILE"
+headless_sentinel=$(source "$SCRIPT_DIR/lib.sh" 2>/dev/null; headless_sentinel_path "headless:tok123" "$DISPATCH_LOCK_FILE")
+# A PID that is not running — a SIGKILL'd tick leaves this stale sentinel.
+printf '%s\n' "2147483647" > "$headless_sentinel"
+export CLAUDE_CODE_SESSION_ID="sess-headless-C"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "headless-dead exits 0" "0" "$rc"
+assert_eq "headless-dead prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "headless-dead lock file rewritten to caller" \
+  "sess-headless-C" "$lock_contents"
+rm -f "$headless_sentinel"
+lock_teardown
+
 # ============================================================================
 # restore-dispatch-skill tests (#903)
 # ============================================================================
@@ -12181,8 +12553,8 @@ restore_setup() {
     "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts" \
     "$TMPDIR_TEST/bin" \
     "$STUB_DIR"
-  for skill in plan-implement verify-pr qa-fix office-hours code-review-fix \
-               review-fix security-review-fix dispatch-worker \
+  for skill in plan-implement verify-pr qa-fix office-hours \
+               review-fix dispatch-worker \
                dispatch-resolve-conflict; do
     mkdir -p "$TMPDIR_TEST/.claude/skills/$skill"
     cat > "$TMPDIR_TEST/.claude/skills/$skill/SKILL.md" <<EOF
@@ -12365,7 +12737,7 @@ restore_teardown
 
 # --- Test 3: qa → qa-fix body, no ARGUMENTS ---------------------------------
 # qa now routes to /qa-fix (the autonomous QA phase skill), which — like
-# /code-review-fix — resolves its target from the worktree and takes no arg.
+# /review-fix — resolves its target from the worktree and takes no arg.
 echo "Test: restore-dispatch-skill phase=qa → qa-fix body, no ARGUMENTS"
 restore_setup
 set_agents_name "903-foo"
@@ -12467,35 +12839,6 @@ else
 fi
 restore_teardown
 
-# --- Test 4: code-review → code-review-fix body, no ARGUMENTS ----------------
-echo "Test: restore-dispatch-skill phase=code-review → code-review-fix body, no ARGUMENTS"
-restore_setup
-set_agents_name "903-foo"
-echo "code-review" > "$STUB_DIR/current-phase.txt"
-output=$(run_restore)
-TOTAL=$((TOTAL + 1))
-expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/code-review-fix"
-if [[ "$output" == *"$expected_dir"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: code-review: base directory line emitted"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: code-review: base directory line emitted"
-  echo "    output: $output"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"RESTORE_MARKER_code-review-fix"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: code-review: SKILL.md body marker emitted"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: code-review: SKILL.md body marker emitted"
-fi
-TOTAL=$((TOTAL + 1))
-if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
-  PASS=$((PASS + 1)); echo "  PASS: code-review: no ARGUMENTS line"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: code-review: no ARGUMENTS line"
-  echo "    output: $output"
-fi
-restore_teardown
-
 # --- Test 5: review → review-fix body, no ARGUMENTS --------------------------
 echo "Test: restore-dispatch-skill phase=review → review-fix body, no ARGUMENTS"
 restore_setup
@@ -12521,35 +12864,6 @@ if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
   PASS=$((PASS + 1)); echo "  PASS: review: no ARGUMENTS line"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: review: no ARGUMENTS line"
-  echo "    output: $output"
-fi
-restore_teardown
-
-# --- Test 6: security → security-review-fix body, no ARGUMENTS ---------------
-echo "Test: restore-dispatch-skill phase=security → security-review-fix body, no ARGUMENTS"
-restore_setup
-set_agents_name "903-foo"
-echo "security" > "$STUB_DIR/current-phase.txt"
-output=$(run_restore)
-TOTAL=$((TOTAL + 1))
-expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/security-review-fix"
-if [[ "$output" == *"$expected_dir"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: security: base directory line emitted"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: security: base directory line emitted"
-  echo "    output: $output"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"RESTORE_MARKER_security-review-fix"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: security: SKILL.md body marker emitted"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: security: SKILL.md body marker emitted"
-fi
-TOTAL=$((TOTAL + 1))
-if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
-  PASS=$((PASS + 1)); echo "  PASS: security: no ARGUMENTS line"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: security: no ARGUMENTS line"
   echo "    output: $output"
 fi
 restore_teardown
@@ -12711,9 +13025,7 @@ declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/qa-fix/SKILL.md"]=0
   [".claude/skills/office-hours/SKILL.md"]=0
   [".claude/skills/plan-implement/SKILL.md"]=0
-  [".claude/skills/code-review-fix/SKILL.md"]=0
   [".claude/skills/review-fix/SKILL.md"]=0
-  [".claude/skills/security-review-fix/SKILL.md"]=0
   [".claude/skills/verify-pr/SKILL.md"]=0
   [".claude/skills/implement-unit/SKILL.md"]=0
   [".claude/skills/commit-merge-push/SKILL.md"]=0
@@ -13866,11 +14178,11 @@ sel_tick_setup
 cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
 echo called >> "$TMPDIR_TEST/logs/select-target.log"
-echo "pr 660 660-some-branch code-review"
+echo "pr 660 660-some-branch review"
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_sel_tick)
-assert_eq "pr: decision line" "pr 660 660-some-branch code-review 1" \
+assert_eq "pr: decision line" "pr 660 660-some-branch review 1" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "pr: lock held (our session)" "select-tick-session" \
   "$(cat "$DISPATCH_LOCK_FILE")"
@@ -14940,6 +15252,126 @@ assert_eq "distinct: worktrees all unique" "3" \
   "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
 mat_teardown
 
+# --- fan-out exclusion (#1062): the loop passes its SEEN set as --exclude so ---
+# dispatch-select-target yields the NEXT distinct target instead of re-returning
+# an already-processed one. Each of the following tests overrides the default
+# (arg-ignoring) select-target fake with an EXCLUDE-HONORING fake that returns
+# the first MAT_QUEUE entry NOT in the passed --exclude set. WITHOUT --exclude
+# this fake returns the queue HEAD on every call — re-surfacing an already-
+# spawned target — the exact scenario the loop's exclusion must defeat. The
+# helper below writes that fake into the live TMPDIR_TEST.
+write_exclude_honoring_select_target() {
+  cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+# Exclude-honoring fake (#1062): returns the first MAT_QUEUE entry NOT in the
+# passed --exclude set, modelling a real selector yielding the next distinct
+# target. WITHOUT --exclude it returns the first entry every call — re-surfacing
+# an already-spawned target (registration lag / orphan self-close), the exact
+# scenario the loop's exclusion must defeat.
+declare -A EX=()
+while [[ \$# -gt 0 ]]; do
+  case "\$1" in
+    --exclude) shift; while [[ \$# -gt 0 && "\$1" =~ ^[0-9]+\$ ]]; do EX["\$1"]=1; shift; done ;;
+    *) shift ;;
+  esac
+done
+read -r -a Q <<< "\${MAT_QUEUE:-}"
+echo "called exclude=\${!EX[*]:-}" >> "$TMPDIR_TEST/logs/select-target.log"
+for n in "\${Q[@]}"; do
+  if [[ -z "\${EX[\$n]:-}" ]]; then echo "issue \$n"; exit 0; fi
+done
+echo empty
+FAKE
+  chmod +x "$TMPDIR_TEST/dispatch-select-target"
+}
+
+# (a) lagged-live re-surface: queue HEAD 839 is the already-spawned arg, re-
+# surfacing because its live ownership is not yet visible to the next selection
+# (mechanism 1). Without the loop's --exclude the fake would re-return 839 every
+# call and the run would stall at 1 spawn. With it, selection advances 720, 508.
+echo "Test: materialize-spawn fan-out excludes lagged-live re-surfaced target (#1062)"
+mat_setup
+write_exclude_honoring_select_target
+export MAT_QUEUE="839 720 508"
+out=$(run_mat 839 queue --gap 3)
+assert_eq "fanout-lag: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "fanout-lag: distinct worktrees" "3" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
+assert_eq "fanout-lag: summary 3 of gap 3" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 3 of gap 3')"
+assert_eq "fanout-lag: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fanout-lag: no 'no further distinct targets' stop" "0" \
+  "$(printf '%s\n' "$out" | grep -c 'no further distinct targets')"
+mat_teardown
+
+# (a') orphan (self-closed) re-surface: 720 re-surfaces because it self-closed
+# fast, leaving an orphan worktree selection does not skip (mechanism 2). The
+# duplicate 720 in the queue is spawned once; the exclusion carries it past.
+echo "Test: materialize-spawn fan-out excludes orphan self-closed re-surfaced target (#1062)"
+mat_setup
+write_exclude_honoring_select_target
+export MAT_QUEUE="720 720 508"
+out=$(run_mat 839 queue --gap 3)
+assert_eq "fanout-orphan: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "fanout-orphan: distinct worktrees (839,720,508)" "3" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
+assert_eq "fanout-orphan: summary 3 of gap 3" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 3 of gap 3')"
+assert_eq "fanout-orphan: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fanout-orphan: no 'no further distinct targets' stop" "0" \
+  "$(printf '%s\n' "$out" | grep -c 'no further distinct targets')"
+mat_teardown
+
+# (b) multi-leaf subtree, first leaf excluded drains to the next: the exclusion
+# threads into the leaf trace, so a subtree whose first startable leaf (5500) was
+# already processed advances to its sibling (5501) rather than abandoning the
+# parent's remaining leaves.
+echo "Test: materialize-spawn fan-out drains multi-leaf subtree past excluded first leaf (#1062)"
+mat_setup
+write_exclude_honoring_select_target
+export MAT_QUEUE="5500 5501"
+out=$(run_mat 5500 queue --gap 2)
+assert_eq "fanout-subtree: spawn count" "2" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "fanout-subtree: distinct worktrees (5500,5501)" "2" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
+assert_eq "fanout-subtree: summary 2 of gap 2" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 2 of gap 2')"
+assert_eq "fanout-subtree: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+
+# (c) genuinely empty frontier: once 839 is excluded the queue has nothing left,
+# so selection returns `empty` and the loop stops cleanly on a real empty — not
+# on a re-selection.
+echo "Test: materialize-spawn fan-out stops cleanly on a genuinely empty frontier (#1062)"
+mat_setup
+write_exclude_honoring_select_target
+export MAT_QUEUE=""
+out=$(run_mat 839 queue --gap 5)
+assert_eq "fanout-empty: spawn count" "1" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "fanout-empty: summary 1 of gap 5 (queue exhausted)" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 5 (queue exhausted)')"
+assert_eq "fanout-empty: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fanout-empty: no 'no further distinct targets' stop" "0" \
+  "$(printf '%s\n' "$out" | grep -c 'no further distinct targets')"
+mat_teardown
+
+# (backstop) contract violation: dispatch-select-target ALWAYS returns 839 (the
+# already-processed arg) regardless of --exclude. The loop's defensive backstop
+# (#1062) must break rather than spin forever: it records SEEN[839] for target 1,
+# the fake re-returns 839, SEEN[839] is set → backstop fires.
+echo "Test: materialize-spawn fan-out backstop breaks on selector contract violation (#1062)"
+mat_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+echo "issue 839"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue --gap 5 2>"$TMPDIR_TEST/logs/mat-stderr.log")
+assert_eq "backstop: spawn count (only the arg)" "1" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "backstop: summary 1 of gap 5 (unexpected re-selection)" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 5 (selection re-returned an excluded target (unexpected))')"
+assert_eq "backstop: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "backstop: stderr names the contract violation" "1" \
+  "$(grep -c 'contract violation' "$TMPDIR_TEST/logs/mat-stderr.log")"
+mat_teardown
+
 # --- --gap unbounded is removed → usage error exit 2 -------------------------
 # The unbounded fan-out machinery is gone (#1061): a manual /dispatch now spawns
 # exactly one gate-exempt worker (arriving as --gap 1, the single-target path),
@@ -14999,6 +15431,10 @@ tick_setup() {
   # test's $PWD (dispatch-tick's resolve_project_root would otherwise resolve the
   # real project root). The fake spawn-job logs this value as its --cwd argv.
   export DISPATCH_TICK_MAIN_WORKTREE="$TMPDIR_TEST"
+  # Pin the shared lock file under TMPDIR_TEST so the headless-liveness sentinel
+  # (#1068) the tick writes resolves through dispatch_lock_file to a path inside
+  # the test tree (not the host repo's tmp/).
+  export DISPATCH_LOCK_FILE="$TMPDIR_TEST/dispatch.lock"
 
   # Fake dispatch-select-tick: echoes any TICK_SEL_PRE passthrough lines, then
   # the test-controlled decision line (TICK_DECISION) as the LAST line. Exits
@@ -15036,7 +15472,8 @@ tick_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   unset TICK_DECISION TICK_TOKEN TICK_SEL_RC TICK_MAT_RC \
-    TICK_SEL_PRE TICK_MAT_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE
+    TICK_SEL_PRE TICK_MAT_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
+    DISPATCH_LOCK_FILE
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -15102,7 +15539,7 @@ tick_teardown
 # --- pr <num> <branch> <phase> <gap> → derives N, materialize queue ----------
 echo "Test: dispatch-tick pr → derives N from branch, materialize queue --gap"
 tick_setup
-export TICK_DECISION="pr 660 660-some-branch code-review 3" TICK_TOKEN="propagate"
+export TICK_DECISION="pr 660 660-some-branch review 3" TICK_TOKEN="propagate"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "pr: exit 0" "0" "$rc"
 assert_eq "pr: materialize argv (N=660 from branch prefix)" "660 queue --gap 3" \
@@ -15245,14 +15682,46 @@ assert_eq "headless: synthetic id has headless: prefix (not a bare sentinel)" "1
   "$([[ "$sel_id" == headless:* ]] && echo 1 || echo 0)"
 
 # Companion: under systemd the id derives from INVOCATION_ID (the primary
-# headless path), not the bare-PID fallback the run above exercised. Set
-# INVOCATION_ID for one run and assert the synthesized id is exactly
-# headless:<INVOCATION_ID>. Fresh id logs so this run does not cross-contaminate.
+# headless path), not the random-token fallback the run above exercised. Use a
+# realistic 32-hex INVOCATION_ID (the form systemd always produces) and assert
+# the synthesized id is exactly headless:<INVOCATION_ID>. The validation guard
+# must pass hex digits — this exercises that path. (#1068)
 rm -f "$TMPDIR_TEST/logs/sel-id.log" "$TMPDIR_TEST/logs/mat-id.log"
-env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="inv-1054" \
+env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="0123456789abcdef0123456789abcdef" \
   "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1
-assert_eq "headless: id derives from INVOCATION_ID when set (systemd path)" \
-  "headless:inv-1054" "$(cat "$TMPDIR_TEST/logs/sel-id.log")"
+assert_eq "headless: id derives from valid hex INVOCATION_ID (systemd path)" \
+  "headless:0123456789abcdef0123456789abcdef" "$(cat "$TMPDIR_TEST/logs/sel-id.log")"
+
+# Companion: polluted INVOCATION_ID — the #1068 validation guard drops a
+# non-hex value so it cannot truncate the recorded holder (via embedded newline),
+# mislead the awk -F'\t' comparison, or corrupt the sentinel path. The fallback
+# fires and the id must be single-line headless:<hex-or-pid>.
+rm -f "$TMPDIR_TEST/logs/sel-id.log" "$TMPDIR_TEST/logs/mat-id.log"
+env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="a/b" \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1
+polluted_id=$(cat "$TMPDIR_TEST/logs/sel-id.log")
+assert_eq "headless: polluted INVOCATION_ID dropped — id has headless: prefix" "1" \
+  "$([[ "$polluted_id" == headless:* ]] && echo 1 || echo 0)"
+assert_eq "headless: polluted INVOCATION_ID dropped — id is single-line (no embedded newline)" "1" \
+  "$([[ "$polluted_id" != *$'\n'* ]] && echo 1 || echo 0)"
+assert_eq "headless: polluted INVOCATION_ID dropped — token is hex (guard rejected the slash)" "1" \
+  "$([[ "$polluted_id" =~ ^headless:[0-9a-f]+$ ]] && echo 1 || echo 0)"
+
+# Companion: INVOCATION_ID absent — the random-token fallback fires (openssl
+# rand -hex 16 when available; $$ as last resort). Assert the id is headless:-
+# prefixed, single-line, and its token matches hex (openssl path). (#1068)
+rm -f "$TMPDIR_TEST/logs/sel-id.log" "$TMPDIR_TEST/logs/mat-id.log"
+env -u CLAUDE_CODE_SESSION_ID -u INVOCATION_ID \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1
+absent_id=$(cat "$TMPDIR_TEST/logs/sel-id.log")
+assert_eq "headless: absent INVOCATION_ID — id has headless: prefix" "1" \
+  "$([[ "$absent_id" == headless:* ]] && echo 1 || echo 0)"
+assert_eq "headless: absent INVOCATION_ID — id is non-empty" "1" \
+  "$([ -n "$absent_id" ] && echo 1 || echo 0)"
+assert_eq "headless: absent INVOCATION_ID — id is single-line" "1" \
+  "$([[ "$absent_id" != *$'\n'* ]] && echo 1 || echo 0)"
+assert_eq "headless: absent INVOCATION_ID — token is hex (random-token or PID fallback)" "1" \
+  "$([[ "$absent_id" =~ ^headless:[0-9a-f]+$ ]] && echo 1 || echo 0)"
 
 # Companion: a real session keeps its own id — the `:-` fallback never fires.
 # Fresh id logs so this run does not cross-contaminate the headless run above.
@@ -15262,6 +15731,89 @@ export CLAUDE_CODE_SESSION_ID="sess-real-1054"
 assert_eq "real session: select-tick sees the inherited id, not a synthetic one" \
   "sess-real-1054" "$(cat "$TMPDIR_TEST/logs/sel-id.log")"
 unset CLAUDE_CODE_SESSION_ID DISPATCH_LOCK_FILE CLAUDE_AGENTS_CMD
+tick_teardown
+
+# --- headless tick writes a PID sentinel during the run, trap removes it after -
+# #1068: a synthetic headless holder is invisible to `claude agents --json`, so
+# the tick writes a PID sentinel alongside the shared lock file for its lifetime
+# and an EXIT trap removes it. resolve_holder_state resolves the headless
+# holder's liveness from that sentinel. This test observes the sentinel directly
+# (no acquire-lock needed): the fake select-tick globs the lock dir mid-run and
+# records the matched sentinel's existence + content, then after the tick returns
+# we assert (1) a sentinel existed mid-run, (2) it held a numeric PID, (3) the
+# trap left no dispatch-tick-*.live behind. The token is the tick's $$ (no
+# INVOCATION_ID, no inherited id), unknowable in advance — hence the glob.
+echo "Test: dispatch-tick headless writes a PID sentinel mid-run and removes it on exit"
+tick_setup
+LOCK_DIR="$(dirname "$DISPATCH_LOCK_FILE")"
+# Replace the select-tick fake: glob the lock dir for the sentinel mid-run and
+# log its presence (1/0) and contents, then print a decision line so the tick
+# routes to a normal exit. mkdir -p the lock dir defensively (the tick already
+# created it before writing the sentinel).
+cat > "$TMPDIR_TEST/dispatch-select-tick" <<FAKE
+#!/usr/bin/env bash
+shopt -s nullglob
+matches=( "$LOCK_DIR"/dispatch-tick-*.live )
+if (( \${#matches[@]} > 0 )); then
+  printf '1\n' > "$TMPDIR_TEST/logs/sentinel-midrun.log"
+  cat "\${matches[0]}" >> "$TMPDIR_TEST/logs/sentinel-midrun.log"
+else
+  printf '0\n' > "$TMPDIR_TEST/logs/sentinel-midrun.log"
+fi
+printf '%s\n' "empty"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-tick"
+# Run headless with NO inherited id and NO INVOCATION_ID → token is the tick $$.
+env -u CLAUDE_CODE_SESSION_ID -u INVOCATION_ID \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "sentinel: tick exit 0" "0" "$rc"
+midrun_present=$(sed -n '1p' "$TMPDIR_TEST/logs/sentinel-midrun.log" 2>/dev/null)
+midrun_pid=$(sed -n '2p' "$TMPDIR_TEST/logs/sentinel-midrun.log" 2>/dev/null)
+assert_eq "sentinel: existed mid-run" "1" "$midrun_present"
+assert_eq "sentinel: mid-run content is a numeric PID" "1" \
+  "$([[ "$midrun_pid" =~ ^[0-9]+$ ]] && echo 1 || echo 0)"
+# The EXIT trap must have removed every sentinel from the lock dir.
+shopt -s nullglob
+leftover=( "$LOCK_DIR"/dispatch-tick-*.live )
+shopt -u nullglob
+assert_eq "sentinel: removed by the EXIT trap (no .live left behind)" "0" \
+  "${#leftover[@]}"
+tick_teardown
+
+# --- headless tick fails clear when the sentinel write fails (#1068) ----------
+# When the lock-file path resolves but the sentinel write fails (here forced via
+# an over-long-but-hex INVOCATION_ID → a >255-byte sentinel filename →
+# ENAMETOOLONG, while the short dispatch.lock stays writable), dispatch-tick must
+# exit 2 *before* selecting a target rather than warn-and-continue. Continuing
+# would acquire the lock with no liveness sentinel, so a concurrent tick reads
+# this LIVE holder as dead and reclaims mid-selection — the exact duplicate-spawn
+# defect #1068 closes. The select-tick fake drops a marker if it runs; the test
+# asserts the tick exited non-zero and never reached selection.
+echo "Test: dispatch-tick headless fails clear (exit 2, no selection) when the sentinel write fails"
+tick_setup
+LOCK_DIR="$(dirname "$DISPATCH_LOCK_FILE")"
+cat > "$TMPDIR_TEST/dispatch-select-tick" <<FAKE
+#!/usr/bin/env bash
+printf 'ran\n' > "$TMPDIR_TEST/logs/select-ran.log"
+printf '%s\n' "empty"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-tick"
+rm -f "$TMPDIR_TEST/logs/select-ran.log"
+# 250 hex chars: passes the INVOCATION_ID guard, yields a sentinel filename
+# (dispatch-tick-<250>.live = 269 bytes) that exceeds NAME_MAX (255) → write fails.
+long_inv=$(printf 'a%.0s' {1..250})
+env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="$long_inv" \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "sentinel-write-fail: tick exits 2 (fail clear)" "2" "$rc"
+assert_eq "sentinel-write-fail: selection never ran (aborted before select-tick)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-ran.log" ] && echo 1 || echo 0)"
+shopt -s nullglob
+leftover=( "$LOCK_DIR"/dispatch-tick-*.live )
+shopt -u nullglob
+assert_eq "sentinel-write-fail: no stale .live left behind (trap cleaned partial)" "0" \
+  "${#leftover[@]}"
 tick_teardown
 
 # --- --manual is forwarded to select-tick; one gate-exempt worker (gap=1) -----
@@ -15886,6 +16438,281 @@ else
   echo "    stderr: $err"
 fi
 digest_window_teardown
+
+# dispatch-drift-scan tests
+# ============================================================================
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   copy of dispatch-drift-scan
+#   $TMPDIR_TEST/bin/       gh + git stubs (prepended to PATH)
+#   $TMPDIR_TEST/tree/      the fixture working tree the script greps / stats
+#
+# The stubs key on "$*" and read fixtures from TREE = dirname/.. = $TMPDIR_TEST,
+# which is a separate dir from the fixture working tree ($TMPDIR_TEST/tree) the
+# test cds into. So stub fixtures (issue.json, prs.json, commits.txt) live at
+# $TMPDIR_TEST/*, while the real files the script existence-checks/greps live at
+# $TMPDIR_TEST/tree/*.
+
+# Local contains / not-contains helpers for the drift-scan section. (The suite
+# has only assert_eq; these mirror the inline contains-pattern used elsewhere.)
+assert_contains_local() {
+  local label="$1" needle="$2" hay="$3"
+  TOTAL=$((TOTAL + 1))
+  if [[ "$hay" == *"$needle"* ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: $label"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: $label"
+    echo "    needle: '$needle'"
+    echo "    actual: '$hay'"
+  fi
+}
+
+assert_not_contains_local() {
+  local label="$1" needle="$2" hay="$3"
+  TOTAL=$((TOTAL + 1))
+  if [[ "$hay" != *"$needle"* ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: $label"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: $label"
+    echo "    unexpected needle present: '$needle'"
+    echo "    actual: '$hay'"
+  fi
+}
+
+drift_scan_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/tree"
+
+  cp "$SCRIPT_DIR/dispatch-drift-scan" "$TMPDIR_TEST/scripts/dispatch-drift-scan"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-drift-scan"
+
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+args="$*"
+TREE="$(cd "$(dirname "$0")/.." && pwd)"
+case "$args" in
+  issue\ view\ *\ --json\ createdAt,body)
+    if [[ -f "$TREE/issue.json" ]]; then
+      cat "$TREE/issue.json"
+    else
+      echo '{"createdAt":"2026-01-01T00:00:00Z","body":"no refs"}'
+    fi
+    ;;
+  "pr list --state merged --search merged:>="*" --limit 100 --json number,title,mergedAt")
+    if [[ -f "$TREE/prs.json" ]]; then
+      cat "$TREE/prs.json"
+    else
+      echo '[]'
+    fi
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  cat > "$TMPDIR_TEST/bin/git" <<'STUB'
+#!/usr/bin/env bash
+args="$*"
+TREE="$(cd "$(dirname "$0")/.." && pwd)"
+case "$args" in
+  log\ --since=*)
+    if [[ -f "$TREE/commits.txt" ]]; then
+      cat "$TREE/commits.txt"
+    fi
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/git"
+
+  SAVED_PATH_DRIFT="$PATH"
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+}
+
+drift_scan_teardown() {
+  cd "$SCRIPT_DIR"
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  export PATH="$SAVED_PATH_DRIFT"
+}
+
+# --- Test: evidence output ---
+
+echo "Test: dispatch-drift-scan emits the four evidence inputs"
+drift_scan_setup
+# Fixture working tree: a present path and a present name ref.
+printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
+printf 'presentName_token here\n' > "$TMPDIR_TEST/tree/lib.txt"
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh` and `does/not/exist.ts`. Uses `presentName_token` and `absentName_token`."}
+EOF
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[{"number":42,"title":"some pr","mergedAt":"2026-06-02T00:00:00Z"}]
+EOF
+cat > "$TMPDIR_TEST/commits.txt" <<'EOF'
+abc1234 reworked present.sh distinctively_committed
+def5678 unrelated touch
+EOF
+cd "$TMPDIR_TEST/tree"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
+assert_eq "dispatch-drift-scan: evidence output exits 0" "0" "$rc"
+assert_contains_local "dispatch-drift-scan: prints createdAt anchor" "2026-06-03T00:00:00Z" "$out"
+assert_contains_local "dispatch-drift-scan: absent path flagged [ABSENT]" "does/not/exist.ts [ABSENT]" "$out"
+assert_not_contains_local "dispatch-drift-scan: present path not flagged [ABSENT]" "present.sh [ABSENT]" "$out"
+assert_contains_local "dispatch-drift-scan: present path line renders" "  present.sh" "$out"
+assert_contains_local "dispatch-drift-scan: absent name flagged [NOT FOUND]" "absentName_token [NOT FOUND]" "$out"
+assert_not_contains_local "dispatch-drift-scan: present name not flagged [NOT FOUND]" "presentName_token [NOT FOUND]" "$out"
+assert_contains_local "dispatch-drift-scan: a commit line renders" "distinctively_committed" "$out"
+assert_contains_local "dispatch-drift-scan: merged PR enumerated" "#42" "$out"
+drift_scan_teardown
+
+# --- Test: too-wide-window guard ---
+
+echo "Test: dispatch-drift-scan trips the too-wide-window guard at the 100-PR limit"
+drift_scan_setup
+printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh`."}
+EOF
+jq -nc '[range(100) | {number: (.+1), title: ("pr " + (.+1|tostring)), mergedAt: "2026-06-01T00:00:00Z"}]' \
+  > "$TMPDIR_TEST/prs.json"
+cd "$TMPDIR_TEST/tree"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
+assert_eq "dispatch-drift-scan: too-wide window still exits 0" "0" "$rc"
+assert_contains_local "dispatch-drift-scan: emits WINDOW-TOO-WIDE marker" "WINDOW-TOO-WIDE" "$out"
+assert_contains_local "dispatch-drift-scan: recommends re-run" "Re-run" "$out"
+assert_contains_local "dispatch-drift-scan: recommends /ready" "/ready" "$out"
+assert_contains_local "dispatch-drift-scan: anchor still prints under guard" "2026-06-03T00:00:00Z" "$out"
+assert_not_contains_local "dispatch-drift-scan: partial PR list suppressed" "pr 50" "$out"
+drift_scan_teardown
+
+# --- Test: missing / invalid argument ---
+
+echo "Test: dispatch-drift-scan rejects a missing or non-digit argument"
+drift_scan_setup
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "dispatch-drift-scan: missing arg exits 2" "2" "$rc"
+err=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 2>&1 1>/dev/null) || true
+assert_contains_local "dispatch-drift-scan: missing arg stderr mentions usage" "usage" "$err"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" abc 2>/dev/null) && rc=0 || rc=$?
+assert_eq "dispatch-drift-scan: non-digit arg exits 2" "2" "$rc"
+drift_scan_teardown
+
+# --- Test: no path references → commit scan skipped ---
+
+echo "Test: dispatch-drift-scan skips the commit scan when no path refs are named"
+drift_scan_setup
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-03T00:00:00Z","body":"Uses `somename_ref` only."}
+EOF
+cd "$TMPDIR_TEST/tree"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
+assert_eq "dispatch-drift-scan: no-path-refs exits 0" "0" "$rc"
+assert_contains_local "dispatch-drift-scan: notes commit scan skipped" "commit scan skipped" "$out"
+drift_scan_teardown
+
+# --- Regression: present name ref found even when grep_out is large ---
+# Guards defect 1: under `set -o pipefail` the old `printf … | grep -qF` test
+# SIGPIPEs printf when grep -q short-circuits on the first match, flagging every
+# present name [NOT FOUND] once grep_out is large. The here-string fix avoids the
+# upstream process entirely. The bug only manifests at scale, so build a large
+# fixture file containing many lines with the present name token.
+
+echo "Test: dispatch-drift-scan finds a present name ref under a large grep_out (pipefail regression)"
+drift_scan_setup
+printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
+# Build a large fixture without a `yes | head` pipeline: under this suite's
+# `set -o pipefail`, head closing the pipe SIGPIPEs yes (exit 141) and would
+# abort the suite. awk writes all 20000 lines itself, no broken pipe.
+awk 'BEGIN { for (i = 0; i < 20000; i++) print "scalename_tok appears here" }' \
+  > "$TMPDIR_TEST/tree/big.txt"
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-03T00:00:00Z","body":"Uses `scalename_tok` across `present.sh`."}
+EOF
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[]
+EOF
+cat > "$TMPDIR_TEST/commits.txt" <<'EOF'
+abc1234 some commit
+EOF
+cd "$TMPDIR_TEST/tree"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
+assert_eq "dispatch-drift-scan: large-grep_out scan exits 0" "0" "$rc"
+assert_not_contains_local "dispatch-drift-scan: present name ref found even when grep_out is large (pipefail regression)" "scalename_tok [NOT FOUND]" "$out"
+drift_scan_teardown
+
+# --- Regression: slash-commands are not classified as path refs ---
+# Guards defect 2: tokens like /ready and /dispatch-worker contain `/`, so the
+# old is_path_token treated them as filesystem paths and existence-checked them,
+# flagging [ABSENT]. They are skill references and must fall through to name refs.
+
+echo "Test: dispatch-drift-scan does not classify slash-commands as path refs"
+drift_scan_setup
+printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-03T00:00:00Z","body":"Run `/dispatch-worker` and `/ready` then `present.sh`."}
+EOF
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[]
+EOF
+: > "$TMPDIR_TEST/commits.txt"
+cd "$TMPDIR_TEST/tree"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
+assert_eq "dispatch-drift-scan: slash-command scan exits 0" "0" "$rc"
+assert_not_contains_local "dispatch-drift-scan: /ready not existence-checked as a path" "/ready [ABSENT]" "$out"
+assert_not_contains_local "dispatch-drift-scan: /dispatch-worker not existence-checked as a path" "/dispatch-worker [ABSENT]" "$out"
+drift_scan_teardown
+
+# --- Security regression: backtick-span globs are not expanded against the cwd ---
+# Guards the unquoted-`for tok in $span` glob-injection defect: the issue body is
+# attacker-influenceable (public repo). A span of a bare `*` must NOT expand to
+# the working-tree filenames; the fix tokenizes with `read -ra` (no globbing), so
+# `*` is dropped (it is neither a path token nor a >=3-char name ref) and the
+# uniquely-named fixture file never surfaces in the output.
+
+echo "Test: dispatch-drift-scan does not glob-expand backtick spans against the cwd"
+drift_scan_setup
+printf 'echo hi\n' > "$TMPDIR_TEST/tree/globbed_unique_xyz.sh"
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `*` widely."}
+EOF
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[]
+EOF
+: > "$TMPDIR_TEST/commits.txt"
+cd "$TMPDIR_TEST/tree"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
+assert_eq "dispatch-drift-scan: glob-span scan exits 0" "0" "$rc"
+assert_not_contains_local "dispatch-drift-scan: bare-* span not glob-expanded against cwd" "globbed_unique_xyz" "$out"
+drift_scan_teardown
+
+# --- Security regression: path-traversal tokens are rejected, not probed ---
+# Guards the path-traversal defect: a backtick span citing `../../../etc/passwd`
+# must not be existence-checked (which would let a crafted issue body probe paths
+# outside the worktree). The fix drops any token containing `..`, so the
+# traversal reference never appears in the output at all.
+
+echo "Test: dispatch-drift-scan rejects path-traversal reference tokens"
+drift_scan_setup
+printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
+cat > "$TMPDIR_TEST/issue.json" <<'EOF'
+{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh` and `../../../etc/passwd`."}
+EOF
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[]
+EOF
+: > "$TMPDIR_TEST/commits.txt"
+cd "$TMPDIR_TEST/tree"
+out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
+assert_eq "dispatch-drift-scan: traversal scan exits 0" "0" "$rc"
+assert_not_contains_local "dispatch-drift-scan: traversal token not existence-probed" "etc/passwd" "$out"
+assert_contains_local "dispatch-drift-scan: a legitimate sibling path still renders" "  present.sh" "$out"
+drift_scan_teardown
 
 # ============================================================================
 # summary
