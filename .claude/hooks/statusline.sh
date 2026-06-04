@@ -32,7 +32,7 @@ else
   printf "\033[36m%s\033[0m | \033[33m%s\033[0m" "$model" "$cwd"
 fi
 
-# Dispatch-phase segment — the worktree's /dispatch PR phase, cached with a TTL
+# Dispatch-phase segment — the worktree's dispatch PR phase, cached with a TTL
 # and refreshed in a detached background process so the status line never blocks
 # on dispatch-phase's `gh pr list` network call. The trailing `|| true` keeps a
 # transient git/dispatch-phase/cache failure from blanking the other segments.

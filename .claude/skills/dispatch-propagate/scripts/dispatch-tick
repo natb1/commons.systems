@@ -17,14 +17,29 @@
 # `propagate`/`drain` disposition, dispatch-tick simply exits 0. The autonomous
 # tick is launched by systemd (the #725 heartbeat) and by the worker Stop-hook in
 # a later unit; it runs bare and keeps the concurrency gate. A human-typed
-# `/dispatch` is a thin shim that runs one tick and relays its stdout for live
-# UX; it passes `--manual` to run one gate-exempt tick that spawns a single
-# worker (exempt from the pace curve and the `MAX_WORKERS` ceiling); fan-out is
-# autonomous-only.
+# `dispatch` runs one tick as foreground bash, passing `--manual` to spawn a
+# single gate-exempt worker (exempt from the pace curve and the `MAX_WORKERS`
+# ceiling); fan-out is autonomous-only.
 # The audit record is this script's journal output
 # (every captured stdout line is echoed through) plus the spawned workers'
 # transcripts plus durable GitHub side effects (PR comments, `dispatch:*`
 # labels) — so relay survives only on the human shim, not on the autonomous tick.
+#
+# Manual `dispatch` cap semantics & selection lock:
+#   `dispatch <N>` (explicit target): the tick skips the concurrency gate and
+#   processes that one target (gap=1). A human forcing a specific target is never
+#   paced by the autonomous budget.
+#
+#   `dispatch` (bare, no argument): skips BOTH the pace-curve budget
+#   (`dispatch-target-workers`, which a budget pause can drop to 0) AND the
+#   `MAX_WORKERS` concurrency ceiling, and spawns exactly ONE gate-exempt worker
+#   (the highest-priority queue target), never emitting `concurrency-cap`. Fan-out
+#   is the autonomous chain's behavior only.
+#
+#   Selection lock: the selection lock (`dispatch-acquire-lock`, acquired inside
+#   `dispatch-select-tick`) is shared with the autonomous chain, so a manual run
+#   cannot select the same target as an in-flight tick. Merge conflicts are handled
+#   by a spawned `/dispatch-resolve-conflict` bg job.
 #
 # Behavior:
 #   1. Run dispatch-select-tick [<N>], echoing all of its stdout through (the
@@ -81,9 +96,9 @@ source "$SCRIPT_DIR/lib.sh"
 # under one stable directory regardless of who invoked the tick. dispatch-spawn-job
 # dedups on `--name` *under <cwd>*: pinning --cwd to the main worktree keeps that
 # dedup consistent across the headless path (where $PWD is already the main
-# worktree) and the human-typed /dispatch shim (where $PWD is the caller's
-# worktree) — otherwise a manual /dispatch could spawn a duplicate of a job the
-# headless tick already started. Same idiom as dispatch-spawn-tick /
+# worktree) and the terminal `dispatch` command (where $PWD is the caller's
+# worktree) — otherwise a manual `dispatch` run could spawn a duplicate of a job
+# the headless tick already started. Same idiom as dispatch-spawn-tick /
 # dispatch-schedule-reseed; an explicit DISPATCH_TICK_MAIN_WORKTREE is
 # authoritative and bypasses the git lookup (tests rely on this).
 if [[ -n "${DISPATCH_TICK_MAIN_WORKTREE:-}" ]]; then
@@ -122,20 +137,22 @@ if [[ -n "$MANUAL" && -n "$ARG" ]]; then
 fi
 
 # --- Synthesize a session identity for the headless tick ---------------------
-# A real .claude session (the human-typed /dispatch shim) exports its own stable
-# CLAUDE_CODE_SESSION_ID, so the `:-` fallback below never fires for it. A
-# systemd-launched tick starts from a clean environment (systemd-run --user
-# forwards only PATH), so it inherits no session id — yet dispatch-acquire-lock
-# hard-requires one (exit 2 if unset) to key the selection lock on a stable
-# holder. Declare a synthetic, stable id here, at the single headless entry
-# point, so every sub-script invoked below (dispatch-select-tick →
-# dispatch-acquire-lock, the materialize-spawn hold, and the release) sees one
-# consistent holder id across the acquire / hold / release of this tick. Derive
-# it from the systemd unit's INVOCATION_ID (set by systemd, identical across all
-# subprocesses of the unit and unique per tick), falling back to the dispatch-tick
-# PID ($$, unique per process, stable once exported) when neither is present. PID
-# is evaluated once at export time and frozen into the value, so all children see
-# the same fixed string regardless of how they check $$. Exported once so all
+# The terminal `dispatch` command may or may not run inside a .claude session:
+# when invoked from within a Claude session it inherits CLAUDE_CODE_SESSION_ID;
+# when run from a plain terminal the env var is absent. A systemd-launched tick
+# also starts from a clean environment (systemd-run --user forwards only PATH).
+# In both no-session cases dispatch-acquire-lock hard-requires a session id (exit
+# 2 if unset) to key the selection lock on a stable holder. Declare a synthetic,
+# stable id here, at the single headless entry point, so every sub-script invoked
+# below (dispatch-select-tick → dispatch-acquire-lock, the materialize-spawn
+# hold, and the release) sees one consistent holder id across the acquire / hold /
+# release of this tick. Derive it from the systemd unit's INVOCATION_ID (set by
+# systemd, identical across all subprocesses of the unit and unique per tick),
+# falling back to the dispatch-tick PID ($$, unique per process, stable once
+# exported) when neither is present. PID is evaluated once at export time and
+# frozen into the value, so all children see the same fixed string regardless of
+# how they check $$. The `:-` fallback is a no-op when CLAUDE_CODE_SESSION_ID is
+# already set (ambient session or previously exported). Exported once so all
 # children agree.
 export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_ID:-$$}}"
 
