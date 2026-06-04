@@ -40,23 +40,28 @@
 #   <worktree-basename> in the ledger dir, with the three documented lines. All
 #   three arguments are required and must be non-empty (an empty arg prints a
 #   diagnostic to stderr and returns 1, matching the arg-validation style of the
-#   sibling lib-claude-agents.sh primitives). The dir is `mkdir -p`'d first. The
+#   sibling lib-claude-agents.sh primitives). The basename must also be free of
+#   path separators, `..` components, and control characters — an unsafe name
+#   prints a diagnostic and returns 1 (defense-in-depth so the name can never
+#   escape the ledger dir). The dir is `mkdir -p -m 0700`'d first (owner-only, so
+#   a host co-tenant cannot read session ids or inject forged markers). The
 #   write is atomic: content goes to a dot-prefixed `.tmp` tempfile in the same
 #   dir, then `mv` into place, so a concurrent reader (count/sweep) never observes
 #   a partial file. The timestamp is `${DISPATCH_RESERVATION_NOW:-$(date -u
 #   +%FT%TZ)}`.
 #     return 0 — marker written.
-#     return 1 — a missing argument, an unresolvable ledger dir, or a write/mv
-#               failure.
+#     return 1 — a missing/unsafe argument, an unresolvable ledger dir, or a
+#               write/mv failure.
 #
 # reservation_clear <worktree-basename>
 #   Best-effort cleanup: remove the marker file named <worktree-basename>.
 #   Idempotent — succeeds whether or not the file existed. The argument is
-#   required (empty → return 1). If the ledger dir is unresolvable (no project
+#   required and must pass the same path-safety guard as reservation_write
+#   (missing or unsafe → return 1). If the ledger dir is unresolvable (no project
 #   root and no override), there is nothing to clear → return 0.
 #     return 0 — file absent after the call (removed, or never existed, or no
 #               ledger).
-#     return 1 — missing argument only.
+#     return 1 — missing or unsafe argument only.
 #
 # reservation_count
 #   Print the integer count of outstanding marker files to stdout. NEVER fails —
@@ -77,9 +82,12 @@
 #     a. marker basename ∈ live-session-names  → a LIVE worker already owns the
 #        worktree (counted by busy_workers); reclaim (redundant / crash-after-
 #        register backstop).
-#     b. else reserving session id ∉ live-session-ids → reserving session is DEAD
+#     b. else the `session=` line is empty/absent (malformed marker) → KEEP and
+#        flag; an empty session id is not treated as "dead" so a corrupt or
+#        tampered marker never causes a still-valid slot to be reclaimed.
+#     c. else reserving session id ∉ live-session-ids → reserving session is DEAD
 #        and never converted; reclaim (stranded).
-#     c. else (reserving session alive, no live worker yet) → in-flight; KEEP.
+#     d. else (reserving session alive, no live worker yet) → in-flight; KEEP.
 #   Reclaim = `reservation_clear <basename>` plus a one-line stderr note
 #   distinguishing the two reasons (live-worker-redundant vs dead-session-
 #   stranded), mirroring dispatch-sweep's reclaim-note style. `.tmp`/dot
@@ -136,18 +144,31 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
   # reservation_write <worktree-basename> <issue-N> <session-id> — claim a slot.
   # See the header comment for the return-code contract.
   reservation_write() {
-    local basename="${1:-}" issue="${2:-}" session="${3:-}"
-    if [[ -z "$basename" || -z "$issue" || -z "$session" ]]; then
+    local wt_name="${1:-}" issue="${2:-}" session="${3:-}"
+    if [[ -z "$wt_name" || -z "$issue" || -z "$session" ]]; then
       printf 'lib-reservation-ledger: reservation_write requires <worktree-basename> <issue-N> <session-id>\n' >&2
       return 1
     fi
+    # Defense-in-depth path guard: the marker is named exactly by the worktree
+    # basename, so a value carrying a path separator, a `..` component, or a
+    # control character could escape the ledger dir on the `mv`. All current
+    # callers pass a `basename`-stripped worktree name, but guard the boundary
+    # here regardless (mirrors restore-dispatch-skill.sh).
+    case "$wt_name" in
+      *..*|*/*|*[[:cntrl:]]*)
+        printf 'lib-reservation-ledger: reservation_write: unsafe worktree-basename %q\n' "$wt_name" >&2
+        return 1
+        ;;
+    esac
 
     local dir
     dir=$(reservation_dir) || {
       printf 'lib-reservation-ledger: reservation_write could not resolve the ledger dir (not in a git repo and DISPATCH_RESERVATION_DIR unset)\n' >&2
       return 1
     }
-    mkdir -p "$dir" || return 1
+    # Owner-only (0700) so a co-tenant on the host cannot read reserving session
+    # ids out of the markers nor inject a forged marker to skew the budget.
+    mkdir -p -m 0700 "$dir" || return 1
 
     local ts="${DISPATCH_RESERVATION_NOW:-$(date -u +%FT%TZ)}"
 
@@ -156,14 +177,14 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
     # rename into place. A concurrent reader never observes a partial marker, and
     # the dot/.tmp name is excluded by count/sweep so the tempfile is never seen
     # as an outstanding reservation.
-    local tmpfile="$dir/.${basename}.$$.tmp"
+    local tmpfile="$dir/.${wt_name}.$$.tmp"
     {
       printf 'session=%s\n' "$session"
       printf 'issue=%s\n' "$issue"
       printf 'timestamp=%s\n' "$ts"
     } >"$tmpfile" || { rm -f "$tmpfile" 2>/dev/null; return 1; }
 
-    if ! mv -f "$tmpfile" "$dir/$basename"; then
+    if ! mv -f "$tmpfile" "$dir/$wt_name"; then
       rm -f "$tmpfile" 2>/dev/null
       return 1
     fi
@@ -173,15 +194,23 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
   # reservation_clear <worktree-basename> — best-effort idempotent removal.
   # See the header comment for the return-code contract.
   reservation_clear() {
-    local basename="${1:-}"
-    if [[ -z "$basename" ]]; then
+    local wt_name="${1:-}"
+    if [[ -z "$wt_name" ]]; then
       printf 'lib-reservation-ledger: reservation_clear requires a <worktree-basename> argument\n' >&2
       return 1
     fi
+    # Same path guard as reservation_write — never let an unsafe name drive the
+    # `rm` outside the ledger dir.
+    case "$wt_name" in
+      *..*|*/*|*[[:cntrl:]]*)
+        printf 'lib-reservation-ledger: reservation_clear: unsafe worktree-basename %q\n' "$wt_name" >&2
+        return 1
+        ;;
+    esac
     local dir
     # Unresolvable ledger dir → nothing to clear (best-effort cleanup).
     dir=$(reservation_dir) || return 0
-    rm -f "$dir/$basename" 2>/dev/null || true
+    rm -f "$dir/$wt_name" 2>/dev/null || true
     return 0
   }
 
@@ -254,6 +283,13 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
         # the worktree basename) — redundant / crash-after-register backstop.
         reservation_clear "$bn"
         printf 'lib-reservation-ledger: reclaimed reservation %s (live-worker-redundant)\n' "$bn" >&2
+      elif [[ -z "$marker_sid" ]]; then
+        # A marker with no readable `session=` line is malformed (truncation
+        # cannot happen via the atomic write, so this means external tampering or
+        # corruption). Reclaiming on an empty session id would conflate "no
+        # session" with "dead session" and could delete a still-valid slot — KEEP
+        # it and flag it instead (fail safe, matching the sweep's conservatism).
+        printf 'lib-reservation-ledger: keeping malformed reservation %s (no session= line)\n' "$bn" >&2
       elif [[ -z "${live_ids[$marker_sid]:-}" ]]; then
         # (b) The reserving session is not live and never converted — stranded.
         reservation_clear "$bn"

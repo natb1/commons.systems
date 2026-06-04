@@ -340,7 +340,12 @@ process_one_target() {
   # dispatch-select-target skips the now-owned worktree — so the next in-loop
   # selection yields a distinct target. On a failed spawn no worker registered.
   wt_basename="$(basename "$WORKTREE_PATH")"
-  reservation_write "$wt_basename" "$n" "${CLAUDE_CODE_SESSION_ID:-}" 1>&2 || true
+  # Best-effort, but surface a failure: a missing marker means the spawn proceeds
+  # uncounted, so a silent swallow would hide a budget blind spot. The sweeper
+  # still reclaims any stranded state, so a failed write is non-fatal to the loop.
+  if ! reservation_write "$wt_basename" "$n" "${CLAUDE_CODE_SESSION_ID:-}" 1>&2; then
+    echo "dispatch-materialize-spawn: reservation_write failed for $wt_basename; spawning without a ledger entry (budget may undercount this slot)" >&2
+  fi
   if "$SCRIPT_DIR/dispatch-spawn-worker" "$n" "$WORKTREE_PATH" 1>&2; then
     reservation_clear "$wt_basename" 1>&2 || true
     OUTCOME=spawned

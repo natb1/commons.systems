@@ -6147,6 +6147,76 @@ if reservation_sweep 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "rl-sweep-absent: absent ledger dir → returns 0" "0" "$rc"
 rl_teardown
 
+# --- Test 8: reservation_write rejects an empty session-id --------------------
+
+echo "Test: reservation_write rejects an empty session-id and writes no marker"
+rl_setup
+if reservation_write "950-slug" "950" ""; then rc=0; else rc=$?; fi
+assert_eq "rl-write-empty-session: exits 1" "1" "$rc"
+assert_eq "rl-write-empty-session: no marker written" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/950-slug" ] && echo 1 || echo 0)"
+cnt=$(reservation_count)
+assert_eq "rl-write-empty-session: reservation_count stays 0" "0" "$cnt"
+rl_teardown
+
+# --- Test 9: reservation_write rejects a path-traversal basename --------------
+
+echo "Test: reservation_write rejects an unsafe basename and writes nothing outside the ledger dir"
+rl_setup
+# A basename carrying a path component would, unguarded, let the marker escape
+# the ledger dir on the mv. The guard must reject it with rc=1.
+if reservation_write "../escape" "960" "sess-x"; then rc=0; else rc=$?; fi
+assert_eq "rl-write-traversal: exits 1" "1" "$rc"
+assert_eq "rl-write-traversal: no escaped marker created" "0" \
+  "$([ -e "$RL_DIR/escape" ] && echo 1 || echo 0)"
+if reservation_write "a/b" "961" "sess-y"; then rc=0; else rc=$?; fi
+assert_eq "rl-write-traversal: slash basename also rejected (exits 1)" "1" "$rc"
+cnt=$(reservation_count)
+assert_eq "rl-write-traversal: reservation_count stays 0" "0" "$cnt"
+rl_teardown
+
+# --- Test 10: reservation_clear rejects a path-traversal basename -------------
+
+echo "Test: reservation_clear rejects an unsafe basename"
+rl_setup
+# Plant a file outside the ledger dir; an unguarded clear with '../victim' would
+# delete it. The guard must reject the call and leave the file untouched.
+printf 'keep\n' > "$RL_DIR/victim"
+if reservation_clear "../victim"; then rc=0; else rc=$?; fi
+assert_eq "rl-clear-traversal: exits 1" "1" "$rc"
+assert_eq "rl-clear-traversal: outside file untouched" "1" \
+  "$([ -f "$RL_DIR/victim" ] && echo 1 || echo 0)"
+rl_teardown
+
+# --- Test 11: reservation_write creates the ledger dir owner-only (0700) ------
+
+echo "Test: reservation_write creates the ledger dir with mode 0700"
+rl_setup
+reservation_write "970-slug" "970" "sess-z"
+assert_eq "rl-write-mode: ledger dir is 0700" "700" \
+  "$(stat -c '%a' "$DISPATCH_RESERVATION_DIR")"
+rl_teardown
+
+# --- Test 12: sweep keeps a malformed marker with no session= line -----------
+
+echo "Test: reservation_sweep keeps (does not reclaim) a malformed marker missing the session= line"
+rl_setup
+mkdir -p -m 0700 "$DISPATCH_RESERVATION_DIR"
+# A marker with no session= line yields an empty marker_sid; it must NOT be
+# treated as dead-session-stranded and reclaimed.
+printf 'issue=980\ntimestamp=2026-01-01T00:00:00Z\n' > "$DISPATCH_RESERVATION_DIR/980-slug"
+rl_write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+err=$(reservation_sweep 2>&1 1>/dev/null)
+cnt=$(reservation_count)
+assert_eq "rl-sweep-malformed: malformed marker kept (count 1)" "1" "$cnt"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'malformed reservation'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-malformed: note mentions malformed reservation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-malformed: note mentions malformed reservation"
+fi
+rl_teardown
+
 # ============================================================================
 # dispatch-config-load tests
 # ============================================================================
