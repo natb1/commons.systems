@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# dispatch-mark-deviation — scripted terminal office-hours-reason marker write.
+#
+# Usage: dispatch-mark-deviation "<reason>"
+#
+# Writes the dispatch office-hours-reason marker that dispatch-stop.sh's
+# resolve_office_hours_reason() reads to park an issue into office-hours with a
+# context-specific reason. The marker is written atomically (tempfile + mv)
+# under the $CLAUDE_JOB_DIR guard, exactly as the phase skills previously did
+# inline at their Step-4 terminus when a phase deviates and needs user review.
+# A one-token script call is more reliable than re-deriving the atomic write in
+# the post-clear, skill-less build session.
+#
+# Marker contents (byte format MUST be preserved — read by dispatch-stop.sh):
+#
+#   <reason>
+#
+# When CLAUDE_JOB_DIR is unset/empty or not a directory the script is running
+# interactively (not under a dispatch job): it prints a diagnostic and no-ops
+# (exit 0), so the same Step-4 call is harmless in an interactive run.
+#
+# Exactly one non-empty reason argument is required; zero args, extra args, or
+# an empty reason is a clear error, not a fallback (exit 2).
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+  echo "dispatch-mark-deviation: exactly one reason argument is required" >&2
+  echo "usage: dispatch-mark-deviation \"<reason>\"" >&2
+  exit 2
+fi
+
+REASON="$1"
+
+if [[ -z "$REASON" ]]; then
+  echo "dispatch-mark-deviation: reason must be non-empty" >&2
+  echo "usage: dispatch-mark-deviation \"<reason>\"" >&2
+  exit 2
+fi
+
+# CLAUDE_JOB_DIR guard: an interactive run (no dispatch job) is a no-op.
+if [[ -z "${CLAUDE_JOB_DIR:-}" || ! -d "$CLAUDE_JOB_DIR" ]]; then
+  echo "dispatch-mark-deviation: CLAUDE_JOB_DIR unset or not a directory; interactive run, skipping marker write" >&2
+  exit 0
+fi
+
+# Atomic write: tempfile + mv. The exact byte format is read by dispatch-stop.sh.
+f="$CLAUDE_JOB_DIR/office-hours-reason"
+printf '%s\n' "$REASON" > "$f.tmp"
+mv "$f.tmp" "$f"

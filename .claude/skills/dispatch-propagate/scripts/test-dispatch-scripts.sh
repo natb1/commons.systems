@@ -17927,6 +17927,104 @@ out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "CodeQL js/sql-injection a
 assert_eq "followup-exists: codeql alert-number prefix collision (#5 vs #50) → empty" "" "$out"
 followup_exists_teardown
 
+echo ""
+echo "=== dispatch-mark-complete / dispatch-mark-deviation ==="
+
+MARK_COMPLETE="$SCRIPT_DIR/dispatch-mark-complete"
+MARK_DEVIATION="$SCRIPT_DIR/dispatch-mark-deviation"
+
+# ----- mark-complete: writes exact marker contents -----
+mc_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mc_dir" "$MARK_COMPLETE" --phase implement --pr 42; then mc_ec=0; else mc_ec=$?; fi
+assert_eq "mark-complete: exit 0 on happy path" "0" "$mc_ec"
+assert_eq "mark-complete: writes exact phase-completed contents" \
+  "$(printf 'phase=implement\npr=42\n')" "$(cat "$mc_dir/phase-completed")"
+rm -rf "$mc_dir"
+
+# ----- mark-complete: unknown phase → exit 2, no file -----
+mc_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mc_dir" "$MARK_COMPLETE" --phase bogus --pr 7 2>/dev/null; then mc_ec=0; else mc_ec=$?; fi
+assert_eq "mark-complete: unknown phase exit 2" "2" "$mc_ec"
+assert_eq "mark-complete: unknown phase writes no file" "0" \
+  "$([ -f "$mc_dir/phase-completed" ] && echo 1 || echo 0)"
+rm -rf "$mc_dir"
+
+# ----- mark-complete: missing --pr → exit 2 -----
+mc_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mc_dir" "$MARK_COMPLETE" --phase qa 2>/dev/null; then mc_ec=0; else mc_ec=$?; fi
+assert_eq "mark-complete: missing --pr exit 2" "2" "$mc_ec"
+rm -rf "$mc_dir"
+
+# ----- mark-complete: missing flag value → exit 2 -----
+mc_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mc_dir" "$MARK_COMPLETE" --phase qa --pr 2>/dev/null; then mc_ec=0; else mc_ec=$?; fi
+assert_eq "mark-complete: missing flag value exit 2" "2" "$mc_ec"
+rm -rf "$mc_dir"
+
+# ----- mark-complete: CLAUDE_JOB_DIR unset → exit 0, no file, stderr diagnostic -----
+mc_err=$( (unset CLAUDE_JOB_DIR; "$MARK_COMPLETE" --phase implement --pr 42) 2>&1 1>/dev/null ) && mc_ec=0 || mc_ec=$?
+assert_eq "mark-complete: unset CLAUDE_JOB_DIR exit 0" "0" "$mc_ec"
+assert_eq "mark-complete: unset CLAUDE_JOB_DIR emits diagnostic" "1" \
+  "$([ -n "$mc_err" ] && echo 1 || echo 0)"
+
+# ----- mark-deviation: writes exact one-line reason -----
+md_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$md_dir" "$MARK_DEVIATION" "some reason text"; then md_ec=0; else md_ec=$?; fi
+assert_eq "mark-deviation: exit 0 on happy path" "0" "$md_ec"
+assert_eq "mark-deviation: writes exact office-hours-reason contents" \
+  "$(printf 'some reason text\n')" "$(cat "$md_dir/office-hours-reason")"
+rm -rf "$md_dir"
+
+# ----- mark-deviation: no arg → exit 2 -----
+md_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$md_dir" "$MARK_DEVIATION" 2>/dev/null; then md_ec=0; else md_ec=$?; fi
+assert_eq "mark-deviation: no arg exit 2" "2" "$md_ec"
+rm -rf "$md_dir"
+
+# ----- mark-deviation: empty-string arg → exit 2 -----
+md_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$md_dir" "$MARK_DEVIATION" "" 2>/dev/null; then md_ec=0; else md_ec=$?; fi
+assert_eq "mark-deviation: empty arg exit 2" "2" "$md_ec"
+rm -rf "$md_dir"
+
+# ----- mark-deviation: CLAUDE_JOB_DIR unset → exit 0, no file, stderr diagnostic -----
+md_err=$( (unset CLAUDE_JOB_DIR; "$MARK_DEVIATION" "x") 2>&1 1>/dev/null ) && md_ec=0 || md_ec=$?
+assert_eq "mark-deviation: unset CLAUDE_JOB_DIR exit 0" "0" "$md_ec"
+assert_eq "mark-deviation: unset CLAUDE_JOB_DIR emits diagnostic" "1" \
+  "$( [[ -n "$md_err" ]] && echo 1 || echo 0 )"
+
+# ----- mark-deviation: extra arg → exit 2 -----
+md_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$md_dir" "$MARK_DEVIATION" "reason1" "reason2" 2>/dev/null; then md_ec=0; else md_ec=$?; fi
+assert_eq "mark-deviation: extra arg exit 2" "2" "$md_ec"
+rm -rf "$md_dir"
+
+# ----- mark-complete: missing --phase only (--pr present) → exit 2 -----
+mc_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mc_dir" "$MARK_COMPLETE" --pr 42 2>/dev/null; then mc_ec=0; else mc_ec=$?; fi
+assert_eq "mark-complete: missing --phase exit 2" "2" "$mc_ec"
+rm -rf "$mc_dir"
+
+# ----- mark-complete: non-numeric --pr → exit 2, no file -----
+mc_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mc_dir" "$MARK_COMPLETE" --phase qa --pr bogus 2>/dev/null; then mc_ec=0; else mc_ec=$?; fi
+assert_eq "mark-complete: non-numeric --pr exit 2" "2" "$mc_ec"
+assert_eq "mark-complete: non-numeric --pr writes no file" "0" \
+  "$(ls "$mc_dir" | wc -l | tr -d ' ')"
+rm -rf "$mc_dir"
+
+# ----- mark-complete: CLAUDE_JOB_DIR set to a file (not a dir) → exit 0, no write -----
+mc_file=$(mktemp)
+if CLAUDE_JOB_DIR="$mc_file" "$MARK_COMPLETE" --phase implement --pr 42 2>/dev/null; then mc_ec=0; else mc_ec=$?; fi
+assert_eq "mark-complete: CLAUDE_JOB_DIR is a file exit 0" "0" "$mc_ec"
+rm -f "$mc_file"
+
+# ----- mark-deviation: CLAUDE_JOB_DIR set to a file (not a dir) → exit 0, no write -----
+md_file=$(mktemp)
+if CLAUDE_JOB_DIR="$md_file" "$MARK_DEVIATION" "reason" 2>/dev/null; then md_ec=0; else md_ec=$?; fi
+assert_eq "mark-deviation: CLAUDE_JOB_DIR is a file exit 0" "0" "$md_ec"
+rm -f "$md_file"
+
 # ============================================================================
 # === dispatch-open-pr ===
 # ============================================================================
