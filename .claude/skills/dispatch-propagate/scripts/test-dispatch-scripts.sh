@@ -16822,13 +16822,16 @@ out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "npm advisories in lodash"
 assert_eq "followup-exists: open npm match → prints number" "1077" "$out"
 followup_exists_teardown
 
-# CASE 2 — CLOSED match (npm); state irrelevant to the script (--state all)
+# CASE 2 — Match from a fixture that includes a closed issue. The stub accepts
+# --state all (which is the flag the script passes), confirming the script doesn't
+# silently drop the flag. The stub is state-agnostic — it mirrors how gh returns
+# both open and closed issues when --state all is supplied; jq does the filtering.
 followup_exists_setup
 cat > "$TMPDIR_TEST/issues.json" <<'EOF'
 [{"number":1094,"title":"security: npm advisories in axios"}]
 EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "npm advisories in axios")
-assert_eq "followup-exists: closed npm match → prints number" "1094" "$out"
+assert_eq "followup-exists: --state all fixture match → prints number" "1094" "$out"
 followup_exists_teardown
 
 # CASE 3 — CodeQL match
@@ -16849,15 +16852,50 @@ out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "npm advisories in lodash"
 assert_eq "followup-exists: no match → empty" "" "$out"
 followup_exists_teardown
 
-# CASE 5 — FUZZY token overlap but NOT an exact substring.
+# CASE 5 — FUZZY token overlap but NOT a boundary-anchored match.
 # Title "npm advisories in the lodash package" shares the leading tokens but
-# the intervening word "the" breaks the substring, so contains() is false.
+# the intervening word "the" breaks the substring, so neither endswith($id)
+# nor contains($id + " ") matches.
 followup_exists_setup
 cat > "$TMPDIR_TEST/issues.json" <<'EOF'
 [{"number":1200,"title":"security: npm advisories in the lodash package"}]
 EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "npm advisories in lodash")
 assert_eq "followup-exists: fuzzy token overlap, no exact substring → empty" "" "$out"
+followup_exists_teardown
+
+# CASE 6 — MULTIPLE matches: script returns the FIRST issue number ([0]).
+followup_exists_setup
+cat > "$TMPDIR_TEST/issues.json" <<'EOF'
+[{"number":1050,"title":"security: npm advisories in lodash"},{"number":1077,"title":"security: npm advisories in lodash (duplicate)"}]
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "npm advisories in lodash")
+assert_eq "followup-exists: multiple matches → first issue number" "1050" "$out"
+followup_exists_teardown
+
+# CASE 7 — npm PREFIX COLLISION must NOT match. Identifier "npm advisories in
+# lodash" is a literal substring of title "...lodash-es", but the char after
+# the identifier is "-", not a space or end-of-title. A bare contains() would
+# false-match and silently suppress the genuine "lodash" follow-up; the
+# boundary-aware filter rejects it.
+followup_exists_setup
+cat > "$TMPDIR_TEST/issues.json" <<'EOF'
+[{"number":1300,"title":"security: npm advisories in lodash-es"}]
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "npm advisories in lodash")
+assert_eq "followup-exists: npm prefix collision (lodash vs lodash-es) → empty" "" "$out"
+followup_exists_teardown
+
+# CASE 8 — CodeQL alert-number PREFIX COLLISION must NOT match. Identifier
+# "CodeQL js/sql-injection alert #5" is a literal substring of title
+# "...alert #50 in ...", but the char after "#5" is "0", not a space. The
+# boundary-aware filter rejects it so alert #5 still files its own follow-up.
+followup_exists_setup
+cat > "$TMPDIR_TEST/issues.json" <<'EOF'
+[{"number":1301,"title":"security: CodeQL js/sql-injection alert #50 in src/db.ts"}]
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "CodeQL js/sql-injection alert #5")
+assert_eq "followup-exists: codeql alert-number prefix collision (#5 vs #50) → empty" "" "$out"
 followup_exists_teardown
 
 # ============================================================================

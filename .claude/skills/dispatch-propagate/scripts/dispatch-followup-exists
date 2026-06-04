@@ -37,9 +37,20 @@
 # MATCHING
 #   gh's --search is tokenized/fuzzy, so it only narrows the candidate set
 #   server-side (wrapping the identifier in literal double-quotes and adding the
-#   `in:title` qualifier). The authoritative match is the jq post-filter, which
-#   uses `contains($id)` — a LITERAL substring test — so a mere shared-token hit
-#   does NOT match. The first matching issue number is printed; nothing if none.
+#   `in:title` qualifier). The authoritative match is the jq post-filter.
+#
+#   The post-filter is BOUNDARY-AWARE, not a bare substring test. A title matches
+#   only when the identifier sits at a token boundary — it either ends the title
+#   (`endswith`) or is immediately followed by a space (`contains($id + " ")`).
+#   The emitter's titles are `security: <identifier>` (npm) and
+#   `security: <identifier> in <location>` (CodeQL), so the real identifier is
+#   always followed by end-of-title or a space. A bare `contains($id)` would
+#   false-match on a prefix collision — identifier `npm advisories in lodash`
+#   is a substring of title `... lodash-es`, and `CodeQL <rule> alert #5` is a
+#   substring of `... alert #50 ...` — silently suppressing a genuine follow-up
+#   for the shorter-named package or lower-numbered alert. The boundary check
+#   rejects those: the char after the candidate is `-` / `0`, not a space or
+#   end-of-string. The first matching issue number is printed; nothing if none.
 set -euo pipefail
 
 if [[ "$#" -lt 1 || -z "${1:-}" ]]; then
@@ -50,4 +61,5 @@ fi
 identifier="$1"
 
 gh issue list --search "\"$identifier\" in:title" --state all --json number,title --limit 100 \
-  | jq -r --arg id "$identifier" '[.[] | select(.title | contains($id))][0].number // empty'
+  | jq -r --arg id "$identifier" \
+      '[.[] | select((.title | endswith($id)) or (.title | contains($id + " ")))][0].number // empty'

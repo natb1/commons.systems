@@ -481,8 +481,9 @@ sandboxed-fine):
 
 It applies the threshold and emits a JSON array of `{identifier, title, body}`
 follow-ups (empty when none qualify). CodeQL emits one follow-up per alert; npm
-emits one follow-up per vulnerable package. Each `identifier` — CodeQL `rule.id` + alert number, or `npm advisories in
-<package>` — is embedded verbatim in the `title`. Before filing, the
+emits one follow-up per vulnerable package. Each `identifier` — CodeQL
+`rule.id` + alert number, or `npm advisories in <package>` — is embedded
+verbatim in the `title`. Before filing, the
 per-follow-up subagent runs `dispatch-followup-exists "<identifier>"`, a
 deterministic exact-identifier existence check spanning all issue states
 (`--state all`, open and closed), so the same alert or package is never re-filed
