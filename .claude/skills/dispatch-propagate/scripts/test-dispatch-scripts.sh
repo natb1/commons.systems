@@ -6324,6 +6324,23 @@ assert_eq "no-match: exits 0" "0" "$rc"
 assert_eq "no-match: prints 0" "0" "$out"
 ca_teardown
 
+# --- Test 11b: priority/main-broken workers are still counted (#1134) -------
+# The #1134 priority bypass exempts priority/main-broken work from the worker
+# GATE, not the COUNT: a gate-exempt priority worker is named `<N>-slug` like any
+# worker, so claude_agents_count_busy_workers must still count it. This guards
+# that no priority carve-out leaked into counting — priority workers must keep
+# inflating LIVE_COUNT and suppressing non-priority fan-out on later ticks.
+echo "Test: claude_agents_count_busy_workers counts a priority/main-broken worker"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"a","pid":1,"status":"busy","name":"1134-priority-fix"},
+  {"sessionId":"b","pid":2,"status":"busy","name":"720-bar"}
+]' 0
+if out=$(claude_agents_count_busy_workers); then rc=0; else rc=$?; fi
+assert_eq "priority-count: exits 0" "0" "$rc"
+assert_eq "priority-count: priority-named worker counted (2 total)" "2" "$out"
+ca_teardown
+
 # --- Test 12: claude_agents_count_busy_workers reports UNKNOWN on failure --
 
 echo "Test: claude_agents_count_busy_workers returns rc 1 on daemon failure"
@@ -15279,12 +15296,25 @@ echo "$1"
 FAKE
   cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
+# --priority-only probe (the at-cap bypass): logged separately so a test can
+# assert whether the priority probe ran, and driven by SEL_PRIORITY_ONLY.
+if [[ "\$1" == "--priority-only" ]]; then
+  echo called >> "$TMPDIR_TEST/logs/select-target-priority.log"
+  echo "\${SEL_PRIORITY_ONLY:-empty}"
+  exit 0
+fi
 echo called >> "$TMPDIR_TEST/logs/select-target.log"
 echo empty
 FAKE
   # Run-scoped concurrency gate fakes (overridable per test via SEL_* env vars).
+  # Arg-aware: --exhausted reports the rate-limit exhaustion floor (SEL_EXHAUSTED,
+  # default ok); the no-arg query returns the worker target (SEL_TARGET_N).
   cat > "$TMPDIR_TEST/dispatch-target-workers" <<'FAKE'
 #!/usr/bin/env bash
+if [[ "$1" == "--exhausted" ]]; then
+  echo "${SEL_EXHAUSTED:-ok}"
+  exit 0
+fi
 echo "${SEL_TARGET_N:-1}"
 FAKE
   cat > "$TMPDIR_TEST/dispatch-schedule-reseed" <<FAKE
@@ -15366,6 +15396,7 @@ sel_tick_teardown() {
     DISPATCH_LOCK_WAIT_TIMEOUT DISPATCH_LOCK_WAIT_INTERVAL \
     FAKE_GIT_BRANCH FAKE_GIT_FETCH_FAIL FAKE_GIT_MERGE_FAIL \
     SEL_TARGET_N SEL_LIVE_COUNT SEL_LIVE_COUNT_FAIL \
+    SEL_EXHAUSTED SEL_PRIORITY_ONLY \
     DISPATCH_RESERVATION_DIR SEL_AGENTS_TSV SEL_AGENTS_LIST_FAIL
 }
 
@@ -15611,15 +15642,21 @@ esac
 assert_eq "extra args → usage error, exit 2" "ok" "$status"
 sel_tick_teardown
 
-# --- gate at cap → concurrency-cap, no selection work ------------------------
-echo "Test: select-tick at cap → concurrency-cap, no selection work"
+# --- gate at cap, not exhausted, no priority item → concurrency-cap ----------
+# At cap the gate no longer hard-stops blindly: it first checks --exhausted (ok
+# here) then probes --priority-only (empty here). Empty priority tier → the
+# unchanged hard cap. The normal no-arg selection (select-target.log) still does
+# NOT run, but the priority-only probe (select-target-priority.log) DOES.
+echo "Test: select-tick at cap, not exhausted, no priority item → concurrency-cap"
 sel_tick_setup
-export SEL_LIVE_COUNT=2 SEL_TARGET_N=1
+export SEL_LIVE_COUNT=2 SEL_TARGET_N=1 SEL_EXHAUSTED=ok SEL_PRIORITY_ONLY=empty
 out=$(run_sel_tick)
 assert_eq "cap: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "cap: reseed scheduled" "called" "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
-assert_eq "cap: no selection work (select-target not called)" "0" \
+assert_eq "cap: priority-only probe ran (returned empty)" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
+assert_eq "cap: normal no-arg selection did NOT run" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
@@ -15691,8 +15728,10 @@ assert_eq "effective-cap: reseed scheduled" "called" \
   "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
 assert_eq "effective-cap: router message surfaces the busy/reserved split" "1" \
   "$(printf '%s\n' "$out" | grep -cF 'effective live (1 busy + 1 reserved)')"
-assert_eq "effective-cap: no selection work (select-target not called)" "0" \
+assert_eq "effective-cap: normal no-arg selection did NOT run" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
+assert_eq "effective-cap: priority-only probe ran (returned empty)" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
 # --- empty ledger is behavior-preserving (gap == pre-ledger gate) ------------
@@ -15796,18 +15835,87 @@ assert_eq "manual-overcap: pace-curve dispatch-target-workers NOT invoked (gate 
   "$([ -f "$TMPDIR_TEST/logs/target-workers.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
-# --- autonomous no-arg with LIVE_COUNT >= TARGET_N → concurrency-cap (unchanged) ---
-# The exemption is --manual only. An autonomous no-arg tick with LIVE_COUNT >= TARGET_N
-# still gates on the pace curve and emits concurrency-cap — unchanged behavior.
-echo "Test: select-tick autonomous no-arg LIVE_COUNT >= TARGET_N → concurrency-cap (unchanged)"
+# --- autonomous no-arg at cap, not exhausted, no priority item → concurrency-cap ---
+# The exemption is --manual only. An autonomous no-arg tick at the budget with no
+# priority/main-broken item waiting still emits concurrency-cap — unchanged hard
+# cap — but the priority-only probe now runs (and returns empty) before it.
+echo "Test: select-tick autonomous no-arg at cap, no priority item → concurrency-cap"
 sel_tick_setup
-export SEL_LIVE_COUNT=3 SEL_TARGET_N=0
+export SEL_LIVE_COUNT=3 SEL_TARGET_N=0 SEL_EXHAUSTED=ok SEL_PRIORITY_ONLY=empty
 out=$(run_sel_tick)
 assert_eq "autonomous-cap: decision line is concurrency-cap" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "autonomous-cap: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "autonomous-cap: reseed scheduled" "called" \
   "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
+assert_eq "autonomous-cap: priority-only probe ran (returned empty)" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- at cap, not exhausted, priority PR waiting → spawned as ONE gate-exempt worker ---
+# The core #1134 bypass: at/over the worker budget, a waiting priority PR is
+# selected and spawned with GAP=1 (one gate-exempt worker, exactly like manual /
+# explicit dispatch). Lock HELD, no reseed, no concurrency-cap.
+echo "Test: select-tick at cap, priority PR → pr line w/ gap 1, lock held, no reseed"
+sel_tick_setup
+export SEL_LIVE_COUNT=3 SEL_TARGET_N=1 SEL_EXHAUSTED=ok
+export SEL_PRIORITY_ONLY="pr 50 50-foo verify"
+out=$(run_sel_tick)
+assert_eq "cap-prio-pr: decision line w/ gap 1" "pr 50 50-foo verify 1" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "cap-prio-pr: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "cap-prio-pr: no reseed scheduled" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
+assert_eq "cap-prio-pr: no concurrency-cap emitted" "0" \
+  "$(printf '%s\n' "$out" | grep -cF 'concurrency-cap')"
+sel_tick_teardown
+
+# --- at cap, not exhausted, priority issue waiting → spawned as ONE gate-exempt worker ---
+echo "Test: select-tick at cap, priority issue → issue line w/ gap 1, lock held"
+sel_tick_setup
+export SEL_LIVE_COUNT=3 SEL_TARGET_N=1 SEL_EXHAUSTED=ok
+export SEL_PRIORITY_ONLY="issue 60"
+out=$(run_sel_tick)
+assert_eq "cap-prio-issue: decision line w/ gap 1" "issue 60 1" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "cap-prio-issue: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "cap-prio-issue: no reseed scheduled" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- at cap, not exhausted, main-broken waiting → main-broken line, lock RELEASED ---
+# A main that breaks WHILE at cap is now surfaced (the old early-exit fired before
+# any selection ran). The diagnose bg job spawns lock-free downstream, so the lock
+# is released here. No reseed.
+echo "Test: select-tick at cap, main-broken → main-broken line, lock released, no reseed"
+sel_tick_setup
+export SEL_LIVE_COUNT=3 SEL_TARGET_N=1 SEL_EXHAUSTED=ok
+export SEL_PRIORITY_ONLY="main-broken deadbeef"
+out=$(run_sel_tick)
+assert_eq "cap-mainbroken: decision line" "main-broken deadbeef" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "cap-mainbroken: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "cap-mainbroken: no reseed scheduled" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- at cap, EXHAUSTED → hard stop: concurrency-cap, no priority probe -------
+# Genuine token exhaustion is the one hard floor: even with a priority item
+# waiting, nothing spawns. The --priority-only probe is NOT consulted, the lock is
+# released, the reseed is armed at the window reset, and the decision is
+# concurrency-cap.
+echo "Test: select-tick at cap, exhausted → concurrency-cap, priority probe NOT consulted"
+sel_tick_setup
+export SEL_LIVE_COUNT=3 SEL_TARGET_N=1 SEL_EXHAUSTED=exhausted
+export SEL_PRIORITY_ONLY="pr 50 50-foo verify"
+out=$(run_sel_tick)
+assert_eq "cap-exhausted: decision line" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "cap-exhausted: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "cap-exhausted: reseed scheduled" "called" \
+  "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
+assert_eq "cap-exhausted: priority-only probe NOT consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
 # --- --manual cannot be combined with an explicit <number> → exit 2 ----------
