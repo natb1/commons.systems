@@ -18322,6 +18322,47 @@ assert_eq "malformed reset → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1
 assert_eq "malformed reset → no state file written" "1" "$([[ ! -e "$DISPATCH_RATE_LIMITS_STATE_FILE" ]] && echo 1 || echo 0)"
 rr_teardown
 
+# CASE 5c — tampered token: a token with characters outside the OAuth set
+# (a space) fails the charset guard before any header is placed → no write.
+rr_setup
+printf '{"claudeAiOauth":{"accessToken":"bad token","expiresAt":9999999999000}}\n' > "$TMPDIR_TEST/fix/creds.json"
+write_headers "$TMPDIR_TEST/fix/headers.txt" \
+  "$RR_H_5UTIL" "$RR_H_5RESET" "$RR_H_7UTIL" "$RR_H_7RESET"
+export DISPATCH_REFRESH_RATE_LIMITS_CREDS="$TMPDIR_TEST/fix/creds.json"
+export DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE="$TMPDIR_TEST/fix/headers.txt"
+if out=$("$TMPDIR_TEST/scripts/dispatch-refresh-rate-limits" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "tampered token → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "tampered token → no state file written" "1" "$([[ ! -e "$DISPATCH_RATE_LIMITS_STATE_FILE" ]] && echo 1 || echo 0)"
+rr_teardown
+
+# CASE 5d — bad model override: a model name with a quote fails the charset
+# guard before the JSON body is built → no write.
+rr_setup
+write_creds "$TMPDIR_TEST/fix/creds.json" 9999999999000
+write_headers "$TMPDIR_TEST/fix/headers.txt" \
+  "$RR_H_5UTIL" "$RR_H_5RESET" "$RR_H_7UTIL" "$RR_H_7RESET"
+export DISPATCH_REFRESH_RATE_LIMITS_CREDS="$TMPDIR_TEST/fix/creds.json"
+export DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE="$TMPDIR_TEST/fix/headers.txt"
+export DISPATCH_REFRESH_RATE_LIMITS_MODEL='haiku","injected":"x'
+if out=$("$TMPDIR_TEST/scripts/dispatch-refresh-rate-limits" 2>/dev/null); then rc=0; else rc=$?; fi
+unset DISPATCH_REFRESH_RATE_LIMITS_MODEL
+assert_eq "bad model override → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "bad model override → no state file written" "1" "$([[ ! -e "$DISPATCH_RATE_LIMITS_STATE_FILE" ]] && echo 1 || echo 0)"
+rr_teardown
+
+# CASE 5e — non-https endpoint: with the network branch taken (no headers seam),
+# a non-https ENDPOINT trips the TLS guard and exits before curl runs — the
+# bearer token is never sent in cleartext, and no state file is written.
+rr_setup
+write_creds "$TMPDIR_TEST/fix/creds.json" 9999999999000
+export DISPATCH_REFRESH_RATE_LIMITS_CREDS="$TMPDIR_TEST/fix/creds.json"
+export DISPATCH_REFRESH_RATE_LIMITS_ENDPOINT="http://127.0.0.1:9/never"
+if out=$("$TMPDIR_TEST/scripts/dispatch-refresh-rate-limits" 2>/dev/null); then rc=0; else rc=$?; fi
+unset DISPATCH_REFRESH_RATE_LIMITS_ENDPOINT
+assert_eq "non-https endpoint → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "non-https endpoint → no state file written" "1" "$([[ ! -e "$DISPATCH_RATE_LIMITS_STATE_FILE" ]] && echo 1 || echo 0)"
+rr_teardown
+
 # CASE 6 — refresh→budget regression for #1127. Seed a FROZEN pre-reset file
 # (used 95%, resets_at in the past); the probe overwrites it with reopened-window
 # telemetry; the REAL dispatch-target-workers then computes a positive target

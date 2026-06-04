@@ -45,6 +45,16 @@ if [[ -z "$TOKEN" || -z "$EXPIRES_AT" ]]; then
   exit 1
 fi
 
+# Validate the token's character set before placing it in an HTTP header. OAuth
+# access tokens are base64url/JWT (alnum plus . _ ~ + / = -); any other character
+# means a corrupted or tampered credentials file, and an embedded newline could
+# inject a header. Reject rather than send it. (Boundary check per
+# .claude/rules/code-style.md — input validation at a system edge, not a fallback.)
+if [[ ! "$TOKEN" =~ ^[A-Za-z0-9._~+/=-]+$ ]]; then
+  echo "dispatch-refresh-rate-limits: access token has unexpected characters; keeping cached telemetry" >&2
+  exit 1
+fi
+
 now_ms=$(( $(date +%s) * 1000 ))
 if [[ ! "$EXPIRES_AT" =~ ^[0-9]+$ ]] || (( EXPIRES_AT <= now_ms )); then
   echo "dispatch-refresh-rate-limits: token expired; keeping cached telemetry" >&2
@@ -54,10 +64,25 @@ fi
 ENDPOINT="${DISPATCH_REFRESH_RATE_LIMITS_ENDPOINT:-https://api.anthropic.com/v1/messages}"
 MODEL="${DISPATCH_REFRESH_RATE_LIMITS_MODEL:-claude-haiku-4-5-20251001}"
 
+# Validate the model name before interpolating it into the JSON request body.
+# Model IDs are alnum plus . _ - ; any other character (a quote, backslash, or
+# control char from a bad override) would produce malformed/injected JSON.
+if [[ ! "$MODEL" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "dispatch-refresh-rate-limits: model name has unexpected characters; keeping cached telemetry" >&2
+  exit 1
+fi
+
 # TEST SEAM: read headers from a file instead of the network (no eval).
 if [[ -n "${DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE:-}" ]]; then
   HEADERS="$(cat "$DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE")"
 else
+  # Never send the bearer token over a non-TLS endpoint: enforce https before the
+  # request leaves with the Authorization header. The default is https; a custom
+  # override (e.g. a fat-fingered http URL) must not silently leak credentials.
+  if [[ "$ENDPOINT" != https://* ]]; then
+    echo "dispatch-refresh-rate-limits: endpoint is not https; refusing to send credentials; keeping cached telemetry" >&2
+    exit 1
+  fi
   HEADERS=$(curl -sS -D - -o /dev/null --connect-timeout 5 --max-time 10 \
     -H "authorization: Bearer $TOKEN" \
     -H "anthropic-version: 2023-06-01" \
@@ -68,8 +93,8 @@ else
 fi
 
 # Parse a header value: case-insensitive name match, last occurrence wins,
-# strip the value of surrounding whitespace and a trailing CR.
-header_val() { printf '%s\n' "$HEADERS" | grep -i "^$1:" | tail -n1 | sed 's/^[^:]*://; s/[[:space:]]//g; s/\r$//'; }
+# strip the value of all whitespace (including any trailing CR from CRLF headers).
+header_val() { printf '%s\n' "$HEADERS" | grep -i "^$1:" | tail -n1 | sed 's/^[^:]*://; s/[[:space:]]//g'; }
 
 U5=$(header_val "anthropic-ratelimit-unified-5h-utilization")
 R5=$(header_val "anthropic-ratelimit-unified-5h-reset")
