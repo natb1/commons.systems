@@ -5,8 +5,10 @@
 # Reads a JSON array of classified security findings on stdin. Writes a JSON
 # array of follow-ups to stdout, each object exactly:
 #   { "identifier": ..., "title": ..., "body": ... }
-# Emits [] when nothing qualifies. Qualifying findings are emitted in input
-# order.
+# Emits [] when nothing qualifies. CodeQL follow-ups are one-per-alert in input
+# order; npm follow-ups are grouped per package (one follow-up per vulnerable
+# package), ordered by package name. CodeQL follow-ups are emitted before npm
+# follow-ups.
 #
 # The PR number ($1) is used ONLY in the body provenance line — this script
 # makes NO network/git/gh calls. Pure stdin → stdout classification via jq.
@@ -21,49 +23,36 @@
 #
 # Meaningfulness predicate (a follow-up is emitted ONLY when ALL hold):
 #   CodeQL: classification == "out-of-scope" AND
-#           security_severity_level in {critical, high, medium}
-#   npm:    classification == "out-of-scope" AND severity in {high, critical}
-#           AND introduced_by_diff == false
+#           security_severity_level in {critical, high, medium}.
+#           One follow-up per alert.
+#   npm:    a package qualifies if ANY of its out-of-scope,
+#           not-introduced-by-diff advisories is severity high/critical; the
+#           follow-up lists every such advisory on the package. One follow-up
+#           per package.
 #   required and false-positive are always excluded.
 #
 # Stable identifier (embedded verbatim in the title for /file-issue dedup):
 #   CodeQL: CodeQL <rule_id> alert #<alert_number>
-#   npm:    npm advisory <advisory_id>
+#   npm:    npm advisories in <package>
 set -euo pipefail
 
 pr="$1"
 
 jq --arg pr "$pr" '
+  def sevrank: {"critical":4,"high":3,"moderate":2,"low":1}[.] // 0;
+
   [ .[]
-    | select(
-        (.source == "codeql"
-          and .classification == "out-of-scope"
-          and (.security_severity_level == "critical" or .security_severity_level == "high" or .security_severity_level == "medium"))
-        or
-        (.source == "npm"
-          and .classification == "out-of-scope"
-          and (.severity == "high" or .severity == "critical")
-          and (.introduced_by_diff == false))
-      )
-    | if .source == "codeql" then
-        {
-          source: "codeql",
-          identifier: ("CodeQL " + .rule_id + " alert #" + (.alert_number | tostring)),
-          location: .location,
-          severity: .security_severity_level,
-          urlline: ("URL: " + .html_url),
-          desc: .description
-        }
-      else
-        {
-          source: "npm",
-          identifier: ("npm advisory " + .advisory_id),
-          location: .package,
-          severity: .severity,
-          urlline: ("URL: " + .url),
-          desc: .title
-        }
-      end
+    | select(.source == "codeql"
+        and .classification == "out-of-scope"
+        and (.security_severity_level == "critical" or .security_severity_level == "high" or .security_severity_level == "medium"))
+    | {
+        source: "codeql",
+        identifier: ("CodeQL " + .rule_id + " alert #" + (.alert_number | tostring)),
+        location: .location,
+        severity: .security_severity_level,
+        urlline: ("URL: " + .html_url),
+        desc: .description
+      }
     | {
         identifier: .identifier,
         title: ("security: " + .identifier + " in " + .location),
@@ -74,6 +63,33 @@ jq --arg pr "$pr" '
           .urlline,
           ("Description: " + .desc),
           ("Pre-existing out-of-scope finding surfaced during the security review of PR #" + $pr + ".")
+        ] | join("\n"))
+      }
+  ]
+  +
+  [ [ .[]
+      | select(.source == "npm"
+          and .classification == "out-of-scope"
+          and (.introduced_by_diff == false))
+    ]
+    | group_by(.package)[]
+    | select(any(.[]; .severity == "high" or .severity == "critical"))
+    | (.[0].package) as $package
+    | ((map(.severity) | max_by(sevrank)) ) as $maxsev
+    | (map("- " + .advisory_id + " (" + .severity + "): " + .url)) as $bullets
+    | ("npm advisories in " + $package) as $identifier
+    | {
+        identifier: $identifier,
+        title: ("security: " + $identifier),
+        body: ([
+          ("Identifier: npm advisories in " + $package),
+          "Source: npm",
+          ("Max severity: " + $maxsev),
+          "",
+          ("Advisories resolved by upgrading " + $package + ":")
+        ] + $bullets + [
+          "",
+          ("These pre-existing out-of-scope advisories surfaced during the security review of PR #" + $pr + ". A single version bump of " + $package + " remediates all listed advisories.")
         ] | join("\n"))
       }
   ]
