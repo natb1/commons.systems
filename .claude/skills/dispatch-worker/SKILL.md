@@ -185,51 +185,35 @@ If it prints a PR number, **skip this relevance review** and advance directly to
 Step 1 of this skill — a PR already exists and implementation is underway.
 
 If `dispatch-find-pr` prints nothing, run a creation-date-anchored drift
-analysis. First, fetch the issue's creation timestamp
-(`dangerouslyDisableSandbox: true` — `gh` needs network):
+analysis. Gather the deterministic evidence in one call
+(`dangerouslyDisableSandbox: true` — it calls `gh`):
 
 ```bash
-gh issue view <N> --json createdAt -q .createdAt
+.claude/skills/dispatch-propagate/scripts/dispatch-drift-scan <N>
 ```
 
-Then gather evidence of drift since that timestamp across the paths, references,
-and conventions the issue body names.
+`dispatch-drift-scan` emits, in one invocation, the three mechanical drift
+inputs anchored on the issue's `createdAt`: commits to the paths the issue body
+names since creation, PRs merged in the window, and the validity of the issue's
+named references (paths existence-checked, names grepped — anything renamed,
+moved, or removed is flagged `[ABSENT]`/`[NOT FOUND]`). It mines those
+references from the single-backtick spans in the issue body; read its header for
+what the heuristic does and does not cover. When the merged-PR query hits its
+100-result limit the script prints a `WINDOW-TOO-WIDE` marker recommending
+`/ready` instead of a partial scan — treat that as the too-wide-window signal in
+the verdict below.
 
-### Drift-analysis inputs
+Two judgments stay with the dispatching session, after reading the script's
+evidence:
 
-Inputs 1, 3, and 4 are independent — issue them in parallel (one message,
-multiple tool calls), together with input 2's initial list call. Input 2 then
-has a dependent per-PR follow-up once that list returns.
-
-1. **Commits since creation** — one `git log --since=<createdAt> -- <path1> <path2>
-   ...` across every file path the issue body names. Relevant commits indicate the
-   area is actively changing and may have shifted the issue's assumptions.
-
-2. **Merged PRs since creation that touched the same files** — list merged PRs in
-   the window (`dangerouslyDisableSandbox: true` — `gh` needs network):
-   ```bash
-   gh pr list --state merged --search "merged:>=<createdAt>" --limit 100
-   ```
-   If the result hits the limit, the drift window is too wide to analyze cheaply
-   — report that and recommend re-running `/ready` instead. Otherwise, for the
-   PRs whose titles plausibly relate to the issue's domain, fetch their changed
-   files and keep the ones overlapping the paths the issue names. Titles and
-   descriptions often surface whether the overlap is incidental or substantive.
-
-3. **Named-reference validity** — one `grep`/`rg` with all names alternated as a
-   single pattern. Names include any file paths, module names, function names, CLI
-   commands, env vars, or npm scripts the issue body cites. Flag anything renamed,
-   moved, or removed since the issue was created.
-
-4. **Convention drift** — re-read `CLAUDE.md` and any `.claude/rules/*.md` whose
-   domain the issue touches. Flag approaches the issue assumes that no longer match
-   current conventions (e.g. a deprecated pattern, a renamed package, a changed
-   config shape).
-
-Input 4 stays with the dispatching session. Inputs 1-3 may be handed to a
-one-shot subagent that returns a structured drift summary — decide this before
-the parallel dispatch so the calls are not run twice. The dispatching session
-always owns the verdict.
+1. **Convention drift** — re-read `CLAUDE.md` and any `.claude/rules/*.md` whose
+   domain the issue touches. Flag approaches the issue assumes that no longer
+   match current conventions (e.g. a deprecated pattern, a renamed package, a
+   changed config shape). The script does not mine conventions; this read is
+   yours.
+2. **Merged-PR overlap** — for any merged PR the script lists whose title
+   plausibly relates to the issue's domain, optionally fetch its changed files
+   to judge whether the overlap is incidental or substantive.
 
 ### Three-way verdict
 
