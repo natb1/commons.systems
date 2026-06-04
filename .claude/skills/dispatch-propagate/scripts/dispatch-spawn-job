@@ -16,9 +16,9 @@
 #     /dispatch-jit-reminder bg-job spawns, which run those sub-skills in their
 #     own session rather than in the router's.
 #
-# Usage: dispatch-spawn-job --name <name> --cwd <cwd> <prompt>
+# Usage: dispatch-spawn-job [--no-verify] --name <name> --cwd <cwd> <prompt>
 #
-# Arguments (all required):
+# Arguments (--name, --cwd, <prompt> required; --no-verify optional):
 #   --name <name>   The spawned session's --name. Dedup keys on it directly:
 #                   another live session with the same name under <cwd> means
 #                   nothing is spawned.
@@ -26,27 +26,42 @@
 #                   `claude --bg`, so the new job is born there and the daemon
 #                   registers it under that path. Must be an existing directory.
 #   <prompt>        The single positional prompt string passed to `claude --bg`.
+#   --no-verify     Skip Step 4 (the registration wait). The script returns
+#                   `spawned`/exit 0 on a successful `claude --bg` kick — the
+#                   kick's own exit code is now the came-up signal — or exits 1
+#                   with a diagnostic on a non-zero kick. The worker fan-out
+#                   passes this: it is the budget path, reconciled by the
+#                   reservation ledger + sweep (#1045/#1048), so it opts out of
+#                   the registration wait. The unledgered one-off spawns
+#                   (main-broken / jit-reminder), which have no ledger/sweep
+#                   safety net, keep the default verify.
 #
 # Behavior, in order:
 #   1. Dedup    — if another live session with name == <name> is already running
 #                 under <cwd>, spawn nothing. Fail-safe: if the registry cannot
 #                 be queried, also spawn nothing (a dispatch agent may be live).
 #   2. Spawn    — `claude --bg --name <name> --permission-mode auto "<prompt>"`,
-#                 from a subshell that `cd`s into <cwd> first.
-#   3. Verify   — re-query the registry under <cwd> (where the new job registers)
-#                 with a bounded retry (verify_agent_registered_under) to absorb
-#                 the async-registration race; confirm the new agent appears.
+#                 from a subshell that `cd`s into <cwd> first; capture its exit
+#                 code.
+#   3. Verify   — only when --no-verify is absent: re-query the registry under
+#                 <cwd> (where the new job registers) with a bounded retry
+#                 (verify_agent_registered_under) to absorb the async-
+#                 registration race; confirm the new agent appears. With
+#                 --no-verify the kick exit code from Step 2 is the result.
 #
 # Stdout protocol (exactly one word):
 #   deduped   another agent with the same name is running, or the registry
 #             could not be queried — nothing was spawned.
-#   spawned   a new job was spawned and verified.
-# A spawn that does not verify prints nothing to stdout, writes a diagnostic to
-# stderr, and exits non-zero.
+#   spawned   a new job was spawned and verified (default), or kicked
+#             successfully (--no-verify).
+# A spawn that does not verify (default) or whose kick exits non-zero
+# (--no-verify) prints nothing to stdout, writes a diagnostic to stderr, and
+# exits non-zero.
 #
 # Exit codes:
 #   0  deduped or spawned (stdout disambiguates).
-#   1  the successor never registered in 'claude agents --json' — see stderr.
+#   1  default path: the successor never registered in 'claude agents --json';
+#      --no-verify path: the `claude --bg` kick exited non-zero — see stderr.
 #   2  the script cannot operate — usage / validation failed (missing or empty
 #      --name, --cwd, or <prompt>; an unexpected extra positional; or a --cwd
 #      that is not an existing directory).
@@ -71,9 +86,14 @@ set -uo pipefail
 # ---- Step 0: parse and validate arguments -----------------------------------
 NAME=""
 CWD=""
+NO_VERIFY=""
 positionals=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --no-verify)
+      NO_VERIFY=1
+      shift
+      ;;
     --name)
       if [[ $# -lt 2 ]]; then
         echo "dispatch-spawn-job: --name requires a value" >&2
@@ -158,14 +178,31 @@ done <<<"$sessions"
 # ---- Step 3: spawn the job --------------------------------------------------
 # The job is born with cwd = CWD via a subshell `cd` so SessionStart hooks key
 # on the right directory directly. The subshell `cd` is scoped — this script's
-# own cwd is untouched. Capture the spawn's combined output so a failure
-# diagnostic can surface why (`claude` missing, `--bg` rejected). `|| true`
-# keeps a non-zero spawn from aborting the script — Step 4's registry check is
-# the source of truth for whether the agent actually came up.
+# own cwd is untouched. Capture the spawn's combined output and exit code so a
+# failure diagnostic can surface why (`claude` missing, `--bg` rejected). On the
+# default path the rc is informational only — Step 4's registry check is the
+# source of truth; on the --no-verify path the rc is the came-up signal.
+spawn_rc=0
 spawn_output=$(
   cd "$CWD" && "$CLAUDE_CMD" --bg --name "$NAME" \
     --permission-mode auto "$PROMPT" 2>&1
-) || true
+) || spawn_rc=$?
+
+# ---- Step 3b: --no-verify early branch --------------------------------------
+# The budget-path fan-out opts out of the registration wait (#1048): the
+# reservation ledger + sweep reconcile the slot, so a successful kick is enough.
+if [[ -n "$NO_VERIFY" ]]; then
+  if [[ "$spawn_rc" -eq 0 ]]; then
+    echo spawned
+    exit 0
+  fi
+  if [[ -n "${spawn_output//[[:space:]]/}" ]]; then
+    echo "dispatch-spawn-job: 'claude --bg' kick for '$NAME' exited $spawn_rc; output: $spawn_output" >&2
+  else
+    echo "dispatch-spawn-job: 'claude --bg' kick for '$NAME' exited $spawn_rc" >&2
+  fi
+  exit 1
+fi
 
 # ---- Step 4: verify the new agent registered --------------------------------
 # Query under CWD — the new job's registered cwd. The bounded
