@@ -93,15 +93,11 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
         .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh <pr-num> tmp/verify-summary.md
         ```
 
-     3. **Write `office-hours-reason`** atomically (tempfile + mv), under the
-        `CLAUDE_JOB_DIR` guard — the same shape as `/plan-implement` Step 4's
-        deviation block:
+     3. **Write `office-hours-reason`** via `dispatch-mark-deviation`:
 
         ```bash
-        if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-          printf '%s\n' "/verify-pr: <required_action>" > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
-          mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" "$CLAUDE_JOB_DIR/office-hours-reason"
-        fi
+        .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+          "/verify-pr: <required_action>"
         ```
 
      4. **Do NOT write the `phase=verify` marker** (do not run Step 9).
@@ -248,15 +244,12 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
 9. **Write the phase-completed marker, then stop.** Reached by every outcome
    **except** needs-human (which stopped in Step 4 without a marker). The Stop hook
    (`.claude/hooks/dispatch-stop.sh`) reads this to decide propagate vs park.
-   Atomic via tempfile + mv. `CLAUDE_JOB_DIR` unset = interactive run; skip.
+   `CLAUDE_JOB_DIR` unset = interactive run; the script no-ops with a clear
+   diagnostic.
 
    ```bash
-   if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-     printf 'phase=verify\npr=%s\n' "$PR_NUM" \
-       > "$CLAUDE_JOB_DIR/phase-completed.tmp"
-     mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
-        "$CLAUDE_JOB_DIR/phase-completed"
-   fi
+   .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
+     --phase verify --pr "$PR_NUM"
    ```
 
    Then **stop**. The `/dispatch-propagate` background-job chain drives the

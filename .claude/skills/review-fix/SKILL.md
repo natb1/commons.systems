@@ -642,16 +642,11 @@ treat the deviation criterion as not met and write the marker.
 Confidence `high` remains unresolved after the Step 5 fix pass.
 
 **Deviation fires** (a high-confidence `required` finding is still unresolved) —
-skip the phase-completed marker. Write a one-line reason instead, atomic via
-tempfile + mv:
+skip the phase-completed marker. Call `dispatch-mark-deviation` instead:
 
 ```bash
-if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-  printf '%s\n' "/review-fix: high-confidence required security finding(s) left unresolved after fixes" \
-    > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
-  mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" \
-     "$CLAUDE_JOB_DIR/office-hours-reason"
-fi
+.claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+  "/review-fix: high-confidence required security finding(s) left unresolved after fixes"
 ```
 
 The Stop hook reads marker-absence as Branch A and applies `dispatch:office-hours`
@@ -660,15 +655,12 @@ which criterion fired. Do not apply the `dispatch:office-hours` label inline —
 Stop hook owns label application.
 
 **No deviation** (all high-confidence `required` findings resolved, or none
-existed) — write the phase-completed marker, atomic via tempfile + mv:
+existed) — call `dispatch-mark-complete`. `CLAUDE_JOB_DIR` unset = interactive
+run; the script no-ops with a clear diagnostic.
 
 ```bash
-if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-  printf 'phase=review\npr=%s\n' "$PR_NUM" \
-    > "$CLAUDE_JOB_DIR/phase-completed.tmp"
-  mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
-     "$CLAUDE_JOB_DIR/phase-completed"
-fi
+.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
+  --phase review --pr "$PR_NUM"
 ```
 
 Then **stop**. The Stop hook reads the marker and advances the chain. `gh pr ready`

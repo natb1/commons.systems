@@ -3,8 +3,8 @@
 # Prints a single status line to stdout (e.g. "5h: 5% · 7d: 1%") when data is present.
 set -euo pipefail
 
-STATE_DIR="$HOME/.local/share/commons-dispatch"
-STATE_FILE="$STATE_DIR/rate_limits.json"
+STATE_FILE="${DISPATCH_RATE_LIMITS_STATE_FILE:-$HOME/.local/share/commons-dispatch/rate_limits.json}"
+STATE_DIR="$(dirname "$STATE_FILE")"
 
 HOOK_INPUT="$(cat)"
 

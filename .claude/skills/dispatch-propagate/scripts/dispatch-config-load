@@ -130,7 +130,7 @@
 #
 # Top-level object with optional tunables for `dispatch-target-workers`. Each
 # field must be a number when present; absent fields fall back to the
-# defaults baked into `dispatch-target-workers`. The eight percentage fields
+# defaults baked into `dispatch-target-workers`. The six percentage fields
 # must be in (0, 100]; weekly_curve_power and max_concurrent_workers must be
 # > 0 with no upper bound. When both members of a pair are present, two
 # cross-field ordering checks apply: weekly_increment_floor_pct <=
@@ -142,10 +142,10 @@
 #   weekly_increment_floor_pct     default 1    per-window floor
 #   weekly_increment_cap_pct       default 10   per-window hard ceiling
 #   weekly_curve_power             default 1    convexity; >1 back-loads
-#   weekly_headroom_taper_pct      default 20   weekly headroom earning full F
-#   five_hour_target_floor_pct     default 50   F band floor
-#   five_hour_target_ceiling_pct   default 80   F band ceiling
-#   five_hour_headroom_taper_pct   default 15   5h headroom -> max workers
+#   five_hour_target_floor_pct     default 50   used_5h % at/below which workers
+#                                               are max
+#   five_hour_target_ceiling_pct   default 80   used_5h % at/above which workers
+#                                               are zero
 #   max_concurrent_workers         default 8
 #
 # Example (see target-workers.example.json):
@@ -155,10 +155,8 @@
 #     "weekly_increment_floor_pct": 1,
 #     "weekly_increment_cap_pct": 10,
 #     "weekly_curve_power": 1,
-#     "weekly_headroom_taper_pct": 20,
 #     "five_hour_target_floor_pct": 50,
 #     "five_hour_target_ceiling_pct": 80,
-#     "five_hour_headroom_taper_pct": 15,
 #     "max_concurrent_workers": 8
 #   }
 set -euo pipefail
@@ -354,7 +352,7 @@ case "$CONFIG_TYPE" in
     # top-level value must be an object; all tunables are optional numbers.
     # `dispatch-target-workers` substitutes a baked-in default for any field
     # absent here, so absence is silent — only the type of present fields is
-    # checked. The eight percentage fields carry an additional `<= 100` bound;
+    # checked. The six percentage fields carry an additional `<= 100` bound;
     # weekly_curve_power and max_concurrent_workers have no upper bound.
     ERRORS=$(jq -r '
       if type != "object" then
@@ -364,8 +362,8 @@ case "$CONFIG_TYPE" in
         (["target_weekly_usage_pct","weekly_terminal_pct",
           "weekly_increment_floor_pct",
           "weekly_increment_cap_pct","weekly_curve_power",
-          "weekly_headroom_taper_pct","five_hour_target_floor_pct",
-          "five_hour_target_ceiling_pct","five_hour_headroom_taper_pct",
+          "five_hour_target_floor_pct",
+          "five_hour_target_ceiling_pct",
           "max_concurrent_workers"] |
          .[] |
          . as $field |
@@ -373,9 +371,9 @@ case "$CONFIG_TYPE" in
          # unbounded above.
          ([ "target_weekly_usage_pct","weekly_terminal_pct",
             "weekly_increment_floor_pct",
-            "weekly_increment_cap_pct","weekly_headroom_taper_pct",
-            "five_hour_target_floor_pct","five_hour_target_ceiling_pct",
-            "five_hour_headroom_taper_pct" ] | index($field)) as $is_pct |
+            "weekly_increment_cap_pct",
+            "five_hour_target_floor_pct","five_hour_target_ceiling_pct" ]
+            | index($field)) as $is_pct |
          if ($cfg | has($field)) | not then
            empty
          elif ($cfg[$field] | type) != "number" then
