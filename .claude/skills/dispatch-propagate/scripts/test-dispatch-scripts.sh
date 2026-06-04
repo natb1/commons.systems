@@ -2736,6 +2736,118 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "green draft PR selected by PR queue as qa" "pr 10 55-feature qa" "$result"
 teardown
 
+# --- --priority-only mode (#1134) -------------------------------------------
+# --priority-only runs the main-broken health gate, then scans ONLY the
+# priority=1 tier. The JIT scan is suppressed. It is the at-cap bypass selector:
+# dispatch-select-tick consults it when the autonomous tick is at the worker cap
+# but not token-exhausted, to spawn a priority/main-broken item as one
+# gate-exempt worker. Output is one of: main-broken <sha> | pr <num> <branch>
+# <phase> | issue <num> | empty.
+
+# PO1. A priority PR (its closing issue carries `priority`) is returned over a
+#      non-priority PR — the non-priority PR is skipped wholesale by the
+#      priority-tier guard, never reaching the per-PR gh calls.
+echo "Test: --priority-only returns the priority PR, skips the non-priority PR"
+setup
+# PR 10 (older) closes plain bug issue 200; PR 20 (newer) closes priority issue 100.
+UNION='['
+UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 20 "20-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only returns priority PR" "pr 20 20-priority-pr verify" "$result"
+teardown
+
+# PO2. A priority help-wanted issue is returned over a non-priority help-wanted
+#      issue — the non-priority issue is skipped before the leaf trace.
+echo "Test: --priority-only returns the priority issue, skips the non-priority issue"
+setup
+setup_union_pr_list '[]'
+# Issue 300 (older, no priority) and issue 400 (newer, priority); both help-wanted.
+printf '[{"number":300,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":400,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only returns priority issue" "issue 400" "$result"
+teardown
+
+# PO3. main is red and no latch issue open → main-broken fires first, before the
+#      priority scan (the gate runs ahead of the ladder, same as default mode).
+echo "Test: --priority-only — main red, no latch → main-broken (gate first)"
+setup
+# Seed a priority PR that would otherwise be selected; the gate must preempt it.
+UNION='['"$(make_pr_union 20 "20-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only main red → main-broken first" "main-broken mainhead0" "$result"
+teardown
+
+# PO4. Only non-priority items in the queue → empty (the priority tier is empty,
+#      and the pri=0 iteration of the selection loop finds nothing).
+echo "Test: --priority-only — only non-priority items → empty"
+setup
+UNION='['"$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only no priority items → empty" "empty" "$result"
+teardown
+
+# PO5. A due JIT is configured but --priority-only suppresses the JIT scan — the
+#      reminder is NOT emitted; the priority result is returned instead. (The
+#      same JIT fixture emits a jit-reminder in default mode, see JS4.)
+echo "Test: --priority-only suppresses the JIT scan (reminder not emitted)"
+setup
+# Self-contained one-project catalog (the shared JIT_PROJECTS_JSON is defined
+# later in the JIT-scan section).
+cat > "$DISPATCH_CONFIG_DIR/projects.json" <<'EOF'
+{ "projects": [
+  { "key": "household", "owner": "natb1", "number": 5,
+    "statusField": "Status", "statusInProgress": "In Progress",
+    "statusDone": "Done" }
+] }
+EOF
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{ "jits": [
+  { "key": "email-review", "repo": "natb1/household", "label": "jit:email-review",
+    "title": "Email review", "body": "Review the inbox.",
+    "project": "household", "dueAfterCreate": "48h" }
+] }
+EOF
+printf '[{"number":77,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_email-review.json"
+printf '{"items":[{"id":"PVTI_077","content":{"url":"https://github.com/natb1/household/issues/77"},"status":"Todo"}]}\n' \
+  > "$STUB_DIR/project-item-list.json"
+# A priority help-wanted issue waits in the queue; --priority-only must return it
+# rather than the suppressed JIT reminder.
+setup_union_pr_list '[]'
+printf '[{"number":400,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only JIT suppressed → priority issue returned" "issue 400" "$result"
+teardown
+
+# PO6. --priority-only rejects combination with the other modes.
+echo "Test: --priority-only + --qa → error exit"
+setup
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --qa 2>/dev/null) && rc=0 || rc=$?
+assert_eq "--priority-only --qa → exit 1" "1" "$rc"
+teardown
+
 # ============================================================================
 # --- JIT scan ---
 # dispatch-select-target's JIT scan runs before the main-broken health gate.
