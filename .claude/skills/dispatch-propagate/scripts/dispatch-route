@@ -14,6 +14,7 @@
 #   INVOKE /dispatch-resolve-conflict  provisioning hit an origin/main merge conflict
 #   RELEVANCE-REVIEW                phase implement    (no PR) — routes to SKILL.md Step 2
 #   STOP done                       phase done         (non-draft PR)
+#   PUSH-STRANDED                   phase done, but worktree ahead of origin/<branch> — push then park
 #   STOP waiting                    dispatch-ci-ready reports not-ready (draft PR CI pending)
 #   STOP provision-failed           direnv/merge provisioning failed (non-conflict);
 #                                   an office-hours-reason is written here before printing it
@@ -130,7 +131,19 @@ case "$PHASE" in
   verify)       echo "INVOKE /verify-pr" ;;
   qa)           echo "INVOKE /qa-fix" ;;
   review)       echo "INVOKE /review-fix" ;;
-  done)         echo "STOP done" ;;
+  done)
+    # #1105: never park a `done` PR whose worktree is ahead of its remote branch —
+    # those unpushed dispatch-merge-main / resolve-conflict merges leave the PR
+    # permanently CONFLICTING with no later tick able to push them.
+    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    git fetch origin "$CURRENT_BRANCH" >/dev/null 2>&1 || true
+    AHEAD=$(git rev-list --count "origin/${CURRENT_BRANCH}..HEAD" 2>/dev/null || echo 0)
+    if [[ "$AHEAD" -ne 0 ]]; then
+      echo "PUSH-STRANDED"
+    else
+      echo "STOP done"
+    fi
+    ;;
   *)
     echo "dispatch-route: unexpected phase '$PHASE' for $N" >&2
     exit 1
