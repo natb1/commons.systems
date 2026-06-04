@@ -88,9 +88,11 @@ create or edit fails because the label does not exist (gh reports a "not found"
 error), create it once and retry. `bug` and `priority` already exist.
 
 ```bash
-gh label create dispatch:main-broken --color BFD4F2 \
+gh label create dispatch:main-broken \
   --description "dispatch workflow: origin/main HEAD CI is red (gate latch)"
 ```
+
+The `--color` flag is intentionally omitted — the dispatch-label color hex is single-sourced in `dispatch-complete-phase` and must not be duplicated here.
 
 All `gh` calls here need `dangerouslyDisableSandbox: true`.
 
