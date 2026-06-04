@@ -7291,6 +7291,38 @@ else
 fi
 config_teardown
 
+# --- Test 13i: exhaustion_threshold_pct: valid round-trip -------------------
+
+echo "Test: exhaustion_threshold_pct: 95 accepted and round-trips"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"exhaustion_threshold_pct": 95}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "exhaustion_threshold_pct 95 exits 0" "0" "$rc"
+tw_exh=$(printf '%s' "$out" | jq -r '.exhaustion_threshold_pct')
+assert_eq "exhaustion_threshold_pct 95 preserved" "95" "$tw_exh"
+config_teardown
+
+# --- Test 13j: exhaustion_threshold_pct: 101 rejected (must be <= 100) -------
+
+echo "Test: exhaustion_threshold_pct: 101 exits 1 and stderr says must be <= 100"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"exhaustion_threshold_pct": 101}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "exhaustion_threshold_pct 101 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"exhaustion_threshold_pct"* && "$err" == *"<= 100"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: exhaustion_threshold_pct 101 stderr says <= 100"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: exhaustion_threshold_pct 101 stderr says <= 100"
+  echo "    stderr: $err"
+fi
+config_teardown
+
 # ============================================================================
 # dispatch-target-workers tests
 # ============================================================================
@@ -7944,6 +7976,87 @@ if (( out >= 1 )); then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: mid-week used_weekly=30 expected N>=1, got $out"
 fi
+tw_teardown
+
+# --- Test 24: --exhausted — 5h window at 100% with future reset → exhausted --
+#
+# Exhausted mode reads telemetry directly and reports `exhausted` when EITHER
+# window is at/near 100% used (>= exhaustion_threshold_pct, default 98) with
+# resets_at in the future, else `ok`. It is independent of the pace/ramp math
+# and fails OPEN on missing/invalid telemetry.
+
+echo "Test: --exhausted 5h used=100, resets in future → exhausted"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+# 5h pinned at 100%, weekly comfortably under; both resets in the future.
+write_rl "exh.json" 30 $((TW_NOW + 302400)) 100 $((TW_NOW + 3600))
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>/dev/null)
+assert_eq "--exhausted: 5h=100 future reset → exhausted" "exhausted" "$out"
+tw_teardown
+
+# --- Test 25: --exhausted — weekly used=99 (>=98) future reset → exhausted ---
+
+echo "Test: --exhausted weekly used=99, resets in future → exhausted"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+write_rl "exh.json" 99 $((TW_NOW + 302400)) 30 $((TW_NOW + 3600))
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>/dev/null)
+assert_eq "--exhausted: weekly=99 future reset → exhausted" "exhausted" "$out"
+tw_teardown
+
+# --- Test 26: --exhausted — both windows used=50 → ok -----------------------
+
+echo "Test: --exhausted both windows used=50 → ok"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+write_rl "exh.json" 50 $((TW_NOW + 302400)) 50 $((TW_NOW + 3600))
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>/dev/null)
+assert_eq "--exhausted: both=50 → ok" "ok" "$out"
+tw_teardown
+
+# --- Test 27: --exhausted — 5h used=100 but resets_at <= now → ok ------------
+#
+# A window already past its reset is not "out of tokens" — the window has
+# refilled. resets_at in the past must NOT count as exhausted.
+
+echo "Test: --exhausted 5h used=100 but window already reset → ok"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+# 5h reset is in the PAST (<= now); weekly under pace with a future reset.
+write_rl "exh.json" 30 $((TW_NOW + 302400)) 100 $((TW_NOW - 1))
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>/dev/null)
+assert_eq "--exhausted: 5h=100 past reset → ok" "ok" "$out"
+tw_teardown
+
+# --- Test 28: --exhausted — missing rate_limits.json → ok (fail open) -------
+#
+# The OPPOSITE of count mode's fallback-to-1: unknown usage is not genuine
+# exhaustion, so priority work is never suppressed on absent telemetry.
+
+echo "Test: --exhausted missing rate_limits.json → ok (fail open)"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+# tw_setup points RATE_LIMITS_PATH at an absent file by default; no write_rl.
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>/dev/null)
+assert_eq "--exhausted: missing telemetry → ok" "ok" "$out"
+tw_teardown
+
+# --- Test 29: --exhausted — threshold from config (95): 96→exhausted, 94→ok -
+
+echo "Test: --exhausted exhaustion_threshold_pct config 95 gates at 95"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"exhaustion_threshold_pct": 95}
+EOF
+# used=96 (>= 95) with a future reset → exhausted.
+write_rl "exh.json" 96 $((TW_NOW + 302400)) 30 $((TW_NOW + 3600))
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>/dev/null)
+assert_eq "--exhausted: threshold 95, weekly=96 → exhausted" "exhausted" "$out"
+# used=94 (< 95) → ok.
+write_rl "exh.json" 94 $((TW_NOW + 302400)) 30 $((TW_NOW + 3600))
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>/dev/null)
+assert_eq "--exhausted: threshold 95, weekly=94 → ok" "ok" "$out"
 tw_teardown
 
 # --- Test: --reopen-at pace-curve crossing (#1050) --------------------------

@@ -6,5 +6,6 @@
   "weekly_curve_power": 1,
   "five_hour_target_floor_pct": 50,
   "five_hour_target_ceiling_pct": 80,
-  "max_concurrent_workers": 8
+  "max_concurrent_workers": 8,
+  "exhaustion_threshold_pct": 98
 }

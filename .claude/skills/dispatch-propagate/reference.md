@@ -385,6 +385,7 @@ baked into the script):
 | `five_hour_target_floor_pct` (`floor5`) | 50 | `used_5h` % at which workers reach max (gate open) |
 | `five_hour_target_ceiling_pct` (`ceil5`) | 80 | `used_5h` % at which workers reach zero (gate open) |
 | `max_concurrent_workers` | 8 | max worker count |
+| `exhaustion_threshold_pct` | 98 | used_% (either window) at/near 100, with resets_at in the future, treated as genuine token exhaustion — a hard stop even for priority/main-broken work |
 
 Recalibration: raise `weekly_curve_power` to back-load spend later in the
 week (a higher `p` makes the curve concave up, so `W` grows slowly early and
@@ -406,6 +407,13 @@ clamps the terminal `W(1)` below `target_weekly_usage_pct`. The config validator
 only cross-checks floor vs. cap when both appear in the same config file, so a
 floor raised against the baked-in cap default passes validation but still
 clamps.
+
+Keep `exhaustion_threshold_pct` above `five_hour_target_ceiling_pct` (default 98
+> 80) so the 5h ramp's zero-point and the exhaustion floor stay distinct: the
+band between them (80→98) is "paced to 0", which priority/main-broken work
+overrides, while only used_% at/above the threshold is genuine token exhaustion,
+a hard stop for all work. Setting the threshold at or below the ceiling would
+collapse that override band into a hard stop.
 
 **Missing-telemetry fallback.** When
 `~/.local/share/commons-dispatch/rate_limits.json` is missing or unreadable,
