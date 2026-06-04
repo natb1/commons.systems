@@ -28,8 +28,8 @@ source, and (b) embed the terminal procedure (Steps 3–4) in its preface. There
 re-entry into this skill to guard against.
 
 If a requirement term has multiple plausible readings that would change the plan,
-resolve it via `AskUserQuestion` **before** drafting — guessing risks a plan rejected
-over the term and a costly redraft.
+resolve it via `AskUserQuestion` **before** calling `EnterPlanMode` — guessing risks
+a plan rejected over the term and a costly redraft.
 
 Invoke `EnterPlanMode` and produce a plan whose implementation section is an
 **ordered list of logical units of work**. The plan lives in the `ExitPlanMode`
@@ -51,8 +51,10 @@ Planning Rule: the plan assumes execution in a clean context and records that th
 active workflow step is the `implement` phase of `/dispatch-propagate`. Because the
 build session runs without this skill body, the preface must also embed the terminal
 procedure (Steps 3–4) so the build can execute it from the plan text alone: the
-`dispatch-open-pr` invocation with its close set, and the
-`dispatch-mark-complete` / `dispatch-mark-deviation` marker write.
+`dispatch-open-pr` invocation with its close set (including the `PR_NUM=$()`
+stdout capture), and the `dispatch-mark-complete` / `dispatch-mark-deviation`
+marker write. Copy these script invocations verbatim from Steps 3–4 — do not
+paraphrase — so the build session has the exact arguments and sandbox annotations.
 
 ### 2. Build each unit
 
@@ -69,6 +71,10 @@ and recovers from merge / pre-commit / push errors. This is a normal in-session 
 — **do not clear context between units**.
 
 ### 3. Open the draft PR
+
+This `dispatch-open-pr` call (including the `PR_NUM=$()` capture) is also carried
+in the plan preface (Step 1), so the post-clear build session executes it even
+though this skill body is absent.
 
 After every unit is committed and pushed, write the PR body prose to
 `tmp/pr-body.md`, then open the draft PR with `dispatch-open-pr` (use
@@ -100,8 +106,9 @@ hand.
 
 ### 4. Check for deviation, then write the marker (or skip it), then stop
 
-This marker write is also carried in the plan preface (Step 1), so the post-clear
-build session executes it even though this skill body is absent.
+Both marker writes (deviation and completion) are also carried in the plan preface
+(Step 1), so the post-clear build session executes them even though this skill body
+is absent.
 
 Before writing the marker, judge whether the implementation deviated from the
 approved plan — scope shifted mid-implementation, or the plan could not be
