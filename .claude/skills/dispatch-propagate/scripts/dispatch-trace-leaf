@@ -264,9 +264,9 @@ find_leaf() {
     if [[ -n "${EXCLUDED[$n]:-}" ]]; then
       return 1
     fi
-    # A valid leaf. Live-session-owned children are filtered before recursion
-    # (see the descent loop below), so a queue-mode leaf reached here is never
-    # itself live-owned.
+    # A valid leaf. Descended children are filtered before recursion (see the
+    # descent loop below, and the root guard above), so a queue-mode leaf
+    # reached here is never itself live-owned, reserved, or parked.
     echo "$n"
     return 0
   fi
@@ -296,13 +296,12 @@ find_leaf() {
 }
 
 # In queue mode the root issue is filtered exactly like a descended child
-# (#1011): if the starting issue is itself a parked topological leaf, the
-# descent loop never gets a chance to skip it, so guard it here before the
-# trace. This keeps dispatch-trace-leaf's standalone contract — "queue mode
-# never returns a leaf carrying dispatch:office-hours" — true for the root, not
-# just for children. Force the no-startable-leaf path (rc 2) so it flows into
-# the exit-2 surface below, matching the all-children-parked case.
-if [[ "$MODE" == "queue" ]] && child_is_office_hours_parked "$ISSUE_NUM"; then
+# (#1011, #1046): if the starting issue is itself a topological leaf that is
+# parked or claimed (reserved/live-owned), the descent loop never gets a chance
+# to skip it, so guard it here before the trace. Force the no-startable-leaf
+# path (rc 2) so it flows into the exit-2 surface below, matching the
+# all-children-skipped case.
+if [[ "$MODE" == "queue" ]] && { child_is_office_hours_parked "$ISSUE_NUM" || child_worktree_claimed "$ISSUE_NUM"; }; then
   trace_rc=2
 elif LEAF=$(find_leaf "$ISSUE_NUM"); then
   trace_rc=0

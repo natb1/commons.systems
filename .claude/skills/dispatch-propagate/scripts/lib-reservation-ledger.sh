@@ -246,7 +246,7 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
     local dir
     # Unresolvable ledger dir → nothing reserved.
     dir=$(reservation_dir) || return 1
-    [[ -e "$dir/$wt_name" ]]
+    [[ -f "$dir/$wt_name" ]]
   }
 
   # reservation_count — print the count of outstanding marker files. Never fails.
@@ -319,18 +319,18 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
         reservation_clear "$bn"
         printf 'lib-reservation-ledger: reclaimed reservation %s (live-worker-redundant)\n' "$bn" >&2
       elif [[ -z "$marker_sid" ]]; then
-        # A marker with no readable `session=` line is malformed (truncation
+        # (b) A marker with no readable `session=` line is malformed (truncation
         # cannot happen via the atomic write, so this means external tampering or
         # corruption). Reclaiming on an empty session id would conflate "no
         # session" with "dead session" and could delete a still-valid slot — KEEP
         # it and flag it instead (fail safe, matching the sweep's conservatism).
         printf 'lib-reservation-ledger: keeping malformed reservation %s (no session= line)\n' "$bn" >&2
       elif [[ -z "${live_ids[$marker_sid]:-}" ]]; then
-        # (b) The reserving session is not live and never converted — stranded.
+        # (c) The reserving session is not live and never converted — stranded.
         reservation_clear "$bn"
         printf 'lib-reservation-ledger: reclaimed reservation %s (dead-session-stranded)\n' "$bn" >&2
       fi
-      # (c) reserving session alive, no live worker yet → in-flight → KEEP.
+      # (d) reserving session alive, no live worker yet → in-flight → KEEP.
     done
     (( had_nullglob )) || shopt -u nullglob
     return 0

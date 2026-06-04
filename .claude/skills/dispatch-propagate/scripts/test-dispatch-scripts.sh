@@ -3769,6 +3769,25 @@ err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" 2>/dev/null && echo "
 assert_eq "queue: parked root leaf → exit 2, no leaf on stdout" "EXIT=2" "$err_out"
 teardown
 
+# 20-r. Queue mode: the ROOT issue is itself a RESERVED topological leaf
+#       (#1046). 700 has no children, so the descent loop never runs; the root
+#       guard before the trace must catch the reservation and exit 2 rather than
+#       returning the reserved root. Mirrors the parked-root guard in test 20.
+echo "Test: queue mode → reserved ROOT leaf guarded, exits 2"
+setup
+# No subissues-700.json → 700 is a topological leaf.
+printf '{"title":"Issue 700","body":"","comments":[],"number":700,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-700.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/700-feature\nHEAD def456\nbranch refs/heads/700-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live sessions; reservation marker for the root's worktree → root is claimed.
+select_target_fake_claude
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv-sess\nissue=700\ntimestamp=2026-01-01T00:00:00Z\n' > "$DISPATCH_RESERVATION_DIR/700-feature"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" 2>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+assert_eq "queue: reserved root leaf → exit 2, no leaf on stdout" "EXIT=2" "$err_out"
+teardown
+
 # 21. Explicit mode: a parked ROOT leaf is returned unchanged (#1011 scopes the
 #     root guard to queue mode, mirroring the descent child-skip scoping).
 echo "Test: explicit mode → parked ROOT leaf returned (no guard)"
