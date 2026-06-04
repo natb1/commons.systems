@@ -16003,6 +16003,57 @@ esac
 assert_eq "gap-unbounded-removed: usage error exit 2" "ok" "$status"
 mat_teardown
 
+# --- spawn-boundary done re-check (#1109): explicit done → notify target-done --
+# A target selected while its PR was a draft `review` PR can flip to ready
+# (non-draft) before the worker boots. The spawn boundary re-derives the phase
+# (dispatch-phase) before any worktree/spawn work and refuses a done target:
+# explicit dispatch emits a user-facing `notify target-done` and spawns no
+# worker. MAT_PR set so the realistic done path runs (a PR exists and went ready).
+echo "Test: materialize-spawn explicit done re-check → notify target-done, no spawn (#1109)"
+mat_setup
+export MAT_PR=665
+export MAT_PHASE=done
+out=$(run_mat 839 explicit)
+assert_eq "explicit-done: terminal token" "notify target-done" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "explicit-done: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "explicit-done: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "explicit-done: no office-hours park" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/apply-office-hours.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- spawn-boundary done re-check (#1109): queue single-target done → drain ----
+# An autonomous single-target (gap<=1) found done at the spawn boundary drains so
+# the next tick proceeds to the next priority; no worker is spawned.
+echo "Test: materialize-spawn queue single-target done re-check → drain target-done, no spawn (#1109)"
+mat_setup
+export MAT_PHASE=done
+out=$(run_mat 839 queue)
+assert_eq "queue-done: terminal token" "drain target-done" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "queue-done: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "queue-done: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- spawn-boundary done re-check (#1109): fan-out done → skip each, drain ------
+# MAT_PHASE is global, so every fan-out target reads done: each is recorded as a
+# `propagate: skipped #<n> (target-done)` and the loop continues to the next
+# distinct target until the queue drains. Nothing spawns → terminal `drain`.
+echo "Test: materialize-spawn fan-out done re-check → skip each, drain, no spawn (#1109)"
+mat_setup
+export MAT_PHASE=done
+export MAT_QUEUE="840 841"
+out=$(run_mat 839 queue --gap 3)
+assert_eq "fanout-done: skipped detail per target (839,840,841)" "3" \
+  "$(printf '%s\n' "$out" | grep -c 'skipped #.* (target-done)')"
+assert_eq "fanout-done: zero spawns in summary" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 0 of gap 3')"
+assert_eq "fanout-done: terminal token" "drain" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fanout-done: no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+assert_eq "fanout-done: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
 echo "=== print_remote_access_block ==="
 
 # All four emulators
