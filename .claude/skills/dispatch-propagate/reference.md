@@ -370,7 +370,7 @@ floor raised against the baked-in cap default passes validation but still
 clamps.
 
 **Missing-telemetry fallback.** When
-`~/.local/share/productivity-tui/rate_limits.json` is missing or unreadable,
+`~/.local/share/commons-dispatch/rate_limits.json` is missing or unreadable,
 or the `seven_day` block is absent (missing `used_weekly` or `resets_at_weekly`,
 or a malformed `now`), `dispatch-target-workers` prints `1` and writes a
 one-line note to stderr — the chain degrades to "spawn one per tick". When only
