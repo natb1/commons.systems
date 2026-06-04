@@ -651,6 +651,20 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   #            a later issue in the same bucket may still fill the slot.
   #   exit 1 — usage error; propagate as a hard failure, never swallow as a skip.
   if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue "${EXCLUDE_ARGS[@]}"); then
+    # Readiness gate, symmetric with the PR-loop gate above (#1106). A
+    # help-wanted issue can already carry a draft PR whose CI is in progress —
+    # a draft closing PR does not evict its issue from this queue (#920), so a
+    # stalled/orphaned draft is recyclable. Skip such a leaf: spawning a worker
+    # now would only hit dispatch-route's STOP-waiting re-gate, wasting a tick.
+    # A leaf with no PR (normal implement) or a concluded-CI draft reports
+    # ready and proceeds; a concluded-CI draft is owned by the PR queue
+    # (verify/qa), which precedes the issue within a bucket and recycles the
+    # orphan worktree via `enter` just as the issue path would. dispatch-ci-ready
+    # resolves the all-digit leaf to its PR by headRefName prefix. Reuses the
+    # PR list fetched above.
+    if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$leaf" >/dev/null; then
+      continue
+    fi
     FIRST_ISSUE[$issue_bucket]="$leaf"
   else
     trace_status=$?
