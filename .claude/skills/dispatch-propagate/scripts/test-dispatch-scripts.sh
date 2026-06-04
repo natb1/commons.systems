@@ -14825,6 +14825,32 @@ case "$*" in
 esac
 STUB
   chmod +x "$TMPDIR_TEST/bin/git"
+
+  # PATH-shimmed gh for the Step 1c latch re-arm (#1085). The open-latch query
+  # reads main-broken-open.txt (one issue number per line; absent → no open
+  # latch, the re-arm short-circuits). `issue close` is logged to
+  # gh-issue-close.log so a test can assert whether the latch was closed.
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  issue\ list\ *dispatch:main-broken*)
+    if [[ -f "$STUB_DIR/main-broken-open.txt" ]]; then
+      cat "$STUB_DIR/main-broken-open.txt"
+    fi
+    ;;
+  issue\ close\ *)
+    echo "$args" >> "$STUB_DIR/gh-issue-close.log"
+    ;;
+  *)
+    echo "gh stub (sel-tick): unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
   export PATH="$TMPDIR_TEST/bin:$SAVED_PATH"
 }
 
@@ -14897,6 +14923,58 @@ assert_eq "main-broken: decision line" "main-broken abc1234" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "main-broken: lock released" "" \
   "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- Step 1c latch re-arm: green main + open latch issue → close (#1085) ------
+echo "Test: select-tick re-arm closes open latch issue when main is green"
+sel_tick_setup
+# Fake select-target: green for --main-broken-sha (prints nothing), else `empty`.
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--main-broken-sha" ]]; then exit 0; fi
+echo empty
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+printf '99\n' > "$STUB_DIR/main-broken-open.txt"
+out=$(run_sel_tick)
+assert_eq "re-arm green+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "re-arm green+open: latch issue closed" "issue close 99 --comment origin/main is green again; closing the main-broken latch (re-arming the gate)." \
+  "$(cat "$STUB_DIR/gh-issue-close.log" 2>/dev/null || echo MISSING)"
+sel_tick_teardown
+
+# --- Step 1c latch re-arm: red main + open latch issue → NOT closed -----------
+echo "Test: select-tick re-arm leaves open latch issue while main is still red"
+sel_tick_setup
+# Fake select-target: red for --main-broken-sha (prints a sha), else `empty`.
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--main-broken-sha" ]]; then echo "redsha1"; exit 0; fi
+echo empty
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+printf '99\n' > "$STUB_DIR/main-broken-open.txt"
+out=$(run_sel_tick)
+assert_eq "re-arm red+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "re-arm red+open: latch issue NOT closed" "absent" \
+  "$([[ -e "$STUB_DIR/gh-issue-close.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Step 1c latch re-arm: green main + NO open latch issue → no-op -----------
+echo "Test: select-tick re-arm is a no-op when no latch issue is open"
+sel_tick_setup
+# Fake select-target green for --main-broken-sha; no main-broken-open.txt fixture
+# means the open-latch query returns empty, so the re-arm short-circuits before
+# the CI read.
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--main-broken-sha" ]]; then exit 0; fi
+echo empty
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_sel_tick)
+assert_eq "re-arm green+no-issue: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "re-arm green+no-issue: no close attempted" "absent" \
+  "$([[ -e "$STUB_DIR/gh-issue-close.log" ]] && echo present || echo absent)"
 sel_tick_teardown
 
 # --- jit-reminder → passthrough + lock RELEASED (spawned as a bg job) --------
