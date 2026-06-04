@@ -2423,8 +2423,11 @@ teardown
 echo "Test: open issue closed only by a draft PR is still selected (#920)"
 setup
 # Draft PR 10 (pending CI → waiting phase, skipped) closes issue 55 (help-wanted).
-# isDraft=true → must NOT gate issue 55. Waiting phase skip clears the PR from
-# the ladder, so issue 55 is the only remaining candidate.
+# PR branch "10-draft-pr" does NOT match the "55-" prefix, so dispatch-ci-ready 55
+# finds no matching PR and returns ready — the #1106 CI gate does not fire. The
+# READY_PR_CLOSED_ISSUES gate also does not fire (isDraft=true is excluded).
+# Waiting phase skip clears the PR from the ladder, so issue 55 is the only
+# remaining candidate.
 UNION='['"$(make_pr_union 10 "10-draft-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":55}]')"']'
 setup_union_pr_list "$UNION"
 printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
