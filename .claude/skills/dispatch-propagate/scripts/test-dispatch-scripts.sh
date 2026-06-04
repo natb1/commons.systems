@@ -13834,10 +13834,10 @@ dc_setup() {
   FAKE_REPO="$TEST_TMP/repo"
   mkdir -p "$FAKE_REPO/budget-etl" \
            "$FAKE_REPO/scaffolding/firebase" \
-           "$FAKE_REPO/productivity-tui"
+           "$FAKE_REPO/retired-tui"
   : > "$FAKE_REPO/budget-etl/go.mod"
   : > "$FAKE_REPO/scaffolding/firebase/go.mod"
-  : > "$FAKE_REPO/productivity-tui/go.mod"
+  : > "$FAKE_REPO/retired-tui/go.mod"
 
   # Per-test inputs/outputs.
   DC_CHANGED="$TEST_TMP/changed.txt"
@@ -13924,7 +13924,7 @@ dc_teardown
 dc_setup
 assert_eq "detect-changes: go=true for budget-etl module"           "true"  "$(dc_run go 'budget-etl/main.go')"
 assert_eq "detect-changes: go=true for scaffolding/firebase module" "true"  "$(dc_run go 'scaffolding/firebase/x.go')"
-assert_eq "detect-changes: go=true for productivity-tui module"     "true"  "$(dc_run go 'productivity-tui/y.go')"
+assert_eq "detect-changes: go=true for retired-tui module"         "true"  "$(dc_run go 'retired-tui/y.go')"
 assert_eq "detect-changes: go absent for non-Go path"               "false" "$(dc_run go 'README.md')"
 dc_teardown
 
