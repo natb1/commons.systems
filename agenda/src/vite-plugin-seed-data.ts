@@ -10,17 +10,8 @@ export function agendaSeedDataPlugin(): Plugin {
   return {
     name: "agenda-seed-data",
     buildStart() {
-      const staticReminders = seedReminders.map(
-        ({ jitKey, title, repo, issueNumber, dueInMinutes }) => ({
-          jitKey,
-          title,
-          repo,
-          issueNumber,
-          dueInMinutes,
-        })
-      );
       moduleCode =
-        `const seeds = ${JSON.stringify(staticReminders)};\n` +
+        `const seeds = ${JSON.stringify(seedReminders)};\n` +
         `const now = Date.now();\n` +
         `export default seeds.map(({ jitKey, title, repo, issueNumber, dueInMinutes }) => ({\n` +
         `  jitKey, title, repo, issueNumber, dueAt: new Date(now + dueInMinutes * 60000),\n` +
