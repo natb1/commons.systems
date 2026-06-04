@@ -39,7 +39,7 @@ set -euo pipefail
 pr="$1"
 
 jq --arg pr "$pr" '
-  def sevrank: {"critical":4,"high":3,"moderate":2,"low":1}[.] // 0;
+  def sevrank: if . == null then 0 else ({"critical":4,"high":3,"moderate":2,"low":1}[.] // 0) end;
 
   [ .[]
     | select(.source == "codeql"
@@ -82,7 +82,7 @@ jq --arg pr "$pr" '
         identifier: $identifier,
         title: ("security: " + $identifier),
         body: ([
-          ("Identifier: npm advisories in " + $package),
+          ("Identifier: " + $identifier),
           "Source: npm",
           ("Max severity: " + $maxsev),
           "",
