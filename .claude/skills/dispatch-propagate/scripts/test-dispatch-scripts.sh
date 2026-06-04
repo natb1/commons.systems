@@ -2369,6 +2369,57 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "issue closed only by draft PR is still selectable" "issue 55" "$result"
 teardown
 
+# --- issue-queue CI-ready gate (#1106) ---
+# A help-wanted issue can carry a draft PR whose CI is in progress (#920 leaves
+# such an issue selectable). The issue loop now applies the same readiness gate
+# as the PR loop: an issue (or its resolved leaf) whose draft PR has pending CI
+# is skipped, so the autonomous tick selects the next-priority target instead of
+# spawning a worker that immediately hits dispatch-route's STOP-waiting re-gate.
+
+# 41a. A help-wanted issue whose draft PR has in-progress CI is skipped by the
+#      issue-queue gate; the next help-wanted issue (no PR) is selected. The PR
+#      is on the issue's own branch 55-feature so dispatch-ci-ready keys to it.
+#      The pending draft is also skipped in the PR loop (waiting phase), so only
+#      the issue queue remains; issue 55 is gated out, issue 66 is selected.
+echo "Test: issue with pending draft PR skipped → next issue selected (#1106)"
+setup
+UNION='['"$(make_pr_union 10 "55-feature" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":55}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "issue 55 with pending draft PR skipped → issue 66 selected" "issue 66" "$result"
+teardown
+
+# 41b. Regression guard: a help-wanted issue with no PR is still selected for the
+#      implement phase. dispatch-ci-ready reports `ready` (no matching PR), so
+#      the gate does not skip it.
+echo "Test: help-wanted issue with no PR still selected (#1106 regression)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "help-wanted issue 55 with no PR still selected" "issue 55" "$result"
+teardown
+
+# 41c. A draft PR with concluded (green) CI is NOT over-skipped by the new gate:
+#      dispatch-ci-ready reports `ready`, and within the shared (category,
+#      priority) bucket the PR queue selects it as qa before the issue line. A
+#      green draft with no dispatch:* labels resolves to qa (dispatch-phase).
+echo "Test: concluded green draft PR defers to PR queue as qa (#1106)"
+setup
+UNION='['"$(make_pr_union 10 "55-feature" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":55}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "green draft PR selected by PR queue as qa" "pr 10 55-feature qa" "$result"
+teardown
+
 # ============================================================================
 # --- JIT scan ---
 # dispatch-select-target's JIT scan runs before the main-broken health gate.
@@ -2772,20 +2823,26 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "ready PR closes issue 55; issue 66 chosen instead" "issue 66" "$result"
 teardown
 
-# R2. Draft PR does not gate.
-# A draft PR (isDraft=true, pending rollup → classified waiting, dropped from
-# the ladder) closes issue 55; issue 55 is help-wanted with no worktree. Assert
-# the result is issue 55 — the draft does not exclude its issue.
-echo "Test: Draft PR does not gate."
+# R2. Draft PR does not permanently evict its issue (#920), but a draft PR on the
+# issue's own branch with PENDING CI is transiently skipped by the #1106
+# issue-queue readiness gate. A draft (isDraft=true, pending rollup → classified
+# waiting, dropped from the PR ladder) closes issue 55; the PR is on the issue's
+# own branch 55-draft-pr, so dispatch-ci-ready 55 reports `waiting` and the issue
+# loop skips it this tick. With no other candidate the selector returns empty;
+# the issue resurfaces on a later tick once CI concludes. (The #920 eviction
+# intent — that a draft does not *permanently* remove the issue from the
+# help-wanted queue — is still covered by the draft-on-a-non-matching-branch
+# test above, where the issue stays selectable.)
+echo "Test: Draft PR on issue's branch with pending CI transiently skipped (#1106)."
 setup
-# Draft (isDraft=true, pending rollup) PR 100 closes issue 55.
+# Draft (isDraft=true, pending rollup) PR 100 on the issue's own branch closes issue 55.
 UNION='['"$(make_pr_union 100 "55-draft-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":55}]')"']'
 setup_union_pr_list "$UNION"
 printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "draft PR does not gate issue 55; issue 55 chosen" "issue 55" "$result"
+assert_eq "pending draft PR on issue's branch → issue skipped this tick (empty)" "empty" "$result"
 teardown
 
 # ============================================================================
