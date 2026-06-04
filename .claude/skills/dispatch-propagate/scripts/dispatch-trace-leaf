@@ -24,10 +24,11 @@
 #              for the recycle-after-completion case, or `conflict` if a live
 #              session still owns the worktree — #837).
 #   queue    — descent filters out children whose <N>-* worktree is owned by a
-#              LIVE Claude session (#914). An orphan <N>-* worktree (on disk, no
-#              session) stays descendable — it is a reuse signal, not a skip,
-#              matching the direct-row liveness fix in dispatch-select-target
-#              (#905). A child with no worktree at all is never filtered.
+#              LIVE Claude session (#914) or carries a reservation marker
+#              (#1046). An orphan <N>-* worktree (on disk, no session, no marker)
+#              stays descendable — it is a reuse signal, not a skip, matching the
+#              direct-row claimed-skip in dispatch-select-target (#905, #1046). A
+#              child with no worktree at all is never filtered.
 #              Queue mode also filters out a child parked on
 #              dispatch:office-hours (#1011): the label parks an item for human
 #              review and must remove it from autonomous selection (#757), so a
@@ -62,6 +63,11 @@ source "$SCRIPT_DIR/lib.sh"
 # ask the liveness question; it sets -uo pipefail (not -e), preserving this
 # script's set -euo pipefail above.
 source "$SCRIPT_DIR/lib-claude-agents.sh"
+# reservation_exists — queue-mode descent ALSO skips a child whose <N>-* worktree
+# carries a reservation marker (#1046), mirroring the selector's reserved-skip
+# applied to subtree children. Load-guarded; re-sources lib.sh /
+# lib-claude-agents.sh harmlessly.
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 
 ISSUE_NUM="${1:-}"
 MODE="${2:-}"
@@ -148,6 +154,24 @@ child_has_live_worktree() {
     if worktree_has_live_session "$p"; then
       return 0
     fi
+  done <<< "$paths"
+  return 1
+}
+
+# True when any <num>-* child worktree is CLAIMED — live-owned (#914) OR reserved
+# (#1046). Mirrors dispatch-select-target's issue_worktree_claimed, applied to
+# subtree children: a reserved-but-not-yet-registered child must not be descended
+# into nor returned. An orphan child (no session, no marker) stays descendable.
+# The reserved check is a fast-path file stat keyed on the worktree basename, no
+# daemon round-trip.
+child_worktree_claimed() {
+  local num="$1" p
+  child_has_live_worktree "$num" && return 0
+  local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
+  [[ -z "$paths" ]] && return 1
+  while IFS= read -r p; do
+    [[ -z "$p" ]] && continue
+    reservation_exists "$(basename "$p")" && return 0
   done <<< "$paths"
   return 1
 }
@@ -240,22 +264,23 @@ find_leaf() {
     if [[ -n "${EXCLUDED[$n]:-}" ]]; then
       return 1
     fi
-    # A valid leaf. Live-session-owned children are filtered before recursion
-    # (see the descent loop below), so a queue-mode leaf reached here is never
-    # itself live-owned.
+    # A valid leaf. Descended children are filtered before recursion (see the
+    # descent loop below, and the root guard above), so a queue-mode leaf
+    # reached here is never itself live-owned, reserved, or parked.
     echo "$n"
     return 0
   fi
 
   # Descend into children lowest-numbered first; return the first leaf found.
   # In queue mode, skip any child whose <N>-* worktree is owned by a live
-  # session (#914) — an orphan child worktree stays descendable — and any child
-  # parked on dispatch:office-hours (#1011). If every child is skipped the loop
-  # finds nothing and we bubble up.
+  # session (#914) or carries a reservation marker (#1046) — an orphan child
+  # worktree (no session, no marker) stays descendable — and any child parked on
+  # dispatch:office-hours (#1011). If every child is skipped the loop finds
+  # nothing and we bubble up.
   local kid leaf
   while IFS= read -r kid; do
     [[ -z "$kid" ]] && continue
-    [[ "$MODE" == "queue" ]] && child_has_live_worktree "$kid" && continue
+    [[ "$MODE" == "queue" ]] && child_worktree_claimed "$kid" && continue
     [[ "$MODE" == "queue" ]] && child_is_office_hours_parked "$kid" && continue
     # Capture the status explicitly (set -e is disabled here) so a hard error
     # (rc 3) is distinguishable from "no leaf in this subtree" (rc 1).
@@ -271,13 +296,12 @@ find_leaf() {
 }
 
 # In queue mode the root issue is filtered exactly like a descended child
-# (#1011): if the starting issue is itself a parked topological leaf, the
-# descent loop never gets a chance to skip it, so guard it here before the
-# trace. This keeps dispatch-trace-leaf's standalone contract — "queue mode
-# never returns a leaf carrying dispatch:office-hours" — true for the root, not
-# just for children. Force the no-startable-leaf path (rc 2) so it flows into
-# the exit-2 surface below, matching the all-children-parked case.
-if [[ "$MODE" == "queue" ]] && child_is_office_hours_parked "$ISSUE_NUM"; then
+# (#1011, #1046): if the starting issue is itself a topological leaf that is
+# parked or claimed (reserved/live-owned), the descent loop never gets a chance
+# to skip it, so guard it here before the trace. Force the no-startable-leaf
+# path (rc 2) so it flows into the exit-2 surface below, matching the
+# all-children-skipped case.
+if [[ "$MODE" == "queue" ]] && { child_is_office_hours_parked "$ISSUE_NUM" || child_worktree_claimed "$ISSUE_NUM"; }; then
   trace_rc=2
 elif LEAF=$(find_leaf "$ISSUE_NUM"); then
   trace_rc=0
