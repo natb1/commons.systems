@@ -108,6 +108,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 
 # Defined before argument parsing so the usage-error exits below release the lock
 # too. The lock is acquired by dispatch-select-tick in the same router session,
@@ -159,7 +160,7 @@ WAITING_N=""
 process_one_target() {
   local n="$1" mode="$2"
   local PR LEAF ISSUE_STATE BLOCKERS WT_DECISION WT_ACTION WT_REST
-  local WORKTREE_PATH BRANCH PROJECT_ROOT rc
+  local WORKTREE_PATH BRANCH PROJECT_ROOT rc wt_basename
 
   # --- Step 4: explicit-path guards (skipped entirely in queue mode) ---------
   # Queue rows were already vetted by dispatch-select-target (leaf, blockers,
@@ -274,16 +275,33 @@ process_one_target() {
     return 0
   fi
 
-  # --- Step 6b: spawn the worker ---------------------------------------------
-  # The lock is still held here (#945). dispatch-spawn-worker returns success
-  # only after the worker is verified-registered under its <basename>, at which
-  # point dispatch-select-target skips the now-owned worktree — so the next
-  # in-loop selection yields a distinct target. On a failed spawn no worker
-  # registered.
+  # --- Step 6b: reserve, then spawn the worker -------------------------------
+  # The lock is still held here (#945). Write the reservation marker the instant
+  # before the spawn and clear it the instant the spawn returns: on success the
+  # worker has registered and is now counted by busy_workers; on failure no
+  # worker is coming. A completed fan-out therefore leaves effective_live == busy
+  # (no double-count, no leaked budget), identical to the pre-ledger gate. If the
+  # router dies between the write and the clear, the marker is stranded — the
+  # reservation sweeper (reservation_sweep, run at the next tick) reclaims it via
+  # the dead-session / live-worker-redundant rules.
+  #
+  # dispatch-spawn-worker returns success only after the worker is
+  # verified-registered under its <basename>, at which point
+  # dispatch-select-target skips the now-owned worktree — so the next in-loop
+  # selection yields a distinct target. On a failed spawn no worker registered.
+  wt_basename="$(basename "$WORKTREE_PATH")"
+  # Best-effort, but surface a failure: a missing marker means the spawn proceeds
+  # uncounted, so a silent swallow would hide a budget blind spot. The sweeper
+  # still reclaims any stranded state, so a failed write is non-fatal to the loop.
+  if ! reservation_write "$wt_basename" "$n" "${CLAUDE_CODE_SESSION_ID:-}" 1>&2; then
+    echo "dispatch-materialize-spawn: reservation_write failed for $wt_basename; spawning without a ledger entry (budget may undercount this slot)" >&2
+  fi
   if "$SCRIPT_DIR/dispatch-spawn-worker" "$n" "$WORKTREE_PATH" 1>&2; then
+    reservation_clear "$wt_basename" 1>&2 || true
     OUTCOME=spawned
     return 0
   fi
+  reservation_clear "$wt_basename" 1>&2 || true
   OUTCOME=spawn-failed
   return 0
 }
