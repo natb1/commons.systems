@@ -239,8 +239,16 @@ process_one_target() {
   # target. dispatch-phase prints `done` for a non-draft PR regardless of CI; a
   # draft with pending CI exits 3 (no stdout) and any non-`done` phase falls
   # through to normal processing — this gate catches `done` only, it does not
-  # re-gate CI (the router owns that).
-  PHASE=$("$SCRIPT_DIR/dispatch-phase" "$n" 2>/dev/null) || PHASE=""
+  # re-gate CI (the router owns that). Exit 3 is the ONLY non-zero we tolerate:
+  # any other failure (gh/jq error) is genuine and must surface, not silently
+  # fall through onto a possibly-`done` PR — a hard return 2, like every other
+  # tool failure in this function.
+  PHASE_RC=0
+  PHASE=$("$SCRIPT_DIR/dispatch-phase" "$n" 2>/dev/null) || PHASE_RC=$?
+  if [[ "$PHASE_RC" -ne 0 && "$PHASE_RC" -ne 3 ]]; then
+    echo "dispatch-materialize-spawn: dispatch-phase failed (exit $PHASE_RC) for #$n" >&2
+    return 2
+  fi
   if [[ "$PHASE" == "done" ]]; then
     echo "target #$n is done (ready PR); not dispatching"
     OUTCOME=target-done
