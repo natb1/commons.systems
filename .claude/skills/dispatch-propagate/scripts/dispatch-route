@@ -1,23 +1,38 @@
 #!/usr/bin/env bash
-# Collapse /dispatch-worker Steps 0–2 into one call and print one directive.
-# Usage: dispatch-route <N> <worktree-path>
+# Collapse the deterministic /dispatch-worker prelude into one call and print one
+# directive. Usage: dispatch-route <N> <worktree-path>
 #
-# Runs the deterministic worker prelude — the worktree cross-check, the
-# dispatch-ci-ready gate, and dispatch-phase — in a single invocation, so the
-# worker model makes one Bash round-trip instead of ~3.6. Prints exactly one
-# directive line to stdout:
+# Runs the entire deterministic worker prelude — the worktree cross-check, the
+# worktree provisioning + origin/main merge, the dispatch-ci-ready gate, and
+# dispatch-phase — in a single invocation, so the worker model makes one Bash
+# round-trip and never branches on intermediate exit codes itself. Prints exactly
+# one directive line to stdout:
 #
-#   INVOKE /verify-pr            phase verify       (draft PR, CI failed)
-#   INVOKE /qa-fix               phase qa           (draft, CI green, no label)
-#   INVOKE /review-fix           phase review       (dispatch:qa-done / reviewed re-entry)
-#   RELEVANCE-REVIEW             phase implement    (no PR) — routes to SKILL.md Step 2
-#   STOP done                    phase done         (non-draft PR)
-#   PUSH-STRANDED                phase done, but worktree ahead of origin/<branch> — push then park
-#   STOP waiting                 dispatch-ci-ready reports not-ready (draft PR CI pending)
-#   STOP wrong-worktree          cross-check failed (diagnostic on stderr); exits non-zero
+#   INVOKE /verify-pr               phase verify       (draft PR, CI failed)
+#   INVOKE /qa-fix                  phase qa           (draft, CI green, no label)
+#   INVOKE /review-fix              phase review       (dispatch:qa-done / reviewed re-entry)
+#   INVOKE /dispatch-resolve-conflict  provisioning hit an origin/main merge conflict
+#   RELEVANCE-REVIEW                phase implement    (no PR) — routes to SKILL.md Step 2
+#   STOP done                       phase done         (non-draft PR)
+#   PUSH-STRANDED                   phase done, but worktree ahead of origin/<branch> — push then park
+#   STOP waiting                    dispatch-ci-ready reports not-ready (draft PR CI pending)
+#   STOP provision-failed           direnv/merge provisioning failed (non-conflict);
+#                                   an office-hours-reason is written here before printing it
+#   STOP wrong-worktree             cross-check failed (diagnostic on stderr); exits non-zero
 #
 # Usage error (missing <N> or <worktree-path>) → stderr message, exit 2 (matches
 # the sibling-script convention).
+#
+# Provisioning (dispatch-provision-worktree) runs AFTER the cross-check and BEFORE
+# phase derivation: the cross-check guards against merging into the wrong worktree,
+# and the origin/main merge must complete before dispatch-ci-ready/dispatch-phase
+# run so they — and the phase skill the worker later loads — read the up-to-date
+# .claude/ tree (the merge can update those very scripts). This script's own code
+# is the pre-merge version for this one invocation; its dispatch-ci-ready/dispatch-phase
+# subprocesses pick up the merged tree. This is the worker counterpart of what
+# restore-dispatch-skill.sh does on context-clear, relocated out of the router's
+# held-lock fan-out loop (#1047 / part of #1044): the router does only the cheap
+# `git worktree add`, and the multi-minute, budget-irrelevant provisioning runs here.
 #
 # The open-PR list is fetched ONCE here and exported as DISPATCH_PR_LIST; both
 # dispatch-ci-ready and dispatch-phase honor that env contract and reuse the
@@ -25,7 +40,9 @@
 # (a push restarting CI between router selection and worker session end) is caught
 # by dispatch-stop.sh's early not-ready gate, not here.
 #
-# Calls gh — invoke with dangerouslyDisableSandbox: true (see .claude/rules/sandbox.md).
+# Calls gh and (via dispatch-provision-worktree) git merge / direnv / npm — invoke
+# with dangerouslyDisableSandbox: true. The merge is a tree-updating op over the
+# read-only .claude/skills/** carve-out (see .claude/rules/sandbox.md).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -61,6 +78,31 @@ if [[ "$ACTUAL_TOPLEVEL" != "$WORKTREE_PATH" ]]; then
   echo "dispatch-route invoked with mismatched <worktree-path>: spawn cwd '$ACTUAL_TOPLEVEL' != argument '$WORKTREE_PATH'" >&2
   echo "STOP wrong-worktree"
   exit 1
+fi
+
+# Provision the worktree and merge origin/main — runs here, after the cross-check
+# (so we never merge into the wrong worktree) and before phase derivation (so the
+# merged tree's dispatch-ci-ready/dispatch-phase and the worker's later phase skill
+# are current). dispatch-provision-worktree exits: 0 clean / already-up-to-date;
+# 3 merge conflict (merge aborted, tree left clean); any other non-zero is a fetch
+# or non-conflict merge failure. Capture its code without tripping `set -e`.
+PROVISION_RC=0
+"$SCRIPT_DIR/dispatch-provision-worktree" "$WORKTREE_PATH" || PROVISION_RC=$?
+if [[ "$PROVISION_RC" -eq 3 ]]; then
+  # A clean origin/main merge conflict — hand off to the conflict-resolver skill.
+  echo "INVOKE /dispatch-resolve-conflict"
+  exit 0
+elif [[ "$PROVISION_RC" -ne 0 ]]; then
+  # Fetch failure or a non-conflict merge failure — park the issue to office-hours.
+  # Write the reason here (under the CLAUDE_JOB_DIR guard, atomically) so the worker
+  # only has to stop; the Stop hook surfaces this file.
+  if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+    printf '%s\n' "dispatch-route: provisioning/merge of origin/main failed for #${N} (exit ${PROVISION_RC})" \
+      > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+    mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" "$CLAUDE_JOB_DIR/office-hours-reason"
+  fi
+  echo "STOP provision-failed"
+  exit 0
 fi
 
 # Fetch the open-PR list once; reuse it for every sibling call via the

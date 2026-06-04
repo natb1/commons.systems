@@ -5,13 +5,15 @@ description: Conflict-resolver bg job — auto-resolves a clean origin/main merg
 
 # Dispatch: Resolve Conflict
 
-Runs as its own `claude --bg` job spawned by the dispatch tick when
-`dispatch-merge-main` finds `origin/main` does not merge cleanly into a target
-worktree. The router/tick is headless and cannot run an opus subagent, so the
-merge-conflict judgment lives here, in its own session. This job's session name
-is the worktree basename (`<N>-slug`), which both locks the worktree against
-other dispatch workers (the name-keyed `worktree_has_live_session` skip) and
-consumes a concurrency slot — no new lock machinery.
+Runs either as its own `claude --bg` job or as an `INVOKE` inside a dispatch
+worker session when `dispatch-merge-main` finds `origin/main` does not merge
+cleanly into a target worktree. After #1047, the worker's `dispatch-route`
+detects the conflict (via `dispatch-provision-worktree`) and invokes this skill
+directly — the worker session is already named `<N>-slug` and has `CLAUDE_JOB_DIR`
+set, so the sentinel-writing and Stop-hook contract work identically either way.
+The session name (`<N>-slug`) locks the worktree against other dispatch workers
+(the name-keyed `worktree_has_live_session` skip) and consumes a concurrency
+slot — no new lock machinery.
 
 Invoked as `/dispatch-resolve-conflict <N> <worktree>`:
 
