@@ -3,6 +3,7 @@ package export
 import (
 	"encoding/json"
 	"flag"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1040,6 +1041,117 @@ func TestOutputCarriesJournalCollections(t *testing.T) {
 	if got.Transactions[0].JournalEntryID == nil || *got.Transactions[0].JournalEntryID != "je-001" {
 		t.Errorf("transactions[0].journalEntryId = %v, want je-001", got.Transactions[0].JournalEntryID)
 	}
+}
+
+func TestJournalLegValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		leg     JournalLeg
+		wantErr bool
+	}{
+		{"valid debit-only", JournalLeg{Debit: 52.30, Credit: 0}, false},
+		{"valid credit-only", JournalLeg{Debit: 0, Credit: 100.00}, false},
+		{"both zero", JournalLeg{Debit: 0, Credit: 0}, false},
+		{"both positive", JournalLeg{Debit: 10, Credit: 10}, true},
+		{"negative debit", JournalLeg{Debit: -1, Credit: 0}, true},
+		{"negative credit", JournalLeg{Debit: 0, Credit: -1}, true},
+		{"NaN debit", JournalLeg{Debit: math.NaN(), Credit: 0}, true},
+		{"+Inf credit", JournalLeg{Debit: 0, Credit: math.Inf(1)}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.leg.Validate()
+			if tt.wantErr && err == nil {
+				t.Errorf("Validate() = nil, want error")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("Validate() = %v, want nil", err)
+			}
+		})
+	}
+}
+
+func TestAccountValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		acctType AccountType
+		wantErr bool
+	}{
+		{"asset", AccountTypeAsset, false},
+		{"liability", AccountTypeLiability, false},
+		{"equity", AccountTypeEquity, false},
+		{"income", AccountTypeIncome, false},
+		{"expense", AccountTypeExpense, false},
+		{"unknown", AccountType("checking"), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Account{ID: "a1", AccountType: tt.acctType}.Validate()
+			if tt.wantErr && err == nil {
+				t.Errorf("Validate() = nil, want error")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("Validate() = %v, want nil", err)
+			}
+		})
+	}
+}
+
+func TestWriteFileValidatesOutput(t *testing.T) {
+	validLeg := JournalLeg{
+		ID: "jl-001", EntryID: "je-001", AccountID: "acct-1",
+		Debit: 52.30, Credit: 0, Timestamp: "2025-06-10T00:00:00Z",
+	}
+	validAcct := Account{
+		ID: "acct-1", Institution: "bankone", Account: "1234",
+		AccountType: AccountTypeAsset,
+	}
+
+	t.Run("valid output round-trips", func(t *testing.T) {
+		out := minimalOutput("household")
+		out.JournalLegs = []JournalLeg{validLeg}
+		out.Accounts = []Account{validAcct}
+
+		path := filepath.Join(t.TempDir(), "budget.json")
+		if err := WriteFile(path, out, ""); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		got, err := ReadFile(path, "")
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		if len(got.JournalLegs) != 1 || len(got.Accounts) != 1 {
+			t.Fatalf("round-trip lost journal collections: legs=%d accounts=%d", len(got.JournalLegs), len(got.Accounts))
+		}
+	})
+
+	t.Run("invalid leg writes no file", func(t *testing.T) {
+		out := minimalOutput("household")
+		out.JournalLegs = []JournalLeg{{ID: "jl-bad", Debit: 10, Credit: 10}}
+		out.Accounts = []Account{validAcct}
+
+		path := filepath.Join(t.TempDir(), "budget.json")
+		if err := WriteFile(path, out, ""); err == nil {
+			t.Fatal("WriteFile: expected error for invalid leg")
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("file should not exist after validation failure, stat err = %v", err)
+		}
+	})
+
+	t.Run("invalid account writes no file", func(t *testing.T) {
+		out := minimalOutput("household")
+		out.JournalLegs = []JournalLeg{validLeg}
+		out.Accounts = []Account{{ID: "acct-bad", AccountType: AccountType("checking")}}
+
+		path := filepath.Join(t.TempDir(), "budget.json")
+		if err := WriteFile(path, out, ""); err == nil {
+			t.Fatal("WriteFile: expected error for invalid account")
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("file should not exist after validation failure, stat err = %v", err)
+		}
+	})
 }
 
 // TestWriteGoldenFile generates a BENC-encrypted golden file for cross-implementation
