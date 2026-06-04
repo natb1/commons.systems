@@ -23,7 +23,8 @@
 # The audit record is this script's journal output
 # (every captured stdout line is echoed through) plus the spawned workers'
 # transcripts plus durable GitHub side effects (PR comments, `dispatch:*`
-# labels) — so relay survives only on the human shim, not on the autonomous tick.
+# labels) — so relay matters only for a human-run `dispatch` (foreground
+# terminal bash), not for the autonomous tick.
 #
 # Manual `dispatch` cap semantics & selection lock:
 #   `dispatch <N>` (explicit target): the tick skips the concurrency gate and
