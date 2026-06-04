@@ -12273,6 +12273,63 @@ assert_eq "unset session: no marker created in target worktree" "0" \
   "$([ -f "$UNSET_WT/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
 lock_teardown
 
+# ----- Headless-holder sentinel reclaim (#1068) ------------------------------
+# A synthetic `headless:<token>` holder never appears in `claude agents --json`,
+# so resolve_holder_state resolves its liveness through the PID sentinel the tick
+# writes alongside the lock file: live iff the sentinel exists AND its PID is
+# alive. These tests drive the real dispatch-acquire-lock against a lock file
+# recording a headless holder, with a different caller sessionId. No
+# CLAUDE_AGENTS_CMD fake is needed — the headless branch returns before the
+# daemon query. Sentinel path: <dirname $DISPATCH_LOCK_FILE>/dispatch-tick-<slug>.live
+# (slug for a simple token like `tok123` is unchanged).
+
+# --- Headless A: live PID in the sentinel → caller stays busy (no reclaim) ----
+echo "Test: headless holder with a live-PID sentinel is busy (not reclaimed)"
+lock_setup
+printf '%s\n' "headless:tok123" > "$DISPATCH_LOCK_FILE"
+headless_sentinel=$(source "$SCRIPT_DIR/lib.sh" 2>/dev/null; headless_sentinel_path "headless:tok123" "$DISPATCH_LOCK_FILE")
+printf '%s\n' "$$" > "$headless_sentinel"   # this test process is alive
+export CLAUDE_CODE_SESSION_ID="sess-headless-A"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "headless-live exits 0" "0" "$rc"
+assert_eq "headless-live prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "headless-live lock file still holds the headless holder" \
+  "headless:tok123" "$lock_contents"
+rm -f "$headless_sentinel"
+lock_teardown
+
+# --- Headless B: no sentinel → caller reclaims (acquired) ---------------------
+echo "Test: headless holder with no sentinel is reclaimed (acquired)"
+lock_setup
+printf '%s\n' "headless:tok123" > "$DISPATCH_LOCK_FILE"
+# No sentinel file written → the headless holder reads dead.
+export CLAUDE_CODE_SESSION_ID="sess-headless-B"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "headless-absent exits 0" "0" "$rc"
+assert_eq "headless-absent prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "headless-absent lock file rewritten to caller" \
+  "sess-headless-B" "$lock_contents"
+lock_teardown
+
+# --- Headless C: dead PID in the sentinel → caller reclaims (stale-after-kill) -
+echo "Test: headless holder with a dead-PID sentinel is reclaimed (acquired)"
+lock_setup
+printf '%s\n' "headless:tok123" > "$DISPATCH_LOCK_FILE"
+headless_sentinel=$(source "$SCRIPT_DIR/lib.sh" 2>/dev/null; headless_sentinel_path "headless:tok123" "$DISPATCH_LOCK_FILE")
+# A PID that is not running — a SIGKILL'd tick leaves this stale sentinel.
+printf '%s\n' "2147483647" > "$headless_sentinel"
+export CLAUDE_CODE_SESSION_ID="sess-headless-C"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "headless-dead exits 0" "0" "$rc"
+assert_eq "headless-dead prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "headless-dead lock file rewritten to caller" \
+  "sess-headless-C" "$lock_contents"
+rm -f "$headless_sentinel"
+lock_teardown
+
 # ============================================================================
 # restore-dispatch-skill tests (#903)
 # ============================================================================
@@ -15179,6 +15236,10 @@ tick_setup() {
   # test's $PWD (dispatch-tick's resolve_project_root would otherwise resolve the
   # real project root). The fake spawn-job logs this value as its --cwd argv.
   export DISPATCH_TICK_MAIN_WORKTREE="$TMPDIR_TEST"
+  # Pin the shared lock file under TMPDIR_TEST so the headless-liveness sentinel
+  # (#1068) the tick writes resolves through dispatch_lock_file to a path inside
+  # the test tree (not the host repo's tmp/).
+  export DISPATCH_LOCK_FILE="$TMPDIR_TEST/dispatch.lock"
 
   # Fake dispatch-select-tick: echoes any TICK_SEL_PRE passthrough lines, then
   # the test-controlled decision line (TICK_DECISION) as the LAST line. Exits
@@ -15216,7 +15277,8 @@ tick_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   unset TICK_DECISION TICK_TOKEN TICK_SEL_RC TICK_MAT_RC \
-    TICK_SEL_PRE TICK_MAT_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE
+    TICK_SEL_PRE TICK_MAT_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
+    DISPATCH_LOCK_FILE
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -15425,14 +15487,46 @@ assert_eq "headless: synthetic id has headless: prefix (not a bare sentinel)" "1
   "$([[ "$sel_id" == headless:* ]] && echo 1 || echo 0)"
 
 # Companion: under systemd the id derives from INVOCATION_ID (the primary
-# headless path), not the bare-PID fallback the run above exercised. Set
-# INVOCATION_ID for one run and assert the synthesized id is exactly
-# headless:<INVOCATION_ID>. Fresh id logs so this run does not cross-contaminate.
+# headless path), not the random-token fallback the run above exercised. Use a
+# realistic 32-hex INVOCATION_ID (the form systemd always produces) and assert
+# the synthesized id is exactly headless:<INVOCATION_ID>. The validation guard
+# must pass hex digits — this exercises that path. (#1068)
 rm -f "$TMPDIR_TEST/logs/sel-id.log" "$TMPDIR_TEST/logs/mat-id.log"
-env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="inv-1054" \
+env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="0123456789abcdef0123456789abcdef" \
   "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1
-assert_eq "headless: id derives from INVOCATION_ID when set (systemd path)" \
-  "headless:inv-1054" "$(cat "$TMPDIR_TEST/logs/sel-id.log")"
+assert_eq "headless: id derives from valid hex INVOCATION_ID (systemd path)" \
+  "headless:0123456789abcdef0123456789abcdef" "$(cat "$TMPDIR_TEST/logs/sel-id.log")"
+
+# Companion: polluted INVOCATION_ID — the #1068 validation guard drops a
+# non-hex value so it cannot truncate the recorded holder (via embedded newline),
+# mislead the awk -F'\t' comparison, or corrupt the sentinel path. The fallback
+# fires and the id must be single-line headless:<hex-or-pid>.
+rm -f "$TMPDIR_TEST/logs/sel-id.log" "$TMPDIR_TEST/logs/mat-id.log"
+env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="a/b" \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1
+polluted_id=$(cat "$TMPDIR_TEST/logs/sel-id.log")
+assert_eq "headless: polluted INVOCATION_ID dropped — id has headless: prefix" "1" \
+  "$([[ "$polluted_id" == headless:* ]] && echo 1 || echo 0)"
+assert_eq "headless: polluted INVOCATION_ID dropped — id is single-line (no embedded newline)" "1" \
+  "$([[ "$polluted_id" != *$'\n'* ]] && echo 1 || echo 0)"
+assert_eq "headless: polluted INVOCATION_ID dropped — token is hex (guard rejected the slash)" "1" \
+  "$([[ "$polluted_id" =~ ^headless:[0-9a-f]+$ ]] && echo 1 || echo 0)"
+
+# Companion: INVOCATION_ID absent — the random-token fallback fires (openssl
+# rand -hex 16 when available; $$ as last resort). Assert the id is headless:-
+# prefixed, single-line, and its token matches hex (openssl path). (#1068)
+rm -f "$TMPDIR_TEST/logs/sel-id.log" "$TMPDIR_TEST/logs/mat-id.log"
+env -u CLAUDE_CODE_SESSION_ID -u INVOCATION_ID \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1
+absent_id=$(cat "$TMPDIR_TEST/logs/sel-id.log")
+assert_eq "headless: absent INVOCATION_ID — id has headless: prefix" "1" \
+  "$([[ "$absent_id" == headless:* ]] && echo 1 || echo 0)"
+assert_eq "headless: absent INVOCATION_ID — id is non-empty" "1" \
+  "$([ -n "$absent_id" ] && echo 1 || echo 0)"
+assert_eq "headless: absent INVOCATION_ID — id is single-line" "1" \
+  "$([[ "$absent_id" != *$'\n'* ]] && echo 1 || echo 0)"
+assert_eq "headless: absent INVOCATION_ID — token is hex (random-token or PID fallback)" "1" \
+  "$([[ "$absent_id" =~ ^headless:[0-9a-f]+$ ]] && echo 1 || echo 0)"
 
 # Companion: a real session keeps its own id — the `:-` fallback never fires.
 # Fresh id logs so this run does not cross-contaminate the headless run above.
@@ -15442,6 +15536,89 @@ export CLAUDE_CODE_SESSION_ID="sess-real-1054"
 assert_eq "real session: select-tick sees the inherited id, not a synthetic one" \
   "sess-real-1054" "$(cat "$TMPDIR_TEST/logs/sel-id.log")"
 unset CLAUDE_CODE_SESSION_ID DISPATCH_LOCK_FILE CLAUDE_AGENTS_CMD
+tick_teardown
+
+# --- headless tick writes a PID sentinel during the run, trap removes it after -
+# #1068: a synthetic headless holder is invisible to `claude agents --json`, so
+# the tick writes a PID sentinel alongside the shared lock file for its lifetime
+# and an EXIT trap removes it. resolve_holder_state resolves the headless
+# holder's liveness from that sentinel. This test observes the sentinel directly
+# (no acquire-lock needed): the fake select-tick globs the lock dir mid-run and
+# records the matched sentinel's existence + content, then after the tick returns
+# we assert (1) a sentinel existed mid-run, (2) it held a numeric PID, (3) the
+# trap left no dispatch-tick-*.live behind. The token is the tick's $$ (no
+# INVOCATION_ID, no inherited id), unknowable in advance — hence the glob.
+echo "Test: dispatch-tick headless writes a PID sentinel mid-run and removes it on exit"
+tick_setup
+LOCK_DIR="$(dirname "$DISPATCH_LOCK_FILE")"
+# Replace the select-tick fake: glob the lock dir for the sentinel mid-run and
+# log its presence (1/0) and contents, then print a decision line so the tick
+# routes to a normal exit. mkdir -p the lock dir defensively (the tick already
+# created it before writing the sentinel).
+cat > "$TMPDIR_TEST/dispatch-select-tick" <<FAKE
+#!/usr/bin/env bash
+shopt -s nullglob
+matches=( "$LOCK_DIR"/dispatch-tick-*.live )
+if (( \${#matches[@]} > 0 )); then
+  printf '1\n' > "$TMPDIR_TEST/logs/sentinel-midrun.log"
+  cat "\${matches[0]}" >> "$TMPDIR_TEST/logs/sentinel-midrun.log"
+else
+  printf '0\n' > "$TMPDIR_TEST/logs/sentinel-midrun.log"
+fi
+printf '%s\n' "empty"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-tick"
+# Run headless with NO inherited id and NO INVOCATION_ID → token is the tick $$.
+env -u CLAUDE_CODE_SESSION_ID -u INVOCATION_ID \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "sentinel: tick exit 0" "0" "$rc"
+midrun_present=$(sed -n '1p' "$TMPDIR_TEST/logs/sentinel-midrun.log" 2>/dev/null)
+midrun_pid=$(sed -n '2p' "$TMPDIR_TEST/logs/sentinel-midrun.log" 2>/dev/null)
+assert_eq "sentinel: existed mid-run" "1" "$midrun_present"
+assert_eq "sentinel: mid-run content is a numeric PID" "1" \
+  "$([[ "$midrun_pid" =~ ^[0-9]+$ ]] && echo 1 || echo 0)"
+# The EXIT trap must have removed every sentinel from the lock dir.
+shopt -s nullglob
+leftover=( "$LOCK_DIR"/dispatch-tick-*.live )
+shopt -u nullglob
+assert_eq "sentinel: removed by the EXIT trap (no .live left behind)" "0" \
+  "${#leftover[@]}"
+tick_teardown
+
+# --- headless tick fails clear when the sentinel write fails (#1068) ----------
+# When the lock-file path resolves but the sentinel write fails (here forced via
+# an over-long-but-hex INVOCATION_ID → a >255-byte sentinel filename →
+# ENAMETOOLONG, while the short dispatch.lock stays writable), dispatch-tick must
+# exit 2 *before* selecting a target rather than warn-and-continue. Continuing
+# would acquire the lock with no liveness sentinel, so a concurrent tick reads
+# this LIVE holder as dead and reclaims mid-selection — the exact duplicate-spawn
+# defect #1068 closes. The select-tick fake drops a marker if it runs; the test
+# asserts the tick exited non-zero and never reached selection.
+echo "Test: dispatch-tick headless fails clear (exit 2, no selection) when the sentinel write fails"
+tick_setup
+LOCK_DIR="$(dirname "$DISPATCH_LOCK_FILE")"
+cat > "$TMPDIR_TEST/dispatch-select-tick" <<FAKE
+#!/usr/bin/env bash
+printf 'ran\n' > "$TMPDIR_TEST/logs/select-ran.log"
+printf '%s\n' "empty"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-tick"
+rm -f "$TMPDIR_TEST/logs/select-ran.log"
+# 250 hex chars: passes the INVOCATION_ID guard, yields a sentinel filename
+# (dispatch-tick-<250>.live = 269 bytes) that exceeds NAME_MAX (255) → write fails.
+long_inv=$(printf 'a%.0s' {1..250})
+env -u CLAUDE_CODE_SESSION_ID INVOCATION_ID="$long_inv" \
+  "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "sentinel-write-fail: tick exits 2 (fail clear)" "2" "$rc"
+assert_eq "sentinel-write-fail: selection never ran (aborted before select-tick)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-ran.log" ] && echo 1 || echo 0)"
+shopt -s nullglob
+leftover=( "$LOCK_DIR"/dispatch-tick-*.live )
+shopt -u nullglob
+assert_eq "sentinel-write-fail: no stale .live left behind (trap cleaned partial)" "0" \
+  "${#leftover[@]}"
 tick_teardown
 
 # --- --manual is forwarded to select-tick; one gate-exempt worker (gap=1) -----
