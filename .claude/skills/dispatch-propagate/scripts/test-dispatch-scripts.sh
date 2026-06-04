@@ -1375,8 +1375,9 @@ FAKE
 # a live session row (sessionId `s-<name>`). The fake branches on its first arg:
 # `agents` returns the JSON payload (the liveness query); any other invocation —
 # `--resume <id>` or `/office-hours` — prints `LAUNCH: $*` so a test can assert
-# which launch fired. Wired via OFFICE_HOURS_CLAUDE_CMD (the script exports it as
-# CLAUDE_AGENTS_CMD, so a single fake covers both the query and the launch).
+# which launch fired. Wires both OFFICE_HOURS_CLAUDE_CMD (the entry script's
+# launch target) and CLAUDE_AGENTS_CMD (the selector subprocess's liveness query)
+# at the same fake, so a single binary serves both the query and the launch.
 office_hours_fake_claude() {
   local payload="[" name first=1
   for name in "$@"; do
@@ -1399,6 +1400,10 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/bin/claude"
   export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+  # The entry script no longer queries liveness itself; the selector subprocess
+  # it invokes does. Point CLAUDE_AGENTS_CMD at the same fake so a single binary
+  # serves the selector's `agents` query and the entry script's launch.
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
 }
 
 # 1. A non-QA PR is chosen over a QA PR and a help-wanted issue.
@@ -3302,12 +3307,16 @@ teardown
 echo ""
 echo "=== office-hours (entry point) ==="
 #
-# The single user entry point to the office-hours queue (#759). Resumes a still-
-# live blocked session (`claude --resume <sessionId>`) if any labeled item has
-# one; otherwise starts a fresh `/office-hours` session. office_hours_fake_claude
-# serves the liveness payload on `agents` and prints `LAUNCH: $*` on launch, so
-# each case asserts which launch fired. The fake's sessionId convention is
-# `s-<worktree-basename>`.
+# The single user entry point to the office-hours queue (#759). It is now a thin
+# dispatcher: it calls office-hours-select-target once and switches on the verb —
+# resume / parked-router (exec `claude --resume <sessionId>`), fresh-with-args
+# (exec `claude "/office-hours <N> <phase> <pr>"`), or empty (print a queue-empty
+# message and exit WITHOUT launching). These are therefore entry+selector
+# integration tests: setup copies the real selector into TMPDIR_TEST, the
+# selector emits the disposition, and office_hours_fake_claude serves the
+# selector's `agents` liveness query and prints `LAUNCH: $*` on launch so each
+# case asserts which launch fired (or that none did). The fake's sessionId
+# convention is `s-<worktree-basename>`.
 
 # OH1. One labeled item whose <N>-* worktree has a live session → resume it.
 echo "Test: live-session labeled item → resume its session"
@@ -3332,8 +3341,11 @@ result=$("$TMPDIR_TEST/office-hours")
 assert_eq "resumes the oldest live item's session" "LAUNCH: --resume s-42-x" "$result"
 teardown
 
-# OH3. Labeled items but none with a live session → start fresh /office-hours.
-echo "Test: labeled items, none live → fresh /office-hours"
+# OH3. Labeled items but none with a live session → start fresh /office-hours,
+# with the selected target's <N> <phase> <pr> passed through as arguments. The
+# selector emits `office-hours 42 implement -`; the entry execs
+# `/office-hours 42 implement -`.
+echo "Test: labeled items, none live → fresh /office-hours with passed args"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
@@ -3341,17 +3353,20 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude   # orphan world: no live sessions
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "no live session → fresh /office-hours" "LAUNCH: /office-hours" "$result"
+assert_eq "no live session → fresh /office-hours with args" "LAUNCH: /office-hours 42 implement -" "$result"
 teardown
 
-# OH4. Empty office-hours queue → start fresh /office-hours.
-echo "Test: empty queue → fresh /office-hours"
+# OH4. Empty office-hours queue → selector emits `empty` → the entry script prints
+# the queue-empty message and exits WITHOUT launching Claude.
+echo "Test: empty queue → queue-empty message, no launch"
 setup
 echo '[]' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_fake_claude   # `[]`: no sessions under main, no parked router
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "empty queue → fresh /office-hours" "LAUNCH: /office-hours" "$result"
+assert_eq "empty queue → queue-empty message, no launch" "office-hours: queue is empty — nothing to resume or start." "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # OH5. Mixed: an older sessionless item + a newer live-session item → resume the
@@ -3368,28 +3383,25 @@ result=$("$TMPDIR_TEST/office-hours")
 assert_eq "resume wins over fresh whenever any labeled item is live" "LAUNCH: --resume s-99-y" "$result"
 teardown
 
-# OH6. UNKNOWN daemon (claude unqueryable) → fall through to fresh /office-hours.
-# This is the entry-point's deliberate asymmetry with office-hours-select-target:
-# select-target (OHST5) treats UNKNOWN as occupied (left for resume); the entry
-# point treats UNKNOWN as not-resumable (fall through to fresh), so the two paths
-# never both claim an item whose liveness cannot be determined.
-echo "Test: UNKNOWN daemon → not-resumable, fall through to fresh /office-hours"
+# OH6. UNKNOWN daemon (claude unqueryable). Under the single fail-safe convention
+# the only labeled item (42) is UNKNOWN → skipped by the selector, and the
+# parked-router fallback also reads UNKNOWN → no router, so the selector emits
+# `empty`. The entry script prints the queue-empty message and does not launch.
+# (The old entry-vs-selector asymmetry — entry treating UNKNOWN as not-resumable
+# and falling through to a fresh session — is gone; UNKNOWN is occupied
+# everywhere now that the enumeration is no longer duplicated.)
+echo "Test: UNKNOWN daemon → selector empty → queue-empty message, no launch"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-# OFFICE_HOURS_CLAUDE_CMD must be set so the script has a launch target and so
-# CLAUDE_AGENTS_CMD is overridden to a command that reports UNKNOWN (non-zero
-# exit). Re-use the office_hours_fake_claude stub but wire it with no live
-# sessions, then make the agents call fail to exercise the UNKNOWN path.
-office_hours_fake_claude   # sets OFFICE_HOURS_CLAUDE_CMD=TMPDIR_TEST/bin/claude
-# Override the claude binary so agents query always exits 1 (UNKNOWN daemon),
-# but launch invocations still print "LAUNCH: $*" so the test can assert which
-# launch fired.
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_fake_claude   # sets OFFICE_HOURS_CLAUDE_CMD + CLAUDE_AGENTS_CMD
+# Override the claude binary so the `agents` query always exits 1 (UNKNOWN
+# daemon), while launch invocations still print "LAUNCH: $*".
 cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "agents" ]]; then
-  # Simulate an unqueryable daemon: non-zero exit, no output.
   exit 1
 fi
 echo "LAUNCH: $*"
@@ -3397,7 +3409,34 @@ exit 0
 FAKE
 chmod +x "$TMPDIR_TEST/bin/claude"
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "UNKNOWN daemon → not-resumable → fresh /office-hours" "LAUNCH: /office-hours" "$result"
+assert_eq "UNKNOWN daemon → selector empty → queue-empty message, no launch" "office-hours: queue is empty — nothing to resume or start." "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OH7. The selector emits `parked-router <sessionId> <name>` (a target-less
+# parked dispatch router, #1010) → the entry script resumes that session. The
+# entry script gains the parked-router handling the selector already had.
+echo "Test: parked-router directive → entry resumes the router session"
+setup
+echo '[]' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_fake_claude   # sets OFFICE_HOURS_CLAUDE_CMD + CLAUDE_AGENTS_CMD
+# A live, idle `dispatch-*` router under main on the `agents` query; launch
+# invocations still print "LAUNCH: $*".
+cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "agents" ]]; then
+  printf '%s' '[{"sessionId":"s-dispatch-abc123","pid":1,"status":"waiting","name":"dispatch-abc123","cwd":""}]'
+  exit 0
+fi
+echo "LAUNCH: $*"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/claude"
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "parked-router directive resumes the router session" "LAUNCH: --resume s-dispatch-abc123" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # ============================================================================
