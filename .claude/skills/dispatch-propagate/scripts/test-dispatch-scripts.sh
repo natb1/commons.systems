@@ -1070,6 +1070,7 @@ setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "false" "$NO_LABELS" "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+echo "42-my-feature" > "$STUB_DIR/current-branch.txt"
 echo "2" > "$STUB_DIR/route-ahead-count.txt"
 route_run 42 /wt/42-my-feature
 assert_eq "non-draft PR ahead of remote → PUSH-STRANDED (directive)" "PUSH-STRANDED" "$ROUTE_OUT"

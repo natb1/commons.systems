@@ -581,7 +581,8 @@ real work only when no push point fired this run.
 
 ```bash
 git fetch origin "$BRANCH"
-if [[ "$(git rev-list --count "origin/$BRANCH..HEAD")" -ne 0 ]]; then
+AHEAD=$(git rev-list --count "origin/$BRANCH..HEAD")
+if [[ "$AHEAD" -ne 0 ]]; then
   git push origin HEAD
 fi
 ```
