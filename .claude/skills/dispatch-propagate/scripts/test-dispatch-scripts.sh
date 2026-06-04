@@ -15969,9 +15969,10 @@ if reservation_exists "839-test"; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: resv-success: reservation_exists after release (target stays reserved)"
 fi
-# The marker SURVIVES a fresh sweep: mat-session is reported live (rule (d) keeps
-# the in-flight marker; the boot grace would keep it anyway). The target remains
-# reserved across the full reserve→release→reacquire sequence.
+# The marker SURVIVES a fresh sweep: the marker is very recent (boot grace keeps
+# it as in-flight); additionally mat-session is reported live so rule (d) would
+# keep it too. The target remains reserved across the full
+# reserve→release→reacquire sequence.
 reservation_sweep 2>/dev/null
 assert_eq "resv-success: reservation survives a fresh reservation_sweep" "1" \
   "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
