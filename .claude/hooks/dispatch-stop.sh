@@ -43,12 +43,28 @@
 #      dispatch-phase network failure) is treated as "undetermined" and falls
 #      through to Branch D rather than triggering a false self-close.
 #   C. marker present + same phase + CURRENT_PHASE == verify + verify-attempt
-#      counter < 3 — CI re-runs still possible. Spawn router, exit 0 (no label,
-#      no self-close — session parks "stopped"; transcript is the diagnostic).
+#      counter < 3 — transient no-push verify outcome. CI has already concluded
+#      and nothing is pending: a verify pass that pushes a fix restarts CI, and
+#      the early not-ready gate above already intercepts and self-closes that
+#      in-progress case when the marker is present, so by the time control
+#      reaches Branch C, CI is concluded and not re-running. Spawn router,
+#      self-close (so the session does not leak idle holding its worktree); the
+#      next tick re-runs verify or escalates at the cap. The needs-human verify
+#      failure never reaches Branch C — /verify-pr skips the marker for it, so it
+#      lands in Branch A (marker absent → park the issue on office-hours on the
+#      first run).
 #   D. marker present + same phase + NOT (verify AND counter < 3) — true
 #      non-advancement (or a hypothetical same-phase non-verify case). Park the
 #      ISSUE on a human via dispatch-apply-office-hours (label + why-comment),
 #      spawn router, exit 0.
+#
+# CLOSING NOTE (post-#1108): NO worker branch self-parks idle waiting on pending
+# work. The early not-ready gate self-closes its concluded-CI marker-present case
+# and hands back its in-progress marker-absent case; Branch C self-closes its
+# concluded no-push case. The remaining exit-0-without-self-close branches —
+# Branch A and Branch D office-hours parks, and the early-gate marker-absent
+# TOCTOU hand-back — are deliberate human-review parks or router hand-backs, not
+# idle waiters.
 #
 # Discriminator: only acts for a /dispatch-worker job. Skipped when
 # CLAUDE_JOB_DIR is unset (interactive session), state.json is missing, or the
@@ -225,8 +241,11 @@ if [ "$CURRENT_PHASE" = "verify" ] && [ -n "$PR_NUM" ]; then
   N=$(gh pr view "$PR_NUM" --json labels --jq '[.labels[].name | capture("^dispatch:verify-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0' 2>/dev/null) || N=0
   [ -z "$N" ] && N=0
   if [ "$N" -lt 3 ]; then
-    # Branch C — verify retry still possible.
+    # Branch C — transient no-push verify outcome; CI concluded, nothing
+    # pending. Self-close so the session does not leak idle holding its
+    # worktree; the next tick re-runs verify or escalates at the cap.
     spawn_tick
+    self_close
     exit 0
   fi
 fi
