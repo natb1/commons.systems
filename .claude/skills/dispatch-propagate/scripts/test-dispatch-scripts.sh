@@ -3051,18 +3051,47 @@ result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "qa item selected with its PR number" "office-hours 50 qa 7" "$result"
 teardown
 
-# OHST3. A labeled item whose <N>-* worktree has a live session is skipped; the
-# next labeled item wins.
-echo "Test: labeled item with a live session is skipped"
+# OHST3. The oldest labeled item whose <N>-* worktree has a live session is
+# RESUMED — resume wins over a sessionless newer sibling.
+echo "Test: oldest live-session item is resumed (resume wins over fresh sibling)"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-select_target_fake_claude "42-x"   # 42's worktree has a live session
+select_target_fake_claude "42-x"   # 42's worktree has a live session; 99 sessionless
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "live-session item skipped; next labeled item selected" "office-hours 99 implement -" "$result"
+assert_eq "live item resumed over sessionless sibling 99" "resume s-42-x" "$result"
+teardown
+
+# OHST3b. Two labeled items both live → resume the oldest one's session
+# (mirrors OH2 on the entry-point side).
+echo "Test: two live items → oldest resumed"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "42-x" "99-y"   # both worktrees live
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "oldest of two live items resumed" "resume s-42-x" "$result"
+teardown
+
+# OHST3c. Older sessionless item + newer live item → resume the live one
+# (mirrors OH5: resume wins regardless of age order).
+echo "Test: older sessionless + newer live → resume the live one"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+# 42 (older) has no worktree at all → sessionless; 99 (newer) has a live worktree.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "99-y"   # only 99's worktree is live
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "live item resumed regardless of age order" "resume s-99-y" "$result"
 teardown
 
 # OHST4. An empty office-hours queue with no parked router prints `empty`. The
