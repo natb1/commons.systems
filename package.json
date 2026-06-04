@@ -25,7 +25,8 @@
     "rules-test"
   ],
   "overrides": {
-    "@xmldom/xmldom": "^0.8.13"
+    "@xmldom/xmldom": "^0.8.13",
+    "fast-xml-builder": "^1.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",
