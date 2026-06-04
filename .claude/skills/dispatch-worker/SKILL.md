@@ -55,7 +55,7 @@ Act on the one directive:
 | `INVOKE /review-fix` | 0 | draft PR + `dispatch:qa-done` (or `dispatch:reviewed` re-entry) | invoke `/review-fix` |
 | `INVOKE /dispatch-resolve-conflict` | 0 | provisioning hit an `origin/main` merge conflict | invoke `/dispatch-resolve-conflict` (see below) |
 | `RELEVANCE-REVIEW` | 0 | no PR on the target (`implement`) | run the Step 2 relevance review, then dispatch its verdict |
-| `STOP done` | 0 | non-draft (ready) PR | stop without invoking a phase skill |
+| `STOP done` | 0 | non-draft (ready) PR — should-never-happen; spawn boundary (#1109) prevents it upstream | stop without invoking a phase skill |
 | `STOP waiting` | 0 | draft PR's CI has no verdict yet | print the verbatim message below and stop |
 | `STOP provision-failed` | 0 | `direnv`/merge provisioning failed (non-conflict) | stop with no marker (reason already written) |
 | `STOP wrong-worktree` | non-zero | spawn cwd / branch did not match `<N>` / `<worktree-path>` | stop |
@@ -132,10 +132,14 @@ on `dispatch:office-hours`.
 Stop without invoking a phase skill and without writing a marker. The Stop hook
 reads marker-absence and applies `dispatch:office-hours` to the issue. For `done`
 (a non-draft PR), no phase skill ran and the slip-past sweep (#843) flags this PR
-for office-hours review. For `wrong-worktree`, the spawn was incoherent — the
-branch-name sanity check rejected the spawn cwd, or the positional
-`<worktree-path>` disagreed with `git rev-parse --show-toplevel`; see
-`reference.md`.
+for office-hours review. Since #1109 the spawn boundary
+(`dispatch-materialize-spawn`) re-checks done before spawning and refuses to
+dispatch a done target, so `STOP done` is now a defensive guard for the
+sub-millisecond residual window between that re-check and worker boot — the
+normal-case done PR is caught upstream and no worker is spawned. For
+`wrong-worktree`, the spawn was incoherent — the branch-name sanity check
+rejected the spawn cwd, or the positional `<worktree-path>` disagreed with `git
+rev-parse --show-toplevel`; see `reference.md`.
 
 ## 2. Pre-Implementation Relevance Review
 
