@@ -35,6 +35,30 @@ most-recent worker's worktree rather than `worktrees/main` — a recoverable UI
 default, accepted in exchange for sessions whose cwd does not silently drift
 mid-tick when subsequent `Bash` / `Skill` tool calls reset to the spawn cwd.
 
+## Provisioning and the `origin/main` merge inside `dispatch-route`
+
+The router's held-lock fan-out loop runs only the cheap `git worktree add`
+(branched from `origin/main`, not provisioned, not merged up) so the lock-hold
+does not scale with the multi-minute, budget-irrelevant provisioning cost
+(#1047 / part of #1044). `dispatch-route` therefore runs `direnv` provisioning
+and the `origin/main` merge — via `dispatch-provision-worktree` — itself, in a
+fixed causal slot: **after** the worktree cross-check (so it never merges into
+the wrong worktree) and **before** the `dispatch-ci-ready` gate and
+`dispatch-phase` (so they, and the phase skill the worker later loads, read the
+merged `.claude/` tree — the merge can update those very scripts). `dispatch-route`'s
+own already-loaded code runs as its pre-merge version for that one invocation;
+its `dispatch-ci-ready` / `dispatch-phase` subprocesses pick up the merged tree.
+This mirrors what `restore-dispatch-skill.sh` does on context-clear.
+
+`dispatch-provision-worktree` exits `0` (clean / already-up-to-date), `3` (merge
+conflict — merge aborted, tree left clean), or any other non-zero (fetch failure
+or a non-conflict merge failure). `dispatch-route` maps `3` to the
+`INVOKE /dispatch-resolve-conflict` directive (the worker hands the conflict to
+the resolver skill, whose Stop-hook branch owns the disposition) and any other
+non-zero to `STOP provision-failed`, writing the one-line reason to
+`$CLAUDE_JOB_DIR/office-hours-reason` so the Stop hook parks the issue on
+`dispatch:office-hours`.
+
 ## Race-window / Stop-hook re-gate rationale
 
 `dispatch-route` emits `STOP waiting` when the initial `dispatch-ci-ready` gate

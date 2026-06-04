@@ -33,15 +33,19 @@ cap or pace-curve pause (see *The #725 cap-keyed re-seed*).
 The pattern is **seed once → fan out to `gap` → each freed slot triggers one
 dedup'd refill tick that fans out again**, replacing the old serial "one tick,
 one worker, repeat". A single `dispatch-materialize-spawn` run now spawns up to
-`gap` workers in one held-lock loop, where `gap = TARGET_N − LIVE_COUNT` comes
-from the `dispatch-select-tick` concurrency gate (evaluated once per run before
-selection). Within the loop the first target is the select-tick target; targets
-2..`gap` come from successive `dispatch-select-target` calls — each spawned
-worker registers before the next selection (#945/#905), so the next selection
-skips its now-live-owned worktree and yields a distinct target. A per-target
-block / merge-conflict parks that one issue (`dispatch:office-hours`) and the
-loop continues; the run emits an aggregate summary (`spawned <k> of gap <G>`)
-and one terminal token (`propagate` if ≥1 spawned, else `drain`).
+`gap` workers in one held-lock loop, where `gap = TARGET_N − effective_live`
+(`effective_live = busy_workers + outstanding_reservations`) comes from the
+`dispatch-select-tick` concurrency gate (evaluated once per run before
+selection). Within the held-lock loop, each target's reservation is written
+immediately before its spawn and cleared immediately after the spawn returns —
+so the budget reflects in-flight slots the instant they are claimed rather than
+waiting for worker registration. The first target is the select-tick target;
+targets 2..`gap` come from successive `dispatch-select-target` calls — each
+spawned worker registers before the next selection (#945/#905), so the next
+selection skips its now-live-owned worktree and yields a distinct target. A
+per-target block / merge-conflict parks that one issue (`dispatch:office-hours`)
+and the loop continues; the run emits an aggregate summary (`spawned <k> of gap
+<G>`) and one terminal token (`propagate` if ≥1 spawned, else `drain`).
 
 The worker Stop-hook baton-pass code in `.claude/hooks/dispatch-stop.sh` calls
 `dispatch-spawn-tick`, deduped to a single live tick unit, which now fans out
@@ -84,8 +88,12 @@ basename `<N>-slug`, which locks the worktree via the existing name-keyed
 liveness skip and consumes a concurrency slot); the lock is released before the
 resolver job is spawned. Crash safety: a router that dies mid-spawn holding the lock is
 recovered by the lock's existing dead-holder reclaim (the recorded sessionId
-absent from `claude agents --json`) on the next `--wait`; the marker-reclaim path
-is belt-and-suspenders rather than load-bearing.
+absent from `claude agents --json`) on the next `--wait`. Such a router also
+strands any reservation marker it wrote before dying; `reservation_sweep` (run
+at the start of the next tick) reclaims that marker via the same dead-session
+rule — a parallel, belt-and-suspenders reclaim path alongside the lock's
+dead-holder reclaim. The stranded marker is cheap to reclaim and leaves no
+half-built state.
 
 The `tmp/dispatch-worktree` marker is the post-Step-5 reclaim signal for
 **dead** holders, and it is **session-scoped**: `dispatch-finalize-selection`
@@ -169,7 +177,7 @@ tier — every topic category, every phase — before considering any `priority=
 item, so a `priority` item in a low-ranked topic outranks every non-priority
 item in a higher-ranked topic. Within one priority level, categories run
 highest first: `security` → `bug` → `testing infrastructure` → `dispatch` →
-`budget` → `other`. The
+`budget` → `print` → `audio` → `other`. The
 `priority` label is human-applied — `/ready` never applies it automatically.
 A PR's category is the highest-priority topic among the labels of every issue
 it closes; an issue's category is the highest-priority topic among its own
@@ -254,17 +262,44 @@ the worker `cd`'d in its own Step 0 — silently broke when subsequent `Bash` /
 ## Concurrency budgeting
 
 The run-scoped concurrency gate lives in `dispatch-select-tick` (evaluated once
-per run, before selection): after lock acquisition and `main` sync it computes
-`LIVE_COUNT` and `gap = max(0, TARGET_N − LIVE_COUNT)`, short-circuiting to
-`drain concurrency-cap` when `LIVE_COUNT >= TARGET_N`. The `gap` it computes is
-carried on the decision line and bounds the `dispatch-materialize-spawn` fan-out
-(see *Fan-out*) — `materialize-spawn` no longer evaluates the gate per target.
+per run, before selection): after lock acquisition and `main` sync it runs
+`reservation_sweep` to reclaim any stranded markers, then computes
+`effective_live = busy_workers + outstanding_reservations` and
+`gap = max(0, TARGET_N − effective_live)`, short-circuiting to
+`drain concurrency-cap` when `effective_live >= TARGET_N`. Sweeping first
+ensures the gate counts only live-or-in-flight reservations. A reservation
+counts against the budget the instant it is written — no wait for the worker to
+register — which is the point of the ledger: it decouples the budget from
+registration timing. With an empty ledger `effective_live` equals the old
+busy-worker count, so this change is behavior-preserving. The `gap` it computes
+is carried on the decision line and bounds the `dispatch-materialize-spawn`
+fan-out (see *Fan-out*) — `materialize-spawn` no longer evaluates the gate per
+target.
+
+The reservation ledger is a directory of marker files at
+`<project-root>/tmp/dispatch-reservations/` (project-root-shared like
+`tmp/dispatch.lock`), one file per reserved slot keyed by the worktree basename
+(`<N>-slug`). Each marker records the reserving session id, the issue number,
+and a UTC timestamp. `dispatch-materialize-spawn` writes a marker immediately
+before `dispatch-spawn-worker` and clears it immediately after the spawn
+returns; a completed fan-out therefore leaves `effective_live == busy_workers`
+with no double-count and no leaked budget. `reservation_sweep` reclaims a
+marker when: (a) the worktree already has a live worker matching the marker
+basename (the reservation converted — redundant backstop), or (b) the reserving
+session is absent from `claude agents --json` and no live worker registered. A
+marker whose reserving session is still live but has no registered worker yet is
+kept as in-flight. If `claude agents --json` returns UNKNOWN, the sweep reclaims
+nothing (fail-safe). Later #1044 sub-issues build on this ledger: #1046 extends
+`dispatch-select-target` to skip reserved worktrees; #1047 relocates
+provisioning out of the held-lock loop; #1048 releases the lock after
+reserve+spawn rather than after registration.
 
 `dispatch-target-workers` runs a sequential four-stage pace-relative pipeline
 (W → F → N) to decide how many concurrent busy workers should run; the live
-count is `claude_agents_count_busy_workers` — busy sessions whose name matches
-the real worker shape `^[0-9]+-` (NOT a `dispatch-worker-*` prefix, which never
-existed in production — that was the Defect-B bug this issue fixed). Instead of a
+count used for the `busy_workers` addend is `claude_agents_count_busy_workers`
+— busy sessions whose name matches the real worker shape `^[0-9]+-` (NOT a
+`dispatch-worker-*` prefix, which never existed in production — that was the
+Defect-B bug this issue fixed). Instead of a
 flat weekly cap, the weekly budget follows a
 **cumulative-pace curve** keyed to how far through the weekly rate-limit window
 we are (in 5-hour-window terms), so token spend spreads smoothly across the
