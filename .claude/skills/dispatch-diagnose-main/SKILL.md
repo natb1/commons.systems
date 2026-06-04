@@ -46,7 +46,12 @@ Both calls need `dangerouslyDisableSandbox: true`.
 Compose the likely cause from the logs and check-run details as the issue
 body. Record the broken HEAD `<sha>` as prose (e.g. `origin/main HEAD <sha>`);
 keep it a bare reference and never place a closing keyword next to a `#N`, so
-the body closes no issue.
+the body closes no issue. This applies to log-sourced text too: if a failing
+check, step, or test name carries a closing keyword followed by a `#N` (e.g. a
+test named `closes #5 regression`), GitHub would read it as a directive and
+auto-close that unrelated issue when this issue is opened — neutralize it
+(drop the `#`, or reword) before it reaches the body. See
+`.claude/rules/issue-references.md` for the full keyword set.
 
 Include only the failing check/step name and a high-level error category
 (e.g. "test assertion failed", "lint error", "type error"). Do not reproduce

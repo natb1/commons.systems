@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Select the single highest-priority task from the queue.
-# Usage: dispatch-select-target [--qa | --health-only] [--exclude <n>...]
+# Usage: dispatch-select-target [--qa | --health-only | --main-broken-sha] [--exclude <n>...]
 #
 # --exclude <n>... names issue numbers the caller has already processed (the
 # fan-out loop's SEEN set, #1062); the selector never returns an excluded target
