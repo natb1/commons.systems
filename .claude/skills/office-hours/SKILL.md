@@ -40,19 +40,38 @@ hand-off and no Stop-hook action — the Stop hook ignores non-`<N>-` session na
 
 0. **Select and locate the target.**
 
-   Run the selection script (use `dangerouslyDisableSandbox: true` — it queries
-   `gh` and `claude agents --json`):
+   **Args-first (normal dispatched path).** When ARGUMENTS contains `<N> <phase>
+   <pr>` — passed by the `office-hours` entry script, which already ran the
+   selector before launching this skill — take `<N>`, `<phase>`, and `<pr>`
+   directly from ARGUMENTS and skip selection entirely:
+
+   ```bash
+   read -r N PHASE PR <<<"$ARGUMENTS"
+   ```
+
+   The selector has already chosen this target; re-running it would re-enumerate
+   the same state inside this freshly-booted session, exactly the waste this
+   design removes. Go straight to "Enter the item's worktree" below.
+
+   **Bare-invocation fallback (human typing `/office-hours` in an existing
+   session).** When ARGUMENTS is empty, run the selector (use
+   `dangerouslyDisableSandbox: true` — it queries `gh` and `claude agents
+   --json`):
 
    ```bash
    .claude/skills/dispatch-propagate/scripts/office-hours-select-target
    ```
 
-   It prints one line:
+   It prints one line — one of four dispositions:
 
-   - `empty` — no sessionless office-hours item exists. Report that and **stop**.
    - `office-hours <N> <phase> <pr-or-dash>` — the selected issue `<N>`, its
-     phase, and its PR number (or `-`). Carry `<N>`, `<phase>`, and the PR
-     through the rest of the skill.
+     phase, and its PR number (or `-`). Carry `<N>`, `<phase>`, and `<pr>`
+     through the rest of the skill (same as the args-first path above). Proceed
+     to "Enter the item's worktree" below.
+   - `resume <sessionId>` — a labeled item whose `<N>-*` worktree has a live
+     session. This skill cannot resume a session from within an already-running
+     session. Report the session ID and tell the user to run
+     `claude --resume <sessionId>` to re-engage it. **Stop.**
    - `parked-router <sessionId> <name>` — the dispatch chain has a target-less
      parked router (#1010): a router tick left no continuation, so the
      `dispatch-self-close` continuation invariant kept the session alive rather
@@ -61,10 +80,12 @@ hand-off and no Stop-hook action — the Stop hook ignores non-`<N>-` session na
      issue/PR. Resume it by re-engaging that exact session: re-run
      `/dispatch-propagate` inside the `<name>` session (`<sessionId>`). Report
      that and **stop**.
+   - `empty` — no item to resume or start. Report that and **stop**.
 
-   **Enter the item's worktree.** If the current branch is already `<N>-…`, you
-   are in place — proceed. Otherwise resolve the worktree (use
-   `dangerouslyDisableSandbox: true`):
+   **Enter the item's worktree.** Both the args-first path and the bare
+   `office-hours` verb arrive here with `<N>` in hand. If the current branch is
+   already `<N>-…`, you are in place — proceed. Otherwise resolve the worktree
+   (use `dangerouslyDisableSandbox: true`):
 
    ```bash
    .claude/skills/dispatch-propagate/scripts/dispatch-resolve-worktree <N> explicit
