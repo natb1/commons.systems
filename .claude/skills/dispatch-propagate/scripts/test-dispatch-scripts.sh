@@ -13015,7 +13015,6 @@ PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 # Map of chain-skill SKILL.md → allowed count of EnterWorktree+ExitWorktree
 # substring mentions (grep -oE counts each occurrence, not each line).
 declare -A CHAIN_GUARD_EXPECTED=(
-  [".claude/skills/dispatch/SKILL.md"]=0
   [".claude/skills/dispatch-propagate/SKILL.md"]=0
   [".claude/skills/dispatch-worker/SKILL.md"]=2
   # Phase skills do not call EnterWorktree/ExitWorktree (#868): they write the
