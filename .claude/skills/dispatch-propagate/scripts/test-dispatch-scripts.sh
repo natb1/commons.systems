@@ -74,6 +74,10 @@ setup() {
   # dispatch-select-target sources lib-claude-agents.sh via its SCRIPT_DIR
   # (TMPDIR_TEST under test). Sourced, not executed — no chmod +x needed.
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
+  # dispatch-select-target and dispatch-trace-leaf source lib-reservation-ledger.sh
+  # via their SCRIPT_DIR (#1046), to skip a reserved-but-not-yet-live target.
+  # Sourced, not executed — no chmod +x needed.
+  cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/lib-reservation-ledger.sh"
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
            "$TMPDIR_TEST/dispatch-ci-ready" \
            "$TMPDIR_TEST/dispatch-find-pr" \
@@ -123,6 +127,12 @@ STUB
   # no test reaches the real `claude` daemon. Per-test calls to
   # select_target_fake_claude override this to model live or orphan worktrees.
   export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
+
+  # Point the reservation ledger (#1046) at a scratch dir that is absent by
+  # default — no marker files, so reservation_exists is false for every row and
+  # the reserved-skip is inert. Every existing select-target / trace-leaf test
+  # stays green; a reserved-skip test creates a marker file here to opt in.
+  export DISPATCH_RESERVATION_DIR="$TMPDIR_TEST/reservations"
 
   # dispatch-select-target calls dispatch-phase as "$SCRIPT_DIR/dispatch-phase".
   # Since we copied them all to TMPDIR_TEST, SCRIPT_DIR inside each copy will
@@ -572,6 +582,8 @@ teardown() {
   # Per-test exports for the liveness gate must not leak across tests.
   unset CLAUDE_AGENTS_CMD
   unset CLAUDE_CODE_SESSION_ID
+  # The reservation-ledger override (#1046) must not leak across tests either.
+  unset DISPATCH_RESERVATION_DIR
 }
 trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
 
@@ -1435,6 +1447,42 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR with orphan worktree is selected, not skipped" "pr 10 10-active-branch verify" "$result"
 teardown
 
+# 2c. A PR whose branch worktree is RESERVED — on disk, no live session, but a
+#     reservation marker present — is skipped, even though no live session owns
+#     it yet (#1046). Closes the spawn-gap re-selection race before registration.
+echo "Test: PR whose branch worktree is reserved (no live session) is skipped"
+setup
+UNION='['"$(make_pr_union 10 "10-active-branch" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-other" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/10-active-branch\nHEAD def456\nbranch refs/heads/10-active-branch\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live sessions: 10-active-branch's worktree is sessionless. But a reservation
+# marker named by the worktree basename is present in the ledger.
+select_target_fake_claude
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv-sess\nissue=10\ntimestamp=2026-01-01T00:00:00Z\n' > "$DISPATCH_RESERVATION_DIR/10-active-branch"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "PR with reserved worktree skipped; next PR returned" "pr 20 20-other verify" "$result"
+teardown
+
+# 2d. A PR whose branch worktree is an orphan with NO reservation marker is NOT
+#     skipped — reserved is gated strictly on the marker (#1046). Guards that the
+#     reserved-skip never broadens the orphan-recycle path.
+echo "Test: PR whose orphan worktree has no reservation marker is not skipped"
+setup
+UNION='['"$(make_pr_union 10 "10-active-branch" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-other" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/10-active-branch\nHEAD def456\nbranch refs/heads/10-active-branch\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live session and an empty ledger (default): 10-active-branch is a recyclable
+# orphan, not a skip.
+select_target_fake_claude
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "PR with orphan worktree and no marker is selected" "pr 10 10-active-branch verify" "$result"
+teardown
+
 # 2b. A PR whose ISSUE carries dispatch:office-hours is skipped (issue #909).
 # The label lives on the issue, not the PR — the skip resolves the issue number
 # from the PR's branch prefix (<N>-) and reads the issue's labels. PR 10's branch
@@ -1882,6 +1930,26 @@ printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD
 select_target_fake_claude
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "issue with orphan worktree selected, not skipped" "issue 55" "$result"
+teardown
+
+# 24c. Help-wanted issue whose <N>-* worktree is RESERVED — on disk, no live
+#      session, but a reservation marker present — is skipped in favor of the
+#      next-oldest issue (#1046). The reserved-but-not-yet-registered target must
+#      not be re-selected, racing the reservation.
+echo "Test: issue with reserved worktree (no live session) skipped; next-oldest chosen"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD def456\nbranch refs/heads/55-some-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live sessions: 55's worktree is sessionless. But a reservation marker named
+# by the worktree basename is present → 55 is claimed and skipped.
+select_target_fake_claude
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv-sess\nissue=55\ntimestamp=2026-01-01T00:00:00Z\n' > "$DISPATCH_RESERVATION_DIR/55-some-feature"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "issue with reserved worktree skipped; next issue 66 chosen" "issue 66" "$result"
 teardown
 
 # 25. A lone help-wanted issue whose worktree has a live session → empty

@@ -108,6 +108,11 @@ source "$SCRIPT_DIR/lib.sh"
 # when a live Claude session owns the matching worktree (#905). Sourced here so
 # the queue-scan loops below can ask the liveness question.
 source "$SCRIPT_DIR/lib-claude-agents.sh"
+# reservation_exists — a worktree-bearing row is ALSO skipped when its worktree
+# carries a reservation marker (#1046), even before a live session owns it: a
+# reserved-but-not-yet-registered target must not be re-selected, racing the
+# reservation. Load-guarded; re-sources lib.sh / lib-claude-agents.sh harmlessly.
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 QA_MODE=false
 HEALTH_ONLY=false
 declare -A EXCLUDED=()
@@ -369,6 +374,35 @@ issue_has_live_worktree() {
   return 1
 }
 
+# True when the <branch> worktree is CLAIMED — a live session owns it (#905) OR
+# it carries a reservation marker (#1046). Both close the spawn-gap re-selection
+# race: a reserved-but-not-yet-registered target must not be re-selected. An
+# orphan worktree (on disk, no live session, no marker) is NOT claimed — it stays
+# a reuse signal for dispatch-resolve-worktree. The reserved check is a fast-path
+# file stat keyed on the worktree basename, no daemon round-trip.
+pr_branch_worktree_claimed() {
+  local branch="$1"
+  pr_branch_has_live_worktree "$branch" && return 0
+  local path="${WORKTREE_PATH_BY_BRANCH[$branch]:-}"
+  [[ -z "$path" ]] && return 1
+  reservation_exists "$(basename "$path")"
+}
+
+# True when any <num>-* worktree is CLAIMED — live-owned (#905) OR reserved
+# (#1046). Several matches → claimed if any one is live or reserved. Orphan
+# worktrees (no session, no marker) stay reuse signals, not skips.
+issue_worktree_claimed() {
+  local num="$1" p
+  issue_has_live_worktree "$num" && return 0
+  local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
+  [[ -z "$paths" ]] && return 1
+  while IFS= read -r p; do
+    [[ -z "$p" ]] && continue
+    reservation_exists "$(basename "$p")" && return 0
+  done <<< "$paths"
+  return 1
+}
+
 # Fetch all open PRs once, with the union of fields this script and
 # dispatch-phase need. Each per-PR dispatch-phase call below reuses it
 # (passed as DISPATCH_PR_LIST) instead of re-running gh pr list.
@@ -511,9 +545,10 @@ PHASE_PRIORITY=(review verify)
 while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "$pr_num" ]] && continue
 
-  # Skip a PR whose branch worktree is owned by a live session. An orphan
-  # worktree does not skip — it is recycled at dispatch-resolve-worktree (#905).
-  if pr_branch_has_live_worktree "$pr_branch"; then
+  # Skip a PR whose branch worktree is owned by a live session or reserved. An
+  # orphan worktree (no session, no marker) does not skip — it is recycled at
+  # dispatch-resolve-worktree (#905, #1046).
+  if pr_branch_worktree_claimed "$pr_branch"; then
     continue
   fi
 
@@ -624,10 +659,10 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   [[ -z "$issue_num" ]] && continue
   # Skip an open issue already closed by a non-draft (ready) PR (#920).
   [[ -n "${READY_PR_CLOSED_ISSUES[$issue_num]:-}" ]] && continue
-  # Skip an issue whose <N>-* worktree is owned by a live session. An orphan
-  # <N>-* worktree does not skip — it is recycled at dispatch-resolve-worktree
-  # (#905).
-  if issue_has_live_worktree "$issue_num"; then
+  # Skip an issue whose <N>-* worktree is owned by a live session or reserved.
+  # An orphan <N>-* worktree (no session, no marker) does not skip — it is
+  # recycled at dispatch-resolve-worktree (#905, #1046).
+  if issue_worktree_claimed "$issue_num"; then
     continue
   fi
   # Category is the top-level help-wanted issue's own labels. Priority bit is
