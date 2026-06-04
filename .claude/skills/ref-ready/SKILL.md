@@ -329,7 +329,7 @@ alongside a topic label.
 
 - **`dispatch`** — concerns the `/dispatch` or `/dispatch-propagate` workflow,
   one of its phase skills (`/plan-implement`, `/verify-pr`, `/qa-fix`,
-  `/code-review-fix`, `/review-fix`, `/security-review-fix`), the `/office-hours`
+  `/review-fix`), the `/office-hours`
   queue worker, a `ref-*`
   reference skill those skills use (`ref-ready`, `ref-memory-management`,
   `ref-github-issues`, `ref-write-instructions`), or a `dispatch-*` script

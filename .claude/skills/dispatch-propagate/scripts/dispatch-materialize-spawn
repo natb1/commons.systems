@@ -233,10 +233,10 @@ process_one_target() {
       }
       WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
       # Only the cheap `git worktree add` runs under the held lock (#1047/#1044).
-      # direnv/npm provisioning and `dispatch-merge-main` are deferred to the
-      # worker's startup (dispatch-provision-worktree, §1 of dispatch-worker
-      # SKILL.md) so the multi-minute, budget-irrelevant work runs off the critical
-      # section.
+      # direnv/npm provisioning and the `origin/main` merge are deferred to the
+      # worker's startup — dispatch-route runs dispatch-provision-worktree after
+      # its cross-check and before phase derivation — so the multi-minute,
+      # budget-irrelevant work runs off the critical section.
       if ! git worktree add -b "$BRANCH" "$WORKTREE_PATH" origin/main 1>&2; then
         echo "dispatch-materialize-spawn: git worktree add failed for $BRANCH" >&2
         return 2
@@ -323,13 +323,22 @@ if [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); then
 fi
 
 # Fan out: fill up to GAP slots in one held-lock run. Target 1 is the passed-in
-# N; targets 2..GAP come from successive dispatch-select-target calls. Each
-# spawned worker registers before the next selection (#945/#905), so the next
-# dispatch-select-target skips its now-live-owned worktree and yields a distinct
-# target. A SEEN guard additionally stops the run if selection ever returns an
-# already-processed target (a non-spawning outcome that did not remove the
-# target from the queue), bounding the loop. Per-target park/skip outcomes are
-# recorded and the loop continues; the lock is released ONCE at the end.
+# N; targets 2..GAP come from successive dispatch-select-target calls. The loop
+# passes its SEEN set as `--exclude` to dispatch-select-target so selection
+# yields the NEXT distinct target instead of re-returning an already-processed
+# one (#1062). A re-return would otherwise happen via two mechanisms: (1)
+# registration-visibility lag — a just-spawned worker is verified-registered but
+# not yet visible to the next selection's liveness query (#945/#905), so its
+# leaf re-surfaces; or (2) a fast self-close leaving an orphan worktree, which
+# selection treats as a reuse signal (not a conflict) and does not skip. The
+# exclusion defeats both: an excluded target is filtered during the queue scan
+# (and threaded into the leaf trace), so the loop advances to the next distinct
+# startable leaf. The loop stops only on a genuine `empty`, a deferred selection
+# (main-broken / jit-reminder), or a hard error — plus a defensive backstop if
+# selection ever re-returns a SEEN target despite the exclusion (a selector
+# contract violation), to prevent an infinite loop. Per-target park/skip
+# outcomes are recorded and the loop continues; the lock is released ONCE at the
+# end.
 declare -A SEEN=()
 spawned=0
 stop_reason="gap filled"
@@ -357,7 +366,9 @@ while :; do
       ;;
   esac
   (( spawned >= GAP )) && break
-  SELECTED=$("$SCRIPT_DIR/dispatch-select-target") || true
+  exclude_args=()
+  (( ${#SEEN[@]} > 0 )) && exclude_args=(--exclude "${!SEEN[@]}")
+  SELECTED=$("$SCRIPT_DIR/dispatch-select-target" "${exclude_args[@]}") || true
   case "$SELECTED" in
     pr\ *)
       # Extract the branch from "pr <pr_num> <branch> <phase>" without clobbering $@.
@@ -371,8 +382,14 @@ while :; do
        echo "dispatch-materialize-spawn: dispatch-select-target emitted unexpected '$SELECTED' in fan-out" >&2
        exit 2 ;;
   esac
+  # Defensive backstop (#1062): the loop passes SEEN as --exclude, so
+  # dispatch-select-target must never return an already-processed target. If it
+  # somehow does, that is a selector contract violation — break rather than spin
+  # forever. This stop is unreachable in normal operation; the loop's real
+  # terminators are `empty`, a deferred selection, and hard errors above.
   if [[ -n "${SEEN[$cur_n]:-}" ]]; then
-    stop_reason="no further distinct targets"
+    echo "dispatch-materialize-spawn: dispatch-select-target re-returned already-processed target #$cur_n despite --exclude (contract violation); stopping fan-out to avoid an infinite loop" >&2
+    stop_reason="selection re-returned an excluded target (unexpected)"
     break
   fi
 done

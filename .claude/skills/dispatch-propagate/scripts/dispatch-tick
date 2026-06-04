@@ -17,14 +17,30 @@
 # `propagate`/`drain` disposition, dispatch-tick simply exits 0. The autonomous
 # tick is launched by systemd (the #725 heartbeat) and by the worker Stop-hook in
 # a later unit; it runs bare and keeps the concurrency gate. A human-typed
-# `/dispatch` is a thin shim that runs one tick and relays its stdout for live
-# UX; it passes `--manual` to run one gate-exempt tick that spawns a single
-# worker (exempt from the pace curve and the `MAX_WORKERS` ceiling); fan-out is
-# autonomous-only.
+# `dispatch` runs one tick as foreground bash, passing `--manual` to spawn a
+# single gate-exempt worker (exempt from the pace curve and the `MAX_WORKERS`
+# ceiling); fan-out is autonomous-only.
 # The audit record is this script's journal output
 # (every captured stdout line is echoed through) plus the spawned workers'
 # transcripts plus durable GitHub side effects (PR comments, `dispatch:*`
-# labels) — so relay survives only on the human shim, not on the autonomous tick.
+# labels) — so relay matters only for a human-run `dispatch` (foreground
+# terminal bash), not for the autonomous tick.
+#
+# Manual `dispatch` cap semantics & selection lock:
+#   `dispatch <N>` (explicit target): the tick skips the concurrency gate and
+#   processes that one target (gap=1). A human forcing a specific target is never
+#   paced by the autonomous budget.
+#
+#   `dispatch` (bare, no argument): skips BOTH the pace-curve budget
+#   (`dispatch-target-workers`, which a budget pause can drop to 0) AND the
+#   `MAX_WORKERS` concurrency ceiling, and spawns exactly ONE gate-exempt worker
+#   (the highest-priority queue target), never emitting `concurrency-cap`. Fan-out
+#   is the autonomous chain's behavior only.
+#
+#   Selection lock: the selection lock (`dispatch-acquire-lock`, acquired inside
+#   `dispatch-select-tick`) is shared with the autonomous chain, so a manual run
+#   cannot select the same target as an in-flight tick. Merge conflicts are handled
+#   by a spawned `/dispatch-resolve-conflict` bg job.
 #
 # Behavior:
 #   1. Run dispatch-select-tick [<N>], echoing all of its stdout through (the
@@ -81,9 +97,9 @@ source "$SCRIPT_DIR/lib.sh"
 # under one stable directory regardless of who invoked the tick. dispatch-spawn-job
 # dedups on `--name` *under <cwd>*: pinning --cwd to the main worktree keeps that
 # dedup consistent across the headless path (where $PWD is already the main
-# worktree) and the human-typed /dispatch shim (where $PWD is the caller's
-# worktree) — otherwise a manual /dispatch could spawn a duplicate of a job the
-# headless tick already started. Same idiom as dispatch-spawn-tick /
+# worktree) and the terminal `dispatch` command (where $PWD is the caller's
+# worktree) — otherwise a manual `dispatch` run could spawn a duplicate of a job
+# the headless tick already started. Same idiom as dispatch-spawn-tick /
 # dispatch-schedule-reseed; an explicit DISPATCH_TICK_MAIN_WORKTREE is
 # authoritative and bypasses the git lookup (tests rely on this).
 if [[ -n "${DISPATCH_TICK_MAIN_WORKTREE:-}" ]]; then
@@ -122,22 +138,74 @@ if [[ -n "$MANUAL" && -n "$ARG" ]]; then
 fi
 
 # --- Synthesize a session identity for the headless tick ---------------------
-# A real .claude session (the human-typed /dispatch shim) exports its own stable
-# CLAUDE_CODE_SESSION_ID, so the `:-` fallback below never fires for it. A
-# systemd-launched tick starts from a clean environment (systemd-run --user
-# forwards only PATH), so it inherits no session id — yet dispatch-acquire-lock
+# The terminal `dispatch` command may or may not run inside a .claude session:
+# when invoked from within a Claude session it inherits a stable
+# CLAUDE_CODE_SESSION_ID, so the `:-` fallback below never fires for it; when run
+# from a plain terminal the env var is absent. A systemd-launched tick likewise
+# starts from a clean environment (systemd-run --user forwards only PATH), so it
+# inherits no session id — yet dispatch-acquire-lock
 # hard-requires one (exit 2 if unset) to key the selection lock on a stable
 # holder. Declare a synthetic, stable id here, at the single headless entry
 # point, so every sub-script invoked below (dispatch-select-tick →
 # dispatch-acquire-lock, the materialize-spawn hold, and the release) sees one
 # consistent holder id across the acquire / hold / release of this tick. Derive
 # it from the systemd unit's INVOCATION_ID (set by systemd, identical across all
-# subprocesses of the unit and unique per tick), falling back to the dispatch-tick
-# PID ($$, unique per process, stable once exported) when neither is present. PID
-# is evaluated once at export time and frozen into the value, so all children see
-# the same fixed string regardless of how they check $$. Exported once so all
-# children agree.
-export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_ID:-$$}}"
+# subprocesses of the unit and unique per tick), falling back to a random token
+# (openssl rand -hex 16) when INVOCATION_ID is absent, with the dispatch-tick PID
+# ($$) as last resort if openssl is unavailable. The random token (or PID) is
+# evaluated once at export time and frozen into the value, so all children see
+# the same fixed string. Exported once so all children agree. (#1068)
+#
+# INVOCATION_ID validation (#1068, same-user threat model): under systemd
+# INVOCATION_ID is always 32 lowercase hex chars. A manually-set value containing
+# a newline would truncate the recorded holder in the lock file (causing a
+# self-release noop → one-tick lock stall); a backslash or control sequence could
+# mislead the `awk -F'\t'` comparison in dispatch-acquire-lock or corrupt the
+# sentinel path (dispatch-tick-<token>.live). Drop any non-conforming value so
+# the random-token fallback fires instead. Hex digits plus hyphen cover both the
+# standard 32-hex form and any UUID-style variant.
+[[ "${INVOCATION_ID:-}" =~ ^[0-9a-fA-F-]+$ ]] || INVOCATION_ID=""
+#
+# Headless-liveness sentinel (#1068). A synthetic `headless:*` id is a bash
+# string that never appears in `claude agents --json`, so dispatch-acquire-lock's
+# resolve_holder_state cannot resolve its liveness through the daemon registry —
+# a concurrent tick would read this LIVE holder as dead and reclaim the lock
+# mid-selection. To give the headless holder a daemon-independent liveness
+# signal, write a sentinel containing this tick's PID alongside the shared lock
+# file and install a single EXIT/INT/TERM trap to remove it; resolve_holder_state
+# treats the holder as live iff the sentinel exists and its PID is alive. Only a
+# synthesized id writes a sentinel — a real inherited session id is governed by
+# the daemon path and writes none. $$ is the tick PID, recorded in the sentinel
+# content regardless of whether the id token uses it.
+#
+# Two failure modes, two dispositions (#1068):
+#   - The lock-file path cannot be resolved (not in a git repo and
+#     DISPATCH_LOCK_FILE unset): skip the sentinel silently. The daemon path
+#     still governs real ids, and a headless tick that cannot resolve the lock
+#     file also cannot acquire the lock (dispatch-acquire-lock exits 2), so it
+#     never reaches selection — there is nothing to serialize.
+#   - The path resolves but the sentinel write fails (e.g. an over-long token
+#     yielding ENAMETOOLONG while the short dispatch.lock stays writable): fail
+#     clear with exit 2. Continuing here would let this tick acquire the lock
+#     with no liveness sentinel, so a concurrent tick reads this LIVE holder as
+#     dead and reclaims mid-selection — the exact duplicate-spawn defect #1068
+#     closes. Per .claude/rules/code-style.md, fail clear rather than degrade
+#     the concurrency guarantee silently; the chain self-heals on the next tick.
+export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_ID:-$(openssl rand -hex 16 2>/dev/null || echo "$$")}}"
+if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
+  if SENTINEL_LOCK_FILE=$(dispatch_lock_file); then
+    SENTINEL=$(headless_sentinel_path "$CLAUDE_CODE_SESSION_ID" "$SENTINEL_LOCK_FILE")
+    mkdir -p "$(dirname "$SENTINEL")" 2>/dev/null || true
+    # Install the trap before the write so it also clears any partial sentinel
+    # if the write fails and we abort. A single EXIT trap covers every `exit`
+    # below this point — intended.
+    trap 'rm -f "$SENTINEL"' EXIT INT TERM
+    if ! printf '%s\n' "$$" >"$SENTINEL"; then
+      echo "dispatch-tick: ERROR: failed to write headless sentinel '$SENTINEL'; cannot signal liveness — aborting so a concurrent tick does not reclaim this lock mid-selection (#1068)" >&2
+      exit 2
+    fi
+  fi
+fi
 
 # --- Step 1: select the target ------------------------------------------------
 # Capture select-tick's full stdout and echo every line through (jit:/calendar:

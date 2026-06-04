@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 # Select the single highest-priority task from the queue.
-# Usage: dispatch-select-target [--qa | --health-only]
+# Usage: dispatch-select-target [--qa | --health-only] [--exclude <n>...]
+#
+# --exclude <n>... names issue numbers the caller has already processed (the
+# fan-out loop's SEEN set, #1062); the selector never returns an excluded target
+# and instead surfaces the next distinct one. The exclusion is applied during
+# the queue scan, not as a post-selection output filter: a PR row is filtered by
+# its branch issue-prefix (<N>-<slug>) before FIRST_PR is recorded, so the
+# next-oldest PR in an already-tapped bucket surfaces; and the exclusion is
+# threaded into the leaf trace for issue rows, so a multi-leaf subtree whose
+# first leaf was already processed descends to its next startable leaf. Coexists
+# with --qa / --health-only — those flags start with `-`, so the integer-run
+# consumption stops at them.
 #
 # Selection is a pure function of GitHub state plus local-worktree existence.
 # The router's cwd carries no priority signal; invoking this script from any
@@ -55,12 +66,10 @@
 #
 # Within each (priority, topic) bucket, default-mode priority (oldest PR wins
 # within a tier):
-#   1. Oldest "security"    PR (draft + dispatch:reviewed or dispatch:security-reviewed)
-#   2. Oldest "review"      PR (draft + dispatch:code-reviewed)
-#   3. Oldest "code-review" PR (draft + dispatch:qa-done)
-#   4. Oldest "verify"      PR (draft, CI completed and failed)
-#   5. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
-#   6. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
+#   1. Oldest "review"      PR (draft + dispatch:qa-done)
+#   2. Oldest "verify"      PR (draft, CI completed and failed)
+#   3. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
+#   4. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
 #      by a live Claude session, and which is not already closed by a non-draft
 #      (ready) PR (#920), resolved to a startable open leaf (an issue whose
 #      entire open-leaf subtree is owned by live sessions is skipped, exactly as
@@ -101,11 +110,19 @@ source "$SCRIPT_DIR/lib.sh"
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 QA_MODE=false
 HEALTH_ONLY=false
+declare -A EXCLUDED=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --qa) QA_MODE=true; shift ;;
     --health-only) HEALTH_ONLY=true; shift ;;
+    --exclude)
+      shift
+      while [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; do
+        EXCLUDED["$1"]=1
+        shift
+      done
+      ;;
     *) echo "error: unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -114,6 +131,13 @@ if [[ "$QA_MODE" == "true" && "$HEALTH_ONLY" == "true" ]]; then
   echo "error: --qa and --health-only are mutually exclusive" >&2
   exit 1
 fi
+
+# Build the leaf-trace passthrough once: the excluded numbers thread into
+# dispatch-trace-leaf (#1062) so a multi-leaf subtree descends past an excluded
+# leaf. Only constructed when non-empty so the call site passes no --exclude
+# flag at all when no exclusion was requested.
+EXCLUDE_ARGS=()
+(( ${#EXCLUDED[@]} > 0 )) && EXCLUDE_ARGS=(--exclude "${!EXCLUDED[@]}")
 
 # Print origin/main's HEAD SHA if its CI has a failing check; print nothing if
 # main is healthy or only has in-progress checks. main's CI state spans two
@@ -437,15 +461,10 @@ fi
 # level. The companion classifier that *applies* these labels is ref-ready
 # SKILL.md Step 6; keep the two label sets in sync.
 #
-# Disambiguation: the `security` *topic* label here is distinct from two other
-# uses of the word "security" in this workflow, kept apart by exact-match
-# resolution (three separate namespaces):
-#   1. the `security` entry in PHASE_PRIORITY below — a within-category
-#      phase-ladder rung, not a topic; and
-#   2. the `dispatch:security-reviewed` phase label — a `dispatch:*` workflow
-#      marker, not a topic.
-# A bare `security` label means topic; only PHASE_PRIORITY reads it as a phase,
-# and only the `dispatch:`-prefixed form is a phase label.
+# Disambiguation: the `security` *topic* label here is its own namespace, kept
+# apart from any `dispatch:*` workflow marker by exact-match resolution. A bare
+# `security` label means topic; only the `dispatch:`-prefixed form is a phase
+# label, and the single review phase has no `security` rung in PHASE_PRIORITY.
 TOPIC_CATEGORIES=(security bug "testing infrastructure" dispatch budget)
 CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
 # Same priority list as a JSON array, for category_of_labels' jq filter.
@@ -487,7 +506,7 @@ declare -A FIRST_PR
 declare -A FIRST_ISSUE
 
 # Within-category phase ladder, highest priority first.
-PHASE_PRIORITY=(security review code-review verify)
+PHASE_PRIORITY=(review verify)
 
 while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "$pr_num" ]] && continue
@@ -519,6 +538,13 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   # lives on the issue (issue #909), so resolve the issue number from the PR's
   # branch prefix (<N>-<slug>) and check the issue's labels in ISSUE_LABELS_JSON.
   pr_issue_num="${pr_branch%%-*}"
+  # Skip a PR whose issue is in the --exclude set (#1062): the fan-out caller has
+  # already processed this target. Applied during the scan, before FIRST_PR is
+  # populated, so the next-oldest PR in an already-tapped bucket surfaces. The
+  # number matches what the fan-out loop records in SEEN for a pr row
+  # (${pr_branch%%-*}). Shared loop ⇒ also covers --qa selection — harmless and
+  # consistent.
+  [[ -n "$pr_issue_num" && -n "${EXCLUDED[$pr_issue_num]:-}" ]] && continue
   if [[ -n "$pr_issue_num" ]] && printf '%s' "$ISSUE_LABELS_JSON" \
       | jq -e --arg n "$pr_issue_num" \
         '(.[$n] // []) | any(.name == "dispatch:office-hours")' >/dev/null; then
@@ -614,13 +640,17 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   # Resolve a startable open leaf within the issue's subtree. dispatch-trace-leaf
   # in queue mode descends open blockers and sub-issues, skipping any child whose
   # <N>-* worktree is owned by a live session (#914) — an orphan child worktree
-  # stays descendable:
+  # stays descendable. The --exclude set (#1062) is threaded in so a leaf the
+  # fan-out caller already processed — including this help-wanted issue itself as
+  # the trace root, and a multi-leaf subtree's first leaf that self-closed and
+  # left an orphan worktree (not live-skipped) — is descended past to the next
+  # startable leaf, rather than re-returned:
   #   exit 0 — a startable open leaf was found; record it for this bucket.
-  #   exit 2 — every reachable open leaf is owned by a live session. Skip this
-  #            issue exactly as a direct live-owned worktree is skipped; a later
-  #            issue in the same bucket may still fill the slot.
+  #   exit 2 — every reachable open leaf is owned by a live session or excluded.
+  #            Skip this issue exactly as a direct live-owned worktree is skipped;
+  #            a later issue in the same bucket may still fill the slot.
   #   exit 1 — usage error; propagate as a hard failure, never swallow as a skip.
-  if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue); then
+  if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue "${EXCLUDE_ARGS[@]}"); then
     FIRST_ISSUE[$issue_bucket]="$leaf"
   else
     trace_status=$?
