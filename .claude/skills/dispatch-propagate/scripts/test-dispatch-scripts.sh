@@ -17754,6 +17754,179 @@ assert_eq "followup-exists: codeql alert-number prefix collision (#5 vs #50) →
 followup_exists_teardown
 
 # ============================================================================
+# === dispatch-open-pr ===
+# ============================================================================
+
+echo "Test: dispatch-open-pr"
+
+# Dedicated setup/teardown modeled on followup_exists_setup/teardown. Builds a
+# temp tree with the script under test and a gh stub on PATH. The gh stub
+# EMULATES GitHub's close parser: it reads the body passed to `pr create` /
+# `pr edit`, extracts every `<keyword> #N`, and writes the resulting close set
+# to $TREE/close-set.txt — which `pr view` then echoes back. The force-extra /
+# force-drop knobs override the parsed set deterministically.
+open_pr_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
+
+  cp "$SCRIPT_DIR/dispatch-open-pr" "$TMPDIR_TEST/scripts/dispatch-open-pr"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-open-pr"
+
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+# gh stub emulating GitHub's close parser for dispatch-open-pr tests.
+TREE="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Locate the value following --body-file in the argument list.
+body_file=""
+prev=""
+for a in "$@"; do
+  if [[ "$prev" == "--body-file" ]]; then
+    body_file="$a"
+  fi
+  prev="$a"
+done
+
+# Parse the close set from a body file the same way GitHub does, then apply the
+# force-extra / force-drop knobs and write the sorted-unique result.
+write_close_set() {
+  local bf="$1"
+  local set=""
+  if [[ -n "$bf" && -f "$bf" ]]; then
+    # Extract "<keyword> [:] #N" → bare N, case-insensitive.
+    set="$(grep -ioE '(close[sd]?|fix(e[sd])?|resolve[sd]?)[ \t]*:?[ \t]*#[0-9]+' "$bf" \
+      | grep -oE '#[0-9]+' | tr -d '#' || true)"
+  fi
+  # force-extra: add a number.
+  if [[ -f "$TREE/force-extra" ]]; then
+    set="$set
+$(cat "$TREE/force-extra")"
+  fi
+  # force-drop: remove a number.
+  if [[ -f "$TREE/force-drop" ]]; then
+    local drop
+    drop="$(cat "$TREE/force-drop")"
+    set="$(printf '%s\n' "$set" | grep -vxF "$drop" || true)"
+  fi
+  printf '%s\n' "$set" | grep -E '^[0-9]+$' | sort -n -u > "$TREE/close-set.txt" || true
+}
+
+case "$1 $2" in
+  "pr create")
+    cp "$body_file" "$TREE/last-body.txt"
+    write_close_set "$body_file"
+    echo "https://github.com/natb1/commons.systems/pull/1500"
+    ;;
+  "pr edit")
+    cp "$body_file" "$TREE/last-body.txt"
+    write_close_set "$body_file"
+    echo "edit" >> "$TREE/edit-calls.log"
+    echo "https://github.com/natb1/commons.systems/pull/1500"
+    ;;
+  "pr view")
+    if [[ -f "$TREE/close-set.txt" ]]; then
+      cat "$TREE/close-set.txt"
+    fi
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $*" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  SAVED_PATH_OP="$PATH"
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+}
+
+open_pr_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  export PATH="$SAVED_PATH_OP"
+}
+
+# CASE 1 — clean single close: prose-only body file, no --closes.
+open_pr_setup
+echo "Some descriptive prose." > "$TMPDIR_TEST/body.txt"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title "t" --body-file "$TMPDIR_TEST/body.txt" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: clean single close → stdout PR number" "1500" "$out"
+assert_eq "open-pr: clean single close → rc 0" "0" "$rc"
+open_pr_teardown
+
+# CASE 2 — multi-close + normalization ("1120, #1121").
+open_pr_setup
+echo "Body prose." > "$TMPDIR_TEST/body.txt"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title "t" --closes "1120, #1121" --body-file "$TMPDIR_TEST/body.txt" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: multi-close → stdout PR number" "1500" "$out"
+assert_eq "open-pr: multi-close → rc 0" "0" "$rc"
+close_set="$(cat "$TMPDIR_TEST/close-set.txt")"
+assert_eq "open-pr: multi-close → close set is the three numbers" "$(printf '1119\n1120\n1121')" "$close_set"
+assert_eq "open-pr: multi-close → body has Closes #1119" "1" "$(grep -cxF 'Closes #1119' "$TMPDIR_TEST/last-body.txt")"
+assert_eq "open-pr: multi-close → body has Closes #1120" "1" "$(grep -cxF 'Closes #1120' "$TMPDIR_TEST/last-body.txt")"
+assert_eq "open-pr: multi-close → body has Closes #1121" "1" "$(grep -cxF 'Closes #1121' "$TMPDIR_TEST/last-body.txt")"
+open_pr_teardown
+
+# CASE 3 — stray "fixes #999" in prose → corrected via edit.
+open_pr_setup
+printf 'This change also fixes #999 in passing.\n' > "$TMPDIR_TEST/body.txt"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title "t" --body-file "$TMPDIR_TEST/body.txt" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: stray fixes #999 → stdout PR number" "1500" "$out"
+assert_eq "open-pr: stray fixes #999 → rc 0" "0" "$rc"
+assert_eq "open-pr: stray fixes #999 → an edit occurred" "1" "$([[ -s "$TMPDIR_TEST/edit-calls.log" ]] && echo 1 || echo 0)"
+assert_eq "open-pr: stray fixes #999 → final close set is just 1119" "1119" "$(cat "$TMPDIR_TEST/close-set.txt")"
+assert_eq "open-pr: stray fixes #999 → keyword stripped from corrected body" "0" "$(grep -cE '(close[sd]?|fix(e[sd])?|resolve[sd]?)[ \t]*:?[ \t]*#999' "$TMPDIR_TEST/last-body.txt" || true)"
+open_pr_teardown
+
+# CASE 4 — force-extra=777: an extra the script cannot strip (no keyword in body
+# produces it) → correction fails, rc non-zero, stderr names 777.
+open_pr_setup
+echo "Body prose." > "$TMPDIR_TEST/body.txt"
+echo 777 > "$TMPDIR_TEST/force-extra"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title "t" --body-file "$TMPDIR_TEST/body.txt" 2>"$TMPDIR_TEST/err.txt") && rc=0 || rc=$?
+assert_eq "open-pr: unresolvable extra → rc non-zero" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "open-pr: unresolvable extra → stderr names 777" "1" "$(grep -c '777' "$TMPDIR_TEST/err.txt")"
+open_pr_teardown
+
+# CASE 5 — force-drop=1119: an intended number missing → rc non-zero, stderr
+# names 1119.
+open_pr_setup
+echo "Body prose." > "$TMPDIR_TEST/body.txt"
+echo 1119 > "$TMPDIR_TEST/force-drop"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title "t" --body-file "$TMPDIR_TEST/body.txt" 2>"$TMPDIR_TEST/err.txt") && rc=0 || rc=$?
+assert_eq "open-pr: missing intended → rc non-zero" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "open-pr: missing intended → stderr names 1119" "1" "$(grep -c '1119' "$TMPDIR_TEST/err.txt")"
+open_pr_teardown
+
+# CASE 6 — prose via stdin (no --body-file).
+open_pr_setup
+out=$(echo "some prose" | "$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title t 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: stdin prose → stdout PR number" "1500" "$out"
+assert_eq "open-pr: stdin prose → rc 0" "0" "$rc"
+assert_eq "open-pr: stdin prose → close set is 1119" "1119" "$(cat "$TMPDIR_TEST/close-set.txt")"
+open_pr_teardown
+
+# CASE 7 — usage errors.
+open_pr_setup
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" --title t 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: missing primary → rc non-zero" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" abc --title t 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: non-numeric primary → rc non-zero" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: missing --title → rc non-zero" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+open_pr_teardown
+
+# CASE 8 — primary repeated in --closes is deduped to a single Closes line.
+open_pr_setup
+echo "Body prose." > "$TMPDIR_TEST/body.txt"
+out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title "t" --closes "1119 1120" --body-file "$TMPDIR_TEST/body.txt" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "open-pr: dedup primary → stdout PR number" "1500" "$out"
+assert_eq "open-pr: dedup primary → rc 0" "0" "$rc"
+assert_eq "open-pr: dedup primary → exactly one Closes #1119 line" "1" "$(grep -cxF 'Closes #1119' "$TMPDIR_TEST/last-body.txt")"
+assert_eq "open-pr: dedup primary → close set is 1119 1120" "$(printf '1119\n1120')" "$(cat "$TMPDIR_TEST/close-set.txt")"
+open_pr_teardown
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
