@@ -2,7 +2,24 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { prerenderPosts, type PrerenderConfig } from "../src/prerender";
 import * as fs from "node:fs";
 
-vi.mock("node:fs");
+// vitest 4 no longer turns a bare `vi.mock("node:fs")` automock of a Node
+// builtin into spy functions in the default pool, so `vi.mocked(fs.readFileSync)`
+// is the real function and `.mockImplementation` is undefined. Supply an
+// explicit factory whose named and `default` exports share the same spies:
+// prerender.ts uses named imports, but the CJS interop resolves them through
+// the default export, so both must point at the mocks for the source under
+// test to see them.
+vi.mock("node:fs", () => {
+  const readFileSync = vi.fn();
+  const writeFileSync = vi.fn();
+  const mkdirSync = vi.fn();
+  return {
+    readFileSync,
+    writeFileSync,
+    mkdirSync,
+    default: { readFileSync, writeFileSync, mkdirSync },
+  };
+});
 
 const TEMPLATE = `<!DOCTYPE html>
 <html>
