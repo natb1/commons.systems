@@ -27,10 +27,15 @@ with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 ## 1. Route via `dispatch-route`, Then Act on the Directive
 
 `dispatch-route` performs the entire deterministic prelude in one call — the
-worktree cross-check, the `dispatch-ci-ready` gate, and `dispatch-phase` — and
-prints exactly one directive line. Run it (`dangerouslyDisableSandbox: true` —
-it calls `gh`), capturing both the directive on stdout and the exit code.
-`ARGUMENTS` has the shape `<N> <worktree-path>`:
+worktree cross-check, the worktree provisioning + `origin/main` merge, the
+`dispatch-ci-ready` gate, and `dispatch-phase` — and prints exactly one directive
+line. The router's held-lock fan-out does only the cheap `git worktree add`; the
+multi-minute `direnv`/`npm` provisioning and the `origin/main` merge run **here**,
+inside `dispatch-route`, after the cross-check and before phase derivation (so the
+phase skill the worker later loads reads the merged `.claude/` tree — #1047). Run
+it (`dangerouslyDisableSandbox: true` — it calls `gh`, and provisioning runs
+`git merge`/`direnv`/`npm`), capturing both the directive on stdout and the exit
+code. `ARGUMENTS` has the shape `<N> <worktree-path>`:
 
 ```bash
 read -r N WORKTREE_PATH <<<"$ARGUMENTS"
@@ -48,9 +53,11 @@ Act on the one directive:
 | `INVOKE /verify-pr` | 0 | draft PR, CI completed and failed | invoke `/verify-pr` |
 | `INVOKE /qa-fix` | 0 | draft PR, CI green, no `dispatch:*` label | invoke `/qa-fix` |
 | `INVOKE /review-fix` | 0 | draft PR + `dispatch:qa-done` (or `dispatch:reviewed` re-entry) | invoke `/review-fix` |
+| `INVOKE /dispatch-resolve-conflict` | 0 | provisioning hit an `origin/main` merge conflict | invoke `/dispatch-resolve-conflict` (see below) |
 | `RELEVANCE-REVIEW` | 0 | no PR on the target (`implement`) | run the Step 2 relevance review, then dispatch its verdict |
 | `STOP done` | 0 | non-draft (ready) PR | stop without invoking a phase skill |
 | `STOP waiting` | 0 | draft PR's CI has no verdict yet | print the verbatim message below and stop |
+| `STOP provision-failed` | 0 | `direnv`/merge provisioning failed (non-conflict) | stop with no marker (reason already written) |
 | `STOP wrong-worktree` | non-zero | spawn cwd / branch did not match `<N>` / `<worktree-path>` | stop |
 
 ### `INVOKE` — run exactly one phase skill
@@ -82,6 +89,17 @@ to the next phase in the same tick — one phase per `/dispatch-worker` invocati
 `/ultrareview` is intentionally **never** invoked: it is user-triggered and
 billed, so `/dispatch-worker` cannot launch it.
 
+### `INVOKE /dispatch-resolve-conflict` — hand off the merge conflict
+
+Provisioning found that `origin/main` does not merge cleanly into this worktree.
+Invoke `/dispatch-resolve-conflict $N $WORKTREE_PATH` via the Skill tool **instead
+of** any phase skill. The worker is already a session in the worktree, named
+`<N>-slug`, with `CLAUDE_JOB_DIR` set — exactly the environment that skill expects
+(it normally runs as a bg job the router spawns). Write **no** phase marker: the
+Stop hook's conflict-resolver branch owns the disposition — re-seed at `<N>` on
+`resolved`, or park an ambiguous conflict to office-hours — via the
+`conflict-resolver` / `conflict-resolved` sentinels that skill writes. Then stop.
+
 ### `RELEVANCE-REVIEW` — run the relevance review, then dispatch its verdict
 
 Run the Step 2 relevance review and dispatch the verdict it returns (`proceed` /
@@ -100,6 +118,14 @@ user-visible report verbatim:
 Apply no `dispatch:office-hours` and spawn no babysitter — a not-ready target is
 not worker-actionable; the router owns the CI gate. See `reference.md` for the
 Stop-hook re-gate rationale.
+
+### `STOP provision-failed` — stop with no marker
+
+Provisioning failed for a non-conflict reason (a fetch failure or a non-conflict
+merge failure). `dispatch-route` has already written the one-line reason to
+`$CLAUDE_JOB_DIR/office-hours-reason`, so just stop without invoking a phase skill
+and without writing a marker. The Stop hook reads that reason and parks the issue
+on `dispatch:office-hours`.
 
 ### `STOP done` / `STOP wrong-worktree` — stop with no marker
 
