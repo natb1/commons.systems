@@ -50,6 +50,7 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-phase" "$TMPDIR_TEST/dispatch-phase"
   cp "$SCRIPT_DIR/dispatch-ci-ready" "$TMPDIR_TEST/dispatch-ci-ready"
   cp "$SCRIPT_DIR/dispatch-find-pr" "$TMPDIR_TEST/dispatch-find-pr"
+  cp "$SCRIPT_DIR/dispatch-route" "$TMPDIR_TEST/dispatch-route"
   cp "$SCRIPT_DIR/dispatch-resolve-arg" "$TMPDIR_TEST/dispatch-resolve-arg"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
@@ -76,6 +77,7 @@ setup() {
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
            "$TMPDIR_TEST/dispatch-ci-ready" \
            "$TMPDIR_TEST/dispatch-find-pr" \
+           "$TMPDIR_TEST/dispatch-route" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/office-hours-select-target" \
@@ -936,6 +938,199 @@ else
   call_count=0
 fi
 assert_eq "no self-fetch gh pr list calls when DISPATCH_PR_LIST set" "0" "$call_count"
+teardown
+
+# ============================================================================
+# dispatch-route tests
+# ============================================================================
+echo ""
+echo "=== dispatch-route ==="
+
+# dispatch-route collapses the worker prelude (worktree cross-check,
+# dispatch-ci-ready gate, dispatch-phase) into one call and prints exactly one
+# directive. The git stub serves the worktree toplevel
+# from worktree-toplevel.txt; the gh stub serves the full-field open-PR list
+# from pr-list-full.json and logs each such call to gh-pr-list-calls.log, so a
+# test can prove the single DISPATCH_PR_LIST fetch is reused, not re-issued.
+route_run() {
+  ROUTE_OUT=$("$TMPDIR_TEST/dispatch-route" "$@" 2>/dev/null) && ROUTE_RC=0 || ROUTE_RC=$?
+}
+
+# 1. No PR → RELEVANCE-REVIEW (implement phase).
+echo "Test: no PR → RELEVANCE-REVIEW"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR → RELEVANCE-REVIEW (directive)" "RELEVANCE-REVIEW" "$ROUTE_OUT"
+assert_eq "no PR → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 2. Draft + failing CI → INVOKE /verify-pr.
+echo "Test: draft + failing CI → INVOKE /verify-pr"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$FAILING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "draft + failing → INVOKE /verify-pr (directive)" "INVOKE /verify-pr" "$ROUTE_OUT"
+assert_eq "draft + failing → INVOKE /verify-pr (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 3. Draft + green + no label → INVOKE /qa-fix.
+# Also assert exactly one gh pr list was issued, proving DISPATCH_PR_LIST reuse
+# across both dispatch-ci-ready calls and dispatch-phase.
+echo "Test: draft + green + no label → INVOKE /qa-fix"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "draft + green → INVOKE /qa-fix (directive)" "INVOKE /qa-fix" "$ROUTE_OUT"
+assert_eq "draft + green → INVOKE /qa-fix (exit 0)" "0" "$ROUTE_RC"
+assert_eq "dispatch-route issues exactly one gh pr list" "1" \
+  "$([[ -f "$STUB_DIR/gh-pr-list-calls.log" ]] && wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ' || echo 0)"
+teardown
+
+# 4. Draft + green + dispatch:qa-done → INVOKE /review-fix (the single terminal
+# review phase; #1091 consolidated code-review/review/security into one).
+echo "Test: draft + green + dispatch:qa-done → INVOKE /review-fix"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "dispatch:qa-done → INVOKE /review-fix (directive)" "INVOKE /review-fix" "$ROUTE_OUT"
+assert_eq "dispatch:qa-done → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 5. Draft + green + dispatch:reviewed → INVOKE /review-fix (idempotent re-entry;
+# /review-fix just finishes "gh pr ready").
+echo "Test: draft + green + dispatch:reviewed → INVOKE /review-fix (re-entry)"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:reviewed"}]' "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "dispatch:reviewed → INVOKE /review-fix (directive)" "INVOKE /review-fix" "$ROUTE_OUT"
+assert_eq "dispatch:reviewed → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 6. Draft + green + legacy dispatch:code-reviewed → INVOKE /review-fix
+# (in-flight tolerance: a PR still carrying the old three-phase label converges
+# on the merged review pass instead of stalling — see dispatch-phase test 8).
+echo "Test: draft + green + legacy dispatch:code-reviewed → INVOKE /review-fix"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:code-reviewed"}]' "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "legacy dispatch:code-reviewed → INVOKE /review-fix (directive)" "INVOKE /review-fix" "$ROUTE_OUT"
+assert_eq "legacy dispatch:code-reviewed → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 7. Draft + green + legacy dispatch:security-reviewed → INVOKE /review-fix
+# (in-flight tolerance — see dispatch-phase test 9).
+echo "Test: draft + green + legacy dispatch:security-reviewed → INVOKE /review-fix"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "legacy dispatch:security-reviewed → INVOKE /review-fix (directive)" "INVOKE /review-fix" "$ROUTE_OUT"
+assert_eq "legacy dispatch:security-reviewed → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 8. Non-draft PR → STOP done.
+echo "Test: non-draft PR → STOP done"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "false" "$NO_LABELS" "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "non-draft PR → STOP done (directive)" "STOP done" "$ROUTE_OUT"
+assert_eq "non-draft PR → STOP done (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 9. Draft + pending CI → STOP waiting (the dispatch-ci-ready not-ready path).
+echo "Test: draft + pending CI → STOP waiting"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$PENDING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "draft + pending → STOP waiting (directive)" "STOP waiting" "$ROUTE_OUT"
+assert_eq "draft + pending → STOP waiting (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 10. Wrong-worktree — mismatched path: toplevel branch matches <N> but the
+# toplevel does not equal the passed <worktree-path>.
+echo "Test: wrong-worktree mismatched path → STOP wrong-worktree, non-zero"
+setup
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /tmp/nope
+assert_eq "wrong-worktree mismatched path → directive" "STOP wrong-worktree" "$ROUTE_OUT"
+assert_eq "wrong-worktree mismatched path → non-zero exit" "nonzero" \
+  "$([[ "$ROUTE_RC" != "0" ]] && echo nonzero || echo zero)"
+teardown
+
+# 11. Wrong-worktree — branch-prefix mismatch: the toplevel basename is not
+# prefixed by "<N>-".
+echo "Test: wrong-worktree branch-prefix mismatch → STOP wrong-worktree, non-zero"
+setup
+echo "/wt/99-other" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/99-other
+assert_eq "wrong-worktree branch mismatch → directive" "STOP wrong-worktree" "$ROUTE_OUT"
+assert_eq "wrong-worktree branch mismatch → non-zero exit" "nonzero" \
+  "$([[ "$ROUTE_RC" != "0" ]] && echo nonzero || echo zero)"
+teardown
+
+# 12. Missing argument: one arg (no <worktree-path>) → exit 2.
+echo "Test: missing <worktree-path> arg → exit 2"
+setup
+route_run 42
+assert_eq "missing <worktree-path> arg → exit 2" "2" "$ROUTE_RC"
+teardown
+
+# 13. Missing argument: no args at all → exit 2.
+echo "Test: no args → exit 2"
+setup
+route_run
+assert_eq "no args → exit 2" "2" "$ROUTE_RC"
+teardown
+
+# 14. Non-numeric <N> → exit 2.
+echo "Test: non-numeric <N> → exit 2"
+setup
+route_run "abc" /wt/abc-feature
+assert_eq "non-numeric N → exit 2" "2" "$ROUTE_RC"
+teardown
+
+# 15. Draft + mixed rollup (failing + pending) → INVOKE /verify-pr.
+# failure wins: dispatch-ci-ready treats mixed as ready, dispatch-phase maps to verify.
+echo "Test: draft + mixed rollup (failing+pending) → INVOKE /verify-pr"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$MIXED_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "draft + mixed rollup → INVOKE /verify-pr (directive)" "INVOKE /verify-pr" "$ROUTE_OUT"
+assert_eq "draft + mixed rollup → INVOKE /verify-pr (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 16. Zero / leading-zero <N> → exit 2. The <N> regex is ^[1-9][0-9]*$, matching
+# lib.sh:resolve_issue_number, so "0" (a nonexistent issue) and leading-zero
+# forms are rejected rather than routed against a bogus issue number.
+echo "Test: zero <N> → exit 2"
+setup
+route_run 0 /wt/0-feature
+assert_eq "zero N → exit 2" "2" "$ROUTE_RC"
+teardown
+
+echo "Test: leading-zero <N> → exit 2"
+setup
+route_run 042 /wt/042-feature
+assert_eq "leading-zero N → exit 2" "2" "$ROUTE_RC"
 teardown
 
 # ============================================================================
