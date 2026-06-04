@@ -1196,6 +1196,9 @@ route_run 42 /wt/42-my-feature
 assert_eq "happy path still routes (INVOKE /qa-fix)" "INVOKE /qa-fix" "$ROUTE_OUT"
 assert_eq "happy path invoked provisioning exactly once" "1" \
   "$([[ -f "$STUB_DIR/provision-calls.log" ]] && wc -l < "$STUB_DIR/provision-calls.log" | tr -d ' ' || echo 0)"
+assert_eq "happy path forwarded correct worktree path to provisioning" \
+  "provision /wt/42-my-feature" \
+  "$([[ -f "$STUB_DIR/provision-calls.log" ]] && cat "$STUB_DIR/provision-calls.log" || echo '')"
 teardown
 
 # 20. Cross-check precedes provisioning: a wrong-worktree spawn never provisions.
