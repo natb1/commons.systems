@@ -92,7 +92,7 @@ Then derive the phase via `dispatch-phase <N>`:
 ```
 
 It prints exactly one actionable phase name (`implement | verify | qa |
-code-review | review | security | done`). It never prints `waiting`. For a
+review | done`). It never prints `waiting`. For a
 draft PR whose CI has no verdict yet, it prints an error to stderr and exits 3
 — which is why the `dispatch-ci-ready` gate above must run first.
 
@@ -112,9 +112,7 @@ Map the phase:
 | `implement` | no PR on the target | relevance review (Step 3), then dispatch its verdict |
 | `verify` | draft PR, CI completed and failed | `/verify-pr` |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/qa-fix` |
-| `code-review` | draft PR + `dispatch:qa-done` | `/code-review-fix` (applies `dispatch:code-reviewed` itself) |
-| `review` | draft PR + `dispatch:code-reviewed` | `/review-fix` (applies `dispatch:reviewed` itself) |
-| `security` | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` — re-entry; `/security-review-fix` is idempotent) | `/security-review-fix` (applies `dispatch:security-reviewed` and marks ready itself) |
+| `review` | draft PR + `dispatch:qa-done` | `/review-fix` (applies `dispatch:reviewed` and marks the PR ready itself) |
 | `done` | non-draft (ready) PR | already complete — stop without invoking a phase skill; the Stop hook applies `dispatch:office-hours` to the issue |
 
 ## 2. Dispatch One Phase, Then Hand Off
@@ -146,27 +144,18 @@ picks the target up once CI concludes.
   no label. On a user-input blocker (a needs-human-judgment item, a bug, a failed
   pre-QA check) it escalates to the office-hours queue instead, where `/office-hours`
   runs the interactive residue.
-- **`code-review`** — invoke `/code-review-fix`. It runs `/code-review max --fix`,
-  applies the recommended fixes, defers important out-of-scope findings to
-  tracking issues, posts a PR comment, and applies the `dispatch:code-reviewed`
-  label itself — `/dispatch-worker` applies no label.
-- **`review`** — invoke `/review-fix`. It runs `/review`, applies the
-  recommended fixes, posts a PR comment, and applies the `dispatch:reviewed`
-  label itself — `/dispatch-worker` applies no label.
-- **`security`** — invoke `/security-review-fix`. Its Step 1 classifies the
-  diff's changed surface: a docs-only diff skips the fan-out with a one-line
-  "no attack surface" PR comment; a code diff fans out the relevant domain
-  subagents (plus a red team and the built-in `/security-review` scan,
-  subagent-wrapped Skill invocation) and runs CodeQL and the dependency audit
-  inline when relevant. It then applies the required fixes, posts a PR comment,
-  applies the `dispatch:security-reviewed` label, and marks the PR ready. It is
-  idempotent on re-entry — `/dispatch-worker` applies no label.
+- **`review`** — invoke `/review-fix`. It runs `/code-review max --fix`,
+  `/review`, and the full security pass (surface-gated) as direct subagents,
+  aggregates and de-duplicates findings, applies fixes, files out-of-scope
+  findings as follow-ups, posts one PR comment, applies the `dispatch:reviewed`
+  label, and marks the PR ready. It is idempotent on re-entry — `/dispatch-worker`
+  applies no label.
 - **`done`** — stop without invoking a phase skill; the Stop hook applies
   `dispatch:office-hours` to the issue. No phase skill ran; the slip past
   sweep (#843) flags this PR for office-hours review.
 
-The PR stays a **draft** through every phase; the `security` phase's
-`/security-review-fix` flips it to ready as the workflow's terminal action.
+The PR stays a **draft** through every phase; the `review` phase's
+`/review-fix` flips it to ready as the workflow's terminal action.
 
 After the phase skill returns, the worker session ends; the Stop hook reads
 the marker the phase skill wrote and propagates the chain. The worker does

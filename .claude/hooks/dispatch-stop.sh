@@ -168,7 +168,7 @@ MARKER_PHASE=""
 if [ -f "$MARKER_FILE" ]; then
   MARKER_PHASE=$(grep -E '^phase=' "$MARKER_FILE" | head -n1 | cut -d= -f2) || MARKER_PHASE=""
   case "$MARKER_PHASE" in
-    implement|verify|qa|code-review|review|security|done) ;;
+    implement|verify|qa|review|done) ;;
     *) MARKER_PHASE="" ;;
   esac
 fi
