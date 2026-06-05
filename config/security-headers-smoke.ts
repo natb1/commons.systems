@@ -9,6 +9,7 @@ const expectedHeaders: {
     assert: (v) => {
       expect(v).toContain("default-src");
       expect(v).toContain("script-src");
+      expect(v).toContain("frame-ancestors");
     },
   },
   {
@@ -34,14 +35,17 @@ const expectedHeaders: {
 
 export function describeSecurityHeadersSmoke(appName: string): void {
   test.describe(`${appName} security headers smoke`, () => {
-    for (const { header, assert } of expectedHeaders) {
-      test(`page response includes ${header} @smoke @hosting`, async ({ page }) => {
-        const response = await page.goto("/");
-        expect(response).not.toBeNull();
-        const value = response!.headers()[header];
+    test(`response includes security headers @hosting`, async ({ request }) => {
+      const response = await request.head("/");
+      expect(response).toBeTruthy();
+      expect(response.status()).toBe(200);
+
+      const headers = response.headers();
+      for (const { header, assert } of expectedHeaders) {
+        const value = headers[header];
         expect(value, `${header} header missing`).toBeDefined();
         assert(value);
-      });
-    }
+      }
+    });
   });
 }
