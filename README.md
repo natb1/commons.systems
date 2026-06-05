@@ -150,7 +150,7 @@ competes in the selection ladder.
 
 [`/new-requirement`](.claude/skills/new-requirement/SKILL.md) handles a
 requirement introduced or amended mid-flight. It clarifies the change, updates
-the remote issues, re-syncs context, and revises the active plan — keeping the
+the remote issues, syncs context, and revises the active plan — keeping the
 worktree's open work coherent with the new requirement instead of forcing a
 restart.
 
@@ -166,9 +166,9 @@ still matches the project's direction.
 #### 5. Skill-running JIT reminders
 
 Most jit-reminders surface a summary for a human to read; some instead run a
-skill in an office-hours session. The planned `/digest` skill (see #769) is the
-example: a periodic digest compiled in a session rather than executed
-autonomously. The jit engine itself lives in the Dispatch Queue spine's
+skill in an office-hours session. [`/digest`](.claude/skills/digest/SKILL.md)
+(see #769) is the example: a periodic digest compiled in a session rather than
+executed autonomously. The jit engine itself lives in the Dispatch Queue spine's
 [JIT-on-dispatch](#4-jit-on-dispatch) subsection — this covers only the
 office-hours-side surfacing.
 
