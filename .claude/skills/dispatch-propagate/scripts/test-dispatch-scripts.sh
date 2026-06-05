@@ -272,6 +272,22 @@ case "$args" in
     printf '{"data":{"repository":%s}}\n' "$aliases"
     ;;
   "repo view --json nameWithOwner -q .nameWithOwner")
+    # Transient injection: gh-transient-repo-view holds N = how many initial hits
+    # should fail with a retryable HTTP 504, after which the normal response is
+    # served. A .count sidecar records every hit so a test can assert how many
+    # attempts gh_retry made.
+    if [[ -f "$STUB_DIR/gh-transient-repo-view" ]]; then
+      fail_n=$(cat "$STUB_DIR/gh-transient-repo-view")
+      count_file="$STUB_DIR/gh-transient-repo-view.count"
+      count=0
+      [[ -f "$count_file" ]] && count=$(cat "$count_file")
+      count=$((count + 1))
+      echo "$count" > "$count_file"
+      if [[ "$count" -le "$fail_n" ]]; then
+        echo "gh: HTTP 504: Gateway Timeout (https://api.github.com/)" >&2
+        exit 1
+      fi
+    fi
     echo "natb1/commons.systems"
     ;;
   api\ */dependencies/blocked_by)
@@ -2495,6 +2511,27 @@ printf '[{"number":999,"state":"open"}]\n' > "$STUB_DIR/blockers-101.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "multi-issue PR with later blocked issue → skipped → next PR chosen" "pr 20 20-clear-pr verify" "$result"
+teardown
+
+# 34r. Integration: a transient gh repo view failure (HTTP 504) is retried by
+#      gh_retry inside dispatch-select-target's blocker-prefetch path. PR 10
+#      closes issue 100 (unblocked); gh repo view fails twice (HTTP 504) before
+#      succeeding. The selection must still succeed with the correct target and
+#      repo view must have been invoked exactly 3 times (.count sidecar == 3).
+echo "Test: select-target retries a transient repo-view failure → pr 10, 3 hits"
+setup
+UNION='['"$(make_pr_union 10 "10-clear-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Fail repo view twice with HTTP 504, then serve the normal response.
+echo 2 > "$STUB_DIR/gh-transient-repo-view"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+rc=$?
+assert_eq "select-target transient repo-view retry → pr 10 10-clear-pr verify" "pr 10 10-clear-pr verify" "$result"
+assert_eq "select-target transient repo-view retry → rc 0" "0" "$rc"
+hit_count=$(cat "$STUB_DIR/gh-transient-repo-view.count")
+assert_eq "select-target transient repo-view → repo view hit exactly 3 times" "3" "$hit_count"
 teardown
 
 # --- help-wanted leaf reachability (issue #715) -----------------------------
