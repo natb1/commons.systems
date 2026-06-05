@@ -54,8 +54,13 @@ func TestDiscoverFiles(t *testing.T) {
 
 	if sf, ok := found[key{"bankone", "1234", "2025-07"}]; !ok {
 		t.Error("missing bankone/1234/2025-07")
-	} else if sf.StatementID() != "bankone-1234-2025-07" {
-		t.Errorf("StatementID = %q, want %q", sf.StatementID(), "bankone-1234-2025-07")
+	} else {
+		if sf.StatementID() != "bankone-1234-2025-07" {
+			t.Errorf("StatementID = %q, want %q", sf.StatementID(), "bankone-1234-2025-07")
+		}
+		if want := "bankone/1234/2025-07/datafile.csv"; sf.RelPath != want {
+			t.Errorf("RelPath = %q, want %q", sf.RelPath, want)
+		}
 	}
 
 	if _, ok := found[key{"banktwo", "5678", "2025-05"}]; !ok {
@@ -65,8 +70,14 @@ func TestDiscoverFiles(t *testing.T) {
 	// 3-level layout: period from filename stem
 	if sf, ok := found[key{"bankone", "1234", "2025-08"}]; !ok {
 		t.Error("missing bankone/1234/2025-08 (3-level layout)")
-	} else if sf.StatementID() != "bankone-1234-2025-08" {
-		t.Errorf("StatementID = %q, want %q", sf.StatementID(), "bankone-1234-2025-08")
+	} else {
+		if sf.StatementID() != "bankone-1234-2025-08" {
+			t.Errorf("StatementID = %q, want %q", sf.StatementID(), "bankone-1234-2025-08")
+		}
+		// RelPath is the statements-root-relative, forward-slash path.
+		if want := "bankone/1234/2025-08.csv"; sf.RelPath != want {
+			t.Errorf("RelPath = %q, want %q", sf.RelPath, want)
+		}
 	}
 }
 

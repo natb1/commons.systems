@@ -34,6 +34,10 @@ type StatementFile struct {
 	Institution string
 	Account     string
 	Period      string
+	// RelPath is the file's path relative to the statements root, using
+	// forward slashes so it resolves against a browser directory handle
+	// regardless of the host OS path separator.
+	RelPath string
 }
 
 // StatementID returns a deterministic identifier for this statement: "{institution}-{account}-{period}".
@@ -115,6 +119,7 @@ func DiscoverFiles(dir string) ([]StatementFile, error) {
 				Institution: parts[0],
 				Account:     parts[1],
 				Period:      parts[2],
+				RelPath:     filepath.ToSlash(rel),
 			}, nil
 		case 3:
 			// institution/account/file (no period directory)
@@ -127,6 +132,7 @@ func DiscoverFiles(dir string) ([]StatementFile, error) {
 				Institution: parts[0],
 				Account:     parts[1],
 				Period:      period,
+				RelPath:     filepath.ToSlash(rel),
 			}, nil
 		default:
 			return StatementFile{}, fmt.Errorf("unexpected path depth for %s: expected institution/account/[period/]file, got %d components", rel, len(parts))
@@ -139,16 +145,19 @@ func DiscoverFiles(dir string) ([]StatementFile, error) {
 // account. Period is derived from each file's basename with its extension
 // stripped; InferPeriod later overwrites it from document content where possible.
 func discoverFlatFiles(dir, institution, account string) ([]StatementFile, error) {
+	dir = filepath.Clean(dir)
 	return walkStatementFiles(dir, func(path string, info os.FileInfo) (StatementFile, error) {
 		period, err := periodFromStem(info.Name())
 		if err != nil {
 			return StatementFile{}, err
 		}
+		rel, _ := filepath.Rel(dir, path)
 		return StatementFile{
 			Path:        path,
 			Institution: institution,
 			Account:     account,
 			Period:      period,
+			RelPath:     filepath.ToSlash(rel),
 		}, nil
 	})
 }

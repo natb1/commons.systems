@@ -138,6 +138,7 @@ type Statement struct {
 	BalanceDate         string  `json:"balanceDate"`
 	LastTransactionDate *string `json:"lastTransactionDate"`
 	Virtual             bool    `json:"virtual"`
+	SourceFile          string  `json:"sourceFile,omitempty"`
 }
 
 // Transaction is a single transaction in the JSON output.

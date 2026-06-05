@@ -17,6 +17,10 @@ type StatementData struct {
 	Period              string
 	BalanceDate         *time.Time // LEDGERBAL DTASOF; nil if absent
 	LastTransactionDate *time.Time // nil when not yet computed or no transactions exist for this account
+	// SourceFile is the statements-root-relative (forward-slash) path of the
+	// statement file this data was parsed from; empty for ETL-synthesized
+	// statements (e.g. derived balance anchors).
+	SourceFile string
 }
 
 // StatementDocID generates a deterministic document ID from a statement ID
