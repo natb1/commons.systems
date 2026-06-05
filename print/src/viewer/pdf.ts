@@ -83,9 +83,17 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     targetCanvas: HTMLCanvasElement,
     containerRect: DOMRect,
     wrapper?: HTMLDivElement,
+    shouldAbort?: () => boolean,
+    onTaskStart?: (task: RenderTask) => void,
   ): Promise<CanvasRenderResult | null> {
     const page = await pdfDoc!.getPage(pageNum);
     if (destroyed) return null;
+    // Bail before any canvas mutation or page.render() if a newer generation has
+    // superseded this render. renderGen is bumped synchronously, so an older
+    // render suspended in getPage above sees the bump and returns here — keeping
+    // overlapping renders off the shared canvas. Must stay synchronous through
+    // page.render() below (no await) so check-then-render is atomic.
+    if (shouldAbort?.()) return null;
 
     const baseViewport = page.getViewport({ scale: 1 });
     const scaleX = containerRect.width / baseViewport.width;
@@ -110,6 +118,10 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     const ctx = targetCanvas.getContext("2d");
     if (!ctx) throw new Error("Could not acquire 2D canvas context");
     const task = page.render({ canvasContext: ctx, viewport });
+    // Publish the RenderTask synchronously (page.render returns it before its
+    // .promise resolves) so a superseding renderPage's top-of-function cancel
+    // can abort this in-flight render and free the shared canvas.
+    onTaskStart?.(task);
 
     try {
       await task.promise;
@@ -175,7 +187,14 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     // superseded render never surfaces stale text.
     if (textLayerDiv) textLayerDiv.replaceChildren();
 
-    const result = await renderPageToCanvas(pageNum, canvas, containerRect, pageWrapper ?? undefined);
+    const result = await renderPageToCanvas(
+      pageNum,
+      canvas,
+      containerRect,
+      pageWrapper ?? undefined,
+      () => gen !== renderGen,
+      (task) => { renderTask = task; },
+    );
     if (!result) return;
     if (gen !== renderGen) {
       result.task.cancel();
