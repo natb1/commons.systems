@@ -354,7 +354,7 @@ case "$CONFIG_TYPE" in
     # top-level value must be an object; all tunables are optional numbers.
     # `dispatch-target-workers` substitutes a baked-in default for any field
     # absent here, so absence is silent — only the type of present fields is
-    # checked. The six percentage fields carry an additional `<= 100` bound;
+    # checked. The seven percentage fields carry an additional `<= 100` bound;
     # weekly_curve_power and max_concurrent_workers have no upper bound.
     ERRORS=$(jq -r '
       if type != "object" then
@@ -408,6 +408,13 @@ case "$CONFIG_TYPE" in
             and ($cfg.five_hour_target_ceiling_pct | type) == "number"
             and ($cfg.five_hour_target_floor_pct > $cfg.five_hour_target_ceiling_pct)
          then "five_hour_target_floor_pct must be <= five_hour_target_ceiling_pct, got floor \($cfg.five_hour_target_floor_pct) > ceiling \($cfg.five_hour_target_ceiling_pct)"
+         else empty end),
+        (if ($cfg | has("exhaustion_threshold_pct"))
+            and ($cfg | has("five_hour_target_ceiling_pct"))
+            and ($cfg.exhaustion_threshold_pct | type) == "number"
+            and ($cfg.five_hour_target_ceiling_pct | type) == "number"
+            and ($cfg.exhaustion_threshold_pct <= $cfg.five_hour_target_ceiling_pct)
+         then "exhaustion_threshold_pct must be > five_hour_target_ceiling_pct (the override band collapses otherwise), got threshold \($cfg.exhaustion_threshold_pct) <= ceiling \($cfg.five_hour_target_ceiling_pct)"
          else empty end)
       end
     ' "$CONFIG_FILE")

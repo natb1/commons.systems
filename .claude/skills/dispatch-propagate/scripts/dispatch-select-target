@@ -785,6 +785,12 @@ done <<< "$ISSUE_SORTED"
 # phase — is exhausted before any priority=0 item is considered; within one
 # priority level topic category is the tie-break, and within each
 # (priority, category) bucket the phase ladder runs innermost.
+#
+# In --priority-only mode the scan loops above already `continue` on every
+# priority=0 item, so FIRST_PR/FIRST_ISSUE hold only priority=1 keys; the pri=0
+# pass below is then a guaranteed no-op (every lookup misses). It is left in the
+# shared loop rather than special-cased — the empty-map iteration is harmless
+# and keeps the default and --priority-only output paths identical.
 for pri in 1 0; do
   for category in "${CATEGORIES[@]}"; do
     for phase in "${PHASE_PRIORITY[@]}"; do

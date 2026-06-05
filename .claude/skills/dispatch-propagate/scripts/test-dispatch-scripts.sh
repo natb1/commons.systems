@@ -2841,11 +2841,25 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
 assert_eq "--priority-only JIT suppressed → priority issue returned" "issue 400" "$result"
 teardown
 
-# PO6. --priority-only rejects combination with the other modes.
+# PO6. --priority-only rejects combination with the other modes. The guard
+# condition covers all three sibling modes, so exercise each arm: --qa,
+# --health-only, and --main-broken-sha must each be rejected with exit 1.
 echo "Test: --priority-only + --qa → error exit"
 setup
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --qa 2>/dev/null) && rc=0 || rc=$?
 assert_eq "--priority-only --qa → exit 1" "1" "$rc"
+teardown
+
+echo "Test: --priority-only + --health-only → error exit"
+setup
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --health-only 2>/dev/null) && rc=0 || rc=$?
+assert_eq "--priority-only --health-only → exit 1" "1" "$rc"
+teardown
+
+echo "Test: --priority-only + --main-broken-sha → error exit"
+setup
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --main-broken-sha 2>/dev/null) && rc=0 || rc=$?
+assert_eq "--priority-only --main-broken-sha → exit 1" "1" "$rc"
 teardown
 
 # ============================================================================
