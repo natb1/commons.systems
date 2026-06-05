@@ -1258,6 +1258,52 @@ assert_eq "wrong-worktree → provisioning not invoked" "0" \
   "$([[ -f "$STUB_DIR/provision-calls.log" ]] && wc -l < "$STUB_DIR/provision-calls.log" | tr -d ' ' || echo 0)"
 teardown
 
+# 21. No-PR issue whose label is in the statements config → INVOKE /budget-parse-job
+# (#1024). The implement arm fetches the issue's labels (gh issue view --json labels,
+# served from issue-labels-<num>.json) and the configured statements labels (from
+# dispatch-config-load against DISPATCH_CONFIG_DIR), and on a non-empty intersection
+# routes to the parse-job handler instead of RELEVANCE-REVIEW.
+echo "Test: no PR + statements label → INVOKE /budget-parse-job"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"statements":[{"key":"acme","dir":"/s","repo":"o/r","label":"statements:acme","project":"p"}]}\n' \
+  > "$DISPATCH_CONFIG_DIR/statements.json"
+printf '{"labels":[{"name":"statements:acme"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR + statements label → INVOKE /budget-parse-job (directive)" \
+  "INVOKE /budget-parse-job" "$ROUTE_OUT"
+assert_eq "no PR + statements label → INVOKE /budget-parse-job (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 22. No-PR issue with a statements config present, but the issue carries no
+# configured label → RELEVANCE-REVIEW (empty intersection, unchanged behavior).
+echo "Test: no PR + non-statements label → RELEVANCE-REVIEW"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"statements":[{"key":"acme","dir":"/s","repo":"o/r","label":"statements:acme","project":"p"}]}\n' \
+  > "$DISPATCH_CONFIG_DIR/statements.json"
+printf '{"labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR + non-statements label → RELEVANCE-REVIEW (directive)" \
+  "RELEVANCE-REVIEW" "$ROUTE_OUT"
+assert_eq "no PR + non-statements label → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 23. No statements config present at all → RELEVANCE-REVIEW (the normal state for
+# repos without statement scanning; dispatch-config-load prints "no-config", the
+# arm treats it as no configured labels and never fetches the issue's labels).
+echo "Test: no PR + no statements config → RELEVANCE-REVIEW"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR + no statements config → RELEVANCE-REVIEW (directive)" \
+  "RELEVANCE-REVIEW" "$ROUTE_OUT"
+assert_eq "no PR + no statements config → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
+teardown
+
 # ============================================================================
 # dispatch-resolve-arg tests
 # ============================================================================
