@@ -112,9 +112,22 @@ RESET_WINDOW="${DISPATCH_TICK_RECOVER_RESET_WINDOW:-3600}"
 CAP="${DISPATCH_TICK_RECOVER_CAP:-3}"
 BASE="${DISPATCH_TICK_RECOVER_BASE_BACKOFF:-300}"
 MAX="${DISPATCH_TICK_RECOVER_MAX_BACKOFF:-3600}"
-for var in RESET_WINDOW CAP BASE MAX; do
+for var in BASE MAX; do
   if ! [[ "${!var}" =~ ^[0-9]+$ ]]; then
     echo "dispatch-tick-recover: $var must be a non-negative integer, got '${!var}'; aborting" >&2
+    exit 2
+  fi
+done
+# CAP and RESET_WINDOW must be positive integers (>= 1), not merely
+# non-negative. CAP=0 would escalate on the very first failure with no retry.
+# RESET_WINDOW=0 would treat every failure as a fresh episode (NOW -
+# last_failure > 0 is almost always true), so the consecutive count never
+# reaches the cap and escalation never fires — an unbounded retry loop. Both
+# are almost certainly misconfigurations; reject them rather than silently
+# defeat the cap.
+for var in CAP RESET_WINDOW; do
+  if ! [[ "${!var}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "dispatch-tick-recover: $var must be a positive integer (>= 1), got '${!var}'; aborting" >&2
     exit 2
   fi
 done
@@ -216,6 +229,14 @@ continuation_present() {
   return 1
 }
 
+# Read state before the continuation check so that write_state in the
+# continuation branch has the real last_failure value from the file.
+# Without this, STATE_LAST_FAILURE is its initial value (0), and a
+# continuation resets last_failure to 0 — causing the NEXT episode to always
+# look "old" (NOW - 0 > RESET_WINDOW), defeating the consecutive-failure cap
+# for patterns with brief continuations.
+read_state
+
 if continuation_present; then
   write_state 0 "$STATE_LAST_FAILURE" || true
   echo "dispatch-tick-recover: continuation present; no-op" >&2
@@ -224,7 +245,6 @@ fi
 
 # ---- Step 3: no continuation — load + advance the failure state -------------
 
-read_state
 COUNT="$STATE_COUNT"
 LAST_FAILURE="$STATE_LAST_FAILURE"
 
@@ -314,7 +334,11 @@ fi
 # on the launchers, and the recover unit must not chain to itself.
 
 BACKOFF=$(( BASE * (1 << (COUNT - 1)) ))
-if (( BACKOFF > MAX )); then
+# A very high COUNT (only reachable with a large CAP) overflows the 64-bit
+# signed left-shift to a negative value, which the `> MAX` guard alone would
+# let through — yielding a past/negative RESEED_AT that fires the timer
+# immediately and defeats the backoff. Clamp non-positive and over-max alike.
+if (( BACKOFF <= 0 || BACKOFF > MAX )); then
   BACKOFF="$MAX"
 fi
 RESEED_AT=$(( NOW + BACKOFF ))

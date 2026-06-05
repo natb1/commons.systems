@@ -743,17 +743,38 @@ print_remote_access_block() {
 # Args: $1 = main worktree path
 ensure_recover_unit() {
   local main_worktree="$1"
+
+  # A systemd unit file is line-structured: each line is an independent
+  # directive. An embedded newline in any value we interpolate below would land
+  # as an attacker-controlled extra directive in the [Service] section. The
+  # main worktree path comes from git output or a test override and never
+  # legitimately contains a newline; reject it rather than emit a malformed
+  # unit (best-effort: warn + return per this helper's contract — never exit).
+  if [[ "$main_worktree" == *$'\n'* ]]; then
+    echo "WARNING: ensure_recover_unit: main worktree path contains a newline; refusing to write unit; OnFailure recovery unavailable" >&2
+    return 1
+  fi
+
   local RECOVER_SCRIPT="$main_worktree/.claude/skills/dispatch-propagate/scripts/dispatch-tick-recover"
   local UNIT_DIR="${DISPATCH_RECOVER_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
   local UNIT_PATH="$UNIT_DIR/dispatch-tick-recover.service"
   local SYSTEMCTL_CMD="${DISPATCH_RECOVER_SYSTEMCTL_CMD:-systemctl}"
 
-  # Environment=PATH=$PATH captures the launching caller's PATH at write time,
+  # Strip any stray newline from the captured PATH for the same line-structure
+  # reason; a newline in PATH is a broken environment, not a value we should
+  # propagate into a unit directive.
+  local safe_path="${PATH//$'\n'/}"
+
+  # Environment=PATH=... captures the launching caller's PATH at write time,
   # for the same reason dispatch-spawn-tick passes --setenv=PATH: the systemd
   # user manager's minimal default PATH omits the nix store, so on NixOS/WSL
   # hosts /usr/bin/env can't resolve bash and the recover script can't find
   # git/jq/claude. The caller carries the full nix-store PATH, so baking it into
   # the unit at write time makes the unit self-sufficient.
+  #
+  # The path-bearing directives are double-quoted: systemd unescapes C-style
+  # quotes, so a path containing spaces is parsed as a single token rather than
+  # split into an executable + spurious arguments.
   #
   # Deliberately NO OnFailure= on this unit — the recover handler must not chain
   # to itself, or a failing recovery would recurse.
@@ -764,9 +785,9 @@ Description=Dispatch chain continuation recovery (OnFailure handler)
 
 [Service]
 Type=oneshot
-Environment=PATH=$PATH
-ExecStart=$RECOVER_SCRIPT
-WorkingDirectory=$main_worktree
+Environment="PATH=$safe_path"
+ExecStart="$RECOVER_SCRIPT"
+WorkingDirectory="$main_worktree"
 EOF
 )
 

@@ -10240,6 +10240,54 @@ fi
 assert_eq "reset-window: state count == 1 (fresh episode)" "1" "$(tr_state_count)"
 tr_teardown
 
+# --- Test 7: CAP=0 is rejected (would escalate with zero retries) ------------
+
+echo "Test: CAP=0 is rejected (exit 2, no reseed, no escalation)"
+tr_setup
+export DISPATCH_TICK_RECOVER_CAP=0
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "cap-zero: dispatch-tick-recover exits 2" "2" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "cap-zero: no reseed armed (systemd-run log empty)" "" "$log"
+ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
+assert_eq "cap-zero: no escalation issue (gh log empty)" "" "$ghlog"
+tr_teardown
+
+# --- Test 8: RESET_WINDOW=0 is rejected (would defeat the cap) ---------------
+
+echo "Test: RESET_WINDOW=0 is rejected (exit 2, no reseed) — it would reset the count every call"
+tr_setup
+export DISPATCH_TICK_RECOVER_RESET_WINDOW=0
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "reset-window-zero: dispatch-tick-recover exits 2" "2" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "reset-window-zero: no reseed armed (systemd-run log empty)" "" "$log"
+tr_teardown
+
+# --- Test 9: a high failure count whose backoff overflows is clamped to MAX ---
+
+echo "Test: an overflowing backoff is clamped to MAX (never a past/immediate epoch)"
+tr_setup
+# A large CAP lets COUNT climb high before escalation. Seed count=55 (→56):
+# BASE * (1 << 55) overflows the 64-bit signed left-shift to a negative value,
+# which the bare `> MAX` guard would pass through as a past RESEED_AT (firing
+# the timer immediately). The clamp must instead pin BACKOFF to MAX (3600) →
+# reseed_at = NOW + 3600 = 1003600.
+export DISPATCH_TICK_RECOVER_CAP=100
+tr_seed_state 55 999500
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "overflow-clamp: dispatch-tick-recover exits 0" "0" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@1003600"* \
+   && "$log" == *"--unit=dispatch-reseed-1003600"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: overflow-clamp: backoff clamped to MAX, reseed at NOW + 3600"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: overflow-clamp: backoff clamped to MAX, reseed at NOW + 3600"
+  echo "    log: $log"
+fi
+tr_teardown
+
 # ============================================================================
 # dispatch-spawn-worker tests
 # ============================================================================
