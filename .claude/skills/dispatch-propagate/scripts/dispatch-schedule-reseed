@@ -368,6 +368,14 @@ else
   MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
 fi
 
+# Install the OnFailure recovery unit (dispatch-tick-recover.service) before
+# scheduling the transient reseed timer. Best-effort: OnFailure= resolves
+# lazily at failure time, so a failure here is non-fatal — a missing target
+# only logs an error if the reseed unit ever fails. We still pass OnFailure=
+# unconditionally below so an abnormal reseed exit is guaranteed a chain
+# continuation (#1150).
+ensure_recover_unit "$MAIN_WORKTREE" || true
+
 # ---- Step 6: schedule the transient timer -----------------------------------
 #
 # The unit name embeds the epoch resets_at — a repeated call with the same
@@ -392,6 +400,18 @@ fi
 # claude/git/jq. The caller (a dispatch tick) always carries the full
 # nix-store PATH, so capturing it at schedule time makes the unit
 # self-sufficient when the timer later fires.
+#
+# --collect makes systemd garbage-collect the transient unit after it finishes
+# OR FAILS, so a failed reseed tick does not linger in systemd's `failed`
+# state (mirrors dispatch-spawn-tick). Without it a non-zero dispatch-tick exit
+# would leave a lingering failed unit behind.
+#
+# --property=OnFailure=dispatch-tick-recover.service (#1150): if the reseed
+# unit fails abnormally, systemd fires the recovery handler (edge-triggered,
+# owned by systemd, unskippable by a crashing tick) so the chain still gets a
+# continuation. ensure_recover_unit (above) installs that handler best-effort;
+# OnFailure= resolves lazily at failure time, so passing it is safe even when
+# the install failed.
 
 SYSTEMD_RUN_CMD="${DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD:-systemd-run}"
 UNIT_NAME="dispatch-reseed-${RESEED_AT}"
@@ -406,6 +426,8 @@ trap 'rm -f "$RUN_STDERR"' EXIT
 "$SYSTEMD_RUN_CMD" --user \
      --unit="$UNIT_NAME" \
      --on-calendar="@$RESEED_AT" \
+     --collect \
+     --property=OnFailure=dispatch-tick-recover.service \
      --working-directory="$MAIN_WORKTREE" \
      --timer-property=Persistent=true \
      --setenv=PATH="$PATH" \
