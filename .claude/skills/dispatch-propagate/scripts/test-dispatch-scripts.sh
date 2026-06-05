@@ -11761,6 +11761,18 @@ else
   echo "  FAIL: new-file invoked search / issue create / project item-add"
   echo "    gh-calls.log: $calls"
 fi
+# Assert both labels are present in the issue create call.
+create_args=""
+[[ -f "$STUB_DIR/gh-issue-create.log" ]] && create_args=$(cat "$STUB_DIR/gh-issue-create.log")
+TOTAL=$((TOTAL + 1))
+if [[ "$create_args" == *"--label statements:bank"* && "$create_args" == *"--label help wanted"* ]]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: new-file issue create carries both --label statements:bank and --label help wanted"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: new-file issue create carries both --label statements:bank and --label help wanted"
+  echo "    gh-issue-create.log: $create_args"
+fi
 statements_teardown
 
 # --- Test 3: open hit → skipped ----------------------------------------------
