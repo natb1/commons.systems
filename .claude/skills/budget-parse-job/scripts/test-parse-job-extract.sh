@@ -68,6 +68,13 @@ Parse the bank statement.
 - File: \`jan.qfx\`
 EOF
 
+# Body whose File value is a glob pattern (must be rejected, not fed to find).
+BODY_GLOB="$TMP/body-glob.txt"
+cat > "$BODY_GLOB" <<EOF
+- File: \`*.qfx\`
+- sha256: \`$REAL_SHA\`
+EOF
+
 # Body whose sha256 does not match the real file.
 WRONG_SHA="0000000000000000000000000000000000000000000000000000000000000000"
 BODY_MISMATCH="$TMP/body-mismatch.txt"
@@ -93,6 +100,14 @@ assert_eq "parse missing File line errors" "1" "$rc"
 # parse: missing sha256 line -> error.
 rc=0; "$EXTRACT" parse "$BODY_NO_SHA" >/dev/null 2>&1 || rc=$?
 assert_eq "parse missing sha256 line errors" "1" "$rc"
+
+# parse: glob metacharacters in File value -> error (not fed to find -name).
+rc=0; "$EXTRACT" parse "$BODY_GLOB" >/dev/null 2>&1 || rc=$?
+assert_eq "parse rejects glob metacharacters in File" "1" "$rc"
+
+# locate: glob metacharacters in base -> error (defense-in-depth entry point).
+rc=0; "$EXTRACT" locate "$TMP/statements" "*.qfx" "$REAL_SHA" >/dev/null 2>&1 || rc=$?
+assert_eq "locate rejects glob metacharacters in base" "1" "$rc"
 
 # ---- locate: found + sha matches ------------------------------------------
 echo "== locate =="

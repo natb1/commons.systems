@@ -147,7 +147,15 @@ case "$PHASE" in
     fi
     PARSE_JOB=0
     if [[ -n "$CONFIGURED_LABELS" ]]; then
-      ISSUE_LABELS=$(gh issue view "$N" --json labels | jq -r '.labels[].name')
+      ISSUE_LABELS=""
+      ISSUE_LABELS=$(gh issue view "$N" --json labels | jq -r '.labels[].name') || {
+        # gh failure (network error, auth issue, etc.) — fall back to the safe
+        # default of RELEVANCE-REVIEW rather than exiting non-zero without a
+        # directive, which would leave the stop hook with a misleading reason.
+        echo "dispatch-route: gh issue view $N --json labels failed; defaulting to RELEVANCE-REVIEW" >&2
+        echo "RELEVANCE-REVIEW"
+        exit 0
+      }
       # Non-empty intersection of the issue's labels with the configured
       # statements labels → this is a parse-job issue.
       if [[ -n "$ISSUE_LABELS" ]] \

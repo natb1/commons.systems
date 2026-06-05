@@ -109,6 +109,13 @@ cmd_parse() {
     echo "parse-job-extract.sh parse: File value contains control characters" >&2
     exit 1
   fi
+  # Reject shell-glob metacharacters: the basename is fed to `find -name`, which
+  # treats * ? [ ] as a pattern, not a literal name. A poisoned body of `*.qfx`
+  # would otherwise glob-match an arbitrary statement file the issue never named.
+  if [[ "$file" == *"*"* || "$file" == *"?"* || "$file" == *"["* ]]; then
+    echo "parse-job-extract.sh parse: File value contains glob metacharacters (* ? [); a bare literal basename is required" >&2
+    exit 1
+  fi
   if [[ ! "$sha" =~ ^[0-9a-fA-F]{64}$ ]]; then
     echo "parse-job-extract.sh parse: sha256 value '$sha' is not a 64-hex-char digest" >&2
     exit 1
@@ -134,6 +141,12 @@ cmd_locate() {
     echo "parse-job-extract.sh locate: base '$base' must be a bare basename" >&2
     exit 1
   fi
+  # Defense-in-depth (locate is a separate entry point from parse): reject the
+  # same glob metacharacters so `find -name "$base"` cannot pattern-match.
+  if [[ "$base" == *"*"* || "$base" == *"?"* || "$base" == *"["* ]]; then
+    echo "parse-job-extract.sh locate: base contains glob metacharacters (* ? [); a bare literal basename is required" >&2
+    exit 1
+  fi
 
   # Recursive find by exact basename. -print0 + mapfile -d '' is whitespace- and
   # newline-safe. Regular files only.
@@ -145,10 +158,11 @@ cmd_locate() {
     exit 1
   fi
   if [[ "${#matches[@]}" -gt 1 ]]; then
-    {
-      echo "parse-job-extract.sh locate: ambiguous — ${#matches[@]} files named '$base' under '$dir':"
-      printf '  %s\n' "${matches[@]}"
-    } >&2
+    # The caller quotes this diagnostic into the office-hours escalation reason,
+    # which is posted as a public GitHub comment. Emit only the count and the
+    # basename (already public — it is in the issue body); never the absolute
+    # paths, which would leak the dispatch machine's filesystem layout.
+    echo "parse-job-extract.sh locate: ambiguous — ${#matches[@]} files named '$base' under the configured statements directory; a human must disambiguate" >&2
     exit 1
   fi
 
@@ -160,7 +174,11 @@ cmd_locate() {
   fi
   # Case-insensitive hex comparison.
   if [[ "${got,,}" != "${want,,}" ]]; then
-    echo "parse-job-extract.sh locate: sha256 mismatch for '$found': expected $want, got $got" >&2
+    # This diagnostic reaches a public office-hours comment via the caller's
+    # escalation reason. Report only the basename — never the absolute path nor
+    # the file's real on-disk hash ($got), which an issue-filer could otherwise
+    # learn by deliberately filing a wrong $want to probe the real digest.
+    echo "parse-job-extract.sh locate: sha256 mismatch for '$base' — the on-disk file no longer matches the hash filed in the issue; a human must reconcile" >&2
     exit 1
   fi
 
