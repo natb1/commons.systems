@@ -1,14 +1,14 @@
 import type { Plugin } from "vite";
 import { seedReminders } from "./seed-reminders.js";
 
-const VIRTUAL_MODULE_ID = "virtual:agenda-seed-data";
+const VIRTUAL_MODULE_ID = "virtual:office-hours-seed-data";
 const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
 
-export function agendaSeedDataPlugin(): Plugin {
+export function officeHoursSeedDataPlugin(): Plugin {
   let moduleCode: string;
 
   return {
-    name: "agenda-seed-data",
+    name: "office-hours-seed-data",
     buildStart() {
       moduleCode =
         `const seeds = ${JSON.stringify(seedReminders)};\n` +
