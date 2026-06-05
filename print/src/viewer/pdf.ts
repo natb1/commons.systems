@@ -19,6 +19,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
   let resizeObserver: ResizeObserver | null = null;
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   let renderTask: RenderTask | null = null;
+  let renderGen = 0;
   let destroyed = false;
   interface SpreadPage { renderTask: RenderTask; textLayer: TextLayer | null; }
   const spreadPages: SpreadPage[] = [];
@@ -133,12 +134,26 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       container: targetDiv,
       viewport: cssViewport,
     });
-    await tl.render();
+    try {
+      await tl.render();
+    } catch (e) {
+      // A superseding render cancelled this text layer — benign, mirrors the
+      // canvas RenderingCancelledException handling in renderPageToCanvas.
+      if ((e as Error).name !== "AbortException") throw e;
+      return null;
+    }
     return tl;
   }
 
   async function renderPage(pageNum: number): Promise<void> {
     if (!pdfDoc || !canvas || !container) return;
+
+    // Each render claims a generation token. A later renderPage call bumps the
+    // counter, marking any in-flight render stale; the stale render bails after
+    // its next await instead of clobbering the winner or surfacing a spurious
+    // "Navigation failed". This serializes concurrent renderPage calls — e.g. a
+    // ResizeObserver re-render racing a navigation tap.
+    const gen = ++renderGen;
 
     if (renderTask) {
       renderTask.cancel();
@@ -154,10 +169,19 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
 
     const result = await renderPageToCanvas(pageNum, canvas, containerRect, pageWrapper ?? undefined);
     if (!result) return;
+    if (gen !== renderGen) {
+      result.task.cancel();
+      return;
+    }
 
     renderTask = result.task;
     if (textLayerDiv) {
-      activeTextLayer = await renderTextLayer(result.page, result.cssViewport, textLayerDiv);
+      const tl = await renderTextLayer(result.page, result.cssViewport, textLayerDiv);
+      if (gen !== renderGen) {
+        tl?.cancel();
+        return;
+      }
+      activeTextLayer = tl;
     }
   }
 
