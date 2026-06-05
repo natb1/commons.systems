@@ -7147,6 +7147,81 @@ assert_eq "absent statements.json exits 0" "0" "$rc"
 assert_eq "absent statements.json prints no-config" "no-config" "$out"
 config_teardown
 
+# --- Test 7f: statements.json with valid string snapshot passes ---------------
+
+echo "Test: statements.json with string snapshot exits 0"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/statements.json" <<'EOF'
+{
+  "statements": [
+    {
+      "key": "mybank",
+      "dir": "/home/user/statements/mybank",
+      "repo": "test-owner/test-repo",
+      "label": "statements:mybank",
+      "project": "test-project",
+      "snapshot": "/home/user/statements/mybank/budget.benc"
+    }
+  ]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" statements 2>/dev/null); rc=$?
+assert_eq "snapshot string exits 0" "0" "$rc"
+stmt_snapshot=$(printf '%s' "$out" | jq -r '.statements[0].snapshot')
+assert_eq "snapshot value round-trips" "/home/user/statements/mybank/budget.benc" "$stmt_snapshot"
+config_teardown
+
+# --- Test 7g: statements.json with non-string snapshot exits 1 ---------------
+
+echo "Test: statements.json with non-string snapshot exits 1 and stderr mentions snapshot"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/statements.json" <<'EOF'
+{
+  "statements": [
+    {
+      "key": "mybank",
+      "dir": "/home/user/statements/mybank",
+      "repo": "test-owner/test-repo",
+      "label": "statements:mybank",
+      "project": "test-project",
+      "snapshot": 42
+    }
+  ]
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" statements 2>&1 1>/dev/null) || rc=$?
+assert_eq "snapshot non-string exits 1" "1" "$rc"
+if [[ "$err" == *"snapshot"* ]]; then
+  assert_eq "snapshot non-string stderr mentions snapshot" "yes" "yes"
+else
+  assert_eq "snapshot non-string stderr mentions snapshot" "yes" "no: $err"
+fi
+config_teardown
+
+# --- Test 7h: statements.json without snapshot field is still valid -----------
+
+echo "Test: statements.json without snapshot field exits 0 (back-compat)"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/statements.json" <<'EOF'
+{
+  "statements": [
+    {
+      "key": "mybank",
+      "dir": "/home/user/statements/mybank",
+      "repo": "test-owner/test-repo",
+      "label": "statements:mybank",
+      "project": "test-project"
+    }
+  ]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" statements 2>/dev/null); rc=$?
+assert_eq "absent snapshot exits 0" "0" "$rc"
+stmt_key=$(printf '%s' "$out" | jq -r '.statements[0].key')
+assert_eq "absent snapshot key round-trips" "mybank" "$stmt_key"
+config_teardown
+
 # --- Test 8: valid target-workers.json prints normalized JSON ---------------
 
 echo "Test: valid target-workers.json prints normalized JSON"

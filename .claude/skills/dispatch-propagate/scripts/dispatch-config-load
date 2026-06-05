@@ -114,6 +114,8 @@
 #               within window).
 #   extensions  array  — filename extensions to scan, e.g. ["qfx","ofx","csv",
 #               "pdf"]. When absent the scan script applies its own default set.
+#   snapshot    string — absolute path to the encrypted `.benc` snapshot that
+#               the parse-job handler reads and overwrites in place.
 #
 # Example (see statements.example.json):
 #   {
@@ -332,7 +334,7 @@ case "$CONFIG_TYPE" in
             empty
           end),
           # optional string fields — must be strings if present
-          (["debounce"] |
+          (["debounce","snapshot"] |
           .[] |
           . as $field |
           if ($item | has($field)) and ($item[$field] | type) != "string" then
