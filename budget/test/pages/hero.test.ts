@@ -16,30 +16,32 @@ describe("renderHero", () => {
     expect(html).toContain('href="https://commons.systems"');
   });
 
-  it("renders three chip buttons", () => {
+  it("renders a single chip button", () => {
     const matches = html.match(/class="hero-chip"/g);
-    expect(matches).toHaveLength(3);
+    expect(matches).toHaveLength(1);
   });
 
-  it("contains Easy, Medium, Hard badges", () => {
+  it("contains the Easy badge but not Medium or Hard", () => {
     expect(html).toContain("chip-badge--easy");
-    expect(html).toContain("chip-badge--medium");
-    expect(html).toContain("chip-badge--hard");
+    expect(html).not.toContain("chip-badge--medium");
+    expect(html).not.toContain("chip-badge--hard");
   });
 
-  it("chips reference their panels via data-panel", () => {
+  it("the single chip references its panel via data-panel", () => {
     expect(html).toContain('data-panel="panel-analyze"');
-    expect(html).toContain('data-panel="panel-parser"');
-    expect(html).toContain('data-panel="panel-host"');
+    expect(html).not.toContain("panel-parser");
+    expect(html).not.toContain("panel-host");
   });
 
   it("panels are hidden by default", () => {
     const panels = html.match(/class="hero-chip-panel"[^>]*hidden/g);
-    expect(panels).toHaveLength(3);
+    expect(panels).toHaveLength(1);
   });
 
-  it("contains inline chip button referencing parser panel", () => {
-    expect(html).toContain('data-opens="panel-parser"');
+  it("step 6 points to the parser flow as plain text, not an inline chip", () => {
+    expect(html).not.toContain("data-opens");
+    expect(html).toContain("/budget-parser");
+    expect(html).toContain('href="https://github.com/natb1/commons.systems/fork"');
   });
 
   it("renders a single FAQ details element with summary", () => {

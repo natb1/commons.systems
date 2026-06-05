@@ -3,6 +3,11 @@
 
 export FIREBASE_PROJECT_ID="commons-systems"
 
+# Default Tailscale SSH host for remote QA port-forwarding. Static by design:
+# the Remote access block must not shell out to `tailscale` at runtime (#963).
+# Override with QA_REMOTE_SSH_HOST when the host's tailnet name differs.
+QA_REMOTE_SSH_HOST="${QA_REMOTE_SSH_HOST:-nixos}"
+
 # Resolve the issue number from an argument or the current branch name.
 # Args: $1 = issue number (optional; derived from branch if omitted)
 # Output: prints the issue number to stdout
@@ -62,6 +67,99 @@ count_open_blockers() {
   local issue_num="$1"
   gh_api_array "/repos/{owner}/{repo}/issues/$issue_num/dependencies/blocked_by" \
     '[.[] | select(.state == "open" or .state == "OPEN")] | length'
+}
+
+# Classify a PR's statusCheckRollup into a CI verdict.
+# Args: $1 = the statusCheckRollup JSON array (e.g. `gh pr view --json
+#   statusCheckRollup | jq '.statusCheckRollup'`).
+# Output: prints exactly one of `failing` | `passing` | `pending` to stdout.
+#   failing — at least one check run/status context has concluded in a failing
+#             state (a concluded failure is actionable even while other checks
+#             are still running, so a mixed rollup resolves to `failing`).
+#   passing — every entry has concluded passing.
+#   pending — no verdict yet: empty rollup, in-progress checks, or any
+#             unrecognized non-terminal state.
+# This is the classification logic that dispatch-phase applies inline; it is
+# factored here so the readiness predicate can reuse it verbatim.
+dispatch_classify_rollup() {
+  local rollup="$1"
+  local rollup_len
+  rollup_len=$(printf '%s' "$rollup" | jq 'length')
+
+  # Empty rollup — checks not yet started, nothing actionable.
+  if [[ "$rollup_len" -eq 0 ]]; then
+    echo "pending"
+    return 0
+  fi
+
+  # Check for any failing entries first: a concluded failure is actionable even
+  # while other checks are still running, so a mixed rollup (some failing, some
+  # pending) resolves to failing, not pending.
+  local failing
+  failing=$(printf '%s' "$rollup" | jq '
+    map(
+      if has("conclusion") then
+        # Check run: failing conclusions
+        (.conclusion // "") as $c |
+        ($c == "FAILURE" or $c == "TIMED_OUT" or $c == "CANCELLED" or
+         $c == "ACTION_REQUIRED" or $c == "STARTUP_FAILURE" or $c == "STALE")
+      else
+        # Status context: failing states
+        (.state // "") as $s |
+        ($s == "FAILURE" or $s == "ERROR")
+      end
+    ) | any
+  ')
+
+  if [[ "$failing" == "true" ]]; then
+    echo "failing"
+    return 0
+  fi
+
+  # Check for any pending entries (check runs not yet COMPLETED, or status
+  # contexts with state PENDING/EXPECTED). No failures found above, so pending
+  # means checks are still running — nothing actionable yet.
+  local pending
+  pending=$(printf '%s' "$rollup" | jq '
+    map(
+      if has("conclusion") then
+        # Check run: pending if status != COMPLETED
+        .status != "COMPLETED"
+      else
+        # Status context: pending if state is PENDING or EXPECTED
+        (.state == "PENDING" or .state == "EXPECTED")
+      end
+    ) | any
+  ')
+
+  if [[ "$pending" == "true" ]]; then
+    echo "pending"
+    return 0
+  fi
+
+  # All entries are passing — check that all passing conditions hold.
+  # An entry passes if: check run with conclusion in {SUCCESS,NEUTRAL,SKIPPED},
+  # or status context with state SUCCESS.
+  local all_passing
+  all_passing=$(printf '%s' "$rollup" | jq '
+    map(
+      if has("conclusion") then
+        (.conclusion // "") as $c |
+        ($c == "SUCCESS" or $c == "NEUTRAL" or $c == "SKIPPED")
+      else
+        (.state // "") == "SUCCESS"
+      end
+    ) | all
+  ')
+
+  if [[ "$all_passing" != "true" ]]; then
+    # Non-empty rollup with no failures, no pending, but not all passing —
+    # unrecognized state, nothing actionable.
+    echo "pending"
+    return 0
+  fi
+
+  echo "passing"
 }
 
 # Detect what Firebase features the app uses.
@@ -143,6 +241,42 @@ resolve_project_root() {
   local common_dir
   common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
   dirname "$common_dir"
+}
+
+# Print the canonical dispatch selection-lock file path to stdout. An explicit
+# DISPATCH_LOCK_FILE is authoritative and bypasses the git lookup (tests rely on
+# this). Otherwise the lock lives at the shared project-root tmp/ (not a per-
+# worktree tmp/) so concurrent ticks in different worktrees contend on the same
+# file. Returns non-zero (no output) when DISPATCH_LOCK_FILE is unset AND
+# resolve_project_root fails (not in a git repo); the caller supplies its own
+# error message. Mirrors dispatch-acquire-lock's Step-1 logic so the tick (which
+# writes the headless liveness sentinel) and the lock script resolve the same
+# lock-file directory. See #1068.
+dispatch_lock_file() {
+  local project_root
+  if [[ -n "${DISPATCH_LOCK_FILE:-}" ]]; then
+    printf '%s\n' "$DISPATCH_LOCK_FILE"
+    return 0
+  fi
+  project_root=$(resolve_project_root) || return 1
+  printf '%s\n' "$project_root/tmp/dispatch.lock"
+}
+
+# headless_sentinel_path <holder-id> <lock-file> — print the PID-sentinel path
+# for a `headless:<token>` holder id to stdout. The sentinel lives alongside the
+# lock file (same directory) so a concurrent tick in any worktree resolves the
+# same path. The filename is `dispatch-tick-<slug>.live`, where <slug> is the
+# token (everything after the `headless:` prefix) with every character outside
+# `[0-9A-Za-z._-]` replaced by `_`. Slugging is defense-in-depth (#1068): a
+# polluted INVOCATION_ID cannot escape the lock-file directory via path
+# separators. Fed via `printf '%s'` (no trailing newline) so `tr -c` appends no
+# spurious trailing `_`.
+headless_sentinel_path() {
+  local holder="$1" lock_file="$2" token slug dir
+  token="${holder#headless:}"
+  slug="$(printf '%s' "$token" | tr -c '0-9A-Za-z._-' '_')"
+  dir="$(dirname "$lock_file")"
+  printf '%s\n' "$dir/dispatch-tick-${slug}.live"
 }
 
 # Return the project ID for Firebase emulators.
@@ -564,4 +698,129 @@ find_available_ports() {
 # Find a single available TCP port (convenience wrapper).
 find_available_port() {
   find_available_ports 1
+}
+
+# Print the Remote access block for QA-server startup: the universal localhost
+# URL plus a copy-paste `ssh -L` command forwarding the Vite port and every
+# allocated emulator port to a remote client's localhost, so the served origin
+# stays http://localhost:<vite>/ on every machine.
+# Args: $1 = vite port; $2.. = emulator ports (may be empty)
+print_remote_access_block() {
+  local vite_port="$1"; shift
+  local ssh_cmd="ssh -L ${vite_port}:localhost:${vite_port}"
+  local p
+  for p in "$@"; do
+    ssh_cmd+=" -L ${p}:localhost:${p}"
+  done
+  ssh_cmd+=" ${QA_REMOTE_SSH_HOST}"
+  echo "========================================"
+  echo "  Remote access (Tailscale tunnel)"
+  echo "========================================"
+  echo ""
+  echo "  The QA server runs on the WSL host. The URL below is the same on"
+  echo "  every machine. On the same host, just open it. From a remote tailnet"
+  echo "  client, run the ssh command first to forward the ports, then open it."
+  echo ""
+  echo "  URL:  http://localhost:${vite_port}/"
+  echo ""
+  echo "  Remote client (run before opening the URL):"
+  echo ""
+  echo "    ${ssh_cmd}"
+  echo ""
+  echo "========================================"
+  echo ""
+}
+
+# Install the static `dispatch-tick-recover.service` unit file so the tick and
+# reseed launchers can attach `OnFailure=dispatch-tick-recover.service`.
+# OnFailure= references a LOADABLE unit file, not a script — and dispatch
+# otherwise uses only transient `systemd-run` units, so no such file exists
+# until we write one. This helper writes it idempotently.
+#
+# Best-effort: a failure here must not abort the caller (a tick/reseed
+# launcher), so we warn to stderr and return non-zero — never `exit`. A missing
+# recover unit just means a crashing tick falls back to the prior behavior.
+# Args: $1 = main worktree path
+ensure_recover_unit() {
+  local main_worktree="$1"
+
+  # A systemd unit file is line-structured: each line is an independent
+  # directive. An embedded newline in any value we interpolate below would land
+  # as an attacker-controlled extra directive in the [Service] section. The
+  # main worktree path comes from git output or a test override and never
+  # legitimately contains a newline; reject it rather than emit a malformed
+  # unit (best-effort: warn + return per this helper's contract — never exit).
+  if [[ "$main_worktree" == *$'\n'* ]]; then
+    echo "WARNING: ensure_recover_unit: main worktree path contains a newline; refusing to write unit; OnFailure recovery unavailable" >&2
+    return 1
+  fi
+
+  local RECOVER_SCRIPT="$main_worktree/.claude/skills/dispatch-propagate/scripts/dispatch-tick-recover"
+  local UNIT_DIR="${DISPATCH_RECOVER_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
+  local UNIT_PATH="$UNIT_DIR/dispatch-tick-recover.service"
+  local SYSTEMCTL_CMD="${DISPATCH_RECOVER_SYSTEMCTL_CMD:-systemctl}"
+
+  # Strip any stray newline from the captured PATH for the same line-structure
+  # reason; a newline in PATH is a broken environment, not a value we should
+  # propagate into a unit directive.
+  local safe_path="${PATH//$'\n'/}"
+
+  # Environment=PATH=... captures the launching caller's PATH at write time,
+  # for the same reason dispatch-spawn-tick passes --setenv=PATH: the systemd
+  # user manager's minimal default PATH omits the nix store, so on NixOS/WSL
+  # hosts /usr/bin/env can't resolve bash and the recover script can't find
+  # git/jq/claude. The caller carries the full nix-store PATH, so baking it into
+  # the unit at write time makes the unit self-sufficient.
+  #
+  # The path-bearing directives are double-quoted: systemd unescapes C-style
+  # quotes, so a path containing spaces is parsed as a single token rather than
+  # split into an executable + spurious arguments.
+  #
+  # Deliberately NO OnFailure= on this unit — the recover handler must not chain
+  # to itself, or a failing recovery would recurse.
+  local desired
+  desired=$(cat <<EOF
+[Unit]
+Description=Dispatch chain continuation recovery (OnFailure handler)
+
+[Service]
+Type=oneshot
+Environment="PATH=$safe_path"
+ExecStart="$RECOVER_SCRIPT"
+WorkingDirectory="$main_worktree"
+EOF
+)
+
+  # Steady-state hot path: if the installed unit already matches byte-for-byte,
+  # skip the write and the daemon-reload entirely (a single content compare).
+  if [ -f "$UNIT_PATH" ] && [ "$(cat "$UNIT_PATH")" = "$desired" ]; then
+    return 0
+  fi
+
+  if ! mkdir -p "$UNIT_DIR"; then
+    echo "WARNING: ensure_recover_unit: mkdir -p $UNIT_DIR failed; OnFailure recovery unavailable" >&2
+    return 1
+  fi
+
+  # Write atomically: temp file in the same dir, then mv into place.
+  local tmp
+  tmp=$(mktemp "$UNIT_DIR/.dispatch-tick-recover.service.XXXXXX") || {
+    echo "WARNING: ensure_recover_unit: could not create temp file in $UNIT_DIR; OnFailure recovery unavailable" >&2
+    return 1
+  }
+  if ! printf '%s\n' "$desired" > "$tmp"; then
+    echo "WARNING: ensure_recover_unit: failed to write $tmp; OnFailure recovery unavailable" >&2
+    rm -f "$tmp"
+    return 1
+  fi
+  if ! mv "$tmp" "$UNIT_PATH"; then
+    echo "WARNING: ensure_recover_unit: failed to install $UNIT_PATH; OnFailure recovery unavailable" >&2
+    rm -f "$tmp"
+    return 1
+  fi
+
+  if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
+    echo "WARNING: ensure_recover_unit: systemctl --user daemon-reload failed; OnFailure recovery may be stale" >&2
+    return 1
+  fi
 }

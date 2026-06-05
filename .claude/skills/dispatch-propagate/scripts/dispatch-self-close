@@ -12,26 +12,114 @@
 # doubles as the foreground-safe gate: an interactive session reaching this
 # script is a no-op — the user's live conversation is not deleted.
 #
+# Continuation invariant (#1010):
+#   /dispatch-propagate is a self-perpetuating chain carried forward only by
+#   (1) a worker's Stop hook (dispatch-stop.sh → spawn_router) or (2) a
+#   `dispatch-reseed*` systemd timer. A ROUTER's own self-close carries
+#   nothing — the Stop hook is a no-op for router sessions (their name does
+#   not match `^[0-9]+-`). Several terminal `drain` dispositions route through
+#   this script having spawned no worker and scheduled no reseed, so the chain
+#   could silently die with work still queued (e.g. when the only live worker
+#   is parked on `dispatch:office-hours` and never fires its Stop hook).
+#
+#   To make that structurally impossible, a ROUTER tick may self-close only
+#   if it leaves a continuation:
+#     - a pending `dispatch-reseed*` systemd timer (armed / waiting), OR
+#     - >=1 live BUSY worker (`claude_agents_count_busy_workers` >= 1 —
+#       "busy" is precisely "actively progressing, not parked on office-hours",
+#       since office-hours-parked workers are waiting/idle, never busy).
+#   Otherwise the router PARKS: it stays alive (does NOT call `claude rm`) and
+#   emits a one-line reason, so the stall is visible and resumable by
+#   office-hours.
+#
+#   The invariant is gated to ROUTER sessions only (state.json `.name` matches
+#   `dispatch-*`). It is intentionally NOT applied to:
+#     - workers (name `^[0-9]+-`): the worker Stop-hook self-close always calls
+#       `spawn_router` first, so it already leaves a continuation.
+#     - empty/missing name, or absent state.json: legacy / non-router callers
+#       (dispatch-handoff, the interactive gate, plain managed jobs) keep their
+#       existing unconditional behavior, which also keeps existing tests green.
+#
 # Behavior:
-#   $CLAUDE_JOB_DIR set    → `claude rm $(basename "$CLAUDE_JOB_DIR")`,
-#                            exit with that command's status.
-#   $CLAUDE_JOB_DIR unset  → diagnostic to stderr, exit 0 (no-op).
+#   $CLAUDE_JOB_DIR unset           → diagnostic to stderr, exit 0 (no-op).
+#   $CLAUDE_JOB_DIR set, non-router → `claude rm $(basename "$CLAUDE_JOB_DIR")`.
+#   $CLAUDE_JOB_DIR set, router with continuation → `claude rm ...` (self-close).
+#   $CLAUDE_JOB_DIR set, router with NO continuation → park: print reason, exit 0
+#                                                      WITHOUT `claude rm`.
 #
-# Environment override for testability (mirroring dispatch-spawn-router's
-# DISPATCH_SPAWN_ROUTER_CLAUDE_CMD):
-#   DISPATCH_SELF_CLOSE_CLAUDE_CMD  The `claude` command. Default: `claude`.
+# Environment overrides for testability (mirroring dispatch-spawn-worker's
+# DISPATCH_SPAWN_WORKER_CLAUDE_CMD):
+#   DISPATCH_SELF_CLOSE_CLAUDE_CMD     The `claude` command. Default: `claude`.
+#   DISPATCH_SELF_CLOSE_SYSTEMCTL_CMD  The `systemctl` command used to probe for
+#                                      a pending `dispatch-reseed*` timer.
+#                                      Default: `systemctl`.
+#   CLAUDE_AGENTS_CMD                  Honored by the sourced lib-claude-agents.sh
+#                                      for its `claude agents --json` query.
 #
-# Sandbox: `claude rm` reaches the local Claude daemon over a Unix socket;
-# callers must invoke this script with `dangerouslyDisableSandbox: true` —
-# see `.claude/rules/sandbox.md § claude agents --json`.
+# Sandbox: `claude rm` and `claude agents --json` reach the local Claude daemon
+# over a Unix socket; callers must invoke this script with
+# `dangerouslyDisableSandbox: true` — see
+# `.claude/rules/sandbox.md § claude agents --json`.
 set -uo pipefail
 
 CLAUDE_CMD="${DISPATCH_SELF_CLOSE_CLAUDE_CMD:-claude}"
+SYSTEMCTL="${DISPATCH_SELF_CLOSE_SYSTEMCTL_CMD:-systemctl}"
 JOB_ID=$(basename "${CLAUDE_JOB_DIR:-}")
 
 if [[ -z "$JOB_ID" || "$JOB_ID" == "." ]]; then
   echo "dispatch-self-close: not a managed background job (CLAUDE_JOB_DIR unset); skipping self-close" >&2
   exit 0
+fi
+
+# Read this session's name from its job state. A missing file, missing jq, or a
+# missing `.name` all collapse to an empty name — which falls through to the
+# legacy unconditional self-close path below.
+STATE_JSON="$CLAUDE_JOB_DIR/state.json"
+SESSION_NAME=""
+if [[ -f "$STATE_JSON" ]]; then
+  SESSION_NAME=$(jq -r '.name // ""' "$STATE_JSON" 2>/dev/null) || SESSION_NAME=""
+fi
+
+# Continuation invariant applies only to ROUTER sessions (name `dispatch-*`).
+# Everything else — workers (`^[0-9]+-`), empty/missing name — self-closes
+# unconditionally as before.
+if [[ "$SESSION_NAME" == dispatch-* ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+  continuation=0
+
+  # Continuation 1: a pending `dispatch-reseed*` systemd timer. Treat as present
+  # iff an armed (sub-state `waiting`) reseed timer line is reported. A permissive
+  # grep tolerates systemctl's column formatting across versions.
+  if "$SYSTEMCTL" --user list-units --type=timer --all --no-legend 'dispatch-reseed*' 2>/dev/null \
+      | grep -E 'dispatch-reseed' | grep -q 'waiting'; then
+    continuation=1
+  fi
+
+  # Continuation 2: >=1 live BUSY worker. A "busy" worker is actively
+  # progressing (not parked on office-hours), so its Stop hook will eventually
+  # re-seed the chain. CRITICAL fail-safe: if the helper returns non-zero
+  # (UNKNOWN — daemon unqueryable), fail toward SELF-CLOSE (treat continuation
+  # as present). A spurious park is noisy and wedges routing; the invariant only
+  # needs to catch the *definite* no-continuation case, so when the daemon
+  # cannot be queried we let the tick self-close as it did before #1010.
+  if [[ "$continuation" -eq 0 ]]; then
+    if busy_count=$(claude_agents_count_busy_workers); then
+      [[ "$busy_count" -ge 1 ]] && continuation=1
+    else
+      # UNKNOWN: daemon unqueryable → fail safe toward self-close.
+      continuation=1
+    fi
+  fi
+
+  if [[ "$continuation" -eq 0 ]]; then
+    msg="dispatch-self-close: parking — no continuation (no worker spawned, no pending reseed timer, no live busy worker); router stays alive for office-hours resume"
+    echo "$msg"
+    echo "$msg" >&2
+    exit 0
+  fi
 fi
 
 exec "$CLAUDE_CMD" rm "$JOB_ID"

@@ -6,8 +6,7 @@ description: QA phase — merge origin/main, run the autonomous portion of user-
 # QA and Fix
 
 The `qa` phase of the issue workflow, dispatched by `/dispatch-propagate`. This is
-the **autonomous** half of user-acceptance QA — sibling to `/code-review-fix`,
-`/review-fix`, and `/security-review-fix`.
+the **autonomous** half of user-acceptance QA — sibling to `/review-fix`.
 
 QA was historically a single user-triggered skill (`/dispatch-qa`) that bundled
 two responsibilities: the autonomous part (select target, plan items, run
@@ -242,19 +241,15 @@ Otherwise run all steps in order.
    `<issue>-…` branch issue number — the PR↔issue linkage was established earlier
    in the tick, so this session must **not** pause to re-confirm the mismatch.
    This skill **owns** its `dispatch:qa-done` label — parallel to how
-   `/code-review-fix` owns `dispatch:code-reviewed` — so `/dispatch-propagate`
+   `/review-fix` owns `dispatch:reviewed` — so `/dispatch-propagate`
    does not apply the label after this skill returns.
 
-   Then write the `phase-completed` marker as the final action. Atomic via
-   tempfile + mv. `CLAUDE_JOB_DIR` unset = interactive run; skip.
+   Then call `dispatch-mark-complete` as the final action. `CLAUDE_JOB_DIR`
+   unset = interactive run; the script no-ops with a clear diagnostic.
 
    ```bash
-   if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-     printf 'phase=qa\npr=%s\n' "$PR_NUM" \
-       > "$CLAUDE_JOB_DIR/phase-completed.tmp"
-     mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
-        "$CLAUDE_JOB_DIR/phase-completed"
-   fi
+   .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
+     --phase qa --pr "$PR_NUM"
    ```
 
    Then **stop**. The Stop hook reads the marker and advances the chain.
@@ -274,18 +269,15 @@ Otherwise run all steps in order.
 ## Escalation
 
 On a user-input blocker, do **not** write the `phase-completed` marker. Instead
-write a one-line reason so the Stop hook can surface it in the office-hours
-comment. The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads marker-absence as
-Branch A and applies `dispatch:office-hours` to the **issue**, parking it for the
-office-hours queue (`/office-hours` runs the user-input residue).
+call `dispatch-mark-deviation` so the Stop hook can surface the reason in the
+office-hours comment. The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads
+marker-absence as Branch A and applies `dispatch:office-hours` to the **issue**,
+parking it for the office-hours queue (`/office-hours` runs the user-input
+residue).
 
 ```bash
-if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-  printf '%s\n' "/qa-fix: QA needs a human (judgment item, bug, or failed pre-QA check); escalating to office-hours" \
-    > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
-  mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" \
-     "$CLAUDE_JOB_DIR/office-hours-reason"
-fi
+.claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+  "/qa-fix: QA needs a human (judgment item, bug, or failed pre-QA check); escalating to office-hours"
 ```
 
 Tailor the reason text to the blocker that actually fired (judgment item, machine

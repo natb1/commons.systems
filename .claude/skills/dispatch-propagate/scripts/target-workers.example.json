@@ -4,9 +4,8 @@
   "weekly_increment_floor_pct": 1,
   "weekly_increment_cap_pct": 10,
   "weekly_curve_power": 1,
-  "weekly_headroom_taper_pct": 20,
   "five_hour_target_floor_pct": 50,
   "five_hour_target_ceiling_pct": 80,
-  "five_hour_headroom_taper_pct": 15,
-  "max_concurrent_workers": 8
+  "max_concurrent_workers": 8,
+  "exhaustion_threshold_pct": 98
 }
