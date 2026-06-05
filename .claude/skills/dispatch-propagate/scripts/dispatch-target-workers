@@ -28,6 +28,9 @@
 #   dispatch-target-workers --reopen-at  reopen mode: print the earliest epoch
 #                                        at which the worker target next becomes
 #                                        >= 1, or `none`.
+#   dispatch-target-workers --exhausted  exhausted mode: print `exhausted` when
+#                                        the weekly OR 5-hour window is genuinely
+#                                        out of tokens, else `ok`.
 #
 # Stdout protocol:
 #   count mode (default):
@@ -38,9 +41,23 @@
 #     none        when the pace curve is not the blocker (target already >= 1,
 #                 or the 0 comes from an absolute cap / transient 5h fill rather
 #                 than a pace-curve pause), or the weekly anchor is absent.
+#   exhausted mode (--exhausted):
+#     exhausted   the weekly OR 5-hour window is GENUINELY out of tokens — its
+#                 used_% is at/near 100 (>= exhaustion_threshold_pct) with
+#                 resets_at still in the future. A hard stop even for
+#                 priority/main-broken work.
+#     ok          otherwise, INCLUDING missing/unreadable/invalid telemetry.
+#                 Exhausted mode fails OPEN: unknown usage is not genuine
+#                 exhaustion, so priority work is never suppressed on absent
+#                 data — the OPPOSITE posture from count mode's fallback-to-1.
+#                 This mode reads telemetry directly and never runs the
+#                 pace/ramp math, so "paced to 0" (a self-imposed throttle
+#                 priority work overrides) is reported as `ok`, distinct from
+#                 genuine `exhausted`.
 #
 # Exit codes:
-#   0  the script prints a number (count mode) or epoch/`none` (reopen mode).
+#   0  the script prints a number (count mode), epoch/`none` (reopen mode), or
+#      `exhausted`/`ok` (exhausted mode).
 #   2  unrecognized mode argument.
 #
 # Inputs (env-var overrides for tests; otherwise read from telemetry/config):
@@ -76,6 +93,13 @@
 #   five_hour_target_ceiling_pct   default 80   used_5h % at/above which workers
 #                                               are zero
 #   max_concurrent_workers         default 8
+#   exhaustion_threshold_pct       default 98   used_% (either window) at/near
+#                                               100 treated as genuine token
+#                                               exhaustion (--exhausted mode);
+#                                               above the 5h ramp's 80% zero-
+#                                               point so the 80→98 band stays a
+#                                               priority override, not a hard
+#                                               stop
 #
 # ---- The algorithm ----------------------------------------------------------
 #
@@ -155,8 +179,9 @@ MODE="count"
 case "${1:-}" in
   "")           MODE="count" ;;
   --reopen-at)  MODE="reopen" ;;
+  --exhausted)  MODE="exhausted" ;;
   *)
-    echo "dispatch-target-workers: unrecognized argument '$1' (expected --reopen-at or none)" >&2
+    echo "dispatch-target-workers: unrecognized argument '$1' (expected --reopen-at, --exhausted, or none)" >&2
     exit 2
     ;;
 esac
@@ -171,6 +196,7 @@ WEEKLY_CURVE_POWER=1
 FIVEH_TARGET_FLOOR=50
 FIVEH_TARGET_CEILING=80
 MAX_WORKERS=8
+EXHAUSTION_THRESHOLD=98
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -204,6 +230,8 @@ if [[ -n "$CONFIG_JSON" ]]; then
   [[ -n "$val" ]] && FIVEH_TARGET_CEILING="$val"
   val=$(jq -r '.max_concurrent_workers // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && MAX_WORKERS="$val"
+  val=$(jq -r '.exhaustion_threshold_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && EXHAUSTION_THRESHOLD="$val"
 fi
 
 # ---- Step 1: load telemetry -------------------------------------------------
@@ -278,6 +306,54 @@ fi
 if [[ -n "$WEEKLY_RESETS" && ! "$WEEKLY_RESETS" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
   echo "dispatch-target-workers: WEEKLY_RESETS has non-numeric value '$WEEKLY_RESETS'; treating as missing" >&2
   WEEKLY_RESETS=""
+fi
+
+# ---- Exhausted mode: telemetry-only genuine-exhaustion query ----------------
+#
+# Exhausted mode answers a different question from the pace/ramp math: is a
+# window GENUINELY out of tokens (used_% at/near 100 with a reset still in the
+# future), as opposed to merely PACED to zero by the self-imposed weekly gate or
+# 5h ramp? Priority/main-broken dispatch overrides a paced-zero but must still
+# hard-stop on genuine exhaustion. It is computed directly from telemetry,
+# independent of the curve.
+#
+# Fail open: missing/unreadable/invalid telemetry → `ok`. Unknown is not genuine
+# exhaustion, so priority work is never suppressed on absent data — the OPPOSITE
+# posture from count mode's fallback-to-1. A window is exhausted iff
+# used_% >= EXHAUSTION_THRESHOLD AND resets_at > now; print `exhausted` if EITHER
+# window is, else `ok`.
+if [[ "$MODE" == "exhausted" ]]; then
+  # FIVEH_RESETS is not sanitized above (count/reopen never read the 5h reset),
+  # so sanitize it here as count mode sanitizes WEEKLY_RESETS: a malformed value
+  # drops the 5h reset → that window cannot be "exhausted" (fail open).
+  if [[ -n "$FIVEH_RESETS" && ! "$FIVEH_RESETS" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    echo "dispatch-target-workers: FIVEH_RESETS has non-numeric value '$FIVEH_RESETS'; treating as missing" >&2
+    FIVEH_RESETS=""
+  fi
+  # A missing/invalid NOW means we cannot compare resets_at to the present →
+  # fail open (`ok`). awk coerces an empty -v to 0, so guard on NOW != "".
+  if [[ -z "$NOW" ]]; then
+    echo ok
+    exit 0
+  fi
+  awk -v now="$NOW" \
+      -v used_weekly="$WEEKLY_USED" -v resets_weekly="$WEEKLY_RESETS" \
+      -v used_5h="$FIVEH_USED" -v resets_5h="$FIVEH_RESETS" \
+      -v threshold="$EXHAUSTION_THRESHOLD" \
+      'function exhausted(used, resets) {
+         # A window is genuinely exhausted only when its usage is at/near 100
+         # AND the reset is still in the future. Empty used/resets → not
+         # exhausted (fail open: a non-numeric stays empty and is skipped here,
+         # never coerced to a usage of 0 that could read as "exhausted").
+         if (used == "" || resets == "") return 0
+         return ((used + 0) >= (threshold + 0) && (resets + 0) > (now + 0))
+       }
+       BEGIN {
+         ex = (exhausted(used_weekly, resets_weekly) \
+               || exhausted(used_5h, resets_5h))
+         print (ex ? "exhausted" : "ok")
+       }'
+  exit 0
 fi
 
 # The weekly anchor requires BOTH used_weekly AND resets_at_weekly AND a valid
