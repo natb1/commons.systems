@@ -5,7 +5,7 @@
   "targets": {
     "commons-systems": {
       "hosting": {
-        "agenda": [
+        "office-hours": [
           "cs-agenda-7b2e"
         ],
         "audio": [

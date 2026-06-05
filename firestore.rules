@@ -446,10 +446,10 @@ service cloud.firestore {
         && request.auth.token.email in resource.data.memberEmails;
     }
 
-    // Agenda reminders are the synced JIT queue, scoped to the owner via a
+    // Office Hours reminders are the synced JIT queue, scoped to the owner via a
     // denormalized `memberEmails` field. Client writes are denied; only the
-    // Admin-SDK sync Function (functions/src/agenda-sync.ts) writes here.
-    match /agenda/{env}/items/{itemId} {
+    // Admin-SDK sync Function (functions/src/office-hours-sync.ts) writes here.
+    match /office-hours/{env}/items/{itemId} {
       allow read: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails;
       allow write: if false;

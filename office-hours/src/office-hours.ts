@@ -1,4 +1,4 @@
-export function renderAgenda(): HTMLElement {
+export function renderOfficeHours(): HTMLElement {
   const section = document.createElement("section");
 
   const list = document.createElement("ul");
