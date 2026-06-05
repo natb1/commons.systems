@@ -1,7 +1,7 @@
 import "missing.css";
-import { renderAgenda } from "./agenda.js";
+import { renderOfficeHours } from "./office-hours.js";
 
 const app = document.querySelector("#app");
 if (!app) throw new Error("#app element not found");
 
-app.appendChild(renderAgenda());
+app.appendChild(renderOfficeHours());
