@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFsaHandleStore } from "../src/fsa-handle-store";
 
 // idbutil's connection closeDb references reportError; not every test env
@@ -77,6 +77,26 @@ describe("createFsaHandleStore persistence", () => {
   it("rejects an empty app namespace", () => {
     expect(() => createFsaHandleStore({ app: "" })).toThrow(/app/);
   });
+
+  it("rejects an app namespace containing a colon", () => {
+    expect(() => createFsaHandleStore({ app: "a:b" })).toThrow(/app/);
+  });
+
+  it("rejects a purpose containing a colon", async () => {
+    const store = createFsaHandleStore({ app: "print", dbName: uniqueDbName() });
+    await expect(
+      store.get("a:b"),
+    ).rejects.toThrow(/purpose/);
+  });
+
+  it("rejects a malformed (non-handle) persisted value", async () => {
+    const dbName = uniqueDbName();
+    const writer = createFsaHandleStore({ app: "print", dbName });
+    // Simulate a tampered store entry: a value that is not a handle shape.
+    await writer.put("library", { junk: true } as unknown as FileSystemHandle);
+    const reader = createFsaHandleStore({ app: "print", dbName });
+    await expect(reader.get("library")).rejects.toThrow(/malformed/);
+  });
 });
 
 describe("permission flow", () => {
@@ -131,5 +151,32 @@ describe("permission flow", () => {
   it("load returns null when no handle is persisted", async () => {
     const store = createFsaHandleStore({ app: "print", dbName: uniqueDbName() });
     expect(await store.load("missing")).toBeNull();
+  });
+});
+
+describe("isSupported", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("reflects live window state — false when pickers are absent", () => {
+    vi.stubGlobal("window", {});
+    const store = createFsaHandleStore({ app: "print", dbName: uniqueDbName() });
+    expect(store.isSupported()).toBe(false);
+  });
+
+  it("reflects live window state — true when showOpenFilePicker is present", () => {
+    vi.stubGlobal("window", { showOpenFilePicker: () => {} });
+    const store = createFsaHandleStore({ app: "print", dbName: uniqueDbName() });
+    expect(store.isSupported()).toBe(true);
+  });
+
+  it("returns updated result after window gains FSA support (dynamic probe)", () => {
+    vi.stubGlobal("window", {});
+    const store = createFsaHandleStore({ app: "print", dbName: uniqueDbName() });
+    expect(store.isSupported()).toBe(false);
+    // Simulate FSA becoming available (e.g., SSR→hydration transition).
+    vi.stubGlobal("window", { showOpenFilePicker: () => {} });
+    expect(store.isSupported()).toBe(true);
   });
 });

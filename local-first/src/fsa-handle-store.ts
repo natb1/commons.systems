@@ -1,5 +1,5 @@
 import { createDbConnection } from "@commons-systems/idbutil/connection";
-import { detectFsaCapabilities, type FsaCapabilities } from "./capabilities.js";
+import { detectFsaCapabilities, isFsaSupported, type FsaCapabilities } from "./capabilities.js";
 
 const HANDLE_STORE = "handles";
 const DEFAULT_DB_NAME = "fsa-handle-store";
@@ -54,6 +54,12 @@ export interface FsaHandleStore {
    * Load the persisted handle for (app, purpose) and resolve its permission.
    * Returns null when no handle is persisted. `permission` reflects the
    * post-`ensurePermission` state.
+   *
+   * Because this calls `ensurePermission`, which issues a permission request
+   * when the handle is in the `prompt` state, call `load` from within a user
+   * gesture. Outside a gesture the browser silently denies the request and
+   * `permission` resolves to `denied`; a non-null return therefore does not
+   * imply the handle is usable — check `permission === "granted"` before I/O.
    */
   load(
     purpose: string,
@@ -66,6 +72,9 @@ export function createFsaHandleStore(
 ): FsaHandleStore {
   if (!config.app) {
     throw new Error("FsaHandleStoreConfig.app must be a non-empty string");
+  }
+  if (config.app.includes(":")) {
+    throw new Error('FsaHandleStoreConfig.app must not contain ":"');
   }
   const capabilities = detectFsaCapabilities();
   const conn = createDbConnection({
@@ -81,6 +90,9 @@ export function createFsaHandleStore(
   const keyFor = (purpose: string): string => {
     if (!purpose) {
       throw new Error("purpose must be a non-empty string");
+    }
+    if (purpose.includes(":")) {
+      throw new Error('purpose must not contain ":"');
     }
     return `${config.app}:${purpose}`;
   };
@@ -106,8 +118,29 @@ export function createFsaHandleStore(
     return new Promise<FileSystemHandle | null>((resolve, reject) => {
       const tx = db.transaction(HANDLE_STORE, "readonly");
       const req = tx.objectStore(HANDLE_STORE).get(key);
-      req.onsuccess = () => resolve((req.result as FileSystemHandle) ?? null);
+      req.onsuccess = () => {
+        const result = req.result as unknown;
+        if (result === undefined || result === null) {
+          resolve(null);
+          return;
+        }
+        if (
+          typeof result !== "object" ||
+          ((result as { kind?: unknown }).kind !== "file" &&
+            (result as { kind?: unknown }).kind !== "directory")
+        ) {
+          reject(
+            new Error(
+              "Persisted FSA handle is malformed (expected a FileSystemHandle); the IndexedDB store may be corrupted or tampered with",
+            ),
+          );
+          return;
+        }
+        resolve(result as FileSystemHandle);
+      };
       req.onerror = () => reject(req.error);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
     });
   }
 
@@ -161,8 +194,7 @@ export function createFsaHandleStore(
 
   return {
     capabilities,
-    isSupported: () =>
-      capabilities.filePicker || capabilities.directoryPicker,
+    isSupported: isFsaSupported,
     put,
     get,
     remove,
