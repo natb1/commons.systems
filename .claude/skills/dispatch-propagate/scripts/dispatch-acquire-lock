@@ -35,6 +35,20 @@
 #     the lock is never stolen from a possibly-held foreign holder when the
 #     daemon cannot be queried.
 #
+# Headless holders bypass the registry (#1068). The systemd-launched dispatch-
+# tick has no real Claude session, so it synthesizes a `headless:<token>` holder
+# id (token = INVOCATION_ID or PID) — a bash string that never appears in
+# `claude agents --json`. Resolving its liveness through that registry would
+# always classify it dead, letting a concurrent tick steal a LIVE headless
+# holder's lock mid-selection (the duplicate-spawn defect of #1068). Instead the
+# tick writes a PID sentinel — `<lock-file dir>/dispatch-tick-<slug>.live`
+# containing its own PID — for the tick's lifetime, and resolve_holder_state
+# treats a `headless:*` holder as live iff that sentinel exists AND its recorded
+# PID is still alive (`kill -0`). PID-in-sentinel (not bare existence) keeps the
+# self-healing reclaim: a SIGKILL leaves a stale sentinel whose PID is gone, so
+# the next tick reads it dead and reclaims. The sentinel sits in the lock file's
+# own directory, so a concurrent tick in any worktree resolves the same path.
+#
 # Release is implicit and self-healing: when the session ends its sessionId
 # stops appearing in `claude agents --json`, so the next tick's read-check-
 # write reclaims the lock automatically. `--release` is an explicit optional
@@ -153,6 +167,23 @@ WAIT_INTERVAL="${DISPATCH_LOCK_WAIT_INTERVAL:-5}"
 # exit client, but the cost of defending against a future fork is one redir.
 resolve_holder_state() {
   local sid="$1" out rows match
+  # Headless holders (the systemd-launched dispatch-tick's synthetic
+  # `headless:<token>` id) never appear in the `claude agents --json` registry —
+  # it tracks model sessions, not bash processes. Resolve their liveness through
+  # the PID sentinel the tick writes alongside the lock file (#1068): live iff
+  # the sentinel exists AND its recorded PID is still alive. A SIGKILL leaves a
+  # stale sentinel whose PID is gone, so it resolves DEAD and the lock self-heals.
+  # No cwd is emitted (matches the live-with-empty-cwd convention — marker check
+  # stays strict), and the daemon is never queried for these ids.
+  if [[ "$sid" == headless:* ]]; then
+    local sentinel pid=""
+    sentinel=$(headless_sentinel_path "$sid" "$LOCK_FILE")
+    [[ -f "$sentinel" ]] || return 1
+    IFS= read -r pid <"$sentinel" 2>/dev/null || true
+    [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    return 0
+  fi
   if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json 2>/dev/null 9>&-); then
     return 0
   fi
@@ -200,18 +231,13 @@ marker_names_holder() {
 }
 
 # ---- Step 1: resolve the lock file ------------------------------------------
-# An explicit DISPATCH_LOCK_FILE is authoritative and bypasses the git lookup —
-# tests rely on this. Otherwise the lock lives at the shared project-root tmp/
-# (not a per-worktree tmp/) so concurrent ticks in different worktrees contend
-# on the same file. resolve_project_root (lib.sh) returns the project root in
-# both classic (.git) and bare (.bare) layouts.
-if [[ -n "${DISPATCH_LOCK_FILE:-}" ]]; then
-  LOCK_FILE="$DISPATCH_LOCK_FILE"
-else
-  PROJECT_ROOT=$(resolve_project_root) \
-    || { echo "ERROR: not in a git repo and DISPATCH_LOCK_FILE is unset" >&2; exit 2; }
-  LOCK_FILE="$PROJECT_ROOT/tmp/dispatch.lock"
-fi
+# dispatch_lock_file (lib.sh) honors an explicit DISPATCH_LOCK_FILE (tests rely
+# on this) and otherwise resolves the shared project-root tmp/dispatch.lock (not
+# a per-worktree tmp/) so concurrent ticks in different worktrees contend on the
+# same file. The tick's headless-liveness sentinel resolves through the same
+# helper, keeping the lock script and the tick on one lock-file directory (#1068).
+LOCK_FILE=$(dispatch_lock_file) \
+  || { echo "ERROR: not in a git repo and DISPATCH_LOCK_FILE is unset" >&2; exit 2; }
 
 # ---- Step 2: identify our own session ---------------------------------------
 # CLAUDE_CODE_SESSION_ID is set in every real .claude session's environment.

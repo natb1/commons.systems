@@ -7,7 +7,12 @@ import {
 import { personJsonLd } from "../src/seo";
 import * as fs from "node:fs";
 
-vi.mock("node:fs");
+vi.mock(import("node:fs"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
+}));
 
 const TEMPLATE = `<!DOCTYPE html>
 <html>

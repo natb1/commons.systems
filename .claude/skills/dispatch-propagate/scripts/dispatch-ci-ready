@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# Readiness predicate: is a CI verdict available for an issue or branch's PR?
+# Usage: dispatch-ci-ready <issue-num|branch>
+#
+# This is the absence-of-a-verdict gate, separate from "which phase skill runs"
+# (dispatch-phase). A target is READY when there is an actionable next step —
+# either no CI gate applies (no PR, or a non-draft PR) or the draft PR's CI has
+# concluded (passing or failing, both actionable). It is NOT-READY only when a
+# draft PR's checks are still in progress (no verdict yet).
+#
+#   READY    — exit 0, prints `ready`:  no matching PR, OR a non-draft PR, OR a
+#              draft PR whose statusCheckRollup classifies as failing/passing.
+#   NOT-READY — exit 1, prints `waiting`: a draft PR whose rollup is pending.
+#
+# Argument resolution:
+#   - All-digit arg: treated as an issue number. The matching PR is the one
+#     whose headRefName starts with "<issue>-".
+#   - Otherwise: treated as a branch name. Matched exactly.
+#
+# Environment:
+#   DISPATCH_PR_LIST — optional. A JSON array of open PRs supplied by the
+#     caller (dispatch-select-target passes it to avoid a redundant
+#     gh pr list per PR). When set and non-empty, it is used in place of a
+#     self-issued gh pr list. Must include the fields
+#     number,headRefName,isDraft,statusCheckRollup,labels.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+ARG="${1:-}"
+if [[ -z "$ARG" ]]; then
+  echo "error: usage: dispatch-ci-ready <issue-num|branch>" >&2
+  exit 2
+fi
+
+# Use the caller-supplied open-PR list when DISPATCH_PR_LIST is set.
+# Otherwise fetch the list ourselves — standalone callers rely on this path.
+if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
+  PR_LIST="$DISPATCH_PR_LIST"
+else
+  PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+fi
+
+# Find the matching PR.
+if [[ "$ARG" =~ ^[0-9]+$ ]]; then
+  # Issue number: find PR whose headRefName starts with "<num>-"
+  ISSUE_NUM="$ARG"
+  PR=$(printf '%s' "$PR_LIST" | jq --arg num "${ISSUE_NUM}-" \
+    'map(select(.headRefName | startswith($num))) | .[0] // empty')
+else
+  # Branch name: exact match
+  PR=$(printf '%s' "$PR_LIST" | jq --arg branch "$ARG" \
+    'map(select(.headRefName == $branch)) | .[0] // empty')
+fi
+
+# No matching PR → phase would be implement; no CI gate applies → ready.
+if [[ -z "$PR" || "$PR" == "null" ]]; then
+  echo "ready"
+  exit 0
+fi
+
+IS_DRAFT=$(printf '%s' "$PR" | jq -r '.isDraft')
+
+# Non-draft (ready-for-review) PR → phase would be done; no CI gate → ready.
+if [[ "$IS_DRAFT" == "false" ]]; then
+  echo "ready"
+  exit 0
+fi
+
+# Draft PR — readiness hinges on whether CI has reached a verdict.
+ROLLUP=$(printf '%s' "$PR" | jq '.statusCheckRollup')
+VERDICT=$(dispatch_classify_rollup "$ROLLUP")
+
+# A concluded verdict — failing or passing — is actionable, so ready.
+# Only an in-progress (pending) rollup is not yet ready.
+if [[ "$VERDICT" == "pending" ]]; then
+  echo "waiting"
+  exit 1
+fi
+
+echo "ready"
+exit 0

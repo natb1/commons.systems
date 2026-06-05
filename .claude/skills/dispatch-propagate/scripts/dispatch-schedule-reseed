@@ -13,6 +13,16 @@
 # chain resumes immediately when the window resets, rather than waiting on a
 # coarse static heartbeat.
 #
+# The budgeter also returns 0 for a *pace-curve pause*: cumulative weekly
+# usage runs ahead of the smooth cumulative-spend curve W(x) — collapsing the
+# 5h target band to F=0 — even while usage sits far below the absolute weekly
+# cap. That trips NEITHER absolute threshold above, yet the chain still
+# drains. This pause is transient and self-clearing (the curve W rises to meet
+# the flat used_weekly within the hour). When no absolute cap is hit, this
+# script consults `dispatch-target-workers --reopen-at` for the curve-crossing
+# epoch and arms the reseed timer at that crossing (with a short-delay floor
+# when the crossing is essentially now), instead of no-op'ing.
+#
 # Stalls for the *other* class of reason (empty queue, all items parked on a
 # human via dispatch:office-hours) are NOT this script's concern; the
 # office-hours queue (#755/#757/#758) re-seeds the chain when a human engages
@@ -32,9 +42,18 @@
 #      the budgeter uses, which can trip momentarily at window-start and clear
 #      within seconds — a static reseed-at-resets_at schedule for that case
 #      would be wrong).
-#   4. reseed_at = min(cand_weekly, cand_5h) — earliest blocking reset wins.
-#      If reseed_at <= now, no-op (the window already reopened; the next tick
-#      will re-evaluate against fresh telemetry).
+#      When NO absolute cap is hit, the chain may still be paused by the
+#      pace curve. Consult `dispatch-target-workers --reopen-at` (passing the
+#      already-parsed weekly telemetry through its env contract so the crossing
+#      uses identical inputs): a numeric epoch is the curve crossing where the
+#      pause lifts; `none` means the pace curve is not the blocker (genuine
+#      no-op).
+#   4. reseed_at = min(cand_weekly, cand_5h) — earliest blocking reset wins —
+#      for the absolute-cap path; or the pace-curve crossing epoch for the
+#      pace path. If reseed_at <= now on the absolute path, no-op (the window
+#      already reopened; the next tick will re-evaluate against fresh
+#      telemetry). On the pace path, a crossing at/before now arms a
+#      short-delay floor timer (now + short_delay) instead.
 #   5. Write a transient systemd.user timer via systemd-run --user
 #      --on-calendar=@<reseed_at>, naming the unit
 #      dispatch-reseed-<reseed_at>. The epoch suffix gives idempotency: a
@@ -45,7 +64,12 @@
 #   scheduled <unit-name> at <reseed_at>   timer was created.
 #   (stderr diagnostic + exit 0)           no-op (already-passed reset,
 #                                          missing telemetry, or idempotent
-#                                          re-call). Silent only: no cap hit.
+#                                          re-call). Silent only when no
+#                                          absolute cap is hit AND the pace
+#                                          curve also permits (--reopen-at
+#                                          returns `none`); a pace-curve pause
+#                                          instead schedules (or applies the
+#                                          short-delay floor).
 #
 # Exit codes:
 #   0  always on no-op or successful schedule.
@@ -56,7 +80,7 @@
 #
 #   DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH
 #     Override the rate_limits.json path. Default:
-#     ~/.local/share/productivity-tui/rate_limits.json.
+#     ~/.local/share/commons-dispatch/rate_limits.json.
 #
 #   DISPATCH_SCHEDULE_RESEED_NOW
 #     Override the current epoch seconds. Default: date +%s.
@@ -74,10 +98,19 @@
 #     Override the main worktree path. When set, the script does NOT require
 #     a git repo. Default: <project-root>/worktrees/main, where project-root
 #     is the parent of git --git-common-dir. Mirrors
-#     dispatch-spawn-router's idiom.
+#     dispatch-spawn-tick's idiom.
 #
 #   DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD
 #     Override the `systemd-run` binary. Default: `systemd-run`.
+#
+#   DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD
+#     Override the budgeter binary consulted for the pace-curve reopen epoch
+#     (`--reopen-at`). Default: $SCRIPT_DIR/dispatch-target-workers.
+#
+#   DISPATCH_SCHEDULE_RESEED_SHORT_DELAY
+#     Short-delay floor in seconds, applied when a pace-curve crossing is at or
+#     before now (the reseed arms at now + this value instead of a past-dated
+#     timer). Must be a non-negative integer. Default: 300.
 #
 # Sandbox: `systemd-run --user` talks to the user's systemd over D-Bus; this
 # script is not sandbox-safe and callers must invoke it with
@@ -120,9 +153,20 @@ for var in TARGET_WEEKLY TARGET_5H; do
   fi
 done
 
+# Budgeter consulted for the pace-curve reopen epoch (Step 4 pace path).
+TARGET_WORKERS_CMD="${DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD:-$SCRIPT_DIR/dispatch-target-workers}"
+
+# Short-delay floor (seconds) for a pace-curve crossing at/before now. Integer
+# only — no decimal — so a separate check from the TARGET_* loop above.
+SHORT_DELAY="${DISPATCH_SCHEDULE_RESEED_SHORT_DELAY:-300}"
+if ! [[ "$SHORT_DELAY" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-schedule-reseed: SHORT_DELAY must be a non-negative integer, got '$SHORT_DELAY'; aborting" >&2
+  exit 2
+fi
+
 # ---- Step 1: load telemetry -------------------------------------------------
 
-RL_PATH="${DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH:-$HOME/.local/share/productivity-tui/rate_limits.json}"
+RL_PATH="${DISPATCH_SCHEDULE_RESEED_RATE_LIMITS_PATH:-$HOME/.local/share/commons-dispatch/rate_limits.json}"
 NOW="${DISPATCH_SCHEDULE_RESEED_NOW:-$(date +%s)}"
 
 # NOW reaches `(( RESEED_AT <= NOW ))` — bash arithmetic context evaluates
@@ -235,15 +279,53 @@ fi
 
 # ---- Step 4: pick the earliest blocking reset -------------------------------
 #
-# If neither cap is hit, the chain is not stalled by a cap and there is
-# nothing to schedule. Silent no-op (exit 0).
+# If at least one absolute cap is hit, schedule at the earliest blocking
+# reset. If neither is hit, the chain may still be paused by the pace curve —
+# consult the budgeter's --reopen-at for the curve-crossing epoch and schedule
+# there. The budgeter returns `none` (genuine no-op) when the pace curve is not
+# the blocker. PACE_PATH distinguishes the two for the already-passed handling
+# below: the pace path applies a short-delay floor, the absolute path no-ops.
+
+PACE_PATH=0
+RESEED_AT=""
 
 if [[ -z "$CAND_WEEKLY" && -z "$CAND_5H" ]]; then
-  exit 0
-fi
+  # No absolute cap hit. Without the weekly anchor, no crossing can be
+  # computed — keep the no-op.
+  if (( WEEKLY_PRESENT != 1 )); then
+    echo "dispatch-schedule-reseed: no absolute cap hit and weekly anchor missing; no-op" >&2
+    exit 0
+  fi
 
-RESEED_AT=""
-if [[ -n "$CAND_WEEKLY" && -n "$CAND_5H" ]]; then
+  # Consult the budgeter for the pace-curve reopen, passing the already-parsed
+  # and validated weekly telemetry through its env contract so the crossing
+  # uses identical inputs. Pass 5h telemetry too when present (reopen mode only
+  # needs the weekly anchor, but keep inputs consistent).
+  reopen_env=(
+    "DISPATCH_TARGET_WORKERS_USED_WEEKLY=$WEEKLY_USED"
+    "DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY=$WEEKLY_RESETS"
+    "DISPATCH_TARGET_WORKERS_NOW=$NOW"
+  )
+  if (( FIVEH_PRESENT == 1 )); then
+    reopen_env+=(
+      "DISPATCH_TARGET_WORKERS_USED_5H=$FIVEH_USED"
+      "DISPATCH_TARGET_WORKERS_RESETS_AT_5H=$FIVEH_RESETS"
+    )
+  fi
+  REOPEN_AT=$(env "${reopen_env[@]}" "$TARGET_WORKERS_CMD" --reopen-at) || REOPEN_AT=""
+
+  if [[ "$REOPEN_AT" =~ ^[0-9]+$ ]]; then
+    RESEED_AT="$REOPEN_AT"
+    PACE_PATH=1
+  elif [[ "$REOPEN_AT" == "none" ]]; then
+    echo "dispatch-schedule-reseed: no absolute cap hit and pace curve permits (reopen-at='none'); no-op" >&2
+    exit 0
+  else
+    # Empty string means the budgeter failed (non-zero exit or unexpected output).
+    echo "dispatch-schedule-reseed: no absolute cap hit and budgeter returned unexpected result (reopen-at='$REOPEN_AT'); no-op" >&2
+    exit 0
+  fi
+elif [[ -n "$CAND_WEEKLY" && -n "$CAND_5H" ]]; then
   if (( CAND_WEEKLY <= CAND_5H )); then
     RESEED_AT="$CAND_WEEKLY"
   else
@@ -255,18 +337,27 @@ else
   RESEED_AT="$CAND_5H"
 fi
 
-# Already-passed reset → no-op. The next tick will re-evaluate against fresh
-# telemetry; scheduling a timer for a past time would fire immediately and
-# either re-hit the cap (because telemetry hasn't refreshed yet) or duplicate
-# the next tick's spawn.
+# Already-passed reset → on the absolute-cap path, no-op. The next tick will
+# re-evaluate against fresh telemetry; scheduling a timer for a past time would
+# fire immediately and either re-hit the cap (because telemetry hasn't
+# refreshed yet) or duplicate the next tick's spawn.
+#
+# On the pace path, a crossing at/before now means the pause is essentially
+# lifting now — arm a short-delay floor timer (now + SHORT_DELAY) instead of a
+# past-dated one, so the chain resumes promptly without firing in the past.
 if (( RESEED_AT <= NOW )); then
-  echo "dispatch-schedule-reseed: cap reset already passed (resets_at=$RESEED_AT <= now=$NOW); no-op" >&2
-  exit 0
+  if (( PACE_PATH == 1 )); then
+    RESEED_AT=$(( NOW + SHORT_DELAY ))
+    echo "dispatch-schedule-reseed: pace-curve crossing at/before now; applying short-delay floor (+${SHORT_DELAY}s) -> $RESEED_AT" >&2
+  else
+    echo "dispatch-schedule-reseed: cap reset already passed (resets_at=$RESEED_AT <= now=$NOW); no-op" >&2
+    exit 0
+  fi
 fi
 
 # ---- Step 5: resolve the main worktree --------------------------------------
 #
-# Same idiom as dispatch-spawn-router. The spawned re-seed runs from the main
+# Same idiom as dispatch-spawn-tick. The spawned re-seed runs from the main
 # worktree.
 
 if [[ -n "${DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE:-}" ]]; then
@@ -287,17 +378,19 @@ fi
 # missed while WSL was down runs on the next start. Matches the legacy 9 AM
 # timer's behavior.
 #
-# ExecStart is dispatch-spawn-router — the worker→router baton-pass primitive
-# that dedup-guards, prunes stopped agents, and spawns
-# `claude --bg --name dispatch-<id> --permission-mode auto "/dispatch-propagate"`
-# from the main worktree.
+# ExecStart is the headless dispatch-tick script directly — the timer unit is
+# itself the detachment, so there is no nested model router session. When the
+# timer fires, systemd runs one autonomous dispatch tick (select → spawn) from
+# the main worktree. (Before Unit 3 of #982 the ExecStart was dispatch-spawn-router,
+# which spawned a `claude --bg "/dispatch-propagate"` model session; that per-tick
+# session is gone — the routing now lives in the dispatch-tick bash script.)
 #
 # --setenv=PATH="$PATH" propagates the scheduling caller's PATH into the
 # transient unit. Without it the unit inherits the systemd user manager's
 # minimal default PATH, which omits the nix store — so on NixOS/WSL hosts
-# /usr/bin/env can't resolve bash (exit 127) and the router can't find
-# claude/git/jq. The caller (a /dispatch-propagate tick) always carries the
-# full nix-store PATH, so capturing it at schedule time makes the unit
+# /usr/bin/env can't resolve bash (exit 127) and the tick can't find
+# claude/git/jq. The caller (a dispatch tick) always carries the full
+# nix-store PATH, so capturing it at schedule time makes the unit
 # self-sufficient when the timer later fires.
 
 SYSTEMD_RUN_CMD="${DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD:-systemd-run}"
@@ -316,7 +409,7 @@ trap 'rm -f "$RUN_STDERR"' EXIT
      --working-directory="$MAIN_WORKTREE" \
      --timer-property=Persistent=true \
      --setenv=PATH="$PATH" \
-     "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-spawn-router" \
+     "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-tick" \
      2>"$RUN_STDERR"
 RC=$?
 if (( RC == 0 )); then

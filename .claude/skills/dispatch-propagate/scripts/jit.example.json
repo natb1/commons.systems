@@ -10,6 +10,18 @@
       "remindAfterClose": "12h",
       "dueAfterClose": "24h",
       "debounce": "1h"
+    },
+    {
+      "key": "digest",
+      "repo": "example-owner/example-repo",
+      "label": "jit:digest",
+      "title": "Digest",
+      "body": "Recurring digest checkpoint. Summarizes dispatch-queue work completed since the previous digest closed, then closes to anchor the next cycle.",
+      "project": "example-project",
+      "remindAfterClose": "24h",
+      "dueAfterClose": "48h",
+      "debounce": "1h",
+      "skill": "digest"
     }
   ]
 }

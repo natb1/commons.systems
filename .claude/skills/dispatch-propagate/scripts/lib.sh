@@ -3,6 +3,11 @@
 
 export FIREBASE_PROJECT_ID="commons-systems"
 
+# Default Tailscale SSH host for remote QA port-forwarding. Static by design:
+# the Remote access block must not shell out to `tailscale` at runtime (#963).
+# Override with QA_REMOTE_SSH_HOST when the host's tailnet name differs.
+QA_REMOTE_SSH_HOST="${QA_REMOTE_SSH_HOST:-nixos}"
+
 # Resolve the issue number from an argument or the current branch name.
 # Args: $1 = issue number (optional; derived from branch if omitted)
 # Output: prints the issue number to stdout
@@ -62,6 +67,99 @@ count_open_blockers() {
   local issue_num="$1"
   gh_api_array "/repos/{owner}/{repo}/issues/$issue_num/dependencies/blocked_by" \
     '[.[] | select(.state == "open" or .state == "OPEN")] | length'
+}
+
+# Classify a PR's statusCheckRollup into a CI verdict.
+# Args: $1 = the statusCheckRollup JSON array (e.g. `gh pr view --json
+#   statusCheckRollup | jq '.statusCheckRollup'`).
+# Output: prints exactly one of `failing` | `passing` | `pending` to stdout.
+#   failing — at least one check run/status context has concluded in a failing
+#             state (a concluded failure is actionable even while other checks
+#             are still running, so a mixed rollup resolves to `failing`).
+#   passing — every entry has concluded passing.
+#   pending — no verdict yet: empty rollup, in-progress checks, or any
+#             unrecognized non-terminal state.
+# This is the classification logic that dispatch-phase applies inline; it is
+# factored here so the readiness predicate can reuse it verbatim.
+dispatch_classify_rollup() {
+  local rollup="$1"
+  local rollup_len
+  rollup_len=$(printf '%s' "$rollup" | jq 'length')
+
+  # Empty rollup — checks not yet started, nothing actionable.
+  if [[ "$rollup_len" -eq 0 ]]; then
+    echo "pending"
+    return 0
+  fi
+
+  # Check for any failing entries first: a concluded failure is actionable even
+  # while other checks are still running, so a mixed rollup (some failing, some
+  # pending) resolves to failing, not pending.
+  local failing
+  failing=$(printf '%s' "$rollup" | jq '
+    map(
+      if has("conclusion") then
+        # Check run: failing conclusions
+        (.conclusion // "") as $c |
+        ($c == "FAILURE" or $c == "TIMED_OUT" or $c == "CANCELLED" or
+         $c == "ACTION_REQUIRED" or $c == "STARTUP_FAILURE" or $c == "STALE")
+      else
+        # Status context: failing states
+        (.state // "") as $s |
+        ($s == "FAILURE" or $s == "ERROR")
+      end
+    ) | any
+  ')
+
+  if [[ "$failing" == "true" ]]; then
+    echo "failing"
+    return 0
+  fi
+
+  # Check for any pending entries (check runs not yet COMPLETED, or status
+  # contexts with state PENDING/EXPECTED). No failures found above, so pending
+  # means checks are still running — nothing actionable yet.
+  local pending
+  pending=$(printf '%s' "$rollup" | jq '
+    map(
+      if has("conclusion") then
+        # Check run: pending if status != COMPLETED
+        .status != "COMPLETED"
+      else
+        # Status context: pending if state is PENDING or EXPECTED
+        (.state == "PENDING" or .state == "EXPECTED")
+      end
+    ) | any
+  ')
+
+  if [[ "$pending" == "true" ]]; then
+    echo "pending"
+    return 0
+  fi
+
+  # All entries are passing — check that all passing conditions hold.
+  # An entry passes if: check run with conclusion in {SUCCESS,NEUTRAL,SKIPPED},
+  # or status context with state SUCCESS.
+  local all_passing
+  all_passing=$(printf '%s' "$rollup" | jq '
+    map(
+      if has("conclusion") then
+        (.conclusion // "") as $c |
+        ($c == "SUCCESS" or $c == "NEUTRAL" or $c == "SKIPPED")
+      else
+        (.state // "") == "SUCCESS"
+      end
+    ) | all
+  ')
+
+  if [[ "$all_passing" != "true" ]]; then
+    # Non-empty rollup with no failures, no pending, but not all passing —
+    # unrecognized state, nothing actionable.
+    echo "pending"
+    return 0
+  fi
+
+  echo "passing"
 }
 
 # Detect what Firebase features the app uses.
@@ -143,6 +241,42 @@ resolve_project_root() {
   local common_dir
   common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
   dirname "$common_dir"
+}
+
+# Print the canonical dispatch selection-lock file path to stdout. An explicit
+# DISPATCH_LOCK_FILE is authoritative and bypasses the git lookup (tests rely on
+# this). Otherwise the lock lives at the shared project-root tmp/ (not a per-
+# worktree tmp/) so concurrent ticks in different worktrees contend on the same
+# file. Returns non-zero (no output) when DISPATCH_LOCK_FILE is unset AND
+# resolve_project_root fails (not in a git repo); the caller supplies its own
+# error message. Mirrors dispatch-acquire-lock's Step-1 logic so the tick (which
+# writes the headless liveness sentinel) and the lock script resolve the same
+# lock-file directory. See #1068.
+dispatch_lock_file() {
+  local project_root
+  if [[ -n "${DISPATCH_LOCK_FILE:-}" ]]; then
+    printf '%s\n' "$DISPATCH_LOCK_FILE"
+    return 0
+  fi
+  project_root=$(resolve_project_root) || return 1
+  printf '%s\n' "$project_root/tmp/dispatch.lock"
+}
+
+# headless_sentinel_path <holder-id> <lock-file> — print the PID-sentinel path
+# for a `headless:<token>` holder id to stdout. The sentinel lives alongside the
+# lock file (same directory) so a concurrent tick in any worktree resolves the
+# same path. The filename is `dispatch-tick-<slug>.live`, where <slug> is the
+# token (everything after the `headless:` prefix) with every character outside
+# `[0-9A-Za-z._-]` replaced by `_`. Slugging is defense-in-depth (#1068): a
+# polluted INVOCATION_ID cannot escape the lock-file directory via path
+# separators. Fed via `printf '%s'` (no trailing newline) so `tr -c` appends no
+# spurious trailing `_`.
+headless_sentinel_path() {
+  local holder="$1" lock_file="$2" token slug dir
+  token="${holder#headless:}"
+  slug="$(printf '%s' "$token" | tr -c '0-9A-Za-z._-' '_')"
+  dir="$(dirname "$lock_file")"
+  printf '%s\n' "$dir/dispatch-tick-${slug}.live"
 }
 
 # Return the project ID for Firebase emulators.
@@ -564,4 +698,35 @@ find_available_ports() {
 # Find a single available TCP port (convenience wrapper).
 find_available_port() {
   find_available_ports 1
+}
+
+# Print the Remote access block for QA-server startup: the universal localhost
+# URL plus a copy-paste `ssh -L` command forwarding the Vite port and every
+# allocated emulator port to a remote client's localhost, so the served origin
+# stays http://localhost:<vite>/ on every machine.
+# Args: $1 = vite port; $2.. = emulator ports (may be empty)
+print_remote_access_block() {
+  local vite_port="$1"; shift
+  local ssh_cmd="ssh -L ${vite_port}:localhost:${vite_port}"
+  local p
+  for p in "$@"; do
+    ssh_cmd+=" -L ${p}:localhost:${p}"
+  done
+  ssh_cmd+=" ${QA_REMOTE_SSH_HOST}"
+  echo "========================================"
+  echo "  Remote access (Tailscale tunnel)"
+  echo "========================================"
+  echo ""
+  echo "  The QA server runs on the WSL host. The URL below is the same on"
+  echo "  every machine. On the same host, just open it. From a remote tailnet"
+  echo "  client, run the ssh command first to forward the ports, then open it."
+  echo ""
+  echo "  URL:  http://localhost:${vite_port}/"
+  echo ""
+  echo "  Remote client (run before opening the URL):"
+  echo ""
+  echo "    ${ssh_cmd}"
+  echo ""
+  echo "========================================"
+  echo ""
 }

@@ -10,10 +10,8 @@
 # create metadata (color and description).
 #
 # Phase → label:
-#   qa          → dispatch:qa-done
-#   code-review → dispatch:code-reviewed
-#   review      → dispatch:reviewed
-#   security    → dispatch:security-reviewed
+#   qa     → dispatch:qa-done
+#   review → dispatch:reviewed
 #
 # Missing args or an unknown phase is a clear error, not a fallback.
 set -euo pipefail
@@ -27,12 +25,10 @@ if [[ -z "$PR_NUM" || -z "$PHASE" ]]; then
 fi
 
 case "$PHASE" in
-  qa)           LABEL="dispatch:qa-done" ;;
-  code-review)  LABEL="dispatch:code-reviewed" ;;
-  review)       LABEL="dispatch:reviewed" ;;
-  security)     LABEL="dispatch:security-reviewed" ;;
+  qa)      LABEL="dispatch:qa-done" ;;
+  review)  LABEL="dispatch:reviewed" ;;
   *)
-    echo "error: unknown phase: $PHASE (expected qa, code-review, review, or security)" >&2
+    echo "error: unknown phase: $PHASE (expected qa or review)" >&2
     exit 1
     ;;
 esac

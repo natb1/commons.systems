@@ -4,6 +4,7 @@
   "workspaces": [
     "config",
     "analyticsutil",
+    "agenda",
     "audio",
     "authutil",
     "blog",
@@ -23,6 +24,10 @@
     "style",
     "rules-test"
   ],
+  "overrides": {
+    "@xmldom/xmldom": "^0.8.13",
+    "fast-xml-builder": "^1.2.0"
+  },
   "devDependencies": {
     "@eslint/js": "^9.19.0",
     "@firebase/rules-unit-testing": "^5.0.0",
@@ -37,6 +42,6 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.22.0",
     "vite": "^6.1.0",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.8"
   }
 }
