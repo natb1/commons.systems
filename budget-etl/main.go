@@ -362,7 +362,7 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	// IsCreditCard is not stored in export.Transaction, so we recover it from Accounts.
 	priorLiabilities := make(map[string]bool, len(inp.Accounts))
 	for _, a := range inp.Accounts {
-		if a.AccountType == "liability" {
+		if a.AccountType == export.AccountTypeLiability {
 			priorLiabilities[a.ID] = true
 		}
 	}
@@ -1070,7 +1070,7 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 	// IsCreditCard is not stored in export.Transaction, so we recover it from Accounts.
 	priorLiabilities := make(map[string]bool, len(inp.Accounts))
 	for _, a := range inp.Accounts {
-		if a.AccountType == "liability" {
+		if a.AccountType == export.AccountTypeLiability {
 			priorLiabilities[a.ID] = true
 		}
 	}
