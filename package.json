@@ -19,6 +19,7 @@
     "htmlutil",
     "idbutil",
     "landing",
+    "mediautil",
     "print",
     "router",
     "style",
