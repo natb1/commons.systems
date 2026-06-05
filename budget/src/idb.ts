@@ -110,7 +110,12 @@ export async function storeParsedData(data: ParsedData): Promise<void> {
     stores[name] = tx.objectStore(name);
   }
 
-  // Clear all stores first (skip "meta" to preserve the persisted fileHandle record)
+  // Clear all stores first. The "meta" store is special: it mixes the
+  // parsed-data cache (the "upload" record) with capability records (the
+  // persisted "fileHandle"). A reload replaces the former and must preserve the
+  // latter, so delete only the "upload" key here rather than clearing the whole
+  // store — clearing it blindly would also drop the fileHandle, and skipping it
+  // blindly would silently retain any future meta key.
   const clearPromises: Promise<void>[] = [];
   for (const name of STORE_NAMES) {
     if (name === "meta") continue;
@@ -122,6 +127,13 @@ export async function storeParsedData(data: ParsedData): Promise<void> {
       }),
     );
   }
+  clearPromises.push(
+    new Promise((resolve, reject) => {
+      const req = stores.meta.delete("upload");
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    }),
+  );
   await Promise.all(clearPromises);
 
   // Write all records

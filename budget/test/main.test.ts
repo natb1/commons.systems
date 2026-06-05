@@ -130,6 +130,8 @@ describe("main module", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     // Defaults: no persisted handle, FSA unsupported -> existing upload behavior.
+    mockGetMeta.mockReset();
+    mockStoreParsedData.mockReset();
     mockGetFileHandle.mockReset().mockResolvedValue(undefined);
     mockPutFileHandle.mockReset().mockResolvedValue(undefined);
     mockClearFileHandle.mockReset().mockResolvedValue(undefined);
@@ -289,6 +291,100 @@ describe("main module", () => {
     const errorEl = document.querySelector(".nav-error") as HTMLElement;
     expect(errorEl.hidden).toBe(false);
     expect(errorEl.textContent).toContain("no longer available");
+  });
+
+  it("clears the persisted handle when the linked file fails content validation", async () => {
+    const handle = { name: "wrong.json" } as unknown as FileSystemFileHandle;
+    mockGetFileHandle.mockResolvedValue(handle);
+    mockQueryReadPermission.mockResolvedValue("granted");
+    mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "wrong.json"));
+
+    resetAndMockAll();
+
+    const { parseUploadedJson, UploadValidationError } = await import("../src/upload.js");
+    (parseUploadedJson as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new UploadValidationError("Not a valid budget file.");
+    });
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // A bad file would otherwise be re-auto-loaded every startup; the handle is
+    // dropped so the next session falls through to cached/seed instead.
+    expect(mockClearFileHandle).toHaveBeenCalled();
+    expect(mockStoreParsedData).not.toHaveBeenCalled();
+    const errorEl = document.querySelector(".nav-error") as HTMLElement;
+    expect(errorEl.hidden).toBe(false);
+    expect(errorEl.textContent).toContain("Not a valid budget file.");
+  });
+
+  it("clears a denied handle and shows an unlinked notice, falling through to cached data", async () => {
+    const handle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
+    mockGetFileHandle.mockResolvedValue(handle);
+    mockQueryReadPermission.mockResolvedValue("denied");
+    mockGetMeta.mockResolvedValue({
+      key: "upload",
+      groupName: "household",
+      version: 1,
+      exportedAt: "2025-06-15T10:30:00Z",
+    });
+
+    resetAndMockAll();
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(mockClearFileHandle).toHaveBeenCalled();
+    expect(mockReadFileFromHandle).not.toHaveBeenCalled();
+    // Cached data is still shown (local state -> hero hidden).
+    const heroContainer = document.getElementById("hero-container")!;
+    expect(heroContainer.hidden).toBe(true);
+    const errorEl = document.querySelector(".nav-error") as HTMLElement;
+    expect(errorEl.hidden).toBe(false);
+    expect(errorEl.textContent).toContain("denied");
+  });
+
+  it("reload button falls back to the picker when re-grant is still denied", async () => {
+    const handle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
+    const newHandle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
+    mockGetFileHandle.mockResolvedValue(handle);
+    mockQueryReadPermission.mockResolvedValue("prompt");
+    mockGetMeta.mockResolvedValue({
+      key: "upload",
+      groupName: "household",
+      version: 1,
+      exportedAt: "2025-06-15T10:30:00Z",
+    });
+    mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "budget.benc"));
+
+    resetAndMockAll();
+
+    const { parseUploadedJson, toParsedData } = await import("../src/upload.js");
+    (parseUploadedJson as ReturnType<typeof vi.fn>).mockReturnValue({ groupName: "household" });
+    (toParsedData as ReturnType<typeof vi.fn>).mockReturnValue({ meta: { groupName: "household" } });
+    mockStoreParsedData.mockResolvedValue(undefined);
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    const button = document.querySelector(".reload-handle") as HTMLButtonElement;
+    expect(button).not.toBeNull();
+
+    // Re-grant is refused, so the click falls back to the FSA picker.
+    mockRequestReadPermission.mockResolvedValue("denied");
+    mockPickBencFile.mockResolvedValue(newHandle);
+    button.click();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(mockRequestReadPermission).toHaveBeenCalledWith(handle);
+    expect(mockPickBencFile).toHaveBeenCalled();
+    expect(mockPutFileHandle).toHaveBeenCalledWith(newHandle);
+    expect(mockReadFileFromHandle).toHaveBeenCalledWith(newHandle);
   });
 
   it("transitions to cached local state when no handle but meta exists (unchanged path)", async () => {

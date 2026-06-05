@@ -283,6 +283,7 @@ async function handleFileUpload(file: File): Promise<void> {
 }
 
 async function loadFromHandle(handle: FileSystemFileHandle): Promise<void> {
+  clearNavError();
   let file: File;
   try {
     file = await readFileFromHandle(handle);
@@ -295,7 +296,27 @@ async function loadFromHandle(handle: FileSystemFileHandle): Promise<void> {
     showNavError("The linked file is no longer available. Please re-link it.");
     return;
   }
-  await handleFileUpload(file); // reuses the existing parse/validation error handling
+  // Run the parse/validation pipeline directly (rather than via handleFileUpload)
+  // so a content-validation failure can drop the persisted handle. Without this,
+  // a handle pointing at a non-budget file would be auto-loaded, fail validation,
+  // and be retried on every subsequent startup — a permanent failing-load loop.
+  try {
+    await loadFromFile(file);
+  } catch (error) {
+    if (error instanceof UploadValidationError) {
+      // The persisted handle points to a file that is not valid budget data
+      // (e.g. the wrong file was picked). Drop the handle so it does not
+      // re-trigger a failing auto-load on every startup. A wrong decryption
+      // password throws a different error (handled below) and keeps the handle,
+      // since the file itself is valid and the user can retry.
+      await clearFileHandle();
+      showNavError(error.message);
+      return;
+    }
+    if (deferProgrammerError(error)) return;
+    logError(error, { operation: "load-from-handle" });
+    showNavError("Could not load the linked file. Please re-link it.");
+  }
 }
 
 uploadInput.addEventListener("change", () => {
@@ -412,8 +433,15 @@ function showReloadPrompt(handle: FileSystemFileHandle): void {
         return;
       }
       // Still not granted: fall back to the re-link picker.
+      // Only remove the button when the picker resulted in a successful load
+      // (state transitions to "local"). If the user cancels the picker,
+      // pickAndLoad returns normally without transitioning, and the button
+      // must remain so the user can retry.
+      const stateBefore = state;
       await pickAndLoad();
-      button.remove();
+      if (state !== stateBefore && state.source === "local") {
+        button.remove();
+      }
     } catch (error) {
       if (deferProgrammerError(error)) return;
       logError(error, { operation: "reload-handle" });
@@ -424,6 +452,7 @@ function showReloadPrompt(handle: FileSystemFileHandle): void {
 
 // Startup: check for a persisted FSA handle, then fall back to cached/seed data.
 async function initialize(): Promise<void> {
+  let denied = false;
   const handle = await getFileHandle();
   if (handle) {
     const perm = await queryReadPermission(handle);
@@ -442,14 +471,23 @@ async function initialize(): Promise<void> {
       showReloadPrompt(handle);
       return;
     }
-    // perm === "denied": fall through to cached/seed display below.
+    // perm === "denied": the browser will not re-prompt for a denied handle, so
+    // it is permanently unusable. Drop it (rather than silently re-entering the
+    // denied path every session, a dead end) and fall through to the cached/seed
+    // display below, then tell the user it was unlinked so they can re-link.
+    await clearFileHandle();
+    denied = true;
   }
   const meta = await getMeta();
   if (meta) {
     transition({ source: "local", groupName: meta.groupName });
-    return;
+  } else {
+    transition({ source: "seed" });
   }
-  transition({ source: "seed" });
+  // transition() clears any nav error, so surface the denied notice afterward.
+  if (denied) {
+    showNavError("Access to the linked file was denied; it has been unlinked.");
+  }
 }
 
 initialize().catch((error) => {
