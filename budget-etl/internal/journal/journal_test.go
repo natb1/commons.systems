@@ -45,7 +45,7 @@ func assertBalanced(t *testing.T, legs []export.JournalLeg) {
 func accountIDs(accts []export.Account) map[string]string {
 	m := map[string]string{}
 	for _, a := range accts {
-		m[a.ID] = a.AccountType
+		m[a.ID] = string(a.AccountType)
 	}
 	return m
 }
