@@ -53,6 +53,7 @@ Act on the one directive:
 | `INVOKE /verify-pr` | 0 | draft PR, CI completed and failed | invoke `/verify-pr` |
 | `INVOKE /qa-fix` | 0 | draft PR, CI green, no `dispatch:*` label | invoke `/qa-fix` |
 | `INVOKE /review-fix` | 0 | draft PR + `dispatch:qa-done` (or `dispatch:reviewed` re-entry) | invoke `/review-fix` |
+| `INVOKE /budget-parse-job` | 0 | a statement parse-job issue (`statements:<key>` label, no PR) | invoke `/budget-parse-job` (see below) |
 | `INVOKE /dispatch-resolve-conflict` | 0 | provisioning hit an `origin/main` merge conflict | invoke `/dispatch-resolve-conflict` (see below) |
 | `RELEVANCE-REVIEW` | 0 | no PR on the target (`implement`) | run the Step 2 relevance review, then dispatch its verdict |
 | `STOP done` | 0 | non-draft (ready) PR — should-never-happen; spawn boundary (#1109) prevents it upstream | stop without invoking a phase skill |
@@ -100,6 +101,21 @@ of** any phase skill. The worker is already a session in the worktree, named
 Stop hook's conflict-resolver branch owns the disposition — re-seed at `<N>` on
 `resolved`, or park an ambiguous conflict to office-hours — via the
 `conflict-resolver` / `conflict-resolved` sentinels that skill writes. Then stop.
+
+### `INVOKE /budget-parse-job` — merge one statement, close the issue
+
+The routed target is a statement parse-job issue (filed by
+`dispatch-statements-scan`, carrying a `statements:<key>` label, with no PR).
+Invoke `/budget-parse-job` via the Skill tool **instead of** any phase skill. It
+is a **one-phase** handler with no PR and no `dispatch:*` label: report-first via
+`budget-etl` to detect uncategorized transactions, then idempotently merge the
+statement into the user's encrypted `.benc` snapshot in the shared folder, close
+the issue, and write the `parse-job-done` sentinel (Stop-hook Branch P) on a
+clean run. On **any** blocker — a malformed body, a missing/changed file, a
+missing snapshot or password, or (the central case) an uncategorized transaction
+needing the author's judgment — it escalates via `dispatch-mark-deviation` and
+stops with no sentinel, so the Stop hook parks the still-open issue on
+`dispatch:office-hours` for the `/office-hours` residue.
 
 ### `RELEVANCE-REVIEW` — run the relevance review, then dispatch its verdict
 
