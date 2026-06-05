@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   isFsaSupported,
   pickBencFile,
-  queryReadPermission,
-  requestReadPermission,
+  queryReadWritePermission,
+  requestReadWritePermission,
   readFileFromHandle,
+  writeFileToHandle,
 } from "../src/local-file";
 
 describe("isFsaSupported", () => {
@@ -71,21 +72,44 @@ describe("pickBencFile", () => {
   });
 });
 
-describe("queryReadPermission", () => {
-  it("delegates to handle.queryPermission with mode read", async () => {
+describe("queryReadWritePermission", () => {
+  it("delegates to handle.queryPermission with mode readwrite", async () => {
     const queryPermission = vi.fn().mockResolvedValue("granted");
     const handle = { queryPermission } as unknown as FileSystemFileHandle;
-    expect(await queryReadPermission(handle)).toBe("granted");
-    expect(queryPermission).toHaveBeenCalledWith({ mode: "read" });
+    expect(await queryReadWritePermission(handle)).toBe("granted");
+    expect(queryPermission).toHaveBeenCalledWith({ mode: "readwrite" });
   });
 });
 
-describe("requestReadPermission", () => {
-  it("delegates to handle.requestPermission with mode read", async () => {
+describe("requestReadWritePermission", () => {
+  it("delegates to handle.requestPermission with mode readwrite", async () => {
     const requestPermission = vi.fn().mockResolvedValue("granted");
     const handle = { requestPermission } as unknown as FileSystemFileHandle;
-    expect(await requestReadPermission(handle)).toBe("granted");
-    expect(requestPermission).toHaveBeenCalledWith({ mode: "read" });
+    expect(await requestReadWritePermission(handle)).toBe("granted");
+    expect(requestPermission).toHaveBeenCalledWith({ mode: "readwrite" });
+  });
+});
+
+describe("writeFileToHandle", () => {
+  it("writes bytes and closes the writable stream", async () => {
+    const write = vi.fn().mockResolvedValue(undefined);
+    const close = vi.fn().mockResolvedValue(undefined);
+    const createWritable = vi.fn().mockResolvedValue({ write, close });
+    const handle = { createWritable } as unknown as FileSystemFileHandle;
+    const data = new Uint8Array([1, 2, 3]);
+    await writeFileToHandle(handle, data);
+    expect(write).toHaveBeenCalledWith(data);
+    expect(close).toHaveBeenCalled();
+  });
+
+  it("calls close even when write rejects", async () => {
+    const writeError = new Error("disk full");
+    const write = vi.fn().mockRejectedValue(writeError);
+    const close = vi.fn().mockResolvedValue(undefined);
+    const createWritable = vi.fn().mockResolvedValue({ write, close });
+    const handle = { createWritable } as unknown as FileSystemFileHandle;
+    await expect(writeFileToHandle(handle, new Uint8Array([4, 5]))).rejects.toThrow("disk full");
+    expect(close).toHaveBeenCalled();
   });
 });
 

@@ -28,8 +28,8 @@ import { storeParsedData, clearAll, getMeta, getFileHandle, putFileHandle, clear
 import {
   isFsaSupported,
   pickBencFile,
-  queryReadPermission,
-  requestReadPermission,
+  queryReadWritePermission,
+  requestReadWritePermission,
   readFileFromHandle,
 } from "./local-file.js";
 import { SeedDataSource, IdbDataSource, type DataSource } from "./data-source.js";
@@ -426,7 +426,7 @@ function showReloadPrompt(handle: FileSystemFileHandle): void {
   authContainer!.appendChild(button);
   button.addEventListener("click", async () => {
     try {
-      const perm = await requestReadPermission(handle);
+      const perm = await requestReadWritePermission(handle);
       if (perm === "granted") {
         await loadFromHandle(handle);
         button.remove();
@@ -455,7 +455,7 @@ async function initialize(): Promise<void> {
   let denied = false;
   const handle = await getFileHandle();
   if (handle) {
-    const perm = await queryReadPermission(handle);
+    const perm = await queryReadWritePermission(handle);
     if (perm === "granted") {
       await loadFromHandle(handle);
       return;

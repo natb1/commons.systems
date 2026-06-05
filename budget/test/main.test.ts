@@ -37,8 +37,8 @@ const mockClearFileHandle = vi.fn();
 
 const mockIsFsaSupported = vi.fn();
 const mockPickBencFile = vi.fn();
-const mockQueryReadPermission = vi.fn();
-const mockRequestReadPermission = vi.fn();
+const mockQueryReadWritePermission = vi.fn();
+const mockRequestReadWritePermission = vi.fn();
 const mockReadFileFromHandle = vi.fn();
 
 vi.mock("../src/idb.js", () => ({
@@ -53,8 +53,8 @@ vi.mock("../src/idb.js", () => ({
 vi.mock("../src/local-file.js", () => ({
   isFsaSupported: mockIsFsaSupported,
   pickBencFile: mockPickBencFile,
-  queryReadPermission: mockQueryReadPermission,
-  requestReadPermission: mockRequestReadPermission,
+  queryReadWritePermission: mockQueryReadWritePermission,
+  requestReadWritePermission: mockRequestReadWritePermission,
   readFileFromHandle: mockReadFileFromHandle,
 }));
 
@@ -105,8 +105,8 @@ function resetAndMockAll(): void {
   vi.mock("../src/local-file.js", () => ({
     isFsaSupported: mockIsFsaSupported,
     pickBencFile: mockPickBencFile,
-    queryReadPermission: mockQueryReadPermission,
-    requestReadPermission: mockRequestReadPermission,
+    queryReadWritePermission: mockQueryReadWritePermission,
+    requestReadWritePermission: mockRequestReadWritePermission,
     readFileFromHandle: mockReadFileFromHandle,
   }));
   vi.mock("../src/upload.js", () => ({
@@ -137,8 +137,8 @@ describe("main module", () => {
     mockClearFileHandle.mockReset().mockResolvedValue(undefined);
     mockIsFsaSupported.mockReset().mockReturnValue(false);
     mockPickBencFile.mockReset().mockResolvedValue(null);
-    mockQueryReadPermission.mockReset();
-    mockRequestReadPermission.mockReset();
+    mockQueryReadWritePermission.mockReset();
+    mockRequestReadWritePermission.mockReset();
     mockReadFileFromHandle.mockReset();
   });
 
@@ -221,7 +221,7 @@ describe("main module", () => {
   it("auto-loads from a persisted handle when permission is granted", async () => {
     const handle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
     mockGetFileHandle.mockResolvedValue(handle);
-    mockQueryReadPermission.mockResolvedValue("granted");
+    mockQueryReadWritePermission.mockResolvedValue("granted");
     mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "budget.benc"));
 
     resetAndMockAll();
@@ -242,7 +242,7 @@ describe("main module", () => {
   it("shows a reload button (no auto-load) when permission is prompt, then loads on click", async () => {
     const handle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
     mockGetFileHandle.mockResolvedValue(handle);
-    mockQueryReadPermission.mockResolvedValue("prompt");
+    mockQueryReadWritePermission.mockResolvedValue("prompt");
     mockGetMeta.mockResolvedValue({
       key: "upload",
       groupName: "household",
@@ -266,19 +266,19 @@ describe("main module", () => {
     expect(button).not.toBeNull();
     expect(mockReadFileFromHandle).not.toHaveBeenCalled();
 
-    mockRequestReadPermission.mockResolvedValue("granted");
+    mockRequestReadWritePermission.mockResolvedValue("granted");
     button.click();
     await new Promise(r => setTimeout(r, 0));
     await new Promise(r => setTimeout(r, 0));
 
-    expect(mockRequestReadPermission).toHaveBeenCalledWith(handle);
+    expect(mockRequestReadWritePermission).toHaveBeenCalledWith(handle);
     expect(mockReadFileFromHandle).toHaveBeenCalledWith(handle);
   });
 
   it("clears a stale handle and shows a re-link error when the file is gone", async () => {
     const handle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
     mockGetFileHandle.mockResolvedValue(handle);
-    mockQueryReadPermission.mockResolvedValue("granted");
+    mockQueryReadWritePermission.mockResolvedValue("granted");
     mockReadFileFromHandle.mockRejectedValue(new DOMException("missing", "NotFoundError"));
 
     resetAndMockAll();
@@ -296,7 +296,7 @@ describe("main module", () => {
   it("clears the persisted handle when the linked file fails content validation", async () => {
     const handle = { name: "wrong.json" } as unknown as FileSystemFileHandle;
     mockGetFileHandle.mockResolvedValue(handle);
-    mockQueryReadPermission.mockResolvedValue("granted");
+    mockQueryReadWritePermission.mockResolvedValue("granted");
     mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "wrong.json"));
 
     resetAndMockAll();
@@ -322,7 +322,7 @@ describe("main module", () => {
   it("clears a denied handle and shows an unlinked notice, falling through to cached data", async () => {
     const handle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
     mockGetFileHandle.mockResolvedValue(handle);
-    mockQueryReadPermission.mockResolvedValue("denied");
+    mockQueryReadWritePermission.mockResolvedValue("denied");
     mockGetMeta.mockResolvedValue({
       key: "upload",
       groupName: "household",
@@ -350,7 +350,7 @@ describe("main module", () => {
     const handle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
     const newHandle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
     mockGetFileHandle.mockResolvedValue(handle);
-    mockQueryReadPermission.mockResolvedValue("prompt");
+    mockQueryReadWritePermission.mockResolvedValue("prompt");
     mockGetMeta.mockResolvedValue({
       key: "upload",
       groupName: "household",
@@ -374,14 +374,14 @@ describe("main module", () => {
     expect(button).not.toBeNull();
 
     // Re-grant is refused, so the click falls back to the FSA picker.
-    mockRequestReadPermission.mockResolvedValue("denied");
+    mockRequestReadWritePermission.mockResolvedValue("denied");
     mockPickBencFile.mockResolvedValue(newHandle);
     button.click();
     await new Promise(r => setTimeout(r, 0));
     await new Promise(r => setTimeout(r, 0));
     await new Promise(r => setTimeout(r, 0));
 
-    expect(mockRequestReadPermission).toHaveBeenCalledWith(handle);
+    expect(mockRequestReadWritePermission).toHaveBeenCalledWith(handle);
     expect(mockPickBencFile).toHaveBeenCalled();
     expect(mockPutFileHandle).toHaveBeenCalledWith(newHandle);
     expect(mockReadFileFromHandle).toHaveBeenCalledWith(newHandle);

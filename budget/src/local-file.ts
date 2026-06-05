@@ -49,15 +49,33 @@ export async function pickBencFile(): Promise<FileSystemFileHandle | null> {
   }
 }
 
-/** Query whether the handle currently has read permission. */
-export function queryReadPermission(handle: FileSystemFileHandle): Promise<PermissionState> {
-  // Mode "read": S1 is load-only; #1019 upgrades to "readwrite".
-  return handle.queryPermission({ mode: "read" });
+/**
+ * Query whether the handle currently has readwrite permission. The app needs
+ * readwrite access to read the on-disk file and write back encrypted edits.
+ */
+export function queryReadWritePermission(handle: FileSystemFileHandle): Promise<PermissionState> {
+  return handle.queryPermission({ mode: "readwrite" });
 }
 
-/** Request read permission for the handle (may prompt the user). */
-export function requestReadPermission(handle: FileSystemFileHandle): Promise<PermissionState> {
-  return handle.requestPermission({ mode: "read" });
+/**
+ * Request readwrite permission for the handle (may prompt the user). The app
+ * needs readwrite access to read the on-disk file and write back encrypted edits.
+ */
+export function requestReadWritePermission(handle: FileSystemFileHandle): Promise<PermissionState> {
+  return handle.requestPermission({ mode: "readwrite" });
+}
+
+/** Overwrite the on-disk file behind the handle with `data` (encrypted bytes). */
+export async function writeFileToHandle(
+  handle: FileSystemFileHandle,
+  data: BufferSource,
+): Promise<void> {
+  const writable = await handle.createWritable();
+  try {
+    await writable.write(data);
+  } finally {
+    await writable.close();
+  }
 }
 
 /**
