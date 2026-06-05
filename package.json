@@ -19,6 +19,7 @@
     "htmlutil",
     "idbutil",
     "landing",
+    "local-first",
     "print",
     "router",
     "style",
