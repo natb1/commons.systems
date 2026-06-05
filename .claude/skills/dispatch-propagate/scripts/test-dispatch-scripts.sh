@@ -2736,6 +2736,132 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "green draft PR selected by PR queue as qa" "pr 10 55-feature qa" "$result"
 teardown
 
+# --- --priority-only mode (#1134) -------------------------------------------
+# --priority-only runs the main-broken health gate, then scans ONLY the
+# priority=1 tier. The JIT scan is suppressed. It is the at-cap bypass selector:
+# dispatch-select-tick consults it when the autonomous tick is at the worker cap
+# but not token-exhausted, to spawn a priority/main-broken item as one
+# gate-exempt worker. Output is one of: main-broken <sha> | pr <num> <branch>
+# <phase> | issue <num> | empty.
+
+# PO1. A priority PR (its closing issue carries `priority`) is returned over a
+#      non-priority PR — the non-priority PR is skipped wholesale by the
+#      priority-tier guard, never reaching the per-PR gh calls.
+echo "Test: --priority-only returns the priority PR, skips the non-priority PR"
+setup
+# PR 10 (older) closes plain bug issue 200; PR 20 (newer) closes priority issue 100.
+UNION='['
+UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 20 "20-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only returns priority PR" "pr 20 20-priority-pr verify" "$result"
+teardown
+
+# PO2. A priority help-wanted issue is returned over a non-priority help-wanted
+#      issue — the non-priority issue is skipped before the leaf trace.
+echo "Test: --priority-only returns the priority issue, skips the non-priority issue"
+setup
+setup_union_pr_list '[]'
+# Issue 300 (older, no priority) and issue 400 (newer, priority); both help-wanted.
+printf '[{"number":300,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":400,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only returns priority issue" "issue 400" "$result"
+teardown
+
+# PO3. main is red and no latch issue open → main-broken fires first, before the
+#      priority scan (the gate runs ahead of the ladder, same as default mode).
+echo "Test: --priority-only — main red, no latch → main-broken (gate first)"
+setup
+# Seed a priority PR that would otherwise be selected; the gate must preempt it.
+UNION='['"$(make_pr_union 20 "20-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only main red → main-broken first" "main-broken mainhead0" "$result"
+teardown
+
+# PO4. Only non-priority items in the queue → empty (the priority tier is empty,
+#      and the pri=0 iteration of the selection loop finds nothing).
+echo "Test: --priority-only — only non-priority items → empty"
+setup
+UNION='['"$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only no priority items → empty" "empty" "$result"
+teardown
+
+# PO5. A due JIT is configured but --priority-only suppresses the JIT scan — the
+#      reminder is NOT emitted; the priority result is returned instead. (The
+#      same JIT fixture emits a jit-reminder in default mode, see JS4.)
+echo "Test: --priority-only suppresses the JIT scan (reminder not emitted)"
+setup
+# Self-contained one-project catalog (the shared JIT_PROJECTS_JSON is defined
+# later in the JIT-scan section).
+cat > "$DISPATCH_CONFIG_DIR/projects.json" <<'EOF'
+{ "projects": [
+  { "key": "household", "owner": "natb1", "number": 5,
+    "statusField": "Status", "statusInProgress": "In Progress",
+    "statusDone": "Done" }
+] }
+EOF
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{ "jits": [
+  { "key": "email-review", "repo": "natb1/household", "label": "jit:email-review",
+    "title": "Email review", "body": "Review the inbox.",
+    "project": "household", "dueAfterCreate": "48h" }
+] }
+EOF
+printf '[{"number":77,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_email-review.json"
+printf '{"items":[{"id":"PVTI_077","content":{"url":"https://github.com/natb1/household/issues/77"},"status":"Todo"}]}\n' \
+  > "$STUB_DIR/project-item-list.json"
+# A priority help-wanted issue waits in the queue; --priority-only must return it
+# rather than the suppressed JIT reminder.
+setup_union_pr_list '[]'
+printf '[{"number":400,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only JIT suppressed → priority issue returned" "issue 400" "$result"
+teardown
+
+# PO6. --priority-only rejects combination with the other modes. The guard
+# condition covers all three sibling modes, so exercise each arm: --qa,
+# --health-only, and --main-broken-sha must each be rejected with exit 1.
+echo "Test: --priority-only + --qa → error exit"
+setup
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --qa 2>/dev/null) && rc=0 || rc=$?
+assert_eq "--priority-only --qa → exit 1" "1" "$rc"
+teardown
+
+echo "Test: --priority-only + --health-only → error exit"
+setup
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --health-only 2>/dev/null) && rc=0 || rc=$?
+assert_eq "--priority-only --health-only → exit 1" "1" "$rc"
+teardown
+
+echo "Test: --priority-only + --main-broken-sha → error exit"
+setup
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --main-broken-sha 2>/dev/null) && rc=0 || rc=$?
+assert_eq "--priority-only --main-broken-sha → exit 1" "1" "$rc"
+teardown
+
 # ============================================================================
 # --- JIT scan ---
 # dispatch-select-target's JIT scan runs before the main-broken health gate.
@@ -6212,6 +6338,23 @@ assert_eq "no-match: exits 0" "0" "$rc"
 assert_eq "no-match: prints 0" "0" "$out"
 ca_teardown
 
+# --- Test 11b: priority/main-broken workers are still counted (#1134) -------
+# The #1134 priority bypass exempts priority/main-broken work from the worker
+# GATE, not the COUNT: a gate-exempt priority worker is named `<N>-slug` like any
+# worker, so claude_agents_count_busy_workers must still count it. This guards
+# that no priority carve-out leaked into counting — priority workers must keep
+# inflating LIVE_COUNT and suppressing non-priority fan-out on later ticks.
+echo "Test: claude_agents_count_busy_workers counts a priority/main-broken worker"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"a","pid":1,"status":"busy","name":"1134-priority-fix"},
+  {"sessionId":"b","pid":2,"status":"busy","name":"720-bar"}
+]' 0
+if out=$(claude_agents_count_busy_workers); then rc=0; else rc=$?; fi
+assert_eq "priority-count: exits 0" "0" "$rc"
+assert_eq "priority-count: priority-named worker counted (2 total)" "2" "$out"
+ca_teardown
+
 # --- Test 12: claude_agents_count_busy_workers reports UNKNOWN on failure --
 
 echo "Test: claude_agents_count_busy_workers returns rc 1 on daemon failure"
@@ -7491,6 +7634,38 @@ else
 fi
 config_teardown
 
+# --- Test 13i: exhaustion_threshold_pct: valid round-trip -------------------
+
+echo "Test: exhaustion_threshold_pct: 95 accepted and round-trips"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"exhaustion_threshold_pct": 95}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "exhaustion_threshold_pct 95 exits 0" "0" "$rc"
+tw_exh=$(printf '%s' "$out" | jq -r '.exhaustion_threshold_pct')
+assert_eq "exhaustion_threshold_pct 95 preserved" "95" "$tw_exh"
+config_teardown
+
+# --- Test 13j: exhaustion_threshold_pct: 101 rejected (must be <= 100) -------
+
+echo "Test: exhaustion_threshold_pct: 101 exits 1 and stderr says must be <= 100"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"exhaustion_threshold_pct": 101}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "exhaustion_threshold_pct 101 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"exhaustion_threshold_pct"* && "$err" == *"<= 100"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: exhaustion_threshold_pct 101 stderr says <= 100"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: exhaustion_threshold_pct 101 stderr says <= 100"
+  echo "    stderr: $err"
+fi
+config_teardown
+
 # ============================================================================
 # dispatch-target-workers tests
 # ============================================================================
@@ -8144,6 +8319,87 @@ if (( out >= 1 )); then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: mid-week used_weekly=30 expected N>=1, got $out"
 fi
+tw_teardown
+
+# --- Test 24: --exhausted — 5h window at 100% with future reset → exhausted --
+#
+# Exhausted mode reads telemetry directly and reports `exhausted` when EITHER
+# window is at/near 100% used (>= exhaustion_threshold_pct, default 98) with
+# resets_at in the future, else `ok`. It is independent of the pace/ramp math
+# and fails OPEN on missing/invalid telemetry.
+
+echo "Test: --exhausted 5h used=100, resets in future → exhausted"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+# 5h pinned at 100%, weekly comfortably under; both resets in the future.
+write_rl "exh.json" 30 $((TW_NOW + 302400)) 100 $((TW_NOW + 3600))
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>/dev/null)
+assert_eq "--exhausted: 5h=100 future reset → exhausted" "exhausted" "$out"
+tw_teardown
+
+# --- Test 25: --exhausted — weekly used=99 (>=98) future reset → exhausted ---
+
+echo "Test: --exhausted weekly used=99, resets in future → exhausted"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+write_rl "exh.json" 99 $((TW_NOW + 302400)) 30 $((TW_NOW + 3600))
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>/dev/null)
+assert_eq "--exhausted: weekly=99 future reset → exhausted" "exhausted" "$out"
+tw_teardown
+
+# --- Test 26: --exhausted — both windows used=50 → ok -----------------------
+
+echo "Test: --exhausted both windows used=50 → ok"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+write_rl "exh.json" 50 $((TW_NOW + 302400)) 50 $((TW_NOW + 3600))
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>/dev/null)
+assert_eq "--exhausted: both=50 → ok" "ok" "$out"
+tw_teardown
+
+# --- Test 27: --exhausted — 5h used=100 but resets_at <= now → ok ------------
+#
+# A window already past its reset is not "out of tokens" — the window has
+# refilled. resets_at in the past must NOT count as exhausted.
+
+echo "Test: --exhausted 5h used=100 but window already reset → ok"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+# 5h reset is in the PAST (<= now); weekly under pace with a future reset.
+write_rl "exh.json" 30 $((TW_NOW + 302400)) 100 $((TW_NOW - 1))
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>/dev/null)
+assert_eq "--exhausted: 5h=100 past reset → ok" "ok" "$out"
+tw_teardown
+
+# --- Test 28: --exhausted — missing rate_limits.json → ok (fail open) -------
+#
+# The OPPOSITE of count mode's fallback-to-1: unknown usage is not genuine
+# exhaustion, so priority work is never suppressed on absent telemetry.
+
+echo "Test: --exhausted missing rate_limits.json → ok (fail open)"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+# tw_setup points RATE_LIMITS_PATH at an absent file by default; no write_rl.
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>/dev/null)
+assert_eq "--exhausted: missing telemetry → ok" "ok" "$out"
+tw_teardown
+
+# --- Test 29: --exhausted — threshold from config (95): 96→exhausted, 94→ok -
+
+echo "Test: --exhausted exhaustion_threshold_pct config 95 gates at 95"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"exhaustion_threshold_pct": 95}
+EOF
+# used=96 (>= 95) with a future reset → exhausted.
+write_rl "exh.json" 96 $((TW_NOW + 302400)) 30 $((TW_NOW + 3600))
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>/dev/null)
+assert_eq "--exhausted: threshold 95, weekly=96 → exhausted" "exhausted" "$out"
+# used=94 (< 95) → ok.
+write_rl "exh.json" 94 $((TW_NOW + 302400)) 30 $((TW_NOW + 3600))
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>/dev/null)
+assert_eq "--exhausted: threshold 95, weekly=94 → ok" "ok" "$out"
 tw_teardown
 
 # --- Test: --reopen-at pace-curve crossing (#1050) --------------------------
@@ -15301,12 +15557,25 @@ echo "$1"
 FAKE
   cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
+# --priority-only probe (the at-cap bypass): logged separately so a test can
+# assert whether the priority probe ran, and driven by SEL_PRIORITY_ONLY.
+if [[ "\$1" == "--priority-only" ]]; then
+  echo called >> "$TMPDIR_TEST/logs/select-target-priority.log"
+  echo "\${SEL_PRIORITY_ONLY:-empty}"
+  exit 0
+fi
 echo called >> "$TMPDIR_TEST/logs/select-target.log"
 echo empty
 FAKE
   # Run-scoped concurrency gate fakes (overridable per test via SEL_* env vars).
+  # Arg-aware: --exhausted reports the rate-limit exhaustion floor (SEL_EXHAUSTED,
+  # default ok); the no-arg query returns the worker target (SEL_TARGET_N).
   cat > "$TMPDIR_TEST/dispatch-target-workers" <<'FAKE'
 #!/usr/bin/env bash
+if [[ "$1" == "--exhausted" ]]; then
+  echo "${SEL_EXHAUSTED:-ok}"
+  exit 0
+fi
 echo "${SEL_TARGET_N:-1}"
 FAKE
   cat > "$TMPDIR_TEST/dispatch-schedule-reseed" <<FAKE
@@ -15388,6 +15657,7 @@ sel_tick_teardown() {
     DISPATCH_LOCK_WAIT_TIMEOUT DISPATCH_LOCK_WAIT_INTERVAL \
     FAKE_GIT_BRANCH FAKE_GIT_FETCH_FAIL FAKE_GIT_MERGE_FAIL \
     SEL_TARGET_N SEL_LIVE_COUNT SEL_LIVE_COUNT_FAIL \
+    SEL_EXHAUSTED SEL_PRIORITY_ONLY \
     DISPATCH_RESERVATION_DIR SEL_AGENTS_TSV SEL_AGENTS_LIST_FAIL
 }
 
@@ -15633,15 +15903,21 @@ esac
 assert_eq "extra args → usage error, exit 2" "ok" "$status"
 sel_tick_teardown
 
-# --- gate at cap → concurrency-cap, no selection work ------------------------
-echo "Test: select-tick at cap → concurrency-cap, no selection work"
+# --- gate at cap, not exhausted, no priority item → concurrency-cap ----------
+# At cap the gate no longer hard-stops blindly: it first checks --exhausted (ok
+# here) then probes --priority-only (empty here). Empty priority tier → the
+# unchanged hard cap. The normal no-arg selection (select-target.log) still does
+# NOT run, but the priority-only probe (select-target-priority.log) DOES.
+echo "Test: select-tick at cap, not exhausted, no priority item → concurrency-cap"
 sel_tick_setup
-export SEL_LIVE_COUNT=2 SEL_TARGET_N=1
+export SEL_LIVE_COUNT=2 SEL_TARGET_N=1 SEL_EXHAUSTED=ok SEL_PRIORITY_ONLY=empty
 out=$(run_sel_tick)
 assert_eq "cap: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "cap: reseed scheduled" "called" "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
-assert_eq "cap: no selection work (select-target not called)" "0" \
+assert_eq "cap: priority-only probe ran (returned empty)" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
+assert_eq "cap: normal no-arg selection did NOT run" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
@@ -15713,8 +15989,10 @@ assert_eq "effective-cap: reseed scheduled" "called" \
   "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
 assert_eq "effective-cap: router message surfaces the busy/reserved split" "1" \
   "$(printf '%s\n' "$out" | grep -cF 'effective live (1 busy + 1 reserved)')"
-assert_eq "effective-cap: no selection work (select-target not called)" "0" \
+assert_eq "effective-cap: normal no-arg selection did NOT run" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
+assert_eq "effective-cap: priority-only probe ran (returned empty)" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
 # --- empty ledger is behavior-preserving (gap == pre-ledger gate) ------------
@@ -15818,18 +16096,87 @@ assert_eq "manual-overcap: pace-curve dispatch-target-workers NOT invoked (gate 
   "$([ -f "$TMPDIR_TEST/logs/target-workers.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
-# --- autonomous no-arg with LIVE_COUNT >= TARGET_N → concurrency-cap (unchanged) ---
-# The exemption is --manual only. An autonomous no-arg tick with LIVE_COUNT >= TARGET_N
-# still gates on the pace curve and emits concurrency-cap — unchanged behavior.
-echo "Test: select-tick autonomous no-arg LIVE_COUNT >= TARGET_N → concurrency-cap (unchanged)"
+# --- autonomous no-arg at cap, not exhausted, no priority item → concurrency-cap ---
+# The exemption is --manual only. An autonomous no-arg tick at the budget with no
+# priority/main-broken item waiting still emits concurrency-cap — unchanged hard
+# cap — but the priority-only probe now runs (and returns empty) before it.
+echo "Test: select-tick autonomous no-arg at cap, no priority item → concurrency-cap"
 sel_tick_setup
-export SEL_LIVE_COUNT=3 SEL_TARGET_N=0
+export SEL_LIVE_COUNT=3 SEL_TARGET_N=0 SEL_EXHAUSTED=ok SEL_PRIORITY_ONLY=empty
 out=$(run_sel_tick)
 assert_eq "autonomous-cap: decision line is concurrency-cap" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "autonomous-cap: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "autonomous-cap: reseed scheduled" "called" \
   "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
+assert_eq "autonomous-cap: priority-only probe ran (returned empty)" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- at cap, not exhausted, priority PR waiting → spawned as ONE gate-exempt worker ---
+# The core #1134 bypass: at/over the worker budget, a waiting priority PR is
+# selected and spawned with GAP=1 (one gate-exempt worker, exactly like manual /
+# explicit dispatch). Lock HELD, no reseed, no concurrency-cap.
+echo "Test: select-tick at cap, priority PR → pr line w/ gap 1, lock held, no reseed"
+sel_tick_setup
+export SEL_LIVE_COUNT=3 SEL_TARGET_N=1 SEL_EXHAUSTED=ok
+export SEL_PRIORITY_ONLY="pr 50 50-foo verify"
+out=$(run_sel_tick)
+assert_eq "cap-prio-pr: decision line w/ gap 1" "pr 50 50-foo verify 1" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "cap-prio-pr: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "cap-prio-pr: no reseed scheduled" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
+assert_eq "cap-prio-pr: no concurrency-cap emitted" "0" \
+  "$(printf '%s\n' "$out" | grep -cF 'concurrency-cap')"
+sel_tick_teardown
+
+# --- at cap, not exhausted, priority issue waiting → spawned as ONE gate-exempt worker ---
+echo "Test: select-tick at cap, priority issue → issue line w/ gap 1, lock held"
+sel_tick_setup
+export SEL_LIVE_COUNT=3 SEL_TARGET_N=1 SEL_EXHAUSTED=ok
+export SEL_PRIORITY_ONLY="issue 60"
+out=$(run_sel_tick)
+assert_eq "cap-prio-issue: decision line w/ gap 1" "issue 60 1" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "cap-prio-issue: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "cap-prio-issue: no reseed scheduled" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- at cap, not exhausted, main-broken waiting → main-broken line, lock RELEASED ---
+# A main that breaks WHILE at cap is now surfaced (the old early-exit fired before
+# any selection ran). The diagnose bg job spawns lock-free downstream, so the lock
+# is released here. No reseed.
+echo "Test: select-tick at cap, main-broken → main-broken line, lock released, no reseed"
+sel_tick_setup
+export SEL_LIVE_COUNT=3 SEL_TARGET_N=1 SEL_EXHAUSTED=ok
+export SEL_PRIORITY_ONLY="main-broken deadbeef"
+out=$(run_sel_tick)
+assert_eq "cap-mainbroken: decision line" "main-broken deadbeef" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "cap-mainbroken: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "cap-mainbroken: no reseed scheduled" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- at cap, EXHAUSTED → hard stop: concurrency-cap, no priority probe -------
+# Genuine token exhaustion is the one hard floor: even with a priority item
+# waiting, nothing spawns. The --priority-only probe is NOT consulted, the lock is
+# released, the reseed is armed at the window reset, and the decision is
+# concurrency-cap.
+echo "Test: select-tick at cap, exhausted → concurrency-cap, priority probe NOT consulted"
+sel_tick_setup
+export SEL_LIVE_COUNT=3 SEL_TARGET_N=1 SEL_EXHAUSTED=exhausted
+export SEL_PRIORITY_ONLY="pr 50 50-foo verify"
+out=$(run_sel_tick)
+assert_eq "cap-exhausted: decision line" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "cap-exhausted: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "cap-exhausted: reseed scheduled" "called" \
+  "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
+assert_eq "cap-exhausted: priority-only probe NOT consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
 # --- --manual cannot be combined with an explicit <number> → exit 2 ----------
