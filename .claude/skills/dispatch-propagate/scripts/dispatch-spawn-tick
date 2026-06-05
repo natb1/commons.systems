@@ -27,6 +27,17 @@
 #   dispatch-tick exit would leave a lingering failed unit and the next
 #   `--unit=dispatch-tick` would collide forever — wedging all future ticks.
 #
+# OnFailure recovery (#1150):
+#   Before launching, ensure_recover_unit (lib.sh) idempotently installs the
+#   static dispatch-tick-recover.service unit (best-effort — a failure is
+#   non-fatal). Each transient tick unit then carries
+#   --property=OnFailure=dispatch-tick-recover.service. systemd fires that
+#   handler exactly when the tick unit fails abnormally (edge-triggered, owned
+#   by systemd, unskippable by a crashing tick), guaranteeing a chain
+#   continuation even when the tick aborts before producing a Stop-hook
+#   handoff or an armed reseed timer. OnFailure= resolves lazily at failure
+#   time, so passing it is safe even if ensure_recover_unit failed.
+#
 # Unlike dispatch-schedule-reseed (which schedules an --on-calendar TIMER), this
 # script runs the unit IMMEDIATELY: a transient .service, no --on-calendar /
 # --timer-property. The transient unit is itself the detachment — systemd runs
@@ -107,6 +118,13 @@ else
   MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
 fi
 
+# Install the OnFailure recovery unit (dispatch-tick-recover.service) before
+# launching the transient tick. Best-effort: OnFailure= resolves lazily at
+# failure time, so a failure here is non-fatal — a missing target only logs an
+# error if the tick ever fails. We still pass OnFailure= unconditionally below
+# so an abnormal tick exit is guaranteed a chain continuation (#1150).
+ensure_recover_unit "$MAIN_WORKTREE" || true
+
 SYSTEMD_RUN_CMD="${DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD:-systemd-run}"
 TICK_PATH="$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-tick"
 
@@ -129,6 +147,7 @@ if [[ -n "$TARGET_N" ]]; then
   "$SYSTEMD_RUN_CMD" --user \
        --unit="$UNIT_NAME" \
        --collect \
+       --property=OnFailure=dispatch-tick-recover.service \
        --working-directory="$MAIN_WORKTREE" \
        --setenv=PATH="$PATH" \
        "$TICK_PATH" "$TARGET_N" \
@@ -138,6 +157,7 @@ else
   "$SYSTEMD_RUN_CMD" --user \
        --unit="$UNIT_NAME" \
        --collect \
+       --property=OnFailure=dispatch-tick-recover.service \
        --working-directory="$MAIN_WORKTREE" \
        --setenv=PATH="$PATH" \
        "$TICK_PATH" \

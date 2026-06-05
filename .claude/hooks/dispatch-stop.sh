@@ -33,6 +33,14 @@
 #      returns to <N>, where materialize-spawn now sails through the resolved
 #      merge); sentinel present without `conflict-resolved` (ambiguous/crash) →
 #      park the issue (its office-hours-reason) + re-seed, no self-close.
+#   P. parse-job clean completion (#1024) — a /budget-parse-job session is named
+#      <N>-slug like a worker but writes a `parse-job-done` sentinel instead of a
+#      phase-completed marker when its idempotent statement merge succeeds.
+#      Checked AFTER Branch R and BEFORE Branches A-D. A clean parse-job produces
+#      NO PR (the handler already closed the parse-job issue), so there is no
+#      label work: spawn router + self-close. Escalation writes no sentinel — the
+#      issue stays open and PR-less and lands in Branch A's office-hours park, so
+#      no branch is needed for it here.
 #   A. marker absent — phase skill did not run to completion (mid-phase exit
 #      or context compaction). Park the ISSUE on a human via
 #      dispatch-apply-office-hours (label + why-comment), spawn router, exit 0 —
@@ -160,6 +168,20 @@ if [ -f "$CLAUDE_JOB_DIR/conflict-resolver" ]; then
     || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
   "$SCRIPTS/dispatch-spawn-tick" "$ISSUE_NUM" >/dev/null 2>&1 \
     || echo "[dispatch-stop] WARNING: dispatch-spawn-tick (ambiguous re-seed) failed" >&2
+  exit 0
+fi
+
+# Branch P — parse-job clean completion (#1024): a /budget-parse-job session is
+# named <N>-slug like a worker but, on a successful idempotent statement merge,
+# writes a `parse-job-done` sentinel instead of a phase-completed marker. A clean
+# parse-job produces NO PR: the handler already closed the parse-job issue, so
+# there is no label work and no PR-centric disposition — spawn the next tick and
+# self-close. (Escalation writes no sentinel; the issue stays open and PR-less and
+# falls through to Branch A, which parks it on office-hours — no branch needed
+# here.) Checked BEFORE the PR-centric branches, mirroring Branch R.
+if [ -f "$CLAUDE_JOB_DIR/parse-job-done" ]; then
+  spawn_tick
+  self_close
   exit 0
 fi
 
