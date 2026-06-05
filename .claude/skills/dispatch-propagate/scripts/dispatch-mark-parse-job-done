@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# dispatch-mark-parse-job-done — scripted terminal parse-job clean-completion
+# sentinel write.
+#
+# Usage: dispatch-mark-parse-job-done ["<note>"]
+#
+# Writes the dispatch parse-job-done sentinel that dispatch-stop.sh's parse-job
+# clean-completion branch reads to spawn the next tick and self-close — the
+# terminal disposition for a parse-job whose budget-etl statement merge
+# succeeded. Unlike an implement/verify phase, a clean parse-job produces NO PR:
+# the handler skill has already closed the parse-job issue, so there is no label
+# work and no PR-centric disposition. The sentinel is written atomically
+# (tempfile + mv) under the $CLAUDE_JOB_DIR guard, exactly as the marker scripts
+# do. A one-token script call is more reliable than re-deriving the atomic write
+# in the post-clear, skill-less build session.
+#
+# Sentinel contents (an optional one-line note, for diagnostics only — presence,
+# not content, drives dispatch-stop.sh):
+#
+#   <note>
+#
+# When CLAUDE_JOB_DIR is unset/empty or not a directory the script is running
+# interactively (not under a dispatch job): it prints a diagnostic and no-ops
+# (exit 0), so the same terminal call is harmless in an interactive run.
+#
+# At most one note argument is accepted; extra args are a clear error, not a
+# fallback (exit 2).
+set -euo pipefail
+
+if [[ $# -gt 1 ]]; then
+  echo "dispatch-mark-parse-job-done: at most one note argument is accepted" >&2
+  echo "usage: dispatch-mark-parse-job-done \"<note>\"" >&2
+  exit 2
+fi
+
+NOTE="${1:-}"
+
+# CLAUDE_JOB_DIR guard: an interactive run (no dispatch job) is a no-op.
+if [[ -z "${CLAUDE_JOB_DIR:-}" || ! -d "$CLAUDE_JOB_DIR" ]]; then
+  echo "dispatch-mark-parse-job-done: CLAUDE_JOB_DIR unset or not a directory; interactive run, skipping sentinel write" >&2
+  exit 0
+fi
+
+# Atomic write: tempfile + mv. Presence is read by dispatch-stop.sh; the note is
+# diagnostic only.
+f="$CLAUDE_JOB_DIR/parse-job-done"
+printf '%s\n' "$NOTE" > "$f.tmp"
+mv "$f.tmp" "$f"

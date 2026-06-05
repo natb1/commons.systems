@@ -781,3 +781,97 @@ print_remote_access_block() {
   echo "========================================"
   echo ""
 }
+
+# Install the static `dispatch-tick-recover.service` unit file so the tick and
+# reseed launchers can attach `OnFailure=dispatch-tick-recover.service`.
+# OnFailure= references a LOADABLE unit file, not a script — and dispatch
+# otherwise uses only transient `systemd-run` units, so no such file exists
+# until we write one. This helper writes it idempotently.
+#
+# Best-effort: a failure here must not abort the caller (a tick/reseed
+# launcher), so we warn to stderr and return non-zero — never `exit`. A missing
+# recover unit just means a crashing tick falls back to the prior behavior.
+# Args: $1 = main worktree path
+ensure_recover_unit() {
+  local main_worktree="$1"
+
+  # A systemd unit file is line-structured: each line is an independent
+  # directive. An embedded newline in any value we interpolate below would land
+  # as an attacker-controlled extra directive in the [Service] section. The
+  # main worktree path comes from git output or a test override and never
+  # legitimately contains a newline; reject it rather than emit a malformed
+  # unit (best-effort: warn + return per this helper's contract — never exit).
+  if [[ "$main_worktree" == *$'\n'* ]]; then
+    echo "WARNING: ensure_recover_unit: main worktree path contains a newline; refusing to write unit; OnFailure recovery unavailable" >&2
+    return 1
+  fi
+
+  local RECOVER_SCRIPT="$main_worktree/.claude/skills/dispatch-propagate/scripts/dispatch-tick-recover"
+  local UNIT_DIR="${DISPATCH_RECOVER_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
+  local UNIT_PATH="$UNIT_DIR/dispatch-tick-recover.service"
+  local SYSTEMCTL_CMD="${DISPATCH_RECOVER_SYSTEMCTL_CMD:-systemctl}"
+
+  # Strip any stray newline from the captured PATH for the same line-structure
+  # reason; a newline in PATH is a broken environment, not a value we should
+  # propagate into a unit directive.
+  local safe_path="${PATH//$'\n'/}"
+
+  # Environment=PATH=... captures the launching caller's PATH at write time,
+  # for the same reason dispatch-spawn-tick passes --setenv=PATH: the systemd
+  # user manager's minimal default PATH omits the nix store, so on NixOS/WSL
+  # hosts /usr/bin/env can't resolve bash and the recover script can't find
+  # git/jq/claude. The caller carries the full nix-store PATH, so baking it into
+  # the unit at write time makes the unit self-sufficient.
+  #
+  # The path-bearing directives are double-quoted: systemd unescapes C-style
+  # quotes, so a path containing spaces is parsed as a single token rather than
+  # split into an executable + spurious arguments.
+  #
+  # Deliberately NO OnFailure= on this unit — the recover handler must not chain
+  # to itself, or a failing recovery would recurse.
+  local desired
+  desired=$(cat <<EOF
+[Unit]
+Description=Dispatch chain continuation recovery (OnFailure handler)
+
+[Service]
+Type=oneshot
+Environment="PATH=$safe_path"
+ExecStart="$RECOVER_SCRIPT"
+WorkingDirectory="$main_worktree"
+EOF
+)
+
+  # Steady-state hot path: if the installed unit already matches byte-for-byte,
+  # skip the write and the daemon-reload entirely (a single content compare).
+  if [ -f "$UNIT_PATH" ] && [ "$(cat "$UNIT_PATH")" = "$desired" ]; then
+    return 0
+  fi
+
+  if ! mkdir -p "$UNIT_DIR"; then
+    echo "WARNING: ensure_recover_unit: mkdir -p $UNIT_DIR failed; OnFailure recovery unavailable" >&2
+    return 1
+  fi
+
+  # Write atomically: temp file in the same dir, then mv into place.
+  local tmp
+  tmp=$(mktemp "$UNIT_DIR/.dispatch-tick-recover.service.XXXXXX") || {
+    echo "WARNING: ensure_recover_unit: could not create temp file in $UNIT_DIR; OnFailure recovery unavailable" >&2
+    return 1
+  }
+  if ! printf '%s\n' "$desired" > "$tmp"; then
+    echo "WARNING: ensure_recover_unit: failed to write $tmp; OnFailure recovery unavailable" >&2
+    rm -f "$tmp"
+    return 1
+  fi
+  if ! mv "$tmp" "$UNIT_PATH"; then
+    echo "WARNING: ensure_recover_unit: failed to install $UNIT_PATH; OnFailure recovery unavailable" >&2
+    rm -f "$tmp"
+    return 1
+  fi
+
+  if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
+    echo "WARNING: ensure_recover_unit: systemctl --user daemon-reload failed; OnFailure recovery may be stale" >&2
+    return 1
+  fi
+}
