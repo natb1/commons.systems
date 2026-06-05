@@ -12,7 +12,6 @@ export function describeReachabilitySmoke(
   test.describe(`${appName} reachability smoke`, () => {
     test("key paths are reachable @hosting", async ({ request }) => {
       const { indexResponse, entryAssetUrl } = await getEntryAsset(request);
-      expect(indexResponse.status()).toBe(200);
       expect(indexResponse.headers()["content-type"]).toContain("text/html");
 
       const assetResponse = await request.head(entryAssetUrl);

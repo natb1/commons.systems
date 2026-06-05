@@ -37,7 +37,6 @@ export function describeSecurityHeadersSmoke(appName: string): void {
   test.describe(`${appName} security headers smoke`, () => {
     test(`response includes security headers @hosting`, async ({ request }) => {
       const response = await request.head("/");
-      expect(response).toBeTruthy();
       expect(response.status()).toBe(200);
 
       const headers = response.headers();
