@@ -12,7 +12,7 @@ import {
 
 const ENV = "test";
 
-describe("agenda items", () => {
+describe("office-hours items", () => {
   let env: RulesTestEnvironment;
 
   beforeAll(async () => {
@@ -22,7 +22,7 @@ describe("agenda items", () => {
   setupCleanup();
 
   beforeEach(async () => {
-    await adminSetDoc(env, `agenda/${ENV}/items/jit-demo`, {
+    await adminSetDoc(env, `office-hours/${ENV}/items/jit-demo`, {
       memberEmails: ["owner@test.com"],
       title: "Weekly review",
       dueAt: new Date("2026-06-10T00:00:00Z"),
@@ -36,7 +36,7 @@ describe("agenda items", () => {
     const ctx = authenticatedContext(env, "owner@test.com");
     const db = ctx.firestore();
     await assertSucceeds(
-      getDoc(doc(db, `agenda/${ENV}/items/jit-demo`)),
+      getDoc(doc(db, `office-hours/${ENV}/items/jit-demo`)),
     );
   });
 
@@ -44,7 +44,7 @@ describe("agenda items", () => {
     const ctx = authenticatedContext(env, "stranger@test.com");
     const db = ctx.firestore();
     await assertFails(
-      getDoc(doc(db, `agenda/${ENV}/items/jit-demo`)),
+      getDoc(doc(db, `office-hours/${ENV}/items/jit-demo`)),
     );
   });
 
@@ -52,7 +52,7 @@ describe("agenda items", () => {
     const ctx = unauthenticatedContext(env);
     const db = ctx.firestore();
     await assertFails(
-      getDoc(doc(db, `agenda/${ENV}/items/jit-demo`)),
+      getDoc(doc(db, `office-hours/${ENV}/items/jit-demo`)),
     );
   });
 
@@ -60,7 +60,7 @@ describe("agenda items", () => {
     const ctx = authenticatedContext(env, "owner@test.com");
     const db = ctx.firestore();
     await assertFails(
-      setDoc(doc(db, `agenda/${ENV}/items/jit-demo`), {
+      setDoc(doc(db, `office-hours/${ENV}/items/jit-demo`), {
         memberEmails: ["owner@test.com"],
       }),
     );
@@ -70,7 +70,7 @@ describe("agenda items", () => {
     const ctx = authenticatedContext(env, "owner@test.com");
     const db = ctx.firestore();
     await assertFails(
-      deleteDoc(doc(db, `agenda/${ENV}/items/jit-demo`)),
+      deleteDoc(doc(db, `office-hours/${ENV}/items/jit-demo`)),
     );
   });
 
@@ -78,7 +78,7 @@ describe("agenda items", () => {
     const ctx = authenticatedContext(env, "owner@test.com");
     const db = ctx.firestore();
     await assertFails(
-      updateDoc(doc(db, `agenda/${ENV}/items/jit-demo`), {
+      updateDoc(doc(db, `office-hours/${ENV}/items/jit-demo`), {
         title: "Updated title",
       }),
     );
@@ -88,7 +88,7 @@ describe("agenda items", () => {
     const ctx = authenticatedContext(env, "stranger@test.com");
     const db = ctx.firestore();
     await assertFails(
-      setDoc(doc(db, `agenda/${ENV}/items/jit-demo`), {
+      setDoc(doc(db, `office-hours/${ENV}/items/jit-demo`), {
         memberEmails: ["stranger@test.com"],
       }),
     );
@@ -98,7 +98,7 @@ describe("agenda items", () => {
     const ctx = unauthenticatedContext(env);
     const db = ctx.firestore();
     await assertFails(
-      setDoc(doc(db, `agenda/${ENV}/items/jit-demo`), {
+      setDoc(doc(db, `office-hours/${ENV}/items/jit-demo`), {
         memberEmails: ["owner@test.com"],
       }),
     );
