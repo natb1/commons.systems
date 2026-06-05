@@ -19,7 +19,9 @@
 #   busy             lock held by another tick; nothing acquired, nothing released.
 #   sync-failed      git fetch / merge --ff-only failed on `main`; lock released.
 #   resolver-failed  explicit arg did not resolve to one issue; lock released.
-#   concurrency-cap  effective-live count (busy workers + outstanding reservations) >= target; #725 re-seed scheduled; lock released.
+#   concurrency-cap  effective-live count (busy workers + outstanding reservations) >= target,
+#                    AND no priority/main-broken item waits to bypass it (or the rate-limit
+#                    window is genuinely exhausted); #725 re-seed scheduled; lock released.
 #   explicit <num> <gap>   explicit arg resolved to issue <num>; lock HELD.
 #   pr <num> <branch> <phase> <gap>   queue selected a PR; lock HELD.
 #   issue <num> <gap>   queue selected a help-wanted leaf; lock HELD.
@@ -41,7 +43,10 @@
 # A `--manual` run (the bare human-typed `/dispatch` shim) ALSO skips the gate —
 # no live-count query, never emits `concurrency-cap` — and like the explicit path
 # emits <gap> = 1, spawning ONE gate-exempt worker. Fan-out is autonomous-only.
-# The autonomous no-arg queue path keeps the full gate.
+# The autonomous no-arg queue path keeps the full gate, but with a priority
+# bypass at cap (see the gate narrative below): a waiting priority/main-broken
+# item is still selected and spawned as ONE gate-exempt worker (<gap> = 1) even
+# at/over the worker budget. The only hard floor is genuine token exhaustion.
 #
 # Lock invariant (the three guards): HOLD on pr/issue/explicit; RELEASE on
 # empty/sync-failed/resolver-failed/concurrency-cap/main-broken/jit-reminder;
@@ -141,18 +146,40 @@ fi
 # never emit `concurrency-cap` — and keep GAP=1, spawning ONE gate-exempt worker
 # that is not paced by the autonomous concurrency budget. Fan-out is
 # autonomous-only.
-# On the autonomous queue path the gate is evaluated ONCE per run, before any
-# selection work, so a run already at the worker budget does no JIT/selection
-# traversal. Before counting, the gate sweeps stranded reservations
-# (reservation_sweep) so it reconciles the ledger first. LIVE_COUNT is then the
-# effective-live count, effective_live = busy_workers + outstanding_reservations
+# On the autonomous queue path the gate is evaluated ONCE per run. Before
+# counting, the gate sweeps stranded reservations (reservation_sweep) so it
+# reconciles the ledger first. LIVE_COUNT is then the effective-live count,
+# effective_live = busy_workers + outstanding_reservations
 # (claude_agents_count_busy_workers + reservation_count), not busy workers alone
 # — a reservation counts against the budget the instant it is written, with no
-# wait for worker registration. At cap: schedule the #725 cap-keyed re-seed,
-# release the lock, emit `concurrency-cap`. Under cap: GAP bounds how many workers
-# a fan-out run may spawn. Daemon UNKNOWN (the busy-worker read fails;
-# reservation_count never fails) → fail open (GAP=1); the per-worktree dedup in
-# dispatch-spawn-worker is the last-line defense.
+# wait for worker registration. Under cap: GAP bounds how many workers a fan-out
+# run may spawn, and normal selection (Step 3) already runs priority-first, so a
+# priority item under budget is handled there. Daemon UNKNOWN (the busy-worker
+# read fails; reservation_count never fails) → fail open (GAP=1); the
+# per-worktree dedup in dispatch-spawn-worker is the last-line defense.
+#
+# AT cap (LIVE_COUNT >= TARGET_N) the budget no longer hard-stops the run. The
+# budget paces only NON-priority autonomous fan-out; priority/main-broken work
+# bypasses it. There are three cases, evaluated in order:
+#   1. `dispatch-target-workers --exhausted` reports `exhausted` (the 5-hour or
+#      weekly window is genuinely ~100% used, reset still ahead) → HARD STOP for
+#      everything: release the lock, schedule the #725 re-seed, emit
+#      `concurrency-cap`. No probe, no spawn — launching workers with no tokens
+#      is pure noise. This is distinct from "paced to 0 / at cap", which the
+#      pace/ramp math can produce while tokens remain; --exhausted is computed
+#      from telemetry independently of that math.
+#   2. Otherwise `dispatch-select-target --priority-only` probes the priority
+#      tier (its main-broken health gate runs first, so a main that broke WHILE
+#      at cap is now surfaced — the old early-exit fired before any selection):
+#        - `main-broken <sha>` → release the lock, echo it (the lock-free
+#          diagnose bg job spawns downstream).
+#        - `pr ...` / `issue ...` → HOLD the lock, append GAP=1 — ONE
+#          gate-exempt worker, exactly like manual/explicit dispatch. It is
+#          still counted by claude_agents_count_busy_workers on later ticks, so
+#          it suppresses non-priority fan-out: it bypasses the GATE, not the
+#          COUNT.
+#   3. `empty` (no priority/main-broken item waiting) → the unchanged hard cap:
+#      release the lock, schedule the #725 re-seed, emit `concurrency-cap`.
 GAP=1
 if [[ -z "$MANUAL" && -z "$ARG" ]]; then
   # shellcheck source=/dev/null
@@ -167,11 +194,56 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
     RESV=$(reservation_count)
     LIVE_COUNT=$(( BUSY + RESV ))
     if (( LIVE_COUNT >= TARGET_N )); then
-      release_lock
-      "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
       echo "router: $LIVE_COUNT effective live ($BUSY busy + $RESV reserved) >= target $TARGET_N"
-      echo "concurrency-cap"
-      exit 0
+      # At the worker budget. The budget paces NON-priority autonomous fan-out;
+      # priority / main-broken work bypasses it (one gate-exempt worker, GAP=1),
+      # exactly like a manual or explicit-target run. The only hard stop is
+      # genuine token exhaustion: when the 5-hour or weekly window is actually
+      # out of tokens (~100% used, reset still ahead), spawn nothing — including
+      # the main-broken diagnose job. Distinguish "paced to 0 / at cap" (a
+      # self-imposed throttle priority overrides) from "out of tokens" via the
+      # telemetry-only --exhausted query.
+      EXHAUSTED=$("$SCRIPT_DIR/dispatch-target-workers" --exhausted 2>/dev/null) || EXHAUSTED="ok"
+      if [[ "$EXHAUSTED" == exhausted ]]; then
+        release_lock
+        "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+        echo "router: rate-limit window exhausted; no priority bypass"
+        echo "concurrency-cap"
+        exit 0
+      fi
+      # Not exhausted: probe the priority tier only (JIT output suppressed). The
+      # main-broken health gate runs first inside --priority-only, so a main that
+      # broke WHILE at cap is now surfaced (the old early-exit fired before any
+      # selection ran).
+      PRIO=$("$SCRIPT_DIR/dispatch-select-target" --priority-only) || PRIO="empty"
+      case "$PRIO" in
+        main-broken\ *)
+          # Spawned as its own lock-free bg job — release the lock here.
+          release_lock
+          echo "$PRIO"
+          exit 0
+          ;;
+        pr\ *|issue\ *)
+          # One gate-exempt worker, exactly like manual / explicit dispatch:
+          # hold the lock, append GAP=1. Counted by
+          # claude_agents_count_busy_workers on later ticks, so it suppresses
+          # non-priority fan-out — it bypasses the GATE, not the COUNT.
+          echo "$PRIO 1"
+          exit 0
+          ;;
+        empty)
+          # No priority/main-broken item waiting → hard cap as before.
+          release_lock
+          "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+          echo "concurrency-cap"
+          exit 0
+          ;;
+        *)
+          release_lock
+          echo "dispatch-select-tick: dispatch-select-target --priority-only emitted unexpected '$PRIO'" >&2
+          exit 2
+          ;;
+      esac
     fi
     GAP=$(( TARGET_N - LIVE_COUNT ))
   fi

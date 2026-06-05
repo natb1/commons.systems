@@ -37,6 +37,30 @@
 #   (the highest-priority queue target), never emitting `concurrency-cap`. Fan-out
 #   is the autonomous chain's behavior only.
 #
+#   Exhaustion hard floor (autonomous path only): when the 5-hour or weekly
+#   rate-limit window is at/near 100% used with `resets_at` still in the future,
+#   `dispatch-target-workers --exhausted` reports `exhausted`. In that state the
+#   tick emits `concurrency-cap`, arms a reseed at the window reset, and spawns
+#   nothing — even a waiting `priority` or `dispatch:main-broken` item. This is a
+#   hard stop on genuine token exhaustion, not the self-imposed pacing throttle
+#   that the priority bypass is meant to override.
+#
+#   Priority/main-broken bypass (autonomous path, at-cap, not exhausted): when
+#   `LIVE_COUNT >= TARGET_N` but `--exhausted` reports `ok`, the tick does NOT
+#   immediately emit `concurrency-cap`. Instead it runs
+#   `dispatch-select-target --priority-only`, which checks the main-broken health
+#   gate first, then scans only the `priority=1` queue tier. If a
+#   `priority`-labeled PR or help-wanted issue (including any `dispatch:main-broken`
+#   issue) is found, the tick holds the lock and spawns exactly ONE gate-exempt
+#   worker (`GAP=1`) — the same treatment as a manual `dispatch`. This also closes
+#   the gap where a main that breaks while at the worker cap was previously
+#   suppressed: the old pre-selection gate exited before the main-broken health
+#   check ran; the bypass now runs that check first, so `main-broken <sha>` can
+#   surface and spawn the diagnose job even at cap. Priority/main-broken workers
+#   still count toward `LIVE_COUNT` and suppress non-priority fan-out on later
+#   ticks. If `--priority-only` returns `empty`, the tick falls back to the normal
+#   `concurrency-cap` disposition and reseed.
+#
 #   Selection lock: the selection lock (`dispatch-acquire-lock`, acquired inside
 #   `dispatch-select-tick`) is shared with the autonomous chain, so a manual run
 #   cannot select the same target as an in-flight tick. Merge conflicts are handled
@@ -50,6 +74,12 @@
 #        busy / sync-failed / resolver-failed / empty / concurrency-cap
 #                          → log a one-line note; exit 0. (select-tick already
 #                            released the lock / scheduled any reseed.)
+#        NOTE: on the autonomous no-arg path, `concurrency-cap` is emitted by
+#        select-tick only after the priority/main-broken bypass runs (see above):
+#        at-cap + exhausted → concurrency-cap immediately;
+#        at-cap + not exhausted + no priority/main-broken item → concurrency-cap;
+#        at-cap + not exhausted + priority/main-broken item found → pr/issue/main-broken
+#        decision instead, spawned as one gate-exempt worker (GAP=1).
 #        main-broken <sha> → spawn /dispatch-diagnose-main <sha> as a bg job via
 #                            dispatch-spawn-job (--name diagnose-main); exit 0.
 #        jit-reminder ...  → spawn /dispatch-jit-reminder ... as a bg job via

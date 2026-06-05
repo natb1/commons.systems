@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Select the single highest-priority task from the queue.
-# Usage: dispatch-select-target [--qa | --health-only | --main-broken-sha] [--exclude <n>...]
+# Usage: dispatch-select-target [--qa | --health-only | --main-broken-sha | --priority-only] [--exclude <n>...]
 #
 # --exclude <n>... names issue numbers the caller has already processed (the
 # fan-out loop's SEEN set, #1062); the selector never returns an excluded target
@@ -47,6 +47,20 @@
 #
 # --qa mode omits the <phase> field — there it is always "qa":
 #   pr <num> <branch>           — the QA PR to work on
+#
+# --priority-only mode is the at-cap bypass selector (#1134): it runs the
+# origin/main CI health gate, then scans ONLY the `priority=1` tier of the
+# PR/issue ladder, returning the single highest-priority priority item. The JIT
+# scan is suppressed (a reminder is not priority/main-broken fix work). Every
+# default-mode skip rule is preserved (worktree ownership/reservation,
+# blocked_by, ready-PR-closes-issue, not-ready PR). dispatch-select-tick consults
+# it when the autonomous tick is at the worker cap but not token-exhausted, to
+# spawn a priority/main-broken item as one gate-exempt worker.
+# Output is exactly one line:
+#   main-broken <sha>           — origin/main's HEAD CI has a failing check
+#   pr <num> <branch> <phase>   — the highest-priority priority=1 PR
+#   issue <num>                 — the highest-priority priority=1 help-wanted issue
+#   empty                       — no priority=1 item eligible
 #
 # Selection is three-tier: the `priority` label is the *outermost* axis, topic
 # *category* nests inside it, and the phase *ladder* runs innermost. The
@@ -116,6 +130,7 @@ source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 QA_MODE=false
 HEALTH_ONLY=false
 MAIN_BROKEN_SHA_ONLY=false
+PRIORITY_ONLY=false
 declare -A EXCLUDED=()
 
 while [[ $# -gt 0 ]]; do
@@ -123,6 +138,7 @@ while [[ $# -gt 0 ]]; do
     --qa) QA_MODE=true; shift ;;
     --health-only) HEALTH_ONLY=true; shift ;;
     --main-broken-sha) MAIN_BROKEN_SHA_ONLY=true; shift ;;
+    --priority-only) PRIORITY_ONLY=true; shift ;;
     --exclude)
       shift
       while [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; do
@@ -136,6 +152,16 @@ done
 
 if [[ "$QA_MODE" == "true" && "$HEALTH_ONLY" == "true" ]]; then
   echo "error: --qa and --health-only are mutually exclusive" >&2
+  exit 1
+fi
+
+# --priority-only is a default-mode variant (main-broken gate + the priority=1
+# tier only); it has no meaning alongside the --qa / --health-only / --main-broken-sha
+# modes, which run their own selection or exit early. Reject the combination
+# rather than silently picking one.
+if [[ "$PRIORITY_ONLY" == "true" \
+      && ( "$QA_MODE" == "true" || "$HEALTH_ONLY" == "true" || "$MAIN_BROKEN_SHA_ONLY" == "true" ) ]]; then
+  echo "error: --priority-only cannot combine with --qa, --health-only, or --main-broken-sha" >&2
   exit 1
 fi
 
@@ -340,12 +366,18 @@ if [[ "$HEALTH_ONLY" == "true" ]]; then
   exit 0
 fi
 
-# Default mode: JIT scan, then the main-broken gate.
+# Default mode: JIT scan, then the main-broken gate. --priority-only suppresses
+# the JIT scan (a reminder is not priority/main-broken fix work) but still runs
+# the main-broken latch: a newly-red main outranks the priority queue, and once
+# the diagnose job has filed the dispatch:main-broken+priority issue the latch
+# stands down so that fix work flows through the priority scan below.
 if [[ "$QA_MODE" == "false" ]]; then
-  JIT_LINE=$(jit_scan)
-  if [[ -n "$JIT_LINE" ]]; then
-    echo "$JIT_LINE"
-    exit 0
+  if [[ "$PRIORITY_ONLY" == "false" ]]; then
+    JIT_LINE=$(jit_scan)
+    if [[ -n "$JIT_LINE" ]]; then
+      echo "$JIT_LINE"
+      exit 0
+    fi
   fi
 
   MAIN_BROKEN_SHA=$(main_broken_latch)
@@ -571,6 +603,15 @@ PHASE_PRIORITY=(review verify)
 while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "$pr_num" ]] && continue
 
+  # --priority-only scans only the priority=1 tier. Skip any PR whose
+  # closing-issue label union does not carry `priority` BEFORE the expensive
+  # per-PR dispatch-ci-ready / dispatch-phase gh calls — a non-priority PR is
+  # never selectable in this mode, so it pays nothing.
+  if [[ "$PRIORITY_ONLY" == "true" ]] \
+     && [[ "$(has_priority_in_labels "$(pr_combined_labels "$pr_closing")")" != "1" ]]; then
+    continue
+  fi
+
   # Skip a PR whose branch worktree is owned by a live session or reserved. An
   # orphan worktree (no session, no marker) does not skip — it is recycled at
   # dispatch-resolve-worktree (#905, #1046).
@@ -696,6 +737,9 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   # remaining issues in it are skipped — including the expensive leaf trace.
   issue_cat=$(category_of_labels "$issue_labels")
   issue_pri=$(has_priority_in_labels "$issue_labels")
+  # --priority-only scans only the priority=1 tier — skip non-priority issues
+  # before the expensive dispatch-trace-leaf descent.
+  [[ "$PRIORITY_ONLY" == "true" && "$issue_pri" != "1" ]] && continue
   issue_bucket="$issue_cat|$issue_pri"
   [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]] && continue
   # Resolve a startable open leaf within the issue's subtree. dispatch-trace-leaf
@@ -741,6 +785,12 @@ done <<< "$ISSUE_SORTED"
 # phase — is exhausted before any priority=0 item is considered; within one
 # priority level topic category is the tie-break, and within each
 # (priority, category) bucket the phase ladder runs innermost.
+#
+# In --priority-only mode the scan loops above already `continue` on every
+# priority=0 item, so FIRST_PR/FIRST_ISSUE hold only priority=1 keys; the pri=0
+# pass below is then a guaranteed no-op (every lookup misses). It is left in the
+# shared loop rather than special-cased — the empty-map iteration is harmless
+# and keeps the default and --priority-only output paths identical.
 for pri in 1 0; do
   for category in "${CATEGORIES[@]}"; do
     for phase in "${PHASE_PRIORITY[@]}"; do
