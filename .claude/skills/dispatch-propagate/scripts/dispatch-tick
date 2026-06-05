@@ -207,6 +207,21 @@ if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
   fi
 fi
 
+# --- Step 0.5: refresh rate-limit telemetry (headless source) ----------------
+# The budget reads below (dispatch-select-tick -> dispatch-target-workers) consume
+# cached telemetry in rate_limits.json, whose ONLY status-line writer never runs in
+# the headless chain (no session renders a status line). When the chain fully pauses
+# and its reseed timer later fires, re-reading that frozen snapshot reports the
+# still-capped pre-reset state and nothing spawns — the budget reopened but the tick
+# cannot observe it (#1127). Refresh telemetry from a non-status-line source FIRST,
+# so every budget read this tick (and any reseed it arms) is computed against fresh
+# data. Fail-safe: a probe failure (network, expired token, malformed headers) logs
+# one note and the tick proceeds on the cached file — a probe outage degrades to the
+# prior behavior rather than erroring the tick.
+if ! "$SCRIPT_DIR/dispatch-refresh-rate-limits"; then
+  echo "dispatch-tick: rate-limit refresh probe failed; proceeding on cached telemetry (#1127)" >&2
+fi
+
 # --- Step 1: select the target ------------------------------------------------
 # Capture select-tick's full stdout and echo every line through (jit:/calendar:
 # passthrough AND the decision line) so journald and a live relay see it all.

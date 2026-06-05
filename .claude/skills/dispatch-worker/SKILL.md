@@ -130,20 +130,15 @@ Run `git push origin HEAD` to flush them. This is sandbox-safe: it uses HTTPS
 to `github.com`, an allowlisted host, so no `dangerouslyDisableSandbox` is
 needed.
 
-Then write a one-line reason to `$CLAUDE_JOB_DIR/office-hours-reason` using the
-atomic tempfile + mv pattern (only when `CLAUDE_JOB_DIR` is set and exists —
-match the pattern used in review-fix Step 8 / implement-unit), then stop with
+Then call `dispatch-mark-deviation` with a one-line reason, then stop with
 no marker. The push heals the `CONFLICTING` PR; stopping without a marker means
 the Stop hook applies `dispatch:office-hours`, surfacing the unexpected
 late-skip for a human.
 
 ```bash
 git push origin HEAD
-if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-  printf '%s\n' "/dispatch-worker: PUSH-STRANDED — pushed unpushed local commits a done PR left behind; parking for review" \
-    > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
-  mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" "$CLAUDE_JOB_DIR/office-hours-reason"
-fi
+.claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+  "/dispatch-worker: PUSH-STRANDED — pushed unpushed local commits a done PR left behind; parking for review"
 ```
 
 Note: with the `/review-fix` terminal-flush guard (#1105 Unit 1) in place, this
