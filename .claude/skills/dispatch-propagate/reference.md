@@ -89,11 +89,11 @@ liveness skip and consumes a concurrency slot); the lock is released before the
 resolver job is spawned. Crash safety: a router that dies mid-spawn holding the lock is
 recovered by the lock's existing dead-holder reclaim (the recorded sessionId
 absent from `claude agents --json`) on the next `--wait`. Such a router also
-strands any reservation marker it wrote before dying; `reservation_sweep` (run
-at the start of the next tick) reclaims that marker via the same dead-session
-rule — a parallel, belt-and-suspenders reclaim path alongside the lock's
-dead-holder reclaim. The stranded marker is cheap to reclaim and leaves no
-half-built state.
+strands any reservation marker it wrote before dying; `reservation_sweep`
+reclaims that marker via the same dead-session rule once it has aged past the
+boot grace (i.e. on a subsequent tick after the grace elapses) — a parallel,
+belt-and-suspenders reclaim path alongside the lock's dead-holder reclaim. The
+stranded marker is cheap to reclaim and leaves no half-built state.
 
 The `tmp/dispatch-worktree` marker is the post-Step-5 reclaim signal for
 **dead** holders, and it is **session-scoped**: `dispatch-finalize-selection`
@@ -285,11 +285,15 @@ before `dispatch-spawn-worker` and clears it immediately after the spawn
 returns; a completed fan-out therefore leaves `effective_live == busy_workers`
 with no double-count and no leaked budget. `reservation_sweep` reclaims a
 marker when: (a) the worktree already has a live worker matching the marker
-basename (the reservation converted — redundant backstop), or (b) the reserving
-session is absent from `claude agents --json` and no live worker registered. A
-marker whose reserving session is still live but has no registered worker yet is
-kept as in-flight. If `claude agents --json` returns UNKNOWN, the sweep reclaims
-nothing (fail-safe). Later #1044 sub-issues build on this ledger: #1046 extends
+basename (the reservation converted — redundant backstop, at any age), or (b)
+the reserving session is absent from `claude agents --json` and no live worker
+registered AND the marker has aged past the boot grace. A marker younger than
+the boot grace (`DISPATCH_RESERVATION_BOOT_GRACE_S`, default 30s) is kept as
+in-flight regardless of the reserving session's liveness, so an async spawn whose
+router has exited while the worker is still booting is not reclaimed out from
+under it; a marker whose reserving session is still live but has no registered
+worker yet is likewise kept as in-flight. If `claude agents --json` returns
+UNKNOWN, the sweep reclaims nothing (fail-safe). Later #1044 sub-issues build on this ledger: #1046 extends
 `dispatch-select-target` to skip reserved worktrees; #1047 relocates
 provisioning out of the held-lock loop; #1048 releases the lock after
 reserve+spawn rather than after registration.

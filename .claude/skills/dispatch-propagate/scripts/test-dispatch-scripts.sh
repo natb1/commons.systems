@@ -6637,7 +6637,8 @@ rl_teardown() {
   rm -rf "$RL_DIR"
   RL_DIR=""
   RL_FAKE=""
-  unset DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_NOW
+  unset DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_NOW \
+    DISPATCH_RESERVATION_SWEEP_NOW_EPOCH DISPATCH_RESERVATION_BOOT_GRACE_S
 }
 
 # rl_write_fake_claude <json-array> — install a fake `claude` that prints the
@@ -6838,6 +6839,62 @@ if printf '%s' "$err" | grep -q 'malformed reservation'; then
   PASS=$((PASS + 1)); echo "  PASS: rl-sweep-malformed: note mentions malformed reservation"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-malformed: note mentions malformed reservation"
+fi
+rl_teardown
+
+# --- Test A: sweep keeps a YOUNG marker even when reserving session is dead ----
+
+echo "Test: reservation_sweep keeps a young marker even when the reserving session is dead (boot grace; #1048 regression guard)"
+rl_setup
+# DISPATCH_RESERVATION_NOW is "2026-01-01T00:00:00Z" (set by rl_setup); its
+# epoch is 1767225600 (confirmed via `date -u -d 2026-01-01T00:00:00Z +%s`).
+reservation_write "990-slug" "990" "dead-sess"
+# Sweep clock 5s after the marker timestamp → within the 30s grace.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=1767225605
+# A live session that is NEITHER the reserving session NOR a worker named by the
+# basename — without the grace this would be reclaimed as dead-session-stranded.
+rl_write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+reservation_sweep 2>/dev/null
+cnt=$(reservation_count)
+assert_eq "rl-sweep-young: young marker with dead session kept (count 1)" "1" "$cnt"
+rl_teardown
+
+# --- Test B: sweep reclaims an AGED marker whose reserving session is dead -----
+
+echo "Test: reservation_sweep reclaims an aged marker whose reserving session is dead (grace boundary)"
+rl_setup
+reservation_write "991-slug" "991" "dead-sess"
+# Sweep clock 31s after the marker timestamp → past the 30s grace.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=1767225631
+rl_write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+err=$(reservation_sweep 2>&1 1>/dev/null)
+cnt=$(reservation_count)
+assert_eq "rl-sweep-aged: aged marker with dead session reclaimed (count 0)" "0" "$cnt"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'dead-session-stranded'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-aged: note mentions dead-session-stranded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-aged: note mentions dead-session-stranded"
+fi
+rl_teardown
+
+# --- Test C: live-worker-redundant reclaim is age-independent (rule (a)) -------
+
+echo "Test: reservation_sweep reclaims a live-worker-redundant marker regardless of age (rule (a) is age-independent)"
+rl_setup
+reservation_write "992-slug" "992" "whatever-sess"
+# YOUNG marker (sweep clock within grace) — but the worktree already has a live
+# worker, so rule (a) must reclaim it ahead of the grace check.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=1767225605
+rl_write_fake_claude '[{"sessionId":"x","pid":1,"status":"busy","name":"992-slug"}]'
+err=$(reservation_sweep 2>&1 1>/dev/null)
+cnt=$(reservation_count)
+assert_eq "rl-sweep-redundant-young: live-worker-redundant reclaimed despite youth (count 0)" "0" "$cnt"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'live-worker-redundant'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-redundant-young: note mentions live-worker-redundant"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-redundant-young: note mentions live-worker-redundant"
 fi
 rl_teardown
 
@@ -9992,28 +10049,49 @@ assert_eq "self-exclude-worker: stdout is 'spawned' (own session is not 'another
   "spawned" "$out"
 spawn_worker_teardown
 
-# --- Test 5: spawn failure ---------------------------------------------------
+# --- Test 5: --no-verify behavior (kick is the came-up signal) ---------------
+# The worker passes --no-verify (#1048), so the registration wait is gone. A
+# kick that never registers SUCCEEDS (the kick itself returns 0); only a
+# non-zero kick fails.
 
-echo "Test: a spawned worker job that never registers exits non-zero with a diagnostic"
+echo "Test: a kick that never registers still exits 0 (--no-verify, no registration wait)"
 spawn_worker_setup
 write_fake_spawn_worker_claude
+# SPAWN_BG_REGISTERS=0: the --bg handler returns 0 but never appends to the
+# registry. Under the old verify path this exited 1; with --no-verify the worker
+# exits 0 with stdout 'spawned' and no verify poll.
 export SPAWN_BG_REGISTERS=0
-# Skip the real inter-attempt sleeps — this test exercises the full exhaustion
-# path, which would otherwise add ~0.8 s of wall-clock sleep.
-export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "spawn-worker-noverify: a never-registering kick exits 0" "0" "$rc"
+assert_eq "spawn-worker-noverify: stdout is 'spawned'" "spawned" "$out"
+spawn_worker_teardown
+
+echo "Test: a non-zero 'claude --bg' kick exits 1 with a diagnostic (--no-verify)"
+spawn_worker_setup
+# Inline fake whose --bg branch exits non-zero. dedup (Step 2) queries `agents`
+# first, so that branch must print a parseable empty array.
+cat > "$TMPDIR_TEST/fake-claude" <<FAKE
+#!/usr/bin/env bash
+set -uo pipefail
+case "\${1:-}" in
+  agents) echo '[]' ;;
+  --bg) echo "boom" >&2; exit 3 ;;
+esac
+FAKE
+chmod +x "$TMPDIR_TEST/fake-claude"
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>&1 1>/dev/null) || rc=$?
 TOTAL=$((TOTAL + 1))
 if [[ "$rc" -ne 0 ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-fail: dispatch-spawn-worker exits non-zero"
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-failkick: dispatch-spawn-worker exits non-zero"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-fail: dispatch-spawn-worker exits non-zero (rc=$rc)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-failkick: dispatch-spawn-worker exits non-zero (rc=$rc)"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"did not register"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-fail: stderr reports the unregistered agent"
+if [[ -n "${err//[[:space:]]/}" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-failkick: stderr reports the failed kick"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-fail: stderr reports the unregistered agent"
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-failkick: stderr reports the failed kick"
   echo "    stderr: $err"
 fi
 spawn_worker_teardown
@@ -10079,25 +10157,24 @@ assert_eq "missing-args-worker: unsafe chars in <worktree-path> → exit 2" "2" 
 
 spawn_worker_teardown
 
-# --- Test 8: dedup + verify query the worktree path, not the spawner cwd ----
+# --- Test 8: dedup queries the worktree path, not the spawner cwd -----------
 #
 # Regression guard: in production the daemon server-side-filters `agents
 # --json --cwd <path>` to sessions started under <path>. Since
 # dispatch-spawn-worker `cd`s into the target worktree before `claude --bg`,
 # the new worker registers under <worktree-path>, not under the spawner cwd
-# (worktrees/main). Dedup and verify both query the worktree path so the new
-# worker is found. If they queried the spawner cwd instead, the daemon would
-# exclude the new worker, `registered` would stay empty, and the script would
-# exit 1 — on every spawn in production.
+# (worktrees/main). Under --no-verify (#1048) only DEDUP queries the worktree
+# path now (there is no verify step). If dedup queried the spawner cwd instead,
+# the fixture would still be correct here, but the dedup query is the path-keyed
+# query this test pins.
 #
 # The default fake `claude` (write_fake_spawn_worker_claude) ignores --cwd,
 # so the existing Tests 1–7 do not exercise this filter and would not catch
 # the regression. This test installs a cwd-aware fake: its `agents` handler
 # filters its registry-emit by --cwd, and its --bg handler records the new
-# worker with cwd = $(pwd) at spawn time. With the fix, both queries pass
-# the worktree path and the worker is found. Without it, verify returns no
-# session and the script exits 1.
-echo "Test: dedup + verify query the worktree path, not the spawner cwd"
+# worker with cwd = $(pwd) at spawn time. dedup finds nothing under the path,
+# so the worker is spawned and the kick succeeds.
+echo "Test: dedup queries the worktree path, not the spawner cwd"
 spawn_worker_setup
 cat > "$TMPDIR_TEST/fake-claude" <<FAKE
 #!/usr/bin/env bash
@@ -10140,59 +10217,8 @@ chmod +x "$TMPDIR_TEST/fake-claude"
 SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
 if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "cwd-aware-spawn: exits 0" "0" "$rc"
-assert_eq "cwd-aware-spawn: stdout is 'spawned' (verify queried under worktree path, found the new worker)" \
+assert_eq "cwd-aware-spawn: stdout is 'spawned' (dedup queried under worktree path; nothing found, so the worker is spawned)" \
   "spawned" "$out"
-spawn_worker_teardown
-
-# --- Test 9: delayed registration absorbed by verify retry -------------------
-
-echo "Test: a spawned worker that registers on the 2nd 'agents' call still exits 0"
-spawn_worker_setup
-write_fake_spawn_worker_claude
-# SPAWN_BG_REGISTER_AFTER_N=2 models the daemon's async-registration race:
-# the spawned worker first appears in the fake's registry on the 2nd
-# subsequent `agents` call. verify_agent_registered_under polls up to 5
-# times, so the 2nd attempt finds the worker and the script exits 0.
-export SPAWN_BG_REGISTER_AFTER_N=2
-SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
-err_file="$TMPDIR_TEST/stderr"
-if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>"$err_file" ); then rc=0; else rc=$?; fi
-err=$(cat "$err_file")
-assert_eq "delayed-register-worker: dispatch-spawn-worker exits 0" "0" "$rc"
-assert_eq "delayed-register-worker: stdout is 'spawned'" "spawned" "$out"
-TOTAL=$((TOTAL + 1))
-if [[ -z "${err//[[:space:]]/}" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: delayed-register-worker: no diagnostic on stderr"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: delayed-register-worker: no diagnostic on stderr"
-  echo "    stderr: $err"
-fi
-spawn_worker_teardown
-
-# --- Test 10: registration on the exact last attempt still exits 0 -----------
-
-echo "Test: a spawned worker that registers on the 5th (final) 'agents' call still exits 0"
-spawn_worker_setup
-write_fake_spawn_worker_claude
-# SPAWN_BG_REGISTER_AFTER_N=5 makes the worker first appear on the 5th
-# subsequent `agents` call — the last poll before verify_agent_registered_under
-# exhausts its 5-attempt budget. This pins the off-by-one in the retry loop:
-# the final attempt is honoured, so the script must still exit 0.
-export SPAWN_BG_REGISTER_AFTER_N=5
-export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
-SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
-err_file="$TMPDIR_TEST/stderr"
-if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>"$err_file" ); then rc=0; else rc=$?; fi
-err=$(cat "$err_file")
-assert_eq "last-attempt-register-worker: dispatch-spawn-worker exits 0" "0" "$rc"
-assert_eq "last-attempt-register-worker: stdout is 'spawned'" "spawned" "$out"
-TOTAL=$((TOTAL + 1))
-if [[ -z "${err//[[:space:]]/}" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: last-attempt-register-worker: no diagnostic on stderr"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: last-attempt-register-worker: no diagnostic on stderr"
-  echo "    stderr: $err"
-fi
 spawn_worker_teardown
 
 # ============================================================================
@@ -10329,6 +10355,118 @@ assert_eq "spawn-job-usage: non-existent --cwd → exit 2" "2" "$sj_rc_d"
 if "$TMPDIR_TEST/scripts/dispatch-spawn-job" --name diagnose-main --cwd "$SPAWN_JOB_CWD" "prompt-one" "prompt-two" 2>/dev/null; then sj_rc_e=0; else sj_rc_e=$?; fi
 assert_eq "spawn-job-usage: extra positional → exit 2" "2" "$sj_rc_e"
 
+spawn_worker_teardown
+
+# --- Test 5: --no-verify mode skips the registration wait (#1048) ------------
+# The budget-path fan-out passes --no-verify: a successful `claude --bg` kick is
+# enough (the ledger + sweep reconcile the slot), and a non-zero kick fails.
+
+echo "Test: --no-verify exits 0 on a kick that never registers (no registration poll)"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+# SPAWN_BG_REGISTERS=0: the --bg fake returns 0 but never appends to the
+# registry. Under the OLD verify path this would have exited 1; with --no-verify
+# the kick's own exit 0 is the came-up signal, so the script exits 0.
+export SPAWN_BG_REGISTERS=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" --no-verify \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job-noverify: exits 0 despite an empty registry" "0" "$rc"
+assert_eq "spawn-job-noverify: stdout is 'spawned'" "spawned" "$out"
+# Prove no registration happened: the registry was never appended to.
+TOTAL=$((TOTAL + 1))
+if [[ "$(cat "$SPAWN_WORKER_REGISTRY")" == "[]" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-job-noverify: spawned without the worker ever registering"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-job-noverify: spawned without the worker ever registering"
+  echo "    registry: $(cat "$SPAWN_WORKER_REGISTRY")"
+fi
+spawn_worker_teardown
+
+echo "Test: --no-verify exits 1 on a non-zero 'claude --bg' kick with a diagnostic"
+spawn_worker_setup
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+# Inline fake whose --bg exits non-zero; `agents` prints [] so dedup passes.
+cat > "$TMPDIR_TEST/fake-claude" <<FAKE
+#!/usr/bin/env bash
+set -uo pipefail
+case "\${1:-}" in
+  agents) echo '[]' ;;
+  --bg) echo "boom" >&2; exit 3 ;;
+esac
+FAKE
+chmod +x "$TMPDIR_TEST/fake-claude"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" --no-verify \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc" 2>&1 1>/dev/null) || rc=$?
+assert_eq "spawn-job-noverify-fail: a non-zero kick exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ -n "${err//[[:space:]]/}" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-job-noverify-fail: stderr reports the failed kick"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-job-noverify-fail: stderr reports the failed kick"
+  echo "    stderr: $err"
+fi
+spawn_worker_teardown
+
+# --- Test 6: default (verify) path absorbs delayed registration --------------
+# The unledgered one-off spawns (main-broken / jit-reminder) keep the default
+# verify, so the delayed-registration retry coverage lives here on the DEFAULT
+# path (no --no-verify), ported from the former worker Tests 9 & 10.
+
+echo "Test: a job that registers on the 2nd 'agents' call still exits 0 (default verify)"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+# SPAWN_BG_REGISTER_AFTER_N=2: the job first appears on the 2nd subsequent
+# `agents` call. verify_agent_registered_under polls up to 5 times, so the 2nd
+# attempt finds it and the script exits 0.
+export SPAWN_BG_REGISTER_AFTER_N=2
+err_file="$TMPDIR_TEST/stderr"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc" 2>"$err_file" ); then rc=0; else rc=$?; fi
+err=$(cat "$err_file")
+assert_eq "spawn-job-delayed: exits 0" "0" "$rc"
+assert_eq "spawn-job-delayed: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ -z "${err//[[:space:]]/}" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-job-delayed: no diagnostic on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-job-delayed: no diagnostic on stderr"
+  echo "    stderr: $err"
+fi
+spawn_worker_teardown
+
+echo "Test: a job that registers on the 5th (final) 'agents' call still exits 0 (default verify)"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+# SPAWN_BG_REGISTER_AFTER_N=5: the job first appears on the last poll before
+# verify exhausts its 5-attempt budget. Pins the off-by-one — the final attempt
+# is honoured, so the script must still exit 0.
+export SPAWN_BG_REGISTER_AFTER_N=5
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+err_file="$TMPDIR_TEST/stderr"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc" 2>"$err_file" ); then rc=0; else rc=$?; fi
+err=$(cat "$err_file")
+assert_eq "spawn-job-last-attempt: exits 0" "0" "$rc"
+assert_eq "spawn-job-last-attempt: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ -z "${err//[[:space:]]/}" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-job-last-attempt: no diagnostic on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-job-last-attempt: no diagnostic on stderr"
+  echo "    stderr: $err"
+fi
 spawn_worker_teardown
 
 # ============================================================================
@@ -16099,13 +16237,14 @@ assert_eq "queue happy: marker written into target worktree" "1" \
   "$([ -f "$TMPDIR_TEST/project/worktrees/839-test/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- #945 boot-gap: propagate releases the lock ONLY after spawn -------------
-# The headline #945 assertion: the lock must be HELD while dispatch-spawn-worker
-# runs (i.e. through the worker's boot/registration) and released only after it
-# returns. Override the spawn-worker fake to snapshot the live lock contents at
-# spawn time, then assert the snapshot equals the held session id AND the final
-# lock file is empty (released after spawn).
-echo "Test: materialize-spawn holds the lock during spawn, releases after (#945)"
+# --- #1048 boot-gap: propagate releases the lock ONLY after spawn ------------
+# The headline assertion: the lock must be HELD while dispatch-spawn-worker runs
+# (i.e. through the worker spawn-kick) and released only after it returns. The
+# spawn is async (#1048), so the lock spans the kick, not registration. Override
+# the spawn-worker fake to snapshot the live lock contents at spawn time, then
+# assert the snapshot equals the held session id AND the final lock file is empty
+# (released after the kick).
+echo "Test: materialize-spawn holds the lock during spawn, releases after (#1048)"
 mat_setup
 cat > "$TMPDIR_TEST/dispatch-spawn-worker" <<FAKE
 #!/usr/bin/env bash
@@ -16126,11 +16265,16 @@ assert_eq "boot-gap: lock held during spawn (== session id)" "mat-session" \
 assert_eq "boot-gap: lock released after spawn" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
-# --- reservation written before spawn, cleared after a successful spawn -------
-# Step 6b writes the marker the instant before dispatch-spawn-worker and clears
-# it the instant the spawn returns. Snapshot the marker presence AT spawn time
-# (must be present), then assert it is gone after a successful spawn.
-echo "Test: materialize-spawn writes the reservation before spawn, clears it after success"
+# --- reservation written before spawn, LEFT in place after success (#1048) ----
+# Step 6b writes the marker the instant before the (now async) spawn-kick and
+# LEAVES it in place on success: the spawn is async (dispatch-spawn-worker passes
+# --no-verify), so the worker has not registered yet. The marker is this slot's
+# in-flight budget/selection contribution; the sweep reclaims it on registration
+# (rule (a)) or after the boot grace. Snapshot the marker presence AT spawn time
+# (must be present), then assert it SURVIVES a successful spawn — AND survives the
+# lock release and a fresh reservation_sweep, the reserve→release→reacquire
+# no-double-select property the AC names (the reserved target stays skipped).
+echo "Test: materialize-spawn leaves the reservation in place after a successful async spawn (#1048)"
 mat_setup
 cat > "$TMPDIR_TEST/dispatch-spawn-worker" <<FAKE
 #!/usr/bin/env bash
@@ -16146,7 +16290,24 @@ assert_eq "resv-success: exit 0" "0" "$rc"
 assert_eq "resv-success: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "resv-success: reservation present AT spawn time" "present" \
   "$(cat "$TMPDIR_TEST/logs/resv-at-spawn.log")"
-assert_eq "resv-success: reservation cleared after a successful spawn" "0" \
+assert_eq "resv-success: reservation LEFT in place after a successful spawn" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
+# Lock was released after the kick (the locked phase is fast).
+assert_eq "resv-success: lock released after the spawn-kick" "" "$(cat "$DISPATCH_LOCK_FILE")"
+# reserve→release→reacquire: with the lock released, the marker still exists, so
+# a concurrent acquirer's reserved-skip (#1046) keeps skipping the target.
+TOTAL=$((TOTAL + 1))
+if reservation_exists "839-test"; then
+  PASS=$((PASS + 1)); echo "  PASS: resv-success: reservation_exists after release (target stays reserved)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: resv-success: reservation_exists after release (target stays reserved)"
+fi
+# The marker SURVIVES a fresh sweep: the marker is very recent (boot grace keeps
+# it as in-flight); additionally mat-session is reported live so rule (d) would
+# keep it too. The target remains reserved across the full
+# reserve→release→reacquire sequence.
+reservation_sweep 2>/dev/null
+assert_eq "resv-success: reservation survives a fresh reservation_sweep" "1" \
   "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
 mat_teardown
 
