@@ -67,6 +67,24 @@ export interface UploadMeta {
   exportedAt: string;
 }
 
+export interface FileHandleMeta {
+  key: "fileHandle";
+  handle: FileSystemFileHandle;
+}
+
+export async function putFileHandle(handle: FileSystemFileHandle): Promise<void> {
+  await put("meta", { key: "fileHandle", handle });
+}
+
+export async function getFileHandle(): Promise<FileSystemFileHandle | undefined> {
+  const record = await get<FileHandleMeta>("meta", "fileHandle");
+  return record?.handle;
+}
+
+export async function clearFileHandle(): Promise<void> {
+  await deleteRecord("meta", "fileHandle");
+}
+
 export interface ParsedData {
   transactions: IdbTransaction[];
   budgets: IdbBudget[];
@@ -92,9 +110,10 @@ export async function storeParsedData(data: ParsedData): Promise<void> {
     stores[name] = tx.objectStore(name);
   }
 
-  // Clear all stores first
+  // Clear all stores first (skip "meta" to preserve the persisted fileHandle record)
   const clearPromises: Promise<void>[] = [];
   for (const name of STORE_NAMES) {
+    if (name === "meta") continue;
     clearPromises.push(
       new Promise((resolve, reject) => {
         const req = stores[name].clear();
