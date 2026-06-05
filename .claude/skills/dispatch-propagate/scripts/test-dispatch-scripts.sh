@@ -1258,6 +1258,52 @@ assert_eq "wrong-worktree → provisioning not invoked" "0" \
   "$([[ -f "$STUB_DIR/provision-calls.log" ]] && wc -l < "$STUB_DIR/provision-calls.log" | tr -d ' ' || echo 0)"
 teardown
 
+# 21. No-PR issue whose label is in the statements config → INVOKE /budget-parse-job
+# (#1024). The implement arm fetches the issue's labels (gh issue view --json labels,
+# served from issue-labels-<num>.json) and the configured statements labels (from
+# dispatch-config-load against DISPATCH_CONFIG_DIR), and on a non-empty intersection
+# routes to the parse-job handler instead of RELEVANCE-REVIEW.
+echo "Test: no PR + statements label → INVOKE /budget-parse-job"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"statements":[{"key":"acme","dir":"/s","repo":"o/r","label":"statements:acme","project":"p"}]}\n' \
+  > "$DISPATCH_CONFIG_DIR/statements.json"
+printf '{"labels":[{"name":"statements:acme"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR + statements label → INVOKE /budget-parse-job (directive)" \
+  "INVOKE /budget-parse-job" "$ROUTE_OUT"
+assert_eq "no PR + statements label → INVOKE /budget-parse-job (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 22. No-PR issue with a statements config present, but the issue carries no
+# configured label → RELEVANCE-REVIEW (empty intersection, unchanged behavior).
+echo "Test: no PR + non-statements label → RELEVANCE-REVIEW"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"statements":[{"key":"acme","dir":"/s","repo":"o/r","label":"statements:acme","project":"p"}]}\n' \
+  > "$DISPATCH_CONFIG_DIR/statements.json"
+printf '{"labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR + non-statements label → RELEVANCE-REVIEW (directive)" \
+  "RELEVANCE-REVIEW" "$ROUTE_OUT"
+assert_eq "no PR + non-statements label → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 23. No statements config present at all → RELEVANCE-REVIEW (the normal state for
+# repos without statement scanning; dispatch-config-load prints "no-config", the
+# arm treats it as no configured labels and never fetches the issue's labels).
+echo "Test: no PR + no statements config → RELEVANCE-REVIEW"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR + no statements config → RELEVANCE-REVIEW (directive)" \
+  "RELEVANCE-REVIEW" "$ROUTE_OUT"
+assert_eq "no PR + no statements config → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
+teardown
+
 # ============================================================================
 # dispatch-resolve-arg tests
 # ============================================================================
@@ -7290,6 +7336,81 @@ assert_eq "absent statements.json exits 0" "0" "$rc"
 assert_eq "absent statements.json prints no-config" "no-config" "$out"
 config_teardown
 
+# --- Test 7f: statements.json with valid string snapshot passes ---------------
+
+echo "Test: statements.json with string snapshot exits 0"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/statements.json" <<'EOF'
+{
+  "statements": [
+    {
+      "key": "mybank",
+      "dir": "/home/user/statements/mybank",
+      "repo": "test-owner/test-repo",
+      "label": "statements:mybank",
+      "project": "test-project",
+      "snapshot": "/home/user/statements/mybank/budget.benc"
+    }
+  ]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" statements 2>/dev/null); rc=$?
+assert_eq "snapshot string exits 0" "0" "$rc"
+stmt_snapshot=$(printf '%s' "$out" | jq -r '.statements[0].snapshot')
+assert_eq "snapshot value round-trips" "/home/user/statements/mybank/budget.benc" "$stmt_snapshot"
+config_teardown
+
+# --- Test 7g: statements.json with non-string snapshot exits 1 ---------------
+
+echo "Test: statements.json with non-string snapshot exits 1 and stderr mentions snapshot"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/statements.json" <<'EOF'
+{
+  "statements": [
+    {
+      "key": "mybank",
+      "dir": "/home/user/statements/mybank",
+      "repo": "test-owner/test-repo",
+      "label": "statements:mybank",
+      "project": "test-project",
+      "snapshot": 42
+    }
+  ]
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" statements 2>&1 1>/dev/null) || rc=$?
+assert_eq "snapshot non-string exits 1" "1" "$rc"
+if [[ "$err" == *"snapshot"* ]]; then
+  assert_eq "snapshot non-string stderr mentions snapshot" "yes" "yes"
+else
+  assert_eq "snapshot non-string stderr mentions snapshot" "yes" "no: $err"
+fi
+config_teardown
+
+# --- Test 7h: statements.json without snapshot field is still valid -----------
+
+echo "Test: statements.json without snapshot field exits 0 (back-compat)"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/statements.json" <<'EOF'
+{
+  "statements": [
+    {
+      "key": "mybank",
+      "dir": "/home/user/statements/mybank",
+      "repo": "test-owner/test-repo",
+      "label": "statements:mybank",
+      "project": "test-project"
+    }
+  ]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" statements 2>/dev/null); rc=$?
+assert_eq "absent snapshot exits 0" "0" "$rc"
+stmt_key=$(printf '%s' "$out" | jq -r '.statements[0].key')
+assert_eq "absent snapshot key round-trips" "mybank" "$stmt_key"
+config_teardown
+
 # --- Test 8: valid target-workers.json prints normalized JSON ---------------
 
 echo "Test: valid target-workers.json prints normalized JSON"
@@ -11929,6 +12050,18 @@ else
   echo "  FAIL: new-file invoked search / issue create / project item-add"
   echo "    gh-calls.log: $calls"
 fi
+# Assert both labels are present in the issue create call.
+create_args=""
+[[ -f "$STUB_DIR/gh-issue-create.log" ]] && create_args=$(cat "$STUB_DIR/gh-issue-create.log")
+TOTAL=$((TOTAL + 1))
+if [[ "$create_args" == *"--label statements:bank"* && "$create_args" == *"--label help wanted"* ]]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: new-file issue create carries both --label statements:bank and --label help wanted"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: new-file issue create carries both --label statements:bank and --label help wanted"
+  echo "    gh-issue-create.log: $create_args"
+fi
 statements_teardown
 
 # --- Test 3: open hit → skipped ----------------------------------------------
@@ -13391,6 +13524,40 @@ if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: resolver-ambiguous: self-close NOT invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: resolver-ambiguous: self-close NOT invoked"
+fi
+stop_teardown
+
+# --- Test P1: parse-job-done sentinel → spawn + self-close, no label work (#1024)
+# A /budget-parse-job session is named <N>-slug like a worker but writes a
+# `parse-job-done` sentinel (no phase-completed marker) on a clean idempotent
+# statement merge. Branch P spawns the next tick and self-closes; the handler
+# already closed the parse-job issue, so there is NO PR and NO office-hours apply
+# or label edit. Checked ahead of the PR-centric branches, like Branch R.
+echo "Test: stop hook + parse-job-done sentinel → spawn + self-close, no label work"
+stop_setup
+echo "839-foo" > "$STUB_DIR/current-branch.txt"
+echo '{"name":"839-foo"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+printf 'merged 839 statement\n' > "$TMPDIR_TEST/jobs/abcd1234/parse-job-done"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "parse-job-done: hook exits 0" "0" "$rc"
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "parse-job-done: spawn invoked exactly once" "1" "$spawn_calls"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "parse-job-done: self-close invoked exactly once" "1" "$self_close_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: parse-job-done: no office-hours apply"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: parse-job-done: no office-hours apply"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: parse-job-done: no label add or remove invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: parse-job-done: no label add or remove invoked"
 fi
 stop_teardown
 
@@ -18920,6 +19087,56 @@ md_file=$(mktemp)
 if CLAUDE_JOB_DIR="$md_file" "$MARK_DEVIATION" "reason" 2>/dev/null; then md_ec=0; else md_ec=$?; fi
 assert_eq "mark-deviation: CLAUDE_JOB_DIR is a file exit 0" "0" "$md_ec"
 rm -f "$md_file"
+
+echo ""
+echo "=== dispatch-mark-parse-job-done ==="
+
+MARK_PARSE_JOB_DONE="$SCRIPT_DIR/dispatch-mark-parse-job-done"
+
+# ----- mark-parse-job-done: writes the sentinel under CLAUDE_JOB_DIR (with note) -----
+pj_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$pj_dir" "$MARK_PARSE_JOB_DONE" "merged statement abc.qfx"; then pj_ec=0; else pj_ec=$?; fi
+assert_eq "mark-parse-job-done: exit 0 on happy path" "0" "$pj_ec"
+assert_eq "mark-parse-job-done: writes the parse-job-done sentinel" "1" \
+  "$([ -f "$pj_dir/parse-job-done" ] && echo 1 || echo 0)"
+assert_eq "mark-parse-job-done: writes exact note contents" \
+  "$(printf 'merged statement abc.qfx\n')" "$(cat "$pj_dir/parse-job-done")"
+rm -rf "$pj_dir"
+
+# ----- mark-parse-job-done: no arg → exit 0, sentinel present (note optional) -----
+pj_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$pj_dir" "$MARK_PARSE_JOB_DONE"; then pj_ec=0; else pj_ec=$?; fi
+assert_eq "mark-parse-job-done: no-arg exit 0" "0" "$pj_ec"
+assert_eq "mark-parse-job-done: no-arg writes the sentinel" "1" \
+  "$([ -f "$pj_dir/parse-job-done" ] && echo 1 || echo 0)"
+rm -rf "$pj_dir"
+
+# ----- mark-parse-job-done: extra arg → exit 2, no file -----
+pj_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$pj_dir" "$MARK_PARSE_JOB_DONE" "a" "b" 2>/dev/null; then pj_ec=0; else pj_ec=$?; fi
+assert_eq "mark-parse-job-done: extra arg exit 2" "2" "$pj_ec"
+assert_eq "mark-parse-job-done: extra arg writes no file" "0" \
+  "$([ -f "$pj_dir/parse-job-done" ] && echo 1 || echo 0)"
+rm -rf "$pj_dir"
+
+# ----- mark-parse-job-done: CLAUDE_JOB_DIR unset → exit 0, no file, stderr diagnostic -----
+pj_err=$( (unset CLAUDE_JOB_DIR; "$MARK_PARSE_JOB_DONE" "x") 2>&1 1>/dev/null ) && pj_ec=0 || pj_ec=$?
+assert_eq "mark-parse-job-done: unset CLAUDE_JOB_DIR exit 0" "0" "$pj_ec"
+assert_eq "mark-parse-job-done: unset CLAUDE_JOB_DIR emits diagnostic" "1" \
+  "$( [[ -n "$pj_err" ]] && echo 1 || echo 0 )"
+
+# ----- mark-parse-job-done: unset CLAUDE_JOB_DIR writes no file -----
+pj_dir=$(mktemp -d)
+( unset CLAUDE_JOB_DIR; "$MARK_PARSE_JOB_DONE" "x" ) >/dev/null 2>&1 || true
+assert_eq "mark-parse-job-done: unset CLAUDE_JOB_DIR writes no sentinel in any dir" "0" \
+  "$([ -f "$pj_dir/parse-job-done" ] && echo 1 || echo 0)"
+rm -rf "$pj_dir"
+
+# ----- mark-parse-job-done: CLAUDE_JOB_DIR set to a file (not a dir) → exit 0, no write -----
+pj_file=$(mktemp)
+if CLAUDE_JOB_DIR="$pj_file" "$MARK_PARSE_JOB_DONE" "note" 2>/dev/null; then pj_ec=0; else pj_ec=$?; fi
+assert_eq "mark-parse-job-done: CLAUDE_JOB_DIR is a file exit 0" "0" "$pj_ec"
+rm -f "$pj_file"
 
 # ============================================================================
 # === dispatch-open-pr ===
