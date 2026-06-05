@@ -31,11 +31,31 @@ vi.mock("../src/firebase.js", () => ({
 const mockGetMeta = vi.fn();
 const mockStoreParsedData = vi.fn();
 const mockClearAll = vi.fn();
+const mockGetFileHandle = vi.fn();
+const mockPutFileHandle = vi.fn();
+const mockClearFileHandle = vi.fn();
+
+const mockIsFsaSupported = vi.fn();
+const mockPickBencFile = vi.fn();
+const mockQueryReadPermission = vi.fn();
+const mockRequestReadPermission = vi.fn();
+const mockReadFileFromHandle = vi.fn();
 
 vi.mock("../src/idb.js", () => ({
   getMeta: mockGetMeta,
   storeParsedData: mockStoreParsedData,
   clearAll: mockClearAll,
+  getFileHandle: mockGetFileHandle,
+  putFileHandle: mockPutFileHandle,
+  clearFileHandle: mockClearFileHandle,
+}));
+
+vi.mock("../src/local-file.js", () => ({
+  isFsaSupported: mockIsFsaSupported,
+  pickBencFile: mockPickBencFile,
+  queryReadPermission: mockQueryReadPermission,
+  requestReadPermission: mockRequestReadPermission,
+  readFileFromHandle: mockReadFileFromHandle,
 }));
 
 vi.mock("../src/upload.js", () => ({
@@ -80,6 +100,14 @@ function resetAndMockAll(): void {
   }));
   vi.mock("../src/idb.js", () => ({
     getMeta: mockGetMeta, storeParsedData: mockStoreParsedData, clearAll: mockClearAll,
+    getFileHandle: mockGetFileHandle, putFileHandle: mockPutFileHandle, clearFileHandle: mockClearFileHandle,
+  }));
+  vi.mock("../src/local-file.js", () => ({
+    isFsaSupported: mockIsFsaSupported,
+    pickBencFile: mockPickBencFile,
+    queryReadPermission: mockQueryReadPermission,
+    requestReadPermission: mockRequestReadPermission,
+    readFileFromHandle: mockReadFileFromHandle,
   }));
   vi.mock("../src/upload.js", () => ({
     parseUploadedJson: vi.fn(), toParsedData: vi.fn(),
@@ -101,6 +129,15 @@ type AppState = import("../src/main").AppState;
 describe("main module", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    // Defaults: no persisted handle, FSA unsupported -> existing upload behavior.
+    mockGetFileHandle.mockReset().mockResolvedValue(undefined);
+    mockPutFileHandle.mockReset().mockResolvedValue(undefined);
+    mockClearFileHandle.mockReset().mockResolvedValue(undefined);
+    mockIsFsaSupported.mockReset().mockReturnValue(false);
+    mockPickBencFile.mockReset().mockResolvedValue(null);
+    mockQueryReadPermission.mockReset();
+    mockRequestReadPermission.mockReset();
+    mockReadFileFromHandle.mockReset();
   });
 
   it("exports AppState type (compile-time check)", () => {
@@ -177,5 +214,99 @@ describe("main module", () => {
     expect(mockGetMeta).toHaveBeenCalled();
     const heroContainer = document.getElementById("hero-container")!;
     expect(heroContainer.hidden).toBe(true);
+  });
+
+  it("auto-loads from a persisted handle when permission is granted", async () => {
+    const handle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
+    mockGetFileHandle.mockResolvedValue(handle);
+    mockQueryReadPermission.mockResolvedValue("granted");
+    mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "budget.benc"));
+
+    resetAndMockAll();
+
+    const { parseUploadedJson, toParsedData } = await import("../src/upload.js");
+    (parseUploadedJson as ReturnType<typeof vi.fn>).mockReturnValue({ groupName: "household" });
+    (toParsedData as ReturnType<typeof vi.fn>).mockReturnValue({ meta: { groupName: "household" } });
+    mockStoreParsedData.mockResolvedValue(undefined);
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(mockReadFileFromHandle).toHaveBeenCalledWith(handle);
+    expect(mockStoreParsedData).toHaveBeenCalled();
+  });
+
+  it("shows a reload button (no auto-load) when permission is prompt, then loads on click", async () => {
+    const handle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
+    mockGetFileHandle.mockResolvedValue(handle);
+    mockQueryReadPermission.mockResolvedValue("prompt");
+    mockGetMeta.mockResolvedValue({
+      key: "upload",
+      groupName: "household",
+      version: 1,
+      exportedAt: "2025-06-15T10:30:00Z",
+    });
+    mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "budget.benc"));
+
+    resetAndMockAll();
+
+    const { parseUploadedJson, toParsedData } = await import("../src/upload.js");
+    (parseUploadedJson as ReturnType<typeof vi.fn>).mockReturnValue({ groupName: "household" });
+    (toParsedData as ReturnType<typeof vi.fn>).mockReturnValue({ meta: { groupName: "household" } });
+    mockStoreParsedData.mockResolvedValue(undefined);
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    const button = document.querySelector(".reload-handle") as HTMLButtonElement;
+    expect(button).not.toBeNull();
+    expect(mockReadFileFromHandle).not.toHaveBeenCalled();
+
+    mockRequestReadPermission.mockResolvedValue("granted");
+    button.click();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(mockRequestReadPermission).toHaveBeenCalledWith(handle);
+    expect(mockReadFileFromHandle).toHaveBeenCalledWith(handle);
+  });
+
+  it("clears a stale handle and shows a re-link error when the file is gone", async () => {
+    const handle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
+    mockGetFileHandle.mockResolvedValue(handle);
+    mockQueryReadPermission.mockResolvedValue("granted");
+    mockReadFileFromHandle.mockRejectedValue(new DOMException("missing", "NotFoundError"));
+
+    resetAndMockAll();
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(mockClearFileHandle).toHaveBeenCalled();
+    const errorEl = document.querySelector(".nav-error") as HTMLElement;
+    expect(errorEl.hidden).toBe(false);
+    expect(errorEl.textContent).toContain("no longer available");
+  });
+
+  it("transitions to cached local state when no handle but meta exists (unchanged path)", async () => {
+    mockGetFileHandle.mockResolvedValue(undefined);
+    mockGetMeta.mockResolvedValue({
+      key: "upload",
+      groupName: "household",
+      version: 1,
+      exportedAt: "2025-06-15T10:30:00Z",
+    });
+
+    resetAndMockAll();
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+
+    const heroContainer = document.getElementById("hero-container")!;
+    expect(heroContainer.hidden).toBe(true);
+    expect(mockReadFileFromHandle).not.toHaveBeenCalled();
   });
 });
