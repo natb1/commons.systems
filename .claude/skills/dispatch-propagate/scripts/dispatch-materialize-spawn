@@ -12,16 +12,20 @@
 # for the worker's startup, per #1047 / #1044), writes the recovery marker via
 # dispatch-finalize-selection (which no longer releases the lock — #945), runs
 # the explicit-target readiness gate (dispatch-ci-ready), spawns the worker, and
-# releases the lock after the worker registers. Prints exactly ONE terminal
+# releases the lock after the worker spawn is kicked (the spawn is async — #1048;
+# the lock no longer spans registration). Prints exactly ONE terminal
 # token as its LAST stdout line;
 # supporting detail (a path, a blocker list, the CI line) precedes the token.
 #
 # With `--gap <N>` and `queue` mode, the script FANS OUT: it spawns up to N
 # workers in one held-lock run, selecting a distinct next target each iteration
 # via dispatch-select-target. The first target is the passed-in <issue-N>;
-# targets 2..N come from successive dispatch-select-target calls (each spawned
-# worker registers before the next selection — #945/#905 — so the next
-# selection skips its now-live-owned worktree and yields a distinct target).
+# targets 2..N come from successive dispatch-select-target calls. The worker no
+# longer registers synchronously (#1048), so the loop threads its SEEN set as
+# `--exclude` to dispatch-select-target AND the just-written reservation marker
+# makes dispatch-select-target's reserved-skip (#1046) skip the reserved
+# worktree — so the next selection yields a distinct target even though the prior
+# worker has not yet registered.
 # `explicit` mode and `--gap 1` process a single target (backward-compatible).
 # Fan-out (`--gap N` with N>1) is autonomous-only; a manual run arrives as
 # `--gap 1` and takes the single-target path.
@@ -33,8 +37,9 @@
 #
 # Terminal tokens (the last stdout line is always exactly one of):
 #   propagate              the worker spawned (or deduped); the chain advances.
-#                          Lock released AFTER dispatch-spawn-worker confirms the
-#                          worker registered under its <basename> (#945).
+#                          Lock released after dispatch-spawn-worker kicks the
+#                          (async) worker spawn (#1048); the reservation marker,
+#                          not registration, closes the spawn-gap race.
 #   notify target-blocked  explicit target is closed or has an open blocker; the
 #                          issue is parked via dispatch-apply-office-hours and
 #                          the lock released at the guard.
@@ -90,16 +95,18 @@
 #                          distinct target — a normal terminal state, not a
 #                          failure.
 #
-# Lock-release points (#945): the lock is held THROUGH the spawn so the next
-# tick cannot re-select the target during the worker's boot gap. In a fan-out
-# run the lock is held across the WHOLE loop and released ONCE at the end (or on
-# a hard `exit 2`); per-target park/skip outcomes do NOT release between
-# iterations.
+# Lock-release points (#1048): the lock is held THROUGH the reserve + spawn-KICK
+# (not through registration); after release the reservation marker closes the
+# spawn-gap re-selection race so the next tick cannot re-select the target during
+# the worker's boot gap. In a fan-out run the lock is held across the WHOLE loop
+# and released ONCE at the end (or on a hard `exit 2`); per-target park/skip
+# outcomes do NOT release between iterations.
 # dispatch-finalize-selection writes the recovery marker but no longer releases.
 # `notify target-blocked` and `drain worktree-conflict` release explicitly at the
 # guard (the marker does not exist yet on these pre-finalize stop paths).
 # `propagate` and `notify spawn-failed` release AFTER dispatch-spawn-worker
-# returns (the worker is verified-registered on success).
+# returns: on success the spawn was kicked async and the reservation marker is
+# left in place; on failure the marker is cleared.
 # The single-target ci-waiting stop (now `drain ci-reseeded` / `notify
 # ci-wait-exhausted`, or the fallback `drain ci-waiting` on a scheduler hard-
 # failure) releases the lock at its stop, BEFORE dispatch-schedule-target-reseed
@@ -171,8 +178,10 @@ WAITING_N=""
 # re-check, Step 5 resolve, recovery marker, Step 6a explicit-only readiness
 # gate, Step 6b spawn) for ONE target. Does NOT
 # release the lock and does NOT exit — the caller owns lock release and process
-# exit. Sets the global OUTCOME on every soft path and returns 0; returns 2 on a
-# hard error (the caller maps that to release_lock; exit 2).
+# exit. The Step 6b spawn-kick is async (#1048): on success the reservation
+# marker is left in place as the in-flight contribution; registration is not
+# awaited. Sets the global OUTCOME on every soft path and returns 0; returns 2 on
+# a hard error (the caller maps that to release_lock; exit 2).
 process_one_target() {
   local n="$1" mode="$2"
   local PR LEAF ISSUE_STATE BLOCKERS WT_DECISION WT_ACTION WT_REST
@@ -298,7 +307,8 @@ process_one_target() {
   esac
 
   # Write the recovery marker into the target worktree. The lock is STILL HELD
-  # from here through the spawn (#945) — the caller releases it after the loop.
+  # from here through the spawn-kick (#1048) — the caller releases it after the
+  # loop; registration is no longer awaited.
   if ! "$SCRIPT_DIR/dispatch-finalize-selection" "$WORKTREE_PATH" 1>&2; then
     echo "dispatch-materialize-spawn: dispatch-finalize-selection failed for $WORKTREE_PATH" >&2
     return 2
@@ -318,19 +328,19 @@ process_one_target() {
   fi
 
   # --- Step 6b: reserve, then spawn the worker -------------------------------
-  # The lock is still held here (#945). Write the reservation marker the instant
-  # before the spawn and clear it the instant the spawn returns: on success the
-  # worker has registered and is now counted by busy_workers; on failure no
-  # worker is coming. A completed fan-out therefore leaves effective_live == busy
-  # (no double-count, no leaked budget), identical to the pre-ledger gate. If the
-  # router dies between the write and the clear, the marker is stranded — the
-  # reservation sweeper (reservation_sweep, run at the next tick) reclaims it via
-  # the dead-session / live-worker-redundant rules.
+  # The lock is still held here. Write the reservation marker the instant before
+  # the (now async) spawn-kick and LEAVE it in place on success: registration is
+  # no longer awaited (#1048 — dispatch-spawn-worker passes --no-verify), so the
+  # marker, not registration timing, is this slot's in-flight budget/selection
+  # contribution and is what closes the spawn-gap re-selection race #945 closed.
+  # A concurrent acquirer's reserved-skip (#1046) and the budget gate (#1045)
+  # both key on the marker. reservation_sweep reclaims it on registration (rule
+  # (a)) or after the boot grace if the worker never comes up. On a failed kick
+  # no worker is coming, so the marker is cleared (no leaked budget).
   #
-  # dispatch-spawn-worker returns success only after the worker is
-  # verified-registered under its <basename>, at which point
-  # dispatch-select-target skips the now-owned worktree — so the next in-loop
-  # selection yields a distinct target. On a failed spawn no worker registered.
+  # The next in-loop selection yields a distinct target because the marker makes
+  # dispatch-select-target's reserved-skip (#1046) skip this worktree, and the
+  # loop threads its SEEN set as --exclude — neither depends on registration.
   wt_basename="$(basename "$WORKTREE_PATH")"
   # Best-effort, but surface a failure: a missing marker means the spawn proceeds
   # uncounted, so a silent swallow would hide a budget blind spot. The sweeper
@@ -339,10 +349,18 @@ process_one_target() {
     echo "dispatch-materialize-spawn: reservation_write failed for $wt_basename; spawning without a ledger entry (budget may undercount this slot)" >&2
   fi
   if "$SCRIPT_DIR/dispatch-spawn-worker" "$n" "$WORKTREE_PATH" 1>&2; then
-    reservation_clear "$wt_basename" 1>&2 || true
+    # Leave the marker in place (#1048): the spawn is async (dispatch-spawn-worker
+    # passes --no-verify), so the worker has not registered yet. The marker is the
+    # in-flight budget/selection contribution that a concurrent acquirer's
+    # reserved-skip (#1046) and the budget gate (#1045) rely on; reservation_sweep
+    # reclaims it once the worker goes live (rule (a)) or after the boot grace if
+    # the worker never comes up.
     OUTCOME=spawned
     return 0
   fi
+  # Failed kick: no worker is coming, so clear the marker (no leaked budget). A
+  # stranded marker would otherwise be reclaimed by the sweep anyway, but clearing
+  # here is immediate and precise.
   reservation_clear "$wt_basename" 1>&2 || true
   OUTCOME=spawn-failed
   return 0
@@ -398,11 +416,13 @@ fi
 # N; targets 2..GAP come from successive dispatch-select-target calls. The loop
 # passes its SEEN set as `--exclude` to dispatch-select-target so selection
 # yields the NEXT distinct target instead of re-returning an already-processed
-# one (#1062). A re-return would otherwise happen via two mechanisms: (1)
-# registration-visibility lag — a just-spawned worker is verified-registered but
-# not yet visible to the next selection's liveness query (#945/#905), so its
-# leaf re-surfaces; or (2) a fast self-close leaving an orphan worktree, which
-# selection treats as a reuse signal (not a conflict) and does not skip. The
+# one (#1062). The worker is no longer verified-registered (the spawn is async —
+# #1048), so within-loop de-confliction rests on the SEEN `--exclude` AND the
+# reservation marker (dispatch-select-target's reserved-skip, #1046), not on
+# registration visibility. A re-return would otherwise happen via two mechanisms:
+# (1) a target whose just-written reservation or SEEN membership is not honored;
+# or (2) a fast self-close leaving an orphan worktree, which selection treats as
+# a reuse signal (not a conflict) and does not skip. The
 # exclusion defeats both: an excluded target is filtered during the queue scan
 # (and threaded into the leaf trace), so the loop advances to the next distinct
 # startable leaf. The loop stops only on a genuine `empty`, a deferred selection
