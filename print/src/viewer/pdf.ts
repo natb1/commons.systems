@@ -167,6 +167,14 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     const containerRect = container.getBoundingClientRect();
     if (containerRect.width === 0 || containerRect.height === 0) return;
 
+    // Clear the previous page's text-layer spans up-front, synchronously before
+    // the first await. renderTextLayer would clear them too, but a render
+    // superseded between the canvas and text-layer stages (the gen check below)
+    // returns before reaching it — leaving the previous page's selectable text
+    // in the DOM until the winning render completes. Clearing here guarantees a
+    // superseded render never surfaces stale text.
+    if (textLayerDiv) textLayerDiv.replaceChildren();
+
     const result = await renderPageToCanvas(pageNum, canvas, containerRect, pageWrapper ?? undefined);
     if (!result) return;
     if (gen !== renderGen) {
