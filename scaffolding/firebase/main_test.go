@@ -99,3 +99,39 @@ func TestScaffoldedAppIsInstallable(t *testing.T) {
 		}
 	}
 }
+
+// TestScaffoldedAppHasInstallHelper renders the real embedded templates and
+// asserts the generated app ships the PWA install-prompt + persisted-FSA-handle
+// auto-load helper (src/pwa.ts), wired into the app entry point (src/main.ts).
+func TestScaffoldedAppHasInstallHelper(t *testing.T) {
+	data, err := scaffold.NewAppData("demo", "cs-demo-1234")
+	if err != nil {
+		t.Fatalf("NewAppData error: %v", err)
+	}
+
+	dir := t.TempDir()
+	if err := scaffold.RenderTemplates(templateFS, dir, "templates/app", "demo", data); err != nil {
+		t.Fatalf("RenderTemplates error: %v", err)
+	}
+
+	// The install helper exists and exports the install-prompt and auto-load APIs.
+	pwaRaw, err := os.ReadFile(filepath.Join(dir, "demo", "src", "pwa.ts"))
+	if err != nil {
+		t.Fatalf("reading src/pwa.ts: %v", err)
+	}
+	pwa := string(pwaRaw)
+	for _, want := range []string{"setupInstallPrompt", "autoLoadPersistedHandle"} {
+		if !strings.Contains(pwa, want) {
+			t.Errorf("src/pwa.ts: missing %q", want)
+		}
+	}
+
+	// main.ts wires the helper in (ESM .js import convention).
+	mainRaw, err := os.ReadFile(filepath.Join(dir, "demo", "src", "main.ts"))
+	if err != nil {
+		t.Fatalf("reading src/main.ts: %v", err)
+	}
+	if !strings.Contains(string(mainRaw), "./pwa.js") {
+		t.Errorf("src/main.ts: missing import of %q", "./pwa.js")
+	}
+}
