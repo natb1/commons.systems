@@ -335,12 +335,18 @@ func ReadFile(path, password string) (Output, error) {
 	if out.Transactions == nil {
 		return Output{}, fmt.Errorf("parsing %s: missing required field 'transactions'", path)
 	}
+	// Note: ReadFile intentionally does not call out.Validate(). Validation is
+	// enforced at the serialization boundary (WriteFile) so that a file written
+	// by an older ETL version still loads; refusing to read it would strand the
+	// user with no migration path. Callers that re-emit a read Output go back
+	// through WriteFile, which re-validates before writing.
 	return out, nil
 }
 
 // Validate checks the double-entry invariants on the journal legs and accounts
 // before serialization, mirroring the TypeScript upload-path validation so the
-// two halves stay in lockstep.
+// two halves stay in lockstep. WriteFile calls Validate before serializing;
+// callers that only need the check can call Validate directly.
 func (o Output) Validate() error {
 	for i, l := range o.JournalLegs {
 		if err := l.Validate(); err != nil {

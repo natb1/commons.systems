@@ -1131,8 +1131,12 @@ func TestWriteFileValidatesOutput(t *testing.T) {
 		out.Accounts = []Account{validAcct}
 
 		path := filepath.Join(t.TempDir(), "budget.json")
-		if err := WriteFile(path, out, ""); err == nil {
+		err := WriteFile(path, out, "")
+		if err == nil {
 			t.Fatal("WriteFile: expected error for invalid leg")
+		}
+		if !strings.Contains(err.Error(), "journalLegs[0]") {
+			t.Errorf("error should name the offending leg index, got %v", err)
 		}
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Errorf("file should not exist after validation failure, stat err = %v", err)
@@ -1145,8 +1149,12 @@ func TestWriteFileValidatesOutput(t *testing.T) {
 		out.Accounts = []Account{{ID: "acct-bad", AccountType: AccountType("checking")}}
 
 		path := filepath.Join(t.TempDir(), "budget.json")
-		if err := WriteFile(path, out, ""); err == nil {
+		err := WriteFile(path, out, "")
+		if err == nil {
 			t.Fatal("WriteFile: expected error for invalid account")
+		}
+		if !strings.Contains(err.Error(), "accounts[0]") {
+			t.Errorf("error should name the offending account index, got %v", err)
 		}
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Errorf("file should not exist after validation failure, stat err = %v", err)
