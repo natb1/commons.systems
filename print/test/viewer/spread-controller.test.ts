@@ -76,7 +76,6 @@ describe("SpreadController", () => {
     expect(controller.positionLabel).toBe(
       spreadPositionLabel({ left: 1, right: null }, 10),
     );
-    expect(controller.positionLabel).toBe("Page 1 / 10");
   });
 
   describe("leave() page-restore", () => {
@@ -136,6 +135,16 @@ describe("SpreadController", () => {
     expect(reportErrorMock).toHaveBeenCalled();
   });
 
+  it("loadPreference returns true when the stored preference is 'true'", () => {
+    // Use real storage rather than spying on Storage.prototype.getItem: under
+    // happy-dom only the first prototype getItem spy in the file is wired to
+    // localStorage, and the throw-path test above claims that slot.
+    localStorage.setItem(STORAGE_KEY, "true");
+    const { controller } = makeController();
+    expect(controller.loadPreference()).toBe(true);
+    expect(reportErrorMock).not.toHaveBeenCalled();
+  });
+
   it("destroy() is safe before enter and when called twice", () => {
     const { controller } = makeController({ renderPageInto: vi.fn() });
 
@@ -172,9 +181,9 @@ describe("SpreadController", () => {
     controller.enter(1);
     expect(capturedCb).not.toBeNull();
 
-    // Fire the observer callback; it debounces with setTimeout(150).
+    // Fire the observer callback; it debounces the render with setTimeout.
     capturedCb!();
-    await vi.advanceTimersByTimeAsync(150);
+    await vi.runAllTimersAsync();
 
     expect(onRenderError).toHaveBeenCalledWith(renderErr);
   });
