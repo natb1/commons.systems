@@ -1,22 +1,47 @@
 #!/usr/bin/env bash
-# office-hours-select-target — select one office-hours item for /office-hours.
+# office-hours-select-target — emit a complete disposition for the office-hours
+# queue. This selector is the single source of truth: it enumerates the queue
+# once and the thin `office-hours` entry-script dispatcher and the /office-hours
+# skill consume its verb without re-enumerating.
 #
 # The office-hours queue is "open issues carrying the dispatch:office-hours
-# label" (the label is issue-anchored, #868/#909). This script selects the
-# oldest such issue whose <N>-* worktree has NO live Claude session — a
-# sessionless item that /office-hours can pick up fresh. An item that still
-# has a live session is left for the `office-hours` entry-point script (#759)
-# to resume; it is not selected here.
+# label" (the label is issue-anchored, #868/#909). The selector enumerates those
+# issues oldest-first, makes ONE per-item liveness call against each item's
+# <N>-* worktree, and emits exactly one of four dispositions, in this priority:
 #
-# Output (one line on success):
+#   resume <sessionId>
+#     The oldest labeled item whose <N>-* worktree has a live Claude session.
+#     Resume wins over fresh: if any labeled item is live, its session is
+#     resumed in preference to picking up a sessionless sibling fresh.
 #   office-hours <issue> <phase> <pr-or-dash>
+#     The oldest labeled item with NO live session — a sessionless item that
+#     /office-hours picks up fresh.
 #     <issue> — the selected issue number.
-#     <phase> — dispatch-phase <issue>: implement | qa | code-review | review |
-#               security | verify | waiting | done. /office-hours branches on
-#               this: implement → plan-approval residue; qa → QA walkthrough
-#               residue; anything past qa → deviation-review.
+#     <phase> — implement | qa | code-review | review | security | verify |
+#               waiting | done. `waiting` comes from dispatch-ci-ready (draft PR
+#               with CI still pending); all other values come from dispatch-phase.
+#               /office-hours branches on this: implement → plan-approval
+#               residue; qa → QA walkthrough residue; anything past qa →
+#               deviation-review.
 #     <pr-or-dash> — the issue's open PR number, or `-` when none exists.
-# Prints `empty` when no sessionless labeled item exists.
+#   parked-router <sessionId> <name>
+#     A target-less parked /dispatch-propagate router (#1010). When no labeled
+#     item is resumable or sessionless, this fallback surfaces a live, idle/waiting
+#     `dispatch-*` router session rooted under worktrees/main — the artifact the
+#     continuation invariant in `dispatch-self-close` keeps alive rather than
+#     orphaning the chain. A parked router has no issue/PR and so no
+#     dispatch:office-hours label; the human resumes it by re-engaging that exact
+#     session (re-running /dispatch-propagate inside it). A `busy` router is
+#     actively ticking and is NOT surfaced.
+#   empty
+#     None of the above exists.
+#
+# Single fail-safe convention: UNKNOWN → skip. When an item's liveness cannot be
+# determined (the daemon could not be queried for some worktree, and no worktree
+# was found live), the item is skipped entirely — neither resumed nor picked up
+# fresh. Skipping avoids a double-claim: a single source of truth no longer needs
+# the opposite-convention coordination that the entry script and this selector
+# previously split between them.
 #
 # Reuses dispatch-phase and dispatch-find-pr (passed a shared open-PR list to
 # avoid redundant gh calls), and the lib.sh / lib-claude-agents.sh worktree
@@ -30,9 +55,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
-# worktree_has_live_session is fail-safe: an unqueryable daemon counts as
-# occupied, so an item whose liveness cannot be determined is left for the
-# resume path rather than double-claimed by a fresh /office-hours session.
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 
 # Open issues carrying dispatch:office-hours, with their creation times.
@@ -50,39 +72,101 @@ while IFS= read -r wt_record; do
   fi
 done < <(list_worktree_records)
 
-# True when a live session owns any <num>-* worktree. No such worktree →
-# fast-path miss (return 1). Several matches → owned if any one is live.
-issue_has_live_worktree() {
-  local num="$1" p
+# Returns the sessionId of a live <num>-* worktree on stdout (rc 0), rc 1 if the
+# item is sessionless (no worktree, or every worktree queried clean), or rc 2 if
+# liveness is UNKNOWN for some worktree (daemon unqueryable) and none was live.
+# Single per-item liveness call; name-keyed via claude_sessions_with_name, the
+# same primitive worktree_has_live_session delegates to.
+issue_live_session_id() {
+  local num="$1" p sessions sid saw_unknown=0
   local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
   [[ -z "$paths" ]] && return 1
   while IFS= read -r p; do
     [[ -z "$p" ]] && continue
-    if worktree_has_live_session "$p"; then
-      return 0
+    if sessions=$(claude_sessions_with_name "$(basename "$p")"); then
+      if [[ -n "$sessions" ]]; then
+        sid=$(printf '%s\n' "$sessions" | head -n 1 | cut -f1)
+        printf '%s' "$sid"
+        return 0
+      fi
+    else
+      saw_unknown=1
     fi
   done <<< "$paths"
+  (( saw_unknown )) && return 2
   return 1
 }
 
-# One shared open-PR list for the per-issue dispatch-phase / dispatch-find-pr
-# calls (mirrors dispatch-select-target passing DISPATCH_PR_LIST). The field
-# set is dispatch-phase's superset; dispatch-find-pr accepts it too.
-PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
-
-# Oldest-first: the first sessionless labeled issue wins.
+# Single oldest-first enumeration with one per-item liveness call. RESUME wins
+# over FRESH: a live item is resumed in preference to any sessionless sibling.
 SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[].number')
+FRESH_NUM=""
+RESUME_ID=""
 while IFS= read -r issue_num; do
   [[ -z "$issue_num" ]] && continue
-  # Skip an item whose <N>-* worktree is owned by a live session — that one is
-  # resumed by the entry point, not picked up fresh here.
-  if issue_has_live_worktree "$issue_num"; then
-    continue
+  if sid=$(issue_live_session_id "$issue_num"); then
+    RESUME_ID="$sid"
+    break
+  else
+    rc=$?
+    [[ "$rc" -eq 2 ]] && continue            # UNKNOWN → skip
+    [[ -z "$FRESH_NUM" ]] && FRESH_NUM="$issue_num"   # rc 1 → sessionless
   fi
-  phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$issue_num")
-  pr=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-find-pr" "$issue_num")
-  printf 'office-hours %s %s %s\n' "$issue_num" "$phase" "${pr:--}"
-  exit 0
 done <<< "$SORTED"
+
+# Priority 1: resume the oldest live item.
+if [[ -n "$RESUME_ID" ]]; then
+  printf 'resume %s\n' "$RESUME_ID"
+  exit 0
+fi
+
+# Priority 2: pick up the oldest sessionless item fresh. The open-PR list is
+# fetched lazily here — only the fresh path needs it, so the resume path makes
+# no `gh pr list` call. The field set is dispatch-phase's superset;
+# dispatch-find-pr accepts it too (mirrors dispatch-select-target's
+# DISPATCH_PR_LIST).
+if [[ -n "$FRESH_NUM" ]]; then
+  PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+  # Readiness gate: dispatch-phase no longer emits `waiting`; check CI readiness
+  # first. A not-ready draft PR (exit non-zero) maps to phase=waiting, preserving
+  # the byte-identical output contract callers expect.
+  if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$FRESH_NUM" >/dev/null; then
+    phase="waiting"
+  else
+    phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$FRESH_NUM")
+  fi
+  pr=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-find-pr" "$FRESH_NUM")
+  printf 'office-hours %s %s %s\n' "$FRESH_NUM" "$phase" "${pr:--}"
+  exit 0
+fi
+
+# No resumable or sessionless labeled item. Fall back to surfacing a target-less parked
+# router (#1010): a live, idle/waiting `dispatch-*` router session rooted under
+# worktrees/main, kept alive by dispatch-self-close's continuation invariant. It
+# carries no issue/PR, so no label anchors it — discover it directly by cwd +
+# state. The human resumes it by re-engaging that exact session.
+MAIN_WORKTREE="${DISPATCH_OFFICE_HOURS_MAIN_WORKTREE:-}"
+if [[ -z "$MAIN_WORKTREE" ]]; then
+  if ! project_root="$(resolve_project_root)"; then
+    echo "office-hours-select-target: cannot resolve project root (not in a git repo?)" >&2
+    exit 1
+  fi
+  MAIN_WORKTREE="$project_root/worktrees/main"
+fi
+
+# claude_sessions_under honors the UNKNOWN contract: a non-zero return means the
+# daemon could not be queried, so we must NOT fabricate a parked router — skip
+# the block (the `if rows=...; then` capture leaves rows unscanned) and fall
+# through to `empty`. On a successful query, scan for the first idle/waiting
+# `dispatch-*` router.
+if rows=$(claude_sessions_under "$MAIN_WORKTREE"); then
+  while IFS=$'\t' read -r session_id _ status name; do
+    [[ -z "$name" ]] && continue
+    # A `dispatch-*` router that is NOT busy — parked/idle, not actively ticking.
+    [[ "$name" == dispatch-* && "$status" != "busy" ]] || continue
+    printf 'parked-router %s %s\n' "$session_id" "$name"
+    exit 0
+  done <<< "$rows"
+fi
 
 echo "empty"

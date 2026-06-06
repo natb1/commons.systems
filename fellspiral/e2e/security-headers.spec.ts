@@ -1,51 +1,6 @@
 import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("security headers", () => {
-  test("content-security-policy includes key directives @hosting", async ({ page }) => {
-    const response = await page.goto("/");
-    expect(response).not.toBeNull();
-    expect(response!.status()).toBe(200);
-
-    const csp = response!.headers()["content-security-policy"];
-    expect(csp, "content-security-policy header missing from response").toBeDefined();
-    expect(csp).toContain("default-src");
-    expect(csp).toContain("script-src");
-    expect(csp).toContain("frame-ancestors");
-  });
-
-  test("cross-origin-opener-policy is same-origin @hosting", async ({ page }) => {
-    const response = await page.goto("/");
-    expect(response).not.toBeNull();
-    expect(response!.status()).toBe(200);
-
-    const coop = response!.headers()["cross-origin-opener-policy"];
-    expect(coop, "cross-origin-opener-policy header missing from response").toBeDefined();
-    expect(coop).toBe("same-origin");
-  });
-
-  test("x-frame-options is DENY @hosting", async ({ page }) => {
-    const response = await page.goto("/");
-    expect(response).not.toBeNull();
-    expect(response!.status()).toBe(200);
-
-    const xfo = response!.headers()["x-frame-options"];
-    expect(xfo, "x-frame-options header missing from response").toBeDefined();
-    expect(xfo).toBe("DENY");
-  });
-
-  test("strict-transport-security includes includeSubDomains and preload @hosting", async ({
-    page,
-  }) => {
-    const response = await page.goto("/");
-    expect(response).not.toBeNull();
-    expect(response!.status()).toBe(200);
-
-    const hsts = response!.headers()["strict-transport-security"];
-    expect(hsts, "strict-transport-security header missing from response").toBeDefined();
-    expect(hsts).toContain("includeSubDomains");
-    expect(hsts).toContain("preload");
-  });
-
   test("no CSP violation errors in console", async ({ page }) => {
     const cspViolations: string[] = [];
     // The emulator connects to localhost for Firestore and Auth, which

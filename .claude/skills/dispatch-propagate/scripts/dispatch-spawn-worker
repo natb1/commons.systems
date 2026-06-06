@@ -3,8 +3,12 @@
 # worktree (the router → worker spawn primitive).
 #
 # Thin wrapper: this script validates the worker-specific arguments
-# (<issue-num>, <worktree-path>) and then delegates the spawn / dedup / verify
-# mechanics to dispatch-spawn-job, the generalized `claude --bg` spawn primitive.
+# (<issue-num>, <worktree-path>) and then delegates the spawn / dedup mechanics
+# to dispatch-spawn-job, the generalized `claude --bg` spawn primitive. It passes
+# --no-verify: the worker fan-out is the budget path, reconciled by the
+# reservation ledger + sweep (#1045/#1048), so the worker no longer waits for
+# registration. The reservation marker (not registration timing) closes the
+# spawn-gap re-selection race #945 closed.
 # The worker's --name is the worktree basename (per-worktree name uniqueness is
 # automatic) and its --cwd is the worktree path, so the new worker is born in
 # its target worktree.
@@ -19,9 +23,11 @@
 #                   worker's second positional argument.
 #
 # Stdout / exit codes / sandbox: delegated to dispatch-spawn-job (`deduped` /
-# `spawned` on stdout; 0 = deduped or spawned, 1 = never registered, 2 = usage
-# / validation error). Callers must run with `dangerouslyDisableSandbox: true`
-# — see `.claude/rules/sandbox.md § claude agents --json`.
+# `spawned` on stdout; 0 = deduped or spawned, 1 = failed kick, 2 = usage
+# / validation error). Because this passes --no-verify (#1048), exit 1 means the
+# `claude --bg` kick failed — not "never registered". Callers must run with
+# `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md § claude
+# agents --json`.
 #
 # Environment overrides for testability:
 #   DISPATCH_SPAWN_WORKER_CLAUDE_CMD    The `claude` command — translated into
@@ -83,6 +89,7 @@ fi
 # ---- Step 2: delegate to the generalized spawn primitive --------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 exec "$SCRIPT_DIR/dispatch-spawn-job" \
+  --no-verify \
   --name "$(basename "$WORKTREE_PATH")" \
   --cwd "$WORKTREE_PATH" \
   "/dispatch-worker $ISSUE_NUM $WORKTREE_PATH"

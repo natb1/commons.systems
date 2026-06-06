@@ -17,17 +17,27 @@ implementation subagent and forks `/commit-merge-push`.
 
 ### 1. Plan logical units
 
-**Idempotency guard — check this first.** If an approved plan for this dispatch is
-already present in context (typical after `showClearContextOnPlanAccept` fires — the
-user accepted a plan and then cleared the context, causing this skill to be
-re-invoked), skip planning and resume at Step 2. The plan persists across context
-clears, so the unit list remains visible even though the planning conversation is
-gone.
+**The build session never reloads this skill.** When the user accepts the plan via
+`ExitPlanMode`, `showClearContextOnPlanAccept` (set `true` in
+`.claude/settings.json`) clears context and starts a fresh build session seeded with
+`Implement the following plan: <plan>`. That session does **not** re-invoke
+`/plan-implement`, so Steps 2–4 of this skill body are absent — the build works from
+the plan text alone. The plan is therefore the only carrier of build instructions: it
+must (a) carry file anchors so the build delegates each unit without re-reading
+source, and (b) embed the terminal procedure (Steps 3–4) in its preface. There is no
+re-entry into this skill to guard against.
 
-Otherwise, invoke `EnterPlanMode` and produce a plan whose implementation section is
-an **ordered list of logical units of work**. Each unit specifies:
+If a requirement term has multiple plausible readings that would change the plan,
+resolve it via `AskUserQuestion` **before** calling `EnterPlanMode` — guessing risks
+a plan rejected over the term and a costly redraft.
 
-1. **Scope.** What files/behavior change, what is explicitly out of scope.
+Invoke `EnterPlanMode` and produce a plan whose implementation section is an
+**ordered list of logical units of work**. The plan lives in the `ExitPlanMode`
+payload — do not write-edit-reread it on disk. Each unit specifies:
+
+1. **Scope.** What files/behavior change, what is explicitly out of scope. Name the
+   exact files and `path:line` anchors the unit touches, so the build delegates to
+   `/implement-unit` without the main thread re-reading source.
 2. **Model.** `opus` or `sonnet`, chosen per the model-selection heuristic in
    `/implement-unit` — see that skill for the heuristic (it is the canonical home;
    do not restate it here).
@@ -38,7 +48,13 @@ Each unit becomes one commit. The user reviews and approves the plan.
 
 The plan must include a **plan preface** per `ref-memory-management`'s Clean Context
 Planning Rule: the plan assumes execution in a clean context and records that the
-active workflow step is the `implement` phase of `/dispatch-propagate`.
+active workflow step is the `implement` phase of `/dispatch-propagate`. Because the
+build session runs without this skill body, the preface must also embed the terminal
+procedure (Steps 3–4) so the build can execute it from the plan text alone: the
+`dispatch-open-pr` invocation with its close set (including the `PR_NUM=$()`
+stdout capture), and the `dispatch-mark-complete` / `dispatch-mark-deviation`
+marker write. Copy these script invocations verbatim from Steps 3–4 — do not
+paraphrase — so the build session has the exact arguments and sandbox annotations.
 
 ### 2. Build each unit
 
@@ -56,85 +72,71 @@ and recovers from merge / pre-commit / push errors. This is a normal in-session 
 
 ### 3. Open the draft PR
 
-After every unit is committed and pushed, create the draft PR (use
-`dangerouslyDisableSandbox: true` — `gh` needs network):
+This `dispatch-open-pr` call (including the `PR_NUM=$()` capture) is also carried
+in the plan preface (Step 1), so the post-clear build session executes it even
+though this skill body is absent.
+
+After every unit is committed and pushed, write the PR body prose to
+`tmp/pr-body.md`, then open the draft PR with `dispatch-open-pr` (use
+`dangerouslyDisableSandbox: true` — the script calls `gh`, which needs network):
 
 ```bash
-URL=$(gh pr create --draft --title "<short summary>" --body "$(cat <<'EOF'
-Closes #<primary-issue>
-Closes #<sub-issue-or-blocker>   # repeat for each implemented issue
-EOF
-)")
-PR_NUM=$(basename "$URL")
+PR_NUM=$(.claude/skills/dispatch-propagate/scripts/dispatch-open-pr \
+  <primary-issue> \
+  --title "<short summary>" \
+  --closes "<sub-issue-or-blocker> ..." \
+  --body-file tmp/pr-body.md)
 ```
 
-The body has one `Closes #N` line per issue implemented in this PR — the primary
-issue plus any implemented sub-issues or blockers. This draft PR is the
-implement→verify transition marker.
+`<primary-issue>` is the issue this PR primarily implements; `--closes` lists
+any additional implemented sub-issues or blockers (whitespace- or
+comma-separated, with or without a leading `#`). The script writes one
+`Closes #N` line per issue, appends the prose from `--body-file` (omit the flag
+to read prose from stdin), and echoes the created PR number — the only thing it
+prints on stdout. This draft PR is the implement→verify transition marker.
 
-Then verify GitHub parsed exactly the intended close set — narrative prose in
-the body can carry a stray closing keyword that GitHub reads as an extra close
-directive (see `.claude/rules/issue-references.md`). Compare the parsed set to
-the `Closes #N` lines you deliberately wrote (`gh` still needs
-`dangerouslyDisableSandbox: true`):
-
-```bash
-gh pr view "$PR_NUM" --json closingIssuesReferences \
-  -q '.closingIssuesReferences[].number' | sort -n
-```
-
-If the parsed set does not exactly match the intended set, fix it and re-run
-until it does:
-
-- **Extra number (parsed but not intended):** the body contains a stray
-  `<keyword> #N` in narrative prose. Find it, rewrite it to a bare `#N`
-  (drop the preceding closing keyword — e.g. `Closes #905` → `#905`,
-  `resolved #905` → `#905`). Write the corrected body to a temp file under
-  `tmp/` and apply it with `gh pr edit "$PR_NUM" --body-file tmp/<file>` —
-  never interpolate the body inline into the command, since it may carry
-  shell metacharacters from issue-sourced text.
-- **Missing number (intended but not parsed):** a `Closes #N` line was not
-  recognized — check that it appears on its own line, outside any code block,
-  with no leading spaces. Re-edit the body to restore the canonical form.
+The script then verifies GitHub parsed exactly the intended close set, per
+`.claude/rules/issue-references.md`: narrative prose can carry a stray closing
+keyword that GitHub reads as an extra close directive. On an extra, the script
+strips the stray keyword and re-applies the body (bounded retries); on a number
+intended-but-missing, or an extra it cannot resolve, it exits non-zero with a
+diagnostic naming the offending number. If it exits non-zero, read the
+diagnostic and fix the body or `--closes` set rather than opening the PR by
+hand.
 
 ### 4. Check for deviation, then write the marker (or skip it), then stop
+
+Both marker writes (deviation and completion) are also carried in the plan preface
+(Step 1), so the post-clear build session executes them even though this skill body
+is absent.
 
 Before writing the marker, judge whether the implementation deviated from the
 approved plan — scope shifted mid-implementation, or the plan could not be
 fully implemented as approved. Base this on the `/implement-unit` outcomes
 observed in Step 2.
 
-**Deviation fires** — skip the `phase-completed` marker. Instead write a
-one-line deviation reason to `$CLAUDE_JOB_DIR/office-hours-reason`, atomic via
-tempfile + mv, under the same `CLAUDE_JOB_DIR` guard. The draft PR opened in
-Step 3 stays open. The Stop hook reads marker-absence as Branch A, applies
-`dispatch:office-hours` to the issue (surfacing this reason in the
+**Deviation fires** — skip the `phase-completed` marker. Instead call
+`dispatch-mark-deviation` to write the office-hours-reason atomically. The draft
+PR opened in Step 3 stays open. The Stop hook reads marker-absence as Branch A,
+applies `dispatch:office-hours` to the issue (surfacing this reason in the
 why-comment), and parks the issue for human review.
 
 ```bash
-if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-  printf '%s\n' "/plan-implement: implementation deviated from the approved plan" \
-    > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
-  mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" \
-     "$CLAUDE_JOB_DIR/office-hours-reason"
-fi
+.claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+  "/plan-implement: implementation deviated from the approved plan"
 ```
 
 Use the default phrasing above, or make it more specific when the nature of
 the shift is clear (e.g. `/plan-implement: unit 3 scope expanded to cover
 auth; approved plan did not include auth changes`).
 
-**No deviation** — write the `phase-completed` marker as the final action.
-Atomic via tempfile + mv so the hook never sees a partial file.
-`CLAUDE_JOB_DIR` unset = interactive run; skip.
+**No deviation** — call `dispatch-mark-complete` as the final action.
+`CLAUDE_JOB_DIR` unset = interactive run; the script no-ops with a clear
+diagnostic.
 
 ```bash
-if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
-  printf 'phase=implement\npr=%s\n' "$PR_NUM" \
-    > "$CLAUDE_JOB_DIR/phase-completed.tmp"
-  mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
-     "$CLAUDE_JOB_DIR/phase-completed"
-fi
+.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
+  --phase implement --pr "$PR_NUM"
 ```
 
 Stop. The Stop hook reads the marker, spawns the next `/dispatch-propagate`

@@ -24,8 +24,16 @@ import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
 import { parseUploadedJson, toParsedData, UploadValidationError } from "./upload.js";
-import { storeParsedData, clearAll, getMeta } from "./idb.js";
-import { SeedDataSource, IdbDataSource, type DataSource } from "./data-source.js";
+import { storeParsedData, clearAll, getMeta, getFileHandle, putFileHandle, clearFileHandle } from "./idb.js";
+import {
+  isFsaSupported,
+  pickBencFile,
+  queryReadWritePermission,
+  requestReadWritePermission,
+  readFileFromHandle,
+} from "./local-file.js";
+import { SeedDataSource, IdbDataSource, FileSyncingDataSource, type DataSource } from "./data-source.js";
+import { configureFileSync, flushWriteBack, resetFileSync } from "./file-sync.js";
 import { setActiveDataSource } from "./active-data-source.js";
 import { exportToJson } from "./export.js";
 import { isEncrypted, decrypt, encrypt } from "./crypto.js";
@@ -101,7 +109,7 @@ function updateNav(): void {
 
 function createDataSource(): DataSource {
   if (state.source === "local") {
-    return new IdbDataSource();
+    return new FileSyncingDataSource(new IdbDataSource());
   }
   return new SeedDataSource();
 }
@@ -239,24 +247,31 @@ function promptPassword(message: string): Promise<string | null> {
   });
 }
 
+// Core load pipeline shared by the upload path and the FSA handle path:
+// read bytes, decrypt-or-decode, parse, store, and transition to the local
+// state. Throws on any failure; callers wrap it in error handling.
+async function loadFromFile(file: File): Promise<void> {
+  const buffer = await file.arrayBuffer();
+  let text: string;
+  let pw: string | null = null;
+  if (isEncrypted(buffer)) {
+    pw = await promptPassword("Enter password to decrypt");
+    if (pw === null) return;
+    text = await decrypt(buffer, pw);
+  } else {
+    text = new TextDecoder().decode(buffer);
+  }
+  const parsed = parseUploadedJson(text);
+  const data = toParsedData(parsed);
+  await storeParsedData(data);
+  importPassword = pw;
+  transition({ source: "local", groupName: parsed.groupName });
+}
+
 async function handleFileUpload(file: File): Promise<void> {
   clearNavError();
   try {
-    const buffer = await file.arrayBuffer();
-    let text: string;
-    let pw: string | null = null;
-    if (isEncrypted(buffer)) {
-      pw = await promptPassword("Enter password to decrypt");
-      if (pw === null) return;
-      text = await decrypt(buffer, pw);
-    } else {
-      text = new TextDecoder().decode(buffer);
-    }
-    const parsed = parseUploadedJson(text);
-    const data = toParsedData(parsed);
-    await storeParsedData(data);
-    importPassword = pw;
-    transition({ source: "local", groupName: parsed.groupName });
+    await loadFromFile(file);
   } catch (error) {
     if (error instanceof UploadValidationError) {
       showNavError(error.message);
@@ -265,6 +280,49 @@ async function handleFileUpload(file: File): Promise<void> {
     if (deferProgrammerError(error)) return;
     logError(error, { operation: "upload" });
     showNavError("Upload failed. Please try again.");
+  }
+}
+
+async function loadFromHandle(handle: FileSystemFileHandle): Promise<void> {
+  clearNavError();
+  let file: File;
+  try {
+    file = await readFileFromHandle(handle);
+  } catch (error) {
+    // Stale/invalid handle (file moved or deleted): drop it and surface the
+    // re-link picker rather than crashing.
+    await clearFileHandle();
+    if (deferProgrammerError(error)) return;
+    logError(error, { operation: "load-from-handle" });
+    showNavError("The linked file is no longer available. Please re-link it.");
+    return;
+  }
+  // Run the parse/validation pipeline directly (rather than via handleFileUpload)
+  // so a content-validation failure can drop the persisted handle. Without this,
+  // a handle pointing at a non-budget file would be auto-loaded, fail validation,
+  // and be retried on every subsequent startup — a permanent failing-load loop.
+  try {
+    await loadFromFile(file);
+    // Arm encrypted write-back so subsequent UI edits overwrite this on-disk
+    // file in place. loadFromFile sets importPassword only on the success path
+    // (an encrypted file decrypted, or null for a plaintext file); a
+    // password-cancel returns early without transitioning to local, leaving
+    // importPassword null, so this no-ops there.
+    if (importPassword) configureFileSync(handle, importPassword);
+  } catch (error) {
+    if (error instanceof UploadValidationError) {
+      // The persisted handle points to a file that is not valid budget data
+      // (e.g. the wrong file was picked). Drop the handle so it does not
+      // re-trigger a failing auto-load on every startup. A wrong decryption
+      // password throws a different error (handled below) and keeps the handle,
+      // since the file itself is valid and the user can retry.
+      await clearFileHandle();
+      showNavError(error.message);
+      return;
+    }
+    if (deferProgrammerError(error)) return;
+    logError(error, { operation: "load-from-handle" });
+    showNavError("Could not load the linked file. Please re-link it.");
   }
 }
 
@@ -280,11 +338,51 @@ uploadInput.addEventListener("change", () => {
   uploadInput.value = "";
 });
 
+// FSA picker flow (Chromium): pick a file, persist its handle, then load it.
+// Shared between the label click and keyboard activation handlers.
+async function pickAndLoad(): Promise<void> {
+  clearNavError();
+  try {
+    const handle = await pickBencFile();
+    if (!handle) return; // user canceled
+    await putFileHandle(handle);
+    // Request readwrite up front so the handle can be written back to. Reads
+    // work from a freshly-picked handle regardless; doWrite re-checks lazily,
+    // so the result is not branched on here.
+    await requestReadWritePermission(handle);
+    await loadFromHandle(handle);
+  } catch (error) {
+    if (deferProgrammerError(error)) return;
+    logError(error, { operation: "upload" });
+    showNavError("Upload failed. Please try again.");
+  }
+}
+
+if (isFsaSupported()) {
+  // A <label> wrapping an <input> natively forwards clicks to the input, which
+  // would open the legacy file dialog. preventDefault() stops that so the FSA
+  // picker is the only dialog shown.
+  uploadLabel.addEventListener("click", (e) => {
+    e.preventDefault();
+    pickAndLoad().catch((error) => {
+      if (deferProgrammerError(error)) return;
+      logError(error, { operation: "upload" });
+    });
+  });
+}
+
 // Allow keyboard activation of the label
 uploadLabel.addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === " ") {
     e.preventDefault();
-    uploadInput.click();
+    if (isFsaSupported()) {
+      pickAndLoad().catch((error) => {
+        if (deferProgrammerError(error)) return;
+        logError(error, { operation: "upload" });
+      });
+    } else {
+      uploadInput.click();
+    }
   }
 });
 
@@ -315,10 +413,17 @@ exportButton.addEventListener("click", async () => {
   }
 });
 
+// Force any pending debounced write-back to run when the tab is hidden, so a
+// tab close does not lose the last edit. Registered once at the top level.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") void flushWriteBack();
+});
+
 clearButton.addEventListener("click", async () => {
   try {
     await clearAll();
     importPassword = null;
+    resetFileSync();
     transition({ source: "seed" });
   } catch (error) {
     if (deferProgrammerError(error)) return;
@@ -327,14 +432,80 @@ clearButton.addEventListener("click", async () => {
   }
 });
 
-// Startup: check for existing local data
+// Render a one-click "Reload <file>" affordance into the nav. Used when a
+// persisted handle's permission is in the "prompt" state: we show cached/seed
+// data immediately and let the user re-grant with a single click.
+function showReloadPrompt(handle: FileSystemFileHandle): void {
+  const existing = authContainer!.querySelector(".reload-handle");
+  if (existing) existing.remove();
+  const button = document.createElement("button");
+  button.className = "reload-handle";
+  button.textContent = `Reload ${handle.name}`;
+  authContainer!.appendChild(button);
+  button.addEventListener("click", async () => {
+    try {
+      const perm = await requestReadWritePermission(handle);
+      if (perm === "granted") {
+        await loadFromHandle(handle);
+        button.remove();
+        return;
+      }
+      // Still not granted: fall back to the re-link picker.
+      // Only remove the button when the picker resulted in a successful load
+      // (state transitions to "local"). If the user cancels the picker,
+      // pickAndLoad returns normally without transitioning, and the button
+      // must remain so the user can retry.
+      const stateBefore = state;
+      await pickAndLoad();
+      if (state !== stateBefore && state.source === "local") {
+        button.remove();
+      }
+    } catch (error) {
+      if (deferProgrammerError(error)) return;
+      logError(error, { operation: "reload-handle" });
+      showNavError("Could not reload the linked file. Please re-link it.");
+    }
+  });
+}
+
+// Startup: check for a persisted FSA handle, then fall back to cached/seed data.
 async function initialize(): Promise<void> {
+  let denied = false;
+  const handle = await getFileHandle();
+  if (handle) {
+    const perm = await queryReadWritePermission(handle);
+    if (perm === "granted") {
+      await loadFromHandle(handle);
+      return;
+    }
+    if (perm === "prompt") {
+      // Show cached data (or seed) immediately, plus a one-click reload affordance.
+      const meta = await getMeta();
+      if (meta) {
+        transition({ source: "local", groupName: meta.groupName });
+      } else {
+        transition({ source: "seed" });
+      }
+      showReloadPrompt(handle);
+      return;
+    }
+    // perm === "denied": the browser will not re-prompt for a denied handle, so
+    // it is permanently unusable. Drop it (rather than silently re-entering the
+    // denied path every session, a dead end) and fall through to the cached/seed
+    // display below, then tell the user it was unlinked so they can re-link.
+    await clearFileHandle();
+    denied = true;
+  }
   const meta = await getMeta();
   if (meta) {
     transition({ source: "local", groupName: meta.groupName });
-    return;
+  } else {
+    transition({ source: "seed" });
   }
-  transition({ source: "seed" });
+  // transition() clears any nav error, so surface the denied notice afterward.
+  if (denied) {
+    showNavError("Access to the linked file was denied; it has been unlinked.");
+  }
 }
 
 initialize().catch((error) => {

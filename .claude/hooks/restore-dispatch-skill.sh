@@ -16,8 +16,11 @@ if [ -n "$SESSION_ID" ]; then
     2>/dev/null) || NAME=""
 fi
 
-# Router sessions (dispatch-<short-id>) restart via /dispatch-propagate, not skill
-# restoration — skip them explicitly.
+# No `dispatch-<short-id>` router sessions exist anymore: after #982 Unit 3 the
+# autonomous tick is a headless `systemd-run` dispatch-tick, not a Claude session,
+# so nothing spawns `claude --bg /dispatch-propagate`. The branch is kept as a
+# defensive no-op — a stray `dispatch-*` session is not a phase worker and must
+# not have a phase skill restored.
 case "$NAME" in
   dispatch-*) exit 0 ;;
 esac
@@ -70,8 +73,8 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 # regardless of whether the Skill tool was invoked.
 #
 # Routing: implement→plan-implement; verify→verify-pr; qa→qa-fix;
-# code-review→code-review-fix; review→review-fix; security→security-review-fix;
-# waiting/done/unknown/dispatch-phase failure→dispatch-worker (the worker's
+# review→review-fix;
+# done/unknown/dispatch-phase failure (incl. not-ready CI, exit 3)→dispatch-worker (the worker's
 # Step 2 CI-monitor loop and Step 2 done variance handling still run).
 #
 # An office-hours-<N> session (started by the /office-hours entry point, #759)
@@ -80,11 +83,20 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 # session --name ahead of the phase routing below; it is inert until
 # office-hours-* sessions exist.
 #
+# A conflict-resolver session (#982) is named <N>-slug like a worker but writes a
+# `conflict-resolver` sentinel into CLAUDE_JOB_DIR. It restores the
+# /dispatch-resolve-conflict skill body, not a phase skill — matched first, by the
+# sentinel, ahead of the office-hours and phase routing below.
+#
 # Falls back to the one-line Reload directive if SKILL.md is missing or
 # unreadable — defensive against a packaging error breaking recovery.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 DISPATCH_SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
-if printf '%s\n' "$NAME" | grep -qE '^office-hours-[0-9]+$'; then
+if [ -n "${CLAUDE_JOB_DIR:-}" ] && [ -f "$CLAUDE_JOB_DIR/conflict-resolver" ]; then
+  SKILL_DIR_NAME="dispatch-resolve-conflict"
+  SKILL_ARGS="$ISSUE_NUM $WORKTREE_PATH"
+  DIRECTIVE="/dispatch-resolve-conflict $ISSUE_NUM $WORKTREE_PATH"
+elif printf '%s\n' "$NAME" | grep -qE '^office-hours-[0-9]+$'; then
   SKILL_DIR_NAME="office-hours"
   SKILL_ARGS=""
   DIRECTIVE="/office-hours"
@@ -107,20 +119,10 @@ else
       SKILL_ARGS=""
       DIRECTIVE="/qa-fix"
       ;;
-    code-review)
-      SKILL_DIR_NAME="code-review-fix"
-      SKILL_ARGS=""
-      DIRECTIVE="/code-review-fix"
-      ;;
     review)
       SKILL_DIR_NAME="review-fix"
       SKILL_ARGS=""
       DIRECTIVE="/review-fix"
-      ;;
-    security)
-      SKILL_DIR_NAME="security-review-fix"
-      SKILL_ARGS=""
-      DIRECTIVE="/security-review-fix"
       ;;
     *)
       SKILL_DIR_NAME="dispatch-worker"

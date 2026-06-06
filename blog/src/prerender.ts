@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import * as fs from "node:fs";
 import { join } from "node:path";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
@@ -166,7 +166,7 @@ export async function loadPostsForPrerender(args: {
 
   const contentMap = await renderPostContents(
     published,
-    (filename) => readFileSync(join(args.postDir, filename), "utf-8"),
+    (filename) => fs.readFileSync(join(args.postDir, filename), "utf-8"),
     marked,
   );
 
@@ -206,7 +206,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     homeExtraHtml,
   } = config;
 
-  const template = readFileSync(join(distDir, "index.html"), "utf-8");
+  const template = fs.readFileSync(join(distDir, "index.html"), "utf-8");
 
   const { panelHtml, allArticlesHtml, rendered } = await loadPostsForPrerender({
     seed,
@@ -241,7 +241,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     rootHtml = injectBeforeHead(rootHtml, rootOgTags, "root template");
   }
   rootHtml = injectBeforeHead(rootHtml, rootSeoHead, "root template");
-  writeFileSync(join(distDir, "index.html"), rootHtml);
+  fs.writeFileSync(join(distDir, "index.html"), rootHtml);
   console.log("Pre-rendered: /index.html");
 
   for (const { meta } of rendered) {
@@ -269,8 +269,8 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     }
 
     const outDir = join(distDir, "post", meta.id);
-    mkdirSync(outDir, { recursive: true });
-    writeFileSync(join(outDir, "index.html"), html);
+    fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(join(outDir, "index.html"), html);
     console.log(`Pre-rendered: /post/${meta.id}/index.html`);
   }
 }
@@ -292,7 +292,7 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
     stripHero,
   } = config;
 
-  const template = readFileSync(join(distDir, "index.html"), "utf-8");
+  const template = fs.readFileSync(join(distDir, "index.html"), "utf-8");
 
   const ogBlock = ogTagsToHtml(staticPageOgEntries(siteUrl, page));
 
@@ -327,7 +327,7 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
   }
 
   const outDir = join(distDir, page.url);
-  mkdirSync(outDir, { recursive: true });
-  writeFileSync(join(outDir, "index.html"), html);
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.writeFileSync(join(outDir, "index.html"), html);
   console.log(`Pre-rendered: ${page.url}/index.html`);
 }
