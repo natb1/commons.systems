@@ -1102,3 +1102,45 @@ func subprocessEnvNoPassword() []string {
 	}
 	return append(env, "BUDGET_ETL_TEST_RUN_MAIN=1")
 }
+
+// TestSourceFileFlowsThrough verifies that a parsed file's statements-root-relative
+// RelPath is recorded as StatementData.SourceFile and carried into the exported
+// Statement, while derived balance anchors (no source file) stay empty.
+func TestSourceFileFlowsThrough(t *testing.T) {
+	parsed := []parsedFile{{
+		sf: parse.StatementFile{
+			Institution: "amex",
+			Account:     "2011",
+			Period:      "2026-03",
+			RelPath:     "amex/2011/2026-03/activity.qfx",
+		},
+		result: parse.ParseResult{Balance: 100000},
+	}}
+
+	stmts := buildStatementData(parsed, map[string]*time.Time{})
+	if len(stmts) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(stmts))
+	}
+	if want := "amex/2011/2026-03/activity.qfx"; stmts[0].SourceFile != want {
+		t.Errorf("StatementData.SourceFile = %q, want %q", stmts[0].SourceFile, want)
+	}
+
+	exported := buildExportStatements(stmts)
+	if len(exported) != 1 {
+		t.Fatalf("expected 1 exported statement, got %d", len(exported))
+	}
+	if want := "amex/2011/2026-03/activity.qfx"; exported[0].SourceFile != want {
+		t.Errorf("export.Statement.SourceFile = %q, want %q", exported[0].SourceFile, want)
+	}
+
+	// A derived balance anchor has no source file; SourceFile must stay empty.
+	derived := buildExportStatements([]budget.StatementData{{
+		StatementID: "amex-2011-2026-02",
+		Institution: "amex",
+		Account:     "2011",
+		Period:      "2026-02",
+	}})
+	if derived[0].SourceFile != "" {
+		t.Errorf("derived export.Statement.SourceFile = %q, want empty", derived[0].SourceFile)
+	}
+}

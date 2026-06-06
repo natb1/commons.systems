@@ -758,4 +758,25 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".viewer-md-actions")).toHaveCount(0);
   });
+
+  test("rapid page navigation never surfaces a navigation error", async ({ page }) => {
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer-position")).toContainText("1 / 3", { timeout: 15000 });
+    await expect(page.locator(".textLayer span").first()).toBeAttached({ timeout: 15000 });
+
+    // Synchronous burst: all clicks in one microtask window, so multiple
+    // renderPage calls overlap inside the getPage await (the #1146 race).
+    await page.evaluate(() => {
+      const next = document.querySelector(".viewer-next") as HTMLButtonElement;
+      const prev = document.querySelector(".viewer-prev") as HTMLButtonElement;
+      for (let i = 0; i < 6; i++) { next.click(); prev.click(); next.click(); }
+    });
+
+    const position = page.locator(".viewer-position");
+    await expect(position).not.toContainText("Navigation failed", { timeout: 5000 });
+    await expect(position).toContainText(/[1-3] \/ 3/, { timeout: 15000 });
+    await expect(page.locator(".textLayer span").first()).toBeAttached({ timeout: 15000 });
+    const text = await page.locator(".textLayer").textContent();
+    expect((text ?? "").trim().length).toBeGreaterThan(0);
+  });
 });

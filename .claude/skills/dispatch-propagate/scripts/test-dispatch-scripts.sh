@@ -118,6 +118,8 @@ STUB
   mkdir -p "$TMPDIR_TEST/config"
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
   export DISPATCH_FIND_PR_RETRY_DELAY=0
+  # gh_retry's backoff must not actually sleep under test.
+  export GH_RETRY_BASE_DELAY=0
 
   # Default the worktree-liveness daemon to UNKNOWN: point CLAUDE_AGENTS_CMD at a
   # path with no executable so `claude agents --json` exits non-zero. The
@@ -270,6 +272,22 @@ case "$args" in
     printf '{"data":{"repository":%s}}\n' "$aliases"
     ;;
   "repo view --json nameWithOwner -q .nameWithOwner")
+    # Transient injection: gh-transient-repo-view holds N = how many initial hits
+    # should fail with a retryable HTTP 504, after which the normal response is
+    # served. A .count sidecar records every hit so a test can assert how many
+    # attempts gh_retry made.
+    if [[ -f "$STUB_DIR/gh-transient-repo-view" ]]; then
+      fail_n=$(cat "$STUB_DIR/gh-transient-repo-view")
+      count_file="$STUB_DIR/gh-transient-repo-view.count"
+      count=0
+      [[ -f "$count_file" ]] && count=$(cat "$count_file")
+      count=$((count + 1))
+      echo "$count" > "$count_file"
+      if [[ "$count" -le "$fail_n" ]]; then
+        echo "gh: HTTP 504: Gateway Timeout (https://api.github.com/)" >&2
+        exit 1
+      fi
+    fi
     echo "natb1/commons.systems"
     ;;
   api\ */dependencies/blocked_by)
@@ -282,6 +300,22 @@ case "$args" in
     if [[ -f "$STUB_DIR/gh-fail-blocked_by-${num}" ]]; then
       echo "gh: API error on issues/${num}/dependencies/blocked_by" >&2
       exit 1
+    fi
+    # Transient injection: gh-transient-blocked_by-<num> holds N = how many
+    # initial hits should fail with a retryable HTTP 504, after which the normal
+    # fixture is served. A .count sidecar records every hit so a test can assert
+    # how many attempts gh_api_array (via gh_retry) made.
+    if [[ -f "$STUB_DIR/gh-transient-blocked_by-${num}" ]]; then
+      fail_n=$(cat "$STUB_DIR/gh-transient-blocked_by-${num}")
+      count_file="$STUB_DIR/gh-transient-blocked_by-${num}.count"
+      count=0
+      [[ -f "$count_file" ]] && count=$(cat "$count_file")
+      count=$((count + 1))
+      echo "$count" > "$count_file"
+      if [[ "$count" -le "$fail_n" ]]; then
+        echo "gh: HTTP 504: Gateway Timeout (https://api.github.com/repos/owner/repo/issues/${num}/dependencies/blocked_by)" >&2
+        exit 1
+      fi
     fi
     if [[ -f "$STUB_DIR/blockers-${num}.json" ]]; then
       cat "$STUB_DIR/blockers-${num}.json"
@@ -538,6 +572,22 @@ if [[ -f "$STUB_DIR/gh-fail-blocked_by-${num}" ]]; then
   echo "error: gh api call failed for issues/${num}/dependencies/blocked_by" >&2
   exit 1
 fi
+# Transient injection: when a gh-transient-blocked_by-<num> marker exists, take
+# the REAL gh_api_array path (which routes through gh_retry against the stub gh)
+# so an integration test can verify the lookup is retried within trace-leaf's
+# path. The gh stub's blocked_by case fails N times then serves the fixture.
+if [[ -f "$STUB_DIR/gh-transient-blocked_by-${num}" ]]; then
+  source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+  blocker_nums=$(gh_api_array "/repos/{owner}/{repo}/issues/${num}/dependencies/blocked_by" '.[].number') || exit 1
+  for dep in $blocker_nums; do
+    if [[ -f "$STUB_DIR/issue-${dep}.json" ]]; then
+      cat "$STUB_DIR/issue-${dep}.json"
+    else
+      echo "{\"title\":\"Issue $dep\",\"body\":\"\",\"comments\":[],\"number\":$dep,\"state\":\"OPEN\"}"
+    fi
+  done
+  exit 0
+fi
 # issue-blocking calls lib.sh resolve_issue_number then gh api + gh issue view.
 # Our fake: just read a stub file.
 blocker_nums=""
@@ -589,6 +639,7 @@ teardown() {
   export PATH="$SAVED_PATH"
   unset DISPATCH_CONFIG_DIR
   unset DISPATCH_FIND_PR_RETRY_DELAY
+  unset GH_RETRY_BASE_DELAY
   # Per-test exports for the liveness gate must not leak across tests.
   unset CLAUDE_AGENTS_CMD
   unset CLAUDE_CODE_SESSION_ID
@@ -2508,6 +2559,27 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "multi-issue PR with later blocked issue → skipped → next PR chosen" "pr 20 20-clear-pr verify" "$result"
 teardown
 
+# 34r. Integration: a transient gh repo view failure (HTTP 504) is retried by
+#      gh_retry inside dispatch-select-target's blocker-prefetch path. PR 10
+#      closes issue 100 (unblocked); gh repo view fails twice (HTTP 504) before
+#      succeeding. The selection must still succeed with the correct target and
+#      repo view must have been invoked exactly 3 times (.count sidecar == 3).
+echo "Test: select-target retries a transient repo-view failure → pr 10, 3 hits"
+setup
+UNION='['"$(make_pr_union 10 "10-clear-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Fail repo view twice with HTTP 504, then serve the normal response.
+echo 2 > "$STUB_DIR/gh-transient-repo-view"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+rc=$?
+assert_eq "select-target transient repo-view retry → pr 10 10-clear-pr verify" "pr 10 10-clear-pr verify" "$result"
+assert_eq "select-target transient repo-view retry → rc 0" "0" "$rc"
+hit_count=$(cat "$STUB_DIR/gh-transient-repo-view.count")
+assert_eq "select-target transient repo-view → repo view hit exactly 3 times" "3" "$hit_count"
+teardown
+
 # --- help-wanted leaf reachability (issue #715) -----------------------------
 # dispatch-select-target runs dispatch-trace-leaf <N> queue for each help-wanted
 # candidate and skips any whose subtree is fully worktree-conflicted (trace
@@ -4182,6 +4254,150 @@ printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def
 select_target_fake_claude
 result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" --exclude 701)
 assert_eq "queue: multi-leaf subtree, --exclude 701 (orphan) → next leaf 702" "702" "$result"
+teardown
+
+# 26. Integration: a transient blocked_by failure on a childless leaf is retried
+#     by gh_api_array (via gh_retry) inside trace-leaf's path. Issue 900 has no
+#     children, so trace-leaf returns 900 — but only after its blocked_by lookup
+#     fails twice (HTTP 504) and succeeds on the third hit. The .count sidecar
+#     confirms exactly 3 attempts.
+echo "Test: trace-leaf retries a transient blocked_by failure → leaf 900, 3 hits"
+setup
+# Fail the blocked_by lookup twice, then serve the default empty fixture.
+echo 2 > "$STUB_DIR/gh-transient-blocked_by-900"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "900" "queue")
+rc=$?
+assert_eq "trace-leaf transient retry → leaf 900" "900" "$result"
+assert_eq "trace-leaf transient retry → rc 0" "0" "$rc"
+hit_count=$(cat "$STUB_DIR/gh-transient-blocked_by-900.count")
+assert_eq "trace-leaf transient retry → blocked_by hit exactly 3 times" "3" "$hit_count"
+teardown
+
+# ============================================================================
+# gh_retry tests
+# ============================================================================
+echo ""
+echo "=== gh_retry ==="
+
+# A file-counter fake: increments a counter file and emits a transient or
+# deterministic stderr depending on whether the hit count is within FAIL_N.
+# Each test writes a fresh fake into TMPDIR_TEST and drives gh_retry against it.
+
+# a. transient-then-succeed: HTTP 504 twice, then success → rc 0, 3 attempts.
+echo "Test: gh_retry transient-then-succeed → rc 0, correct stdout, 3 attempts"
+setup
+cat > "$TMPDIR_TEST/fake-transient-succeed" <<'FAKE'
+#!/usr/bin/env bash
+cf="$FAKE_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+if [[ "$c" -le 2 ]]; then
+  echo "gh: HTTP 504: Gateway Timeout" >&2
+  exit 1
+fi
+echo "OK-PAYLOAD"
+FAKE
+chmod +x "$TMPDIR_TEST/fake-transient-succeed"
+out=$(
+  source "$TMPDIR_TEST/lib.sh"
+  export GH_RETRY_ATTEMPTS=4 FAKE_COUNT_FILE="$TMPDIR_TEST/c-a"
+  gh_retry "$TMPDIR_TEST/fake-transient-succeed" 2>/dev/null
+)
+rc=$?
+assert_eq "transient-then-succeed → rc 0" "0" "$rc"
+assert_eq "transient-then-succeed → stdout payload" "OK-PAYLOAD" "$out"
+assert_eq "transient-then-succeed → 3 attempts" "3" "$(cat "$TMPDIR_TEST/c-a")"
+teardown
+
+# b. always-transient (HTTP 503): exhausts retries → rc non-zero, 4 attempts.
+echo "Test: gh_retry always-transient (503) → rc non-zero, 4 attempts (exhausted)"
+setup
+cat > "$TMPDIR_TEST/fake-always-503" <<'FAKE'
+#!/usr/bin/env bash
+cf="$FAKE_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+echo "gh: HTTP 503: Service Unavailable" >&2
+exit 1
+FAKE
+chmod +x "$TMPDIR_TEST/fake-always-503"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export GH_RETRY_ATTEMPTS=4 FAKE_COUNT_FILE="$TMPDIR_TEST/c-b"
+  gh_retry "$TMPDIR_TEST/fake-always-503" >/dev/null 2>&1
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+assert_eq "always-503 → rc non-zero (exhausted)" "nonzero" "$rc_state"
+assert_eq "always-503 → 4 attempts" "4" "$(cat "$TMPDIR_TEST/c-b")"
+teardown
+
+# c. deterministic HTTP 404 → rc non-zero, 1 attempt (fail fast).
+echo "Test: gh_retry deterministic 404 → rc non-zero, 1 attempt"
+setup
+cat > "$TMPDIR_TEST/fake-404" <<'FAKE'
+#!/usr/bin/env bash
+cf="$FAKE_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+echo "gh: Not Found (HTTP 404)" >&2
+exit 1
+FAKE
+chmod +x "$TMPDIR_TEST/fake-404"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export GH_RETRY_ATTEMPTS=4 FAKE_COUNT_FILE="$TMPDIR_TEST/c-c"
+  gh_retry "$TMPDIR_TEST/fake-404" >/dev/null 2>&1
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+assert_eq "404 → rc non-zero" "nonzero" "$rc_state"
+assert_eq "404 → 1 attempt (fail fast)" "1" "$(cat "$TMPDIR_TEST/c-c")"
+teardown
+
+# d. secondary rate limit → transient (fail twice, then succeed → 3 attempts).
+echo "Test: gh_retry secondary rate limit → transient, 3 attempts"
+setup
+cat > "$TMPDIR_TEST/fake-secondary" <<'FAKE'
+#!/usr/bin/env bash
+cf="$FAKE_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+if [[ "$c" -le 2 ]]; then
+  echo "gh: You have exceeded a secondary rate limit. Please wait and retry your request again later." >&2
+  exit 1
+fi
+echo "RATE-OK"
+FAKE
+chmod +x "$TMPDIR_TEST/fake-secondary"
+out=$(
+  source "$TMPDIR_TEST/lib.sh"
+  export GH_RETRY_ATTEMPTS=4 FAKE_COUNT_FILE="$TMPDIR_TEST/c-d"
+  gh_retry "$TMPDIR_TEST/fake-secondary" 2>/dev/null
+)
+rc=$?
+assert_eq "secondary rate limit → rc 0" "0" "$rc"
+assert_eq "secondary rate limit → stdout payload" "RATE-OK" "$out"
+assert_eq "secondary rate limit → 3 attempts" "3" "$(cat "$TMPDIR_TEST/c-d")"
+teardown
+
+# e. deterministic auth (HTTP 403: Bad credentials) → rc non-zero, 1 attempt.
+#    A bare "rate limit" / 403 must NOT be treated as transient.
+echo "Test: gh_retry deterministic auth (403 Bad credentials) → 1 attempt"
+setup
+cat > "$TMPDIR_TEST/fake-auth" <<'FAKE'
+#!/usr/bin/env bash
+cf="$FAKE_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+echo "gh: HTTP 403: Bad credentials (https://api.github.com/repos/owner/repo)" >&2
+exit 1
+FAKE
+chmod +x "$TMPDIR_TEST/fake-auth"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export GH_RETRY_ATTEMPTS=4 FAKE_COUNT_FILE="$TMPDIR_TEST/c-e"
+  gh_retry "$TMPDIR_TEST/fake-auth" >/dev/null 2>&1
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+assert_eq "403 auth → rc non-zero" "nonzero" "$rc_state"
+assert_eq "403 auth → 1 attempt (fail fast)" "1" "$(cat "$TMPDIR_TEST/c-e")"
 teardown
 
 # ============================================================================
