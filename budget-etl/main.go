@@ -1351,6 +1351,7 @@ func buildStatementData(parsed []parsedFile, maxDates map[string]*time.Time) []b
 			Period:              pf.sf.Period,
 			BalanceDate:         balanceDate,
 			LastTransactionDate: maxDates[key],
+			SourceFile:          pf.sf.RelPath,
 		}
 	}
 	return out
@@ -1378,6 +1379,7 @@ func buildExportStatements(stmts []budget.StatementData) []export.Statement {
 			Period:              s.Period,
 			BalanceDate:         balanceDate,
 			LastTransactionDate: ltd,
+			SourceFile:          s.SourceFile,
 		}
 	}
 	return out
