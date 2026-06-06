@@ -55,6 +55,8 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
   cp "$SCRIPT_DIR/office-hours" "$TMPDIR_TEST/office-hours"
+  cp "$SCRIPT_DIR/dispatch-spawn-office-hours" "$TMPDIR_TEST/dispatch-spawn-office-hours"
+  cp "$SCRIPT_DIR/dispatch-spawn-job" "$TMPDIR_TEST/dispatch-spawn-job"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-check-blockers" "$TMPDIR_TEST/dispatch-check-blockers"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
@@ -86,6 +88,8 @@ setup() {
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/office-hours-select-target" \
            "$TMPDIR_TEST/office-hours" \
+           "$TMPDIR_TEST/dispatch-spawn-office-hours" \
+           "$TMPDIR_TEST/dispatch-spawn-job" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
            "$TMPDIR_TEST/dispatch-check-blockers" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
@@ -1512,6 +1516,44 @@ FAKE
   # The entry script no longer queries liveness itself; the selector subprocess
   # it invokes does. Point CLAUDE_AGENTS_CMD at the same fake so a single binary
   # serves the selector's `agents` query and the entry script's launch.
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+}
+
+# office_hours_fresh_fake_claude — fake `claude` for the fresh (spawn-worker-
+# style) entry path. Serves `agents` from an oh-registry.json (starts empty); on
+# `--bg` records argv + $PWD and registers {"sessionId":"sess-<name>",...} under
+# --name (so dispatch-spawn-job's verify + dispatch-spawn-office-hours' resolve
+# both find it); prints `LAUNCH: $*` on anything else (the entry's --resume).
+office_hours_fresh_fake_claude() {
+  printf '[]' > "$TMPDIR_TEST/oh-registry.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+set -uo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REG="$ROOT/oh-registry.json"
+case "${1:-}" in
+  agents)
+    cat "$REG"
+    ;;
+  --bg)
+    pwd >> "$ROOT/oh-pwd-log"
+    printf '%s\n' "$@" > "$ROOT/oh-bg-argv"
+    name=""
+    while [[ $# -gt 0 ]]; do
+      if [[ "$1" == "--name" ]]; then name="${2:-}"; shift 2; continue; fi
+      shift
+    done
+    tmp=$(mktemp)
+    jq --arg name "$name" '. + [{"sessionId":("sess-"+$name),"pid":9999,"status":"busy","name":$name,"cwd":"/worker"}]' "$REG" > "$tmp" && mv "$tmp" "$REG"
+    ;;
+  *)
+    echo "LAUNCH: $*"
+    ;;
+esac
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/claude"
+  export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
   export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
 }
 
@@ -3667,19 +3709,44 @@ result=$("$TMPDIR_TEST/office-hours")
 assert_eq "resumes the oldest live item's session" "LAUNCH: --resume s-42-x" "$result"
 teardown
 
-# OH3. Labeled items but none with a live session → start fresh /office-hours,
-# with the selected target's <N> <phase> <pr> passed through as arguments. The
-# selector emits `office-hours 42 implement -`; the entry execs
-# `/office-hours 42 implement -`.
-echo "Test: labeled items, none live → fresh /office-hours with passed args"
+# OH3. Labeled items but none with a live session → launch the fresh /office-hours
+# session worker-style (a --bg job named after the <N>-* worktree, cwd = that
+# worktree) via dispatch-spawn-office-hours, then attach the human by resuming the
+# spawned session id. Fixes the originally-reported label leak (#1160): born in the
+# worktree, the session's branch is <N>-..., so the strip hook clears the label.
+echo "Test: labeled item, none live → spawn worker-style --bg then resume"
 setup
-printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
-  > "$STUB_DIR/oh-issue-list.json"
-printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
-  > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude   # orphan world: no live sessions
+mkdir -p "$TMPDIR_TEST/worktrees/42-x"
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  "$TMPDIR_TEST/worktrees/42-x" > "$STUB_DIR/worktree-list.txt"
+office_hours_fresh_fake_claude
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "no live session → fresh /office-hours with args" "LAUNCH: /office-hours 42 implement -" "$result"
+# Attaches the human by resuming the just-spawned session id.
+assert_eq "fresh path resumes the spawned session id" "LAUNCH: --resume sess-42-x" "$result"
+# The spawn was a --bg job named after the worktree basename running /office-hours.
+mapfile -t oh_argv < "$TMPDIR_TEST/oh-bg-argv"
+assert_eq "fresh: --bg" "--bg" "${oh_argv[0]:-}"
+assert_eq "fresh: --name" "--name" "${oh_argv[1]:-}"
+assert_eq "fresh: name is the worktree basename" "42-x" "${oh_argv[2]:-}"
+assert_eq "fresh: prompt is /office-hours with args" "/office-hours 42 implement -" "${oh_argv[5]:-}"
+# The --bg job was born in the worktree (cwd = worktree path).
+oh_pwd=$(head -1 "$TMPDIR_TEST/oh-pwd-log" 2>/dev/null || true)
+assert_eq "fresh: spawn cwd is the worktree" "$(realpath "$TMPDIR_TEST/worktrees/42-x")" "$(realpath "$oh_pwd" 2>/dev/null)"
+teardown
+
+# OH3b. Sessionless item with NO <N>-* worktree on disk (the worktree was swept) →
+# the selector emits `-` for the 5th field, so the entry script exits non-zero with
+# a clear diagnostic and launches nothing (clear-errors-over-fallbacks).
+echo "Test: sessionless item with no worktree → non-zero exit, no launch"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"   # no 42-* worktree
+office_hours_fresh_fake_claude
+rc=0; out=$("$TMPDIR_TEST/office-hours" 2>&1) || rc=$?
+assert_eq "no worktree → exit 1" "1" "$rc"
+assert_eq "no worktree → no spawn recorded" "no" \
+  "$([[ -e "$TMPDIR_TEST/oh-bg-argv" ]] && echo yes || echo no)"
 teardown
 
 # OH4. Empty office-hours queue → selector emits `empty` → the entry script prints

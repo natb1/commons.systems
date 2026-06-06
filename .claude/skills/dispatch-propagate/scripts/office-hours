@@ -15,13 +15,21 @@
 #                                   a target-less parked dispatch router (#1010),
 #                                   the artifact dispatch-self-close's continuation
 #                                   invariant keeps alive. No skill is loaded.
-#   office-hours <N> <phase> <pr> → exec `claude "/office-hours <N> <phase> <pr>"`:
-#                                   a fresh interactive session running the
-#                                   /office-hours skill, with the already-selected
-#                                   target passed as arguments so the skill skips
-#                                   re-selection. A Claude session + skill context
-#                                   is loaded only on this path — only when there
-#                                   is actual residue work.
+#   office-hours <N> <phase> <pr> <worktree-path>
+#                                 → launch the fresh /office-hours session
+#                                   worker-style: a `--bg` job named after the
+#                                   item's <N>-* worktree, with cwd = that
+#                                   worktree (5th field), via
+#                                   dispatch-spawn-office-hours; then exec
+#                                   `claude --resume <sessionId>` to attach the
+#                                   human. Born in the worktree, the session's
+#                                   branch is <N>-..., so the strip hook clears
+#                                   the dispatch:office-hours label and the
+#                                   session registers under the worktree
+#                                   basename, holding the per-worktree
+#                                   concurrency lock. When no <N>-* worktree
+#                                   resolves (5th field `-`), exit non-zero with
+#                                   a diagnostic and launch nothing.
 #   empty                         → print a queue-empty message and exit WITHOUT
 #                                   launching Claude. The empty queue is handled
 #                                   entirely in bash; no session is booted.
@@ -44,16 +52,32 @@ CLAUDE_CMD="${OFFICE_HOURS_CLAUDE_CMD:-claude}"
 
 # One call to the single source of truth; dispatch on the returned verb.
 directive=$("$SCRIPT_DIR/office-hours-select-target")
-read -r verb a b c <<< "$directive"
+read -r verb a b c d <<< "$directive"
 case "$verb" in
   resume|parked-router)
     # a = the live worker / parked-router sessionId.
     exec "$CLAUDE_CMD" --resume "$a"
     ;;
   office-hours)
-    # a b c = <N> <phase> <pr-or-dash>, passed through so /office-hours Step 0
-    # uses them and skips re-selection.
-    exec "$CLAUDE_CMD" "/office-hours $a $b $c"
+    # a b c d = <N> <phase> <pr-or-dash> <worktree-path>. Launch a fresh
+    # /office-hours session worker-style — a --bg job named after the <N>-*
+    # worktree, rooted in it — then attach the human via --resume. Rooting it in
+    # the worktree clears the dispatch:office-hours label (the strip hook
+    # resolves <N> from the cwd branch) and registers the session under the
+    # worktree basename, so it holds the per-worktree concurrency lock.
+    if [[ -z "$d" || "$d" == "-" ]]; then
+      echo "office-hours: no <N>-* worktree resolved for #$a — cannot launch a fresh session (the worktree may have been swept). Re-create the worktree or re-run /ready." >&2
+      exit 1
+    fi
+    # The spawn wrapper runs `claude --bg` and queries `claude agents`; point it
+    # at the same launch command this script uses so a test fake serves both. It
+    # prints the spawned (or deduped) session id on stdout.
+    export DISPATCH_SPAWN_OFFICE_HOURS_CLAUDE_CMD="$CLAUDE_CMD"
+    if ! sid=$("$SCRIPT_DIR/dispatch-spawn-office-hours" "$a" "$b" "$c" "$d"); then
+      echo "office-hours: failed to launch a fresh /office-hours session for #$a in $d" >&2
+      exit 1
+    fi
+    exec "$CLAUDE_CMD" --resume "$sid"
     ;;
   empty)
     echo "office-hours: queue is empty — nothing to resume or start."
