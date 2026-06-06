@@ -7,7 +7,7 @@
 # the normalized result to stdout.
 #
 # Usage:
-#   dispatch-config-load <projects|jit|statements|target-workers>
+#   dispatch-config-load <projects|jit|statements|target-workers|budget-etl>
 #
 # Config files live in <project-root>/dispatch.config/. The project root is
 # resolved via resolve_project_root (lib.sh).
@@ -163,6 +163,29 @@
 #     "max_concurrent_workers": 8,
 #     "exhaustion_threshold_pct": 98
 #   }
+#
+# ---- Schema: budget-etl.json -----------------------------------------------
+#
+# Top-level object with four required non-empty string path fields. Read by the
+# config-driven /budget-etl skill; the paths are machine-specific and live in
+# the uncommitted dispatch.config/budget-etl.json. Paths may contain spaces
+# (e.g. "/mnt/g/My Drive/budget") and must be quoted by every consumer.
+#
+#   downloads    string (non-empty) — directory new statement files land in.
+#   statements   string (non-empty) — root of the institution/account archive.
+#   snapshotDir  string (non-empty) — directory holding immutable budget
+#                snapshots (budget-<ts>.enc.json).
+#   current      string (non-empty) — the authoritative current snapshot file,
+#                kept equal to the newest snapshot; supplies rules + prior
+#                transactions to each merge.
+#
+# Example (see budget-etl.example.json):
+#   {
+#     "downloads": "/mnt/c/Users/example/Downloads",
+#     "statements": "/mnt/g/My Drive/budget/statements",
+#     "snapshotDir": "/mnt/g/My Drive/budget/snapshots",
+#     "current": "/mnt/g/My Drive/budget/budget.enc.json"
+#   }
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -171,9 +194,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 CONFIG_TYPE="${1:-}"
 case "$CONFIG_TYPE" in
-  projects|jit|statements|target-workers) ;;
+  projects|jit|statements|target-workers|budget-etl) ;;
   *)
-    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers>" >&2
+    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl>" >&2
     exit 2
     ;;
 esac
@@ -418,6 +441,37 @@ case "$CONFIG_TYPE" in
             and ($cfg.exhaustion_threshold_pct <= $cfg.five_hour_target_ceiling_pct)
          then "exhaustion_threshold_pct must be > five_hour_target_ceiling_pct (the override band collapses otherwise), got threshold \($cfg.exhaustion_threshold_pct) <= ceiling \($cfg.five_hour_target_ceiling_pct)"
          else empty end)
+      end
+    ' "$CONFIG_FILE")
+    ;;
+  budget-etl)
+    # top-level value must be an object; four required non-empty string path
+    # fields. Paths may contain spaces. Each must be an absolute path with no
+    # ".." component — these values become filesystem destinations the budget-etl
+    # skill writes to and reads bank statements from, so a relative or
+    # parent-traversing path could redirect those writes outside the intended
+    # Drive mount.
+    ERRORS=$(jq -r '
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      else
+        . as $cfg |
+        (["downloads","statements","snapshotDir","current"] |
+         .[] |
+         . as $field |
+         if ($cfg | has($field)) | not then
+           "missing required field \($field)"
+         elif ($cfg[$field] | type) != "string" then
+           "\($field) must be a string, got \($cfg[$field] | type)"
+         elif ($cfg[$field] | length) == 0 then
+           "\($field) must be a non-empty string"
+         elif ($cfg[$field] | startswith("/") | not) then
+           "\($field) must be an absolute path (start with /), got \($cfg[$field])"
+         elif ($cfg[$field] | test("(^|/)\\.\\.(/|$)")) then
+           "\($field) must not contain a \"..\" path component, got \($cfg[$field])"
+         else
+           empty
+         end)
       end
     ' "$CONFIG_FILE")
     ;;
