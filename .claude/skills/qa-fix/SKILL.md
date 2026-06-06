@@ -72,9 +72,12 @@ Otherwise run all steps in order.
    `<N>` is the issue number used by the remaining steps for their `tmp/`
    filenames.
 
-0.5. **Merge `origin/main` into the working branch.** Fork `/commit-merge-push`
-   via the Agent tool so the QA pass runs against a branch current with `main`
-   rather than stale state. This invocation runs with no pending working-tree
+0.5. **Merge `origin/main` into the working branch.** Fork `/commit-merge-push` so
+   the QA pass runs against a branch current with `main` rather than stale state —
+   issue an Agent tool call with `subagent_type: general-purpose` and `model: sonnet`
+   whose prompt invokes `/commit-merge-push` via the Skill tool, the canonical fork
+   recipe `/implement-unit` Step 2 documents (`subagent_type` is `general-purpose`,
+   never the skill name). This invocation runs with no pending working-tree
    changes — `/commit-merge-push` tolerates that and creates no commit. If it
    reports a **merge conflict**, surface it and **stop** — do not begin the QA
    walkthrough. A merge conflict needs a human, so escalate to office-hours: skip
