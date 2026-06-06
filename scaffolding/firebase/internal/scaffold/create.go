@@ -89,7 +89,7 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 		fmt.Printf("[dry-run] Would render app templates into %s/\n", appName)
 	} else {
 		fmt.Printf("Rendering app templates into %s/...\n", appName)
-		if err := renderTemplates(templateFS, repoRoot, "templates/app", appName, data); err != nil {
+		if err := RenderTemplates(templateFS, repoRoot, "templates/app", appName, data); err != nil {
 			return fmt.Errorf("rendering app templates: %w", err)
 		}
 	}
@@ -227,7 +227,7 @@ func InsertFirestoreRules(repoRoot, appName string) error {
 	return os.WriteFile(rulesPath, []byte(updated), 0o644)
 }
 
-func renderTemplates(templateFS fs.FS, repoRoot, templateDir, outputDir string, data AppData) error {
+func RenderTemplates(templateFS fs.FS, repoRoot, templateDir, outputDir string, data AppData) error {
 	return fs.WalkDir(templateFS, templateDir, func(embedPath string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
