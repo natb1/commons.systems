@@ -35,12 +35,16 @@ current branch (use `dangerouslyDisableSandbox: true` — `gh` needs network):
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 PR_JSON=$(gh pr view "$BRANCH" --json number,labels,body)
-PR_NUM=$(echo "$PR_JSON" | jq -r .number)
-echo "$PR_JSON" | jq -r '.labels[].name'
+PR_NUM=$(jq -r .number <<<"$PR_JSON")
+jq -r '.labels[].name' <<<"$PR_JSON"
 ```
 
+A here-string (`<<<`) is used, not `echo "$PR_JSON" | jq`, because zsh `echo`
+un-escapes `\t`/`\n` in the JSON and injects raw control chars `jq` rejects — see
+`.claude/rules/shell-json.md`.
+
 `PR_NUM` is carried through to every later step — do not re-resolve. The PR body
-stays in `PR_JSON` (`echo "$PR_JSON" | jq -r .body`); Step 6 parses its
+stays in `PR_JSON` (`jq -r .body <<<"$PR_JSON"`); Step 6 parses its
 `Closes #N` line(s) to resolve the issue(s) this PR implements.
 
 If the printed labels already include `dispatch:reviewed` — an interrupted prior
@@ -409,7 +413,7 @@ bucket is empty.
 #### 6a. Deferred code-review/review findings → `/file-issue` with a blocked-by link
 
 First resolve the PR's **implementing issue(s)**: parse the `Closes #N` line(s)
-from the PR body captured in `PR_JSON` (`echo "$PR_JSON" | jq -r .body`). These
+from the PR body captured in `PR_JSON` (`jq -r .body <<<"$PR_JSON"`). These
 are the issue(s) this PR's work delivers.
 
 Then, for **each** Deferred finding, assess — as a required sub-step, never
