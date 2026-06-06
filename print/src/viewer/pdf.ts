@@ -198,6 +198,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     if (!result) return;
     if (gen !== renderGen) {
       result.task.cancel();
+      renderTask = null;
       return;
     }
 
