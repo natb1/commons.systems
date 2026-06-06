@@ -39,9 +39,13 @@ current branch (use `dangerouslyDisableSandbox: true` — `gh` needs network):
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 PR_JSON=$(gh pr view "$BRANCH" --json number,labels)
-PR_NUM=$(echo "$PR_JSON" | jq -r .number)
-echo "$PR_JSON" | jq -r '.labels[].name'
+PR_NUM=$(jq -r .number <<<"$PR_JSON")
+jq -r '.labels[].name' <<<"$PR_JSON"
 ```
+
+A here-string (`<<<`) is used, not `echo "$PR_JSON" | jq`, because zsh `echo`
+un-escapes `\t`/`\n` in the JSON and injects raw control chars `jq` rejects — see
+`.claude/rules/shell-json.md`.
 
 `PR_NUM` is carried through to Steps 5, 6, and 7 — do not
 re-resolve. If the PR already carries the `dispatch:qa-done` label — an
