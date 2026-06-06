@@ -75,6 +75,38 @@ describe("resolveSourceFile", () => {
     expect(await resolveSourceFile(dir, "///")).toBeNull();
   });
 
+  it("returns null for a path containing a '..' segment without calling the handle", async () => {
+    let called = false;
+    const dir: DirHandleLike = {
+      async getDirectoryHandle() {
+        called = true;
+        throw notFound();
+      },
+      async getFileHandle() {
+        called = true;
+        throw notFound();
+      },
+    };
+    expect(await resolveSourceFile(dir, "bankone/../../../etc/passwd")).toBeNull();
+    expect(called).toBe(false);
+  });
+
+  it("returns null for a path containing a '.' segment without calling the handle", async () => {
+    let called = false;
+    const dir: DirHandleLike = {
+      async getDirectoryHandle() {
+        called = true;
+        throw notFound();
+      },
+      async getFileHandle() {
+        called = true;
+        throw notFound();
+      },
+    };
+    expect(await resolveSourceFile(dir, "bankone/./file.csv")).toBeNull();
+    expect(called).toBe(false);
+  });
+
   it("propagates non-NotFoundError errors", async () => {
     const boom: DirHandleLike = {
       async getDirectoryHandle() {

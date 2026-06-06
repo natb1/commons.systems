@@ -81,6 +81,58 @@ func TestDiscoverFiles(t *testing.T) {
 	}
 }
 
+func TestDiscoverFlatFiles_RelPath(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "2025-07.csv"), []byte("csv data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmp, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "sub", "2025-08.ofx"), []byte("ofx data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// dot-prefixed file should be skipped
+	if err := os.WriteFile(filepath.Join(tmp, ".DS_Store"), []byte("junk"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := Discover(tmp, DiscoverOpts{Institution: "mybank", Account: "9999"})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(files))
+	}
+
+	byRelPath := map[string]StatementFile{}
+	for _, f := range files {
+		byRelPath[f.RelPath] = f
+	}
+
+	if sf, ok := byRelPath["2025-07.csv"]; !ok {
+		t.Error("missing RelPath 2025-07.csv")
+	} else {
+		if sf.Institution != "mybank" {
+			t.Errorf("Institution = %q, want %q", sf.Institution, "mybank")
+		}
+		if sf.Account != "9999" {
+			t.Errorf("Account = %q, want %q", sf.Account, "9999")
+		}
+		if sf.Period != "2025-07" {
+			t.Errorf("Period = %q, want %q", sf.Period, "2025-07")
+		}
+	}
+
+	if sf, ok := byRelPath["sub/2025-08.ofx"]; !ok {
+		t.Error("missing RelPath sub/2025-08.ofx")
+	} else {
+		if sf.Period != "2025-08" {
+			t.Errorf("Period = %q, want %q", sf.Period, "2025-08")
+		}
+	}
+}
+
 func TestDetectFormat(t *testing.T) {
 	tests := []struct {
 		name string

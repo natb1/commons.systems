@@ -112,7 +112,9 @@ describe("openStatementSource — message states", () => {
     await openStatementSource("stmt-1");
 
     expect(dialogText()).toContain("Source file not found in the linked folder");
-    expect(dialogText()).toContain("2024/chase.qfx");
+    // Only the basename is shown — not the full path (which encodes PII).
+    expect(dialogText()).toContain("chase.qfx");
+    expect(dialogText()).not.toContain("2024/chase.qfx");
   });
 
   it("shows the permission message when read permission is not granted", async () => {
@@ -165,5 +167,42 @@ describe("openStatementSource — success states", () => {
     // textContent (no raw HTML injection).
     expect(pre?.textContent).toBe("<OFX>raw & content</OFX>");
     expect(pre?.querySelector("ofx")).toBeNull();
+  });
+
+  it("renders a sandboxed iframe for a PDF source file", async () => {
+    mockDataSource.getStatements.mockResolvedValue([
+      { statementId: "stmt-1", sourceFile: "stmt.pdf" },
+    ]);
+    mockStatementsDir.getStoredDirectoryHandle.mockResolvedValue({ name: "dir" });
+    mockStatementsDir.ensureReadPermission.mockResolvedValue(true);
+    const file = { name: "stmt.pdf" };
+    // happy-dom does not implement URL.createObjectURL; stub it.
+    const originalCreate = URL.createObjectURL;
+    const originalRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => "blob:fake-url");
+    URL.revokeObjectURL = vi.fn();
+    mockResolver.resolveSourceFile.mockResolvedValue({
+      getFile: () => Promise.resolve(file),
+    });
+
+    await openStatementSource("stmt-1");
+
+    const frame = document.querySelector(".statement-source-frame") as HTMLIFrameElement | null;
+    expect(frame).not.toBeNull();
+    expect(frame?.getAttribute("sandbox")).toBe("allow-same-origin");
+
+    URL.createObjectURL = originalCreate;
+    URL.revokeObjectURL = originalRevoke;
+  });
+});
+
+describe("openStatementSource — accessibility", () => {
+  it("gives the dialog an aria-label", async () => {
+    mockDataSource.getStatements.mockResolvedValue([]);
+
+    await openStatementSource("any");
+
+    const dialog = document.querySelector(".statement-source-dialog");
+    expect(dialog?.getAttribute("aria-label")).toBe("Source statement viewer");
   });
 });
