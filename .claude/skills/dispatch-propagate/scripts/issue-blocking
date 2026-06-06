@@ -4,5 +4,5 @@ source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 ISSUE_NUM=$(resolve_issue_number "${1:-}")
 BLOCKERS=$(gh_api_array "/repos/{owner}/{repo}/issues/$ISSUE_NUM/dependencies/blocked_by" '.[].number')
 for dep in $BLOCKERS; do
-  gh issue view "$dep" --json title,body,comments,number,state
+  gh_retry gh issue view "$dep" --json title,body,comments,number,state
 done
