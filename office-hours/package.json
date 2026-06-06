@@ -12,6 +12,10 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "@commons-systems/errorutil": "file:../errorutil",
+    "@commons-systems/firebaseutil": "file:../firebaseutil",
+    "@commons-systems/firestoreutil": "file:../firestoreutil",
+    "firebase": "^12.9.0",
     "missing.css": "^1.1.3"
   },
   "devDependencies": {
