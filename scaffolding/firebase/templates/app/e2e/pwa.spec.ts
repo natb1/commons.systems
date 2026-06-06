@@ -8,7 +8,7 @@ test.describe("PWA install scaffolding", () => {
     expect(response.status()).toBe(200);
 
     const manifest = await response.json();
-    expect(typeof manifest.name).toBe("string");
+    expect(manifest.name).toBeTruthy();
     expect(manifest.start_url).toBeTruthy();
     expect(manifest.display).toBe("standalone");
     expect(Array.isArray(manifest.icons)).toBe(true);

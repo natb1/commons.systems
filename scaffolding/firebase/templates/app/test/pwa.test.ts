@@ -78,6 +78,9 @@ function makeBeforeInstallPromptEvent(
   outcome: "accepted" | "dismissed" = "accepted",
 ): FakeBeforeInstallPromptEvent {
   const event = new Event("beforeinstallprompt") as FakeBeforeInstallPromptEvent;
+  // Native beforeinstallprompt events are trusted; setupInstallPrompt ignores
+  // untrusted (synthetic) events, so mark this test event trusted.
+  Object.defineProperty(event, "isTrusted", { value: true });
   event.prompt = vi.fn().mockResolvedValue(undefined);
   event.userChoice = Promise.resolve({ outcome, platform: "web" });
   return event;
@@ -158,5 +161,26 @@ describe("setupInstallPrompt", () => {
     window.dispatchEvent(makeBeforeInstallPromptEvent());
 
     expect(controller.canInstall()).toBe(false);
+  });
+
+  it("a new beforeinstallprompt fired during promptInstall() is not discarded", async () => {
+    const controller = setupInstallPrompt();
+    controllers.push(controller);
+
+    const firstEvent = makeBeforeInstallPromptEvent("dismissed");
+    window.dispatchEvent(firstEvent);
+
+    // Begin the install flow for the first event. The prompt resolves as a
+    // microtask, so we can dispatch a second beforeinstallprompt in between.
+    const installPromise = controller.promptInstall();
+
+    // Simulate a second beforeinstallprompt arriving while the first is pending.
+    const secondEvent = makeBeforeInstallPromptEvent("accepted");
+    window.dispatchEvent(secondEvent);
+
+    await installPromise;
+
+    // The second event must survive — the install button should still be available.
+    expect(controller.canInstall()).toBe(true);
   });
 });

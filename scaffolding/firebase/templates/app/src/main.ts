@@ -33,6 +33,9 @@ const installController = setupInstallPrompt(({ canInstall, installed }) => {
   installBtn.hidden = !canInstall || installed;
 });
 installBtn.addEventListener("click", () => void installController.promptInstall());
+// Media apps (P3/A3) that persist an FSA directory handle should call
+// autoLoadPersistedHandle (from ./pwa.ts) at startup with their stored handle,
+// so an installed app re-loads it without a per-session permission click.
 
 const heroContainer = document.getElementById("hero-container") as HTMLElement;
 if (!heroContainer) throw new Error("#hero-container element not found");

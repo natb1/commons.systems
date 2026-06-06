@@ -77,6 +77,10 @@ export function setupInstallPrompt(
   };
 
   const onBeforeInstallPrompt = (event: Event): void => {
+    // Only the browser's own (trusted) event should enable the install
+    // affordance. A page script could dispatch a forged `beforeinstallprompt`
+    // to flip install state; `isTrusted` is false for synthetic events.
+    if (!event.isTrusted) return;
     event.preventDefault();
     deferred = event as BeforeInstallPromptEvent;
     emit();
@@ -100,8 +104,11 @@ export function setupInstallPrompt(
       const event = deferred;
       await event.prompt();
       const { outcome } = await event.userChoice;
-      // A deferred prompt can only be used once.
-      deferred = null;
+      // A deferred prompt can only be used once. Only null out `deferred` if it
+      // still refers to the event we just consumed — a new beforeinstallprompt
+      // could have fired during the awaits above, overwriting `deferred` with a
+      // fresh event that we must not discard.
+      if (deferred === event) deferred = null;
       emit();
       return outcome;
     },
