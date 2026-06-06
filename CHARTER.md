@@ -186,7 +186,11 @@ Failure conditions (above) are *observable tripwires*. The entries here are *con
 
 **Current response:** The capability of generating software from natural language intent is unlikely to disappear — open-source models are improving, local inference is becoming more feasible, and competitive dynamics make simultaneous price increases across all providers unlikely. The construction-tool-vs-runtime distinction (see Progressive Detachment) is the structural mitigation: loss of agent access slows iteration but does not destroy what has been built.
 
-**Status:** Acknowledged. Monitor the economics of agentic coding access.
+**Sustainability threshold.** Claude is an estimated 75–95% of the project's running cost, so the project's burn rate is effectively its Claude spend. Sustainability is a race: the project must reach revenue self-sufficiency (see Resourcing) before available funds run out. The threshold is therefore not a fixed monthly ceiling but a runway — monthly Claude spend is unsustainable when projected runway (available funds ÷ trailing monthly spend) falls below the horizon needed to reach revenue self-sufficiency. Available funds are derived from the project's own budget app; the account configuration that feeds the runway calculation lives in the private `natb1/agenda-nate` repo, not here, so no figures are published in this charter.
+
+**Review trigger:** when projected runway drops below the estimated time-to-revenue-self-sufficiency (the horizon estimate, like the funds inputs, is maintained in the private `natb1/agenda-nate` config), reassess before continuing at the current spend. The default response is to *slow down*, not pay more — the construction-tool-vs-runtime distinction means reducing iteration velocity costs time but breaks nothing already built. Sustaining or raising spend through a breached threshold is a deliberate choice, justified only by a credible revenue trajectory, never the default.
+
+**Status:** Threshold defined as a runway rule (above). Inputs are pending — the budget accounts and the `natb1/agenda-nate` config that feed the runway calculation do not exist yet. Recompute runway once they do, and monitor the economics of agentic coding access.
 
 ### Infrastructure Provider Hostility
 
