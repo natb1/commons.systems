@@ -96,6 +96,12 @@ if [[ ! "$WORKTREE_PATH" =~ ^[A-Za-z0-9/_.-]+$ ]]; then
   echo "dispatch-spawn-worker: worktree path '$WORKTREE_PATH' contains unsafe characters" >&2
   exit 2
 fi
+# Defense-in-depth: MODEL is forwarded to `claude --bg --model <MODEL>`. Reject
+# values outside the model-id charset (mirrors dispatch-refresh-rate-limits).
+if [[ -n "$MODEL" && ! "$MODEL" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "dispatch-spawn-worker: --model value '$MODEL' contains unexpected characters" >&2
+  exit 2
+fi
 
 # ---- Step 1: translate env overrides ----------------------------------------
 # Map the worker's DISPATCH_SPAWN_WORKER_* overrides onto dispatch-spawn-job's

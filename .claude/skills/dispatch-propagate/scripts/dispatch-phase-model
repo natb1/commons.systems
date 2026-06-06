@@ -19,13 +19,17 @@
 #
 # Exit codes:
 #   0  always (an unmapped phase is NOT an error — it means "default").
-#   2  missing or empty <phase> argument (usage error).
+#   2  missing, empty, or extra <phase> argument (usage error).
 #
 # NOT set -e: exits are handled explicitly.
 set -uo pipefail
 
 if [[ $# -lt 1 || -z "${1:-}" ]]; then
   echo "dispatch-phase-model: expected a phase argument" >&2
+  exit 2
+fi
+if [[ $# -gt 1 ]]; then
+  echo "dispatch-phase-model: unexpected argument '$2'" >&2
   exit 2
 fi
 

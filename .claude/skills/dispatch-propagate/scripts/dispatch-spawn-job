@@ -137,6 +137,11 @@ if [[ ${#positionals[@]} -ne 1 ]]; then
 fi
 PROMPT="${positionals[0]}"
 
+if [[ -n "$MODEL" && ! "$MODEL" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "dispatch-spawn-job: --model value '$MODEL' contains unexpected characters" >&2
+  exit 2
+fi
+
 if [[ -z "$NAME" ]]; then
   echo "dispatch-spawn-job: --name is required and must be non-empty" >&2
   exit 2

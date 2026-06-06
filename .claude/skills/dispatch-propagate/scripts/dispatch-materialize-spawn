@@ -360,7 +360,12 @@ process_one_target() {
   # (pending CI); in normal operation PHASE is non-empty here — queue targets are
   # CI-pre-gated and explicit targets pass the Step 6a readiness gate.
   WORKER_MODEL=""
-  [[ -n "$PHASE" ]] && WORKER_MODEL=$("$SCRIPT_DIR/dispatch-phase-model" "$PHASE")
+  if [[ -n "$PHASE" ]]; then
+    if ! WORKER_MODEL=$("$SCRIPT_DIR/dispatch-phase-model" "$PHASE"); then
+      echo "dispatch-materialize-spawn: dispatch-phase-model failed for phase '$PHASE'" >&2
+      return 2
+    fi
+  fi
   worker_args=()
   [[ -n "$WORKER_MODEL" ]] && worker_args+=(--model "$WORKER_MODEL")
   worker_args+=("$n" "$WORKTREE_PATH")
