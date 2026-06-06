@@ -30,9 +30,13 @@ vi.mock("virtual:budget-seed-data", async () => {
   return { default: SEED_DATA_MOCK };
 });
 
+const scheduleWriteBack = vi.fn();
+vi.mock("../src/file-sync.js", () => ({ scheduleWriteBack: () => scheduleWriteBack() }));
+
 import { Timestamp } from "firebase/firestore";
 import { storeParsedData, closeDb } from "../src/idb";
-import { IdbDataSource, SeedDataSource } from "../src/data-source";
+import { IdbDataSource, SeedDataSource, FileSyncingDataSource } from "../src/data-source";
+import type { DataSource } from "../src/data-source";
 import type { TransactionId, BudgetPeriodId, RuleId } from "../src/firestore";
 import { makeParsedData } from "./helpers";
 
@@ -467,5 +471,80 @@ describe("SeedDataSource", () => {
     expect(aggs[0].creditTotal).toBe(500);
     expect(aggs[0].unbudgetedTotal).toBe(75);
     expect(aggs[0].groupId).toBeNull();
+  });
+});
+
+describe("FileSyncingDataSource", () => {
+  beforeEach(() => {
+    scheduleWriteBack.mockClear();
+  });
+
+  // Hand-rolled stub inner DataSource: every method is a vi.fn(); a real
+  // IdbDataSource is unnecessary to verify delegation + write-back arming.
+  function makeStubInner() {
+    return {
+      getTransactions: vi.fn().mockResolvedValue([{ id: "t1" }]),
+      getStatements: vi.fn().mockResolvedValue([]),
+      getStatementItems: vi.fn().mockResolvedValue([]),
+      getReconciliationNotes: vi.fn().mockResolvedValue([]),
+      getAccounts: vi.fn().mockResolvedValue([]),
+      getJournalEntries: vi.fn().mockResolvedValue([]),
+      getJournalLegs: vi.fn().mockResolvedValue([]),
+      getReconciliationEvents: vi.fn().mockResolvedValue([]),
+      getBudgets: vi.fn().mockResolvedValue([]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([]),
+      getRules: vi.fn().mockResolvedValue([]),
+      getNormalizationRules: vi.fn().mockResolvedValue([]),
+      getWeeklyAggregates: vi.fn().mockResolvedValue([]),
+      updateTransaction: vi.fn().mockResolvedValue(undefined),
+      updateTransactionStatementItemLink: vi.fn().mockResolvedValue(undefined),
+      upsertReconciliationNote: vi.fn().mockResolvedValue(undefined),
+      deleteReconciliationNote: vi.fn().mockResolvedValue(undefined),
+      updateJournalLegCleared: vi.fn().mockResolvedValue(undefined),
+      createReconciliationEvent: vi.fn().mockResolvedValue(undefined),
+      createJournalEntry: vi.fn().mockResolvedValue({ entryId: "e1", legIds: [] }),
+      updateBudget: vi.fn().mockResolvedValue(undefined),
+      updateBudgetOverrides: vi.fn().mockResolvedValue(undefined),
+      adjustBudgetPeriodTotal: vi.fn().mockResolvedValue(undefined),
+      createRule: vi.fn().mockResolvedValue("rule-id-123" as RuleId),
+      updateRule: vi.fn().mockResolvedValue(undefined),
+      deleteRule: vi.fn().mockResolvedValue(undefined),
+      createNormalizationRule: vi.fn().mockResolvedValue("nrule-id-456"),
+      updateNormalizationRule: vi.fn().mockResolvedValue(undefined),
+      deleteNormalizationRule: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  it("a read delegates to inner and does NOT arm write-back", async () => {
+    const inner = makeStubInner();
+    const ds = new FileSyncingDataSource(inner as unknown as DataSource);
+    const result = await ds.getTransactions();
+    expect(inner.getTransactions).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([{ id: "t1" }]);
+    expect(scheduleWriteBack).not.toHaveBeenCalled();
+  });
+
+  it("updateTransaction delegates and arms write-back exactly once", async () => {
+    const inner = makeStubInner();
+    const ds = new FileSyncingDataSource(inner as unknown as DataSource);
+    await ds.updateTransaction("t1" as TransactionId, { note: "x" });
+    expect(inner.updateTransaction).toHaveBeenCalledWith("t1", { note: "x" });
+    expect(scheduleWriteBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("createRule returns the inner result and arms write-back", async () => {
+    const inner = makeStubInner();
+    const ds = new FileSyncingDataSource(inner as unknown as DataSource);
+    const id = await ds.createRule({
+      type: "categorization",
+      pattern: "TARGET",
+      target: "Shopping",
+      priority: 2,
+      institution: null,
+      account: null,
+    } as Parameters<DataSource["createRule"]>[0]);
+    expect(inner.createRule).toHaveBeenCalledTimes(1);
+    expect(id).toBe("rule-id-123");
+    expect(scheduleWriteBack).toHaveBeenCalledTimes(1);
   });
 });
