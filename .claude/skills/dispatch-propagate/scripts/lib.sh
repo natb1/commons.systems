@@ -28,6 +28,57 @@ resolve_issue_number() {
   echo "$num"
 }
 
+# Classify a captured gh stderr blob as transient (retryable) or deterministic.
+# Args: $1 = the captured stderr text.
+# Returns 0 when the blob matches a known transient class (HTTP 5xx, gateway
+# timeouts, connection resets, secondary rate limit / abuse detection, etc.),
+# non-zero otherwise. Deterministic failures (404, 401/403 auth, 422, and the
+# bare primary "API rate limit exceeded") are NOT transient — fail fast.
+# Match is case-insensitive. A bare 4xx code and a bare "rate limit" must not
+# match; only a "secondary rate limit" is retryable.
+_gh_error_is_transient() {
+  local stderr="$1"
+  printf '%s' "$stderr" | grep -qiE \
+    'HTTP 5[0-9][0-9]|Bad Gateway|Gateway Time-?out|Service Unavailable|Internal Server Error|timed out|\btimeout\b|i/o timeout|deadline exceeded|connection reset|TLS handshake|secondary rate limit|abuse detection|retry your request|temporarily unavailable'
+}
+
+# Run a command, retrying on transient gh/GitHub failures with exponential
+# backoff. Args: the command and its arguments (e.g. `gh_retry gh api /path`).
+# On success: prints the command's stdout and returns 0. On a deterministic
+# failure or once attempts are exhausted: forwards the last attempt's stderr to
+# >&2 and returns the command's real exit code (no swallowing — see
+# .claude/rules/code-style.md). A transient failure with attempts remaining
+# logs one retry line to >&2, sleeps, doubles the delay, and retries.
+# Tunables (env): GH_RETRY_ATTEMPTS (default 4 = 1 try + 3 retries),
+# GH_RETRY_BASE_DELAY (default 2 seconds).
+gh_retry() {
+  local attempts="${GH_RETRY_ATTEMPTS:-4}"
+  local delay="${GH_RETRY_BASE_DELAY:-2}"
+  local attempt out rc err tmpfile
+  tmpfile=$(mktemp) || { echo "error: could not create temp file" >&2; return 1; }
+  for (( attempt=1; attempt<=attempts; attempt++ )); do
+    out=$("$@" 2>"$tmpfile")
+    rc=$?
+    if [[ "$rc" -eq 0 ]]; then
+      printf '%s\n' "$out"
+      rm -f "$tmpfile"
+      return 0
+    fi
+    err=$(cat "$tmpfile")
+    if [[ "$attempt" -ge "$attempts" ]] || ! _gh_error_is_transient "$err"; then
+      printf '%s' "$err" >&2
+      rm -f "$tmpfile"
+      return "$rc"
+    fi
+    echo "gh_retry: transient gh failure (attempt $attempt/$attempts), retrying in ${delay}s" >&2
+    sleep "$delay"
+    delay=$(( delay * 2 ))
+  done
+  # Unreachable — the loop returns on every path — but keep the temp file clean.
+  rm -f "$tmpfile"
+  return 1
+}
+
 # Call gh api and validate the response is a JSON array before applying a jq filter.
 # Args: $1 = API path (e.g. "/repos/{owner}/{repo}/issues/42/sub_issues")
 #        $2 = jq filter to apply to the array (e.g. '.[].number')
@@ -38,7 +89,7 @@ gh_api_array() {
   local filter="$2"
   local raw stderr_file
   stderr_file=$(mktemp) || { echo "error: could not create temp file" >&2; return 1; }
-  raw=$(gh api "$path" 2>"$stderr_file") || {
+  raw=$(gh_retry gh api "$path" 2>"$stderr_file") || {
     local api_stderr
     api_stderr=$(cat "$stderr_file")
     rm -f "$stderr_file"

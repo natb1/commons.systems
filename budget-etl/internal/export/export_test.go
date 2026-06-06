@@ -31,6 +31,7 @@ func TestWriteFileRoundTrip(t *testing.T) {
 				Account:     "1234",
 				Balance:     1429.61,
 				Period:      "2025-06",
+				SourceFile:  "bankone/1234/2025-06/statement.qfx",
 			},
 		},
 		Transactions: []Transaction{
@@ -163,6 +164,9 @@ func TestWriteFileRoundTrip(t *testing.T) {
 	}
 	if got.Statements[0].StatementID != "bankone-1234-2025-06" {
 		t.Errorf("statement[0].statementId = %q, want bankone-1234-2025-06", got.Statements[0].StatementID)
+	}
+	if want := "bankone/1234/2025-06/statement.qfx"; got.Statements[0].SourceFile != want {
+		t.Errorf("statement[0].sourceFile = %q, want %q", got.Statements[0].SourceFile, want)
 	}
 
 	// Verify transactions

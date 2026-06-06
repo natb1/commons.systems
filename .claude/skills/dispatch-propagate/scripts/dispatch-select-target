@@ -502,7 +502,7 @@ if [[ -z "$CLOSING_NUMS" ]]; then
   BLOCKER_COUNTS='{}'
 else
   # owner/repo for the GraphQL variables (same pattern as post-pr-comment.sh).
-  REPO_NWO=$(gh repo view --json nameWithOwner -q .nameWithOwner) || {
+  REPO_NWO=$(gh_retry gh repo view --json nameWithOwner -q .nameWithOwner) || {
     echo "error: dispatch-select-target: gh repo view failed" >&2
     exit 1
   }
@@ -526,7 +526,7 @@ else
   repository(owner: \$owner, name: \$name) {
 ${GQL_FIELDS}  }
 }"
-  BLOCKER_COUNTS=$(gh api graphql -F owner="$REPO_OWNER" -F name="$REPO_NAME" -f query="$GQL_QUERY" \
+  BLOCKER_COUNTS=$(gh_retry gh api graphql -F owner="$REPO_OWNER" -F name="$REPO_NAME" -f query="$GQL_QUERY" \
     | jq -c '.data.repository
              | to_entries
              | map(select(.value != null)

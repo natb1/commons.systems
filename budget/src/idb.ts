@@ -201,9 +201,35 @@ export async function deleteRecord(storeName: StoreName, id: string): Promise<vo
 export async function clearAll(): Promise<void> {
   const db = await openDb();
   const tx = db.transaction([...STORE_NAMES], "readwrite");
+  const stores: Record<string, IDBObjectStore> = {};
   for (const name of STORE_NAMES) {
-    tx.objectStore(name).clear();
+    stores[name] = tx.objectStore(name);
   }
+
+  // Clear all non-meta stores fully. The "meta" store is special: it holds both
+  // the parsed-data cache ("upload" key) and persistent capability records
+  // ("fileHandle", "statementsDir"). Only delete the "upload" key so the
+  // capability records survive a data reset.
+  const clearPromises: Promise<void>[] = [];
+  for (const name of STORE_NAMES) {
+    if (name === "meta") continue;
+    clearPromises.push(
+      new Promise((resolve, reject) => {
+        const req = stores[name].clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      }),
+    );
+  }
+  clearPromises.push(
+    new Promise((resolve, reject) => {
+      const req = stores.meta.delete("upload");
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    }),
+  );
+  await Promise.all(clearPromises);
+
   await new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
