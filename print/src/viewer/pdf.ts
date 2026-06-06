@@ -19,6 +19,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
   let resizeObserver: ResizeObserver | null = null;
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   let renderTask: RenderTask | null = null;
+  let renderGen = 0;
   let destroyed = false;
   interface SpreadPage { renderTask: RenderTask; textLayer: TextLayer | null; }
   const spreadPages: SpreadPage[] = [];
@@ -82,9 +83,17 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     targetCanvas: HTMLCanvasElement,
     containerRect: DOMRect,
     wrapper?: HTMLDivElement,
+    shouldAbort?: () => boolean,
+    onTaskStart?: (task: RenderTask) => void,
   ): Promise<CanvasRenderResult | null> {
     const page = await pdfDoc!.getPage(pageNum);
     if (destroyed) return null;
+    // Bail before any canvas mutation or page.render() if a newer generation has
+    // superseded this render. renderGen is bumped synchronously, so an older
+    // render suspended in getPage above sees the bump and returns here — keeping
+    // overlapping renders off the shared canvas. Must stay synchronous through
+    // page.render() below (no await) so check-then-render is atomic.
+    if (shouldAbort?.()) return null;
 
     const baseViewport = page.getViewport({ scale: 1 });
     const scaleX = containerRect.width / baseViewport.width;
@@ -109,6 +118,10 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     const ctx = targetCanvas.getContext("2d");
     if (!ctx) throw new Error("Could not acquire 2D canvas context");
     const task = page.render({ canvasContext: ctx, viewport });
+    // Publish the RenderTask synchronously (page.render returns it before its
+    // .promise resolves) so a superseding renderPage's top-of-function cancel
+    // can abort this in-flight render and free the shared canvas.
+    onTaskStart?.(task);
 
     try {
       await task.promise;
@@ -133,12 +146,26 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       container: targetDiv,
       viewport: cssViewport,
     });
-    await tl.render();
+    try {
+      await tl.render();
+    } catch (e) {
+      // A superseding render cancelled this text layer — benign, mirrors the
+      // canvas RenderingCancelledException handling in renderPageToCanvas.
+      if ((e as Error).name !== "AbortException") throw e;
+      return null;
+    }
     return tl;
   }
 
   async function renderPage(pageNum: number): Promise<void> {
     if (!pdfDoc || !canvas || !container) return;
+
+    // Each render claims a generation token. A later renderPage call bumps the
+    // counter, marking any in-flight render stale; the stale render bails after
+    // its next await instead of clobbering the winner or surfacing a spurious
+    // "Navigation failed". This serializes concurrent renderPage calls — e.g. a
+    // ResizeObserver re-render racing a navigation tap.
+    const gen = ++renderGen;
 
     if (renderTask) {
       renderTask.cancel();
@@ -152,12 +179,37 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     const containerRect = container.getBoundingClientRect();
     if (containerRect.width === 0 || containerRect.height === 0) return;
 
-    const result = await renderPageToCanvas(pageNum, canvas, containerRect, pageWrapper ?? undefined);
+    // Clear the previous page's text-layer spans up-front, synchronously before
+    // the first await. renderTextLayer would clear them too, but a render
+    // superseded between the canvas and text-layer stages (the gen check below)
+    // returns before reaching it — leaving the previous page's selectable text
+    // in the DOM until the winning render completes. Clearing here guarantees a
+    // superseded render never surfaces stale text.
+    if (textLayerDiv) textLayerDiv.replaceChildren();
+
+    const result = await renderPageToCanvas(
+      pageNum,
+      canvas,
+      containerRect,
+      pageWrapper ?? undefined,
+      () => gen !== renderGen,
+      (task) => { renderTask = task; },
+    );
     if (!result) return;
+    if (gen !== renderGen) {
+      result.task.cancel();
+      renderTask = null;
+      return;
+    }
 
     renderTask = result.task;
     if (textLayerDiv) {
-      activeTextLayer = await renderTextLayer(result.page, result.cssViewport, textLayerDiv);
+      const tl = await renderTextLayer(result.page, result.cssViewport, textLayerDiv);
+      if (gen !== renderGen) {
+        tl?.cancel();
+        return;
+      }
+      activeTextLayer = tl;
     }
   }
 

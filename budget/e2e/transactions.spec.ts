@@ -47,7 +47,7 @@ test.describe("transactions", () => {
     await expect(details).toBeVisible();
     await expect(details.locator("dt", { hasText: "Date" })).toBeVisible();
     await expect(details.locator("dt", { hasText: "Statement" })).toBeVisible();
-    await expect(details.locator("a", { hasText: "statement" })).toBeVisible();
+    await expect(details.locator("button.statement-source-link", { hasText: "view source" })).toBeVisible();
   });
 
   test("expanded row shows budget balance for budgeted transaction", async ({ page }) => {

@@ -11,6 +11,7 @@
 #   INVOKE /verify-pr               phase verify       (draft PR, CI failed)
 #   INVOKE /qa-fix                  phase qa           (draft, CI green, no label)
 #   INVOKE /review-fix              phase review       (dispatch:qa-done / reviewed re-entry)
+#   INVOKE /budget-parse-job       phase implement    (no PR, statements:<key> label) — parse-job issue
 #   INVOKE /dispatch-resolve-conflict  provisioning hit an origin/main merge conflict
 #   RELEVANCE-REVIEW                phase implement    (no PR) — routes to SKILL.md Step 2
 #   STOP done                       phase done         (non-draft PR)
@@ -127,7 +128,50 @@ PHASE=$("$SCRIPT_DIR/dispatch-phase" "$N")
 
 # Map the phase string to its directive.
 case "$PHASE" in
-  implement)    echo "RELEVANCE-REVIEW" ;;
+  implement)
+    # A no-PR target is normally an implement-phase issue → RELEVANCE-REVIEW. But
+    # a statement parse-job issue (filed by dispatch-statements-scan, carrying a
+    # configured statements:<key> label, with no PR) routes to /budget-parse-job
+    # instead — it is a one-phase handler that never opens a code PR. The label
+    # fetch happens ONLY here, inside the no-PR arm, so PR-bearing phases add no
+    # extra gh call. dispatch-config-load distinguishes "config absent" (prints
+    # "no-config", exit 0 — the normal state for repos without statement scanning)
+    # from "config present but malformed" (exit 1) — surface the latter as an
+    # error, treat the former as no configured labels (empty intersection →
+    # unchanged RELEVANCE-REVIEW).
+    STATEMENTS_CONFIG=$("$SCRIPT_DIR/dispatch-config-load" statements)
+    if [[ "$STATEMENTS_CONFIG" == "no-config" ]]; then
+      CONFIGURED_LABELS=""
+    else
+      CONFIGURED_LABELS=$(printf '%s' "$STATEMENTS_CONFIG" | jq -r '.statements[].label')
+    fi
+    PARSE_JOB=0
+    if [[ -n "$CONFIGURED_LABELS" ]]; then
+      ISSUE_LABELS=""
+      ISSUE_LABELS=$(gh issue view "$N" --json labels | jq -r '.labels[].name') || {
+        # gh failure (network error, auth issue, etc.) — fall back to the safe
+        # default of RELEVANCE-REVIEW rather than exiting non-zero without a
+        # directive, which would leave the stop hook with a misleading reason.
+        echo "dispatch-route: gh issue view $N --json labels failed; defaulting to RELEVANCE-REVIEW" >&2
+        echo "RELEVANCE-REVIEW"
+        exit 0
+      }
+      # Non-empty intersection of the issue's labels with the configured
+      # statements labels → this is a parse-job issue.
+      if [[ -n "$ISSUE_LABELS" ]] \
+        && comm -12 \
+          <(printf '%s\n' "$CONFIGURED_LABELS" | sort -u) \
+          <(printf '%s\n' "$ISSUE_LABELS" | sort -u) \
+          | grep -q .; then
+        PARSE_JOB=1
+      fi
+    fi
+    if [[ "$PARSE_JOB" -eq 1 ]]; then
+      echo "INVOKE /budget-parse-job"
+    else
+      echo "RELEVANCE-REVIEW"
+    fi
+    ;;
   verify)       echo "INVOKE /verify-pr" ;;
   qa)           echo "INVOKE /qa-fix" ;;
   review)       echo "INVOKE /review-fix" ;;

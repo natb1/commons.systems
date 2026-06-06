@@ -118,6 +118,8 @@ STUB
   mkdir -p "$TMPDIR_TEST/config"
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
   export DISPATCH_FIND_PR_RETRY_DELAY=0
+  # gh_retry's backoff must not actually sleep under test.
+  export GH_RETRY_BASE_DELAY=0
 
   # Default the worktree-liveness daemon to UNKNOWN: point CLAUDE_AGENTS_CMD at a
   # path with no executable so `claude agents --json` exits non-zero. The
@@ -270,6 +272,22 @@ case "$args" in
     printf '{"data":{"repository":%s}}\n' "$aliases"
     ;;
   "repo view --json nameWithOwner -q .nameWithOwner")
+    # Transient injection: gh-transient-repo-view holds N = how many initial hits
+    # should fail with a retryable HTTP 504, after which the normal response is
+    # served. A .count sidecar records every hit so a test can assert how many
+    # attempts gh_retry made.
+    if [[ -f "$STUB_DIR/gh-transient-repo-view" ]]; then
+      fail_n=$(cat "$STUB_DIR/gh-transient-repo-view")
+      count_file="$STUB_DIR/gh-transient-repo-view.count"
+      count=0
+      [[ -f "$count_file" ]] && count=$(cat "$count_file")
+      count=$((count + 1))
+      echo "$count" > "$count_file"
+      if [[ "$count" -le "$fail_n" ]]; then
+        echo "gh: HTTP 504: Gateway Timeout (https://api.github.com/)" >&2
+        exit 1
+      fi
+    fi
     echo "natb1/commons.systems"
     ;;
   api\ */dependencies/blocked_by)
@@ -282,6 +300,22 @@ case "$args" in
     if [[ -f "$STUB_DIR/gh-fail-blocked_by-${num}" ]]; then
       echo "gh: API error on issues/${num}/dependencies/blocked_by" >&2
       exit 1
+    fi
+    # Transient injection: gh-transient-blocked_by-<num> holds N = how many
+    # initial hits should fail with a retryable HTTP 504, after which the normal
+    # fixture is served. A .count sidecar records every hit so a test can assert
+    # how many attempts gh_api_array (via gh_retry) made.
+    if [[ -f "$STUB_DIR/gh-transient-blocked_by-${num}" ]]; then
+      fail_n=$(cat "$STUB_DIR/gh-transient-blocked_by-${num}")
+      count_file="$STUB_DIR/gh-transient-blocked_by-${num}.count"
+      count=0
+      [[ -f "$count_file" ]] && count=$(cat "$count_file")
+      count=$((count + 1))
+      echo "$count" > "$count_file"
+      if [[ "$count" -le "$fail_n" ]]; then
+        echo "gh: HTTP 504: Gateway Timeout (https://api.github.com/repos/owner/repo/issues/${num}/dependencies/blocked_by)" >&2
+        exit 1
+      fi
     fi
     if [[ -f "$STUB_DIR/blockers-${num}.json" ]]; then
       cat "$STUB_DIR/blockers-${num}.json"
@@ -538,6 +572,22 @@ if [[ -f "$STUB_DIR/gh-fail-blocked_by-${num}" ]]; then
   echo "error: gh api call failed for issues/${num}/dependencies/blocked_by" >&2
   exit 1
 fi
+# Transient injection: when a gh-transient-blocked_by-<num> marker exists, take
+# the REAL gh_api_array path (which routes through gh_retry against the stub gh)
+# so an integration test can verify the lookup is retried within trace-leaf's
+# path. The gh stub's blocked_by case fails N times then serves the fixture.
+if [[ -f "$STUB_DIR/gh-transient-blocked_by-${num}" ]]; then
+  source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+  blocker_nums=$(gh_api_array "/repos/{owner}/{repo}/issues/${num}/dependencies/blocked_by" '.[].number') || exit 1
+  for dep in $blocker_nums; do
+    if [[ -f "$STUB_DIR/issue-${dep}.json" ]]; then
+      cat "$STUB_DIR/issue-${dep}.json"
+    else
+      echo "{\"title\":\"Issue $dep\",\"body\":\"\",\"comments\":[],\"number\":$dep,\"state\":\"OPEN\"}"
+    fi
+  done
+  exit 0
+fi
 # issue-blocking calls lib.sh resolve_issue_number then gh api + gh issue view.
 # Our fake: just read a stub file.
 blocker_nums=""
@@ -589,6 +639,7 @@ teardown() {
   export PATH="$SAVED_PATH"
   unset DISPATCH_CONFIG_DIR
   unset DISPATCH_FIND_PR_RETRY_DELAY
+  unset GH_RETRY_BASE_DELAY
   # Per-test exports for the liveness gate must not leak across tests.
   unset CLAUDE_AGENTS_CMD
   unset CLAUDE_CODE_SESSION_ID
@@ -1256,6 +1307,52 @@ route_run 42 /wt/99-other
 assert_eq "wrong-worktree → STOP wrong-worktree" "STOP wrong-worktree" "$ROUTE_OUT"
 assert_eq "wrong-worktree → provisioning not invoked" "0" \
   "$([[ -f "$STUB_DIR/provision-calls.log" ]] && wc -l < "$STUB_DIR/provision-calls.log" | tr -d ' ' || echo 0)"
+teardown
+
+# 21. No-PR issue whose label is in the statements config → INVOKE /budget-parse-job
+# (#1024). The implement arm fetches the issue's labels (gh issue view --json labels,
+# served from issue-labels-<num>.json) and the configured statements labels (from
+# dispatch-config-load against DISPATCH_CONFIG_DIR), and on a non-empty intersection
+# routes to the parse-job handler instead of RELEVANCE-REVIEW.
+echo "Test: no PR + statements label → INVOKE /budget-parse-job"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"statements":[{"key":"acme","dir":"/s","repo":"o/r","label":"statements:acme","project":"p"}]}\n' \
+  > "$DISPATCH_CONFIG_DIR/statements.json"
+printf '{"labels":[{"name":"statements:acme"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR + statements label → INVOKE /budget-parse-job (directive)" \
+  "INVOKE /budget-parse-job" "$ROUTE_OUT"
+assert_eq "no PR + statements label → INVOKE /budget-parse-job (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 22. No-PR issue with a statements config present, but the issue carries no
+# configured label → RELEVANCE-REVIEW (empty intersection, unchanged behavior).
+echo "Test: no PR + non-statements label → RELEVANCE-REVIEW"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"statements":[{"key":"acme","dir":"/s","repo":"o/r","label":"statements:acme","project":"p"}]}\n' \
+  > "$DISPATCH_CONFIG_DIR/statements.json"
+printf '{"labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR + non-statements label → RELEVANCE-REVIEW (directive)" \
+  "RELEVANCE-REVIEW" "$ROUTE_OUT"
+assert_eq "no PR + non-statements label → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 23. No statements config present at all → RELEVANCE-REVIEW (the normal state for
+# repos without statement scanning; dispatch-config-load prints "no-config", the
+# arm treats it as no configured labels and never fetches the issue's labels).
+echo "Test: no PR + no statements config → RELEVANCE-REVIEW"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR + no statements config → RELEVANCE-REVIEW (directive)" \
+  "RELEVANCE-REVIEW" "$ROUTE_OUT"
+assert_eq "no PR + no statements config → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
 teardown
 
 # ============================================================================
@@ -2460,6 +2557,27 @@ printf '[{"number":999,"state":"open"}]\n' > "$STUB_DIR/blockers-101.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "multi-issue PR with later blocked issue → skipped → next PR chosen" "pr 20 20-clear-pr verify" "$result"
+teardown
+
+# 34r. Integration: a transient gh repo view failure (HTTP 504) is retried by
+#      gh_retry inside dispatch-select-target's blocker-prefetch path. PR 10
+#      closes issue 100 (unblocked); gh repo view fails twice (HTTP 504) before
+#      succeeding. The selection must still succeed with the correct target and
+#      repo view must have been invoked exactly 3 times (.count sidecar == 3).
+echo "Test: select-target retries a transient repo-view failure → pr 10, 3 hits"
+setup
+UNION='['"$(make_pr_union 10 "10-clear-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Fail repo view twice with HTTP 504, then serve the normal response.
+echo 2 > "$STUB_DIR/gh-transient-repo-view"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+rc=$?
+assert_eq "select-target transient repo-view retry → pr 10 10-clear-pr verify" "pr 10 10-clear-pr verify" "$result"
+assert_eq "select-target transient repo-view retry → rc 0" "0" "$rc"
+hit_count=$(cat "$STUB_DIR/gh-transient-repo-view.count")
+assert_eq "select-target transient repo-view → repo view hit exactly 3 times" "3" "$hit_count"
 teardown
 
 # --- help-wanted leaf reachability (issue #715) -----------------------------
@@ -4136,6 +4254,150 @@ printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def
 select_target_fake_claude
 result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" --exclude 701)
 assert_eq "queue: multi-leaf subtree, --exclude 701 (orphan) → next leaf 702" "702" "$result"
+teardown
+
+# 26. Integration: a transient blocked_by failure on a childless leaf is retried
+#     by gh_api_array (via gh_retry) inside trace-leaf's path. Issue 900 has no
+#     children, so trace-leaf returns 900 — but only after its blocked_by lookup
+#     fails twice (HTTP 504) and succeeds on the third hit. The .count sidecar
+#     confirms exactly 3 attempts.
+echo "Test: trace-leaf retries a transient blocked_by failure → leaf 900, 3 hits"
+setup
+# Fail the blocked_by lookup twice, then serve the default empty fixture.
+echo 2 > "$STUB_DIR/gh-transient-blocked_by-900"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "900" "queue")
+rc=$?
+assert_eq "trace-leaf transient retry → leaf 900" "900" "$result"
+assert_eq "trace-leaf transient retry → rc 0" "0" "$rc"
+hit_count=$(cat "$STUB_DIR/gh-transient-blocked_by-900.count")
+assert_eq "trace-leaf transient retry → blocked_by hit exactly 3 times" "3" "$hit_count"
+teardown
+
+# ============================================================================
+# gh_retry tests
+# ============================================================================
+echo ""
+echo "=== gh_retry ==="
+
+# A file-counter fake: increments a counter file and emits a transient or
+# deterministic stderr depending on whether the hit count is within FAIL_N.
+# Each test writes a fresh fake into TMPDIR_TEST and drives gh_retry against it.
+
+# a. transient-then-succeed: HTTP 504 twice, then success → rc 0, 3 attempts.
+echo "Test: gh_retry transient-then-succeed → rc 0, correct stdout, 3 attempts"
+setup
+cat > "$TMPDIR_TEST/fake-transient-succeed" <<'FAKE'
+#!/usr/bin/env bash
+cf="$FAKE_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+if [[ "$c" -le 2 ]]; then
+  echo "gh: HTTP 504: Gateway Timeout" >&2
+  exit 1
+fi
+echo "OK-PAYLOAD"
+FAKE
+chmod +x "$TMPDIR_TEST/fake-transient-succeed"
+out=$(
+  source "$TMPDIR_TEST/lib.sh"
+  export GH_RETRY_ATTEMPTS=4 FAKE_COUNT_FILE="$TMPDIR_TEST/c-a"
+  gh_retry "$TMPDIR_TEST/fake-transient-succeed" 2>/dev/null
+)
+rc=$?
+assert_eq "transient-then-succeed → rc 0" "0" "$rc"
+assert_eq "transient-then-succeed → stdout payload" "OK-PAYLOAD" "$out"
+assert_eq "transient-then-succeed → 3 attempts" "3" "$(cat "$TMPDIR_TEST/c-a")"
+teardown
+
+# b. always-transient (HTTP 503): exhausts retries → rc non-zero, 4 attempts.
+echo "Test: gh_retry always-transient (503) → rc non-zero, 4 attempts (exhausted)"
+setup
+cat > "$TMPDIR_TEST/fake-always-503" <<'FAKE'
+#!/usr/bin/env bash
+cf="$FAKE_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+echo "gh: HTTP 503: Service Unavailable" >&2
+exit 1
+FAKE
+chmod +x "$TMPDIR_TEST/fake-always-503"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export GH_RETRY_ATTEMPTS=4 FAKE_COUNT_FILE="$TMPDIR_TEST/c-b"
+  gh_retry "$TMPDIR_TEST/fake-always-503" >/dev/null 2>&1
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+assert_eq "always-503 → rc non-zero (exhausted)" "nonzero" "$rc_state"
+assert_eq "always-503 → 4 attempts" "4" "$(cat "$TMPDIR_TEST/c-b")"
+teardown
+
+# c. deterministic HTTP 404 → rc non-zero, 1 attempt (fail fast).
+echo "Test: gh_retry deterministic 404 → rc non-zero, 1 attempt"
+setup
+cat > "$TMPDIR_TEST/fake-404" <<'FAKE'
+#!/usr/bin/env bash
+cf="$FAKE_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+echo "gh: Not Found (HTTP 404)" >&2
+exit 1
+FAKE
+chmod +x "$TMPDIR_TEST/fake-404"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export GH_RETRY_ATTEMPTS=4 FAKE_COUNT_FILE="$TMPDIR_TEST/c-c"
+  gh_retry "$TMPDIR_TEST/fake-404" >/dev/null 2>&1
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+assert_eq "404 → rc non-zero" "nonzero" "$rc_state"
+assert_eq "404 → 1 attempt (fail fast)" "1" "$(cat "$TMPDIR_TEST/c-c")"
+teardown
+
+# d. secondary rate limit → transient (fail twice, then succeed → 3 attempts).
+echo "Test: gh_retry secondary rate limit → transient, 3 attempts"
+setup
+cat > "$TMPDIR_TEST/fake-secondary" <<'FAKE'
+#!/usr/bin/env bash
+cf="$FAKE_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+if [[ "$c" -le 2 ]]; then
+  echo "gh: You have exceeded a secondary rate limit. Please wait and retry your request again later." >&2
+  exit 1
+fi
+echo "RATE-OK"
+FAKE
+chmod +x "$TMPDIR_TEST/fake-secondary"
+out=$(
+  source "$TMPDIR_TEST/lib.sh"
+  export GH_RETRY_ATTEMPTS=4 FAKE_COUNT_FILE="$TMPDIR_TEST/c-d"
+  gh_retry "$TMPDIR_TEST/fake-secondary" 2>/dev/null
+)
+rc=$?
+assert_eq "secondary rate limit → rc 0" "0" "$rc"
+assert_eq "secondary rate limit → stdout payload" "RATE-OK" "$out"
+assert_eq "secondary rate limit → 3 attempts" "3" "$(cat "$TMPDIR_TEST/c-d")"
+teardown
+
+# e. deterministic auth (HTTP 403: Bad credentials) → rc non-zero, 1 attempt.
+#    A bare "rate limit" / 403 must NOT be treated as transient.
+echo "Test: gh_retry deterministic auth (403 Bad credentials) → 1 attempt"
+setup
+cat > "$TMPDIR_TEST/fake-auth" <<'FAKE'
+#!/usr/bin/env bash
+cf="$FAKE_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+echo "gh: HTTP 403: Bad credentials (https://api.github.com/repos/owner/repo)" >&2
+exit 1
+FAKE
+chmod +x "$TMPDIR_TEST/fake-auth"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export GH_RETRY_ATTEMPTS=4 FAKE_COUNT_FILE="$TMPDIR_TEST/c-e"
+  gh_retry "$TMPDIR_TEST/fake-auth" >/dev/null 2>&1
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+assert_eq "403 auth → rc non-zero" "nonzero" "$rc_state"
+assert_eq "403 auth → 1 attempt (fail fast)" "1" "$(cat "$TMPDIR_TEST/c-e")"
 teardown
 
 # ============================================================================
@@ -7290,6 +7552,81 @@ assert_eq "absent statements.json exits 0" "0" "$rc"
 assert_eq "absent statements.json prints no-config" "no-config" "$out"
 config_teardown
 
+# --- Test 7f: statements.json with valid string snapshot passes ---------------
+
+echo "Test: statements.json with string snapshot exits 0"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/statements.json" <<'EOF'
+{
+  "statements": [
+    {
+      "key": "mybank",
+      "dir": "/home/user/statements/mybank",
+      "repo": "test-owner/test-repo",
+      "label": "statements:mybank",
+      "project": "test-project",
+      "snapshot": "/home/user/statements/mybank/budget.benc"
+    }
+  ]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" statements 2>/dev/null); rc=$?
+assert_eq "snapshot string exits 0" "0" "$rc"
+stmt_snapshot=$(printf '%s' "$out" | jq -r '.statements[0].snapshot')
+assert_eq "snapshot value round-trips" "/home/user/statements/mybank/budget.benc" "$stmt_snapshot"
+config_teardown
+
+# --- Test 7g: statements.json with non-string snapshot exits 1 ---------------
+
+echo "Test: statements.json with non-string snapshot exits 1 and stderr mentions snapshot"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/statements.json" <<'EOF'
+{
+  "statements": [
+    {
+      "key": "mybank",
+      "dir": "/home/user/statements/mybank",
+      "repo": "test-owner/test-repo",
+      "label": "statements:mybank",
+      "project": "test-project",
+      "snapshot": 42
+    }
+  ]
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" statements 2>&1 1>/dev/null) || rc=$?
+assert_eq "snapshot non-string exits 1" "1" "$rc"
+if [[ "$err" == *"snapshot"* ]]; then
+  assert_eq "snapshot non-string stderr mentions snapshot" "yes" "yes"
+else
+  assert_eq "snapshot non-string stderr mentions snapshot" "yes" "no: $err"
+fi
+config_teardown
+
+# --- Test 7h: statements.json without snapshot field is still valid -----------
+
+echo "Test: statements.json without snapshot field exits 0 (back-compat)"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/statements.json" <<'EOF'
+{
+  "statements": [
+    {
+      "key": "mybank",
+      "dir": "/home/user/statements/mybank",
+      "repo": "test-owner/test-repo",
+      "label": "statements:mybank",
+      "project": "test-project"
+    }
+  ]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" statements 2>/dev/null); rc=$?
+assert_eq "absent snapshot exits 0" "0" "$rc"
+stmt_key=$(printf '%s' "$out" | jq -r '.statements[0].key')
+assert_eq "absent snapshot key round-trips" "mybank" "$stmt_key"
+config_teardown
+
 # --- Test 8: valid target-workers.json prints normalized JSON ---------------
 
 echo "Test: valid target-workers.json prints normalized JSON"
@@ -8450,6 +8787,18 @@ echo "\$*" >> "$TMPDIR_TEST/systemd-log"
 STUB
   chmod +x "$TMPDIR_TEST/bin/systemd-run"
   export DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
+
+  # dispatch-schedule-reseed now calls ensure_recover_unit (lib.sh), which
+  # without isolation would write to the real ~/.config/systemd/user/ and run a
+  # real `systemctl --user daemon-reload`. Redirect the unit dir into the tmp
+  # tree and point its systemctl at a no-op stub so daemon-reload is harmless.
+  cat > "$TMPDIR_TEST/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
 }
 
 sr_teardown() {
@@ -8467,6 +8816,7 @@ sr_teardown() {
   unset DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD
   unset DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD
   unset DISPATCH_SCHEDULE_RESEED_SHORT_DELAY
+  unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
 }
 
 # sr_write_rl <file-name> <used_weekly> <resets_weekly> <used_5h> <resets_5h>
@@ -8509,12 +8859,14 @@ log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-20000"* \
    && "$log" == *"--on-calendar=@20000"* \
+   && "$log" == *"--collect"* \
+   && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + cwd + setenv + exec)"
+  PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + cwd + setenv + exec)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + cwd + setenv + exec)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + cwd + setenv + exec)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -9715,6 +10067,18 @@ STUB
 
   export DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
   export DISPATCH_SPAWN_TICK_MAIN_WORKTREE="$TMPDIR_TEST/main"
+
+  # dispatch-spawn-tick now calls ensure_recover_unit (lib.sh), which without
+  # isolation would write to the real ~/.config/systemd/user/ and run a real
+  # `systemctl --user daemon-reload`. Redirect the unit dir into the tmp tree
+  # and point its systemctl at a no-op stub so daemon-reload is harmless.
+  cat > "$TMPDIR_TEST/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
 }
 
 st_teardown() {
@@ -9722,6 +10086,7 @@ st_teardown() {
   TMPDIR_TEST=""
   unset DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD
   unset DISPATCH_SPAWN_TICK_MAIN_WORKTREE
+  unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
 }
 
 # --- Test 1: no-arg launch → spawned, exit 0, correct argv -------------------
@@ -9735,12 +10100,13 @@ log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-tick"* \
    && "$log" == *"--collect"* \
+   && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: no-arg systemd-run argv (unit + collect + cwd + setenv + exec)"
+  PASS=$((PASS + 1)); echo "  PASS: no-arg systemd-run argv (unit + collect + OnFailure + cwd + setenv + exec)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: no-arg systemd-run argv (unit + collect + cwd + setenv + exec)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-arg systemd-run argv (unit + collect + OnFailure + cwd + setenv + exec)"
   echo "    log: $log"
 fi
 # No trailing numeric arg in the no-arg case: the exec path must be the LAST
@@ -9765,10 +10131,11 @@ assert_eq "target: stdout is 'spawned'" "spawned" "$out"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-tick-979"* \
+   && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick 979"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: target systemd-run argv (unit=dispatch-tick-979 + exec path 979)"
+  PASS=$((PASS + 1)); echo "  PASS: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + exec path 979)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: target systemd-run argv (unit=dispatch-tick-979 + exec path 979)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + exec path 979)"
   echo "    log: $log"
 fi
 st_teardown
@@ -9829,6 +10196,313 @@ else
   echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
 fi
 st_teardown
+
+# ============================================================================
+# dispatch-tick-recover tests (#1150)
+# ============================================================================
+echo ""
+echo "=== dispatch-tick-recover ==="
+#
+# dispatch-tick-recover is the OnFailure= handler that guarantees a chain
+# continuation after an abnormal tick/reseed exit. It is exercised entirely
+# against fakes wired through its env-override contract — no real systemd,
+# systemctl, gh, or claude daemon is needed:
+#
+#   $TMPDIR_TEST/bin/systemd-run   records its argv (one line per call) to
+#                                  $TMPDIR_TEST/systemd-log, exits 0.
+#   $TMPDIR_TEST/bin/systemctl     `list-units` prints the contents of
+#                                  $TMPDIR_TEST/timer-units (empty by default →
+#                                  no pending dispatch-reseed* timer).
+#   $TMPDIR_TEST/bin/claude        `agents --json` prints the contents of
+#                                  $TMPDIR_TEST/agents.json (`[]` by default →
+#                                  0 busy workers). Backs CLAUDE_AGENTS_CMD.
+#   $TMPDIR_TEST/bin/gh            logs its argv to $TMPDIR_TEST/gh-log; an
+#                                  `issue list ... -q '.[0].number'` prints the
+#                                  contents of $TMPDIR_TEST/gh-existing (empty by
+#                                  default → no open latch issue).
+#
+# Each test seeds state by writing the JSON state file first (where needed),
+# invokes the REAL dispatch-tick-recover with the section env, then asserts on
+# the systemd-run log / gh log / resulting state file (count read via jq).
+#
+# The test shell runs under `set -e`; dispatch-tick-recover always exits 0 on
+# these paths, but each invocation is still wrapped to capture the code.
+
+tr_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/bin" "$TMPDIR_TEST/main"
+
+  # systemd-run fake: record argv, exit 0.
+  cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/systemd-log"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemd-run"
+
+  # systemctl fake: `list-units` prints \$TMPDIR_TEST/timer-units (default empty
+  # → no pending dispatch-reseed* timer). Any other subcommand is a no-op exit 0.
+  : > "$TMPDIR_TEST/timer-units"
+  cat > "$TMPDIR_TEST/bin/systemctl" <<STUB
+#!/usr/bin/env bash
+for a in "\$@"; do
+  if [[ "\$a" == "list-units" ]]; then
+    cat "$TMPDIR_TEST/timer-units"
+    exit 0
+  fi
+done
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemctl"
+
+  # claude fake (backs CLAUDE_AGENTS_CMD via lib-claude-agents.sh): `agents --json`
+  # prints \$TMPDIR_TEST/agents.json (default `[]` → 0 busy workers).
+  echo '[]' > "$TMPDIR_TEST/agents.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<STUB
+#!/usr/bin/env bash
+cat "$TMPDIR_TEST/agents.json"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/claude"
+
+  # gh fake: log argv; an `issue list ... -q '.[0].number'` prints
+  # \$TMPDIR_TEST/gh-existing (default empty → no open latch issue). Other
+  # subcommands (issue create, label create) just log and exit 0.
+  : > "$TMPDIR_TEST/gh-existing"
+  cat > "$TMPDIR_TEST/bin/gh" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/gh-log"
+if [[ "\$1" == "issue" && "\$2" == "list" ]]; then
+  cat "$TMPDIR_TEST/gh-existing"
+fi
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  export DISPATCH_TICK_RECOVER_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
+  export DISPATCH_TICK_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_TICK_RECOVER_GH_CMD="$TMPDIR_TEST/bin/gh"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+  export DISPATCH_TICK_RECOVER_MAIN_WORKTREE="$TMPDIR_TEST/main"
+  export DISPATCH_TICK_RECOVER_STATE_PATH="$TMPDIR_TEST/recover-state.json"
+  export DISPATCH_TICK_RECOVER_NOW=1000000
+  # Pin every tunable so the backoff/cap/reset arithmetic is deterministic.
+  export DISPATCH_TICK_RECOVER_CAP=3
+  export DISPATCH_TICK_RECOVER_BASE_BACKOFF=300
+  export DISPATCH_TICK_RECOVER_MAX_BACKOFF=3600
+  export DISPATCH_TICK_RECOVER_RESET_WINDOW=3600
+}
+
+tr_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_TICK_RECOVER_SYSTEMD_RUN_CMD
+  unset DISPATCH_TICK_RECOVER_SYSTEMCTL_CMD
+  unset DISPATCH_TICK_RECOVER_GH_CMD
+  unset CLAUDE_AGENTS_CMD
+  unset DISPATCH_TICK_RECOVER_MAIN_WORKTREE
+  unset DISPATCH_TICK_RECOVER_STATE_PATH
+  unset DISPATCH_TICK_RECOVER_NOW
+  unset DISPATCH_TICK_RECOVER_CAP
+  unset DISPATCH_TICK_RECOVER_BASE_BACKOFF
+  unset DISPATCH_TICK_RECOVER_MAX_BACKOFF
+  unset DISPATCH_TICK_RECOVER_RESET_WINDOW
+}
+
+# tr_seed_state <count> <last_failure> — write the consecutive-failure state.
+tr_seed_state() {
+  printf '{"count":%s,"last_failure":%s}\n' "$1" "$2" > "$TMPDIR_TEST/recover-state.json"
+}
+
+# tr_busy_worker — make the claude fake report one busy real worker.
+tr_busy_worker() {
+  echo '[{"sessionId":"a","pid":1,"status":"busy","name":"824-foo"}]' \
+    > "$TMPDIR_TEST/agents.json"
+}
+
+# tr_state_count — print the count field of the resulting state file (or "none").
+tr_state_count() {
+  if [[ -r "$TMPDIR_TEST/recover-state.json" ]]; then
+    jq -r '.count' "$TMPDIR_TEST/recover-state.json"
+  else
+    echo none
+  fi
+}
+
+# --- Test 1: first failure, no continuation → arms a reseed ------------------
+
+echo "Test: first failure with no continuation arms a bounded-backoff reseed"
+tr_setup
+# No state file, empty timer list, 0 busy workers → fresh episode, count 0→1,
+# backoff = BASE * 2^0 = 300, reseed_at = NOW + 300 = 1000300.
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "first-fail: dispatch-tick-recover exits 0" "0" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@1000300"* \
+   && "$log" == *"--unit=dispatch-reseed-1000300"* \
+   && "$log" == *"--collect"* \
+   && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: first-fail systemd-run argv (calendar + unit + collect + exec)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: first-fail systemd-run argv (calendar + unit + collect + exec)"
+  echo "    log: $log"
+fi
+assert_eq "first-fail: state count == 1" "1" "$(tr_state_count)"
+tr_teardown
+
+# --- Test 2: continuation present (busy worker) → no reseed, count reset -----
+
+echo "Test: a live busy worker is a continuation → no reseed, count reset to 0"
+tr_setup
+tr_busy_worker
+tr_seed_state 2 999000
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "busy-worker: dispatch-tick-recover exits 0" "0" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "busy-worker: no reseed armed (systemd-run log empty)" "" "$log"
+assert_eq "busy-worker: state count reset to 0" "0" "$(tr_state_count)"
+tr_teardown
+
+# --- Test 3: continuation present (pending dispatch-reseed* timer) → no reseed -
+
+echo "Test: a pending dispatch-reseed* timer is a continuation → no reseed armed"
+tr_setup
+# A pending reseed timer row drives the continuation signal; 0 busy workers.
+printf 'dispatch-reseed-1234.timer  active  waiting  Dispatch reseed\n' \
+  > "$TMPDIR_TEST/timer-units"
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "pending-timer: dispatch-tick-recover exits 0" "0" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "pending-timer: no reseed armed (systemd-run log empty)" "" "$log"
+tr_teardown
+
+# --- Test 4: cap reached → escalate, not retry -------------------------------
+
+echo "Test: count past the cap escalates (files a chain-stalled latch issue), no reseed"
+tr_setup
+# Seed count == CAP (3) with a recent last_failure (within RESET_WINDOW so no
+# reset) → count 3→4 > cap=3 → escalate. No existing latch issue (gh-existing
+# empty) → an issue create fires.
+tr_seed_state 3 999500
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "cap: dispatch-tick-recover exits 0" "0" "$rc"
+ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"--label dispatch:chain-stalled"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: cap: gh issue create with --label dispatch:chain-stalled"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cap: gh issue create with --label dispatch:chain-stalled"
+  echo "    gh-log: $ghlog"
+fi
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "cap: no reseed armed (systemd-run log empty)" "" "$log"
+
+# --- Test 4b: cap reached with an existing latch → no-op create --------------
+echo "Test: count past the cap with an open latch issue does NOT create a second"
+tr_teardown
+tr_setup
+tr_seed_state 3 999500
+echo "742" > "$TMPDIR_TEST/gh-existing"   # an open latch already exists
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "cap-latched: dispatch-tick-recover exits 0" "0" "$rc"
+ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
+assert_eq "cap-latched: no issue create (latch already open)" \
+  "0" "$([[ "$ghlog" != *"issue create"* ]] && echo 0 || echo 1)"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "cap-latched: no reseed armed (systemd-run log empty)" "" "$log"
+tr_teardown
+
+# --- Test 5: backoff grows with the consecutive-failure count ----------------
+
+echo "Test: backoff doubles with the failure count (count 1→2 → BASE*2 = 600)"
+tr_setup
+# Seed count == 1 with a recent last_failure → no reset, count 1→2, backoff =
+# BASE * 2^(2-1) = 600, reseed_at = NOW + 600 = 1000600.
+tr_seed_state 1 999500
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "backoff: dispatch-tick-recover exits 0" "0" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@1000600"* \
+   && "$log" == *"--unit=dispatch-reseed-1000600"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: backoff: reseed armed at NOW + 600 (calendar + unit)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: backoff: reseed armed at NOW + 600 (calendar + unit)"
+  echo "    log: $log"
+fi
+assert_eq "backoff: state count == 2" "2" "$(tr_state_count)"
+tr_teardown
+
+# --- Test 6: reset window — a stale last_failure starts a fresh episode -------
+
+echo "Test: a last_failure older than RESET_WINDOW resets the count to a fresh episode"
+tr_setup
+# last_failure = NOW - 4000 (= 996000); NOW - last_failure = 4000 > RESET_WINDOW
+# (3600) → fresh episode: count reset 2→0, then +1 = 1, backoff = BASE*2^0 = 300,
+# reseed_at = NOW + 300 = 1000300.
+tr_seed_state 2 996000
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "reset-window: dispatch-tick-recover exits 0" "0" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@1000300"* \
+   && "$log" == *"--unit=dispatch-reseed-1000300"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: reset-window: fresh episode armed at NOW + 300"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reset-window: fresh episode armed at NOW + 300"
+  echo "    log: $log"
+fi
+assert_eq "reset-window: state count == 1 (fresh episode)" "1" "$(tr_state_count)"
+tr_teardown
+
+# --- Test 7: CAP=0 is rejected (would escalate with zero retries) ------------
+
+echo "Test: CAP=0 is rejected (exit 2, no reseed, no escalation)"
+tr_setup
+export DISPATCH_TICK_RECOVER_CAP=0
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "cap-zero: dispatch-tick-recover exits 2" "2" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "cap-zero: no reseed armed (systemd-run log empty)" "" "$log"
+ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
+assert_eq "cap-zero: no escalation issue (gh log empty)" "" "$ghlog"
+tr_teardown
+
+# --- Test 8: RESET_WINDOW=0 is rejected (would defeat the cap) ---------------
+
+echo "Test: RESET_WINDOW=0 is rejected (exit 2, no reseed) — it would reset the count every call"
+tr_setup
+export DISPATCH_TICK_RECOVER_RESET_WINDOW=0
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "reset-window-zero: dispatch-tick-recover exits 2" "2" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "reset-window-zero: no reseed armed (systemd-run log empty)" "" "$log"
+tr_teardown
+
+# --- Test 9: a high failure count whose backoff overflows is clamped to MAX ---
+
+echo "Test: an overflowing backoff is clamped to MAX (never a past/immediate epoch)"
+tr_setup
+# A large CAP lets COUNT climb high before escalation. Seed count=55 (→56):
+# BASE * (1 << 55) overflows the 64-bit signed left-shift to a negative value,
+# which the bare `> MAX` guard would pass through as a past RESEED_AT (firing
+# the timer immediately). The clamp must instead pin BACKOFF to MAX (3600) →
+# reseed_at = NOW + 3600 = 1003600.
+export DISPATCH_TICK_RECOVER_CAP=100
+tr_seed_state 55 999500
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "overflow-clamp: dispatch-tick-recover exits 0" "0" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@1003600"* \
+   && "$log" == *"--unit=dispatch-reseed-1003600"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: overflow-clamp: backoff clamped to MAX, reseed at NOW + 3600"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: overflow-clamp: backoff clamped to MAX, reseed at NOW + 3600"
+  echo "    log: $log"
+fi
+tr_teardown
 
 # ============================================================================
 # dispatch-spawn-worker tests
@@ -11640,6 +12314,18 @@ else
   echo "  FAIL: new-file invoked search / issue create / project item-add"
   echo "    gh-calls.log: $calls"
 fi
+# Assert both labels are present in the issue create call.
+create_args=""
+[[ -f "$STUB_DIR/gh-issue-create.log" ]] && create_args=$(cat "$STUB_DIR/gh-issue-create.log")
+TOTAL=$((TOTAL + 1))
+if [[ "$create_args" == *"--label statements:bank"* && "$create_args" == *"--label help wanted"* ]]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: new-file issue create carries both --label statements:bank and --label help wanted"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: new-file issue create carries both --label statements:bank and --label help wanted"
+  echo "    gh-issue-create.log: $create_args"
+fi
 statements_teardown
 
 # --- Test 3: open hit → skipped ----------------------------------------------
@@ -13102,6 +13788,40 @@ if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: resolver-ambiguous: self-close NOT invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: resolver-ambiguous: self-close NOT invoked"
+fi
+stop_teardown
+
+# --- Test P1: parse-job-done sentinel → spawn + self-close, no label work (#1024)
+# A /budget-parse-job session is named <N>-slug like a worker but writes a
+# `parse-job-done` sentinel (no phase-completed marker) on a clean idempotent
+# statement merge. Branch P spawns the next tick and self-closes; the handler
+# already closed the parse-job issue, so there is NO PR and NO office-hours apply
+# or label edit. Checked ahead of the PR-centric branches, like Branch R.
+echo "Test: stop hook + parse-job-done sentinel → spawn + self-close, no label work"
+stop_setup
+echo "839-foo" > "$STUB_DIR/current-branch.txt"
+echo '{"name":"839-foo"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+printf 'merged 839 statement\n' > "$TMPDIR_TEST/jobs/abcd1234/parse-job-done"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "parse-job-done: hook exits 0" "0" "$rc"
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "parse-job-done: spawn invoked exactly once" "1" "$spawn_calls"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "parse-job-done: self-close invoked exactly once" "1" "$self_close_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: parse-job-done: no office-hours apply"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: parse-job-done: no office-hours apply"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: parse-job-done: no label add or remove invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: parse-job-done: no label add or remove invoked"
 fi
 stop_teardown
 
@@ -18631,6 +19351,56 @@ md_file=$(mktemp)
 if CLAUDE_JOB_DIR="$md_file" "$MARK_DEVIATION" "reason" 2>/dev/null; then md_ec=0; else md_ec=$?; fi
 assert_eq "mark-deviation: CLAUDE_JOB_DIR is a file exit 0" "0" "$md_ec"
 rm -f "$md_file"
+
+echo ""
+echo "=== dispatch-mark-parse-job-done ==="
+
+MARK_PARSE_JOB_DONE="$SCRIPT_DIR/dispatch-mark-parse-job-done"
+
+# ----- mark-parse-job-done: writes the sentinel under CLAUDE_JOB_DIR (with note) -----
+pj_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$pj_dir" "$MARK_PARSE_JOB_DONE" "merged statement abc.qfx"; then pj_ec=0; else pj_ec=$?; fi
+assert_eq "mark-parse-job-done: exit 0 on happy path" "0" "$pj_ec"
+assert_eq "mark-parse-job-done: writes the parse-job-done sentinel" "1" \
+  "$([ -f "$pj_dir/parse-job-done" ] && echo 1 || echo 0)"
+assert_eq "mark-parse-job-done: writes exact note contents" \
+  "$(printf 'merged statement abc.qfx\n')" "$(cat "$pj_dir/parse-job-done")"
+rm -rf "$pj_dir"
+
+# ----- mark-parse-job-done: no arg → exit 0, sentinel present (note optional) -----
+pj_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$pj_dir" "$MARK_PARSE_JOB_DONE"; then pj_ec=0; else pj_ec=$?; fi
+assert_eq "mark-parse-job-done: no-arg exit 0" "0" "$pj_ec"
+assert_eq "mark-parse-job-done: no-arg writes the sentinel" "1" \
+  "$([ -f "$pj_dir/parse-job-done" ] && echo 1 || echo 0)"
+rm -rf "$pj_dir"
+
+# ----- mark-parse-job-done: extra arg → exit 2, no file -----
+pj_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$pj_dir" "$MARK_PARSE_JOB_DONE" "a" "b" 2>/dev/null; then pj_ec=0; else pj_ec=$?; fi
+assert_eq "mark-parse-job-done: extra arg exit 2" "2" "$pj_ec"
+assert_eq "mark-parse-job-done: extra arg writes no file" "0" \
+  "$([ -f "$pj_dir/parse-job-done" ] && echo 1 || echo 0)"
+rm -rf "$pj_dir"
+
+# ----- mark-parse-job-done: CLAUDE_JOB_DIR unset → exit 0, no file, stderr diagnostic -----
+pj_err=$( (unset CLAUDE_JOB_DIR; "$MARK_PARSE_JOB_DONE" "x") 2>&1 1>/dev/null ) && pj_ec=0 || pj_ec=$?
+assert_eq "mark-parse-job-done: unset CLAUDE_JOB_DIR exit 0" "0" "$pj_ec"
+assert_eq "mark-parse-job-done: unset CLAUDE_JOB_DIR emits diagnostic" "1" \
+  "$( [[ -n "$pj_err" ]] && echo 1 || echo 0 )"
+
+# ----- mark-parse-job-done: unset CLAUDE_JOB_DIR writes no file -----
+pj_dir=$(mktemp -d)
+( unset CLAUDE_JOB_DIR; "$MARK_PARSE_JOB_DONE" "x" ) >/dev/null 2>&1 || true
+assert_eq "mark-parse-job-done: unset CLAUDE_JOB_DIR writes no sentinel in any dir" "0" \
+  "$([ -f "$pj_dir/parse-job-done" ] && echo 1 || echo 0)"
+rm -rf "$pj_dir"
+
+# ----- mark-parse-job-done: CLAUDE_JOB_DIR set to a file (not a dir) → exit 0, no write -----
+pj_file=$(mktemp)
+if CLAUDE_JOB_DIR="$pj_file" "$MARK_PARSE_JOB_DONE" "note" 2>/dev/null; then pj_ec=0; else pj_ec=$?; fi
+assert_eq "mark-parse-job-done: CLAUDE_JOB_DIR is a file exit 0" "0" "$pj_ec"
+rm -f "$pj_file"
 
 # ============================================================================
 # === dispatch-open-pr ===
