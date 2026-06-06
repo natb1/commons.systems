@@ -10922,6 +10922,10 @@ echo "Test: dispatch-phase-model with no phase arg exits 2"
 if "$SCRIPT_DIR/dispatch-phase-model" 2>/dev/null; then pm_rc=0; else pm_rc=$?; fi
 assert_eq "phase-model: no-arg → exit 2" "2" "$pm_rc"
 
+echo "Test: dispatch-phase-model with an empty-string arg exits 2"
+if "$SCRIPT_DIR/dispatch-phase-model" "" 2>/dev/null; then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: empty-string-arg → exit 2" "2" "$pm_rc"
+
 # ============================================================================
 # dispatch-spawn-worker tests
 # ============================================================================
@@ -17477,7 +17481,7 @@ mat_setup() {
   STUB_DIR="$TMPDIR_TEST/stub"
   mkdir -p "$STUB_DIR" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/logs"
 
-  for s in dispatch-materialize-spawn dispatch-finalize-selection dispatch-acquire-lock; do
+  for s in dispatch-materialize-spawn dispatch-finalize-selection dispatch-acquire-lock dispatch-phase-model; do
     cp "$SCRIPT_DIR/$s" "$TMPDIR_TEST/$s"
     chmod +x "$TMPDIR_TEST/$s"
   done
@@ -18369,6 +18373,36 @@ assert_eq "fanout-done: terminal token" "drain" "$(printf '%s\n' "$out" | tail -
 assert_eq "fanout-done: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
 assert_eq "fanout-done: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- phase→model integration: qa phase → --model claude-sonnet-4-6 forwarded --
+# When the recomputed PHASE is qa, dispatch-materialize-spawn calls the real
+# dispatch-phase-model (now staged by mat_setup) which emits claude-sonnet-4-6,
+# and the spawn-worker invocation must include --model claude-sonnet-4-6.
+echo "Test: materialize-spawn qa phase → spawn-worker receives --model claude-sonnet-4-6 (#1171)"
+mat_setup
+export MAT_PHASE=qa
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "qa-model: exit 0" "0" "$rc"
+assert_eq "qa-model: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "qa-model: spawn-worker argv contains --model claude-sonnet-4-6" \
+  "--model claude-sonnet-4-6 839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+mat_teardown
+
+# --- phase→model integration: non-qa phase → no --model forwarded (Opus default)
+# An unmapped phase (implement) emits nothing from dispatch-phase-model, so no
+# --model flag is passed to dispatch-spawn-worker and the worker inherits the
+# session default (Opus).
+echo "Test: materialize-spawn implement phase → no --model forwarded (Opus default) (#1171)"
+mat_setup
+export MAT_PHASE=implement
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "implement-model: exit 0" "0" "$rc"
+assert_eq "implement-model: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "implement-model: spawn-worker argv has no --model flag" \
+  "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
 mat_teardown
 
 echo "=== print_remote_access_block ==="
