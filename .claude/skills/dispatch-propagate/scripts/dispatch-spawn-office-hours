@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+# dispatch-spawn-office-hours — spawn a fresh /office-hours background job for a
+# queue item, worker-style, and print the spawned (or deduped) session id so the
+# caller can attach a human via `claude --resume`.
+#
+# This is the office-hours fresh-launch counterpart of dispatch-spawn-worker
+# (the router → phase-worker spawn primitive). Both are thin wrappers over
+# dispatch-spawn-job: they validate their own arguments and delegate the
+# dedup → spawn → verify mechanics. Like the worker, the spawned session's
+# --name is the worktree basename and its --cwd is the worktree path, so the new
+# /office-hours session is born in its target worktree (branch <N>-...). Born
+# there, it (a) lets dispatch-office-hours-strip.sh resolve <N> from the cwd
+# branch and clear the dispatch:office-hours label, and (b) registers under the
+# worktree basename, holding the per-worktree concurrency lock every liveness
+# check keys on.
+#
+# Unlike the worker it uses the DEFAULT verify path (no --no-verify):
+# office-hours is an unledgered one-off with no reservation-ledger/sweep safety
+# net, so it waits for registration — matching the main-broken / jit one-off
+# spawns.
+#
+# Difference from dispatch-spawn-worker: that wrapper `exec`s dispatch-spawn-job
+# and is done. This wrapper must hand the caller a session id to resume, so it
+# does NOT exec: it runs dispatch-spawn-job, then resolves the session id by the
+# worktree basename (the name the job registered under) via
+# claude_sessions_with_name and prints it — the only thing on stdout. The
+# resolve serves both outcomes uniformly: on a fresh spawn it returns the new
+# session; on a dedup hit (a same-named session already owns the worktree, a
+# TOCTOU since selection) it returns that existing session — exactly the one to
+# resume.
+#
+# Usage: dispatch-spawn-office-hours <issue-num> <phase> <pr-or-dash> <worktree-path>
+#
+# Arguments (all four required):
+#   <issue-num>     The issue number N. Spawned prompt is
+#                   `/office-hours <N> <phase> <pr>`.
+#   <phase>         The office-hours phase token (implement | qa | ...). Passed
+#                   through into the prompt.
+#   <pr-or-dash>    The issue's open PR number, or `-`. Passed through.
+#   <worktree-path> Absolute path to the <N>-* worktree. Its basename is the
+#                   spawned session's --name and the resolve key; the path is the
+#                   spawn --cwd. Must be an existing directory.
+#
+# Stdout / exit codes:
+#   On success prints exactly the resolved session id and exits 0.
+#   1  the spawn failed (dispatch-spawn-job exited non-zero), or the session id
+#      could not be resolved after a successful spawn/dedup (registry UNKNOWN or
+#      no same-named session). Diagnostic on stderr.
+#   2  usage / validation error (wrong arg count, bad issue number, bad phase or
+#      pr token, or a worktree path that is missing or contains unsafe chars).
+#
+# Environment overrides for testability:
+#   DISPATCH_SPAWN_OFFICE_HOURS_CLAUDE_CMD   The `claude` command — used for this
+#                                            wrapper's own `claude agents` resolve
+#                                            (via CLAUDE_AGENTS_CMD) and translated
+#                                            into dispatch-spawn-job's
+#                                            DISPATCH_SPAWN_JOB_CLAUDE_CMD.
+#   DISPATCH_SPAWN_OFFICE_HOURS_SESSION_ID   This session's id — translated into
+#                                            dispatch-spawn-job's
+#                                            DISPATCH_SPAWN_JOB_SESSION_ID.
+#
+# Sandbox: every `claude` call (here and in dispatch-spawn-job) reaches the local
+# daemon over a Unix socket; callers must run this script with
+# `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
+#
+# NOT set -e: exits are handled explicitly (matching dispatch-spawn-worker).
+set -uo pipefail
+
+# ---- Step 0: parse and validate arguments -----------------------------------
+if [[ $# -lt 4 ]]; then
+  echo "dispatch-spawn-office-hours: expected 4 arguments: <issue-num> <phase> <pr-or-dash> <worktree-path>" >&2
+  exit 2
+fi
+if [[ $# -gt 4 ]]; then
+  echo "dispatch-spawn-office-hours: unexpected argument '$5'" >&2
+  exit 2
+fi
+
+ISSUE_NUM="$1"
+PHASE="$2"
+PR="$3"
+WORKTREE_PATH="$4"
+
+if [[ ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
+  echo "dispatch-spawn-office-hours: invalid issue number '$ISSUE_NUM' (expected a positive integer)" >&2
+  exit 2
+fi
+# PHASE and PR flow into the inline prompt string passed to `claude --bg`.
+# Constrain them to the shapes the selector emits so neither can split the
+# prompt argument or inject metacharacters (defense-in-depth, mirroring
+# dispatch-spawn-worker's worktree-path check).
+if [[ ! "$PHASE" =~ ^[a-z][a-z-]*$ ]]; then
+  echo "dispatch-spawn-office-hours: invalid phase '$PHASE'" >&2
+  exit 2
+fi
+if [[ ! "$PR" =~ ^([1-9][0-9]*|-)$ ]]; then
+  echo "dispatch-spawn-office-hours: invalid pr token '$PR' (expected a positive integer or '-')" >&2
+  exit 2
+fi
+if [[ ! -d "$WORKTREE_PATH" ]]; then
+  echo "dispatch-spawn-office-hours: worktree path '$WORKTREE_PATH' does not exist" >&2
+  exit 2
+fi
+if [[ ! "$WORKTREE_PATH" =~ ^[A-Za-z0-9/_.-]+$ ]]; then
+  echo "dispatch-spawn-office-hours: worktree path '$WORKTREE_PATH' contains unsafe characters" >&2
+  exit 2
+fi
+
+NAME="$(basename "$WORKTREE_PATH")"
+
+# ---- Step 1: resolve config + translate env overrides -----------------------
+CLAUDE_CMD="${DISPATCH_SPAWN_OFFICE_HOURS_CLAUDE_CMD:-claude}"
+# This wrapper's own resolve (claude_sessions_with_name) reads CLAUDE_AGENTS_CMD.
+export CLAUDE_AGENTS_CMD="$CLAUDE_CMD"
+# Map onto dispatch-spawn-job's overrides so the delegated spawn uses the same
+# command + self-exclusion id.
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$CLAUDE_CMD"
+if [[ -n "${DISPATCH_SPAWN_OFFICE_HOURS_SESSION_ID+x}" ]]; then
+  export DISPATCH_SPAWN_JOB_SESSION_ID="$DISPATCH_SPAWN_OFFICE_HOURS_SESSION_ID"
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+# ---- Step 2: spawn worker-style (DEFAULT verify) ----------------------------
+# Default verify (no --no-verify) so the new session is registered before the
+# resolve below. dispatch-spawn-job prints `spawned`/`deduped`; discard that and
+# resolve the id ourselves.
+if ! "$SCRIPT_DIR/dispatch-spawn-job" \
+  --name "$NAME" \
+  --cwd "$WORKTREE_PATH" \
+  "/office-hours $ISSUE_NUM $PHASE $PR" >/dev/null; then
+  echo "dispatch-spawn-office-hours: spawn of /office-hours for #$ISSUE_NUM failed" >&2
+  exit 1
+fi
+
+# ---- Step 3: resolve the session id by the worktree basename ----------------
+# Works for both outcomes: a fresh spawn registers under NAME; a dedup hit means
+# a same-named session already owns the worktree. Either way the live session
+# under NAME is the one to resume.
+if ! sessions=$(claude_sessions_with_name "$NAME"); then
+  echo "dispatch-spawn-office-hours: could not query the session registry to resolve '$NAME'" >&2
+  exit 1
+fi
+sid=$(printf '%s\n' "$sessions" | head -n 1 | cut -f1)
+if [[ -z "$sid" ]]; then
+  echo "dispatch-spawn-office-hours: no live session named '$NAME' after spawn" >&2
+  exit 1
+fi
+printf '%s\n' "$sid"
