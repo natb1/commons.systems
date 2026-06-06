@@ -678,8 +678,8 @@
       ]
     },
     {
-      "target": "agenda",
-      "public": "agenda/dist",
+      "target": "office-hours",
+      "public": "office-hours/dist",
       "ignore": [
         "firebase.json",
         "**/.*",

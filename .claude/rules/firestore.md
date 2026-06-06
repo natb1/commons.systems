@@ -42,7 +42,7 @@ documents within that collection:
 {appName}/{envSuffix}/{collection}/{docId}
 ```
 
-Examples: `landing/prod/posts/abc123`, `landing/preview-pr-42/posts/abc123`, `agenda/prod/items/<jitKey>`
+Examples: `landing/prod/posts/abc123`, `landing/preview-pr-42/posts/abc123`, `office-hours/prod/items/<jitKey>`
 
 Rules use the literal app name as a path segment:
 
