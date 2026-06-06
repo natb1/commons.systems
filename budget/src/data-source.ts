@@ -41,6 +41,7 @@ import { idbToRule } from "./entities/rule.js";
 import { idbToNormalizationRule } from "./entities/normalization-rule.js";
 import { idbToWeeklyAggregate } from "./entities/weekly-aggregate.js";
 import { filterByTimestamp } from "./entities/_helpers.js";
+import { scheduleWriteBack } from "./file-sync.js";
 
 export interface TransactionQuery {
   since?: Timestamp;
@@ -484,5 +485,165 @@ export class IdbDataSource implements DataSource {
 
   async deleteNormalizationRule(id: NormalizationRuleId): Promise<void> {
     await deleteRecord("normalizationRules", id);
+  }
+}
+
+/**
+ * DataSource decorator that mirrors every mutation back to the on-disk `.benc`
+ * via a debounced encrypted write (see file-sync.ts). Reads delegate straight
+ * through. `scheduleWriteBack()` is a no-op until `configureFileSync` arms a
+ * handle, so this decorator is harmless to wrap around seed / upload sessions.
+ */
+export class FileSyncingDataSource implements DataSource {
+  constructor(private readonly inner: DataSource) {}
+
+  // Reads: delegate straight through.
+  getTransactions(query?: TransactionQuery): Promise<Transaction[]> {
+    return this.inner.getTransactions(query);
+  }
+  getStatements(): Promise<Statement[]> {
+    return this.inner.getStatements();
+  }
+  getStatementItems(): Promise<StatementItem[]> {
+    return this.inner.getStatementItems();
+  }
+  getReconciliationNotes(): Promise<ReconciliationNote[]> {
+    return this.inner.getReconciliationNotes();
+  }
+  getAccounts(): Promise<Account[]> {
+    return this.inner.getAccounts();
+  }
+  getJournalEntries(): Promise<JournalEntry[]> {
+    return this.inner.getJournalEntries();
+  }
+  getJournalLegs(): Promise<JournalLeg[]> {
+    return this.inner.getJournalLegs();
+  }
+  getReconciliationEvents(): Promise<ReconciliationEvent[]> {
+    return this.inner.getReconciliationEvents();
+  }
+  getBudgets(): Promise<Budget[]> {
+    return this.inner.getBudgets();
+  }
+  getBudgetPeriods(): Promise<BudgetPeriod[]> {
+    return this.inner.getBudgetPeriods();
+  }
+  getRules(): Promise<Rule[]> {
+    return this.inner.getRules();
+  }
+  getNormalizationRules(): Promise<NormalizationRule[]> {
+    return this.inner.getNormalizationRules();
+  }
+  getWeeklyAggregates(): Promise<WeeklyAggregate[]> {
+    return this.inner.getWeeklyAggregates();
+  }
+
+  // Mutations: delegate, then arm a debounced write-back, then return the result.
+  async updateTransaction(
+    id: TransactionId,
+    fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription">>,
+  ): Promise<void> {
+    await this.inner.updateTransaction(id, fields);
+    scheduleWriteBack();
+  }
+
+  async updateTransactionStatementItemLink(
+    id: TransactionId,
+    statementItemId: StatementItemId | null,
+  ): Promise<void> {
+    await this.inner.updateTransactionStatementItemLink(id, statementItemId);
+    scheduleWriteBack();
+  }
+
+  async upsertReconciliationNote(fields: ReconciliationNoteFields): Promise<void> {
+    await this.inner.upsertReconciliationNote(fields);
+    scheduleWriteBack();
+  }
+
+  async deleteReconciliationNote(
+    entityType: ReconciliationEntityType,
+    entityId: string,
+  ): Promise<void> {
+    await this.inner.deleteReconciliationNote(entityType, entityId);
+    scheduleWriteBack();
+  }
+
+  async updateJournalLegCleared(legId: string, cleared: boolean): Promise<void> {
+    await this.inner.updateJournalLegCleared(legId, cleared);
+    scheduleWriteBack();
+  }
+
+  async createReconciliationEvent(
+    fields: ReconciliationEventFields,
+    legIds: string[],
+  ): Promise<ReconciliationEvent> {
+    const result = await this.inner.createReconciliationEvent(fields, legIds);
+    scheduleWriteBack();
+    return result;
+  }
+
+  async createJournalEntry(
+    entry: JournalEntryFields,
+    legs: JournalLegFields[],
+  ): Promise<{ entryId: string; legIds: string[] }> {
+    const result = await this.inner.createJournalEntry(entry, legs);
+    scheduleWriteBack();
+    return result;
+  }
+
+  async updateBudget(
+    id: BudgetId,
+    fields: Partial<Pick<Budget, "name" | "allowance" | "allowancePeriod" | "rollover">>,
+  ): Promise<void> {
+    await this.inner.updateBudget(id, fields);
+    scheduleWriteBack();
+  }
+
+  async updateBudgetOverrides(id: BudgetId, overrides: BudgetOverride[]): Promise<void> {
+    await this.inner.updateBudgetOverrides(id, overrides);
+    scheduleWriteBack();
+  }
+
+  async adjustBudgetPeriodTotal(id: BudgetPeriodId, delta: number): Promise<void> {
+    await this.inner.adjustBudgetPeriodTotal(id, delta);
+    scheduleWriteBack();
+  }
+
+  async createRule(fields: Omit<Rule, "id" | "groupId">): Promise<RuleId> {
+    const result = await this.inner.createRule(fields);
+    scheduleWriteBack();
+    return result;
+  }
+
+  async updateRule(
+    id: RuleId,
+    fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account" | "minAmount" | "maxAmount" | "excludeCategory" | "matchCategory">>,
+  ): Promise<void> {
+    await this.inner.updateRule(id, fields);
+    scheduleWriteBack();
+  }
+
+  async deleteRule(id: RuleId): Promise<void> {
+    await this.inner.deleteRule(id);
+    scheduleWriteBack();
+  }
+
+  async createNormalizationRule(fields: Omit<NormalizationRule, "id" | "groupId">): Promise<NormalizationRuleId> {
+    const result = await this.inner.createNormalizationRule(fields);
+    scheduleWriteBack();
+    return result;
+  }
+
+  async updateNormalizationRule(
+    id: NormalizationRuleId,
+    fields: Partial<Pick<NormalizationRule, "pattern" | "patternType" | "canonicalDescription" | "dateWindowDays" | "priority" | "institution" | "account">>,
+  ): Promise<void> {
+    await this.inner.updateNormalizationRule(id, fields);
+    scheduleWriteBack();
+  }
+
+  async deleteNormalizationRule(id: NormalizationRuleId): Promise<void> {
+    await this.inner.deleteNormalizationRule(id);
+    scheduleWriteBack();
   }
 }

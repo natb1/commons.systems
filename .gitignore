@@ -21,3 +21,22 @@ ui-debug.log
 **/tmp/
 budget-etl/budget-etl
 result
+
+# Claude Code sandbox /dev/null bind-mount artifacts — character device nodes
+# bind-mounted over host shell/tool/editor config inside every worktree. Not
+# repo content and not committable (git cannot stage a character device); listed
+# here only to keep `git status` clean. Caveat: .gitmodules, .mcp.json, and
+# .claude/commands are names this repo could legitimately track in the future —
+# a real file at one of those paths needs a one-time `git add -f`.
+/.bash_profile
+/.bashrc
+/.profile
+/.zprofile
+/.zshrc
+/.gitconfig
+/.ripgreprc
+/.gitmodules
+/.mcp.json
+/.claude/commands
+/.idea
+/.vscode
