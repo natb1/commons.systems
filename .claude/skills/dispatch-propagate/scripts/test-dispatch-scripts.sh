@@ -7929,6 +7929,222 @@ fi
 config_teardown
 
 # ============================================================================
+# budget-etl config schema tests (Tests 7i-7m)
+# ============================================================================
+#
+# budget-etl.json is a flat top-level object with four required non-empty
+# string fields: downloads, statements, snapshotDir, current.
+# Paths may contain spaces (e.g. "/mnt/g/My Drive/budget/statements").
+#
+# Uses config_setup / config_teardown (same helpers as the statements tests).
+
+echo ""
+echo "=== budget-etl config schema ==="
+
+# --- Test 7i: valid budget-etl.json round-trips ------------------------------
+
+echo "Test: valid budget-etl.json prints normalized JSON and paths with spaces round-trip"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
+{
+  "downloads": "/mnt/c/Users/example/Downloads",
+  "statements": "/mnt/g/My Drive/budget/statements",
+  "snapshotDir": "/mnt/g/My Drive/budget/snapshots",
+  "current": "/mnt/g/My Drive/budget/budget.enc.json"
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>/dev/null); rc=$?
+assert_eq "7i valid budget-etl.json exits 0" "0" "$rc"
+dl=$(printf '%s' "$out" | jq -r '.downloads')
+assert_eq "7i downloads round-trips" "/mnt/c/Users/example/Downloads" "$dl"
+st=$(printf '%s' "$out" | jq -r '.statements')
+assert_eq "7i statements round-trips (spaces preserved)" "/mnt/g/My Drive/budget/statements" "$st"
+sd=$(printf '%s' "$out" | jq -r '.snapshotDir')
+assert_eq "7i snapshotDir round-trips (spaces preserved)" "/mnt/g/My Drive/budget/snapshots" "$sd"
+cur=$(printf '%s' "$out" | jq -r '.current')
+assert_eq "7i current round-trips" "/mnt/g/My Drive/budget/budget.enc.json" "$cur"
+config_teardown
+
+# --- Test 7j: budget-etl.json missing required field exits 1 -----------------
+
+echo "Test: budget-etl.json missing required field exits 1 and stderr names the field"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
+{
+  "downloads": "/mnt/c/Users/example/Downloads",
+  "statements": "/mnt/g/My Drive/budget/statements",
+  "snapshotDir": "/mnt/g/My Drive/budget/snapshots"
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>&1 1>/dev/null) || rc=$?
+assert_eq "7j missing current field exits 1" "1" "$rc"
+if [[ "$err" == *"current"* ]]; then
+  assert_eq "7j missing-current error names the field" "yes" "yes"
+else
+  assert_eq "7j missing-current error names the field" "yes" "no: $err"
+fi
+config_teardown
+
+# --- Test 7k: budget-etl.json non-string field exits 1 -----------------------
+
+echo "Test: budget-etl.json with non-string downloads exits 1 and stderr names the field"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
+{
+  "downloads": 42,
+  "statements": "/mnt/g/My Drive/budget/statements",
+  "snapshotDir": "/mnt/g/My Drive/budget/snapshots",
+  "current": "/mnt/g/My Drive/budget/budget.enc.json"
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>&1 1>/dev/null) || rc=$?
+assert_eq "7k non-string downloads exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"downloads"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7k non-string downloads stderr mentions downloads"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7k non-string downloads stderr mentions downloads"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7l: budget-etl.json empty-string field exits 1 ---------------------
+
+echo "Test: budget-etl.json with empty-string snapshotDir exits 1 and stderr names the field"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
+{
+  "downloads": "/mnt/c/Users/example/Downloads",
+  "statements": "/mnt/g/My Drive/budget/statements",
+  "snapshotDir": "",
+  "current": "/mnt/g/My Drive/budget/budget.enc.json"
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>&1 1>/dev/null) || rc=$?
+assert_eq "7l empty snapshotDir exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"snapshotDir"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7l empty snapshotDir stderr mentions snapshotDir"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7l empty snapshotDir stderr mentions snapshotDir"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7m: absent budget-etl.json prints no-config and exits 0 ------------
+
+echo "Test: absent budget-etl.json prints no-config and exits 0"
+config_setup
+# no file written — config dir is empty
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>/dev/null); rc=$?
+assert_eq "7m absent budget-etl.json exits 0" "0" "$rc"
+assert_eq "7m absent budget-etl.json prints no-config" "no-config" "$out"
+config_teardown
+
+# ============================================================================
+# ingest-downloads.sh tests
+# ============================================================================
+#
+# Both ingest-downloads.sh and identify-qfx.sh are copied into a fresh tmp
+# tree so BASH_SOURCE-based SCRIPT_DIR resolution works correctly. The budget-etl
+# scripts live at $SCRIPT_DIR/../../budget-etl/scripts/ relative to the
+# dispatch-propagate scripts dir.
+
+echo ""
+echo "=== ingest-downloads.sh ==="
+
+INGEST_SRC="$SCRIPT_DIR/../../budget-etl/scripts/ingest-downloads.sh"
+IDENTIFY_SRC="$SCRIPT_DIR/../../budget-etl/scripts/identify-qfx.sh"
+
+ING_TMP=""
+
+ingest_setup() {
+  ING_TMP=$(mktemp -d)
+  mkdir -p "$ING_TMP/scripts" "$ING_TMP/dl" "$ING_TMP/st"
+  cp "$INGEST_SRC"   "$ING_TMP/scripts/ingest-downloads.sh"
+  cp "$IDENTIFY_SRC" "$ING_TMP/scripts/identify-qfx.sh"
+  chmod +x "$ING_TMP/scripts/ingest-downloads.sh" "$ING_TMP/scripts/identify-qfx.sh"
+}
+
+ingest_teardown() {
+  rm -rf "$ING_TMP"
+  ING_TMP=""
+}
+
+# --- Test: move — AMEX file is classified and moved to the correct subdir ----
+
+echo "Test: ingest-downloads.sh moves an AMEX QFX to the correct institution/account subdir"
+ingest_setup
+printf '<ORG>AMEX</ORG>\n<ACCTID>tok|12345</ACCTID>\n' > "$ING_TMP/dl/amex.qfx"
+out=$(bash "$ING_TMP/scripts/ingest-downloads.sh" "$ING_TMP/dl" "$ING_TMP/st" 2>&1); rc=$?
+assert_eq "ingest-move: exits 0" "0" "$rc"
+assert_eq "ingest-move: file at american_express/12345/amex.qfx" "yes" \
+  "$([[ -f "$ING_TMP/st/american_express/12345/amex.qfx" ]] && echo yes || echo no)"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$out" | grep -qF ' to '; then
+  PASS=$((PASS + 1)); echo "  PASS: ingest-move: output contains '<src> to <dest>' line"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ingest-move: output contains '<src> to <dest>' line"
+  echo "    output: $out"
+fi
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$out" | grep -qF "american_express/12345/amex.qfx"; then
+  PASS=$((PASS + 1)); echo "  PASS: ingest-move: output names the dest path"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ingest-move: output names the dest path"
+  echo "    output: $out"
+fi
+ingest_teardown
+
+# --- Test: collision — timestamp-suffixed name used; original not overwritten -
+
+echo "Test: ingest-downloads.sh uses a timestamp-suffixed name on collision"
+ingest_setup
+mkdir -p "$ING_TMP/st/american_express/12345"
+printf 'OLD\n' > "$ING_TMP/st/american_express/12345/amex.qfx"
+printf '<ORG>AMEX</ORG>\n<ACCTID>tok|12345</ACCTID>\n' > "$ING_TMP/dl/amex.qfx"
+out=$(bash "$ING_TMP/scripts/ingest-downloads.sh" "$ING_TMP/dl" "$ING_TMP/st" 2>&1); rc=$?
+assert_eq "ingest-collision: exits 0" "0" "$rc"
+# Original file must still have its sentinel content (not overwritten).
+orig_content=$(cat "$ING_TMP/st/american_express/12345/amex.qfx")
+assert_eq "ingest-collision: original file not overwritten (content OLD)" "OLD" "$orig_content"
+# A timestamp-suffixed file matching amex.*.qfx should exist.
+ts_files=()
+while IFS= read -r -d '' f; do
+  ts_files+=("$f")
+done < <(find "$ING_TMP/st/american_express/12345" -maxdepth 1 -name 'amex.*.qfx' -print0 2>/dev/null)
+assert_eq "ingest-collision: exactly one timestamp-suffixed file exists" "1" "${#ts_files[@]}"
+ingest_teardown
+
+# --- Test: unknown ORG — classify-all-first: nothing moved -------------------
+
+echo "Test: ingest-downloads.sh moves nothing when any file has an unknown ORG"
+ingest_setup
+printf '<ORG>AMEX</ORG>\n<ACCTID>tok|00001</ACCTID>\n' > "$ING_TMP/dl/good.qfx"
+printf '<ORG>NOPE</ORG>\n<ACCTID>tok|00002</ACCTID>\n' > "$ING_TMP/dl/bad.qfx"
+rc=0
+out=$(bash "$ING_TMP/scripts/ingest-downloads.sh" "$ING_TMP/dl" "$ING_TMP/st" 2>&1) || rc=$?
+assert_eq "ingest-unknown-org: exits 1" "1" "$rc"
+assert_eq "ingest-unknown-org: good.qfx NOT moved (still in dl)" "yes" \
+  "$([[ -f "$ING_TMP/dl/good.qfx" ]] && echo yes || echo no)"
+assert_eq "ingest-unknown-org: bad.qfx NOT moved (still in dl)" "yes" \
+  "$([[ -f "$ING_TMP/dl/bad.qfx" ]] && echo yes || echo no)"
+# Statements dir must be empty (nothing moved).
+st_file_count=$(find "$ING_TMP/st" -type f | wc -l | tr -d ' ')
+assert_eq "ingest-unknown-org: statements dir has no files" "0" "$st_file_count"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$out" | grep -qE 'bad\.qfx|NOPE'; then
+  PASS=$((PASS + 1)); echo "  PASS: ingest-unknown-org: output mentions the bad file or ORG"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ingest-unknown-org: output mentions the bad file or ORG"
+  echo "    output: $out"
+fi
+ingest_teardown
+
+# ============================================================================
 # dispatch-target-workers tests
 # ============================================================================
 #
