@@ -28,15 +28,15 @@ result
 # here only to keep `git status` clean. Caveat: .gitmodules, .mcp.json, and
 # .claude/commands are names this repo could legitimately track in the future —
 # a real file at one of those paths needs a one-time `git add -f`.
-.bash_profile
-.bashrc
-.profile
-.zprofile
-.zshrc
-.gitconfig
-.ripgreprc
-.gitmodules
-.mcp.json
-.claude/commands
-.idea
-.vscode
+/.bash_profile
+/.bashrc
+/.profile
+/.zprofile
+/.zshrc
+/.gitconfig
+/.ripgreprc
+/.gitmodules
+/.mcp.json
+/.claude/commands
+/.idea
+/.vscode
