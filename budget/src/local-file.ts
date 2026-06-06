@@ -1,0 +1,93 @@
+// File System Access API (FSA) surface for the budget app.
+//
+// `window.showOpenFilePicker` and `FileSystemHandle.queryPermission` /
+// `requestPermission` are not in baseline `lib.dom.d.ts`, so this module owns
+// the minimal ambient declarations. The FSA primitives let a Chromium browser
+// persist a `FileSystemFileHandle` (stored in IDB) and re-open the same on-disk
+// `.benc` across sessions; non-Chromium browsers fall back to the existing
+// `<input type=file>` upload path (detected via `isFsaSupported`).
+
+interface FileSystemHandlePermissionDescriptor {
+  mode?: "read" | "readwrite";
+}
+interface OpenFilePickerOptions {
+  multiple?: boolean;
+  types?: { description?: string; accept: Record<string, string[]> }[];
+}
+declare global {
+  interface Window {
+    showOpenFilePicker(options?: OpenFilePickerOptions): Promise<FileSystemFileHandle[]>;
+  }
+  interface FileSystemHandle {
+    queryPermission(descriptor?: FileSystemHandlePermissionDescriptor): Promise<PermissionState>;
+    requestPermission(descriptor?: FileSystemHandlePermissionDescriptor): Promise<PermissionState>;
+  }
+}
+
+/** True on Chromium browsers that expose the File System Access picker. */
+export function isFsaSupported(): boolean {
+  return typeof window !== "undefined" && "showOpenFilePicker" in window;
+}
+
+/**
+ * Show the FSA picker for a `.benc`/`.json` file. Returns the picked handle, or
+ * `null` when the user cancels the picker (AbortError). Any other error is
+ * rethrown.
+ */
+export async function pickBencFile(): Promise<FileSystemFileHandle | null> {
+  try {
+    const handles = await window.showOpenFilePicker({
+      multiple: false,
+      types: [{ description: "Budget data", accept: { "application/octet-stream": [".benc"], "application/json": [".json"] } }],
+    });
+    return handles[0];
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Query whether the handle currently has readwrite permission. The app needs
+ * readwrite access to read the on-disk file and write back encrypted edits.
+ */
+export function queryReadWritePermission(handle: FileSystemFileHandle): Promise<PermissionState> {
+  return handle.queryPermission({ mode: "readwrite" });
+}
+
+/**
+ * Request readwrite permission for the handle (may prompt the user). The app
+ * needs readwrite access to read the on-disk file and write back encrypted edits.
+ */
+export function requestReadWritePermission(handle: FileSystemFileHandle): Promise<PermissionState> {
+  return handle.requestPermission({ mode: "readwrite" });
+}
+
+/** Overwrite the on-disk file behind the handle with `data` (encrypted bytes). */
+export async function writeFileToHandle(
+  handle: FileSystemFileHandle,
+  data: BufferSource,
+): Promise<void> {
+  const writable = await handle.createWritable();
+  try {
+    await writable.write(data);
+    await writable.close();
+  } catch (e) {
+    // Abort discards the temp write rather than committing a truncated file.
+    // createWritable() defaults to keepExistingData: false, so a close() after a
+    // failed write() would replace the original file with an empty or partial one.
+    await writable.abort();
+    throw e;
+  }
+}
+
+/**
+ * Read the current `File` from the handle. Does not catch errors: a
+ * NotFoundError (file moved/deleted) propagates so callers can treat it as a
+ * stale handle and fall back to the re-link picker.
+ */
+export function readFileFromHandle(handle: FileSystemFileHandle): Promise<File> {
+  return handle.getFile();
+}

@@ -28,16 +28,18 @@
       # Per-system outputs
       systemOutputs = {
         packages = forAllSystems ({ pkgs, ... }: {
-          productivity-tui = pkgs.callPackage ./nix/packages/productivity-tui.nix { };
+          dispatch = pkgs.callPackage ./nix/packages/dispatch.nix { };
+          office-hours = pkgs.callPackage ./nix/packages/office-hours.nix { };
         });
 
         devShells = forAllSystems ({ pkgs, ... }:
           let
-            productivity-tui = pkgs.callPackage ./nix/packages/productivity-tui.nix { };
+            dispatch = pkgs.callPackage ./nix/packages/dispatch.nix { };
+            office-hours = pkgs.callPackage ./nix/packages/office-hours.nix { };
           in
           {
             default = pkgs.mkShell {
-              packages = with pkgs; [
+              packages = (with pkgs; [
                 nodejs_22
                 openjdk
                 go
@@ -46,10 +48,9 @@
                 playwright-driver.browsers
                 gnupg
                 pass
-              ];
+              ]) ++ [ dispatch office-hours ];
               shellHook = ''
                 export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
-                export PATH="${productivity-tui}/bin:$PATH"
               '';
             };
           });

@@ -703,3 +703,62 @@ svg [aria-label="tip"] text { fill: #222; }
   outline: 2px dotted currentColor;
   outline-offset: 2px;
 }
+
+/* --- Source-statement viewer --- */
+
+.statement-source-link {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.statement-source-dialog {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem;
+  max-width: min(90vw, 800px);
+  width: 90vw;
+}
+
+.statement-source-dialog::backdrop {
+  background: color-mix(in srgb, var(--fg) 30%, transparent);
+}
+
+.statement-source-close {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 0.75rem;
+}
+
+.statement-source-message {
+  margin: 0;
+}
+
+.statement-source-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 70vh;
+  overflow: auto;
+  margin: 0;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.statement-source-frame {
+  width: 100%;
+  height: 70vh;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}

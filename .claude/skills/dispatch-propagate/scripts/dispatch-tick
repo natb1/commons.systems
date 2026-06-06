@@ -1,0 +1,375 @@
+#!/usr/bin/env bash
+# dispatch-tick — the headless /dispatch-propagate tick: a thin bash sequencer
+# over dispatch-select-tick → dispatch-materialize-spawn, with NO model session.
+#
+# Usage: dispatch-tick [--manual] [<issue-or-PR-number>]
+#
+# This is the scripted equivalent of the routing the dispatch-propagate SKILL.md
+# (Tables 1 and 2) used to describe for a model router session. Replacing that
+# model session is the point: a tick has no remaining model-decision seam — every
+# branch is deterministic — so the per-tick `claude --bg` router session (a boot,
+# a context load, and a teardown whose only job was to call two scripts and relay
+# one line) is pure overhead. dispatch-tick runs the same two orchestrators
+# headlessly.
+#
+# Because it is NOT itself a managed `claude --bg` job, there is nothing to
+# self-close: where the model router would have called dispatch-self-close on a
+# `propagate`/`drain` disposition, dispatch-tick simply exits 0. The autonomous
+# tick is launched by systemd (the #725 heartbeat) and by the worker Stop-hook in
+# a later unit; it runs bare and keeps the concurrency gate. A human-typed
+# `dispatch` runs one tick as foreground bash, passing `--manual` to spawn a
+# single gate-exempt worker (exempt from the pace curve and the `MAX_WORKERS`
+# ceiling); fan-out is autonomous-only.
+# The audit record is this script's journal output
+# (every captured stdout line is echoed through) plus the spawned workers'
+# transcripts plus durable GitHub side effects (PR comments, `dispatch:*`
+# labels) — so relay matters only for a human-run `dispatch` (foreground
+# terminal bash), not for the autonomous tick.
+#
+# Manual `dispatch` cap semantics & selection lock:
+#   `dispatch <N>` (explicit target): the tick skips the concurrency gate and
+#   processes that one target (gap=1). A human forcing a specific target is never
+#   paced by the autonomous budget.
+#
+#   `dispatch` (bare, no argument): skips BOTH the pace-curve budget
+#   (`dispatch-target-workers`, which a budget pause can drop to 0) AND the
+#   `MAX_WORKERS` concurrency ceiling, and spawns exactly ONE gate-exempt worker
+#   (the highest-priority queue target), never emitting `concurrency-cap`. Fan-out
+#   is the autonomous chain's behavior only.
+#
+#   Exhaustion hard floor (autonomous path only): when the 5-hour or weekly
+#   rate-limit window is at/near 100% used with `resets_at` still in the future,
+#   `dispatch-target-workers --exhausted` reports `exhausted`. In that state the
+#   tick emits `concurrency-cap`, arms a reseed at the window reset, and spawns
+#   nothing — even a waiting `priority` or `dispatch:main-broken` item. This is a
+#   hard stop on genuine token exhaustion, not the self-imposed pacing throttle
+#   that the priority bypass is meant to override.
+#
+#   Priority/main-broken bypass (autonomous path, at-cap, not exhausted): when
+#   `LIVE_COUNT >= TARGET_N` but `--exhausted` reports `ok`, the tick does NOT
+#   immediately emit `concurrency-cap`. Instead it runs
+#   `dispatch-select-target --priority-only`, which checks the main-broken health
+#   gate first, then scans only the `priority=1` queue tier. If a
+#   `priority`-labeled PR or help-wanted issue (including any `dispatch:main-broken`
+#   issue) is found, the tick holds the lock and spawns exactly ONE gate-exempt
+#   worker (`GAP=1`) — the same treatment as a manual `dispatch`. This also closes
+#   the gap where a main that breaks while at the worker cap was previously
+#   suppressed: the old pre-selection gate exited before the main-broken health
+#   check ran; the bypass now runs that check first, so `main-broken <sha>` can
+#   surface and spawn the diagnose job even at cap. Priority/main-broken workers
+#   still count toward `LIVE_COUNT` and suppress non-priority fan-out on later
+#   ticks. If `--priority-only` returns `empty`, the tick falls back to the normal
+#   `concurrency-cap` disposition and reseed.
+#
+#   Selection lock: the selection lock (`dispatch-acquire-lock`, acquired inside
+#   `dispatch-select-tick`) is shared with the autonomous chain, so a manual run
+#   cannot select the same target as an in-flight tick. Merge conflicts are handled
+#   by a spawned `/dispatch-resolve-conflict` bg job.
+#
+# Behavior:
+#   1. Run dispatch-select-tick [<N>], echoing all of its stdout through (the
+#      jit:/calendar: passthrough lines AND the decision line) so journald and a
+#      live relay both see the narrative. The decision is its LAST stdout line.
+#   2. Route on the decision line (mirrors SKILL.md Table 1):
+#        busy / sync-failed / resolver-failed / empty / concurrency-cap
+#                          → log a one-line note; exit 0. (select-tick already
+#                            released the lock / scheduled any reseed.)
+#        NOTE: on the autonomous no-arg path, `concurrency-cap` is emitted by
+#        select-tick only after the priority/main-broken bypass runs (see above):
+#        at-cap + exhausted → concurrency-cap immediately;
+#        at-cap + not exhausted + no priority/main-broken item → concurrency-cap;
+#        at-cap + not exhausted + priority/main-broken item found → pr/issue/main-broken
+#        decision instead, spawned as one gate-exempt worker (GAP=1).
+#        main-broken <sha> → spawn /dispatch-diagnose-main <sha> as a bg job via
+#                            dispatch-spawn-job (--name diagnose-main); exit 0.
+#        jit-reminder ...  → spawn /dispatch-jit-reminder ... as a bg job via
+#                            dispatch-spawn-job (--name jit-reminder-<num>); exit 0.
+#        explicit <num> <gap>            → dispatch-materialize-spawn <num> explicit --gap <gap>
+#        pr <num> <branch> <phase> <gap> → N=${branch%%-*}; dispatch-materialize-spawn <N> queue --gap <gap>
+#        issue <num> <gap>               → dispatch-materialize-spawn <num> queue --gap <gap>
+#                            then route the terminal token (step 3).
+#        anything else     → diagnostic to stderr; exit 2.
+#   3. Route the materialize-spawn terminal token (its LAST stdout line). Every
+#      recognized token — `propagate`, `notify <reason>`, `drain <reason>`,
+#      `drain`, and (for now) `resolve merge-conflict` — is a log-and-exit-0
+#      disposition: the token was already echoed via the stdout passthrough, so
+#      the journal IS the disposition record; there is no self-close. A non-zero
+#      materialize-spawn exit → exit 2.
+#
+#      NOTE on `resolve merge-conflict`: dispatch-materialize-spawn no longer
+#      emits this token — its merge-conflict path now spawns a
+#      /dispatch-resolve-conflict bg job and emits `propagate` instead. The branch
+#      is retained as a defensive no-op (log the token, exit 0) so a future path
+#      that surfaces it again can never wedge the headless tick;
+#      test-dispatch-scripts.sh asserts it stays a safe exit-0 disposition.
+#
+# Requires `dangerouslyDisableSandbox: true` — the sub-scripts call `gh`, query
+# the local Claude daemon over a Unix socket, and write tmp state (see
+# `.claude/rules/sandbox.md`). dispatch-select-tick's `--wait` lock acquisition
+# also needs an elevated Bash `timeout` (see SKILL.md Step 0).
+#
+# Manual inspection of the autonomous tick's journal (once systemd drives it):
+#   journalctl --user -u dispatch-tick
+#
+# Exit codes: 0 on a routed disposition (any select-tick decision or
+# materialize-spawn terminal token); 2 on an internal/usage error surfaced on
+# stderr.
+#
+# NOT set -e: exits are handled explicitly (matching the sibling dispatch scripts).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+# Resolve the canonical main worktree — the --cwd for the advisory diagnose-main
+# and jit-reminder bg jobs. These are repo-global concerns (diagnose origin/main
+# CI; remind about a JIT issue), not feature-worktree work, so they must spawn
+# under one stable directory regardless of who invoked the tick. dispatch-spawn-job
+# dedups on `--name` *under <cwd>*: pinning --cwd to the main worktree keeps that
+# dedup consistent across the headless path (where $PWD is already the main
+# worktree) and the terminal `dispatch` command (where $PWD is the caller's
+# worktree) — otherwise a manual `dispatch` run could spawn a duplicate of a job
+# the headless tick already started. Same idiom as dispatch-spawn-tick /
+# dispatch-schedule-reseed; an explicit DISPATCH_TICK_MAIN_WORKTREE is
+# authoritative and bypasses the git lookup (tests rely on this).
+if [[ -n "${DISPATCH_TICK_MAIN_WORKTREE:-}" ]]; then
+  MAIN_WORKTREE="$DISPATCH_TICK_MAIN_WORKTREE"
+else
+  PROJECT_ROOT=$(resolve_project_root) \
+    || { echo "dispatch-tick: not in a git repo and DISPATCH_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
+  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+fi
+
+# --- Step 0: parse the single optional positional <N> ------------------------
+ARG=""
+MANUAL=""
+for a in "$@"; do
+  case "$a" in
+    --manual) MANUAL=1 ;;
+    --*)
+      echo "dispatch-tick: unknown flag '$a'" >&2
+      echo "usage: dispatch-tick [--manual] [<issue-or-PR-number>]" >&2
+      exit 2
+      ;;
+    *)
+      if [[ -n "$ARG" ]]; then
+        echo "dispatch-tick: unexpected extra arguments after <number>" >&2
+        echo "usage: dispatch-tick [--manual] [<issue-or-PR-number>]" >&2
+        exit 2
+      fi
+      ARG="${a#\#}"
+      ;;
+  esac
+done
+if [[ -n "$MANUAL" && -n "$ARG" ]]; then
+  echo "dispatch-tick: --manual cannot be combined with an explicit <number>" >&2
+  echo "usage: dispatch-tick [--manual] [<issue-or-PR-number>]" >&2
+  exit 2
+fi
+
+# --- Synthesize a session identity for the headless tick ---------------------
+# The terminal `dispatch` command may or may not run inside a .claude session:
+# when invoked from within a Claude session it inherits a stable
+# CLAUDE_CODE_SESSION_ID, so the `:-` fallback below never fires for it; when run
+# from a plain terminal the env var is absent. A systemd-launched tick likewise
+# starts from a clean environment (systemd-run --user forwards only PATH), so it
+# inherits no session id — yet dispatch-acquire-lock
+# hard-requires one (exit 2 if unset) to key the selection lock on a stable
+# holder. Declare a synthetic, stable id here, at the single headless entry
+# point, so every sub-script invoked below (dispatch-select-tick →
+# dispatch-acquire-lock, the materialize-spawn hold, and the release) sees one
+# consistent holder id across the acquire / hold / release of this tick. Derive
+# it from the systemd unit's INVOCATION_ID (set by systemd, identical across all
+# subprocesses of the unit and unique per tick), falling back to a random token
+# (openssl rand -hex 16) when INVOCATION_ID is absent, with the dispatch-tick PID
+# ($$) as last resort if openssl is unavailable. The random token (or PID) is
+# evaluated once at export time and frozen into the value, so all children see
+# the same fixed string. Exported once so all children agree. (#1068)
+#
+# INVOCATION_ID validation (#1068, same-user threat model): under systemd
+# INVOCATION_ID is always 32 lowercase hex chars. A manually-set value containing
+# a newline would truncate the recorded holder in the lock file (causing a
+# self-release noop → one-tick lock stall); a backslash or control sequence could
+# mislead the `awk -F'\t'` comparison in dispatch-acquire-lock or corrupt the
+# sentinel path (dispatch-tick-<token>.live). Drop any non-conforming value so
+# the random-token fallback fires instead. Hex digits plus hyphen cover both the
+# standard 32-hex form and any UUID-style variant.
+[[ "${INVOCATION_ID:-}" =~ ^[0-9a-fA-F-]+$ ]] || INVOCATION_ID=""
+#
+# Headless-liveness sentinel (#1068). A synthetic `headless:*` id is a bash
+# string that never appears in `claude agents --json`, so dispatch-acquire-lock's
+# resolve_holder_state cannot resolve its liveness through the daemon registry —
+# a concurrent tick would read this LIVE holder as dead and reclaim the lock
+# mid-selection. To give the headless holder a daemon-independent liveness
+# signal, write a sentinel containing this tick's PID alongside the shared lock
+# file and install a single EXIT/INT/TERM trap to remove it; resolve_holder_state
+# treats the holder as live iff the sentinel exists and its PID is alive. Only a
+# synthesized id writes a sentinel — a real inherited session id is governed by
+# the daemon path and writes none. $$ is the tick PID, recorded in the sentinel
+# content regardless of whether the id token uses it.
+#
+# Two failure modes, two dispositions (#1068):
+#   - The lock-file path cannot be resolved (not in a git repo and
+#     DISPATCH_LOCK_FILE unset): skip the sentinel silently. The daemon path
+#     still governs real ids, and a headless tick that cannot resolve the lock
+#     file also cannot acquire the lock (dispatch-acquire-lock exits 2), so it
+#     never reaches selection — there is nothing to serialize.
+#   - The path resolves but the sentinel write fails (e.g. an over-long token
+#     yielding ENAMETOOLONG while the short dispatch.lock stays writable): fail
+#     clear with exit 2. Continuing here would let this tick acquire the lock
+#     with no liveness sentinel, so a concurrent tick reads this LIVE holder as
+#     dead and reclaims mid-selection — the exact duplicate-spawn defect #1068
+#     closes. Per .claude/rules/code-style.md, fail clear rather than degrade
+#     the concurrency guarantee silently; the chain self-heals on the next tick.
+export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_ID:-$(openssl rand -hex 16 2>/dev/null || echo "$$")}}"
+if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
+  if SENTINEL_LOCK_FILE=$(dispatch_lock_file); then
+    SENTINEL=$(headless_sentinel_path "$CLAUDE_CODE_SESSION_ID" "$SENTINEL_LOCK_FILE")
+    mkdir -p "$(dirname "$SENTINEL")" 2>/dev/null || true
+    # Install the trap before the write so it also clears any partial sentinel
+    # if the write fails and we abort. A single EXIT trap covers every `exit`
+    # below this point — intended.
+    trap 'rm -f "$SENTINEL"' EXIT INT TERM
+    if ! printf '%s\n' "$$" >"$SENTINEL"; then
+      echo "dispatch-tick: ERROR: failed to write headless sentinel '$SENTINEL'; cannot signal liveness — aborting so a concurrent tick does not reclaim this lock mid-selection (#1068)" >&2
+      exit 2
+    fi
+  fi
+fi
+
+# --- Step 0.5: refresh rate-limit telemetry (headless source) ----------------
+# The budget reads below (dispatch-select-tick -> dispatch-target-workers) consume
+# cached telemetry in rate_limits.json, whose ONLY status-line writer never runs in
+# the headless chain (no session renders a status line). When the chain fully pauses
+# and its reseed timer later fires, re-reading that frozen snapshot reports the
+# still-capped pre-reset state and nothing spawns — the budget reopened but the tick
+# cannot observe it (#1127). Refresh telemetry from a non-status-line source FIRST,
+# so every budget read this tick (and any reseed it arms) is computed against fresh
+# data. Fail-safe: a probe failure (network, expired token, malformed headers) logs
+# one note and the tick proceeds on the cached file — a probe outage degrades to the
+# prior behavior rather than erroring the tick.
+if ! "$SCRIPT_DIR/dispatch-refresh-rate-limits"; then
+  echo "dispatch-tick: rate-limit refresh probe failed; proceeding on cached telemetry (#1127)" >&2
+fi
+
+# --- Step 1: select the target ------------------------------------------------
+# Capture select-tick's full stdout and echo every line through (jit:/calendar:
+# passthrough AND the decision line) so journald and a live relay see it all.
+if [[ -n "$MANUAL" ]]; then
+  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" --manual)
+elif [[ -n "$ARG" ]]; then
+  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" "$ARG")
+else
+  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick")
+fi
+SEL_RC=$?
+if [[ -n "$SEL_OUT" ]]; then
+  printf '%s\n' "$SEL_OUT"
+fi
+if (( SEL_RC != 0 )); then
+  echo "dispatch-tick: dispatch-select-tick exited $SEL_RC" >&2
+  exit 2
+fi
+
+DECISION=$(printf '%s\n' "$SEL_OUT" | tail -n 1)
+
+# --- Step 2: route the decision line (SKILL.md Table 1) ----------------------
+# Run materialize-spawn for a real target, then route its terminal token.
+# Echoes the materialize-spawn stdout through (supporting detail + token) and
+# routes on the LAST line (step 3 helper).
+run_materialize() {
+  local mat_out mat_rc token
+  mat_out=$("$SCRIPT_DIR/dispatch-materialize-spawn" "$@")
+  mat_rc=$?
+  if [[ -n "$mat_out" ]]; then
+    printf '%s\n' "$mat_out"
+  fi
+  if (( mat_rc != 0 )); then
+    echo "dispatch-tick: dispatch-materialize-spawn exited $mat_rc" >&2
+    exit 2
+  fi
+  token=$(printf '%s\n' "$mat_out" | tail -n 1)
+  # Every recognized terminal token is a log-and-exit-0 disposition for a headless
+  # tick: the token is already in the journal via the passthrough above, and there
+  # is no managed job to self-close. `resolve merge-conflict` is a defensive no-op
+  # — materialize-spawn now spawns a resolver bg job and emits `propagate`, so the
+  # token no longer reaches here, but the branch keeps it a safe exit-0 disposition.
+  case "$token" in
+    propagate|drain|drain\ *|notify\ *|resolve\ merge-conflict)
+      exit 0
+      ;;
+    *)
+      echo "dispatch-tick: dispatch-materialize-spawn emitted unexpected token '$token'" >&2
+      exit 2
+      ;;
+  esac
+}
+
+# shellcheck disable=SC2086  # decision fields are intentionally word-split
+set -f  # word-split only — disable glob expansion so a field containing *, ?, or
+        # [ ] (e.g. a jit `project`/`repo` config value) is not expanded against cwd
+set -- $DECISION
+set +f
+case "${1:-}" in
+  busy)
+    echo "dispatch-tick: another tick holds the lock (busy); nothing to do" >&2
+    exit 0
+    ;;
+  sync-failed|resolver-failed|empty|concurrency-cap)
+    echo "dispatch-tick: select-tick disposition '$1'; nothing spawned" >&2
+    exit 0
+    ;;
+  main-broken)
+    sha="${2:-}"
+    if [[ -z "$sha" ]]; then
+      echo "dispatch-tick: main-broken decision missing <sha>" >&2
+      exit 2
+    fi
+    "$SCRIPT_DIR/dispatch-spawn-job" --name diagnose-main --cwd "$MAIN_WORKTREE" \
+      "/dispatch-diagnose-main $sha" \
+      || echo "dispatch-tick: WARNING: dispatch-spawn-job (diagnose-main) failed; diagnose job lost" >&2
+    exit 0
+    ;;
+  jit-reminder)
+    repo="${2:-}" num="${3:-}" project="${4:-}" item="${5:-}"
+    if [[ -z "$repo" || -z "$num" || -z "$project" || -z "$item" ]]; then
+      echo "dispatch-tick: jit-reminder decision missing fields" >&2
+      exit 2
+    fi
+    "$SCRIPT_DIR/dispatch-spawn-job" --name "jit-reminder-$num" --cwd "$MAIN_WORKTREE" \
+      "/dispatch-jit-reminder $repo $num $project $item" \
+      || echo "dispatch-tick: WARNING: dispatch-spawn-job (jit-reminder-$num) failed; reminder job lost" >&2
+    exit 0
+    ;;
+  explicit)
+    num="${2:-}" gap="${3:-}"
+    if [[ -z "$num" || -z "$gap" ]]; then
+      echo "dispatch-tick: explicit decision missing <num>/<gap>" >&2
+      exit 2
+    fi
+    run_materialize "$num" explicit --gap "$gap"
+    ;;
+  pr)
+    # decision line shape: `pr <pr_num> <branch> <phase> <gap>` — fields $2..$5.
+    branch="${3:-}" gap="${5:-}"
+    if [[ -z "$branch" || -z "$gap" ]]; then
+      echo "dispatch-tick: pr decision missing <branch>/<gap>" >&2
+      exit 2
+    fi
+    # N is the issue the PR closes — the branch prefix, NEVER the PR number ($2).
+    N="${branch%%-*}"
+    run_materialize "$N" queue --gap "$gap"
+    ;;
+  issue)
+    num="${2:-}" gap="${3:-}"
+    if [[ -z "$num" || -z "$gap" ]]; then
+      echo "dispatch-tick: issue decision missing <num>/<gap>" >&2
+      exit 2
+    fi
+    run_materialize "$num" queue --gap "$gap"
+    ;;
+  *)
+    echo "dispatch-tick: unrecognized select-tick decision line '$DECISION'" >&2
+    exit 2
+    ;;
+esac

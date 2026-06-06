@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# office-hours — the single user entry point to the office-hours queue (#759).
+#
+# A thin dispatcher over office-hours-select-target, which is the single source
+# of truth for the queue: it enumerates the open dispatch:office-hours issues and
+# their <N>-* worktrees once, makes one per-item liveness call, and emits exactly
+# one disposition. This script reads that disposition and acts on it — it does no
+# enumeration or liveness checking of its own.
+#
+# Dispositions and the action each triggers:
+#   resume <sessionId>            → exec `claude --resume <sessionId>`: the user
+#                                   supplies the pending input to a still-live
+#                                   blocked session. No skill is loaded.
+#   parked-router <sessionId> ... → exec `claude --resume <sessionId>`: re-engage
+#                                   a target-less parked dispatch router (#1010),
+#                                   the artifact dispatch-self-close's continuation
+#                                   invariant keeps alive. No skill is loaded.
+#   office-hours <N> <phase> <pr> → exec `claude "/office-hours <N> <phase> <pr>"`:
+#                                   a fresh interactive session running the
+#                                   /office-hours skill, with the already-selected
+#                                   target passed as arguments so the skill skips
+#                                   re-selection. A Claude session + skill context
+#                                   is loaded only on this path — only when there
+#                                   is actual residue work.
+#   empty                         → print a queue-empty message and exit WITHOUT
+#                                   launching Claude. The empty queue is handled
+#                                   entirely in bash; no session is booted.
+#
+# Liveness now lives entirely in the selector, under a single UNKNOWN→skip
+# fail-safe convention — the old entry-vs-selector dual-convention coordination
+# (this script treating UNKNOWN as not-resumable while the selector treated it as
+# occupied) is gone, because the enumeration is no longer duplicated.
+#
+# Sandbox: the selector shells out to `claude agents --json` (via
+# lib-claude-agents.sh), which reaches the local daemon over a Unix socket — run
+# this script with `dangerouslyDisableSandbox: true`. See `.claude/rules/sandbox.md`.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Launch target only. The selector reads CLAUDE_AGENTS_CMD from the environment
+# for its own liveness queries (default `claude`); this script does not set it.
+CLAUDE_CMD="${OFFICE_HOURS_CLAUDE_CMD:-claude}"
+
+# One call to the single source of truth; dispatch on the returned verb.
+directive=$("$SCRIPT_DIR/office-hours-select-target")
+read -r verb a b c <<< "$directive"
+case "$verb" in
+  resume|parked-router)
+    # a = the live worker / parked-router sessionId.
+    exec "$CLAUDE_CMD" --resume "$a"
+    ;;
+  office-hours)
+    # a b c = <N> <phase> <pr-or-dash>, passed through so /office-hours Step 0
+    # uses them and skips re-selection.
+    exec "$CLAUDE_CMD" "/office-hours $a $b $c"
+    ;;
+  empty)
+    echo "office-hours: queue is empty — nothing to resume or start."
+    exit 0
+    ;;
+  *)
+    echo "office-hours: unexpected directive from office-hours-select-target: $directive" >&2
+    exit 1
+    ;;
+esac

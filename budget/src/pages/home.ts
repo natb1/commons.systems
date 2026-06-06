@@ -84,7 +84,7 @@ function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<
         <dt>Budget</dt><dd>${budgetCell}</dd>
         ${balanceRow}
         <dt>Group</dt><dd>${escapeHtml(groupName)}</dd>
-        <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
+        <dt>Statement</dt><dd>${txn.statementId ? `<button type="button" class="statement-source-link" data-statement-id="${escapeHtml(txn.statementId)}">view source</button>` : ""}</dd>
       </dl>`;
   return { txnIdAttr, noteCell, categoryCell, reimbursementCell, budgetCell, balanceRow, amountAttr, budgetIdAttr, timestampAttr, reimbursementAttr, categoryAttr, netAmountAttr, budgetNameAttr, detailDl };
 }

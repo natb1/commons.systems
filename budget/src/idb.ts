@@ -67,6 +67,24 @@ export interface UploadMeta {
   exportedAt: string;
 }
 
+export interface FileHandleMeta {
+  key: "fileHandle";
+  handle: FileSystemFileHandle;
+}
+
+export async function putFileHandle(handle: FileSystemFileHandle): Promise<void> {
+  await put("meta", { key: "fileHandle", handle });
+}
+
+export async function getFileHandle(): Promise<FileSystemFileHandle | undefined> {
+  const record = await get<FileHandleMeta>("meta", "fileHandle");
+  return record?.handle;
+}
+
+export async function clearFileHandle(): Promise<void> {
+  await deleteRecord("meta", "fileHandle");
+}
+
 export interface ParsedData {
   transactions: IdbTransaction[];
   budgets: IdbBudget[];
@@ -92,9 +110,15 @@ export async function storeParsedData(data: ParsedData): Promise<void> {
     stores[name] = tx.objectStore(name);
   }
 
-  // Clear all stores first
+  // Clear all stores first. The "meta" store is special: it mixes the
+  // parsed-data cache (the "upload" record) with capability records (the
+  // persisted "fileHandle"). A reload replaces the former and must preserve the
+  // latter, so delete only the "upload" key here rather than clearing the whole
+  // store — clearing it blindly would also drop the fileHandle, and skipping it
+  // blindly would silently retain any future meta key.
   const clearPromises: Promise<void>[] = [];
   for (const name of STORE_NAMES) {
+    if (name === "meta") continue;
     clearPromises.push(
       new Promise((resolve, reject) => {
         const req = stores[name].clear();
@@ -103,6 +127,13 @@ export async function storeParsedData(data: ParsedData): Promise<void> {
       }),
     );
   }
+  clearPromises.push(
+    new Promise((resolve, reject) => {
+      const req = stores.meta.delete("upload");
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    }),
+  );
   await Promise.all(clearPromises);
 
   // Write all records
@@ -170,9 +201,35 @@ export async function deleteRecord(storeName: StoreName, id: string): Promise<vo
 export async function clearAll(): Promise<void> {
   const db = await openDb();
   const tx = db.transaction([...STORE_NAMES], "readwrite");
+  const stores: Record<string, IDBObjectStore> = {};
   for (const name of STORE_NAMES) {
-    tx.objectStore(name).clear();
+    stores[name] = tx.objectStore(name);
   }
+
+  // Clear all non-meta stores fully. The "meta" store is special: it holds both
+  // the parsed-data cache ("upload" key) and persistent capability records
+  // ("fileHandle", "statementsDir"). Only delete the "upload" key so the
+  // capability records survive a data reset.
+  const clearPromises: Promise<void>[] = [];
+  for (const name of STORE_NAMES) {
+    if (name === "meta") continue;
+    clearPromises.push(
+      new Promise((resolve, reject) => {
+        const req = stores[name].clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      }),
+    );
+  }
+  clearPromises.push(
+    new Promise((resolve, reject) => {
+      const req = stores.meta.delete("upload");
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    }),
+  );
+  await Promise.all(clearPromises);
+
   await new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);

@@ -7,7 +7,7 @@
 # the normalized result to stdout.
 #
 # Usage:
-#   dispatch-config-load <projects|jit|target-workers>
+#   dispatch-config-load <projects|jit|statements|target-workers>
 #
 # Config files live in <project-root>/dispatch.config/. The project root is
 # resolved via resolve_project_root (lib.sh).
@@ -77,6 +77,10 @@
 # Timing-field semantics (cadence vs check-script) are validated by the JIT
 # engine, not here. This loader only checks types.
 #
+#   skill   string — optional; names a skill to run when this jit's reminder
+#           is selected. Absent → the reminder is summarized and the job
+#           stops. Not a timing field.
+#
 # Example (see jit.example.json):
 #   {
 #     "jits": [
@@ -88,11 +92,47 @@
 #     ]
 #   }
 #
+# ---- Schema: statements.json -----------------------------------------------
+#
+# Top-level object with a required "statements" array. Each element is an object
+# with these required fields:
+#
+#   key     string (non-empty) — local identifier for the scan entry. Also used
+#           as the issue label suffix: the scan stamps "statements:<key>" on
+#           filed parse-job issues.
+#   dir     string (non-empty) — absolute path to the shared statements folder
+#           to scan.
+#   repo    string (non-empty) — GitHub repo in "owner/repo" form.
+#   label   string (non-empty) — full label name stamped on filed parse-job
+#           issues, typically "statements:<key>".
+#   project string (non-empty) — "key" of an entry in projects.json.
+#
+# Optional fields (each must be the stated type if present):
+#
+#   debounce    string — duration string, e.g. "1h". How often the scan
+#               re-checks this entry (local rate-limiter; skips network calls
+#               within window).
+#   extensions  array  — filename extensions to scan, e.g. ["qfx","ofx","csv",
+#               "pdf"]. When absent the scan script applies its own default set.
+#   snapshot    string — absolute path to the encrypted `.benc` snapshot that
+#               the parse-job handler reads and overwrites in place.
+#
+# Example (see statements.example.json):
+#   {
+#     "statements": [
+#       { "key": "example-bank", "dir": "/home/user/statements/example-bank",
+#         "repo": "example-owner/example-repo",
+#         "label": "statements:example-bank",
+#         "project": "example-project",
+#         "debounce": "1h", "extensions": ["qfx","ofx","csv","pdf"] }
+#     ]
+#   }
+#
 # ---- Schema: target-workers.json -------------------------------------------
 #
 # Top-level object with optional tunables for `dispatch-target-workers`. Each
 # field must be a number when present; absent fields fall back to the
-# defaults baked into `dispatch-target-workers`. The eight percentage fields
+# defaults baked into `dispatch-target-workers`. The seven percentage fields
 # must be in (0, 100]; weekly_curve_power and max_concurrent_workers must be
 # > 0 with no upper bound. When both members of a pair are present, two
 # cross-field ordering checks apply: weekly_increment_floor_pct <=
@@ -104,11 +144,12 @@
 #   weekly_increment_floor_pct     default 1    per-window floor
 #   weekly_increment_cap_pct       default 10   per-window hard ceiling
 #   weekly_curve_power             default 1    convexity; >1 back-loads
-#   weekly_headroom_taper_pct      default 20   weekly headroom earning full F
-#   five_hour_target_floor_pct     default 50   F band floor
-#   five_hour_target_ceiling_pct   default 80   F band ceiling
-#   five_hour_headroom_taper_pct   default 15   5h headroom -> max workers
+#   five_hour_target_floor_pct     default 50   used_5h % at/below which workers
+#                                               are max
+#   five_hour_target_ceiling_pct   default 80   used_5h % at/above which workers
+#                                               are zero
 #   max_concurrent_workers         default 8
+#   exhaustion_threshold_pct       default 98   used_% at/near 100 treated as genuine token exhaustion
 #
 # Example (see target-workers.example.json):
 #   {
@@ -117,11 +158,10 @@
 #     "weekly_increment_floor_pct": 1,
 #     "weekly_increment_cap_pct": 10,
 #     "weekly_curve_power": 1,
-#     "weekly_headroom_taper_pct": 20,
 #     "five_hour_target_floor_pct": 50,
 #     "five_hour_target_ceiling_pct": 80,
-#     "five_hour_headroom_taper_pct": 15,
-#     "max_concurrent_workers": 8
+#     "max_concurrent_workers": 8,
+#     "exhaustion_threshold_pct": 98
 #   }
 set -euo pipefail
 
@@ -131,9 +171,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 CONFIG_TYPE="${1:-}"
 case "$CONFIG_TYPE" in
-  projects|jit|target-workers) ;;
+  projects|jit|statements|target-workers) ;;
   *)
-    echo "error: usage: dispatch-config-load <projects|jit|target-workers>" >&2
+    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers>" >&2
     exit 2
     ;;
 esac
@@ -246,15 +286,68 @@ case "$CONFIG_TYPE" in
           else
             empty
           end),
-          # optional timing fields — must be strings if present
-          (["remindAfterClose","dueAfterClose","dueAfterCreate","debounce"] |
+          # optional string fields — must be strings if present
+          (["remindAfterClose","dueAfterClose","dueAfterCreate","debounce","skill"] |
           .[] |
           . as $field |
           if ($item | has($field)) and ($item[$field] | type) != "string" then
             "jits[\($idx)]: \($field) must be a string if present, got \($item[$field] | type)"
           else
             empty
+          end),
+          # skill, if present, names a skill the jit-reminder path invokes via
+          # the Skill tool — constrain it to a skill-name slug so a malformed
+          # value is rejected at config load rather than reaching the caller.
+          (if ($item | has("skill")) and (($item.skill | type) == "string")
+              and (($item.skill | test("^[a-z][a-z0-9-]*$")) | not) then
+            "jits[\($idx)]: skill must be a lowercase skill-name slug (^[a-z][a-z0-9-]*$), got \"\($item.skill)\""
+          else
+            empty
           end)
+        end
+      end
+    ' "$CONFIG_FILE")
+    ;;
+  statements)
+    ERRORS=$(jq -r '
+      # top-level value must be an object; .statements must be an array
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      elif (.statements | type) != "array" then
+        "top-level .statements must be an array, got \(.statements | type)"
+      else
+        .statements | to_entries[] |
+        .value as $item |
+        (.key + 1) as $idx |
+        if ($item | type) != "object" then
+          "statements[\($idx)]: must be an object, got \($item | type)"
+        else
+          # required string fields (non-empty)
+          (["key","dir","repo","label","project"] |
+          .[] |
+          . as $field |
+          if ($item | has($field)) | not then
+            "statements[\($idx)]: missing required field \($field)"
+          elif ($item[$field] | type) != "string" then
+            "statements[\($idx)]: \($field) must be a string, got \($item[$field] | type)"
+          elif ($item[$field] | length) == 0 then
+            "statements[\($idx)]: \($field) must be a non-empty string"
+          else
+            empty
+          end),
+          # optional string fields — must be strings if present
+          (["debounce","snapshot"] |
+          .[] |
+          . as $field |
+          if ($item | has($field)) and ($item[$field] | type) != "string" then
+            "statements[\($idx)]: \($field) must be a string if present, got \($item[$field] | type)"
+          else
+            empty
+          end),
+          # optional array field: extensions
+          (if ($item | has("extensions")) and ($item.extensions | type) != "array" then
+            "statements[\($idx)]: extensions must be an array if present, got \($item.extensions | type)"
+          else empty end)
         end
       end
     ' "$CONFIG_FILE")
@@ -263,7 +356,7 @@ case "$CONFIG_TYPE" in
     # top-level value must be an object; all tunables are optional numbers.
     # `dispatch-target-workers` substitutes a baked-in default for any field
     # absent here, so absence is silent — only the type of present fields is
-    # checked. The eight percentage fields carry an additional `<= 100` bound;
+    # checked. The seven percentage fields carry an additional `<= 100` bound;
     # weekly_curve_power and max_concurrent_workers have no upper bound.
     ERRORS=$(jq -r '
       if type != "object" then
@@ -273,18 +366,20 @@ case "$CONFIG_TYPE" in
         (["target_weekly_usage_pct","weekly_terminal_pct",
           "weekly_increment_floor_pct",
           "weekly_increment_cap_pct","weekly_curve_power",
-          "weekly_headroom_taper_pct","five_hour_target_floor_pct",
-          "five_hour_target_ceiling_pct","five_hour_headroom_taper_pct",
-          "max_concurrent_workers"] |
+          "five_hour_target_floor_pct",
+          "five_hour_target_ceiling_pct",
+          "max_concurrent_workers",
+          "exhaustion_threshold_pct"] |
          .[] |
          . as $field |
          # The percentage fields are bounded (0, 100]; the other two are
          # unbounded above.
          ([ "target_weekly_usage_pct","weekly_terminal_pct",
             "weekly_increment_floor_pct",
-            "weekly_increment_cap_pct","weekly_headroom_taper_pct",
+            "weekly_increment_cap_pct",
             "five_hour_target_floor_pct","five_hour_target_ceiling_pct",
-            "five_hour_headroom_taper_pct" ] | index($field)) as $is_pct |
+            "exhaustion_threshold_pct" ]
+            | index($field)) as $is_pct |
          if ($cfg | has($field)) | not then
            empty
          elif ($cfg[$field] | type) != "number" then
@@ -315,6 +410,13 @@ case "$CONFIG_TYPE" in
             and ($cfg.five_hour_target_ceiling_pct | type) == "number"
             and ($cfg.five_hour_target_floor_pct > $cfg.five_hour_target_ceiling_pct)
          then "five_hour_target_floor_pct must be <= five_hour_target_ceiling_pct, got floor \($cfg.five_hour_target_floor_pct) > ceiling \($cfg.five_hour_target_ceiling_pct)"
+         else empty end),
+        (if ($cfg | has("exhaustion_threshold_pct"))
+            and ($cfg | has("five_hour_target_ceiling_pct"))
+            and ($cfg.exhaustion_threshold_pct | type) == "number"
+            and ($cfg.five_hour_target_ceiling_pct | type) == "number"
+            and ($cfg.exhaustion_threshold_pct <= $cfg.five_hour_target_ceiling_pct)
+         then "exhaustion_threshold_pct must be > five_hour_target_ceiling_pct (the override band collapses otherwise), got threshold \($cfg.exhaustion_threshold_pct) <= ceiling \($cfg.five_hour_target_ceiling_pct)"
          else empty end)
       end
     ' "$CONFIG_FILE")

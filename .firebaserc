@@ -5,6 +5,9 @@
   "targets": {
     "commons-systems": {
       "hosting": {
+        "office-hours": [
+          "cs-office-hours-888e"
+        ],
         "audio": [
           "cs-audio-ac47"
         ],

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"time"
@@ -138,6 +139,7 @@ type Statement struct {
 	BalanceDate         string  `json:"balanceDate"`
 	LastTransactionDate *string `json:"lastTransactionDate"`
 	Virtual             bool    `json:"virtual"`
+	SourceFile          string  `json:"sourceFile,omitempty"`
 }
 
 // Transaction is a single transaction in the JSON output.
@@ -160,14 +162,46 @@ type Transaction struct {
 	JournalEntryID        *string `json:"journalEntryId"`
 }
 
+// AccountType is the kind of a financial account. Mirrors the TypeScript
+// ACCOUNT_TYPES enum in budget/src/schema/enums.ts.
+type AccountType string
+
+const (
+	AccountTypeAsset     AccountType = "asset"
+	AccountTypeLiability AccountType = "liability"
+	AccountTypeEquity    AccountType = "equity"
+	AccountTypeIncome    AccountType = "income"
+	AccountTypeExpense   AccountType = "expense"
+)
+
+var validAccountTypes = map[AccountType]bool{
+	AccountTypeAsset:     true,
+	AccountTypeLiability: true,
+	AccountTypeEquity:    true,
+	AccountTypeIncome:    true,
+	AccountTypeExpense:   true,
+}
+
+// Valid reports whether t is one of the recognized account types.
+func (t AccountType) Valid() bool { return validAccountTypes[t] }
+
 // Account is a financial account record in the JSON output.
 type Account struct {
-	ID                 string   `json:"id"`
-	Institution        string   `json:"institution"`
-	Account            string   `json:"account"`
-	AccountType        string   `json:"accountType"`
-	OpeningBalance     *float64 `json:"openingBalance"`
-	OpeningBalanceDate *string  `json:"openingBalanceDate"`
+	ID                 string      `json:"id"`
+	Institution        string      `json:"institution"`
+	Account            string      `json:"account"`
+	AccountType        AccountType `json:"accountType"`
+	OpeningBalance     *float64    `json:"openingBalance"`
+	OpeningBalanceDate *string     `json:"openingBalanceDate"`
+}
+
+// Validate checks the account-type enum invariant, mirroring the TypeScript
+// parseRawAccount enum check (requireUploadEnum against ACCOUNT_TYPES).
+func (a Account) Validate() error {
+	if !a.AccountType.Valid() {
+		return fmt.Errorf("account type %q is not one of asset, liability, equity, income, expense", a.AccountType)
+	}
+	return nil
 }
 
 // JournalEntry is a double-entry journal entry in the JSON output.
@@ -191,6 +225,23 @@ type JournalLeg struct {
 	ReconciledAt      *string `json:"reconciledAt"`
 	ReconciledEventID *string `json:"reconciledEventId"`
 	StatementItemID   *string `json:"statementItemId"`
+}
+
+// Validate checks the debit/credit invariants, mirroring the TypeScript
+// parseRawJournalLeg rules: both debit and credit must be finite,
+// non-negative numbers, and they cannot both be positive simultaneously.
+// Both-zero is allowed.
+func (l JournalLeg) Validate() error {
+	if math.IsNaN(l.Debit) || math.IsInf(l.Debit, 0) || l.Debit < 0 {
+		return fmt.Errorf("journal leg debit must be a non-negative finite number (got %v)", l.Debit)
+	}
+	if math.IsNaN(l.Credit) || math.IsInf(l.Credit, 0) || l.Credit < 0 {
+		return fmt.Errorf("journal leg credit must be a non-negative finite number (got %v)", l.Credit)
+	}
+	if l.Debit > 0 && l.Credit > 0 {
+		return fmt.Errorf("journal leg cannot have both a debit and a credit (debit=%v, credit=%v)", l.Debit, l.Credit)
+	}
+	return nil
 }
 
 // Budget is a budget definition in the JSON output.
@@ -285,12 +336,39 @@ func ReadFile(path, password string) (Output, error) {
 	if out.Transactions == nil {
 		return Output{}, fmt.Errorf("parsing %s: missing required field 'transactions'", path)
 	}
+	// Note: ReadFile intentionally does not call out.Validate(). Validation is
+	// enforced at the serialization boundary (WriteFile) so that a file written
+	// by an older ETL version still loads; refusing to read it would strand the
+	// user with no migration path. Callers that re-emit a read Output go back
+	// through WriteFile, which re-validates before writing.
 	return out, nil
+}
+
+// Validate checks the double-entry invariants on the journal legs and accounts
+// before serialization, mirroring the TypeScript upload-path validation so the
+// two halves stay in lockstep. WriteFile calls Validate before serializing;
+// callers that only need the check can call Validate directly.
+func (o Output) Validate() error {
+	for i, l := range o.JournalLegs {
+		if err := l.Validate(); err != nil {
+			return fmt.Errorf("journalLegs[%d]: %w", i, err)
+		}
+	}
+	for i, a := range o.Accounts {
+		if err := a.Validate(); err != nil {
+			return fmt.Errorf("accounts[%d]: %w", i, err)
+		}
+	}
+	return nil
 }
 
 // WriteFile marshals data as indented JSON and writes it atomically to path
 // via a temp file and rename. If password is non-empty, the output is encrypted.
 func WriteFile(path string, data Output, password string) error {
+	if err := data.Validate(); err != nil {
+		return fmt.Errorf("validating output: %w", err)
+	}
+
 	b, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling JSON: %w", err)
