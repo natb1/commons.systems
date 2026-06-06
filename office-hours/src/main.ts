@@ -39,12 +39,16 @@ function updateAuthButton(user: User | null): void {
 render(getDemoReminders());
 
 async function refresh(): Promise<void> {
-  if (currentUser === null) {
+  const refreshUser = currentUser;
+  if (refreshUser === null) {
     render(getDemoReminders());
     return;
   }
   try {
-    const owner = await getOwnerReminders(db, NAMESPACE, currentUser);
+    const owner = await getOwnerReminders(db, NAMESPACE, refreshUser);
+    // Auth may have changed while the Firestore call was in flight — skip the
+    // render so the in-flight result does not clobber the already-updated view.
+    if (currentUser !== refreshUser) return;
     // A signed-in non-owner's query returns empty (rules deny the real data) —
     // fall back to the demo tier.
     render(owner.length > 0 ? owner : getDemoReminders());
