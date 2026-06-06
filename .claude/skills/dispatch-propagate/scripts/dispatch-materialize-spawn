@@ -32,8 +32,11 @@
 #
 # <issue-N> is always the ISSUE number (the model derives N=${branch%%-*} for a
 # `pr` row before calling). The two literal `[branch phase]` positionals the
-# queue selection carries are dropped — no sub-script consumes them; the spawn
-# never needs the phase (the worker re-derives it).
+# queue selection carries are still dropped — no sub-script consumes them. The
+# spawn does consult the phase, but the #1109-recomputed PHASE (Step 5), not the
+# carried positional: it maps PHASE → worker model via dispatch-phase-model so
+# the qa phase launches on Sonnet (#1171); every other phase yields no --model
+# and inherits the session default (Opus).
 #
 # Terminal tokens (the last stdout line is always exactly one of):
 #   propagate              the worker spawned (or deduped); the chain advances.
@@ -185,7 +188,7 @@ WAITING_N=""
 process_one_target() {
   local n="$1" mode="$2"
   local PR LEAF ISSUE_STATE BLOCKERS WT_DECISION WT_ACTION WT_REST
-  local WORKTREE_PATH BRANCH PROJECT_ROOT rc wt_basename PHASE
+  local WORKTREE_PATH BRANCH PROJECT_ROOT rc wt_basename PHASE WORKER_MODEL worker_args
 
   # --- Step 4: explicit-path guards (skipped entirely in queue mode) ---------
   # Queue rows were already vetted by dispatch-select-target (leaf, blockers,
@@ -348,7 +351,20 @@ process_one_target() {
   if ! reservation_write "$wt_basename" "$n" "${CLAUDE_CODE_SESSION_ID:-}" 1>&2; then
     echo "dispatch-materialize-spawn: reservation_write failed for $wt_basename; spawning without a ledger entry (budget may undercount this slot)" >&2
   fi
-  if "$SCRIPT_DIR/dispatch-spawn-worker" "$n" "$WORKTREE_PATH" 1>&2; then
+  # Resolve the worker model from the #1109-recomputed PHASE (#1171): the
+  # phase→model map (dispatch-phase-model) returns a non-empty model only for
+  # mapped phases (qa → claude-sonnet-4-6); every other phase yields empty, so
+  # no --model is forwarded and the worker inherits the session default (Opus).
+  # The [[ -n "$PHASE" ]] guard avoids calling dispatch-phase-model with an empty
+  # arg (its usage error) in the defensive case where dispatch-phase exited 3
+  # (pending CI); in normal operation PHASE is non-empty here — queue targets are
+  # CI-pre-gated and explicit targets pass the Step 6a readiness gate.
+  WORKER_MODEL=""
+  [[ -n "$PHASE" ]] && WORKER_MODEL=$("$SCRIPT_DIR/dispatch-phase-model" "$PHASE")
+  worker_args=()
+  [[ -n "$WORKER_MODEL" ]] && worker_args+=(--model "$WORKER_MODEL")
+  worker_args+=("$n" "$WORKTREE_PATH")
+  if "$SCRIPT_DIR/dispatch-spawn-worker" "${worker_args[@]}" 1>&2; then
     # Leave the marker in place (#1048): the spawn is async (dispatch-spawn-worker
     # passes --no-verify), so the worker has not registered yet. The marker is the
     # in-flight budget/selection contribution that a concurrent acquirer's
