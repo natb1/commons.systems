@@ -43,8 +43,14 @@ export function createFirebaseMediaSource<
 >(config: FirebaseMediaSourceConfig<T>): MediaSource<T> {
   const { queries, cache, storage, storageNamespace, viewerEmail } = config;
 
-  async function downloadUrl(storagePath: string): Promise<string> {
-    return getDownloadURL(ref(storage, `${storageNamespace}/${storagePath}`));
+  /**
+   * The namespaced storage path. Used as both the Firebase Storage ref and the
+   * derived-cache key so the cache key carries the namespace — a single
+   * `LruBlobCache` shared across sources with different `storageNamespace`
+   * values cannot collide on a bare `storagePath`.
+   */
+  function namespacedPath(storagePath: string): string {
+    return `${storageNamespace}/${storagePath}`;
   }
 
   return {
@@ -60,15 +66,16 @@ export function createFirebaseMediaSource<
     },
 
     async resolveToBlob(item) {
-      const cached = await cache.getEntry<ArrayBuffer>(item.storagePath);
+      const key = namespacedPath(item.storagePath);
+      const cached = await cache.getEntry<ArrayBuffer>(key);
       if (cached) return cached;
 
-      const url = await downloadUrl(item.storagePath);
+      const url = await getDownloadURL(ref(storage, key));
       const res = await fetch(url);
-      if (!res.ok) throw new Error(`Media fetch failed: ${res.status}`);
+      if (!res.ok) throw new Error(`Media fetch failed: ${res.status} (${item.storagePath})`);
       const buf = await res.arrayBuffer();
 
-      await cache.putEntry(item.storagePath, buf);
+      await cache.putEntry(key, buf);
       return buf;
     },
   };

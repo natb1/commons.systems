@@ -36,14 +36,11 @@ function freshCache() {
   return createLruBlobCache({ name: `mediautil-test-${++cacheCounter}`, version: 1 });
 }
 
-function fakeQueries(
-  overrides: Partial<MediaQueries<TestItem>> = {},
-): MediaQueries<TestItem> {
+function fakeQueries(): MediaQueries<TestItem> {
   return {
     getPublicMedia: vi.fn(async () => [ITEM]),
     getAllAccessibleMedia: vi.fn(async (_email: string) => [ITEM, { ...ITEM, id: "a2" }]),
     getMediaItem: vi.fn(async (id: string) => (id === ITEM.id ? ITEM : null)),
-    ...overrides,
   };
 }
 
@@ -123,13 +120,13 @@ describe("resolveToBlob", () => {
     expect(getDownloadURL).toHaveBeenCalledWith({ path: "print/books/a1.pdf" });
     expect(f).toHaveBeenCalledWith("https://files.test/print/books/a1.pdf");
     expect(new Uint8Array(out)).toEqual(new Uint8Array(body));
-    expect(await cache.getEntry<ArrayBuffer>("books/a1.pdf")).not.toBeNull();
+    expect(await cache.getEntry<ArrayBuffer>("print/books/a1.pdf")).not.toBeNull();
   });
 
   it("returns cached bytes without fetching on a cache hit", async () => {
     const { source, cache } = makeSource();
     const cached = new TextEncoder().encode("cached").buffer;
-    await cache.putEntry("books/a1.pdf", cached);
+    await cache.putEntry("print/books/a1.pdf", cached);
     const f = stubFetch(new ArrayBuffer(0));
 
     const out = await source.resolveToBlob(ITEM);
@@ -142,6 +139,6 @@ describe("resolveToBlob", () => {
   it("throws when the fetch response is not ok", async () => {
     const { source } = makeSource();
     stubFetch(new ArrayBuffer(0), false, 404);
-    await expect(source.resolveToBlob(ITEM)).rejects.toThrow("Media fetch failed: 404");
+    await expect(source.resolveToBlob(ITEM)).rejects.toThrow("Media fetch failed: 404 (books/a1.pdf)");
   });
 });
