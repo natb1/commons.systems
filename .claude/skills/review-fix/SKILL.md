@@ -391,9 +391,12 @@ Dismissed, false-positive, Deferred, and out-of-scope findings are **not**
 implemented here. If there are no remaining required/Fixed findings to apply,
 skip the implementation subagents.
 
-Then fork **one** `/commit-merge-push` via the Agent tool to commit every pending
-working-tree change — `/code-review`'s Step 1a edits plus these implementation
-edits — and push. If there were no code changes at all, `/commit-merge-push`
+Then fork **one** `/commit-merge-push` to commit every pending working-tree change —
+`/code-review`'s Step 1a edits plus these implementation edits — and push. Issue an
+Agent tool call with `subagent_type: general-purpose` and `model: sonnet` whose
+prompt invokes `/commit-merge-push` via the Skill tool, the canonical fork recipe
+`/implement-unit` Step 2 documents (`subagent_type` is `general-purpose`, never the
+skill name). If there were no code changes at all, `/commit-merge-push`
 tolerates the no-op and creates no commit. Even on that no-op it pushes `origin
 HEAD`, so it carries any pending local merge (left by `dispatch-merge-main` /
 `/dispatch-resolve-conflict`) to origin; Step 8's flush guard is the
