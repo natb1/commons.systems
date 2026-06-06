@@ -3729,6 +3729,8 @@ mapfile -t oh_argv < "$TMPDIR_TEST/oh-bg-argv"
 assert_eq "fresh: --bg" "--bg" "${oh_argv[0]:-}"
 assert_eq "fresh: --name" "--name" "${oh_argv[1]:-}"
 assert_eq "fresh: name is the worktree basename" "42-x" "${oh_argv[2]:-}"
+assert_eq "fresh: --permission-mode" "--permission-mode" "${oh_argv[3]:-}"
+assert_eq "fresh: permission mode is auto" "auto" "${oh_argv[4]:-}"
 assert_eq "fresh: prompt is /office-hours with args" "/office-hours 42 implement -" "${oh_argv[5]:-}"
 # The --bg job was born in the worktree (cwd = worktree path).
 oh_pwd=$(head -1 "$TMPDIR_TEST/oh-pwd-log" 2>/dev/null || true)
@@ -11162,6 +11164,30 @@ assert_eq "badtoken-oh: malformed phase → exit 2" "2" "$oh_rc"
 # Bad pr token (neither a positive integer nor '-').
 if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement x "$WORKER_TARGET_WORKTREE" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
 assert_eq "badtoken-oh: malformed pr token → exit 2" "2" "$oh_rc"
+spawn_office_hours_teardown
+
+# --- Test 8: unknown registry exits 1 ----------------------------------------
+
+echo "Test: an unparseable session registry causes dispatch-spawn-office-hours to exit 1"
+spawn_office_hours_setup
+# A registry that is not a JSON array: lib-claude-agents.sh's
+# claude_sessions_under (used by dispatch-spawn-job's dedup) and
+# claude_sessions_with_name (used by dispatch-spawn-office-hours' resolve) both
+# return 1 (UNKNOWN). The dedup treats UNKNOWN as "a session may be running"
+# and emits 'deduped'; the resolve then cannot query the registry for the
+# session id — dispatch-spawn-office-hours must exit 1 with a diagnostic.
+printf '%s' 'not-a-json-array' > "$SPAWN_WORKER_REGISTRY"
+write_fake_spawn_worker_claude
+if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
+assert_eq "unknown-registry-oh: dispatch-spawn-office-hours exits 1" "1" "$oh_rc"
+# No --bg invocation was recorded — the dedup guard suppressed the spawn.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: unknown-registry-oh: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unknown-registry-oh: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
+fi
 spawn_office_hours_teardown
 
 # ============================================================================
