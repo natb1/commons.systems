@@ -91,7 +91,7 @@ The router runs a single selection ladder, top to bottom. The ladder spans both 
 2. **JIT scan** — surface the most-overdue jit-reminder. Bypasses the `origin/main` health gate so reminders fire even when main is red.
 3. **`origin/main` health gate** — if main is red, stop; do not start new work. [`/dispatch-diagnose-main`](.claude/skills/dispatch-diagnose-main/SKILL.md) reports the failing checks.
 4. **Sweep orphan adoption** — adopt a stray `<N>-…` worktree with no live session (see #847).
-5. **Topic-category × priority × phase ladder.** Three tiers nest from outermost to innermost. Topic categories, highest first: `bug` → `testing infrastructure` → `dispatch` → `other`. Within each topic category, items carrying the `priority` label rank above items without it (`priority` is human-applied; the selector never adds it automatically). Within each `(topic, priority)` bucket, the phase ladder is, highest first: `security` → `review` → `code-review` → `qa` → `implement`. The selector exhausts one bucket's full phase ladder before moving to the next.
+5. **Topic-category × priority × phase ladder.** Three tiers nest from outermost to innermost. Topic categories, highest first: `security` → `bug` → `testing infrastructure` → `dispatch` → `other`. Within each topic category, items carrying the `priority` label rank above items without it (`priority` is human-applied; the selector never adds it automatically). Within each `(topic, priority)` bucket, the phase ladder is, highest first: `security` → `review` → `code-review` → `qa` → `implement`. The selector exhausts one bucket's full phase ladder before moving to the next.
 
 The QA reorder (`qa` above `implement` rather than at the bottom of the ladder) lands with #758; the README documents the post-#758 target. Concurrent worker count scales with the rate-limit window per #845.
 
@@ -103,7 +103,7 @@ Local `dispatch.config/jit.json` declares recurring "just-in-time" issues. The e
 2. Open-issue guard — skip if the previous jit issue for that key is still open.
 3. Create the next issue when its `remindAfterClose` (or `dueAfterCreate`) cadence has elapsed.
 
-Every jit issue carries a `jit:<key>` label and is tracked in its configured GitHub project. Jit-reminders that produce dispatch-queue work surface ahead of the queue ladder; jit-reminders that run as office-hours sessions are covered in the [Office Hours Queue](#office-hours-queue) spine. See #769.
+Every jit issue carries a `jit:<key>` label and is tracked in its configured GitHub project. Jit-reminders that produce dispatch-queue work surface ahead of the queue ladder; jit-reminders that run as office-hours sessions are covered in the [Office Hours Queue](#office-hours-queue) spine. A jit may carry an optional `skill` field: when selected, the reminder job runs that named skill as an office-hours session instead of only summarizing; absent → summarize-and-stop (unchanged). See #769.
 
 With no `dispatch.config/jit.json` present the engine is a no-op.
 
@@ -115,7 +115,62 @@ Tunables live in `dispatch.config/target-workers.json` (see `dispatch-propagate/
 
 ### Office Hours Queue
 
-*See #858 for the office-hours queue spine.*
+The office-hours queue is the human-driven counterpart to the dispatch queue.
+Items land here when work needs live human attention: an inbound idea to
+triage, a requirement that changed mid-flight, a roadmap reassessment, or a
+jit-reminder that runs as a session rather than autonomously. The
+`dispatch:office-hours` label is the signal an item belongs here (see [Two
+queues, two control paths](#two-queues-two-control-paths)). Prioritization
+across both queues is the dispatch router's single selection ladder — see
+[Prioritization](#3-prioritization); office-hours items are surfaced by the
+label, not by a separate ranking.
+
+#### 1. Entry point
+
+- `office-hours` — the single user entry point to the queue (see #759). It
+  resumes a blocked live session for a `dispatch:office-hours`-labeled item if
+  one exists, or starts a fresh
+  [`/office-hours`](.claude/skills/office-hours/SKILL.md) session for a
+  sessionless labeled item.
+- [`/office-hours`](.claude/skills/office-hours/SKILL.md) — the body of a fresh
+  session. It picks up a labeled item, runs the user-input portion (plan
+  approval for an `implement` item, a judgment-call walkthrough for a `qa`
+  item, or an accept/reject deviation review for a completed-but-deviating
+  item), clears the label on completion, and hands back to the dispatch chain.
+
+#### 2. Pre-dispatch intake
+
+[`/ready`](.claude/skills/ready/SKILL.md) evaluates a candidate issue or a
+plain-text description across seven quality categories and returns an
+evaluation a human can act on before the dispatch chain reaches the item. Use
+it to triage an inbound idea or a backlogged issue into ready shape before it
+competes in the selection ladder.
+
+#### 3. Mid-flight requirement changes
+
+[`/new-requirement`](.claude/skills/new-requirement/SKILL.md) handles a
+requirement introduced or amended mid-flight. It clarifies the change, updates
+the remote issues, syncs context, and revises the active plan — keeping the
+worktree's open work coherent with the new requirement instead of forcing a
+restart.
+
+#### 4. Periodic reassessment
+
+`/roadmap` (see #771 for the rename; currently
+[`/roadmap-debate`](.claude/skills/roadmap-debate/SKILL.md)) runs a structured
+five-persona roadmap reassessment: each persona analyzes project state, the
+synthesis is debated, the skill stops for user feedback, then proposes edits.
+Use it to step back from the queue and ask whether the priority ladder itself
+still matches the project's direction.
+
+#### 5. Skill-running JIT reminders
+
+Most jit-reminders surface a summary for a human to read; some instead run a
+skill in an office-hours session. [`/digest`](.claude/skills/digest/SKILL.md)
+(see #769) is the example: a periodic digest compiled in a session rather than
+executed autonomously. The jit engine itself lives in the Dispatch Queue spine's
+[JIT-on-dispatch](#4-jit-on-dispatch) subsection — this covers only the
+office-hours-side surfacing.
 
 ### Key design decisions for adopters
 

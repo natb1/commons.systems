@@ -322,9 +322,9 @@ func buildAccounts(tents []*tentative, referenced map[string]bool) []export.Acco
 
 	accounts := []export.Account{}
 	for id, ra := range reals {
-		acctType := "asset"
+		acctType := export.AccountTypeAsset
 		if ra.liability {
-			acctType = "liability"
+			acctType = export.AccountTypeLiability
 		}
 		accounts = append(accounts, export.Account{
 			ID:          id,
@@ -336,11 +336,12 @@ func buildAccounts(tents []*tentative, referenced map[string]bool) []export.Acco
 
 	// Placeholder accounts: emit only those referenced by an emitted leg.
 	for _, ph := range []struct {
-		id, account, acctType string
+		id, account string
+		acctType    export.AccountType
 	}{
-		{acctUncategorizedExpense, "Uncategorized Expense", "expense"},
-		{acctUncategorizedIncome, "Uncategorized Income", "income"},
-		{acctUnresolvedTransfers, "Unresolved Transfers", "asset"},
+		{acctUncategorizedExpense, "Uncategorized Expense", export.AccountTypeExpense},
+		{acctUncategorizedIncome, "Uncategorized Income", export.AccountTypeIncome},
+		{acctUnresolvedTransfers, "Unresolved Transfers", export.AccountTypeAsset},
 	} {
 		if !referenced[ph.id] {
 			continue

@@ -41,4 +41,4 @@ if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
 fi
 
 # Run smoke tests
-BASE_URL="$BASE_URL" npx playwright test --config e2e/playwright.config.ts --grep @smoke
+BASE_URL="$BASE_URL" npx playwright test --config e2e/playwright.config.ts --grep @hosting --project=desktop

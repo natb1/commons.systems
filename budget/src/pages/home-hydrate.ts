@@ -9,6 +9,7 @@ import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/components/autocomplete";
 import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
 import { renderTransactionRows, compareByTimestampDesc, SCROLL_BATCH_WEEKS, serializeChartTransactions } from "./home.js";
+import { openStatementSource } from "./statement-source-view.js";
 import { TRANSACTIONS_APPENDED_EVENT, type SerializedChartTransaction } from "./home-chart.js";
 
 /**
@@ -197,6 +198,20 @@ export function hydrateTransactionTable(container: HTMLElement): void {
     const target = e.target as HTMLElement;
     if (target.closest("summary") && target.closest("input")) {
       e.preventDefault();
+    }
+
+    // "view source" opens the read-only source-statement viewer. The button
+    // lives in the expanded details (not the summary), so toggling is not a
+    // concern, but suppress default/propagation defensively to keep the click
+    // off the accordion.
+    const sourceLink = target.closest(".statement-source-link");
+    if (sourceLink instanceof HTMLElement) {
+      e.preventDefault();
+      e.stopPropagation();
+      const statementId = sourceLink.dataset.statementId;
+      if (statementId) {
+        void openStatementSource(statementId);
+      }
     }
   });
 
