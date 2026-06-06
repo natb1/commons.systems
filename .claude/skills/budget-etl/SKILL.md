@@ -34,7 +34,10 @@ macOS users with the `budget` keychain entry may alternatively pass
 All paths come from `dispatch.config/budget-etl.json` (uncommitted, per-machine). Load and parse it from the worktree root:
 
 ```bash
-CFG=$(.claude/skills/dispatch-propagate/scripts/dispatch-config-load budget-etl)
+CFG=$(.claude/skills/dispatch-propagate/scripts/dispatch-config-load budget-etl) || {
+  echo "budget-etl config present but invalid — see the error above" >&2
+  exit 1
+}
 if [[ "$CFG" == "no-config" ]]; then
   echo "no dispatch.config/budget-etl.json — copy .claude/skills/dispatch-propagate/scripts/budget-etl.example.json to dispatch.config/budget-etl.json and set the four paths" >&2
   exit 1
@@ -51,11 +54,12 @@ Verify the directories exist and fail loudly if not (no silent fallback to a sta
 
 ```bash
 [[ -d "$downloads" ]] || { echo "downloads dir missing: $downloads" >&2; exit 1; }
+[[ -d "$statements" ]] || { echo "Drive mount missing (statements): $statements" >&2; exit 1; }
 [[ -d "$(dirname "$current")" ]] || { echo "Drive mount missing (parent of current): $(dirname "$current")" >&2; exit 1; }
 [[ -d "$snapshotDir" ]] || [[ -d "$(dirname "$snapshotDir")" ]] || { echo "Drive mount missing (snapshotDir): $snapshotDir" >&2; exit 1; }
 ```
 
-`current` itself may not exist on a first run, but its parent (the Drive mount) must. `$downloads`, `$statements`, `$snapshotDir`, and `$current` carry through the later steps — every reference stays double-quoted because paths may contain spaces (`My Drive`).
+`current` itself may not exist on a first run, but its parent (the Drive mount) must. `$statements` is expected to already exist as a pre-existing archive directory — if the Drive is unmounted it will not be present, so the check catches a missing/stale mount before any files are moved. `$downloads`, `$statements`, `$snapshotDir`, and `$current` carry through the later steps — every reference stays double-quoted because paths may contain spaces (`My Drive`).
 
 ## Step 1 — Ingest downloads into the statements archive
 

@@ -446,7 +446,11 @@ case "$CONFIG_TYPE" in
     ;;
   budget-etl)
     # top-level value must be an object; four required non-empty string path
-    # fields. Paths may contain spaces — only type/emptiness is checked here.
+    # fields. Paths may contain spaces. Each must be an absolute path with no
+    # ".." component — these values become filesystem destinations the budget-etl
+    # skill writes to and reads bank statements from, so a relative or
+    # parent-traversing path could redirect those writes outside the intended
+    # Drive mount.
     ERRORS=$(jq -r '
       if type != "object" then
         "top-level value must be a JSON object, got \(type)"
@@ -461,6 +465,10 @@ case "$CONFIG_TYPE" in
            "\($field) must be a string, got \($cfg[$field] | type)"
          elif ($cfg[$field] | length) == 0 then
            "\($field) must be a non-empty string"
+         elif ($cfg[$field] | startswith("/") | not) then
+           "\($field) must be an absolute path (start with /), got \($cfg[$field])"
+         elif ($cfg[$field] | test("(^|/)\\.\\.(/|$)")) then
+           "\($field) must not contain a \"..\" path component, got \($cfg[$field])"
          else
            empty
          end)

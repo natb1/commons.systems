@@ -8044,6 +8044,57 @@ assert_eq "7m absent budget-etl.json exits 0" "0" "$rc"
 assert_eq "7m absent budget-etl.json prints no-config" "no-config" "$out"
 config_teardown
 
+# --- Test 7n: budget-etl.json relative path field exits 1 --------------------
+# Path fields become filesystem destinations the skill writes to; a relative
+# path could redirect writes off the intended Drive mount, so the schema
+# requires an absolute path.
+
+echo "Test: budget-etl.json with a relative downloads path exits 1 and names the field"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
+{
+  "downloads": "relative/Downloads",
+  "statements": "/mnt/g/My Drive/budget/statements",
+  "snapshotDir": "/mnt/g/My Drive/budget/snapshots",
+  "current": "/mnt/g/My Drive/budget/budget.enc.json"
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>&1 1>/dev/null) || rc=$?
+assert_eq "7n relative downloads exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"downloads"* && "$err" == *"absolute"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7n relative downloads error names the field and 'absolute'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7n relative downloads error names the field and 'absolute'"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7o: budget-etl.json path with a ".." component exits 1 -------------
+
+echo "Test: budget-etl.json with a '..' component in statements exits 1 and names the field"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
+{
+  "downloads": "/mnt/c/Users/example/Downloads",
+  "statements": "/mnt/g/My Drive/../../../etc",
+  "snapshotDir": "/mnt/g/My Drive/budget/snapshots",
+  "current": "/mnt/g/My Drive/budget/budget.enc.json"
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>&1 1>/dev/null) || rc=$?
+assert_eq "7o '..' statements exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"statements"* && "$err" == *".."* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7o '..' statements error names the field and '..'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7o '..' statements error names the field and '..'"
+  echo "    stderr: $err"
+fi
+config_teardown
+
 # ============================================================================
 # ingest-downloads.sh tests
 # ============================================================================
@@ -8099,6 +8150,24 @@ else
 fi
 ingest_teardown
 
+# --- Test: missing statements dir — exits 1 with descriptive error -----------
+
+echo "Test: ingest-downloads.sh exits 1 when statements dir does not exist"
+ingest_setup
+rm -rf "$ING_TMP/st"   # remove the statements dir to simulate unmounted drive
+printf '<ORG>AMEX</ORG>\n<ACCTID>tok|12345</ACCTID>\n' > "$ING_TMP/dl/amex.qfx"
+rc=0
+err=$(bash "$ING_TMP/scripts/ingest-downloads.sh" "$ING_TMP/dl" "$ING_TMP/st" 2>&1 >/dev/null) || rc=$?
+assert_eq "ingest-missing-statements: exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -qF "statements"; then
+  PASS=$((PASS + 1)); echo "  PASS: ingest-missing-statements: stderr mentions statements"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ingest-missing-statements: stderr mentions statements"
+  echo "    stderr: $err"
+fi
+ingest_teardown
+
 # --- Test: collision — timestamp-suffixed name used; original not overwritten -
 
 echo "Test: ingest-downloads.sh uses a timestamp-suffixed name on collision"
@@ -8141,6 +8210,35 @@ if printf '%s' "$out" | grep -qE 'bad\.qfx|NOPE'; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: ingest-unknown-org: output mentions the bad file or ORG"
   echo "    output: $out"
+fi
+ingest_teardown
+
+# --- Test: path traversal — a crafted ACCTID is rejected, nothing moved ------
+# identify-qfx.sh canonicalizes ACCTID by taking the segment after the last '|',
+# without stripping path separators — so <ACCTID>tok|../../escape</ACCTID>
+# yields account "../../escape". ingest-downloads.sh must reject any
+# institution/account containing "/" or ".." before mkdir -p / mv, otherwise a
+# crafted statement file in Downloads escapes the archive root (arbitrary write).
+
+echo "Test: ingest-downloads.sh rejects a path-traversal account and moves nothing"
+ingest_setup
+printf '<ORG>AMEX</ORG>\n<ACCTID>tok|../../escape</ACCTID>\n' > "$ING_TMP/dl/evil.qfx"
+rc=0
+err=$(bash "$ING_TMP/scripts/ingest-downloads.sh" "$ING_TMP/dl" "$ING_TMP/st" 2>&1 >/dev/null) || rc=$?
+assert_eq "ingest-traversal: exits 1" "1" "$rc"
+assert_eq "ingest-traversal: evil.qfx NOT moved (still in dl)" "yes" \
+  "$([[ -f "$ING_TMP/dl/evil.qfx" ]] && echo yes || echo no)"
+# Nothing created inside or beside the statements tree.
+assert_eq "ingest-traversal: no file written under statements dir" "0" \
+  "$(find "$ING_TMP/st" -type f | wc -l | tr -d ' ')"
+assert_eq "ingest-traversal: no file escaped to ING_TMP/escape" "no" \
+  "$([[ -e "$ING_TMP/escape" ]] && echo yes || echo no)"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -qiE 'unsafe|path component'; then
+  PASS=$((PASS + 1)); echo "  PASS: ingest-traversal: stderr flags an unsafe path component"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ingest-traversal: stderr flags an unsafe path component"
+  echo "    stderr: $err"
 fi
 ingest_teardown
 

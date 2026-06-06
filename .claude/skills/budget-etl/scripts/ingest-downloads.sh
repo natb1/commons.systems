@@ -19,6 +19,12 @@ if [[ ! -d "$downloads" ]]; then
   exit 1
 fi
 
+if [[ ! -d "$statements" ]]; then
+  echo "ingest-downloads: statements dir does not exist or is not a directory: $statements" >&2
+  echo "ingest-downloads: verify the Drive mount is present before running" >&2
+  exit 1
+fi
+
 # Temp file for capturing identify-qfx.sh stderr per file. Cleaned on exit.
 err_tmp="$(mktemp "${TMPDIR:-/tmp}/ingest-qfx-err.XXXXXX")"
 trap 'rm -f "$err_tmp"' EXIT
@@ -56,8 +62,17 @@ for file in "${files[@]}"; do
     # Output line: <file>\t<institution>\t<account>
     institution="$(printf '%s' "$out" | cut -f2)"
     account="$(printf '%s' "$out" | cut -f3)"
-    institutions+=("$institution")
-    accounts+=("$account")
+    # institution/account become path components under $statements. They derive
+    # from file content (the QFX <ACCTID>), so reject any value that could escape
+    # the archive root — empty, a slash, or a ".." component — before it reaches
+    # mkdir -p / mv. A crafted statement otherwise writes outside $statements.
+    if [[ -z "$institution" || "$institution" == */* || "$institution" == *..* \
+       || -z "$account" || "$account" == */* || "$account" == *..* ]]; then
+      failures+=("$file: unsafe path component from classifier (institution='$institution' account='$account')")
+    else
+      institutions+=("$institution")
+      accounts+=("$account")
+    fi
   fi
 done
 
