@@ -22,8 +22,8 @@ func TestRenderTemplates(t *testing.T) {
 		"tpl/{{.AppName}}/readme.txt":          {Data: []byte("static content")},
 	}
 
-	if err := renderTemplates(fs, outDir, "tpl", "out", data); err != nil {
-		t.Fatalf("renderTemplates error: %v", err)
+	if err := RenderTemplates(fs, outDir, "tpl", "out", data); err != nil {
+		t.Fatalf("RenderTemplates error: %v", err)
 	}
 
 	// Static files are copied verbatim
