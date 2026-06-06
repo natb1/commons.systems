@@ -64,8 +64,15 @@ describe("web app manifest", () => {
   });
 
   it("index.html links to manifest.webmanifest", () => {
-    expect(html).toContain(`rel="manifest"`);
-    expect(html).toContain(`href="/manifest.webmanifest"`);
+    expect(html).toContain(`rel="manifest" href="/manifest.webmanifest"`);
+  });
+
+  it("index.html contains apple-touch-icon link", () => {
+    expect(html).toContain(`rel="apple-touch-icon"`);
+  });
+
+  it("index.html contains the SVG favicon link", () => {
+    expect(html).toContain(`rel="icon" type="image/svg+xml" href="/icons/icon.svg"`);
   });
 
   it("index.html contains theme-color meta", () => {
