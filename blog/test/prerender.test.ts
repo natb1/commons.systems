@@ -2,7 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { prerenderPosts, type PrerenderConfig } from "../src/prerender";
 import * as fs from "node:fs";
 
-vi.mock("node:fs");
+vi.mock(import("node:fs"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
+}));
 
 const TEMPLATE = `<!DOCTYPE html>
 <html>

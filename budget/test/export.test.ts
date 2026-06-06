@@ -111,6 +111,7 @@ const idbStatements = [
     balanceDate: null,
     lastTransactionDateMs: Date.parse("2025-06-10T00:00:00.000Z"),
     virtual: false,
+    sourceFile: null,
   },
 ];
 

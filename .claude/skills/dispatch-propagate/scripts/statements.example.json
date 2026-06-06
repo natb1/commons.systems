@@ -1,0 +1,14 @@
+{
+  "statements": [
+    {
+      "key": "example-bank",
+      "dir": "/home/user/statements/example-bank",
+      "repo": "example-owner/example-repo",
+      "label": "statements:example-bank",
+      "project": "example-project",
+      "debounce": "1h",
+      "extensions": ["qfx", "ofx", "csv", "pdf"],
+      "snapshot": "/home/user/statements/example-bank/budget.benc"
+    }
+  ]
+}
