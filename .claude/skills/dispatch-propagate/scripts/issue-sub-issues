@@ -4,5 +4,5 @@ source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 ISSUE_NUM=$(resolve_issue_number "${1:-}")
 SUBS=$(gh_api_array "/repos/{owner}/{repo}/issues/$ISSUE_NUM/sub_issues" '.[].number')
 for sub in $SUBS; do
-  gh issue view "$sub" --json title,body,comments,number,state
+  gh_retry gh issue view "$sub" --json title,body,comments,number,state
 done

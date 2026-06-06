@@ -54,8 +54,13 @@ func TestDiscoverFiles(t *testing.T) {
 
 	if sf, ok := found[key{"bankone", "1234", "2025-07"}]; !ok {
 		t.Error("missing bankone/1234/2025-07")
-	} else if sf.StatementID() != "bankone-1234-2025-07" {
-		t.Errorf("StatementID = %q, want %q", sf.StatementID(), "bankone-1234-2025-07")
+	} else {
+		if sf.StatementID() != "bankone-1234-2025-07" {
+			t.Errorf("StatementID = %q, want %q", sf.StatementID(), "bankone-1234-2025-07")
+		}
+		if want := "bankone/1234/2025-07/datafile.csv"; sf.RelPath != want {
+			t.Errorf("RelPath = %q, want %q", sf.RelPath, want)
+		}
 	}
 
 	if _, ok := found[key{"banktwo", "5678", "2025-05"}]; !ok {
@@ -65,8 +70,66 @@ func TestDiscoverFiles(t *testing.T) {
 	// 3-level layout: period from filename stem
 	if sf, ok := found[key{"bankone", "1234", "2025-08"}]; !ok {
 		t.Error("missing bankone/1234/2025-08 (3-level layout)")
-	} else if sf.StatementID() != "bankone-1234-2025-08" {
-		t.Errorf("StatementID = %q, want %q", sf.StatementID(), "bankone-1234-2025-08")
+	} else {
+		if sf.StatementID() != "bankone-1234-2025-08" {
+			t.Errorf("StatementID = %q, want %q", sf.StatementID(), "bankone-1234-2025-08")
+		}
+		// RelPath is the statements-root-relative, forward-slash path.
+		if want := "bankone/1234/2025-08.csv"; sf.RelPath != want {
+			t.Errorf("RelPath = %q, want %q", sf.RelPath, want)
+		}
+	}
+}
+
+func TestDiscoverFlatFiles_RelPath(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "2025-07.csv"), []byte("csv data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmp, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "sub", "2025-08.ofx"), []byte("ofx data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// dot-prefixed file should be skipped
+	if err := os.WriteFile(filepath.Join(tmp, ".DS_Store"), []byte("junk"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := Discover(tmp, DiscoverOpts{Institution: "mybank", Account: "9999"})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(files))
+	}
+
+	byRelPath := map[string]StatementFile{}
+	for _, f := range files {
+		byRelPath[f.RelPath] = f
+	}
+
+	if sf, ok := byRelPath["2025-07.csv"]; !ok {
+		t.Error("missing RelPath 2025-07.csv")
+	} else {
+		if sf.Institution != "mybank" {
+			t.Errorf("Institution = %q, want %q", sf.Institution, "mybank")
+		}
+		if sf.Account != "9999" {
+			t.Errorf("Account = %q, want %q", sf.Account, "9999")
+		}
+		if sf.Period != "2025-07" {
+			t.Errorf("Period = %q, want %q", sf.Period, "2025-07")
+		}
+	}
+
+	if sf, ok := byRelPath["sub/2025-08.ofx"]; !ok {
+		t.Error("missing RelPath sub/2025-08.ofx")
+	} else {
+		if sf.Period != "2025-08" {
+			t.Errorf("Period = %q, want %q", sf.Period, "2025-08")
+		}
 	}
 }
 

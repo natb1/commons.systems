@@ -198,7 +198,9 @@ describe("renderHome", () => {
     }));
     expect(html).toContain("<dt>Date</dt>");
     expect(html).toContain("<dt>Statement</dt>");
-    expect(html).toContain('<a href="#">statement</a>');
+    expect(html).toContain('class="statement-source-link"');
+    expect(html).toContain('data-statement-id="stmt-2025-01"');
+    expect(html).toContain("view source");
   });
 
   it("renders empty statement dd when statementId is null", async () => {
