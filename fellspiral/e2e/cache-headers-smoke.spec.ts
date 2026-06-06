@@ -1,11 +1,11 @@
 import { test, expect } from "@commons-systems/config/playwright-test";
 import { describeCacheHeadersSmoke } from "@commons-systems/config/cache-headers-smoke";
 
-describeCacheHeadersSmoke("fellspiral");
+describeCacheHeadersSmoke("fellspiral", { imagePath: "/blog-map-color.webp" });
 
 test.describe("fellspiral extra cache headers smoke", () => {
-  test("fonts have yearly cache-control @smoke @hosting", async ({ request }) => {
-    const fontResponse = await request.get(
+  test("fonts have yearly cache-control @hosting", async ({ request }) => {
+    const fontResponse = await request.head(
       "/fonts/eb-garamond-latin-400-normal.woff2",
     );
     expect(

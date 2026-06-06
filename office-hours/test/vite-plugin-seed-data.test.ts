@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { agendaSeedDataPlugin } from "../src/vite-plugin-seed-data";
+import { officeHoursSeedDataPlugin } from "../src/vite-plugin-seed-data";
 import type { Plugin } from "vite";
 
-describe("agendaSeedDataPlugin", () => {
+describe("officeHoursSeedDataPlugin", () => {
   let plugin: Plugin;
   let moduleCode: string | undefined;
   let resolvedId: string | undefined;
@@ -15,15 +15,15 @@ describe("agendaSeedDataPlugin", () => {
   }
 
   beforeAll(() => {
-    plugin = agendaSeedDataPlugin();
+    plugin = officeHoursSeedDataPlugin();
     (plugin.buildStart as () => void)();
-    resolvedId = resolveId("virtual:agenda-seed-data");
+    resolvedId = resolveId("virtual:office-hours-seed-data");
     moduleCode = resolvedId ? load(resolvedId) : undefined;
   });
 
   it("resolves the virtual module ID", () => {
     expect(resolvedId).toBeDefined();
-    expect(resolvedId).toBe("\0virtual:agenda-seed-data");
+    expect(resolvedId).toBe("\0virtual:office-hours-seed-data");
   });
 
   it("returns undefined for unrelated module IDs", () => {

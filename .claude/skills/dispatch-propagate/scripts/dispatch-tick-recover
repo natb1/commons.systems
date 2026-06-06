@@ -1,0 +1,382 @@
+#!/usr/bin/env bash
+# dispatch-tick-recover — guarantee a dispatch-chain continuation after an
+# abnormal tick exit. Wired as the `OnFailure=dispatch-tick-recover.service`
+# handler on the transient tick / reseed units (dispatch-spawn-tick,
+# dispatch-schedule-reseed). systemd fires it edge-triggered, exactly when a
+# unit fails — unskippable by a crashing tick. It is the chain's safety net:
+# the headless tick otherwise carries the chain only via a spawned worker's
+# Stop hook or an armed dispatch-reseed* timer, both produced ONLY after a
+# successful selection. A tick that aborts early (e.g. a transient GitHub 504
+# in the selection path) leaves neither — and #1010's continuation invariant
+# (dispatch-self-close) no-ops for a systemd-run unit. This handler closes that
+# gap. See #1150 / #1148.
+#
+# Behavior, in order:
+#   1. NOW = env override or `date +%s` (validated as an integer epoch).
+#   2. Continuation detection: the chain is already carried iff EITHER a
+#      pending `dispatch-reseed*` timer exists OR a live busy worker exists.
+#      A daemon UNKNOWN (busy-worker query fails) is treated as NO worker —
+#      we fail toward GUARANTEEING a continuation. A redundant reseed is
+#      harmless: dispatch's per-worktree dedup + the run-scoped concurrency
+#      gate absorb it. If a continuation exists → reset the consecutive-failure
+#      count to 0 and no-op.
+#   3. No continuation: load the consecutive-failure state. A failure older
+#      than RESET_WINDOW starts a fresh episode (count reset to 0). Then
+#      count += 1.
+#   4. Cap check: count > CAP → ESCALATE rather than retry. Find-or-create one
+#      open `dispatch:chain-stalled` latch issue (one at a time), naming the
+#      failed unit / exit status and the `dispatch` resume hint. No reseed.
+#   5. Otherwise arm a bounded-backoff reseed at now + min(BASE*2^(count-1),
+#      MAX), via systemd-run --on-calendar, with the `dispatch-reseed-<epoch>`
+#      unit name so the armed timer is itself recognized as a continuation by
+#      step 2 (and is idempotent by epoch). The reseed runs a NO-ARG
+#      dispatch-tick (re-evaluate the whole queue — more robust than re-keying
+#      the failed target).
+#
+# Its decision is driven by LIVE system state (pending timer + live workers),
+# NOT by which unit failed. It reads systemd's $MONITOR_UNIT /
+# $MONITOR_EXIT_STATUS (which systemd >= 256 injects into an OnFailure=-activated
+# unit) only for context in the escalation issue body.
+#
+# Environment overrides for testability:
+#
+#   DISPATCH_TICK_RECOVER_MAIN_WORKTREE
+#     Override the main worktree path. When set, the script does NOT require a
+#     git repo. Default: <project-root>/worktrees/main, via resolve_project_root
+#     (lib.sh). Mirrors dispatch-spawn-tick's idiom.
+#
+#   DISPATCH_TICK_RECOVER_NOW
+#     Override the current epoch seconds. Default: date +%s.
+#
+#   DISPATCH_TICK_RECOVER_STATE_PATH
+#     Override the consecutive-failure state JSON path. Default:
+#     ~/.local/share/commons-dispatch/recover-state.json (same dir as
+#     dispatch-schedule-reseed's rate_limits.json). Shape:
+#     {"count": N, "last_failure": EPOCH}.
+#
+#   DISPATCH_TICK_RECOVER_RESET_WINDOW
+#     Seconds since the last failure beyond which a new failure starts a fresh
+#     episode (count reset to 0). Non-negative integer. Default: 3600.
+#
+#   DISPATCH_TICK_RECOVER_CAP
+#     Consecutive-failure cap. count > CAP escalates instead of retrying.
+#     Positive integer. Default: 3.
+#
+#   DISPATCH_TICK_RECOVER_BASE_BACKOFF
+#     Base backoff seconds for attempt 1. Positive integer. Default: 300.
+#
+#   DISPATCH_TICK_RECOVER_MAX_BACKOFF
+#     Backoff ceiling in seconds. Positive integer. Default: 3600.
+#
+#   DISPATCH_TICK_RECOVER_SYSTEMCTL_CMD
+#     The `systemctl` binary (used for the pending-timer query). Default:
+#     `systemctl`.
+#
+#   DISPATCH_TICK_RECOVER_SYSTEMD_RUN_CMD
+#     The `systemd-run` binary (used to arm the reseed). Default: `systemd-run`.
+#
+#   DISPATCH_TICK_RECOVER_GH_CMD
+#     The `gh` binary (used for the escalation latch issue). Default: `gh`.
+#
+#   CLAUDE_AGENTS_CMD
+#     Replaces the `claude` invocation in lib-claude-agents.sh's
+#     claude_agents_count_busy_workers. Default: `claude`.
+#
+# Sandbox: this runs as a systemd `OnFailure=` unit OUTSIDE Claude's Bash
+# sandbox. `systemd-run --user` / `systemctl --user` talk to the user's systemd
+# over D-Bus, `claude agents --json` reaches the local daemon over a Unix
+# socket, and `gh` needs network/TLS — all blocked by the sandbox. A Bash-tool
+# caller must invoke this with `dangerouslyDisableSandbox: true`. See
+# `.claude/rules/sandbox.md`.
+#
+# NOT set -e: exits are handled explicitly (matching dispatch-schedule-reseed /
+# dispatch-spawn-tick).
+set -uo pipefail
+
+# ---- Step 0: config, sourced helpers, MAIN_WORKTREE -------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+STATE_PATH="${DISPATCH_TICK_RECOVER_STATE_PATH:-$HOME/.local/share/commons-dispatch/recover-state.json}"
+SYSTEMCTL_CMD="${DISPATCH_TICK_RECOVER_SYSTEMCTL_CMD:-systemctl}"
+SYSTEMD_RUN_CMD="${DISPATCH_TICK_RECOVER_SYSTEMD_RUN_CMD:-systemd-run}"
+GH_CMD="${DISPATCH_TICK_RECOVER_GH_CMD:-gh}"
+
+# Integer tunables. Validate before any value reaches a `(( ))` arithmetic
+# context — bash arithmetic evaluates array-index command substitution (e.g.
+# `a[$(touch /tmp/pwn)]`), so a hostile env override must be rejected as a
+# literal-integer check first (mirrors dispatch-schedule-reseed:~160-179).
+RESET_WINDOW="${DISPATCH_TICK_RECOVER_RESET_WINDOW:-3600}"
+CAP="${DISPATCH_TICK_RECOVER_CAP:-3}"
+BASE="${DISPATCH_TICK_RECOVER_BASE_BACKOFF:-300}"
+MAX="${DISPATCH_TICK_RECOVER_MAX_BACKOFF:-3600}"
+for var in BASE MAX; do
+  if ! [[ "${!var}" =~ ^[0-9]+$ ]]; then
+    echo "dispatch-tick-recover: $var must be a non-negative integer, got '${!var}'; aborting" >&2
+    exit 2
+  fi
+done
+# CAP and RESET_WINDOW must be positive integers (>= 1), not merely
+# non-negative. CAP=0 would escalate on the very first failure with no retry.
+# RESET_WINDOW=0 would treat every failure as a fresh episode (NOW -
+# last_failure > 0 is almost always true), so the consecutive count never
+# reaches the cap and escalation never fires — an unbounded retry loop. Both
+# are almost certainly misconfigurations; reject them rather than silently
+# defeat the cap.
+for var in CAP RESET_WINDOW; do
+  if ! [[ "${!var}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "dispatch-tick-recover: $var must be a positive integer (>= 1), got '${!var}'; aborting" >&2
+    exit 2
+  fi
+done
+
+# Resolve the main worktree — same idiom as dispatch-spawn-tick. An explicit
+# override is authoritative and bypasses the git lookup (tests rely on this).
+if [[ -n "${DISPATCH_TICK_RECOVER_MAIN_WORKTREE:-}" ]]; then
+  MAIN_WORKTREE="$DISPATCH_TICK_RECOVER_MAIN_WORKTREE"
+else
+  PROJECT_ROOT=$(resolve_project_root) \
+    || { echo "dispatch-tick-recover: not in a git repo and DISPATCH_TICK_RECOVER_MAIN_WORKTREE is unset" >&2; exit 2; }
+  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+fi
+
+# ---- Step 1: NOW ------------------------------------------------------------
+
+NOW="${DISPATCH_TICK_RECOVER_NOW:-$(date +%s)}"
+# NOW reaches `(( NOW - last_failure > RESET_WINDOW ))` and `(( reseed_at = NOW
+# + backoff ))`; the default (date +%s) is always safe, the env-override path is
+# the surface that requires validation. (See dispatch-schedule-reseed:~172-179.)
+if ! [[ "$NOW" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-tick-recover: NOW must be an integer epoch, got '$NOW'; aborting" >&2
+  exit 2
+fi
+
+# ---- State read/write helpers -----------------------------------------------
+#
+# State JSON lives in the same dir as dispatch-schedule-reseed's rate_limits.json
+# (~/.local/share/commons-dispatch/). Read defensively (missing/empty/unparseable
+# → defaults count=0, last_failure=0). Write atomically (tmp + mv) into the dir,
+# creating it with `mkdir -p` — mirroring how the sibling scripts manage JSON.
+
+STATE_COUNT=0
+STATE_LAST_FAILURE=0
+
+read_state() {
+  STATE_COUNT=0
+  STATE_LAST_FAILURE=0
+  [[ -r "$STATE_PATH" ]] || return 0
+  local parsed
+  parsed=$(jq -r '"\(.count // 0)|\(.last_failure // 0)"' "$STATE_PATH" 2>/dev/null) || return 0
+  local c="${parsed%%|*}"
+  local lf="${parsed#*|}"
+  # Sanitize before either value enters a `(( ))` context.
+  [[ "$c" =~ ^[0-9]+$ ]] && STATE_COUNT="$c"
+  [[ "$lf" =~ ^[0-9]+$ ]] && STATE_LAST_FAILURE="$lf"
+  return 0
+}
+
+# write_state <count> <last_failure>
+write_state() {
+  local count="$1" last_failure="$2"
+  local dir
+  dir="$(dirname "$STATE_PATH")"
+  mkdir -p "$dir" || { echo "dispatch-tick-recover: mkdir -p $dir failed" >&2; return 1; }
+  local tmp
+  tmp=$(mktemp "$dir/.recover-state.json.XXXXXX") || {
+    echo "dispatch-tick-recover: could not create temp file in $dir" >&2; return 1
+  }
+  if ! jq -n --argjson count "$count" --argjson last_failure "$last_failure" \
+       '{count: $count, last_failure: $last_failure}' > "$tmp"; then
+    echo "dispatch-tick-recover: failed to write $tmp" >&2
+    rm -f "$tmp"
+    return 1
+  fi
+  mv "$tmp" "$STATE_PATH" || { echo "dispatch-tick-recover: failed to install $STATE_PATH" >&2; rm -f "$tmp"; return 1; }
+  return 0
+}
+
+# ---- Step 2: continuation detection -----------------------------------------
+#
+# The chain is already carried iff EITHER a pending dispatch-reseed* timer
+# exists OR a live busy worker exists. If so, reset the consecutive-failure
+# count and no-op — the failed unit was not the chain's only carrier.
+
+continuation_present() {
+  # (a) Pending dispatch-reseed* timer. `list-units --type=timer --all` with the
+  # glob restricts the listing; a row whose unit column matches
+  # dispatch-reseed-*.timer means a reseed is armed (and an armed reseed unit is
+  # exactly what step 5 produces, so this is self-consistent).
+  local units
+  if units=$("$SYSTEMCTL_CMD" --user list-units --type=timer --all --no-legend 'dispatch-reseed*' 2>/dev/null); then
+    if grep -Eq '(^|[[:space:]])dispatch-reseed-[^[:space:]]*\.timer([[:space:]]|$)' <<<"$units"; then
+      return 0
+    fi
+  fi
+
+  # (b) Live busy worker. claude_agents_count_busy_workers returns 0 with a
+  # numeric count on success; non-zero on UNKNOWN (daemon unreachable). On
+  # UNKNOWN we treat it as NO worker — fail toward guaranteeing a continuation
+  # (a redundant reseed is absorbed by dispatch's dedup + concurrency gate).
+  local busy
+  if busy=$(claude_agents_count_busy_workers); then
+    if [[ "$busy" =~ ^[0-9]+$ ]] && (( busy > 0 )); then
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+# Read state before the continuation check so that write_state in the
+# continuation branch has the real last_failure value from the file.
+# Without this, STATE_LAST_FAILURE is its initial value (0), and a
+# continuation resets last_failure to 0 — causing the NEXT episode to always
+# look "old" (NOW - 0 > RESET_WINDOW), defeating the consecutive-failure cap
+# for patterns with brief continuations.
+read_state
+
+if continuation_present; then
+  write_state 0 "$STATE_LAST_FAILURE" || true
+  echo "dispatch-tick-recover: continuation present; no-op" >&2
+  exit 0
+fi
+
+# ---- Step 3: no continuation — load + advance the failure state -------------
+
+COUNT="$STATE_COUNT"
+LAST_FAILURE="$STATE_LAST_FAILURE"
+
+# A failure older than RESET_WINDOW starts a fresh episode.
+if (( NOW - LAST_FAILURE > RESET_WINDOW )); then
+  COUNT=0
+fi
+COUNT=$(( COUNT + 1 ))
+
+# ---- Step 4: cap check — escalate instead of retry --------------------------
+#
+# Past the cap, looping a reseed would mask a persistent failure. Escalate
+# visibly via a find-or-create dispatch:chain-stalled latch issue (one open at a
+# time) and do NOT arm a reseed. Mirrors dispatch-diagnose-main's
+# apply-first/create-on-not-found label bootstrap.
+
+if (( COUNT > CAP )); then
+  # One open latch issue at a time: if one is already open, no-op the create.
+  existing=$("$GH_CMD" issue list --label dispatch:chain-stalled --state open \
+    --json number -q '.[0].number' 2>/dev/null) || existing=""
+
+  if [[ -n "$existing" ]]; then
+    echo "dispatch-tick-recover: chain-stalled latch issue #$existing already open; not retrying (count=$COUNT > cap=$CAP)" >&2
+  else
+    body_file=$(mktemp) || { echo "dispatch-tick-recover: could not create temp file for issue body" >&2; exit 2; }
+    trap 'rm -f "$body_file"' EXIT
+    {
+      echo "The dispatch chain has had ${CAP} consecutive tick failures that each left no"
+      echo "continuation (no pending \`dispatch-reseed*\` timer, no live busy worker)."
+      echo "Auto-retry is now stopped to avoid masking a persistent failure."
+      echo
+      echo "Most recent failing unit (from systemd OnFailure context):"
+      echo "- unit: \`${MONITOR_UNIT:-unknown}\`"
+      echo "- exit status: \`${MONITOR_EXIT_STATUS:-unknown}\`"
+      echo
+      echo "Resume the chain manually once the underlying cause is addressed:"
+      echo
+      echo '```'
+      echo "dispatch"
+      echo '```'
+    } > "$body_file"
+
+    # apply-first / create-on-not-found: the dispatch:chain-stalled label may
+    # not exist yet. Try the create; if it fails because the label is "not
+    # found", create the label ONCE (no --color — single-sourced elsewhere) and
+    # retry. bug + priority already exist and sort the fix to the top.
+    create_err=$(mktemp) || { echo "dispatch-tick-recover: could not create temp file" >&2; exit 2; }
+    if ! "$GH_CMD" issue create \
+         --title "dispatch chain stalled: ${CAP} consecutive tick failures left no continuation" \
+         --body-file "$body_file" \
+         --label dispatch:chain-stalled --label bug --label priority \
+         2>"$create_err"; then
+      if grep -qi "not found" "$create_err"; then
+        "$GH_CMD" label create dispatch:chain-stalled \
+          --description "dispatch workflow: the chain stalled with no continuation past the recover cap" 2>/dev/null || true
+        "$GH_CMD" issue create \
+          --title "dispatch chain stalled: ${CAP} consecutive tick failures left no continuation" \
+          --body-file "$body_file" \
+          --label dispatch:chain-stalled --label bug --label priority \
+          >&2 || echo "dispatch-tick-recover: chain-stalled issue create failed after label bootstrap" >&2
+      else
+        cat "$create_err" >&2
+        echo "dispatch-tick-recover: chain-stalled issue create failed" >&2
+      fi
+    fi
+    rm -f "$create_err"
+    echo "dispatch-tick-recover: escalated (count=$COUNT > cap=$CAP); no reseed armed" >&2
+  fi
+
+  # Keep the count (do not reset) so a subsequent recovery sees we are still
+  # over the cap; record this failure's time.
+  write_state "$COUNT" "$NOW" || true
+  exit 0
+fi
+
+# ---- Step 5: arm a bounded-backoff reseed -----------------------------------
+#
+# backoff = min(BASE * 2^(count-1), MAX); reseed_at = NOW + backoff. The unit is
+# named dispatch-reseed-<reseed_at> so the armed timer is itself recognized as a
+# continuation by step 2 and is idempotent by epoch. Arm a NO-ARG dispatch-tick
+# (re-evaluate the whole queue — more robust than re-keying the failed target).
+#
+# The systemd-run flag style mirrors dispatch-schedule-reseed's Step-6 call
+# exactly, plus --collect (so a failed reseed unit does not linger — Unit 3
+# adds the same flag to dispatch-schedule-reseed). Deliberately NO OnFailure=
+# here: arming the recover handler on a recover-armed reseed is Unit 3's concern
+# on the launchers, and the recover unit must not chain to itself.
+
+BACKOFF=$(( BASE * (1 << (COUNT - 1)) ))
+# A very high COUNT (only reachable with a large CAP) overflows the 64-bit
+# signed left-shift to a negative value, which the `> MAX` guard alone would
+# let through — yielding a past/negative RESEED_AT that fires the timer
+# immediately and defeats the backoff. Clamp non-positive and over-max alike.
+if (( BACKOFF <= 0 || BACKOFF > MAX )); then
+  BACKOFF="$MAX"
+fi
+RESEED_AT=$(( NOW + BACKOFF ))
+UNIT_NAME="dispatch-reseed-${RESEED_AT}"
+
+RUN_STDERR=$(mktemp)
+trap 'rm -f "$RUN_STDERR"' EXIT
+# Capture the exit code directly — after `if cmd; then ... fi`, `$?` is the exit
+# status of the `if`, NOT of `cmd`. Run outside an `if` and capture `$?` at once.
+"$SYSTEMD_RUN_CMD" --user \
+     --unit="$UNIT_NAME" \
+     --collect \
+     --on-calendar="@$RESEED_AT" \
+     --working-directory="$MAIN_WORKTREE" \
+     --timer-property=Persistent=true \
+     --setenv=PATH="$PATH" \
+     "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-tick" \
+     2>"$RUN_STDERR"
+RC=$?
+
+if (( RC == 0 )); then
+  write_state "$COUNT" "$NOW" || true
+  echo "dispatch-tick-recover: armed reseed at $RESEED_AT (attempt $COUNT/$CAP)" >&2
+  exit 0
+fi
+
+err=$(cat "$RUN_STDERR")
+# systemd's already-exists message varies across versions; match the substring
+# (mirrors dispatch-schedule-reseed:~424). A collision means a reseed for this
+# exact epoch is already armed — the continuation is already guaranteed.
+if [[ "$err" == *"already exists"* ]]; then
+  write_state "$COUNT" "$NOW" || true
+  echo "dispatch-tick-recover: $UNIT_NAME already armed; no-op (attempt $COUNT/$CAP)" >&2
+  exit 0
+fi
+
+# Some other failure — surface stderr and pass the exit code through. Record the
+# failure state anyway so the consecutive-failure count stays accurate.
+write_state "$COUNT" "$NOW" || true
+echo "$err" >&2
+exit "$RC"

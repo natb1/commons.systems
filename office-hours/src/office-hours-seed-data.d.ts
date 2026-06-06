@@ -1,4 +1,4 @@
-declare module "virtual:agenda-seed-data" {
+declare module "virtual:office-hours-seed-data" {
   export interface SeedReminder {
     readonly jitKey: string;
     readonly title: string;

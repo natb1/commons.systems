@@ -19,7 +19,7 @@ detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
 
 # Resolve per-app GA measurement ID from environment (e.g. GA_MEASUREMENT_ID_LANDING).
 # Empty/unset silently disables analytics for the app (initAnalytics returns a no-op).
-GA_VAR="GA_MEASUREMENT_ID_$(echo "$APP_NAME" | tr '[:lower:]' '[:upper:]')"
+GA_VAR="GA_MEASUREMENT_ID_$(echo "$APP_NAME" | tr 'a-z-' 'A-Z_')"
 VITE_GA_MEASUREMENT_ID="${!GA_VAR:-}"
 export VITE_GA_MEASUREMENT_ID
 
