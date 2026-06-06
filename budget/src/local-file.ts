@@ -73,8 +73,13 @@ export async function writeFileToHandle(
   const writable = await handle.createWritable();
   try {
     await writable.write(data);
-  } finally {
     await writable.close();
+  } catch (e) {
+    // Abort discards the temp write rather than committing a truncated file.
+    // createWritable() defaults to keepExistingData: false, so a close() after a
+    // failed write() would replace the original file with an empty or partial one.
+    await writable.abort();
+    throw e;
   }
 }
 

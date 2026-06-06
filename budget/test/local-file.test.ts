@@ -102,14 +102,19 @@ describe("writeFileToHandle", () => {
     expect(close).toHaveBeenCalled();
   });
 
-  it("calls close even when write rejects", async () => {
+  it("aborts (not closes) the writable stream when write rejects, then rethrows", async () => {
+    // createWritable() defaults to keepExistingData: false, truncating the file at open.
+    // If write() fails and we called close(), the truncated (empty) file would be committed.
+    // abort() discards the temp write, preserving the original file content.
     const writeError = new Error("disk full");
     const write = vi.fn().mockRejectedValue(writeError);
     const close = vi.fn().mockResolvedValue(undefined);
-    const createWritable = vi.fn().mockResolvedValue({ write, close });
+    const abort = vi.fn().mockResolvedValue(undefined);
+    const createWritable = vi.fn().mockResolvedValue({ write, close, abort });
     const handle = { createWritable } as unknown as FileSystemFileHandle;
     await expect(writeFileToHandle(handle, new Uint8Array([4, 5]))).rejects.toThrow("disk full");
-    expect(close).toHaveBeenCalled();
+    expect(abort).toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
   });
 });
 

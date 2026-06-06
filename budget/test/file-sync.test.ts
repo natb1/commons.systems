@@ -118,4 +118,93 @@ describe("file-sync", () => {
     await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
     expect(writeFileToHandle).not.toHaveBeenCalled();
   });
+
+  it("concurrent flushWriteBack awaits the in-flight write before returning", async () => {
+    // Simulate: a timer fires and starts a doWrite (inFlight); then a second
+    // flushWriteBack (e.g. from visibilitychange) is called while doWrite runs.
+    // The second caller must not return until the in-flight write completes.
+    let resolveWrite!: () => void;
+    writeFileToHandle.mockReturnValueOnce(
+      new Promise<void>((res) => { resolveWrite = res; }),
+    );
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD);
+
+    // Start first flush — writeFileToHandle is blocked on resolveWrite.
+    const firstFlush = fs.flushWriteBack();
+
+    // Second flush (concurrent) — should await the in-flight write, not return immediately.
+    let secondFlushDone = false;
+    const secondFlush = fs.flushWriteBack().then(() => { secondFlushDone = true; });
+
+    // Neither flush has completed yet.
+    await Promise.resolve();
+    expect(secondFlushDone).toBe(false);
+
+    // Unblock the write.
+    resolveWrite();
+    await firstFlush;
+    await secondFlush;
+
+    // Both should have completed; only one actual write occurred.
+    expect(secondFlushDone).toBe(true);
+    expect(writeFileToHandle).toHaveBeenCalledTimes(1);
+  });
+
+  it("flush drains a mutation that arrives during an in-flight write", async () => {
+    // A mutation that lands while a write is in flight must reach disk before a
+    // concurrent flush (e.g. visibilitychange→hidden) returns — the flush cancels
+    // the debounce timer, so the writer loop is the only thing that can persist it.
+    let resolveWrite!: () => void;
+    writeFileToHandle.mockReturnValueOnce(
+      new Promise<void>((res) => { resolveWrite = res; }),
+    );
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD);
+
+    // First write starts and blocks on resolveWrite.
+    const firstFlush = fs.flushWriteBack();
+
+    // A mutation lands mid-write, then a concurrent flush is requested.
+    fs.scheduleWriteBack();
+    let secondFlushDone = false;
+    const secondFlush = fs.flushWriteBack().then(() => { secondFlushDone = true; });
+
+    await Promise.resolve();
+    expect(secondFlushDone).toBe(false);
+
+    // Unblock the first write; the writer loop must run a second write for the
+    // mutation, and the concurrent flush must wait for it.
+    resolveWrite();
+    await firstFlush;
+    await secondFlush;
+
+    expect(secondFlushDone).toBe(true);
+    expect(writeFileToHandle).toHaveBeenCalledTimes(2);
+  });
+
+  it("abandons an in-flight write when the session is reset mid-write", async () => {
+    // Clear-data while a write is encrypting must not clobber the on-disk file
+    // with a post-clear (empty) snapshot. The generation guard makes doWrite bail
+    // before writeFileToHandle when resetFileSync ran after it started.
+    let resolveEncrypt!: (b: ArrayBuffer) => void;
+    encrypt.mockReturnValueOnce(
+      new Promise<ArrayBuffer>((res) => { resolveEncrypt = res; }),
+    );
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD);
+
+    const flush = fs.flushWriteBack();
+    // Let doWrite run through the permission check + export and block on encrypt.
+    await vi.advanceTimersByTimeAsync(0);
+
+    // User clears data while the write is mid-flight.
+    fs.resetFileSync();
+
+    // The (now-stale) encryption finishes.
+    resolveEncrypt(BYTES);
+    await flush;
+
+    expect(writeFileToHandle).not.toHaveBeenCalled();
+  });
 });
