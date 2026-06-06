@@ -250,13 +250,19 @@ function promptPassword(message: string): Promise<string | null> {
 // Core load pipeline shared by the upload path and the FSA handle path:
 // read bytes, decrypt-or-decode, parse, store, and transition to the local
 // state. Throws on any failure; callers wrap it in error handling.
-async function loadFromFile(file: File): Promise<void> {
+// Pass `cachedPassword` to skip the password dialog when the session password
+// is already known (e.g. on an external-change reload).
+async function loadFromFile(file: File, cachedPassword?: string): Promise<void> {
   const buffer = await file.arrayBuffer();
   let text: string;
   let pw: string | null = null;
   if (isEncrypted(buffer)) {
-    pw = await promptPassword("Enter password to decrypt");
-    if (pw === null) return;
+    if (cachedPassword !== undefined) {
+      pw = cachedPassword;
+    } else {
+      pw = await promptPassword("Enter password to decrypt");
+      if (pw === null) return;
+    }
     text = await decrypt(buffer, pw);
   } else {
     text = new TextDecoder().decode(buffer);
@@ -425,7 +431,12 @@ document.addEventListener("visibilitychange", () => {
 // sync, or a dispatched budget-etl parse) — reload it so we do not overwrite a
 // newer external write with stale in-memory state. Last-write-wins, whole-file.
 // No-op in seed / non-FSA sessions (no armed handle).
+let reloadInFlight: Promise<void> | null = null;
 async function reloadIfExternallyChanged(): Promise<void> {
+  // Coalesce concurrent focus events (e.g. rapid tab-in/tab-out) into a single
+  // reload: if one is already running, wait for it and return rather than
+  // stacking a second concurrent storeParsedData + transition pair.
+  if (reloadInFlight) { await reloadInFlight; return; }
   const handle = getSyncHandle();
   if (!handle) return;
   const watermark = getLastSyncedModified();
@@ -438,8 +449,36 @@ async function reloadIfExternallyChanged(): Promise<void> {
     logError(error, { operation: "external-change-reload" });
     return;
   }
-  if (watermark !== null && file.lastModified <= watermark) return;
-  await loadFromHandle(handle);
+  // No watermark means the session is not armed for sync (handle and watermark
+  // are always set/cleared together by configureFileSync/resetFileSync), so a
+  // null watermark is an explicit no-op rather than an unconditional reload.
+  if (watermark === null || file.lastModified <= watermark) return;
+  // Reload using the already-read File and the session's cached password so the
+  // user is not re-prompted for their decryption password on every external write.
+  const cachedPw = importPassword ?? undefined;
+  reloadInFlight = (async () => {
+    clearNavError();
+    try {
+      await loadFromFile(file, cachedPw);
+      // Stamp the watermark. loadFromFile either set importPassword (success) or
+      // returned early (wrong cached pw). In the early-return case importPassword
+      // still holds its old value, so configureFileSync still advances the watermark
+      // past this file version, preventing a re-prompt loop.
+      if (importPassword) configureFileSync(handle, importPassword, file.lastModified);
+    } catch (error) {
+      // Do NOT clear the file handle here: a content-validation error in an
+      // external write should not permanently unlink the FSA handle. The handle
+      // is valid; only this particular file version is bad.
+      if (deferProgrammerError(error)) return;
+      logError(error, { operation: "external-change-reload" });
+      showNavError("Could not reload the linked file.");
+    }
+  })();
+  try {
+    await reloadInFlight;
+  } finally {
+    reloadInFlight = null;
+  }
 }
 
 window.addEventListener("focus", () => {
