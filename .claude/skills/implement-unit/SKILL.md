@@ -44,9 +44,16 @@ The caller supplies:
    `model`. The prompt includes `context` and `scope`, plus the explicit constraint:
    *the subagent edits the working tree only — no commits, no pushes.*
 
-2. **Fork `/commit-merge-push`** via the Agent tool to commit, merge `origin/main`,
-   and push. Its frontmatter sets `model: sonnet`, so do not pass a model override.
-   Pass `commit_intent` so it can write a focused commit message.
+2. **Fork `/commit-merge-push`** to commit, merge `origin/main`, and push. This is
+   the **canonical commit-merge-push fork recipe** — `/qa-fix` and `/review-fix`
+   reference this step rather than restating it. Issue an Agent tool call with
+   **`subagent_type: general-purpose`** and **`model: sonnet`** whose prompt invokes
+   `/commit-merge-push` via the Skill tool, passing `commit_intent` so it can write a
+   focused commit message. `/commit-merge-push` is a `context: fork` skill, so its
+   own frontmatter `model: sonnet` does not auto-apply to the subagent — set the model
+   on the Agent call. The `subagent_type` is always `general-purpose` — **never the
+   skill name** (there is no `commit-merge-push` agent type); the subagent runs the
+   skill through its own Skill tool.
 
 3. **On a `/commit-merge-push` error, recover:**
    - **Merge conflict** → launch an `opus` subagent to resolve the conflict in the
@@ -58,7 +65,7 @@ The caller supplies:
      - **`resolved`** (markers removed, files saved, clean tree) → verify no
        conflict markers survived (`git diff --check`; grep the conflicted files for
        a leftover `<<<<<<<`/`=======`/`>>>>>>>` line) — if any remain, treat the
-       verdict as **`ambiguous`** instead. Otherwise re-fork `/commit-merge-push`.
+       verdict as **`ambiguous`** instead. Otherwise re-fork `/commit-merge-push` (the Step 2 invocation).
      - **`ambiguous <reason>`** (the subagent made **no** edits; `<reason>` is a
        one-line explanation) → call `dispatch-mark-deviation` with `<reason>`,
        **skip** the caller's `phase-completed` marker, and **stop**. The
@@ -71,7 +78,7 @@ The caller supplies:
        .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation "$REASON"
        ```
    - **Pre-commit hook failure** → launch a `sonnet` subagent to fix the underlying
-     issue with a **new commit — never `--amend`** — then re-fork `/commit-merge-push`.
+     issue with a **new commit — never `--amend`** — then re-fork `/commit-merge-push` (the Step 2 invocation).
    - **Push rejection** (non-fast-forward, server hook) → surface to the user. Do
      **not** force-push.
 

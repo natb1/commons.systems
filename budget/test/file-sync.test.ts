@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const exportToJson = vi.fn<[], Promise<string>>();
 const encrypt = vi.fn<[string, string], Promise<ArrayBuffer>>();
 const writeFileToHandle = vi.fn<[FileSystemFileHandle, BufferSource], Promise<void>>();
+const readFileFromHandle = vi.fn<[FileSystemFileHandle], Promise<File>>();
 const queryReadWritePermission = vi.fn<[FileSystemFileHandle], Promise<PermissionState>>();
 const requestReadWritePermission = vi.fn<[FileSystemFileHandle], Promise<PermissionState>>();
 const logError = vi.fn();
@@ -13,6 +14,7 @@ vi.mock("../src/export.js", () => ({ exportToJson: () => exportToJson() }));
 vi.mock("../src/crypto.js", () => ({ encrypt: (p: string, pw: string) => encrypt(p, pw) }));
 vi.mock("../src/local-file.js", () => ({
   writeFileToHandle: (h: FileSystemFileHandle, d: BufferSource) => writeFileToHandle(h, d),
+  readFileFromHandle: (h: FileSystemFileHandle) => readFileFromHandle(h),
   queryReadWritePermission: (h: FileSystemFileHandle) => queryReadWritePermission(h),
   requestReadWritePermission: (h: FileSystemFileHandle) => requestReadWritePermission(h),
 }));
@@ -37,6 +39,7 @@ beforeEach(() => {
   exportToJson.mockResolvedValue(JSON_STR);
   encrypt.mockResolvedValue(BYTES);
   writeFileToHandle.mockResolvedValue(undefined);
+  readFileFromHandle.mockResolvedValue(new File([], "budget.benc", { lastModified: 5000 }));
   queryReadWritePermission.mockResolvedValue("granted");
   requestReadWritePermission.mockResolvedValue("granted");
 });
@@ -58,7 +61,7 @@ describe("file-sync", () => {
 
   it("coalesces a burst of scheduleWriteBack calls into a single write", async () => {
     const fs = await loadFileSync();
-    fs.configureFileSync(HANDLE, PASSWORD);
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
     fs.scheduleWriteBack();
     fs.scheduleWriteBack();
     fs.scheduleWriteBack();
@@ -74,7 +77,7 @@ describe("file-sync", () => {
 
   it("flushWriteBack writes immediately and cancels the pending timer", async () => {
     const fs = await loadFileSync();
-    fs.configureFileSync(HANDLE, PASSWORD);
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
     fs.scheduleWriteBack();
     await fs.flushWriteBack();
     expect(writeFileToHandle).toHaveBeenCalledTimes(1);
@@ -88,7 +91,7 @@ describe("file-sync", () => {
     queryReadWritePermission.mockResolvedValue("prompt");
     requestReadWritePermission.mockResolvedValue("granted");
     const fs = await loadFileSync();
-    fs.configureFileSync(HANDLE, PASSWORD);
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
     await fs.flushWriteBack();
     expect(requestReadWritePermission).toHaveBeenCalledWith(HANDLE);
     expect(writeFileToHandle).toHaveBeenCalledTimes(1);
@@ -98,7 +101,7 @@ describe("file-sync", () => {
     queryReadWritePermission.mockResolvedValue("prompt");
     requestReadWritePermission.mockResolvedValue("denied");
     const fs = await loadFileSync();
-    fs.configureFileSync(HANDLE, PASSWORD);
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
     await fs.flushWriteBack();
     expect(requestReadWritePermission).toHaveBeenCalledWith(HANDLE);
     expect(logError).toHaveBeenCalled();
@@ -108,7 +111,7 @@ describe("file-sync", () => {
 
   it("resetFileSync cancels a pending write and disarms subsequent schedules", async () => {
     const fs = await loadFileSync();
-    fs.configureFileSync(HANDLE, PASSWORD);
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
     fs.scheduleWriteBack();
     fs.resetFileSync();
     await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
@@ -128,7 +131,7 @@ describe("file-sync", () => {
       new Promise<void>((res) => { resolveWrite = res; }),
     );
     const fs = await loadFileSync();
-    fs.configureFileSync(HANDLE, PASSWORD);
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
 
     // Start first flush — writeFileToHandle is blocked on resolveWrite.
     const firstFlush = fs.flushWriteBack();
@@ -160,7 +163,7 @@ describe("file-sync", () => {
       new Promise<void>((res) => { resolveWrite = res; }),
     );
     const fs = await loadFileSync();
-    fs.configureFileSync(HANDLE, PASSWORD);
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
 
     // First write starts and blocks on resolveWrite.
     const firstFlush = fs.flushWriteBack();
@@ -192,7 +195,7 @@ describe("file-sync", () => {
       new Promise<ArrayBuffer>((res) => { resolveEncrypt = res; }),
     );
     const fs = await loadFileSync();
-    fs.configureFileSync(HANDLE, PASSWORD);
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
 
     const flush = fs.flushWriteBack();
     // Let doWrite run through the permission check + export and block on encrypt.
@@ -206,5 +209,29 @@ describe("file-sync", () => {
     await flush;
 
     expect(writeFileToHandle).not.toHaveBeenCalled();
+  });
+
+  it("stamps the watermark from the post-write file after a flush", async () => {
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    fs.scheduleWriteBack();
+    await fs.flushWriteBack();
+    // readFileFromHandle returns a file with lastModified 5000 (beforeEach).
+    expect(fs.getLastSyncedModified()).toBe(5000);
+  });
+
+  it("getSyncHandle returns the armed handle, and both reset to null on resetFileSync", async () => {
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    expect(fs.getSyncHandle()).toBe(HANDLE);
+    fs.resetFileSync();
+    expect(fs.getSyncHandle()).toBeNull();
+    expect(fs.getLastSyncedModified()).toBeNull();
+  });
+
+  it("getLastSyncedModified reflects the modifiedMs passed to configureFileSync", async () => {
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    expect(fs.getLastSyncedModified()).toBe(1000);
   });
 });
