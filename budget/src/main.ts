@@ -28,11 +28,12 @@ import { storeParsedData, clearAll, getMeta, getFileHandle, putFileHandle, clear
 import {
   isFsaSupported,
   pickBencFile,
-  queryReadPermission,
-  requestReadPermission,
+  queryReadWritePermission,
+  requestReadWritePermission,
   readFileFromHandle,
 } from "./local-file.js";
-import { SeedDataSource, IdbDataSource, type DataSource } from "./data-source.js";
+import { SeedDataSource, IdbDataSource, FileSyncingDataSource, type DataSource } from "./data-source.js";
+import { configureFileSync, flushWriteBack, resetFileSync } from "./file-sync.js";
 import { setActiveDataSource } from "./active-data-source.js";
 import { exportToJson } from "./export.js";
 import { isEncrypted, decrypt, encrypt } from "./crypto.js";
@@ -108,7 +109,7 @@ function updateNav(): void {
 
 function createDataSource(): DataSource {
   if (state.source === "local") {
-    return new IdbDataSource();
+    return new FileSyncingDataSource(new IdbDataSource());
   }
   return new SeedDataSource();
 }
@@ -302,6 +303,12 @@ async function loadFromHandle(handle: FileSystemFileHandle): Promise<void> {
   // and be retried on every subsequent startup — a permanent failing-load loop.
   try {
     await loadFromFile(file);
+    // Arm encrypted write-back so subsequent UI edits overwrite this on-disk
+    // file in place. loadFromFile sets importPassword only on the success path
+    // (an encrypted file decrypted, or null for a plaintext file); a
+    // password-cancel returns early without transitioning to local, leaving
+    // importPassword null, so this no-ops there.
+    if (importPassword) configureFileSync(handle, importPassword);
   } catch (error) {
     if (error instanceof UploadValidationError) {
       // The persisted handle points to a file that is not valid budget data
@@ -339,6 +346,10 @@ async function pickAndLoad(): Promise<void> {
     const handle = await pickBencFile();
     if (!handle) return; // user canceled
     await putFileHandle(handle);
+    // Request readwrite up front so the handle can be written back to. Reads
+    // work from a freshly-picked handle regardless; doWrite re-checks lazily,
+    // so the result is not branched on here.
+    await requestReadWritePermission(handle);
     await loadFromHandle(handle);
   } catch (error) {
     if (deferProgrammerError(error)) return;
@@ -402,10 +413,17 @@ exportButton.addEventListener("click", async () => {
   }
 });
 
+// Force any pending debounced write-back to run when the tab is hidden, so a
+// tab close does not lose the last edit. Registered once at the top level.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") void flushWriteBack();
+});
+
 clearButton.addEventListener("click", async () => {
   try {
     await clearAll();
     importPassword = null;
+    resetFileSync();
     transition({ source: "seed" });
   } catch (error) {
     if (deferProgrammerError(error)) return;
@@ -426,7 +444,7 @@ function showReloadPrompt(handle: FileSystemFileHandle): void {
   authContainer!.appendChild(button);
   button.addEventListener("click", async () => {
     try {
-      const perm = await requestReadPermission(handle);
+      const perm = await requestReadWritePermission(handle);
       if (perm === "granted") {
         await loadFromHandle(handle);
         button.remove();
@@ -455,7 +473,7 @@ async function initialize(): Promise<void> {
   let denied = false;
   const handle = await getFileHandle();
   if (handle) {
-    const perm = await queryReadPermission(handle);
+    const perm = await queryReadWritePermission(handle);
     if (perm === "granted") {
       await loadFromHandle(handle);
       return;
