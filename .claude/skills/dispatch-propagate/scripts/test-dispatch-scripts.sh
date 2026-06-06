@@ -10694,6 +10694,180 @@ assert_eq "cwd-aware-spawn: stdout is 'spawned' (dedup queried under worktree pa
 spawn_worker_teardown
 
 # ============================================================================
+# dispatch-spawn-office-hours tests
+# ============================================================================
+echo "=== dispatch-spawn-office-hours ==="
+#
+# dispatch-spawn-office-hours is the office-hours fresh-launch counterpart of
+# dispatch-spawn-worker: it spawns a /office-hours --bg job worker-style (--name
+# = worktree basename, --cwd = worktree path) via dispatch-spawn-job, then —
+# unlike the worker, which `exec`s the spawn and is done — resolves the spawned
+# (or deduped) session id by the worktree basename and prints it, so the caller
+# can attach a human via `claude --resume`.
+#
+# It reuses the spawn-worker fake-`claude` harness (write_fake_spawn_worker_claude)
+# and the SPAWN_WORKER_* fixture globals: that fake's `--bg` handler registers
+# `{"sessionId":"sess-<name>",...,"name":"<name>"}`, so the resolved id for the
+# 839-test-worker target is deterministically `sess-839-test-worker`.
+#
+# The test shell runs under `set -e`; the script can exit non-zero, so every
+# invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
+
+spawn_office_hours_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" \
+    "$TMPDIR_TEST/worktrees/main" \
+    "$TMPDIR_TEST/worktrees/839-test-worker"
+
+  # dispatch-spawn-office-hours sources lib-claude-agents.sh from its own
+  # directory and runs dispatch-spawn-job from there, so both must sit alongside
+  # the copy. lib-claude-agents.sh is sourced, not executed — no chmod; the two
+  # executables are run, so they are chmod'd.
+  cp "$SCRIPT_DIR/dispatch-spawn-office-hours" "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours"
+  cp "$SCRIPT_DIR/dispatch-spawn-job" "$TMPDIR_TEST/scripts/dispatch-spawn-job"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-job"
+
+  # Reuse the SPAWN_WORKER_* fixture globals so write_fake_spawn_worker_claude
+  # (which references them) backs this script too.
+  SPAWN_WORKER_REGISTRY="$TMPDIR_TEST/registry.json"
+  SPAWN_WORKER_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_WORKER_PWD_LOG="$TMPDIR_TEST/pwd-log"
+  SPAWN_WORKER_PENDING="$TMPDIR_TEST/pending"
+  WORKER_TARGET_WORKTREE="$TMPDIR_TEST/worktrees/839-test-worker"
+  printf '[]' > "$SPAWN_WORKER_REGISTRY"
+
+  export DISPATCH_SPAWN_OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+  export DISPATCH_SPAWN_OFFICE_HOURS_SESSION_ID="sess-self"
+}
+
+spawn_office_hours_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  SPAWN_WORKER_REGISTRY=""
+  SPAWN_WORKER_BG_ARGV=""
+  SPAWN_WORKER_PWD_LOG=""
+  SPAWN_WORKER_PENDING=""
+  WORKER_TARGET_WORKTREE=""
+  unset DISPATCH_SPAWN_OFFICE_HOURS_CLAUDE_CMD DISPATCH_SPAWN_OFFICE_HOURS_SESSION_ID \
+    DISPATCH_SPAWN_JOB_CLAUDE_CMD DISPATCH_SPAWN_JOB_SESSION_ID \
+    SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
+    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+}
+
+# --- Test 1: happy path — spawn worker-style, resolve + print the id ---------
+
+echo "Test: an empty registry spawns one /office-hours --bg job and prints the resolved id"
+spawn_office_hours_setup
+write_fake_spawn_worker_claude
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-oh: dispatch-spawn-office-hours exits 0" "0" "$rc"
+# stdout is exactly the resolved session id (the only thing printed).
+assert_eq "spawn-oh: stdout is the resolved session id" "sess-839-test-worker" "$out"
+# The recorded argv must be exactly:
+#   --bg --name <worktree-basename> --permission-mode auto
+#   "/office-hours 839 implement -"
+mapfile -t oh_bg_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-oh: argv[0] is --bg" "--bg" "${oh_bg_argv[0]:-}"
+assert_eq "spawn-oh: argv[1] is --name" "--name" "${oh_bg_argv[1]:-}"
+assert_eq "spawn-oh: argv[2] is the worktree basename" \
+  "839-test-worker" "${oh_bg_argv[2]:-}"
+assert_eq "spawn-oh: argv[3] is --permission-mode" "--permission-mode" "${oh_bg_argv[3]:-}"
+assert_eq "spawn-oh: argv[4] is auto" "auto" "${oh_bg_argv[4]:-}"
+assert_eq "spawn-oh: argv[5] is '/office-hours 839 implement -'" \
+  "/office-hours 839 implement -" "${oh_bg_argv[5]:-}"
+spawn_office_hours_teardown
+
+# --- Test 2: spawn cwd is the target worktree path ---------------------------
+
+echo "Test: dispatch-spawn-office-hours invokes 'claude --bg' from the target worktree path"
+spawn_office_hours_setup
+write_fake_spawn_worker_claude
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-oh-cwd: exits 0" "0" "$rc"
+oh_pwd_line=$(head -1 "$SPAWN_WORKER_PWD_LOG" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$(realpath "$oh_pwd_line" 2>/dev/null)" == "$(realpath "$WORKER_TARGET_WORKTREE")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-oh-cwd: 'claude --bg' ran with cwd = target worktree path"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-oh-cwd: 'claude --bg' ran with cwd = target worktree path"
+  echo "    pwd-log:  '$oh_pwd_line'"
+  echo "    expected: '$WORKER_TARGET_WORKTREE'"
+fi
+spawn_office_hours_teardown
+
+# --- Test 3: dedup hit — resolve the existing same-name session for resume ----
+
+echo "Test: a live same-name session deduplicates the spawn; its id is resolved for resume"
+spawn_office_hours_setup
+# Prime the registry with a different sessionId whose name matches the worktree
+# basename the spawn would use. dispatch-spawn-job dedups (no --bg); the resolve
+# then returns this existing session — the one to resume.
+printf '%s' \
+  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"839-test-worker"}]' \
+  > "$SPAWN_WORKER_REGISTRY"
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "dedup-oh: dispatch-spawn-office-hours exits 0" "0" "$rc"
+assert_eq "dedup-oh: stdout is the existing session id (resolved for resume)" "sess-other" "$out"
+# No --bg invocation was recorded — nothing was spawned.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: dedup-oh: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: dedup-oh: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
+fi
+spawn_office_hours_teardown
+
+# --- Test 4: wrong arg count -------------------------------------------------
+
+echo "Test: wrong argument count exits 2"
+spawn_office_hours_setup
+write_fake_spawn_worker_claude
+# Three args (missing <worktree-path>).
+if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
+assert_eq "argcount-oh: three args → exit 2" "2" "$oh_rc"
+# Five args (extra trailing argument).
+if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" extra 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
+assert_eq "argcount-oh: five args → exit 2" "2" "$oh_rc"
+spawn_office_hours_teardown
+
+# --- Test 5: invalid issue number --------------------------------------------
+
+echo "Test: a non-integer issue number exits 2"
+spawn_office_hours_setup
+write_fake_spawn_worker_claude
+if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" abc implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
+assert_eq "badnum-oh: non-integer <N> → exit 2" "2" "$oh_rc"
+spawn_office_hours_teardown
+
+# --- Test 6: missing worktree dir --------------------------------------------
+
+echo "Test: a non-existent worktree path exits 2"
+spawn_office_hours_setup
+write_fake_spawn_worker_claude
+if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$TMPDIR_TEST/worktrees/does-not-exist" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
+assert_eq "noworktree-oh: non-existent <worktree-path> → exit 2" "2" "$oh_rc"
+spawn_office_hours_teardown
+
+# --- Test 7: bad phase / bad pr token ----------------------------------------
+
+echo "Test: a malformed phase or pr token exits 2"
+spawn_office_hours_setup
+write_fake_spawn_worker_claude
+# Bad phase (uppercase + metacharacter).
+if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 "QA!" - "$WORKER_TARGET_WORKTREE" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
+assert_eq "badtoken-oh: malformed phase → exit 2" "2" "$oh_rc"
+# Bad pr token (neither a positive integer nor '-').
+if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement x "$WORKER_TARGET_WORKTREE" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
+assert_eq "badtoken-oh: malformed pr token → exit 2" "2" "$oh_rc"
+spawn_office_hours_teardown
+
+# ============================================================================
 # dispatch-spawn-job tests
 # ============================================================================
 echo "=== dispatch-spawn-job ==="
