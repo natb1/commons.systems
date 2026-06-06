@@ -33,7 +33,7 @@ import {
   readFileFromHandle,
 } from "./local-file.js";
 import { SeedDataSource, IdbDataSource, FileSyncingDataSource, type DataSource } from "./data-source.js";
-import { configureFileSync, flushWriteBack, resetFileSync } from "./file-sync.js";
+import { configureFileSync, flushWriteBack, resetFileSync, getSyncHandle, getLastSyncedModified } from "./file-sync.js";
 import { setActiveDataSource } from "./active-data-source.js";
 import { exportToJson } from "./export.js";
 import { isEncrypted, decrypt, encrypt } from "./crypto.js";
@@ -308,7 +308,7 @@ async function loadFromHandle(handle: FileSystemFileHandle): Promise<void> {
     // (an encrypted file decrypted, or null for a plaintext file); a
     // password-cancel returns early without transitioning to local, leaving
     // importPassword null, so this no-ops there.
-    if (importPassword) configureFileSync(handle, importPassword);
+    if (importPassword) configureFileSync(handle, importPassword, file.lastModified);
   } catch (error) {
     if (error instanceof UploadValidationError) {
       // The persisted handle points to a file that is not valid budget data
@@ -417,6 +417,36 @@ exportButton.addEventListener("click", async () => {
 // tab close does not lose the last edit. Registered once at the top level.
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") void flushWriteBack();
+});
+
+// External-change reload: when the window regains focus, re-read the on-disk
+// file's lastModified. If it is newer than the watermark the app stamped at its
+// last load or write-back, an external writer changed the file (another device's
+// sync, or a dispatched budget-etl parse) — reload it so we do not overwrite a
+// newer external write with stale in-memory state. Last-write-wins, whole-file.
+// No-op in seed / non-FSA sessions (no armed handle).
+async function reloadIfExternallyChanged(): Promise<void> {
+  const handle = getSyncHandle();
+  if (!handle) return;
+  const watermark = getLastSyncedModified();
+  let file: File;
+  try {
+    file = await readFileFromHandle(handle);
+  } catch (error) {
+    // Stale handle (file moved/deleted): leave it for the next explicit load,
+    // which surfaces the re-link picker. Do not crash the focus handler.
+    logError(error, { operation: "external-change-reload" });
+    return;
+  }
+  if (watermark !== null && file.lastModified <= watermark) return;
+  await loadFromHandle(handle);
+}
+
+window.addEventListener("focus", () => {
+  reloadIfExternallyChanged().catch((error) => {
+    if (deferProgrammerError(error)) return;
+    logError(error, { operation: "external-change-reload" });
+  });
 });
 
 clearButton.addEventListener("click", async () => {

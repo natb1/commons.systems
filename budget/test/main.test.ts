@@ -44,6 +44,8 @@ const mockReadFileFromHandle = vi.fn();
 const mockConfigureFileSync = vi.fn();
 const mockFlushWriteBack = vi.fn();
 const mockResetFileSync = vi.fn();
+const mockGetSyncHandle = vi.fn();
+const mockGetLastSyncedModified = vi.fn();
 
 const mockIsEncrypted = vi.fn();
 const mockDecrypt = vi.fn();
@@ -84,6 +86,8 @@ vi.mock("../src/file-sync.js", () => ({
   configureFileSync: mockConfigureFileSync,
   flushWriteBack: mockFlushWriteBack,
   resetFileSync: mockResetFileSync,
+  getSyncHandle: mockGetSyncHandle,
+  getLastSyncedModified: mockGetLastSyncedModified,
 }));
 
 vi.mock("../src/crypto.js", () => ({
@@ -143,6 +147,8 @@ function resetAndMockAll(): void {
     configureFileSync: mockConfigureFileSync,
     flushWriteBack: mockFlushWriteBack,
     resetFileSync: mockResetFileSync,
+    getSyncHandle: mockGetSyncHandle,
+    getLastSyncedModified: mockGetLastSyncedModified,
   }));
   vi.mock("../src/crypto.js", () => ({
     isEncrypted: mockIsEncrypted,
@@ -176,6 +182,8 @@ describe("main module", () => {
     mockConfigureFileSync.mockReset();
     mockFlushWriteBack.mockReset().mockResolvedValue(undefined);
     mockResetFileSync.mockReset();
+    mockGetSyncHandle.mockReset().mockReturnValue(null);
+    mockGetLastSyncedModified.mockReset().mockReturnValue(null);
     // Default: plaintext files (no BENC header) — preserves the existing
     // upload/auto-load tests that pass a bare `{}` file.
     mockIsEncrypted.mockReset().mockReturnValue(false);
@@ -477,7 +485,7 @@ describe("main module", () => {
     await new Promise(r => setTimeout(r, 0));
 
     expect(mockStoreParsedData).toHaveBeenCalled();
-    expect(mockConfigureFileSync).toHaveBeenCalledWith(handle, "s3cret");
+    expect(mockConfigureFileSync).toHaveBeenCalledWith(handle, "s3cret", expect.any(Number));
   });
 
   it("flushes a pending write-back on visibilitychange -> hidden", async () => {
@@ -555,5 +563,75 @@ describe("main module", () => {
     expect(mockPutFileHandle).toHaveBeenCalledWith(handle);
     expect(mockRequestReadWritePermission).toHaveBeenCalledWith(handle);
     expect(mockReadFileFromHandle).toHaveBeenCalledWith(handle);
+  });
+
+  it("reloads when the on-disk file is newer than the watermark", async () => {
+    const handle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
+    mockGetSyncHandle.mockReturnValue(handle);
+    mockGetLastSyncedModified.mockReturnValue(1000);
+    mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "budget.benc", { lastModified: 9000 }));
+
+    resetAndMockAll();
+
+    const { parseUploadedJson, toParsedData } = await import("../src/upload.js");
+    (parseUploadedJson as ReturnType<typeof vi.fn>).mockReturnValue({ groupName: "household" });
+    (toParsedData as ReturnType<typeof vi.fn>).mockReturnValue({ meta: { groupName: "household" } });
+    mockStoreParsedData.mockResolvedValue(undefined);
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // initialize() does not load (default handle undefined), so no store yet.
+    const storeCallsBefore = mockStoreParsedData.mock.calls.length;
+    mockReadFileFromHandle.mockClear();
+
+    window.dispatchEvent(new Event("focus"));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // The focus watcher re-read the file and reloaded it through the pipeline.
+    expect(mockReadFileFromHandle).toHaveBeenCalledWith(handle);
+    expect(mockStoreParsedData.mock.calls.length).toBeGreaterThan(storeCallsBefore);
+  });
+
+  it("does not reload when the on-disk file is not newer than the watermark", async () => {
+    const handle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
+    mockGetSyncHandle.mockReturnValue(handle);
+    mockGetLastSyncedModified.mockReturnValue(9000);
+    mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "budget.benc", { lastModified: 1000 }));
+
+    resetAndMockAll();
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    mockStoreParsedData.mockClear();
+
+    window.dispatchEvent(new Event("focus"));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // File is older-or-equal to the watermark: no reload.
+    expect(mockStoreParsedData).not.toHaveBeenCalled();
+  });
+
+  it("is a no-op on focus in a seed/non-FSA session (no armed handle)", async () => {
+    mockGetSyncHandle.mockReturnValue(null);
+
+    resetAndMockAll();
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    mockReadFileFromHandle.mockClear();
+
+    window.dispatchEvent(new Event("focus"));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(mockReadFileFromHandle).not.toHaveBeenCalled();
   });
 });
