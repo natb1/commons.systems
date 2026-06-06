@@ -17,6 +17,8 @@
     "./firebase-headers.test-helper": "./firebase-headers.test-helper.ts",
     "./cache-headers-smoke": "./cache-headers-smoke.ts",
     "./security-headers-smoke": "./security-headers-smoke.ts",
+    "./reachability-smoke": "./reachability-smoke.ts",
+    "./hosting-smoke-helpers": "./hosting-smoke-helpers.ts",
     "./playwright-test": "./playwright-test.ts"
   }
 }
