@@ -21,6 +21,9 @@ export interface DirHandleLike {
  * subdirectory, the final segment is the file. Returns the file handle, or
  * `null` when a directory or the file is missing/moved (a `NotFoundError`). All
  * other errors propagate.
+ *
+ * Path-traversal guard: any segment equal to `..` or `.` causes an immediate
+ * `null` return, independent of browser FSA behavior.
  */
 export async function resolveSourceFile(
   dir: DirHandleLike,
@@ -28,6 +31,9 @@ export async function resolveSourceFile(
 ): Promise<FileHandleLike | null> {
   const segments = relPath.split("/").filter((s) => s.length > 0);
   if (segments.length === 0) {
+    return null;
+  }
+  if (segments.some((s) => s === ".." || s === ".")) {
     return null;
   }
 

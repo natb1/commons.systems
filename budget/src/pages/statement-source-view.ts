@@ -1,4 +1,3 @@
-import { escapeHtml } from "@commons-systems/htmlutil";
 import { getActiveDataSource } from "../active-data-source.js";
 import {
   isDirectoryAccessSupported,
@@ -53,6 +52,7 @@ function createSourceDialog(): DialogHandle {
 
   const dialog = document.createElement("dialog");
   dialog.className = "statement-source-dialog";
+  dialog.setAttribute("aria-label", "Source statement viewer");
 
   const closeButton = document.createElement("button");
   closeButton.type = "button";
@@ -94,7 +94,10 @@ function createSourceDialog(): DialogHandle {
 
 /** Render a plain text message into the dialog body. */
 function renderMessage(body: HTMLElement, message: string): void {
-  body.innerHTML = `<p class="statement-source-message">${escapeHtml(message)}</p>`;
+  const p = document.createElement("p");
+  p.className = "statement-source-message";
+  p.textContent = message;
+  body.replaceChildren(p);
 }
 
 /**
@@ -118,6 +121,11 @@ async function renderFile(
     onClose(() => URL.revokeObjectURL(url));
     const frame = document.createElement("iframe");
     frame.className = "statement-source-frame";
+    // Defense-in-depth: blob: is same-origin; allow-same-origin lets the
+    // browser's native PDF viewer load the blob URL, while omitting
+    // allow-scripts blocks any JavaScript embedded in a malicious PDF from
+    // executing in the app origin.
+    frame.setAttribute("sandbox", "allow-same-origin");
     frame.src = url;
     body.replaceChildren(frame);
   } else {
@@ -151,9 +159,10 @@ async function showSourceForHandle(
   // 5. Resolve the recorded path against the directory handle.
   const fileHandle = await resolveSourceFile(asDirHandleLike(handle), sourceFile);
   if (fileHandle === null) {
+    const displayName = sourceFile.split("/").at(-1) ?? sourceFile;
     renderMessage(
       dlg.body,
-      `Source file not found in the linked folder (it may have moved or been renamed): ${sourceFile}`,
+      `Source file not found in the linked folder (it may have moved or been renamed): ${displayName}`,
     );
     return;
   }
@@ -170,58 +179,66 @@ async function showSourceForHandle(
 export async function openStatementSource(statementId: string): Promise<void> {
   const dlg = createSourceDialog();
 
-  // 1. Capability gate.
-  if (!isDirectoryAccessSupported()) {
-    renderMessage(
-      dlg.body,
-      "Directory access is not supported in this browser. Source statement files can only be shown in a Chromium-based browser.",
-    );
-    return;
+  try {
+    // 1. Capability gate.
+    if (!isDirectoryAccessSupported()) {
+      renderMessage(
+        dlg.body,
+        "Directory access is not supported in this browser. Source statement files can only be shown in a Chromium-based browser.",
+      );
+      return;
+    }
+
+    // 2. Look up the statement and its recorded source file.
+    const statements = await getActiveDataSource().getStatements();
+    const statement = statements.find((s) => s.statementId === statementId);
+    if (!statement || !statement.sourceFile) {
+      renderMessage(
+        dlg.body,
+        "No source file is recorded for this statement. Re-run the parser to enable provenance.",
+      );
+      return;
+    }
+    const sourceFile = statement.sourceFile;
+
+    // 3. Obtain the persisted directory handle, or offer to link the folder.
+    const stored = await getStoredDirectoryHandle();
+    if (!stored) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "statement-source-link-folder";
+      button.textContent = "Link statements folder";
+      button.addEventListener("click", () => {
+        void (async () => {
+          let picked: FileSystemDirectoryHandle;
+          try {
+            picked = await pickStatementsDirectory();
+          } catch {
+            // User aborted the picker, or it failed — show a message, no crash.
+            renderMessage(
+              dlg.body,
+              "No statements folder was linked. Link the folder to view source files.",
+            );
+            return;
+          }
+          try {
+            await showSourceForHandle(picked, sourceFile, dlg);
+          } catch {
+            renderMessage(dlg.body, "An unexpected error occurred while reading the source file.");
+          }
+        })();
+      });
+
+      const intro = document.createElement("p");
+      intro.className = "statement-source-message";
+      intro.textContent =
+        "Link your statements folder to view the source file for this transaction.";
+      dlg.body.replaceChildren(intro, button);
+      return;
+    }
+
+    await showSourceForHandle(stored, sourceFile, dlg);
+  } catch {
+    renderMessage(dlg.body, "An unexpected error occurred while opening the source file.");
   }
-
-  // 2. Look up the statement and its recorded source file.
-  const statements = await getActiveDataSource().getStatements();
-  const statement = statements.find((s) => s.statementId === statementId);
-  if (!statement || !statement.sourceFile) {
-    renderMessage(
-      dlg.body,
-      "No source file is recorded for this statement. Re-run the parser to enable provenance.",
-    );
-    return;
-  }
-  const sourceFile = statement.sourceFile;
-
-  // 3. Obtain the persisted directory handle, or offer to link the folder.
-  const stored = await getStoredDirectoryHandle();
-  if (!stored) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "statement-source-link-folder";
-    button.textContent = "Link statements folder";
-    button.addEventListener("click", () => {
-      void (async () => {
-        let picked: FileSystemDirectoryHandle;
-        try {
-          picked = await pickStatementsDirectory();
-        } catch {
-          // User aborted the picker, or it failed — show a message, no crash.
-          renderMessage(
-            dlg.body,
-            "No statements folder was linked. Link the folder to view source files.",
-          );
-          return;
-        }
-        await showSourceForHandle(picked, sourceFile, dlg);
-      })();
-    });
-
-    const intro = document.createElement("p");
-    intro.className = "statement-source-message";
-    intro.textContent =
-      "Link your statements folder to view the source file for this transaction.";
-    dlg.body.replaceChildren(intro, button);
-    return;
-  }
-
-  await showSourceForHandle(stored, sourceFile, dlg);
 }

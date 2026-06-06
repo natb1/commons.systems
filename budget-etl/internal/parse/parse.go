@@ -151,7 +151,10 @@ func discoverFlatFiles(dir, institution, account string) ([]StatementFile, error
 		if err != nil {
 			return StatementFile{}, err
 		}
-		rel, _ := filepath.Rel(dir, path)
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return StatementFile{}, err
+		}
 		return StatementFile{
 			Path:        path,
 			Institution: institution,
