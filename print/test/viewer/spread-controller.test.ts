@@ -125,21 +125,29 @@ describe("SpreadController", () => {
     expect(canvasWrap.style.transform).toBe("");
   });
 
+  // Both tests stub the global localStorage object rather than spy on
+  // Storage.prototype.getItem. Under happy-dom only the first prototype getItem
+  // spy in a Storage instance's lifetime is wired to localStorage, so a second
+  // spy silently reads through to real storage — making prototype-spy tests
+  // order- and cross-file-dependent. Stubbing the global (cleaned by
+  // vi.unstubAllGlobals in afterEach) targets the boundary the controller
+  // actually reads and is immune to that quirk.
   it("loadPreference returns false and reports error when getItem throws", () => {
-    const { controller } = makeController();
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-      throw new Error("boom");
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("boom");
+      },
     });
+    const { controller } = makeController();
 
     expect(controller.loadPreference()).toBe(false);
     expect(reportErrorMock).toHaveBeenCalled();
   });
 
   it("loadPreference returns true when the stored preference is 'true'", () => {
-    // Use real storage rather than spying on Storage.prototype.getItem: under
-    // happy-dom only the first prototype getItem spy in the file is wired to
-    // localStorage, and the throw-path test above claims that slot.
-    localStorage.setItem(STORAGE_KEY, "true");
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => (key === STORAGE_KEY ? "true" : null),
+    });
     const { controller } = makeController();
     expect(controller.loadPreference()).toBe(true);
     expect(reportErrorMock).not.toHaveBeenCalled();
