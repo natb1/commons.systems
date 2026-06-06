@@ -3425,7 +3425,7 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # orphan world: no live sessions
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "oldest labeled item selected (implement, no PR)" "office-hours 42 implement -" "$result"
+assert_eq "oldest labeled item selected (implement, no PR)" "office-hours 42 implement - -" "$result"
 teardown
 
 # OHST2. A qa item — draft PR, CI green, no dispatch:* label → phase qa, PR num.
@@ -3437,7 +3437,7 @@ printf '[{"number":7,"headRefName":"50-feat","isDraft":true,"statusCheckRollup":
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "qa item selected with its PR number" "office-hours 50 qa 7" "$result"
+assert_eq "qa item selected with its PR number" "office-hours 50 qa 7 -" "$result"
 teardown
 
 # OHST3. The oldest labeled item whose <N>-* worktree has a live session is
@@ -3511,7 +3511,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 # setup's default CLAUDE_AGENTS_CMD points at a non-existent binary (UNKNOWN).
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "UNKNOWN-liveness worktree item skipped; worktree-free item selected" "office-hours 99 implement -" "$result"
+assert_eq "UNKNOWN-liveness worktree item skipped; worktree-free item selected" "office-hours 99 implement - -" "$result"
 teardown
 
 # Install a fake `claude` whose `agents --json` returns a controllable session
@@ -3581,7 +3581,7 @@ export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
 # sessionless) plus a parked dispatch-* router under main.
 parked_router_fake_claude "dispatch-abc123:waiting"
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "labeled item selected over parked router" "office-hours 42 implement -" "$result"
+assert_eq "labeled item selected over parked router" "office-hours 42 implement - -" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
@@ -3610,7 +3610,21 @@ printf '[%s]\n' "$(make_pr 7 "50-feat" "true" "$NO_LABELS" "$PENDING_ROLLUP")" \
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "pending-CI draft PR → waiting, PR number" "office-hours 50 waiting 7" "$result"
+assert_eq "pending-CI draft PR → waiting, PR number" "office-hours 50 waiting 7 -" "$result"
+teardown
+
+# OHST11. A sessionless labeled item whose <N>-* worktree exists on disk (an
+# orphan: no live session) → the fresh disposition carries that worktree path
+# as its 5th field, so the entry script can launch the fresh session --cwd it.
+echo "Test: sessionless item with an orphan worktree → worktree path emitted"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # orphan: no live sessions → sessionless, picked fresh
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "fresh disposition carries the worktree path" "office-hours 42 implement - /worktrees/42-x" "$result"
 teardown
 
 # ============================================================================
