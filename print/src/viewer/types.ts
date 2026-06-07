@@ -25,6 +25,8 @@ export interface OutlineEntry {
 export interface ContentRenderer {
   init(container: HTMLElement, source: string | ArrayBuffer, initialPosition?: string): Promise<void>;
   goToPage(page: number): Promise<void>;
+  /** Navigate to an arbitrary serialized position (page-number string or EPUB CFI). */
+  goToPosition(position: string): Promise<void>;
   next(): Promise<void>;
   prev(): Promise<void>;
   readonly pageCount: number;

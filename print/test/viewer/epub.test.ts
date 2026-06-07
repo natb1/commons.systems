@@ -205,6 +205,34 @@ describe("createEpubRenderer", () => {
     });
   });
 
+  describe("goToPosition", () => {
+    it("displays the given CFI and awaits relocation", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      mockRendition.display.mockClear();
+
+      // Capture the relocated callback registered by goToPosition's waitForRelocated
+      // and invoke it so the awaited promise resolves (mirrors next/prev tests).
+      mockRendition.once.mockImplementation((_event: string, cb: () => void) => {
+        cb();
+      });
+
+      const cfi = "epubcfi(/6/14!/4/2/2)";
+      await renderer.goToPosition(cfi);
+
+      expect(mockRendition.display).toHaveBeenCalledWith(cfi);
+    });
+
+    it("does nothing when rendition is not initialized", async () => {
+      const renderer = createEpubRenderer();
+
+      await renderer.goToPosition("epubcfi(/6/14!/4/2/2)");
+
+      expect(mockRendition.display).not.toHaveBeenCalled();
+    });
+  });
+
   describe("destroy", () => {
     it("calls rendition.destroy, book.destroy, and removes container div", async () => {
       const renderer = createEpubRenderer();

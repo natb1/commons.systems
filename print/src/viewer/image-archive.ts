@@ -220,6 +220,11 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void, sto
       prefetchNextPage(page);
     },
 
+    async goToPosition(position: string): Promise<void> {
+      const page = parsePositionPage(position, _pageCount);
+      await this.goToPage(page);
+    },
+
     async next(): Promise<void> {
       if (_currentPage < _pageCount) {
         await this.goToPage(_currentPage + 1);

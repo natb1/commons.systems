@@ -165,6 +165,42 @@ describe("createImageArchiveRenderer", () => {
     expect(img.alt).toBe("Page 2");
   });
 
+  it("goToPosition navigates to the page named by the position string", async () => {
+    mockEntries({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+      "image-003.png": new Uint8Array([3]),
+    });
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    const img = container.querySelector("img") as HTMLImageElement;
+    const firstSrc = img.src;
+
+    await renderer.goToPosition("3");
+    expect(renderer.currentPage).toBe(3);
+    expect(renderer.position).toBe("3");
+    expect(img.src).not.toBe(firstSrc);
+    expect(img.alt).toBe("Page 3");
+  });
+
+  it("goToPosition falls back to page 1 for out-of-range positions", async () => {
+    mockEntries({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    await renderer.goToPage(2);
+    await renderer.goToPosition("99");
+    expect(renderer.currentPage).toBe(1);
+  });
+
   it("next() advances to next page", async () => {
     mockEntries({
       "image-001.png": new Uint8Array([1]),

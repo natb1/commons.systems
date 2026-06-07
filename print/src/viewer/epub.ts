@@ -122,6 +122,13 @@ export function createEpubRenderer(
       await rendition.display(spineItem.href);
     },
 
+    async goToPosition(position: string): Promise<void> {
+      if (!rendition) return;
+      const relocated = waitForRelocated();
+      await rendition.display(position);
+      await relocated;
+    },
+
     async next(): Promise<void> {
       if (!rendition || _atEnd) return;
       const relocated = waitForRelocated();

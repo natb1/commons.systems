@@ -279,6 +279,12 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       await renderPage(page);
     },
 
+    async goToPosition(position: string): Promise<void> {
+      const page = parsePositionPage(position, _pageCount);
+      _currentPage = page;
+      await renderPage(page);
+    },
+
     async next(): Promise<void> {
       if (_currentPage < _pageCount) {
         _currentPage++;
