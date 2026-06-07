@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # fetch-analytics.sh — fetch Google Analytics 4 (GA4) and Google Search Console
 # data and emit a single formatted text block to stdout, for consumption by the
-# roadmap-debate skill's Phase 1 context gathering.
+# roadmap skill's Phase 1 context gathering.
 #
 # GA4 metrics (per deployed app, 30-day window): page views, sessions, bounce
 # rate; top-10 referral sources by sessions; top-10 landing pages. Search
@@ -43,7 +43,7 @@
 #      configured with your own client id/secret and BOTH scopes above) and
 #      capture the refresh token it issues.
 #   4. Store all three values in pass under stable paths and source them as
-#      env vars before invoking /roadmap-debate.
+#      env vars before invoking /roadmap.
 #
 # Config env vars (with defaults):
 #   ROADMAP_GA4_PROPERTY_IDS    App→property map, comma-separated app:propertyId
@@ -68,7 +68,7 @@ set -euo pipefail
 # ---- Step 0: no-config gate -------------------------------------------------
 # Any of the three OAuth env vars unset/empty → print a parenthetical note to
 # stdout, exit 0. Unlike dispatch-jit-calendar-import (which exits silently),
-# this script surfaces the skip to the parent so roadmap-debate Phase 1 can log
+# this script surfaces the skip to the parent so roadmap Phase 1 can log
 # it in the context file.
 if [[ -z "${GOOGLE_ANALYTICS_CLIENT_ID:-}" \
    || -z "${GOOGLE_ANALYTICS_CLIENT_SECRET:-}" \
