@@ -9,6 +9,7 @@ import "@commons-systems/components/nav";
 import type { AppNavElement } from "@commons-systems/components/nav";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "./auth.js";
+import { setViewerEmail } from "./library.js";
 import { trackPageView } from "./firebase.js";
 import { renderHero } from "./pages/hero.js";
 import { mountHero } from "@commons-systems/components/hero";
@@ -66,5 +67,6 @@ onAuthStateChanged((user) => {
   currentUser = user;
   navEl.user = user;
   heroContainer.hidden = user !== null;
+  setViewerEmail(user?.email ?? null);
   router.navigate();
 });

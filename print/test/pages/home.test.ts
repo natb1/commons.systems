@@ -1,13 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
-const mockGetPublicMedia = vi.fn();
-const mockGetAllAccessibleMedia = vi.fn();
+const mockListCloud = vi.fn();
 
-vi.mock("../../src/firestore.js", () => ({
-  getPublicMedia: (...args: unknown[]) => mockGetPublicMedia(...args),
-  getAllAccessibleMedia: (...args: unknown[]) =>
-    mockGetAllAccessibleMedia(...args),
+// renderHome routes its cloud fetch through library.ts's listCloud(); the
+// per-viewer dispatch (public vs. accessible) now lives in library.ts and is
+// covered by library.test.ts. Mock the library seam here so renderHome's
+// rendering is tested without real firebase init.
+vi.mock("../../src/library.js", () => ({
+  listCloud: (...args: unknown[]) => mockListCloud(...args),
+}));
+
+// local-folder-ui.ts transitively imports firebase via library.ts; only
+// afterRenderHome uses it, so stub it for the render-only tests.
+vi.mock("../../src/local-folder-ui.js", () => ({
+  initLocalFolder: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("../../src/storage.js", () => ({
@@ -47,17 +54,16 @@ describe("renderHome", () => {
   });
 
   describe("when user is null (signed out)", () => {
-    it("calls getPublicMedia", async () => {
-      mockGetPublicMedia.mockResolvedValue([]);
+    it("fetches the cloud library via listCloud", async () => {
+      mockListCloud.mockResolvedValue([]);
 
       await renderHome(null);
 
-      expect(mockGetPublicMedia).toHaveBeenCalled();
-      expect(mockGetAllAccessibleMedia).not.toHaveBeenCalled();
+      expect(mockListCloud).toHaveBeenCalled();
     });
 
     it("shows the public notice", async () => {
-      mockGetPublicMedia.mockResolvedValue([]);
+      mockListCloud.mockResolvedValue([]);
 
       const html = await renderHome(null);
 
@@ -73,17 +79,16 @@ describe("renderHome", () => {
       displayName: string;
     };
 
-    it("calls getAllAccessibleMedia with user email", async () => {
-      mockGetAllAccessibleMedia.mockResolvedValue([]);
+    it("fetches the cloud library via listCloud", async () => {
+      mockListCloud.mockResolvedValue([]);
 
       await renderHome(mockUser);
 
-      expect(mockGetAllAccessibleMedia).toHaveBeenCalledWith("user@example.com");
-      expect(mockGetPublicMedia).not.toHaveBeenCalled();
+      expect(mockListCloud).toHaveBeenCalled();
     });
 
     it("does not show the public notice", async () => {
-      mockGetAllAccessibleMedia.mockResolvedValue([]);
+      mockListCloud.mockResolvedValue([]);
 
       const html = await renderHome(mockUser);
 
@@ -92,15 +97,23 @@ describe("renderHome", () => {
   });
 
   it("renders the Library heading", async () => {
-    mockGetPublicMedia.mockResolvedValue([]);
+    mockListCloud.mockResolvedValue([]);
 
     const html = await renderHome(null);
 
     expect(html).toContain("<h2>Library</h2>");
   });
 
+  it("renders the local-folder section", async () => {
+    mockListCloud.mockResolvedValue([]);
+
+    const html = await renderHome(null);
+
+    expect(html).toContain('id="local-folder"');
+  });
+
   it("renders empty state when no items are returned", async () => {
-    mockGetPublicMedia.mockResolvedValue([]);
+    mockListCloud.mockResolvedValue([]);
 
     const html = await renderHome(null);
 
@@ -109,7 +122,7 @@ describe("renderHome", () => {
   });
 
   it("renders media list with items", async () => {
-    mockGetPublicMedia.mockResolvedValue([
+    mockListCloud.mockResolvedValue([
       makeMediaItem({ id: "book-1", title: "First Book" }),
       makeMediaItem({ id: "book-2", title: "Second Book", mediaType: "epub" }),
     ]);
@@ -122,7 +135,7 @@ describe("renderHome", () => {
   });
 
   it("renders media-item elements with data-id attributes", async () => {
-    mockGetPublicMedia.mockResolvedValue([
+    mockListCloud.mockResolvedValue([
       makeMediaItem({ id: "book-1" }),
     ]);
 
@@ -133,7 +146,7 @@ describe("renderHome", () => {
   });
 
   it("renders a view link for each item", async () => {
-    mockGetPublicMedia.mockResolvedValue([
+    mockListCloud.mockResolvedValue([
       makeMediaItem({ id: "book-1" }),
     ]);
 
@@ -144,7 +157,7 @@ describe("renderHome", () => {
   });
 
   it("renders a download button for each item", async () => {
-    mockGetPublicMedia.mockResolvedValue([
+    mockListCloud.mockResolvedValue([
       makeMediaItem({ storagePath: "media/test.pdf" }),
     ]);
 
@@ -155,7 +168,7 @@ describe("renderHome", () => {
   });
 
   it("renders media type badge", async () => {
-    mockGetPublicMedia.mockResolvedValue([
+    mockListCloud.mockResolvedValue([
       makeMediaItem({ mediaType: "epub" }),
     ]);
 
@@ -166,7 +179,7 @@ describe("renderHome", () => {
   });
 
   it("renders error fallback when Firestore fails", async () => {
-    mockGetPublicMedia.mockRejectedValue(new Error("connection failed"));
+    mockListCloud.mockRejectedValue(new Error("connection failed"));
 
     const html = await renderHome(null);
 
@@ -175,7 +188,7 @@ describe("renderHome", () => {
   });
 
   it("renders markdown buttons when markdownPath is non-null", async () => {
-    mockGetPublicMedia.mockResolvedValue([
+    mockListCloud.mockResolvedValue([
       makeMediaItem({ markdownPath: "media/test.md" }),
     ]);
 
@@ -187,7 +200,7 @@ describe("renderHome", () => {
   });
 
   it("does not render markdown buttons when markdownPath is null", async () => {
-    mockGetPublicMedia.mockResolvedValue([
+    mockListCloud.mockResolvedValue([
       makeMediaItem(),
     ]);
 
@@ -198,7 +211,7 @@ describe("renderHome", () => {
   });
 
   it("re-throws DataIntegrityError", async () => {
-    mockGetPublicMedia.mockRejectedValue(
+    mockListCloud.mockRejectedValue(
       new DataIntegrityError("corrupt data"),
     );
 

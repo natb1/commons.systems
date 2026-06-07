@@ -2,9 +2,10 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 import { logError } from "@commons-systems/errorutil/log";
 import type { User } from "../auth.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
-import { getPublicMedia, getAllAccessibleMedia } from "../firestore.js";
+import { listCloud } from "../library.js";
 import { getMediaDownloadUrl } from "../storage.js";
 import { wireMarkdownActions } from "../markdown-actions.js";
+import { initLocalFolder } from "../local-folder-ui.js";
 import type { MediaItem, MediaType } from "../types.js";
 
 function mediaTypeBadge(mediaType: MediaType): string {
@@ -34,6 +35,25 @@ function renderMediaList(items: MediaItem[]): string {
     .join("\n");
 
   return `<ul id="media-list">${rows}</ul>`;
+}
+
+/**
+ * Render local-folder items as `<li>` rows for prepending into the shared media
+ * list. Local items get a "local" badge and a view link, but no download /
+ * markdown actions — their bytes live on the user's disk, not in cloud storage.
+ */
+export function renderLocalMediaItems(items: MediaItem[]): string {
+  return items
+    .map((item) => {
+      return `<li class="media-item media-item-local" data-id="${escapeHtml(item.id)}">
+        <div class="media-info">
+          <span class="media-title"><a href="/view/${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a></span>
+          ${mediaTypeBadge(item.mediaType)}
+          <span class="media-badge media-badge-local">local</span>
+        </div>
+      </li>`;
+    })
+    .join("\n");
 }
 
 async function handleDownload(button: HTMLButtonElement): Promise<void> {
@@ -73,10 +93,7 @@ async function handleDownload(button: HTMLButtonElement): Promise<void> {
 export async function renderHome(user: User | null): Promise<string> {
   let mediaHtml: string;
   try {
-    const items = user?.email
-      ? await getAllAccessibleMedia(user.email)
-      : await getPublicMedia();
-
+    const items = await listCloud();
     mediaHtml = renderMediaList(items);
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
@@ -91,11 +108,21 @@ export async function renderHome(user: User | null): Promise<string> {
   return `
     <h2>Library</h2>
     ${publicNotice}
+    <section id="local-folder"></section>
     ${mediaHtml}
   `;
 }
 
-export function afterRenderHome(outlet: HTMLElement): void {
+let detachLocalFolder: (() => void) | null = null;
+
+export async function afterRenderHome(outlet: HTMLElement): Promise<void> {
+  // Tear down the previous run's local-folder wiring (focus listener) before
+  // re-initializing, so navigating away and back does not leak listeners.
+  if (detachLocalFolder) {
+    detachLocalFolder();
+    detachLocalFolder = null;
+  }
+
   outlet.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
     const downloadBtn = target.closest(".media-download") as HTMLButtonElement | null;
@@ -105,4 +132,13 @@ export function afterRenderHome(outlet: HTMLElement): void {
     }
   });
   wireMarkdownActions(outlet);
+
+  const localFolderSectionEl = outlet.querySelector<HTMLElement>("#local-folder");
+  if (localFolderSectionEl) {
+    try {
+      detachLocalFolder = await initLocalFolder(localFolderSectionEl, outlet);
+    } catch (err) {
+      logError(err, { operation: "init-local-folder" });
+    }
+  }
 }
