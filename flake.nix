@@ -43,6 +43,7 @@
                 nodejs_22
                 openjdk
                 go
+                python3
                 jq
                 fswatch
                 playwright-driver.browsers
