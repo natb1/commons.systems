@@ -9258,12 +9258,13 @@ if [[ "$log" == *"--unit=dispatch-reseed-20000"* \
    && "$log" == *"--on-calendar=@20000"* \
    && "$log" == *"--collect"* \
    && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + cwd + setenv + exec)"
+  PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + KillMode + cwd + setenv + exec)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + cwd + setenv + exec)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + KillMode + cwd + setenv + exec)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -10498,12 +10499,13 @@ TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-tick"* \
    && "$log" == *"--collect"* \
    && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: no-arg systemd-run argv (unit + collect + OnFailure + cwd + setenv + exec)"
+  PASS=$((PASS + 1)); echo "  PASS: no-arg systemd-run argv (unit + collect + OnFailure + KillMode + cwd + setenv + exec)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: no-arg systemd-run argv (unit + collect + OnFailure + cwd + setenv + exec)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-arg systemd-run argv (unit + collect + OnFailure + KillMode + cwd + setenv + exec)"
   echo "    log: $log"
 fi
 # No trailing numeric arg in the no-arg case: the exec path must be the LAST
@@ -10529,10 +10531,11 @@ log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-tick-979"* \
    && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick 979"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + exec path 979)"
+  PASS=$((PASS + 1)); echo "  PASS: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + KillMode + exec path 979)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + exec path 979)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + KillMode + exec path 979)"
   echo "    log: $log"
 fi
 st_teardown
