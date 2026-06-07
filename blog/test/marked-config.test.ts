@@ -77,6 +77,53 @@ describe("image renderer", () => {
   });
 });
 
+describe("link renderer", () => {
+  it("appends ↗ glyph for external http links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[repo](https://github.com/x)");
+    expect(html).toContain('class="external-link-icon"');
+    expect(html).toContain("&#x2197;");
+  });
+
+  it("does not append glyph for relative links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[post](/post/x)");
+    expect(html).not.toContain("external-link-icon");
+    expect(html).not.toContain("&#x2197;");
+  });
+
+  it("does not append glyph for commons.systems subdomain links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[budget](https://budget.commons.systems)");
+    expect(html).not.toContain("external-link-icon");
+    expect(html).not.toContain("&#x2197;");
+  });
+
+  it("does not append glyph for apex commons.systems links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[home](https://commons.systems/x)");
+    expect(html).not.toContain("external-link-icon");
+    expect(html).not.toContain("&#x2197;");
+  });
+
+  it("does not append glyph for mailto links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[email](mailto:user@example.com)");
+    expect(html).not.toContain("external-link-icon");
+    expect(html).not.toContain("&#x2197;");
+  });
+
+  it("preserves target=_blank and rel attributes on all links", async () => {
+    const marked = createMarked();
+    const externalHtml = await marked.parse("[ext](https://github.com/x)");
+    const internalHtml = await marked.parse("[int](/post/x)");
+    expect(externalHtml).toContain('target="_blank"');
+    expect(externalHtml).toContain('rel="noopener noreferrer"');
+    expect(internalHtml).toContain('target="_blank"');
+    expect(internalHtml).toContain('rel="noopener noreferrer"');
+  });
+});
+
 describe("IMAGE_DIMENSIONS", () => {
   it("derives one entry per BLOG_IMAGES config", () => {
     expect(Object.keys(IMAGE_DIMENSIONS).length).toBe(BLOG_IMAGES.length);
