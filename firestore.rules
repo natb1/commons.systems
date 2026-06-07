@@ -460,9 +460,11 @@ service cloud.firestore {
     // other env is owner-gated via the denormalized `memberEmails` field. Client
     // writes are denied.
     match /office-hours/{env}/usage-samples/{sampleId} {
-      allow read: if env == "demo"
+      allow get: if env == "demo"
         || (request.auth != null
             && request.auth.token.email in resource.data.memberEmails);
+      allow list: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
       allow write: if false;
     }
 

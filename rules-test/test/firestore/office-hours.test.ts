@@ -1,7 +1,17 @@
 import { describe, it, beforeAll, beforeEach } from "vitest";
 import { assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
 import type { RulesTestEnvironment } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, deleteDoc, updateDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  updateDoc,
+  collection,
+  query,
+  where,
+} from "firebase/firestore";
 import {
   getTestEnv,
   authenticatedContext,
@@ -218,6 +228,81 @@ describe("office-hours usage-samples", () => {
       setDoc(doc(db, `office-hours/demo/usage-samples/sample-demo`), {
         memberEmails: ["demo@example.com"],
       }),
+    );
+  });
+
+  it("allows owner list query on test-env collection", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/usage-samples`),
+          where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+  });
+
+  it("denies non-member list query on test-env collection", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/usage-samples`),
+          where("memberEmails", "array-contains", "stranger@test.com"),
+        ),
+      ),
+    );
+  });
+
+  it("denies unauthenticated list query on test-env collection", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/usage-samples`),
+          where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+  });
+
+  it("denies unauthenticated list query on demo-env collection", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(collection(db, `office-hours/demo/usage-samples`)),
+    );
+  });
+
+  it("denies authenticated setDoc on demo-env doc", async () => {
+    const ctx = authenticatedContext(env, "demo@example.com");
+    const db = ctx.firestore();
+    await assertFails(
+      setDoc(doc(db, `office-hours/demo/usage-samples/sample-demo`), {
+        memberEmails: ["demo@example.com"],
+      }),
+    );
+  });
+
+  it("denies authenticated updateDoc on demo-env doc", async () => {
+    const ctx = authenticatedContext(env, "demo@example.com");
+    const db = ctx.firestore();
+    await assertFails(
+      updateDoc(doc(db, `office-hours/demo/usage-samples/sample-demo`), {
+        activeWorkers: 2,
+      }),
+    );
+  });
+
+  it("denies authenticated deleteDoc on demo-env doc", async () => {
+    const ctx = authenticatedContext(env, "demo@example.com");
+    const db = ctx.firestore();
+    await assertFails(
+      deleteDoc(doc(db, `office-hours/demo/usage-samples/sample-demo`)),
     );
   });
 });
