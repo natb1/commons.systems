@@ -447,6 +447,16 @@ awk -v mode="$MODE" \
        # the per-window increment ceiling at wcap. Constant in t.
        end = (wfloor + 0) + ((p + 0) + 1) * ((target_weekly + 0) / T - (wfloor + 0))
        if (end > (wcap + 0)) end = (wcap + 0)
+       # Only the upper bound is clamped here. The lower bound (end >= 0, i.e.
+       # curve monotonicity — W rising to target_weekly only at x=1, never
+       # overshooting mid-week) is guaranteed UPSTREAM by dispatch-config-load's
+       # monotonicity constraint (#930): it rejects any config where
+       # target_weekly_usage_pct < T*wfloor*p/(p+1), which is exactly the
+       # condition under which `end` would go negative. Tunables reach this
+       # algorithm only through that validated config (no env-var bypass), so a
+       # defensive `end < 0` clamp here would be dead code masking an
+       # already-rejected config — omitted per the code-style rule (prefer clear
+       # errors over defensive fallbacks).
 
        # ---- Reopen mode: earliest epoch the target next becomes >= 1 ----
        if (mode == "reopen") {

@@ -134,10 +134,18 @@
 # field must be a number when present; absent fields fall back to the
 # defaults baked into `dispatch-target-workers`. The seven percentage fields
 # must be in (0, 100]; weekly_curve_power and max_concurrent_workers must be
-# > 0 with no upper bound. When both members of a pair are present, two
-# cross-field ordering checks apply: weekly_increment_floor_pct <=
-# weekly_increment_cap_pct and five_hour_target_floor_pct <=
-# five_hour_target_ceiling_pct.
+# > 0 with no upper bound. Cross-field checks: three ordering checks fire only
+# when both members of a pair are explicitly present (absent fields fall back to
+# the script defaults, which the validator does not know) — weekly_increment_floor_pct
+# <= weekly_increment_cap_pct, five_hour_target_floor_pct <=
+# five_hour_target_ceiling_pct, and exhaustion_threshold_pct >
+# five_hour_target_ceiling_pct. A fourth check — a curve-monotonicity constraint
+# — instead applies the algorithm defaults for any absent field (unlike the
+# ordering checks), because the canonical misconfiguration sets
+# target_weekly_usage_pct alone with floor/power defaulted: it rejects configs
+# where target_weekly_usage_pct < T*weekly_increment_floor_pct*p/(p+1) (T=34,
+# p=weekly_curve_power), under which the weekly pace curve would be non-monotone
+# (overshooting target_weekly mid-week).
 #
 #   target_weekly_usage_pct        default 90   smooth-curve terminal
 #   weekly_terminal_pct            default 100  envelope terminal W(1)
@@ -440,6 +448,38 @@ case "$CONFIG_TYPE" in
             and ($cfg.five_hour_target_ceiling_pct | type) == "number"
             and ($cfg.exhaustion_threshold_pct <= $cfg.five_hour_target_ceiling_pct)
          then "exhaustion_threshold_pct must be > five_hour_target_ceiling_pct (the override band collapses otherwise), got threshold \($cfg.exhaustion_threshold_pct) <= ceiling \($cfg.five_hour_target_ceiling_pct)"
+         else empty end),
+        # Curve-monotonicity constraint. The pace curve in dispatch-target-workers
+        # solves the terminal per-window increment as
+        #   end = wfloor + (p+1)*(target_weekly/T - wfloor)
+        # and clamps end from above at the cap but never from below. When
+        # target_weekly < T*wfloor*p/(p+1), end goes negative, the per-window
+        # increment d(x)=wfloor+(end-wfloor)*x^p crosses zero, and the cumulative
+        # curve W(x) becomes non-monotone — overshooting target_weekly mid-week
+        # and opening the weekly gate while already over budget. Reject such
+        # configs at load (prefer clear errors over defensive fallbacks).
+        #
+        # Unlike the three ordering checks above (which fire only when BOTH
+        # members are explicitly present, because the validator does not know the
+        # script defaults), this check APPLIES the algorithm defaults for any
+        # absent field — because the canonical misconfiguration is
+        # `target_weekly_usage_pct: 10` set ALONE with floor/power defaulted.
+        # The defaults are numeric, so `//` covers absence; a present-but-non-numeric
+        # field is skipped here (the per-field type check above already flags it),
+        # guarded by the explicit number-type tests so arithmetic never touches a
+        # non-number.
+        (if ((($cfg.target_weekly_usage_pct // 90) | type) == "number")
+            and ((($cfg.weekly_increment_floor_pct // 1) | type) == "number")
+            and ((($cfg.weekly_curve_power // 1) | type) == "number")
+         then
+           ($cfg.target_weekly_usage_pct // 90) as $tw |
+           ($cfg.weekly_increment_floor_pct // 1) as $fl |
+           ($cfg.weekly_curve_power // 1) as $pw |
+           (34) as $T |    # round(WEEK_SECONDS/18000) = round(604800/18000) = 34
+           ($T * $fl * $pw / ($pw + 1)) as $min |
+           if $tw < $min then
+             "target_weekly_usage_pct (effective \($tw)) is below the cumulative pace-curve floor \($min) (= T*floor*p/(p+1), T=\($T), p=\($pw), floor=\($fl)); the smooth weekly pace curve would violate monotonicity — overshooting target_weekly mid-week before descending back to it at week end. Raise target_weekly_usage_pct, or lower weekly_increment_floor_pct / weekly_curve_power."
+           else empty end
          else empty end)
       end
     ' "$CONFIG_FILE")
