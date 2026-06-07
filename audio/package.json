@@ -20,6 +20,8 @@
     "@commons-systems/errorutil": "file:../errorutil",
     "@commons-systems/htmlutil": "file:../htmlutil",
     "@commons-systems/idbutil": "file:../idbutil",
+    "@commons-systems/local-first": "file:../local-first",
+    "@commons-systems/mediautil": "file:../mediautil",
     "@commons-systems/router": "file:../router",
     "@commons-systems/style": "file:../style",
     "firebase": "^12.9.0",
