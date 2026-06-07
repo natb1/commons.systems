@@ -15542,6 +15542,60 @@ else
 fi
 restore_teardown
 
+# --- Test 7b: name-lookup path wins over a divergent branch (#875) -----------
+# Proves the worktree basename derives from the session .name (the
+# `claude agents --json` primary path), NOT from `git rev-parse --abbrev-ref
+# HEAD`. The two sources are made to DIVERGE: .name=875-from-name,
+# branch=999-from-branch. phase=ERROR routes to the dispatch-worker fallback,
+# which emits the worktree path on the ARGUMENTS line.
+echo "Test: restore-dispatch-skill name-lookup wins over divergent branch"
+restore_setup
+set_agents_name "875-from-name"
+echo "999-from-branch" > "$STUB_DIR/current-branch.txt"
+echo "ERROR" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+expected_args="ARGUMENTS: 875 $TMPDIR_TEST/worktrees/875-from-name"
+if [[ "$output" == *"$expected_args"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: name-lookup: ARGUMENTS path derived from .name"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: name-lookup: ARGUMENTS path derived from .name"
+  echo "    output: $output"
+  echo "    expected to contain: $expected_args"
+fi
+# Negative: the divergent branch name must NOT appear anywhere in the output —
+# proves git rev-parse was not the basename source.
+TOTAL=$((TOTAL + 1))
+if [[ "$output" != *"999-from-branch"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: name-lookup: divergent branch name absent from output"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: name-lookup: divergent branch name absent from output"
+  echo "    output: $output"
+fi
+restore_teardown
+
+# --- Test 7c: empty registry → branch-name fallback (#875) -------------------
+# With no claude-agents.json fixture the `claude` stub returns `[]`, so .name is
+# empty and the hook falls through to `git rev-parse --abbrev-ref HEAD`. The
+# branch (999-from-branch) then supplies the basename. Same phase=ERROR routing
+# emits the worktree path on the ARGUMENTS line.
+echo "Test: restore-dispatch-skill empty registry -> branch-name fallback"
+restore_setup
+# Deliberately do NOT call set_agents_name — the claude stub returns [].
+echo "999-from-branch" > "$STUB_DIR/current-branch.txt"
+echo "ERROR" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+expected_args="ARGUMENTS: 999 $TMPDIR_TEST/worktrees/999-from-branch"
+if [[ "$output" == *"$expected_args"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: empty-registry fallback: ARGUMENTS path derived from branch"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: empty-registry fallback: ARGUMENTS path derived from branch"
+  echo "    output: $output"
+  echo "    expected to contain: $expected_args"
+fi
+restore_teardown
+
 # --- Test 8: missing SKILL.md → legacy one-line Reload fallback --------------
 echo "Test: restore-dispatch-skill missing SKILL.md → legacy fallback"
 restore_setup
