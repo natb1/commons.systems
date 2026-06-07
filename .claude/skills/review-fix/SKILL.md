@@ -35,12 +35,16 @@ current branch (use `dangerouslyDisableSandbox: true` — `gh` needs network):
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 PR_JSON=$(gh pr view "$BRANCH" --json number,labels,body)
-PR_NUM=$(echo "$PR_JSON" | jq -r .number)
-echo "$PR_JSON" | jq -r '.labels[].name'
+PR_NUM=$(jq -r .number <<<"$PR_JSON")
+jq -r '.labels[].name' <<<"$PR_JSON"
 ```
 
+A here-string (`<<<`) is used, not `echo "$PR_JSON" | jq`, because zsh `echo`
+un-escapes `\t`/`\n` in the JSON and injects raw control chars `jq` rejects — see
+`.claude/rules/shell-json.md`.
+
 `PR_NUM` is carried through to every later step — do not re-resolve. The PR body
-stays in `PR_JSON` (`echo "$PR_JSON" | jq -r .body`); Step 6 parses its
+stays in `PR_JSON` (`jq -r .body <<<"$PR_JSON"`); Step 6 parses its
 `Closes #N` line(s) to resolve the issue(s) this PR implements.
 
 If the printed labels already include `dispatch:reviewed` — an interrupted prior
@@ -391,9 +395,12 @@ Dismissed, false-positive, Deferred, and out-of-scope findings are **not**
 implemented here. If there are no remaining required/Fixed findings to apply,
 skip the implementation subagents.
 
-Then fork **one** `/commit-merge-push` via the Agent tool to commit every pending
-working-tree change — `/code-review`'s Step 1a edits plus these implementation
-edits — and push. If there were no code changes at all, `/commit-merge-push`
+Then fork **one** `/commit-merge-push` to commit every pending working-tree change —
+`/code-review`'s Step 1a edits plus these implementation edits — and push. Issue an
+Agent tool call with `subagent_type: general-purpose` and `model: sonnet` whose
+prompt invokes `/commit-merge-push` via the Skill tool, the canonical fork recipe
+`/implement-unit` Step 2 documents (`subagent_type` is `general-purpose`, never the
+skill name). If there were no code changes at all, `/commit-merge-push`
 tolerates the no-op and creates no commit. Even on that no-op it pushes `origin
 HEAD`, so it carries any pending local merge (left by `dispatch-merge-main` /
 `/dispatch-resolve-conflict`) to origin; Step 8's flush guard is the
@@ -409,7 +416,7 @@ bucket is empty.
 #### 6a. Deferred code-review/review findings → `/file-issue` with a blocked-by link
 
 First resolve the PR's **implementing issue(s)**: parse the `Closes #N` line(s)
-from the PR body captured in `PR_JSON` (`echo "$PR_JSON" | jq -r .body`). These
+from the PR body captured in `PR_JSON` (`jq -r .body <<<"$PR_JSON"`). These
 are the issue(s) this PR's work delivers.
 
 Then, for **each** Deferred finding, assess — as a required sub-step, never
