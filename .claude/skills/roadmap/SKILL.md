@@ -112,15 +112,20 @@ roadmap review** against `CHARTER.md`. Compute the window-start timestamp first:
   issue in that repo and use its `closedAt` as `WINDOW_START`:
 
   ```bash
-  REVIEW_REPO=$(jq -r '.jits[] | select(.skill == "roadmap") | .repo' <<<"$JIT_JSON")
-  WINDOW_START=$(gh issue list --repo "$REVIEW_REPO" --label jit:roadmap \
-    --state closed --limit 100 --json closedAt \
-    --jq 'max_by(.closedAt) | .closedAt // empty')
+  REVIEW_REPO=$(jq -r '.jits[] | select(.skill == "roadmap") | .repo' <<<"$JIT_JSON" | head -n1)
+  if [[ -z "$REVIEW_REPO" ]]; then
+    WINDOW_START=""
+  else
+    WINDOW_START=$(gh issue list --repo "$REVIEW_REPO" --label jit:roadmap \
+      --state closed --limit 100 --json closedAt \
+      --jq 'max_by(.closedAt) | .closedAt // empty')
+  fi
   ```
 
   Run the `gh` call with `dangerouslyDisableSandbox: true`. If no closed
   `jit:roadmap` issue exists, leave `WINDOW_START` empty and note **"no prior
-  roadmap review — full project history"**.
+  roadmap review — full project history"**. If `REVIEW_REPO` is empty (no jit
+  entry with `skill == "roadmap"`), treat this the same as the no-config case.
 
 Pass `WINDOW_START` into the persona context (Phase 1): instruct the personas to
 evaluate `ROADMAP.md` and **all work completed since `WINDOW_START`** (or the
@@ -333,6 +338,7 @@ never inline it into a command. Then post it as a comment on the review issue
 and close the issue:
 
 ```bash
+mkdir -p "$CLAUDE_JOB_DIR/tmp"
 gh issue comment <num> --repo <repo> --body-file "$CLAUDE_JOB_DIR/tmp/roadmap-report.md"
 gh issue close <num> --repo <repo>
 ```
