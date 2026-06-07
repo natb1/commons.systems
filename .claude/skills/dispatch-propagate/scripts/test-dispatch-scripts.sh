@@ -10911,8 +10911,13 @@ if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" qa 2>/dev/null); then pm_rc=0; el
 assert_eq "phase-model: qa exits 0" "0" "$pm_rc"
 assert_eq "phase-model: qa → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
 
+echo "Test: dispatch-phase-model maps review → claude-sonnet-4-6 (#1172)"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" review 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: review exits 0" "0" "$pm_rc"
+assert_eq "phase-model: review → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+
 echo "Test: dispatch-phase-model maps unmapped phases → empty (default → Opus, no override)"
-for ph in implement verify review done; do
+for ph in implement verify done; do
   if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" "$ph" 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
   assert_eq "phase-model: $ph exits 0" "0" "$pm_rc"
   assert_eq "phase-model: $ph → empty (no --model, inherit Opus)" "" "$pm_out"
@@ -10925,6 +10930,22 @@ assert_eq "phase-model: no-arg → exit 2" "2" "$pm_rc"
 echo "Test: dispatch-phase-model with an empty-string arg exits 2"
 if "$SCRIPT_DIR/dispatch-phase-model" "" 2>/dev/null; then pm_rc=0; else pm_rc=$?; fi
 assert_eq "phase-model: empty-string-arg → exit 2" "2" "$pm_rc"
+
+# --- review-fix/SKILL.md model-tiering content guards (#1172) -----------------
+# The review-fix orchestrator runs on Sonnet; fix-authoring is delegated to an
+# Opus subagent and its /code-review pass is detection-only. Guard both facts so
+# a regression that re-introduces Sonnet-authored fixes (or a --fix /code-review)
+# is caught here.
+REPO_ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
+RF_SKILL="$REPO_ROOT/.claude/skills/review-fix/SKILL.md"
+
+echo "Test: review-fix/SKILL.md pins fix-authoring to Opus (model: opus present)"
+if grep -q 'model: opus' "$RF_SKILL"; then rf_opus=yes; else rf_opus=no; fi
+assert_eq "review-fix: Opus fix-authoring pinned" "yes" "$rf_opus"
+
+echo "Test: review-fix/SKILL.md runs /code-review detection-only (no --fix)"
+if grep -q -- '/code-review max --fix' "$RF_SKILL"; then rf_fix=yes; else rf_fix=no; fi
+assert_eq "review-fix: no /code-review max --fix invocation" "no" "$rf_fix"
 
 # ============================================================================
 # dispatch-spawn-worker tests
@@ -18402,6 +18423,22 @@ assert_eq "implement-model: exit 0" "0" "$rc"
 assert_eq "implement-model: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "implement-model: spawn-worker argv has no --model flag" \
   "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+mat_teardown
+
+# --- phase→model integration: review phase → --model claude-sonnet-4-6 forwarded
+# When the recomputed PHASE is review, dispatch-materialize-spawn calls the real
+# dispatch-phase-model which emits claude-sonnet-4-6 (the review-fix orchestrator
+# runs on Sonnet; fix-authoring is delegated to an Opus subagent), so the
+# spawn-worker invocation must include --model claude-sonnet-4-6.
+echo "Test: materialize-spawn review phase → spawn-worker receives --model claude-sonnet-4-6 (#1172)"
+mat_setup
+export MAT_PHASE=review
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "review-model: exit 0" "0" "$rc"
+assert_eq "review-model: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "review-model: spawn-worker argv contains --model claude-sonnet-4-6" \
+  "--model claude-sonnet-4-6 839 $TMPDIR_TEST/project/worktrees/839-test" \
   "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
 mat_teardown
 
