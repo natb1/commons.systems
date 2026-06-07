@@ -20621,6 +20621,16 @@ if out=$(WRITER "$W1_PAYLOAD" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "writer W5 TTL below range → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
 su_teardown
 
+# W5b — non-integer TTL string → non-zero exit.
+su_setup
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
+export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
+export DISPATCH_USAGE_SAMPLES_TTL_DAYS="abc"
+if out=$(WRITER "$W1_PAYLOAD" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "writer W5b non-integer TTL → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+su_teardown
+
 # W6 — missing groupId → non-zero exit.
 su_setup
 export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
@@ -20715,6 +20725,117 @@ export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
 if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "sampler S4 worker count unknown → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
 assert_eq "sampler S4 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
+su_teardown
+
+# S5 — target-workers exits non-zero → non-zero exit; writer NOT invoked.
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+CAPTURE="$TMPDIR_TEST/fix/payload.json"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$CAPTURE'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+printf '%s\n' '{"five_hour":{"used_percentage":4,"resets_at":1780867800},"seven_day":{"used_percentage":84,"resets_at":1780880400}}' \
+  > "$TMPDIR_TEST/fix/rate_limits.json"
+su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
+  '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
+printf '#!/usr/bin/env bash\nexit 1\n' > "$TMPDIR_TEST/fix/fake-target"
+chmod +x "$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
+export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S5 target-workers failure → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "sampler S5 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
+su_teardown
+
+# S6 — target-workers prints non-integer → non-zero exit; writer NOT invoked.
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+CAPTURE="$TMPDIR_TEST/fix/payload.json"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$CAPTURE'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+printf '%s\n' '{"five_hour":{"used_percentage":4,"resets_at":1780867800},"seven_day":{"used_percentage":84,"resets_at":1780880400}}' \
+  > "$TMPDIR_TEST/fix/rate_limits.json"
+su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
+  '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
+printf '#!/usr/bin/env bash\necho not-a-number\n' > "$TMPDIR_TEST/fix/fake-target"
+chmod +x "$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
+export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S6 target-workers non-integer → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "sampler S6 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
+su_teardown
+
+# S7 — invalid JSON in rate_limits.json → non-zero exit; writer NOT invoked.
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+CAPTURE="$TMPDIR_TEST/fix/payload.json"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$CAPTURE'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+printf '%s\n' 'not valid json {{' > "$TMPDIR_TEST/fix/rate_limits.json"
+su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
+  '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
+printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
+chmod +x "$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
+export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S7 invalid JSON → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "sampler S7 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
+su_teardown
+
+# S8 — missing used_percentage in rate_limits.json → non-zero exit; writer NOT invoked.
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+CAPTURE="$TMPDIR_TEST/fix/payload.json"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$CAPTURE'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+printf '%s\n' '{"five_hour":{},"seven_day":{}}' > "$TMPDIR_TEST/fix/rate_limits.json"
+su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
+  '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
+printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
+chmod +x "$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
+export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S8 missing used_percentage → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "sampler S8 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
+su_teardown
+
+# S9 — writer returns non-zero → non-zero exit (fail-closed; no doc written).
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+printf '#!/usr/bin/env bash\n: > %s\nexit 1\n' "'$INVOKED'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+printf '%s\n' '{"five_hour":{"used_percentage":4,"resets_at":1780867800},"seven_day":{"used_percentage":84,"resets_at":1780880400}}' \
+  > "$TMPDIR_TEST/fix/rate_limits.json"
+su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
+  '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
+printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
+chmod +x "$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
+export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S9 writer failure → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
 su_teardown
 
 # ============================================================================

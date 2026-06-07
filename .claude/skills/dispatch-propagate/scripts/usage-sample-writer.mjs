@@ -151,17 +151,22 @@ function loadPayload(raw) {
     fail("stdin payload must be a JSON object");
   }
 
-  for (const field of ["fiveHourUsedPct", "weeklyUsedPct", "activeWorkers", "targetWorkers"]) {
+  for (const field of ["fiveHourUsedPct", "weeklyUsedPct"]) {
     if (!isFiniteNumber(obj[field])) {
       fail(`payload field ${field} must be a finite number`);
+    }
+  }
+  for (const field of ["activeWorkers", "targetWorkers"]) {
+    if (!Number.isInteger(obj[field]) || obj[field] < 0) {
+      fail(`payload field ${field} must be a non-negative integer`);
     }
   }
 
   // Resets are epoch seconds (integer) OR null.
   for (const field of ["fiveHourResetsAt", "weeklyResetsAt"]) {
     const v = obj[field];
-    if (v !== null && !isFiniteNumber(v)) {
-      fail(`payload field ${field} must be a finite number or null`);
+    if (v !== null && (!Number.isInteger(v) || v <= 0)) {
+      fail(`payload field ${field} must be a positive integer (epoch seconds) or null`);
     }
   }
 

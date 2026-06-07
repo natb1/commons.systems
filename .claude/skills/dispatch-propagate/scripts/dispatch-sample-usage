@@ -16,8 +16,9 @@
 #      firebase-admin SDK (the admin SDK bypasses Firestore security rules, so
 #      this does NOT depend on the sibling #1006 rules being deployed).
 # The writer reads ALL of its config (member emails, group id, namespace, TTL,
-# project id) from the same env vars the dispatch tick exports; this sampler does
-# NOT re-read them, except the opt-in gate (Step 1).
+# project id) from env vars that must be pre-set in the environment (e.g., shell
+# profile); dispatch-tick inherits them but does not export them; this sampler
+# does NOT re-read them, except the opt-in gate (Step 1).
 #
 # FAIL-SAFE CONTRACT (per .claude/rules/code-style.md; mirrors
 # dispatch-refresh-rate-limits): every failure path logs exactly ONE stderr
@@ -44,7 +45,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # No member emails configured → this machine is not set up for capacity
 # sampling. Exit 0 (a no-op, NOT a failure) so the tick stays inert here.
 if [[ -z "${DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS:-}" ]]; then
-  echo "dispatch-sample-usage: DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS unset; skipping capacity sample (opt-in)" >&2
   exit 0
 fi
 
@@ -116,7 +116,7 @@ fi
 # lib-claude-agents.sh's claude_agents_count_busy_workers returns 0 with an
 # integer on stdout, or 1 for UNKNOWN (daemon unreachable / non-array output).
 # UNKNOWN is fail-safe here: never write a wrong count.
-source "$SCRIPT_DIR/lib-claude-agents.sh"
+source "$SCRIPT_DIR/lib-claude-agents.sh" || { echo "dispatch-sample-usage: failed to source lib-claude-agents.sh" >&2; exit 1; }
 if ! activeWorkers=$(claude_agents_count_busy_workers); then
   echo "dispatch-sample-usage: busy-worker count unknown (claude agents unavailable); skipping capacity sample" >&2
   exit 1
@@ -154,7 +154,9 @@ if ! payload=$(jq -n \
 fi
 
 # Pipe the payload to the writer (Unit 1), overridable for tests. The writer
-# reads its own config from the env the tick exports; do not echo credentials.
+# reads its own config from env vars that must be pre-set in the environment
+# (e.g., shell profile); the dispatch tick inherits them but does not set them
+# itself. Do not echo credentials.
 WRITER="${DISPATCH_USAGE_SAMPLES_WRITER:-$SCRIPT_DIR/usage-sample-writer.mjs}"
 if ! printf '%s' "$payload" | "$WRITER"; then
   echo "dispatch-sample-usage: usage-sample-writer failed to write the sample; no document written" >&2
