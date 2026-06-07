@@ -9288,12 +9288,13 @@ if [[ "$log" == *"--unit=dispatch-reseed-20000"* \
    && "$log" == *"--on-calendar=@20000"* \
    && "$log" == *"--collect"* \
    && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + cwd + setenv + exec)"
+  PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + KillMode + cwd + setenv + exec)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + cwd + setenv + exec)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + KillMode + cwd + setenv + exec)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -9311,10 +9312,11 @@ assert_eq "5h cap-hit stdout names the 5h reset unit" \
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-15000"* \
-   && "$log" == *"--on-calendar=@15000"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: 5h cap-hit systemd-run argv (unit + calendar)"
+   && "$log" == *"--on-calendar=@15000"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 5h cap-hit systemd-run argv (unit + calendar + KillMode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: 5h cap-hit systemd-run argv (unit + calendar)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5h cap-hit systemd-run argv (unit + calendar + KillMode)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -9715,10 +9717,11 @@ assert_eq "pace pause schedules crossing" \
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-12345"* \
-   && "$log" == *"--on-calendar=@12345"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: pace pause systemd-run argv (unit + calendar)"
+   && "$log" == *"--on-calendar=@12345"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: pace pause systemd-run argv (unit + calendar + KillMode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: pace pause systemd-run argv (unit + calendar)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: pace pause systemd-run argv (unit + calendar + KillMode)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -9775,10 +9778,11 @@ assert_eq "past crossing → short-delay floor" \
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-10300"* \
-   && "$log" == *"--on-calendar=@10300"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: past crossing short-delay systemd-run argv (unit + calendar)"
+   && "$log" == *"--on-calendar=@10300"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: past crossing short-delay systemd-run argv (unit + calendar + KillMode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: past crossing short-delay systemd-run argv (unit + calendar)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: past crossing short-delay systemd-run argv (unit + calendar + KillMode)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -9807,10 +9811,11 @@ assert_eq "crossing==NOW → short-delay floor" \
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-10300"* \
-   && "$log" == *"--on-calendar=@10300"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: crossing==NOW short-delay systemd-run argv (unit + calendar)"
+   && "$log" == *"--on-calendar=@10300"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: crossing==NOW short-delay systemd-run argv (unit + calendar + KillMode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: crossing==NOW short-delay systemd-run argv (unit + calendar)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: crossing==NOW short-delay systemd-run argv (unit + calendar + KillMode)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -10528,12 +10533,13 @@ TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-tick"* \
    && "$log" == *"--collect"* \
    && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: no-arg systemd-run argv (unit + collect + OnFailure + cwd + setenv + exec)"
+  PASS=$((PASS + 1)); echo "  PASS: no-arg systemd-run argv (unit + collect + OnFailure + KillMode + cwd + setenv + exec)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: no-arg systemd-run argv (unit + collect + OnFailure + cwd + setenv + exec)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-arg systemd-run argv (unit + collect + OnFailure + KillMode + cwd + setenv + exec)"
   echo "    log: $log"
 fi
 # No trailing numeric arg in the no-arg case: the exec path must be the LAST
@@ -10559,10 +10565,11 @@ log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-tick-979"* \
    && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick 979"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + exec path 979)"
+  PASS=$((PASS + 1)); echo "  PASS: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + KillMode + exec path 979)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + exec path 979)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + KillMode + exec path 979)"
   echo "    log: $log"
 fi
 st_teardown
@@ -20615,6 +20622,49 @@ else
 fi
 unset DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH DISPATCH_TARGET_WORKERS_NOW
 rr_teardown
+
+# ============================================================================
+# ensure_recover_unit: WorkingDirectory= is unquoted and absolute (#1203)
+# ============================================================================
+echo ""
+echo "=== ensure_recover_unit WorkingDirectory= quoting ==="
+# Regression: systemd's WorkingDirectory= does not unescape quotes; a quoted
+# value makes the path non-absolute and the unit loads as bad-setting, so the
+# OnFailure= recovery never fires. Assert the emitted line is bare + absolute.
+eru_tmp=$(mktemp -d)
+mkdir -p "$eru_tmp/bin"
+mkdir -p "$eru_tmp/main-worktree"
+cat > "$eru_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$eru_tmp/bin/systemctl"
+if (
+  export DISPATCH_RECOVER_UNIT_DIR="$eru_tmp/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$eru_tmp/bin/systemctl"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_recover_unit "$eru_tmp/main-worktree"
+); then
+  eru_unit="$eru_tmp/systemd-user/dispatch-tick-recover.service"
+  if eru_wd_line=$(grep '^WorkingDirectory=' "$eru_unit" 2>/dev/null); then
+    assert_eq "WorkingDirectory= is the bare absolute path (no quotes)" \
+      "WorkingDirectory=$eru_tmp/main-worktree" "$eru_wd_line"
+    # Guard the specific defect: no leading double-quote after the '='.
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eru_wd_line" != 'WorkingDirectory="'* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: WorkingDirectory= value is not double-quoted"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: WorkingDirectory= value is double-quoted: $eru_wd_line"
+    fi
+  else
+    TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
+    echo "  FAIL: unit file missing or lacks WorkingDirectory= line: $eru_unit"
+  fi
+else
+  TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
+  echo "  FAIL: ensure_recover_unit returned non-zero"
+fi
+rm -rf "$eru_tmp"
 
 # ============================================================================
 # summary
