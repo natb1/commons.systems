@@ -43,7 +43,11 @@
 #   2  usage error (bad/unknown arg, non-integer --days)
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Fail fast if GNU date is not available (BSD/macOS date uses a different syntax).
+if ! date -d '1 day ago' +%s >/dev/null 2>&1; then
+  echo "error: GNU date required (this script does not support BSD/macOS date)" >&2
+  exit 2
+fi
 
 DAYS=7
 JSON_OUT=""
@@ -52,12 +56,18 @@ PROJECTS_ROOT="${DISPATCH_AUDIT_PROJECTS_ROOT:-$HOME/.claude/projects}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --days)
-      DAYS="${2:-}"
-      shift 2 || { echo "error: --days requires a value" >&2; exit 2; }
+      if [[ $# -lt 2 || "${2:-}" == -* || -z "${2:-}" ]]; then
+        echo "error: --days requires a value" >&2; exit 2
+      fi
+      DAYS="$2"
+      shift 2
       ;;
     --json-out)
-      JSON_OUT="${2:-}"
-      shift 2 || { echo "error: --json-out requires a value" >&2; exit 2; }
+      if [[ $# -lt 2 || "${2:-}" == -* || -z "${2:-}" ]]; then
+        echo "error: --json-out requires a value" >&2; exit 2
+      fi
+      JSON_OUT="$2"
+      shift 2
       ;;
     *)
       echo "error: unknown argument '$1'" >&2
@@ -120,6 +130,8 @@ def content_to_string(c):
 
 # Normalize one error .content (string OR array of blocks -> joined .text) into a
 # single signature string.
+# NOTE: The signature is opaque, attacker-influenceable transcript data — it is
+# capped at 120 characters so malicious content cannot inject arbitrarily long keys.
 def err_signature(c):
   ( if (c|type) == "string" then c
     elif (c|type) == "array" then
@@ -127,7 +139,8 @@ def err_signature(c):
     else "" end )
   | split("\n")[0]                          # first line only
   | gsub("[0-9]+"; "N")                      # digit runs -> N
-  | gsub("(/[A-Za-z0-9._-]+){3,}"; "PATH");  # long absolute paths -> PATH
+  | gsub("(/[A-Za-z0-9._-]+){3,}"; "PATH")  # long absolute paths -> PATH
+  | .[0:120];                                # hard cap — opaque attacker-controlled data
 
 . as $msgs
 | (asst) as $a
@@ -139,9 +152,11 @@ def err_signature(c):
 | ( if $firstuser == null then "" else content_to_string($firstuser.message.content) end ) as $firstuser_str
 
 # Per-assistant-message usage paired with model / skill / branch.
+# Sanitize model and skill before they are used as JSON object keys: replace tab
+# characters with '_' and cap length so composite keys (skill + tab + model) are clean.
 | ( [ $a[] | {
-        model:  (.message.model // "unknown"),
-        skill:  (.attributionSkill // "<none>"),
+        model:  ((.message.model // "unknown") | gsub("\t"; "_") | .[0:64]),
+        skill:  ((.attributionSkill // "<none>") | gsub("\t"; "_") | .[0:64]),
         branch: (.gitBranch // null),
         u:      usage_of(.)
       } ] ) as $rows
@@ -305,7 +320,7 @@ def add_to_bucket(bucket; u; turns):
           .[$sig].sessions_affected = ((.[$sig].sessions_affected // 0) + 1)
         )
     )
-    | to_entries
+    | to_entries | map(select(.key != ""))
     | map({ signature: .key, count: .value.count, sessions_affected: .value.sessions_affected })
     | sort_by(.signature) | sort_by(-.count)
   ) as $tool_errors
