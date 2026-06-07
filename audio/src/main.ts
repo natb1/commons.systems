@@ -46,7 +46,7 @@ const router = createHistoryRouter(
     {
       path: "/",
       render: () => renderHome(currentUser),
-      afterRender: (outlet) => afterRenderHome(outlet, player),
+      afterRender: (outlet) => afterRenderHome(outlet, player, currentUser),
     },
     { path: "/about", render: renderAbout },
   ],
