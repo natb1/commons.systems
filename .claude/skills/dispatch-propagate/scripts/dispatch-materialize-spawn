@@ -35,8 +35,8 @@
 # queue selection carries are still dropped — no sub-script consumes them. The
 # spawn does consult the phase, but the #1109-recomputed PHASE (Step 5), not the
 # carried positional: it maps PHASE → worker model via dispatch-phase-model so
-# the qa phase launches on Sonnet (#1171); every other phase yields no --model
-# and inherits the session default (Opus).
+# the qa and review phases launch on Sonnet (#1171, #1172); every other phase
+# yields no --model and inherits the session default (Opus).
 #
 # Terminal tokens (the last stdout line is always exactly one of):
 #   propagate              the worker spawned (or deduped); the chain advances.
@@ -351,10 +351,11 @@ process_one_target() {
   if ! reservation_write "$wt_basename" "$n" "${CLAUDE_CODE_SESSION_ID:-}" 1>&2; then
     echo "dispatch-materialize-spawn: reservation_write failed for $wt_basename; spawning without a ledger entry (budget may undercount this slot)" >&2
   fi
-  # Resolve the worker model from the #1109-recomputed PHASE (#1171): the
+  # Resolve the worker model from the #1109-recomputed PHASE (#1171, #1172): the
   # phase→model map (dispatch-phase-model) returns a non-empty model only for
-  # mapped phases (qa → claude-sonnet-4-6); every other phase yields empty, so
-  # no --model is forwarded and the worker inherits the session default (Opus).
+  # mapped phases (qa, review → claude-sonnet-4-6); every other phase yields
+  # empty, so no --model is forwarded and the worker inherits the session
+  # default (Opus).
   # The [[ -n "$PHASE" ]] guard avoids calling dispatch-phase-model with an empty
   # arg (its usage error) in the defensive case where dispatch-phase exited 3
   # (pending CI); in normal operation PHASE is non-empty here — queue targets are
