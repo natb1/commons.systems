@@ -775,8 +775,11 @@ test.describe("viewer", () => {
     const position = page.locator(".viewer-position");
     await expect(position).not.toContainText("Navigation failed", { timeout: 5000 });
     await expect(position).toContainText(/[1-3] \/ 3/, { timeout: 15000 });
-    await expect(page.locator(".textLayer span").first()).toBeAttached({ timeout: 15000 });
-    const text = await page.locator(".textLayer").textContent();
-    expect((text ?? "").trim().length).toBeGreaterThan(0);
+    await expect
+      .poll(
+        async () => ((await page.locator(".textLayer").textContent()) ?? "").trim().length,
+        { timeout: 15000 },
+      )
+      .toBeGreaterThan(0);
   });
 });
