@@ -9258,12 +9258,13 @@ if [[ "$log" == *"--unit=dispatch-reseed-20000"* \
    && "$log" == *"--on-calendar=@20000"* \
    && "$log" == *"--collect"* \
    && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + cwd + setenv + exec)"
+  PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + KillMode + cwd + setenv + exec)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + cwd + setenv + exec)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + KillMode + cwd + setenv + exec)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -9281,10 +9282,11 @@ assert_eq "5h cap-hit stdout names the 5h reset unit" \
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-15000"* \
-   && "$log" == *"--on-calendar=@15000"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: 5h cap-hit systemd-run argv (unit + calendar)"
+   && "$log" == *"--on-calendar=@15000"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 5h cap-hit systemd-run argv (unit + calendar + KillMode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: 5h cap-hit systemd-run argv (unit + calendar)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5h cap-hit systemd-run argv (unit + calendar + KillMode)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -9685,10 +9687,11 @@ assert_eq "pace pause schedules crossing" \
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-12345"* \
-   && "$log" == *"--on-calendar=@12345"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: pace pause systemd-run argv (unit + calendar)"
+   && "$log" == *"--on-calendar=@12345"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: pace pause systemd-run argv (unit + calendar + KillMode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: pace pause systemd-run argv (unit + calendar)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: pace pause systemd-run argv (unit + calendar + KillMode)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -9745,10 +9748,11 @@ assert_eq "past crossing → short-delay floor" \
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-10300"* \
-   && "$log" == *"--on-calendar=@10300"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: past crossing short-delay systemd-run argv (unit + calendar)"
+   && "$log" == *"--on-calendar=@10300"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: past crossing short-delay systemd-run argv (unit + calendar + KillMode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: past crossing short-delay systemd-run argv (unit + calendar)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: past crossing short-delay systemd-run argv (unit + calendar + KillMode)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -9777,10 +9781,11 @@ assert_eq "crossing==NOW → short-delay floor" \
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-10300"* \
-   && "$log" == *"--on-calendar=@10300"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: crossing==NOW short-delay systemd-run argv (unit + calendar)"
+   && "$log" == *"--on-calendar=@10300"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: crossing==NOW short-delay systemd-run argv (unit + calendar + KillMode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: crossing==NOW short-delay systemd-run argv (unit + calendar)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: crossing==NOW short-delay systemd-run argv (unit + calendar + KillMode)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -10498,12 +10503,13 @@ TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-tick"* \
    && "$log" == *"--collect"* \
    && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: no-arg systemd-run argv (unit + collect + OnFailure + cwd + setenv + exec)"
+  PASS=$((PASS + 1)); echo "  PASS: no-arg systemd-run argv (unit + collect + OnFailure + KillMode + cwd + setenv + exec)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: no-arg systemd-run argv (unit + collect + OnFailure + cwd + setenv + exec)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-arg systemd-run argv (unit + collect + OnFailure + KillMode + cwd + setenv + exec)"
   echo "    log: $log"
 fi
 # No trailing numeric arg in the no-arg case: the exec path must be the LAST
@@ -10529,10 +10535,11 @@ log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-tick-979"* \
    && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick 979"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + exec path 979)"
+  PASS=$((PASS + 1)); echo "  PASS: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + KillMode + exec path 979)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + exec path 979)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + KillMode + exec path 979)"
   echo "    log: $log"
 fi
 st_teardown
