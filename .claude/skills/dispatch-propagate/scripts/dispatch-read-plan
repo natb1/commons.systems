@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# dispatch-read-plan — print the issue's persisted plan to stdout.
+#
+# Usage: dispatch-read-plan <issue-num>
+#
+# Prints the body of the <!-- dispatch:plan --> sentinel comment on issue
+# <issue-num> to stdout. This is the counterpart to dispatch-write-plan: the
+# implement phase reads the plan from here in a fresh context. Exits non-zero
+# with a clear diagnostic when no plan comment exists.
+#
+# The repo is resolved from the git common dir so gh addresses the right
+# repository from any caller cwd. A missing arg or a non-numeric issue-num is a
+# clear error, not a fallback (exit 2).
+set -euo pipefail
+
+N="${1:-}"
+if [[ $# -ne 1 || -z "$N" ]]; then
+  echo "dispatch-read-plan: exactly one issue-num argument is required" >&2
+  echo "usage: dispatch-read-plan <issue-num>" >&2
+  exit 2
+fi
+if [[ ! "$N" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-read-plan: issue-num must be a positive integer, got: $N" >&2
+  echo "usage: dispatch-read-plan <issue-num>" >&2
+  exit 2
+fi
+
+common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || {
+  echo "dispatch-read-plan: not inside a git repository" >&2; exit 1; }
+cd "$(dirname "$common_dir")"   # PROJECT_ROOT — so gh resolves the repo from any caller cwd
+
+MARKER='<!-- dispatch:plan -->'
+
+# Fetch the comment id first, then fetch that single comment's body. Do NOT pipe
+# --jq .body through head — a multi-line body would truncate to its first line.
+CID=$(gh api --paginate "repos/{owner}/{repo}/issues/$N/comments" \
+  --jq '.[] | select(.body | contains("'"$MARKER"'")) | .id' | head -n1)
+if [[ -z "$CID" ]]; then
+  echo "dispatch-read-plan: no <!-- dispatch:plan --> comment found on issue #$N" >&2
+  exit 1
+fi
+gh api "repos/{owner}/{repo}/issues/comments/$CID" --jq '.body'
