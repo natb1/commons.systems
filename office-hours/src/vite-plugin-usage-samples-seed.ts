@@ -15,7 +15,8 @@ export function usageSamplesSeedDataPlugin(): Plugin {
       // public JS bundle. The UI never reads it; Firestore rules gate access
       // server-side.
       const publicSeeds = usageSampleSeeds.map(
-        ({ memberEmails: _memberEmails, ...rest }) => rest,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructure-omit memberEmails from the public bundle
+        ({ memberEmails, ...rest }) => rest,
       );
       moduleCode =
         `const seeds = ${JSON.stringify(publicSeeds)};\n` +
