@@ -110,7 +110,7 @@ test.describe("sitemap.xml", () => {
     );
   });
 
-  test("sitemap excludes unpublished posts", async ({ page }) => {
+  test("sitemap excludes unpublished posts @build", async ({ page }) => {
     const response = await page.goto("/sitemap.xml");
     const body = await response!.text();
     expect(body).not.toContain("draft-ideas");
