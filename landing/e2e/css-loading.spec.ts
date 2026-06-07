@@ -27,7 +27,7 @@ test.describe("CSS loading", () => {
     expect(match![2]).toBeLessThan(80);
   });
 
-  test("full stylesheet loads after page load", async ({ page }) => {
+  test("full stylesheet loads after page load @build", async ({ page }) => {
     await page.goto("/");
     await page.waitForLoadState("load");
     const hasFullStylesheet = await page.evaluate(() => {
