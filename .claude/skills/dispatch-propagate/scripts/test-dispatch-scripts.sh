@@ -55,6 +55,8 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
   cp "$SCRIPT_DIR/office-hours" "$TMPDIR_TEST/office-hours"
+  cp "$SCRIPT_DIR/dispatch-spawn-office-hours" "$TMPDIR_TEST/dispatch-spawn-office-hours"
+  cp "$SCRIPT_DIR/dispatch-spawn-job" "$TMPDIR_TEST/dispatch-spawn-job"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-check-blockers" "$TMPDIR_TEST/dispatch-check-blockers"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
@@ -86,6 +88,8 @@ setup() {
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/office-hours-select-target" \
            "$TMPDIR_TEST/office-hours" \
+           "$TMPDIR_TEST/dispatch-spawn-office-hours" \
+           "$TMPDIR_TEST/dispatch-spawn-job" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
            "$TMPDIR_TEST/dispatch-check-blockers" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
@@ -1512,6 +1516,44 @@ FAKE
   # The entry script no longer queries liveness itself; the selector subprocess
   # it invokes does. Point CLAUDE_AGENTS_CMD at the same fake so a single binary
   # serves the selector's `agents` query and the entry script's launch.
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+}
+
+# office_hours_fresh_fake_claude — fake `claude` for the fresh (spawn-worker-
+# style) entry path. Serves `agents` from an oh-registry.json (starts empty); on
+# `--bg` records argv + $PWD and registers {"sessionId":"sess-<name>",...} under
+# --name (so dispatch-spawn-job's verify + dispatch-spawn-office-hours' resolve
+# both find it); prints `LAUNCH: $*` on anything else (the entry's --resume).
+office_hours_fresh_fake_claude() {
+  printf '[]' > "$TMPDIR_TEST/oh-registry.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+set -uo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REG="$ROOT/oh-registry.json"
+case "${1:-}" in
+  agents)
+    cat "$REG"
+    ;;
+  --bg)
+    pwd >> "$ROOT/oh-pwd-log"
+    printf '%s\n' "$@" > "$ROOT/oh-bg-argv"
+    name=""
+    while [[ $# -gt 0 ]]; do
+      if [[ "$1" == "--name" ]]; then name="${2:-}"; shift 2; continue; fi
+      shift
+    done
+    tmp=$(mktemp)
+    jq --arg name "$name" '. + [{"sessionId":("sess-"+$name),"pid":9999,"status":"busy","name":$name,"cwd":"/worker"}]' "$REG" > "$tmp" && mv "$tmp" "$REG"
+    ;;
+  *)
+    echo "LAUNCH: $*"
+    ;;
+esac
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/claude"
+  export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
   export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
 }
 
@@ -3425,7 +3467,7 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # orphan world: no live sessions
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "oldest labeled item selected (implement, no PR)" "office-hours 42 implement -" "$result"
+assert_eq "oldest labeled item selected (implement, no PR)" "office-hours 42 implement - -" "$result"
 teardown
 
 # OHST2. A qa item — draft PR, CI green, no dispatch:* label → phase qa, PR num.
@@ -3437,7 +3479,7 @@ printf '[{"number":7,"headRefName":"50-feat","isDraft":true,"statusCheckRollup":
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "qa item selected with its PR number" "office-hours 50 qa 7" "$result"
+assert_eq "qa item selected with its PR number" "office-hours 50 qa 7 -" "$result"
 teardown
 
 # OHST3. The oldest labeled item whose <N>-* worktree has a live session is
@@ -3511,7 +3553,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 # setup's default CLAUDE_AGENTS_CMD points at a non-existent binary (UNKNOWN).
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "UNKNOWN-liveness worktree item skipped; worktree-free item selected" "office-hours 99 implement -" "$result"
+assert_eq "UNKNOWN-liveness worktree item skipped; worktree-free item selected" "office-hours 99 implement - -" "$result"
 teardown
 
 # Install a fake `claude` whose `agents --json` returns a controllable session
@@ -3581,7 +3623,7 @@ export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
 # sessionless) plus a parked dispatch-* router under main.
 parked_router_fake_claude "dispatch-abc123:waiting"
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "labeled item selected over parked router" "office-hours 42 implement -" "$result"
+assert_eq "labeled item selected over parked router" "office-hours 42 implement - -" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
@@ -3610,7 +3652,21 @@ printf '[%s]\n' "$(make_pr 7 "50-feat" "true" "$NO_LABELS" "$PENDING_ROLLUP")" \
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "pending-CI draft PR → waiting, PR number" "office-hours 50 waiting 7" "$result"
+assert_eq "pending-CI draft PR → waiting, PR number" "office-hours 50 waiting 7 -" "$result"
+teardown
+
+# OHST11. A sessionless labeled item whose <N>-* worktree exists on disk (an
+# orphan: no live session) → the fresh disposition carries that worktree path
+# as its 5th field, so the entry script can launch the fresh session --cwd it.
+echo "Test: sessionless item with an orphan worktree → worktree path emitted"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # orphan: no live sessions → sessionless, picked fresh
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "fresh disposition carries the worktree path" "office-hours 42 implement - /worktrees/42-x" "$result"
 teardown
 
 # ============================================================================
@@ -3653,19 +3709,46 @@ result=$("$TMPDIR_TEST/office-hours")
 assert_eq "resumes the oldest live item's session" "LAUNCH: --resume s-42-x" "$result"
 teardown
 
-# OH3. Labeled items but none with a live session → start fresh /office-hours,
-# with the selected target's <N> <phase> <pr> passed through as arguments. The
-# selector emits `office-hours 42 implement -`; the entry execs
-# `/office-hours 42 implement -`.
-echo "Test: labeled items, none live → fresh /office-hours with passed args"
+# OH3. Labeled items but none with a live session → launch the fresh /office-hours
+# session worker-style (a --bg job named after the <N>-* worktree, cwd = that
+# worktree) via dispatch-spawn-office-hours, then attach the human by resuming the
+# spawned session id. Fixes the originally-reported label leak (#1160): born in the
+# worktree, the session's branch is <N>-..., so the strip hook clears the label.
+echo "Test: labeled item, none live → spawn worker-style --bg then resume"
 setup
-printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
-  > "$STUB_DIR/oh-issue-list.json"
-printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
-  > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude   # orphan world: no live sessions
+mkdir -p "$TMPDIR_TEST/worktrees/42-x"
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  "$TMPDIR_TEST/worktrees/42-x" > "$STUB_DIR/worktree-list.txt"
+office_hours_fresh_fake_claude
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "no live session → fresh /office-hours with args" "LAUNCH: /office-hours 42 implement -" "$result"
+# Attaches the human by resuming the just-spawned session id.
+assert_eq "fresh path resumes the spawned session id" "LAUNCH: --resume sess-42-x" "$result"
+# The spawn was a --bg job named after the worktree basename running /office-hours.
+mapfile -t oh_argv < "$TMPDIR_TEST/oh-bg-argv"
+assert_eq "fresh: --bg" "--bg" "${oh_argv[0]:-}"
+assert_eq "fresh: --name" "--name" "${oh_argv[1]:-}"
+assert_eq "fresh: name is the worktree basename" "42-x" "${oh_argv[2]:-}"
+assert_eq "fresh: --permission-mode" "--permission-mode" "${oh_argv[3]:-}"
+assert_eq "fresh: permission mode is auto" "auto" "${oh_argv[4]:-}"
+assert_eq "fresh: prompt is /office-hours with args" "/office-hours 42 implement -" "${oh_argv[5]:-}"
+# The --bg job was born in the worktree (cwd = worktree path).
+oh_pwd=$(head -1 "$TMPDIR_TEST/oh-pwd-log" 2>/dev/null || true)
+assert_eq "fresh: spawn cwd is the worktree" "$(realpath "$TMPDIR_TEST/worktrees/42-x")" "$(realpath "$oh_pwd" 2>/dev/null)"
+teardown
+
+# OH3b. Sessionless item with NO <N>-* worktree on disk (the worktree was swept) →
+# the selector emits `-` for the 5th field, so the entry script exits non-zero with
+# a clear diagnostic and launches nothing (clear-errors-over-fallbacks).
+echo "Test: sessionless item with no worktree → non-zero exit, no launch"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"   # no 42-* worktree
+office_hours_fresh_fake_claude
+rc=0; out=$("$TMPDIR_TEST/office-hours" 2>&1) || rc=$?
+assert_eq "no worktree → exit 1" "1" "$rc"
+assert_eq "no worktree → no spawn recorded" "no" \
+  "$([[ -e "$TMPDIR_TEST/oh-bg-argv" ]] && echo yes || echo no)"
 teardown
 
 # OH4. Empty office-hours queue → selector emits `empty` → the entry script prints
@@ -7929,6 +8012,320 @@ fi
 config_teardown
 
 # ============================================================================
+# budget-etl config schema tests (Tests 7i-7m)
+# ============================================================================
+#
+# budget-etl.json is a flat top-level object with four required non-empty
+# string fields: downloads, statements, snapshotDir, current.
+# Paths may contain spaces (e.g. "/mnt/g/My Drive/budget/statements").
+#
+# Uses config_setup / config_teardown (same helpers as the statements tests).
+
+echo ""
+echo "=== budget-etl config schema ==="
+
+# --- Test 7i: valid budget-etl.json round-trips ------------------------------
+
+echo "Test: valid budget-etl.json prints normalized JSON and paths with spaces round-trip"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
+{
+  "downloads": "/mnt/c/Users/example/Downloads",
+  "statements": "/mnt/g/My Drive/budget/statements",
+  "snapshotDir": "/mnt/g/My Drive/budget/snapshots",
+  "current": "/mnt/g/My Drive/budget/budget.enc.json"
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>/dev/null); rc=$?
+assert_eq "7i valid budget-etl.json exits 0" "0" "$rc"
+dl=$(printf '%s' "$out" | jq -r '.downloads')
+assert_eq "7i downloads round-trips" "/mnt/c/Users/example/Downloads" "$dl"
+st=$(printf '%s' "$out" | jq -r '.statements')
+assert_eq "7i statements round-trips (spaces preserved)" "/mnt/g/My Drive/budget/statements" "$st"
+sd=$(printf '%s' "$out" | jq -r '.snapshotDir')
+assert_eq "7i snapshotDir round-trips (spaces preserved)" "/mnt/g/My Drive/budget/snapshots" "$sd"
+cur=$(printf '%s' "$out" | jq -r '.current')
+assert_eq "7i current round-trips" "/mnt/g/My Drive/budget/budget.enc.json" "$cur"
+config_teardown
+
+# --- Test 7j: budget-etl.json missing required field exits 1 -----------------
+
+echo "Test: budget-etl.json missing required field exits 1 and stderr names the field"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
+{
+  "downloads": "/mnt/c/Users/example/Downloads",
+  "statements": "/mnt/g/My Drive/budget/statements",
+  "snapshotDir": "/mnt/g/My Drive/budget/snapshots"
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>&1 1>/dev/null) || rc=$?
+assert_eq "7j missing current field exits 1" "1" "$rc"
+if [[ "$err" == *"current"* ]]; then
+  assert_eq "7j missing-current error names the field" "yes" "yes"
+else
+  assert_eq "7j missing-current error names the field" "yes" "no: $err"
+fi
+config_teardown
+
+# --- Test 7k: budget-etl.json non-string field exits 1 -----------------------
+
+echo "Test: budget-etl.json with non-string downloads exits 1 and stderr names the field"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
+{
+  "downloads": 42,
+  "statements": "/mnt/g/My Drive/budget/statements",
+  "snapshotDir": "/mnt/g/My Drive/budget/snapshots",
+  "current": "/mnt/g/My Drive/budget/budget.enc.json"
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>&1 1>/dev/null) || rc=$?
+assert_eq "7k non-string downloads exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"downloads"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7k non-string downloads stderr mentions downloads"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7k non-string downloads stderr mentions downloads"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7l: budget-etl.json empty-string field exits 1 ---------------------
+
+echo "Test: budget-etl.json with empty-string snapshotDir exits 1 and stderr names the field"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
+{
+  "downloads": "/mnt/c/Users/example/Downloads",
+  "statements": "/mnt/g/My Drive/budget/statements",
+  "snapshotDir": "",
+  "current": "/mnt/g/My Drive/budget/budget.enc.json"
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>&1 1>/dev/null) || rc=$?
+assert_eq "7l empty snapshotDir exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"snapshotDir"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7l empty snapshotDir stderr mentions snapshotDir"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7l empty snapshotDir stderr mentions snapshotDir"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7m: absent budget-etl.json prints no-config and exits 0 ------------
+
+echo "Test: absent budget-etl.json prints no-config and exits 0"
+config_setup
+# no file written — config dir is empty
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>/dev/null); rc=$?
+assert_eq "7m absent budget-etl.json exits 0" "0" "$rc"
+assert_eq "7m absent budget-etl.json prints no-config" "no-config" "$out"
+config_teardown
+
+# --- Test 7n: budget-etl.json relative path field exits 1 --------------------
+# Path fields become filesystem destinations the skill writes to; a relative
+# path could redirect writes off the intended Drive mount, so the schema
+# requires an absolute path.
+
+echo "Test: budget-etl.json with a relative downloads path exits 1 and names the field"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
+{
+  "downloads": "relative/Downloads",
+  "statements": "/mnt/g/My Drive/budget/statements",
+  "snapshotDir": "/mnt/g/My Drive/budget/snapshots",
+  "current": "/mnt/g/My Drive/budget/budget.enc.json"
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>&1 1>/dev/null) || rc=$?
+assert_eq "7n relative downloads exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"downloads"* && "$err" == *"absolute"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7n relative downloads error names the field and 'absolute'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7n relative downloads error names the field and 'absolute'"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7o: budget-etl.json path with a ".." component exits 1 -------------
+
+echo "Test: budget-etl.json with a '..' component in statements exits 1 and names the field"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
+{
+  "downloads": "/mnt/c/Users/example/Downloads",
+  "statements": "/mnt/g/My Drive/../../../etc",
+  "snapshotDir": "/mnt/g/My Drive/budget/snapshots",
+  "current": "/mnt/g/My Drive/budget/budget.enc.json"
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>&1 1>/dev/null) || rc=$?
+assert_eq "7o '..' statements exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"statements"* && "$err" == *".."* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7o '..' statements error names the field and '..'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7o '..' statements error names the field and '..'"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# ============================================================================
+# ingest-downloads.sh tests
+# ============================================================================
+#
+# Both ingest-downloads.sh and identify-qfx.sh are copied into a fresh tmp
+# tree so BASH_SOURCE-based SCRIPT_DIR resolution works correctly. The budget-etl
+# scripts live at $SCRIPT_DIR/../../budget-etl/scripts/ relative to the
+# dispatch-propagate scripts dir.
+
+echo ""
+echo "=== ingest-downloads.sh ==="
+
+INGEST_SRC="$SCRIPT_DIR/../../budget-etl/scripts/ingest-downloads.sh"
+IDENTIFY_SRC="$SCRIPT_DIR/../../budget-etl/scripts/identify-qfx.sh"
+
+ING_TMP=""
+
+ingest_setup() {
+  ING_TMP=$(mktemp -d)
+  mkdir -p "$ING_TMP/scripts" "$ING_TMP/dl" "$ING_TMP/st"
+  cp "$INGEST_SRC"   "$ING_TMP/scripts/ingest-downloads.sh"
+  cp "$IDENTIFY_SRC" "$ING_TMP/scripts/identify-qfx.sh"
+  chmod +x "$ING_TMP/scripts/ingest-downloads.sh" "$ING_TMP/scripts/identify-qfx.sh"
+}
+
+ingest_teardown() {
+  rm -rf "$ING_TMP"
+  ING_TMP=""
+}
+
+# --- Test: move — AMEX file is classified and moved to the correct subdir ----
+
+echo "Test: ingest-downloads.sh moves an AMEX QFX to the correct institution/account subdir"
+ingest_setup
+printf '<ORG>AMEX</ORG>\n<ACCTID>tok|12345</ACCTID>\n' > "$ING_TMP/dl/amex.qfx"
+out=$(bash "$ING_TMP/scripts/ingest-downloads.sh" "$ING_TMP/dl" "$ING_TMP/st" 2>&1); rc=$?
+assert_eq "ingest-move: exits 0" "0" "$rc"
+assert_eq "ingest-move: file at american_express/12345/amex.qfx" "yes" \
+  "$([[ -f "$ING_TMP/st/american_express/12345/amex.qfx" ]] && echo yes || echo no)"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$out" | grep -qF ' to '; then
+  PASS=$((PASS + 1)); echo "  PASS: ingest-move: output contains '<src> to <dest>' line"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ingest-move: output contains '<src> to <dest>' line"
+  echo "    output: $out"
+fi
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$out" | grep -qF "american_express/12345/amex.qfx"; then
+  PASS=$((PASS + 1)); echo "  PASS: ingest-move: output names the dest path"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ingest-move: output names the dest path"
+  echo "    output: $out"
+fi
+ingest_teardown
+
+# --- Test: missing statements dir — exits 1 with descriptive error -----------
+
+echo "Test: ingest-downloads.sh exits 1 when statements dir does not exist"
+ingest_setup
+rm -rf "$ING_TMP/st"   # remove the statements dir to simulate unmounted drive
+printf '<ORG>AMEX</ORG>\n<ACCTID>tok|12345</ACCTID>\n' > "$ING_TMP/dl/amex.qfx"
+rc=0
+err=$(bash "$ING_TMP/scripts/ingest-downloads.sh" "$ING_TMP/dl" "$ING_TMP/st" 2>&1 >/dev/null) || rc=$?
+assert_eq "ingest-missing-statements: exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -qF "statements"; then
+  PASS=$((PASS + 1)); echo "  PASS: ingest-missing-statements: stderr mentions statements"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ingest-missing-statements: stderr mentions statements"
+  echo "    stderr: $err"
+fi
+ingest_teardown
+
+# --- Test: collision — timestamp-suffixed name used; original not overwritten -
+
+echo "Test: ingest-downloads.sh uses a timestamp-suffixed name on collision"
+ingest_setup
+mkdir -p "$ING_TMP/st/american_express/12345"
+printf 'OLD\n' > "$ING_TMP/st/american_express/12345/amex.qfx"
+printf '<ORG>AMEX</ORG>\n<ACCTID>tok|12345</ACCTID>\n' > "$ING_TMP/dl/amex.qfx"
+out=$(bash "$ING_TMP/scripts/ingest-downloads.sh" "$ING_TMP/dl" "$ING_TMP/st" 2>&1); rc=$?
+assert_eq "ingest-collision: exits 0" "0" "$rc"
+# Original file must still have its sentinel content (not overwritten).
+orig_content=$(cat "$ING_TMP/st/american_express/12345/amex.qfx")
+assert_eq "ingest-collision: original file not overwritten (content OLD)" "OLD" "$orig_content"
+# A timestamp-suffixed file matching amex.*.qfx should exist.
+ts_files=()
+while IFS= read -r -d '' f; do
+  ts_files+=("$f")
+done < <(find "$ING_TMP/st/american_express/12345" -maxdepth 1 -name 'amex.*.qfx' -print0 2>/dev/null)
+assert_eq "ingest-collision: exactly one timestamp-suffixed file exists" "1" "${#ts_files[@]}"
+ingest_teardown
+
+# --- Test: unknown ORG — classify-all-first: nothing moved -------------------
+
+echo "Test: ingest-downloads.sh moves nothing when any file has an unknown ORG"
+ingest_setup
+printf '<ORG>AMEX</ORG>\n<ACCTID>tok|00001</ACCTID>\n' > "$ING_TMP/dl/good.qfx"
+printf '<ORG>NOPE</ORG>\n<ACCTID>tok|00002</ACCTID>\n' > "$ING_TMP/dl/bad.qfx"
+rc=0
+out=$(bash "$ING_TMP/scripts/ingest-downloads.sh" "$ING_TMP/dl" "$ING_TMP/st" 2>&1) || rc=$?
+assert_eq "ingest-unknown-org: exits 1" "1" "$rc"
+assert_eq "ingest-unknown-org: good.qfx NOT moved (still in dl)" "yes" \
+  "$([[ -f "$ING_TMP/dl/good.qfx" ]] && echo yes || echo no)"
+assert_eq "ingest-unknown-org: bad.qfx NOT moved (still in dl)" "yes" \
+  "$([[ -f "$ING_TMP/dl/bad.qfx" ]] && echo yes || echo no)"
+# Statements dir must be empty (nothing moved).
+st_file_count=$(find "$ING_TMP/st" -type f | wc -l | tr -d ' ')
+assert_eq "ingest-unknown-org: statements dir has no files" "0" "$st_file_count"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$out" | grep -qE 'bad\.qfx|NOPE'; then
+  PASS=$((PASS + 1)); echo "  PASS: ingest-unknown-org: output mentions the bad file or ORG"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ingest-unknown-org: output mentions the bad file or ORG"
+  echo "    output: $out"
+fi
+ingest_teardown
+
+# --- Test: path traversal — a crafted ACCTID is rejected, nothing moved ------
+# identify-qfx.sh canonicalizes ACCTID by taking the segment after the last '|',
+# without stripping path separators — so <ACCTID>tok|../../escape</ACCTID>
+# yields account "../../escape". ingest-downloads.sh must reject any
+# institution/account containing "/" or ".." before mkdir -p / mv, otherwise a
+# crafted statement file in Downloads escapes the archive root (arbitrary write).
+
+echo "Test: ingest-downloads.sh rejects a path-traversal account and moves nothing"
+ingest_setup
+printf '<ORG>AMEX</ORG>\n<ACCTID>tok|../../escape</ACCTID>\n' > "$ING_TMP/dl/evil.qfx"
+rc=0
+err=$(bash "$ING_TMP/scripts/ingest-downloads.sh" "$ING_TMP/dl" "$ING_TMP/st" 2>&1 >/dev/null) || rc=$?
+assert_eq "ingest-traversal: exits 1" "1" "$rc"
+assert_eq "ingest-traversal: evil.qfx NOT moved (still in dl)" "yes" \
+  "$([[ -f "$ING_TMP/dl/evil.qfx" ]] && echo yes || echo no)"
+# Nothing created inside or beside the statements tree.
+assert_eq "ingest-traversal: no file written under statements dir" "0" \
+  "$(find "$ING_TMP/st" -type f | wc -l | tr -d ' ')"
+assert_eq "ingest-traversal: no file escaped to ING_TMP/escape" "no" \
+  "$([[ -e "$ING_TMP/escape" ]] && echo yes || echo no)"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -qiE 'unsafe|path component'; then
+  PASS=$((PASS + 1)); echo "  PASS: ingest-traversal: stderr flags an unsafe path component"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ingest-traversal: stderr flags an unsafe path component"
+  echo "    stderr: $err"
+fi
+ingest_teardown
+
+# ============================================================================
 # dispatch-target-workers tests
 # ============================================================================
 #
@@ -10505,6 +10902,52 @@ fi
 tr_teardown
 
 # ============================================================================
+# dispatch-phase-model tests
+# ============================================================================
+echo "=== dispatch-phase-model ==="
+
+echo "Test: dispatch-phase-model maps qa → claude-sonnet-4-6"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" qa 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: qa exits 0" "0" "$pm_rc"
+assert_eq "phase-model: qa → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+
+echo "Test: dispatch-phase-model maps review → claude-sonnet-4-6 (#1172)"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" review 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: review exits 0" "0" "$pm_rc"
+assert_eq "phase-model: review → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+
+echo "Test: dispatch-phase-model maps unmapped phases → empty (default → Opus, no override)"
+for ph in implement verify done; do
+  if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" "$ph" 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+  assert_eq "phase-model: $ph exits 0" "0" "$pm_rc"
+  assert_eq "phase-model: $ph → empty (no --model, inherit Opus)" "" "$pm_out"
+done
+
+echo "Test: dispatch-phase-model with no phase arg exits 2"
+if "$SCRIPT_DIR/dispatch-phase-model" 2>/dev/null; then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: no-arg → exit 2" "2" "$pm_rc"
+
+echo "Test: dispatch-phase-model with an empty-string arg exits 2"
+if "$SCRIPT_DIR/dispatch-phase-model" "" 2>/dev/null; then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: empty-string-arg → exit 2" "2" "$pm_rc"
+
+# --- review-fix/SKILL.md model-tiering content guards (#1172) -----------------
+# The review-fix orchestrator runs on Sonnet; fix-authoring is delegated to an
+# Opus subagent and its /code-review pass is detection-only. Guard both facts so
+# a regression that re-introduces Sonnet-authored fixes (or a --fix /code-review)
+# is caught here.
+REPO_ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
+RF_SKILL="$REPO_ROOT/.claude/skills/review-fix/SKILL.md"
+
+echo "Test: review-fix/SKILL.md pins fix-authoring to Opus (model: opus present)"
+if grep -q 'model: opus' "$RF_SKILL"; then rf_opus=yes; else rf_opus=no; fi
+assert_eq "review-fix: Opus fix-authoring pinned" "yes" "$rf_opus"
+
+echo "Test: review-fix/SKILL.md runs /code-review detection-only (no --fix)"
+if grep -q -- '/code-review max --fix' "$RF_SKILL"; then rf_fix=yes; else rf_fix=no; fi
+assert_eq "review-fix: no /code-review max --fix invocation" "no" "$rf_fix"
+
+# ============================================================================
 # dispatch-spawn-worker tests
 # ============================================================================
 echo "=== dispatch-spawn-worker ==="
@@ -10909,6 +11352,224 @@ assert_eq "cwd-aware-spawn: stdout is 'spawned' (dedup queried under worktree pa
   "spawned" "$out"
 spawn_worker_teardown
 
+# --- Test 9: --model is forwarded through to the bg argv (#1171) -------------
+
+echo "Test: dispatch-spawn-worker forwards a leading --model into the bg argv"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" --model claude-sonnet-4-6 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "spawn-worker-model: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "spawn-worker-model: stdout is 'spawned'" "spawned" "$out"
+mapfile -t sw_bg_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-worker-model: argv[0] is --bg" "--bg" "${sw_bg_argv[0]:-}"
+assert_eq "spawn-worker-model: argv[1] is --name" "--name" "${sw_bg_argv[1]:-}"
+assert_eq "spawn-worker-model: argv[2] is the worktree basename" "839-test-worker" "${sw_bg_argv[2]:-}"
+assert_eq "spawn-worker-model: argv[3] is --model" "--model" "${sw_bg_argv[3]:-}"
+assert_eq "spawn-worker-model: argv[4] is claude-sonnet-4-6" "claude-sonnet-4-6" "${sw_bg_argv[4]:-}"
+assert_eq "spawn-worker-model: argv[5] is --permission-mode" "--permission-mode" "${sw_bg_argv[5]:-}"
+assert_eq "spawn-worker-model: argv[6] is auto" "auto" "${sw_bg_argv[6]:-}"
+assert_eq "spawn-worker-model: argv[7] is '/dispatch-worker 839 <worktree-path>'" \
+  "/dispatch-worker 839 $WORKER_TARGET_WORKTREE" "${sw_bg_argv[7]:-}"
+spawn_worker_teardown
+
+# ============================================================================
+# dispatch-spawn-office-hours tests
+# ============================================================================
+echo "=== dispatch-spawn-office-hours ==="
+#
+# dispatch-spawn-office-hours is the office-hours fresh-launch counterpart of
+# dispatch-spawn-worker: it spawns a /office-hours --bg job worker-style (--name
+# = worktree basename, --cwd = worktree path) via dispatch-spawn-job, then —
+# unlike the worker, which `exec`s the spawn and is done — resolves the spawned
+# (or deduped) session id by the worktree basename and prints it, so the caller
+# can attach a human via `claude --resume`.
+#
+# It reuses the spawn-worker fake-`claude` harness (write_fake_spawn_worker_claude)
+# and the SPAWN_WORKER_* fixture globals: that fake's `--bg` handler registers
+# `{"sessionId":"sess-<name>",...,"name":"<name>"}`, so the resolved id for the
+# 839-test-worker target is deterministically `sess-839-test-worker`.
+#
+# The test shell runs under `set -e`; the script can exit non-zero, so every
+# invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
+
+spawn_office_hours_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" \
+    "$TMPDIR_TEST/worktrees/main" \
+    "$TMPDIR_TEST/worktrees/839-test-worker"
+
+  # dispatch-spawn-office-hours sources lib-claude-agents.sh from its own
+  # directory and runs dispatch-spawn-job from there, so both must sit alongside
+  # the copy. lib-claude-agents.sh is sourced, not executed — no chmod; the two
+  # executables are run, so they are chmod'd.
+  cp "$SCRIPT_DIR/dispatch-spawn-office-hours" "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours"
+  cp "$SCRIPT_DIR/dispatch-spawn-job" "$TMPDIR_TEST/scripts/dispatch-spawn-job"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-job"
+
+  # Reuse the SPAWN_WORKER_* fixture globals so write_fake_spawn_worker_claude
+  # (which references them) backs this script too.
+  SPAWN_WORKER_REGISTRY="$TMPDIR_TEST/registry.json"
+  SPAWN_WORKER_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_WORKER_PWD_LOG="$TMPDIR_TEST/pwd-log"
+  SPAWN_WORKER_PENDING="$TMPDIR_TEST/pending"
+  WORKER_TARGET_WORKTREE="$TMPDIR_TEST/worktrees/839-test-worker"
+  printf '[]' > "$SPAWN_WORKER_REGISTRY"
+
+  export DISPATCH_SPAWN_OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+  export DISPATCH_SPAWN_OFFICE_HOURS_SESSION_ID="sess-self"
+}
+
+spawn_office_hours_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  SPAWN_WORKER_REGISTRY=""
+  SPAWN_WORKER_BG_ARGV=""
+  SPAWN_WORKER_PWD_LOG=""
+  SPAWN_WORKER_PENDING=""
+  WORKER_TARGET_WORKTREE=""
+  unset DISPATCH_SPAWN_OFFICE_HOURS_CLAUDE_CMD DISPATCH_SPAWN_OFFICE_HOURS_SESSION_ID \
+    DISPATCH_SPAWN_JOB_CLAUDE_CMD DISPATCH_SPAWN_JOB_SESSION_ID \
+    SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
+    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+}
+
+# --- Test 1: happy path — spawn worker-style, resolve + print the id ---------
+
+echo "Test: an empty registry spawns one /office-hours --bg job and prints the resolved id"
+spawn_office_hours_setup
+write_fake_spawn_worker_claude
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-oh: dispatch-spawn-office-hours exits 0" "0" "$rc"
+# stdout is exactly the resolved session id (the only thing printed).
+assert_eq "spawn-oh: stdout is the resolved session id" "sess-839-test-worker" "$out"
+# The recorded argv must be exactly:
+#   --bg --name <worktree-basename> --permission-mode auto
+#   "/office-hours 839 implement -"
+mapfile -t oh_bg_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-oh: argv[0] is --bg" "--bg" "${oh_bg_argv[0]:-}"
+assert_eq "spawn-oh: argv[1] is --name" "--name" "${oh_bg_argv[1]:-}"
+assert_eq "spawn-oh: argv[2] is the worktree basename" \
+  "839-test-worker" "${oh_bg_argv[2]:-}"
+assert_eq "spawn-oh: argv[3] is --permission-mode" "--permission-mode" "${oh_bg_argv[3]:-}"
+assert_eq "spawn-oh: argv[4] is auto" "auto" "${oh_bg_argv[4]:-}"
+assert_eq "spawn-oh: argv[5] is '/office-hours 839 implement -'" \
+  "/office-hours 839 implement -" "${oh_bg_argv[5]:-}"
+spawn_office_hours_teardown
+
+# --- Test 2: spawn cwd is the target worktree path ---------------------------
+
+echo "Test: dispatch-spawn-office-hours invokes 'claude --bg' from the target worktree path"
+spawn_office_hours_setup
+write_fake_spawn_worker_claude
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-oh-cwd: exits 0" "0" "$rc"
+oh_pwd_line=$(head -1 "$SPAWN_WORKER_PWD_LOG" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$(realpath "$oh_pwd_line" 2>/dev/null)" == "$(realpath "$WORKER_TARGET_WORKTREE")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-oh-cwd: 'claude --bg' ran with cwd = target worktree path"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-oh-cwd: 'claude --bg' ran with cwd = target worktree path"
+  echo "    pwd-log:  '$oh_pwd_line'"
+  echo "    expected: '$WORKER_TARGET_WORKTREE'"
+fi
+spawn_office_hours_teardown
+
+# --- Test 3: dedup hit — resolve the existing same-name session for resume ----
+
+echo "Test: a live same-name session deduplicates the spawn; its id is resolved for resume"
+spawn_office_hours_setup
+# Prime the registry with a different sessionId whose name matches the worktree
+# basename the spawn would use. dispatch-spawn-job dedups (no --bg); the resolve
+# then returns this existing session — the one to resume.
+printf '%s' \
+  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"839-test-worker"}]' \
+  > "$SPAWN_WORKER_REGISTRY"
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "dedup-oh: dispatch-spawn-office-hours exits 0" "0" "$rc"
+assert_eq "dedup-oh: stdout is the existing session id (resolved for resume)" "sess-other" "$out"
+# No --bg invocation was recorded — nothing was spawned.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: dedup-oh: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: dedup-oh: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
+fi
+spawn_office_hours_teardown
+
+# --- Test 4: wrong arg count -------------------------------------------------
+
+echo "Test: wrong argument count exits 2"
+spawn_office_hours_setup
+write_fake_spawn_worker_claude
+# Three args (missing <worktree-path>).
+if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
+assert_eq "argcount-oh: three args → exit 2" "2" "$oh_rc"
+# Five args (extra trailing argument).
+if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" extra 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
+assert_eq "argcount-oh: five args → exit 2" "2" "$oh_rc"
+spawn_office_hours_teardown
+
+# --- Test 5: invalid issue number --------------------------------------------
+
+echo "Test: a non-integer issue number exits 2"
+spawn_office_hours_setup
+write_fake_spawn_worker_claude
+if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" abc implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
+assert_eq "badnum-oh: non-integer <N> → exit 2" "2" "$oh_rc"
+spawn_office_hours_teardown
+
+# --- Test 6: missing worktree dir --------------------------------------------
+
+echo "Test: a non-existent worktree path exits 2"
+spawn_office_hours_setup
+write_fake_spawn_worker_claude
+if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$TMPDIR_TEST/worktrees/does-not-exist" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
+assert_eq "noworktree-oh: non-existent <worktree-path> → exit 2" "2" "$oh_rc"
+spawn_office_hours_teardown
+
+# --- Test 7: bad phase / bad pr token ----------------------------------------
+
+echo "Test: a malformed phase or pr token exits 2"
+spawn_office_hours_setup
+write_fake_spawn_worker_claude
+# Bad phase (uppercase + metacharacter).
+if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 "QA!" - "$WORKER_TARGET_WORKTREE" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
+assert_eq "badtoken-oh: malformed phase → exit 2" "2" "$oh_rc"
+# Bad pr token (neither a positive integer nor '-').
+if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement x "$WORKER_TARGET_WORKTREE" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
+assert_eq "badtoken-oh: malformed pr token → exit 2" "2" "$oh_rc"
+spawn_office_hours_teardown
+
+# --- Test 8: unknown registry exits 1 ----------------------------------------
+
+echo "Test: an unparseable session registry causes dispatch-spawn-office-hours to exit 1"
+spawn_office_hours_setup
+# A registry that is not a JSON array: lib-claude-agents.sh's
+# claude_sessions_under (used by dispatch-spawn-job's dedup) and
+# claude_sessions_with_name (used by dispatch-spawn-office-hours' resolve) both
+# return 1 (UNKNOWN). The dedup treats UNKNOWN as "a session may be running"
+# and emits 'deduped'; the resolve then cannot query the registry for the
+# session id — dispatch-spawn-office-hours must exit 1 with a diagnostic.
+printf '%s' 'not-a-json-array' > "$SPAWN_WORKER_REGISTRY"
+write_fake_spawn_worker_claude
+if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
+assert_eq "unknown-registry-oh: dispatch-spawn-office-hours exits 1" "1" "$oh_rc"
+# No --bg invocation was recorded — the dedup guard suppressed the spawn.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: unknown-registry-oh: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unknown-registry-oh: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
+fi
+spawn_office_hours_teardown
+
 # ============================================================================
 # dispatch-spawn-job tests
 # ============================================================================
@@ -10984,6 +11645,30 @@ assert_eq "spawn-job-jit: argv[2] is the passed name" "jit-reminder-961" "${sj_b
 assert_eq "spawn-job-jit: argv[3] is --permission-mode" "--permission-mode" "${sj_bg_argv[3]:-}"
 assert_eq "spawn-job-jit: argv[4] is auto" "auto" "${sj_bg_argv[4]:-}"
 assert_eq "spawn-job-jit: argv[5] is the prompt" "$jit_prompt" "${sj_bg_argv[5]:-}"
+spawn_worker_teardown
+
+# --- Test 2b: --model is forwarded into the bg argv (#1171) -------------------
+
+echo "Test: dispatch-spawn-job forwards --model into the 'claude --bg' argv"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" --model claude-sonnet-4-6 \
+    "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job-model: dispatch-spawn-job exits 0" "0" "$rc"
+assert_eq "spawn-job-model: stdout is 'spawned'" "spawned" "$out"
+mapfile -t sj_bg_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-job-model: argv[0] is --bg" "--bg" "${sj_bg_argv[0]:-}"
+assert_eq "spawn-job-model: argv[1] is --name" "--name" "${sj_bg_argv[1]:-}"
+assert_eq "spawn-job-model: argv[2] is the passed name" "diagnose-main" "${sj_bg_argv[2]:-}"
+assert_eq "spawn-job-model: argv[3] is --model" "--model" "${sj_bg_argv[3]:-}"
+assert_eq "spawn-job-model: argv[4] is claude-sonnet-4-6" "claude-sonnet-4-6" "${sj_bg_argv[4]:-}"
+assert_eq "spawn-job-model: argv[5] is --permission-mode" "--permission-mode" "${sj_bg_argv[5]:-}"
+assert_eq "spawn-job-model: argv[6] is auto" "auto" "${sj_bg_argv[6]:-}"
+assert_eq "spawn-job-model: argv[7] is the prompt" "/dispatch-diagnose-main abc123" "${sj_bg_argv[7]:-}"
 spawn_worker_teardown
 
 # --- Test 3: exact-name dedup ------------------------------------------------
@@ -16817,7 +17502,7 @@ mat_setup() {
   STUB_DIR="$TMPDIR_TEST/stub"
   mkdir -p "$STUB_DIR" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/logs"
 
-  for s in dispatch-materialize-spawn dispatch-finalize-selection dispatch-acquire-lock; do
+  for s in dispatch-materialize-spawn dispatch-finalize-selection dispatch-acquire-lock dispatch-phase-model; do
     cp "$SCRIPT_DIR/$s" "$TMPDIR_TEST/$s"
     chmod +x "$TMPDIR_TEST/$s"
   done
@@ -17709,6 +18394,52 @@ assert_eq "fanout-done: terminal token" "drain" "$(printf '%s\n' "$out" | tail -
 assert_eq "fanout-done: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
 assert_eq "fanout-done: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- phase→model integration: qa phase → --model claude-sonnet-4-6 forwarded --
+# When the recomputed PHASE is qa, dispatch-materialize-spawn calls the real
+# dispatch-phase-model (now staged by mat_setup) which emits claude-sonnet-4-6,
+# and the spawn-worker invocation must include --model claude-sonnet-4-6.
+echo "Test: materialize-spawn qa phase → spawn-worker receives --model claude-sonnet-4-6 (#1171)"
+mat_setup
+export MAT_PHASE=qa
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "qa-model: exit 0" "0" "$rc"
+assert_eq "qa-model: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "qa-model: spawn-worker argv contains --model claude-sonnet-4-6" \
+  "--model claude-sonnet-4-6 839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+mat_teardown
+
+# --- phase→model integration: non-qa phase → no --model forwarded (Opus default)
+# An unmapped phase (implement) emits nothing from dispatch-phase-model, so no
+# --model flag is passed to dispatch-spawn-worker and the worker inherits the
+# session default (Opus).
+echo "Test: materialize-spawn implement phase → no --model forwarded (Opus default) (#1171)"
+mat_setup
+export MAT_PHASE=implement
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "implement-model: exit 0" "0" "$rc"
+assert_eq "implement-model: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "implement-model: spawn-worker argv has no --model flag" \
+  "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+mat_teardown
+
+# --- phase→model integration: review phase → --model claude-sonnet-4-6 forwarded
+# When the recomputed PHASE is review, dispatch-materialize-spawn calls the real
+# dispatch-phase-model which emits claude-sonnet-4-6 (the review-fix orchestrator
+# runs on Sonnet; fix-authoring is delegated to an Opus subagent), so the
+# spawn-worker invocation must include --model claude-sonnet-4-6.
+echo "Test: materialize-spawn review phase → spawn-worker receives --model claude-sonnet-4-6 (#1172)"
+mat_setup
+export MAT_PHASE=review
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "review-model: exit 0" "0" "$rc"
+assert_eq "review-model: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "review-model: spawn-worker argv contains --model claude-sonnet-4-6" \
+  "--model claude-sonnet-4-6 839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
 mat_teardown
 
 echo "=== print_remote_access_block ==="

@@ -16,9 +16,9 @@
 #     /dispatch-jit-reminder bg-job spawns, which run those sub-skills in their
 #     own session rather than in the router's.
 #
-# Usage: dispatch-spawn-job [--no-verify] --name <name> --cwd <cwd> <prompt>
+# Usage: dispatch-spawn-job [--no-verify] [--model <model>] --name <name> --cwd <cwd> <prompt>
 #
-# Arguments (--name, --cwd, <prompt> required; --no-verify optional):
+# Arguments (--name, --cwd, <prompt> required; --no-verify and --model optional):
 #   --name <name>   The spawned session's --name. Dedup keys on it directly:
 #                   another live session with the same name under <cwd> means
 #                   nothing is spawned.
@@ -35,14 +35,19 @@
 #                   the registration wait. The unledgered one-off spawns
 #                   (main-broken / jit-reminder), which have no ledger/sweep
 #                   safety net, keep the default verify.
+#   --model <model> Optional, opaque model override forwarded directly to
+#                   `claude --bg --model <model>`. When absent or empty, the
+#                   --model flag is omitted entirely and the session inherits the
+#                   launcher's default model (Opus). See dispatch-phase-model for
+#                   the phase → model policy (#1171).
 #
 # Behavior, in order:
 #   1. Dedup    — if another live session with name == <name> is already running
 #                 under <cwd>, spawn nothing. Fail-safe: if the registry cannot
 #                 be queried, also spawn nothing (a dispatch agent may be live).
-#   2. Spawn    — `claude --bg --name <name> --permission-mode auto "<prompt>"`,
+#   2. Spawn    — `claude --bg --name <name> [--model <model>] --permission-mode auto "<prompt>"`,
 #                 from a subshell that `cd`s into <cwd> first; capture its exit
-#                 code.
+#                 code. --model is inserted only when non-empty.
 #   3. Verify   — only when --no-verify is absent: re-query the registry under
 #                 <cwd> (where the new job registers) with a bounded retry
 #                 (verify_agent_registered_under) to absorb the async-
@@ -86,6 +91,7 @@ set -uo pipefail
 # ---- Step 0: parse and validate arguments -----------------------------------
 NAME=""
 CWD=""
+MODEL=""
 NO_VERIFY=""
 positionals=()
 while [[ $# -gt 0 ]]; do
@@ -110,6 +116,14 @@ while [[ $# -gt 0 ]]; do
       CWD="$2"
       shift 2
       ;;
+    --model)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-spawn-job: --model requires a value" >&2
+        exit 2
+      fi
+      MODEL="$2"
+      shift 2
+      ;;
     *)
       positionals+=("$1")
       shift
@@ -122,6 +136,11 @@ if [[ ${#positionals[@]} -ne 1 ]]; then
   exit 2
 fi
 PROMPT="${positionals[0]}"
+
+if [[ -n "$MODEL" && ! "$MODEL" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "dispatch-spawn-job: --model value '$MODEL' contains unexpected characters" >&2
+  exit 2
+fi
 
 if [[ -z "$NAME" ]]; then
   echo "dispatch-spawn-job: --name is required and must be non-empty" >&2
@@ -183,9 +202,11 @@ done <<<"$sessions"
 # default path the rc is informational only — Step 4's registry check is the
 # source of truth; on the --no-verify path the rc is the came-up signal.
 spawn_rc=0
+bg_args=(--bg --name "$NAME")
+[[ -n "$MODEL" ]] && bg_args+=(--model "$MODEL")
+bg_args+=(--permission-mode auto "$PROMPT")
 spawn_output=$(
-  cd "$CWD" && "$CLAUDE_CMD" --bg --name "$NAME" \
-    --permission-mode auto "$PROMPT" 2>&1
+  cd "$CWD" && "$CLAUDE_CMD" "${bg_args[@]}" 2>&1
 ) || spawn_rc=$?
 
 # ---- Step 3b: --no-verify early branch --------------------------------------

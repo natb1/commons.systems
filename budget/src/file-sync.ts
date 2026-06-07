@@ -13,6 +13,7 @@ import { encrypt } from "./crypto.js";
 import { logError } from "@commons-systems/errorutil/log";
 import {
   writeFileToHandle,
+  readFileFromHandle,
   queryReadWritePermission,
   requestReadWritePermission,
 } from "./local-file.js";
@@ -31,11 +32,16 @@ let dirty = false;
 // in flight when the user clears data cannot clobber the on-disk file with a
 // post-clear snapshot.
 let generation = 0;
+// The on-disk file's lastModified as the app last loaded or wrote it. The focus
+// watcher compares the live lastModified against this watermark to detect an
+// external write; stamping it on our own write-back prevents a self-trigger.
+let lastSyncedModified: number | null = null;
 
 /** Arm write-back for an encrypted FSA-handle session. */
-export function configureFileSync(h: FileSystemFileHandle, pw: string): void {
+export function configureFileSync(h: FileSystemFileHandle, pw: string, modifiedMs: number): void {
   handle = h;
   password = pw;
+  lastSyncedModified = modifiedMs;
   generation++;
 }
 
@@ -48,6 +54,7 @@ export function resetFileSync(): void {
   handle = null;
   password = null;
   dirty = false;
+  lastSyncedModified = null;
   generation++;
 }
 
@@ -106,4 +113,15 @@ async function doWrite(h: FileSystemFileHandle, pw: string, gen: number): Promis
   // with a now-stale snapshot.
   if (gen !== generation) return;
   await writeFileToHandle(h, bytes);
+  // Stamp the watermark from the file as just written so the focus watcher does
+  // not mistake our own write-back for an external change. Skip if the session was
+  // re-armed/reset mid-write (gen changed) — that path set its own watermark.
+  if (gen === generation) {
+    lastSyncedModified = (await readFileFromHandle(h)).lastModified;
+  }
 }
+
+/** Active FSA handle for this session, or null in seed / non-FSA upload mode. */
+export function getSyncHandle(): FileSystemFileHandle | null { return handle; }
+/** Watermark: lastModified of the on-disk file as the app last loaded/wrote it. */
+export function getLastSyncedModified(): number | null { return lastSyncedModified; }

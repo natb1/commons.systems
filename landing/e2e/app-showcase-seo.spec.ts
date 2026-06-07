@@ -43,7 +43,7 @@ async function getSoftwareApplicationJsonLd(
 }
 
 test.describe("SEO: SoftwareApplication JSON-LD", () => {
-  test("homepage has exactly 3 SoftwareApplication JSON-LD scripts", async ({
+  test("homepage has exactly 3 SoftwareApplication JSON-LD scripts @build", async ({
     page,
   }) => {
     await page.goto("/");
@@ -51,7 +51,7 @@ test.describe("SEO: SoftwareApplication JSON-LD", () => {
     expect(apps).toHaveLength(3);
   });
 
-  test("each SoftwareApplication has correct url, category, os, and name", async ({
+  test("each SoftwareApplication has correct url, category, os, and name @build", async ({
     page,
   }) => {
     await page.goto("/");

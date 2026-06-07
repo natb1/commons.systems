@@ -86,7 +86,7 @@ test.describe("app showcase", () => {
     });
   });
 
-  test("showcase and SoftwareApplication JSON-LD are live @smoke", async ({
+  test("showcase and SoftwareApplication JSON-LD are live @smoke @build", async ({
     page,
   }) => {
     await page.goto("/");

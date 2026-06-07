@@ -10,11 +10,40 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap"
     />
+    <style>
+      header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+      #reminder-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .reminder {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--graphical-fg, rgba(255, 255, 255, 0.15));
+      }
+      .reminder-due {
+        color: var(--muted-fg, #9aa0a6);
+        white-space: nowrap;
+      }
+      .reminder-due.overdue {
+        color: var(--danger, #ff6b6b);
+        font-weight: 700;
+      }
+    </style>
   </head>
   <body>
     <div class="page">
       <header>
         <h1>Office Hours</h1>
+        <button id="auth-toggle" type="button">Sign in</button>
       </header>
       <main id="app"></main>
       <footer>
