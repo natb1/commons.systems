@@ -14,7 +14,6 @@ export function getDemoSamples(): UsageSample[] {
     activeWorkers: s.activeWorkers,
     targetWorkers: s.targetWorkers,
     groupId: s.groupId,
-    memberEmails: s.memberEmails,
   }));
 }
 

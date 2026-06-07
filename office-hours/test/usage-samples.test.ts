@@ -11,12 +11,13 @@ const baseSample: UsageSample = {
   activeWorkers: 3,
   targetWorkers: 4,
   groupId: "group-abc",
-  memberEmails: ["alice@example.com", "bob@example.com"],
 };
+
+const memberEmails = ["alice@example.com", "bob@example.com"];
 
 describe("usageSampleToDoc / toUsageSample round-trip", () => {
   it("round-trips a UsageSample through doc and back", () => {
-    const doc = usageSampleToDoc(baseSample);
+    const doc = usageSampleToDoc(baseSample, memberEmails);
     const result = toUsageSample("auto-id", doc);
 
     expect(result).not.toBeNull();
@@ -30,12 +31,13 @@ describe("usageSampleToDoc / toUsageSample round-trip", () => {
     expect(result.activeWorkers).toBe(baseSample.activeWorkers);
     expect(result.targetWorkers).toBe(baseSample.targetWorkers);
     expect(result.groupId).toBe(baseSample.groupId);
-    expect(result.memberEmails).toEqual(baseSample.memberEmails);
+    // memberEmails is an auth field stripped from the client-facing struct.
+    expect(result).not.toHaveProperty("memberEmails");
   });
 });
 
 describe("toUsageSample malformed-doc cases", () => {
-  const validDoc = usageSampleToDoc(baseSample);
+  const validDoc = usageSampleToDoc(baseSample, memberEmails);
 
   it("returns null when sampledAt is missing", () => {
     const doc = { ...validDoc, sampledAt: undefined };

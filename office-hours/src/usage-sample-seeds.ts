@@ -156,7 +156,7 @@ export const usageSampleSeeds: UsageSampleSeed[] = [
     fiveHourUsedPct: 71,
     weeklyUsedPct: 63,
     fiveHourResetsAtOffsetMin: -720 + 60,
-    weeklyResetsAtOffsetMin: -720 + 3600,
+    weeklyResetsAtOffsetMin: 3600,
     activeWorkers: 2,
     targetWorkers: 4,
     groupId: "demo-group",
@@ -168,7 +168,7 @@ export const usageSampleSeeds: UsageSampleSeed[] = [
     fiveHourUsedPct: 33,
     weeklyUsedPct: 68,
     fiveHourResetsAtOffsetMin: -120 + 270,
-    weeklyResetsAtOffsetMin: -120 + 2960,
+    weeklyResetsAtOffsetMin: 3600,
     activeWorkers: 2,
     targetWorkers: 2,
     groupId: "demo-group",
@@ -180,7 +180,7 @@ export const usageSampleSeeds: UsageSampleSeed[] = [
     fiveHourUsedPct: 41,
     weeklyUsedPct: 71,
     fiveHourResetsAtOffsetMin: 150, // next 5h reset in 2.5h
-    weeklyResetsAtOffsetMin: 2840, // next weekly reset in ~2 days
+    weeklyResetsAtOffsetMin: 3600, // next weekly reset in ~2.5 days
     activeWorkers: 3,
     targetWorkers: 2,
     groupId: "demo-group",

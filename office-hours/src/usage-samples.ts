@@ -10,7 +10,6 @@ export interface UsageSample {
   activeWorkers: number;
   targetWorkers: number;
   groupId: string;
-  memberEmails: string[];
 }
 
 export function toUsageSample(id: string, data: Record<string, unknown>): UsageSample | null {
@@ -72,11 +71,13 @@ export function toUsageSample(id: string, data: Record<string, unknown>): UsageS
     activeWorkers,
     targetWorkers,
     groupId,
-    memberEmails,
   };
 }
 
-export function usageSampleToDoc(s: UsageSample): Record<string, unknown> {
+export function usageSampleToDoc(
+  s: UsageSample,
+  memberEmails: string[],
+): Record<string, unknown> {
   return {
     sampledAt: Timestamp.fromDate(s.sampledAt),
     fiveHourUsedPct: s.fiveHourUsedPct,
@@ -86,6 +87,6 @@ export function usageSampleToDoc(s: UsageSample): Record<string, unknown> {
     activeWorkers: s.activeWorkers,
     targetWorkers: s.targetWorkers,
     groupId: s.groupId,
-    memberEmails: s.memberEmails,
+    memberEmails,
   };
 }

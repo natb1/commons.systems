@@ -10,10 +10,17 @@ export function usageSamplesSeedDataPlugin(): Plugin {
   return {
     name: "office-hours-usage-samples-seed-data",
     buildStart() {
+      // Strip memberEmails (a denormalized auth field holding real email
+      // addresses) before serializing — it must never be baked into the
+      // public JS bundle. The UI never reads it; Firestore rules gate access
+      // server-side.
+      const publicSeeds = usageSampleSeeds.map(
+        ({ memberEmails: _memberEmails, ...rest }) => rest,
+      );
       moduleCode =
-        `const seeds = ${JSON.stringify(usageSampleSeeds)};\n` +
+        `const seeds = ${JSON.stringify(publicSeeds)};\n` +
         `const now = Date.now();\n` +
-        `export default seeds.map(({ sampledAtOffsetMin, fiveHourUsedPct, weeklyUsedPct, fiveHourResetsAtOffsetMin, weeklyResetsAtOffsetMin, activeWorkers, targetWorkers, groupId, memberEmails }) => ({\n` +
+        `export default seeds.map(({ sampledAtOffsetMin, fiveHourUsedPct, weeklyUsedPct, fiveHourResetsAtOffsetMin, weeklyResetsAtOffsetMin, activeWorkers, targetWorkers, groupId }) => ({\n` +
         `  sampledAt: new Date(now + sampledAtOffsetMin * 60000),\n` +
         `  fiveHourUsedPct,\n` +
         `  weeklyUsedPct,\n` +
@@ -22,7 +29,6 @@ export function usageSamplesSeedDataPlugin(): Plugin {
         `  activeWorkers,\n` +
         `  targetWorkers,\n` +
         `  groupId,\n` +
-        `  memberEmails,\n` +
         `}));\n`;
     },
     resolveId(id) {

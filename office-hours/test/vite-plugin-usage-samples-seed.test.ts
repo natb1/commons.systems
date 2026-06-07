@@ -39,6 +39,11 @@ describe("usageSamplesSeedDataPlugin", () => {
     expect(moduleCode).toContain("export default");
   });
 
+  it("does not bake the memberEmails auth field into the bundle", () => {
+    expect(moduleCode).toBeDefined();
+    expect(moduleCode).not.toContain("memberEmails");
+  });
+
   describe("generated usage samples", () => {
     let samples: Array<{
       sampledAt: Date;
@@ -49,7 +54,6 @@ describe("usageSamplesSeedDataPlugin", () => {
       activeWorkers: number;
       targetWorkers: number;
       groupId: string;
-      memberEmails: string[];
     }>;
     let now: number;
 
@@ -74,8 +78,8 @@ describe("usageSamplesSeedDataPlugin", () => {
         expect(typeof s.activeWorkers).toBe("number");
         expect(typeof s.targetWorkers).toBe("number");
         expect(typeof s.groupId).toBe("string");
-        expect(Array.isArray(s.memberEmails)).toBe(true);
-        expect(s.memberEmails.every((e) => typeof e === "string")).toBe(true);
+        // memberEmails is an auth field that must never reach the public bundle.
+        expect(s).not.toHaveProperty("memberEmails");
       }
     });
 
