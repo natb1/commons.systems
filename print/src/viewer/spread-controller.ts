@@ -160,6 +160,13 @@ export class SpreadController {
     }
   }
 
+  async goToPage(page: number): Promise<void> {
+    if (this.spreads.length === 0) return;
+    this.spreadIndex = spreadIndexForPage(page, this.renderer.pageCount);
+    this.preSpreadPage = page;
+    await this.render();
+  }
+
   zoomIn(): void {
     this.spreadZoomLevel++;
     this.updateZoom();
