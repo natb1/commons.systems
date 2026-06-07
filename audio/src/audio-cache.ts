@@ -14,6 +14,7 @@ const cache = createLruBlobCache({
   maxBytes: MAX_CACHE_BYTES,
 });
 
+export const mediaCache = cache;
 export const closeDb = cache.closeDb;
 export const clearCache = cache.clearCache;
 
