@@ -468,6 +468,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Dispatch-queue metrics snapshot (office-hours Queue view). Group members
+    // read their env's snapshot via the denormalized memberEmails field; the
+    // demo env is world-readable for the unauthenticated demo view. Client
+    // writes are denied; only the Admin-SDK sampler (functions/, #1182) writes.
+    match /office-hours/{env}/metrics/{metricId} {
+      allow read: if env == "demo"
+        || (request.auth != null
+            && request.auth.token.email in resource.data.memberEmails);
+      allow write: if false;
+    }
+
     // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
     // InsertFirestoreRules inserts new rule blocks immediately above this line.
     match /{document=**} {

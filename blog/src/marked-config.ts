@@ -24,6 +24,18 @@ export const IMAGE_DIMENSIONS: Record<string, ImageMeta> = Object.fromEntries(
   ]),
 );
 
+function isExternalHref(href: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(href, "https://commons.systems");
+  } catch {
+    return false; // unparseable → treat as internal (no glyph)
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false; // mailto:, tel:, …
+  const host = url.hostname;
+  return host !== "commons.systems" && !host.endsWith(".commons.systems");
+}
+
 // Creates a Marked instance that strips raw HTML from markdown (defense-in-depth)
 // and opens post-body links in new tabs with rel="noopener noreferrer" to prevent
 // reverse tabnapping. The image renderer adds width/height, srcset/sizes, and
@@ -41,7 +53,10 @@ export function createMarked(): Marked {
       link({ href, text, title }) {
         const safeHref = escapeHtml(href);
         const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
-        return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
+        const glyphHtml = isExternalHref(href)
+          ? '<span class="external-link-icon" aria-hidden="true">&#x2197;</span>'
+          : "";
+        return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}${glyphHtml}</a>`;
       },
       image({ href, text }) {
         const safeHref = escapeHtml(href);

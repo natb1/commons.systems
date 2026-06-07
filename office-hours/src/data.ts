@@ -3,7 +3,9 @@ import type { User } from "firebase/auth";
 import { nsCollectionPath, type Namespace } from "@commons-systems/firestoreutil/namespace";
 import { logError } from "@commons-systems/errorutil/log";
 import seedReminders from "virtual:office-hours-seed-data";
+import seedQueueMetrics from "virtual:office-hours-queue-seed";
 import type { Reminder } from "./reminders.js";
+import type { QueueMetricsSnapshot } from "./queue-metrics.js";
 
 export function getDemoReminders(): Reminder[] {
   return seedReminders.map((s) => ({
@@ -13,6 +15,20 @@ export function getDemoReminders(): Reminder[] {
     issueNumber: s.issueNumber,
     dueAt: s.dueAt,
   }));
+}
+
+export function getDemoQueueMetrics(): QueueMetricsSnapshot {
+  return {
+    openHelpWanted: seedQueueMetrics.openHelpWanted,
+    closedPerDay: seedQueueMetrics.closedPerDay,
+    createdPerDay: seedQueueMetrics.createdPerDay,
+    netDrainPerDay: seedQueueMetrics.netDrainPerDay,
+    runwayDays: seedQueueMetrics.runwayDays,
+    windowDays: seedQueueMetrics.windowDays,
+    computedAt: seedQueueMetrics.computedAt,
+    groupId: seedQueueMetrics.groupId,
+    memberEmails: [...seedQueueMetrics.memberEmails],
+  };
 }
 
 export async function getOwnerReminders(

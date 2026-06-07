@@ -36,7 +36,14 @@ describe("link renderer (real Marked instance)", () => {
     expect(content.innerHTML).toContain('target="_blank"');
     expect(content.innerHTML).toContain('rel="noopener noreferrer"');
     expect(content.innerHTML).toContain('href="https://example.com"');
-    expect(content.innerHTML).toContain(">example</a>");
+    expect(content.innerHTML).toContain(">example");
+    expect(content.innerHTML).toContain('class="external-link-icon"');
+  });
+
+  it("omits external-link-icon for internal/relative links", async () => {
+    const content = await renderAndHydrate("Check [post](/post/x) link");
+    expect(content.innerHTML).toContain('href="/post/x"');
+    expect(content.innerHTML).not.toContain("external-link-icon");
   });
 
   it("escapes special characters in href", async () => {
