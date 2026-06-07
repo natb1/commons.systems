@@ -7456,6 +7456,36 @@ else
 fi
 config_teardown
 
+# --- Test 2d: roadmap jit (7d/14d, skill: roadmap) validates -----------------
+
+echo "Test: roadmap jit (7d/14d, skill: roadmap) validates"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "roadmap",
+      "repo": "test-owner/test-repo",
+      "label": "jit:roadmap",
+      "title": "Roadmap review",
+      "body": "Recurring roadmap review.",
+      "project": "test-project",
+      "remindAfterClose": "7d",
+      "dueAfterClose": "14d",
+      "debounce": "1h",
+      "skill": "roadmap"
+    }
+  ]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>/dev/null); rc=$?
+assert_eq "roadmap jit exits 0" "0" "$rc"
+roadmap_skill=$(printf '%s' "$out" | jq -r '.jits[0].skill')
+assert_eq "roadmap jit skill value" "roadmap" "$roadmap_skill"
+roadmap_remind=$(printf '%s' "$out" | jq -r '.jits[0].remindAfterClose')
+assert_eq "roadmap jit remindAfterClose value" "7d" "$roadmap_remind"
+config_teardown
+
 # --- Test 3: absent file prints no-config and exits 0 ------------------------
 
 echo "Test: absent file prints no-config and exits 0"
@@ -12309,6 +12339,51 @@ else
 fi
 jit_teardown
 
+# --- Test 2-roadmap: roadmap jit (7d/14d) cadence cold start -----------------
+
+echo "Test: dispatch-jit-engine roadmap jit cadence cold start creates an issue"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "roadmap",
+      "repo": "test-owner/test-repo",
+      "label": "jit:roadmap",
+      "title": "Roadmap review",
+      "body": "Recurring roadmap review.",
+      "project": "test-project",
+      "remindAfterClose": "7d",
+      "dueAfterClose": "14d",
+      "skill": "roadmap"
+    }
+  ]
+}
+EOF
+# open-issues.json and closed-issues.json absent — open/closed both "[]".
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
+assert_eq "roadmap cold start exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+# Cold start with remind=7d, due=14d, NOW=2026-01-01T00:00:00Z:
+# DUE = NOW + 14d - 7d = NOW + 7d = 2026-01-08T00:00:00Z.
+if [[ "$out" == *"roadmap: created #123 (due 2026-01-08T00:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap cold start reports created #123 (due 2026-01-08T00:00:00Z)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap cold start reports created #123 (due 2026-01-08T00:00:00Z)"
+  echo "    actual: $out"
+fi
+create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$create_log" == *"<!-- jit-due: 2026-01-08T00:00:00Z -->"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap cold start embedded jit-due marker in issue body"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap cold start embedded jit-due marker in issue body"
+  echo "    gh-issue-create.log: $create_log"
+fi
+jit_teardown
+
 # --- Test 3: cadence within window — skipped, no issue created ---------------
 
 echo "Test: dispatch-jit-engine cadence within remindAfterClose is skipped"
@@ -12395,6 +12470,54 @@ if [[ "$create_log" == *"<!-- jit-due: 2026-01-01T00:00:00Z -->"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: past-window embedded jit-due marker in issue body"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: past-window embedded jit-due marker in issue body"
+  echo "    gh-issue-create.log: $create_log"
+fi
+jit_teardown
+
+# --- Test 4-roadmap: roadmap jit (7d/14d) cadence steady state ---------------
+
+echo "Test: dispatch-jit-engine roadmap jit past remindAfterClose creates an issue"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "roadmap",
+      "repo": "test-owner/test-repo",
+      "label": "jit:roadmap",
+      "title": "Roadmap review",
+      "body": "Recurring roadmap review.",
+      "project": "test-project",
+      "remindAfterClose": "7d",
+      "dueAfterClose": "14d",
+      "skill": "roadmap"
+    }
+  ]
+}
+EOF
+# Newest closed issue closed 10d before "now" — past the 7d remind window.
+closed_at=$(date -u -d "@$((JIT_NOW_EPOCH - 10*86400))" +%Y-%m-%dT%H:%M:%SZ)
+printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
+  > "$STUB_DIR/closed-issues.json"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
+assert_eq "roadmap past-window exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+# closedAt = NOW − 10d = 2025-12-22T00:00:00Z, dueAfterClose = 14d →
+# DUE = closedAt + 14d = 2026-01-05T00:00:00Z.
+if [[ "$out" == *"roadmap: created #123 (due 2026-01-05T00:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap past-window reports created #123 (due 2026-01-05T00:00:00Z)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window reports created #123 (due 2026-01-05T00:00:00Z)"
+  echo "    actual: $out"
+fi
+create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$create_log" == *"<!-- jit-due: 2026-01-05T00:00:00Z -->"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap past-window embedded jit-due marker in issue body"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window embedded jit-due marker in issue body"
   echo "    gh-issue-create.log: $create_log"
 fi
 jit_teardown
