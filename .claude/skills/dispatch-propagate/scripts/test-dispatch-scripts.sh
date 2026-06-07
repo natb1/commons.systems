@@ -15586,7 +15586,7 @@ restore_teardown
 # empty and the hook falls through to `git rev-parse --abbrev-ref HEAD`. The
 # branch (999-from-branch) then supplies the basename. Same phase=ERROR routing
 # emits the worktree path on the ARGUMENTS line.
-echo "Test: restore-dispatch-skill empty registry -> branch-name fallback"
+echo "Test: restore-dispatch-skill empty registry → branch-name fallback"
 restore_setup
 # Deliberately do NOT call set_agents_name — the claude stub returns [].
 echo "999-from-branch" > "$STUB_DIR/current-branch.txt"
