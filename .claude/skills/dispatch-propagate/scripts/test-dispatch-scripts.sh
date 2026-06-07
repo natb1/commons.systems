@@ -61,6 +61,7 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-check-blockers" "$TMPDIR_TEST/dispatch-check-blockers"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   cp "$SCRIPT_DIR/dispatch-apply-office-hours" "$TMPDIR_TEST/dispatch-apply-office-hours"
+  cp "$SCRIPT_DIR/dispatch-apply-planned" "$TMPDIR_TEST/dispatch-apply-planned"
   cp "$SCRIPT_DIR/dispatch-resolve-worktree" "$TMPDIR_TEST/dispatch-resolve-worktree"
   # dispatch-select-target's JIT scan calls dispatch-config-load and
   # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
@@ -94,6 +95,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-check-blockers" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
            "$TMPDIR_TEST/dispatch-apply-office-hours" \
+           "$TMPDIR_TEST/dispatch-apply-planned" \
            "$TMPDIR_TEST/dispatch-resolve-worktree" \
            "$TMPDIR_TEST/dispatch-config-load" \
            "$TMPDIR_TEST/dispatch-project-status-read"
@@ -4673,6 +4675,55 @@ if grep -q 'FBCA04' "$SCRIPT_DIR/dispatch-apply-office-hours"; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: dispatch-apply-office-hours owns FBCA04"
 fi
+
+# ============================================================================
+# dispatch-apply-planned tests
+# ============================================================================
+echo ""
+echo "=== dispatch-apply-planned ==="
+
+# Happy path: the label already exists in the repo (default stub mode), so the
+# script applies it to the ISSUE with a single `gh issue edit` and no create.
+echo "Test: label exists → apply dispatch:planned to issue, no label create"
+setup
+"$TMPDIR_TEST/dispatch-apply-planned" 55
+assert_eq "applies dispatch:planned to the issue" \
+  "issue edit 55 --add-label dispatch:planned" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+assert_eq "label exists: no gh label create" "absent" "$(log_state gh-label-create.log)"
+teardown
+
+# Create-on-first-use: the apply fails "not found" (the label does not exist in
+# the repo yet), so the script creates it with the canonical 0E8A16 color and
+# retries the edit.
+echo "Test: label not found → create (0E8A16) then retry"
+setup
+echo "label-missing" > "$STUB_DIR/issue-edit-mode"
+"$TMPDIR_TEST/dispatch-apply-planned" 55
+TOTAL=$((TOTAL + 1))
+if grep -q "^label create dispatch:planned --color 0E8A16 " "$STUB_DIR/gh-label-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: label created with 0E8A16 color"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: label created with 0E8A16 color"
+fi
+assert_eq "create-on-first-use: label applied on retry" \
+  "issue edit 55 --add-label dispatch:planned" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+teardown
+
+# Non-numeric, flag-like issue number → hard error (exit 1), no gh calls.
+echo "Test: non-numeric issue number → non-zero exit, no edit/label-create"
+setup
+if "$TMPDIR_TEST/dispatch-apply-planned" "--repo other/repo" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "non-numeric issue number exits non-zero" "1" "$rc"
+assert_eq "non-numeric: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "non-numeric: no label create" "absent" "$(log_state gh-label-create.log)"
+teardown
+
+# Missing arg → hard error (exit 1).
+echo "Test: missing issue number → non-zero exit"
+setup
+if "$TMPDIR_TEST/dispatch-apply-planned" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "missing issue number exits non-zero" "1" "$rc"
+teardown
 
 # ============================================================================
 # dispatch-resolve-worktree tests
@@ -20215,6 +20266,14 @@ assert_eq "mark-complete: writes exact phase-completed contents" \
   "$(printf 'phase=implement\npr=42\n')" "$(cat "$mc_dir/phase-completed")"
 rm -rf "$mc_dir"
 
+# ----- mark-complete: --phase plan accepted, writes exact marker -----
+mc_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mc_dir" "$MARK_COMPLETE" --phase plan --pr 42; then mc_ec=0; else mc_ec=$?; fi
+assert_eq "mark-complete: --phase plan accepted (exit 0)" "0" "$mc_ec"
+assert_eq "mark-complete: plan writes exact phase-completed contents" \
+  "$(printf 'phase=plan\npr=42\n')" "$(cat "$mc_dir/phase-completed")"
+rm -rf "$mc_dir"
+
 # ----- mark-complete: unknown phase → exit 2, no file -----
 mc_dir=$(mktemp -d)
 if CLAUDE_JOB_DIR="$mc_dir" "$MARK_COMPLETE" --phase bogus --pr 7 2>/dev/null; then mc_ec=0; else mc_ec=$?; fi
@@ -21089,6 +21148,181 @@ else
   echo "  FAIL: ensure_recover_unit returned non-zero"
 fi
 rm -rf "$eru_tmp"
+
+# ============================================================================
+# dispatch-write-plan / dispatch-read-plan tests
+# ============================================================================
+echo ""
+echo "=== dispatch-write-plan / dispatch-read-plan ==="
+
+# These two scripts exercise a stateful gh comment store, so this block builds
+# its own fake `gh` (a generic `gh api` emulator over a JSON file) rather than
+# reusing the shared fixture stub. The fake honors: GET .../issues/<N>/comments
+# (returns the store array), GET .../issues/comments/<id> (returns one comment),
+# POST .../issues/<N>/comments (append), PATCH .../issues/comments/<id> (replace
+# body). It pipes the response through the REAL `jq` when --jq is given.
+wp_root=$(mktemp -d)
+mkdir -p "$wp_root/bin"
+WP_STORE="$wp_root/store.json"
+WP_COUNTER="$wp_root/counter"
+echo '[]' > "$WP_STORE"
+echo '0' > "$WP_COUNTER"
+cat > "$wp_root/bin/gh" <<WPGH
+#!/usr/bin/env bash
+# Generic gh api emulator over a JSON comment store. Only the surface the two
+# plan scripts use is implemented.
+set -uo pipefail
+STORE="$WP_STORE"
+COUNTER="$WP_COUNTER"
+WPGH
+cat >> "$wp_root/bin/gh" <<'WPGH'
+method="GET"
+endpoint=""
+jqfilter=""
+bodyfile=""
+# First arg is the gh subcommand group; we only support "api".
+if [[ "${1:-}" != "api" ]]; then
+  echo "fake-gh: unsupported subcommand: ${1:-}" >&2; exit 1
+fi
+shift
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --method) method="$2"; shift 2 ;;
+    --paginate) shift ;;
+    --jq) jqfilter="$2"; shift 2 ;;
+    --field)
+      # Expect body=@<file>
+      val="$2"; shift 2
+      case "$val" in
+        body=@*) bodyfile="${val#body=@}" ;;
+        *) ;; # ignore other fields
+      esac
+      ;;
+    -f) # alternate field form, ignore unless body=@
+      val="$2"; shift 2
+      case "$val" in
+        body=@*) bodyfile="${val#body=@}" ;;
+        *) ;;
+      esac
+      ;;
+    -*) shift ;;            # ignore unknown flags
+    *)
+      if [[ -z "$endpoint" ]]; then endpoint="$1"; fi
+      shift
+      ;;
+  esac
+done
+
+emit() {
+  # $1 = JSON response. Pipe through real jq if a filter was given.
+  if [[ -n "$jqfilter" ]]; then
+    printf '%s' "$1" | jq -r "$jqfilter"
+  else
+    printf '%s' "$1"
+  fi
+}
+
+# Strip a trailing/leading nothing; match endpoint shapes.
+if [[ "$method" == "GET" && "$endpoint" == *"/comments" && "$endpoint" != *"/issues/comments/"* ]]; then
+  # GET .../issues/<N>/comments  → the whole store array
+  emit "$(cat "$STORE")"
+  exit 0
+fi
+if [[ "$method" == "GET" && "$endpoint" == *"/issues/comments/"* ]]; then
+  cid="${endpoint##*/issues/comments/}"
+  obj=$(jq -c --argjson id "$cid" '.[] | select(.id == $id)' "$STORE")
+  if [[ -z "$obj" ]]; then
+    echo "fake-gh: comment $cid not found" >&2; exit 1
+  fi
+  emit "$obj"
+  exit 0
+fi
+if [[ "$method" == "POST" && "$endpoint" == *"/comments" ]]; then
+  next=$(( $(cat "$COUNTER") + 1 ))
+  echo "$next" > "$COUNTER"
+  newbody=$(cat "$bodyfile")
+  updated=$(jq -c --argjson id "$next" --arg body "$newbody" '. + [{id:$id, body:$body}]' "$STORE")
+  echo "$updated" > "$STORE"
+  emit "$(jq -c --argjson id "$next" '.[] | select(.id == $id)' "$STORE")"
+  exit 0
+fi
+if [[ "$method" == "PATCH" && "$endpoint" == *"/issues/comments/"* ]]; then
+  cid="${endpoint##*/issues/comments/}"
+  newbody=$(cat "$bodyfile")
+  updated=$(jq -c --argjson id "$cid" --arg body "$newbody" 'map(if .id == $id then .body = $body else . end)' "$STORE")
+  echo "$updated" > "$STORE"
+  emit "$(jq -c --argjson id "$cid" '.[] | select(.id == $id)' "$STORE")"
+  exit 0
+fi
+echo "fake-gh: unhandled $method $endpoint" >&2
+exit 1
+WPGH
+chmod +x "$wp_root/bin/gh"
+
+WP_WRITE="$SCRIPT_DIR/dispatch-write-plan"
+WP_READ="$SCRIPT_DIR/dispatch-read-plan"
+
+# 1. write-creates: empty store → one comment containing the marker + PLAN A.
+if ! PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"PLAN A"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan (test 1) failed unexpectedly"
+fi
+assert_eq "write-plan: store has exactly one comment after first write" \
+  "1" "$(jq 'length' "$WP_STORE")"
+TOTAL=$((TOTAL + 1))
+if jq -e '.[0].body | contains("<!-- dispatch:plan -->") and contains("PLAN A")' "$WP_STORE" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: first comment carries the marker and PLAN A"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: first comment carries the marker and PLAN A"
+fi
+
+# 2. round-trip read returns the full (multi-line) body untruncated.
+if ! PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"$(printf 'PLAN A\nline two\nline three')"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan (test 2) failed unexpectedly"
+fi
+read_out=""
+read_out=$(PATH="$wp_root/bin:$SAVED_PATH" "$WP_READ" 7) || { FAIL=$((FAIL + 1)); echo "  FAIL: read-plan (test 2) exited non-zero unexpectedly"; }
+TOTAL=$((TOTAL + 1))
+if [[ "$read_out" == *"<!-- dispatch:plan -->"* && "$read_out" == *"line three"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan returns the full multi-line body with marker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan returns the full multi-line body with marker"
+  echo "    actual: '$read_out'"
+fi
+
+# 3. write-updates-in-place: still exactly one comment; read now returns PLAN B.
+if ! PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"PLAN B"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan (test 3) failed unexpectedly"
+fi
+assert_eq "write-plan: still exactly one comment after update" \
+  "1" "$(jq 'length' "$WP_STORE")"
+read_out=""
+read_out=$(PATH="$wp_root/bin:$SAVED_PATH" "$WP_READ" 7) || { FAIL=$((FAIL + 1)); echo "  FAIL: read-plan (test 3) exited non-zero unexpectedly"; }
+TOTAL=$((TOTAL + 1))
+if [[ "$read_out" == *"PLAN B"* && "$read_out" != *"PLAN A"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan returns updated PLAN B, not PLAN A"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan returns updated PLAN B, not PLAN A"
+  echo "    actual: '$read_out'"
+fi
+
+# 4. read-missing-errors: fresh empty store, unknown issue → exit 1 + diagnostic.
+wp_empty=$(mktemp -d); mkdir -p "$wp_empty/bin"
+# Reuse the same fake gh but point it at a fresh empty store.
+sed "s|$WP_STORE|$wp_empty/store.json|; s|$WP_COUNTER|$wp_empty/counter|" \
+  "$wp_root/bin/gh" > "$wp_empty/bin/gh"
+chmod +x "$wp_empty/bin/gh"
+echo '[]' > "$wp_empty/store.json"; echo '0' > "$wp_empty/counter"
+if read_err=$(PATH="$wp_empty/bin:$SAVED_PATH" "$WP_READ" 99 2>&1 1>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "read-plan: missing comment exits non-zero" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$read_err" == *"dispatch:plan"* || "$read_err" == *"no "*"comment"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan emits a clear missing-comment diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan emits a clear missing-comment diagnostic"
+  echo "    actual: '$read_err'"
+fi
+rm -rf "$wp_empty"
+rm -rf "$wp_root"
 
 # ============================================================================
 # summary
