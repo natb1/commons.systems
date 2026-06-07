@@ -16863,6 +16863,14 @@ FAKE
   cat > "$PROV_TMPDIR/bin/direnv" <<FAKE
 #!/usr/bin/env bash
 echo "\$*" >> "$PROV_DIRENV_LOG"
+if [[ "\$1" == "allow" ]]; then
+  [[ "\${DIRENV_ALLOW_RC:-0}" -ne 0 ]] && echo "fake-direnv-allow-stderr" >&2
+  exit "\${DIRENV_ALLOW_RC:-0}"
+fi
+if [[ "\$1" == "exec" ]]; then
+  [[ "\${DIRENV_EXEC_RC:-0}" -ne 0 ]] && echo "fake-direnv-exec-stderr" >&2
+  exit "\${DIRENV_EXEC_RC:-0}"
+fi
 exit 0
 FAKE
   chmod +x "$PROV_TMPDIR/bin/direnv"
@@ -16874,7 +16882,7 @@ FAKE
 prov_teardown() {
   export PATH="$SAVED_PATH"
   rm -rf "$PROV_TMPDIR"
-  unset PROV_TMPDIR PROV_SCRIPT PROV_DIRENV_LOG PROV_MERGE_LOG PROV_MERGE_RC
+  unset PROV_TMPDIR PROV_SCRIPT PROV_DIRENV_LOG PROV_MERGE_LOG PROV_MERGE_RC DIRENV_ALLOW_RC DIRENV_EXEC_RC
 }
 
 # direnv argv capture + worktree forwarded to dispatch-merge-main (happy run).
@@ -16925,6 +16933,30 @@ echo "Test: extra arg → exit 2"
 prov_setup
 "$PROV_SCRIPT" "/wt/a" extra >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq "extra arg → exit 2" "2" "$rc"
+prov_teardown
+
+# direnv warm-up failures surface and abort before merge (#855). A non-zero
+# `direnv exec`/`direnv allow` must make the script exit 1 with a diagnostic
+# naming the worktree, and must NOT proceed to exec dispatch-merge-main.
+echo "Test: direnv exec failure → exit 1, abort before merge"
+prov_setup
+WT="/home/n8/natb1/commons.systems/worktrees/77-example"
+out=$(DIRENV_EXEC_RC=1 "$PROV_SCRIPT" "$WT" 2>&1) && rc=0 || rc=$?
+assert_eq "direnv exec failure → exit 1" "1" "$rc"
+assert_eq "diagnostic names the worktree" "1" "$([[ "$out" == *"$WT"* ]] && echo 1 || echo 0)"
+assert_eq "diagnostic includes direnv stderr" "1" "$([[ "$out" == *"fake-direnv-exec-stderr"* ]] && echo 1 || echo 0)"
+assert_eq "merge-main not reached on exec failure" "0" "$([[ -s "$PROV_MERGE_LOG" ]] && echo 1 || echo 0)"
+prov_teardown
+
+echo "Test: direnv allow failure → exit 1, abort before exec and before merge"
+prov_setup
+WT="/home/n8/natb1/commons.systems/worktrees/77-example"
+out=$(DIRENV_ALLOW_RC=1 "$PROV_SCRIPT" "$WT" 2>&1) && rc=0 || rc=$?
+assert_eq "direnv allow failure → exit 1" "1" "$rc"
+assert_eq "diagnostic names the worktree" "1" "$([[ "$out" == *"$WT"* ]] && echo 1 || echo 0)"
+assert_eq "diagnostic includes direnv stderr" "1" "$([[ "$out" == *"fake-direnv-allow-stderr"* ]] && echo 1 || echo 0)"
+assert_eq "direnv log holds only the allow line" "allow $WT" "$(cat "$PROV_DIRENV_LOG")"
+assert_eq "merge-main not reached on allow failure" "0" "$([[ -s "$PROV_MERGE_LOG" ]] && echo 1 || echo 0)"
 prov_teardown
 
 # ============================================================================
