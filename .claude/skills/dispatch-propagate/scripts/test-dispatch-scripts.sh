@@ -20501,6 +20501,49 @@ unset DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH DISPATCH_TARGET_WORKERS_NOW
 rr_teardown
 
 # ============================================================================
+# ensure_recover_unit: WorkingDirectory= is unquoted and absolute (#1203)
+# ============================================================================
+echo ""
+echo "=== ensure_recover_unit WorkingDirectory= quoting ==="
+# Regression: systemd's WorkingDirectory= does not unescape quotes; a quoted
+# value makes the path non-absolute and the unit loads as bad-setting, so the
+# OnFailure= recovery never fires. Assert the emitted line is bare + absolute.
+eru_tmp=$(mktemp -d)
+mkdir -p "$eru_tmp/bin"
+mkdir -p "$eru_tmp/main-worktree"
+cat > "$eru_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$eru_tmp/bin/systemctl"
+if (
+  export DISPATCH_RECOVER_UNIT_DIR="$eru_tmp/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$eru_tmp/bin/systemctl"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_recover_unit "$eru_tmp/main-worktree"
+); then
+  eru_unit="$eru_tmp/systemd-user/dispatch-tick-recover.service"
+  if eru_wd_line=$(grep '^WorkingDirectory=' "$eru_unit" 2>/dev/null); then
+    assert_eq "WorkingDirectory= is the bare absolute path (no quotes)" \
+      "WorkingDirectory=$eru_tmp/main-worktree" "$eru_wd_line"
+    # Guard the specific defect: no leading double-quote after the '='.
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eru_wd_line" != 'WorkingDirectory="'* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: WorkingDirectory= value is not double-quoted"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: WorkingDirectory= value is double-quoted: $eru_wd_line"
+    fi
+  else
+    TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
+    echo "  FAIL: unit file missing or lacks WorkingDirectory= line: $eru_unit"
+  fi
+else
+  TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
+  echo "  FAIL: ensure_recover_unit returned non-zero"
+fi
+rm -rf "$eru_tmp"
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
