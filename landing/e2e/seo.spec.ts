@@ -20,7 +20,7 @@ test.describe("SEO: canonical, JSON-LD, rel=me", () => {
     await expect(canonical).toHaveAttribute("href", `${SITE_URL}/`);
   });
 
-  test("homepage has Organization JSON-LD @smoke", async ({ page }) => {
+  test("homepage has Organization JSON-LD @smoke @build", async ({ page }) => {
     await page.goto("/");
     const org = await getJsonLd(page, "Organization");
     expect(org).not.toBeNull();
@@ -32,7 +32,7 @@ test.describe("SEO: canonical, JSON-LD, rel=me", () => {
     expect(org.sameAs).toContain("https://github.com/natb1");
   });
 
-  test("homepage has rel=me link to GitHub profile @smoke", async ({ page }) => {
+  test("homepage has rel=me link to GitHub profile @smoke @build", async ({ page }) => {
     await page.goto("/");
     const relMe = page.locator('link[rel="me"]');
     await expect(relMe).toHaveAttribute("href", "https://github.com/natb1");
@@ -50,7 +50,7 @@ test.describe("SEO: canonical, JSON-LD, rel=me", () => {
     );
   });
 
-  test("post page has BlogPosting JSON-LD with required fields", async ({ page }) => {
+  test("post page has BlogPosting JSON-LD with required fields @build", async ({ page }) => {
     await page.route("https://raw.githubusercontent.com/**", (route) =>
       route.fulfill({ body: "# Test\nContent." }),
     );
@@ -87,7 +87,7 @@ test.describe("SEO: canonical, JSON-LD, rel=me", () => {
 });
 
 test.describe("sitemap.xml", () => {
-  test("GET /sitemap.xml returns valid XML with urlset @smoke", async ({ page }) => {
+  test("GET /sitemap.xml returns valid XML with urlset @smoke @build", async ({ page }) => {
     const response = await page.goto("/sitemap.xml");
     expect(response).not.toBeNull();
     expect(response!.status()).toBe(200);
@@ -101,7 +101,7 @@ test.describe("sitemap.xml", () => {
     expect(body).toContain("<loc>");
   });
 
-  test("sitemap includes homepage and all published posts", async ({ page }) => {
+  test("sitemap includes homepage and all published posts @build", async ({ page }) => {
     const response = await page.goto("/sitemap.xml");
     const body = await response!.text();
     expect(body).toContain(`<loc>${SITE_URL}/</loc>`);
@@ -110,7 +110,7 @@ test.describe("sitemap.xml", () => {
     );
   });
 
-  test("sitemap excludes unpublished posts", async ({ page }) => {
+  test("sitemap excludes unpublished posts @build", async ({ page }) => {
     const response = await page.goto("/sitemap.xml");
     const body = await response!.text();
     expect(body).not.toContain("draft-ideas");
