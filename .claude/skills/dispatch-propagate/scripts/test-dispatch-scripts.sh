@@ -21054,7 +21054,9 @@ WP_WRITE="$SCRIPT_DIR/dispatch-write-plan"
 WP_READ="$SCRIPT_DIR/dispatch-read-plan"
 
 # 1. write-creates: empty store → one comment containing the marker + PLAN A.
-PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"PLAN A"
+if ! PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"PLAN A"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan (test 1) failed unexpectedly"
+fi
 assert_eq "write-plan: store has exactly one comment after first write" \
   "1" "$(jq 'length' "$WP_STORE")"
 TOTAL=$((TOTAL + 1))
@@ -21065,8 +21067,11 @@ else
 fi
 
 # 2. round-trip read returns the full (multi-line) body untruncated.
-PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"$(printf 'PLAN A\nline two\nline three')"
-read_out=$(PATH="$wp_root/bin:$SAVED_PATH" "$WP_READ" 7)
+if ! PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"$(printf 'PLAN A\nline two\nline three')"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan (test 2) failed unexpectedly"
+fi
+read_out=""
+read_out=$(PATH="$wp_root/bin:$SAVED_PATH" "$WP_READ" 7) || { FAIL=$((FAIL + 1)); echo "  FAIL: read-plan (test 2) exited non-zero unexpectedly"; }
 TOTAL=$((TOTAL + 1))
 if [[ "$read_out" == *"<!-- dispatch:plan -->"* && "$read_out" == *"line three"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: read-plan returns the full multi-line body with marker"
@@ -21076,10 +21081,13 @@ else
 fi
 
 # 3. write-updates-in-place: still exactly one comment; read now returns PLAN B.
-PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"PLAN B"
+if ! PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"PLAN B"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan (test 3) failed unexpectedly"
+fi
 assert_eq "write-plan: still exactly one comment after update" \
   "1" "$(jq 'length' "$WP_STORE")"
-read_out=$(PATH="$wp_root/bin:$SAVED_PATH" "$WP_READ" 7)
+read_out=""
+read_out=$(PATH="$wp_root/bin:$SAVED_PATH" "$WP_READ" 7) || { FAIL=$((FAIL + 1)); echo "  FAIL: read-plan (test 3) exited non-zero unexpectedly"; }
 TOTAL=$((TOTAL + 1))
 if [[ "$read_out" == *"PLAN B"* && "$read_out" != *"PLAN A"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: read-plan returns updated PLAN B, not PLAN A"
