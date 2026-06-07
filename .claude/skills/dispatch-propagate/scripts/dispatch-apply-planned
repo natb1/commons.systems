@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Apply the dispatch:planned phase-completion label to an issue.
+# Usage: dispatch-apply-planned <issue-num>
+#
+# dispatch:planned means "an approved plan exists; the implement phase is next" —
+# the cheap discriminator the router reads. The label is applied to the ISSUE,
+# not a PR, because no PR exists yet at plan time. (Apply-first ordering and
+# missing-label handling mirror dispatch-complete-phase, explained inline below.)
+#
+# This script is the single source of truth for the dispatch:planned label
+# create metadata (color and description).
+#
+# A missing arg or a non-numeric issue-num is a clear error, not a fallback.
+set -euo pipefail
+
+ISSUE_NUM="${1:-}"
+[[ -z "$ISSUE_NUM" ]] && { echo "usage: dispatch-apply-planned <issue-num>" >&2; exit 1; }
+[[ "$ISSUE_NUM" =~ ^[0-9]+$ ]] || {
+  echo "error: dispatch-apply-planned: issue-num must be a positive integer, got '$ISSUE_NUM'" >&2; exit 1; }
+
+LABEL="dispatch:planned"
+COLOR="0E8A16"   # distinct from the complete-phase and office-hours (FBCA04) label colors
+DESC="dispatch workflow: an approved plan exists; implement phase is next"
+
+# Apply first; gh issue edit --add-label is naturally idempotent.
+if apply_output=$(gh issue edit "$ISSUE_NUM" --add-label "$LABEL" 2>&1); then
+  exit 0
+fi
+# Missing-label → create with canonical metadata, retry once. Any other failure is real.
+if [[ "$apply_output" != *"not found"* ]]; then echo "$apply_output" >&2; exit 1; fi
+gh label create "$LABEL" --color "$COLOR" --description "$DESC"
+gh issue edit "$ISSUE_NUM" --add-label "$LABEL"
