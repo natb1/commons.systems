@@ -412,6 +412,19 @@ ensure_recover_unit "$MAIN_WORKTREE" || true
 # continuation. ensure_recover_unit (above) installs that handler best-effort;
 # OnFailure= resolves lazily at failure time, so passing it is safe even when
 # the install failed.
+#
+# --property=KillMode=process (#1196): Claude Code's per-user bg supervisor
+# daemon is spawned on demand by the first `claude` call inside the reseed
+# unit — the `claude agents --json` liveness checks in lib-claude-agents.sh
+# are called during the tick that the reseed timer fires. That means the
+# daemon and its --bg-spare / --bg-pty-host worker children are born inside
+# this transient unit's cgroup. systemd's default KillMode=control-group
+# SIGTERMs the entire cgroup when the reseed tick finishes, reaping the
+# daemon and every running worker. The bg hosts are spawned detached: true
+# (setsid) to outlive their launcher, but setsid only changes the
+# session/process-group, not the cgroup, so cgroup-kill ignores it.
+# KillMode=process confines the kill to the dispatch-tick process itself;
+# the detached bg hosts survive as init orphans across reseed cycles.
 
 SYSTEMD_RUN_CMD="${DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD:-systemd-run}"
 UNIT_NAME="dispatch-reseed-${RESEED_AT}"
@@ -428,6 +441,7 @@ trap 'rm -f "$RUN_STDERR"' EXIT
      --on-calendar="@$RESEED_AT" \
      --collect \
      --property=OnFailure=dispatch-tick-recover.service \
+     --property=KillMode=process \
      --working-directory="$MAIN_WORKTREE" \
      --timer-property=Persistent=true \
      --setenv=PATH="$PATH" \

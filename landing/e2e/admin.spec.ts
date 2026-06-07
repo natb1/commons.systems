@@ -23,7 +23,7 @@ test.describe("admin", () => {
     await expect(page.locator("#sign-in")).toBeVisible();
   });
 
-  test("after sign-in, admin group member sees admin page", async ({ page }) => {
+  test("after sign-in, admin group member sees admin page @testonly", async ({ page }) => {
     await page.goto("/");
     await signIn(page);
     await page.goto("/admin");
@@ -35,7 +35,7 @@ test.describe("admin", () => {
   // The seed user (seeds/auth.ts) is a member of the admin group
   // (seeds/firestore.ts), so draft posts should be visible after sign-in.
 
-  test("[draft] badge visible for admin", async ({
+  test("[draft] badge visible for admin @testonly", async ({
     page,
   }) => {
     await page.goto("/");
@@ -44,7 +44,7 @@ test.describe("admin", () => {
     await expect(page.locator("#posts")).toContainText("[draft]");
   });
 
-  test("home page shows draft posts after sign-in as admin", async ({
+  test("home page shows draft posts after sign-in as admin @testonly", async ({
     page,
   }) => {
     await page.goto("/");

@@ -38,6 +38,22 @@
 #   handoff or an armed reseed timer. OnFailure= resolves lazily at failure
 #   time, so passing it is safe even if ensure_recover_unit failed.
 #
+# KillMode=process — cgroup-reaping stop-gap (#1196):
+#   Claude Code's per-user bg supervisor daemon is spawned on demand by the
+#   first `claude` call inside a tick unit (the --bg worker kick in
+#   dispatch-spawn-job, or the `claude agents --json` liveness checks). That
+#   means the daemon — and the --bg-spare / --bg-pty-host children that host
+#   each worker — is born inside this transient unit's cgroup. systemd's
+#   default KillMode=control-group SIGTERMs the entire cgroup when the tick
+#   finishes, reaping the daemon and every running worker. The bg hosts are
+#   spawned detached: true (setsid) to outlive their launcher, but setsid
+#   only changes the session/process-group, not the cgroup, so cgroup-kill
+#   ignores it. Passing --property=KillMode=process makes a finishing tick
+#   kill only its own dispatch-tick process; the detached bg hosts survive as
+#   init orphans — exactly what detached: true is designed for. The durable
+#   daemon-ownership design is tracked in #1197; this is the minimal correct
+#   stop-gap.
+#
 # Unlike dispatch-schedule-reseed (which schedules an --on-calendar TIMER), this
 # script runs the unit IMMEDIATELY: a transient .service, no --on-calendar /
 # --timer-property. The transient unit is itself the detachment — systemd runs
@@ -148,6 +164,7 @@ if [[ -n "$TARGET_N" ]]; then
        --unit="$UNIT_NAME" \
        --collect \
        --property=OnFailure=dispatch-tick-recover.service \
+       --property=KillMode=process \
        --working-directory="$MAIN_WORKTREE" \
        --setenv=PATH="$PATH" \
        "$TICK_PATH" "$TARGET_N" \
@@ -158,6 +175,7 @@ else
        --unit="$UNIT_NAME" \
        --collect \
        --property=OnFailure=dispatch-tick-recover.service \
+       --property=KillMode=process \
        --working-directory="$MAIN_WORKTREE" \
        --setenv=PATH="$PATH" \
        "$TICK_PATH" \

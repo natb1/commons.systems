@@ -13,7 +13,7 @@
 #     The oldest labeled item whose <N>-* worktree has a live Claude session.
 #     Resume wins over fresh: if any labeled item is live, its session is
 #     resumed in preference to picking up a sessionless sibling fresh.
-#   office-hours <issue> <phase> <pr-or-dash>
+#   office-hours <issue> <phase> <pr-or-dash> <worktree-path>
 #     The oldest labeled item with NO live session — a sessionless item that
 #     /office-hours picks up fresh.
 #     <issue> — the selected issue number.
@@ -24,6 +24,9 @@
 #               residue; qa → QA walkthrough residue; anything past qa →
 #               deviation-review.
 #     <pr-or-dash> — the issue's open PR number, or `-` when none exists.
+#     <worktree-path> — the path to the item's <N>-* worktree, or `-` when no
+#               <N>-* worktree is registered. The entry script launches the
+#               fresh /office-hours session worker-style with --cwd this path.
 #   parked-router <sessionId> <name>
 #     A target-less parked /dispatch-propagate router (#1010). When no labeled
 #     item is resumable or sessionless, this fallback surfaces a live, idle/waiting
@@ -136,7 +139,10 @@ if [[ -n "$FRESH_NUM" ]]; then
     phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$FRESH_NUM")
   fi
   pr=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-find-pr" "$FRESH_NUM")
-  printf 'office-hours %s %s %s\n' "$FRESH_NUM" "$phase" "${pr:--}"
+  # The path to this item's <N>-* worktree (newline-separated values per key;
+  # take the first), or empty when no <N>-* worktree is registered.
+  wt_path=$(printf '%s' "${WORKTREE_PATHS_BY_NUM[$FRESH_NUM]:-}" | head -n 1)
+  printf 'office-hours %s %s %s %s\n' "$FRESH_NUM" "$phase" "${pr:--}" "${wt_path:--}"
   exit 0
 fi
 
