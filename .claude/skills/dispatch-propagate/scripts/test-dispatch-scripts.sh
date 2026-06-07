@@ -10902,6 +10902,31 @@ fi
 tr_teardown
 
 # ============================================================================
+# dispatch-phase-model tests
+# ============================================================================
+echo "=== dispatch-phase-model ==="
+
+echo "Test: dispatch-phase-model maps qa → claude-sonnet-4-6"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" qa 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: qa exits 0" "0" "$pm_rc"
+assert_eq "phase-model: qa → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+
+echo "Test: dispatch-phase-model maps unmapped phases → empty (default → Opus, no override)"
+for ph in implement verify review done; do
+  if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" "$ph" 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+  assert_eq "phase-model: $ph exits 0" "0" "$pm_rc"
+  assert_eq "phase-model: $ph → empty (no --model, inherit Opus)" "" "$pm_out"
+done
+
+echo "Test: dispatch-phase-model with no phase arg exits 2"
+if "$SCRIPT_DIR/dispatch-phase-model" 2>/dev/null; then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: no-arg → exit 2" "2" "$pm_rc"
+
+echo "Test: dispatch-phase-model with an empty-string arg exits 2"
+if "$SCRIPT_DIR/dispatch-phase-model" "" 2>/dev/null; then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: empty-string-arg → exit 2" "2" "$pm_rc"
+
+# ============================================================================
 # dispatch-spawn-worker tests
 # ============================================================================
 echo "=== dispatch-spawn-worker ==="
@@ -11306,6 +11331,26 @@ assert_eq "cwd-aware-spawn: stdout is 'spawned' (dedup queried under worktree pa
   "spawned" "$out"
 spawn_worker_teardown
 
+# --- Test 9: --model is forwarded through to the bg argv (#1171) -------------
+
+echo "Test: dispatch-spawn-worker forwards a leading --model into the bg argv"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" --model claude-sonnet-4-6 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "spawn-worker-model: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "spawn-worker-model: stdout is 'spawned'" "spawned" "$out"
+mapfile -t sw_bg_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-worker-model: argv[0] is --bg" "--bg" "${sw_bg_argv[0]:-}"
+assert_eq "spawn-worker-model: argv[1] is --name" "--name" "${sw_bg_argv[1]:-}"
+assert_eq "spawn-worker-model: argv[2] is the worktree basename" "839-test-worker" "${sw_bg_argv[2]:-}"
+assert_eq "spawn-worker-model: argv[3] is --model" "--model" "${sw_bg_argv[3]:-}"
+assert_eq "spawn-worker-model: argv[4] is claude-sonnet-4-6" "claude-sonnet-4-6" "${sw_bg_argv[4]:-}"
+assert_eq "spawn-worker-model: argv[5] is --permission-mode" "--permission-mode" "${sw_bg_argv[5]:-}"
+assert_eq "spawn-worker-model: argv[6] is auto" "auto" "${sw_bg_argv[6]:-}"
+assert_eq "spawn-worker-model: argv[7] is '/dispatch-worker 839 <worktree-path>'" \
+  "/dispatch-worker 839 $WORKER_TARGET_WORKTREE" "${sw_bg_argv[7]:-}"
+spawn_worker_teardown
+
 # ============================================================================
 # dispatch-spawn-office-hours tests
 # ============================================================================
@@ -11579,6 +11624,30 @@ assert_eq "spawn-job-jit: argv[2] is the passed name" "jit-reminder-961" "${sj_b
 assert_eq "spawn-job-jit: argv[3] is --permission-mode" "--permission-mode" "${sj_bg_argv[3]:-}"
 assert_eq "spawn-job-jit: argv[4] is auto" "auto" "${sj_bg_argv[4]:-}"
 assert_eq "spawn-job-jit: argv[5] is the prompt" "$jit_prompt" "${sj_bg_argv[5]:-}"
+spawn_worker_teardown
+
+# --- Test 2b: --model is forwarded into the bg argv (#1171) -------------------
+
+echo "Test: dispatch-spawn-job forwards --model into the 'claude --bg' argv"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" --model claude-sonnet-4-6 \
+    "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job-model: dispatch-spawn-job exits 0" "0" "$rc"
+assert_eq "spawn-job-model: stdout is 'spawned'" "spawned" "$out"
+mapfile -t sj_bg_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-job-model: argv[0] is --bg" "--bg" "${sj_bg_argv[0]:-}"
+assert_eq "spawn-job-model: argv[1] is --name" "--name" "${sj_bg_argv[1]:-}"
+assert_eq "spawn-job-model: argv[2] is the passed name" "diagnose-main" "${sj_bg_argv[2]:-}"
+assert_eq "spawn-job-model: argv[3] is --model" "--model" "${sj_bg_argv[3]:-}"
+assert_eq "spawn-job-model: argv[4] is claude-sonnet-4-6" "claude-sonnet-4-6" "${sj_bg_argv[4]:-}"
+assert_eq "spawn-job-model: argv[5] is --permission-mode" "--permission-mode" "${sj_bg_argv[5]:-}"
+assert_eq "spawn-job-model: argv[6] is auto" "auto" "${sj_bg_argv[6]:-}"
+assert_eq "spawn-job-model: argv[7] is the prompt" "/dispatch-diagnose-main abc123" "${sj_bg_argv[7]:-}"
 spawn_worker_teardown
 
 # --- Test 3: exact-name dedup ------------------------------------------------
@@ -17412,7 +17481,7 @@ mat_setup() {
   STUB_DIR="$TMPDIR_TEST/stub"
   mkdir -p "$STUB_DIR" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/logs"
 
-  for s in dispatch-materialize-spawn dispatch-finalize-selection dispatch-acquire-lock; do
+  for s in dispatch-materialize-spawn dispatch-finalize-selection dispatch-acquire-lock dispatch-phase-model; do
     cp "$SCRIPT_DIR/$s" "$TMPDIR_TEST/$s"
     chmod +x "$TMPDIR_TEST/$s"
   done
@@ -18304,6 +18373,36 @@ assert_eq "fanout-done: terminal token" "drain" "$(printf '%s\n' "$out" | tail -
 assert_eq "fanout-done: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
 assert_eq "fanout-done: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- phase→model integration: qa phase → --model claude-sonnet-4-6 forwarded --
+# When the recomputed PHASE is qa, dispatch-materialize-spawn calls the real
+# dispatch-phase-model (now staged by mat_setup) which emits claude-sonnet-4-6,
+# and the spawn-worker invocation must include --model claude-sonnet-4-6.
+echo "Test: materialize-spawn qa phase → spawn-worker receives --model claude-sonnet-4-6 (#1171)"
+mat_setup
+export MAT_PHASE=qa
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "qa-model: exit 0" "0" "$rc"
+assert_eq "qa-model: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "qa-model: spawn-worker argv contains --model claude-sonnet-4-6" \
+  "--model claude-sonnet-4-6 839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+mat_teardown
+
+# --- phase→model integration: non-qa phase → no --model forwarded (Opus default)
+# An unmapped phase (implement) emits nothing from dispatch-phase-model, so no
+# --model flag is passed to dispatch-spawn-worker and the worker inherits the
+# session default (Opus).
+echo "Test: materialize-spawn implement phase → no --model forwarded (Opus default) (#1171)"
+mat_setup
+export MAT_PHASE=implement
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "implement-model: exit 0" "0" "$rc"
+assert_eq "implement-model: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "implement-model: spawn-worker argv has no --model flag" \
+  "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
 mat_teardown
 
 echo "=== print_remote_access_block ==="
