@@ -22,6 +22,18 @@
       "dueAfterClose": "48h",
       "debounce": "1h",
       "skill": "digest"
+    },
+    {
+      "key": "roadmap",
+      "repo": "example-owner/example-repo",
+      "label": "jit:roadmap",
+      "title": "Roadmap review",
+      "body": "Recurring roadmap review. Reassesses ROADMAP.md and work completed since the previous review against CHARTER.md, triages the backlog, then closes to anchor the next cycle.",
+      "project": "example-project",
+      "remindAfterClose": "7d",
+      "dueAfterClose": "14d",
+      "debounce": "1h",
+      "skill": "roadmap"
     }
   ]
 }
