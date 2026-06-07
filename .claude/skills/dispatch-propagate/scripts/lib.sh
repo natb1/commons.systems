@@ -823,9 +823,12 @@ ensure_recover_unit() {
   # git/jq/claude. The caller carries the full nix-store PATH, so baking it into
   # the unit at write time makes the unit self-sufficient.
   #
-  # The path-bearing directives are double-quoted: systemd unescapes C-style
-  # quotes, so a path containing spaces is parsed as a single token rather than
-  # split into an executable + spurious arguments.
+  # ExecStart= and Environment= are double-quoted: systemd unescapes C-style
+  # quotes for these two directives, so a path containing spaces is parsed as a
+  # single token rather than split into an executable + spurious arguments.
+  # WorkingDirectory= is the exception — it does NOT unescape quotes; a leading
+  # `"` makes the path non-absolute and systemd rejects the unit (bad-setting),
+  # so it takes the bare path (safe here: the worktree path has no spaces).
   #
   # Deliberately NO OnFailure= on this unit — the recover handler must not chain
   # to itself, or a failing recovery would recurse.
@@ -838,7 +841,7 @@ Description=Dispatch chain continuation recovery (OnFailure handler)
 Type=oneshot
 Environment="PATH=$safe_path"
 ExecStart="$RECOVER_SCRIPT"
-WorkingDirectory="$main_worktree"
+WorkingDirectory=$main_worktree
 EOF
 )
 
