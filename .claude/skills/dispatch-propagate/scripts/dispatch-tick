@@ -252,6 +252,14 @@ if ! "$SCRIPT_DIR/dispatch-refresh-rate-limits"; then
   echo "dispatch-tick: rate-limit refresh probe failed; proceeding on cached telemetry (#1127)" >&2
 fi
 
+# --- Step 0.6: sample capacity telemetry (#1007) ------------------------------
+# Append one usage-samples Firestore document for the office-hours Capacity view,
+# from the telemetry just refreshed above. Fail-safe: a sampler failure logs one
+# note and the tick proceeds — capacity telemetry is best-effort, never gates work.
+if ! "$SCRIPT_DIR/dispatch-sample-usage"; then
+  echo "dispatch-tick: usage sample failed; proceeding (#1007)" >&2
+fi
+
 # --- Step 1: select the target ------------------------------------------------
 # Capture select-tick's full stdout and echo every line through (jit:/calendar:
 # passthrough AND the decision line) so journald and a live relay see it all.
