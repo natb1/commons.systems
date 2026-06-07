@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: Review phase — the workflow's single terminal review pass. Run /code-review max --fix, /review, and the full surface-gated security fan-out as direct subagents over the same diff, unify and de-duplicate the findings, apply the in-scope fixes via one /commit-merge-push, file meaningful out-of-scope findings as blocked_by follow-ups, post one PR comment covering every finding, apply the dispatch:reviewed label, and mark the PR ready
+description: Review phase — the workflow's single terminal review pass. Run /code-review max, /review, and the full surface-gated security fan-out as direct subagents over the same diff, unify and de-duplicate the findings, apply the in-scope fixes via one /commit-merge-push, file meaningful out-of-scope findings as blocked_by follow-ups, post one PR comment covering every finding, apply the dispatch:reviewed label, and mark the PR ready
 ---
 
 # Review and Fix
@@ -83,31 +83,30 @@ review source (e.g. `tmp/findings-code-review.json`, `tmp/findings-review.json`,
 `tmp/findings-security.json`). See **Context-budget discipline** below for why
 this serialization is not optional.
 
-#### 1a. `/code-review max --fix` — a single NON-ISOLATED subagent
+#### 1a. `/code-review max` — a findings-only subagent
 
 Fork a subagent via the Agent tool (`subagent_type: general-purpose`,
 `model: sonnet`) that invokes the built-in `/code-review` skill via the Skill
-tool with the `max` effort argument (the highest thoroughness available) and the
-`--fix` flag inside the subagent. It applies in-scope fixes to the working tree
-and surfaces findings with the skill's own (fixed vs skipped) disposition.
+tool with the `max` effort argument (the highest thoroughness available) inside
+the subagent — **without** the `--fix` flag. It produces findings; it applies no
+fixes. Detection stays on Sonnet; all fix-authoring is concentrated in Step 5's
+Opus-pinned implementation subagents (#1172), so `/code-review` here is
+findings-only, exactly like `/review` (1b).
 
 The subagent boundary is the control-flow guarantee: the parent never sees the
 inner Skill's prompt template, so it remains on this step when the Agent call
-returns. The subagent inherits the parent's worktree filesystem — working-tree
-edits made by `/code-review` inside the subagent surface on disk for Step 5's
-`/commit-merge-push` with no additional plumbing. **Do not set `isolation:` on
-this subagent: an isolated worktree would silently capture `/code-review`'s edits
-in a discarded copy, leaving the commit step with nothing to commit.** The
-subagent passes the inner skill no output contract and returns its natural output
-as-is. Keep the "once it returns, continue" wording inside the **subagent's**
-prompt as defense-in-depth for the inner Skill invocation; any "final reply" /
-"nothing else" wording in `/code-review`'s prompt scopes only to its findings
-deliverable.
+returns. `/code-review` is built-in and uneditable: the subagent passes the inner
+skill no output contract and returns its natural output as-is. Keep the "once it
+returns, continue" wording inside the **subagent's** prompt as defense-in-depth
+for the inner Skill invocation; any "final reply" / "nothing else" wording in
+`/code-review`'s prompt scopes only to its findings deliverable. The subagent
+stays non-isolated for consistency with the other findings-only subagents; it
+writes nothing to the working tree, so isolation would change nothing either way.
 
-Normalize the subagent's output to the **Per-finding schema** — each finding
-carries its `disposition` of `fixed` (applied to the working tree by
-`/code-review`) or `skipped` (the wrapper classifies it in Step 2) — and serialize
-the finding set to `tmp/findings-code-review.json`.
+Normalize the subagent's output to the **Per-finding schema** — code-review emits
+no fixes, so every finding is `skipped` (the wrapper classifies each into the
+disposition table in Step 2) — and serialize the finding set to
+`tmp/findings-code-review.json`.
 
 #### 1b. `/review` — a findings-only subagent
 
@@ -342,7 +341,7 @@ code-review/review `Fixed` / `Informational` / `Dismissed` / `Deferred` axis.
 
 | Bucket | Source vocabulary | Meaning |
 |---|---|---|
-| Fixed | code-review/review | A concrete, in-scope code change applicable to this PR. Code-review findings already `fixed` by `/code-review` in Step 1a land here; review/code-review findings the wrapper decides to implement also land here (applied in Step 5). |
+| Fixed | code-review/review | A concrete, in-scope code change applicable to this PR — the in-scope code-review/review findings the wrapper decides to implement. All are applied in Step 5 (no finding is pre-applied). |
 | Required | security | A real vulnerability or weakness in the changed code that should be fixed (applied in Step 5). |
 | Informational | code-review/review | FYIs, notes, observations surfaced for human reference; no change required. |
 | Dismissed | code-review/review | Nits, incorrect findings, or not applicable; no change, each with a one-line rationale. |
@@ -382,25 +381,27 @@ than the stacked ~138k that would trip auto-compaction.
 
 ### 5. Apply the required/Fixed fixes, then one commit-merge-push
 
-`/code-review max --fix` (Step 1a) already applied its own fixes to the working
-tree. This step applies the **remaining** required/Fixed fixes — the Fixed-bucket
-findings from `/review` and the `required`-bucket findings from the security pass
-that are not already on disk.
+This step authors **all** in-scope fixes — no finding is pre-applied, because
+Step 1a's `/code-review` runs detection-only. It applies every Fixed-bucket
+finding (from `/code-review` and `/review`) and every `required`-bucket finding
+from the security pass.
 
 For each such finding, launch an implementation subagent via the Agent tool,
-constrained to **working-tree edits only — no commits, no pushes**. Choose each
-subagent's model per `/implement-unit`'s model-selection heuristic (see that
-skill — it is the canonical home; do not restate it here). Informational,
+constrained to **working-tree edits only — no commits, no pushes**. **Pin these
+implementation subagents to `model: opus`** (#1172): writing a correct fix is
+code generation, where Opus has the edge, so all fix-authoring is concentrated on
+Opus while the orchestrator chain and detection run on Sonnet. Informational,
 Dismissed, false-positive, Deferred, and out-of-scope findings are **not**
-implemented here. If there are no remaining required/Fixed findings to apply,
-skip the implementation subagents.
+implemented here. If there are no Fixed/required findings to apply, skip the
+implementation subagents.
 
-Then fork **one** `/commit-merge-push` to commit every pending working-tree change —
-`/code-review`'s Step 1a edits plus these implementation edits — and push. Issue an
-Agent tool call with `subagent_type: general-purpose` and `model: sonnet` whose
-prompt invokes `/commit-merge-push` via the Skill tool, the canonical fork recipe
+Then fork **one** `/commit-merge-push` to commit every pending working-tree
+change — the implementation subagents' edits — and push. Issue an Agent tool call
+with `subagent_type: general-purpose` and `model: sonnet` whose prompt invokes
+`/commit-merge-push` via the Skill tool, the canonical fork recipe
 `/implement-unit` Step 2 documents (`subagent_type` is `general-purpose`, never the
-skill name). If there were no code changes at all, `/commit-merge-push`
+skill name). The `/commit-merge-push` fork stays on `model: sonnet`: it is
+orchestration (commit/merge/push), not fix-authoring. If there were no code changes at all, `/commit-merge-push`
 tolerates the no-op and creates no commit. Even on that no-op it pushes `origin
 HEAD`, so it carries any pending local merge (left by `dispatch-merge-main` /
 `/dispatch-resolve-conflict`) to origin; Step 8's flush guard is the
@@ -731,3 +732,14 @@ The skill is idempotent: a re-invocation with `dispatch:reviewed` already on the
 PR skips Steps 1–7 and runs Step 8, which flushes any unpushed commits, ensures
 the PR is ready, and writes the phase-completed marker (the unified finding set
 is not in context on re-entry, so the deviation criterion is treated as not met).
+
+**Model split (#1172).** The dispatch chain runs this `review` phase orchestrator
+on **Sonnet** (via `dispatch-phase-model`, which maps `review →
+claude-sonnet-4-6`). Findings detection is unchanged — it stays on the **Sonnet**
+review subagents (Step 1's `/code-review`, `/review`, and the security fan-out).
+**Fix-authoring is pinned to an Opus subagent** (Step 5's implementation
+subagents, `model: opus`), so the Sonnet orchestrator authors no product code.
+When #890 ports this fan-out to a Workflow pipeline, that port carries the same
+tiering as per-`agent()` `model:` settings (finders + orchestrator Sonnet,
+fix-authoring Opus) so fix-authoring stays pinned to Opus **exactly once** — there
+is no double model-tiering.
