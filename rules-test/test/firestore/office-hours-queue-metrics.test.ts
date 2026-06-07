@@ -83,6 +83,14 @@ describe("office-hours queue metrics", () => {
     );
   });
 
+  it("allows authenticated non-member read of demo env", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertSucceeds(
+      getDoc(doc(db, "office-hours/demo/metrics/dispatch-queue")),
+    );
+  });
+
   it("denies member setDoc", async () => {
     const ctx = authenticatedContext(env, "owner@test.com");
     const db = ctx.firestore();

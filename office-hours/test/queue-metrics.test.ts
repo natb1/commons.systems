@@ -57,4 +57,12 @@ describe("serializeQueueMetrics / parseQueueMetrics", () => {
     const parsed = parseQueueMetrics(doc);
     expect(parsed).toBeNull();
   });
+
+  it("returns a valid snapshot when runwayDays field is absent (Firestore omits stored nulls)", () => {
+    const serialized = serializeQueueMetrics({ ...base, runwayDays: null }) as Record<string, unknown>;
+    delete serialized.runwayDays;
+    const parsed = parseQueueMetrics(serialized);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.runwayDays).toBeNull();
+  });
 });

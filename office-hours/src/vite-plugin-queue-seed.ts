@@ -5,7 +5,7 @@ const VIRTUAL_MODULE_ID = "virtual:office-hours-queue-seed";
 const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
 
 export function officeHoursQueueSeedPlugin(): Plugin {
-  let moduleCode: string;
+  let moduleCode: string | undefined;
 
   return {
     name: "office-hours-queue-seed",
@@ -20,7 +20,10 @@ export function officeHoursQueueSeedPlugin(): Plugin {
       if (id === VIRTUAL_MODULE_ID) return RESOLVED_VIRTUAL_MODULE_ID;
     },
     load(id) {
-      if (id === RESOLVED_VIRTUAL_MODULE_ID) return moduleCode;
+      if (id === RESOLVED_VIRTUAL_MODULE_ID) {
+        if (!moduleCode) throw new Error("office-hours-queue-seed: load called before buildStart");
+        return moduleCode;
+      }
     },
   };
 }

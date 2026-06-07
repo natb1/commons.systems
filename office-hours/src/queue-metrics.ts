@@ -63,11 +63,11 @@ function toDate(v: unknown): Date | null {
  * `.toDate()`).
  */
 export function parseQueueMetrics(data: Record<string, unknown>): QueueMetricsSnapshot | null {
-  const openHelpWanted = typeof data.openHelpWanted === "number" ? data.openHelpWanted : null;
-  const closedPerDay = typeof data.closedPerDay === "number" ? data.closedPerDay : null;
-  const createdPerDay = typeof data.createdPerDay === "number" ? data.createdPerDay : null;
-  const netDrainPerDay = typeof data.netDrainPerDay === "number" ? data.netDrainPerDay : null;
-  const windowDays = typeof data.windowDays === "number" ? data.windowDays : null;
+  const openHelpWanted = typeof data.openHelpWanted === "number" && Number.isFinite(data.openHelpWanted) ? data.openHelpWanted : null;
+  const closedPerDay = typeof data.closedPerDay === "number" && Number.isFinite(data.closedPerDay) ? data.closedPerDay : null;
+  const createdPerDay = typeof data.createdPerDay === "number" && Number.isFinite(data.createdPerDay) ? data.createdPerDay : null;
+  const netDrainPerDay = typeof data.netDrainPerDay === "number" && Number.isFinite(data.netDrainPerDay) ? data.netDrainPerDay : null;
+  const windowDays = typeof data.windowDays === "number" && Number.isFinite(data.windowDays) ? data.windowDays : null;
   const groupId = typeof data.groupId === "string" ? data.groupId : null;
   const memberEmails =
     Array.isArray(data.memberEmails) && data.memberEmails.every((e) => typeof e === "string")
@@ -77,10 +77,10 @@ export function parseQueueMetrics(data: Record<string, unknown>): QueueMetricsSn
 
   let runwayDays: number | null;
   let runwayDaysValid: boolean;
-  if (data.runwayDays === null) {
+  if (data.runwayDays === null || data.runwayDays === undefined) {
     runwayDays = null;
     runwayDaysValid = true;
-  } else if (typeof data.runwayDays === "number") {
+  } else if (typeof data.runwayDays === "number" && Number.isFinite(data.runwayDays)) {
     runwayDays = data.runwayDays;
     runwayDaysValid = true;
   } else {
