@@ -467,6 +467,19 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Usage samples are the Capacity-view time series, written by the Admin-SDK
+    // sampler. The `demo` env is world-readable for the public demo tier; every
+    // other env is owner-gated via the denormalized `memberEmails` field. Client
+    // writes are denied.
+    match /office-hours/{env}/usage-samples/{sampleId} {
+      allow get: if env == "demo"
+        || (request.auth != null
+            && request.auth.token.email in resource.data.memberEmails);
+      allow list: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow write: if false;
+    }
+
     // Dispatch-queue metrics snapshot (office-hours Queue view). Group members
     // read their env's snapshot via the denormalized memberEmails field; the
     // demo env is world-readable for the unauthenticated demo view. Client
