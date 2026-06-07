@@ -33,6 +33,7 @@ function toMediaItem(id: string, data: Record<string, unknown>): MediaItem {
     groupId: optionalString(data.groupId, "groupId"),
     memberEmails: requireStringArray(data.memberEmails, "memberEmails"),
     addedAt: requireIso8601(data.addedAt, "addedAt"),
+    origin: "cloud",
   };
 }
 
