@@ -240,7 +240,8 @@ body.viewer-active {
 .viewer-next,
 .viewer-zoom-in,
 .viewer-zoom-out,
-.viewer-zoom-reset {
+.viewer-zoom-reset,
+.viewer-bookmark-toggle {
   background: none;
   border: 1px solid var(--muted-fg, #888);
   border-radius: 3px;
@@ -248,10 +249,21 @@ body.viewer-active {
   padding: 0.25rem 0.5rem;
 }
 
+.viewer-bookmark-toggle:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.viewer-bookmark-toggle[aria-pressed="true"] {
+  background: var(--muted-fg, #888);
+  border-color: var(--muted-fg, #888);
+}
+
 .zoom-hidden,
 .spread-hidden,
 .search-hidden,
-.outline-hidden {
+.outline-hidden,
+.bookmarks-hidden {
   display: none;
 }
 
@@ -387,6 +399,51 @@ body.viewer-active {
   padding: 0.1rem 0.3rem;
   border: 1px solid var(--muted-fg, #888);
   border-radius: 3px;
+}
+
+/* Bookmarks */
+.viewer-bookmarks-heading {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.viewer-bookmarks-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  border: 1px solid var(--muted-fg, #888);
+  border-radius: 3px;
+}
+
+.viewer-bookmarks-list:empty {
+  display: none;
+}
+
+.viewer-bookmarks-item {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--muted-fg, #888);
+}
+
+.viewer-bookmarks-item:last-child {
+  border-bottom: none;
+}
+
+.viewer-bookmark-entry {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-bookmark-entry:hover {
+  text-decoration: underline;
 }
 
 /* Outline / TOC */

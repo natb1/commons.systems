@@ -6,8 +6,15 @@ import {
   getReadingPosition,
   saveReadingPosition,
 } from "../reading-position.js";
+import type { Bookmark } from "../bookmarks.js";
+import { getBookmarks, saveBookmarks } from "../bookmarks.js";
 import { renderSearchSection, initSearch } from "./search.js";
 import { renderOutlineSection, initOutline } from "./outline.js";
+import {
+  renderBookmarksToggle,
+  renderBookmarksSection,
+  initBookmarks,
+} from "./bookmarks.js";
 
 function renderTags(tags: Record<string, string>): string {
   const entries = Object.entries(tags);
@@ -34,8 +41,10 @@ export function renderViewerShell(item: MediaItem): string {
           <button class="viewer-zoom-out zoom-hidden" aria-label="Zoom out">&minus;</button>
           <button class="viewer-zoom-reset zoom-hidden" aria-label="Reset zoom">&#8865;</button>
           <button class="viewer-spread-toggle spread-hidden" aria-label="Toggle spread view" aria-pressed="false">&#9783;</button>
+          ${renderBookmarksToggle()}
         </div>
         ${renderSearchSection()}
+        ${renderBookmarksSection()}
         ${renderOutlineSection()}
         <div class="viewer-meta">
           <h3 class="viewer-title">${escapeHtml(item.title)}</h3>
@@ -71,6 +80,29 @@ function saveLocalPosition(mediaId: string, position: string): void {
     localStorage.setItem(localStorageKey(mediaId), position);
   } catch (e) {
     reportError(new Error("Could not save reading position to localStorage", { cause: e }));
+  }
+}
+
+function bookmarksStorageKey(mediaId: string): string {
+  return `bookmarks:${mediaId}`;
+}
+
+function loadLocalBookmarks(mediaId: string): Bookmark[] {
+  try {
+    const raw = localStorage.getItem(bookmarksStorageKey(mediaId));
+    if (!raw) return [];
+    return JSON.parse(raw) as Bookmark[];
+  } catch (e) {
+    reportError(new Error("Could not load bookmarks from localStorage", { cause: e }));
+    return [];
+  }
+}
+
+function saveLocalBookmarks(mediaId: string, bookmarks: Bookmark[]): void {
+  try {
+    localStorage.setItem(bookmarksStorageKey(mediaId), JSON.stringify(bookmarks));
+  } catch (e) {
+    reportError(new Error("Could not save bookmarks to localStorage", { cause: e }));
   }
 }
 
@@ -231,6 +263,7 @@ export function initViewer(
   let searchCleanup: (() => void) | null = null;
   let outlineCleanup: (() => void) | null = null;
   let spreadToggleCleanup: (() => void) | null = null;
+  let bm: { cleanup: () => void; sync: () => void } | null = null;
 
   const controller = new SpreadController({
     renderer,
@@ -257,6 +290,7 @@ export function initViewer(
     }
     updateZoomState();
     scheduleSave();
+    bm?.sync();
   }
 
   function handleNavError(err: unknown) {
@@ -351,6 +385,16 @@ export function initViewer(
     }
     searchCleanup = initSearch(viewer, renderer, () => updateNav());
     outlineCleanup = initOutline(viewer, renderer, () => updateNav());
+    const bookmarksStore = uid && !firestoreReadFailed
+      ? {
+          load: () => getBookmarks(uid, mediaId),
+          save: (b: Bookmark[]) => saveBookmarks(uid, mediaId, b),
+        }
+      : {
+          load: async () => loadLocalBookmarks(mediaId),
+          save: async (b: Bookmark[]) => saveLocalBookmarks(mediaId, b),
+        };
+    bm = initBookmarks(viewer, renderer, bookmarksStore, () => updateNav());
     updateNav();
   })().catch((err) => {
     reportError(new Error("Viewer initialization failed", { cause: err }));
@@ -375,6 +419,7 @@ export function initViewer(
     searchCleanup?.();
     outlineCleanup?.();
     spreadToggleCleanup?.();
+    bm?.cleanup();
     controller.destroy();
     renderer.destroy();
   };
