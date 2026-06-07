@@ -455,6 +455,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Usage samples are the Capacity-view time series, written by the Admin-SDK
+    // sampler. The `demo` env is world-readable for the public demo tier; every
+    // other env is owner-gated via the denormalized `memberEmails` field. Client
+    // writes are denied.
+    match /office-hours/{env}/usage-samples/{sampleId} {
+      allow read: if env == "demo"
+        || (request.auth != null
+            && request.auth.token.email in resource.data.memberEmails);
+      allow write: if false;
+    }
+
     // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
     // InsertFirestoreRules inserts new rule blocks immediately above this line.
     match /{document=**} {
