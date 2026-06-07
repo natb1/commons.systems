@@ -156,21 +156,24 @@ restart.
 
 #### 4. Periodic reassessment
 
-`/roadmap` (see #771 for the rename; currently
-[`/roadmap-debate`](.claude/skills/roadmap-debate/SKILL.md)) runs a structured
-five-persona roadmap reassessment: each persona analyzes project state, the
-synthesis is debated, the skill stops for user feedback, then proposes edits.
-Use it to step back from the queue and ask whether the priority ladder itself
-still matches the project's direction.
+[`/roadmap`](.claude/skills/roadmap/SKILL.md) runs a structured five-persona
+roadmap reassessment: each persona analyzes project state, the synthesis is
+debated, proposed `ROADMAP.md` edits are produced, and the open backlog is
+triaged (add `help wanted`, update body, or close as not planned for each
+unlabeled issue). Run it interactively to step back from the queue and ask
+whether the priority ladder still matches the project's direction. It also runs
+autonomously on a 7-day `roadmap` jit cadence — posting the full report as a
+comment on the review issue and closing it to anchor the next cycle.
 
 #### 5. Skill-running JIT reminders
 
 Most jit-reminders surface a summary for a human to read; some instead run a
-skill in an office-hours session. [`/digest`](.claude/skills/digest/SKILL.md)
-(see #769) is the example: a periodic digest compiled in a session rather than
-executed autonomously. The jit engine itself lives in the Dispatch Queue spine's
-[JIT-on-dispatch](#4-jit-on-dispatch) subsection — this covers only the
-office-hours-side surfacing.
+skill when selected. [`/digest`](.claude/skills/digest/SKILL.md) runs as an
+office-hours session (interactive demos require a user present);
+[`/roadmap`](.claude/skills/roadmap/SKILL.md) runs as an office-hours
+session with no interactive stops — it posts its report and closes the review issue. The jit engine itself
+lives in the Dispatch Queue spine's [JIT-on-dispatch](#4-jit-on-dispatch)
+subsection — this covers only the office-hours-side surfacing.
 
 ### Key design decisions for adopters
 
