@@ -7923,20 +7923,31 @@ else
 fi
 config_teardown
 
-# --- Test 13d: floor == cap accepted; only floor-alone (default cap) accepted -
+# --- Test 13d: floor == cap accepted; large floor alone now rejected (#930) ---
 
-echo "Test: weekly_increment_floor_pct == cap accepted; floor alone accepted"
+echo "Test: weekly_increment_floor_pct == cap accepted; large floor alone rejected (monotonicity)"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
 {"weekly_increment_floor_pct": 5, "weekly_increment_cap_pct": 5}
 EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
 assert_eq "floor == cap exits 0" "0" "$rc"
-# Cross-check only fires when both are present: floor alone (cap defaulted) is
-# not flagged here, by design — the validator does not know the script default.
+# #930 added a curve-monotonicity constraint that applies algorithm defaults for
+# absent fields. floor=50 alone gives min = 34*50*1/2 = 850 > 90 (default
+# target_weekly_usage_pct), so the config is now rejected even without a cap
+# field present. This changed the pre-#930 behaviour where floor alone with a
+# defaulted cap was silently accepted.
 echo '{"weekly_increment_floor_pct": 50}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
-out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
-assert_eq "floor alone (cap absent) exits 0" "0" "$rc"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "large floor alone (cap absent) exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"monotonicity"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: large floor alone stderr contains monotonicity"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: large floor alone stderr contains monotonicity"
+  echo "    stderr: $err"
+fi
 config_teardown
 
 # --- Test 13e: five_hour_target_floor_pct > ceiling rejected (cross-field) ---
@@ -8039,6 +8050,85 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: exhaustion_threshold_pct 101 stderr says <= 100"
   echo "    stderr: $err"
 fi
+config_teardown
+
+# --- Test 13k: target_weekly_usage_pct: 10 rejected (10 < 17, default floor/power) ---
+
+echo "Test: target_weekly_usage_pct: 10 exits 1, stderr names target_weekly_usage_pct and monotonicity"
+config_setup
+echo '{"target_weekly_usage_pct": 10}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "target_weekly_usage_pct 10 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"target_weekly_usage_pct"* && "$err" == *"monotonicity"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: target_weekly_usage_pct 10 stderr names field and monotonicity"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: target_weekly_usage_pct 10 stderr names field and monotonicity"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 13l: target_weekly_usage_pct: 17 accepted (boundary; 17 < 17 is false) ---
+
+echo "Test: target_weekly_usage_pct: 17 exits 0 (boundary, min = 34*1*1/2 = 17, inclusive-accept)"
+config_setup
+echo '{"target_weekly_usage_pct": 17}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "target_weekly_usage_pct 17 exits 0" "0" "$rc"
+config_teardown
+
+# --- Test 13m: target_weekly_usage_pct: 16 rejected (16 < 17) ----------------
+
+echo "Test: target_weekly_usage_pct: 16 exits 1, stderr contains monotonicity"
+config_setup
+echo '{"target_weekly_usage_pct": 16}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "target_weekly_usage_pct 16 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"monotonicity"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: target_weekly_usage_pct 16 stderr contains monotonicity"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: target_weekly_usage_pct 16 stderr contains monotonicity"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 13n: weekly_curve_power shifts the threshold -----------------------
+# With power=3: min = 34*1*3/(3+1) = 25.5; so target=20 is rejected.
+# With default power=1: min = 34*1*1/(1+1) = 17; so target=20 is accepted.
+
+echo "Test: power=3 raises threshold (target=20 rejected); default power=1 accepts target=20"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"target_weekly_usage_pct": 20, "weekly_curve_power": 3}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "target=20 power=3 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"monotonicity"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: target=20 power=3 stderr contains monotonicity"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: target=20 power=3 stderr contains monotonicity"
+  echo "    stderr: $err"
+fi
+echo '{"target_weekly_usage_pct": 20}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "target=20 default power=1 exits 0" "0" "$rc"
+config_teardown
+
+# --- Test 13o: valid combined floor and target accepted ----------------------
+# floor=5, target=90: min = 34*5*1/2 = 85 <= 90, so accepted.
+
+echo "Test: target_weekly_usage_pct=90 weekly_increment_floor_pct=5 exits 0 (min=85 <= 90)"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"target_weekly_usage_pct": 90, "weekly_increment_floor_pct": 5}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "target=90 floor=5 exits 0" "0" "$rc"
 config_teardown
 
 # ============================================================================
