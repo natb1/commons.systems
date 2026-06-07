@@ -387,7 +387,11 @@ finding (from `/code-review` and `/review`) and every `required`-bucket finding
 from the security pass.
 
 For each such finding, launch an implementation subagent via the Agent tool,
-constrained to **working-tree edits only — no commits, no pushes**. **Pin these
+constrained to **working-tree edits only — no commits, no pushes** (when there
+are multiple findings to apply, these implementation subagents may be fanned out
+in parallel — multiple Agent calls in one message — but only when they touch
+disjoint files; group findings that edit the same file into one subagent to
+avoid write conflicts). **Pin these
 implementation subagents to `model: opus`** (#1172): writing a correct fix is
 code generation, where Opus has the edge, so all fix-authoring is concentrated on
 Opus while the orchestrator chain and detection run on Sonnet. Informational,
@@ -695,10 +699,10 @@ through to the unified set in Step 2 — has these fields:
 - **Recommended fix** — the concrete change that resolves the finding.
 - **Disposition** — the unified bucket from the **Disposition table**, set by the
   Step 2 unification subagent. Security sources additionally carry the underlying
-  `required` / `out-of-scope` / `false-positive` classification; code-review/review
-  sources carry the `fixed` / `skipped` disposition `/code-review` emitted, which
-  the unification subagent extends into Fixed / Informational / Dismissed /
-  Deferred.
+  `required` / `out-of-scope` / `false-positive` classification; code-review
+  findings (detection-only, per Step 1a) and review findings both carry
+  `skipped`, which the unification subagent extends into Fixed / Informational /
+  Dismissed / Deferred.
 
 ## Edge cases
 
