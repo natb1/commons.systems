@@ -45,7 +45,7 @@ const router = createHistoryRouter(
     },
     {
       path: /^\/view\/([^/]+)$/,
-      render: (path) => renderView(path.slice("/view/".length), currentUser),
+      render: (path) => renderView(decodeURIComponent(path.slice("/view/".length)), currentUser),
       afterRender: (outlet) => afterRenderView(outlet, currentUser),
     },
     { path: "/about", render: renderAbout },
