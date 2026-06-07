@@ -449,7 +449,7 @@ awk -v mode="$MODE" \
        if (end > (wcap + 0)) end = (wcap + 0)
        # Only the upper bound is clamped here. The lower bound (end >= 0, i.e.
        # curve monotonicity — W rising to target_weekly only at x=1, never
-       # overshooting mid-week) is guaranteed UPSTREAM by dispatch-config-load's
+       # overshooting mid-week) is guaranteed UPSTREAM by the dispatch-config-load
        # monotonicity constraint (#930): it rejects any config where
        # target_weekly_usage_pct < T*wfloor*p/(p+1), which is exactly the
        # condition under which `end` would go negative. Tunables reach this
