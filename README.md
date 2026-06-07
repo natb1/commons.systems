@@ -170,8 +170,8 @@ comment on the review issue and closing it to anchor the next cycle.
 Most jit-reminders surface a summary for a human to read; some instead run a
 skill when selected. [`/digest`](.claude/skills/digest/SKILL.md) runs as an
 office-hours session (interactive demos require a user present);
-[`/roadmap`](.claude/skills/roadmap/SKILL.md) runs autonomously (no user
-needed — it posts its report and closes the review issue). The jit engine itself
+[`/roadmap`](.claude/skills/roadmap/SKILL.md) runs as an office-hours
+session with no interactive stops — it posts its report and closes the review issue. The jit engine itself
 lives in the Dispatch Queue spine's [JIT-on-dispatch](#4-jit-on-dispatch)
 subsection — this covers only the office-hours-side surfacing.
 
