@@ -25,6 +25,8 @@ export interface OutlineEntry {
 export interface ContentRenderer {
   init(container: HTMLElement, source: string | ArrayBuffer, initialPosition?: string): Promise<void>;
   goToPage(page: number): Promise<void>;
+  /** Optional percent-based navigation [0,1]. EPUB-only. Generates locations lazily. */
+  goToFraction?(fraction: number): Promise<void>;
   next(): Promise<void>;
   prev(): Promise<void>;
   readonly pageCount: number;
@@ -60,4 +62,21 @@ export function parsePositionPage(initialPosition: string | undefined, pageCount
     if (parsed >= 1 && parsed <= pageCount) return parsed;
   }
   return 1;
+}
+
+/**
+ * Clamp a raw "go to page" input into [1, pageCount].
+ *
+ * Complements parsePositionPage: an interactive jump ignores garbage (returns
+ * null) rather than defaulting to 1, so a typo does not silently send the reader
+ * to page 1. Restoring a saved position from storage is parsePositionPage's job.
+ *
+ * Returns null for empty/whitespace or non-numeric input; otherwise the parsed
+ * value clamped into [1, pageCount].
+ */
+export function clampGoToPage(raw: string, pageCount: number): number | null {
+  if (raw.trim() === "") return null;
+  const parsed = parseInt(raw, 10);
+  if (Number.isNaN(parsed)) return null;
+  return Math.max(1, Math.min(pageCount, parsed));
 }

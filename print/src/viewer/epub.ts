@@ -15,6 +15,8 @@ export function createEpubRenderer(
   let _atEnd = false;
   let _currentCfi = "";
   let destroyed = false;
+  let locationsReady: Promise<void> | null = null;
+  const GENERATE_CHARS = 1024;
   const outlineHrefMap = new WeakMap<OutlineEntry, string>();
 
   function mapNavItems(items: NavItem[]): OutlineEntry[] {
@@ -35,6 +37,16 @@ export function createEpubRenderer(
       const timer = setTimeout(() => { reportError(new Error("waitForRelocated: timed out after 5s")); resolve(); }, 5000);
       rendition.once("relocated", () => { clearTimeout(timer); resolve(); });
     });
+  }
+
+  // epub.js percent-based navigation requires a generated locations index,
+  // which is expensive. Generate it lazily on first use and memoize the promise.
+  function ensureLocations(): Promise<void> {
+    if (!book) return Promise.resolve();
+    if (!locationsReady) {
+      locationsReady = book.locations.generate(GENERATE_CHARS).then(() => {});
+    }
+    return locationsReady;
   }
 
   return {
@@ -120,6 +132,17 @@ export function createEpubRenderer(
       const spineItem = book.spine.get(page - 1);
       if (!spineItem) return;
       await rendition.display(spineItem.href);
+    },
+
+    async goToFraction(fraction: number): Promise<void> {
+      if (!rendition || !book) return;
+      await ensureLocations();
+      if (destroyed) return;
+      const clamped = Math.max(0, Math.min(1, fraction));
+      const cfi = book.locations.cfiFromPercentage(clamped);
+      const relocated = waitForRelocated();
+      await rendition.display(cfi);
+      await relocated;
     },
 
     async next(): Promise<void> {
