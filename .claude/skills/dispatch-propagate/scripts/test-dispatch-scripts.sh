@@ -63,6 +63,10 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-apply-office-hours" "$TMPDIR_TEST/dispatch-apply-office-hours"
   cp "$SCRIPT_DIR/dispatch-apply-planned" "$TMPDIR_TEST/dispatch-apply-planned"
   cp "$SCRIPT_DIR/dispatch-resolve-worktree" "$TMPDIR_TEST/dispatch-resolve-worktree"
+  # dispatch-reconcile-ready sources lib.sh (for dispatch_classify_rollup) via its
+  # SCRIPT_DIR, which resolves to TMPDIR_TEST for this copy — lib.sh is copied
+  # below alongside the other scripts, so the source resolves.
+  cp "$SCRIPT_DIR/dispatch-reconcile-ready" "$TMPDIR_TEST/dispatch-reconcile-ready"
   # dispatch-select-target's JIT scan calls dispatch-config-load and
   # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
   # TMPDIR_TEST for the copied dispatch-select-target, so the two helpers must
@@ -97,6 +101,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-apply-office-hours" \
            "$TMPDIR_TEST/dispatch-apply-planned" \
            "$TMPDIR_TEST/dispatch-resolve-worktree" \
+           "$TMPDIR_TEST/dispatch-reconcile-ready" \
            "$TMPDIR_TEST/dispatch-config-load" \
            "$TMPDIR_TEST/dispatch-project-status-read"
 
@@ -174,7 +179,10 @@ case "$args" in
       echo "[]"
     fi
     ;;
-  "pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences")
+  "pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences,mergeable")
+    # dispatch-select-target's union fetch now carries `mergeable` (#1241). The
+    # field is forward-compatible (consumed by #1243); the current selection path
+    # does not read it, and make_pr_union fixtures omit it (jq yields null).
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     if [[ -f "$STUB_DIR/pr-list-union.json" ]]; then
       cat "$STUB_DIR/pr-list-union.json"
@@ -442,6 +450,27 @@ case "$args" in
         echo "$args" >> "$STUB_DIR/gh-pr-edit.log"
         ;;
     esac
+    ;;
+  "pr list --state open --json number,isDraft,labels,statusCheckRollup,mergeable")
+    # dispatch-reconcile-ready's one fetch. $STUB_DIR/reconcile-pr-list.json
+    # supplies the per-test PR array; absence means no open PRs.
+    echo "pr list" >> "$STUB_DIR/gh-reconcile-pr-list.log"
+    if [[ -f "$STUB_DIR/reconcile-pr-list.json" ]]; then
+      cat "$STUB_DIR/reconcile-pr-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  pr\ ready\ --undo\ *)
+    # dispatch-reconcile-ready demote. Match --undo BEFORE the bare `pr ready`
+    # case below so a demote does not fall through to the promote log.
+    num=$(printf '%s' "$args" | awk '{print $NF}')
+    echo "$num" >> "$STUB_DIR/gh-pr-ready-undo.log"
+    ;;
+  pr\ ready\ *)
+    # dispatch-reconcile-ready promote (bare `gh pr ready <N>`).
+    num=$(printf '%s' "$args" | awk '{print $NF}')
+    echo "$num" >> "$STUB_DIR/gh-pr-ready.log"
     ;;
   "api repos/{owner}/{repo}/commits/main")
     # main_broken_sha: resolve origin/main's HEAD SHA. Default: healthy main.
@@ -21462,6 +21491,239 @@ git --git-dir="$bw_root/.bare" worktree prune 2>/dev/null || true
 rm -rf "$bw_root"
 
 rm -rf "$wp_root"
+
+# ============================================================================
+# dispatch-reconcile-ready tests
+# ============================================================================
+echo ""
+echo "=== dispatch-reconcile-ready ==="
+
+# Build a single-PR fixture array for the reconcile fetch. Shapes match the
+# `gh pr list --json number,isDraft,labels,statusCheckRollup,mergeable` output
+# the script consumes.
+#   $1 = number, $2 = isDraft (true|false), $3 = mergeable
+#   (MERGEABLE|CONFLICTING|UNKNOWN), $4 = rollup JSON, $5 = labels JSON.
+make_reconcile_pr() {
+  local num="$1" is_draft="$2" mergeable="$3" rollup_json="$4" labels_json="$5"
+  printf '[{"number":%s,"isDraft":%s,"mergeable":"%s","statusCheckRollup":%s,"labels":%s}]' \
+    "$num" "$is_draft" "$mergeable" "$rollup_json" "$labels_json"
+}
+
+# Labels: a single dispatch:reviewed label, and the no-reviewed scope case.
+REVIEWED_LABELS='[{"name":"dispatch:reviewed"}]'
+NO_REVIEWED_LABELS='[{"name":"dispatch:planned"}]'
+
+# Reports whether a given stub log file is present/absent.
+reconcile_log_state() {
+  [[ -f "$STUB_DIR/$1" ]] && echo "present" || echo "absent"
+}
+
+# --- Truth table for a dispatch:reviewed PR ---------------------------------
+# Each row writes a one-PR fixture, runs the reconciler, and asserts on the
+# emitted stdout plus the promote/demote call logs.
+
+# Row 1: draft + passing + MERGEABLE → promote.
+echo "Test: draft + passing + MERGEABLE → promote (#7)"
+setup
+make_reconcile_pr 7 true MERGEABLE "$GREEN_ROLLUP" "$REVIEWED_LABELS" \
+  > "$STUB_DIR/reconcile-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
+assert_eq "promote: stdout is 'promoted #7'" "promoted #7" "$out"
+assert_eq "promote: gh pr ready #7 logged" "7" "$(cat "$STUB_DIR/gh-pr-ready.log")"
+assert_eq "promote: no demote call" "absent" "$(reconcile_log_state gh-pr-ready-undo.log)"
+teardown
+
+# Row 2: draft + passing + UNKNOWN → no-op (mergeable async, self-heal later).
+echo "Test: draft + passing + UNKNOWN → no-op (#8)"
+setup
+make_reconcile_pr 8 true UNKNOWN "$GREEN_ROLLUP" "$REVIEWED_LABELS" \
+  > "$STUB_DIR/reconcile-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
+assert_eq "draft+UNKNOWN: no stdout" "" "$out"
+assert_eq "draft+UNKNOWN: no promote call" "absent" "$(reconcile_log_state gh-pr-ready.log)"
+assert_eq "draft+UNKNOWN: no demote call" "absent" "$(reconcile_log_state gh-pr-ready-undo.log)"
+teardown
+
+# Row 3: draft + failing + MERGEABLE → no-op (a draft is never demoted).
+echo "Test: draft + failing + MERGEABLE → no-op (#9)"
+setup
+make_reconcile_pr 9 true MERGEABLE "$FAILING_ROLLUP" "$REVIEWED_LABELS" \
+  > "$STUB_DIR/reconcile-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
+assert_eq "draft+failing: no stdout" "" "$out"
+assert_eq "draft+failing: no promote call" "absent" "$(reconcile_log_state gh-pr-ready.log)"
+assert_eq "draft+failing: no demote call" "absent" "$(reconcile_log_state gh-pr-ready-undo.log)"
+teardown
+
+# Row 4: draft + pending + MERGEABLE → no-op (CI still running).
+echo "Test: draft + pending + MERGEABLE → no-op (#10)"
+setup
+make_reconcile_pr 10 true MERGEABLE "$PENDING_ROLLUP" "$REVIEWED_LABELS" \
+  > "$STUB_DIR/reconcile-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
+assert_eq "draft+pending: no stdout" "" "$out"
+assert_eq "draft+pending: no promote call" "absent" "$(reconcile_log_state gh-pr-ready.log)"
+teardown
+
+# Row 5: ready + failing + MERGEABLE → demote (CI regressed).
+echo "Test: ready + failing + MERGEABLE → demote (#11)"
+setup
+make_reconcile_pr 11 false MERGEABLE "$FAILING_ROLLUP" "$REVIEWED_LABELS" \
+  > "$STUB_DIR/reconcile-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
+assert_eq "demote (failing): stdout reports verdict + mergeable" \
+  "demoted #11 (ci=failing merge=MERGEABLE)" "$out"
+assert_eq "demote (failing): gh pr ready --undo #11 logged" \
+  "11" "$(cat "$STUB_DIR/gh-pr-ready-undo.log")"
+assert_eq "demote (failing): no promote call" "absent" "$(reconcile_log_state gh-pr-ready.log)"
+# dispatch:reviewed is KEPT — no remove-label of it.
+assert_eq "demote (failing): dispatch:reviewed not removed" \
+  "absent" "$(reconcile_log_state gh-pr-edit.log)"
+teardown
+
+# Row 6: ready + passing + CONFLICTING → demote (merge conflict).
+echo "Test: ready + passing + CONFLICTING → demote (#12)"
+setup
+make_reconcile_pr 12 false CONFLICTING "$GREEN_ROLLUP" "$REVIEWED_LABELS" \
+  > "$STUB_DIR/reconcile-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
+assert_eq "demote (CONFLICTING): stdout reports verdict + mergeable" \
+  "demoted #12 (ci=passing merge=CONFLICTING)" "$out"
+assert_eq "demote (CONFLICTING): gh pr ready --undo #12 logged" \
+  "12" "$(cat "$STUB_DIR/gh-pr-ready-undo.log")"
+teardown
+
+# Row 7: ready + passing + UNKNOWN → no-op (do NOT demote on UNKNOWN).
+echo "Test: ready + passing + UNKNOWN → no-op (#13)"
+setup
+make_reconcile_pr 13 false UNKNOWN "$GREEN_ROLLUP" "$REVIEWED_LABELS" \
+  > "$STUB_DIR/reconcile-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
+assert_eq "ready+UNKNOWN: no stdout" "" "$out"
+assert_eq "ready+UNKNOWN: no demote call" "absent" "$(reconcile_log_state gh-pr-ready-undo.log)"
+teardown
+
+# Row 8: ready + pending + MERGEABLE → no-op (do NOT demote on pending CI).
+echo "Test: ready + pending + MERGEABLE → no-op (#14)"
+setup
+make_reconcile_pr 14 false MERGEABLE "$PENDING_ROLLUP" "$REVIEWED_LABELS" \
+  > "$STUB_DIR/reconcile-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
+assert_eq "ready+pending: no stdout" "" "$out"
+assert_eq "ready+pending: no demote call" "absent" "$(reconcile_log_state gh-pr-ready-undo.log)"
+teardown
+
+# Row 9: ready + passing + MERGEABLE → no-op (already correct).
+echo "Test: ready + passing + MERGEABLE → no-op (already correct) (#15)"
+setup
+make_reconcile_pr 15 false MERGEABLE "$GREEN_ROLLUP" "$REVIEWED_LABELS" \
+  > "$STUB_DIR/reconcile-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
+assert_eq "ready+correct: no stdout" "" "$out"
+assert_eq "ready+correct: no promote call" "absent" "$(reconcile_log_state gh-pr-ready.log)"
+assert_eq "ready+correct: no demote call" "absent" "$(reconcile_log_state gh-pr-ready-undo.log)"
+teardown
+
+# --- Scope gate: a PR WITHOUT dispatch:reviewed is never flipped -------------
+# Use the would-promote combination (draft + passing + MERGEABLE): the only
+# thing withholding the flip is the missing label.
+echo "Test: scope gate — no dispatch:reviewed → never flipped, even when promotable (#16)"
+setup
+make_reconcile_pr 16 true MERGEABLE "$GREEN_ROLLUP" "$NO_REVIEWED_LABELS" \
+  > "$STUB_DIR/reconcile-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
+assert_eq "scope gate: no stdout" "" "$out"
+assert_eq "scope gate: no promote call" "absent" "$(reconcile_log_state gh-pr-ready.log)"
+assert_eq "scope gate: no demote call" "absent" "$(reconcile_log_state gh-pr-ready-undo.log)"
+assert_eq "scope gate: no edit/remove-label call" "absent" "$(reconcile_log_state gh-pr-edit.log)"
+teardown
+
+# Scope gate, ready side: a non-reviewed ready PR that is failing+CONFLICTING
+# (the strongest demote signal) is still never demoted.
+echo "Test: scope gate — no dispatch:reviewed ready+failing+CONFLICTING → never demoted (#17)"
+setup
+make_reconcile_pr 17 false CONFLICTING "$FAILING_ROLLUP" "$NO_REVIEWED_LABELS" \
+  > "$STUB_DIR/reconcile-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
+assert_eq "scope gate (ready): no stdout" "" "$out"
+assert_eq "scope gate (ready): no demote call" "absent" "$(reconcile_log_state gh-pr-ready-undo.log)"
+teardown
+
+# --- Attempt-clear: promote removes ALL dispatch:*-attempt-* labels ---------
+# A promotable PR also carries two attempt counters; both are removed via
+# gh pr edit --remove-label, and dispatch:reviewed is NOT among the removed.
+echo "Test: promote clears all dispatch:*-attempt-* labels, keeps dispatch:reviewed (#18)"
+setup
+ATTEMPT_LABELS='[{"name":"dispatch:reviewed"},{"name":"dispatch:verify-attempt-2"},{"name":"dispatch:ci-wait-attempt-1"}]'
+make_reconcile_pr 18 true MERGEABLE "$GREEN_ROLLUP" "$ATTEMPT_LABELS" \
+  > "$STUB_DIR/reconcile-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
+assert_eq "attempt-clear: still promoted" "promoted #18" "$out"
+assert_eq "attempt-clear: gh pr ready #18 logged" "18" "$(cat "$STUB_DIR/gh-pr-ready.log")"
+edit_log=$(cat "$STUB_DIR/gh-pr-edit.log")
+TOTAL=$((TOTAL + 1))
+if grep -q 'pr edit 18 --remove-label dispatch:verify-attempt-2' <<<"$edit_log" \
+   && grep -q 'pr edit 18 --remove-label dispatch:ci-wait-attempt-1' <<<"$edit_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: attempt-clear: both attempt labels removed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: attempt-clear: both attempt labels removed"
+  echo "    actual gh-pr-edit.log: '$edit_log'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'remove-label dispatch:reviewed' <<<"$edit_log"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: attempt-clear: dispatch:reviewed must NOT be removed"
+  echo "    actual gh-pr-edit.log: '$edit_log'"
+else
+  PASS=$((PASS + 1)); echo "  PASS: attempt-clear: dispatch:reviewed not removed"
+fi
+teardown
+
+# --- Multi-PR: scope, promote, demote, and no-op coexist in one fetch --------
+# A single fetch carrying four PRs reconciles each independently: a reviewed
+# promotable PR is promoted, a reviewed demotable PR is demoted, a non-reviewed
+# promotable PR is skipped, and a reviewed already-correct PR is a no-op.
+echo "Test: multi-PR fetch reconciles each PR independently"
+setup
+{
+  printf '[\n'
+  printf '{"number":20,"isDraft":true,"mergeable":"MERGEABLE","statusCheckRollup":%s,"labels":%s},\n' \
+    "$GREEN_ROLLUP" "$REVIEWED_LABELS"
+  printf '{"number":21,"isDraft":false,"mergeable":"CONFLICTING","statusCheckRollup":%s,"labels":%s},\n' \
+    "$GREEN_ROLLUP" "$REVIEWED_LABELS"
+  printf '{"number":22,"isDraft":true,"mergeable":"MERGEABLE","statusCheckRollup":%s,"labels":%s},\n' \
+    "$GREEN_ROLLUP" "$NO_REVIEWED_LABELS"
+  printf '{"number":23,"isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":%s,"labels":%s}\n' \
+    "$GREEN_ROLLUP" "$REVIEWED_LABELS"
+  printf ']\n'
+} > "$STUB_DIR/reconcile-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
+assert_eq "multi: #20 promoted" "20" "$(cat "$STUB_DIR/gh-pr-ready.log")"
+assert_eq "multi: #21 demoted" "21" "$(cat "$STUB_DIR/gh-pr-ready-undo.log")"
+TOTAL=$((TOTAL + 1))
+if grep -q 'promoted #20' <<<"$out" \
+   && grep -q 'demoted #21 (ci=passing merge=CONFLICTING)' <<<"$out" \
+   && ! grep -qE '#22|#23' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: multi: stdout has promote+demote lines only for the two reviewed actionable PRs"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: multi: stdout has promote+demote lines only for the two reviewed actionable PRs"
+  echo "    actual stdout: '$out'"
+fi
+teardown
+
+# --- Empty fetch: no PRs → no output, no calls ------------------------------
+echo "Test: no open PRs → no output, no calls"
+setup
+echo "[]" > "$STUB_DIR/reconcile-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
+assert_eq "empty fetch: no stdout" "" "$out"
+assert_eq "empty fetch: no promote call" "absent" "$(reconcile_log_state gh-pr-ready.log)"
+assert_eq "empty fetch: no demote call" "absent" "$(reconcile_log_state gh-pr-ready-undo.log)"
+teardown
+
+# --- Executable-bit guard ----------------------------------------------------
+echo "Test: dispatch-reconcile-ready is executable"
+assert_eq "dispatch-reconcile-ready is executable" "yes" \
+  "$([[ -x "$SCRIPT_DIR/dispatch-reconcile-ready" ]] && echo yes || echo no)"
 
 # ============================================================================
 # summary
