@@ -1354,7 +1354,7 @@ assert_eq "wrong-worktree → provisioning not invoked" "0" \
 teardown
 
 # 21. No-PR issue whose label is in the statements config → INVOKE /budget-parse-job
-# (#1024). The implement arm fetches the issue's labels (gh issue view --json labels,
+# (#1024). The plan arm fetches the issue's labels (gh issue view --json labels,
 # served from issue-labels-<num>.json) and the configured statements labels (from
 # dispatch-config-load against DISPATCH_CONFIG_DIR), and on a non-empty intersection
 # routes to the parse-job handler instead of RELEVANCE-REVIEW.

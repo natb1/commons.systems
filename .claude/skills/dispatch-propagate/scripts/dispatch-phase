@@ -73,9 +73,16 @@ if [[ -z "$PR" || "$PR" == "null" ]]; then
     ISSUE_NUM="$ARG"
   else
     ISSUE_NUM="${ARG%%-*}"
+    if [[ ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
+      echo "dispatch-phase: cannot resolve issue number from non-numeric branch '$ARG'" >&2
+      exit 1
+    fi
   fi
-  ISSUE_LABELS=$(gh issue view "$ISSUE_NUM" --json labels | jq -r '.labels[].name')
-  if echo "$ISSUE_LABELS" | grep -qF "dispatch:planned"; then
+  ISSUE_LABELS=$(gh issue view "$ISSUE_NUM" --json labels | jq -r '.labels[].name' 2>/dev/null) || {
+    echo "plan"
+    exit 0
+  }
+  if grep -qxF "dispatch:planned" <<<"$ISSUE_LABELS"; then
     echo "implement"
   else
     echo "plan"
