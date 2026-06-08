@@ -37,6 +37,68 @@
         color: var(--danger, #ff6b6b);
         font-weight: 700;
       }
+      .capacity-heading {
+        font-size: 1rem;
+        letter-spacing: 0.05em;
+        color: var(--muted-fg, #9aa0a6);
+        margin-bottom: 0.75rem;
+      }
+      .capacity-cards {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+      .capacity-card {
+        border: 1px solid var(--graphical-fg, rgba(255, 255, 255, 0.15));
+        padding: 0.75rem 1rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+      .capacity-card-label {
+        color: var(--muted-fg, #9aa0a6);
+        font-size: 0.8rem;
+      }
+      .capacity-card-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+      }
+      .capacity-resets {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 1rem 0;
+      }
+      .capacity-resets li {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--graphical-fg, rgba(255, 255, 255, 0.15));
+      }
+      .capacity-reset-label {
+        flex: 0 0 7rem;
+        min-width: 7rem;
+        color: var(--muted-fg, #9aa0a6);
+        font-size: 0.85rem;
+      }
+      .capacity-reset-clock {
+        font-weight: 400;
+        white-space: nowrap;
+      }
+      .capacity-reset-countdown {
+        color: var(--muted-fg, #9aa0a6);
+        white-space: nowrap;
+      }
+      .capacity-workers {
+        margin: 0;
+      }
+      .capacity-worker-state {
+        color: var(--muted-fg, #9aa0a6);
+      }
+      .capacity-worker-state.paused {
+        color: var(--danger, #ff6b6b);
+      }
     </style>
   </head>
   <body>
