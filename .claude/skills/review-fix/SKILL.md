@@ -541,6 +541,8 @@ subagent:
    gh issue edit <N> --add-label security --add-label bug
    ```
 
+   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed.
+
 4. Returns `<N>` mapped to the follow-up's `identifier`.
 
 Capture each `<N>` against its source finding for the Step 7 comment.
