@@ -144,8 +144,8 @@ fully implemented as written. Base this on the `/implement-unit` outcomes
 observed in Step 2.
 
 **Deviation fires** — skip the `phase-completed` marker. Instead call
-`dispatch-mark-deviation` to write the office-hours-reason atomically. The draft
-PR opened in Step 3 stays open. The Stop hook reads marker-absence as Branch A,
+`dispatch-mark-deviation` to write the office-hours-reason atomically. If Step 3
+already opened a draft PR, it stays open. The Stop hook reads marker-absence as Branch A,
 applies `dispatch:office-hours` to the issue (surfacing this reason in the
 why-comment), and parks the issue for human review.
 
