@@ -11,9 +11,10 @@
 #   INVOKE /verify-pr               phase verify       (draft PR, CI failed)
 #   INVOKE /qa-fix                  phase qa           (draft, CI green, no label)
 #   INVOKE /review-fix              phase review       (dispatch:qa-done / reviewed re-entry)
-#   INVOKE /budget-parse-job       phase implement    (no PR, statements:<key> label) — parse-job issue
+#   INVOKE /budget-parse-job       phase plan         (no PR, unplanned, statements:<key> label) — parse-job issue
+#   INVOKE /plan-implement         phase implement    (no PR + dispatch:planned) — transitional bridge; #1201 → /implement
 #   INVOKE /dispatch-resolve-conflict  provisioning hit an origin/main merge conflict
-#   RELEVANCE-REVIEW                phase implement    (no PR) — routes to SKILL.md Step 2
+#   RELEVANCE-REVIEW                phase plan         (no PR, unplanned) — routes to SKILL.md Step 2
 #   STOP done                       phase done         (non-draft PR)
 #   PUSH-STRANDED                   phase done, but worktree ahead of origin/<branch> — push then park
 #   STOP waiting                    dispatch-ci-ready reports not-ready (draft PR CI pending)
@@ -128,9 +129,9 @@ PHASE=$("$SCRIPT_DIR/dispatch-phase" "$N")
 
 # Map the phase string to its directive.
 case "$PHASE" in
-  implement)
-    # A no-PR target is normally an implement-phase issue → RELEVANCE-REVIEW. But
-    # a statement parse-job issue (filed by dispatch-statements-scan, carrying a
+  plan)
+    # A no-PR unplanned target is normally a plan-phase issue → RELEVANCE-REVIEW.
+    # But a statement parse-job issue (filed by dispatch-statements-scan, carrying a
     # configured statements:<key> label, with no PR) routes to /budget-parse-job
     # instead — it is a one-phase handler that never opens a code PR. The label
     # fetch happens ONLY here, inside the no-PR arm, so PR-bearing phases add no
@@ -171,6 +172,13 @@ case "$PHASE" in
     else
       echo "RELEVANCE-REVIEW"
     fi
+    ;;
+  implement)
+    # Transitional bridge: a planned (dispatch:planned) no-PR issue routes straight
+    # to the build skill — planning already happened in the plan phase, so no
+    # relevance review and no parse-job check (a planned issue is never a parse-job).
+    # #1201 changes this to `INVOKE /implement` (build from the persisted plan comment).
+    echo "INVOKE /plan-implement"
     ;;
   verify)       echo "INVOKE /verify-pr" ;;
   qa)           echo "INVOKE /qa-fix" ;;

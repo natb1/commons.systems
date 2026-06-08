@@ -3,7 +3,7 @@
 # Usage: dispatch-phase <issue-num|branch>
 #
 # Prints exactly one actionable phase name to stdout:
-#   implement | verify | qa | review | done
+#   plan | implement | verify | qa | review | done
 #
 # This script answers ONLY "which phase skill runs." It does NOT report CI
 # readiness. When a draft PR's CI has no verdict yet (checks still in progress),
@@ -22,6 +22,10 @@
 #   - All-digit arg: treated as an issue number. The matching PR is the one
 #     whose headRefName starts with "<issue>-".
 #   - Otherwise: treated as a branch name. Matched exactly.
+#
+# For a no-PR target, the phase is `plan` unless the issue carries the
+# `dispatch:planned` label (then `implement`). This is determined by fetching
+# the issue's labels via `gh issue view`.
 #
 # Environment:
 #   DISPATCH_PR_LIST — optional. A JSON array of open PRs supplied by the
@@ -60,9 +64,29 @@ else
     'map(select(.headRefName == $branch)) | .[0] // empty')
 fi
 
-# No matching PR → implement.
+# No matching PR — derive phase from whether the issue carries dispatch:planned.
+# An issue carrying dispatch:planned already has an approved plan → implement;
+# without it the next phase is plan.
 if [[ -z "$PR" || "$PR" == "null" ]]; then
-  echo "implement"
+  # Resolve issue number: all-digits → use as-is; branch name → strip first segment.
+  if [[ "$ARG" =~ ^[0-9]+$ ]]; then
+    ISSUE_NUM="$ARG"
+  else
+    ISSUE_NUM="${ARG%%-*}"
+    if [[ ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
+      echo "dispatch-phase: cannot resolve issue number from non-numeric branch '$ARG'" >&2
+      exit 1
+    fi
+  fi
+  ISSUE_LABELS=$(gh issue view "$ISSUE_NUM" --json labels | jq -r '.labels[].name' 2>/dev/null) || {
+    echo "plan"
+    exit 0
+  }
+  if grep -qxF "dispatch:planned" <<<"$ISSUE_LABELS"; then
+    echo "implement"
+  else
+    echo "plan"
+  fi
   exit 0
 fi
 
