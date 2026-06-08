@@ -2935,6 +2935,44 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "green draft PR selected by PR queue as qa" "pr 10 55-feature qa" "$result"
 teardown
 
+# --- within-bucket phase ladder: implement outranks plan (#1202) ------------
+# Unit 1's ladder reorder splits the help-wanted issue tier by phase: within one
+# (category, priority) bucket a planned issue (carrying dispatch:planned, the
+# implement-phase discriminator) ranks ABOVE an unplanned issue (plan phase).
+#
+# Two help-wanted issues share the same (category="other", priority=0) bucket and
+# neither has a PR or sub-issues, so each traces to itself as its own startable
+# leaf. The UNPLANNED issue 700 is OLDER than the PLANNED issue 800. Under the
+# pre-Unit-1 ladder the single bucket was keyed only by (category, priority) with
+# oldest-wins, so the older unplanned 700 would have won. With the phase split,
+# 800 (implement) outranks 700 (plan) regardless of createdAt — proving the
+# reorder, not oldest-wins.
+echo "Test: planned issue outranks unplanned issue in same bucket (#1202)"
+setup
+setup_union_pr_list '[]'
+# 700: older, help wanted, no dispatch:planned → plan phase.
+# 800: newer, help wanted, dispatch:planned → implement phase.
+printf '[{"number":700,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":800,"createdAt":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"dispatch:planned"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+# No worktrees — both issues are startable leaves.
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "planned issue 800 (implement) outranks older unplanned 700 (plan)" "issue 800" "$result"
+teardown
+
+# Guard the converse: with NO planned issue in the bucket, oldest-wins still
+# governs the plan tier — the older unplanned issue 700 wins. Confirms the phase
+# split did not disturb the within-phase oldest-wins ordering.
+echo "Test: with no planned issue, oldest unplanned issue still wins (#1202)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":700,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":800,"createdAt":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "no planned issue → oldest unplanned 700 wins" "issue 700" "$result"
+teardown
+
 # --- --priority-only mode (#1134) -------------------------------------------
 # --priority-only runs the main-broken health gate, then scans ONLY the
 # priority=1 tier. The JIT scan is suppressed. It is the at-cap bypass selector:
@@ -15338,7 +15376,7 @@ restore_setup() {
     "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts" \
     "$TMPDIR_TEST/bin" \
     "$STUB_DIR"
-  for skill in plan-implement verify-pr qa-fix office-hours \
+  for skill in plan-issue implement verify-pr qa-fix office-hours \
                review-fix dispatch-worker \
                dispatch-resolve-conflict; do
     mkdir -p "$TMPDIR_TEST/.claude/skills/$skill"
@@ -15448,8 +15486,10 @@ set_agents_name() {
   printf '[{"sessionId":"sid-test","name":"%s"}]\n' "$1" > "$STUB_DIR/claude-agents.json"
 }
 
-# --- Test 1: implement → plan-implement body + ARGUMENTS: <N> -----------------
-echo "Test: restore-dispatch-skill phase=implement → plan-implement body + args"
+# --- Test 1: implement → implement body + ARGUMENTS: <N> ----------------------
+# Phase=implement routes to the /implement skill (the post-#1202 cutover: the
+# retired /plan-implement is split into /plan-issue (plan) and /implement).
+echo "Test: restore-dispatch-skill phase=implement → implement body + args"
 restore_setup
 set_agents_name "903-foo"
 echo "implement" > "$STUB_DIR/current-phase.txt"
@@ -15462,7 +15502,7 @@ else
   echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
-expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/plan-implement"
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/implement"
 if [[ "$output" == *"$expected_dir"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: implement: base directory line emitted"
 else
@@ -15470,7 +15510,7 @@ else
   echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"RESTORE_MARKER_plan-implement"* ]]; then
+if [[ "$output" == *"RESTORE_MARKER_implement"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: implement: SKILL.md body marker emitted"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: implement: SKILL.md body marker emitted"
@@ -15482,12 +15522,57 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: implement: ARGUMENTS line emitted"
   echo "    output: $output"
 fi
-# Frontmatter must be stripped — no `name: plan-implement` line should appear.
+# Frontmatter must be stripped — no `name: implement` line should appear.
 TOTAL=$((TOTAL + 1))
-if [[ "$output" != *"name: plan-implement"* ]]; then
+if [[ "$output" != *"name: implement"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: implement: frontmatter stripped"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: implement: frontmatter stripped"
+fi
+restore_teardown
+
+# --- Test 1b: plan → plan-issue body + ARGUMENTS: <N> -------------------------
+# Phase=plan (no PR, unplanned issue) routes to the /plan-issue skill — the front
+# half of the retired /plan-implement, mirroring Test 1's implement routing.
+echo "Test: restore-dispatch-skill phase=plan → plan-issue body + args"
+restore_setup
+set_agents_name "903-foo"
+echo "plan" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"COMPACTION RECOVERY — resume the active phase skill below."* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: plan: header line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: plan: header line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/plan-issue"
+if [[ "$output" == *"$expected_dir"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: plan: base directory line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: plan: base directory line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"RESTORE_MARKER_plan-issue"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: plan: SKILL.md body marker emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: plan: SKILL.md body marker emitted"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"ARGUMENTS: 903"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: plan: ARGUMENTS line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: plan: ARGUMENTS line emitted"
+  echo "    output: $output"
+fi
+# Frontmatter must be stripped — no `name: plan-issue` line should appear.
+TOTAL=$((TOTAL + 1))
+if [[ "$output" != *"name: plan-issue"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: plan: frontmatter stripped"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: plan: frontmatter stripped"
 fi
 restore_teardown
 
@@ -15595,7 +15680,7 @@ restore_teardown
 echo "Test: restore-dispatch-skill conflict-resolver sentinel → dispatch-resolve-conflict body + args"
 restore_setup
 set_agents_name "839-foo"
-echo "implement" > "$STUB_DIR/current-phase.txt"   # would route to plan-implement absent the sentinel
+echo "implement" > "$STUB_DIR/current-phase.txt"   # would route to /implement absent the sentinel
 mkdir -p "$TMPDIR_TEST/jobdir"
 printf 'issue=839\nworktree=%s/worktrees/839-foo\n' "$TMPDIR_TEST" > "$TMPDIR_TEST/jobdir/conflict-resolver"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobdir"
@@ -15746,10 +15831,10 @@ echo "Test: restore-dispatch-skill missing SKILL.md → legacy fallback"
 restore_setup
 set_agents_name "903-foo"
 echo "implement" > "$STUB_DIR/current-phase.txt"
-rm -f "$TMPDIR_TEST/.claude/skills/plan-implement/SKILL.md"
+rm -f "$TMPDIR_TEST/.claude/skills/implement/SKILL.md"
 output=$(run_restore)
 TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"COMPACTION RECOVERY: Reload skill: /plan-implement 903"* ]]; then
+if [[ "$output" == *"COMPACTION RECOVERY: Reload skill: /implement 903"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: missing SKILL.md: legacy line emitted"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: missing SKILL.md: legacy line emitted"
@@ -15760,6 +15845,28 @@ if [[ "$output" != *"Base directory for this skill:"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: missing SKILL.md: no inline emission"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: missing SKILL.md: no inline emission"
+fi
+restore_teardown
+
+# --- Test 8b: missing SKILL.md (plan phase) → legacy one-line Reload fallback -
+echo "Test: restore-dispatch-skill missing SKILL.md (plan phase) → legacy fallback"
+restore_setup
+set_agents_name "903-foo"
+echo "plan" > "$STUB_DIR/current-phase.txt"
+rm -f "$TMPDIR_TEST/.claude/skills/plan-issue/SKILL.md"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"COMPACTION RECOVERY: Reload skill: /plan-issue 903"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing SKILL.md (plan): legacy line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing SKILL.md (plan): legacy line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" != *"Base directory for this skill:"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing SKILL.md (plan): no inline emission"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing SKILL.md (plan): no inline emission"
 fi
 restore_teardown
 
@@ -15792,12 +15899,12 @@ echo "Test: restore-dispatch-skill malformed frontmatter → file emitted verbat
 restore_setup
 set_agents_name "903-foo"
 echo "implement" > "$STUB_DIR/current-phase.txt"
-cat > "$TMPDIR_TEST/.claude/skills/plan-implement/SKILL.md" <<'EOF'
+cat > "$TMPDIR_TEST/.claude/skills/implement/SKILL.md" <<'EOF'
 ---
-name: plan-implement
+name: implement
 description: malformed fixture with no closing delimiter
 
-# Test Skill plan-implement
+# Test Skill implement
 
 RESTORE_MARKER_malformed body line.
 EOF
@@ -15812,7 +15919,7 @@ fi
 # Verbatim emission keeps the unstrippable frontmatter lines (incl. the `name:`
 # line that the normal path would have removed), proving the guard's else branch.
 TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"name: plan-implement"* ]]; then
+if [[ "$output" == *"name: implement"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: malformed frontmatter: file emitted verbatim (frontmatter retained)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: malformed frontmatter: file emitted verbatim (frontmatter retained)"
@@ -15862,7 +15969,8 @@ declare -A CHAIN_GUARD_EXPECTED=(
   # This supersedes #824's terminal ExitWorktree action:"keep" pattern.
   [".claude/skills/qa-fix/SKILL.md"]=0
   [".claude/skills/office-hours/SKILL.md"]=0
-  [".claude/skills/plan-implement/SKILL.md"]=0
+  [".claude/skills/plan-issue/SKILL.md"]=0
+  [".claude/skills/implement/SKILL.md"]=0
   [".claude/skills/review-fix/SKILL.md"]=0
   [".claude/skills/verify-pr/SKILL.md"]=0
   [".claude/skills/implement-unit/SKILL.md"]=0
