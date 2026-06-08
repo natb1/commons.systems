@@ -9,10 +9,10 @@ The `plan` phase of the issue workflow, dispatched by `/dispatch-propagate` —
 sibling to `/qa-fix` and `/review-fix`. It plans a no-PR issue into an ordered
 list of logical units of work and **persists the plan to the issue** as a
 `<!-- dispatch:plan -->` comment, then applies `dispatch:planned`. The
-`implement` phase (`/plan-implement` today, `/implement` after #1201) reads that
+`implement` phase (`/implement`) reads that
 comment in a fresh worker and builds from it.
 
-This is the autonomous front half of what `/plan-implement` used to do inline. It
+This is the autonomous front half of what `/plan-implement` previously did inline. It
 replaces plan mode: there is **no `EnterPlanMode`/`ExitPlanMode`**, no
 user-approval gate, and no context-clear-on-accept. The phase boundary *is* the
 context clear — the persisted plan comment is the only carrier between this phase

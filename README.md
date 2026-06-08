@@ -29,7 +29,8 @@ A reference workflow for individuals who want to fork and adapt an agentic codin
 
 | Phase | Meaning | Skill |
 |-------|---------|-------|
-| implement | No PR on the target | [plan-implement](.claude/skills/plan-implement/SKILL.md) |
+| plan | No PR, unplanned issue | [plan-issue](.claude/skills/plan-issue/SKILL.md) |
+| implement | No PR, dispatch:planned | [implement](.claude/skills/implement/SKILL.md) |
 | verify | Draft PR, CI failed | [verify-pr](.claude/skills/verify-pr/SKILL.md) |
 | waiting | Draft PR, CI in progress | (nothing — wait) |
 | qa | Draft PR, CI green | [qa-fix](.claude/skills/qa-fix/SKILL.md) (autonomous) or [office-hours](.claude/skills/office-hours/SKILL.md) (human-driven; see #758) |
