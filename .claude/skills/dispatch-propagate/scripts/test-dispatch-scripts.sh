@@ -61,6 +61,7 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-check-blockers" "$TMPDIR_TEST/dispatch-check-blockers"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   cp "$SCRIPT_DIR/dispatch-apply-office-hours" "$TMPDIR_TEST/dispatch-apply-office-hours"
+  cp "$SCRIPT_DIR/dispatch-apply-planned" "$TMPDIR_TEST/dispatch-apply-planned"
   cp "$SCRIPT_DIR/dispatch-resolve-worktree" "$TMPDIR_TEST/dispatch-resolve-worktree"
   # dispatch-select-target's JIT scan calls dispatch-config-load and
   # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
@@ -94,6 +95,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-check-blockers" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
            "$TMPDIR_TEST/dispatch-apply-office-hours" \
+           "$TMPDIR_TEST/dispatch-apply-planned" \
            "$TMPDIR_TEST/dispatch-resolve-worktree" \
            "$TMPDIR_TEST/dispatch-config-load" \
            "$TMPDIR_TEST/dispatch-project-status-read"
@@ -688,12 +690,32 @@ NO_LABELS='[]'
 # ============================================================================
 echo "=== dispatch-phase ==="
 
-# 1. No PR → implement
-echo "Test: no PR → implement"
+# 1. No PR, no dispatch:planned label → plan (the issue has not been planned yet).
+# dispatch-phase fetches the issue's labels (gh issue view <num> --json labels);
+# absence of issue-labels-42.json means the issue carries no labels.
+echo "Test: no PR, unplanned → plan"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "no PR → implement" "implement" "$result"
+assert_eq "no PR, unplanned → plan" "plan" "$result"
+teardown
+
+# 1b. No PR + dispatch:planned label → implement (an approved plan exists).
+echo "Test: no PR + dispatch:planned → implement"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf '{"labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "no PR + dispatch:planned → implement" "implement" "$result"
+teardown
+
+# 1c. No PR + labels without dispatch:planned → plan (explicit non-empty labels).
+echo "Test: no PR + non-planned label → plan"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf '{"labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "no PR + non-planned label → plan" "plan" "$result"
 teardown
 
 # 2. Draft + failing CI → verify
@@ -799,13 +821,14 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42-my-feature")
 assert_eq "branch arg exact match → qa" "qa" "$result"
 teardown
 
-# 12. Issue prefix disambiguation: issue 6 should not match branch "60-foo"
+# 12. Issue prefix disambiguation: issue 6 should not match branch "60-foo".
+# With no PR matched for issue 6 and no dispatch:planned label, the phase is plan.
 echo "Test: issue 6 does not match branch 60-foo"
 setup
 printf '[%s]\n' "$(make_pr 10 "60-foo" "true" "$NO_LABELS" "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "6")
-assert_eq "issue 6 does not match branch 60-foo" "implement" "$result"
+assert_eq "issue 6 does not match branch 60-foo → plan" "plan" "$result"
 teardown
 
 # 13. DISPATCH_PR_LIST is used in place of a self-issued gh pr list.
@@ -1065,14 +1088,30 @@ route_run() {
   ROUTE_OUT=$("$TMPDIR_TEST/dispatch-route" "$@" 2>/dev/null) && ROUTE_RC=0 || ROUTE_RC=$?
 }
 
-# 1. No PR → RELEVANCE-REVIEW (implement phase).
-echo "Test: no PR → RELEVANCE-REVIEW"
+# 1. No PR, unplanned → RELEVANCE-REVIEW (plan phase). dispatch-phase fetches the
+# issue's labels (no issue-labels-42.json → no dispatch:planned → plan), and the
+# plan arm with no statements config falls through to RELEVANCE-REVIEW.
+echo "Test: no PR, unplanned → RELEVANCE-REVIEW"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 route_run 42 /wt/42-my-feature
-assert_eq "no PR → RELEVANCE-REVIEW (directive)" "RELEVANCE-REVIEW" "$ROUTE_OUT"
-assert_eq "no PR → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
+assert_eq "no PR, unplanned → RELEVANCE-REVIEW (directive)" "RELEVANCE-REVIEW" "$ROUTE_OUT"
+assert_eq "no PR, unplanned → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 1b. No PR + dispatch:planned → INVOKE /implement (implement phase). dispatch-phase
+# reads dispatch:planned → implement, and the implement arm routes straight to the
+# build skill with no relevance review and no parse-job check.
+echo "Test: no PR + dispatch:planned → INVOKE /implement"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR + dispatch:planned → INVOKE /implement (directive)" \
+  "INVOKE /implement" "$ROUTE_OUT"
+assert_eq "no PR + dispatch:planned → INVOKE /implement (exit 0)" "0" "$ROUTE_RC"
 teardown
 
 # 2. Draft + failing CI → INVOKE /verify-pr.
@@ -1314,7 +1353,7 @@ assert_eq "wrong-worktree → provisioning not invoked" "0" \
 teardown
 
 # 21. No-PR issue whose label is in the statements config → INVOKE /budget-parse-job
-# (#1024). The implement arm fetches the issue's labels (gh issue view --json labels,
+# (#1024). The plan arm fetches the issue's labels (gh issue view --json labels,
 # served from issue-labels-<num>.json) and the configured statements labels (from
 # dispatch-config-load against DISPATCH_CONFIG_DIR), and on a non-empty intersection
 # routes to the parse-job handler instead of RELEVANCE-REVIEW.
@@ -2896,6 +2935,44 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "green draft PR selected by PR queue as qa" "pr 10 55-feature qa" "$result"
 teardown
 
+# --- within-bucket phase ladder: implement outranks plan (#1202) ------------
+# Unit 1's ladder reorder splits the help-wanted issue tier by phase: within one
+# (category, priority) bucket a planned issue (carrying dispatch:planned, the
+# implement-phase discriminator) ranks ABOVE an unplanned issue (plan phase).
+#
+# Two help-wanted issues share the same (category="other", priority=0) bucket and
+# neither has a PR or sub-issues, so each traces to itself as its own startable
+# leaf. The UNPLANNED issue 700 is OLDER than the PLANNED issue 800. Under the
+# pre-Unit-1 ladder the single bucket was keyed only by (category, priority) with
+# oldest-wins, so the older unplanned 700 would have won. With the phase split,
+# 800 (implement) outranks 700 (plan) regardless of createdAt — proving the
+# reorder, not oldest-wins.
+echo "Test: planned issue outranks unplanned issue in same bucket (#1202)"
+setup
+setup_union_pr_list '[]'
+# 700: older, help wanted, no dispatch:planned → plan phase.
+# 800: newer, help wanted, dispatch:planned → implement phase.
+printf '[{"number":700,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":800,"createdAt":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"dispatch:planned"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+# No worktrees — both issues are startable leaves.
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "planned issue 800 (implement) outranks older unplanned 700 (plan)" "issue 800" "$result"
+teardown
+
+# Guard the converse: with NO planned issue in the bucket, oldest-wins still
+# governs the plan tier — the older unplanned issue 700 wins. Confirms the phase
+# split did not disturb the within-phase oldest-wins ordering.
+echo "Test: with no planned issue, oldest unplanned issue still wins (#1202)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":700,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":800,"createdAt":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "no planned issue → oldest unplanned 700 wins" "issue 700" "$result"
+teardown
+
 # --- --priority-only mode (#1134) -------------------------------------------
 # --priority-only runs the main-broken health gate, then scans ONLY the
 # priority=1 tier. The JIT scan is suppressed. It is the at-cap bypass selector:
@@ -3458,8 +3535,8 @@ echo "=== office-hours-select-target ==="
 # Reuses the select-target gh/git/claude fakes (oh-issue-list.json seeds the
 # office-hours queue; pr-list-full.json drives dispatch-phase/dispatch-find-pr).
 
-# OHST1. Oldest labeled sessionless item wins; no PR → phase implement, pr `-`.
-echo "Test: oldest labeled item with no PR → implement, dash PR"
+# OHST1. Oldest labeled sessionless item wins; no PR, unplanned → phase plan, pr `-`.
+echo "Test: oldest labeled item with no PR → plan, dash PR"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
@@ -3467,7 +3544,7 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # orphan world: no live sessions
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "oldest labeled item selected (implement, no PR)" "office-hours 42 implement - -" "$result"
+assert_eq "oldest labeled item selected (plan, no PR)" "office-hours 42 plan - -" "$result"
 teardown
 
 # OHST2. A qa item — draft PR, CI green, no dispatch:* label → phase qa, PR num.
@@ -3553,7 +3630,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 # setup's default CLAUDE_AGENTS_CMD points at a non-existent binary (UNKNOWN).
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "UNKNOWN-liveness worktree item skipped; worktree-free item selected" "office-hours 99 implement - -" "$result"
+assert_eq "UNKNOWN-liveness worktree item skipped; worktree-free item selected" "office-hours 99 plan - -" "$result"
 teardown
 
 # Install a fake `claude` whose `agents --json` returns a controllable session
@@ -3623,7 +3700,7 @@ export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
 # sessionless) plus a parked dispatch-* router under main.
 parked_router_fake_claude "dispatch-abc123:waiting"
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "labeled item selected over parked router" "office-hours 42 implement - -" "$result"
+assert_eq "labeled item selected over parked router" "office-hours 42 plan - -" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
@@ -3666,7 +3743,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # orphan: no live sessions → sessionless, picked fresh
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "fresh disposition carries the worktree path" "office-hours 42 implement - /worktrees/42-x" "$result"
+assert_eq "fresh disposition carries the worktree path" "office-hours 42 plan - /worktrees/42-x" "$result"
 teardown
 
 # ============================================================================
@@ -3731,7 +3808,7 @@ assert_eq "fresh: --name" "--name" "${oh_argv[1]:-}"
 assert_eq "fresh: name is the worktree basename" "42-x" "${oh_argv[2]:-}"
 assert_eq "fresh: --permission-mode" "--permission-mode" "${oh_argv[3]:-}"
 assert_eq "fresh: permission mode is auto" "auto" "${oh_argv[4]:-}"
-assert_eq "fresh: prompt is /office-hours with args" "/office-hours 42 implement -" "${oh_argv[5]:-}"
+assert_eq "fresh: prompt is /office-hours with args" "/office-hours 42 plan -" "${oh_argv[5]:-}"
 # The --bg job was born in the worktree (cwd = worktree path).
 oh_pwd=$(head -1 "$TMPDIR_TEST/oh-pwd-log" 2>/dev/null || true)
 assert_eq "fresh: spawn cwd is the worktree" "$(realpath "$TMPDIR_TEST/worktrees/42-x")" "$(realpath "$oh_pwd" 2>/dev/null)"
@@ -4673,6 +4750,55 @@ if grep -q 'FBCA04' "$SCRIPT_DIR/dispatch-apply-office-hours"; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: dispatch-apply-office-hours owns FBCA04"
 fi
+
+# ============================================================================
+# dispatch-apply-planned tests
+# ============================================================================
+echo ""
+echo "=== dispatch-apply-planned ==="
+
+# Happy path: the label already exists in the repo (default stub mode), so the
+# script applies it to the ISSUE with a single `gh issue edit` and no create.
+echo "Test: label exists → apply dispatch:planned to issue, no label create"
+setup
+"$TMPDIR_TEST/dispatch-apply-planned" 55
+assert_eq "applies dispatch:planned to the issue" \
+  "issue edit 55 --add-label dispatch:planned" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+assert_eq "label exists: no gh label create" "absent" "$(log_state gh-label-create.log)"
+teardown
+
+# Create-on-first-use: the apply fails "not found" (the label does not exist in
+# the repo yet), so the script creates it with the canonical 0E8A16 color and
+# retries the edit.
+echo "Test: label not found → create (0E8A16) then retry"
+setup
+echo "label-missing" > "$STUB_DIR/issue-edit-mode"
+"$TMPDIR_TEST/dispatch-apply-planned" 55
+TOTAL=$((TOTAL + 1))
+if grep -q "^label create dispatch:planned --color 0E8A16 " "$STUB_DIR/gh-label-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: label created with 0E8A16 color"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: label created with 0E8A16 color"
+fi
+assert_eq "create-on-first-use: label applied on retry" \
+  "issue edit 55 --add-label dispatch:planned" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+teardown
+
+# Non-numeric, flag-like issue number → hard error (exit 1), no gh calls.
+echo "Test: non-numeric issue number → non-zero exit, no edit/label-create"
+setup
+if "$TMPDIR_TEST/dispatch-apply-planned" "--repo other/repo" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "non-numeric issue number exits non-zero" "1" "$rc"
+assert_eq "non-numeric: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "non-numeric: no label create" "absent" "$(log_state gh-label-create.log)"
+teardown
+
+# Missing arg → hard error (exit 1).
+echo "Test: missing issue number → non-zero exit"
+setup
+if "$TMPDIR_TEST/dispatch-apply-planned" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "missing issue number exits non-zero" "1" "$rc"
+teardown
 
 # ============================================================================
 # dispatch-resolve-worktree tests
@@ -7456,6 +7582,36 @@ else
 fi
 config_teardown
 
+# --- Test 2d: roadmap jit (7d/14d, skill: roadmap) validates -----------------
+
+echo "Test: roadmap jit (7d/14d, skill: roadmap) validates"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "roadmap",
+      "repo": "test-owner/test-repo",
+      "label": "jit:roadmap",
+      "title": "Roadmap review",
+      "body": "Recurring roadmap review.",
+      "project": "test-project",
+      "remindAfterClose": "7d",
+      "dueAfterClose": "14d",
+      "debounce": "1h",
+      "skill": "roadmap"
+    }
+  ]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>/dev/null); rc=$?
+assert_eq "roadmap jit exits 0" "0" "$rc"
+roadmap_skill=$(printf '%s' "$out" | jq -r '.jits[0].skill')
+assert_eq "roadmap jit skill value" "roadmap" "$roadmap_skill"
+roadmap_remind=$(printf '%s' "$out" | jq -r '.jits[0].remindAfterClose')
+assert_eq "roadmap jit remindAfterClose value" "7d" "$roadmap_remind"
+config_teardown
+
 # --- Test 3: absent file prints no-config and exits 0 ------------------------
 
 echo "Test: absent file prints no-config and exits 0"
@@ -9258,12 +9414,13 @@ if [[ "$log" == *"--unit=dispatch-reseed-20000"* \
    && "$log" == *"--on-calendar=@20000"* \
    && "$log" == *"--collect"* \
    && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + cwd + setenv + exec)"
+  PASS=$((PASS + 1)); echo "  PASS: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + KillMode + cwd + setenv + exec)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + cwd + setenv + exec)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly cap-hit systemd-run argv (unit + calendar + collect + OnFailure + KillMode + cwd + setenv + exec)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -9281,10 +9438,11 @@ assert_eq "5h cap-hit stdout names the 5h reset unit" \
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-15000"* \
-   && "$log" == *"--on-calendar=@15000"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: 5h cap-hit systemd-run argv (unit + calendar)"
+   && "$log" == *"--on-calendar=@15000"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 5h cap-hit systemd-run argv (unit + calendar + KillMode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: 5h cap-hit systemd-run argv (unit + calendar)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5h cap-hit systemd-run argv (unit + calendar + KillMode)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -9685,10 +9843,11 @@ assert_eq "pace pause schedules crossing" \
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-12345"* \
-   && "$log" == *"--on-calendar=@12345"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: pace pause systemd-run argv (unit + calendar)"
+   && "$log" == *"--on-calendar=@12345"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: pace pause systemd-run argv (unit + calendar + KillMode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: pace pause systemd-run argv (unit + calendar)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: pace pause systemd-run argv (unit + calendar + KillMode)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -9745,10 +9904,11 @@ assert_eq "past crossing → short-delay floor" \
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-10300"* \
-   && "$log" == *"--on-calendar=@10300"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: past crossing short-delay systemd-run argv (unit + calendar)"
+   && "$log" == *"--on-calendar=@10300"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: past crossing short-delay systemd-run argv (unit + calendar + KillMode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: past crossing short-delay systemd-run argv (unit + calendar)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: past crossing short-delay systemd-run argv (unit + calendar + KillMode)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -9777,10 +9937,11 @@ assert_eq "crossing==NOW → short-delay floor" \
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-10300"* \
-   && "$log" == *"--on-calendar=@10300"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: crossing==NOW short-delay systemd-run argv (unit + calendar)"
+   && "$log" == *"--on-calendar=@10300"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: crossing==NOW short-delay systemd-run argv (unit + calendar + KillMode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: crossing==NOW short-delay systemd-run argv (unit + calendar)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: crossing==NOW short-delay systemd-run argv (unit + calendar + KillMode)"
   echo "    log: $log"
 fi
 sr_teardown
@@ -10498,12 +10659,13 @@ TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-tick"* \
    && "$log" == *"--collect"* \
    && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: no-arg systemd-run argv (unit + collect + OnFailure + cwd + setenv + exec)"
+  PASS=$((PASS + 1)); echo "  PASS: no-arg systemd-run argv (unit + collect + OnFailure + KillMode + cwd + setenv + exec)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: no-arg systemd-run argv (unit + collect + OnFailure + cwd + setenv + exec)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-arg systemd-run argv (unit + collect + OnFailure + KillMode + cwd + setenv + exec)"
   echo "    log: $log"
 fi
 # No trailing numeric arg in the no-arg case: the exec path must be the LAST
@@ -10529,10 +10691,11 @@ log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-tick-979"* \
    && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick 979"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + exec path 979)"
+  PASS=$((PASS + 1)); echo "  PASS: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + KillMode + exec path 979)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + exec path 979)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: target systemd-run argv (unit=dispatch-tick-979 + OnFailure + KillMode + exec path 979)"
   echo "    log: $log"
 fi
 st_teardown
@@ -12302,6 +12465,51 @@ else
 fi
 jit_teardown
 
+# --- Test 2-roadmap: roadmap jit (7d/14d) cadence cold start -----------------
+
+echo "Test: dispatch-jit-engine roadmap jit cadence cold start creates an issue"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "roadmap",
+      "repo": "test-owner/test-repo",
+      "label": "jit:roadmap",
+      "title": "Roadmap review",
+      "body": "Recurring roadmap review.",
+      "project": "test-project",
+      "remindAfterClose": "7d",
+      "dueAfterClose": "14d",
+      "skill": "roadmap"
+    }
+  ]
+}
+EOF
+# open-issues.json and closed-issues.json absent — open/closed both "[]".
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
+assert_eq "roadmap cold start exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+# Cold start with remind=7d, due=14d, NOW=2026-01-01T00:00:00Z:
+# DUE = NOW + 14d - 7d = NOW + 7d = 2026-01-08T00:00:00Z.
+if [[ "$out" == *"roadmap: created #123 (due 2026-01-08T00:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap cold start reports created #123 (due 2026-01-08T00:00:00Z)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap cold start reports created #123 (due 2026-01-08T00:00:00Z)"
+  echo "    actual: $out"
+fi
+create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$create_log" == *"<!-- jit-due: 2026-01-08T00:00:00Z -->"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap cold start embedded jit-due marker in issue body"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap cold start embedded jit-due marker in issue body"
+  echo "    gh-issue-create.log: $create_log"
+fi
+jit_teardown
+
 # --- Test 3: cadence within window — skipped, no issue created ---------------
 
 echo "Test: dispatch-jit-engine cadence within remindAfterClose is skipped"
@@ -12388,6 +12596,54 @@ if [[ "$create_log" == *"<!-- jit-due: 2026-01-01T00:00:00Z -->"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: past-window embedded jit-due marker in issue body"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: past-window embedded jit-due marker in issue body"
+  echo "    gh-issue-create.log: $create_log"
+fi
+jit_teardown
+
+# --- Test 4-roadmap: roadmap jit (7d/14d) cadence steady state ---------------
+
+echo "Test: dispatch-jit-engine roadmap jit past remindAfterClose creates an issue"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "roadmap",
+      "repo": "test-owner/test-repo",
+      "label": "jit:roadmap",
+      "title": "Roadmap review",
+      "body": "Recurring roadmap review.",
+      "project": "test-project",
+      "remindAfterClose": "7d",
+      "dueAfterClose": "14d",
+      "skill": "roadmap"
+    }
+  ]
+}
+EOF
+# Newest closed issue closed 10d before "now" — past the 7d remind window.
+closed_at=$(date -u -d "@$((JIT_NOW_EPOCH - 10*86400))" +%Y-%m-%dT%H:%M:%SZ)
+printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
+  > "$STUB_DIR/closed-issues.json"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
+assert_eq "roadmap past-window exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+# closedAt = NOW − 10d = 2025-12-22T00:00:00Z, dueAfterClose = 14d →
+# DUE = closedAt + 14d = 2026-01-05T00:00:00Z.
+if [[ "$out" == *"roadmap: created #123 (due 2026-01-05T00:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap past-window reports created #123 (due 2026-01-05T00:00:00Z)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window reports created #123 (due 2026-01-05T00:00:00Z)"
+  echo "    actual: $out"
+fi
+create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$create_log" == *"<!-- jit-due: 2026-01-05T00:00:00Z -->"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap past-window embedded jit-due marker in issue body"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window embedded jit-due marker in issue body"
   echo "    gh-issue-create.log: $create_log"
 fi
 jit_teardown
@@ -14881,79 +15137,6 @@ unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID
 router_smoke_teardown
 
 # ============================================================================
-# dispatch-handoff tests (#824)
-# ============================================================================
-echo "=== dispatch-handoff ==="
-
-HANDOFF_SCRIPT="$SCRIPT_DIR/dispatch-handoff"
-
-# Minimal per-test harness for handoff: does not need the full setup/teardown
-# (no gh stub via PATH, no git stub). Uses env overrides to fake every external
-# call the script makes.
-
-# Helper — create a temp dir with fake command stubs.
-handoff_setup() {
-  HTMPDIR=$(mktemp -d)
-  HSELF_CLOSE_LOG="$HTMPDIR/self-close.log"
-  HSPAWN_LOG="$HTMPDIR/spawn.log"
-
-  # Default fake dispatch-self-close: records the call, exits 0.
-  cat > "$HTMPDIR/fake-self-close" <<'FAKE'
-#!/usr/bin/env bash
-echo "self-close called" >> "$HSELF_CLOSE_LOG"
-exit 0
-FAKE
-  # Inject HSELF_CLOSE_LOG into the fake via env at call time.
-  chmod +x "$HTMPDIR/fake-self-close"
-}
-
-handoff_teardown() {
-  rm -rf "$HTMPDIR"
-  unset HTMPDIR HSELF_CLOSE_LOG HSPAWN_LOG
-}
-
-# Run dispatch-handoff with fake commands injected via env.
-run_handoff() {
-  DISPATCH_HANDOFF_SELF_CLOSE_CMD="$HTMPDIR/fake-self-close" \
-  HSELF_CLOSE_LOG="$HSELF_CLOSE_LOG" \
-  HSPAWN_LOG="$HSPAWN_LOG" \
-    "$HANDOFF_SCRIPT" "$@"
-}
-
-# ----- 1. --early-stop: calls self-close, exits 0 ---------------------------
-echo "Test: dispatch-handoff --early-stop calls self-close and exits 0"
-handoff_setup
-# Wrap fake-self-close so that exec is simulated by just running and exiting.
-# dispatch-handoff uses `exec` for self-close; the fake does not exec, it exits.
-# The test just checks exit code and log presence.
-run_handoff --early-stop
-early_stop_exit=$?
-assert_eq "--early-stop exit code" "0" "$early_stop_exit"
-assert_eq "--early-stop self-close called" "self-close called" "$(cat "$HSELF_CLOSE_LOG" 2>/dev/null || echo '')"
-# spawn must NOT be called on early-stop.
-assert_eq "--early-stop no spawn" "" "$(cat "$HSPAWN_LOG" 2>/dev/null || echo '')"
-handoff_teardown
-
-# ----- 2. No arguments → exit 2 -----------------------------------------------
-echo "Test: dispatch-handoff with no arguments → exit 2"
-handoff_setup
-# Use if/else to capture exit code without triggering set -e.
-if run_handoff 2>/dev/null; then no_args_exit=0; else no_args_exit=$?; fi
-assert_eq "no arguments: exit 2" "2" "$no_args_exit"
-handoff_teardown
-
-# ----- 3. CLAUDE_JOB_DIR unset: self-close is a no-op (interactive session) --
-echo "Test: dispatch-handoff --early-stop with CLAUDE_JOB_DIR unset: self-close no-op, exits 0"
-handoff_setup
-# The real dispatch-self-close is a no-op when CLAUDE_JOB_DIR is unset.
-# Our fake always succeeds — same observable behavior. The test verifies that
-# dispatch-handoff does not error when CLAUDE_JOB_DIR is absent.
-(unset CLAUDE_JOB_DIR; run_handoff --early-stop)
-interactive_exit=$?
-assert_eq "--early-stop interactive: exits 0" "0" "$interactive_exit"
-handoff_teardown
-
-# ============================================================================
 # dispatch-finalize-selection tests (#896)
 # ============================================================================
 # Pin the cd-first contract introduced for #896. The wrapper takes one
@@ -15193,7 +15376,7 @@ restore_setup() {
     "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts" \
     "$TMPDIR_TEST/bin" \
     "$STUB_DIR"
-  for skill in plan-implement verify-pr qa-fix office-hours \
+  for skill in plan-issue implement verify-pr qa-fix office-hours \
                review-fix dispatch-worker \
                dispatch-resolve-conflict; do
     mkdir -p "$TMPDIR_TEST/.claude/skills/$skill"
@@ -15303,8 +15486,10 @@ set_agents_name() {
   printf '[{"sessionId":"sid-test","name":"%s"}]\n' "$1" > "$STUB_DIR/claude-agents.json"
 }
 
-# --- Test 1: implement → plan-implement body + ARGUMENTS: <N> -----------------
-echo "Test: restore-dispatch-skill phase=implement → plan-implement body + args"
+# --- Test 1: implement → implement body + ARGUMENTS: <N> ----------------------
+# Phase=implement routes to the /implement skill (the post-#1202 cutover: the
+# retired /plan-implement is split into /plan-issue (plan) and /implement).
+echo "Test: restore-dispatch-skill phase=implement → implement body + args"
 restore_setup
 set_agents_name "903-foo"
 echo "implement" > "$STUB_DIR/current-phase.txt"
@@ -15317,7 +15502,7 @@ else
   echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
-expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/plan-implement"
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/implement"
 if [[ "$output" == *"$expected_dir"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: implement: base directory line emitted"
 else
@@ -15325,7 +15510,7 @@ else
   echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"RESTORE_MARKER_plan-implement"* ]]; then
+if [[ "$output" == *"RESTORE_MARKER_implement"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: implement: SKILL.md body marker emitted"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: implement: SKILL.md body marker emitted"
@@ -15337,12 +15522,57 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: implement: ARGUMENTS line emitted"
   echo "    output: $output"
 fi
-# Frontmatter must be stripped — no `name: plan-implement` line should appear.
+# Frontmatter must be stripped — no `name: implement` line should appear.
 TOTAL=$((TOTAL + 1))
-if [[ "$output" != *"name: plan-implement"* ]]; then
+if [[ "$output" != *"name: implement"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: implement: frontmatter stripped"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: implement: frontmatter stripped"
+fi
+restore_teardown
+
+# --- Test 1b: plan → plan-issue body + ARGUMENTS: <N> -------------------------
+# Phase=plan (no PR, unplanned issue) routes to the /plan-issue skill — the front
+# half of the retired /plan-implement, mirroring Test 1's implement routing.
+echo "Test: restore-dispatch-skill phase=plan → plan-issue body + args"
+restore_setup
+set_agents_name "903-foo"
+echo "plan" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"COMPACTION RECOVERY — resume the active phase skill below."* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: plan: header line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: plan: header line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/plan-issue"
+if [[ "$output" == *"$expected_dir"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: plan: base directory line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: plan: base directory line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"RESTORE_MARKER_plan-issue"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: plan: SKILL.md body marker emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: plan: SKILL.md body marker emitted"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"ARGUMENTS: 903"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: plan: ARGUMENTS line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: plan: ARGUMENTS line emitted"
+  echo "    output: $output"
+fi
+# Frontmatter must be stripped — no `name: plan-issue` line should appear.
+TOTAL=$((TOTAL + 1))
+if [[ "$output" != *"name: plan-issue"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: plan: frontmatter stripped"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: plan: frontmatter stripped"
 fi
 restore_teardown
 
@@ -15450,7 +15680,7 @@ restore_teardown
 echo "Test: restore-dispatch-skill conflict-resolver sentinel → dispatch-resolve-conflict body + args"
 restore_setup
 set_agents_name "839-foo"
-echo "implement" > "$STUB_DIR/current-phase.txt"   # would route to plan-implement absent the sentinel
+echo "implement" > "$STUB_DIR/current-phase.txt"   # would route to /implement absent the sentinel
 mkdir -p "$TMPDIR_TEST/jobdir"
 printf 'issue=839\nworktree=%s/worktrees/839-foo\n' "$TMPDIR_TEST" > "$TMPDIR_TEST/jobdir/conflict-resolver"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobdir"
@@ -15542,15 +15772,69 @@ else
 fi
 restore_teardown
 
+# --- Test 7b: name-lookup path wins over a divergent branch (#875) -----------
+# Proves the worktree basename derives from the session .name (the
+# `claude agents --json` primary path), NOT from `git rev-parse --abbrev-ref
+# HEAD`. The two sources are made to DIVERGE: .name=875-from-name,
+# branch=999-from-branch. phase=ERROR routes to the dispatch-worker fallback,
+# which emits the worktree path on the ARGUMENTS line.
+echo "Test: restore-dispatch-skill name-lookup wins over divergent branch"
+restore_setup
+set_agents_name "875-from-name"
+echo "999-from-branch" > "$STUB_DIR/current-branch.txt"
+echo "ERROR" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+expected_args="ARGUMENTS: 875 $TMPDIR_TEST/worktrees/875-from-name"
+if [[ "$output" == *"$expected_args"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: name-lookup: ARGUMENTS path derived from .name"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: name-lookup: ARGUMENTS path derived from .name"
+  echo "    output: $output"
+  echo "    expected to contain: $expected_args"
+fi
+# Negative: the divergent branch name must NOT appear anywhere in the output —
+# proves git rev-parse was not the basename source.
+TOTAL=$((TOTAL + 1))
+if [[ "$output" != *"999-from-branch"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: name-lookup: divergent branch name absent from output"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: name-lookup: divergent branch name absent from output"
+  echo "    output: $output"
+fi
+restore_teardown
+
+# --- Test 7c: empty registry → branch-name fallback (#875) -------------------
+# With no claude-agents.json fixture the `claude` stub returns `[]`, so .name is
+# empty and the hook falls through to `git rev-parse --abbrev-ref HEAD`. The
+# branch (999-from-branch) then supplies the basename. Same phase=ERROR routing
+# emits the worktree path on the ARGUMENTS line.
+echo "Test: restore-dispatch-skill empty registry → branch-name fallback"
+restore_setup
+# Deliberately do NOT call set_agents_name — the claude stub returns [].
+echo "999-from-branch" > "$STUB_DIR/current-branch.txt"
+echo "ERROR" > "$STUB_DIR/current-phase.txt"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+expected_args="ARGUMENTS: 999 $TMPDIR_TEST/worktrees/999-from-branch"
+if [[ "$output" == *"$expected_args"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: empty-registry fallback: ARGUMENTS path derived from branch"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: empty-registry fallback: ARGUMENTS path derived from branch"
+  echo "    output: $output"
+  echo "    expected to contain: $expected_args"
+fi
+restore_teardown
+
 # --- Test 8: missing SKILL.md → legacy one-line Reload fallback --------------
 echo "Test: restore-dispatch-skill missing SKILL.md → legacy fallback"
 restore_setup
 set_agents_name "903-foo"
 echo "implement" > "$STUB_DIR/current-phase.txt"
-rm -f "$TMPDIR_TEST/.claude/skills/plan-implement/SKILL.md"
+rm -f "$TMPDIR_TEST/.claude/skills/implement/SKILL.md"
 output=$(run_restore)
 TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"COMPACTION RECOVERY: Reload skill: /plan-implement 903"* ]]; then
+if [[ "$output" == *"COMPACTION RECOVERY: Reload skill: /implement 903"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: missing SKILL.md: legacy line emitted"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: missing SKILL.md: legacy line emitted"
@@ -15561,6 +15845,28 @@ if [[ "$output" != *"Base directory for this skill:"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: missing SKILL.md: no inline emission"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: missing SKILL.md: no inline emission"
+fi
+restore_teardown
+
+# --- Test 8b: missing SKILL.md (plan phase) → legacy one-line Reload fallback -
+echo "Test: restore-dispatch-skill missing SKILL.md (plan phase) → legacy fallback"
+restore_setup
+set_agents_name "903-foo"
+echo "plan" > "$STUB_DIR/current-phase.txt"
+rm -f "$TMPDIR_TEST/.claude/skills/plan-issue/SKILL.md"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"COMPACTION RECOVERY: Reload skill: /plan-issue 903"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing SKILL.md (plan): legacy line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing SKILL.md (plan): legacy line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" != *"Base directory for this skill:"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing SKILL.md (plan): no inline emission"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing SKILL.md (plan): no inline emission"
 fi
 restore_teardown
 
@@ -15593,12 +15899,12 @@ echo "Test: restore-dispatch-skill malformed frontmatter → file emitted verbat
 restore_setup
 set_agents_name "903-foo"
 echo "implement" > "$STUB_DIR/current-phase.txt"
-cat > "$TMPDIR_TEST/.claude/skills/plan-implement/SKILL.md" <<'EOF'
+cat > "$TMPDIR_TEST/.claude/skills/implement/SKILL.md" <<'EOF'
 ---
-name: plan-implement
+name: implement
 description: malformed fixture with no closing delimiter
 
-# Test Skill plan-implement
+# Test Skill implement
 
 RESTORE_MARKER_malformed body line.
 EOF
@@ -15613,7 +15919,7 @@ fi
 # Verbatim emission keeps the unstrippable frontmatter lines (incl. the `name:`
 # line that the normal path would have removed), proving the guard's else branch.
 TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"name: plan-implement"* ]]; then
+if [[ "$output" == *"name: implement"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: malformed frontmatter: file emitted verbatim (frontmatter retained)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: malformed frontmatter: file emitted verbatim (frontmatter retained)"
@@ -15663,7 +15969,8 @@ declare -A CHAIN_GUARD_EXPECTED=(
   # This supersedes #824's terminal ExitWorktree action:"keep" pattern.
   [".claude/skills/qa-fix/SKILL.md"]=0
   [".claude/skills/office-hours/SKILL.md"]=0
-  [".claude/skills/plan-implement/SKILL.md"]=0
+  [".claude/skills/plan-issue/SKILL.md"]=0
+  [".claude/skills/implement/SKILL.md"]=0
   [".claude/skills/review-fix/SKILL.md"]=0
   [".claude/skills/verify-pr/SKILL.md"]=0
   [".claude/skills/implement-unit/SKILL.md"]=0
@@ -16733,6 +17040,14 @@ FAKE
   cat > "$PROV_TMPDIR/bin/direnv" <<FAKE
 #!/usr/bin/env bash
 echo "\$*" >> "$PROV_DIRENV_LOG"
+if [[ "\$1" == "allow" ]]; then
+  [[ "\${DIRENV_ALLOW_RC:-0}" -ne 0 ]] && echo "fake-direnv-allow-stderr" >&2
+  exit "\${DIRENV_ALLOW_RC:-0}"
+fi
+if [[ "\$1" == "exec" ]]; then
+  [[ "\${DIRENV_EXEC_RC:-0}" -ne 0 ]] && echo "fake-direnv-exec-stderr" >&2
+  exit "\${DIRENV_EXEC_RC:-0}"
+fi
 exit 0
 FAKE
   chmod +x "$PROV_TMPDIR/bin/direnv"
@@ -16744,7 +17059,7 @@ FAKE
 prov_teardown() {
   export PATH="$SAVED_PATH"
   rm -rf "$PROV_TMPDIR"
-  unset PROV_TMPDIR PROV_SCRIPT PROV_DIRENV_LOG PROV_MERGE_LOG PROV_MERGE_RC
+  unset PROV_TMPDIR PROV_SCRIPT PROV_DIRENV_LOG PROV_MERGE_LOG PROV_MERGE_RC DIRENV_ALLOW_RC DIRENV_EXEC_RC
 }
 
 # direnv argv capture + worktree forwarded to dispatch-merge-main (happy run).
@@ -16795,6 +17110,30 @@ echo "Test: extra arg → exit 2"
 prov_setup
 "$PROV_SCRIPT" "/wt/a" extra >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq "extra arg → exit 2" "2" "$rc"
+prov_teardown
+
+# direnv warm-up failures surface and abort before merge (#855). A non-zero
+# `direnv exec`/`direnv allow` must make the script exit 1 with a diagnostic
+# naming the worktree, and must NOT proceed to exec dispatch-merge-main.
+echo "Test: direnv exec failure → exit 1, abort before merge"
+prov_setup
+WT="/home/n8/natb1/commons.systems/worktrees/77-example"
+out=$(DIRENV_EXEC_RC=1 "$PROV_SCRIPT" "$WT" 2>&1) && rc=0 || rc=$?
+assert_eq "direnv exec failure → exit 1" "1" "$rc"
+assert_eq "diagnostic names the worktree" "1" "$([[ "$out" == *"$WT"* ]] && echo 1 || echo 0)"
+assert_eq "diagnostic includes direnv stderr" "1" "$([[ "$out" == *"fake-direnv-exec-stderr"* ]] && echo 1 || echo 0)"
+assert_eq "merge-main not reached on exec failure" "0" "$([[ -s "$PROV_MERGE_LOG" ]] && echo 1 || echo 0)"
+prov_teardown
+
+echo "Test: direnv allow failure → exit 1, abort before exec and before merge"
+prov_setup
+WT="/home/n8/natb1/commons.systems/worktrees/77-example"
+out=$(DIRENV_ALLOW_RC=1 "$PROV_SCRIPT" "$WT" 2>&1) && rc=0 || rc=$?
+assert_eq "direnv allow failure → exit 1" "1" "$rc"
+assert_eq "diagnostic names the worktree" "1" "$([[ "$out" == *"$WT"* ]] && echo 1 || echo 0)"
+assert_eq "diagnostic includes direnv stderr" "1" "$([[ "$out" == *"fake-direnv-allow-stderr"* ]] && echo 1 || echo 0)"
+assert_eq "direnv log holds only the allow line" "allow $WT" "$(cat "$PROV_DIRENV_LOG")"
+assert_eq "merge-main not reached on allow failure" "0" "$([[ -s "$PROV_MERGE_LOG" ]] && echo 1 || echo 0)"
 prov_teardown
 
 # ============================================================================
@@ -19999,6 +20338,24 @@ assert_eq "mark-complete: writes exact phase-completed contents" \
   "$(printf 'phase=implement\npr=42\n')" "$(cat "$mc_dir/phase-completed")"
 rm -rf "$mc_dir"
 
+# ----- mark-complete: --phase plan accepted, writes exact marker -----
+mc_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mc_dir" "$MARK_COMPLETE" --phase plan --pr 42; then mc_ec=0; else mc_ec=$?; fi
+assert_eq "mark-complete: --phase plan accepted (exit 0)" "0" "$mc_ec"
+assert_eq "mark-complete: plan writes exact phase-completed contents" \
+  "$(printf 'phase=plan\npr=42\n')" "$(cat "$mc_dir/phase-completed")"
+rm -rf "$mc_dir"
+
+# ----- mark-complete: --phase plan with NO --pr → exit 0, pr-less marker -----
+# The plan phase completes on a no-PR issue, so --pr is optional for plan and the
+# marker carries only the phase= line (dispatch-stop.sh greps only ^phase=).
+mc_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mc_dir" "$MARK_COMPLETE" --phase plan; then mc_ec=0; else mc_ec=$?; fi
+assert_eq "mark-complete: --phase plan no --pr (exit 0)" "0" "$mc_ec"
+assert_eq "mark-complete: plan no --pr writes pr-less marker" \
+  "$(printf 'phase=plan\n')" "$(cat "$mc_dir/phase-completed")"
+rm -rf "$mc_dir"
+
 # ----- mark-complete: unknown phase → exit 2, no file -----
 mc_dir=$(mktemp -d)
 if CLAUDE_JOB_DIR="$mc_dir" "$MARK_COMPLETE" --phase bogus --pr 7 2>/dev/null; then mc_ec=0; else mc_ec=$?; fi
@@ -20492,6 +20849,619 @@ else
 fi
 unset DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH DISPATCH_TARGET_WORKERS_NOW
 rr_teardown
+
+echo ""
+echo "=== dispatch-sample-usage / usage-sample-writer ==="
+
+# Writer side of #1007 (epic #1005's Capacity view). Two scripts under test:
+#   usage-sample-writer.mjs — firebase-admin writer; run here ONLY in --dry-run,
+#     so firebase-admin is NEVER imported and no network/credentials are touched.
+#     The DISPATCH_USAGE_SAMPLES_NOW seam pins sampledAt/expireAt for determinism.
+#   dispatch-sample-usage — the local sampler. Its rate-limits path, busy-worker
+#     count (CLAUDE_AGENTS_CMD), target-workers binary, and writer binary are all
+#     replaced by seams/fakes, so the sampler tests never hit a real daemon or
+#     firebase-admin either: a FAKE writer captures the assembled payload.
+
+su_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/fix"
+  # Copy everything the two scripts source/exec so default SCRIPT_DIR resolution
+  # works; the sampler tests still override the writer + target via seams.
+  cp "$SCRIPT_DIR/usage-sample-writer.mjs" "$TMPDIR_TEST/scripts/"
+  cp "$SCRIPT_DIR/dispatch-sample-usage" "$TMPDIR_TEST/scripts/"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/"
+  cp "$SCRIPT_DIR/dispatch-target-workers" "$TMPDIR_TEST/scripts/"
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/"
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/"
+  chmod +x "$TMPDIR_TEST/scripts/usage-sample-writer.mjs" \
+           "$TMPDIR_TEST/scripts/dispatch-sample-usage" \
+           "$TMPDIR_TEST/scripts/dispatch-target-workers" \
+           "$TMPDIR_TEST/scripts/dispatch-config-load"
+}
+su_teardown() {
+  rm -rf "$TMPDIR_TEST"; TMPDIR_TEST=""
+  unset DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS DISPATCH_USAGE_SAMPLES_GROUP_ID \
+    DISPATCH_USAGE_SAMPLES_NAMESPACE DISPATCH_USAGE_SAMPLES_TTL_DAYS \
+    DISPATCH_USAGE_SAMPLES_PROJECT_ID DISPATCH_USAGE_SAMPLES_NOW \
+    DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD \
+    DISPATCH_USAGE_SAMPLES_WRITER CLAUDE_AGENTS_CMD
+}
+
+# Fixed epoch for writer determinism: sampledAt=1780600000, TTL 60d →
+# expireAt=1780600000 + 60*86400 = 1785784000.
+SU_NOW=1780600000
+SU_EXPIRE=1785784000   # SU_NOW + 60*86400
+
+WRITER() { printf '%s' "$1" | "$TMPDIR_TEST/scripts/usage-sample-writer.mjs" --dry-run; }
+
+# Write a fake `claude` that prints a fixed JSON blob for any args (the lib calls
+# `claude agents --json` with and without --cwd). $1=dest $2=json-literal.
+su_write_fake_claude() {
+  printf '#!/usr/bin/env bash\nprintf %%s %s\n' "'$2'" > "$1"
+  chmod +x "$1"
+}
+
+# --- WRITER (--dry-run) cases ----------------------------------------------
+
+# W1 — full valid payload + valid config (default namespace + TTL) → exit 0;
+# all 9 schema fields + expireAt present; spot-checked values match input/config;
+# sampledAt/expireAt epochs match NOW and NOW+TTL*86400.
+su_setup
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com,c@d.com"
+export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
+export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
+W1_PAYLOAD='{"fiveHourUsedPct":4,"weeklyUsedPct":84,"fiveHourResetsAt":1780867800,"weeklyResetsAt":1780880400,"activeWorkers":1,"targetWorkers":3}'
+if out=$(WRITER "$W1_PAYLOAD" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "writer W1 valid → exit 0" "0" "$rc"
+assert_eq "writer W1 → has all schema fields + expireAt" "1" \
+  "$(jq -e 'has("sampledAt") and has("fiveHourUsedPct") and has("weeklyUsedPct") and has("fiveHourResetsAt") and has("weeklyResetsAt") and has("activeWorkers") and has("targetWorkers") and has("groupId") and has("memberEmails") and has("expireAt")' <<<"$out" >/dev/null 2>&1 && echo 1 || echo 0)"
+assert_eq "writer W1 → fiveHourUsedPct" "4" "$(jq -r '.fiveHourUsedPct' <<<"$out")"
+assert_eq "writer W1 → weeklyUsedPct" "84" "$(jq -r '.weeklyUsedPct' <<<"$out")"
+assert_eq "writer W1 → activeWorkers" "1" "$(jq -r '.activeWorkers' <<<"$out")"
+assert_eq "writer W1 → targetWorkers" "3" "$(jq -r '.targetWorkers' <<<"$out")"
+assert_eq "writer W1 → groupId" "grp-1" "$(jq -r '.groupId' <<<"$out")"
+assert_eq "writer W1 → memberEmails" '["a@b.com","c@d.com"]' "$(jq -c '.memberEmails' <<<"$out")"
+assert_eq "writer W1 → sampledAt epoch == NOW" "$SU_NOW" \
+  "$(date -u -d "$(jq -r '.sampledAt' <<<"$out")" +%s)"
+assert_eq "writer W1 → expireAt epoch == NOW + TTL*86400" "$SU_EXPIRE" \
+  "$(date -u -d "$(jq -r '.expireAt' <<<"$out")" +%s)"
+su_teardown
+
+# W2 — null resets pass through as JSON null; exit 0, no crash.
+su_setup
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
+export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
+W2_PAYLOAD='{"fiveHourUsedPct":4,"weeklyUsedPct":84,"fiveHourResetsAt":null,"weeklyResetsAt":null,"activeWorkers":0,"targetWorkers":2}'
+if out=$(WRITER "$W2_PAYLOAD" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "writer W2 null resets → exit 0" "0" "$rc"
+assert_eq "writer W2 → fiveHourResetsAt null" "null" "$(jq -r '.fiveHourResetsAt' <<<"$out")"
+assert_eq "writer W2 → weeklyResetsAt null" "null" "$(jq -r '.weeklyResetsAt' <<<"$out")"
+su_teardown
+
+# W3 — empty member emails → non-zero exit (fail-closed).
+su_setup
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS=""
+export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
+export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
+if out=$(WRITER "$W1_PAYLOAD" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "writer W3 empty member emails → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+su_teardown
+
+# W4 — bad namespace (not office-hours/<env>) → non-zero exit.
+su_setup
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
+export DISPATCH_USAGE_SAMPLES_NAMESPACE="evil/prod"
+export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
+if out=$(WRITER "$W1_PAYLOAD" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "writer W4 bad namespace → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+su_teardown
+
+# W5 — TTL out of [30,90] → non-zero exit (above and below range).
+su_setup
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
+export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
+export DISPATCH_USAGE_SAMPLES_TTL_DAYS="100"
+if out=$(WRITER "$W1_PAYLOAD" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "writer W5 TTL above range → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+export DISPATCH_USAGE_SAMPLES_TTL_DAYS="10"
+if out=$(WRITER "$W1_PAYLOAD" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "writer W5 TTL below range → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+su_teardown
+
+# W5b — non-integer TTL string → non-zero exit.
+su_setup
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
+export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
+export DISPATCH_USAGE_SAMPLES_TTL_DAYS="abc"
+if out=$(WRITER "$W1_PAYLOAD" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "writer W5b non-integer TTL → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+su_teardown
+
+# W6 — missing groupId → non-zero exit.
+su_setup
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
+if out=$(WRITER "$W1_PAYLOAD" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "writer W6 missing groupId → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+su_teardown
+
+# --- SAMPLER cases (fakes only; no real daemon / firebase) ------------------
+
+# S1 — opt-in OFF: member emails unset → exit 0 (no-op); writer NOT invoked.
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+CAPTURE="$TMPDIR_TEST/fix/payload.json"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$CAPTURE'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+# member emails deliberately unset
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S1 opt-in off → exit 0" "0" "$rc"
+assert_eq "sampler S1 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
+su_teardown
+
+# S2 — happy path: fixture rate_limits.json + one busy worker + target 3 →
+# exit 0; the captured payload exactly matches the expected assembled object.
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+CAPTURE="$TMPDIR_TEST/fix/payload.json"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$CAPTURE'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+printf '%s\n' '{"five_hour":{"used_percentage":4,"resets_at":1780867800},"seven_day":{"used_percentage":84,"resets_at":1780880400}}' \
+  > "$TMPDIR_TEST/fix/rate_limits.json"
+su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
+  '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
+printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
+chmod +x "$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
+export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S2 happy path → exit 0" "0" "$rc"
+assert_eq "sampler S2 → writer invoked" "1" "$([[ -e "$INVOKED" ]] && echo 1 || echo 0)"
+got=$(jq -S . "$CAPTURE")
+want=$(printf '%s' '{"fiveHourUsedPct":4,"weeklyUsedPct":84,"fiveHourResetsAt":1780867800,"weeklyResetsAt":1780880400,"activeWorkers":1,"targetWorkers":3}' | jq -S .)
+assert_eq "sampler S2 → captured payload canonical" "$want" "$got"
+su_teardown
+
+# S3 — missing telemetry: rate_limits.json path does not exist → non-zero exit;
+# writer NOT invoked.
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+CAPTURE="$TMPDIR_TEST/fix/payload.json"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$CAPTURE'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
+  '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
+printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
+chmod +x "$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/does-not-exist.json"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
+export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S3 missing telemetry → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "sampler S3 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
+su_teardown
+
+# S4 — worker count UNKNOWN: fake claude prints a non-array ({}) so
+# claude_agents_count_busy_workers returns 1 → non-zero exit; writer NOT invoked.
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+CAPTURE="$TMPDIR_TEST/fix/payload.json"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$CAPTURE'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+printf '%s\n' '{"five_hour":{"used_percentage":4,"resets_at":1780867800},"seven_day":{"used_percentage":84,"resets_at":1780880400}}' \
+  > "$TMPDIR_TEST/fix/rate_limits.json"
+su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" '{}'
+printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
+chmod +x "$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
+export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S4 worker count unknown → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "sampler S4 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
+su_teardown
+
+# S5 — target-workers exits non-zero → non-zero exit; writer NOT invoked.
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+CAPTURE="$TMPDIR_TEST/fix/payload.json"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$CAPTURE'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+printf '%s\n' '{"five_hour":{"used_percentage":4,"resets_at":1780867800},"seven_day":{"used_percentage":84,"resets_at":1780880400}}' \
+  > "$TMPDIR_TEST/fix/rate_limits.json"
+su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
+  '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
+printf '#!/usr/bin/env bash\nexit 1\n' > "$TMPDIR_TEST/fix/fake-target"
+chmod +x "$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
+export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S5 target-workers failure → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "sampler S5 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
+su_teardown
+
+# S6 — target-workers prints non-integer → non-zero exit; writer NOT invoked.
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+CAPTURE="$TMPDIR_TEST/fix/payload.json"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$CAPTURE'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+printf '%s\n' '{"five_hour":{"used_percentage":4,"resets_at":1780867800},"seven_day":{"used_percentage":84,"resets_at":1780880400}}' \
+  > "$TMPDIR_TEST/fix/rate_limits.json"
+su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
+  '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
+printf '#!/usr/bin/env bash\necho not-a-number\n' > "$TMPDIR_TEST/fix/fake-target"
+chmod +x "$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
+export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S6 target-workers non-integer → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "sampler S6 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
+su_teardown
+
+# S7 — invalid JSON in rate_limits.json → non-zero exit; writer NOT invoked.
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+CAPTURE="$TMPDIR_TEST/fix/payload.json"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$CAPTURE'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+printf '%s\n' 'not valid json {{' > "$TMPDIR_TEST/fix/rate_limits.json"
+su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
+  '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
+printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
+chmod +x "$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
+export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S7 invalid JSON → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "sampler S7 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
+su_teardown
+
+# S8 — missing used_percentage in rate_limits.json → non-zero exit; writer NOT invoked.
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+CAPTURE="$TMPDIR_TEST/fix/payload.json"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$CAPTURE'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+printf '%s\n' '{"five_hour":{},"seven_day":{}}' > "$TMPDIR_TEST/fix/rate_limits.json"
+su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
+  '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
+printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
+chmod +x "$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
+export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S8 missing used_percentage → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "sampler S8 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
+su_teardown
+
+# S9 — writer returns non-zero → non-zero exit (fail-closed; no doc written).
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+printf '#!/usr/bin/env bash\n: > %s\nexit 1\n' "'$INVOKED'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+printf '%s\n' '{"five_hour":{"used_percentage":4,"resets_at":1780867800},"seven_day":{"used_percentage":84,"resets_at":1780880400}}' \
+  > "$TMPDIR_TEST/fix/rate_limits.json"
+su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
+  '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
+printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
+chmod +x "$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
+export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S9 writer failure → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+su_teardown
+
+# ============================================================================
+# ensure_recover_unit: WorkingDirectory= is unquoted and absolute (#1203)
+# ============================================================================
+echo ""
+echo "=== ensure_recover_unit WorkingDirectory= quoting ==="
+# Regression: systemd's WorkingDirectory= does not unescape quotes; a quoted
+# value makes the path non-absolute and the unit loads as bad-setting, so the
+# OnFailure= recovery never fires. Assert the emitted line is bare + absolute.
+eru_tmp=$(mktemp -d)
+mkdir -p "$eru_tmp/bin"
+mkdir -p "$eru_tmp/main-worktree"
+cat > "$eru_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$eru_tmp/bin/systemctl"
+if (
+  export DISPATCH_RECOVER_UNIT_DIR="$eru_tmp/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$eru_tmp/bin/systemctl"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_recover_unit "$eru_tmp/main-worktree"
+); then
+  eru_unit="$eru_tmp/systemd-user/dispatch-tick-recover.service"
+  if eru_wd_line=$(grep '^WorkingDirectory=' "$eru_unit" 2>/dev/null); then
+    assert_eq "WorkingDirectory= is the bare absolute path (no quotes)" \
+      "WorkingDirectory=$eru_tmp/main-worktree" "$eru_wd_line"
+    # Guard the specific defect: no leading double-quote after the '='.
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eru_wd_line" != 'WorkingDirectory="'* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: WorkingDirectory= value is not double-quoted"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: WorkingDirectory= value is double-quoted: $eru_wd_line"
+    fi
+  else
+    TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
+    echo "  FAIL: unit file missing or lacks WorkingDirectory= line: $eru_unit"
+  fi
+else
+  TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
+  echo "  FAIL: ensure_recover_unit returned non-zero"
+fi
+rm -rf "$eru_tmp"
+
+# ============================================================================
+# dispatch-write-plan / dispatch-read-plan tests
+# ============================================================================
+echo ""
+echo "=== dispatch-write-plan / dispatch-read-plan ==="
+
+# These two scripts exercise a stateful gh comment store, so this block builds
+# its own fake `gh` (a generic `gh api` emulator over a JSON file) rather than
+# reusing the shared fixture stub. The fake honors: GET .../issues/<N>/comments
+# (returns the store array), GET .../issues/comments/<id> (returns one comment),
+# POST .../issues/<N>/comments (append), PATCH .../issues/comments/<id> (replace
+# body). It pipes the response through the REAL `jq` when --jq is given.
+wp_root=$(mktemp -d)
+mkdir -p "$wp_root/bin"
+WP_STORE="$wp_root/store.json"
+WP_COUNTER="$wp_root/counter"
+echo '[]' > "$WP_STORE"
+echo '0' > "$WP_COUNTER"
+cat > "$wp_root/bin/gh" <<WPGH
+#!/usr/bin/env bash
+# Generic gh api emulator over a JSON comment store. Only the surface the two
+# plan scripts use is implemented.
+set -uo pipefail
+STORE="$WP_STORE"
+COUNTER="$WP_COUNTER"
+WPGH
+cat >> "$wp_root/bin/gh" <<'WPGH'
+method="GET"
+endpoint=""
+jqfilter=""
+bodyfile=""
+# First arg is the gh subcommand group; we only support "api".
+if [[ "${1:-}" != "api" ]]; then
+  echo "fake-gh: unsupported subcommand: ${1:-}" >&2; exit 1
+fi
+shift
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --method) method="$2"; shift 2 ;;
+    --paginate) shift ;;
+    --jq) jqfilter="$2"; shift 2 ;;
+    --field)
+      # Expect body=@<file>
+      val="$2"; shift 2
+      case "$val" in
+        body=@*) bodyfile="${val#body=@}" ;;
+        *) ;; # ignore other fields
+      esac
+      ;;
+    -f) # alternate field form, ignore unless body=@
+      val="$2"; shift 2
+      case "$val" in
+        body=@*) bodyfile="${val#body=@}" ;;
+        *) ;;
+      esac
+      ;;
+    -*) shift ;;            # ignore unknown flags
+    *)
+      if [[ -z "$endpoint" ]]; then endpoint="$1"; fi
+      shift
+      ;;
+  esac
+done
+
+emit() {
+  # $1 = JSON response. Pipe through real jq if a filter was given.
+  if [[ -n "$jqfilter" ]]; then
+    printf '%s' "$1" | jq -r "$jqfilter"
+  else
+    printf '%s' "$1"
+  fi
+}
+
+# Strip a trailing/leading nothing; match endpoint shapes.
+if [[ "$method" == "GET" && "$endpoint" == *"/comments" && "$endpoint" != *"/issues/comments/"* ]]; then
+  # GET .../issues/<N>/comments  → the whole store array
+  emit "$(cat "$STORE")"
+  exit 0
+fi
+if [[ "$method" == "GET" && "$endpoint" == *"/issues/comments/"* ]]; then
+  cid="${endpoint##*/issues/comments/}"
+  obj=$(jq -c --argjson id "$cid" '.[] | select(.id == $id)' "$STORE")
+  if [[ -z "$obj" ]]; then
+    echo "fake-gh: comment $cid not found" >&2; exit 1
+  fi
+  emit "$obj"
+  exit 0
+fi
+if [[ "$method" == "POST" && "$endpoint" == *"/comments" ]]; then
+  next=$(( $(cat "$COUNTER") + 1 ))
+  echo "$next" > "$COUNTER"
+  newbody=$(cat "$bodyfile")
+  updated=$(jq -c --argjson id "$next" --arg body "$newbody" '. + [{id:$id, body:$body}]' "$STORE")
+  echo "$updated" > "$STORE"
+  emit "$(jq -c --argjson id "$next" '.[] | select(.id == $id)' "$STORE")"
+  exit 0
+fi
+if [[ "$method" == "PATCH" && "$endpoint" == *"/issues/comments/"* ]]; then
+  cid="${endpoint##*/issues/comments/}"
+  newbody=$(cat "$bodyfile")
+  updated=$(jq -c --argjson id "$cid" --arg body "$newbody" 'map(if .id == $id then .body = $body else . end)' "$STORE")
+  echo "$updated" > "$STORE"
+  emit "$(jq -c --argjson id "$cid" '.[] | select(.id == $id)' "$STORE")"
+  exit 0
+fi
+echo "fake-gh: unhandled $method $endpoint" >&2
+exit 1
+WPGH
+chmod +x "$wp_root/bin/gh"
+
+WP_WRITE="$SCRIPT_DIR/dispatch-write-plan"
+WP_READ="$SCRIPT_DIR/dispatch-read-plan"
+
+# 1. write-creates: empty store → one comment containing the marker + PLAN A.
+if ! PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"PLAN A"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan (test 1) failed unexpectedly"
+fi
+assert_eq "write-plan: store has exactly one comment after first write" \
+  "1" "$(jq 'length' "$WP_STORE")"
+TOTAL=$((TOTAL + 1))
+if jq -e '.[0].body | contains("<!-- dispatch:plan -->") and contains("PLAN A")' "$WP_STORE" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: first comment carries the marker and PLAN A"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: first comment carries the marker and PLAN A"
+fi
+
+# 2. round-trip read returns the full (multi-line) body untruncated.
+if ! PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"$(printf 'PLAN A\nline two\nline three')"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan (test 2) failed unexpectedly"
+fi
+read_out=""
+read_out=$(PATH="$wp_root/bin:$SAVED_PATH" "$WP_READ" 7) || { FAIL=$((FAIL + 1)); echo "  FAIL: read-plan (test 2) exited non-zero unexpectedly"; }
+TOTAL=$((TOTAL + 1))
+if [[ "$read_out" == *"<!-- dispatch:plan -->"* && "$read_out" == *"line three"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan returns the full multi-line body with marker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan returns the full multi-line body with marker"
+  echo "    actual: '$read_out'"
+fi
+
+# 3. write-updates-in-place: still exactly one comment; read now returns PLAN B.
+if ! PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"PLAN B"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan (test 3) failed unexpectedly"
+fi
+assert_eq "write-plan: still exactly one comment after update" \
+  "1" "$(jq 'length' "$WP_STORE")"
+read_out=""
+read_out=$(PATH="$wp_root/bin:$SAVED_PATH" "$WP_READ" 7) || { FAIL=$((FAIL + 1)); echo "  FAIL: read-plan (test 3) exited non-zero unexpectedly"; }
+TOTAL=$((TOTAL + 1))
+if [[ "$read_out" == *"PLAN B"* && "$read_out" != *"PLAN A"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan returns updated PLAN B, not PLAN A"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan returns updated PLAN B, not PLAN A"
+  echo "    actual: '$read_out'"
+fi
+
+# 4. read-missing-errors: fresh empty store, unknown issue → exit 1 + diagnostic.
+wp_empty=$(mktemp -d); mkdir -p "$wp_empty/bin"
+# Reuse the same fake gh but point it at a fresh empty store.
+sed "s|$WP_STORE|$wp_empty/store.json|; s|$WP_COUNTER|$wp_empty/counter|" \
+  "$wp_root/bin/gh" > "$wp_empty/bin/gh"
+chmod +x "$wp_empty/bin/gh"
+echo '[]' > "$wp_empty/store.json"; echo '0' > "$wp_empty/counter"
+if read_err=$(PATH="$wp_empty/bin:$SAVED_PATH" "$WP_READ" 99 2>&1 1>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "read-plan: missing comment exits non-zero" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$read_err" == *"dispatch:plan"* || "$read_err" == *"no "*"comment"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan emits a clear missing-comment diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan emits a clear missing-comment diagnostic"
+  echo "    actual: '$read_err'"
+fi
+rm -rf "$wp_empty"
+
+# 5. bare+worktree repo resolution: from a worktree whose dirname(common_dir) is
+# NOT a git repo (the real bare-repo + worktrees layout), with GH_REPO unset, both
+# scripts must still resolve the repo for gh. This would FAIL against the pre-fix
+# `cd "$(dirname "$common_dir")"` version, which lands in the non-repo container and
+# leaves gh's {owner}/{repo} unresolvable (and GH_REPO unset). The fake gh below
+# requires GH_REPO and never reads cwd, so it stands in for that failure.
+bw_root=$(mktemp -d)
+git init --bare "$bw_root/.bare" >/dev/null 2>&1
+git --git-dir="$bw_root/.bare" config user.email "t@t" 2>/dev/null
+git --git-dir="$bw_root/.bare" config user.name "t" 2>/dev/null
+git --git-dir="$bw_root/.bare" remote add origin https://github.com/natb1/commons.systems.git
+# Seed one commit on the bare repo so `worktree add` works, then add the worktree.
+bw_seed=$(mktemp -d)
+git -C "$bw_seed" init -q
+git -C "$bw_seed" config user.email "t@t"; git -C "$bw_seed" config user.name "t"
+git -C "$bw_seed" commit -q --allow-empty -m seed
+git -C "$bw_seed" remote add bare "$bw_root/.bare"
+git -C "$bw_seed" push -q bare HEAD:refs/heads/main
+mkdir -p "$bw_root/worktrees"
+git --git-dir="$bw_root/.bare" worktree add -q "$bw_root/worktrees/42-foo" main 2>/dev/null
+rm -rf "$bw_seed"
+
+# Fake gh that requires GH_REPO (never reads cwd) over a fresh JSON store.
+mkdir -p "$bw_root/bin"
+BW_STORE="$bw_root/store.json"; BW_COUNTER="$bw_root/counter"
+echo '[]' > "$BW_STORE"; echo '0' > "$BW_COUNTER"
+cat > "$bw_root/bin/gh" <<BWGH
+#!/usr/bin/env bash
+set -uo pipefail
+if [[ -z "\${GH_REPO:-}" ]]; then
+  echo "fatal: not a git repository (GH_REPO unset, no cwd repo)" >&2; exit 1
+fi
+STORE="$BW_STORE"; COUNTER="$BW_COUNTER"
+BWGH
+# Reuse the same emulator body as the main fake gh (everything from method="GET" onward).
+sed -n '/^method="GET"/,$p' "$wp_root/bin/gh" >> "$bw_root/bin/gh"
+chmod +x "$bw_root/bin/gh"
+bash -n "$bw_root/bin/gh" || { FAIL=$((FAIL + 1)); echo "  FAIL: bare+worktree fake gh is not valid bash"; }
+
+# write from the worktree, GH_REPO unset
+if ( cd "$bw_root/worktrees/42-foo" && printf 'PLAN Z\n' | PATH="$bw_root/bin:$SAVED_PATH" env -u GH_REPO "$WP_WRITE" 42 ); then
+  bw_write_rc=0; else bw_write_rc=$?; fi
+assert_eq "write-plan: resolves repo in bare+worktree layout with GH_REPO unset (exit 0)" "0" "$bw_write_rc"
+
+bw_read_out=$( cd "$bw_root/worktrees/42-foo" && PATH="$bw_root/bin:$SAVED_PATH" env -u GH_REPO "$WP_READ" 42 ) && bw_read_rc=0 || bw_read_rc=$?
+assert_eq "read-plan: resolves repo in bare+worktree layout with GH_REPO unset (exit 0)" "0" "$bw_read_rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$bw_read_out" == *"PLAN Z"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan round-trips the plan in the bare+worktree layout"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan round-trips the plan in the bare+worktree layout"
+  echo "    actual: '$bw_read_out'"
+fi
+git --git-dir="$bw_root/.bare" worktree prune 2>/dev/null || true
+rm -rf "$bw_root"
+
+rm -rf "$wp_root"
 
 # ============================================================================
 # summary

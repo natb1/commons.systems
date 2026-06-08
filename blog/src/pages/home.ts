@@ -23,7 +23,7 @@ export function renderArticle(p: PostMeta, postLinkPrefix: string, content?: Pos
     : ` <span class="draft-badge">[draft]</span>`;
   const linkHtml =
     `<a href="${postLinkPrefix}${safeId}" class="post-link">` +
-    `<span class="link-icon" aria-hidden="true">&#x1F517; </span><span class="post-title">${escapeHtml(displayTitle)}</span></a>`;
+    `<span class="post-title">${escapeHtml(displayTitle)}</span></a>`;
   const contentHtml = content
     ? `<div id="post-content-${safeId}" data-hydrated>${content.html}</div>`
     : `<div id="post-content-${safeId}"><p>Loading...</p></div>`;

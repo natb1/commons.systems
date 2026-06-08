@@ -80,6 +80,7 @@ const updateInfoPanel = (): void => {
 }
 
 navEl.links = NAV_LINKS;
+navEl.showHomeLink = false;
 navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => void signOut());
 
