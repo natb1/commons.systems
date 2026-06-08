@@ -119,9 +119,11 @@ describe("local source — before binding", () => {
     expect(await getLocalItem("local:anything.pdf")).toBeNull();
   });
 
-  it("resolveLocalBlob() returns null with no source", async () => {
+  it("resolveLocalBlob() throws with no source bound", async () => {
     const item = { id: "local:x.pdf" } as unknown as MediaItem;
-    expect(await resolveLocalBlob(item)).toBeNull();
+    // Callers guard with isLocalId before reaching here, so an unbound source
+    // is a misconfiguration — surface it as a clear error, not a silent null.
+    await expect(resolveLocalBlob(item)).rejects.toThrow(/No local source bound/);
   });
 });
 

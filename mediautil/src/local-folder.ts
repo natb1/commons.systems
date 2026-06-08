@@ -93,12 +93,11 @@ export function createLocalFolderMediaSource<T extends { id: string; addedAt: st
       if (!handle) {
         throw new Error("Local file no longer present");
       }
-      try {
-        const file = await handle.getFile();
-        return file.arrayBuffer();
-      } catch {
-        throw new Error("Local file no longer present");
-      }
+      // A cached handle whose getFile() fails is a real error (permission
+      // revoked, IO failure) — propagate it rather than masking it as
+      // "no longer present", which is reserved for a genuinely absent entry.
+      const file = await handle.getFile();
+      return file.arrayBuffer();
     },
   };
 }

@@ -153,8 +153,13 @@ describe("local-folder view path", () => {
     afterRenderView(outlet, null);
 
     const resolveSource = vi.mocked(initViewer).mock.calls[0][2];
-    await expect(resolveSource()).rejects.toThrow(/no longer present/);
+    // The closure fully handles the failure (reportError + #view-error UI) and
+    // returns a never-settling promise so initViewer does not re-enter its own
+    // catch for the same error — so assert the side effects, not a rejection.
+    resolveSource();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(outlet.innerHTML).toContain('id="view-error"');
+    expect(globalThis.reportError).toHaveBeenCalledTimes(1);
   });
 });
 
