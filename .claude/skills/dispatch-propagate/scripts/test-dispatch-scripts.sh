@@ -2479,6 +2479,88 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "dispatch-closing PR beats budget-closing PR" "pr 10 10-dispatch-pr verify" "$result"
 teardown
 
+# 30j1. A PR closing a `dispatch` issue outranks a PR closing a `landing` issue,
+#       even when the landing PR is older — `dispatch` ranks above `landing` in
+#       the topic ladder (category beats age).
+echo "Test: PR closing a dispatch issue beats PR closing a landing issue"
+setup
+# PR 20 (older) closes landing issue 200; PR 10 (newer) closes dispatch issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-landing-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-dispatch-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"landing"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "dispatch-closing PR beats landing-closing PR" "pr 10 10-dispatch-pr verify" "$result"
+teardown
+
+# 30j2. A PR closing a `landing` issue outranks a PR closing a `fellspiral` issue,
+#       even when the landing PR is newer — `landing` ranks above `fellspiral` in
+#       the topic ladder (category beats age).
+echo "Test: PR closing a landing issue beats PR closing a fellspiral issue"
+setup
+# PR 20 (older) closes fellspiral issue 200; PR 10 (newer) closes landing issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-fellspiral-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-landing-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"landing"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"fellspiral"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "landing-closing PR beats fellspiral-closing PR" "pr 10 10-landing-pr verify" "$result"
+teardown
+
+# 30j3. A PR closing a `fellspiral` issue outranks a PR closing a `budget` issue,
+#       even when the fellspiral PR is newer — `fellspiral` ranks above `budget` in
+#       the topic ladder (category beats age).
+echo "Test: PR closing a fellspiral issue beats PR closing a budget issue"
+setup
+# PR 20 (older) closes budget issue 200; PR 10 (newer) closes fellspiral issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-budget-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-fellspiral-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"fellspiral"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"budget"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "fellspiral-closing PR beats budget-closing PR" "pr 10 10-fellspiral-pr verify" "$result"
+teardown
+
+# 30j4. A help-wanted `landing` issue outranks a help-wanted issue with no topic
+#       label, even when the landing issue is newer — `landing` ranks above the
+#       `other` fallback (category beats age).
+echo "Test: landing issue beats issue with no topic label"
+setup
+setup_union_pr_list '[]'
+# Issue 400 (older) has no topic label (resolves to `other`); issue 300 (newer) is landing.
+printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"landing"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "landing issue beats untopiced (other) issue" "issue 300" "$result"
+teardown
+
+# 30j5. A help-wanted `fellspiral` issue outranks a help-wanted issue with no topic
+#       label, even when the fellspiral issue is newer — `fellspiral` ranks above
+#       the `other` fallback (category beats age).
+echo "Test: fellspiral issue beats issue with no topic label"
+setup
+setup_union_pr_list '[]'
+# Issue 400 (older) has no topic label (resolves to `other`); issue 300 (newer) is fellspiral.
+printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"fellspiral"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "fellspiral issue beats untopiced (other) issue" "issue 300" "$result"
+teardown
+
 # 30k. A help-wanted `budget` issue outranks a help-wanted issue with no topic
 #      label, even when the budget issue is newer — `budget` ranks above the
 #      `other` fallback.
