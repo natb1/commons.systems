@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # dispatch-self-close — delete this background job.
 #
-# Invoked by the dispatch-stop Stop hook on a clean phase advance, by
-# dispatch-handoff (the scripted terminal-disposition entrypoint for
-# /dispatch-propagate phase completions and early-stop paths), and by
+# Invoked by the dispatch-stop Stop hook on a clean phase advance, and by
 # /dispatch-propagate's router on its terminal-disposition paths (drain
 # concurrency-cap, propagate-success). `claude rm <id>` wants the *job-id*
 # — the 8-hex-char basename of $CLAUDE_JOB_DIR — not the conversation
@@ -37,7 +35,7 @@
 #     - workers (name `^[0-9]+-`): the worker Stop-hook self-close always calls
 #       `spawn_router` first, so it already leaves a continuation.
 #     - empty/missing name, or absent state.json: legacy / non-router callers
-#       (dispatch-handoff, the interactive gate, plain managed jobs) keep their
+#       (the interactive gate, plain managed jobs) keep their
 #       existing unconditional behavior, which also keeps existing tests green.
 #
 # Behavior:

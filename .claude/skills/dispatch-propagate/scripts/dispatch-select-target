@@ -490,6 +490,16 @@ ISSUE_LIST=$(gh issue list --state open --limit 300 --json number,createdAt,labe
 ISSUE_LABELS_JSON=$(printf '%s' "$ISSUE_LIST" \
   | jq -c 'reduce .[] as $i ({}; .[$i.number | tostring] = ($i.labels // []))')
 
+# Planned-issue lookup: number → 1 for every open issue carrying
+# dispatch:planned (the implement-phase discriminator, per dispatch-phase).
+# Reuses the already-fetched ISSUE_LIST — no extra gh call. A leaf absent from
+# this map defaults to the plan phase (the lower issue-ladder tier).
+declare -A ISSUE_PLANNED
+while IFS= read -r planned_num; do
+  [[ -n "$planned_num" ]] && ISSUE_PLANNED["$planned_num"]=1
+done < <(printf '%s' "$ISSUE_LIST" | jq -r '
+  .[] | select((.labels // []) | any(.name == "dispatch:planned")) | .number')
+
 # Prefetch open-blocker state for every closing issue across all open PRs in a
 # single batched GraphQL call, replacing the former per-PR/per-closing-issue REST
 # round-trip (#794). GitHub exposes blockedBy on the Issue type as an
@@ -593,12 +603,17 @@ has_priority_in_labels() {
 # are pre-sorted oldest-first, so the first PR captured for a key is the oldest
 # in that bucket.
 declare -A FIRST_PR
-# First-seen help-wanted issue per (category, priority-bit): key =
-# "<category>|<priority-bit>", value = "<num>".
+# First-seen help-wanted issue per (category, priority-bit, phase): key =
+# "<category>|<priority-bit>|<phase>" where phase ∈ {implement, plan},
+# value = "<num>". Splitting the bucket by phase lets a planned issue
+# (implement) be selected ahead of an unplanned one (plan) in the same bucket.
 declare -A FIRST_ISSUE
 
 # Within-category phase ladder, highest priority first.
 PHASE_PRIORITY=(review verify)
+# Within-category issue ladder, highest priority first: a planned issue
+# (implement phase) advances ahead of an unplanned issue (plan phase).
+ISSUE_PHASE_PRIORITY=(implement plan)
 
 while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "$pr_num" ]] && continue
@@ -740,8 +755,12 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   # --priority-only scans only the priority=1 tier — skip non-priority issues
   # before the expensive dispatch-trace-leaf descent.
   [[ "$PRIORITY_ONLY" == "true" && "$issue_pri" != "1" ]] && continue
-  issue_bucket="$issue_cat|$issue_pri"
-  [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]] && continue
+  # Coarse pre-trace skip: only when BOTH phase sub-buckets are already filled
+  # is the expensive leaf trace pointless. If either implement or plan slot is
+  # still open, descend — the leaf's phase isn't known until after the trace.
+  impl_bucket="$issue_cat|$issue_pri|implement"
+  plan_bucket="$issue_cat|$issue_pri|plan"
+  [[ -n "${FIRST_ISSUE[$impl_bucket]:-}" && -n "${FIRST_ISSUE[$plan_bucket]:-}" ]] && continue
   # Resolve a startable open leaf within the issue's subtree. dispatch-trace-leaf
   # in queue mode descends open blockers and sub-issues, skipping any child whose
   # <N>-* worktree is owned by a live session (#914) — an orphan child worktree
@@ -770,7 +789,14 @@ while IFS=$'\t' read -r issue_num issue_labels; do
     if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$leaf" >/dev/null; then
       continue
     fi
-    FIRST_ISSUE[$issue_bucket]="$leaf"
+    # Phase-key the leaf (NOT the help-wanted root — the traced leaf may differ
+    # from issue_num). dispatch:planned → implement, else plan, mirroring
+    # dispatch-phase. Oldest-wins per phase-bucket: keep the first winner.
+    leaf_phase=plan
+    [[ -n "${ISSUE_PLANNED[$leaf]:-}" ]] && leaf_phase=implement
+    leaf_bucket="$issue_cat|$issue_pri|$leaf_phase"
+    [[ -n "${FIRST_ISSUE[$leaf_bucket]:-}" ]] && continue
+    FIRST_ISSUE[$leaf_bucket]="$leaf"
   else
     trace_status=$?
     [[ "$trace_status" -eq 2 ]] && continue
@@ -807,11 +833,13 @@ for pri in 1 0; do
       exit 0
     fi
 
-    issue_bucket="$category|$pri"
-    if [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]]; then
-      echo "issue ${FIRST_ISSUE[$issue_bucket]}"
-      exit 0
-    fi
+    for iphase in "${ISSUE_PHASE_PRIORITY[@]}"; do
+      issue_key="$category|$pri|$iphase"
+      if [[ -n "${FIRST_ISSUE[$issue_key]:-}" ]]; then
+        echo "issue ${FIRST_ISSUE[$issue_key]}"
+        exit 0
+      fi
+    done
   done
 done
 
