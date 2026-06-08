@@ -11949,7 +11949,7 @@ else
 fi
 spawn_worker_teardown
 
-# --- Test 6: default (fix-checks) path absorbs delayed registration --------------
+# --- Test 6: default (verify) path absorbs delayed registration --------------
 # The unledgered one-off spawns (main-broken / jit-reminder) keep the default
 # verify, so the delayed-registration retry coverage lives here on the DEFAULT
 # path (no --no-verify), ported from the former worker Tests 9 & 10.
