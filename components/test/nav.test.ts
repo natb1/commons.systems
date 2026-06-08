@@ -180,8 +180,10 @@ describe("AppNavElement", () => {
     const nav = createNav();
     nav.links = [{ href: "#/", label: "Home" }];
     const linksContainer = nav.querySelector(".nav-links");
+    const homeContainer = nav.querySelector(".nav-home");
     const authContainer = nav.querySelector(".nav-auth");
     expect(linksContainer?.tagName).toBe("SPAN");
+    expect(homeContainer?.tagName).toBe("SPAN");
     expect(authContainer?.tagName).toBe("SPAN");
   });
 });

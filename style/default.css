@@ -91,8 +91,7 @@ app-nav .nav-home:empty {
 app-nav > .nav-links + .nav-home:not(:empty) {
   margin-left: auto;
 }
-app-nav > .nav-links + .nav-home:empty + .nav-auth,
-app-nav > .nav-links + .nav-auth {
+app-nav > .nav-links + .nav-home:empty + .nav-auth {
   margin-left: auto;
 }
 
