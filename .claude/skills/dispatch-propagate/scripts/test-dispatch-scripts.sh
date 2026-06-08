@@ -1100,19 +1100,18 @@ assert_eq "no PR, unplanned → RELEVANCE-REVIEW (directive)" "RELEVANCE-REVIEW"
 assert_eq "no PR, unplanned → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
 teardown
 
-# 1b. No PR + dispatch:planned → INVOKE /plan-implement (implement phase). The
-# transitional build bridge: dispatch-phase reads dispatch:planned → implement,
-# and the implement arm routes straight to the build skill with no relevance
-# review and no parse-job check. #1201 swaps this directive to INVOKE /implement.
-echo "Test: no PR + dispatch:planned → INVOKE /plan-implement"
+# 1b. No PR + dispatch:planned → INVOKE /implement (implement phase). dispatch-phase
+# reads dispatch:planned → implement, and the implement arm routes straight to the
+# build skill with no relevance review and no parse-job check.
+echo "Test: no PR + dispatch:planned → INVOKE /implement"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 printf '{"labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/issue-labels-42.json"
 route_run 42 /wt/42-my-feature
-assert_eq "no PR + dispatch:planned → INVOKE /plan-implement (directive)" \
-  "INVOKE /plan-implement" "$ROUTE_OUT"
-assert_eq "no PR + dispatch:planned → INVOKE /plan-implement (exit 0)" "0" "$ROUTE_RC"
+assert_eq "no PR + dispatch:planned → INVOKE /implement (directive)" \
+  "INVOKE /implement" "$ROUTE_OUT"
+assert_eq "no PR + dispatch:planned → INVOKE /implement (exit 0)" "0" "$ROUTE_RC"
 teardown
 
 # 2. Draft + failing CI → INVOKE /verify-pr.
