@@ -20,7 +20,7 @@
 # Exit-code contract — identical to dispatch-merge-main, because step 3 `exec`s
 # into it (this script's exit code IS dispatch-merge-main's):
 #   0 — clean merge or already-up-to-date.
-#   1 — fetch failure, or a non-conflict merge failure.
+#   1 — fetch failure, a non-conflict merge failure, or a direnv warm-up failure.
 #   2 — usage error (missing/extra/flag-shaped arg). dispatch-merge-main also
 #       exits 2 for an un-cd-able path.
 #   3 — merge conflict; the merge has been aborted and the tree is left clean.
@@ -35,10 +35,11 @@
 # — and `direnv`/npm write the dependency cache. This mirrors dispatch-select-tick's
 # merge precedent. Callers must run it with `dangerouslyDisableSandbox: true`.
 #
-# The `|| true` swallow on both direnv steps is a behavior-preserving relocation
-# of the router's current create-path behavior (`direnv allow … || true` /
-# `direnv exec … true || true`). Surfacing direnv failures is #855's charter,
-# not this PR's; the two changes coordinate on this same create path.
+# Both direnv steps surface failures: each captures its combined output and exit
+# code, and on non-zero prints a diagnostic to stderr naming the worktree and the
+# direnv output, then exits 1. A failed warm-up leaves the cache unwarmed, so the
+# script aborts rather than proceeding to the merge with node/npm/npx unavailable
+# in the worker (#855).
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -58,10 +59,33 @@ fi
 
 WT="$1"
 
-# Provision the worktree's environment. The `|| true` swallow is preserved from
-# the router's prior create-path behavior — direnv-failure surfacing is #855.
-direnv allow "$WT" || true
-direnv exec "$WT" true || true
+# Provision the worktree's environment. A direnv failure leaves the worktree's
+# cache unwarmed (node/npm/npx would be "command not found" in the worker), so
+# surface it and exit 1 (the non-conflict-failure code dispatch-route maps to
+# STOP provision-failed) rather than swallowing it and proceeding (#855).
+allow_rc=0
+allow_err=$(direnv allow "$WT" 2>&1) || allow_rc=$?
+if [[ "$allow_rc" -ne 0 ]]; then
+  {
+    echo "dispatch-provision-worktree: 'direnv allow $WT' failed (exit $allow_rc)."
+    echo "The worktree's direnv cache is unwarmed; node/npm/npx would be 'command not found' in the worker."
+    echo "direnv output:"
+    printf '%s\n' "$allow_err"
+  } >&2
+  exit 1
+fi
+
+exec_rc=0
+exec_err=$(direnv exec "$WT" true 2>&1) || exec_rc=$?
+if [[ "$exec_rc" -ne 0 ]]; then
+  {
+    echo "dispatch-provision-worktree: 'direnv exec $WT true' failed (exit $exec_rc)."
+    echo "The worktree's direnv cache is unwarmed; node/npm/npx would be 'command not found' in the worker."
+    echo "direnv output:"
+    printf '%s\n' "$exec_err"
+  } >&2
+  exit 1
+fi
 
 # Merge origin/main into the worktree's branch. `exec` so this script's exit
 # code IS dispatch-merge-main's (0 clean / 1 fetch-or-other / 3 conflict).
