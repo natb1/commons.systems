@@ -34,9 +34,11 @@ export function createLocalFolderMediaSource<T extends { id: string; addedAt: st
   config: LocalFolderMediaSourceConfig<T>,
 ): MediaSource<T> {
   const index = new Map<string, LocalFileHandleLike>();
+  const items = new Map<string, T>();
 
   async function scan(): Promise<T[]> {
     index.clear();
+    items.clear();
     const results: T[] = [];
 
     for await (const entry of config.directory.values()) {
@@ -56,6 +58,7 @@ export function createLocalFolderMediaSource<T extends { id: string; addedAt: st
 
       results.push(item);
       index.set(item.id, fileHandle);
+      items.set(item.id, item);
     }
 
     results.sort((a, b) => {
@@ -73,8 +76,12 @@ export function createLocalFolderMediaSource<T extends { id: string; addedAt: st
     },
 
     async metadata(id) {
-      const items = await scan();
-      return items.find((i) => i.id === id) ?? null;
+      let item = items.get(id);
+      if (!item) {
+        await scan();
+        item = items.get(id);
+      }
+      return item ?? null;
     },
 
     async resolveToBlob(item) {
@@ -84,10 +91,14 @@ export function createLocalFolderMediaSource<T extends { id: string; addedAt: st
         handle = index.get(item.id);
       }
       if (!handle) {
-        throw new Error("Local file no longer present: " + item.id);
+        throw new Error("Local file no longer present");
       }
-      const file = await handle.getFile();
-      return file.arrayBuffer();
+      try {
+        const file = await handle.getFile();
+        return file.arrayBuffer();
+      } catch {
+        throw new Error("Local file no longer present");
+      }
     },
   };
 }
