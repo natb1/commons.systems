@@ -1,20 +1,20 @@
 ---
-name: verify-pr
-description: Verify phase — single pass that reproduces and fixes one set of failed CI checks on a draft PR
+name: fix-checks
+description: Fix-checks phase — single pass that reproduces and fixes one set of failed CI checks on a draft PR
 ---
 
-# Verify PR
+# Fix Checks
 
-The `verify` phase of the issue workflow, dispatched by `/dispatch-propagate` only when a
+The `fix-checks` phase of the issue workflow, dispatched by `/dispatch-propagate` only when a
 draft PR has **completed-and-failed** CI. This skill is **single-pass — it has no
 internal loop**. It fixes one round of failed checks, records the outcome, posts it,
 and stops. The `/dispatch-propagate` background-job chain drives iteration: each subsequent
-failure is a fresh `/dispatch-propagate` → `/verify-pr` invocation.
+failure is a fresh `/dispatch-propagate` → `/fix-checks` invocation.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
 launch subagents and invoke `/implement-unit`.
 
-Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
+Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
 [Accumulator](#accumulator) below), not in conversation context.
 
 ## Steps
@@ -27,11 +27,11 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    ```
 
    The PR number resolved here is used in Steps 3, 4 (the Flake sub-path's
-   `gh pr view <pr-num>` body read), 5 (the verify-attempt label edit), and 8 —
+   `gh pr view <pr-num>` body read), 5 (the fix-checks-attempt label edit), and 8 —
    carry it forward.
 
-2. **Read the accumulator.** Read `tmp/verify-summary.md` if it exists — it holds the
-   prior iterations' records. On the first verify pass the file does not yet exist;
+2. **Read the accumulator.** Read `tmp/fix-checks-summary.md` if it exists — it holds the
+   prior iterations' records. On the first fix-checks pass the file does not yet exist;
    that is expected.
 
 3. **Read the failed checks.** Run (use `dangerouslyDisableSandbox: true`):
@@ -82,7 +82,7 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    - **Needs human / infra** — `needs_human == true`: the failure is real but cannot
      be fixed in code (a deploy/infra/permissions blocker — e.g. a GCP Secret Manager
      403 on a renamed secret). This outcome is **terminal here** and **never touches
-     the verify-attempt counter** — retrying verify is pointless, so a human must be
+     the fix-checks-attempt counter** — retrying fix-checks is pointless, so a human must be
      reached on the **first** run. Push nothing. Do these inline and stop:
 
      1. **Append the accumulator record** with outcome `needs-human` and a **Required
@@ -90,20 +90,20 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
      2. **Post the accumulator** — the same `post-pr-comment.sh` command as Step 8:
 
         ```bash
-        .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh <pr-num> tmp/verify-summary.md
+        .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh <pr-num> tmp/fix-checks-summary.md
         ```
 
      3. **Write `office-hours-reason`** via `dispatch-mark-deviation`:
 
         ```bash
         .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
-          "/verify-pr: <required_action>"
+          "/fix-checks: <required_action>"
         ```
 
-     4. **Do NOT write the `phase=verify` marker** (do not run Step 9).
+     4. **Do NOT write the `phase=fix-checks` marker** (do not run Step 9).
      5. **Stop.** With the marker absent and `office-hours-reason` present, the Stop
         hook (`.claude/hooks/dispatch-stop.sh`) takes **Branch A** and parks the issue
-        on `dispatch:office-hours` on the **first** verify run — no verify-attempt
+        on `dispatch:office-hours` on the **first** fix-checks run — no fix-checks-attempt
         cycling, no re-diagnosis. This is the same skip-marker + `office-hours-reason`
         pattern the other phase skills use for a known human-required outcome.
 
@@ -119,7 +119,7 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
      merge commit **alone** — no fix — so CI re-runs against the merged state.
      What gets pushed is the already-completed, deterministic merge of `main`,
      not a fix. Without this push the stale failed CI keeps routing
-     `/dispatch-propagate` back to the `verify` phase forever. The router's
+     `/dispatch-propagate` back to the `fix-checks` phase forever. The router's
      pre-spawn `dispatch-merge-main` always produces a clean merge — a conflict
      would have aborted the spawn — so the merge commit already exists locally;
      just push it (`git push` runs sandboxed — see `.claude/rules/sandbox.md`):
@@ -130,7 +130,7 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
 
    - **Flake** — `is_flake == true`: the failure is an upstream flaky test or a
      CI-infrastructure hiccup, unrelated to this PR's own changes. Re-running
-     `/verify-pr` would only re-reach this same outcome, so instead file the flake
+     `/fix-checks` would only re-reach this same outcome, so instead file the flake
      as its own tracking issue and block the PR's tracked issue on it. Push
      nothing — there is no fix to this PR. Follow these sub-steps:
 
@@ -171,7 +171,7 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
         same terminal behavior as the generic no-repro outcome. On the next
         `/dispatch-propagate` run the PR's tracked issue carries a `blocked_by` against the
         flake issue; `/dispatch-propagate`'s queue scan skips blocked issues, so the PR is
-        no longer re-routed to the `verify` phase. The flake issue stands on its
+        no longer re-routed to the `fix-checks` phase. The flake issue stands on its
         own in the queue for independent triage.
 
    Of the no-repro outcomes, **needs-human** is the only one that does its
@@ -179,23 +179,23 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    Step 5**. The other three (generic, main-fixed, flake) set their own push
    disposition here and then fall through to the shared tail Steps 7→9.
 
-5. **Increment the verify-attempt counter.** Read the PR's labels and find the highest
-   extant `dispatch:verify-attempt-<n>` label (`dangerouslyDisableSandbox: true` —
+5. **Increment the fix-checks-attempt counter.** Read the PR's labels and find the highest
+   extant `dispatch:fix-checks-attempt-<n>` label (`dangerouslyDisableSandbox: true` —
    `gh`):
 
    ```bash
    N=$(gh pr view "$PR_NUM" --json labels \
-     --jq '[.labels[].name | capture("^dispatch:verify-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0')
+     --jq '[.labels[].name | capture("^dispatch:fix-checks-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0')
    NEXT=$(( N < 3 ? N + 1 : 3 ))
    ```
 
    This step runs for the `fixed`, `main-fixed`, `flake`, and `generic` outcomes —
    the ones that consume the retry budget. The needs-human outcome already stopped in
-   Step 4 and never applies a verify-attempt label.
+   Step 4 and never applies a fix-checks-attempt label.
 
-   The cap at 3 means a fourth entry still leaves the label at `dispatch:verify-attempt-3`.
+   The cap at 3 means a fourth entry still leaves the label at `dispatch:fix-checks-attempt-3`.
    Step 4 of `/dispatch-worker` reads this counter: when the re-derived phase is still
-   `verify` and the counter is `>= 3`, it escalates to `dispatch:office-hours` instead
+   `fix-checks` and the counter is `>= 3`, it escalates to `dispatch:office-hours` instead
    of self-closing.
 
    Remove the prior label if one exists, then apply the new one. Use the apply-first /
@@ -205,14 +205,14 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    ```bash
    # Remove the previous counter label (skip if N=0 — none existed)
    if [[ "$N" -gt 0 ]]; then
-     gh pr edit "$PR_NUM" --remove-label "dispatch:verify-attempt-$N"
+     gh pr edit "$PR_NUM" --remove-label "dispatch:fix-checks-attempt-$N"
    fi
 
    # Apply the new label; create it if missing, then retry
-   if ! gh pr edit "$PR_NUM" --add-label "dispatch:verify-attempt-$NEXT" 2>/dev/null; then
-     gh label create "dispatch:verify-attempt-$NEXT" \
-       --description "dispatch workflow: verify-pr attempt $NEXT of 3"
-     gh pr edit "$PR_NUM" --add-label "dispatch:verify-attempt-$NEXT"
+   if ! gh pr edit "$PR_NUM" --add-label "dispatch:fix-checks-attempt-$NEXT" 2>/dev/null; then
+     gh label create "dispatch:fix-checks-attempt-$NEXT" \
+       --description "dispatch workflow: fix-checks attempt $NEXT of 3"
+     gh pr edit "$PR_NUM" --add-label "dispatch:fix-checks-attempt-$NEXT"
    fi
    ```
 
@@ -221,7 +221,7 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
 
    Note: `dispatch-complete-phase` is not the right vehicle for this label — it handles
    only the two canonical phase-complete labels (`dispatch:qa-done`, `dispatch:reviewed`).
-   The verify-attempt label is local to `/verify-pr`.
+   The fix-checks-attempt label is local to `/fix-checks`.
 
 6. **Apply the outcome's action.** If the failure reproduced, fix it by invoking
    `/implement-unit` via the Skill tool — pass `model` (chosen per
@@ -233,12 +233,12 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    commit — so there is nothing more to do here.
 
 7. **Append a record to the accumulator.** Append one `## Iteration <n>` section to
-   `tmp/verify-summary.md` (see [Accumulator](#accumulator)).
+   `tmp/fix-checks-summary.md` (see [Accumulator](#accumulator)).
 
 8. **Post the accumulator as a PR comment** (use `dangerouslyDisableSandbox: true`):
 
    ```bash
-   .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh <pr-num> tmp/verify-summary.md
+   .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh <pr-num> tmp/fix-checks-summary.md
    ```
 
 9. **Write the phase-completed marker, then stop.** Reached by every outcome
@@ -249,18 +249,18 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
 
    ```bash
    .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
-     --phase verify --pr "$PR_NUM"
+     --phase fix-checks --pr "$PR_NUM"
    ```
 
    Then **stop**. The `/dispatch-propagate` background-job chain drives the
    next iteration — the next `/dispatch-propagate` job re-derives the phase
-   from CI ground truth and re-invokes `/verify-pr` if checks still fail.
+   from CI ground truth and re-invokes `/fix-checks` if checks still fail.
 
 ## Accumulator
 
-`tmp/verify-summary.md` is the only cross-iteration memory for the verify phase.
+`tmp/fix-checks-summary.md` is the only cross-iteration memory for the fix-checks phase.
 
-- **First write** — create the file with a header (e.g. `# Verify summary — PR #<n>`).
+- **First write** — create the file with a header (e.g. `# Fix-checks summary — PR #<n>`).
 - **Every invocation** — append a `## Iteration <n>` section containing:
   - **Failed checks** — the check names CI reported failing.
   - **Outcome** — one of `fixed`, `generic-no-repro`, `main-fixed`, `flake`, or
