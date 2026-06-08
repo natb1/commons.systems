@@ -466,7 +466,7 @@ issue_worktree_claimed() {
 # (passed as DISPATCH_PR_LIST) instead of re-running gh pr list.
 # closingIssuesReferences drives topic-category resolution: a PR inherits the
 # highest-priority topic among the labels of every issue it closes.
-PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences)
+PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences,mergeable)
 # The office-hours skip is ISSUE-anchored (issue #909): dispatch:office-hours
 # lives on the issue, not the PR, so it is not filtered here on PR labels.
 # Instead the main PR loop below resolves each candidate PR's issue from its
