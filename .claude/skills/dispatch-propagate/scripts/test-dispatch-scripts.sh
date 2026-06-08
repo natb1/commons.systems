@@ -1100,19 +1100,18 @@ assert_eq "no PR, unplanned → RELEVANCE-REVIEW (directive)" "RELEVANCE-REVIEW"
 assert_eq "no PR, unplanned → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
 teardown
 
-# 1b. No PR + dispatch:planned → INVOKE /plan-implement (implement phase). The
-# transitional build bridge: dispatch-phase reads dispatch:planned → implement,
-# and the implement arm routes straight to the build skill with no relevance
-# review and no parse-job check. #1201 swaps this directive to INVOKE /implement.
-echo "Test: no PR + dispatch:planned → INVOKE /plan-implement"
+# 1b. No PR + dispatch:planned → INVOKE /implement (implement phase). dispatch-phase
+# reads dispatch:planned → implement, and the implement arm routes straight to the
+# build skill with no relevance review and no parse-job check.
+echo "Test: no PR + dispatch:planned → INVOKE /implement"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 printf '{"labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/issue-labels-42.json"
 route_run 42 /wt/42-my-feature
-assert_eq "no PR + dispatch:planned → INVOKE /plan-implement (directive)" \
-  "INVOKE /plan-implement" "$ROUTE_OUT"
-assert_eq "no PR + dispatch:planned → INVOKE /plan-implement (exit 0)" "0" "$ROUTE_RC"
+assert_eq "no PR + dispatch:planned → INVOKE /implement (directive)" \
+  "INVOKE /implement" "$ROUTE_OUT"
+assert_eq "no PR + dispatch:planned → INVOKE /implement (exit 0)" "0" "$ROUTE_RC"
 teardown
 
 # 2. Draft + failing CI → INVOKE /verify-pr.
@@ -21297,6 +21296,63 @@ else
   echo "    actual: '$read_err'"
 fi
 rm -rf "$wp_empty"
+
+# 5. bare+worktree repo resolution: from a worktree whose dirname(common_dir) is
+# NOT a git repo (the real bare-repo + worktrees layout), with GH_REPO unset, both
+# scripts must still resolve the repo for gh. This would FAIL against the pre-fix
+# `cd "$(dirname "$common_dir")"` version, which lands in the non-repo container and
+# leaves gh's {owner}/{repo} unresolvable (and GH_REPO unset). The fake gh below
+# requires GH_REPO and never reads cwd, so it stands in for that failure.
+bw_root=$(mktemp -d)
+git init --bare "$bw_root/.bare" >/dev/null 2>&1
+git --git-dir="$bw_root/.bare" config user.email "t@t" 2>/dev/null
+git --git-dir="$bw_root/.bare" config user.name "t" 2>/dev/null
+git --git-dir="$bw_root/.bare" remote add origin https://github.com/natb1/commons.systems.git
+# Seed one commit on the bare repo so `worktree add` works, then add the worktree.
+bw_seed=$(mktemp -d)
+git -C "$bw_seed" init -q
+git -C "$bw_seed" config user.email "t@t"; git -C "$bw_seed" config user.name "t"
+git -C "$bw_seed" commit -q --allow-empty -m seed
+git -C "$bw_seed" remote add bare "$bw_root/.bare"
+git -C "$bw_seed" push -q bare HEAD:refs/heads/main
+mkdir -p "$bw_root/worktrees"
+git --git-dir="$bw_root/.bare" worktree add -q "$bw_root/worktrees/42-foo" main 2>/dev/null
+rm -rf "$bw_seed"
+
+# Fake gh that requires GH_REPO (never reads cwd) over a fresh JSON store.
+mkdir -p "$bw_root/bin"
+BW_STORE="$bw_root/store.json"; BW_COUNTER="$bw_root/counter"
+echo '[]' > "$BW_STORE"; echo '0' > "$BW_COUNTER"
+cat > "$bw_root/bin/gh" <<BWGH
+#!/usr/bin/env bash
+set -uo pipefail
+if [[ -z "\${GH_REPO:-}" ]]; then
+  echo "fatal: not a git repository (GH_REPO unset, no cwd repo)" >&2; exit 1
+fi
+STORE="$BW_STORE"; COUNTER="$BW_COUNTER"
+BWGH
+# Reuse the same emulator body as the main fake gh (everything from method="GET" onward).
+sed -n '/^method="GET"/,$p' "$wp_root/bin/gh" >> "$bw_root/bin/gh"
+chmod +x "$bw_root/bin/gh"
+bash -n "$bw_root/bin/gh" || { FAIL=$((FAIL + 1)); echo "  FAIL: bare+worktree fake gh is not valid bash"; }
+
+# write from the worktree, GH_REPO unset
+if ( cd "$bw_root/worktrees/42-foo" && printf 'PLAN Z\n' | PATH="$bw_root/bin:$SAVED_PATH" env -u GH_REPO "$WP_WRITE" 42 ); then
+  bw_write_rc=0; else bw_write_rc=$?; fi
+assert_eq "write-plan: resolves repo in bare+worktree layout with GH_REPO unset (exit 0)" "0" "$bw_write_rc"
+
+bw_read_out=$( cd "$bw_root/worktrees/42-foo" && PATH="$bw_root/bin:$SAVED_PATH" env -u GH_REPO "$WP_READ" 42 ) && bw_read_rc=0 || bw_read_rc=$?
+assert_eq "read-plan: resolves repo in bare+worktree layout with GH_REPO unset (exit 0)" "0" "$bw_read_rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$bw_read_out" == *"PLAN Z"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan round-trips the plan in the bare+worktree layout"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan round-trips the plan in the bare+worktree layout"
+  echo "    actual: '$bw_read_out'"
+fi
+git --git-dir="$bw_root/.bare" worktree prune 2>/dev/null || true
+rm -rf "$bw_root"
+
 rm -rf "$wp_root"
 
 # ============================================================================

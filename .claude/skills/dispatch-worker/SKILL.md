@@ -54,7 +54,7 @@ Act on the one directive:
 | `INVOKE /qa-fix` | 0 | draft PR, CI green, no `dispatch:*` label | invoke `/qa-fix` |
 | `INVOKE /review-fix` | 0 | draft PR + `dispatch:qa-done` (or `dispatch:reviewed` re-entry) | invoke `/review-fix` |
 | `INVOKE /budget-parse-job` | 0 | a statement parse-job issue (`statements:<key>` label, no PR) | invoke `/budget-parse-job` (see below) |
-| `INVOKE /plan-implement` | 0 | no PR + `dispatch:planned` (`implement` phase) — transitional bridge; #1201 → `/implement` | invoke `/plan-implement` (the generic INVOKE path below) |
+| `INVOKE /implement` | 0 | no PR + `dispatch:planned` (`implement` phase) | invoke `/implement` (the generic INVOKE path below) |
 | `INVOKE /dispatch-resolve-conflict` | 0 | provisioning hit an `origin/main` merge conflict | invoke `/dispatch-resolve-conflict` (see below) |
 | `RELEVANCE-REVIEW` | 0 | no PR, unplanned (`plan` phase) | run the Step 2 relevance review, then dispatch its verdict |
 | `STOP done` | 0 | non-draft (ready) PR — should-never-happen; spawn boundary (#1109) prevents it upstream | stop without invoking a phase skill |
@@ -84,13 +84,12 @@ applies none:
   findings as `blocked_by` follow-ups, posts one PR comment covering every
   finding, applies `dispatch:reviewed`, and marks the PR ready. It is idempotent
   on re-entry.
-- **`/plan-implement`** — the `implement`-phase build skill for a no-PR issue that
-  already carries `dispatch:planned` (an approved plan exists). This is a
-  **transitional bridge**: planning already happened in the `plan` phase, so the
-  worker runs no relevance review before it — `dispatch-route` routes the
-  `implement` phase straight here. #1201 swaps this directive to `/implement`,
-  which builds from the persisted `<!-- dispatch:plan -->` comment. No `dispatch:*`
-  label — the draft PR it opens is its own marker.
+- **`/implement`** — the `implement`-phase build skill for a no-PR issue carrying
+  `dispatch:planned`. It reads the plan persisted to the issue's
+  `<!-- dispatch:plan -->` comment, builds each unit via `/implement-unit`, and
+  opens a draft PR. Planning already happened in the `plan` phase, so the worker
+  runs no relevance review before it. No `dispatch:*` label — the draft PR it opens
+  is its own marker.
 
 After the phase skill returns, the worker session ends; the Stop hook reads the
 marker the phase skill wrote and propagates the chain. The worker does not advance
