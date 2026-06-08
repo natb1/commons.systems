@@ -42,7 +42,9 @@ documents within that collection:
 {appName}/{envSuffix}/{collection}/{docId}
 ```
 
-Examples: `landing/prod/posts/abc123`, `landing/preview-pr-42/posts/abc123`, `office-hours/prod/items/<jitKey>`
+Examples: `landing/prod/posts/abc123`, `landing/preview-pr-42/posts/abc123`, `office-hours/prod/items/<jitKey>`, `office-hours/demo/usage-samples/<autoId>`
+
+For `usage-samples`, the `demo` env is the public-demo tier (world-readable without authentication), while all other envs are owner-gated via the denormalized `memberEmails` field.
 
 Rules use the literal app name as a path segment:
 
