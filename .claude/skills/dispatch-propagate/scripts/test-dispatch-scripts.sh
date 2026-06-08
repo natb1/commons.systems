@@ -15848,6 +15848,28 @@ else
 fi
 restore_teardown
 
+# --- Test 8b: missing SKILL.md (plan phase) → legacy one-line Reload fallback -
+echo "Test: restore-dispatch-skill missing SKILL.md (plan phase) → legacy fallback"
+restore_setup
+set_agents_name "903-foo"
+echo "plan" > "$STUB_DIR/current-phase.txt"
+rm -f "$TMPDIR_TEST/.claude/skills/plan-issue/SKILL.md"
+output=$(run_restore)
+TOTAL=$((TOTAL + 1))
+if [[ "$output" == *"COMPACTION RECOVERY: Reload skill: /plan-issue 903"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing SKILL.md (plan): legacy line emitted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing SKILL.md (plan): legacy line emitted"
+  echo "    output: $output"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$output" != *"Base directory for this skill:"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing SKILL.md (plan): no inline emission"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing SKILL.md (plan): no inline emission"
+fi
+restore_teardown
+
 # --- Test 9: router-shaped --name → no output -------------------------------
 echo "Test: restore-dispatch-skill router-shaped --name → empty output"
 restore_setup
