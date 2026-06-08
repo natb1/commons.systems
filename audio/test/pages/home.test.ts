@@ -8,17 +8,7 @@ vi.mock("../../src/library.js", () => ({
   listLibrary: (...args: unknown[]) => mockListLibrary(...args),
 }));
 
-const mockEnsureRestored = vi.fn().mockResolvedValue(undefined);
-const mockGetState = vi.fn();
-const mockConnect = vi.fn();
-const mockRegrant = vi.fn();
-
-vi.mock("../../src/local-source.js", () => ({
-  ensureLocalFolderRestored: (...a: unknown[]) => mockEnsureRestored(...a),
-  getLocalFolderState: (...a: unknown[]) => mockGetState(...a),
-  connectLocalFolder: (...a: unknown[]) => mockConnect(...a),
-  regrantLocalFolder: (...a: unknown[]) => mockRegrant(...a),
-}));
+vi.mock("../../src/local-source.js", () => ({}));
 
 // home.ts → player.js → storage.js → firebase.js (config requires env);
 // mock storage.js to keep the page render unit isolated from Firebase config.
@@ -88,8 +78,6 @@ function makeMockPlayer(): PlayerHandle & {
 describe("renderHome", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockEnsureRestored.mockResolvedValue(undefined);
-    mockGetState.mockReturnValue("none");
     mockListLibrary.mockResolvedValue([]);
   });
 
@@ -120,11 +108,6 @@ describe("renderHome", () => {
 
     expect(mockListLibrary).toHaveBeenCalledWith(user);
     expect(html).not.toContain("public-notice");
-  });
-
-  it("restores the local folder before listing", async () => {
-    await renderHome(null);
-    expect(mockEnsureRestored).toHaveBeenCalledOnce();
   });
 
   it("shows #media-empty for empty list", async () => {
@@ -204,39 +187,6 @@ describe("renderHome", () => {
     expect(html).toContain("Vinyl rip");
   });
 
-  describe("folder controls", () => {
-    it("shows #choose-folder-btn in 'none' state", async () => {
-      mockGetState.mockReturnValue("none");
-      const html = await renderHome(null);
-      expect(html).toContain('id="choose-folder-btn"');
-    });
-
-    it("shows #reconnect-folder-btn in 'prompt' state", async () => {
-      mockGetState.mockReturnValue("prompt");
-      const html = await renderHome(null);
-      expect(html).toContain('id="reconnect-folder-btn"');
-    });
-
-    it("shows #folder-connected in 'granted' state", async () => {
-      mockGetState.mockReturnValue("granted");
-      const html = await renderHome(null);
-      expect(html).toContain('id="folder-connected"');
-      expect(html).toContain('id="choose-folder-btn"');
-    });
-
-    it("shows #folder-note in 'unsupported' state", async () => {
-      mockGetState.mockReturnValue("unsupported");
-      const html = await renderHome(null);
-      expect(html).toContain('id="folder-note"');
-    });
-
-    it("shows #choose-folder-btn in 'denied' state", async () => {
-      mockGetState.mockReturnValue("denied");
-      const html = await renderHome(null);
-      expect(html).toContain('id="choose-folder-btn"');
-    });
-  });
-
   it("shows #media-error when listLibrary fails", async () => {
     mockListLibrary.mockRejectedValue(new Error("network failure"));
 
@@ -260,8 +210,6 @@ describe("renderHome", () => {
 describe("afterRenderHome", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockEnsureRestored.mockResolvedValue(undefined);
-    mockGetState.mockReturnValue("none");
     mockListLibrary.mockResolvedValue([]);
   });
 
@@ -386,7 +334,6 @@ describe("afterRenderHome", () => {
   });
 
   it("rescans the library on window focus", async () => {
-    mockGetState.mockReturnValue("granted");
     mockListLibrary.mockResolvedValue([makeLibraryItem({ id: "x1" })]);
     const outlet = await buildOutlet(null);
 
@@ -409,35 +356,4 @@ describe("afterRenderHome", () => {
     });
   });
 
-  it("calls connectLocalFolder when #choose-folder-btn is clicked", async () => {
-    mockGetState.mockReturnValue("none");
-    const outlet = await buildOutlet(null);
-
-    const player = makeMockPlayer();
-    mockConnect.mockResolvedValue(undefined);
-    afterRenderHome(outlet, player, null);
-
-    const btn = outlet.querySelector<HTMLButtonElement>("#choose-folder-btn")!;
-    btn.click();
-
-    await vi.waitFor(() => {
-      expect(mockConnect).toHaveBeenCalled();
-    });
-  });
-
-  it("calls regrantLocalFolder when #reconnect-folder-btn is clicked", async () => {
-    mockGetState.mockReturnValue("prompt");
-    const outlet = await buildOutlet(null);
-
-    const player = makeMockPlayer();
-    mockRegrant.mockResolvedValue(false);
-    afterRenderHome(outlet, player, null);
-
-    const btn = outlet.querySelector<HTMLButtonElement>("#reconnect-folder-btn")!;
-    btn.click();
-
-    await vi.waitFor(() => {
-      expect(mockRegrant).toHaveBeenCalled();
-    });
-  });
 });

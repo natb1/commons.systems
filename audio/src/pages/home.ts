@@ -5,17 +5,9 @@ import type { User } from "../auth.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import type { AudioOrigin, LibraryItem } from "../types.js";
 import { listLibrary } from "../library.js";
-import {
-  ensureLocalFolderRestored,
-  getLocalFolderState,
-  connectLocalFolder,
-  regrantLocalFolder,
-} from "../local-source.js";
 import { formatDuration } from "../player.js";
 import type { PlayerHandle } from "../player.js";
 import { getCacheStats, clearCache, CACHE_UPDATED_EVENT } from "../audio-cache.js";
-
-type LocalFolderState = ReturnType<typeof getLocalFolderState>;
 
 function renderRow(item: LibraryItem): string {
   const track =
@@ -51,40 +43,15 @@ function renderMediaList(items: LibraryItem[]): string {
   return `<div id="media-list">${items.map(renderRow).join("\n")}</div>`;
 }
 
-function renderFolderControls(state: LocalFolderState): string {
-  let body: string;
-  switch (state) {
-    case "unsupported":
-      body = '<p id="folder-note">Local folder library needs a Chromium browser.</p>';
-      break;
-    case "prompt":
-      body = '<button id="reconnect-folder-btn" type="button">Reconnect folder</button>';
-      break;
-    case "granted":
-      body =
-        '<p id="folder-connected">Local folder connected.</p><button id="choose-folder-btn" type="button">Change folder</button>';
-      break;
-    case "none":
-    case "denied":
-    default:
-      body = '<button id="choose-folder-btn" type="button">Choose folder</button>';
-      break;
-  }
-  return `<section id="folder-controls">${body}</section>`;
-}
-
 export async function renderHome(user: User | null): Promise<string> {
-  await ensureLocalFolderRestored();
-
-  const state = getLocalFolderState();
   let regionHtml: string;
   try {
     const items = await listLibrary(user);
-    regionHtml = `<div id="library-region">${renderFolderControls(state)}${renderMediaList(items)}</div>`;
+    regionHtml = `<div id="library-region">${renderMediaList(items)}</div>`;
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
     if (!deferProgrammerError(error)) logError(error, { operation: "load-media" });
-    regionHtml = `<div id="library-region">${renderFolderControls(state)}<p id="media-error">Could not load audio library.</p></div>`;
+    regionHtml = `<div id="library-region"><p id="media-error">Could not load audio library.</p></div>`;
   }
 
   const publicNotice = !user
@@ -132,6 +99,7 @@ export function afterRenderHome(
   outlet: HTMLElement,
   player: PlayerHandle,
   user: User | null,
+  onFolderStateChange?: () => void,
 ): void {
   function applyCheckboxState(): void {
     for (const row of outlet.querySelectorAll<HTMLElement>(".audio-row")) {
@@ -152,10 +120,9 @@ export function afterRenderHome(
   async function rerenderLibraryRegion(): Promise<void> {
     const regionEl = outlet.querySelector<HTMLElement>("#library-region");
     if (!regionEl) return;
-    const state = getLocalFolderState();
     try {
       const items = await listLibrary(user);
-      regionEl.innerHTML = `${renderFolderControls(state)}${renderMediaList(items)}`;
+      regionEl.innerHTML = renderMediaList(items);
     } catch (err) {
       logError(err, { operation: "library-rescan" });
       return; // leave the current region intact
@@ -168,32 +135,15 @@ export function afterRenderHome(
     rescanning = true;
     try {
       await rerenderLibraryRegion();
+      onFolderStateChange?.();
     } finally {
       rescanning = false;
     }
   }
   window.addEventListener("focus", () => { void onFocus(); }, { signal: clickAbort.signal });
 
-  // A single delegated click handler so replacing #library-region's innerHTML on
-  // rerender never loses wiring. Button cases return early before the checkbox case.
   outlet.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
-
-    if (target.closest("#choose-folder-btn")) {
-      e.preventDefault();
-      connectLocalFolder()
-        .then(() => rerenderLibraryRegion())
-        .catch((err) => logError(err, { operation: "choose-folder" }));
-      return;
-    }
-
-    if (target.closest("#reconnect-folder-btn")) {
-      e.preventDefault();
-      regrantLocalFolder()
-        .then(() => rerenderLibraryRegion())
-        .catch((err) => logError(err, { operation: "reconnect-folder" }));
-      return;
-    }
 
     const checkbox = target.closest(
       "input[data-queue-toggle]",
