@@ -54,8 +54,9 @@ Act on the one directive:
 | `INVOKE /qa-fix` | 0 | draft PR, CI green, no `dispatch:*` label | invoke `/qa-fix` |
 | `INVOKE /review-fix` | 0 | draft PR + `dispatch:qa-done` (or `dispatch:reviewed` re-entry) | invoke `/review-fix` |
 | `INVOKE /budget-parse-job` | 0 | a statement parse-job issue (`statements:<key>` label, no PR) | invoke `/budget-parse-job` (see below) |
+| `INVOKE /plan-implement` | 0 | no PR + `dispatch:planned` (`implement` phase) — transitional bridge; #1201 → `/implement` | invoke `/plan-implement` (the generic INVOKE path below) |
 | `INVOKE /dispatch-resolve-conflict` | 0 | provisioning hit an `origin/main` merge conflict | invoke `/dispatch-resolve-conflict` (see below) |
-| `RELEVANCE-REVIEW` | 0 | no PR on the target (`implement`) | run the Step 2 relevance review, then dispatch its verdict |
+| `RELEVANCE-REVIEW` | 0 | no PR, unplanned (`plan` phase) | run the Step 2 relevance review, then dispatch its verdict |
 | `STOP done` | 0 | non-draft (ready) PR — should-never-happen; spawn boundary (#1109) prevents it upstream | stop without invoking a phase skill |
 | `PUSH-STRANDED` | 0 | `done` PR, but the worktree has commits `origin/<branch>` hasn't seen | push `origin HEAD`, write an office-hours reason, stop with no marker |
 | `STOP waiting` | 0 | draft PR's CI has no verdict yet | print the verbatim message below and stop |
@@ -83,6 +84,13 @@ applies none:
   findings as `blocked_by` follow-ups, posts one PR comment covering every
   finding, applies `dispatch:reviewed`, and marks the PR ready. It is idempotent
   on re-entry.
+- **`/plan-implement`** — the `implement`-phase build skill for a no-PR issue that
+  already carries `dispatch:planned` (an approved plan exists). This is a
+  **transitional bridge**: planning already happened in the `plan` phase, so the
+  worker runs no relevance review before it — `dispatch-route` routes the
+  `implement` phase straight here. #1201 swaps this directive to `/implement`,
+  which builds from the persisted `<!-- dispatch:plan -->` comment. No `dispatch:*`
+  label — the draft PR it opens is its own marker.
 
 After the phase skill returns, the worker session ends; the Stop hook reads the
 marker the phase skill wrote and propagates the chain. The worker does not advance
@@ -120,8 +128,9 @@ stops with no sentinel, so the Stop hook parks the still-open issue on
 ### `RELEVANCE-REVIEW` — run the relevance review, then dispatch its verdict
 
 Run the Step 2 relevance review and dispatch the verdict it returns (`proceed` /
-`adjust` / `stop` — see Step 2). The draft PR's existence plus its CI status is
-its own marker — `/plan-implement` gets **no** `dispatch:*` label.
+`adjust` / `stop` — see Step 2). This gates the `plan` phase — a no-PR, unplanned
+issue. `/plan-issue` gets **no** `dispatch:*` label here; it applies
+`dispatch:planned` itself when it finishes and persists the plan.
 
 ### `STOP waiting` — re-gate to the router, no marker
 
@@ -182,16 +191,17 @@ normal-case done PR is caught upstream and no worker is spawned. For
 rejected the spawn cwd, or the positional `<worktree-path>` disagreed with `git
 rev-parse --show-toplevel`; see `reference.md`.
 
-## 2. Pre-Implementation Relevance Review
+## 2. Pre-Planning Relevance Review
 
-This step runs **only** for the `implement` phase — a no-PR target. Every phase
-with an existing PR (`verify` onward) skips it: implementation is already
-underway. It is the implementation-time counterpart of `ref-ready`'s Step 3e
-relevance check; the two are deliberately separate — Step 3e is creation-time
-and `$BASELINE_BRANCH`-anchored, this step is pre-implementation and
+This step runs **only** for the `plan` phase — a no-PR, unplanned target. Every
+phase with an existing PR (`verify` onward) skips it, as does the `implement`
+phase (a planned no-PR issue routes straight to its build skill): implementation
+is already planned or underway. It is the planning-time counterpart of
+`ref-ready`'s Step 3e relevance check; the two are deliberately separate — Step 3e
+is creation-time and `$BASELINE_BRANCH`-anchored, this step is pre-planning and
 `createdAt`-anchored.
 
-Before invoking `/plan-implement` on an `implement`-phase issue, confirm no PR
+Before invoking `/plan-issue` on a `plan`-phase issue, confirm no PR
 exists for the target by running:
 
 ```bash
@@ -234,13 +244,13 @@ evidence:
 
 ### Three-way verdict
 
-- **`proceed`** — drift absent or cosmetic; invoke `/plan-implement`.
+- **`proceed`** — drift absent or cosmetic; invoke `/plan-issue`.
 - **`adjust`** — issue still wanted but references, conventions, or scope have
   shifted; invoke `/new-requirement` with the drift findings as the revised
-  understanding, then `/plan-implement`.
+  understanding, then `/plan-issue`.
 - **`stop`** — codebase has moved past the need; report what changed and
   recommend closing the issue or re-running `/ready`. Do **not** invoke
-  `/plan-implement`; print the drift report and stop. The Stop hook
+  `/plan-issue`; print the drift report and stop. The Stop hook
   applies `dispatch:office-hours` to the issue because no marker was
   written.
 
