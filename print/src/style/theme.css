@@ -87,10 +87,6 @@
   border-style: dashed;
 }
 
-#local-folder {
-  margin: 0.5rem 0;
-}
-
 .local-folder-button {
   cursor: pointer;
   padding: 0.4rem 0.8rem;

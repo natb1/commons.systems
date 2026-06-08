@@ -5,10 +5,10 @@
  * (`@commons-systems/local-first`) so a returning session needs no picker when
  * permission is `granted`, or one click when in the `prompt` state.
  *
- * Rendering is idempotent: local `<li>`s are prepended into the shared
- * `#media-list` and re-rendered on window focus to pick up added / removed
- * files. Non-Chromium browsers (no FSA) get nothing here and stay on the
- * cloud-only path.
+ * The folder button lives in the nav (next to Login), initialized once at app
+ * startup. `renderLocalIntoList` is exported so the home page can repopulate
+ * local items on each render. Non-Chromium browsers (no FSA) get nothing here
+ * and stay on the cloud-only path.
  */
 import { createFsaHandleStore } from "@commons-systems/local-first/fsa-handle-store";
 import { logError } from "@commons-systems/errorutil/log";
@@ -124,21 +124,19 @@ export async function initLocalFolder(
 /**
  * Render the current local items into the shared media list, idempotently:
  * find (or create) the `#media-list` <ul>, strip prior local rows, and prepend
- * freshly-rendered ones before the cloud rows.
+ * freshly-rendered ones before the cloud rows. No-ops when no media list or
+ * empty-state placeholder is present (e.g. viewer page).
  */
-async function renderLocalIntoList(container: HTMLElement): Promise<void> {
+export async function renderLocalIntoList(container: HTMLElement): Promise<void> {
   const items = await listLocal();
   let ul = container.querySelector<HTMLUListElement>("#media-list");
   if (!ul) {
     // Empty cloud library renders a `#media-empty` <p> instead of a <ul>.
     const empty = container.querySelector("#media-empty");
+    if (!empty) return; // not on a page that has a media list — skip
     ul = document.createElement("ul");
     ul.id = "media-list";
-    if (empty) {
-      empty.replaceWith(ul);
-    } else {
-      container.appendChild(ul);
-    }
+    empty.replaceWith(ul);
   }
   for (const li of Array.from(ul.querySelectorAll(".media-item-local"))) {
     li.remove();

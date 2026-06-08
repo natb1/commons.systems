@@ -5,7 +5,7 @@ import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { listCloud } from "../library.js";
 import { getMediaDownloadUrl } from "../storage.js";
 import { wireMarkdownActions } from "../markdown-actions.js";
-import { initLocalFolder } from "../local-folder-ui.js";
+import { renderLocalIntoList } from "../local-folder-ui.js";
 import type { MediaItem, MediaType } from "../types.js";
 
 function mediaTypeBadge(mediaType: MediaType): string {
@@ -108,21 +108,11 @@ export async function renderHome(user: User | null): Promise<string> {
   return `
     <h2>Library</h2>
     ${publicNotice}
-    <section id="local-folder"></section>
     ${mediaHtml}
   `;
 }
 
-let detachLocalFolder: (() => void) | null = null;
-
 export async function afterRenderHome(outlet: HTMLElement): Promise<void> {
-  // Tear down the previous run's local-folder wiring (focus listener) before
-  // re-initializing, so navigating away and back does not leak listeners.
-  if (detachLocalFolder) {
-    detachLocalFolder();
-    detachLocalFolder = null;
-  }
-
   outlet.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
     const downloadBtn = target.closest(".media-download") as HTMLButtonElement | null;
@@ -133,12 +123,9 @@ export async function afterRenderHome(outlet: HTMLElement): Promise<void> {
   });
   wireMarkdownActions(outlet);
 
-  const localFolderSectionEl = outlet.querySelector<HTMLElement>("#local-folder");
-  if (localFolderSectionEl) {
-    try {
-      detachLocalFolder = await initLocalFolder(localFolderSectionEl, outlet);
-    } catch (err) {
-      logError(err, { operation: "init-local-folder" });
-    }
-  }
+  // Repopulate local items into the freshly-rendered media list. The folder
+  // button itself lives in the nav (initialized once at startup in main.ts).
+  renderLocalIntoList(outlet).catch((err) =>
+    logError(err, { operation: "local-folder-home-render" }),
+  );
 }

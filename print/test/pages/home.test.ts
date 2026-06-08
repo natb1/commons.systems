@@ -11,10 +11,10 @@ vi.mock("../../src/library.js", () => ({
   listCloud: (...args: unknown[]) => mockListCloud(...args),
 }));
 
-// local-folder-ui.ts transitively imports firebase via library.ts; only
-// afterRenderHome uses it, so stub it for the render-only tests.
+// local-folder-ui.ts transitively imports firebase via library.ts; stub it
+// so renderHome and afterRenderHome tests don't need real firebase init.
 vi.mock("../../src/local-folder-ui.js", () => ({
-  initLocalFolder: vi.fn().mockResolvedValue(null),
+  renderLocalIntoList: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../src/storage.js", () => ({
@@ -102,14 +102,6 @@ describe("renderHome", () => {
     const html = await renderHome(null);
 
     expect(html).toContain("<h2>Library</h2>");
-  });
-
-  it("renders the local-folder section", async () => {
-    mockListCloud.mockResolvedValue([]);
-
-    const html = await renderHome(null);
-
-    expect(html).toContain('id="local-folder"');
   });
 
   it("renders empty state when no items are returned", async () => {
