@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: Review phase — the workflow's single terminal review pass. Run /code-review max, /review, and the full surface-gated security fan-out as direct subagents over the same diff, unify and de-duplicate the findings, apply the in-scope fixes via one /commit-merge-push, file meaningful out-of-scope findings as blocked_by follow-ups, post one PR comment covering every finding, apply the dispatch:reviewed label, and mark the PR ready
+description: Review phase — the workflow's single terminal review pass. Run /code-review max, /review, and the full surface-gated security fan-out as direct subagents over the same diff, unify and de-duplicate the findings, apply the in-scope fixes via one /commit-merge-push, file meaningful out-of-scope findings as blocked_by follow-ups, post one PR comment covering every finding, and apply the dispatch:reviewed label
 ---
 
 # Review and Fix
@@ -11,11 +11,14 @@ and security — into one pass over a single diff. It runs all three generic
 reviews as direct subagents, unifies and de-duplicates their findings into one
 disposition table, applies the in-scope fixes via one `/commit-merge-push`, files
 meaningful out-of-scope findings as `blocked_by` follow-ups, posts **one** PR
-comment, applies the `dispatch:reviewed` label, and marks the PR ready.
+comment, and applies the `dispatch:reviewed` label.
 
-This is the workflow's **terminal actionable phase** — it marks the PR ready
-itself, so there is no separate phase after it. Resulting chain: `qa -> review
--> done`.
+This is the workflow's **terminal actionable phase** — applying
+`dispatch:reviewed` is its terminal action, so there is no separate phase after
+it. Promotion of the PR to ready is owned by the router's
+`dispatch-reconcile-ready`, which reconciles the draft↔ready bit to
+`dispatch:reviewed ∧ CI passing ∧ mergeable == MERGEABLE` on every tick — this
+skill never readies the PR itself. Resulting chain: `qa -> review -> done`.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
 launch the three review subagents directly via the Agent tool, run the CodeQL and
@@ -49,11 +52,11 @@ stays in `PR_JSON` (`jq -r .body <<<"$PR_JSON"`); Step 6 parses its
 
 If the printed labels already include `dispatch:reviewed` — an interrupted prior
 run — **skip Steps 1–7** and go straight to Step 8, which flushes any unpushed
-commits, readies the PR, and writes the marker. `dispatch:reviewed` is this
-skill's terminal action and is already applied, so re-entry is a no-op beyond
-Step 8's terminal flush and readying the PR. Routing re-entry through Step 8
-(rather than readying the PR inline) means its flush guard also carries any
-commits an interrupted prior run left stranded.
+commits and writes the marker. `dispatch:reviewed` is this skill's terminal
+action and is already applied, so re-entry is a no-op beyond Step 8's terminal
+flush. Routing re-entry through Step 8 means its flush guard also carries any
+commits an interrupted prior run left stranded — the flush that lets the router
+resolve `mergeable == MERGEABLE` and promote the PR to ready.
 
 On this re-entry path the unified finding set is not in context — Step 8 treats
 the deviation criterion as not met and writes the phase-completed marker.
@@ -589,20 +592,24 @@ Then post it (use `dangerouslyDisableSandbox: true` — the script invokes `gh`)
 .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
 ```
 
-### 8. Apply the terminal label, ready the PR, then write the marker (or park on deviation)
+### 8. Apply the terminal label, then write the marker (or park on deviation)
 
 **First, flush any unpushed local commits — the terminal flush of the "never
 push a bare merge commit" contract.** `dispatch-merge-main` (pre-spawn) and
 `/dispatch-resolve-conflict` merge `origin/main` into this worktree **locally**
 and never push, relying on each phase skill's own push point to carry the merge
-to origin. `/review-fix` is the chain's **terminal phase**: once the PR is
-ready, every later tick routes `STOP done` and no push point ever fires again.
-So any local merge left behind must be carried to origin here, before the PR is
-readied — otherwise the remote branch stays behind local HEAD and GitHub reports
-the PR `CONFLICTING` permanently. This guard runs **unconditionally**,
-independent of whether any findings were fixed: on a zero-findings run Step 5's
-`/commit-merge-push` may be skipped entirely, so the readiness gate is the only
-place the flush is guaranteed and it cannot be reasoned away.
+to origin. `/review-fix` is the chain's **terminal phase**: this is the chain's
+last push point — once it applies `dispatch:reviewed`, the router only flips the
+PR's draft bit (it never pushes), and every later tick routes `STOP done`, so no
+push point ever fires again. So any local merge left behind must be carried to
+origin here — otherwise the remote branch stays behind local HEAD and GitHub
+reports the PR `CONFLICTING` permanently, which keeps `dispatch-reconcile-ready`
+from ever promoting the PR to ready (the predicate needs
+`mergeable == MERGEABLE`, so origin must equal HEAD). This guard runs
+**unconditionally**, independent of whether any findings were fixed: on a
+zero-findings run Step 5's `/commit-merge-push` may be skipped entirely, so this
+terminal flush is the only place the push is guaranteed and it cannot be reasoned
+away.
 
 `BRANCH` is captured in the idempotency preamble; it is in scope on both the
 normal path and the re-entry path. Git runs sandboxed here — `origin` is HTTPS
@@ -637,12 +644,11 @@ This skill **owns** its `dispatch:reviewed` label — the dispatch chain does no
 apply the label after this skill returns. The label is applied regardless of
 whether any fixes were made, so a no-findings run still advances the workflow.
 
-Mark the PR ready — the workflow's terminal PR-state action (use
-`dangerouslyDisableSandbox: true` — `gh` needs network):
-
-```bash
-gh pr ready "$PR_NUM"
-```
+This skill does **not** ready the PR. Promotion to ready is owned by the router's
+`dispatch-reconcile-ready`, which reconciles the draft↔ready bit to
+`dispatch:reviewed ∧ CI passing ∧ mergeable == MERGEABLE` on every tick — so the
+PR stays a draft here and the router promotes it on a later tick once the
+predicate holds.
 
 Then write the phase-completed marker — or, on deviation, the office-hours reason.
 The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads this to decide propagate vs
@@ -675,9 +681,11 @@ run; the script no-ops with a clear diagnostic.
   --phase review --pr "$PR_NUM"
 ```
 
-Then **stop**. The Stop hook reads the marker and advances the chain. `gh pr ready`
-is still the workflow's terminal *PR-state* action and runs regardless of
-deviation — only the marker is skipped when the deviation criterion fires.
+Then **stop**. The Stop hook reads the marker and advances the chain. Applying
+`dispatch:reviewed` is unconditional; only the marker is skipped when the
+deviation criterion fires. Promotion to ready is never this skill's job — the
+router's `dispatch-reconcile-ready` owns it, reconciling the draft↔ready bit on
+every tick once CI is passing and `mergeable == MERGEABLE`.
 
 ## Per-finding schema
 
@@ -709,7 +717,7 @@ through to the unified set in Step 2 — has these fields:
 - **Empty or docs-only diff** — `surface` is `empty` or `docs`; launch no security
   reviewers, run no inline scans, and serialize an empty security finding set. The
   code-review and review subagents still run, and the skill still applies
-  `dispatch:reviewed`, readies the PR, and writes the marker.
+  `dispatch:reviewed` and writes the marker.
 - **A subagent finds nothing** — record that source as clean; it contributes no
   findings.
 - **A subagent fails** — re-launch it once. If it fails again, note partial
@@ -726,16 +734,20 @@ through to the unified set in Step 2 — has these fields:
 
 ## Notes
 
-This is the workflow's terminal actionable phase: `gh pr ready` (Step 8) is the
-terminal PR-state action and writing the phase-completed marker is the dispatch
-chain's hand-off cue. After this change the dispatch workflow has no human
-checkpoint before a PR goes ready — the single PR-comment summary is the audit
-trail. This is an intentional trade-off for an autonomous background-job run.
+This is the workflow's terminal actionable phase: applying `dispatch:reviewed`
+(Step 8) is the terminal action and writing the phase-completed marker is the
+dispatch chain's hand-off cue. The skill never readies the PR — the router's
+`dispatch-reconcile-ready` reconciles readiness on every tick, promoting the PR
+once CI is passing and `mergeable == MERGEABLE` (no longer a one-shot readying
+action here). The dispatch workflow has no human checkpoint before a PR
+goes ready — the single PR-comment summary is the audit trail. This is an
+intentional trade-off for an autonomous background-job run.
 
 The skill is idempotent: a re-invocation with `dispatch:reviewed` already on the
-PR skips Steps 1–7 and runs Step 8, which flushes any unpushed commits, ensures
-the PR is ready, and writes the phase-completed marker (the unified finding set
-is not in context on re-entry, so the deviation criterion is treated as not met).
+PR skips Steps 1–7 and runs Step 8, which flushes any unpushed commits and writes
+the phase-completed marker (the unified finding set is not in context on
+re-entry, so the deviation criterion is treated as not met). Readiness is the
+router's projection, reconciled on later ticks — not something re-entry asserts.
 
 **Model split (#1172).** The dispatch chain runs this `review` phase orchestrator
 on **Sonnet** (via `dispatch-phase-model`, which maps `review →
