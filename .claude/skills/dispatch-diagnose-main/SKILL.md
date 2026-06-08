@@ -102,7 +102,7 @@ The `--color` flag is intentionally omitted — the dispatch-label color hex is 
 All `gh` calls here need `dangerouslyDisableSandbox: true`.
 
 Once the issue exists it latches the gate so the queue flows again, and it is
-itself the priority fix item the normal ladder picks up (verify/ready). When
+itself the priority fix item the normal ladder picks up (fix-checks/ready). When
 `origin/main` goes green, `dispatch-select-tick` closes the issue, re-arming
 the gate for the next episode. The skill creates no worktree, branch, or PR —
 it files or updates the issue and stops.

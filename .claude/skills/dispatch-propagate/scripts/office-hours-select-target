@@ -17,7 +17,7 @@
 #     The oldest labeled item with NO live session — a sessionless item that
 #     /office-hours picks up fresh.
 #     <issue> — the selected issue number.
-#     <phase> — implement | qa | code-review | review | security | verify |
+#     <phase> — implement | qa | code-review | review | security | fix-checks |
 #               waiting | done. `waiting` comes from dispatch-ci-ready (draft PR
 #               with CI still pending); all other values come from dispatch-phase.
 #               /office-hours branches on this: implement → plan-approval

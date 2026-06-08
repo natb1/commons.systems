@@ -50,7 +50,7 @@ Act on the one directive:
 
 | Directive | Exit | Meaning | Action |
 |---|---|---|---|
-| `INVOKE /verify-pr` | 0 | draft PR, CI completed and failed | invoke `/verify-pr` |
+| `INVOKE /fix-checks` | 0 | draft PR, CI completed and failed | invoke `/fix-checks` |
 | `INVOKE /qa-fix` | 0 | draft PR, CI green, no `dispatch:*` label | invoke `/qa-fix` |
 | `INVOKE /review-fix` | 0 | draft PR + `dispatch:qa-done` (or `dispatch:reviewed` re-entry) | invoke `/review-fix` |
 | `INVOKE /budget-parse-job` | 0 | a statement parse-job issue (`statements:<key>` label, no PR) | invoke `/budget-parse-job` (see below) |
@@ -71,7 +71,7 @@ Invoke the one named phase skill via the Skill tool. Run exactly one phase per
 action. Each phase skill owns and applies its own `dispatch:*` label — the worker
 applies none:
 
-- **`/verify-pr`** — runs a single pass: fix one set of failed CI checks, record
+- **`/fix-checks`** — runs a single pass: fix one set of failed CI checks, record
   the outcome, post it, stop. No label.
 - **`/qa-fix`** — runs the autonomous portion of QA and applies `dispatch:qa-done`
   itself on a clean pass. On a user-input blocker (a needs-human-judgment item, a
@@ -193,7 +193,7 @@ rev-parse --show-toplevel`; see `reference.md`.
 ## 2. Pre-Planning Relevance Review
 
 This step runs **only** for the `plan` phase — a no-PR, unplanned target. Every
-phase with an existing PR (`verify` onward) skips it, as does the `implement`
+phase with an existing PR (`fix-checks` onward) skips it, as does the `implement`
 phase (a planned no-PR issue routes straight to its build skill): implementation
 is already planned or underway. It is the planning-time counterpart of
 `ref-ready`'s Step 3e relevance check; the two are deliberately separate — Step 3e

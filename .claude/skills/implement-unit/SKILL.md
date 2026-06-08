@@ -12,7 +12,7 @@ and push-rejection recovery.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
 launch subagents via the Agent tool and fork `/commit-merge-push`. Callers (e.g.
-`/implement`, `/verify-pr`) invoke it once per unit.
+`/implement`, `/fix-checks`) invoke it once per unit.
 
 This skill is the **single canonical home** of the model-selection heuristic. Other
 skills choosing a model reference this section rather than restating it.
