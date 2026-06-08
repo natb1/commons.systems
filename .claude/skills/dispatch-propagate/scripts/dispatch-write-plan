@@ -11,9 +11,9 @@
 # lives as a comment, not in the issue body, so the machine-authored plan never
 # clobbers the human-authored acceptance criteria.
 #
-# The repo is resolved from the git common dir so gh addresses the right
-# repository from any caller cwd. A missing arg, a non-numeric issue-num, or
-# empty STDIN is a clear error, not a fallback (exit 2).
+# The repo is resolved explicitly (GH_REPO from the common dir's remote.origin.url)
+# so gh addresses the right repository from any caller cwd. A missing arg, a
+# non-numeric issue-num, or empty STDIN is a clear error, not a fallback (exit 2).
 set -euo pipefail
 
 N="${1:-}"
@@ -30,7 +30,12 @@ fi
 
 common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || {
   echo "dispatch-write-plan: not inside a git repository" >&2; exit 1; }
-cd "$(dirname "$common_dir")"   # PROJECT_ROOT — so gh resolves the repo from any caller cwd
+url="$(git --git-dir="$common_dir" config --get remote.origin.url)"
+# Resolve owner/repo from the remote so gh addresses the repo independent of cwd
+# (dirname(common_dir) is not a working tree in the bare-repo + worktrees layout).
+# Handles https://github.com/<owner>/<repo>(.git) and git@github.com:<owner>/<repo>(.git).
+repo="${url%.git}"; repo="${repo#*github.com[:/]}"
+export GH_REPO="$repo"
 
 MARKER='<!-- dispatch:plan -->'
 
