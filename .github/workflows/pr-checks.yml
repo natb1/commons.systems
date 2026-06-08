@@ -51,16 +51,18 @@ jobs:
       - name: Deploy Cloud Functions (if changed)
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
-          OFFICE_HOURS_GITHUB_APP_ID: ${{ vars.OFFICE_HOURS_GITHUB_APP_ID }}
-          OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID: ${{ vars.OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID }}
+          OFFICE_HOURS_GITHUB_APP_ID: ${{ secrets.OFFICE_HOURS_GITHUB_APP_ID }}
+          OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID: ${{ secrets.OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID }}
           OFFICE_HOURS_GROUP_REPO: ${{ secrets.OFFICE_HOURS_GROUP_REPO }}
+          OFFICE_HOURS_GROUP_ID: ${{ secrets.OFFICE_HOURS_GROUP_ID }}
           OFFICE_HOURS_MEMBER_EMAILS: ${{ secrets.OFFICE_HOURS_MEMBER_EMAILS }}
+          DISPATCH_METRICS_QUEUE_REPO: ${{ secrets.DISPATCH_METRICS_QUEUE_REPO }}
         run: |
           if git diff --name-only origin/main...HEAD | grep -q '^functions/'; then
             .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
             npm run -w functions build
-            printf 'OFFICE_HOURS_GITHUB_APP_ID=%s\nOFFICE_HOURS_GITHUB_APP_INSTALLATION_ID=%s\nOFFICE_HOURS_GROUP_REPO=%s\nOFFICE_HOURS_MEMBER_EMAILS=%s\nOFFICE_HOURS_FIRESTORE_NAMESPACE=office-hours/prod\n' \
-              "$OFFICE_HOURS_GITHUB_APP_ID" "$OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID" "$OFFICE_HOURS_GROUP_REPO" "$OFFICE_HOURS_MEMBER_EMAILS" \
+            printf 'OFFICE_HOURS_GITHUB_APP_ID=%s\nOFFICE_HOURS_GITHUB_APP_INSTALLATION_ID=%s\nOFFICE_HOURS_GROUP_REPO=%s\nOFFICE_HOURS_GROUP_ID=%s\nOFFICE_HOURS_MEMBER_EMAILS=%s\nDISPATCH_METRICS_QUEUE_REPO=%s\n' \
+              "$OFFICE_HOURS_GITHUB_APP_ID" "$OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID" "$OFFICE_HOURS_GROUP_REPO" "$OFFICE_HOURS_GROUP_ID" "$OFFICE_HOURS_MEMBER_EMAILS" "$DISPATCH_METRICS_QUEUE_REPO" \
               > functions/.env
             npx firebase-tools deploy --only functions --force --project "$FIREBASE_PROJECT_ID"
           fi
