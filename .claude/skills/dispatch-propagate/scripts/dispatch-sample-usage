@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# dispatch-sample-usage — local capacity telemetry sampler (writer side of #1007;
+# epic #1005's Capacity view).
+#
+# The office-hours Capacity view needs a Firestore time series of Claude usage
+# and dispatch worker concurrency. The hosted app cannot read the author's local
+# telemetry (`rate_limits.json`) or the live-session registry (`claude agents
+# --json`), so the series must be sampled LOCALLY on the author's machine and
+# pushed to Firestore. This sampler is that local writer: run once per dispatch
+# tick, it
+#   1. reads rate_limits.json (five_hour/seven_day -> used_percentage, resets_at),
+#   2. counts busy workers via lib-claude-agents.sh,
+#   3. computes the worker target via dispatch-target-workers,
+#   4. assembles a JSON payload and pipes it to usage-sample-writer.mjs (Unit 1),
+#      which writes one office-hours/{env}/usage-samples document via the
+#      firebase-admin SDK (the admin SDK bypasses Firestore security rules, so
+#      this does NOT depend on the sibling #1006 rules being deployed).
+# The writer reads ALL of its config (member emails, group id, namespace, TTL,
+# project id) from env vars that must be pre-set in the environment (e.g., shell
+# profile); dispatch-tick inherits them but does not export them; this sampler
+# does NOT re-read them, except the opt-in gate (Step 1).
+#
+# FAIL-SAFE CONTRACT (per .claude/rules/code-style.md; mirrors
+# dispatch-refresh-rate-limits): every failure path logs exactly ONE stderr
+# diagnostic line prefixed "dispatch-sample-usage:" and exits non-zero; the
+# dispatch-tick caller (added in a later unit) wraps this call so a sample
+# failure never errors the tick. Credentials are never echoed. The ONE non-error
+# early exit is the opt-in gate (Step 1), which exits 0 by design so machines
+# without capacity-sampling config stay inert. A genuine success exits 0 too.
+#
+# TEST SEAMS (mirroring dispatch-target-workers / lib-claude-agents.sh):
+#   DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS      the opt-in switch (Step 1); also
+#                                             consumed by the writer.
+#   DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH   override the rate_limits.json path.
+#   CLAUDE_AGENTS_CMD                          consumed by lib-claude-agents.sh
+#                                             for the busy-worker count.
+#   DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD override the dispatch-target-workers
+#                                             binary.
+#   DISPATCH_USAGE_SAMPLES_WRITER             override the writer binary.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# === STEP 1 — OPT-IN GATE =====================================================
+# No member emails configured → this machine is not set up for capacity
+# sampling. Exit 0 (a no-op, NOT a failure) so the tick stays inert here.
+if [[ -z "${DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS:-}" ]]; then
+  exit 0
+fi
+
+# === STEP 2 — READ TELEMETRY (rate_limits.json) ===============================
+# Canonical path, overridable for tests (mirrors dispatch-target-workers'
+# DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH).
+RL_PATH="${DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH:-$HOME/.local/share/commons-dispatch/rate_limits.json}"
+if [[ ! -r "$RL_PATH" ]]; then
+  echo "dispatch-sample-usage: rate_limits.json not readable at $RL_PATH; skipping capacity sample" >&2
+  exit 1
+fi
+
+# One jq pass, one field per line, each anchored by a trailing `|` sentinel so an
+# absent (null) field reads back as an empty string rather than vanishing (same
+# technique as dispatch-target-workers). Field mapping: five_hour -> fiveHour*,
+# seven_day -> weekly* (the schema names the seven-day window "weekly").
+if ! PARSED=$(jq -r '
+    "\(.five_hour.used_percentage // "")|",
+    "\(.seven_day.used_percentage // "")|",
+    "\(.five_hour.resets_at // "")|",
+    "\(.seven_day.resets_at // "")|"
+  ' "$RL_PATH" 2>/dev/null); then
+  echo "dispatch-sample-usage: rate_limits.json is not valid JSON at $RL_PATH; skipping capacity sample" >&2
+  exit 1
+fi
+
+FIVEH_USED=""
+WEEKLY_USED=""
+FIVEH_RESETS=""
+WEEKLY_RESETS=""
+{
+  IFS= read -r line; FIVEH_USED="${line%|}"
+  IFS= read -r line; WEEKLY_USED="${line%|}"
+  IFS= read -r line; FIVEH_RESETS="${line%|}"
+  IFS= read -r line; WEEKLY_RESETS="${line%|}"
+} <<<"$PARSED"
+
+# The two used_percentage fields are REQUIRED and must be finite numbers — never
+# write a sample with a missing or malformed usage number.
+if [[ ! "$FIVEH_USED" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "dispatch-sample-usage: five_hour.used_percentage missing or non-numeric; skipping capacity sample" >&2
+  exit 1
+fi
+if [[ ! "$WEEKLY_USED" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "dispatch-sample-usage: seven_day.used_percentage missing or non-numeric; skipping capacity sample" >&2
+  exit 1
+fi
+
+# resets_at is OPTIONAL: absent → JSON null (the writer accepts null). Any
+# present value must be an epoch-seconds integer.
+if [[ -z "$FIVEH_RESETS" ]]; then
+  FIVEH_RESETS_JSON="null"
+elif [[ "$FIVEH_RESETS" =~ ^[0-9]+$ ]]; then
+  FIVEH_RESETS_JSON="$FIVEH_RESETS"
+else
+  echo "dispatch-sample-usage: five_hour.resets_at present but not an integer; skipping capacity sample" >&2
+  exit 1
+fi
+if [[ -z "$WEEKLY_RESETS" ]]; then
+  WEEKLY_RESETS_JSON="null"
+elif [[ "$WEEKLY_RESETS" =~ ^[0-9]+$ ]]; then
+  WEEKLY_RESETS_JSON="$WEEKLY_RESETS"
+else
+  echo "dispatch-sample-usage: seven_day.resets_at present but not an integer; skipping capacity sample" >&2
+  exit 1
+fi
+
+# === STEP 3 — ACTIVE WORKERS ==================================================
+# lib-claude-agents.sh's claude_agents_count_busy_workers returns 0 with an
+# integer on stdout, or 1 for UNKNOWN (daemon unreachable / non-array output).
+# UNKNOWN is fail-safe here: never write a wrong count.
+source "$SCRIPT_DIR/lib-claude-agents.sh" || { echo "dispatch-sample-usage: failed to source lib-claude-agents.sh" >&2; exit 1; }
+if ! activeWorkers=$(claude_agents_count_busy_workers); then
+  echo "dispatch-sample-usage: busy-worker count unknown (claude agents unavailable); skipping capacity sample" >&2
+  exit 1
+fi
+
+# === STEP 4 — TARGET WORKERS ==================================================
+# dispatch-target-workers count mode (default) prints a non-negative integer and
+# exits 0 even when telemetry is missing (it falls back to `1`), so a non-integer
+# output is a genuine failure. The binary is overridable for tests.
+TARGET_WORKERS_CMD="${DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD:-$SCRIPT_DIR/dispatch-target-workers}"
+if ! targetWorkers=$("$TARGET_WORKERS_CMD"); then
+  echo "dispatch-sample-usage: dispatch-target-workers failed; skipping capacity sample" >&2
+  exit 1
+fi
+if [[ ! "$targetWorkers" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-sample-usage: dispatch-target-workers did not print an integer; skipping capacity sample" >&2
+  exit 1
+fi
+
+# === STEP 5 — ASSEMBLE PAYLOAD + PIPE TO WRITER ===============================
+# Build the payload with jq --argjson so each numeric field serializes as a JSON
+# number and each absent reset as JSON null. Every value below has already been
+# validated as numeric or the literal `null`, so --argjson cannot choke; a jq -n
+# failure is treated as a fail-safe error regardless.
+if ! payload=$(jq -n \
+    --argjson fiveHourUsedPct "$FIVEH_USED" \
+    --argjson weeklyUsedPct "$WEEKLY_USED" \
+    --argjson fiveHourResetsAt "$FIVEH_RESETS_JSON" \
+    --argjson weeklyResetsAt "$WEEKLY_RESETS_JSON" \
+    --argjson activeWorkers "$activeWorkers" \
+    --argjson targetWorkers "$targetWorkers" \
+    '{fiveHourUsedPct:$fiveHourUsedPct, weeklyUsedPct:$weeklyUsedPct, fiveHourResetsAt:$fiveHourResetsAt, weeklyResetsAt:$weeklyResetsAt, activeWorkers:$activeWorkers, targetWorkers:$targetWorkers}'); then
+  echo "dispatch-sample-usage: failed to assemble the usage payload; skipping capacity sample" >&2
+  exit 1
+fi
+
+# Pipe the payload to the writer (Unit 1), overridable for tests. The writer
+# reads its own config from env vars that must be pre-set in the environment
+# (e.g., shell profile); the dispatch tick inherits them but does not set them
+# itself. Do not echo credentials.
+WRITER="${DISPATCH_USAGE_SAMPLES_WRITER:-$SCRIPT_DIR/usage-sample-writer.mjs}"
+if ! printf '%s' "$payload" | "$WRITER"; then
+  echo "dispatch-sample-usage: usage-sample-writer failed to write the sample; no document written" >&2
+  exit 1
+fi
+
+exit 0

@@ -17,7 +17,7 @@
 #   phase=<phase>
 #   pr=<pr-num>
 #
-# <phase> is one of: implement, verify, qa, review.
+# <phase> is one of: plan, implement, verify, qa, review.
 #
 # When CLAUDE_JOB_DIR is unset/empty or not a directory the script is running
 # interactively (not under a dispatch job): it prints a diagnostic and no-ops
@@ -71,9 +71,9 @@ if [[ ! "$PR_NUM" =~ ^[0-9]+$ ]]; then
 fi
 
 case "$PHASE" in
-  implement|verify|qa|review) ;;
+  plan|implement|verify|qa|review) ;;
   *)
-    echo "dispatch-mark-complete: unknown phase: $PHASE (expected implement, verify, qa, or review)" >&2
+    echo "dispatch-mark-complete: unknown phase: $PHASE (expected plan, implement, verify, qa, or review)" >&2
     exit 2
     ;;
 esac

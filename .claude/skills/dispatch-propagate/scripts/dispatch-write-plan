@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# dispatch-write-plan — persist a plan to the issue's sentinel plan comment.
+#
+# Usage: dispatch-write-plan <issue-num>   (plan markdown on STDIN)
+#
+# Reads plan markdown from STDIN and writes it to a sentinel
+# <!-- dispatch:plan --> comment on issue <issue-num>. Find-or-update: if a
+# comment containing the marker already exists, it is edited in place (PATCH);
+# otherwise a new comment is created (POST). The operation is idempotent —
+# re-running replaces the plan, it never stacks a second comment. The full plan
+# lives as a comment, not in the issue body, so the machine-authored plan never
+# clobbers the human-authored acceptance criteria.
+#
+# The repo is resolved from the git common dir so gh addresses the right
+# repository from any caller cwd. A missing arg, a non-numeric issue-num, or
+# empty STDIN is a clear error, not a fallback (exit 2).
+set -euo pipefail
+
+N="${1:-}"
+if [[ $# -ne 1 || -z "$N" ]]; then
+  echo "dispatch-write-plan: exactly one issue-num argument is required" >&2
+  echo "usage: dispatch-write-plan <issue-num>   (plan markdown on STDIN)" >&2
+  exit 2
+fi
+if [[ ! "$N" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-write-plan: issue-num must be a positive integer, got: $N" >&2
+  echo "usage: dispatch-write-plan <issue-num>   (plan markdown on STDIN)" >&2
+  exit 2
+fi
+
+common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || {
+  echo "dispatch-write-plan: not inside a git repository" >&2; exit 1; }
+cd "$(dirname "$common_dir")"   # PROJECT_ROOT — so gh resolves the repo from any caller cwd
+
+MARKER='<!-- dispatch:plan -->'
+
+CONTENT="$(cat)"
+if [[ -z "${CONTENT//[[:space:]]/}" ]]; then
+  echo "dispatch-write-plan: plan markdown on STDIN is empty" >&2
+  exit 2
+fi
+
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+printf '%s\n%s\n' "$MARKER" "$CONTENT" > "$tmp"
+
+CID=$(gh api --paginate "repos/{owner}/{repo}/issues/$N/comments" \
+  --jq '.[] | select(.body | contains("'"$MARKER"'")) | .id' | head -n1)
+
+if [[ -n "$CID" ]]; then
+  gh api --method PATCH "repos/{owner}/{repo}/issues/comments/$CID" \
+    --field body=@"$tmp" >/dev/null
+else
+  gh api --method POST "repos/{owner}/{repo}/issues/$N/comments" \
+    --field body=@"$tmp" >/dev/null
+fi
