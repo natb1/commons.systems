@@ -690,12 +690,32 @@ NO_LABELS='[]'
 # ============================================================================
 echo "=== dispatch-phase ==="
 
-# 1. No PR → implement
-echo "Test: no PR → implement"
+# 1. No PR, no dispatch:planned label → plan (the issue has not been planned yet).
+# dispatch-phase fetches the issue's labels (gh issue view <num> --json labels);
+# absence of issue-labels-42.json means the issue carries no labels.
+echo "Test: no PR, unplanned → plan"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "no PR → implement" "implement" "$result"
+assert_eq "no PR, unplanned → plan" "plan" "$result"
+teardown
+
+# 1b. No PR + dispatch:planned label → implement (an approved plan exists).
+echo "Test: no PR + dispatch:planned → implement"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf '{"labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "no PR + dispatch:planned → implement" "implement" "$result"
+teardown
+
+# 1c. No PR + labels without dispatch:planned → plan (explicit non-empty labels).
+echo "Test: no PR + non-planned label → plan"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf '{"labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "no PR + non-planned label → plan" "plan" "$result"
 teardown
 
 # 2. Draft + failing CI → verify
@@ -801,13 +821,14 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42-my-feature")
 assert_eq "branch arg exact match → qa" "qa" "$result"
 teardown
 
-# 12. Issue prefix disambiguation: issue 6 should not match branch "60-foo"
+# 12. Issue prefix disambiguation: issue 6 should not match branch "60-foo".
+# With no PR matched for issue 6 and no dispatch:planned label, the phase is plan.
 echo "Test: issue 6 does not match branch 60-foo"
 setup
 printf '[%s]\n' "$(make_pr 10 "60-foo" "true" "$NO_LABELS" "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "6")
-assert_eq "issue 6 does not match branch 60-foo" "implement" "$result"
+assert_eq "issue 6 does not match branch 60-foo → plan" "plan" "$result"
 teardown
 
 # 13. DISPATCH_PR_LIST is used in place of a self-issued gh pr list.
@@ -1067,14 +1088,31 @@ route_run() {
   ROUTE_OUT=$("$TMPDIR_TEST/dispatch-route" "$@" 2>/dev/null) && ROUTE_RC=0 || ROUTE_RC=$?
 }
 
-# 1. No PR → RELEVANCE-REVIEW (implement phase).
-echo "Test: no PR → RELEVANCE-REVIEW"
+# 1. No PR, unplanned → RELEVANCE-REVIEW (plan phase). dispatch-phase fetches the
+# issue's labels (no issue-labels-42.json → no dispatch:planned → plan), and the
+# plan arm with no statements config falls through to RELEVANCE-REVIEW.
+echo "Test: no PR, unplanned → RELEVANCE-REVIEW"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 route_run 42 /wt/42-my-feature
-assert_eq "no PR → RELEVANCE-REVIEW (directive)" "RELEVANCE-REVIEW" "$ROUTE_OUT"
-assert_eq "no PR → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
+assert_eq "no PR, unplanned → RELEVANCE-REVIEW (directive)" "RELEVANCE-REVIEW" "$ROUTE_OUT"
+assert_eq "no PR, unplanned → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 1b. No PR + dispatch:planned → INVOKE /plan-implement (implement phase). The
+# transitional build bridge: dispatch-phase reads dispatch:planned → implement,
+# and the implement arm routes straight to the build skill with no relevance
+# review and no parse-job check. #1201 swaps this directive to INVOKE /implement.
+echo "Test: no PR + dispatch:planned → INVOKE /plan-implement"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR + dispatch:planned → INVOKE /plan-implement (directive)" \
+  "INVOKE /plan-implement" "$ROUTE_OUT"
+assert_eq "no PR + dispatch:planned → INVOKE /plan-implement (exit 0)" "0" "$ROUTE_RC"
 teardown
 
 # 2. Draft + failing CI → INVOKE /verify-pr.
@@ -3460,8 +3498,8 @@ echo "=== office-hours-select-target ==="
 # Reuses the select-target gh/git/claude fakes (oh-issue-list.json seeds the
 # office-hours queue; pr-list-full.json drives dispatch-phase/dispatch-find-pr).
 
-# OHST1. Oldest labeled sessionless item wins; no PR → phase implement, pr `-`.
-echo "Test: oldest labeled item with no PR → implement, dash PR"
+# OHST1. Oldest labeled sessionless item wins; no PR, unplanned → phase plan, pr `-`.
+echo "Test: oldest labeled item with no PR → plan, dash PR"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
@@ -3469,7 +3507,7 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # orphan world: no live sessions
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "oldest labeled item selected (implement, no PR)" "office-hours 42 implement - -" "$result"
+assert_eq "oldest labeled item selected (plan, no PR)" "office-hours 42 plan - -" "$result"
 teardown
 
 # OHST2. A qa item — draft PR, CI green, no dispatch:* label → phase qa, PR num.
@@ -3555,7 +3593,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 # setup's default CLAUDE_AGENTS_CMD points at a non-existent binary (UNKNOWN).
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "UNKNOWN-liveness worktree item skipped; worktree-free item selected" "office-hours 99 implement - -" "$result"
+assert_eq "UNKNOWN-liveness worktree item skipped; worktree-free item selected" "office-hours 99 plan - -" "$result"
 teardown
 
 # Install a fake `claude` whose `agents --json` returns a controllable session
@@ -3625,7 +3663,7 @@ export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
 # sessionless) plus a parked dispatch-* router under main.
 parked_router_fake_claude "dispatch-abc123:waiting"
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "labeled item selected over parked router" "office-hours 42 implement - -" "$result"
+assert_eq "labeled item selected over parked router" "office-hours 42 plan - -" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
@@ -3668,7 +3706,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # orphan: no live sessions → sessionless, picked fresh
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "fresh disposition carries the worktree path" "office-hours 42 implement - /worktrees/42-x" "$result"
+assert_eq "fresh disposition carries the worktree path" "office-hours 42 plan - /worktrees/42-x" "$result"
 teardown
 
 # ============================================================================
@@ -3733,7 +3771,7 @@ assert_eq "fresh: --name" "--name" "${oh_argv[1]:-}"
 assert_eq "fresh: name is the worktree basename" "42-x" "${oh_argv[2]:-}"
 assert_eq "fresh: --permission-mode" "--permission-mode" "${oh_argv[3]:-}"
 assert_eq "fresh: permission mode is auto" "auto" "${oh_argv[4]:-}"
-assert_eq "fresh: prompt is /office-hours with args" "/office-hours 42 implement -" "${oh_argv[5]:-}"
+assert_eq "fresh: prompt is /office-hours with args" "/office-hours 42 plan -" "${oh_argv[5]:-}"
 # The --bg job was born in the worktree (cwd = worktree path).
 oh_pwd=$(head -1 "$TMPDIR_TEST/oh-pwd-log" 2>/dev/null || true)
 assert_eq "fresh: spawn cwd is the worktree" "$(realpath "$TMPDIR_TEST/worktrees/42-x")" "$(realpath "$oh_pwd" 2>/dev/null)"
@@ -20272,6 +20310,16 @@ if CLAUDE_JOB_DIR="$mc_dir" "$MARK_COMPLETE" --phase plan --pr 42; then mc_ec=0;
 assert_eq "mark-complete: --phase plan accepted (exit 0)" "0" "$mc_ec"
 assert_eq "mark-complete: plan writes exact phase-completed contents" \
   "$(printf 'phase=plan\npr=42\n')" "$(cat "$mc_dir/phase-completed")"
+rm -rf "$mc_dir"
+
+# ----- mark-complete: --phase plan with NO --pr → exit 0, pr-less marker -----
+# The plan phase completes on a no-PR issue, so --pr is optional for plan and the
+# marker carries only the phase= line (dispatch-stop.sh greps only ^phase=).
+mc_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mc_dir" "$MARK_COMPLETE" --phase plan; then mc_ec=0; else mc_ec=$?; fi
+assert_eq "mark-complete: --phase plan no --pr (exit 0)" "0" "$mc_ec"
+assert_eq "mark-complete: plan no --pr writes pr-less marker" \
+  "$(printf 'phase=plan\n')" "$(cat "$mc_dir/phase-completed")"
 rm -rf "$mc_dir"
 
 # ----- mark-complete: unknown phase → exit 2, no file -----
