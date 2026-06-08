@@ -112,7 +112,7 @@ export async function renderHome(user: User | null): Promise<string> {
   `;
 }
 
-export async function afterRenderHome(outlet: HTMLElement): Promise<void> {
+export function afterRenderHome(outlet: HTMLElement): void {
   outlet.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
     const downloadBtn = target.closest(".media-download") as HTMLButtonElement | null;

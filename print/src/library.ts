@@ -96,7 +96,10 @@ export async function getLocalItem(id: string): Promise<MediaItem | null> {
 }
 
 export async function resolveLocalBlob(item: MediaItem): Promise<ArrayBuffer | null> {
-  return localSource ? localSource.resolveToBlob(item) : null;
+  if (!localSource) {
+    throw new Error('No local source bound');
+  }
+  return localSource.resolveToBlob(item);
 }
 
 export function hasLocalSource(): boolean {

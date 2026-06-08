@@ -13,7 +13,7 @@ import { isLocalId, getLocalItem, resolveLocalBlob } from "../library.js";
 
 const BACK_LINK = '<a href="/" class="viewer-back">&larr; Back to Library</a>';
 
-const NOT_FOUND_HTML = `
+export const NOT_FOUND_HTML = `
       <h2>Not Found</h2>
       <p id="view-not-found">Media item not found.</p>
       ${BACK_LINK}
@@ -119,17 +119,23 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
   const uid = readingPositionUid(local, user?.uid ?? null);
 
   if (local) {
-    const resolveLocal = async (): Promise<ArrayBuffer> => {
-      try {
-        const buf = await resolveLocalBlob(item);
-        if (!buf) throw new Error("Local file no longer present: " + item.id);
-        return buf;
-      } catch (error) {
-        // Graceful: surface the existing #view-error UI instead of crashing.
-        reportError(new Error("Failed to resolve local media file", { cause: error }));
-        outlet.innerHTML = ERROR_HTML;
-        throw error;
-      }
+    const resolveLocal = (): Promise<ArrayBuffer> => {
+      return resolveLocalBlob(item)
+        .then((buf) => {
+          if (!buf) throw new Error("Local file no longer present");
+          return buf;
+        })
+        .catch((error) => {
+          // Graceful: surface the existing #view-error UI instead of crashing.
+          // The error is fully handled here (reportError + ERROR_HTML), so do
+          // NOT re-throw: re-throwing would propagate into initViewer's own
+          // .catch(), which would call reportError a second time for the same
+          // failure. Returning a never-settling promise stops initViewer from
+          // proceeding to render and from entering its catch block.
+          reportError(new Error("Failed to resolve local media file", { cause: error }));
+          outlet.innerHTML = ERROR_HTML;
+          return new Promise<ArrayBuffer>(() => {});
+        });
     };
     switch (item.mediaType) {
       case "pdf":

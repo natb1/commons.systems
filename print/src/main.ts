@@ -5,7 +5,7 @@ import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError } from "@commons-systems/errorutil/log";
 import { renderHome, afterRenderHome } from "./pages/home.js";
 import { initLocalFolder } from "./local-folder-ui.js";
-import { renderView, afterRenderView, cleanupView } from "./pages/view.js";
+import { renderView, afterRenderView, cleanupView, NOT_FOUND_HTML } from "./pages/view.js";
 import { renderAbout } from "./pages/about.js";
 import "@commons-systems/components/nav";
 import type { AppNavElement } from "@commons-systems/components/nav";
@@ -62,7 +62,17 @@ const router = createHistoryRouter(
     },
     {
       path: /^\/view\/([^/]+)$/,
-      render: (path) => renderView(decodeURIComponent(path.slice("/view/".length)), currentUser),
+      render: (path) => {
+        let id: string;
+        try {
+          id = decodeURIComponent(path.slice("/view/".length));
+        } catch {
+          // Malformed percent-encoding (e.g. /view/%ZZ) is normal user input,
+          // not an error to report — treat it as a missing item.
+          return NOT_FOUND_HTML;
+        }
+        return renderView(id, currentUser);
+      },
       afterRender: (outlet) => afterRenderView(outlet, currentUser),
     },
     { path: "/about", render: renderAbout },

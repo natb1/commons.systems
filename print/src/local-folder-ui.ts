@@ -73,7 +73,6 @@ export async function initLocalFolder(
     try {
       const dir = await window.showDirectoryPicker!({ mode: "read" });
       await store.put(PURPOSE, dir);
-      await store.requestPermission(dir, "read");
       await bindAndRender(dir);
     } catch (e) {
       if ((e as DOMException)?.name === "AbortError") return;
