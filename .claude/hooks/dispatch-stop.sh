@@ -50,19 +50,19 @@
 #      and the ISSUE, spawn router, self-close. Empty CURRENT_PHASE (e.g.
 #      dispatch-phase network failure) is treated as "undetermined" and falls
 #      through to Branch D rather than triggering a false self-close.
-#   C. marker present + same phase + CURRENT_PHASE == verify + verify-attempt
-#      counter < 3 — transient no-push verify outcome. CI has already concluded
-#      and nothing is pending: a verify pass that pushes a fix restarts CI, and
+#   C. marker present + same phase + CURRENT_PHASE == fix-checks + fix-checks-attempt
+#      counter < 3 — transient no-push fix-checks outcome. CI has already concluded
+#      and nothing is pending: a fix-checks pass that pushes a fix restarts CI, and
 #      the early not-ready gate above already intercepts and self-closes that
 #      in-progress case when the marker is present, so by the time control
 #      reaches Branch C, CI is concluded and not re-running. Spawn router,
 #      self-close (so the session does not leak idle holding its worktree); the
-#      next tick re-runs verify or escalates at the cap. The needs-human verify
-#      failure never reaches Branch C — /verify-pr skips the marker for it, so it
+#      next tick re-runs fix-checks or escalates at the cap. The needs-human fix-checks
+#      failure never reaches Branch C — /fix-checks skips the marker for it, so it
 #      lands in Branch A (marker absent → park the issue on office-hours on the
 #      first run).
-#   D. marker present + same phase + NOT (verify AND counter < 3) — true
-#      non-advancement (or a hypothetical same-phase non-verify case). Park the
+#   D. marker present + same phase + NOT (fix-checks AND counter < 3) — true
+#      non-advancement (or a hypothetical same-phase non-fix-checks case). Park the
 #      ISSUE on a human via dispatch-apply-office-hours (label + why-comment),
 #      spawn router, exit 0.
 #
@@ -206,7 +206,7 @@ MARKER_PHASE=""
 if [ -f "$MARKER_FILE" ]; then
   MARKER_PHASE=$(grep -E '^phase=' "$MARKER_FILE" | head -n1 | cut -d= -f2) || MARKER_PHASE=""
   case "$MARKER_PHASE" in
-    plan|implement|verify|qa|review|done) ;;
+    plan|implement|fix-checks|qa|review|done) ;;
     *) MARKER_PHASE="" ;;
   esac
 fi
@@ -258,14 +258,14 @@ if [ -n "$CURRENT_PHASE" ] && [ "$MARKER_PHASE" != "$CURRENT_PHASE" ]; then
   exit 0
 fi
 
-# Same phase. Check verify-exemption.
-if [ "$CURRENT_PHASE" = "verify" ] && [ -n "$PR_NUM" ]; then
-  N=$(gh pr view "$PR_NUM" --json labels --jq '[.labels[].name | capture("^dispatch:verify-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0' 2>/dev/null) || N=0
+# Same phase. Check fix-checks-exemption.
+if [ "$CURRENT_PHASE" = "fix-checks" ] && [ -n "$PR_NUM" ]; then
+  N=$(gh pr view "$PR_NUM" --json labels --jq '[.labels[].name | capture("^dispatch:fix-checks-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0' 2>/dev/null) || N=0
   [ -z "$N" ] && N=0
   if [ "$N" -lt 3 ]; then
-    # Branch C — transient no-push verify outcome; CI concluded, nothing
+    # Branch C — transient no-push fix-checks outcome; CI concluded, nothing
     # pending. Self-close so the session does not leak idle holding its
-    # worktree; the next tick re-runs verify or escalates at the cap.
+    # worktree; the next tick re-runs fix-checks or escalates at the cap.
     spawn_tick
     self_close
     exit 0
