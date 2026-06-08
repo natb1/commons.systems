@@ -12,10 +12,14 @@ export interface NavUser {
   readonly email: string | null;
 }
 
+const HOME_HREF = "https://commons.systems/";
+const HOME_LABEL = "commons.systems";
+
 class AppNavElement extends HTMLElement {
   #links: NavLink[] = [];
   #user: NavUser | null = null;
   #showAuth = true;
+  #showHomeLink = true;
 
   set links(v: NavLink[]) {
     this.#links = [...v];
@@ -41,6 +45,14 @@ class AppNavElement extends HTMLElement {
     return this.#showAuth;
   }
 
+  set showHomeLink(v: boolean) {
+    this.#showHomeLink = v;
+    this.#render();
+  }
+  get showHomeLink(): boolean {
+    return this.#showHomeLink;
+  }
+
   #ensureContainer(className: string, position: "prepend" | "append"): HTMLSpanElement {
     let el = this.querySelector(`.${className}`) as HTMLSpanElement | null;
     if (!el) {
@@ -60,6 +72,14 @@ class AppNavElement extends HTMLElement {
         return `<a href="${escapeHtml(l.href)}"${alignAttr}>${escapeHtml(l.label)}</a>`;
       })
       .join("");
+
+    const homeContainer = this.#ensureContainer("nav-home", "append");
+
+    if (this.#showHomeLink) {
+      homeContainer.innerHTML = `<a href="${escapeHtml(HOME_HREF)}">${escapeHtml(HOME_LABEL)}</a>`;
+    } else {
+      homeContainer.innerHTML = "";
+    }
 
     const authContainer = this.#ensureContainer("nav-auth", "append");
 
