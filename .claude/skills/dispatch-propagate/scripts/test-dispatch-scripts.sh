@@ -17193,7 +17193,12 @@ sel_tick_setup() {
   # FAKE copy written below — so the sweep's liveness query is driven by the
   # SEL_AGENTS_* env vars rather than a real daemon. Sourced, not executed.
   cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/lib-reservation-ledger.sh"
-  chmod +x "$TMPDIR_TEST/dispatch-select-tick" "$TMPDIR_TEST/dispatch-acquire-lock"
+  # dispatch-select-tick Step 1d calls dispatch-reconcile-ready from its own
+  # SCRIPT_DIR (= TMPDIR_TEST). Copy the real script so the wiring test can
+  # assert reconcile-produced `ready:` lines appear in the tick output.
+  cp "$SCRIPT_DIR/dispatch-reconcile-ready" "$TMPDIR_TEST/dispatch-reconcile-ready"
+  chmod +x "$TMPDIR_TEST/dispatch-select-tick" "$TMPDIR_TEST/dispatch-acquire-lock" \
+           "$TMPDIR_TEST/dispatch-reconcile-ready"
 
   export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
   export CLAUDE_CODE_SESSION_ID="select-tick-session"
@@ -17301,6 +17306,27 @@ case "$args" in
     ;;
   issue\ close\ *)
     echo "$args" >> "$STUB_DIR/gh-issue-close.log"
+    ;;
+  "pr list --state open --json number,isDraft,labels,statusCheckRollup,mergeable")
+    # dispatch-reconcile-ready's one fetch. $STUB_DIR/reconcile-pr-list.json
+    # supplies the per-test PR array; absence means no open PRs.
+    echo "pr list" >> "$STUB_DIR/gh-reconcile-pr-list.log"
+    if [[ -f "$STUB_DIR/reconcile-pr-list.json" ]]; then
+      cat "$STUB_DIR/reconcile-pr-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  pr\ ready\ --undo\ *)
+    num=$(printf '%s' "$args" | awk '{print $NF}')
+    echo "$num" >> "$STUB_DIR/gh-pr-ready-undo.log"
+    ;;
+  pr\ ready\ *)
+    num=$(printf '%s' "$args" | awk '{print $NF}')
+    echo "$num" >> "$STUB_DIR/gh-pr-ready.log"
+    ;;
+  pr\ edit\ *--remove-label\ *)
+    echo "$args" >> "$STUB_DIR/gh-pr-edit.log"
     ;;
   *)
     echo "gh stub (sel-tick): unknown invocation: $args" >&2
@@ -17583,6 +17609,23 @@ assert_eq "cap: priority-only probe ran (returned empty)" "1" \
   "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
 assert_eq "cap: normal no-arg selection did NOT run" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- concurrency-cap tick still runs reconcile (Step 1d before the gate) -----
+# Acceptance criterion: reconcile runs even on a concurrency-cap tick.
+echo "Test: select-tick concurrency-cap tick runs reconcile, emits ready: lines"
+sel_tick_setup
+export SEL_LIVE_COUNT=2 SEL_TARGET_N=1 SEL_EXHAUSTED=ok SEL_PRIORITY_ONLY=empty
+# Write a promotable PR fixture: draft + dispatch:reviewed + passing CI + MERGEABLE.
+printf '[{"number":42,"isDraft":true,"mergeable":"MERGEABLE","statusCheckRollup":%s,"labels":[{"name":"dispatch:reviewed"}]}]\n' \
+  "$GREEN_ROLLUP" > "$STUB_DIR/reconcile-pr-list.json"
+out=$(run_sel_tick)
+assert_eq "cap-reconcile: decision line still concurrency-cap" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "cap-reconcile: ready: promoted line appears before decision" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'ready: promoted #42')"
+assert_eq "cap-reconcile: gh pr ready was called" "present" \
+  "$([ -f "$STUB_DIR/gh-pr-ready.log" ] && echo present || echo absent)"
 sel_tick_teardown
 
 # --- gate under cap → gap = target − live on the decision line ---------------
