@@ -283,7 +283,11 @@ applies nothing further for description mode.
 
 ### Issue number mode
 
-Assign the issue and apply `help wanted`, the matched type label, and any
+First, invoke `ref-issue-labels` via the Skill tool, passing the issue's title
+and body, to obtain `<type>` (`bug` or `enhancement`) and optional `<topic>`.
+This path never calls `/file-issue`, so the classifier runs here directly.
+
+Then assign the issue and apply `help wanted`, the matched type label, and any
 matched topic label in one call:
 
 ```bash
