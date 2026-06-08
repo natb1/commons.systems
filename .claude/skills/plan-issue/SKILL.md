@@ -143,28 +143,41 @@ Resolve any disagreement between multiple `Plan` proposals here.
 
 ### 5. Clarification / deviation gate — main thread
 
-Call `AskUserQuestion` **only** when EITHER:
+When EITHER:
 
 - **(a) Requirement ambiguity** — a requirement term has multiple plausible
   readings that would change the plan; or
 - **(b) Major scope deviation** — exploration revealed that the work needed
-  deviates substantially from the written acceptance criteria.
+  deviates substantially from the written acceptance criteria —
 
-Calling `AskUserQuestion` trips `dispatch-input-block.sh` (a `PreToolUse` hook),
-which parks the issue on `dispatch:office-hours` and passes the baton; the
-`/office-hours` queue later runs the clarification residue. On escalation, do
-**not** persist a partial plan and do **not** apply `dispatch:planned` — leave the
-issue unplanned so the resumed session re-plans cleanly.
+do **not** persist a partial plan and do **not** apply `dispatch:planned`. Instead,
+call `dispatch-mark-deviation` with a clear reason (including the clarification
+question or scope deviation description, so the office-hours comment tells the
+user what decision is needed), then **stop**:
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+  "/plan-issue: <question or deviation description>"
+```
+
+The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads marker-absence as Branch A
+and applies `dispatch:office-hours` to the issue, so the office-hours queue picks
+it up. The resumed session (`/office-hours`) re-runs `/plan-issue` once the user
+has resolved the ambiguity.
+
+Note: do **not** call `AskUserQuestion` as the escalation mechanism. The
+`dispatch-input-block.sh` hook that would intercept it only fires for
+`dispatch-*`-named background sessions; worker sessions (named after their
+worktree basename) are excluded and the call would block the session indefinitely.
 
 Otherwise proceed autonomously to Step 6. **Never call `ExitPlanMode`** — that is
 the user-approval gate this design removes. This skill's terminus is either
-auto-complete (Step 6) or `AskUserQuestion` → office-hours.
+auto-complete (Step 6) or marker-absent stop → office-hours.
 
-> **Important:** Use `AskUserQuestion` ONLY to resolve genuine ambiguity or a
-> major scope deviation — not as a routine end-of-planning checkpoint. An
-> unambiguous issue is planned with no user interaction. The relevance /
-> drift re-evaluation is owned by `dispatch-route` and the worker's Step 2; do
-> **not** repeat it here.
+> **Important:** Escalate ONLY on genuine ambiguity or a major scope deviation —
+> not as a routine end-of-planning checkpoint. An unambiguous issue is planned
+> with no user interaction. The relevance / drift re-evaluation is owned by
+> `dispatch-route` and the worker's Step 2; do **not** repeat it here.
 
 ### 6. Persist + complete
 
@@ -257,7 +270,7 @@ procedure verbatim:
      approved): skip the completion marker; instead:
      ```bash
      .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
-       "/plan-implement: implementation deviated from the approved plan"
+       "implement: implementation deviated from the approved plan"
      ```
    Then **stop**. The Stop hook reads the marker and propagates the chain.
 ````
