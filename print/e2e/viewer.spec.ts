@@ -630,14 +630,28 @@ test.describe("viewer", () => {
     await page.goto("/view/plato-republic");
     await expect(page.locator(".textLayer span").first()).toBeAttached({ timeout: 15000 });
 
-    // Capture text content on page 1
+    // Capture text content on page 1 — poll until the text layer populates
+    // (PDF.js fills span text asynchronously after node attachment).
+    await expect
+      .poll(
+        async () => ((await page.locator(".textLayer").textContent()) ?? "").trim().length,
+        { timeout: 15000 },
+      )
+      .toBeGreaterThan(0);
     const page1Text = await page.locator(".textLayer").textContent();
 
     // Navigate to page 2
     await page.locator(".viewer-next").click();
     await expect(page.locator(".viewer-position")).toContainText("2 / 3");
 
-    // Text layer content should differ on page 2
+    // Text layer content should differ on page 2 — poll until the page-2 text
+    // layer has populated with content distinct from page 1.
+    await expect
+      .poll(
+        async () => ((await page.locator(".textLayer").textContent()) ?? "").trim(),
+        { timeout: 15000 },
+      )
+      .toSatisfy((t: string) => t.length > 0 && t !== (page1Text ?? "").trim());
     const page2Text = await page.locator(".textLayer").textContent();
     expect(page2Text).not.toBe(page1Text);
   });
