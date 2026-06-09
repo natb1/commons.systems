@@ -4,7 +4,8 @@
 # Usage: dispatch-mark-complete --phase <phase> [--pr <pr-num>]
 #
 # --pr is optional when --phase plan (the plan phase completes on a no-PR
-# issue). It is required for implement, fix-conflicts, fix-checks, qa, and review.
+# issue) and for fix-conflicts in the provisioning backstop (no PR exists yet
+# in the implement phase). It is required for implement, fix-checks, qa, and review.
 #
 # Writes the dispatch phase-completed marker that dispatch-stop.sh reads to
 # decide the chain's next disposition. The marker is written atomically
@@ -75,7 +76,7 @@ case "$PHASE" in
     ;;
 esac
 
-if [[ "$PHASE" != "plan" && -z "$PR_NUM" ]]; then
+if [[ "$PHASE" != "plan" && "$PHASE" != "fix-conflicts" && -z "$PR_NUM" ]]; then
   echo "dispatch-mark-complete: --pr is required for phase $PHASE" >&2
   echo "usage: dispatch-mark-complete --phase <phase> [--pr <pr-num>]" >&2
   exit 2

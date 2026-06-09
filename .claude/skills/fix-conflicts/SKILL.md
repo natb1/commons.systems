@@ -211,8 +211,13 @@ Then write the **standard** phase-completed marker. The Stop hook
 Pass `--pr "$PR_NUM"` when non-empty; in the no-PR backstop pass no `--pr`:
 
 ```bash
-.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
-  --phase fix-conflicts --pr "$PR_NUM"
+if [[ -n "$PR_NUM" ]]; then
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
+    --phase fix-conflicts --pr "$PR_NUM"
+else
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
+    --phase fix-conflicts
+fi
 ```
 
 Then **stop**. With `mergeable` recomputed away from `CONFLICTING`, the next

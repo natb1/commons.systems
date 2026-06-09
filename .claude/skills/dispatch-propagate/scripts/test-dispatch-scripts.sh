@@ -14259,10 +14259,12 @@ case "$args" in
     echo "$args" >> "$STUB_DIR/gh-pr-remove.log"
     ;;
   pr\ view\ *)
-    if [[ -f "$STUB_DIR/verify-count.txt" ]]; then
-      cat "$STUB_DIR/verify-count.txt"
+    N=0
+    [[ -f "$STUB_DIR/verify-count.txt" ]] && N=$(cat "$STUB_DIR/verify-count.txt")
+    if [[ "$N" -gt 0 ]]; then
+      printf '{"labels":[{"name":"dispatch:fix-checks-attempt-%d"},{"name":"dispatch:fix-conflicts-attempt-%d"}]}\n' "$N" "$N"
     else
-      echo "0"
+      printf '{"labels":[]}\n'
     fi
     ;;
   pr\ list\ *)

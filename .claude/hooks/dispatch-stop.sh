@@ -236,7 +236,7 @@ fi
 case "$CURRENT_PHASE" in
   fix-*)
     if [ -n "$PR_NUM" ]; then
-      N=$(gh pr view "$PR_NUM" --json labels --jq --arg phase "$CURRENT_PHASE" '[.labels[].name | capture("^dispatch:" + $phase + "-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0' 2>/dev/null) || N=0
+      N=$(gh pr view "$PR_NUM" --json labels 2>/dev/null | jq --arg phase "$CURRENT_PHASE" '[.labels[].name | capture("^dispatch:" + $phase + "-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0') || N=0
       [ -z "$N" ] && N=0
       if [ "$N" -lt 3 ]; then
         # Branch C — transient no-push fix-* outcome; CI concluded, nothing
