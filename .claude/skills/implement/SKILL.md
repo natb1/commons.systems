@@ -8,7 +8,7 @@ description: Implement phase — read the persisted plan from the issue's `<!-- 
 The `implement` phase of the issue workflow, dispatched by `/dispatch-propagate`.
 Reads the plan persisted to the issue's `<!-- dispatch:plan -->` comment by the
 `plan` phase, builds each unit, and opens a draft PR. One draft PR with a
-`Closes #N` line is the implement→verify transition marker.
+`Closes #N` line is the implement→fix-checks transition marker.
 
 **The main thread never edits files.** It delegates: every code change happens in
 a subagent. Each unit is built by `/implement-unit`, which launches an
@@ -64,7 +64,7 @@ un-escapes `\t`/`\n` in the JSON and injects raw control chars `jq` rejects — 
 If a PR already exists, the build + PR already happened: capture its number as
 `PR_NUM`, **skip Steps 1–3**, and go straight to the Step 4 marker write (this
 covers a same-tick crash between PR-open and marker-write). If no PR exists, run
-all steps. (`dispatch-route` normally routes a PR-bearing issue to verify/qa/review,
+all steps. (`dispatch-route` normally routes a PR-bearing issue to fix-checks/qa/review,
 not implement, so this is a same-tick crash-recovery edge.)
 
 ## Steps
@@ -125,7 +125,7 @@ any additional implemented sub-issues or blockers (whitespace- or
 comma-separated, with or without a leading `#`). The script writes one
 `Closes #N` line per issue, appends the prose from `--body-file` (omit the flag
 to read prose from stdin), and echoes the created PR number — the only thing it
-prints on stdout. This draft PR is the implement→verify transition marker.
+prints on stdout. This draft PR is the implement→fix-checks transition marker.
 
 The script then verifies GitHub parsed exactly the intended close set, per
 `.claude/rules/issue-references.md`: narrative prose can carry a stray closing

@@ -8,7 +8,7 @@
 # round-trip and never branches on intermediate exit codes itself. Prints exactly
 # one directive line to stdout:
 #
-#   INVOKE /verify-pr               phase verify       (draft PR, CI failed)
+#   INVOKE /fix-checks              phase fix-checks   (draft PR, CI failed)
 #   INVOKE /qa-fix                  phase qa           (draft, CI green, no label)
 #   INVOKE /review-fix              phase review       (dispatch:qa-done / reviewed re-entry)
 #   INVOKE /budget-parse-job       phase plan         (no PR, unplanned, statements:<key> label) — parse-job issue
@@ -180,7 +180,7 @@ case "$PHASE" in
     # planned issue is never a parse-job).
     echo "INVOKE /implement"
     ;;
-  verify)       echo "INVOKE /verify-pr" ;;
+  fix-checks)   echo "INVOKE /fix-checks" ;;
   qa)           echo "INVOKE /qa-fix" ;;
   review)       echo "INVOKE /review-fix" ;;
   done)

@@ -72,7 +72,7 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 # when it fires, so the phase skill's full instructions are present in context
 # regardless of whether the Skill tool was invoked.
 #
-# Routing: plan→plan-issue; implement→implement; verify→verify-pr; qa→qa-fix;
+# Routing: plan→plan-issue; implement→implement; fix-checks→fix-checks; qa→qa-fix;
 # review→review-fix;
 # done/unknown/dispatch-phase failure (incl. not-ready CI, exit 3)→dispatch-worker (the worker's
 # Step 2 CI-monitor loop and Step 2 done variance handling still run).
@@ -114,10 +114,10 @@ else
       SKILL_ARGS="$ISSUE_NUM"
       DIRECTIVE="/implement $ISSUE_NUM"
       ;;
-    verify)
-      SKILL_DIR_NAME="verify-pr"
+    fix-checks)
+      SKILL_DIR_NAME="fix-checks"
       SKILL_ARGS=""
-      DIRECTIVE="/verify-pr"
+      DIRECTIVE="/fix-checks"
       ;;
     qa)
       SKILL_DIR_NAME="qa-fix"
