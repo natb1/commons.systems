@@ -18824,6 +18824,36 @@ assert_eq "fanout-done: no spawn" "0" \
 assert_eq "fanout-done: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
+# --- spawn-boundary done re-check (#1109/#1126): MIXED fan-out — one done, one not
+# The all-done fan-out test above uses the global MAT_PHASE and cannot express a
+# per-target mix. With the per-issue override (#1126), #839 reads done (skipped at
+# the spawn boundary) while #840 falls back to the global MAT_PHASE=implement (a
+# normal not-done target → spawned) — the realistic case a per-target regression
+# in the real done re-check would otherwise slip past. Exactly one skip, one spawn,
+# lock released.
+echo "Test: materialize-spawn mixed fan-out done re-check → one skip, one spawn (#1126)"
+mat_setup
+export MAT_PHASE=implement
+export MAT_PHASE_839=done
+export MAT_QUEUE="840"
+out=$(run_mat 839 queue --gap 2) ; rc=$?
+assert_eq "mixed-fanout: exit 0" "0" "$rc"
+assert_eq "mixed-fanout: exactly one target-done skip" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'skipped #.* (target-done)')"
+assert_eq "mixed-fanout: the skipped target is #839" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'propagate: skipped #839 (target-done)')"
+assert_eq "mixed-fanout: exactly one spawn line" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'propagate: spawned #')"
+assert_eq "mixed-fanout: the spawned target is #840" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'propagate: spawned #840')"
+assert_eq "mixed-fanout: spawn-worker invoked exactly once" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log")"
+assert_eq "mixed-fanout: summary spawned 1 of gap 2" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 2')"
+assert_eq "mixed-fanout: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "mixed-fanout: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
 # --- phase→model integration: qa phase → --model claude-sonnet-4-6 forwarded --
 # When the recomputed PHASE is qa, dispatch-materialize-spawn calls the real
 # dispatch-phase-model (now staged by mat_setup) which emits claude-sonnet-4-6,
