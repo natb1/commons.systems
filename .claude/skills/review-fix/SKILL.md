@@ -445,9 +445,10 @@ of scope for this PR. Pass the assessed blocker issue number(s) — or an explic
 `independent` marker — into the subagent's prompt alongside `$INPUT`. The
 subagent:
 
-1. Invokes `/file-issue`, which owns duplicate detection, issue creation, `@me`
-   assignment, and the `help wanted` label. `/file-issue` prints `CREATED <N>` or
-   `EXISTING <N>` on its own line; the subagent parses it.
+1. Invokes `/file-issue`, which runs the full pipeline: duplicate detection,
+   8-category evaluation, decomposition gate, type/topic classification, issue
+   creation, `@me` assignment, and the `help wanted` label. `/file-issue` prints
+   `CREATED <N>` or `EXISTING <N>` on its own line; the subagent parses it.
 2. For a non-independent finding, records a `blocked_by` dependency **on the new
    issue `<N>`, targeting each blocker issue number** passed in. The target is the
    GitHub **issue** — never the PR number, and the dependency is the API
@@ -535,14 +536,16 @@ subagent:
    proceed to the next step.
 2. Invokes `/file-issue` with the follow-up's `title` on the first line and its
    `body` after. `/file-issue` owns duplicate detection, creation, `@me`
-   assignment, and the `help wanted` label; it prints `CREATED <N>` or
-   `EXISTING <N>` on its own line — parse `<N>`.
+   assignment, the `help wanted` label, and type + topic classification; it
+   prints `CREATED <N>` or `EXISTING <N>` on its own line — parse `<N>`.
 3. Applies the topic and type labels (use `dangerouslyDisableSandbox: true` —
    `gh` needs network):
 
    ```bash
    gh issue edit <N> --add-label security --add-label bug
    ```
+
+   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed.
 
 4. Returns `<N>` mapped to the follow-up's `identifier`.
 

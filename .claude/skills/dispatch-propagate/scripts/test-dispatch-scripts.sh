@@ -2279,7 +2279,7 @@ teardown
 # --- topic-category prioritization (issue #707) -----------------------------
 # The `priority` label is the outermost axis: every `priority` item ranks above
 # every non-priority item, regardless of topic. Topic category
-# (security → bug → testing infrastructure → dispatch → budget → print → audio → other) nests inside the priority
+# (security → bug → testing infrastructure → dispatch → landing → fellspiral → budget → print → audio → other) nests inside the priority
 # axis, and the phase ladder runs innermost. A PR's category is resolved from
 # the labels of the issues it closes; an issue's category from its own labels.
 
@@ -2506,6 +2506,88 @@ printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dis
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "dispatch-closing PR beats budget-closing PR" "pr 10 10-dispatch-pr verify" "$result"
+teardown
+
+# 30j1. A PR closing a `dispatch` issue outranks a PR closing a `landing` issue,
+#       even when the dispatch PR is older — `dispatch` ranks above `landing` in
+#       the topic ladder (category beats age).
+echo "Test: PR closing a dispatch issue beats PR closing a landing issue"
+setup
+# PR 20 (newer) closes landing issue 200; PR 10 (older) closes dispatch issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-landing-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-dispatch-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"landing"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "dispatch-closing PR beats landing-closing PR" "pr 10 10-dispatch-pr verify" "$result"
+teardown
+
+# 30j2. A PR closing a `landing` issue outranks a PR closing a `fellspiral` issue,
+#       even when the landing PR is older — `landing` ranks above `fellspiral` in
+#       the topic ladder (category beats age).
+echo "Test: PR closing a landing issue beats PR closing a fellspiral issue"
+setup
+# PR 20 (newer) closes fellspiral issue 200; PR 10 (older) closes landing issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-fellspiral-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-landing-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"landing"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"fellspiral"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "landing-closing PR beats fellspiral-closing PR" "pr 10 10-landing-pr verify" "$result"
+teardown
+
+# 30j3. A PR closing a `fellspiral` issue outranks a PR closing a `budget` issue,
+#       even when the fellspiral PR is older — `fellspiral` ranks above `budget` in
+#       the topic ladder (category beats age).
+echo "Test: PR closing a fellspiral issue beats PR closing a budget issue"
+setup
+# PR 20 (newer) closes budget issue 200; PR 10 (older) closes fellspiral issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-budget-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-fellspiral-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"fellspiral"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"budget"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "fellspiral-closing PR beats budget-closing PR" "pr 10 10-fellspiral-pr verify" "$result"
+teardown
+
+# 30j4. A help-wanted `landing` issue outranks a help-wanted issue with no topic
+#       label, even when the landing issue is older — `landing` ranks above the
+#       `other` fallback (category beats age).
+echo "Test: landing issue beats issue with no topic label"
+setup
+setup_union_pr_list '[]'
+# Issue 400 (newer) has no topic label (resolves to `other`); issue 300 (older) is landing.
+printf '[{"number":400,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"landing"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "landing issue beats untopiced (other) issue" "issue 300" "$result"
+teardown
+
+# 30j5. A help-wanted `fellspiral` issue outranks a help-wanted issue with no topic
+#       label, even when the fellspiral issue is older — `fellspiral` ranks above
+#       the `other` fallback (category beats age).
+echo "Test: fellspiral issue beats issue with no topic label"
+setup
+setup_union_pr_list '[]'
+# Issue 400 (newer) has no topic label (resolves to `other`); issue 300 (older) is fellspiral.
+printf '[{"number":400,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"fellspiral"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "fellspiral issue beats untopiced (other) issue" "issue 300" "$result"
 teardown
 
 # 30k. A help-wanted `budget` issue outranks a help-wanted issue with no topic
@@ -20132,7 +20214,7 @@ out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
 assert_eq "dispatch-drift-scan: too-wide window still exits 0" "0" "$rc"
 assert_contains_local "dispatch-drift-scan: emits WINDOW-TOO-WIDE marker" "WINDOW-TOO-WIDE" "$out"
 assert_contains_local "dispatch-drift-scan: recommends re-run" "Re-run" "$out"
-assert_contains_local "dispatch-drift-scan: recommends /ready" "/ready" "$out"
+assert_contains_local "dispatch-drift-scan: recommends /file-issue" "/file-issue" "$out"
 assert_contains_local "dispatch-drift-scan: anchor still prints under guard" "2026-06-03T00:00:00Z" "$out"
 assert_not_contains_local "dispatch-drift-scan: partial PR list suppressed" "pr 50" "$out"
 drift_scan_teardown
@@ -20193,7 +20275,7 @@ assert_not_contains_local "dispatch-drift-scan: present name ref found even when
 drift_scan_teardown
 
 # --- Regression: slash-commands are not classified as path refs ---
-# Guards defect 2: tokens like /ready and /dispatch-worker contain `/`, so the
+# Guards defect 2: tokens like /file-issue and /dispatch-worker contain `/`, so the
 # old is_path_token treated them as filesystem paths and existence-checked them,
 # flagging [ABSENT]. They are skill references and must fall through to name refs.
 
@@ -20201,7 +20283,7 @@ echo "Test: dispatch-drift-scan does not classify slash-commands as path refs"
 drift_scan_setup
 printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Run `/dispatch-worker` and `/ready` then `present.sh`."}
+{"createdAt":"2026-06-03T00:00:00Z","body":"Run `/dispatch-worker` and `/file-issue` then `present.sh`."}
 EOF
 cat > "$TMPDIR_TEST/prs.json" <<'EOF'
 []
@@ -20210,7 +20292,7 @@ EOF
 cd "$TMPDIR_TEST/tree"
 out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
 assert_eq "dispatch-drift-scan: slash-command scan exits 0" "0" "$rc"
-assert_not_contains_local "dispatch-drift-scan: /ready not existence-checked as a path" "/ready [ABSENT]" "$out"
+assert_not_contains_local "dispatch-drift-scan: /file-issue not existence-checked as a path" "/file-issue [ABSENT]" "$out"
 assert_not_contains_local "dispatch-drift-scan: /dispatch-worker not existence-checked as a path" "/dispatch-worker [ABSENT]" "$out"
 drift_scan_teardown
 
