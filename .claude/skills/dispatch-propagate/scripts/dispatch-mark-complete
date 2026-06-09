@@ -4,7 +4,7 @@
 # Usage: dispatch-mark-complete --phase <phase> [--pr <pr-num>]
 #
 # --pr is optional when --phase plan (the plan phase completes on a no-PR
-# issue). It is required for implement, fix-checks, qa, and review.
+# issue). It is required for implement, fix-conflicts, fix-checks, qa, and review.
 #
 # Writes the dispatch phase-completed marker that dispatch-stop.sh reads to
 # decide the chain's next disposition. The marker is written atomically
@@ -20,7 +20,7 @@
 #   phase=<phase>
 #   pr=<pr-num>   (omitted for the no-PR plan phase when --pr is not given)
 #
-# <phase> is one of: plan, implement, fix-checks, qa, review.
+# <phase> is one of: plan, implement, fix-conflicts, fix-checks, qa, review.
 #
 # When CLAUDE_JOB_DIR is unset/empty or not a directory the script is running
 # interactively (not under a dispatch job): it prints a diagnostic and no-ops
@@ -68,9 +68,9 @@ if [[ -z "$PHASE" ]]; then
 fi
 
 case "$PHASE" in
-  plan|implement|fix-checks|qa|review) ;;
+  plan|implement|fix-conflicts|fix-checks|qa|review) ;;
   *)
-    echo "dispatch-mark-complete: unknown phase: $PHASE (expected plan, implement, fix-checks, qa, or review)" >&2
+    echo "dispatch-mark-complete: unknown phase: $PHASE (expected plan, implement, fix-conflicts, fix-checks, qa, or review)" >&2
     exit 2
     ;;
 esac

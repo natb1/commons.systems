@@ -193,7 +193,7 @@ PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
 # per predicate. On fetch failure DISPATCH_PR_LIST stays empty and each script
 # falls back to its own self-fetch.
 DISPATCH_PR_LIST=$(gh pr list --state open \
-  --json number,headRefName,isDraft,statusCheckRollup,labels 2>/dev/null) \
+  --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable 2>/dev/null) \
   || DISPATCH_PR_LIST=""
 export DISPATCH_PR_LIST
 

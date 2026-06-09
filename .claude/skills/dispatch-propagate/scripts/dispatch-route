@@ -109,7 +109,7 @@ fi
 
 # Fetch the open-PR list once; reuse it for every sibling call via the
 # DISPATCH_PR_LIST env contract (dispatch-ci-ready and dispatch-phase both honor it).
-DISPATCH_PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+DISPATCH_PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable)
 export DISPATCH_PR_LIST
 
 # Initial CI-ready gate. exit 0 (ready) → continue; exit 1 (waiting) → STOP waiting;
