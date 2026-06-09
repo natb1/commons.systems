@@ -2494,7 +2494,7 @@ printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dis
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "dispatch-closing PR beats landing-closing PR" "pr 10 10-dispatch-pr verify" "$result"
+assert_eq "dispatch-closing PR beats landing-closing PR" "pr 10 10-dispatch-pr fix-checks" "$result"
 teardown
 
 # 30j2. A PR closing a `landing` issue outranks a PR closing a `fellspiral` issue,
@@ -2512,7 +2512,7 @@ printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"lan
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "landing-closing PR beats fellspiral-closing PR" "pr 10 10-landing-pr verify" "$result"
+assert_eq "landing-closing PR beats fellspiral-closing PR" "pr 10 10-landing-pr fix-checks" "$result"
 teardown
 
 # 30j3. A PR closing a `fellspiral` issue outranks a PR closing a `budget` issue,
@@ -2530,7 +2530,7 @@ printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"fel
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "fellspiral-closing PR beats budget-closing PR" "pr 10 10-fellspiral-pr verify" "$result"
+assert_eq "fellspiral-closing PR beats budget-closing PR" "pr 10 10-fellspiral-pr fix-checks" "$result"
 teardown
 
 # 30j4. A help-wanted `landing` issue outranks a help-wanted issue with no topic
