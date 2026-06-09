@@ -2,9 +2,10 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 import { logError } from "@commons-systems/errorutil/log";
 import type { User } from "../auth.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
-import { getPublicMedia, getAllAccessibleMedia } from "../firestore.js";
+import { listCloud } from "../library.js";
 import { getMediaDownloadUrl } from "../storage.js";
 import { wireMarkdownActions } from "../markdown-actions.js";
+import { renderLocalIntoList } from "../local-folder-ui.js";
 import type { MediaItem, MediaType } from "../types.js";
 
 function mediaTypeBadge(mediaType: MediaType): string {
@@ -34,6 +35,25 @@ function renderMediaList(items: MediaItem[]): string {
     .join("\n");
 
   return `<ul id="media-list">${rows}</ul>`;
+}
+
+/**
+ * Render local-folder items as `<li>` rows for prepending into the shared media
+ * list. Local items get a "local" badge and a view link, but no download /
+ * markdown actions — their bytes live on the user's disk, not in cloud storage.
+ */
+export function renderLocalMediaItems(items: MediaItem[]): string {
+  return items
+    .map((item) => {
+      return `<li class="media-item media-item-local" data-id="${escapeHtml(item.id)}">
+        <div class="media-info">
+          <span class="media-title"><a href="/view/${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a></span>
+          ${mediaTypeBadge(item.mediaType)}
+          <span class="media-badge media-badge-local">local</span>
+        </div>
+      </li>`;
+    })
+    .join("\n");
 }
 
 async function handleDownload(button: HTMLButtonElement): Promise<void> {
@@ -73,10 +93,7 @@ async function handleDownload(button: HTMLButtonElement): Promise<void> {
 export async function renderHome(user: User | null): Promise<string> {
   let mediaHtml: string;
   try {
-    const items = user?.email
-      ? await getAllAccessibleMedia(user.email)
-      : await getPublicMedia();
-
+    const items = await listCloud();
     mediaHtml = renderMediaList(items);
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
@@ -105,4 +122,10 @@ export function afterRenderHome(outlet: HTMLElement): void {
     }
   });
   wireMarkdownActions(outlet);
+
+  // Repopulate local items into the freshly-rendered media list. The folder
+  // button itself lives in the nav (initialized once at startup in main.ts).
+  renderLocalIntoList(outlet).catch((err) =>
+    logError(err, { operation: "local-folder-home-render" }),
+  );
 }

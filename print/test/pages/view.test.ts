@@ -40,7 +40,21 @@ vi.mock("../../src/media-cache.js", () => ({
   putFile: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { renderView, afterRenderView, cleanupView } from "../../src/pages/view";
+const mockGetLocalItem = vi.fn();
+const mockResolveLocalBlob = vi.fn();
+
+vi.mock("../../src/library.js", () => ({
+  isLocalId: (id: string) => id.startsWith("local:"),
+  getLocalItem: (...args: unknown[]) => mockGetLocalItem(...args),
+  resolveLocalBlob: (...args: unknown[]) => mockResolveLocalBlob(...args),
+}));
+
+import {
+  renderView,
+  afterRenderView,
+  cleanupView,
+  readingPositionUid,
+} from "../../src/pages/view";
 import type { MediaItem } from "../../src/types";
 import { getMediaDownloadUrl } from "../../src/storage";
 import { renderViewerShell, initViewer } from "../../src/viewer/shell";
@@ -67,6 +81,87 @@ const mockUser = { uid: "user-123", displayName: "Test" } as {
   uid: string;
   displayName: string;
 };
+
+describe("readingPositionUid", () => {
+  it("forces null uid for local items (localStorage path, never Firestore)", () => {
+    expect(readingPositionUid(true, "user-123")).toBeNull();
+    expect(readingPositionUid(true, null)).toBeNull();
+  });
+
+  it("uses the signed-in uid for cloud items", () => {
+    expect(readingPositionUid(false, "user-123")).toBe("user-123");
+    expect(readingPositionUid(false, null)).toBeNull();
+  });
+});
+
+describe("local-folder view path", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cleanupView();
+    if (typeof globalThis.reportError !== "function") {
+      globalThis.reportError = () => {};
+    }
+    vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.mocked(globalThis.reportError).mockRestore();
+  });
+
+  it("shows not-found when the local item is missing", async () => {
+    mockGetLocalItem.mockResolvedValue(null);
+
+    const html = await renderView("local:gone.pdf", null);
+
+    expect(mockGetLocalItem).toHaveBeenCalledWith("local:gone.pdf");
+    expect(mockGetMediaItem).not.toHaveBeenCalled();
+    expect(html).toContain('id="view-not-found"');
+  });
+
+  it("renders the viewer shell and forces uid=null for a found local item", async () => {
+    const item = makeMediaItem({
+      id: "local:book.pdf",
+      mediaType: "pdf",
+      origin: "local",
+    });
+    mockGetLocalItem.mockResolvedValue(item);
+
+    await renderView("local:book.pdf", mockUser);
+    expect(renderViewerShell).toHaveBeenCalledWith(item);
+    // The cloud download path is never touched for a local item.
+    expect(getMediaDownloadUrl).not.toHaveBeenCalled();
+
+    const outlet = document.createElement("div");
+    afterRenderView(outlet, mockUser);
+
+    expect(initViewer).toHaveBeenCalledWith(
+      outlet,
+      expect.any(Function),
+      expect.any(Function),
+      "local:book.pdf",
+      null,
+    );
+  });
+
+  it("resolve closure surfaces the #view-error UI when the file is gone", async () => {
+    const item = makeMediaItem({ id: "local:book.pdf", origin: "local" });
+    mockGetLocalItem.mockResolvedValue(item);
+    mockResolveLocalBlob.mockResolvedValue(null);
+
+    await renderView("local:book.pdf", null);
+    const outlet = document.createElement("div");
+    afterRenderView(outlet, null);
+
+    const resolveSource = vi.mocked(initViewer).mock.calls[0][2];
+    // The closure fully handles the failure (reportError + #view-error UI) and
+    // returns a never-settling promise so initViewer does not re-enter its own
+    // catch for the same error — so assert the side effects, not a rejection.
+    resolveSource();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(outlet.innerHTML).toContain('id="view-error"');
+    expect(globalThis.reportError).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("afterRenderView", () => {
   beforeEach(() => {
