@@ -72,8 +72,8 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 # when it fires, so the phase skill's full instructions are present in context
 # regardless of whether the Skill tool was invoked.
 #
-# Routing: plan→plan-issue; implement→implement; fix-checks→fix-checks; qa→qa-fix;
-# review→review-fix;
+# Routing: plan→plan-issue; implement→implement; fix-conflicts→fix-conflicts;
+# fix-checks→fix-checks; qa→qa-fix; review→review-fix;
 # done/unknown/dispatch-phase failure (incl. not-ready CI, exit 3)→dispatch-worker (the worker's
 # Step 2 CI-monitor loop and Step 2 done variance handling still run).
 #
@@ -83,20 +83,11 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 # session --name ahead of the phase routing below; it is inert until
 # office-hours-* sessions exist.
 #
-# A conflict-resolver session (#982) is named <N>-slug like a worker but writes a
-# `conflict-resolver` sentinel into CLAUDE_JOB_DIR. It restores the
-# /dispatch-resolve-conflict skill body, not a phase skill — matched first, by the
-# sentinel, ahead of the office-hours and phase routing below.
-#
 # Falls back to the one-line Reload directive if SKILL.md is missing or
 # unreadable — defensive against a packaging error breaking recovery.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 DISPATCH_SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
-if [ -n "${CLAUDE_JOB_DIR:-}" ] && [ -f "$CLAUDE_JOB_DIR/conflict-resolver" ]; then
-  SKILL_DIR_NAME="dispatch-resolve-conflict"
-  SKILL_ARGS="$ISSUE_NUM $WORKTREE_PATH"
-  DIRECTIVE="/dispatch-resolve-conflict $ISSUE_NUM $WORKTREE_PATH"
-elif printf '%s\n' "$NAME" | grep -qE '^office-hours-[0-9]+$'; then
+if printf '%s\n' "$NAME" | grep -qE '^office-hours-[0-9]+$'; then
   SKILL_DIR_NAME="office-hours"
   SKILL_ARGS=""
   DIRECTIVE="/office-hours"
@@ -113,6 +104,11 @@ else
       SKILL_DIR_NAME="implement"
       SKILL_ARGS="$ISSUE_NUM"
       DIRECTIVE="/implement $ISSUE_NUM"
+      ;;
+    fix-conflicts)
+      SKILL_DIR_NAME="fix-conflicts"
+      SKILL_ARGS=""
+      DIRECTIVE="/fix-conflicts"
       ;;
     fix-checks)
       SKILL_DIR_NAME="fix-checks"

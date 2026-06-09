@@ -82,11 +82,11 @@ the reseed.
 `dispatch-finalize-selection` writes the recovery marker but no longer releases.
 The pre-finalize stop paths — `notify target-blocked`, `drain worktree-conflict`,
 plus the internal `exit 2` error paths — release at the guard, unchanged. A
-merge conflict detected during materialize-spawn spawns a
-`/dispatch-resolve-conflict <N> <worktree>` bg job (named for the worktree
-basename `<N>-slug`, which locks the worktree via the existing name-keyed
-liveness skip and consumes a concurrency slot); the lock is released before the
-resolver job is spawned. Crash safety: a router that dies mid-spawn holding the lock is
+merge conflict detected during materialize-spawn routes to
+`INVOKE /fix-conflicts` via `dispatch-route`; the worker invokes `/fix-conflicts`
+as a normal in-place phase skill (no `<N> <worktree>` args), which writes the
+standard phase marker and owns its `dispatch:fix-conflicts-attempt-*` label;
+the lock is released before the worker is spawned. Crash safety: a router that dies mid-spawn holding the lock is
 recovered by the lock's existing dead-holder reclaim (the recorded sessionId
 absent from `claude agents --json`) on the next `--wait`. Such a router also
 strands any reservation marker it wrote before dying; `reservation_sweep`

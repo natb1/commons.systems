@@ -53,11 +53,11 @@ This mirrors what `restore-dispatch-skill.sh` does on context-clear.
 `dispatch-provision-worktree` exits `0` (clean / already-up-to-date), `3` (merge
 conflict — merge aborted, tree left clean), or any other non-zero (fetch failure
 or a non-conflict merge failure). `dispatch-route` maps `3` to the
-`INVOKE /dispatch-resolve-conflict` directive (the worker hands the conflict to
-the resolver skill, whose Stop-hook branch owns the disposition) and any other
-non-zero to `STOP provision-failed`, writing the one-line reason to
-`$CLAUDE_JOB_DIR/office-hours-reason` so the Stop hook parks the issue on
-`dispatch:office-hours`.
+`INVOKE /fix-conflicts` directive (the worker invokes `/fix-conflicts` as a normal
+phase skill; it writes its own standard marker and owns its `dispatch:fix-conflicts-attempt-*`
+label) and any other non-zero to `STOP provision-failed`, writing the one-line
+reason to `$CLAUDE_JOB_DIR/office-hours-reason` so the Stop hook parks the issue
+on `dispatch:office-hours`.
 
 ## Race-window / Stop-hook re-gate rationale
 

@@ -22,7 +22,7 @@
 #     caller (dispatch-select-target passes it to avoid a redundant
 #     gh pr list per PR). When set and non-empty, it is used in place of a
 #     self-issued gh pr list. Must include the fields
-#     number,headRefName,isDraft,statusCheckRollup,labels.
+#     number,headRefName,isDraft,statusCheckRollup,labels,mergeable.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -39,7 +39,7 @@ fi
 if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
   PR_LIST="$DISPATCH_PR_LIST"
 else
-  PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+  PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable)
 fi
 
 # Find the matching PR.
@@ -67,6 +67,12 @@ if [[ "$IS_DRAFT" == "false" ]]; then
   echo "ready"
   exit 0
 fi
+
+# A CONFLICTING draft is ready even with CI pending: the fix-conflicts phase
+# runs regardless of CI state. UNKNOWN falls through (GitHub recomputes it
+# asynchronously; the next tick resolves it — self-healing).
+MERGEABLE=$(printf '%s' "$PR" | jq -r '.mergeable // "UNKNOWN"')
+if [[ "$MERGEABLE" == "CONFLICTING" ]]; then echo "ready"; exit 0; fi
 
 # Draft PR — readiness hinges on whether CI has reached a verdict.
 ROLLUP=$(printf '%s' "$PR" | jq '.statusCheckRollup')
