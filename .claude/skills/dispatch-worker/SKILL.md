@@ -196,8 +196,8 @@ This step runs **only** for the `plan` phase — a no-PR, unplanned target. Ever
 phase with an existing PR (`fix-checks` onward) skips it, as does the `implement`
 phase (a planned no-PR issue routes straight to its build skill): implementation
 is already planned or underway. It is the planning-time counterpart of
-`ref-ready`'s Step 3e relevance check; the two are deliberately separate — Step 3e
-is creation-time and `$BASELINE_BRANCH`-anchored, this step is pre-planning and
+the creation-time relevance check; the two are deliberately separate — the
+creation-time check is `$BASELINE_BRANCH`-anchored, this step is pre-planning and
 `createdAt`-anchored.
 
 Before invoking `/plan-issue` on a `plan`-phase issue, confirm no PR
@@ -226,7 +226,7 @@ moved, or removed is flagged `[ABSENT]`/`[NOT FOUND]`). It mines those
 references from the single-backtick spans in the issue body; read its header for
 what the heuristic does and does not cover. When the merged-PR query hits its
 100-result limit the script prints a `WINDOW-TOO-WIDE` marker recommending
-`/ready` instead of a partial scan — treat that as the too-wide-window signal in
+`/file-issue` instead of a partial scan — treat that as the too-wide-window signal in
 the verdict below.
 
 Two judgments stay with the dispatching session, after reading the script's
@@ -248,7 +248,7 @@ evidence:
   shifted; invoke `/new-requirement` with the drift findings as the revised
   understanding, then `/plan-issue`.
 - **`stop`** — codebase has moved past the need; report what changed and
-  recommend closing the issue or re-running `/ready`. Do **not** invoke
+  recommend closing the issue or re-running `/file-issue`. Do **not** invoke
   `/plan-issue`; print the drift report and stop. The Stop hook
   applies `dispatch:office-hours` to the issue because no marker was
   written.

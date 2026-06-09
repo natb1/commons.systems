@@ -144,11 +144,12 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
         imperative summary that encodes the fingerprint, e.g.
         `Flaky CI: <check> — <stable identifier>` — followed by a body containing
         the fingerprint, the reproduce command, and the failure excerpt.
-        `/file-issue` runs duplicate detection, creates the issue (or matches an
-        existing open one), assigns `@me`, applies `help wanted`, and prints
-        `CREATED <N>` or `EXISTING <N>` on its own line. The subagent parses that
-        line and returns `<N>` and the `CREATED`/`EXISTING` disposition to this
-        thread.
+        `/file-issue` runs the full pipeline: duplicate detection, 8-category
+        evaluation, decomposition gate, type/topic classification, creation (or
+        match of an existing open issue), `@me` assignment, `help wanted`, type
+        label, and any matched topic label. It prints `CREATED <N>` or
+        `EXISTING <N>` on its own line. The subagent parses that line and returns
+        `<N>` and the `CREATED`/`EXISTING` disposition to this thread.
      3. **Block the PR's tracked issue on the flake issue.** In this thread, read
         the PR body (`gh pr view <pr-num> --json body --jq .body`,
         `dangerouslyDisableSandbox: true`) and parse its `Closes #N` line(s) for
