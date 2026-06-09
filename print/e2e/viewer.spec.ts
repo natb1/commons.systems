@@ -648,10 +648,13 @@ test.describe("viewer", () => {
     // layer has populated with content distinct from page 1.
     await expect
       .poll(
-        async () => ((await page.locator(".textLayer").textContent()) ?? "").trim(),
+        async () => {
+          const t = ((await page.locator(".textLayer").textContent()) ?? "").trim();
+          return t.length > 0 && t !== (page1Text ?? "").trim();
+        },
         { timeout: 15000 },
       )
-      .toSatisfy((t: string) => t.length > 0 && t !== (page1Text ?? "").trim());
+      .toBe(true);
     const page2Text = await page.locator(".textLayer").textContent();
     expect(page2Text).not.toBe(page1Text);
   });
