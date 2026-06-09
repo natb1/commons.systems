@@ -81,7 +81,7 @@
 # Within each (priority, topic) bucket, default-mode priority (oldest PR wins
 # within a tier):
 #   1. Oldest "review"      PR (draft + dispatch:qa-done)
-#   2. Oldest "verify"      PR (draft, CI completed and failed)
+#   2. Oldest "fix-checks"  PR (draft, CI completed and failed)
 #   3. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
 #   4. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
 #      by a live Claude session, and which is not already closed by a non-draft
@@ -610,7 +610,7 @@ declare -A FIRST_PR
 declare -A FIRST_ISSUE
 
 # Within-category phase ladder, highest priority first.
-PHASE_PRIORITY=(review verify)
+PHASE_PRIORITY=(review fix-checks)
 # Within-category issue ladder, highest priority first: a planned issue
 # (implement phase) advances ahead of an unplanned issue (plan phase).
 ISSUE_PHASE_PRIORITY=(implement plan)
@@ -782,7 +782,7 @@ while IFS=$'\t' read -r issue_num issue_labels; do
     # now would only hit dispatch-route's STOP-waiting re-gate, wasting a tick.
     # A leaf with no PR (normal implement) or a concluded-CI draft reports
     # ready and proceeds; a concluded-CI draft is owned by the PR queue
-    # (verify/qa), which precedes the issue within a bucket and recycles the
+    # (fix-checks/qa), which precedes the issue within a bucket and recycles the
     # orphan worktree via `enter` just as the issue path would. dispatch-ci-ready
     # resolves the all-digit leaf to its PR by headRefName prefix. Reuses the
     # PR list fetched above.

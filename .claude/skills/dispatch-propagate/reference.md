@@ -187,7 +187,7 @@ Within each category the ladder is (highest first; within a tier, oldest PR
 wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
 whose closing issue is `blocked_by` an open issue is skipped; not-ready PRs
 (no CI verdict yet, per `dispatch-ci-ready`) are skipped entirely): oldest `review` PR → oldest
-`verify` PR → oldest `help wanted` issue (planned before unplanned — see
+`fix-checks` PR → oldest `help wanted` issue (planned before unplanned — see
 *Phase model* below) → oldest `qa` PR. Non-QA PRs are
 ranked closest-to-done first — `review` is the closest-to-done non-QA tier;
 `help wanted` issues rank below all non-QA PRs but above QA PRs. Within the
@@ -209,7 +209,7 @@ a queue-selected `issue <num>` is always a directly-startable target.
 
 Each issue progresses through five phases in order:
 
-`plan` → `implement` → `verify` → `qa` → `review`
+`plan` → `implement` → `fix-checks` → `qa` → `review`
 
 - **`plan`** — the issue has no PR and no `dispatch:planned` label. `/plan-issue`
   plans the work, fans out `Explore` and `Plan` subagents, produces an ordered
@@ -219,7 +219,7 @@ Each issue progresses through five phases in order:
 - **`implement`** — the issue has `dispatch:planned` but no PR. `/implement` reads
   the persisted plan, builds each unit via `/implement-unit`, and opens the draft
   PR via `dispatch-open-pr`.
-- **`verify`** — the draft PR exists but CI is failing. A `verify` worker patches
+- **`fix-checks`** — the draft PR exists but CI is failing. A `fix-checks` worker patches
   the failing checks.
 - **`qa`** — the draft PR is CI-green and review labels are absent. `/qa-fix` runs
   the autonomous acceptance-test pass.
@@ -536,5 +536,5 @@ That schedules a transient `systemd.user` timer
 cap (default 3) the target is parked on `dispatch:office-hours` and no further
 reseed is scheduled. Because `dispatch-ci-ready` reports not-ready only for
 genuinely in-progress checks — a CI *failure* is a verdict, so the PR reports
-ready and `dispatch-phase` resolves it to `verify`, an actionable phase — the
+ready and `dispatch-phase` resolves it to `fix-checks`, an actionable phase — the
 wait terminates on its own when CI finishes.

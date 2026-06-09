@@ -288,7 +288,7 @@ def add_to_bucket(bucket; u; turns):
 | ( {
       "plan-implement": zero_bucket, "review-fix": zero_bucket,
       "security-review-fix": zero_bucket, "qa-fix": zero_bucket,
-      "code-review-fix": zero_bucket, "verify-pr": zero_bucket,
+      "code-review-fix": zero_bucket, "fix-checks": zero_bucket,
       "dispatch-worker": zero_bucket
     } ) as $phase_seed
 | ( reduce $rows[] as $r ($phase_seed;

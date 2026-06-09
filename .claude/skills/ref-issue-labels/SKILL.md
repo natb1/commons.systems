@@ -60,7 +60,7 @@ alongside a topic label.
   "vulnerability", "CodeQL", "advisory", "CVE", "security finding".
 
 - **`dispatch`** — concerns the `/dispatch` or `/dispatch-propagate` workflow,
-  one of its phase skills (`/plan-issue`, `/implement`, `/verify-pr`, `/qa-fix`,
+  one of its phase skills (`/plan-issue`, `/implement`, `/fix-checks`, `/qa-fix`,
   `/review-fix`), the `/office-hours`
   queue worker, a `ref-*`
   reference skill those skills use (`ref-issue-labels`, `ref-memory-management`,

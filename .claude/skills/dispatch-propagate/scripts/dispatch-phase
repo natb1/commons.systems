@@ -3,7 +3,7 @@
 # Usage: dispatch-phase <issue-num|branch>
 #
 # Prints exactly one actionable phase name to stdout:
-#   plan | implement | verify | qa | review | done
+#   plan | implement | fix-checks | qa | review | done
 #
 # This script answers ONLY "which phase skill runs." It does NOT report CI
 # readiness. When a draft PR's CI has no verdict yet (checks still in progress),
@@ -102,10 +102,10 @@ fi
 ROLLUP=$(printf '%s' "$PR" | jq '.statusCheckRollup')
 VERDICT=$(dispatch_classify_rollup "$ROLLUP")
 
-# A concluded failure is actionable: it resolves to verify (a mixed rollup with
+# A concluded failure is actionable: it resolves to fix-checks (a mixed rollup with
 # some failing and some pending also classifies as failing — failure wins).
 if [[ "$VERDICT" == "failing" ]]; then
-  echo "verify"
+  echo "fix-checks"
   exit 0
 fi
 
