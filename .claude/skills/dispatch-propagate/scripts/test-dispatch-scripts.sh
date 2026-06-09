@@ -17994,7 +17994,11 @@ fi
 FAKE
   cat > "$TMPDIR_TEST/dispatch-phase" <<'FAKE'
 #!/usr/bin/env bash
-echo "${MAT_PHASE:-implement}"
+# Per-issue phase override (#1126): MAT_PHASE_<N> (keyed on the issue number
+# the caller passes as $1) wins over the global MAT_PHASE, so a single fan-out
+# run can mix done and not-done targets. Falls back to MAT_PHASE, then implement.
+override_var="MAT_PHASE_$1"
+echo "${!override_var:-${MAT_PHASE:-implement}}"
 FAKE
   # Readiness predicate fake: MAT_CI_READY controls the verdict (default ready).
   # `ready` → exit 0 / prints ready; anything else → exit 1 / prints waiting.
@@ -18059,6 +18063,9 @@ mat_teardown() {
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_PHASE \
     MAT_CI_READY MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE \
     MAT_RESEED_OUT MAT_RESEED_RC
+  # Per-issue phase overrides (MAT_PHASE_<N>, #1126) have dynamic names the fixed
+  # unset list cannot enumerate; clear any a test set so they don't leak forward.
+  unset ${!MAT_PHASE_@}
 }
 
 run_mat() { "$TMPDIR_TEST/dispatch-materialize-spawn" "$@" 2>/dev/null; }
