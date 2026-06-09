@@ -442,9 +442,10 @@ of scope for this PR. Pass the assessed blocker issue number(s) — or an explic
 `independent` marker — into the subagent's prompt alongside `$INPUT`. The
 subagent:
 
-1. Invokes `/file-issue`, which owns duplicate detection, issue creation, `@me`
-   assignment, and the `help wanted` label. `/file-issue` prints `CREATED <N>` or
-   `EXISTING <N>` on its own line; the subagent parses it.
+1. Invokes `/file-issue`, which runs the full pipeline: duplicate detection,
+   8-category evaluation, decomposition gate, type/topic classification, issue
+   creation, `@me` assignment, and the `help wanted` label. `/file-issue` prints
+   `CREATED <N>` or `EXISTING <N>` on its own line; the subagent parses it.
 2. For a non-independent finding, records a `blocked_by` dependency **on the new
    issue `<N>`, targeting each blocker issue number** passed in. The target is the
    GitHub **issue** — never the PR number, and the dependency is the API
@@ -532,8 +533,8 @@ subagent:
    proceed to the next step.
 2. Invokes `/file-issue` with the follow-up's `title` on the first line and its
    `body` after. `/file-issue` owns duplicate detection, creation, `@me`
-   assignment, and the `help wanted` label; it prints `CREATED <N>` or
-   `EXISTING <N>` on its own line — parse `<N>`.
+   assignment, the `help wanted` label, and type + topic classification; it
+   prints `CREATED <N>` or `EXISTING <N>` on its own line — parse `<N>`.
 3. Applies the topic and type labels (use `dangerouslyDisableSandbox: true` —
    `gh` needs network):
 

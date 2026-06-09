@@ -13,7 +13,7 @@ drive label selection.
 
 ### Type classification
 
-Classify the issue's type from its title, body, and Step 3b compliance check.
+Classify the issue's type from its title and body.
 Type and topic are orthogonal axes — apply one of each as warranted.
 
 - **`bug`** — something isn't working as intended: incorrect output, data
@@ -23,7 +23,7 @@ Type and topic are orthogonal axes — apply one of each as warranted.
   "broken", "leak", "race", "drops", "TOCTOU", "data loss", "silent failure",
   "regression". Classify as `bug` only when the body has at least one
   structural defect signal (expected-vs-actual behavior, reproduction steps,
-  or a Step 3b finding identifying a specific failure mode) — keyword matches
+  or an identified failure mode with a specific location or root cause) — keyword matches
   alone are not sufficient. A request whose body lacks structural defect
   signals is `enhancement` even if it mentions bug-flavored keywords.
 
@@ -63,7 +63,7 @@ alongside a topic label.
   one of its phase skills (`/plan-issue`, `/implement`, `/verify-pr`, `/qa-fix`,
   `/review-fix`), the `/office-hours`
   queue worker, a `ref-*`
-  reference skill those skills use (`ref-ready`, `ref-memory-management`,
+  reference skill those skills use (`ref-issue-labels`, `ref-memory-management`,
   `ref-github-issues`, `ref-write-instructions`), or a `dispatch-*` script
   under `.claude/skills/dispatch-propagate/scripts/` (e.g.
   `dispatch-select-target`, `dispatch-phase`, `dispatch-trace-leaf`). Keyword
@@ -104,7 +104,7 @@ alongside a topic label.
 - **`priority`** — a separate axis from the topic labels above. A
   human-applied escalation marker that routes the issue (or any PR closing it)
   ahead of non-priority items across all topic categories in `/dispatch-propagate` queue selection. Apply only
-  when a human explicitly asks to escalate; `/ready` never applies it
+  when a human explicitly asks to escalate; `/file-issue` never applies it
   automatically. May be combined with any topic label.
 
 - **Neither** — apply no topic label when nothing matches. There is no

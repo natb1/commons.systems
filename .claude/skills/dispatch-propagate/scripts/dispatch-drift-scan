@@ -190,7 +190,7 @@ PR_COUNT=$(printf '%s' "$PRS" | jq 'length')
 
 if [[ "$PR_COUNT" -ge 100 ]]; then
   echo "WINDOW-TOO-WIDE: the merged-PR query hit the 100-result limit, so this"
-  echo "window is too wide to scan reliably. Re-run /ready on this issue to"
+  echo "window is too wide to scan reliably. Re-run /file-issue on this issue to"
   echo "narrow its window rather than trusting a partial merged-PR scan."
   echo "(partial PR enumeration suppressed for this input)"
 elif [[ "$PR_COUNT" -eq 0 ]]; then
@@ -260,7 +260,7 @@ echo "absence. These flags are advisory; the model judges them.)"
 if [[ "$REFS_TRUNCATED" -eq 1 ]]; then
   echo "  NOTE: reference extraction hit the ${MAX_REFS}-ref cap — the issue body"
   echo "  cites an unusually large number of references, so the scan was"
-  echo "  truncated. Re-run /ready to tighten the issue if this is unexpected."
+  echo "  truncated. Re-run /file-issue to tighten the issue if this is unexpected."
 fi
 if [[ "${#FLAGGED[@]}" -gt 0 ]]; then
   for f in "${FLAGGED[@]}"; do
