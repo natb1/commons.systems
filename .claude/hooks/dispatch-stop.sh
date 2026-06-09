@@ -26,17 +26,10 @@
 #     nothing strips the label.) The router owns the CI gate.
 #
 # Branches (driven by marker presence + CURRENT_PHASE relative to MARKER_PHASE):
-#   R. conflict-resolver job (#982) — a /dispatch-resolve-conflict session is
-#      named <N>-slug like a worker but writes a `conflict-resolver` sentinel
-#      instead of a phase-completed marker. Checked BEFORE Branches A-D.
-#      `conflict-resolved` present → target-keyed re-seed + self-close (the chain
-#      returns to <N>, where materialize-spawn now sails through the resolved
-#      merge); sentinel present without `conflict-resolved` (ambiguous/crash) →
-#      park the issue (its office-hours-reason) + re-seed, no self-close.
 #   P. parse-job clean completion (#1024) — a /budget-parse-job session is named
 #      <N>-slug like a worker but writes a `parse-job-done` sentinel instead of a
 #      phase-completed marker when its idempotent statement merge succeeds.
-#      Checked AFTER Branch R and BEFORE Branches A-D. A clean parse-job produces
+#      Checked BEFORE Branches A-D. A clean parse-job produces
 #      NO PR (the handler already closed the parse-job issue), so there is no
 #      label work: spawn router + self-close. Escalation writes no sentinel — the
 #      issue stays open and PR-less and lands in Branch A's office-hours park, so
@@ -50,19 +43,19 @@
 #      and the ISSUE, spawn router, self-close. Empty CURRENT_PHASE (e.g.
 #      dispatch-phase network failure) is treated as "undetermined" and falls
 #      through to Branch D rather than triggering a false self-close.
-#   C. marker present + same phase + CURRENT_PHASE == fix-checks + fix-checks-attempt
-#      counter < 3 — transient no-push fix-checks outcome. CI has already concluded
-#      and nothing is pending: a fix-checks pass that pushes a fix restarts CI, and
-#      the early not-ready gate above already intercepts and self-closes that
-#      in-progress case when the marker is present, so by the time control
-#      reaches Branch C, CI is concluded and not re-running. Spawn router,
+#   C. marker present + same phase + CURRENT_PHASE is any fix-* phase +
+#      dispatch:<fix-phase>-attempt counter < 3 — transient no-push fix-* outcome.
+#      CI has already concluded and nothing is pending: a fix-* pass that pushes a
+#      fix restarts CI, and the early not-ready gate above already intercepts and
+#      self-closes that in-progress case when the marker is present, so by the time
+#      control reaches Branch C, CI is concluded and not re-running. Spawn router,
 #      self-close (so the session does not leak idle holding its worktree); the
-#      next tick re-runs fix-checks or escalates at the cap. The needs-human fix-checks
-#      failure never reaches Branch C — /fix-checks skips the marker for it, so it
-#      lands in Branch A (marker absent → park the issue on office-hours on the
-#      first run).
-#   D. marker present + same phase + NOT (fix-checks AND counter < 3) — true
-#      non-advancement (or a hypothetical same-phase non-fix-checks case). Park the
+#      next tick re-runs the fix-* phase or escalates at the cap. The needs-human
+#      fix-* failure never reaches Branch C — the fix-* skill skips the marker for
+#      it, so it lands in Branch A (marker absent → park the issue on office-hours
+#      on the first run).
+#   D. marker present + same phase + NOT (fix-* AND counter < 3) — true
+#      non-advancement (or a hypothetical same-phase non-fix-* case). Park the
 #      ISSUE on a human via dispatch-apply-office-hours (label + why-comment),
 #      spawn router, exit 0.
 #
@@ -150,27 +143,6 @@ self_close() {
     || echo "[dispatch-stop] WARNING: dispatch-self-close failed" >&2
 }
 
-# Branch R — conflict-resolver job (#982): a /dispatch-resolve-conflict session is
-# named <N>-slug like a worker but writes a `conflict-resolver` sentinel instead of
-# a phase-completed marker. resolved → target-keyed re-seed (so the chain returns to
-# <N>, where materialize-spawn now sails through the already-resolved merge) +
-# self-close. ambiguous/crash (sentinel present, no conflict-resolved marker) →
-# park the issue (its office-hours-reason) + re-seed, no self-close.
-if [ -f "$CLAUDE_JOB_DIR/conflict-resolver" ]; then
-  if [ -f "$CLAUDE_JOB_DIR/conflict-resolved" ]; then
-    "$SCRIPTS/dispatch-spawn-tick" "$ISSUE_NUM" >/dev/null 2>&1 \
-      || echo "[dispatch-stop] WARNING: dispatch-spawn-tick (resolved re-seed) failed" >&2
-    self_close
-    exit 0
-  fi
-  "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
-    "$(resolve_office_hours_reason "merge conflict could not be auto-resolved")" \
-    || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
-  "$SCRIPTS/dispatch-spawn-tick" "$ISSUE_NUM" >/dev/null 2>&1 \
-    || echo "[dispatch-stop] WARNING: dispatch-spawn-tick (ambiguous re-seed) failed" >&2
-  exit 0
-fi
-
 # Branch P — parse-job clean completion (#1024): a /budget-parse-job session is
 # named <N>-slug like a worker but, on a successful idempotent statement merge,
 # writes a `parse-job-done` sentinel instead of a phase-completed marker. A clean
@@ -178,7 +150,7 @@ fi
 # there is no label work and no PR-centric disposition — spawn the next tick and
 # self-close. (Escalation writes no sentinel; the issue stays open and PR-less and
 # falls through to Branch A, which parks it on office-hours — no branch needed
-# here.) Checked BEFORE the PR-centric branches, mirroring Branch R.
+# here.) Checked BEFORE the PR-centric branches.
 if [ -f "$CLAUDE_JOB_DIR/parse-job-done" ]; then
   spawn_tick
   self_close
@@ -206,7 +178,7 @@ MARKER_PHASE=""
 if [ -f "$MARKER_FILE" ]; then
   MARKER_PHASE=$(grep -E '^phase=' "$MARKER_FILE" | head -n1 | cut -d= -f2) || MARKER_PHASE=""
   case "$MARKER_PHASE" in
-    plan|implement|fix-checks|qa|review|done) ;;
+    plan|implement|fix-checks|fix-conflicts|qa|review|done) ;;
     *) MARKER_PHASE="" ;;
   esac
 fi
@@ -258,19 +230,25 @@ if [ -n "$CURRENT_PHASE" ] && [ "$MARKER_PHASE" != "$CURRENT_PHASE" ]; then
   exit 0
 fi
 
-# Same phase. Check fix-checks-exemption.
-if [ "$CURRENT_PHASE" = "fix-checks" ] && [ -n "$PR_NUM" ]; then
-  N=$(gh pr view "$PR_NUM" --json labels --jq '[.labels[].name | capture("^dispatch:fix-checks-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0' 2>/dev/null) || N=0
-  [ -z "$N" ] && N=0
-  if [ "$N" -lt 3 ]; then
-    # Branch C — transient no-push fix-checks outcome; CI concluded, nothing
-    # pending. Self-close so the session does not leak idle holding its
-    # worktree; the next tick re-runs fix-checks or escalates at the cap.
-    spawn_tick
-    self_close
-    exit 0
-  fi
-fi
+# Same phase. Check fix-* exemption (the #831 non-advancement invariant,
+# generalized from fix-checks to any fix-* phase: fix-checks, fix-conflicts, …).
+# The attempt counter label is phase-derived: dispatch:<fix-phase>-attempt-<n>.
+case "$CURRENT_PHASE" in
+  fix-*)
+    if [ -n "$PR_NUM" ]; then
+      N=$(gh pr view "$PR_NUM" --json labels --jq --arg phase "$CURRENT_PHASE" '[.labels[].name | capture("^dispatch:" + $phase + "-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0' 2>/dev/null) || N=0
+      [ -z "$N" ] && N=0
+      if [ "$N" -lt 3 ]; then
+        # Branch C — transient no-push fix-* outcome; CI concluded, nothing
+        # pending. Self-close so the session does not leak idle holding its
+        # worktree; the next tick re-runs the fix-* phase or escalates at the cap.
+        spawn_tick
+        self_close
+        exit 0
+      fi
+    fi
+    ;;
+esac
 
 # Branch D — true non-advancement.
 "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
