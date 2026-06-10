@@ -10,7 +10,7 @@ const adminApp = getApps().length > 0 ? getApps()[0] : initializeApp();
 
 /** Caps the size of the proxied upstream body (~5 MB). Feeds are small; this
  *  bound prevents a hostile upstream from inflating memory/egress. */
-const MAX_FEED_BYTES = 5 * 1024 * 1024;
+export const MAX_FEED_BYTES = 5 * 1024 * 1024;
 
 /** Verify the AppCheck token in the request. Always returns true in the emulator
  *  because the emulator does not issue or verify AppCheck tokens. */
@@ -52,6 +52,7 @@ export async function handleFeedProxy(req: Request, res: Response) {
     upstream = await fetch(url, {
       headers: { "User-Agent": "commons-systems-feed-proxy/1.0" },
       redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -89,7 +90,7 @@ export async function handleFeedProxy(req: Request, res: Response) {
     const reader = upstream.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let total = 0;
-    let acc = "";
+    const parts: string[] = [];
     let overCap = false;
     for (;;) {
       const { done, value } = await reader.read();
@@ -100,7 +101,7 @@ export async function handleFeedProxy(req: Request, res: Response) {
         overCap = true;
         break;
       }
-      acc += decoder.decode(value, { stream: true });
+      parts.push(decoder.decode(value, { stream: true }));
     }
     if (overCap) {
       console.error(
@@ -109,8 +110,8 @@ export async function handleFeedProxy(req: Request, res: Response) {
       res.status(502).send("Upstream feed exceeded maximum allowed size");
       return;
     }
-    acc += decoder.decode();
-    body = acc;
+    parts.push(decoder.decode());
+    body = parts.join("");
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`Feed proxy: body read failed for ${url}: ${message}`);

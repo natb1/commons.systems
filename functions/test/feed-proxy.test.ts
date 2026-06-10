@@ -10,7 +10,7 @@ vi.mock("firebase-admin/app-check", () => ({
   getAppCheck: () => ({ verifyToken: verifyTokenMock }),
 }));
 
-import { handleFeedProxy, ALLOWED_FEED_URLS } from "../src/feed-proxy";
+import { handleFeedProxy, ALLOWED_FEED_URLS, MAX_FEED_BYTES } from "../src/feed-proxy";
 import { FEED_REGISTRY } from "../../blog/src/blog-roll/feed-registry";
 
 function createMockRes() {
@@ -122,6 +122,7 @@ describe("handleFeedProxy", () => {
     expect(fetch).toHaveBeenCalledWith(allowedUrl, {
       headers: { "User-Agent": "commons-systems-feed-proxy/1.0" },
       redirect: "manual",
+      signal: expect.any(AbortSignal),
     });
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe(feedXml);
@@ -215,7 +216,6 @@ describe("handleFeedProxy", () => {
     // Enqueue 64 KB chunks lazily via pull() so the reader's early cancel()
     // stops production — no large allocation needed.
     const CHUNK_SIZE = 64 * 1024;
-    const MAX_FEED_BYTES = 5 * 1024 * 1024;
     const chunksNeeded = Math.ceil(MAX_FEED_BYTES / CHUNK_SIZE) + 1;
     let pulled = 0;
     const stream = new ReadableStream<Uint8Array>({
