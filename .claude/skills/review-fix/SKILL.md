@@ -408,7 +408,7 @@ skill name). The `/commit-merge-push` fork stays on `model: sonnet`: it is
 orchestration (commit/merge/push), not fix-authoring. If there were no code changes at all, `/commit-merge-push`
 tolerates the no-op and creates no commit. Even on that no-op it pushes `origin
 HEAD`, so it carries any pending local merge (left by `dispatch-merge-main` /
-`/dispatch-resolve-conflict`) to origin; Step 8's flush guard is the
+`/fix-conflicts`) to origin; Step 8's flush guard is the
 authoritative backstop when this fork is skipped entirely. Capture the resulting
 fix commit SHA(s) for the Step 7 comment.
 
@@ -596,7 +596,7 @@ Then post it (use `dangerouslyDisableSandbox: true` — the script invokes `gh`)
 
 **First, flush any unpushed local commits — the terminal flush of the "never
 push a bare merge commit" contract.** `dispatch-merge-main` (pre-spawn) and
-`/dispatch-resolve-conflict` merge `origin/main` into this worktree **locally**
+`/fix-conflicts` merge `origin/main` into this worktree **locally**
 and never push, relying on each phase skill's own push point to carry the merge
 to origin. `/review-fix` is the chain's **terminal phase**: once the PR is
 ready, every later tick routes `STOP done` and no push point ever fires again.
