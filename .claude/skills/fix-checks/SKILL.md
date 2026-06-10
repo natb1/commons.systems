@@ -147,15 +147,17 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
         `/file-issue` runs the full pipeline: duplicate detection, 8-category
         evaluation, decomposition gate, type/topic classification, creation (or
         match of an existing open issue), `@me` assignment, `help wanted`, type
-        label, and any matched topic label. It prints `CREATED <N>` or
-        `EXISTING <N>` on its own line. The subagent parses that line and returns
-        `<N>` and the `CREATED`/`EXISTING` disposition to this thread.
+        label, and any matched topic label. It ends with a
+        `===FILE-ISSUE-RESULTS===` … `===FILE-ISSUE-RESULTS-END===` block; the
+        subagent reads the `<disposition> <N>` record(s) between the sentinels (a
+        flake is one topic, so normally one record — iterate if more) and returns
+        each `<N>` with its `CREATED`/`EXISTING` disposition to this thread.
      3. **Block the PR's tracked issue on the flake issue.** In this thread, read
         the PR body (`gh pr view <pr-num> --json body --jq .body`,
         `dangerouslyDisableSandbox: true`) and parse its `Closes #N` line(s) for
         the issue(s) this PR implements. For **each** tracked issue, record a
-        `blocked_by` dependency **on that tracked issue, targeting the flake issue
-        `<N>`** — the PR's own work is blocked by the unrelated flake. Note the
+        `blocked_by` dependency **on that tracked issue, targeting each flake issue
+        `<N>`** returned — the PR's own work is blocked by the unrelated flake. Note the
         direction: this is the **reverse** of `/review-fix`,
         which records `blocked_by` on the *new* issue; here the new flake issue is
         the *blocker* and the PR's existing tracked issue is the *blocked* one.
