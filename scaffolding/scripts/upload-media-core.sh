@@ -147,7 +147,7 @@ core::upload_to_gcs() {
   if [ -n "$group_id" ]; then
     META_ARGS+=(-h "x-goog-meta-groupid:${group_id}")
     local joined
-    joined="$(IFS=,; echo "${emails_ref[*]}")"
+    joined="$(IFS=,; printf '%s' "${emails_ref[*]}" | tr '[:upper:]' '[:lower:]')"
     META_ARGS+=(-h "x-goog-meta-member_emails:${joined}")
   fi
 

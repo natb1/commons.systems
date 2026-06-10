@@ -124,6 +124,20 @@ describe("storage print media", () => {
       await assertSucceeds(ref.getDownloadURL());
     });
 
+    it("allows second listed legacy member to read", async () => {
+      const ctx = authenticatedContext(env, "legacy1@test.com");
+      const storage = ctx.storage();
+      const ref = storage.ref(`print/${ENV}/media/legacy.epub`);
+      await assertSucceeds(ref.getDownloadURL());
+    });
+
+    it("allows third listed legacy member to read", async () => {
+      const ctx = authenticatedContext(env, "legacy2@test.com");
+      const storage = ctx.storage();
+      const ref = storage.ref(`print/${ENV}/media/legacy.epub`);
+      await assertSucceeds(ref.getDownloadURL());
+    });
+
     it("denies a non-listed email on a legacy object", async () => {
       const ctx = authenticatedContext(env, "stranger@test.com");
       const storage = ctx.storage();
