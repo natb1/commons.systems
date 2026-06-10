@@ -99,7 +99,7 @@ describe("createFirestoreErrorSink", () => {
     expect(doc.email).toBeNull();
   });
 
-  it("filters RESERVED_KEYS from extra context", () => {
+  it("filters RESERVED_KEYS from extra context and folds custom fields into extras", () => {
     const sink = createFirestoreErrorSink(makeOptions());
     const ctx: EnrichedErrorContext = { operation: "test-op", kind: "unknown", customField: "kept" };
     (ctx as Record<string, unknown>).message = "override";
@@ -107,16 +107,72 @@ describe("createFirestoreErrorSink", () => {
 
     const doc = getWrittenDoc();
     expect(doc.message).toBe("boom"); // from Error, not context
-    expect(doc.customField).toBe("kept");
+    // customField must be in extras JSON, not top-level
+    expect(doc.customField).toBeUndefined();
+    expect(JSON.parse(doc.extras as string).customField).toBe("kept");
   });
 
-  it("passes extra context fields through", () => {
+  it("folds extra context fields into extras as JSON, not top-level", () => {
     const sink = createFirestoreErrorSink(makeOptions());
     sink(new Error("boom"), { operation: "test-op", kind: "unknown", postId: "abc", txnId: "123" });
 
     const doc = getWrittenDoc();
-    expect(doc.postId).toBe("abc");
-    expect(doc.txnId).toBe("123");
+    // Must NOT be top-level keys
+    expect(doc.postId).toBeUndefined();
+    expect(doc.txnId).toBeUndefined();
+    // Must be in extras
+    const extras = JSON.parse(doc.extras as string);
+    expect(extras.postId).toBe("abc");
+    expect(extras.txnId).toBe("123");
+  });
+
+  it("sets extras to null when there are no non-reserved context fields", () => {
+    const sink = createFirestoreErrorSink(makeOptions());
+    sink(new Error("boom"), makeContext());
+
+    const doc = getWrittenDoc();
+    expect(doc.extras).toBeNull();
+  });
+
+  it("drops a caller-supplied extras key (it is reserved) and does not corrupt synthesized extras", () => {
+    const sink = createFirestoreErrorSink(makeOptions());
+    // extras is now a RESERVED_KEY so it should be filtered out
+    const ctx = { operation: "test-op", kind: "unknown" } as EnrichedErrorContext;
+    (ctx as Record<string, unknown>).extras = "caller-supplied";
+    sink(new Error("boom"), ctx);
+
+    const doc = getWrittenDoc();
+    // The caller-supplied extras key was the only non-reserved-... key,
+    // so synthesized extras should be null (no other non-reserved keys).
+    expect(doc.extras).toBeNull();
+  });
+
+  it("truncates oversized message to 10000 characters", () => {
+    const sink = createFirestoreErrorSink(makeOptions());
+    const longMessage = "a".repeat(15000);
+    sink(new Error(longMessage), makeContext());
+
+    const doc = getWrittenDoc();
+    expect((doc.message as string).length).toBe(10000);
+  });
+
+  it("truncates oversized stack to 50000 characters", () => {
+    const sink = createFirestoreErrorSink(makeOptions());
+    const err = new Error("boom");
+    // Override stack with an oversized value
+    Object.defineProperty(err, "stack", { value: "x".repeat(60000), configurable: true });
+    sink(err, makeContext());
+
+    const doc = getWrittenDoc();
+    expect((doc.stack as string).length).toBe(50000);
+  });
+
+  it("truncates oversized kind to 32 characters", () => {
+    const sink = createFirestoreErrorSink(makeOptions());
+    sink(new Error("boom"), makeContext({ kind: "a".repeat(50) as EnrichedErrorContext["kind"] }));
+
+    const doc = getWrittenDoc();
+    expect((doc.kind as string).length).toBe(32);
   });
 
   it("rate-limits after 50 writes within a window", () => {
