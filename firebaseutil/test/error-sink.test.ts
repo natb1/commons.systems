@@ -310,4 +310,59 @@ describe("createFirestoreErrorSink", () => {
     const doc = getWrittenDoc();
     expect(doc.code).toBe("permission-denied");
   });
+
+  describe("sensitive-key stripping", () => {
+    it("strips a sensitive-named key (sessionToken) from doc.extras", () => {
+      const sink = createFirestoreErrorSink(makeOptions());
+      const ctx = makeContext({ txnId: "123" } as Partial<EnrichedErrorContext>);
+      (ctx as Record<string, unknown>).sessionToken = "tok";
+      sink(new Error("boom"), ctx);
+
+      const doc = getWrittenDoc();
+      expect(doc.sessionToken).toBeUndefined();
+      const extras = JSON.parse(doc.extras as string);
+      expect(extras.sessionToken).toBeUndefined();
+    });
+
+    it("emits a console.warn naming the dropped sensitive key", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const sink = createFirestoreErrorSink(makeOptions());
+      const ctx = makeContext({ txnId: "123" } as Partial<EnrichedErrorContext>);
+      (ctx as Record<string, unknown>).sessionToken = "tok";
+      sink(new Error("boom"), ctx);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("sessionToken"),
+      );
+    });
+
+    it("retains a non-sensitive key (txnId) in doc.extras", () => {
+      // Spy only to suppress the drop warning; restored in beforeEach.
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const sink = createFirestoreErrorSink(makeOptions());
+      const ctx = makeContext({ txnId: "123" } as Partial<EnrichedErrorContext>);
+      (ctx as Record<string, unknown>).sessionToken = "tok";
+      sink(new Error("boom"), ctx);
+
+      const doc = getWrittenDoc();
+      const extras = JSON.parse(doc.extras as string);
+      expect(extras.txnId).toBe("123");
+    });
+
+    it("strips a key that contains a sensitive substring (apiKey matches 'key')", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const sink = createFirestoreErrorSink(makeOptions());
+      const ctx = makeContext({ txnId: "123" } as Partial<EnrichedErrorContext>);
+      (ctx as Record<string, unknown>).apiKey = "secret-api-key";
+      sink(new Error("boom"), ctx);
+
+      const doc = getWrittenDoc();
+      expect(doc.apiKey).toBeUndefined();
+      const extras = JSON.parse(doc.extras as string);
+      expect(extras.apiKey).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("apiKey"),
+      );
+    });
+  });
 });
