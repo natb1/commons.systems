@@ -247,12 +247,20 @@ function promptPassword(message: string): Promise<string | null> {
   });
 }
 
+// Outcome of a load attempt. `committed: true` means this call replaced the
+// in-memory dataset (and disarmed any prior file-sync session); `password` is
+// the password used for the load — `null` for plaintext, the actual string for
+// an encrypted file. `committed: false` means the load did not mutate state
+// (e.g. the user cancelled the password prompt), so any prior sync session is
+// intentionally left armed and still correct.
+type LoadOutcome = { committed: true; password: string | null } | { committed: false };
+
 // Core load pipeline shared by the upload path and the FSA handle path:
 // read bytes, decrypt-or-decode, parse, store, and transition to the local
 // state. Throws on any failure; callers wrap it in error handling.
 // Pass `cachedPassword` to skip the password dialog when the session password
 // is already known (e.g. on an external-change reload).
-async function loadFromFile(file: File, cachedPassword?: string): Promise<void> {
+async function loadFromFile(file: File, cachedPassword?: string): Promise<LoadOutcome> {
   const buffer = await file.arrayBuffer();
   let text: string;
   let pw: string | null = null;
@@ -261,7 +269,7 @@ async function loadFromFile(file: File, cachedPassword?: string): Promise<void> 
       pw = cachedPassword;
     } else {
       pw = await promptPassword("Enter password to decrypt");
-      if (pw === null) return;
+      if (pw === null) return { committed: false };
     }
     text = await decrypt(buffer, pw);
   } else {
@@ -269,9 +277,18 @@ async function loadFromFile(file: File, cachedPassword?: string): Promise<void> 
   }
   const parsed = parseUploadedJson(text);
   const data = toParsedData(parsed);
+  // This is the single point of dataset divergence: the line below replaces the
+  // in-memory dataset, so the prior armed (handle, password) no longer matches
+  // what IndexedDB holds. Disarm sync *before* the swap, after every throwing
+  // decrypt/parse step and the password-cancel early return, so a failure leaves
+  // the prior session armed and still correct (IndexedDB is unchanged). This one
+  // placement covers every load path: upload, plaintext-FSA, encrypted-FSA, and
+  // external reload — callers re-arm afterward only when appropriate.
+  resetFileSync();
   await storeParsedData(data);
   importPassword = pw;
   transition({ source: "local", groupName: parsed.groupName });
+  return { committed: true, password: pw };
 }
 
 async function handleFileUpload(file: File): Promise<void> {
@@ -308,13 +325,15 @@ async function loadFromHandle(handle: FileSystemFileHandle): Promise<void> {
   // a handle pointing at a non-budget file would be auto-loaded, fail validation,
   // and be retried on every subsequent startup — a permanent failing-load loop.
   try {
-    await loadFromFile(file);
-    // Arm encrypted write-back so subsequent UI edits overwrite this on-disk
-    // file in place. loadFromFile sets importPassword only on the success path
-    // (an encrypted file decrypted, or null for a plaintext file); a
-    // password-cancel returns early without transitioning to local, leaving
-    // importPassword null, so this no-ops there.
-    if (importPassword) configureFileSync(handle, importPassword, file.lastModified);
+    const outcome = await loadFromFile(file);
+    // Arm encrypted write-back only when THIS load committed an encrypted file,
+    // using the password the load actually used. A plaintext file (password
+    // null) and a password-cancel (not committed) leave sync disarmed —
+    // loadFromFile has already dropped the prior binding — so we do not re-point
+    // a lingering prior-session password at this new handle.
+    if (outcome.committed && outcome.password !== null) {
+      configureFileSync(handle, outcome.password, file.lastModified);
+    }
   } catch (error) {
     if (error instanceof UploadValidationError) {
       // The persisted handle points to a file that is not valid budget data
@@ -459,12 +478,15 @@ async function reloadIfExternallyChanged(): Promise<void> {
   reloadInFlight = (async () => {
     clearNavError();
     try {
-      await loadFromFile(file, cachedPw);
-      // Stamp the watermark. loadFromFile either set importPassword (success) or
-      // returned early (wrong cached pw). In the early-return case importPassword
-      // still holds its old value, so configureFileSync still advances the watermark
-      // past this file version, preventing a re-prompt loop.
-      if (importPassword) configureFileSync(handle, importPassword, file.lastModified);
+      const outcome = await loadFromFile(file, cachedPw);
+      // Re-arm and stamp the watermark for a genuine committed encrypted reload,
+      // using the password the reload used. A wrong cached password makes
+      // `decrypt` throw (caught below) rather than committing, so we never
+      // re-arm on a bad password — and loadFromFile has already disarmed the
+      // prior session before swapping in the reloaded dataset.
+      if (outcome.committed && outcome.password !== null) {
+        configureFileSync(handle, outcome.password, file.lastModified);
+      }
     } catch (error) {
       // Do NOT clear the file handle here: a content-validation error in an
       // external write should not permanently unlink the FSA handle. The handle
