@@ -8,11 +8,13 @@
 // reminder. The GitHub project's `Due` field is not used.
 //
 // Authentication — GitHub App, not a personal access token:
-//   - The App's private key (PEM) is the only Functions secret. It does not
-//     expire, so there is no token to rotate on a cadence. Set it once per
-//     project via the interactive prompt (paste the full PEM):
+//   - There are two Functions secrets, each set once per project via the
+//     interactive prompt. Neither ever flows through CI or `.env` files.
+//     App private key (paste the full PEM):
 //         firebase functions:secrets:set OFFICE_HOURS_GITHUB_APP_PRIVATE_KEY
-//   - On each run the function signs a short-lived JWT with that key and
+//     Member emails (comma-separated PII list of member email addresses):
+//         firebase functions:secrets:set OFFICE_HOURS_MEMBER_EMAILS
+//   - On each run the function signs a short-lived JWT with the private key and
 //     exchanges it for a ~1-hour installation access token, which it uses to
 //     call the GitHub API. The installation token self-expires; nothing
 //     long-lived is stored.
@@ -21,7 +23,6 @@
 //         OFFICE_HOURS_GITHUB_APP_ID=123456
 //         OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID=87654321
 //         OFFICE_HOURS_GROUP_REPO=natb1/office-hours-nate
-//         OFFICE_HOURS_MEMBER_EMAILS=owner@example.com
 //         OFFICE_HOURS_FIRESTORE_NAMESPACE=office-hours/prod
 //     The App must be installed on the `natb1/office-hours-nate` repo with read-only
 //     `Issues` permission.
@@ -39,7 +40,7 @@ const GH_APP_PRIVATE_KEY = defineSecret("OFFICE_HOURS_GITHUB_APP_PRIVATE_KEY");
 const GH_APP_ID = defineString("OFFICE_HOURS_GITHUB_APP_ID");
 const GH_APP_INSTALLATION_ID = defineString("OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID");
 const GROUP_REPO = defineString("OFFICE_HOURS_GROUP_REPO");
-const MEMBER_EMAILS = defineString("OFFICE_HOURS_MEMBER_EMAILS");
+const MEMBER_EMAILS = defineSecret("OFFICE_HOURS_MEMBER_EMAILS");
 const NAMESPACE = defineString("OFFICE_HOURS_FIRESTORE_NAMESPACE", { default: "office-hours/prod" });
 
 const adminApp = getApps().length > 0 ? getApps()[0] : initializeApp();
@@ -100,7 +101,8 @@ export async function syncOfficeHoursCore(deps: {
 
   const itemsPath = `${deps.namespace}/items`;
   const itemsCollection = deps.firestore.collection(itemsPath);
-  const batch = deps.firestore.batch();
+  const writer = deps.firestore.bulkWriter();
+  const writes: Promise<unknown>[] = [];
 
   const writtenKeys = new Set<string>();
   let written = 0;
@@ -124,15 +126,17 @@ export async function syncOfficeHoursCore(deps: {
 
     const dueAt = Timestamp.fromDate(issue.dueAt);
     const docRef = itemsCollection.doc(issue.jitKey);
-    batch.set(docRef, {
-      title: issue.title,
-      dueAt,
-      repo: issue.repo,
-      issueNumber: issue.number,
-      jitKey: issue.jitKey,
-      memberEmails: deps.memberEmails,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+    writes.push(
+      writer.set(docRef, {
+        title: issue.title,
+        dueAt,
+        repo: issue.repo,
+        issueNumber: issue.number,
+        jitKey: issue.jitKey,
+        memberEmails: deps.memberEmails,
+        updatedAt: FieldValue.serverTimestamp(),
+      }),
+    );
     writtenKeys.add(issue.jitKey);
     written += 1;
   }
@@ -141,12 +145,13 @@ export async function syncOfficeHoursCore(deps: {
   let deleted = 0;
   for (const doc of existing.docs) {
     if (!writtenKeys.has(doc.id)) {
-      batch.delete(doc.ref);
+      writes.push(writer.delete(doc.ref));
       deleted += 1;
     }
   }
 
-  await batch.commit();
+  await writer.close(); // flushes all enqueued writes in ≤500-op chunks
+  await Promise.all(writes); // BulkWriter routes per-op failures to the individual op promises, not to close(); this is what re-raises them
 
   return { written, deleted, skippedNoDate };
 }
@@ -324,7 +329,7 @@ export async function fetchOpenJitIssuesLive(
 export const syncOfficeHours = onSchedule(
   {
     schedule: "every 30 minutes",
-    secrets: [GH_APP_PRIVATE_KEY],
+    secrets: [GH_APP_PRIVATE_KEY, MEMBER_EMAILS],
     timeoutSeconds: 120,
   },
   async () => {

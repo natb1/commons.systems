@@ -82,13 +82,24 @@ function createInMemoryFirestore() {
     doc: (id: string) => doc(`${path}/${id}`),
   });
 
+  // Deliberate regression guard: enforces Firestore's real 500-op WriteBatch cap
+  // so reverting production to a single batch fails the >500-op sync test.
   const batch = () => {
     const ops: Array<() => void> = [];
+    let opCount = 0;
+    const guard = () => {
+      opCount += 1;
+      if (opCount > 500) {
+        throw new Error("INVALID_ARGUMENT: maximum 500 writes allowed per request");
+      }
+    };
     return {
       set: (ref: InMemoryDocRef, data: Record<string, unknown>) => {
+        guard();
         ops.push(() => docs.set(ref.path, data));
       },
       delete: (ref: InMemoryDocRef) => {
+        guard();
         ops.push(() => docs.delete(ref.path));
       },
       commit: async () => {
@@ -97,7 +108,24 @@ function createInMemoryFirestore() {
     };
   };
 
-  return { doc, collection, batch, _docs: docs };
+  const bulkWriter = () => {
+    const ops: Array<() => void> = [];
+    return {
+      set: (ref: InMemoryDocRef, data: Record<string, unknown>) => {
+        ops.push(() => docs.set(ref.path, data));
+        return Promise.resolve();
+      },
+      delete: (ref: InMemoryDocRef) => {
+        ops.push(() => docs.delete(ref.path));
+        return Promise.resolve();
+      },
+      close: async () => {
+        for (const op of ops) op();
+      },
+    };
+  };
+
+  return { doc, collection, batch, bulkWriter, _docs: docs };
 }
 
 function makeIssue(overrides: Partial<JitIssue> = {}): JitIssue {
@@ -239,6 +267,56 @@ describe("syncOfficeHoursCore", () => {
       | Record<string, unknown>
       | undefined;
     expect(written?.memberEmails).toEqual(["a@example.com", "b@example.com"]);
+  });
+
+  it("handles more than 500 operations in a single sync", async () => {
+    // Part 1: >500 set-only path — 600 writes in one sync run.
+    // The regression guard: batch() throws on the 501st op, so a revert to
+    // firestore.batch() fails here. BulkWriter chunks internally and passes.
+    const store1 = createInMemoryFirestore();
+    const issues = Array.from({ length: 600 }, (_, i) =>
+      makeIssue({ number: i, jitKey: `k-${i}` }),
+    );
+
+    const result1 = await syncOfficeHoursCore({
+      fetchOpenJitIssues: async () => issues,
+      firestore: store1 as unknown as Firestore,
+      namespace: "office-hours/prod",
+      memberEmails: ["owner@example.com"],
+    });
+
+    expect(result1.written).toBe(600);
+    for (let i = 0; i < 600; i++) {
+      expect(store1._docs.has(`office-hours/prod/items/k-${i}`)).toBe(true);
+    }
+
+    // Part 2: combined set+delete >500 path — 600 stale deletions + 5 fresh writes = 605 ops.
+    const store2 = createInMemoryFirestore();
+    for (let i = 0; i < 600; i++) {
+      store2._docs.set(`office-hours/prod/items/stale-${i}`, {
+        title: `Stale ${i}`,
+        jitKey: `stale-${i}`,
+      });
+    }
+    const freshIssues = Array.from({ length: 5 }, (_, i) =>
+      makeIssue({ number: 700 + i, jitKey: `fresh-${i}` }),
+    );
+
+    const result2 = await syncOfficeHoursCore({
+      fetchOpenJitIssues: async () => freshIssues,
+      firestore: store2 as unknown as Firestore,
+      namespace: "office-hours/prod",
+      memberEmails: ["owner@example.com"],
+    });
+
+    expect(result2.written).toBe(5);
+    expect(result2.deleted).toBe(600);
+    for (let i = 0; i < 600; i++) {
+      expect(store2._docs.has(`office-hours/prod/items/stale-${i}`)).toBe(false);
+    }
+    for (let i = 0; i < 5; i++) {
+      expect(store2._docs.has(`office-hours/prod/items/fresh-${i}`)).toBe(true);
+    }
   });
 });
 
