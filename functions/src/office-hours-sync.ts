@@ -150,7 +150,7 @@ export async function syncOfficeHoursCore(deps: {
   }
 
   await writer.close(); // flushes all enqueued writes in ≤500-op chunks
-  await Promise.all(writes); // surface any write failure as a thrown error
+  await Promise.all(writes); // BulkWriter routes per-op failures to the individual op promises, not to close(); this is what re-raises them
 
   return { written, deleted, skippedNoDate };
 }
