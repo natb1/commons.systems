@@ -43,29 +43,34 @@
 #      and the ISSUE, spawn router, self-close. Empty CURRENT_PHASE (e.g.
 #      dispatch-phase network failure) is treated as "undetermined" and falls
 #      through to Branch D rather than triggering a false self-close.
-#   C. marker present + same phase + CURRENT_PHASE is any fix-* phase +
-#      dispatch:<fix-phase>-attempt counter < 3 — transient no-push fix-* outcome.
-#      CI has already concluded and nothing is pending: a fix-* pass that pushes a
-#      fix restarts CI, and the early not-ready gate above already intercepts and
-#      self-closes that in-progress case when the marker is present, so by the time
-#      control reaches Branch C, CI is concluded and not re-running. Spawn router,
-#      self-close (so the session does not leak idle holding its worktree); the
-#      next tick re-runs the fix-* phase or escalates at the cap. The needs-human
-#      fix-* failure never reaches Branch C — the fix-* skill skips the marker for
-#      it, so it lands in Branch A (marker absent → park the issue on office-hours
-#      on the first run).
-#   D. marker present + same phase + NOT (fix-* AND counter < 3) — true
-#      non-advancement (or a hypothetical same-phase non-fix-* case). Park the
-#      ISSUE on a human via dispatch-apply-office-hours (label + why-comment),
-#      spawn router, exit 0.
+#   C. marker present + same phase + CURRENT_PHASE is any fix-* phase — transient
+#      no-push fix-* outcome. Two sub-cases:
+#      (a) PR_NUM set + dispatch:<fix-phase>-attempt counter < 3: CI has already
+#          concluded and nothing is pending. Spawn router, self-close (so the
+#          session does not leak idle holding its worktree); the next tick
+#          re-runs the fix-* phase or escalates at the cap. The needs-human
+#          fix-* failure never reaches Branch C — the fix-* skill skips the marker
+#          for it, so it lands in Branch A (marker absent → park the issue on
+#          office-hours on the first run).
+#      (b) PR_NUM empty (no-PR provisioning backstop, e.g. a fix-conflicts pass
+#          that ran during the implement phase before any PR existed): the attempt
+#          counter lives on a PR label and does not exist yet. Always self-close
+#          and re-seed the chain — the marker being present means the fix-* skill
+#          completed a resolvable conflict. The implement phase that opens the PR
+#          runs on the next tick.
+#   D. marker present + same phase + NOT Branch C (i.e. PR-present and attempt
+#      counter >= 3, or a hypothetical same-phase non-fix-* case) — true
+#      non-advancement. Park the ISSUE on a human via dispatch-apply-office-hours
+#      (label + why-comment), spawn router, exit 0.
 #
 # CLOSING NOTE (post-#1108): NO worker branch self-parks idle waiting on pending
 # work. The early not-ready gate self-closes its concluded-CI marker-present case
 # and hands back its in-progress marker-absent case; Branch C self-closes its
-# concluded no-push case. The remaining exit-0-without-self-close branches —
-# Branch A and Branch D office-hours parks, and the early-gate marker-absent
-# TOCTOU hand-back — are deliberate human-review parks or router hand-backs, not
-# idle waiters.
+# concluded no-push case (both the PR-present counter-below-cap sub-case and the
+# no-PR provisioning backstop sub-case). The remaining exit-0-without-self-close
+# branches — Branch A and Branch D office-hours parks, and the early-gate
+# marker-absent TOCTOU hand-back — are deliberate human-review parks or router
+# hand-backs, not idle waiters.
 #
 # Discriminator: only acts for a /dispatch-worker job. Skipped when
 # CLAUDE_JOB_DIR is unset (interactive session), state.json is missing, or the
@@ -246,6 +251,16 @@ case "$CURRENT_PHASE" in
         self_close
         exit 0
       fi
+      # counter at cap: fall through to Branch D (office-hours park)
+    else
+      # Branch C — no-PR provisioning backstop (e.g. a fix-conflicts pass that
+      # ran during the implement phase, before any PR existed). No attempt
+      # counter exists (it lives on a PR label), so always self-close and
+      # re-seed the chain rather than parking — the marker being present means
+      # the fix-* skill completed a resolvable conflict.
+      spawn_tick
+      self_close
+      exit 0
     fi
     ;;
 esac
