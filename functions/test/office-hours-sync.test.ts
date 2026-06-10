@@ -82,13 +82,24 @@ function createInMemoryFirestore() {
     doc: (id: string) => doc(`${path}/${id}`),
   });
 
+  // Deliberate regression guard: enforces Firestore's real 500-op WriteBatch cap
+  // so reverting production to a single batch fails the >500-op sync test.
   const batch = () => {
     const ops: Array<() => void> = [];
+    let opCount = 0;
+    const guard = () => {
+      opCount += 1;
+      if (opCount > 500) {
+        throw new Error("INVALID_ARGUMENT: maximum 500 writes allowed per request");
+      }
+    };
     return {
       set: (ref: InMemoryDocRef, data: Record<string, unknown>) => {
+        guard();
         ops.push(() => docs.set(ref.path, data));
       },
       delete: (ref: InMemoryDocRef) => {
+        guard();
         ops.push(() => docs.delete(ref.path));
       },
       commit: async () => {
@@ -97,7 +108,24 @@ function createInMemoryFirestore() {
     };
   };
 
-  return { doc, collection, batch, _docs: docs };
+  const bulkWriter = () => {
+    const ops: Array<() => void> = [];
+    return {
+      set: (ref: InMemoryDocRef, data: Record<string, unknown>) => {
+        ops.push(() => docs.set(ref.path, data));
+        return Promise.resolve();
+      },
+      delete: (ref: InMemoryDocRef) => {
+        ops.push(() => docs.delete(ref.path));
+        return Promise.resolve();
+      },
+      close: async () => {
+        for (const op of ops) op();
+      },
+    };
+  };
+
+  return { doc, collection, batch, bulkWriter, _docs: docs };
 }
 
 function makeIssue(overrides: Partial<JitIssue> = {}): JitIssue {

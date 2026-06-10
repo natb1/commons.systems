@@ -100,7 +100,8 @@ export async function syncOfficeHoursCore(deps: {
 
   const itemsPath = `${deps.namespace}/items`;
   const itemsCollection = deps.firestore.collection(itemsPath);
-  const batch = deps.firestore.batch();
+  const writer = deps.firestore.bulkWriter();
+  const writes: Promise<unknown>[] = [];
 
   const writtenKeys = new Set<string>();
   let written = 0;
@@ -124,15 +125,17 @@ export async function syncOfficeHoursCore(deps: {
 
     const dueAt = Timestamp.fromDate(issue.dueAt);
     const docRef = itemsCollection.doc(issue.jitKey);
-    batch.set(docRef, {
-      title: issue.title,
-      dueAt,
-      repo: issue.repo,
-      issueNumber: issue.number,
-      jitKey: issue.jitKey,
-      memberEmails: deps.memberEmails,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+    writes.push(
+      writer.set(docRef, {
+        title: issue.title,
+        dueAt,
+        repo: issue.repo,
+        issueNumber: issue.number,
+        jitKey: issue.jitKey,
+        memberEmails: deps.memberEmails,
+        updatedAt: FieldValue.serverTimestamp(),
+      }),
+    );
     writtenKeys.add(issue.jitKey);
     written += 1;
   }
@@ -141,12 +144,13 @@ export async function syncOfficeHoursCore(deps: {
   let deleted = 0;
   for (const doc of existing.docs) {
     if (!writtenKeys.has(doc.id)) {
-      batch.delete(doc.ref);
+      writes.push(writer.delete(doc.ref));
       deleted += 1;
     }
   }
 
-  await batch.commit();
+  await writer.close(); // flushes all enqueued writes in ≤500-op chunks
+  await Promise.all(writes); // surface any write failure as a thrown error
 
   return { written, deleted, skippedNoDate };
 }
