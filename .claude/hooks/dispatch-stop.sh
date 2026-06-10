@@ -257,7 +257,7 @@ case "$CURRENT_PHASE" in
       # ran during the implement phase, before any PR existed). No attempt
       # counter exists (it lives on a PR label), so always self-close and
       # re-seed the chain rather than parking — the marker being present means
-      # the fix-* skill completed a resolvable conflict.
+      # the fix-* skill completed successfully.
       spawn_tick
       self_close
       exit 0

@@ -14919,6 +14919,13 @@ if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-no-pr-backstop: apply-office-hours not invoked (did not park on office-hours)"
 fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-no-pr-backstop: no label add or remove invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-no-pr-backstop: no label add or remove invoked"
+fi
 stop_teardown
 
 # --- Test FC2: fix-conflicts marker, same phase, counter >= 3 → Branch D (fuse)
