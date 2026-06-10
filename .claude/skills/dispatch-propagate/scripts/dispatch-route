@@ -13,7 +13,7 @@
 #   INVOKE /review-fix              phase review       (dispatch:qa-done / reviewed re-entry)
 #   INVOKE /budget-parse-job       phase plan         (no PR, unplanned, statements:<key> label) — parse-job issue
 #   INVOKE /implement              phase implement    (no PR + dispatch:planned)
-#   INVOKE /dispatch-resolve-conflict  provisioning hit an origin/main merge conflict
+#   INVOKE /fix-conflicts              provisioning hit an origin/main merge conflict
 #   RELEVANCE-REVIEW                phase plan         (no PR, unplanned) — routes to SKILL.md Step 2
 #   STOP done                       phase done         (non-draft PR)
 #   PUSH-STRANDED                   phase done, but worktree ahead of origin/<branch> — push then park
@@ -91,8 +91,8 @@ fi
 PROVISION_RC=0
 "$SCRIPT_DIR/dispatch-provision-worktree" "$WORKTREE_PATH" || PROVISION_RC=$?
 if [[ "$PROVISION_RC" -eq 3 ]]; then
-  # A clean origin/main merge conflict — hand off to the conflict-resolver skill.
-  echo "INVOKE /dispatch-resolve-conflict"
+  # A clean origin/main merge conflict — route to the fix-conflicts phase.
+  echo "INVOKE /fix-conflicts"
   exit 0
 elif [[ "$PROVISION_RC" -ne 0 ]]; then
   # Fetch failure or a non-conflict merge failure — park the issue to office-hours.
@@ -109,7 +109,7 @@ fi
 
 # Fetch the open-PR list once; reuse it for every sibling call via the
 # DISPATCH_PR_LIST env contract (dispatch-ci-ready and dispatch-phase both honor it).
-DISPATCH_PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+DISPATCH_PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable)
 export DISPATCH_PR_LIST
 
 # Initial CI-ready gate. exit 0 (ready) → continue; exit 1 (waiting) → STOP waiting;
@@ -180,6 +180,7 @@ case "$PHASE" in
     # planned issue is never a parse-job).
     echo "INVOKE /implement"
     ;;
+  fix-conflicts) echo "INVOKE /fix-conflicts" ;;
   fix-checks)   echo "INVOKE /fix-checks" ;;
   qa)           echo "INVOKE /qa-fix" ;;
   review)       echo "INVOKE /review-fix" ;;

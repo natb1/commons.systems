@@ -54,8 +54,8 @@ Act on the one directive:
 | `INVOKE /qa-fix` | 0 | draft PR, CI green, no `dispatch:*` label | invoke `/qa-fix` |
 | `INVOKE /review-fix` | 0 | draft PR + `dispatch:qa-done` (or `dispatch:reviewed` re-entry) | invoke `/review-fix` |
 | `INVOKE /budget-parse-job` | 0 | a statement parse-job issue (`statements:<key>` label, no PR) | invoke `/budget-parse-job` (see below) |
+| `INVOKE /fix-conflicts` | 0 | provisioning hit an `origin/main` merge conflict | invoke `/fix-conflicts` (the generic INVOKE path below) |
 | `INVOKE /implement` | 0 | no PR + `dispatch:planned` (`implement` phase) | invoke `/implement` (the generic INVOKE path below) |
-| `INVOKE /dispatch-resolve-conflict` | 0 | provisioning hit an `origin/main` merge conflict | invoke `/dispatch-resolve-conflict` (see below) |
 | `RELEVANCE-REVIEW` | 0 | no PR, unplanned (`plan` phase) | run the Step 2 relevance review, then dispatch its verdict |
 | `STOP done` | 0 | non-draft (ready) PR — should-never-happen; spawn boundary (#1109) prevents it upstream | stop without invoking a phase skill |
 | `PUSH-STRANDED` | 0 | `done` PR, but the worktree has commits `origin/<branch>` hasn't seen | push `origin HEAD`, write an office-hours reason, stop with no marker |
@@ -98,17 +98,6 @@ to the next phase in the same tick — one phase per `/dispatch-worker` invocati
 `/ultrareview` is intentionally **never** invoked: it is user-triggered and
 billed, so `/dispatch-worker` cannot launch it.
 
-### `INVOKE /dispatch-resolve-conflict` — hand off the merge conflict
-
-Provisioning found that `origin/main` does not merge cleanly into this worktree.
-Invoke `/dispatch-resolve-conflict $N $WORKTREE_PATH` via the Skill tool **instead
-of** any phase skill. The worker is already a session in the worktree, named
-`<N>-slug`, with `CLAUDE_JOB_DIR` set — exactly the environment that skill expects
-(it normally runs as a bg job the router spawns). Write **no** phase marker: the
-Stop hook's conflict-resolver branch owns the disposition — re-seed at `<N>` on
-`resolved`, or park an ambiguous conflict to office-hours — via the
-`conflict-resolver` / `conflict-resolved` sentinels that skill writes. Then stop.
-
 ### `INVOKE /budget-parse-job` — merge one statement, close the issue
 
 The routed target is a statement parse-job issue (filed by
@@ -147,7 +136,7 @@ Stop-hook re-gate rationale.
 ### `PUSH-STRANDED` — push unpushed local commits, then park
 
 A `done` PR's worktree is ahead of its remote branch — unpushed
-`dispatch-merge-main` / `/dispatch-resolve-conflict` merge commits that, if
+`dispatch-merge-main` / `/fix-conflicts` merge commits that, if
 left, keep the PR `CONFLICTING` with no later tick able to push them.
 
 Run `git push origin HEAD` to flush them. This is sandbox-safe: it uses HTTPS

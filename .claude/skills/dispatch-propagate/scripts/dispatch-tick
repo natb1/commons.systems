@@ -64,7 +64,7 @@
 #   Selection lock: the selection lock (`dispatch-acquire-lock`, acquired inside
 #   `dispatch-select-tick`) is shared with the autonomous chain, so a manual run
 #   cannot select the same target as an in-flight tick. Merge conflicts are handled
-#   by a spawned `/dispatch-resolve-conflict` bg job.
+#   by the `/fix-conflicts` phase routed through the worker.
 #
 # Behavior:
 #   1. Run dispatch-select-tick [<N>], echoing all of its stdout through (the
@@ -97,8 +97,8 @@
 #      materialize-spawn exit → exit 2.
 #
 #      NOTE on `resolve merge-conflict`: dispatch-materialize-spawn no longer
-#      emits this token — its merge-conflict path now spawns a
-#      /dispatch-resolve-conflict bg job and emits `propagate` instead. The branch
+#      emits this token — its merge-conflict path now routes to the
+#      /fix-conflicts phase via dispatch-route and emits `propagate` instead. The branch
 #      is retained as a defensive no-op (log the token, exit 0) so a future path
 #      that surfaces it again can never wedge the headless tick;
 #      test-dispatch-scripts.sh asserts it stays a safe exit-0 disposition.
