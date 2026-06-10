@@ -26,7 +26,6 @@ describe("storage audio media", () => {
       `audio/${ENV}/media/public-audiobook.mp3`,
       {
         publicdomain: "true",
-        member_0: "member@test.com",
       },
     );
     await adminUploadStorage(
@@ -34,8 +33,7 @@ describe("storage audio media", () => {
       `audio/${ENV}/media/private-audiobook.mp3`,
       {
         publicdomain: "false",
-        member_0: "member@test.com",
-        member_1: "other@test.com",
+        member_emails: "member@test.com,other@test.com",
       },
     );
   });
@@ -57,7 +55,7 @@ describe("storage audio media", () => {
   });
 
   describe("private files - member access", () => {
-    it("allows member_0 to read", async () => {
+    it("allows first listed member to read", async () => {
       const ctx = authenticatedContext(env, "member@test.com");
       const storage = ctx.storage();
       const ref = storage.ref(
@@ -66,7 +64,7 @@ describe("storage audio media", () => {
       await assertSucceeds(ref.getDownloadURL());
     });
 
-    it("allows member_1 to read", async () => {
+    it("allows second listed member to read", async () => {
       const ctx = authenticatedContext(env, "other@test.com");
       const storage = ctx.storage();
       const ref = storage.ref(
@@ -90,6 +88,62 @@ describe("storage audio media", () => {
       const ref = storage.ref(
         `audio/${ENV}/media/private-audiobook.mp3`,
       );
+      await assertFails(ref.getDownloadURL());
+    });
+  });
+
+  describe(">3 members (cap removed)", () => {
+    beforeEach(async () => {
+      await adminUploadStorage(
+        env,
+        `audio/${ENV}/media/four-member.mp3`,
+        {
+          publicdomain: "false",
+          member_emails: "a@test.com,b@test.com,c@test.com,d@test.com",
+        },
+      );
+    });
+
+    it("allows the 4th listed member to read", async () => {
+      const ctx = authenticatedContext(env, "d@test.com");
+      const storage = ctx.storage();
+      const ref = storage.ref(`audio/${ENV}/media/four-member.mp3`);
+      await assertSucceeds(ref.getDownloadURL());
+    });
+
+    it("denies a non-listed email", async () => {
+      const ctx = authenticatedContext(env, "e@test.com");
+      const storage = ctx.storage();
+      const ref = storage.ref(`audio/${ENV}/media/four-member.mp3`);
+      await assertFails(ref.getDownloadURL());
+    });
+  });
+
+  describe("legacy member_0/1/2 fallback", () => {
+    beforeEach(async () => {
+      await adminUploadStorage(
+        env,
+        `audio/${ENV}/media/legacy.mp3`,
+        {
+          publicdomain: "false",
+          member_0: "legacy0@test.com",
+          member_1: "legacy1@test.com",
+          member_2: "legacy2@test.com",
+        },
+      );
+    });
+
+    it("allows a listed legacy member to read", async () => {
+      const ctx = authenticatedContext(env, "legacy0@test.com");
+      const storage = ctx.storage();
+      const ref = storage.ref(`audio/${ENV}/media/legacy.mp3`);
+      await assertSucceeds(ref.getDownloadURL());
+    });
+
+    it("denies a non-listed email on a legacy object", async () => {
+      const ctx = authenticatedContext(env, "stranger@test.com");
+      const storage = ctx.storage();
+      const ref = storage.ref(`audio/${ENV}/media/legacy.mp3`);
       await assertFails(ref.getDownloadURL());
     });
   });
