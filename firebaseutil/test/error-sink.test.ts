@@ -313,6 +313,7 @@ describe("createFirestoreErrorSink", () => {
 
   describe("sensitive-key stripping", () => {
     it("strips a sensitive-named key (sessionToken) from doc.extras", () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
       const sink = createFirestoreErrorSink(makeOptions());
       const ctx = makeContext({ txnId: "123" } as Partial<EnrichedErrorContext>);
       (ctx as Record<string, unknown>).sessionToken = "tok";
