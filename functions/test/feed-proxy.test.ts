@@ -107,12 +107,12 @@ describe("handleFeedProxy", () => {
     const feedXml = "<feed><entry>test</entry></feed>";
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        text: () => Promise.resolve(feedXml),
-        headers: new Headers({ "content-type": "application/atom+xml" }),
-      }),
+      vi.fn().mockResolvedValue(
+        new Response(feedXml, {
+          status: 200,
+          headers: { "content-type": "application/atom+xml" },
+        }),
+      ),
     );
 
     const allowedUrl = [...ALLOWED_FEED_URLS][0];
@@ -121,6 +121,7 @@ describe("handleFeedProxy", () => {
 
     expect(fetch).toHaveBeenCalledWith(allowedUrl, {
       headers: { "User-Agent": "commons-systems-feed-proxy/1.0" },
+      redirect: "manual",
     });
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe(feedXml);
@@ -129,14 +130,19 @@ describe("handleFeedProxy", () => {
   });
 
   it("defaults content-type to application/xml when upstream omits it", async () => {
+    // Use a ReadableStream body so Response does not auto-set a content-type
+    // header — that keeps upstream.headers.get("content-type") null and lets
+    // the production "?? application/xml" fallback fire.
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode("<feed/>"));
+        controller.close();
+      },
+    });
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        text: () => Promise.resolve("<feed/>"),
-        headers: new Headers(),
-      }),
+      vi.fn().mockResolvedValue(new Response(stream, { status: 200 })),
     );
 
     const allowedUrl = [...ALLOWED_FEED_URLS][0];
@@ -149,11 +155,7 @@ describe("handleFeedProxy", () => {
   it("forwards upstream error status", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 502,
-        headers: new Headers(),
-      }),
+      vi.fn().mockResolvedValue(new Response(null, { status: 502 })),
     );
 
     const allowedUrl = [...ALLOWED_FEED_URLS][0];
@@ -167,10 +169,35 @@ describe("handleFeedProxy", () => {
   it("returns 502 when reading upstream response body fails", async () => {
     vi.stubGlobal(
       "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new Error("body stream interrupted"));
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/xml" } },
+        ),
+      ),
+    );
+
+    const allowedUrl = [...ALLOWED_FEED_URLS][0];
+    const res = createMockRes();
+    await handleFeedProxy(createMockReq({ url: allowedUrl }), res as never);
+
+    expect(res.statusCode).toBe(502);
+    expect(res.body).toBe("Failed to read upstream response body");
+    expect(res.body).not.toContain("body stream interrupted");
+  });
+
+  it("rejects redirect (SSRF protection) with 502 and does not fall through to status-0 message", async () => {
+    vi.stubGlobal(
+      "fetch",
       vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        text: () => Promise.reject(new Error("body stream interrupted")),
+        type: "opaqueredirect",
+        status: 0,
+        ok: false,
+        body: null,
         headers: new Headers(),
       }),
     );
@@ -180,9 +207,72 @@ describe("handleFeedProxy", () => {
     await handleFeedProxy(createMockReq({ url: allowedUrl }), res as never);
 
     expect(res.statusCode).toBe(502);
-    expect(res.body).toBe(
-      "Failed to read upstream response body: body stream interrupted",
+    expect(res.body).toBe("Upstream returned a redirect, which is not allowed");
+    expect(res.body).not.toBe("Upstream returned 0");
+  });
+
+  it("returns 502 when upstream body exceeds MAX_FEED_BYTES", async () => {
+    // Enqueue 64 KB chunks lazily via pull() so the reader's early cancel()
+    // stops production — no large allocation needed.
+    const CHUNK_SIZE = 64 * 1024;
+    const MAX_FEED_BYTES = 5 * 1024 * 1024;
+    const chunksNeeded = Math.ceil(MAX_FEED_BYTES / CHUNK_SIZE) + 1;
+    let pulled = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled >= chunksNeeded) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(new Uint8Array(CHUNK_SIZE).fill(0x41));
+        pulled++;
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(stream, {
+          status: 200,
+          headers: { "content-type": "application/xml" },
+        }),
+      ),
     );
+
+    const allowedUrl = [...ALLOWED_FEED_URLS][0];
+    const res = createMockRes();
+    await handleFeedProxy(createMockReq({ url: allowedUrl }), res as never);
+
+    expect(res.statusCode).toBe(502);
+    expect(res.body).toBe("Upstream feed exceeded maximum allowed size");
+  });
+
+  it("returns 502 with generic message when fetch throws (no error leak)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("DNS resolution failed")),
+    );
+
+    const allowedUrl = [...ALLOWED_FEED_URLS][0];
+    const res = createMockRes();
+    await handleFeedProxy(createMockReq({ url: allowedUrl }), res as never);
+
+    expect(res.statusCode).toBe(502);
+    expect(res.body).toBe("Failed to fetch upstream feed");
+    expect(res.body).not.toContain("DNS");
+  });
+
+  it("returns 502 with clear message when upstream returns null body on ok response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 200 })),
+    );
+
+    const allowedUrl = [...ALLOWED_FEED_URLS][0];
+    const res = createMockRes();
+    await handleFeedProxy(createMockReq({ url: allowedUrl }), res as never);
+
+    expect(res.statusCode).toBe(502);
+    expect(res.body).toBe("Upstream returned an empty response body");
   });
 
   it("ALLOWED_FEED_URLS matches feed registry", () => {
