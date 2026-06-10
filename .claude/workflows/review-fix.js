@@ -235,9 +235,16 @@ function dedupMerge(groupFindings) {
 }
 
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-review-verify-drop
-// For each Required finding, drop (Refuted) if ≥1 skeptic voted "refuted";
-// otherwise keep (Upheld). Non-Required findings are never affected. Annotates
-// each Required finding with `verify`. Returns {kept, dropped}.
+// For each Required finding:
+//   - no skeptic vote at all (both verify agents failed) → drop (Unverified):
+//     verification could not run, so for a terminal auto-ready phase we do NOT
+//     auto-spend an Opus fix on it — it is dropped from the fix set and filed as
+//     a follow-up, consistent with the skeptic prompt's "default to refuted under
+//     uncertainty" bias (a crashed skeptic is the most uncertain case of all).
+//   - ≥1 skeptic voted "refuted" → drop (Refuted).
+//   - otherwise → keep (Upheld).
+// Non-Required findings are never affected. Annotates each Required finding with
+// `verify`. Returns {kept, dropped}.
 function applyVerifyDrop(findings, votesById) {
   const kept = [];
   const dropped = [];
@@ -245,7 +252,9 @@ function applyVerifyDrop(findings, votesById) {
     if (f.bucket === 'Required') {
       const votes = votesById[f.id] || [];
       const refutedCount = votes.filter((v) => v === 'refuted').length;
-      if (refutedCount >= 1) {
+      if (!votes.length) {
+        dropped.push(Object.assign({}, f, { verify: 'Unverified' }));
+      } else if (refutedCount >= 1) {
         dropped.push(Object.assign({}, f, { verify: 'Refuted' }));
       } else {
         kept.push(Object.assign({}, f, { verify: 'Upheld' }));
@@ -273,9 +282,11 @@ const SCHEMA_BLURB = [
 ].join('\n');
 
 function diffContext(args) {
+  const base = args.merge_base || 'origin/main';
+  const filesStr = (args.changed_files || []).join(', ') || '(see git diff HEAD)';
   return [
-    `Review ONLY the pending diff against the merge base \`${args.merge_base}\` (the branch's`,
-    `changes vs origin/main). Changed files: ${args.changed_files.join(', ')}.`,
+    `Review ONLY the pending diff against the merge base \`${base}\` (the branch's`,
+    `changes vs origin/main). Changed files: ${filesStr}.`,
     'Read full files for the context needed to judge each change, but report findings only',
     'on the pending changes. You report findings ONLY — edit no files, commit nothing, push nothing.',
   ].join(' ');
@@ -344,14 +355,21 @@ function finderPrompt(name, args) {
 // Pipeline
 // =============================================================================
 
+// Normalize args — the Workflow runtime may deliver it as a JSON string rather
+// than a parsed object (property accesses on a string silently return undefined,
+// causing downstream .join/.map calls to throw). Parse once at the top so all
+// downstream code sees a plain JS object.
+const _a = typeof args === 'string' ? JSON.parse(args) : (args || {});
+log(`args type: ${typeof args}; surface=${_a.surface}; changed_files count=${(_a.changed_files || []).length}`);
+
 // --- 1. FINDERS (parallel, barrier) ------------------------------------------
 phase('finders');
-const finderNames = agentFinderSet(args.surface, args.app_or_rules);
-log(`finders: launching ${finderNames.length} agent finder(s) for surface=${args.surface}`);
+const finderNames = agentFinderSet(_a.surface, _a.app_or_rules);
+log(`finders: launching ${finderNames.length} agent finder(s) for surface=${_a.surface}`);
 
 const finderResults = await parallel(
   finderNames.map((name) => () =>
-    agent(finderPrompt(name, args), {
+    agent(finderPrompt(name, _a), {
       model: 'sonnet',
       agentType: 'general-purpose',
       schema: FINDINGS_SCHEMA,
@@ -366,7 +384,7 @@ let allFindings = [];
 for (const res of finderResults.filter(Boolean)) {
   for (const f of res.findings || []) allFindings.push(f);
 }
-for (const f of args.prescanned_findings || []) allFindings.push(f);
+for (const f of _a.prescanned_findings || []) allFindings.push(f);
 
 // Assign a unique id and a global input index (_idx) to every finding.
 {
@@ -391,7 +409,8 @@ for (const f of allFindings) {
   locationGroups.get(loc).push(f);
 }
 
-const dedupedById = new Map(); // representative id → merged finding
+const dedupedById = new Map(); // unique merge key → merged finding
+let dedupCounter = 0; // monotonic key so distinct merges never collide on a shared representative id
 for (const [loc, group] of locationGroups) {
   let partition;
   if (group.length <= 1) {
@@ -428,20 +447,33 @@ for (const [loc, group] of locationGroups) {
   }
 
   // Apply the partition: collapse each subgroup via dedupMerge.
+  // The schema cannot enforce "each id in exactly one subgroup"; a valid-but-
+  // malformed partition that re-uses an id across subgroups would otherwise
+  // silently drop findings (a re-used representative id overwrites its prior
+  // merge under the same map key, and the displaced finding is marked covered
+  // so it never falls through to the singleton fallback). Guard it: skip any
+  // subgroup containing an already-covered id so the FIRST merge wins, and key
+  // the collapsed result by a unique counter rather than merged.id so two
+  // distinct merges that happen to share a representative id both survive.
   const byId = new Map(group.map((f) => [f.id, f]));
   const covered = new Set();
   for (const sub of partition) {
+    const reused = sub.find((id) => covered.has(id));
+    if (reused !== undefined) {
+      log(`dedup: partition for ${loc} re-used id ${reused} across subgroups — skipping the later subgroup (first merge wins)`);
+      continue;
+    }
     const members = sub.map((id) => byId.get(id)).filter(Boolean);
     if (!members.length) continue;
     for (const id of sub) covered.add(id);
     const merged = dedupMerge(members);
-    dedupedById.set(merged.id, merged);
+    dedupedById.set(`merge:${dedupCounter++}`, merged);
   }
   // Any id the partition omitted → emit as its own singleton (spec: uncovered = singleton).
   for (const f of group) {
     if (!covered.has(f.id)) {
       const merged = dedupMerge([f]);
-      dedupedById.set(merged.id, merged);
+      dedupedById.set(`merge:${dedupCounter++}`, merged);
     }
   }
 }
@@ -493,6 +525,11 @@ if (deduped.length) {
   if (classifyRes && classifyRes.classifications) {
     for (const c of classifyRes.classifications) classById.set(c.id, c);
   }
+  if (!classById.size) {
+    log(
+      `classify: agent returned no usable classifications for ${deduped.length} finding(s) — falling back per-source (code-review/review → Deferred so they are filed, security → Out-of-scope)`
+    );
+  }
   const SEC_SOURCES = new Set([
     'input-validation',
     'secrets',
@@ -506,7 +543,11 @@ if (deduped.length) {
   ]);
   deduped = deduped.map((f) => {
     const c = classById.get(f.id);
-    const bucket = c ? c.bucket : SEC_SOURCES.has(f.Source) ? 'Out-of-scope' : 'Informational';
+    // Fallback when the classify agent gave no verdict for this finding: security
+    // sources → Out-of-scope; code-review/review → Deferred (NOT Informational) so
+    // an unclassified-but-real finding is filed as a follow-up rather than silently
+    // dropped from both the fix set and the follow-up filings.
+    const bucket = c ? c.bucket : SEC_SOURCES.has(f.Source) ? 'Out-of-scope' : 'Deferred';
     // For prescanned codeql/npm findings, prefer their own carried classification if present.
     let security_class = c ? c.security_class : 'none';
     if ((f.Source === 'codeql' || f.Source === 'npm') && f.classification) {
@@ -553,9 +594,11 @@ if (requiredFindings.length) {
       });
     })
   );
-  // Collect votes per id. A dead skeptic (null) → no vote contributed (so a
-  // finding whose both skeptics died gets [] → Upheld, the conservative-to-keep
-  // default for a Required finding when verification could not run).
+  // Collect votes per id. A dead skeptic (null) contributes no vote, so a
+  // finding whose both skeptics died gets [] → handled by applyVerifyDrop as
+  // "Unverified": dropped (not auto-fixed) and surfaced as verdict "unverified"
+  // in verify_report, matching the skeptic prompt's "refute under uncertainty"
+  // bias. (A finding is only Upheld when at least one skeptic ran and voted.)
   verifyResults.forEach((res, i) => {
     const job = verifyJobs[i];
     if (!votesById[job.id]) votesById[job.id] = [];
@@ -569,21 +612,37 @@ if (requiredFindings.length) {
 
 const { kept: keptFindings, dropped: refutedFindings } = applyVerifyDrop(deduped, votesById);
 
-// verify_report — one entry per Required finding (upheld or refuted).
+// verify_report — one entry per Required finding (upheld / refuted / unverified).
+// "unverified" = both skeptics failed to vote: distinct from a clean upheld pass
+// so the PR comment shows the verification could not run rather than masking it
+// as verdict "upheld" with empty evidence.
 const verify_report = requiredFindings.map((f) => {
   const votes = votesById[f.id] || [];
-  const refuted = votes.includes('refuted');
+  let verdict;
+  if (!votes.length) {
+    verdict = 'unverified';
+  } else if (votes.includes('refuted')) {
+    verdict = 'refuted';
+  } else {
+    verdict = 'upheld';
+  }
   return {
     id: f.id,
     location: f.Location,
-    verdict: refuted ? 'refuted' : 'upheld',
+    verdict,
     skeptic_votes: votes,
     rationale: (rationalesById[f.id] || []).join(' | '),
   };
 });
 
-// Map refuted Required findings to a "Refuted" disposition bucket for the audit trail.
-const refutedIds = new Set(refutedFindings.map((f) => f.id));
+// Map dropped (refuted OR unverified) Required findings to a non-fixed disposition
+// bucket for the audit trail: refuted → "Refuted", unverified → "Unverified".
+const refutedIds = new Set(
+  refutedFindings.filter((f) => f.verify === 'Refuted').map((f) => f.id)
+);
+const unverifiedIds = new Set(
+  refutedFindings.filter((f) => f.verify === 'Unverified').map((f) => f.id)
+);
 
 // --- 5. FIX (parallel over file-groups) --------------------------------------
 phase('fix');
@@ -667,14 +726,21 @@ function shortTitle(desc) {
   return candidate.trim().replace(/\s+/g, ' ');
 }
 const blockerNums =
-  args.implementing_issues && args.implementing_issues.length
-    ? args.implementing_issues
+  _a.implementing_issues && _a.implementing_issues.length
+    ? _a.implementing_issues
     : 'independent';
 
 const deferred_filings = deduped
-  .filter((f) => f.bucket === 'Deferred')
+  // Deferred code-review/review findings, plus Unverified Required findings
+  // (both skeptics failed): not auto-fixed in this terminal phase, so file a
+  // follow-up rather than silently dropping them.
+  .filter((f) => f.bucket === 'Deferred' || unverifiedIds.has(f.id))
   .map((f) => {
     const files = filePath(f.Location);
+    const isUnverified = unverifiedIds.has(f.id);
+    const tail = isUnverified
+      ? 'Required finding whose adversarial-verify skeptics both failed to vote: deferred to a follow-up rather than auto-applied in the terminal review phase.'
+      : 'Out of scope for this PR: surfaced by the review pass but not a change this PR delivers.';
     const body = [
       f.Description,
       '',
@@ -682,9 +748,9 @@ const deferred_filings = deduped
       '',
       `Files: ${files}`,
       '',
-      `Backlink: #${args.pr_num}`,
+      `Backlink: #${_a.pr_num}`,
       '',
-      'Out of scope for this PR: surfaced by the review pass but not a change this PR delivers.',
+      tail,
     ].join('\n');
     return {
       title: shortTitle(f.Description),
@@ -740,10 +806,13 @@ function truncate(text, n) {
   return t.length <= n ? t : t.slice(0, n);
 }
 
-// dispositions: one entry for EVERY deduped finding (incl. Refuted).
+// dispositions: one entry for EVERY deduped finding (incl. Refuted/Unverified).
 const dispositions = deduped.map((f) => {
-  const isRefuted = refutedIds.has(f.id);
-  const bucket = isRefuted ? 'Refuted' : f.bucket;
+  const bucket = refutedIds.has(f.id)
+    ? 'Refuted'
+    : unverifiedIds.has(f.id)
+      ? 'Unverified'
+      : f.bucket;
   const entry = {
     id: f.id,
     short_desc: truncate(f.Description, 140),
@@ -771,5 +840,5 @@ return {
   security_followup_input,
   verify_report,
   deviation,
-  security_note: args.security_note,
+  security_note: _a.security_note,
 };

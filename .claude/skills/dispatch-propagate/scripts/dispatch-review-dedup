@@ -49,7 +49,7 @@ set -euo pipefail
 jq '
   # --- helpers ----------------------------------------------------------------
 
-  def confrank: {"high":3,"medium":2,"low":1}[.] // 0;
+  def confrank: (. // "_") | {"high":3,"medium":2,"low":1}[.] // 0;
 
   # Build id → input-index map (0-based) for ordering.
   (.findings | to_entries | map({key: .value.id, value: .key}) | from_entries) as $idx |
@@ -73,8 +73,11 @@ jq '
     $all_groups[] |
     . as $group |
 
-    # Enrich each id with its finding and input index.
-    (map({ id: ., finding: $byid[.], idx: $idx[.] })) as $members |
+    # Enrich each id with its finding and input index. Drop ids absent from the
+    # findings map (mirrors the JS `.filter(Boolean)` after `byId.get(id)`) so a
+    # partition referencing an unknown id never feeds a null into the merge.
+    (map({ id: ., finding: $byid[.], idx: $idx[.] })
+      | map(select(.finding != null))) as $members |
 
     # Earliest-input-index member (for output ordering).
     ($members | min_by(.idx) | .idx) as $min_idx |

@@ -16,19 +16,22 @@
 #   (plus arbitrary passthrough fields preserved unchanged)
 #
 # votes: map of finding-id → array of skeptic verdicts ("refuted" or "upheld").
-#   A missing id in votes is treated as [] (no votes → upheld).
+#   A missing id in votes is treated as [] (no votes — both skeptics failed).
 #
 # Drop rule (Required findings only):
-#   REFUTED if votes[id] contains AT LEAST ONE "refuted" => dropped, verify="Refuted"
-#   UPHELD  if votes[id] contains NO "refuted"          => kept,   verify="Upheld"
-#   (threshold is ≥1-refuted-of-N; empty votes array => Upheld)
+#   UNVERIFIED if votes[id] is EMPTY (both skeptics failed) => dropped, verify="Unverified"
+#   REFUTED    if votes[id] contains AT LEAST ONE "refuted"  => dropped, verify="Refuted"
+#   UPHELD     if votes[id] has ≥1 vote and NONE "refuted"  => kept,    verify="Upheld"
+#   (threshold is ≥1-refuted-of-N. Empty votes are NOT upheld: in this terminal
+#   auto-ready phase a finding whose verification could not run is dropped — not
+#   auto-fixed — matching the skeptic prompt's "refute under uncertainty" bias.)
 #
 # Non-Required findings: always kept, never annotated with verify.
 #
 # Output (stdout): a single JSON object:
 #   {
 #     "kept":    [ <finding>, ... ],   // non-Required (unchanged) + Upheld Required
-#     "dropped": [ <finding>, ... ]    // Refuted Required findings
+#     "dropped": [ <finding>, ... ]    // Refuted + Unverified Required findings
 #   }
 # Original relative order of findings is preserved within each output array.
 #
@@ -47,9 +50,13 @@ jq '
 
     if $f.bucket == "Required" then
       # Fetch votes for this finding; default to empty array.
-      (($votes[$f.id] // []) | map(select(. == "refuted")) | length) as $refuted_count |
+      (($votes[$f.id] // [])) as $finding_votes |
+      ($finding_votes | map(select(. == "refuted")) | length) as $refuted_count |
 
-      if $refuted_count >= 1 then
+      if ($finding_votes | length) == 0 then
+        # Both skeptics failed to vote: verification could not run.
+        { disposition: "dropped", finding: ($f + {verify: "Unverified"}) }
+      elif $refuted_count >= 1 then
         { disposition: "dropped", finding: ($f + {verify: "Refuted"}) }
       else
         { disposition: "kept",    finding: ($f + {verify: "Upheld"}) }
