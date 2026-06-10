@@ -34,9 +34,9 @@ test.describe("CSS loading", () => {
     await page.goto("/");
     await page.waitForLoadState("load");
 
-    // Critters defers the full stylesheet by setting media="print" with an
-    // onload handler that switches it back. After load, at least one
-    // <link rel="stylesheet"> should have reverted to a non-print media type.
+    // Critters defers the full stylesheet by moving its <link> to the end of
+    // <body> as a plain blocking link (no media="print", no inline onload), so
+    // at least one <link rel="stylesheet"> has a non-print media type.
     const hasFullStylesheet = await page.evaluate(() => {
       const links = document.querySelectorAll('link[rel="stylesheet"]');
       return Array.from(links).some(
