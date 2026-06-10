@@ -207,6 +207,38 @@ describe("error logs", () => {
         setDoc(doc(db, "budget/emulator-abc/errors/err1"), validErrorDoc()),
       );
     });
+
+    it("allows bare qa env", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertSucceeds(
+        setDoc(doc(db, "budget/qa/errors/err1"), validErrorDoc()),
+      );
+    });
+
+    it("allows bare emulator env", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertSucceeds(
+        setDoc(doc(db, "budget/emulator/errors/err1"), validErrorDoc()),
+      );
+    });
+
+    it("allows prod env", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertSucceeds(
+        setDoc(doc(db, "budget/prod/errors/err1"), validErrorDoc()),
+      );
+    });
+
+    it("denies emulator- with empty suffix (trailing dash, no chars)", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertFails(
+        setDoc(doc(db, "budget/emulator-/errors/err1"), validErrorDoc()),
+      );
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -226,6 +258,14 @@ describe("error logs", () => {
       const db = ctx.firestore();
       await assertFails(
         setDoc(doc(db, `budget/${ENV}/errors/err1`), { ...validErrorDoc(), message: "x".repeat(10001) }),
+      );
+    });
+
+    it("denies oversized operation (201 chars)", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertFails(
+        setDoc(doc(db, `budget/${ENV}/errors/err1`), { ...validErrorDoc(), operation: "x".repeat(201) }),
       );
     });
 
