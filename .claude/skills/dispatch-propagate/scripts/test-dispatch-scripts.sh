@@ -19889,6 +19889,110 @@ assert_eq "followup: empty input → 0" "0" "$(printf '%s' "$out" | jq -r 'lengt
 out=$(printf '%s' '[{"source":"sonarqube","classification":"out-of-scope","security_severity_level":"high"},{"classification":"out-of-scope","severity":"critical"}]' | "$SCRIPT_DIR/dispatch-security-followup" 123)
 assert_eq "followup: unknown/missing source → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
 
+# ============================================================================
+# === dispatch-review-finders ===
+# ============================================================================
+
+echo "Test: dispatch-review-finders"
+
+# empty surface → exactly code-review and review
+out=$(printf 'surface=empty\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders")
+assert_eq "finders: empty → code-review,review only" "code-review
+review" "$out"
+
+# docs surface → exactly code-review and review
+out=$(printf 'surface=docs\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders")
+assert_eq "finders: docs → code-review,review only" "code-review
+review" "$out"
+
+# code + app_or_rules=false + deps=false → 4 always-on security finders present
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(input-validation|secrets|red-team|security-review)$')
+assert_eq "finders: code !app → 4 always-on security finders" "4" "$n"
+
+# code + app_or_rules=false → codeql present
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^codeql$')
+assert_eq "finders: code !app → codeql present" "1" "$n"
+
+# code + app_or_rules=false → npm absent
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^npm$' || true)
+assert_eq "finders: code !app !deps → npm absent" "0" "$n"
+
+# code + app_or_rules=false → app-domain trio absent
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(auth|data-exposure|firebase)$' || true)
+assert_eq "finders: code !app → app-domain trio absent" "0" "$n"
+
+# code + app_or_rules=true + deps=false → 7 security reviewers present
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(input-validation|secrets|red-team|security-review|auth|data-exposure|firebase)$')
+assert_eq "finders: code+app → 7 security reviewers" "7" "$n"
+
+# code + app_or_rules=true + deps=false → npm absent
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^npm$' || true)
+assert_eq "finders: code+app !deps → npm absent" "0" "$n"
+
+# deps=true on a code surface → npm present
+n=$(printf 'surface=code\ndeps=true\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^npm$')
+assert_eq "finders: deps=true → npm present" "1" "$n"
+
+# codeql gating: present on code surface
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^codeql$')
+assert_eq "finders: code surface → codeql present" "1" "$n"
+
+# codeql gating: absent on docs surface
+n=$(printf 'surface=docs\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^codeql$' || true)
+assert_eq "finders: docs surface → codeql absent" "0" "$n"
+
+# ============================================================================
+# === dispatch-review-dedup ===
+# ============================================================================
+
+echo "Test: dispatch-review-dedup"
+
+# same location, partition collapses → length 1, sources merged, Confidence max, OWASP from high
+IN1='{"findings":[{"id":"a","Location":"f.ts:1","Source":"review","OWASP":"","STRIDE":"","Confidence":"low"},{"id":"b","Location":"f.ts:1","Source":"security-review","OWASP":"A03:2021 Injection","STRIDE":"Tampering","Confidence":"high"}],"partition":[["a","b"]]}'
+out=$(printf '%s' "$IN1" | "$SCRIPT_DIR/dispatch-review-dedup")
+assert_eq "dedup: same-location merge → length 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
+assert_eq "dedup: same-location merge → sources union" '["review","security-review"]' "$(printf '%s' "$out" | jq -c '.[0].sources')"
+assert_eq "dedup: same-location merge → Confidence max (high)" "high" "$(printf '%s' "$out" | jq -r '.[0].Confidence')"
+assert_eq "dedup: same-location merge → OWASP from high-confidence member" "A03:2021 Injection" "$(printf '%s' "$out" | jq -r '.[0].OWASP')"
+
+# distinct locations → length 2
+IN2='{"findings":[{"id":"a","Location":"f.ts:1","Source":"review","OWASP":"","STRIDE":"","Confidence":"low"},{"id":"b","Location":"f.ts:9","Source":"review","OWASP":"","STRIDE":"","Confidence":"low"}],"partition":[["a"],["b"]]}'
+out=$(printf '%s' "$IN2" | "$SCRIPT_DIR/dispatch-review-dedup")
+assert_eq "dedup: distinct locations → length 2" "2" "$(printf '%s' "$out" | jq -r 'length')"
+
+# same location, distinct root issues, partition keeps them apart → length 2
+IN3='{"findings":[{"id":"a","Location":"f.ts:1","Source":"review","OWASP":"","STRIDE":"","Confidence":"low"},{"id":"b","Location":"f.ts:1","Source":"secrets","OWASP":"A02:2021 Cryptographic Failures","STRIDE":"Information Disclosure","Confidence":"medium"}],"partition":[["a"],["b"]]}'
+out=$(printf '%s' "$IN3" | "$SCRIPT_DIR/dispatch-review-dedup")
+assert_eq "dedup: same-location distinct-root partition → length 2" "2" "$(printf '%s' "$out" | jq -r 'length')"
+
+# ============================================================================
+# === dispatch-review-verify-drop ===
+# ============================================================================
+
+echo "Test: dispatch-review-verify-drop"
+
+IN='{"findings":[{"id":"r1","bucket":"Required"},{"id":"r2","bucket":"Required"},{"id":"r3","bucket":"Required"},{"id":"r4","bucket":"Required"},{"id":"i1","bucket":"Informational"}],"votes":{"r1":["refuted","upheld"],"r2":["refuted","refuted"],"r3":["upheld","upheld"]}}'
+out=$(printf '%s' "$IN" | "$SCRIPT_DIR/dispatch-review-verify-drop")
+
+# dropped ids (sorted) == r1 and r2
+assert_eq "verify-drop: dropped ids" "r1
+r2" "$(printf '%s' "$out" | jq -r '.dropped[].id' | sort)"
+
+# every dropped finding has verify=="Refuted"
+assert_eq "verify-drop: all dropped have verify=Refuted" "2" "$(printf '%s' "$out" | jq -r '.dropped[] | select(.verify=="Refuted") | .id' | wc -l | tr -d ' ')"
+
+# r1 NOT in kept
+assert_eq "verify-drop: r1 not in kept" "0" "$(printf '%s' "$out" | jq -r '.kept[].id' | grep -c '^r1$' || true)"
+
+# r3 in kept with verify=="Upheld"
+assert_eq "verify-drop: r3 kept with verify=Upheld" "Upheld" "$(printf '%s' "$out" | jq -r '.kept[] | select(.id=="r3") | .verify')"
+
+# r4 (empty votes) in kept with verify=="Upheld"
+assert_eq "verify-drop: r4 empty-votes kept with verify=Upheld" "Upheld" "$(printf '%s' "$out" | jq -r '.kept[] | select(.id=="r4") | .verify')"
+
+# i1 (non-Required) in kept with no verify key
+assert_eq "verify-drop: i1 non-Required kept without verify key" "false" "$(printf '%s' "$out" | jq -r '.kept[] | select(.id=="i1") | has("verify")')"
+
 # dispatch-jit-skill tests
 # ============================================================================
 #
