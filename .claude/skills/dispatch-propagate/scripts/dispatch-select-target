@@ -80,10 +80,11 @@
 #
 # Within each (priority, topic) bucket, default-mode priority (oldest PR wins
 # within a tier):
-#   1. Oldest "review"      PR (draft + dispatch:qa-done)
-#   2. Oldest "fix-checks"  PR (draft, CI completed and failed)
-#   3. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
-#   4. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
+#   1. Oldest "fix-conflicts" PR (draft, mergeable == CONFLICTING)
+#   2. Oldest "review"      PR (draft + dispatch:qa-done)
+#   3. Oldest "fix-checks"  PR (draft, CI completed and failed)
+#   4. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
+#   5. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
 #      by a live Claude session, and which is not already closed by a non-draft
 #      (ready) PR (#920), resolved to a startable open leaf (an issue whose
 #      entire open-leaf subtree is owned by live sessions is skipped, exactly as
@@ -610,7 +611,7 @@ declare -A FIRST_PR
 declare -A FIRST_ISSUE
 
 # Within-category phase ladder, highest priority first.
-PHASE_PRIORITY=(review fix-checks)
+PHASE_PRIORITY=(fix-conflicts review fix-checks)
 # Within-category issue ladder, highest priority first: a planned issue
 # (implement phase) advances ahead of an unplanned issue (plan phase).
 ISSUE_PHASE_PRIORITY=(implement plan)
