@@ -277,15 +277,17 @@ async function loadFromFile(file: File, cachedPassword?: string): Promise<LoadOu
   }
   const parsed = parseUploadedJson(text);
   const data = toParsedData(parsed);
-  // This is the single point of dataset divergence: the line below replaces the
-  // in-memory dataset, so the prior armed (handle, password) no longer matches
-  // what IndexedDB holds. Disarm sync *before* the swap, after every throwing
-  // decrypt/parse step and the password-cancel early return, so a failure leaves
-  // the prior session armed and still correct (IndexedDB is unchanged). This one
-  // placement covers every load path: upload, plaintext-FSA, encrypted-FSA, and
-  // external reload — callers re-arm afterward only when appropriate.
-  resetFileSync();
+  // storeParsedData is the single point of dataset divergence: it replaces the
+  // in-memory dataset, so afterward the prior armed (handle, password) no longer
+  // matches what IndexedDB holds. Disarm sync *after* the swap commits, so any
+  // throwing step that leaves IndexedDB unchanged — a decrypt/parse failure, the
+  // password-cancel early return, or a storeParsedData failure — leaves the prior
+  // session armed and still correct. The generation guard in file-sync protects
+  // any write started before resetFileSync runs. This one placement covers every
+  // load path: upload, plaintext-FSA, encrypted-FSA, and external reload —
+  // callers re-arm afterward only when appropriate.
   await storeParsedData(data);
+  resetFileSync();
   importPassword = pw;
   transition({ source: "local", groupName: parsed.groupName });
   return { committed: true, password: pw };
