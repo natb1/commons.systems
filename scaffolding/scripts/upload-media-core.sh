@@ -6,7 +6,7 @@
 # has no executable bit and no shebang; it expects to be sourced from a bash
 # script that already enabled `set -euo pipefail`.
 #
-# GCS metadata header casing: lowercase (publicdomain, groupid, member_<i>) —
+# GCS metadata header casing: lowercase (publicdomain, groupid, member_emails) —
 # matches the keys read by storage.rules and emitted by the seed runners.
 #
 # Cleanup: register every temp file via core::register_temp_file. Registrations
@@ -146,10 +146,9 @@ core::upload_to_gcs() {
 
   if [ -n "$group_id" ]; then
     META_ARGS+=(-h "x-goog-meta-groupid:${group_id}")
-    local i
-    for i in "${!emails_ref[@]}"; do
-      META_ARGS+=(-h "x-goog-meta-member_${i}:${emails_ref[$i]}")
-    done
+    local joined
+    joined="$(IFS=,; echo "${emails_ref[*]}")"
+    META_ARGS+=(-h "x-goog-meta-member_emails:${joined}")
   fi
 
   if ! gsutil "${META_ARGS[@]}" cp "$file_path" "$gcs_dest"; then
