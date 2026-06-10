@@ -1,24 +1,46 @@
 ---
 name: file-issue
-description: File or improve a GitHub issue — runs the full quality evaluation pipeline (duplicate detection, 8-category evaluation, decomposition gate, type/topic classification) and applies results directly with no approval gate
+description: File or improve GitHub issues — separates multi-topic input into independent issues, then per issue runs the full quality evaluation pipeline (duplicate detection, 8-category evaluation, decomposition gate, type/topic classification) and applies results directly with no approval gate
 ---
 
 # File Issue
 
 The single issue-filing and issue-improvement chokepoint. Accepts either a bare
 issue number (`#N` or `N`) or free text (title + body). Runs the full evaluation
-pipeline — duplicate detection, 8-category quality evaluation, decomposition gate,
-type/topic classification — and applies its results directly with no plan-mode step
-and no approval gate. Every call (interactive or from a non-interactive caller like
-`/review-fix`) gets correct duplicate detection, evaluation, and labeling for free.
+pipeline per issue — duplicate detection, 8-category quality evaluation,
+decomposition gate, type/topic classification — and applies its results directly
+with no plan-mode step and no approval gate. Every call (interactive or from a
+non-interactive caller like `/review-fix`) gets correct duplicate detection,
+evaluation, and labeling for free.
 
-Terminal output: `CREATED <N>` (new issue created) or `EXISTING <N>` (duplicate
-matched; creation skipped). Callers parse this line to retrieve the issue number.
+## Two orthogonal splitting axes
+
+A single call may file more than one issue. Two independent axes decide the shape:
+
+- **Separation** (Step 1, horizontal): free-text input may describe more than one
+  *distinct* topic. Each distinct topic becomes its own independent top-level
+  issue — independently motivated, shippable on its own, sharing no parent.
+- **Decomposition** (Step 3f, vertical): a *single* logical issue too large for one
+  PR splits into sub-issues under one parent epic. The parts share one goal and
+  only together deliver it.
+
+The axes compose: input is first separated into independent issues (Step 1), then
+each independent issue may itself decompose into an epic + sub-issues (Step 3f).
+The leaf constraint is invariant across both — every implementable (leaf) issue is
+exactly one PR.
+
+Terminal output: one `CREATED <N>` / `EXISTING <N>` line per top-level issue (the
+epic, when an issue decomposed). Single-topic input yields exactly one line — the
+contract non-interactive callers (`/review-fix`, `/fix-checks`) rely on, since they
+pass one logical finding per call. Callers parse these lines to retrieve issue
+numbers; the `CREATED`/`EXISTING` discriminator tells them whether each is new.
 
 All `gh` calls run with `dangerouslyDisableSandbox: true` per
 `.claude/rules/sandbox.md` (the sandbox blocks `gh`'s TLS validation).
 
-## Step 1. Parse `$INPUT` and detect mode
+## Step 1. Parse `$INPUT`, detect mode, and separate
+
+### Detect mode
 
 Detect mode from `$INPUT`:
 
@@ -65,6 +87,43 @@ Detect mode from `$INPUT`:
   non-empty line is the **title**; everything after (preserving internal blank lines)
   is the **body**.
 
+### Separate into independent issue specs
+
+The pipeline (Steps 2–7) operates on one **issue spec** — a single logical issue's
+title + body. Build the spec list:
+
+- **Issue number mode** → exactly one spec: the fetched issue `<N>`. An existing
+  issue is never split into multiple top-level issues; over-broad scope is handled
+  by decomposition into sub-issues (Step 3f), which keeps `<N>` as the parent epic.
+- **Description mode** → partition `$INPUT` into one spec per *distinct topic*. Most
+  input is one topic = one spec. Produce more than one spec only when the input
+  bundles changes that are **independently motivated** — each stands alone as its
+  own deliverable, is implementable and shippable in any order, and would not
+  naturally live under one epic. Give each spec its own title (first line) and body
+  (motivation + acceptance criteria) drawn from its part of the input.
+
+Separation vs decomposition — the test is whether the parts are *one thing or
+several*:
+
+- Parts only make sense together (together they deliver one capability) → **one
+  spec**; if too big for one PR, Step 3f decomposes it into sub-issues under one
+  epic.
+- Parts each stand alone (each its own deliverable with its own motivation) →
+  **separate specs**, each an independent top-level issue with no shared parent.
+
+Be conservative — prefer one spec (false negative) over fragmenting a coherent
+issue into several (false positive). Bundled-but-independent is the trigger; merely
+"large" or "multi-step" is not — that is decomposition's job (Step 3f).
+
+If two separated specs have a genuine ordering dependency (one cannot be
+implemented until the other lands), they are still separate issues; record a
+`blocked_by` link between them in Step 5 via `ref-github-issues` once both numbers
+are known. Independent topics need no link.
+
+Run Steps 2–7 independently for each spec — its own duplicate detection,
+evaluation, decomposition check, application, finalization, and return line. The
+steps below say "the issue" / "the new issue"; read that as "the current spec".
+
 ## Step 2. Branch-conditional setup (issue number mode only)
 
 Check for blocking issues and their branches:
@@ -94,8 +153,9 @@ gh search issues --repo {owner}/{repo} --state open --json number,title,body "<k
 ```
 
 In description mode: if any candidate describes the same actionable change as
-the new title + body, treat it as an EXISTING match — skip creation and jump to
-Step 7 (Return). Be conservative — prefer creating a near-duplicate (false negative)
+the new title + body, treat it as an EXISTING match — skip creation for this spec
+and record `EXISTING <N>` as its Step 7 return line; continue with any remaining
+specs. Be conservative — prefer creating a near-duplicate (false negative)
 over merging two distinct findings (false positive). A candidate matches only when
 its scope and required change align, not merely because keywords overlap.
 
@@ -258,7 +318,8 @@ Then proceed to Step 6 (finalize).
 
 Check once more for duplicates against the improved title + body (defense-in-depth
 recheck — `/file-issue` may be called from a non-interactive caller that did not
-pre-screen). If a match is found, jump to Step 7 with `EXISTING <N>`.
+pre-screen). If a match is found, skip creation for this spec and record
+`EXISTING <N>` as its Step 7 return line.
 
 If no duplicate, create the issue:
 ```bash
@@ -334,14 +395,36 @@ marker.
 
 ## Step 7. Return
 
-Print exactly one of the following lines, on its own line, as the final result:
+End the final message with a sentinel-delimited results block — one record line
+per top-level issue spec, in spec order:
 
-- `CREATED <N>` — a new issue was created (description mode, no duplicate found).
-- `EXISTING <N>` — a duplicate was matched (Step 3a or Step 5 defense-in-depth
-  recheck); creation was skipped.
+```
+===FILE-ISSUE-RESULTS===
+CREATED <N>
+EXISTING <N>
+===FILE-ISSUE-RESULTS-END===
+```
 
-In issue number mode the output is `EXISTING <N>` (the issue already existed and
-was edited in place).
+Each record line is `<disposition> <number>`:
 
-Callers parse this line to retrieve the issue number; the `CREATED`/`EXISTING`
-discriminator tells them whether the issue is new.
+- `CREATED <N>` — a new top-level issue was created (description mode, no duplicate
+  found). When the spec decomposed (Step 3f), `<N>` is the parent epic.
+- `EXISTING <N>` — a duplicate was matched for that spec (Step 3a or Step 5
+  defense-in-depth recheck); creation was skipped.
+
+The sentinels make extraction narration-proof: a caller reads every line between
+`===FILE-ISSUE-RESULTS===` and `===FILE-ISSUE-RESULTS-END===` and ignores all other
+prose, so a summary sentence that happens to contain a number never mis-parses.
+Always emit the block — both sentinels, even for a single issue.
+
+Record count by input:
+
+- Issue number mode → exactly one `EXISTING <N>` record (the issue already existed
+  and was edited in place).
+- Single-topic description input → exactly one record.
+- Multi-topic description input → one record per independent top-level issue.
+
+Callers extract the records and **iterate** — they never assume exactly one. A
+caller that passes a single logical finding (e.g. `/review-fix`, `/fix-checks`)
+normally gets one record, but reading the block as a list means a finding that
+legitimately separates into multiple issues is handled, not silently truncated.
