@@ -425,4 +425,98 @@ describe("exportToJson", () => {
     expect(data.meta.groupName).toBe("household");
     expect(data.meta.version).toBe(1);
   });
+
+  it("round-trip preserves weeklyAggregates unchanged", async () => {
+    const json = await exportToJson();
+    const output = JSON.parse(json);
+
+    // Criterion 1a: weeklyAggregates is present and non-empty in exported JSON
+    expect(output.weeklyAggregates).toBeDefined();
+    expect(output.weeklyAggregates).toHaveLength(1);
+    // weekStart should be an ISO string
+    expect(typeof output.weeklyAggregates[0].weekStart).toBe("string");
+    expect(output.weeklyAggregates[0].weekStart).toBe("2025-06-09T00:00:00.000Z");
+
+    // Criterion 1b: round-trip restores IDB records deep-equal to the original fixture
+    const parsed = parseUploadedJson(json);
+    const data = toParsedData(parsed);
+
+    expect(data.weeklyAggregates).toHaveLength(1);
+    expect(data.weeklyAggregates[0]).toEqual(idbWeeklyAggregates[0]);
+  });
+
+  it("ETL-snapshot round-trip empties no store", async () => {
+    // Minimal well-formed IDB fixtures for ETL-emitted stores not already in setupMocks
+    const idbJournalEntriesFixture = [
+      {
+        id: "je-001",
+        timestampMs: Date.parse("2025-06-10T00:00:00.000Z"),
+        description: "Transfer",
+        note: null,
+        legCount: 2,
+      },
+    ];
+    const idbJournalLegsFixture = [
+      {
+        id: "jl-001",
+        entryId: "je-001",
+        accountId: "bankone_1234",
+        debit: 100,
+        credit: 0,
+        timestampMs: Date.parse("2025-06-10T00:00:00.000Z"),
+        cleared: false,
+        reconciledAtMs: null,
+        reconciledEventId: null,
+        statementItemId: null,
+      },
+    ];
+    const idbAccountsFixture = [
+      {
+        id: "bankone_1234",
+        institution: "bankone",
+        account: "1234",
+        accountType: "asset" as const,
+        openingBalance: null,
+        openingBalanceDateMs: null,
+      },
+    ];
+
+    // Override the mocks for this test to supply non-empty ETL stores
+    const original = mockGetAll.getMockImplementation()!;
+    mockGetAll.mockImplementation((storeName: string) => {
+      switch (storeName) {
+        case "journalEntries":
+          return Promise.resolve(idbJournalEntriesFixture);
+        case "journalLegs":
+          return Promise.resolve(idbJournalLegsFixture);
+        case "accounts":
+          return Promise.resolve(idbAccountsFixture);
+        default:
+          return original(storeName);
+      }
+    });
+
+    const json = await exportToJson();
+    const parsed = parseUploadedJson(json);
+    const data = toParsedData(parsed);
+
+    // Every ETL-emitted store that was non-empty before export must be non-empty after.
+    // This is the generic guard: if export.ts ever forgets a new ETL store, this trips.
+    const etlStores: Array<{ name: string; result: unknown[] }> = [
+      { name: "transactions", result: data.transactions },
+      { name: "statements", result: data.statements },
+      { name: "budgets", result: data.budgets },
+      { name: "budgetPeriods", result: data.budgetPeriods },
+      { name: "rules", result: data.rules },
+      { name: "normalizationRules", result: data.normalizationRules },
+      { name: "weeklyAggregates", result: data.weeklyAggregates },
+      { name: "journalEntries", result: data.journalEntries },
+      { name: "journalLegs", result: data.journalLegs },
+      { name: "accounts", result: data.accounts },
+    ];
+
+    for (const { name, result } of etlStores) {
+      expect(result, `store "${name}" was emptied by the export/import round-trip`).not.toHaveLength(0);
+    }
+  });
 });
