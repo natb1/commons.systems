@@ -19044,7 +19044,7 @@ assert_eq "mixed-fanout: exactly one spawn line" "1" \
 assert_eq "mixed-fanout: the spawned target is #840" "1" \
   "$(printf '%s\n' "$out" | grep -c 'propagate: spawned #840')"
 assert_eq "mixed-fanout: spawn-worker invoked exactly once" "1" \
-  "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log")"
+  "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
 assert_eq "mixed-fanout: summary spawned 1 of gap 2" "1" \
   "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 2')"
 assert_eq "mixed-fanout: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
