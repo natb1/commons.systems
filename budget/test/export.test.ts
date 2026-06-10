@@ -115,6 +115,15 @@ const idbStatements = [
   },
 ];
 
+const idbWeeklyAggregates = [
+  {
+    id: "wa-2025-w24",
+    weekStartMs: Date.parse("2025-06-09T00:00:00.000Z"),
+    creditTotal: 52.3,
+    unbudgetedTotal: 10.5,
+  },
+];
+
 const meta = {
   key: "upload" as const,
   groupName: "household",
@@ -149,6 +158,8 @@ function setupMocks() {
         return Promise.resolve([]);
       case "reconciliationEvents":
         return Promise.resolve([]);
+      case "weeklyAggregates":
+        return Promise.resolve(idbWeeklyAggregates);
       default:
         throw new Error(`Unmocked store name in test: "${storeName}"`);
     }
