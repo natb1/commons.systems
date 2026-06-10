@@ -444,18 +444,21 @@ subagent:
 
 1. Invokes `/file-issue`, which runs the full pipeline: duplicate detection,
    8-category evaluation, decomposition gate, type/topic classification, issue
-   creation, `@me` assignment, and the `help wanted` label. `/file-issue` prints
-   `CREATED <N>` or `EXISTING <N>` on its own line; the subagent parses it.
-2. For a non-independent finding, records a `blocked_by` dependency **on the new
-   issue `<N>`, targeting each blocker issue number** passed in. The target is the
-   GitHub **issue** — never the PR number, and the dependency is the API
-   relationship, never body text. Use the `ref-github-issues` dependencies API
+   creation, `@me` assignment, and the `help wanted` label. `/file-issue` ends with
+   a `===FILE-ISSUE-RESULTS===` … `===FILE-ISSUE-RESULTS-END===` block; read every
+   `<disposition> <N>` record line between the sentinels and iterate steps 2–3 over
+   each. A single finding normally yields one record; a finding that legitimately
+   separates into multiple issues yields several — link them all.
+2. For each record, for a non-independent finding, record a `blocked_by` dependency
+   **on the new issue `<N>`, targeting each blocker issue number** passed in. The
+   target is the GitHub **issue** — never the PR number, and the dependency is the
+   API relationship, never body text. Use the `ref-github-issues` dependencies API
    (database-ID resolution with `gh api`, `--input` JSON; see `ref-github-issues`,
-   do not restate the syntax). On the `EXISTING <N>` path, first list `<N>`'s
+   do not restate the syntax). On an `EXISTING <N>` record, first list `<N>`'s
    current `blocked_by` (same dependencies API — see `ref-github-issues`) and skip
    the POST for any blocker already present, so a duplicate does not error. An
    `independent` finding records no dependency.
-3. Returns `<N>` to this thread.
+3. Returns every `<N>` to this thread.
 
 Capture each `<N>` against its source finding for the Step 7 comment.
 
@@ -533,10 +536,12 @@ subagent:
    proceed to the next step.
 2. Invokes `/file-issue` with the follow-up's `title` on the first line and its
    `body` after. `/file-issue` owns duplicate detection, creation, `@me`
-   assignment, the `help wanted` label, and type + topic classification; it
-   prints `CREATED <N>` or `EXISTING <N>` on its own line — parse `<N>`.
-3. Applies the topic and type labels (use `dangerouslyDisableSandbox: true` —
-   `gh` needs network):
+   assignment, the `help wanted` label, and type + topic classification; it ends
+   with a `===FILE-ISSUE-RESULTS===` … `===FILE-ISSUE-RESULTS-END===` block. Read
+   the `<disposition> <N>` record(s) between the sentinels — a single machine-keyed
+   follow-up normally yields one record; iterate step 3 over each if more.
+3. Applies the topic and type labels to each `<N>` (use
+   `dangerouslyDisableSandbox: true` — `gh` needs network):
 
    ```bash
    gh issue edit <N> --add-label security --add-label bug
