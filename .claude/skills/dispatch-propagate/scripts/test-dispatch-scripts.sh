@@ -14892,6 +14892,42 @@ spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop fix-conflicts-retry: spawn invoked exactly once" "1" "$spawn_calls"
 stop_teardown
 
+# --- Test FC1b: fix-conflicts marker, same phase, no PR (no-PR backstop) → Branch C retry
+# A fix-conflicts pass spawned during the implement phase (before any PR exists)
+# writes phase=fix-conflicts but PR_NUM is empty — the attempt counter (which
+# lives on a PR label) does not exist. The no-PR else branch of Branch C always
+# self-closes and re-seeds the chain, bypassing the counter. Branch D (park on
+# office-hours) must NOT fire.
+echo "Test: stop hook + same phase + fix-conflicts + no PR (backstop) → Branch C retry → spawn + self-close"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+# OMIT find-pr-output → PR_NUM="" (no-PR provisioning backstop)
+echo "fix-conflicts" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=fix-conflicts" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop fix-conflicts-no-pr-backstop: hook exits 0" "0" "$rc"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop fix-conflicts-no-pr-backstop: self-close invoked exactly once" "1" "$self_close_calls"
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop fix-conflicts-no-pr-backstop: spawn invoked exactly once" "1" "$spawn_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-no-pr-backstop: apply-office-hours not invoked (did not park on office-hours)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-no-pr-backstop: apply-office-hours not invoked (did not park on office-hours)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-no-pr-backstop: no label add or remove invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-no-pr-backstop: no label add or remove invoked"
+fi
+stop_teardown
+
 # --- Test FC2: fix-conflicts marker, same phase, counter >= 3 → Branch D (fuse)
 # A conflict that recurs three times blows the fuse: at attempt 3 the #831
 # invariant falls through to Branch D, parking the issue on dispatch:office-hours

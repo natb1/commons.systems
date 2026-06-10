@@ -292,38 +292,71 @@ service cloud.firestore {
 
     // Error logs: write-only from clients. Admin reads via Admin SDK.
     // Unauthenticated creates are allowed so error telemetry works regardless
-    // of auth state. Type-validated fields: message (string, max 10KB),
-    // operation (string, max 200 chars), timestamp (timestamp), and optional
-    // stack (string, max 50KB). Other fields (kind, code, userAgent, url, uid,
-    // email, extras) pass through unchecked. Total fields capped at 15.
+    // of auth state — so the rule is the only backstop against cost/DoS abuse
+    // (issue #1296). Two hardening invariants enforce that backstop:
+    //
+    // 1. Env is pinned to a known-env allowlist (isKnownErrorEnv): the {env}
+    //    path segment must match a real environment shape (prod/demo/test,
+    //    preview-pr-N, qa[-id], emulator[-id]). This closes the fabricated-env
+    //    sprawl vector (e.g. budget/zzz/errors/...).
+    // 2. The document is a fully-enumerated, size-bounded schema: exactly the
+    //    11 keys below are allowed (keys().hasOnly) — no arbitrary top-level
+    //    keys pass through — and every field is type- and length-checked. This
+    //    bounds the worst-case doc from ~1 MB to ~73 KB.
+    //
+    // Enumerated fields and caps (UTF-16 code units): message (string, ≤10000),
+    // operation (string, ≤200), timestamp (timestamp); optional kind (≤32),
+    // stack (≤50000), code (≤200), userAgent (≤500), url (≤2000), uid (≤128),
+    // email (≤320), extras (≤10000). Tradeoff: kind is length-capped, not
+    // enum-restricted, to avoid coupling the rule to the ErrorKind union.
+    function isKnownErrorEnv(env) {
+      return env == "prod"
+        || env == "demo"
+        || env == "test"
+        || env.matches("preview-pr-[0-9]+")
+        || env.matches("qa(-[a-z0-9._-]+)?")    // suffix optional: bare "qa" is the main-worktree env
+        || env.matches("emulator(-[a-z0-9._-]+)?");  // suffix optional: bare "emulator" is the main-worktree env
+    }
+    function isOptionalString(data, field, maxLen) {
+      return !(field in data)
+        || data[field] == null
+        || (data[field] is string && data[field].size() <= maxLen);
+    }
     function isValidErrorLog() {
       return request.resource.data.keys().hasAll(["message", "operation", "timestamp"])
-        && request.resource.data.keys().size() <= 15
+        && request.resource.data.keys().hasOnly(["message", "operation", "timestamp", "kind", "stack", "code", "userAgent", "url", "uid", "email", "extras"])
         && request.resource.data.message is string
         && request.resource.data.message.size() <= 10000
         && request.resource.data.operation is string
         && request.resource.data.operation.size() <= 200
         && request.resource.data.timestamp is timestamp
-        && (!("stack" in request.resource.data) || request.resource.data.stack == null || (request.resource.data.stack is string && request.resource.data.stack.size() <= 50000));
+        && isOptionalString(request.resource.data, "kind", 32)
+        && isOptionalString(request.resource.data, "stack", 50000)
+        && isOptionalString(request.resource.data, "code", 200)
+        && isOptionalString(request.resource.data, "userAgent", 500)
+        && isOptionalString(request.resource.data, "url", 2000)
+        && isOptionalString(request.resource.data, "uid", 128)
+        && isOptionalString(request.resource.data, "email", 320)
+        && isOptionalString(request.resource.data, "extras", 10000);
     }
     match /budget/{env}/errors/{errorId} {
-      allow create: if isValidErrorLog();
+      allow create: if isKnownErrorEnv(env) && isValidErrorLog();
       allow read, update, delete: if false;
     }
     match /landing/{env}/errors/{errorId} {
-      allow create: if isValidErrorLog();
+      allow create: if isKnownErrorEnv(env) && isValidErrorLog();
       allow read, update, delete: if false;
     }
     match /fellspiral/{env}/errors/{errorId} {
-      allow create: if isValidErrorLog();
+      allow create: if isKnownErrorEnv(env) && isValidErrorLog();
       allow read, update, delete: if false;
     }
     match /print/{env}/errors/{errorId} {
-      allow create: if isValidErrorLog();
+      allow create: if isKnownErrorEnv(env) && isValidErrorLog();
       allow read, update, delete: if false;
     }
     match /audio/{env}/errors/{errorId} {
-      allow create: if isValidErrorLog();
+      allow create: if isKnownErrorEnv(env) && isValidErrorLog();
       allow read, update, delete: if false;
     }
 
