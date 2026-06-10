@@ -153,7 +153,7 @@ STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 # Reconstruct full args string for matching.
 args="$*"
 case "$args" in
-  "pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels")
+  "pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
       cat "$STUB_DIR/pr-list-full.json"
@@ -174,7 +174,7 @@ case "$args" in
       echo "[]"
     fi
     ;;
-  "pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences")
+  "pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences,mergeable")
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     if [[ -f "$STUB_DIR/pr-list-union.json" ]]; then
       cat "$STUB_DIR/pr-list-union.json"
@@ -672,6 +672,27 @@ make_pr_union() {
     "$num" "$created" "$branch" "$is_draft" "$labels_json" "$rollup_json" "$closing_json"
 }
 
+# Like make_pr_union, but carries an explicit `mergeable` field (8th arg). The
+# select-target phase bucketing reuses dispatch-phase, which reads `.mergeable`
+# to derive fix-conflicts; make_pr_union omits the key (defaults UNKNOWN, a
+# no-op). Use this when a select-target test needs a CONFLICTING PR.
+make_pr_union_mergeable() {
+  local num="$1" branch="$2" created="$3" is_draft="$4" labels_json="$5" rollup_json="$6" mergeable="$7" closing_json="${8:-[]}"
+  printf '{"number":%s,"createdAt":"%s","headRefName":"%s","isDraft":%s,"labels":%s,"statusCheckRollup":%s,"mergeable":"%s","closingIssuesReferences":%s}' \
+    "$num" "$created" "$branch" "$is_draft" "$labels_json" "$rollup_json" "$mergeable" "$closing_json"
+}
+
+# Like make_pr, but carries an explicit `mergeable` field (the 6th arg). The
+# fix-conflicts derivation in dispatch-phase / dispatch-ci-ready reads
+# `.mergeable // "UNKNOWN"`; make_pr omits the key entirely (so its PRs default
+# to UNKNOWN, a no-op for the derivation). Use this helper when a test needs to
+# set mergeable to CONFLICTING / MERGEABLE / UNKNOWN explicitly.
+make_pr_mergeable() {
+  local num="$1" branch="$2" is_draft="$3" labels_json="$4" rollup_json="$5" mergeable="$6"
+  printf '{"number":%s,"headRefName":"%s","isDraft":%s,"labels":%s,"statusCheckRollup":%s,"mergeable":"%s"}' \
+    "$num" "$branch" "$is_draft" "$labels_json" "$rollup_json" "$mergeable"
+}
+
 # Green rollup (two passing check runs).
 GREEN_ROLLUP='[{"status":"COMPLETED","conclusion":"SUCCESS"},{"status":"COMPLETED","conclusion":"NEUTRAL"}]'
 # Failing rollup.
@@ -842,6 +863,66 @@ result=$(DISPATCH_PR_LIST="$ENV_LIST" "$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "DISPATCH_PR_LIST used over self-fetch → fix-checks" "fix-checks" "$result"
 teardown
 
+# 14. Draft + mergeable=CONFLICTING → fix-conflicts (highest-priority outcome).
+echo "Test: draft + CONFLICTING → fix-conflicts"
+setup
+printf '[%s]\n' "$(make_pr_mergeable 10 "42-my-feature" "true" "$NO_LABELS" "$GREEN_ROLLUP" "CONFLICTING")" \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "draft + CONFLICTING → fix-conflicts" "fix-conflicts" "$result"
+teardown
+
+# 14b. fix-conflicts outranks fix-checks: a CONFLICTING draft with FAILING CI
+# still derives fix-conflicts (a PR that can't merge can't usefully be checked).
+echo "Test: CONFLICTING + failing CI → fix-conflicts (outranks fix-checks)"
+setup
+printf '[%s]\n' "$(make_pr_mergeable 10 "42-my-feature" "true" "$NO_LABELS" "$FAILING_ROLLUP" "CONFLICTING")" \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "CONFLICTING + failing CI → fix-conflicts (outranks fix-checks)" "fix-conflicts" "$result"
+teardown
+
+# 14c. fix-conflicts outranks review: a CONFLICTING draft that is already
+# green + reviewed still derives fix-conflicts.
+echo "Test: CONFLICTING + green + reviewed → fix-conflicts (outranks review)"
+setup
+printf '[%s]\n' "$(make_pr_mergeable 10 "42-my-feature" "true" '[{"name":"dispatch:reviewed"}]' "$GREEN_ROLLUP" "CONFLICTING")" \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "CONFLICTING + green + reviewed → fix-conflicts (outranks review)" "fix-conflicts" "$result"
+teardown
+
+# 14d. mergeable=UNKNOWN is a no-op: GitHub recomputes it asynchronously, so the
+# derivation falls through to the normal CI-based classification. UNKNOWN + failing
+# CI still derives fix-checks.
+echo "Test: UNKNOWN + failing CI → fix-checks (mergeable no-op)"
+setup
+printf '[%s]\n' "$(make_pr_mergeable 10 "42-my-feature" "true" "$NO_LABELS" "$FAILING_ROLLUP" "UNKNOWN")" \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "UNKNOWN + failing CI → fix-checks (mergeable no-op)" "fix-checks" "$result"
+teardown
+
+# 14e. mergeable=MERGEABLE is a no-op for the fix-conflicts derivation: a clean
+# green draft with no label still derives qa.
+echo "Test: MERGEABLE + green → qa (mergeable no-op)"
+setup
+printf '[%s]\n' "$(make_pr_mergeable 10 "42-my-feature" "true" "$NO_LABELS" "$GREEN_ROLLUP" "MERGEABLE")" \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "MERGEABLE + green → qa (mergeable no-op)" "qa" "$result"
+teardown
+
+# 14f. Non-draft (done) PR is never fix-conflicts even when CONFLICTING — the
+# draft-state gate precedes the mergeable check, so a non-draft PR maps to done.
+echo "Test: non-draft + CONFLICTING → done (draft gate precedes mergeable)"
+setup
+printf '[%s]\n' "$(make_pr_mergeable 10 "42-my-feature" "false" "$NO_LABELS" "$GREEN_ROLLUP" "CONFLICTING")" \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "non-draft + CONFLICTING → done" "done" "$result"
+teardown
+
 # ============================================================================
 # dispatch-ci-ready tests
 # ============================================================================
@@ -950,6 +1031,18 @@ assert_eq "DISPATCH_PR_LIST used over self-fetch → waiting (token)" "waiting" 
 assert_eq "DISPATCH_PR_LIST used over self-fetch → not-ready (exit 1)" "1" "$CI_READY_RC"
 assert_eq "DISPATCH_PR_LIST reuse issues no gh pr list" "0" \
   "$([[ -f "$STUB_DIR/gh-pr-list-calls.log" ]] && wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ' || echo 0)"
+teardown
+
+# 10. Draft + mergeable=CONFLICTING + pending CI → ready. A conflicting PR is
+# routable to fix-conflicts even while CI is still pending — the conflict gate
+# precedes the CI-pending gate, so the PR is reported ready (exit 0).
+echo "Test: draft + CONFLICTING + pending CI → ready"
+setup
+printf '[%s]\n' "$(make_pr_mergeable 10 "42-my-feature" "true" "$NO_LABELS" "$PENDING_ROLLUP" "CONFLICTING")" \
+  > "$STUB_DIR/pr-list-full.json"
+ci_ready_run "42"
+assert_eq "draft + CONFLICTING + pending → ready (token)" "ready" "$CI_READY_OUT"
+assert_eq "draft + CONFLICTING + pending → ready (exit 0)" "0" "$CI_READY_RC"
 teardown
 
 # ============================================================================
@@ -1294,16 +1387,16 @@ route_run 042 /wt/042-feature
 assert_eq "leading-zero N → exit 2" "2" "$ROUTE_RC"
 teardown
 
-# 17. Provisioning merge conflict (exit 3) → INVOKE /dispatch-resolve-conflict.
+# 17. Provisioning merge conflict (exit 3) → INVOKE /fix-conflicts.
 # The conflict short-circuits before the PR-list fetch and phase derivation, so
 # no gh pr list is issued — proving provisioning runs ahead of the CI/phase gate.
-echo "Test: provisioning conflict → INVOKE /dispatch-resolve-conflict"
+echo "Test: provisioning conflict → INVOKE /fix-conflicts"
 setup
 echo 3 > "$STUB_DIR/provision-exit"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 route_run 42 /wt/42-my-feature
-assert_eq "provision conflict → INVOKE /dispatch-resolve-conflict (directive)" \
-  "INVOKE /dispatch-resolve-conflict" "$ROUTE_OUT"
+assert_eq "provision conflict → INVOKE /fix-conflicts (directive)" \
+  "INVOKE /fix-conflicts" "$ROUTE_OUT"
 assert_eq "provision conflict → exit 0" "0" "$ROUTE_RC"
 assert_eq "provision conflict issues no gh pr list" "0" \
   "$([[ -f "$STUB_DIR/gh-pr-list-calls.log" ]] && wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ' || echo 0)"
@@ -1760,6 +1853,24 @@ echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "review beats fix-checks" "pr 30 30-review review" "$result"
+teardown
+
+# 8b. fix-conflicts is the top non-QA tier: it beats review and fix-checks
+# (PHASE_PRIORITY=(fix-conflicts review fix-checks)). A CONFLICTING draft PR is
+# selected ahead of a review-phase PR and a fix-checks PR in the same category.
+echo "Test: fix-conflicts beats review and fix-checks"
+setup
+REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
+UNION='['
+UNION+="$(make_pr_union 10 "10-verify" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
+UNION+="$(make_pr_union 30 "30-review" "2024-01-03T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
+UNION+="$(make_pr_union_mergeable 40 "40-conflict" "2024-01-04T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" "CONFLICTING")"
+UNION+=']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "fix-conflicts beats review and fix-checks" "pr 40 40-conflict fix-conflicts" "$result"
 teardown
 
 # 9. Within one phase, the oldest PR wins.
@@ -14150,10 +14261,12 @@ case "$args" in
     echo "$args" >> "$STUB_DIR/gh-pr-remove.log"
     ;;
   pr\ view\ *)
-    if [[ -f "$STUB_DIR/verify-count.txt" ]]; then
-      cat "$STUB_DIR/verify-count.txt"
+    N=0
+    [[ -f "$STUB_DIR/verify-count.txt" ]] && N=$(cat "$STUB_DIR/verify-count.txt")
+    if [[ "$N" -gt 0 ]]; then
+      printf '{"labels":[{"name":"dispatch:fix-checks-attempt-%d"},{"name":"dispatch:fix-conflicts-attempt-%d"}]}\n' "$N" "$N"
     else
-      echo "0"
+      printf '{"labels":[]}\n'
     fi
     ;;
   pr\ list\ *)
@@ -14743,77 +14856,166 @@ self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 
 assert_eq "stop wrong-cwd: self-close invoked exactly once" "1" "$self_close_calls"
 stop_teardown
 
-# --- Test R1: conflict-resolver RESOLVED → target re-seed + self-close (#982) -
-# A /dispatch-resolve-conflict job is named <N>-slug like a worker but writes a
-# `conflict-resolver` sentinel (no phase-completed marker). With a
-# `conflict-resolved` marker present, Branch R re-seeds the chain at the issue
-# (target-keyed dispatch-spawn-tick 839) and self-closes; no office-hours park.
-echo "Test: stop hook + conflict-resolver + conflict-resolved → target re-seed + self-close"
+# --- fix-conflicts stop-hook cases (Branch R retired; #1243) -----------------
+# /fix-conflicts is now a standard marker-lifecycle phase, symmetric with
+# fix-checks: it writes a phase-completed marker (clean resolution) or skips it
+# and writes office-hours-reason (ambiguous). The Stop hook drives its
+# disposition through the same Branches A-D as every other phase — there is no
+# conflict-resolver / conflict-resolved sentinel and no Branch R. These four
+# cases mirror the fix-checks Branch C / D / A / B tests above.
+
+# --- Test FC1: fix-conflicts marker, same phase, counter < 3 → Branch C retry -
+# A clean resolution writes phase=fix-conflicts and pushes; on the next tick the
+# PR may still read mergeable=CONFLICTING (GitHub recompute lag), so CURRENT_PHASE
+# is still fix-conflicts. With the dispatch:fix-conflicts-attempt counter < 3 the
+# #831 fix-* invariant takes Branch C: no label work, spawn + self-close (retry).
+echo "Test: stop hook + same phase + fix-conflicts + counter<3 → Branch C retry → spawn + self-close"
 stop_setup
-echo "839-foo" > "$STUB_DIR/current-branch.txt"
-echo '{"name":"839-foo"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
-printf 'issue=839\nworktree=/wt/839-foo\n' > "$TMPDIR_TEST/jobs/abcd1234/conflict-resolver"
-printf 'issue=839\n' > "$TMPDIR_TEST/jobs/abcd1234/conflict-resolved"
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "fix-conflicts" > "$STUB_DIR/current-phase.txt"
+echo "1" > "$STUB_DIR/verify-count.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=fix-conflicts" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
-assert_eq "resolver-resolved: hook exits 0" "0" "$rc"
-spawn_argv=$(cat "$STUB_DIR/spawn-tick-argv.log" 2>/dev/null || true)
+assert_eq "stop fix-conflicts-retry: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$spawn_argv" == *"839"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: resolver-resolved: dispatch-spawn-tick called with target 839"
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-retry: no label add or remove invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-resolved: dispatch-spawn-tick called with target 839"
-  echo "    spawn-tick-argv: $spawn_argv"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-retry: no label add or remove invoked"
 fi
 self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
-assert_eq "resolver-resolved: self-close invoked exactly once" "1" "$self_close_calls"
-TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: resolver-resolved: no office-hours apply"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-resolved: no office-hours apply"
-fi
+assert_eq "stop fix-conflicts-retry: self-close invoked exactly once" "1" "$self_close_calls"
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop fix-conflicts-retry: spawn invoked exactly once" "1" "$spawn_calls"
 stop_teardown
 
-# --- Test R2: conflict-resolver AMBIGUOUS/crash → park + re-seed, no self-close
-# Sentinel present, NO conflict-resolved marker → Branch R parks the issue (with
-# the office-hours-reason file's reason) and re-seeds at 839, but does NOT
-# self-close (the variance stays visible).
-echo "Test: stop hook + conflict-resolver, no conflict-resolved → park + re-seed, no self-close"
+# --- Test FC2: fix-conflicts marker, same phase, counter >= 3 → Branch D (fuse)
+# A conflict that recurs three times blows the fuse: at attempt 3 the #831
+# invariant falls through to Branch D, parking the issue on dispatch:office-hours
+# (no PR add-label, no self-close).
+echo "Test: stop hook + same phase + fix-conflicts + counter>=3 → Branch D park (fuse)"
 stop_setup
-echo "839-foo" > "$STUB_DIR/current-branch.txt"
-echo '{"name":"839-foo"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
-printf 'issue=839\nworktree=/wt/839-foo\n' > "$TMPDIR_TEST/jobs/abcd1234/conflict-resolver"
-printf '%s' "both branches rewrote the same function body" > "$TMPDIR_TEST/jobs/abcd1234/office-hours-reason"
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "fix-conflicts" > "$STUB_DIR/current-phase.txt"
+echo "3" > "$STUB_DIR/verify-count.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=fix-conflicts" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
-assert_eq "resolver-ambiguous: hook exits 0" "0" "$rc"
+assert_eq "stop fix-conflicts-exhausted: hook exits 0" "0" "$rc"
 apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
 apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
 apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
-if [[ "$apply_issue" == "839" && "$apply_reason" == "both branches rewrote the same function body" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: resolver-ambiguous: office-hours applied to 839 with the reason file's contents"
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-exhausted: dispatch-apply-office-hours invoked with issue 123 + non-empty reason (fuse)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-ambiguous: office-hours applied to 839 with the reason file's contents"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-exhausted: dispatch-apply-office-hours invoked with issue 123 + non-empty reason (fuse)"
   echo "    apply-log: $apply_log"
 fi
-spawn_argv=$(cat "$STUB_DIR/spawn-tick-argv.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$spawn_argv" == *"839"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: resolver-ambiguous: dispatch-spawn-tick called with target 839"
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-exhausted: PR --add-label not invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-ambiguous: dispatch-spawn-tick called with target 839"
-  echo "    spawn-tick-argv: $spawn_argv"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-exhausted: PR --add-label not invoked"
 fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop fix-conflicts-exhausted: spawn invoked exactly once" "1" "$spawn_calls"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: resolver-ambiguous: self-close NOT invoked"
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-exhausted: self-close not invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-ambiguous: self-close NOT invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-exhausted: self-close not invoked"
 fi
+stop_teardown
+
+# --- Test FC3: fix-conflicts marker absent + office-hours-reason → Branch A ----
+# A genuinely ambiguous conflict skips the marker and writes office-hours-reason.
+# The Stop hook takes Branch A: park the issue on dispatch:office-hours on the
+# FIRST encounter (the immediate-escalation fast path — no 3-attempt wait), with
+# no attempt cycling.
+echo "Test: stop hook + fix-conflicts phase + marker absent + office-hours-reason → Branch A parks issue (ambiguous fast path)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "fix-conflicts" > "$STUB_DIR/current-phase.txt"
+# fix-conflicts's ambiguous path writes office-hours-reason and SKIPS the marker.
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+printf '%s' "/fix-conflicts: both branches rewrote the same function body" > "$TMPDIR_TEST/jobs/abcd1234/office-hours-reason"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop fix-conflicts-ambiguous: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && "$apply_reason" == "/fix-conflicts: both branches rewrote the same function body" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-ambiguous: office-hours applied to issue 123 with the office-hours-reason contents (Branch A)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-ambiguous: office-hours applied to issue 123 with the office-hours-reason contents (Branch A)"
+  echo "    apply-log: $apply_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop fix-conflicts-ambiguous: spawn invoked exactly once" "1" "$spawn_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-ambiguous: self-close not invoked (Branch A park, not advance)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-ambiguous: self-close not invoked (Branch A park, not advance)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-ambiguous: no attempt label add or remove invoked (Branch A only parks via office-hours)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-ambiguous: no attempt label add or remove invoked (Branch A only parks via office-hours)"
+fi
+stop_teardown
+
+# --- Test FC4: fix-conflicts marker + phase advanced → Branch B advance --------
+# A clean resolution that flips mergeable away from CONFLICTING makes CURRENT_PHASE
+# move on (e.g. to qa). The marker (phase=fix-conflicts) differs from CURRENT_PHASE,
+# so the Stop hook takes Branch B: strip dispatch:office-hours from PR + issue,
+# spawn, self-close — the phase advances.
+echo "Test: stop hook + fix-conflicts marker + phase advanced (qa) → Branch B advance + self-close"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "qa" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=fix-conflicts" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop fix-conflicts-advance: hook exits 0" "0" "$rc"
+pr_remove_log=$(cat "$STUB_DIR/gh-pr-remove.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$pr_remove_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-advance: PR --remove-label invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-advance: PR --remove-label invoked"
+  echo "    pr-remove-log: $pr_remove_log"
+fi
+issue_remove_log=$(cat "$STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-advance: issue --remove-label invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-advance: issue --remove-label invoked"
+  echo "    issue-remove-log: $issue_remove_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop fix-conflicts-advance: spawn invoked exactly once" "1" "$spawn_calls"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop fix-conflicts-advance: self-close invoked exactly once" "1" "$self_close_calls"
 stop_teardown
 
 # --- Test P1: parse-job-done sentinel → spawn + self-close, no label work (#1024)
@@ -15460,9 +15662,8 @@ restore_setup() {
     "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts" \
     "$TMPDIR_TEST/bin" \
     "$STUB_DIR"
-  for skill in plan-issue implement fix-checks qa-fix office-hours \
-               review-fix dispatch-worker \
-               dispatch-resolve-conflict; do
+  for skill in plan-issue implement fix-checks fix-conflicts qa-fix office-hours \
+               review-fix dispatch-worker; do
     mkdir -p "$TMPDIR_TEST/.claude/skills/$skill"
     cat > "$TMPDIR_TEST/.claude/skills/$skill/SKILL.md" <<EOF
 ---
@@ -15756,39 +15957,35 @@ else
 fi
 restore_teardown
 
-# --- Test 3c: conflict-resolver sentinel → dispatch-resolve-conflict body (#982)
-# A <N>-slug session with a `conflict-resolver` sentinel in CLAUDE_JOB_DIR
-# restores the /dispatch-resolve-conflict skill body (matched first, by the
-# sentinel, ahead of office-hours and phase routing) with an
-# `ARGUMENTS: <N> <worktree>` line.
-echo "Test: restore-dispatch-skill conflict-resolver sentinel → dispatch-resolve-conflict body + args"
+# --- Test 3c: fix-conflicts phase → fix-conflicts body, no ARGUMENTS (#1243) --
+# Branch R / the conflict-resolver sentinel is retired: /fix-conflicts is now a
+# normal phase skill, restored through the phase routing (arg-less, like
+# fix-checks). A <N>-slug session whose dispatch-phase yields fix-conflicts
+# restores the /fix-conflicts body with no ARGUMENTS line.
+echo "Test: restore-dispatch-skill phase=fix-conflicts → fix-conflicts body, no ARGUMENTS"
 restore_setup
-set_agents_name "839-foo"
-echo "implement" > "$STUB_DIR/current-phase.txt"   # would route to /implement absent the sentinel
-mkdir -p "$TMPDIR_TEST/jobdir"
-printf 'issue=839\nworktree=%s/worktrees/839-foo\n' "$TMPDIR_TEST" > "$TMPDIR_TEST/jobdir/conflict-resolver"
-export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobdir"
+set_agents_name "903-foo"
+echo "fix-conflicts" > "$STUB_DIR/current-phase.txt"
 output=$(run_restore)
-unset CLAUDE_JOB_DIR
 TOTAL=$((TOTAL + 1))
-expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/dispatch-resolve-conflict"
+expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/fix-conflicts"
 if [[ "$output" == *"$expected_dir"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: resolver-restore: base directory line emitted"
+  PASS=$((PASS + 1)); echo "  PASS: fix-conflicts: base directory line emitted"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-restore: base directory line emitted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: fix-conflicts: base directory line emitted"
   echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"RESTORE_MARKER_dispatch-resolve-conflict"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: resolver-restore: SKILL.md body marker emitted"
+if [[ "$output" == *"RESTORE_MARKER_fix-conflicts"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: fix-conflicts: SKILL.md body marker emitted"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-restore: SKILL.md body marker emitted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: fix-conflicts: SKILL.md body marker emitted"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"ARGUMENTS: 839 $TMPDIR_TEST/worktrees/839-foo"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: resolver-restore: ARGUMENTS line carries <N> <worktree>"
+if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
+  PASS=$((PASS + 1)); echo "  PASS: fix-conflicts: no ARGUMENTS line"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: resolver-restore: ARGUMENTS line carries <N> <worktree>"
+  FAIL=$((FAIL + 1)); echo "  FAIL: fix-conflicts: no ARGUMENTS line"
   echo "    output: $output"
 fi
 restore_teardown
@@ -17996,7 +18193,11 @@ fi
 FAKE
   cat > "$TMPDIR_TEST/dispatch-phase" <<'FAKE'
 #!/usr/bin/env bash
-echo "${MAT_PHASE:-implement}"
+# Per-issue phase override (#1126): MAT_PHASE_<N> (keyed on the issue number
+# the caller passes as $1) wins over the global MAT_PHASE, so a single fan-out
+# run can mix done and not-done targets. Falls back to MAT_PHASE, then implement.
+override_var="MAT_PHASE_$1"
+echo "${!override_var:-${MAT_PHASE:-implement}}"
 FAKE
   # Readiness predicate fake: MAT_CI_READY controls the verdict (default ready).
   # `ready` → exit 0 / prints ready; anything else → exit 1 / prints waiting.
@@ -18061,6 +18262,9 @@ mat_teardown() {
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_PHASE \
     MAT_CI_READY MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE \
     MAT_RESEED_OUT MAT_RESEED_RC
+  # Per-issue phase overrides (MAT_PHASE_<N>, #1126) have dynamic names the fixed
+  # unset list cannot enumerate; clear any a test set so they don't leak forward.
+  unset ${!MAT_PHASE_@}
 }
 
 run_mat() { "$TMPDIR_TEST/dispatch-materialize-spawn" "$@" 2>/dev/null; }
@@ -18817,6 +19021,36 @@ assert_eq "fanout-done: terminal token" "drain" "$(printf '%s\n' "$out" | tail -
 assert_eq "fanout-done: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
 assert_eq "fanout-done: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- spawn-boundary done re-check (#1109/#1126): MIXED fan-out — one done, one not
+# The all-done fan-out test above uses the global MAT_PHASE and cannot express a
+# per-target mix. With the per-issue override (#1126), #839 reads done (skipped at
+# the spawn boundary) while #840 falls back to the global MAT_PHASE=implement (a
+# normal not-done target → spawned) — the realistic case a per-target regression
+# in the real done re-check would otherwise slip past. Exactly one skip, one spawn,
+# lock released.
+echo "Test: materialize-spawn mixed fan-out done re-check → one skip, one spawn (#1126)"
+mat_setup
+export MAT_PHASE=implement
+export MAT_PHASE_839=done
+export MAT_QUEUE="840"
+out=$(run_mat 839 queue --gap 2) ; rc=$?
+assert_eq "mixed-fanout: exit 0" "0" "$rc"
+assert_eq "mixed-fanout: exactly one target-done skip" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'skipped #.* (target-done)')"
+assert_eq "mixed-fanout: the skipped target is #839" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'propagate: skipped #839 (target-done)')"
+assert_eq "mixed-fanout: exactly one spawn line" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'propagate: spawned #')"
+assert_eq "mixed-fanout: the spawned target is #840" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'propagate: spawned #840')"
+assert_eq "mixed-fanout: spawn-worker invoked exactly once" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "mixed-fanout: summary spawned 1 of gap 2" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 2')"
+assert_eq "mixed-fanout: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "mixed-fanout: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
 # --- phase→model integration: qa phase → --model claude-sonnet-4-6 forwarded --
