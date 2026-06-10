@@ -53,8 +53,8 @@ jobs:
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
           OFFICE_HOURS_GITHUB_APP_ID: ${{ vars.OFFICE_HOURS_GITHUB_APP_ID }}
           OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID: ${{ vars.OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID }}
-          OFFICE_HOURS_GROUP_REPO: ${{ secrets.OFFICE_HOURS_GROUP_REPO }}
-          OFFICE_HOURS_MEMBER_EMAILS: ${{ secrets.OFFICE_HOURS_MEMBER_EMAILS }}
+          OFFICE_HOURS_GROUP_REPO: ${{ vars.OFFICE_HOURS_GROUP_REPO }}
+          OFFICE_HOURS_MEMBER_EMAILS: ${{ vars.OFFICE_HOURS_MEMBER_EMAILS }}
         run: |
           if git diff --name-only origin/main...HEAD | grep -q '^functions/'; then
             .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
