@@ -62,11 +62,11 @@ jq '
   ([.partition // [] | .[]] | flatten | unique) as $partitioned_ids |
 
   # Append singleton groups for findings not covered by any partition group.
-  (.partition // []) + [
+  ((.partition // []) + [
     .findings[].id
     | select(. as $id | $partitioned_ids | index($id) == null)
     | [.]
-  ] as $all_groups |
+  ]) as $all_groups |
 
   # --- merge each group -------------------------------------------------------
   [
