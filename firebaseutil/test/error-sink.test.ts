@@ -37,6 +37,7 @@ describe("createFirestoreErrorSink", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("writes error document to Firestore", () => {
@@ -173,6 +174,70 @@ describe("createFirestoreErrorSink", () => {
 
     const doc = getWrittenDoc();
     expect((doc.kind as string).length).toBe(32);
+  });
+
+  it("truncates oversized operation to 200 characters", () => {
+    const sink = createFirestoreErrorSink(makeOptions());
+    sink(new Error("boom"), makeContext({ operation: "a".repeat(201) }));
+
+    const doc = getWrittenDoc();
+    expect((doc.operation as string).length).toBe(200);
+  });
+
+  it("truncates oversized code to 200 characters", () => {
+    const sink = createFirestoreErrorSink(makeOptions());
+    const err = Object.assign(new Error("boom"), { code: "a".repeat(201) });
+    sink(err, makeContext());
+
+    const doc = getWrittenDoc();
+    expect((doc.code as string).length).toBe(200);
+  });
+
+  it("truncates oversized url to 2000 characters", () => {
+    vi.stubGlobal("location", { href: "a".repeat(2001) });
+    const sink = createFirestoreErrorSink(makeOptions());
+    sink(new Error("boom"), makeContext());
+
+    const doc = getWrittenDoc();
+    expect((doc.url as string).length).toBe(2000);
+  });
+
+  it("truncates oversized userAgent to 500 characters", () => {
+    vi.stubGlobal("navigator", { userAgent: "a".repeat(501) });
+    const sink = createFirestoreErrorSink(makeOptions());
+    sink(new Error("boom"), makeContext());
+
+    const doc = getWrittenDoc();
+    expect((doc.userAgent as string).length).toBe(500);
+  });
+
+  it("truncates oversized uid to 128 characters", () => {
+    const sink = createFirestoreErrorSink(makeOptions({
+      getCurrentUser: () => ({ uid: "a".repeat(129), email: "test@example.com" }),
+    }));
+    sink(new Error("boom"), makeContext());
+
+    const doc = getWrittenDoc();
+    expect((doc.uid as string).length).toBe(128);
+  });
+
+  it("truncates oversized email to 320 characters", () => {
+    const sink = createFirestoreErrorSink(makeOptions({
+      getCurrentUser: () => ({ uid: "u1", email: "a".repeat(321) }),
+    }));
+    sink(new Error("boom"), makeContext());
+
+    const doc = getWrittenDoc();
+    expect((doc.email as string).length).toBe(320);
+  });
+
+  it("sets extras to null when serialized extras exceeds 10000 characters", () => {
+    const sink = createFirestoreErrorSink(makeOptions());
+    const ctx = { operation: "test-op", kind: "unknown", bigData: "x".repeat(10001) } as EnrichedErrorContext;
+    sink(new Error("boom"), ctx);
+
+    const doc = getWrittenDoc();
+    expect(doc.extras).toBeNull();
   });
 
   it("rate-limits after 50 writes within a window", () => {

@@ -99,7 +99,8 @@ export function createFirestoreErrorSink(options: ErrorSinkOptions): ErrorSink {
     if (Object.keys(extrasObj).length > 0) {
       let extrasStr: string | null = null;
       try {
-        extrasStr = truncate(JSON.stringify(extrasObj), CAPS.extras);
+        const serialized = JSON.stringify(extrasObj);
+        extrasStr = serialized.length <= CAPS.extras ? serialized : null;
       } catch {
         extrasStr = null;
       }
