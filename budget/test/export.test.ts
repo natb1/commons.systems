@@ -496,27 +496,35 @@ describe("exportToJson", () => {
       }
     });
 
-    const json = await exportToJson();
-    const parsed = parseUploadedJson(json);
-    const data = toParsedData(parsed);
+    try {
+      const json = await exportToJson();
+      const parsed = parseUploadedJson(json);
+      const data = toParsedData(parsed);
 
-    // Every ETL-emitted store that was non-empty before export must be non-empty after.
-    // This is the generic guard: if export.ts ever forgets a new ETL store, this trips.
-    const etlStores: Array<{ name: string; result: unknown[] }> = [
-      { name: "transactions", result: data.transactions },
-      { name: "statements", result: data.statements },
-      { name: "budgets", result: data.budgets },
-      { name: "budgetPeriods", result: data.budgetPeriods },
-      { name: "rules", result: data.rules },
-      { name: "normalizationRules", result: data.normalizationRules },
-      { name: "weeklyAggregates", result: data.weeklyAggregates },
-      { name: "journalEntries", result: data.journalEntries },
-      { name: "journalLegs", result: data.journalLegs },
-      { name: "accounts", result: data.accounts },
-    ];
+      // Static list of the ETL-emitted stores (from budget-etl/internal/export/export.go)
+      // that this test verifies round-trip without being emptied. This is a hardcoded
+      // list, not auto-detected: a new ETL store added to export.ts must also be added
+      // here to be covered. statementItems, reconciliationNotes, and reconciliationEvents
+      // are excluded because they are app-only (not ETL-emitted) and are never populated
+      // in setupMocks.
+      const etlStores: Array<{ name: string; result: unknown[] }> = [
+        { name: "transactions", result: data.transactions },
+        { name: "statements", result: data.statements },
+        { name: "budgets", result: data.budgets },
+        { name: "budgetPeriods", result: data.budgetPeriods },
+        { name: "rules", result: data.rules },
+        { name: "normalizationRules", result: data.normalizationRules },
+        { name: "weeklyAggregates", result: data.weeklyAggregates },
+        { name: "journalEntries", result: data.journalEntries },
+        { name: "journalLegs", result: data.journalLegs },
+        { name: "accounts", result: data.accounts },
+      ];
 
-    for (const { name, result } of etlStores) {
-      expect(result, `store "${name}" was emptied by the export/import round-trip`).not.toHaveLength(0);
+      for (const { name, result } of etlStores) {
+        expect(result, `store "${name}" was emptied by the export/import round-trip`).not.toHaveLength(0);
+      }
+    } finally {
+      mockGetAll.mockImplementation(original);
     }
   });
 });
