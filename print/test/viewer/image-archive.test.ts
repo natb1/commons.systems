@@ -360,6 +360,34 @@ describe("createImageArchiveRenderer", () => {
     expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
+  it("destroy during the initial blob fetch leaks no img or ResizeObserver", async () => {
+    const entries = makeMockEntries({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    // unzip resolves, but the first page's blob hangs so init suspends on the
+    // getObjectUrl await — destroy lands while that fetch is in flight.
+    let resolveBlob!: (value: Blob) => void;
+    entries.entries["image-001.png"]!.blob = vi.fn().mockReturnValue(
+      new Promise((resolve) => { resolveBlob = resolve; }),
+    );
+    mockUnzip.mockResolvedValue(entries as unknown as ZipInfo);
+
+    const container = makeContainer();
+    const parent = document.createElement("div");
+    parent.appendChild(container);
+    const renderer = createImageArchiveRenderer();
+
+    const initPromise = renderer.init(container, "https://example.com/archive.zip");
+    renderer.destroy();
+
+    resolveBlob(new Blob([new Uint8Array([1])]));
+    await initPromise;
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(resizeObserverCallbacks.length).toBe(0);
+  });
+
   it("goToPage throws after destroy", async () => {
     mockEntries({
       "image-001.png": new Uint8Array([1]),
@@ -393,6 +421,42 @@ describe("createImageArchiveRenderer", () => {
     renderer.destroy();
     resolveBlob(new Blob([new Uint8Array([2])]));
     await goToPromise;
+  });
+
+  it("goToPage ignores a superseded fetch resolving after the latest", async () => {
+    const entries = makeMockEntries({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+      "image-003.png": new Uint8Array([3]),
+    });
+    // Page 2's blob hangs; page 3's resolves immediately. Two rapid goToPage
+    // calls race — page 2's stale fetch must not clobber page 3 when it lands.
+    let resolvePage2!: (value: Blob) => void;
+    entries.entries["image-002.png"]!.blob = vi.fn().mockReturnValue(
+      new Promise((resolve) => { resolvePage2 = resolve; }),
+    );
+    const page3Blob = new Blob([new Uint8Array([3])]);
+    entries.entries["image-003.png"]!.blob = vi.fn().mockResolvedValue(page3Blob);
+    mockUnzip.mockResolvedValue(entries as unknown as ZipInfo);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    const img = container.querySelector("img") as HTMLImageElement;
+
+    const go2 = renderer.goToPage(2);
+    const go3 = renderer.goToPage(3);
+    await go3;
+    const page3Src = img.src;
+
+    // Page 2's fetch resolves last — it is superseded and must not change src.
+    resolvePage2(new Blob([new Uint8Array([2])]));
+    await go2;
+
+    expect(img.src).toBe(page3Src);
+    expect(renderer.currentPage).toBe(3);
+    expect(img.alt).toBe("Page 3");
   });
 
   it("ignores out-of-range initialPosition and starts at page 1", async () => {
@@ -897,6 +961,40 @@ describe("createImageArchiveRenderer", () => {
       await renderPromise;
 
       expect(target.querySelector("img")).toBeNull();
+    });
+
+    it("does not stack a second img when a stale render is superseded by a clear", async () => {
+      const entries = makeMockEntries({
+        "image-001.png": new Uint8Array([1]),
+        "image-002.png": new Uint8Array([2]),
+        "image-003.png": new Uint8Array([3]),
+      });
+      // Page 2's blob hangs so its render stays in flight while the slot is
+      // cleared and re-rendered with page 3 (mirrors render()'s innerHTML="").
+      let resolvePage2!: (value: Blob) => void;
+      entries.entries["image-002.png"]!.blob = vi.fn().mockReturnValue(
+        new Promise((resolve) => { resolvePage2 = resolve; }),
+      );
+      mockUnzip.mockResolvedValue(entries as unknown as ZipInfo);
+
+      const container = makeContainer();
+      const renderer = createImageArchiveRenderer();
+      await renderer.init(container, "https://example.com/archive.zip");
+
+      const target = makeContainer();
+      const stale = renderer.renderPageInto(2, target);
+
+      // Supersede: clear the slot and render page 3 into it.
+      target.innerHTML = "";
+      await renderer.renderPageInto(3, target);
+
+      // The stale page-2 fetch lands last — it must not append a second img.
+      resolvePage2(new Blob([new Uint8Array([2])]));
+      await stale;
+
+      const imgs = target.querySelectorAll("img");
+      expect(imgs.length).toBe(1);
+      expect((imgs[0] as HTMLImageElement).alt).toBe("Page 3");
     });
   });
 });

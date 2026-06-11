@@ -67,6 +67,10 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void, sto
   let _currentPage = 0;
   let _pageCount = 0;
   let destroyed = false;
+  // Serializes overlapping goToPage renders: each claims a token synchronously,
+  // a later call bumps the counter, and a superseded fetch bails after its await
+  // instead of assigning a stale src. Mirrors pdf.ts's renderGen.
+  let renderGen = 0;
   let _onZoomChange: (() => void) | undefined;
   let _zoomLevel = 0; // 0 = fit-to-view, 1+ = zoomed (scale = ZOOM_FACTOR ** level, relative to fitted size)
   // Fit-to-view display size, captured on first zoomIn as zoom scale base. Zero until first zoom; zoomIn bails out if either dimension is zero.
@@ -186,7 +190,9 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void, sto
       scrollParent = container.parentElement;
       imgEl = document.createElement("img");
       imgEl.alt = `Page ${startPage}`;
-      imgEl.src = await getObjectUrl(startPage - 1);
+      const url = await getObjectUrl(startPage - 1);
+      if (destroyed) return;
+      imgEl.src = url;
       container.appendChild(imgEl);
 
       prefetchNextPage(startPage);
@@ -199,23 +205,36 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void, sto
 
     async renderPageInto(page: number, target: HTMLElement): Promise<void> {
       if (page < 1 || page > _pageCount) return;
-      const url = await getObjectUrl(page - 1);
-      if (destroyed) return;
+      // Append the <img> synchronously before the await so a render superseded by
+      // render()'s clear+repopulate (innerHTML="") detaches this img — then
+      // target.contains(img) is false below and we skip the stale src assignment,
+      // preventing a second <img> from stacking in the slot. Mirrors pdf.ts.
       const img = document.createElement("img");
       img.alt = `Page ${page}`;
-      img.src = url;
       target.appendChild(img);
+      const url = await getObjectUrl(page - 1);
+      // Supersession: render() cleared the slot with innerHTML="", detaching this
+      // img, so target.contains(img) is false — skip the stale src to avoid
+      // stacking a second image. Destroyed: tear down the img we appended.
+      if (!target.contains(img)) return;
+      if (destroyed) { img.remove(); return; }
+      img.src = url;
       prefetchNextPage(page);
     },
 
     async goToPage(page: number): Promise<void> {
       if (!imgEl) throw new Error("goToPage called after renderer was destroyed");
       if (page < 1 || page > _pageCount) return;
+      // Claim a generation token synchronously. A later goToPage bumps renderGen,
+      // marking this fetch stale; the post-await guard then skips assigning a
+      // stale src. The synchronous writes below are last-write-wins, so they
+      // correctly reflect the latest call. Mirrors pdf.ts's renderPage.
+      const gen = ++renderGen;
       resetZoomState();
       _currentPage = page;
       imgEl.alt = `Page ${page}`;
       const url = await getObjectUrl(page - 1);
-      if (destroyed) return;
+      if (destroyed || gen !== renderGen) return;
       imgEl.src = url;
       prefetchNextPage(page);
     },
