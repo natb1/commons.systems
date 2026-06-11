@@ -826,13 +826,34 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "draft + green + dispatch:qa-done → review" "review" "$result"
 teardown
 
-# 7. Draft + green + dispatch:reviewed → review (idempotent re-entry)
-echo "Test: draft + green + dispatch:reviewed → review (idempotent re-entry)"
+# 7. Draft + green + dispatch:reviewed → done (review-complete; dispatch:reviewed is the
+# terminal review signal; draft→ready promotion is owned by dispatch-reconcile-ready)
+echo "Test: draft + green + dispatch:reviewed → done (review-complete)"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:reviewed"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:reviewed → review (idempotent)" "review" "$result"
+assert_eq "draft + green + dispatch:reviewed → done (review-complete)" "done" "$result"
+teardown
+
+# 7b. Draft + dispatch:reviewed + FAILING CI → fix-checks (failing-verdict branch wins first;
+# a demoted reviewed PR re-routes to the fixer, not back to review)
+echo "Test: draft + dispatch:reviewed + failing CI → fix-checks"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:reviewed"}]' "$FAILING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "draft + dispatch:reviewed + failing CI → fix-checks" "fix-checks" "$result"
+teardown
+
+# 7c. Draft + green + {dispatch:reviewed, dispatch:qa-done} → done (reorder guard:
+# dispatch:reviewed wins over co-present dispatch:qa-done)
+echo "Test: draft + green + dispatch:reviewed + dispatch:qa-done → done (dispatch:reviewed wins)"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:reviewed"},{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "draft + green + dispatch:reviewed + dispatch:qa-done → done (dispatch:reviewed wins)" "done" "$result"
 teardown
 
 # 8. Draft + green + legacy dispatch:code-reviewed → review (in-flight tolerance)
@@ -1274,16 +1295,16 @@ assert_eq "dispatch:qa-done → INVOKE /review-fix (directive)" "INVOKE /review-
 assert_eq "dispatch:qa-done → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
 teardown
 
-# 5. Draft + green + dispatch:reviewed → INVOKE /review-fix (idempotent re-entry;
-# /review-fix just finishes "gh pr ready").
-echo "Test: draft + green + dispatch:reviewed → INVOKE /review-fix (re-entry)"
+# 5. Draft + green + dispatch:reviewed → STOP done (review-complete; dispatch:reviewed is the
+# terminal review signal so the router returns STOP done, same as a non-draft ready PR).
+echo "Test: draft + green + dispatch:reviewed → STOP done (reviewed draft PR is review-complete)"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:reviewed"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 route_run 42 /wt/42-my-feature
-assert_eq "dispatch:reviewed → INVOKE /review-fix (directive)" "INVOKE /review-fix" "$ROUTE_OUT"
-assert_eq "dispatch:reviewed → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
+assert_eq "dispatch:reviewed → STOP done (directive)" "STOP done" "$ROUTE_OUT"
+assert_eq "dispatch:reviewed → STOP done (exit 0)" "0" "$ROUTE_RC"
 teardown
 
 # 6. Draft + green + legacy dispatch:code-reviewed → INVOKE /review-fix
@@ -14403,6 +14424,36 @@ if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; 
   PASS=$((PASS + 1)); echo "  PASS: stop advance: no add-label calls were made"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: no add-label calls were made"
+fi
+stop_teardown
+
+# --- Test 1b: dispatch-stop: clean review pass (marker=review, current=done) self-closes, no office-hours --
+# Simulates Unit-1 behavior: dispatch-phase now returns "done" for a draft+dispatch:reviewed PR
+# with passing CI. The Stop hook sees MARKER_PHASE=review != CURRENT_PHASE=done → Branch B:
+# self-close + spawn + strip office-hours. No dispatch:office-hours add-label must be applied.
+
+echo "Test: dispatch-stop: clean review pass (marker=review, current=done) self-closes, no office-hours"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "done" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=review" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop clean-review: hook exits 0" "0" "$rc"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop clean-review: self-close invoked exactly once" "1" "$self_close_calls"
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop clean-review: spawn invoked exactly once" "1" "$spawn_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop clean-review: no add-label calls were made (no dispatch:office-hours applied)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop clean-review: no add-label calls were made (no dispatch:office-hours applied)"
+  echo "    gh-pr-edit.log: $(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)"
+  echo "    gh-issue-edit.log: $(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)"
 fi
 stop_teardown
 
