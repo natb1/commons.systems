@@ -22101,15 +22101,17 @@ rm -rf "$cvp_lockdir3" "$cvp_results3" "$cvp_stderr3"
 # free slot (post-lock bindability check), not die on the squatted port.
 cvp_lockdir4=$(mktemp -d)
 cvp_squat_port="${CVP_POOL_ARR[0]}"
-node -e "require('net').createServer().listen(${cvp_squat_port},'0.0.0.0');" &
+# The squatter retries on error (so a transient collision can't kill it) and
+# announces readiness by printing READY once bound. We wait for that line rather
+# than bind-probing the port ourselves — a probe would momentarily hold the port
+# and race the squatter's own listen, which is exactly the flake to avoid.
+cvp_squat_out=$(mktemp)
+node -e "const net=require('net');function bind(){const s=net.createServer();s.on('error',()=>setTimeout(bind,50));s.listen(${cvp_squat_port},'0.0.0.0',()=>console.log('READY'));}bind();setInterval(()=>{},1e9);" >"$cvp_squat_out" 2>/dev/null &
 cvp_squat_pid=$!
-# Wait until the squatter has actually bound (the port is no longer bindable).
-for _ in $(seq 1 80); do
-  if node -e "const net=require('net');const s=net.createServer();s.once('error',()=>process.exit(1));s.listen(${cvp_squat_port},'0.0.0.0',()=>s.close(()=>process.exit(0)));" 2>/dev/null; then
-    sleep 0.1
-  else
-    break
-  fi
+# Wait until the squatter reports it has bound the port.
+for _ in $(seq 1 100); do
+  grep -q READY "$cvp_squat_out" 2>/dev/null && break
+  sleep 0.1
 done
 cvp_out4=$(
   source "$SCRIPT_DIR/lib.sh"
@@ -22126,7 +22128,7 @@ else
 fi
 kill "$cvp_squat_pid" 2>/dev/null || true
 wait "$cvp_squat_pid" 2>/dev/null || true
-rm -rf "$cvp_lockdir4"
+rm -rf "$cvp_lockdir4" "$cvp_squat_out"
 
 # ============================================================================
 # dispatch-reconcile-ready tests
