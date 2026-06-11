@@ -44,16 +44,45 @@ The caller supplies:
    `model`. The prompt includes `context` and `scope`, plus the explicit constraint:
    *the subagent edits the working tree only — no commits, no pushes.*
 
-2. **Fork `/commit-merge-push`** to commit, merge `origin/main`, and push. This is
-   the **canonical commit-merge-push fork recipe** — `/qa-fix` and `/review-fix`
-   reference this step rather than restating it. Issue an Agent tool call with
-   **`subagent_type: general-purpose`** and **`model: sonnet`** whose prompt invokes
-   `/commit-merge-push` via the Skill tool, passing `commit_intent` so it can write a
-   focused commit message. `/commit-merge-push` is a `context: fork` skill, so its
-   own frontmatter `model: sonnet` does not auto-apply to the subagent — set the model
-   on the Agent call. The `subagent_type` is always `general-purpose` — **never the
-   skill name** (there is no `commit-merge-push` agent type); the subagent runs the
-   skill through its own Skill tool.
+2. **Commit, merge `origin/main`, and push — script-first, skill-fork fallback.**
+   This step is the **canonical commit-merge-push recipe** — `/qa-fix` and
+   `/review-fix` reference this step rather than restating it.
+
+   **2a. Call the script first** (use `dangerouslyDisableSandbox: true` — git
+   writes + `git push` over HTTPS; see `.claude/rules/sandbox.md`). After the
+   Step-1 subagent returns, build the `--file` arguments from the changed files
+   and invoke the script in one command. Use `git diff --name-only HEAD`, which
+   emits **bare** paths (one per line, no status prefix) — never parse
+   `git status --porcelain` by hand, whose lines carry a 2-character status code
+   and a leading space (e.g. ` M file.txt`) that would be passed verbatim and
+   break `git add`. Read each path with a `while`/`read` loop into a quoted
+   array so paths containing spaces or shell metacharacters are passed safely
+   (never interpolate raw filenames into the command line):
+
+   ```bash
+   args=()
+   while IFS= read -r f; do args+=(--file "$f"); done < <(git diff --name-only HEAD)
+   .claude/skills/dispatch-propagate/scripts/commit-merge-push \
+     --intent "<commit_intent>" \
+     "${args[@]}"
+   ```
+
+   `git diff --name-only HEAD` lists modified and staged tracked files; if the
+   unit added new untracked files, append them the same way via
+   `git ls-files --others --exclude-standard` (also bare, NUL-safe paths) — both
+   feed the same quoted `args` array. Exit 0 → unit landed; proceed to Step 4
+   (Return).
+
+   **2b. On a non-zero exit, fall back to the fork** — this is the **canonical
+   commit-merge-push fork recipe**: issue an Agent tool call with
+   **`subagent_type: general-purpose`** and **`model: sonnet`** whose prompt
+   invokes `/commit-merge-push` via the Skill tool, passing `commit_intent` so it
+   can write a focused commit message. `/commit-merge-push` is a `context: fork`
+   skill, so its own frontmatter `model: sonnet` does not auto-apply to the
+   subagent — set the model on the Agent call. The `subagent_type` is always
+   `general-purpose` — **never the skill name** (there is no `commit-merge-push`
+   agent type); the subagent runs the skill through its own Skill tool. Then apply
+   Step 3 recovery as normal.
 
 3. **On a `/commit-merge-push` error, recover:**
    - **Merge conflict** → launch an `opus` subagent to resolve the conflict in the
