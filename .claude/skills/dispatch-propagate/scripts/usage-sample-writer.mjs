@@ -123,7 +123,7 @@ function resolveMemberEmails(rawCsv) {
 // calls fail() (which exits).
 function loadConfig(env) {
   const secretName = env.DISPATCH_USAGE_SAMPLES_SECRET_NAME ?? DEFAULT_SECRET_NAME;
-  if (typeof secretName !== "string" || secretName.length === 0) {
+  if (secretName.length === 0) {
     fail("DISPATCH_USAGE_SAMPLES_SECRET_NAME must be non-empty");
   }
   if (secretName.includes("/")) {
@@ -155,6 +155,9 @@ function loadConfig(env) {
   const projectId = env.DISPATCH_USAGE_SAMPLES_PROJECT_ID ?? "commons-systems";
   if (typeof projectId !== "string" || projectId.length === 0) {
     fail("DISPATCH_USAGE_SAMPLES_PROJECT_ID must be non-empty");
+  }
+  if (projectId.includes("/")) {
+    fail("DISPATCH_USAGE_SAMPLES_PROJECT_ID must not contain a slash");
   }
 
   let nowEpochSeconds;
@@ -267,6 +270,9 @@ async function main() {
   const [version] = await secretClient.accessSecretVersion({
     name: `projects/${config.projectId}/secrets/${config.secretName}/versions/latest`,
   });
+  if (!version?.payload?.data) {
+    fail(`secret ${config.secretName} returned an empty or missing payload`);
+  }
   const rawSecret = version.payload.data.toString("utf8");
   config.memberEmails = resolveMemberEmails(rawSecret);
 
