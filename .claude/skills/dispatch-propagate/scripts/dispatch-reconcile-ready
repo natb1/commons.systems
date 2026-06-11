@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# dispatch-reconcile-ready — reconcile the draft↔ready bit of every open
+# dispatch:reviewed PR to the router-owned readiness predicate.
+#
+#   ready(PR)  ≡  dispatch:reviewed  ∧  CI == passing  ∧  mergeable == MERGEABLE
+#
+# A ready PR is otherwise never re-examined: once /review-fix labels it
+# dispatch:reviewed and the router promotes it to ready, dispatch-phase maps the
+# non-draft PR to `done` and selection skips it. If origin/main then moves
+# underneath it, a merge conflict or a regressed check leaves the PR ready but
+# unmergeable, with nothing noticing. This script makes `ready` a projection the
+# router reconciles on every tick:
+#
+#   promote — a DRAFT dispatch:reviewed PR with CI passing AND mergeable
+#             MERGEABLE is readied (gh pr ready), and all dispatch:*-attempt-*
+#             counters are cleared (a now-promotable PR carries no in-flight
+#             fix attempt).
+#   demote  — a READY dispatch:reviewed PR whose CI is failing OR whose
+#             mergeable is CONFLICTING is sent back to draft (gh pr ready
+#             --undo). dispatch:reviewed is KEPT so the regression re-routes
+#             straight to the fixer and back to ready without a full re-review.
+#   no-op   — everything else. By construction this covers mergeable == UNKNOWN
+#             (never matches the MERGEABLE-promote nor the CONFLICTING-demote)
+#             and CI == pending (never matches the passing-promote nor the
+#             failing-demote), so GitHub's asynchronously-computed mergeable and
+#             still-running checks self-heal on a later tick. It also covers
+#             already-correct PRs (a draft that isn't promotable, a ready that
+#             isn't demotable).
+#
+# Scope gate: a PR WITHOUT dispatch:reviewed is never flipped in either
+# direction. Dispatch never touches a human's or a non-dispatch PR's draft bit.
+#
+# Stdout protocol (one line per PR actually flipped — nothing for a no-op):
+#   promoted #<n>
+#   demoted #<n> (ci=<verdict> merge=<mergeable>)
+# There is NO trailing decision line: this is a side-effecting reconciler, not a
+# selector. The caller (dispatch-select-tick) prefixes each line with `ready: `.
+#
+# Dependency: invokes the `gh` CLI directly. Per .claude/rules/sandbox.md the
+# caller must wrap this script with dangerouslyDisableSandbox — gh's TLS
+# validation is blocked by the sandbox. This script sets nothing
+# sandbox-related; that is the caller's responsibility.
+#
+# NOT set -e: a per-PR hard error must not abort the loop. gh exit codes are
+# captured explicitly with `|| rc=$?`; a failing PR logs to stderr and the loop
+# continues to the next PR.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"  # dispatch_classify_rollup
+
+# ---- Step 1: one fetch of every open PR -------------------------------------
+PR_LIST_RC=0
+PR_LIST=$(gh pr list --state open \
+  --json number,isDraft,labels,statusCheckRollup,mergeable) || PR_LIST_RC=$?
+if [[ "$PR_LIST_RC" -ne 0 ]]; then
+  echo "dispatch-reconcile-ready: error: gh pr list failed (rc=$PR_LIST_RC)" >&2
+  exit 1
+fi
+
+# ---- Step 2: reconcile each PR ----------------------------------------------
+# Iterate the compact JSON objects (one per line) rather than a here-string of
+# the whole array, mirroring how the sibling scans consume gh --json output. The
+# loop body runs in the current shell (process substitution), so a per-PR error
+# does not need to survive a subshell.
+while IFS= read -r pr; do
+  [[ -n "$pr" ]] || continue
+
+  N=$(jq -r '.number' <<<"$pr")
+  IS_DRAFT=$(jq -r '.isDraft' <<<"$pr")
+  MERGEABLE=$(jq -r '.mergeable' <<<"$pr")
+  ROLLUP=$(jq -c '.statusCheckRollup' <<<"$pr")
+
+  # ---- Scope gate: dispatch:reviewed only -----------------------------------
+  HAS_REVIEWED=$(jq -r '[.labels[].name] | index("dispatch:reviewed") != null' <<<"$pr")
+  if [[ "$HAS_REVIEWED" != "true" ]]; then
+    continue
+  fi
+
+  VERDICT=$(dispatch_classify_rollup "$ROLLUP")
+
+  # ---- Promote: draft + passing + MERGEABLE ---------------------------------
+  if [[ "$IS_DRAFT" == "true" && "$VERDICT" == "passing" && "$MERGEABLE" == "MERGEABLE" ]]; then
+    rc=0
+    out=$(gh pr ready "$N" 2>&1) || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      echo "dispatch-reconcile-ready: error: gh pr ready #$N failed: $out" >&2
+      continue
+    fi
+
+    # Clear ALL attempt counters — a promotable PR carries no in-flight fix
+    # attempt. Same read/remove idiom as dispatch-schedule-target-reseed, with
+    # the regex generalized from the ci-wait prefix to any dispatch attempt
+    # counter. Warn-not-abort on a removal failure (the promotion already
+    # succeeded; the stale label is bookkeeping).
+    mapfile -t ATTEMPT_LABELS < <(jq -r \
+      '.labels[].name | select(test("^dispatch:.*-attempt-[0-9]+$"))' <<<"$pr")
+    for lbl in "${ATTEMPT_LABELS[@]}"; do
+      [[ -n "$lbl" ]] || continue
+      if ! rm_out=$(gh pr edit "$N" --remove-label "$lbl" 2>&1); then
+        echo "dispatch-reconcile-ready: warning: could not remove $lbl from PR #$N: $rm_out" >&2
+      fi
+    done
+
+    echo "promoted #$N"
+    continue
+  fi
+
+  # ---- Demote: ready + (failing OR CONFLICTING) -----------------------------
+  if [[ "$IS_DRAFT" == "false" && ( "$VERDICT" == "failing" || "$MERGEABLE" == "CONFLICTING" ) ]]; then
+    rc=0
+    out=$(gh pr ready --undo "$N" 2>&1) || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      echo "dispatch-reconcile-ready: error: gh pr ready --undo #$N failed: $out" >&2
+      continue
+    fi
+    # dispatch:reviewed is intentionally KEPT — the regression re-routes to the
+    # fixer and back to ready without a full re-review.
+    echo "demoted #$N (ci=$VERDICT merge=$MERGEABLE)"
+    continue
+  fi
+
+  # ---- No-op ----------------------------------------------------------------
+  # UNKNOWN mergeable, pending CI, and already-correct PRs all fall here and
+  # emit nothing.
+done < <(jq -c '.[]' <<<"$PR_LIST")
+
+exit 0
