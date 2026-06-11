@@ -826,13 +826,34 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "draft + green + dispatch:qa-done → review" "review" "$result"
 teardown
 
-# 7. Draft + green + dispatch:reviewed → review (idempotent re-entry)
-echo "Test: draft + green + dispatch:reviewed → review (idempotent re-entry)"
+# 7. Draft + green + dispatch:reviewed → done (review-complete; dispatch:reviewed is the
+# terminal review signal; draft→ready promotion is owned by dispatch-reconcile-ready)
+echo "Test: draft + green + dispatch:reviewed → done (review-complete)"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:reviewed"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:reviewed → review (idempotent)" "review" "$result"
+assert_eq "draft + green + dispatch:reviewed → done (review-complete)" "done" "$result"
+teardown
+
+# 7b. Draft + dispatch:reviewed + FAILING CI → fix-checks (failing-verdict branch wins first;
+# a demoted reviewed PR re-routes to the fixer, not back to review)
+echo "Test: draft + dispatch:reviewed + failing CI → fix-checks"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:reviewed"}]' "$FAILING_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "draft + dispatch:reviewed + failing CI → fix-checks" "fix-checks" "$result"
+teardown
+
+# 7c. Draft + green + {dispatch:reviewed, dispatch:qa-done} → done (reorder guard:
+# dispatch:reviewed wins over co-present dispatch:qa-done)
+echo "Test: draft + green + dispatch:reviewed + dispatch:qa-done → done (dispatch:reviewed wins)"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:reviewed"},{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "draft + green + dispatch:reviewed + dispatch:qa-done → done (dispatch:reviewed wins)" "done" "$result"
 teardown
 
 # 8. Draft + green + legacy dispatch:code-reviewed → review (in-flight tolerance)
@@ -1274,16 +1295,16 @@ assert_eq "dispatch:qa-done → INVOKE /review-fix (directive)" "INVOKE /review-
 assert_eq "dispatch:qa-done → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
 teardown
 
-# 5. Draft + green + dispatch:reviewed → INVOKE /review-fix (idempotent re-entry;
-# /review-fix just finishes "gh pr ready").
-echo "Test: draft + green + dispatch:reviewed → INVOKE /review-fix (re-entry)"
+# 5. Draft + green + dispatch:reviewed → STOP done (review-complete; dispatch:reviewed is the
+# terminal review signal so the router returns STOP done, same as a non-draft ready PR).
+echo "Test: draft + green + dispatch:reviewed → STOP done (reviewed draft PR is review-complete)"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:reviewed"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 route_run 42 /wt/42-my-feature
-assert_eq "dispatch:reviewed → INVOKE /review-fix (directive)" "INVOKE /review-fix" "$ROUTE_OUT"
-assert_eq "dispatch:reviewed → INVOKE /review-fix (exit 0)" "0" "$ROUTE_RC"
+assert_eq "dispatch:reviewed → STOP done (directive)" "STOP done" "$ROUTE_OUT"
+assert_eq "dispatch:reviewed → STOP done (exit 0)" "0" "$ROUTE_RC"
 teardown
 
 # 6. Draft + green + legacy dispatch:code-reviewed → INVOKE /review-fix
@@ -14406,6 +14427,52 @@ else
 fi
 stop_teardown
 
+# --- Test 1b: dispatch-stop: clean review pass (marker=review, current=done) self-closes, no office-hours --
+# Simulates Unit-1 behavior: dispatch-phase now returns "done" for a draft+dispatch:reviewed PR
+# with passing CI. The Stop hook sees MARKER_PHASE=review != CURRENT_PHASE=done → Branch B:
+# self-close + spawn + strip office-hours. No dispatch:office-hours add-label must be applied.
+
+echo "Test: dispatch-stop: clean review pass (marker=review, current=done) self-closes, no office-hours"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "done" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=review" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop clean-review: hook exits 0" "0" "$rc"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop clean-review: self-close invoked exactly once" "1" "$self_close_calls"
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop clean-review: spawn invoked exactly once" "1" "$spawn_calls"
+pr_remove_log=$(cat "$STUB_DIR/gh-pr-remove.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$pr_remove_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop clean-review: PR --remove-label invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop clean-review: PR --remove-label invoked"
+  echo "    pr-remove-log: $pr_remove_log"
+fi
+issue_remove_log=$(cat "$STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop clean-review: issue --remove-label invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop clean-review: issue --remove-label invoked"
+  echo "    issue-remove-log: $issue_remove_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop clean-review: no add-label calls were made (no dispatch:office-hours applied)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop clean-review: no add-label calls were made (no dispatch:office-hours applied)"
+  echo "    gh-pr-edit.log: $(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)"
+  echo "    gh-issue-edit.log: $(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)"
+fi
+stop_teardown
+
 # --- Test 2: marker present, same phase, fix-checks, counter < 3 → transient no-push fix-checks outcome → spawn + self-close ----
 
 echo "Test: stop hook + same phase + fix-checks + counter<3 → transient no-push fix-checks outcome → spawn + self-close"
@@ -21410,11 +21477,12 @@ su_setup() {
 }
 su_teardown() {
   rm -rf "$TMPDIR_TEST"; TMPDIR_TEST=""
-  unset DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS DISPATCH_USAGE_SAMPLES_GROUP_ID \
+  unset DISPATCH_USAGE_SAMPLES_ENABLED DISPATCH_USAGE_SAMPLES_GROUP_ID \
     DISPATCH_USAGE_SAMPLES_NAMESPACE DISPATCH_USAGE_SAMPLES_TTL_DAYS \
     DISPATCH_USAGE_SAMPLES_PROJECT_ID DISPATCH_USAGE_SAMPLES_NOW \
     DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD \
-    DISPATCH_USAGE_SAMPLES_WRITER CLAUDE_AGENTS_CMD
+    DISPATCH_USAGE_SAMPLES_WRITER CLAUDE_AGENTS_CMD \
+    DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE DISPATCH_USAGE_SAMPLES_SECRET_NAME
 }
 
 # Fixed epoch for writer determinism: sampledAt=1780600000, TTL 60d →
@@ -21437,7 +21505,7 @@ su_write_fake_claude() {
 # all 9 schema fields + expireAt present; spot-checked values match input/config;
 # sampledAt/expireAt epochs match NOW and NOW+TTL*86400.
 su_setup
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com,c@d.com"
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com,c@d.com"
 export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
 export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
 W1_PAYLOAD='{"fiveHourUsedPct":4,"weeklyUsedPct":84,"fiveHourResetsAt":1780867800,"weeklyResetsAt":1780880400,"activeWorkers":1,"targetWorkers":3}'
@@ -21459,7 +21527,7 @@ su_teardown
 
 # W2 — null resets pass through as JSON null; exit 0, no crash.
 su_setup
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com"
 export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
 export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
 W2_PAYLOAD='{"fiveHourUsedPct":4,"weeklyUsedPct":84,"fiveHourResetsAt":null,"weeklyResetsAt":null,"activeWorkers":0,"targetWorkers":2}'
@@ -21469,18 +21537,18 @@ assert_eq "writer W2 → fiveHourResetsAt null" "null" "$(jq -r '.fiveHourResets
 assert_eq "writer W2 → weeklyResetsAt null" "null" "$(jq -r '.weeklyResetsAt' <<<"$out")"
 su_teardown
 
-# W3 — empty member emails → non-zero exit (fail-closed).
+# W3 — empty secret override → non-zero exit (fail-closed).
 su_setup
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS=""
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE=""
 export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
 export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
 if out=$(WRITER "$W1_PAYLOAD" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "writer W3 empty member emails → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "writer W3 empty secret override → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
 su_teardown
 
 # W4 — bad namespace (not office-hours/<env>) → non-zero exit.
 su_setup
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com"
 export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
 export DISPATCH_USAGE_SAMPLES_NAMESPACE="evil/prod"
 export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
@@ -21490,7 +21558,7 @@ su_teardown
 
 # W5 — TTL out of [30,90] → non-zero exit (above and below range).
 su_setup
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com"
 export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
 export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
 export DISPATCH_USAGE_SAMPLES_TTL_DAYS="100"
@@ -21503,7 +21571,7 @@ su_teardown
 
 # W5b — non-integer TTL string → non-zero exit.
 su_setup
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com"
 export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
 export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
 export DISPATCH_USAGE_SAMPLES_TTL_DAYS="abc"
@@ -21513,15 +21581,29 @@ su_teardown
 
 # W6 — missing groupId → non-zero exit.
 su_setup
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com"
 export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
 if out=$(WRITER "$W1_PAYLOAD" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "writer W6 missing groupId → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
 su_teardown
 
+# W7 — DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE unset in --dry-run → non-zero
+# exit; writer prints "usage-sample-writer: --dry-run requires
+# DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE".
+su_setup
+export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
+export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
+# SECRET_OVERRIDE deliberately unset
+if out=$(WRITER "$W1_PAYLOAD" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "writer W7 unset secret override in dry-run → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "writer W7 → diagnostic message contains DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE" "1" \
+  "$([[ "$out" == *"DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE"* ]] && echo 1 || echo 0)"
+su_teardown
+
 # --- SAMPLER cases (fakes only; no real daemon / firebase) ------------------
 
-# S1 — opt-in OFF: member emails unset → exit 0 (no-op); writer NOT invoked.
+# S1 — opt-in OFF: DISPATCH_USAGE_SAMPLES_ENABLED unset → exit 0 (no-op); writer
+# NOT invoked.
 su_setup
 INVOKED="$TMPDIR_TEST/fix/invoked"
 CAPTURE="$TMPDIR_TEST/fix/payload.json"
@@ -21529,7 +21611,7 @@ printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$C
   > "$TMPDIR_TEST/fix/fake-writer"
 chmod +x "$TMPDIR_TEST/fix/fake-writer"
 export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
-# member emails deliberately unset
+# DISPATCH_USAGE_SAMPLES_ENABLED deliberately unset (opt-in switch off)
 if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "sampler S1 opt-in off → exit 0" "0" "$rc"
 assert_eq "sampler S1 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
@@ -21549,7 +21631,7 @@ su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
   '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
 printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
@@ -21574,7 +21656,7 @@ su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
   '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
 printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/does-not-exist.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
@@ -21597,7 +21679,7 @@ printf '%s\n' '{"five_hour":{"used_percentage":4,"resets_at":1780867800},"seven_
 su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" '{}'
 printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
@@ -21620,7 +21702,7 @@ su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
   '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
 printf '#!/usr/bin/env bash\nexit 1\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
@@ -21643,7 +21725,7 @@ su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
   '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
 printf '#!/usr/bin/env bash\necho not-a-number\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
@@ -21665,7 +21747,7 @@ su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
   '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
 printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
@@ -21687,7 +21769,7 @@ su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
   '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
 printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
@@ -21709,13 +21791,28 @@ su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
   '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
 printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
 export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
 if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "sampler S9 writer failure → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+su_teardown
+
+# S10 — opt-in switch set to a non-"1" value ("true") → exit 0 (no-op); writer
+# NOT invoked. Locks in the ==1 truthiness contract.
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+CAPTURE="$TMPDIR_TEST/fix/payload.json"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$CAPTURE'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+export DISPATCH_USAGE_SAMPLES_ENABLED="true"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S10 ENABLED=true (non-1) → exit 0" "0" "$rc"
+assert_eq "sampler S10 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
 su_teardown
 
 # ============================================================================
@@ -22627,6 +22724,280 @@ teardown
 echo "Test: dispatch-reconcile-ready is executable"
 assert_eq "dispatch-reconcile-ready is executable" "yes" \
   "$([[ -x "$SCRIPT_DIR/dispatch-reconcile-ready" ]] && echo yes || echo no)"
+
+# ============================================================================
+# commit-merge-push
+# ============================================================================
+# These tests use real git repos (no shared stub harness) because
+# commit-merge-push runs actual git add/commit/fetch/merge/push commands.
+echo ""
+echo "============================================================"
+echo "commit-merge-push tests"
+echo "============================================================"
+
+CMP="$SCRIPT_DIR/commit-merge-push"
+
+# Helper: create an isolated git test environment with a bare origin.
+# Sets CMP_TMPDIR, CMP_BARE, CMP_CLONE.
+cmp_setup() {
+  CMP_TMPDIR=$(mktemp -d)
+  CMP_BARE="$CMP_TMPDIR/origin.git"
+  CMP_CLONE="$CMP_TMPDIR/clone"
+
+  # Create a bare origin.
+  git init --bare -b main -q "$CMP_BARE"
+
+  # Bootstrap the bare origin with an initial commit on main via a seed clone.
+  local seed="$CMP_TMPDIR/seed"
+  git clone -q "$CMP_BARE" "$seed" 2>/dev/null
+  git -C "$seed" config user.email "test@test"
+  git -C "$seed" config user.name "Test"
+  printf 'seed content\n' > "$seed/seed.txt"
+  git -C "$seed" add seed.txt
+  git -C "$seed" commit -q -m "initial"
+  git -C "$seed" push -q origin main
+  rm -rf "$seed"
+
+  # Clone the bare origin to create the local worktree clone.
+  git clone -q "$CMP_BARE" "$CMP_CLONE" 2>/dev/null
+  git -C "$CMP_CLONE" config user.email "test@test"
+  git -C "$CMP_CLONE" config user.name "Test"
+}
+
+cmp_teardown() {
+  rm -rf "$CMP_TMPDIR"
+  unset CMP_TMPDIR CMP_BARE CMP_CLONE
+}
+
+# --- Case 1: merge-only, clean → exit 0, new commit present in clone ----------
+echo "Test: merge-only, clean → exit 0, advanced commit present in clone"
+cmp_setup
+# Advance origin/main via a second helper clone.
+helper="$CMP_TMPDIR/helper1"
+git clone -q "$CMP_BARE" "$helper"
+git -C "$helper" config user.email "test@test"
+git -C "$helper" config user.name "Test"
+printf 'advance\n' > "$helper/advance.txt"
+git -C "$helper" add advance.txt
+git -C "$helper" commit -q -m "origin advance"
+git -C "$helper" push -q origin main
+rm -rf "$helper"
+# Run merge-only.
+set +e
+"$CMP" --worktree "$CMP_CLONE" --merge-only
+cmp1_rc=$?
+set -e
+assert_eq "merge-only clean → exit 0" "0" "$cmp1_rc"
+advance_present="no"
+[[ -f "$CMP_CLONE/advance.txt" ]] && advance_present="yes"
+assert_eq "merge-only clean → advance.txt present after merge" "yes" "$advance_present"
+cmp_teardown
+
+# --- Case 2: single-unit → exit 0, commit message lands on origin -------------
+echo "Test: single-unit → exit 0, commit message on origin"
+cmp_setup
+printf 'changed\n' > "$CMP_CLONE/seed.txt"
+set +e
+"$CMP" --worktree "$CMP_CLONE" --intent "test intent msg" --file seed.txt
+cmp2_rc=$?
+set -e
+assert_eq "single-unit → exit 0" "0" "$cmp2_rc"
+origin_msg=$(git -C "$CMP_BARE" log -1 --format=%s main)
+assert_eq "single-unit → commit message on origin" "test intent msg" "$origin_msg"
+cmp_teardown
+
+# --- Case 3: multi-unit / undeclared → exit 5, no commit created -------------
+echo "Test: multi-unit / undeclared → exit 5, origin unchanged"
+cmp_setup
+# Both files must be tracked; modify both but name only one.
+printf 'change a\n' > "$CMP_CLONE/seed.txt"
+printf 'file b content\n' > "$CMP_CLONE/fileb.txt"
+git -C "$CMP_CLONE" add fileb.txt
+git -C "$CMP_CLONE" commit -q -m "add fileb"
+git -C "$CMP_CLONE" push -q origin main
+printf 'change b again\n' > "$CMP_CLONE/fileb.txt"
+# Now seed.txt and fileb.txt are both modified; name only seed.txt.
+origin_tip_before=$(git -C "$CMP_BARE" rev-parse main)
+local_head_before=$(git -C "$CMP_CLONE" rev-parse HEAD)
+set +e
+"$CMP" --worktree "$CMP_CLONE" --intent "only one file" --file seed.txt
+cmp3_rc=$?
+set -e
+assert_eq "multi-unit → exit 5" "5" "$cmp3_rc"
+origin_tip_after=$(git -C "$CMP_BARE" rev-parse main)
+assert_eq "multi-unit → origin tip unchanged" "$origin_tip_before" "$origin_tip_after"
+local_head_after=$(git -C "$CMP_CLONE" rev-parse HEAD)
+assert_eq "multi-unit → local HEAD unchanged" "$local_head_before" "$local_head_after"
+cmp_teardown
+
+# --- Case 3b: pre-staged unnamed file → exit 5, no commit, index clean -------
+# X != ' ', Y == ' ': an unnamed file is already staged before the script runs.
+# This is the most dangerous undeclared-changes variant — a pre-staged file
+# must not be swept into the single-unit commit.
+echo "Test: pre-staged unnamed file → exit 5, origin unchanged, index clean"
+cmp_setup
+# Both files tracked on origin.
+printf 'file b content\n' > "$CMP_CLONE/fileb.txt"
+git -C "$CMP_CLONE" add fileb.txt
+git -C "$CMP_CLONE" commit -q -m "add fileb"
+git -C "$CMP_CLONE" push -q origin main
+# Modify the named file (seed.txt) and pre-stage a change to the unnamed file.
+printf 'change a\n' > "$CMP_CLONE/seed.txt"
+printf 'staged change b\n' > "$CMP_CLONE/fileb.txt"
+git -C "$CMP_CLONE" add fileb.txt
+origin_tip_before=$(git -C "$CMP_BARE" rev-parse main)
+local_head_before=$(git -C "$CMP_CLONE" rev-parse HEAD)
+set +e
+"$CMP" --worktree "$CMP_CLONE" --intent "only seed" --file seed.txt
+cmp3b_rc=$?
+set -e
+assert_eq "pre-staged unnamed → exit 5" "5" "$cmp3b_rc"
+origin_tip_after=$(git -C "$CMP_BARE" rev-parse main)
+assert_eq "pre-staged unnamed → origin tip unchanged (not committed)" "$origin_tip_before" "$origin_tip_after"
+local_head_after=$(git -C "$CMP_CLONE" rev-parse HEAD)
+assert_eq "pre-staged unnamed → local HEAD unchanged" "$local_head_before" "$local_head_after"
+fileb_committed=$(git -C "$CMP_CLONE" log -1 --format=%H -- fileb.txt 2>/dev/null)
+assert_eq "pre-staged unnamed → fileb.txt change not committed" "$local_head_before" "$fileb_committed"
+cmp_teardown
+
+# --- Case 4: merge conflict → exit 3, tree clean, nothing pushed -------------
+echo "Test: merge conflict → exit 3, tree clean, nothing pushed"
+cmp_setup
+# Advance origin/main with a change to seed.txt line 1.
+helper="$CMP_TMPDIR/helper4"
+git clone -q "$CMP_BARE" "$helper"
+git -C "$helper" config user.email "test@test"
+git -C "$helper" config user.name "Test"
+printf 'origin line\n' > "$helper/seed.txt"
+git -C "$helper" add seed.txt
+git -C "$helper" commit -q -m "origin conflict commit"
+git -C "$helper" push -q origin main
+rm -rf "$helper"
+# In the clone, make a diverging local commit on the same file.
+printf 'clone line\n' > "$CMP_CLONE/seed.txt"
+git -C "$CMP_CLONE" add seed.txt
+git -C "$CMP_CLONE" commit -q -m "clone conflict commit"
+origin_tip_before=$(git -C "$CMP_BARE" rev-parse main)
+# Run merge-only — the merge of origin/main will conflict.
+set +e
+"$CMP" --worktree "$CMP_CLONE" --merge-only
+cmp4_rc=$?
+set -e
+assert_eq "merge conflict → exit 3" "3" "$cmp4_rc"
+status_out=$(git -C "$CMP_CLONE" status --porcelain)
+assert_eq "merge conflict → tree clean after abort" "" "$status_out"
+origin_tip_after=$(git -C "$CMP_BARE" rev-parse main)
+assert_eq "merge conflict → origin tip unchanged" "$origin_tip_before" "$origin_tip_after"
+cmp_teardown
+
+# --- Case 4b: single-unit + merge conflict → exit 3, local commit made -------
+# The single-unit path makes a local commit, THEN the origin/main merge
+# conflicts. Exit 3 must leave the local commit in place (for the fallback fork
+# to carry forward), abort the merge (tree clean), and push nothing.
+echo "Test: single-unit + merge conflict → exit 3, local commit made, origin unchanged"
+cmp_setup
+# Advance origin/main with a conflicting change to seed.txt.
+helper="$CMP_TMPDIR/helper4b"
+git clone -q "$CMP_BARE" "$helper"
+git -C "$helper" config user.email "test@test"
+git -C "$helper" config user.name "Test"
+printf 'origin line\n' > "$helper/seed.txt"
+git -C "$helper" add seed.txt
+git -C "$helper" commit -q -m "origin conflict commit"
+git -C "$helper" push -q origin main
+rm -rf "$helper"
+# In the clone, modify the same file (uncommitted) and invoke single-unit mode.
+printf 'clone line\n' > "$CMP_CLONE/seed.txt"
+origin_tip_before=$(git -C "$CMP_BARE" rev-parse main)
+local_head_before=$(git -C "$CMP_CLONE" rev-parse HEAD)
+set +e
+"$CMP" --worktree "$CMP_CLONE" --intent "single-unit conflict" --file seed.txt
+cmp4b_rc=$?
+set -e
+assert_eq "single-unit + conflict → exit 3" "3" "$cmp4b_rc"
+local_head_after=$(git -C "$CMP_CLONE" rev-parse HEAD)
+assert_eq "single-unit + conflict → local HEAD advanced (commit was made)" \
+  "yes" "$([[ "$local_head_after" != "$local_head_before" ]] && echo yes || echo no)"
+status_out=$(git -C "$CMP_CLONE" status --porcelain)
+assert_eq "single-unit + conflict → tree clean after abort" "" "$status_out"
+origin_tip_after=$(git -C "$CMP_BARE" rev-parse main)
+assert_eq "single-unit + conflict → origin tip unchanged" "$origin_tip_before" "$origin_tip_after"
+cmp_teardown
+
+# --- Case 5: pre-commit hook failure → exit 6, nothing committed/pushed ------
+echo "Test: pre-commit hook failure → exit 6, no commit"
+cmp_setup
+# Install a failing pre-commit hook.
+mkdir -p "$CMP_CLONE/.git/hooks"
+printf '#!/bin/sh\nexit 1\n' > "$CMP_CLONE/.git/hooks/pre-commit"
+chmod +x "$CMP_CLONE/.git/hooks/pre-commit"
+printf 'changed\n' > "$CMP_CLONE/seed.txt"
+local_head_before=$(git -C "$CMP_CLONE" rev-parse HEAD)
+origin_tip_before=$(git -C "$CMP_BARE" rev-parse main)
+set +e
+"$CMP" --worktree "$CMP_CLONE" --intent "hook test" --file seed.txt
+cmp5_rc=$?
+set -e
+assert_eq "pre-commit hook failure → exit 6" "6" "$cmp5_rc"
+local_head_after=$(git -C "$CMP_CLONE" rev-parse HEAD)
+assert_eq "pre-commit hook failure → local HEAD unchanged" "$local_head_before" "$local_head_after"
+origin_tip_after=$(git -C "$CMP_BARE" rev-parse main)
+assert_eq "pre-commit hook failure → origin tip unchanged" "$origin_tip_before" "$origin_tip_after"
+cmp_teardown
+
+# --- Case 6: secret-bearing file → exit 4, nothing committed/pushed ----------
+echo "Test: secret-bearing file → exit 4, no commit"
+cmp_setup
+printf 'SECRET=abc\n' > "$CMP_CLONE/.env"
+local_head_before=$(git -C "$CMP_CLONE" rev-parse HEAD)
+origin_tip_before=$(git -C "$CMP_BARE" rev-parse main)
+set +e
+"$CMP" --worktree "$CMP_CLONE" --intent "secret" --file .env
+cmp6_rc=$?
+set -e
+assert_eq "secret-bearing file → exit 4" "4" "$cmp6_rc"
+local_head_after=$(git -C "$CMP_CLONE" rev-parse HEAD)
+assert_eq "secret-bearing file → local HEAD unchanged" "$local_head_before" "$local_head_after"
+origin_tip_after=$(git -C "$CMP_BARE" rev-parse main)
+assert_eq "secret-bearing file → origin tip unchanged" "$origin_tip_before" "$origin_tip_after"
+cmp_teardown
+
+# --- Case 7: non-ff push rejection → exit 7, local HEAD advanced, origin unchanged
+echo "Test: non-ff push rejection → exit 7, local commit made, origin not force-pushed"
+cmp_setup
+# Check out feature-x in clone and push it to origin.
+git -C "$CMP_CLONE" checkout -q -b feature-x
+git -C "$CMP_CLONE" push -q origin feature-x
+# From a second helper clone, advance origin/feature-x.
+helper="$CMP_TMPDIR/helper7"
+git clone -q "$CMP_BARE" "$helper"
+git -C "$helper" config user.email "test@test"
+git -C "$helper" config user.name "Test"
+git -C "$helper" checkout -q --track origin/feature-x
+printf 'helper advance\n' > "$helper/helper.txt"
+git -C "$helper" add helper.txt
+git -C "$helper" commit -q -m "helper advance feature-x"
+git -C "$helper" push -q origin feature-x
+helper_tip=$(git -C "$CMP_BARE" rev-parse feature-x)
+rm -rf "$helper"
+# Back in clone (still on feature-x, now behind origin/feature-x): make a local change.
+printf 'local change\n' > "$CMP_CLONE/seed.txt"
+local_head_before=$(git -C "$CMP_CLONE" rev-parse HEAD)
+# origin/main is still at initial commit — merge of origin/main is clean.
+set +e
+"$CMP" --worktree "$CMP_CLONE" --intent "local commit for nff test" --file seed.txt
+cmp7_rc=$?
+set -e
+assert_eq "non-ff push rejection → exit 7" "7" "$cmp7_rc"
+local_head_after=$(git -C "$CMP_CLONE" rev-parse HEAD)
+# The script committed locally (advancing HEAD) before the push was rejected.
+assert_eq "non-ff push rejection → local HEAD advanced (commit was made)" \
+  "yes" "$([[ "$local_head_after" != "$local_head_before" ]] && echo yes || echo no)"
+# origin/feature-x must be the helper's commit — NOT force-pushed by the script.
+origin_feature_tip=$(git -C "$CMP_BARE" rev-parse feature-x)
+assert_eq "non-ff push rejection → origin feature-x tip is helper's (not force-pushed)" \
+  "$helper_tip" "$origin_feature_tip"
+cmp_teardown
 
 # ============================================================================
 # summary
