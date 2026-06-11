@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -18,7 +19,21 @@ func parseSGML(path string) (ParseResult, error) {
 		return ParseResult{}, err
 	}
 
-	text := string(data)
+	// Strip a leading UTF-8 BOM so it does not pollute the header scan or the
+	// first tag, then decode per the declared CHARSET. The OFX SGML header is a
+	// block of KEY:VALUE lines (OFXHEADER:, CHARSET:, …) ending at the <OFX> tag.
+	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
+	header := string(data)
+	if i := strings.Index(header, "<OFX"); i >= 0 {
+		header = header[:i]
+	}
+	var text string
+	if sgmlCharset(header) == "1252" {
+		text = decodeWindows1252(data)
+	} else {
+		// Default to UTF-8 when CHARSET is absent or not 1252.
+		text = string(data)
+	}
 
 	// Check for investment account
 	if strings.Contains(text, "INVSTMTMSGSRSV1") {

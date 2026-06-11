@@ -187,6 +187,30 @@ func TestSGMLCharset(t *testing.T) {
 	}
 }
 
+// TestParseSGML_Charset1252 verifies that a declared CHARSET:1252 is decoded so a
+// Windows-1252 high byte (0xE9 → 'é') reaches the transaction Description as the
+// correct rune rather than the U+FFFD replacement character.
+func TestParseSGML_Charset1252(t *testing.T) {
+	path := filepath.Join("testdata", "charset1252.qfx")
+	result, err := parseSGML(path)
+	if err != nil {
+		t.Fatalf("parseSGML: %v", err)
+	}
+	if result.Skipped {
+		t.Fatal("expected non-skipped result")
+	}
+	if len(result.Transactions) == 0 {
+		t.Fatal("expected at least one transaction")
+	}
+	desc := result.Transactions[0].Description
+	if !strings.Contains(desc, string(rune(0xE9))) {
+		t.Errorf("Description = %q, want it to contain decoded rune 'é' (U+00E9)", desc)
+	}
+	if strings.Contains(desc, "�") {
+		t.Errorf("Description = %q, want no U+FFFD replacement character", desc)
+	}
+}
+
 // TestParseSGML_CreditCardLiability covers both acceptance criteria of #1270 at
 // the real seam: parseSGML detects CREDITCARDMSGSRSV1 and sets IsCreditCard, and
 // the journal layer then types the card account as a liability.
