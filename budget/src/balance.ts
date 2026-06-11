@@ -217,43 +217,30 @@ export function computeBudgetBalance(
 
   const targetPeriod = periods[targetPeriodIndex];
 
-  // Check for override that applies at or before the target period start
-  const targetStartMs = targetPeriod.periodStart.toMillis();
-  const override = findLatestOverride(budget.overrides, targetStartMs);
-
-  // Determine which period to start accumulating from
-  let startIdx = 0;
+  // Accumulate through prior periods, resetting to any override that falls
+  // inside the period (else applying normal rollover), then subtracting the
+  // period total. A later in-period override overwrites all prior accumulation.
   let running = 0;
-
-  // Find the period containing the override date (if any)
-  const overridePeriodIdx = override ? periods.findIndex(
-    (p) => {
-      const overrideMs = override.date.toMillis();
-      return p.periodStart.toMillis() <= overrideMs && overrideMs < p.periodEnd.toMillis();
-    },
-  ) : -1;
-
-  if (override && overridePeriodIdx !== -1 && overridePeriodIdx <= targetPeriodIndex) {
-    // Start from the override: set balance to override value, subtract the override period's total, then continue
-    startIdx = overridePeriodIdx + 1;
-    running = override.balance - periods[overridePeriodIdx].total;
-  }
-
-  // Accumulate through prior periods (from startIdx, which is 0 when no override)
-  for (let i = startIdx; i < targetPeriodIndex; i++) {
+  for (let i = 0; i < targetPeriodIndex; i++) {
+    const periodStart = periods[i].periodStart.toMillis();
+    const periodEnd = periods[i].periodEnd.toMillis();
+    const override = findOverrideInPeriod(budget.overrides, periodStart, periodEnd);
     const prevMs = i > 0 ? periods[i - 1].periodStart.toMillis() : null;
-    const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, periods[i].periodStart.toMillis());
-    running = applyRollover(running, allow, budget.rollover);
+    const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, periodStart);
+    running = override ? override.balance : applyRollover(running, allow, budget.rollover);
     running -= periods[i].total;
   }
 
-  // Apply rollover entering the target period (unless override is in this period)
-  if (override && overridePeriodIdx === targetPeriodIndex) {
-    // Override is in the target period: running starts at override balance
-    running = override.balance;
+  // Enter the target period: an in-period override replaces the rollover and no
+  // total is subtracted (the same-period txn walk below subtracts within-period spend).
+  const targetStartMs = targetPeriod.periodStart.toMillis();
+  const targetEndMs = targetPeriod.periodEnd.toMillis();
+  const targetOverride = findOverrideInPeriod(budget.overrides, targetStartMs, targetEndMs);
+  if (targetOverride) {
+    running = targetOverride.balance;
   } else {
     const prevMs = targetPeriodIndex > 0 ? periods[targetPeriodIndex - 1].periodStart.toMillis() : null;
-    const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, targetPeriod.periodStart.toMillis());
+    const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, targetStartMs);
     running = applyRollover(running, allow, budget.rollover);
   }
 
