@@ -843,10 +843,13 @@ ensure_recover_unit() {
   local UNIT_PATH="$UNIT_DIR/dispatch-tick-recover.service"
   local SYSTEMCTL_CMD="${DISPATCH_RECOVER_SYSTEMCTL_CMD:-systemctl}"
 
-  # Strip any stray newline from the captured PATH for the same line-structure
-  # reason; a newline in PATH is a broken environment, not a value we should
-  # propagate into a unit directive.
-  local safe_path="${PATH//$'\n'/}"
+  # Strip any stray newline OR double-quote from the captured PATH for the same
+  # line-structure reason; a newline in PATH is a broken environment, and a
+  # double-quote would prematurely terminate the double-quoted Environment=
+  # value, leaving an attacker-controlled bare token as a stray [Service]
+  # directive. Neither is ever a valid character in a PATH component, so
+  # dropping them is safe (#1207).
+  local safe_path="${PATH//[$'\n'\"]/}"
 
   # Environment=PATH=... captures the launching caller's PATH at write time,
   # for the same reason dispatch-spawn-tick passes --setenv=PATH: the systemd
@@ -952,10 +955,23 @@ ensure_daemon_service() {
     return 1
   fi
 
-  # Strip any stray newline from the captured PATH for the same line-structure
-  # reason; a newline in PATH is a broken environment, not a value we should
-  # propagate into a unit directive.
-  local safe_path="${PATH//$'\n'/}"
+  # ExecStart= is double-quoted ("$CLAUDE_CMD" daemon run); an embedded
+  # double-quote in the path would prematurely close that quoted token, making
+  # systemd parse the executable and arguments wrong (bad-setting) and
+  # permanently break the unit. The resolved binary path never legitimately
+  # contains a double-quote; reject it rather than emit a malformed unit.
+  if [[ "$CLAUDE_CMD" == *'"'* ]]; then
+    echo "WARNING: ensure_daemon_service: claude path contains a double-quote; refusing to write unit; durable daemon service unavailable" >&2
+    return 1
+  fi
+
+  # Strip any stray newline OR double-quote from the captured PATH for the same
+  # line-structure reason; a newline in PATH is a broken environment, and a
+  # double-quote would prematurely terminate the double-quoted Environment=
+  # value, leaving an attacker-controlled bare token as a stray [Service]
+  # directive. Neither is ever a valid character in a PATH component, so
+  # dropping them is safe (#1207).
+  local safe_path="${PATH//[$'\n'\"]/}"
 
   local UNIT_DIR="${DISPATCH_DAEMON_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
   local UNIT_PATH="$UNIT_DIR/dispatch-claude-daemon.service"
@@ -1017,7 +1033,7 @@ EOF
   fi
 
   # Write atomically only when the content differs: temp file in the same dir,
-  # then mv into place, then daemon-reload so systemd picks up the new unit.
+  # then mv into place.
   if [ ! -f "$UNIT_PATH" ] || [ "$(cat "$UNIT_PATH")" != "$desired" ]; then
     local tmp
     tmp=$(mktemp "$UNIT_DIR/.dispatch-claude-daemon.service.XXXXXX") || {
@@ -1034,10 +1050,19 @@ EOF
       rm -f "$tmp"
       return 1
     fi
-    if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
-      echo "WARNING: ensure_daemon_service: systemctl --user daemon-reload failed; durable daemon service unavailable" >&2
-      return 1
-    fi
+  fi
+
+  # daemon-reload unconditionally on this slow path. The hot path above already
+  # returned early when the unit matched byte-for-byte AND the service was
+  # active; reaching here means the unit was just written OR it exists on disk
+  # but the service is not active. A daemon-reload that failed on a prior call
+  # (after the mv succeeded) leaves the unit on disk but unknown to systemd, so
+  # the content compare skips the write block on every later call — running the
+  # reload outside that block ensures it is retried until systemd has loaded the
+  # unit, instead of falling straight through to a doomed `enable --now`.
+  if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
+    echo "WARNING: ensure_daemon_service: systemctl --user daemon-reload failed; durable daemon service unavailable" >&2
+    return 1
   fi
 
   # Install + activate idempotently: enable symlinks the unit under

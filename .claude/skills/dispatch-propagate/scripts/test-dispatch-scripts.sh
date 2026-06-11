@@ -21901,6 +21901,74 @@ else
   echo "  FAIL: ensure_daemon_service (inactive self-heal) returned non-zero"
 fi
 
+# --- 3b. daemon-reload failure must not wedge the unit -----------------------
+# Regression guard for the stuck-state bug: the first call writes the unit to
+# disk (mv succeeds) but daemon-reload fails (STUB_RELOAD_RC=1), so the call
+# returns non-zero. The unit is now on disk byte-for-byte, but systemd never
+# loaded it. A second call (with daemon-reload healthy) MUST retry daemon-reload
+# and reach enable --now — otherwise the content-compare short-circuit skips the
+# write branch forever, leaving an unloaded unit that can never activate.
+eds_reload_dir="$eds_tmp/reload-fail"
+eds_reload_unit="$eds_reload_dir/dispatch-claude-daemon.service"
+# First call: daemon-reload fails → non-zero return, but unit lands on disk.
+: > "$eds_log"
+eds_reload_rc1=0
+if (
+  export DISPATCH_DAEMON_UNIT_DIR="$eds_reload_dir"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
+  export STUB_LOG="$eds_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=1
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_daemon_service
+) 2>/dev/null; then
+  eds_reload_rc1=0
+else
+  eds_reload_rc1=$?
+fi
+assert_eq "reload-fail: first call (daemon-reload fails) → non-zero return" "1" "$eds_reload_rc1"
+TOTAL=$((TOTAL + 1))
+if [ -f "$eds_reload_unit" ]; then
+  PASS=$((PASS + 1)); echo "  PASS: reload-fail first call left the unit on disk"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reload-fail first call did not write the unit"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'enable' "$eds_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: reload-fail first call did not reach enable"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reload-fail first call reached enable despite reload failure"
+fi
+# Second call: daemon-reload healthy. is-active reports inactive (RC=3) so the
+# steady-state short-circuit cannot mask a missing retry. The call MUST retry
+# daemon-reload and reach enable --now, and must succeed.
+: > "$eds_log"
+if (
+  export DISPATCH_DAEMON_UNIT_DIR="$eds_reload_dir"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
+  export STUB_LOG="$eds_log"
+  export STUB_IS_ACTIVE_RC=3 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_daemon_service
+); then
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'daemon-reload' "$eds_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: reload-fail recovery retried daemon-reload"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: reload-fail recovery did not retry daemon-reload (unit wedged)"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'enable --now dispatch-claude-daemon.service' "$eds_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: reload-fail recovery reached enable --now"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: reload-fail recovery did not reach enable --now"
+  fi
+else
+  TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
+  echo "  FAIL: ensure_daemon_service (reload-fail recovery) returned non-zero"
+fi
+
 # --- 4. Degrade safely ------------------------------------------------------
 # 4a. enable fails (simulating no systemd --user) → returns non-zero, does not
 # abort the test shell.
