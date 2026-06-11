@@ -156,6 +156,25 @@ export function findLatestOverride(overrides: BudgetOverride[], beforeMs: number
   return result;
 }
 
+/**
+ * Latest override whose date falls within the half-open period
+ * [periodStartMs, periodEndMs), or null. Requires overrides sorted by
+ * date ascending.
+ */
+export function findOverrideInPeriod(
+  overrides: BudgetOverride[],
+  periodStartMs: number,
+  periodEndMs: number,
+): BudgetOverride | null {
+  let result: BudgetOverride | null = null;
+  for (const o of overrides) {
+    const ms = o.date.toMillis();
+    if (ms >= periodStartMs && ms < periodEndMs) result = o;
+    else if (ms >= periodEndMs) break;
+  }
+  return result;
+}
+
 // Exclude non-primary normalized transactions to avoid double-counting duplicates
 function transactionsForBudget(txns: Transaction[], budgetId: BudgetId): TimestampedTransaction[] {
   return txns
@@ -281,12 +300,12 @@ export function computePeriodBalances(
       const period = sorted[idx];
       const periodStartMs = period.periodStart.toMillis();
       const periodEndMs = period.periodEnd.toMillis();
-      const override = findLatestOverride(budget.overrides, periodStartMs);
+      const override = findOverrideInPeriod(budget.overrides, periodStartMs, periodEndMs);
       const prevMs = idx > 0 ? sorted[idx - 1].periodStart.toMillis() : null;
       const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, periodStartMs);
 
       let running: number;
-      if (override && override.date.toMillis() >= periodStartMs && override.date.toMillis() < periodEndMs) {
+      if (override) {
         // Override is in this period: replaces rollover
         running = override.balance;
       } else {
@@ -323,11 +342,11 @@ export function computeAllBudgetBalances(
       const periodStartMs = period.periodStart.toMillis();
       const periodEndMs = period.periodEnd.toMillis();
 
-      const override = findLatestOverride(budget.overrides, periodStartMs);
+      const override = findOverrideInPeriod(budget.overrides, periodStartMs, periodEndMs);
       const prevMs = pIdx > 0 ? periods[pIdx - 1].periodStart.toMillis() : null;
       const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, periodStartMs);
       let running: number;
-      if (override && override.date.toMillis() >= periodStartMs && override.date.toMillis() < periodEndMs) {
+      if (override) {
         accumulated = override.balance;
         running = accumulated;
       } else {
