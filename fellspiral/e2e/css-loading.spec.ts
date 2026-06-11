@@ -35,15 +35,23 @@ test.describe("CSS loading", () => {
     await page.waitForLoadState("load");
 
     // Critters defers the full stylesheet by moving its <link> to the end of
-    // <body> as a plain blocking link (no media="print", no inline onload), so
-    // at least one <link rel="stylesheet"> has a non-print media type.
-    const hasFullStylesheet = await page.evaluate(() => {
-      const links = document.querySelectorAll('link[rel="stylesheet"]');
-      return Array.from(links).some(
-        (link) => link.getAttribute("media") !== "print",
+    // <body> as a plain blocking link (no media="print", no inline onload). The
+    // link must be present, live inside <body>, and carry no media="print"
+    // attribute — otherwise the stylesheet never applies.
+    const stylesheet = await page.evaluate(() => {
+      const links = Array.from(
+        document.querySelectorAll('link[rel="stylesheet"]'),
       );
+      const link = links.find((l) => l.getAttribute("media") !== "print");
+      if (!link) return null;
+      return {
+        inBody: document.body.contains(link),
+        media: link.getAttribute("media"),
+      };
     });
 
-    expect(hasFullStylesheet).toBe(true);
+    expect(stylesheet, "no non-print stylesheet <link> found").not.toBeNull();
+    expect(stylesheet!.media).not.toBe("print");
+    expect(stylesheet!.inBody).toBe(true);
   });
 });
