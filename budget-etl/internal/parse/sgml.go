@@ -114,7 +114,11 @@ func parseSGMLBalance(text string) (sgmlBalance, error) {
 	if idx < 0 {
 		return sgmlBalance{}, nil
 	}
-	block := text[idx:]
+	end := indexFrom(text, "</LEDGERBAL>", idx)
+	if end < 0 {
+		end = len(text)
+	}
+	block := text[idx:end]
 	balAmt := sgmlTagValue(block, "BALAMT")
 	if balAmt == "" {
 		return sgmlBalance{}, fmt.Errorf("LEDGERBAL block found but BALAMT is empty")

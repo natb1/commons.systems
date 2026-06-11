@@ -3,6 +3,7 @@ package parse
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -91,6 +92,43 @@ func TestParseSGML_InvestmentSkip(t *testing.T) {
 	if result.SkipReason == "" {
 		t.Fatal("expected non-empty skip reason")
 	}
+}
+
+// TestParseSGMLBalance_Bounded verifies that parseSGMLBalance is clamped to the
+// LEDGERBAL aggregate and does not borrow tag values from a later unrelated block.
+func TestParseSGMLBalance_Bounded(t *testing.T) {
+	t.Run("empty BALAMT does not borrow from later block", func(t *testing.T) {
+		// First LEDGERBAL has no BALAMT; a later unrelated block carries one.
+		// Before the fix, parseSGMLBalance would scan past </LEDGERBAL> and find
+		// the later BALAMT, silently returning 999.99. After the fix it must error.
+		text := `<LEDGERBAL>
+<DTASOF>20250101
+</LEDGERBAL>
+<OTHERBLOCK>
+<BALAMT>999.99
+</OTHERBLOCK>`
+		_, err := parseSGMLBalance(text)
+		if err == nil {
+			t.Fatal("expected error for LEDGERBAL with empty BALAMT, got nil")
+		}
+		if !strings.Contains(err.Error(), "BALAMT is empty") {
+			t.Errorf("error = %q, want it to contain %q", err.Error(), "BALAMT is empty")
+		}
+	})
+
+	t.Run("well-formed LEDGERBAL parses correctly", func(t *testing.T) {
+		text := `<LEDGERBAL>
+<BALAMT>123.45
+<DTASOF>20250101
+</LEDGERBAL>`
+		bal, err := parseSGMLBalance(text)
+		if err != nil {
+			t.Fatalf("parseSGMLBalance: %v", err)
+		}
+		if bal.cents != 12345 {
+			t.Errorf("cents = %d, want 12345", bal.cents)
+		}
+	})
 }
 
 // TestParseSGML_CreditCardLiability covers both acceptance criteria of #1270 at
