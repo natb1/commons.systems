@@ -101,7 +101,7 @@ export function describeFirebaseHeaders(
       );
       const match = cspValue.match(/script-src([^;]*)/);
       expect(match, "could not extract script-src directive").not.toBeNull();
-      const scriptSrc = match![0];
+      const scriptSrc = match![1];
       expect(scriptSrc).toContain("'self'");
       expect(scriptSrc).not.toContain("'unsafe-inline'");
     });
