@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -18,7 +19,26 @@ func parseSGML(path string) (ParseResult, error) {
 		return ParseResult{}, err
 	}
 
-	text := string(data)
+	// Strip a leading UTF-8 BOM so it does not pollute the header scan or the
+	// first tag, then decode per the declared CHARSET. The OFX SGML header is a
+	// block of KEY:VALUE lines (OFXHEADER:, CHARSET:, …) ending at the <OFX> tag.
+	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
+	header := string(data)
+	if i := strings.Index(header, "<OFX"); i >= 0 {
+		header = header[:i]
+	}
+	var text string
+	switch charset := sgmlCharset(header); charset {
+	case "1252":
+		text = decodeWindows1252(data)
+	case "":
+		// CHARSET is absent: default to UTF-8.
+		text = string(data)
+	default:
+		// A declared but unsupported charset must error rather than silently
+		// decode as UTF-8, which would mangle non-ASCII bytes to garbage.
+		return ParseResult{}, fmt.Errorf("unsupported CHARSET %q in %s; only 1252 is supported", charset, path)
+	}
 
 	// Check for investment account
 	if strings.Contains(text, "INVSTMTMSGSRSV1") {
@@ -114,7 +134,11 @@ func parseSGMLBalance(text string) (sgmlBalance, error) {
 	if idx < 0 {
 		return sgmlBalance{}, nil
 	}
-	block := text[idx:]
+	end := indexFrom(text, "</LEDGERBAL>", idx)
+	if end < 0 {
+		end = len(text)
+	}
+	block := text[idx:end]
 	balAmt := sgmlTagValue(block, "BALAMT")
 	if balAmt == "" {
 		return sgmlBalance{}, fmt.Errorf("LEDGERBAL block found but BALAMT is empty")
@@ -133,6 +157,47 @@ func parseSGMLBalance(text string) (sgmlBalance, error) {
 		balanceDate = bd
 	}
 	return sgmlBalance{cents: cents, balanceDate: balanceDate}, nil
+}
+
+// cp1252High maps Windows-1252 bytes 0x80–0x9F to their Unicode runes
+// (index = byte - 0x80). 0x00–0x7F are ASCII identity and 0xA0–0xFF are
+// Latin-1 identity, so only this 32-entry high range needs a table. The five
+// bytes undefined in CP1252 (0x81, 0x8D, 0x8F, 0x90, 0x9D) map to U+FFFD.
+// Reference: the Unicode CP1252 0x80–0x9F mapping.
+var cp1252High = [32]rune{
+	'€', '�', '‚', 'ƒ', '„', '…', '†', '‡',
+	'ˆ', '‰', 'Š', '‹', 'Œ', '�', 'Ž', '�',
+	'�', '‘', '’', '“', '”', '•', '–', '—',
+	'˜', '™', 'š', '›', 'œ', '�', 'ž', 'Ÿ',
+}
+
+// decodeWindows1252 decodes a Windows-1252 (CP1252) byte slice to a UTF-8 Go
+// string. Bytes 0x00–0x7F and 0xA0–0xFF map to rune(b); bytes 0x80–0x9F use the
+// cp1252High table (with the five CP1252-undefined bytes mapped to U+FFFD).
+func decodeWindows1252(data []byte) string {
+	var b strings.Builder
+	b.Grow(len(data))
+	for _, c := range data {
+		if c >= 0x80 && c <= 0x9F {
+			b.WriteRune(cp1252High[c-0x80])
+		} else {
+			b.WriteRune(rune(c))
+		}
+	}
+	return b.String()
+}
+
+// sgmlCharset scans an OFX SGML header for a standalone CHARSET: line (e.g.
+// "CHARSET:1252") and returns the trimmed token after the colon (e.g. "1252").
+// Returns "" if no CHARSET line is present.
+func sgmlCharset(header string) string {
+	for _, line := range strings.Split(header, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "CHARSET:") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "CHARSET:"))
+		}
+	}
+	return ""
 }
 
 // sgmlTagValue extracts the value following <TAG> in SGML content.

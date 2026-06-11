@@ -21762,6 +21762,271 @@ fi
 rm -rf "$eru_tmp"
 
 # ============================================================================
+# ensure_daemon_service: durable daemon service install + attach paths (#1197)
+# ============================================================================
+echo ""
+echo "=== ensure_daemon_service durable supervisor service ==="
+# A recording systemctl stub: appends its argv to $STUB_LOG and returns exit
+# codes driven by env flags, so `is-active` can be made to report active /
+# inactive and `enable` can be made to fail (simulating no systemd --user).
+eds_tmp=$(mktemp -d)
+mkdir -p "$eds_tmp/bin"
+cat > "$eds_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUB_LOG"
+for a in "$@"; do
+  case "$a" in
+    is-active) exit "${STUB_IS_ACTIVE_RC:-0}" ;;
+    enable) exit "${STUB_ENABLE_RC:-0}" ;;
+    daemon-reload) exit "${STUB_RELOAD_RC:-0}" ;;
+  esac
+done
+exit 0
+STUB
+chmod +x "$eds_tmp/bin/systemctl"
+# A dummy claude binary path — the unit bakes it into ExecStart; it is never run.
+eds_claude="$eds_tmp/bin/claude"
+cat > "$eds_claude" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$eds_claude"
+eds_unit_dir="$eds_tmp/systemd-user"
+eds_unit="$eds_unit_dir/dispatch-claude-daemon.service"
+eds_log="$eds_tmp/systemctl.log"
+
+# --- 1. Idempotent install (cold path) --------------------------------------
+: > "$eds_log"
+if (
+  export DISPATCH_DAEMON_UNIT_DIR="$eds_unit_dir"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
+  export STUB_LOG="$eds_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_daemon_service
+); then
+  if [ -f "$eds_unit" ]; then
+    TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path wrote the unit file"
+    grep -q '^Type=simple$' "$eds_unit" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: unit has Type=simple"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: unit missing Type=simple"; }
+    grep -q '^Restart=always$' "$eds_unit" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: unit has Restart=always"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: unit missing Restart=always"; }
+    grep -q '^WantedBy=default.target$' "$eds_unit" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: unit has WantedBy=default.target"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: unit missing WantedBy=default.target"; }
+    eds_exec=$(grep '^ExecStart=' "$eds_unit")
+    assert_eq "ExecStart= is the claude path + daemon run" \
+      "ExecStart=\"$eds_claude\" daemon run" "$eds_exec"
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eds_exec" != *"--origin service"* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: ExecStart is not --origin service"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: ExecStart uses --origin service: $eds_exec"
+    fi
+  else
+    TOTAL=$((TOTAL + 6)); FAIL=$((FAIL + 6))
+    echo "  FAIL: cold path did not write the unit file"
+  fi
+  grep -q 'daemon-reload' "$eds_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran daemon-reload"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run daemon-reload"; }
+  grep -q 'enable --now dispatch-claude-daemon.service' "$eds_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran enable --now"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run enable --now"; }
+else
+  TOTAL=$((TOTAL + 8)); FAIL=$((FAIL + 8))
+  echo "  FAIL: ensure_daemon_service (cold path) returned non-zero"
+fi
+
+# --- 2. Attach-to-existing-daemon path (steady-state no-op) ------------------
+# Unit already written (from test 1) and is-active reports active → no-op: no
+# rewrite (no daemon-reload) and no enable.
+: > "$eds_log"
+if (
+  export DISPATCH_DAEMON_UNIT_DIR="$eds_unit_dir"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
+  export STUB_LOG="$eds_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_daemon_service
+); then
+  TOTAL=$((TOTAL + 1))
+  if ! grep -q 'enable' "$eds_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: attach path did not re-run enable"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: attach path re-ran enable"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if ! grep -q 'daemon-reload' "$eds_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: attach path did not rewrite the unit (no daemon-reload)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: attach path rewrote the unit (daemon-reload ran)"
+  fi
+else
+  TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
+  echo "  FAIL: ensure_daemon_service (attach path) returned non-zero"
+fi
+
+# --- 3. Inactive self-heal --------------------------------------------------
+# Content matches but is-active reports inactive → the write branch is skipped
+# (the unit is NOT rewritten — same inode), yet daemon-reload AND enable --now
+# both run on the slow path to revive it. Running daemon-reload even on the
+# unchanged-content slow path is the stuck-state fix (see test 3b): a reload
+# that failed on a prior call left the unit on disk but unloaded, and the
+# content compare would otherwise skip it forever. So "not rewritten" is
+# asserted by inode stability, not by the absence of daemon-reload.
+: > "$eds_log"
+eds_inode_before=$(stat -c '%i' "$eds_unit")
+if (
+  export DISPATCH_DAEMON_UNIT_DIR="$eds_unit_dir"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
+  export STUB_LOG="$eds_log"
+  export STUB_IS_ACTIVE_RC=3 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_daemon_service
+); then
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'enable --now dispatch-claude-daemon.service' "$eds_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: inactive self-heal ran enable --now"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal did not run enable --now"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'daemon-reload' "$eds_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: inactive self-heal ran daemon-reload (stuck-state retry)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal skipped daemon-reload"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if [ "$(stat -c '%i' "$eds_unit")" = "$eds_inode_before" ]; then
+    PASS=$((PASS + 1)); echo "  PASS: inactive self-heal did not rewrite the unchanged unit (inode stable)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal rewrote the unchanged unit (inode changed)"
+  fi
+else
+  TOTAL=$((TOTAL + 3)); FAIL=$((FAIL + 3))
+  echo "  FAIL: ensure_daemon_service (inactive self-heal) returned non-zero"
+fi
+
+# --- 3b. daemon-reload failure must not wedge the unit -----------------------
+# Regression guard for the stuck-state bug: the first call writes the unit to
+# disk (mv succeeds) but daemon-reload fails (STUB_RELOAD_RC=1), so the call
+# returns non-zero. The unit is now on disk byte-for-byte, but systemd never
+# loaded it. A second call (with daemon-reload healthy) MUST retry daemon-reload
+# and reach enable --now — otherwise the content-compare short-circuit skips the
+# write branch forever, leaving an unloaded unit that can never activate.
+eds_reload_dir="$eds_tmp/reload-fail"
+eds_reload_unit="$eds_reload_dir/dispatch-claude-daemon.service"
+# First call: daemon-reload fails → non-zero return, but unit lands on disk.
+: > "$eds_log"
+eds_reload_rc1=0
+if (
+  export DISPATCH_DAEMON_UNIT_DIR="$eds_reload_dir"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
+  export STUB_LOG="$eds_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=1
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_daemon_service
+) 2>/dev/null; then
+  eds_reload_rc1=0
+else
+  eds_reload_rc1=$?
+fi
+assert_eq "reload-fail: first call (daemon-reload fails) → non-zero return" "1" "$eds_reload_rc1"
+TOTAL=$((TOTAL + 1))
+if [ -f "$eds_reload_unit" ]; then
+  PASS=$((PASS + 1)); echo "  PASS: reload-fail first call left the unit on disk"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reload-fail first call did not write the unit"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'enable' "$eds_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: reload-fail first call did not reach enable"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reload-fail first call reached enable despite reload failure"
+fi
+# Second call: daemon-reload healthy. is-active reports inactive (RC=3) so the
+# steady-state short-circuit cannot mask a missing retry. The call MUST retry
+# daemon-reload and reach enable --now, and must succeed.
+: > "$eds_log"
+if (
+  export DISPATCH_DAEMON_UNIT_DIR="$eds_reload_dir"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
+  export STUB_LOG="$eds_log"
+  export STUB_IS_ACTIVE_RC=3 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_daemon_service
+); then
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'daemon-reload' "$eds_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: reload-fail recovery retried daemon-reload"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: reload-fail recovery did not retry daemon-reload (unit wedged)"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'enable --now dispatch-claude-daemon.service' "$eds_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: reload-fail recovery reached enable --now"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: reload-fail recovery did not reach enable --now"
+  fi
+else
+  TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
+  echo "  FAIL: ensure_daemon_service (reload-fail recovery) returned non-zero"
+fi
+
+# --- 4. Degrade safely ------------------------------------------------------
+# 4a. enable fails (simulating no systemd --user) → returns non-zero, does not
+# abort the test shell.
+: > "$eds_log"
+eds_degrade_dir="$eds_tmp/degrade"
+# Guarded with `if` so the script's `set -e` does not abort on the intended
+# non-zero return from the degrade path.
+eds_rc=0
+if (
+  export DISPATCH_DAEMON_UNIT_DIR="$eds_degrade_dir"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
+  export STUB_LOG="$eds_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=1 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_daemon_service
+) 2>/dev/null; then
+  eds_rc=0
+else
+  eds_rc=$?
+fi
+assert_eq "degrade: enable failure → non-zero return" "1" "$eds_rc"
+echo "  (test shell survived the degrade path)"
+
+# 4b. claude binary not found → non-zero return. Empty CLAUDE_CMD falls back to
+# `command -v claude`, so PATH must also lack claude for "not found" to hold.
+eds_rc2=0
+(
+  source "$SCRIPT_DIR/lib.sh"
+  export DISPATCH_DAEMON_UNIT_DIR="$eds_tmp/no-claude"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD=""
+  export STUB_LOG="$eds_log"
+  export PATH="/nonexistent"
+  ensure_daemon_service
+) 2>/dev/null || eds_rc2=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$eds_rc2" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: empty claude path → non-zero return"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: empty claude path returned zero"
+fi
+
+rm -rf "$eds_tmp"
+
+# ============================================================================
 # dispatch-write-plan / dispatch-read-plan tests
 # ============================================================================
 echo ""

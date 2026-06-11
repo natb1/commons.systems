@@ -843,10 +843,13 @@ ensure_recover_unit() {
   local UNIT_PATH="$UNIT_DIR/dispatch-tick-recover.service"
   local SYSTEMCTL_CMD="${DISPATCH_RECOVER_SYSTEMCTL_CMD:-systemctl}"
 
-  # Strip any stray newline from the captured PATH for the same line-structure
-  # reason; a newline in PATH is a broken environment, not a value we should
-  # propagate into a unit directive.
-  local safe_path="${PATH//$'\n'/}"
+  # Strip any stray newline OR double-quote from the captured PATH for the same
+  # line-structure reason; a newline in PATH is a broken environment, and a
+  # double-quote would prematurely terminate the double-quoted Environment=
+  # value, leaving an attacker-controlled bare token as a stray [Service]
+  # directive. Neither is ever a valid character in a PATH component, so
+  # dropping them is safe (#1207).
+  local safe_path="${PATH//[$'\n'\"]/}"
 
   # Environment=PATH=... captures the launching caller's PATH at write time,
   # for the same reason dispatch-spawn-tick passes --setenv=PATH: the systemd
@@ -907,6 +910,166 @@ EOF
 
   if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
     echo "WARNING: ensure_recover_unit: systemctl --user daemon-reload failed; OnFailure recovery may be stale" >&2
+    return 1
+  fi
+}
+
+# Install and activate the durable `dispatch-claude-daemon.service` unit that
+# hosts Claude Code's per-user bg supervisor daemon in a stable, non-transient
+# cgroup (#1197). Without it, the daemon is spawned on demand by the first
+# `claude` call inside a transient tick/reseed unit and is born in that unit's
+# ephemeral cgroup — so a finishing tick reaps the whole fleet (#1196). With a
+# durable service already holding the daemon lock (~/.claude/daemon.lock), every
+# tick/reseed/worker `claude` call attaches to the running daemon instead of
+# spawning its own, and the fleet lives permanently in this service's cgroup
+# regardless of any tick's KillMode.
+#
+# This supersedes the #1196 KillMode=process stop-gap as the load-bearing
+# mechanism; KillMode=process is kept as the degraded-path fallback for hosts
+# where systemd --user is unavailable and this service cannot be installed.
+#
+# Best-effort: a failure here must not abort the caller (a tick/reseed
+# launcher), so we warn to stderr and return non-zero — never `exit`. A missing
+# durable service just means the on-demand daemon falls back to #1196 behavior.
+# Takes no arguments: `claude daemon run` chdirs to $HOME itself, so the unit
+# sets no WorkingDirectory= and needs no worktree path (this also sidesteps the
+# WorkingDirectory quoting hazard of #1203/#1207).
+ensure_daemon_service() {
+  # Resolve the claude binary to bake an absolute ExecStart into the unit. The
+  # systemd user manager's minimal default PATH omits the nix store, so the unit
+  # cannot rely on PATH resolution at fire time; an absolute path makes it
+  # self-sufficient. An explicit override is authoritative (tests rely on it).
+  local CLAUDE_CMD="${DISPATCH_DAEMON_CLAUDE_CMD:-$(command -v claude || true)}"
+  if [[ -z "$CLAUDE_CMD" ]]; then
+    echo "WARNING: ensure_daemon_service: claude binary not found on PATH; durable daemon service unavailable" >&2
+    return 1
+  fi
+
+  # A systemd unit file is line-structured: each line is an independent
+  # directive. An embedded newline in CLAUDE_CMD would land as an
+  # attacker-controlled extra directive in the [Service] section. The resolved
+  # binary path never legitimately contains a newline; reject it rather than
+  # emit a malformed unit (best-effort: warn + return — never exit).
+  if [[ "$CLAUDE_CMD" == *$'\n'* ]]; then
+    echo "WARNING: ensure_daemon_service: claude path contains a newline; refusing to write unit; durable daemon service unavailable" >&2
+    return 1
+  fi
+
+  # ExecStart= is double-quoted ("$CLAUDE_CMD" daemon run); an embedded
+  # double-quote in the path would prematurely close that quoted token, making
+  # systemd parse the executable and arguments wrong (bad-setting) and
+  # permanently break the unit. The resolved binary path never legitimately
+  # contains a double-quote; reject it rather than emit a malformed unit.
+  if [[ "$CLAUDE_CMD" == *'"'* ]]; then
+    echo "WARNING: ensure_daemon_service: claude path contains a double-quote; refusing to write unit; durable daemon service unavailable" >&2
+    return 1
+  fi
+
+  # Strip any stray newline OR double-quote from the captured PATH for the same
+  # line-structure reason; a newline in PATH is a broken environment, and a
+  # double-quote would prematurely terminate the double-quoted Environment=
+  # value, leaving an attacker-controlled bare token as a stray [Service]
+  # directive. Neither is ever a valid character in a PATH component, so
+  # dropping them is safe (#1207).
+  local safe_path="${PATH//[$'\n'\"]/}"
+
+  local UNIT_DIR="${DISPATCH_DAEMON_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
+  local UNIT_PATH="$UNIT_DIR/dispatch-claude-daemon.service"
+  local SYSTEMCTL_CMD="${DISPATCH_DAEMON_SYSTEMCTL_CMD:-systemctl}"
+
+  # Desired unit content, mirroring Claude Code's own (now-disabled) service
+  # template. Environment=PATH= captures the launching caller's full nix-store
+  # PATH at write time, for the same reason the recover unit does — so the
+  # daemon (and the workers it later hosts) can resolve git/jq/claude.
+  #
+  # ExecStart= and Environment= are double-quoted: systemd unescapes C-style
+  # quotes for these two directives, so a path containing spaces is parsed as a
+  # single token rather than split into an executable + spurious arguments.
+  #
+  # No --origin flag: `claude daemon run` defaults its origin to `foreground`,
+  # a long-lived foreground supervisor with no self-uninstall logic. We
+  # deliberately avoid `--origin service`, which carries the binary's
+  # self-uninstall-on-binary-takeover path — the exact fragility #1197 removes.
+  # WE own the lifecycle via systemd Restart=always.
+  #
+  # StartLimitIntervalSec/StartLimitBurst mirror Claude's own template and
+  # tolerate a brief restart burst during a migration window where a
+  # pre-existing transient daemon still holds the lock. No StandardOutput= — the
+  # daemon self-logs to ~/.claude/daemon.log.
+  local desired
+  desired=$(cat <<EOF
+[Unit]
+Description=Dispatch durable Claude background supervisor daemon
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Service]
+Type=simple
+Environment="PATH=$safe_path"
+ExecStart="$CLAUDE_CMD" daemon run
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=default.target
+EOF
+)
+
+  # Steady-state hot path — the attach-to-existing-daemon path: if the installed
+  # unit already matches byte-for-byte AND the service is active, do nothing.
+  # The durable daemon is already running, so the next tick's `claude` call
+  # attaches to it via the lock and we skip the write/reload/enable entirely.
+  # (Unlike the OnFailure-only recover unit, this service must actually be
+  # RUNNING, so we add an is-active check to the content compare.)
+  if [ -f "$UNIT_PATH" ] && [ "$(cat "$UNIT_PATH")" = "$desired" ] \
+     && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-claude-daemon.service; then
+    return 0
+  fi
+
+  if ! mkdir -p "$UNIT_DIR"; then
+    echo "WARNING: ensure_daemon_service: mkdir -p $UNIT_DIR failed; durable daemon service unavailable" >&2
+    return 1
+  fi
+
+  # Write atomically only when the content differs: temp file in the same dir,
+  # then mv into place.
+  if [ ! -f "$UNIT_PATH" ] || [ "$(cat "$UNIT_PATH")" != "$desired" ]; then
+    local tmp
+    tmp=$(mktemp "$UNIT_DIR/.dispatch-claude-daemon.service.XXXXXX") || {
+      echo "WARNING: ensure_daemon_service: could not create temp file in $UNIT_DIR; durable daemon service unavailable" >&2
+      return 1
+    }
+    if ! printf '%s\n' "$desired" > "$tmp"; then
+      echo "WARNING: ensure_daemon_service: failed to write $tmp; durable daemon service unavailable" >&2
+      rm -f "$tmp"
+      return 1
+    fi
+    if ! mv "$tmp" "$UNIT_PATH"; then
+      echo "WARNING: ensure_daemon_service: failed to install $UNIT_PATH; durable daemon service unavailable" >&2
+      rm -f "$tmp"
+      return 1
+    fi
+  fi
+
+  # daemon-reload unconditionally on this slow path. The hot path above already
+  # returned early when the unit matched byte-for-byte AND the service was
+  # active; reaching here means the unit was just written OR it exists on disk
+  # but the service is not active. A daemon-reload that failed on a prior call
+  # (after the mv succeeded) leaves the unit on disk but unknown to systemd, so
+  # the content compare skips the write block on every later call — running the
+  # reload outside that block ensures it is retried until systemd has loaded the
+  # unit, instead of falling straight through to a doomed `enable --now`.
+  if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
+    echo "WARNING: ensure_daemon_service: systemctl --user daemon-reload failed; durable daemon service unavailable" >&2
+    return 1
+  fi
+
+  # Install + activate idempotently: enable symlinks the unit under
+  # WantedBy=default.target (so it auto-starts on every user-session start) and
+  # --now starts it without restarting an already-running instance.
+  if ! "$SYSTEMCTL_CMD" --user enable --now dispatch-claude-daemon.service; then
+    echo "WARNING: ensure_daemon_service: systemctl --user enable --now dispatch-claude-daemon.service failed; durable daemon service unavailable" >&2
     return 1
   fi
 }
