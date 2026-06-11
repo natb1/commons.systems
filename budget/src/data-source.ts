@@ -27,7 +27,7 @@ import { assertLegStateTransition } from "./firestore.js";
 import seedData from "virtual:budget-seed-data";
 import { getAll, get, put, deleteRecord } from "./idb.js";
 import type { IdbTransaction, IdbStatement, IdbStatementItem, IdbReconciliationNote, IdbAccount, IdbJournalEntry, IdbJournalLeg, IdbReconciliationEvent, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
-import { idbToTransaction } from "./entities/transaction.js";
+import { idbToTransaction, validateReimbursementRange } from "./entities/transaction.js";
 import { idbToStatement } from "./entities/statement.js";
 import { idbToStatementItem } from "./entities/statement-item.js";
 import { idbToReconciliationNote } from "./entities/reconciliation-note.js";
@@ -301,6 +301,9 @@ export class IdbDataSource implements DataSource {
     id: TransactionId,
     fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription">>,
   ): Promise<void> {
+    if (fields.reimbursement !== undefined) {
+      validateReimbursementRange(fields.reimbursement);
+    }
     await updateRecord<IdbTransaction>("transactions", id, "Transaction", fields);
   }
 
