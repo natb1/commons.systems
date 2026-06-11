@@ -314,8 +314,8 @@ service cloud.firestore {
         || env == "demo"
         || env == "test"
         || env.matches("preview-pr-[0-9]{1,6}")
-        || env.matches("qa(-[a-z0-9._-]+)?")    // suffix optional: bare "qa" is the main-worktree env
-        || env.matches("emulator(-[a-z0-9._-]+)?");  // suffix optional: bare "emulator" is the main-worktree env
+        || env.matches("qa(-[a-z0-9._-]{1,32})?")    // suffix optional: bare "qa" is the main-worktree env
+        || env.matches("emulator(-[a-z0-9._-]{1,32})?");  // suffix optional: bare "emulator" is the main-worktree env
     }
     function isOptionalString(data, field, maxLen) {
       return !(field in data)
