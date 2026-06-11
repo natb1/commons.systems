@@ -76,17 +76,21 @@ Otherwise run all steps in order.
    `<N>` is the issue number used by the remaining steps for their `tmp/`
    filenames.
 
-0.5. **Merge `origin/main` into the working branch.** Fork `/commit-merge-push` so
-   the QA pass runs against a branch current with `main` rather than stale state —
-   issue an Agent tool call with `subagent_type: general-purpose` and `model: sonnet`
-   whose prompt invokes `/commit-merge-push` via the Skill tool, the canonical fork
-   recipe `/implement-unit` Step 2 documents (`subagent_type` is `general-purpose`,
-   never the skill name). This invocation runs with no pending working-tree
-   changes — `/commit-merge-push` tolerates that and creates no commit. If it
-   reports a **merge conflict**, surface it and **stop** — do not begin the QA
-   walkthrough. A merge conflict needs a human, so escalate to office-hours: skip
-   the `phase-completed` marker and write `office-hours-reason` per the
-   **Escalation** section, then stop.
+0.5. **Merge `origin/main` into the working branch.** Call the script first (use
+   `dangerouslyDisableSandbox: true` — git writes + `git push` over HTTPS; see
+   `.claude/rules/sandbox.md`):
+
+   ```bash
+   .claude/skills/dispatch-propagate/scripts/commit-merge-push --merge-only
+   ```
+
+   Exit 0 → proceed to Step 1. On a non-zero exit, fall back to the fork — the
+   canonical fork recipe `/implement-unit` Step 2 documents (`subagent_type` is
+   `general-purpose`, never the skill name). This invocation runs with no pending
+   working-tree changes — `/commit-merge-push` tolerates that and creates no
+   commit. If the script exits 3 (merge conflict) or the fork reports a merge
+   conflict, escalate to office-hours per the **Escalation** section and stop — do
+   not begin the QA walkthrough.
 
 1. **Detect whether the implementation has a browser component.**
 
