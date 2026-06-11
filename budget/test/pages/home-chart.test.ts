@@ -844,36 +844,47 @@ describe("hydrateCategorySankey", () => {
     const addSpy = vi.spyOn(document, "addEventListener");
     const removeSpy = vi.spyOn(document, "removeEventListener");
 
-    // First hydration — registers a listener.
-    const container1 = makeContainer([txn({ category: "Food", amount: 50 })]);
-    hydrateCategorySankey(container1);
+    try {
+      // First hydration — registers a listener.
+      const container1 = makeContainer([txn({ category: "Food", amount: 50 })]);
+      hydrateCategorySankey(container1);
 
-    // Capture the handler registered by the first hydration.
-    const firstAddCalls = addSpy.mock.calls.filter(([evt]) => evt === TRANSACTIONS_APPENDED_EVENT);
-    expect(firstAddCalls.length).toBeGreaterThanOrEqual(1);
-    const firstHandler = firstAddCalls[firstAddCalls.length - 1][1]; // last add = the one just registered
+      // Capture the handler registered by the first hydration.
+      const firstAddCalls = addSpy.mock.calls.filter(([evt]) => evt === TRANSACTIONS_APPENDED_EVENT);
+      expect(firstAddCalls.length).toBeGreaterThanOrEqual(1);
+      const firstHandler = firstAddCalls[firstAddCalls.length - 1][1]; // last add = the one just registered
 
-    // Record remove-call count after first hydration (may be >0 if earlier tests left a handler).
-    const removeCountAfterFirst = removeSpy.mock.calls.filter(([evt]) => evt === TRANSACTIONS_APPENDED_EVENT).length;
+      // Record remove-call count after first hydration (may be >0 if earlier tests left a handler).
+      const removeCountAfterFirst = removeSpy.mock.calls.filter(([evt]) => evt === TRANSACTIONS_APPENDED_EVENT).length;
 
-    // Second hydration (simulates navigating away and back) — must remove-before-add.
-    document.body.innerHTML = "";
-    const container2 = makeContainer([txn({ category: "Transport", amount: 30 })]);
-    hydrateCategorySankey(container2);
+      // Second hydration (simulates navigating away and back) — must remove-before-add.
+      document.body.innerHTML = "";
+      const container2 = makeContainer([txn({ category: "Transport", amount: 30 })]);
+      hydrateCategorySankey(container2);
 
-    // The second hydration must have removed the handler registered by the first hydration.
-    const removeCallsAfter = removeSpy.mock.calls.filter(([evt]) => evt === TRANSACTIONS_APPENDED_EVENT);
-    expect(removeCallsAfter.length).toBe(removeCountAfterFirst + 1);
-    expect(removeCallsAfter[removeCallsAfter.length - 1][1]).toBe(firstHandler);
+      // The second hydration must have removed the handler registered by the first hydration.
+      const removeCallsAfter = removeSpy.mock.calls.filter(([evt]) => evt === TRANSACTIONS_APPENDED_EVENT);
+      expect(removeCallsAfter.length).toBe(removeCountAfterFirst + 1);
+      expect(removeCallsAfter[removeCallsAfter.length - 1][1]).toBe(firstHandler);
 
-    // And a new addEventListener call must have followed for the second hydration.
-    const addCallsAfter = addSpy.mock.calls.filter(([evt]) => evt === TRANSACTIONS_APPENDED_EVENT);
-    expect(addCallsAfter.length).toBe(firstAddCalls.length + 1);
-    // The new handler must be a fresh closure, not the same reference.
-    expect(addCallsAfter[addCallsAfter.length - 1][1]).not.toBe(firstHandler);
-
-    addSpy.mockRestore();
-    removeSpy.mockRestore();
+      // And a new addEventListener call must have followed for the second hydration.
+      const addCallsAfter = addSpy.mock.calls.filter(([evt]) => evt === TRANSACTIONS_APPENDED_EVENT);
+      expect(addCallsAfter.length).toBe(firstAddCalls.length + 1);
+      // The new handler must be a fresh closure, not the same reference.
+      expect(addCallsAfter[addCallsAfter.length - 1][1]).not.toBe(firstHandler);
+    } finally {
+      // Remove the live handler the second hydration left attached to `document`
+      // before restoring the spies. hydrateCategorySankey registers a module-level
+      // listener that survives `document.body.innerHTML = ""` cleanup, so without
+      // this it would leak into the `transactions-appended event` block below and
+      // re-fire filterTable with a stale closure against a disconnected container.
+      const lastAdd = addSpy.mock.calls.filter(([evt]) => evt === TRANSACTIONS_APPENDED_EVENT).pop();
+      if (lastAdd) {
+        document.removeEventListener(TRANSACTIONS_APPENDED_EVENT, lastAdd[1] as EventListener);
+      }
+      addSpy.mockRestore();
+      removeSpy.mockRestore();
+    }
   });
 });
 

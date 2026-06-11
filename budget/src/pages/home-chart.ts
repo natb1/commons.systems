@@ -216,6 +216,15 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   }
   const parsed: unknown = JSON.parse(scriptEl.textContent);
   assertChartTransactions(parsed);
+
+  // Remove any prior run's document listener before this run can early-return,
+  // so an empty-data re-hydration cannot leave a stale listener firing with the
+  // previous run's closed-over state (#1267).
+  if (appendedListener) {
+    document.removeEventListener(TRANSACTIONS_APPENDED_EVENT, appendedListener);
+    appendedListener = null;
+  }
+
   const allTxns = parsed;
   if (allTxns.length === 0) {
     container.textContent = "No transaction data to chart.";
@@ -332,9 +341,9 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   // update and the table re-filter run as two independent blocks: a failed chart
   // serialization or render must not skip the table re-filter, which is the only
   // thing that re-applies the active filter to scroll-loaded rows (#578).
-  if (appendedListener) {
-    document.removeEventListener(TRANSACTIONS_APPENDED_EVENT, appendedListener);
-  }
+  //
+  // The prior run's listener was already removed near the top of this function
+  // (before the early-return checks); this run just registers its own (#1267).
   appendedListener = ((e: CustomEvent<SerializedChartTransaction[]>) => {
     const newTxns = e.detail;
 
