@@ -1193,7 +1193,11 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 }
 
 // mergeStatements merges dir-parsed statements with input statements.
-// Dir statements override input by statementID; input-only statements are retained.
+// Merge priority by statementID: real dir > real input > derived/virtual anchor.
+// A real dir statement overrides the stale snapshot copy of the same ID. A
+// derived/virtual anchor never shadows a real statement (dir or input); it
+// gap-fills only — emitted solely for a period with no real statement. Virtual
+// input statements (stale prior-snapshot anchors) are skipped and recomputed.
 // Uses maxDates to set LastTransactionDate on all statements (dir and input-only).
 func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statement, maxDates map[string]*time.Time) []export.Statement {
 	for i := range dirStmts {
@@ -1202,14 +1206,33 @@ func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statem
 	}
 	dirExport := buildExportStatements(dirStmts)
 
-	dirByStmtID := make(map[string]bool, len(dirExport))
+	// realDirByStmtID tracks the IDs of non-virtual (real) dir statements so a
+	// stale input copy of the same ID is dropped in favor of the real dir one.
+	realDirByStmtID := make(map[string]bool, len(dirExport))
 	for _, s := range dirExport {
-		dirByStmtID[s.StatementID] = true
+		if !s.Virtual {
+			realDirByStmtID[s.StatementID] = true
+		}
 	}
 
-	result := dirExport
+	// covered tracks IDs already emitted by a real statement (dir or input), so
+	// a derived anchor only fills periods with no real statement.
+	covered := make(map[string]bool, len(dirExport))
+
+	// Seed result with the real (non-virtual) dir statements.
+	var result []export.Statement
+	for _, s := range dirExport {
+		if s.Virtual {
+			continue
+		}
+		result = append(result, s)
+		covered[s.StatementID] = true
+	}
+
+	// Real input statements: skip virtual ones and those overridden by a real
+	// dir statement; otherwise retain and update LastTransactionDate.
 	for _, s := range inputStmts {
-		if dirByStmtID[s.StatementID] || s.Virtual {
+		if s.Virtual || realDirByStmtID[s.StatementID] {
 			continue
 		}
 		// Update input-only statement's LastTransactionDate from merged transactions
@@ -1219,7 +1242,19 @@ func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statem
 			s.LastTransactionDate = &v
 		}
 		result = append(result, s)
+		covered[s.StatementID] = true
 	}
+
+	// Derived/virtual dir anchors gap-fill only: emit one solely when no real
+	// statement (dir or input) already covers its period.
+	for _, s := range dirExport {
+		if !s.Virtual || covered[s.StatementID] {
+			continue
+		}
+		result = append(result, s)
+		covered[s.StatementID] = true
+	}
+
 	return result
 }
 
@@ -1324,6 +1359,7 @@ func deriveMonthlyStatements(parsed []parsedFile) []budget.StatementData {
 				Balance:     derivedBalance,
 				Period:      period,
 				BalanceDate: &bd,
+				Virtual:     true,
 			})
 		}
 		if count := len(derived) - beforeLen; count > 0 {
@@ -1380,6 +1416,7 @@ func buildExportStatements(stmts []budget.StatementData) []export.Statement {
 			BalanceDate:         balanceDate,
 			LastTransactionDate: ltd,
 			SourceFile:          s.SourceFile,
+			Virtual:             s.Virtual,
 		}
 	}
 	return out
