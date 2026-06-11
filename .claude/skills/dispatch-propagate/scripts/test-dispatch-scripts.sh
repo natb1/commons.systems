@@ -21410,11 +21410,12 @@ su_setup() {
 }
 su_teardown() {
   rm -rf "$TMPDIR_TEST"; TMPDIR_TEST=""
-  unset DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS DISPATCH_USAGE_SAMPLES_GROUP_ID \
+  unset DISPATCH_USAGE_SAMPLES_ENABLED DISPATCH_USAGE_SAMPLES_GROUP_ID \
     DISPATCH_USAGE_SAMPLES_NAMESPACE DISPATCH_USAGE_SAMPLES_TTL_DAYS \
     DISPATCH_USAGE_SAMPLES_PROJECT_ID DISPATCH_USAGE_SAMPLES_NOW \
     DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD \
-    DISPATCH_USAGE_SAMPLES_WRITER CLAUDE_AGENTS_CMD
+    DISPATCH_USAGE_SAMPLES_WRITER CLAUDE_AGENTS_CMD \
+    DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE DISPATCH_USAGE_SAMPLES_SECRET_NAME
 }
 
 # Fixed epoch for writer determinism: sampledAt=1780600000, TTL 60d →
@@ -21437,7 +21438,7 @@ su_write_fake_claude() {
 # all 9 schema fields + expireAt present; spot-checked values match input/config;
 # sampledAt/expireAt epochs match NOW and NOW+TTL*86400.
 su_setup
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com,c@d.com"
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com,c@d.com"
 export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
 export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
 W1_PAYLOAD='{"fiveHourUsedPct":4,"weeklyUsedPct":84,"fiveHourResetsAt":1780867800,"weeklyResetsAt":1780880400,"activeWorkers":1,"targetWorkers":3}'
@@ -21459,7 +21460,7 @@ su_teardown
 
 # W2 — null resets pass through as JSON null; exit 0, no crash.
 su_setup
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com"
 export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
 export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
 W2_PAYLOAD='{"fiveHourUsedPct":4,"weeklyUsedPct":84,"fiveHourResetsAt":null,"weeklyResetsAt":null,"activeWorkers":0,"targetWorkers":2}'
@@ -21469,18 +21470,18 @@ assert_eq "writer W2 → fiveHourResetsAt null" "null" "$(jq -r '.fiveHourResets
 assert_eq "writer W2 → weeklyResetsAt null" "null" "$(jq -r '.weeklyResetsAt' <<<"$out")"
 su_teardown
 
-# W3 — empty member emails → non-zero exit (fail-closed).
+# W3 — empty secret override → non-zero exit (fail-closed).
 su_setup
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS=""
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE=""
 export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
 export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
 if out=$(WRITER "$W1_PAYLOAD" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "writer W3 empty member emails → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "writer W3 empty secret override → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
 su_teardown
 
 # W4 — bad namespace (not office-hours/<env>) → non-zero exit.
 su_setup
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com"
 export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
 export DISPATCH_USAGE_SAMPLES_NAMESPACE="evil/prod"
 export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
@@ -21490,7 +21491,7 @@ su_teardown
 
 # W5 — TTL out of [30,90] → non-zero exit (above and below range).
 su_setup
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com"
 export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
 export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
 export DISPATCH_USAGE_SAMPLES_TTL_DAYS="100"
@@ -21503,7 +21504,7 @@ su_teardown
 
 # W5b — non-integer TTL string → non-zero exit.
 su_setup
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com"
 export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
 export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
 export DISPATCH_USAGE_SAMPLES_TTL_DAYS="abc"
@@ -21513,15 +21514,29 @@ su_teardown
 
 # W6 — missing groupId → non-zero exit.
 su_setup
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com"
 export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
 if out=$(WRITER "$W1_PAYLOAD" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "writer W6 missing groupId → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
 su_teardown
 
+# W7 — DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE unset in --dry-run → non-zero
+# exit; writer prints "usage-sample-writer: --dry-run requires
+# DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE".
+su_setup
+export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
+export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
+# SECRET_OVERRIDE deliberately unset
+if out=$(WRITER "$W1_PAYLOAD" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "writer W7 unset secret override in dry-run → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "writer W7 → diagnostic message contains DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE" "1" \
+  "$([[ "$out" == *"DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE"* ]] && echo 1 || echo 0)"
+su_teardown
+
 # --- SAMPLER cases (fakes only; no real daemon / firebase) ------------------
 
-# S1 — opt-in OFF: member emails unset → exit 0 (no-op); writer NOT invoked.
+# S1 — opt-in OFF: DISPATCH_USAGE_SAMPLES_ENABLED unset → exit 0 (no-op); writer
+# NOT invoked.
 su_setup
 INVOKED="$TMPDIR_TEST/fix/invoked"
 CAPTURE="$TMPDIR_TEST/fix/payload.json"
@@ -21529,7 +21544,7 @@ printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$C
   > "$TMPDIR_TEST/fix/fake-writer"
 chmod +x "$TMPDIR_TEST/fix/fake-writer"
 export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
-# member emails deliberately unset
+# DISPATCH_USAGE_SAMPLES_ENABLED deliberately unset (opt-in switch off)
 if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "sampler S1 opt-in off → exit 0" "0" "$rc"
 assert_eq "sampler S1 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
@@ -21549,7 +21564,7 @@ su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
   '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
 printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
@@ -21574,7 +21589,7 @@ su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
   '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
 printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/does-not-exist.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
@@ -21597,7 +21612,7 @@ printf '%s\n' '{"five_hour":{"used_percentage":4,"resets_at":1780867800},"seven_
 su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" '{}'
 printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
@@ -21620,7 +21635,7 @@ su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
   '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
 printf '#!/usr/bin/env bash\nexit 1\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
@@ -21643,7 +21658,7 @@ su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
   '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
 printf '#!/usr/bin/env bash\necho not-a-number\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
@@ -21665,7 +21680,7 @@ su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
   '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
 printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
@@ -21687,7 +21702,7 @@ su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
   '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
 printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
@@ -21709,13 +21724,28 @@ su_write_fake_claude "$TMPDIR_TEST/fix/fake-claude" \
   '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-foo"}]'
 printf '#!/usr/bin/env bash\necho 3\n' > "$TMPDIR_TEST/fix/fake-target"
 chmod +x "$TMPDIR_TEST/fix/fake-target"
-export DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS="a@b.com"
+export DISPATCH_USAGE_SAMPLES_ENABLED="1"
 export DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH="$TMPDIR_TEST/fix/rate_limits.json"
 export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fix/fake-claude"
 export DISPATCH_USAGE_SAMPLES_TARGET_WORKERS_CMD="$TMPDIR_TEST/fix/fake-target"
 export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
 if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "sampler S9 writer failure → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+su_teardown
+
+# S10 — opt-in switch set to a non-"1" value ("true") → exit 0 (no-op); writer
+# NOT invoked. Locks in the ==1 truthiness contract.
+su_setup
+INVOKED="$TMPDIR_TEST/fix/invoked"
+CAPTURE="$TMPDIR_TEST/fix/payload.json"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\necho fake-id\n' "'$INVOKED'" "'$CAPTURE'" \
+  > "$TMPDIR_TEST/fix/fake-writer"
+chmod +x "$TMPDIR_TEST/fix/fake-writer"
+export DISPATCH_USAGE_SAMPLES_ENABLED="true"
+export DISPATCH_USAGE_SAMPLES_WRITER="$TMPDIR_TEST/fix/fake-writer"
+if out=$("$TMPDIR_TEST/scripts/dispatch-sample-usage" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sampler S10 ENABLED=true (non-1) → exit 0" "0" "$rc"
+assert_eq "sampler S10 → writer NOT invoked" "1" "$([[ ! -e "$INVOKED" ]] && echo 1 || echo 0)"
 su_teardown
 
 # ============================================================================
