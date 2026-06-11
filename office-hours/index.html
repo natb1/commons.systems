@@ -99,6 +99,52 @@
       .capacity-worker-state.paused {
         color: var(--danger, #ff6b6b);
       }
+      /* Plot tip text: force dark so it remains readable on every chart. */
+      svg [aria-label="tip"] text { fill: #222; }
+      .chart-layout {
+        display: flex;
+        align-items: stretch;
+      }
+      .chart-y-axis {
+        flex-shrink: 0;
+      }
+      .chart-y-axis svg { display: block; height: auto; }
+      .chart-scroll-wrapper {
+        flex: 1;
+        min-width: 0;
+        overflow-x: auto;
+        overflow-y: hidden;
+      }
+      .chart-scroll-wrapper svg { height: auto; display: block; }
+      .trend-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        padding: 0.25rem 0 0.5rem;
+        font-size: 0.875rem;
+      }
+      .trend-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+      }
+      .legend-line {
+        display: inline-block;
+        width: 20px;
+        height: 3px;
+        border-radius: 1px;
+        flex-shrink: 0;
+      }
+      .capacity-history {
+        display: block;
+        margin-top: 1.5rem;
+      }
+      .capacity-history-heading {
+        font-size: 1rem;
+        letter-spacing: 0.05em;
+        color: var(--muted-fg, #9aa0a6);
+        margin-bottom: 0.75rem;
+      }
     </style>
   </head>
   <body>
