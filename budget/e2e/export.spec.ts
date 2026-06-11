@@ -82,6 +82,8 @@ test.describe("export", () => {
 
     const download = await triggerExportDownload(page);
 
+    expect(download.suggestedFilename()).toMatch(/\.benc$/);
+
     const content = await (await download.createReadStream()).toArray();
     const buf = Buffer.concat(content);
     expect(buf.subarray(0, 4).toString()).toBe("BENC");

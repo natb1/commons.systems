@@ -407,7 +407,8 @@ exportButton.addEventListener("click", async () => {
     a.href = url;
     const date = new Date().toISOString().slice(0, 10);
     const groupName = state.source === "local" ? state.groupName : "budget";
-    a.download = `budget-${groupName}-${date}.json`;
+    const ext = importPassword ? "benc" : "json";
+    a.download = `budget-${groupName}-${date}.${ext}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
