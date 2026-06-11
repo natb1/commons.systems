@@ -1548,6 +1548,45 @@ describe("computeAllBudgetBalances with overrides", () => {
   });
 });
 
+describe("mid-period override agreement (#1264)", () => {
+  // Regression guard: a strictly mid-period override (Jan 16, inside w2 = [Jan13, Jan20))
+  // must be honored identically by all three balance functions.
+  // Against the old bulk code, w2 would yield 130 (override ignored); only the corrected
+  // findOverrideInPeriod resolver yields the expected values (20, 95).
+  const w1 = makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 40 });
+  const w2 = makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 });
+  const w3 = makePeriod({ id: "w3", budgetId: "food", periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"), total: 25 });
+  const periods = [w1, w2, w3];
+
+  // Override date Jan 16 is strictly inside w2 [Jan13, Jan20) — not on a period boundary.
+  // Allowance 100, rollover "balance", per-period totals w1=40/w2=30/w3=25.
+  // Expected values:
+  //   w1: no override → applyRollover(0, 100, "balance") = 100; 100-40 = 60 accumulated
+  //   w2: override in period → running = 50 (replaces rollover); txn-w2 amount 30 → 50-30 = 20
+  //   w3: no override → applyRollover(20, 100, "balance") = 120; txn-w3 amount 25 → 120-25 = 95
+  const budget = makeBudget({ allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-16", 50)] });
+  const txn1 = makeTxn({ id: "txn-w2", amount: 30, timestamp: ts("2025-01-15") });
+  const txn2 = makeTxn({ id: "txn-w3", amount: 25, timestamp: ts("2025-01-22") });
+  const allTxns = [txn1, txn2];
+
+  it("all three functions agree and reflect a mid-period override", () => {
+    const batch = computeAllBudgetBalances(allTxns, [budget], periods);
+
+    // computeAllBudgetBalances matches computeBudgetBalance for each transaction
+    expect(batch.get("txn-w2")).toBe(computeBudgetBalance(txn1, allTxns, budget, periods));
+    expect(batch.get("txn-w3")).toBe(computeBudgetBalance(txn2, allTxns, budget, periods));
+
+    // Concrete values: override is honored in w2 (old buggy bulk code → 130, not 20)
+    expect(batch.get("txn-w2")).toBe(20);
+    expect(batch.get("txn-w3")).toBe(95);
+
+    // computePeriodBalances also reflects the override in w2 and correct w3 rollover
+    const pb = computePeriodBalances([budget], periods).get("food" as any)!;
+    expect(pb[1].runningBalance).toBe(20);  // w2: override applied (old buggy code → 130)
+    expect(pb[2].runningBalance).toBe(95);  // w3: rollover from corrected w2 balance
+  });
+});
+
 describe("periodAllowance", () => {
   it("weekly: always returns full allowance", () => {
     expect(periodAllowance(100, "weekly", null, Date.parse("2025-01-06"))).toBe(100);
