@@ -5,6 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/natb1/commons.systems/budget-etl/internal/budget"
+	"github.com/natb1/commons.systems/budget-etl/internal/export"
+	"github.com/natb1/commons.systems/budget-etl/internal/journal"
 )
 
 func TestParseSGML(t *testing.T) {
@@ -81,5 +85,59 @@ func TestParseSGML_InvestmentSkip(t *testing.T) {
 	}
 	if result.SkipReason == "" {
 		t.Fatal("expected non-empty skip reason")
+	}
+}
+
+// TestParseSGML_CreditCardLiability covers both acceptance criteria of #1270 at
+// the real seam: parseSGML detects CREDITCARDMSGSRSV1 and sets IsCreditCard, and
+// the journal layer then types the card account as a liability.
+func TestParseSGML_CreditCardLiability(t *testing.T) {
+	path := filepath.Join("testdata", "creditcard.qfx")
+	result, err := parseSGML(path)
+	if err != nil {
+		t.Fatalf("parseSGML: %v", err)
+	}
+	if result.Skipped {
+		t.Fatal("expected non-skipped result for credit-card statement")
+	}
+	if len(result.Transactions) == 0 {
+		t.Fatal("expected at least one transaction")
+	}
+	// Criterion 1: the SGML parser detects the credit-card message set.
+	if !result.IsCreditCard {
+		t.Fatal("expected IsCreditCard == true for a CREDITCARDMSGSRSV1 statement")
+	}
+
+	// Convert parsed transactions into budget.TransactionData, mirroring the
+	// field mapping in main.go, and carry the IsCreditCard flag through.
+	const inst, acct = "Test Bank", "Test Card"
+	var txns []budget.TransactionData
+	for _, tr := range result.Transactions {
+		txns = append(txns, budget.TransactionData{
+			Institution:   inst,
+			Account:       acct,
+			Description:   tr.Description,
+			Amount:        tr.Amount,
+			Timestamp:     tr.Date,
+			StatementID:   "test-stmt",
+			TransactionID: tr.TransactionID,
+			IsCreditCard:  result.IsCreditCard,
+		})
+	}
+
+	// Criterion 2: the journal layer types the card account as a liability.
+	r := journal.Build(txns, nil, journal.DefaultPairWindow)
+	wantID := inst + "_" + acct
+	var found bool
+	for _, a := range r.Accounts {
+		if a.ID == wantID {
+			found = true
+			if a.AccountType != export.AccountTypeLiability {
+				t.Errorf("account %q AccountType = %q, want %q", a.ID, a.AccountType, export.AccountTypeLiability)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("account %q not found in journal result", wantID)
 	}
 }
