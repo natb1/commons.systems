@@ -338,21 +338,29 @@ func TestApplyTransactionRulesSkippedByGeneral(t *testing.T) {
 	}
 }
 
-// writeCSVFixture writes a minimal bank statement CSV file to path.
+// writeCSVFixtureBalance writes a minimal bank statement CSV file to path with
+// a caller-specified ending balance in the metadata header line.
 // Each entry is [date, amount, description, "", txnID, type].
-func writeCSVFixture(t *testing.T, path string, rows [][6]string) {
+func writeCSVFixtureBalance(t *testing.T, path, balance string, rows [][6]string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		t.Fatalf("creating fixture dir: %v", err)
 	}
 	var lines []string
-	lines = append(lines, "0000000000,2025/01/01,2025/01/31,100.00,50.00")
+	lines = append(lines, "0000000000,2025/01/01,2025/01/31,100.00,"+balance)
 	for _, r := range rows {
 		lines = append(lines, strings.Join(r[:], ","))
 	}
 	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0644); err != nil {
 		t.Fatalf("writing fixture: %v", err)
 	}
+}
+
+// writeCSVFixture writes a minimal bank statement CSV file to path.
+// Each entry is [date, amount, description, "", txnID, type].
+func writeCSVFixture(t *testing.T, path string, rows [][6]string) {
+	t.Helper()
+	writeCSVFixtureBalance(t, path, "50.00", rows)
 }
 
 func TestRunMerge(t *testing.T) {
@@ -633,6 +641,62 @@ func TestRunMergeDedupOverlappingFiles(t *testing.T) {
 	}
 	if ids[docUnique] != 1 {
 		t.Errorf("TXN-UNIQUE: expected 1 occurrence, got %d", ids[docUnique])
+	}
+
+	// Both overlapping CSV files share the same statementId; they must collapse
+	// to exactly one deduped statement record.
+	if len(out.Statements) != 1 {
+		t.Fatalf("expected 1 statement (deduped), got %d", len(out.Statements))
+	}
+	wantStmtID := "test_bank-1234-2025-01"
+	if out.Statements[0].StatementID != wantStmtID {
+		t.Errorf("statement.statementId = %q, want %q", out.Statements[0].StatementID, wantStmtID)
+	}
+	wantDocID := budget.StatementDocID(wantStmtID)
+	if out.Statements[0].ID != wantDocID {
+		t.Errorf("statement.id = %q, want %q", out.Statements[0].ID, wantDocID)
+	}
+}
+
+func TestRunMergeErrorsOnBalanceDisagreement(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Two overlapping CSV files for the same institution/account/period — same
+	// statementId — but with different ending balances. dedupStatementData must
+	// detect the balance disagreement and return an error.
+	stmtID := "test_bank-1234-2025-01"
+	csv1 := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "download1.csv")
+	writeCSVFixtureBalance(t, csv1, "50.00", [][6]string{
+		{"2025/01/10", "5.00", "SHARED PURCHASE", "", "TXN-OVERLAP", "DEBIT"},
+	})
+	csv2 := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "download2.csv")
+	writeCSVFixtureBalance(t, csv2, "75.00", [][6]string{
+		{"2025/01/10", "5.00", "SHARED PURCHASE", "", "TXN-OVERLAP", "DEBIT"},
+	})
+
+	inputJSON := export.Output{
+		Version:      1,
+		GroupName:    "test-group",
+		Transactions: []export.Transaction{},
+		Rules: []export.Rule{
+			{ID: "cat-all", Type: "categorization", Pattern: "PURCHASE", Target: "Test:General", Priority: 10},
+		},
+	}
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input JSON: %v", err)
+	}
+
+	outputPath := filepath.Join(tmp, "output.json")
+	err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath})
+	if err == nil {
+		t.Fatal("runMerge: expected error for balance disagreement, got nil")
+	}
+	if !strings.Contains(err.Error(), stmtID) {
+		t.Errorf("error %q does not mention statementId %q", err.Error(), stmtID)
+	}
+	if !strings.Contains(err.Error(), "balance disagreement") {
+		t.Errorf("error %q does not contain 'balance disagreement'", err.Error())
 	}
 }
 
