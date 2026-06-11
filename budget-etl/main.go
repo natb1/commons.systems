@@ -151,6 +151,10 @@ func runDirJSON(dir, groupName string, disc parse.DiscoverOpts, output fileOpts)
 	maxDates := maxTransactionDates(allTxns)
 	allStmts := buildStatementData(parsed, maxDates)
 	allStmts = append(allStmts, deriveMonthlyStatements(parsed)...)
+	allStmts, err = dedupStatementData(allStmts)
+	if err != nil {
+		return fmt.Errorf("statements: %w", err)
+	}
 
 	return runOutputJSON(allTxns, allStmts, groupName, output)
 }
@@ -1063,6 +1067,10 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 	// Build statements from dir-parsed files (maxDates computed later after merge)
 	dirStmts := buildStatementData(parsed, nil)
 	dirStmts = append(dirStmts, deriveMonthlyStatements(parsed)...)
+	dirStmts, err = dedupStatementData(dirStmts)
+	if err != nil {
+		return fmt.Errorf("statements: %w", err)
+	}
 
 	// Build input lookup by doc ID
 	inputByID := make(map[string]export.Transaction, len(inp.Transactions))
