@@ -503,6 +503,56 @@ func TestUnrelatedSameAmountNotMerged(t *testing.T) {
 	}
 }
 
+func TestOneLegTransferOneLegNot(t *testing.T) {
+	// A real-world transfer where only one leg carries the Transfer:* category:
+	// the outflow is categorized Transfer:Savings, but the matching inflow
+	// arrives as a plain "Deposit". A single Transfer:* leg is sufficient to
+	// merge — the gate requires at least one transfer leg, not both.
+	txns := []budget.TransactionData{
+		{ // outflow categorized as a transfer
+			Institution:   "Example Bank",
+			Account:       "Checking",
+			Description:   "Transfer to Savings",
+			Amount:        30000,
+			Timestamp:     ts("2025-02-18"),
+			StatementID:   "s",
+			TransactionID: "out",
+			Category:      "Transfer:Savings",
+		},
+		{ // inflow NOT categorized as a transfer
+			Institution:   "Example Credit Union",
+			Account:       "Savings",
+			Description:   "Deposit",
+			Amount:        -30000,
+			Timestamp:     ts("2025-02-19"),
+			StatementID:   "s",
+			TransactionID: "in",
+			Category:      "Deposit",
+		},
+	}
+	r := Build(txns, nil, nil, DefaultPairWindow)
+
+	if len(r.Entries) != 1 {
+		t.Fatalf("expected 1 merged entry (one Transfer:* leg is sufficient), got %d", len(r.Entries))
+	}
+	if len(r.Legs) != 2 {
+		t.Fatalf("expected 2 legs, got %d", len(r.Legs))
+	}
+	assertBalanced(t, r.Legs)
+
+	// No Unresolved Transfers placeholder — the pair matched.
+	if _, ok := accountIDs(r.Accounts)[acctUnresolvedTransfers]; ok {
+		t.Errorf("Unresolved Transfers should not be emitted for a matched pair")
+	}
+
+	// Both docIDs map to the single merged entry.
+	docOut := budget.TransactionDocID("s", "out")
+	docIn := budget.TransactionDocID("s", "in")
+	if r.EntryIDByDocID[docOut] != r.Entries[0].ID || r.EntryIDByDocID[docIn] != r.Entries[0].ID {
+		t.Errorf("both docIDs should map to the merged entry")
+	}
+}
+
 func TestNonPrimaryNormalizedDuplicateSkipped(t *testing.T) {
 	// One real purchase appears in two overlapping statements with different
 	// statement IDs. rules.ApplyNormalization marks one member primary and the
