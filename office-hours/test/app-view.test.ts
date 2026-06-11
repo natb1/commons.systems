@@ -51,6 +51,7 @@ describe("renderApp — demo tier", () => {
     const banner = container.querySelector(".demo-banner");
     expect(banner).not.toBeNull();
     expect(banner!.textContent).toBe("Demo data — sign in to see your queue.");
+    expect(banner!.getAttribute("role")).toBe("status");
   });
 
   it("renders the capacity heading", () => {
@@ -167,6 +168,7 @@ describe("renderApp — error tier", () => {
     const error = container.querySelector(".error");
     expect(error).not.toBeNull();
     expect(error!.textContent).toBe("Couldn't load your queue. Please try again.");
+    expect(error!.getAttribute("role")).toBe("alert");
   });
 
   it("does not render a .demo-banner", () => {

@@ -49,6 +49,9 @@ async function refresh(): Promise<void> {
     if (currentUser !== refreshUser) return;
     renderApp(app!, { tier: "owner", samples, reminders }, new Date());
   } catch (error) {
+    // Auth may have changed while the Firestore calls were in flight — skip the
+    // render so the in-flight error does not clobber the already-updated view.
+    if (currentUser !== refreshUser) return;
     // Load failed — render an explicit error state rather than masking it as
     // demo data. A non-owner's read is "permission-denied"; logError classifies it.
     if (!deferProgrammerError(error)) {
