@@ -216,10 +216,15 @@ describe("renderHome", () => {
 
 describe("download wiring (regression #1280)", () => {
   let router: Router | undefined;
+  let outlet: HTMLElement | undefined;
 
   afterEach(() => {
     router?.destroy();
     router = undefined;
+    if (outlet) {
+      document.body.removeChild(outlet);
+      outlet = undefined;
+    }
   });
 
   it("fires exactly one download per click after N home navigations", async () => {
@@ -229,7 +234,7 @@ describe("download wiring (regression #1280)", () => {
 
     // Mirror main.ts: wire the persistent outlet's click delegation ONCE,
     // before the router's first navigation.
-    const outlet = document.createElement("div");
+    outlet = document.createElement("div");
     document.body.appendChild(outlet);
     wireDownloadActions(outlet);
     wireMarkdownActions(outlet);
