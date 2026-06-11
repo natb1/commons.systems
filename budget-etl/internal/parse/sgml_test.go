@@ -31,6 +31,11 @@ func TestParseSGML(t *testing.T) {
 		t.Errorf("Balance = %d, want %d", result.Balance, 850000)
 	}
 
+	// Guard: a bank/checking statement must not be detected as a credit card.
+	if result.IsCreditCard {
+		t.Errorf("bankone.qfx: expected IsCreditCard == false, got true")
+	}
+
 	// First: DEBIT, TRNAMT=-81.71 → budget amount = +8171 cents
 	t.Run("debit", func(t *testing.T) {
 		txn := txns[0]
@@ -106,6 +111,10 @@ func TestParseSGML_CreditCardLiability(t *testing.T) {
 	// Criterion 1: the SGML parser detects the credit-card message set.
 	if !result.IsCreditCard {
 		t.Fatal("expected IsCreditCard == true for a CREDITCARDMSGSRSV1 statement")
+	}
+	// Balance: LEDGERBAL BALAMT=-45.00 → -4500 cents.
+	if result.Balance != -4500 {
+		t.Errorf("Balance = %d, want -4500", result.Balance)
 	}
 
 	// Convert parsed transactions into budget.TransactionData, mirroring the
