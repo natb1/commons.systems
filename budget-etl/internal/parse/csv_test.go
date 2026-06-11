@@ -105,3 +105,46 @@ func TestParseCSV_DuplicateIDs(t *testing.T) {
 		t.Errorf("txn 2: ID = %q, want %q", txns[2].TransactionID, "ATM0055566-3")
 	}
 }
+
+// TestParseCSV_DuplicateIDCollision verifies that a synthetic duplicate suffix
+// never collides with a real later ID. Given IDs X, X, X-2 in file order:
+//   - row 1 (original X) → X
+//   - row 2 (duplicate X) → X-2 is taken by the original set, so skips to X-3
+//   - row 3 (original X-2) → X-2 (still free)
+func TestParseCSV_DuplicateIDCollision(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "collision.csv")
+	content := "00000000001234567890,2025/06/11,2025/07/10,15000.00,12000.00\n" +
+		"2025/06/16,10.00,\"Row A\",,\"X\",\"DEBIT\"\n" +
+		"2025/06/16,20.00,\"Row B\",,\"X\",\"DEBIT\"\n" +
+		"2025/06/16,30.00,\"Row C\",,\"X-2\",\"DEBIT\"\n"
+	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := parseCSV(tmp)
+	if err != nil {
+		t.Fatalf("parseCSV: %v", err)
+	}
+	txns := result.Transactions
+	if len(txns) != 3 {
+		t.Fatalf("expected 3 transactions, got %d", len(txns))
+	}
+
+	// All three IDs must be distinct.
+	seen := make(map[string]int)
+	for idx, txn := range txns {
+		seen[txn.TransactionID] = idx
+	}
+	if len(seen) != 3 {
+		t.Errorf("expected 3 distinct IDs, got %d: %v", len(seen), seen)
+	}
+
+	// The duplicate X row (row 2) must skip the taken X-2 and become X-3.
+	if txns[1].TransactionID != "X-3" {
+		t.Errorf("txn 1: ID = %q, want %q", txns[1].TransactionID, "X-3")
+	}
+
+	// The real X-2 row (row 3) must keep its original ID.
+	if txns[2].TransactionID != "X-2" {
+		t.Errorf("txn 2: ID = %q, want %q", txns[2].TransactionID, "X-2")
+	}
+}
