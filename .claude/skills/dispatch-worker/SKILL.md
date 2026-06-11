@@ -77,13 +77,15 @@ applies none:
   itself on a clean pass. On a user-input blocker (a needs-human-judgment item, a
   bug, a failed pre-QA check) it escalates to the office-hours queue instead,
   where `/office-hours` runs the interactive residue.
-- **`/review-fix`** — the single terminal review pass. It runs `/code-review max
-  --fix`, `/review`, and the full surface-gated security fan-out as direct
-  subagents over the same diff, unifies and de-duplicates the findings, applies
-  the in-scope fixes via one `/commit-merge-push`, files meaningful out-of-scope
-  findings as `blocked_by` follow-ups, posts one PR comment covering every
-  finding, applies `dispatch:reviewed`, and marks the PR ready. It is idempotent
-  on re-entry.
+- **`/review-fix`** — the single terminal review pass. It invokes the Workflow
+  tool on `.claude/workflows/review-fix.js`, which fans out surface-conditional
+  finders (`/code-review max` findings-only, `/review`, and the surface-gated
+  security reviewers) over the same diff, de-duplicates and classifies the
+  findings in code, adversarially verifies `Required` findings before spending an
+  Opus fix, and runs an Opus fix fan-out. The skill then commits the fixes via one
+  `/commit-merge-push`, files meaningful out-of-scope findings as `blocked_by`
+  follow-ups, posts one PR comment covering every finding, applies
+  `dispatch:reviewed`, and marks the PR ready. It is idempotent on re-entry.
 - **`/implement`** — the `implement`-phase build skill for a no-PR issue carrying
   `dispatch:planned`. It reads the plan persisted to the issue's
   `<!-- dispatch:plan -->` comment, builds each unit via `/implement-unit`, and

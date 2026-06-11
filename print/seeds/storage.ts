@@ -275,7 +275,7 @@ function makeLittleNemoCbz(): Buffer {
 }
 
 const publicMeta = { publicdomain: "true" };
-const testPrivateMeta = { publicdomain: "false", member_0: "test@example.com" };
+const testPrivateMeta = { publicdomain: "false", member_emails: "test@example.com" };
 
 const storageSeed: StorageSeedItem[] = [
   {

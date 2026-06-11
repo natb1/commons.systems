@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Map changed-surface flags → the surface-conditional finder-source set for the
+# /review-fix Workflow fan-out (issue #890).
+# Usage: printf 'surface=code\ndeps=true\napp_or_rules=true\n' | dispatch-review-finders
+#
+# Reads three key=value lines on stdin (as emitted by dispatch-security-surface),
+# in any order, blank lines ignored:
+#   surface=<empty|docs|code>
+#   deps=<true|false>
+#   app_or_rules=<true|false>
+# Missing keys default to: surface=empty, deps=false, app_or_rules=false.
+#
+# Prints finder source names to stdout, one per line, in this fixed order,
+# omitting any not warranted by the surface flags:
+#   code-review          (always)
+#   review               (always)
+#   input-validation     (surface==code)
+#   secrets              (surface==code)
+#   red-team             (surface==code)
+#   security-review      (surface==code)
+#   auth                 (surface==code AND app_or_rules==true)
+#   data-exposure        (surface==code AND app_or_rules==true)
+#   firebase             (surface==code AND app_or_rules==true)
+#   codeql               (surface==code)
+#   npm                  (deps==true)
+#
+# surface empty/docs => exactly code-review and review (zero security finders).
+# surface==code       => 4 always-on security finders + codeql.
+# app_or_rules==true  => additionally auth, data-exposure, firebase (7 total).
+# deps==true          => additionally npm (independent of surface).
+#
+# No network access, no git, no gh — pure stdin → stdout classification.
+#
+# Consumer: .claude/workflows/review-fix.js mirrors this mapping in JS;
+# this script is the normative spec for that inline JS logic.
+set -euo pipefail
+
+# --- parse stdin ----------------------------------------------------------------
+
+surface="empty"
+deps="false"
+app_or_rules="false"
+
+while IFS= read -r line; do
+  # Skip blank / whitespace-only lines.
+  [[ -z "${line//[[:space:]]/}" ]] && continue
+  case "$line" in
+    surface=*)   surface="${line#surface=}" ;;
+    deps=*)      deps="${line#deps=}" ;;
+    app_or_rules=*) app_or_rules="${line#app_or_rules=}" ;;
+  esac
+done
+
+# --- emit finder set ------------------------------------------------------------
+
+# Always-present finders (review quality, all surfaces including empty/docs).
+echo "code-review"
+echo "review"
+
+# Security finders: only when surface==code.
+if [[ "$surface" == "code" ]]; then
+  echo "input-validation"
+  echo "secrets"
+  echo "red-team"
+  echo "security-review"
+
+  # App/rules-specific security finders.
+  if [[ "$app_or_rules" == "true" ]]; then
+    echo "auth"
+    echo "data-exposure"
+    echo "firebase"
+  fi
+
+  echo "codeql"
+fi
+
+# Dependency audit finder: gated on deps flag, independent of surface.
+if [[ "$deps" == "true" ]]; then
+  echo "npm"
+fi
