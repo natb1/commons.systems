@@ -890,6 +890,141 @@ func TestDeriveMonthlyStatements(t *testing.T) {
 	})
 }
 
+// TestDeriveMonthlyStatementsVirtual asserts that every derived anchor produced
+// by deriveMonthlyStatements carries Virtual == true.
+func TestDeriveMonthlyStatementsVirtual(t *testing.T) {
+	parsed := []parsedFile{{
+		sf: parse.StatementFile{
+			Institution: "testbank",
+			Account:     "9999",
+			Period:      "2026-03",
+		},
+		result: parse.ParseResult{
+			Balance:     500000, // $5000.00
+			BalanceDate: time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC),
+			Transactions: []parse.Transaction{
+				{Date: time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC), Amount: 10000},
+				{Date: time.Date(2026, 2, 15, 0, 0, 0, 0, time.UTC), Amount: 20000},
+				{Date: time.Date(2026, 3, 5, 0, 0, 0, 0, time.UTC), Amount: 5000},
+			},
+		},
+	}}
+
+	derived := deriveMonthlyStatements(parsed)
+	if len(derived) == 0 {
+		t.Fatal("expected at least one derived anchor, got none")
+	}
+	for i, s := range derived {
+		if !s.Virtual {
+			t.Errorf("derived[%d] (period=%q) has Virtual=false, want true", i, s.Period)
+		}
+	}
+}
+
+// TestMergeStatementsPreservesRealOverDerivedAnchor asserts the three-way merge
+// priority: real dir > real input > derived/virtual anchor.
+//
+//  1. Core criterion: a real input statement is preserved when a derived
+//     (Virtual=true) dir anchor exists for the same StatementID.
+//  2. Gap-fill: a derived anchor IS emitted for a period that has no real
+//     statement in either dir or input.
+func TestMergeStatementsPreservesRealOverDerivedAnchor(t *testing.T) {
+	// Two derived dir anchors:
+	//   anchor-A: "testbank-acct-2026-01" (Virtual=true, balance=$10 estimate)
+	//   anchor-B: "testbank-acct-2026-02" (Virtual=true, balance=$20 estimate — gap month)
+	//
+	// One real input statement:
+	//   real-A: "testbank-acct-2026-01" (Virtual=false, balance=$99 real value)
+	//
+	// After merge, the result for "testbank-acct-2026-01" must be the $99 real
+	// input statement (not the $10 derived estimate), and "testbank-acct-2026-02"
+	// must still appear (gap-fill preserved).
+
+	const (
+		stmtIDJanuary  = "testbank-acct-2026-01"
+		stmtIDFebruary = "testbank-acct-2026-02"
+	)
+
+	bdJan := time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC)
+	bdFeb := time.Date(2026, 2, 28, 0, 0, 0, 0, time.UTC)
+
+	dirStmts := []budget.StatementData{
+		{
+			StatementID: stmtIDJanuary,
+			Institution: "testbank",
+			Account:     "acct",
+			Balance:     1000, // $10.00 — derived estimate
+			Period:      "2026-01",
+			BalanceDate: &bdJan,
+			Virtual:     true,
+		},
+		{
+			StatementID: stmtIDFebruary,
+			Institution: "testbank",
+			Account:     "acct",
+			Balance:     2000, // $20.00 — derived estimate, gap month
+			Period:      "2026-02",
+			BalanceDate: &bdFeb,
+			Virtual:     true,
+		},
+	}
+
+	inputStmts := []export.Statement{
+		{
+			ID:          budget.StatementDocID(stmtIDJanuary),
+			StatementID: stmtIDJanuary,
+			Institution: "testbank",
+			Account:     "acct",
+			Balance:     99.00, // $99.00 — real measured balance
+			Period:      "2026-01",
+			BalanceDate: "2026-01-28",
+			Virtual:     false,
+		},
+	}
+
+	maxDates := map[string]*time.Time{} // no transactions; LastTransactionDate stays nil
+
+	result := mergeStatements(dirStmts, inputStmts, maxDates)
+
+	// Index the result by StatementID for easy lookup.
+	byStmtID := make(map[string]export.Statement, len(result))
+	for _, s := range result {
+		if _, dup := byStmtID[s.StatementID]; dup {
+			t.Errorf("duplicate StatementID %q in merge result", s.StatementID)
+		}
+		byStmtID[s.StatementID] = s
+	}
+
+	// 1. Core criterion: real input wins — $99 balance, Virtual=false.
+	jan, ok := byStmtID[stmtIDJanuary]
+	if !ok {
+		t.Fatalf("StatementID %q missing from merge result", stmtIDJanuary)
+	}
+	if jan.Virtual {
+		t.Errorf("result for %q has Virtual=true, want false (real input should win)", stmtIDJanuary)
+	}
+	if jan.Balance != 99.00 {
+		t.Errorf("result for %q has Balance=%.2f, want 99.00 (real input balance)", stmtIDJanuary, jan.Balance)
+	}
+
+	// 2. Gap-fill preserved: derived anchor for February still appears.
+	feb, ok := byStmtID[stmtIDFebruary]
+	if !ok {
+		t.Fatalf("StatementID %q missing from merge result — gap-fill regressed", stmtIDFebruary)
+	}
+	if !feb.Virtual {
+		t.Errorf("result for %q has Virtual=false, want true (should be the derived anchor)", stmtIDFebruary)
+	}
+	if feb.Balance != 20.00 {
+		t.Errorf("result for %q has Balance=%.2f, want 20.00 (derived anchor balance)", stmtIDFebruary, feb.Balance)
+	}
+
+	// 3. Exactly the two expected statements — no extras.
+	if len(result) != 2 {
+		t.Errorf("expected 2 statements in merge result, got %d", len(result))
+	}
+}
+
 // TestMain lets TestRemovedFlagsRejected re-exec this test binary as the real
 // budget-etl CLI: when BUDGET_ETL_TEST_RUN_MAIN=1 is set, it runs main()
 // instead of the test suite. main() parses flags via flag.CommandLine, and an
