@@ -718,7 +718,6 @@ describe("renderHome", () => {
       const orphanBatch = [
         txn({ id: "txn-b", description: "Store B", amount: 50, normalizedId: "norm-1", normalizedPrimary: false, timestamp: mockTimestamp("2025-01-04") }),
       ];
-      expect(() => renderTransactionRows(orphanBatch, "household", true, budgetIdToName)).not.toThrow();
       const orphanHtml = renderTransactionRows(orphanBatch, "household", true, budgetIdToName);
       // The orphan duplicate is suppressed — no group row, and it is not shown as a
       // standalone transaction either.
@@ -734,7 +733,6 @@ describe("renderHome", () => {
     });
 
     it("renders the table (no data error) when a batch contains only a non-primary member", async () => {
-      mockComputeAllBalances.mockReturnValue(new Map());
       const html = await renderHome(localOptions({
         getTransactions: vi.fn().mockResolvedValue([
           txn({ id: "txn-b", description: "Store B", amount: 50, normalizedId: "norm-1", normalizedPrimary: false, timestamp: mockTimestamp("2025-01-04") }),
