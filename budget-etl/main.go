@@ -521,6 +521,9 @@ func buildRule(r rules.Rule, minAmountDollars, maxAmountDollars *float64) (rules
 func convertExportRules(exportRules []export.Rule) ([]rules.Rule, error) {
 	ruleSet := make([]rules.Rule, len(exportRules))
 	for i, r := range exportRules {
+		if r.Type == "categorization" && (r.MatchCategory != "" || r.ExcludeCategory != "" || r.Category != "") {
+			return nil, fmt.Errorf("rule %s: category-filter fields (matchCategory/excludeCategory/category) are only valid on budget_assignment rules, not categorization rules", r.ID)
+		}
 		built, err := buildRule(rules.Rule{
 			ID:              r.ID,
 			Type:            r.Type,
