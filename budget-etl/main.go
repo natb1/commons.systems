@@ -181,7 +181,7 @@ func runOutputJSON(allTxns []budget.TransactionData, allStmts []budget.Statement
 
 	exportStmts := buildExportStatements(allStmts)
 
-	result := journal.Build(allTxns, nil, journal.DefaultPairWindow)
+	result := journal.Build(allTxns, nil, nil, journal.DefaultPairWindow)
 	for i := range exportTxns {
 		if id, ok := result.EntryIDByDocID[exportTxns[i].ID]; ok {
 			idCopy := id
@@ -456,7 +456,7 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	// Append pet budget if virtual Synchrony transactions exist
 	budgets := appendPetBudgetIfNeeded(inp.Budgets, vsr.transactions)
 
-	result := journal.Build(allTxns, txnDocIDs, journal.DefaultPairWindow)
+	result := journal.Build(allTxns, txnDocIDs, normMap, journal.DefaultPairWindow)
 	for i := range exportTxns {
 		if id, ok := result.EntryIDByDocID[exportTxns[i].ID]; ok {
 			idCopy := id
@@ -1174,7 +1174,7 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 	// Append pet budget if virtual Synchrony transactions exist
 	budgets := appendPetBudgetIfNeeded(inp.Budgets, vsr.transactions)
 
-	result := journal.Build(allTxns, allDocIDs, journal.DefaultPairWindow)
+	result := journal.Build(allTxns, allDocIDs, normMap, journal.DefaultPairWindow)
 	for i := range exportTxns {
 		if id, ok := result.EntryIDByDocID[exportTxns[i].ID]; ok {
 			idCopy := id
