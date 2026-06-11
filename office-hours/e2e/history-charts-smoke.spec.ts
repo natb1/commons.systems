@@ -21,7 +21,8 @@ test.describe("office-hours capacity history charts", () => {
 
   test("both charts render SVGs", async ({ page }) => {
     const svgs = page.locator(".capacity-history .chart-scroll-wrapper svg");
-    await expect(svgs.first()).toBeVisible({ timeout: 10000 });
+    // beforeEach already waited for the first SVG to be visible, so the count
+    // can proceed immediately.
     const count = await svgs.count();
     expect(count).toBeGreaterThanOrEqual(2);
   });

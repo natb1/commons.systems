@@ -142,7 +142,14 @@ export function renderUsageHistoryChart(samples: UsageSample[]): HTMLElement {
   ]);
 
   container.replaceChildren(layout, legend);
-  wrapper.scrollLeft = wrapper.scrollWidth;
+
+  // Scroll to the newest data (rightmost) on first paint. scrollWidth is 0 for a
+  // detached element, and this container is still detached here (main.ts attaches
+  // the section after this returns), so defer the assignment to the next frame —
+  // by then a layout pass has run and scrollWidth is meaningful.
+  requestAnimationFrame(() => {
+    wrapper.scrollLeft = wrapper.scrollWidth;
+  });
 
   return container;
 }
