@@ -365,5 +365,75 @@ describe("createFirestoreErrorSink", () => {
         expect.stringContaining("apiKey"),
       );
     });
+
+    it("strips a key with a PII substring (recipientEmail matches 'email')", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const sink = createFirestoreErrorSink(makeOptions());
+      const ctx = makeContext({ txnId: "123" } as Partial<EnrichedErrorContext>);
+      (ctx as Record<string, unknown>).recipientEmail = "victim@example.com";
+      sink(new Error("boom"), ctx);
+
+      const doc = getWrittenDoc();
+      expect(doc.recipientEmail).toBeUndefined();
+      const extras = JSON.parse(doc.extras as string);
+      expect(extras.recipientEmail).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("recipientEmail"));
+    });
+
+    it("strips a key with a PII substring (phoneNumber matches 'phone')", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const sink = createFirestoreErrorSink(makeOptions());
+      const ctx = makeContext({ txnId: "123" } as Partial<EnrichedErrorContext>);
+      (ctx as Record<string, unknown>).phoneNumber = "555-1234";
+      sink(new Error("boom"), ctx);
+
+      const doc = getWrittenDoc();
+      expect(doc.phoneNumber).toBeUndefined();
+      const extras = JSON.parse(doc.extras as string);
+      expect(extras.phoneNumber).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("phoneNumber"));
+    });
+
+    it("strips a key with a PII substring (userSsn matches 'ssn')", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const sink = createFirestoreErrorSink(makeOptions());
+      const ctx = makeContext({ txnId: "123" } as Partial<EnrichedErrorContext>);
+      (ctx as Record<string, unknown>).userSsn = "000-00-0000";
+      sink(new Error("boom"), ctx);
+
+      const doc = getWrittenDoc();
+      expect(doc.userSsn).toBeUndefined();
+      const extras = JSON.parse(doc.extras as string);
+      expect(extras.userSsn).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("userSsn"));
+    });
+
+    it("strips a key with a PII substring (userDob matches 'dob')", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const sink = createFirestoreErrorSink(makeOptions());
+      const ctx = makeContext({ txnId: "123" } as Partial<EnrichedErrorContext>);
+      (ctx as Record<string, unknown>).userDob = "1990-01-01";
+      sink(new Error("boom"), ctx);
+
+      const doc = getWrittenDoc();
+      expect(doc.userDob).toBeUndefined();
+      const extras = JSON.parse(doc.extras as string);
+      expect(extras.userDob).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("userDob"));
+    });
+
+    it("strips a key with a PII substring (mailingAddress matches 'address')", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const sink = createFirestoreErrorSink(makeOptions());
+      const ctx = makeContext({ txnId: "123" } as Partial<EnrichedErrorContext>);
+      (ctx as Record<string, unknown>).mailingAddress = "1 Main St";
+      sink(new Error("boom"), ctx);
+
+      const doc = getWrittenDoc();
+      expect(doc.mailingAddress).toBeUndefined();
+      const extras = JSON.parse(doc.extras as string);
+      expect(extras.mailingAddress).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("mailingAddress"));
+    });
   });
 });
