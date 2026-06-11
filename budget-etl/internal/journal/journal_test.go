@@ -63,7 +63,7 @@ func TestExpenseLine(t *testing.T) {
 			Category:      "Groceries",
 		},
 	}
-	r := Build(txns, nil, DefaultPairWindow)
+	r := Build(txns, nil, nil, DefaultPairWindow)
 
 	if len(r.Entries) != 1 || len(r.Legs) != 2 {
 		t.Fatalf("expected 1 entry / 2 legs, got %d / %d", len(r.Entries), len(r.Legs))
@@ -129,7 +129,7 @@ func TestIncomeLine(t *testing.T) {
 			Category:      "Income",
 		},
 	}
-	r := Build(txns, nil, DefaultPairWindow)
+	r := Build(txns, nil, nil, DefaultPairWindow)
 	assertBalanced(t, r.Legs)
 
 	byEntry := legsByEntry(r.Legs)
@@ -180,7 +180,7 @@ func TestMatchingPairMerge(t *testing.T) {
 			Category:      "Transfer:Savings",
 		},
 	}
-	r := Build(txns, nil, DefaultPairWindow)
+	r := Build(txns, nil, nil, DefaultPairWindow)
 
 	if len(r.Entries) != 1 {
 		t.Fatalf("expected 1 merged entry, got %d", len(r.Entries))
@@ -239,7 +239,7 @@ func TestUnmatchedTransferFallback(t *testing.T) {
 			Category:      "Transfer:Savings",
 		},
 	}
-	r := Build(txns, nil, DefaultPairWindow)
+	r := Build(txns, nil, nil, DefaultPairWindow)
 	assertBalanced(t, r.Legs)
 
 	legs := legsByEntry(r.Legs)[r.Entries[0].ID]
@@ -284,7 +284,7 @@ func TestTwoCandidatePairsNearestTime(t *testing.T) {
 			StatementID: "s", TransactionID: "inB", Category: "Transfer:Savings",
 		},
 	}
-	r := Build(txns, nil, DefaultPairWindow)
+	r := Build(txns, nil, nil, DefaultPairWindow)
 
 	if len(r.Entries) != 2 {
 		t.Fatalf("expected 2 merged entries, got %d", len(r.Entries))
@@ -329,7 +329,7 @@ func TestCreditCardLiabilityDerivation(t *testing.T) {
 			IsCreditCard:  true,
 		},
 	}
-	r := Build(txns, nil, DefaultPairWindow)
+	r := Build(txns, nil, nil, DefaultPairWindow)
 	ids := accountIDs(r.Accounts)
 	if ids["Example Bank_Credit Card"] != "liability" {
 		t.Errorf("credit-card account should be liability, got %q", ids["Example Bank_Credit Card"])
@@ -373,7 +373,7 @@ func TestPairWindowExcludesFarApart(t *testing.T) {
 			StatementID: "s", TransactionID: "in", Category: "Transfer:Savings",
 		},
 	}
-	r := Build(txns, nil, DefaultPairWindow)
+	r := Build(txns, nil, nil, DefaultPairWindow)
 	if len(r.Entries) != 2 {
 		t.Fatalf("expected 2 unmerged entries, got %d", len(r.Entries))
 	}
@@ -406,8 +406,8 @@ func TestIdempotency(t *testing.T) {
 			StatementID: "s", TransactionID: "in", Category: "Transfer:Savings",
 		},
 	}
-	r1 := Build(txns, nil, DefaultPairWindow)
-	r2 := Build(txns, nil, DefaultPairWindow)
+	r1 := Build(txns, nil, nil, DefaultPairWindow)
+	r2 := Build(txns, nil, nil, DefaultPairWindow)
 
 	if !reflect.DeepEqual(r1.Entries, r2.Entries) {
 		t.Errorf("entries differ across runs")
@@ -440,8 +440,87 @@ func TestIdempotency(t *testing.T) {
 	}
 }
 
+func TestNonPrimaryNormalizedDuplicateSkipped(t *testing.T) {
+	// One real purchase appears in two overlapping statements with different
+	// statement IDs. rules.ApplyNormalization marks one member primary and the
+	// other a non-primary duplicate. Build must emit a single entry/two legs for
+	// the primary only, crediting the bank account once, and map the duplicate's
+	// doc ID to the primary's entry.
+	const (
+		primaryStmt = "stmt-A"
+		dupStmt     = "stmt-B"
+		primaryTxn  = "txn-A"
+		dupTxn      = "txn-B"
+	)
+	txns := []budget.TransactionData{
+		{
+			Institution:   "Example Bank",
+			Account:       "Checking",
+			Description:   "Grocery Store",
+			Amount:        8450, // spending
+			Timestamp:     ts("2025-02-05"),
+			StatementID:   primaryStmt,
+			TransactionID: primaryTxn,
+			Category:      "Groceries",
+		},
+		{
+			Institution:   "Example Bank",
+			Account:       "Checking",
+			Description:   "Grocery Store",
+			Amount:        8450, // same real purchase, other statement
+			Timestamp:     ts("2025-02-05"),
+			StatementID:   dupStmt,
+			TransactionID: dupTxn,
+			Category:      "Groceries",
+		},
+	}
+
+	primaryDocID := budget.TransactionDocID(primaryStmt, primaryTxn)
+	dupDocID := budget.TransactionDocID(dupStmt, dupTxn)
+
+	normMap := map[string]budget.NormalizationUpdate{
+		primaryDocID: {DocID: primaryDocID, NormalizedID: primaryDocID, NormalizedPrimary: true},
+		dupDocID:     {DocID: dupDocID, NormalizedID: primaryDocID, NormalizedPrimary: false},
+	}
+
+	r := Build(txns, nil, normMap, DefaultPairWindow)
+
+	// Exactly one entry / two legs — the duplicate produced no extra entry/legs.
+	if len(r.Entries) != 1 || len(r.Legs) != 2 {
+		t.Fatalf("expected 1 entry / 2 legs, got %d / %d", len(r.Entries), len(r.Legs))
+	}
+	assertBalanced(t, r.Legs)
+
+	// The bank account is credited exactly once, for one transaction's magnitude.
+	byEntry := legsByEntry(r.Legs)
+	entryID := r.Entries[0].ID
+	var bankCredits int
+	var bankCreditAmount float64
+	for _, l := range byEntry[entryID] {
+		if l.AccountID == "Example Bank_Checking" && l.Credit > 0 {
+			bankCredits++
+			bankCreditAmount = l.Credit
+		}
+	}
+	if bankCredits != 1 {
+		t.Fatalf("expected exactly 1 bank-account credit leg, got %d", bankCredits)
+	}
+	if bankCreditAmount != 84.50 {
+		t.Errorf("bank credit should be 84.50 (one transaction), got %v", bankCreditAmount)
+	}
+
+	// The duplicate's doc ID is merged into the primary's entry.
+	if r.EntryIDByDocID[primaryDocID] == "" {
+		t.Fatalf("primary doc ID should map to an entry")
+	}
+	if r.EntryIDByDocID[dupDocID] != r.EntryIDByDocID[primaryDocID] {
+		t.Errorf("duplicate doc ID should map to the primary's entry: dup=%q primary=%q",
+			r.EntryIDByDocID[dupDocID], r.EntryIDByDocID[primaryDocID])
+	}
+}
+
 func TestEmptyInputNonNilSlices(t *testing.T) {
-	r := Build(nil, nil, DefaultPairWindow)
+	r := Build(nil, nil, nil, DefaultPairWindow)
 	if r.Entries == nil || r.Legs == nil || r.Accounts == nil {
 		t.Errorf("slices must be non-nil so they serialize as [] not null")
 	}
