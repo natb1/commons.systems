@@ -52,7 +52,7 @@ Act on the one directive:
 |---|---|---|---|
 | `INVOKE /fix-checks` | 0 | draft PR, CI completed and failed | invoke `/fix-checks` |
 | `INVOKE /qa-fix` | 0 | draft PR, CI green, no `dispatch:*` label | invoke `/qa-fix` |
-| `INVOKE /review-fix` | 0 | draft PR + `dispatch:qa-done` (or `dispatch:reviewed` re-entry) | invoke `/review-fix` |
+| `INVOKE /review-fix` | 0 | draft PR + `dispatch:qa-done` | invoke `/review-fix` |
 | `INVOKE /budget-parse-job` | 0 | a statement parse-job issue (`statements:<key>` label, no PR) | invoke `/budget-parse-job` (see below) |
 | `INVOKE /fix-conflicts` | 0 | provisioning hit an `origin/main` merge conflict | invoke `/fix-conflicts` (the generic INVOKE path below) |
 | `INVOKE /implement` | 0 | no PR + `dispatch:planned` (`implement` phase) | invoke `/implement` (the generic INVOKE path below) |
