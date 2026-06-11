@@ -751,6 +751,38 @@ find_available_port() {
   find_available_ports 1
 }
 
+# Fixed pool of Vite dev-server ports for QA servers. The claude-in-chrome
+# extension gates navigation per origin (scheme+host+port), so pinning the Vite
+# port to a known 8-slot pool lets the operator approve those 8 origins in Chrome
+# once instead of re-approving a fresh random port every QA session. Emulator
+# ports stay ephemeral (find_available_ports) — the page's own JS reaches them,
+# never the extension, so they never trigger an approval prompt.
+#
+# File-scope globals (not local/readonly) so tests can override them.
+QA_VITE_PORT_POOL=(5170 5171 5172 5173 5174 5175 5176 5177)
+QA_VITE_PORT_LOCK_DIR="${TMPDIR:-/tmp}"
+
+# Sets VITE_PORT and holds an flock on fd 200 for the script's lifetime so
+# concurrent QA workers never select the same pool slot. Errors (does NOT fall
+# back to a random port — that would re-trigger the Chrome approval prompt)
+# when all 8 slots are held.
+claim_fixed_vite_port() {
+  local p lockfile
+  for p in "${QA_VITE_PORT_POOL[@]}"; do
+    lockfile="${QA_VITE_PORT_LOCK_DIR}/qa-vite-port-${p}.lock"
+    exec 200>"$lockfile" || continue
+    if flock -n 200; then
+      if node -e "const net=require('net');const s=net.createServer();s.once('error',()=>process.exit(1));s.listen(${p},'0.0.0.0',()=>s.close(()=>process.exit(0)));" 2>/dev/null; then
+        VITE_PORT="$p"; return 0      # fd 200 stays open in caller, holding the lock
+      fi
+      flock -u 200                    # foreign process owns the port; try next slot
+    fi
+    exec 200>&-
+  done
+  echo "ERROR: all ${#QA_VITE_PORT_POOL[@]} QA Vite ports (${QA_VITE_PORT_POOL[*]}) are in use" >&2
+  return 1
+}
+
 # Print the Remote access block for QA-server startup: the universal localhost
 # URL plus a copy-paste `ssh -L` command forwarding the Vite port and every
 # allocated emulator port to a remote client's localhost, so the served origin
