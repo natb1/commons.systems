@@ -29,8 +29,16 @@ if [ "$USES_AUTH" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
 if [ "$USES_STORAGE" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
 if [ "$USES_FUNCTIONS" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
 
-read -r VITE_PORT EXTRA_PORTS <<< "$(find_available_ports "$PORT_COUNT")"
-echo "Vite dev server will use port $VITE_PORT"
+# Claim the Vite port from a fixed pool (collision-safe via flock, held for the
+# script's lifetime) so the claude-in-chrome extension approves the origin once.
+# Called in the main shell — not a subshell — so the flock'd fd 200 survives.
+claim_fixed_vite_port
+echo "Vite dev server will use port $VITE_PORT (fixed pool — approve once in Chrome)"
+# Emulator ports stay ephemeral — the page's own JS reaches them, never the
+# extension, so they never trigger an approval prompt.
+EMU_PORT_COUNT=$((PORT_COUNT - 1))
+EXTRA_PORTS=""
+[ "$EMU_PORT_COUNT" -gt 0 ] && EXTRA_PORTS="$(find_available_ports "$EMU_PORT_COUNT")"
 
 NAMESPACE=""
 if [ "$USES_FIRESTORE" = true ]; then

@@ -5,6 +5,23 @@ Windows. The `claude-in-chrome` MCP tools pair the two through Anthropic's
 relay — there is no direct WSL↔Windows link, so both sides must be logged into
 the same claude.ai account.
 
+## Browser selection
+
+Two Chrome instances may pair through the relay at once (one Windows, one
+macOS). **Default to the Windows Chrome** — it shares WSL's `localhost` via
+WSL2 NAT forwarding and reaches the QA server's Vite port and every emulator
+with no tunnel. See `## QA server` for the NAT-forwarding details.
+
+Use the macOS Chrome **only on explicit user request**. macOS is a separate
+machine and cannot reach WSL's `localhost` directly. Before calling
+`select_browser`, hand the user the `ssh -L` tunnel command that
+`run-qa-server.sh` prints in its "Remote access" block (it forwards the Vite
+port plus every emulator port); wait for the tunnel to be up, then proceed.
+
+DeviceIds change when the extension re-registers. Never hard-code one. Confirm
+the target deviceId via `list_connected_browsers` and match on `osPlatform`
+(`"Windows"` or `"macOS"`).
+
 ## Chrome must be running first
 
 The extension only registers with the relay while Chrome is open. If Chrome is
@@ -24,7 +41,11 @@ failures; one retry is enough.
 ## Which tools hit the gate
 
 Auto-approved via the `.claude/settings.json` allowlist (never prompt):
-`tabs_context_mcp`, `read_console_messages`, `read_network_requests`.
+`tabs_context_mcp`, `read_console_messages`, `read_network_requests`,
+`list_connected_browsers`, `select_browser`. The latter two are auto-approved so
+the browser-selection step (§ Browser selection) runs without a prompt — in the
+autonomous `/qa-fix` context a permission prompt would fire
+`dispatch-input-block.sh` and escalate to office-hours.
 
 Gated (prompt on first use per origin): `navigate`, `javascript_tool`,
 `computer`, `gif_creator`, `tabs_create_mcp`. Inside a `browser_batch` the gate
