@@ -14,7 +14,7 @@
 #   INVOKE /budget-parse-job       phase plan         (no PR, unplanned, statements:<key> label) — parse-job issue
 #   INVOKE /implement              phase implement    (no PR + dispatch:planned)
 #   INVOKE /fix-conflicts              provisioning hit an origin/main merge conflict
-#   RELEVANCE-REVIEW                phase plan         (no PR, unplanned) — routes to SKILL.md Step 2
+#   INVOKE /plan-issue              phase plan         (no PR, unplanned) — plan phase
 #   STOP done                       phase done         (non-draft PR)
 #   PUSH-STRANDED                   phase done, but worktree ahead of origin/<branch> — push then park
 #   STOP waiting                    dispatch-ci-ready reports not-ready (draft PR CI pending)
@@ -130,7 +130,7 @@ PHASE=$("$SCRIPT_DIR/dispatch-phase" "$N")
 # Map the phase string to its directive.
 case "$PHASE" in
   plan)
-    # A no-PR unplanned target is normally a plan-phase issue → RELEVANCE-REVIEW.
+    # A no-PR unplanned target is normally a plan-phase issue → INVOKE /plan-issue.
     # But a statement parse-job issue (filed by dispatch-statements-scan, carrying a
     # configured statements:<key> label, with no PR) routes to /budget-parse-job
     # instead — it is a one-phase handler that never opens a code PR. The label
@@ -139,7 +139,7 @@ case "$PHASE" in
     # "no-config", exit 0 — the normal state for repos without statement scanning)
     # from "config present but malformed" (exit 1) — surface the latter as an
     # error, treat the former as no configured labels (empty intersection →
-    # unchanged RELEVANCE-REVIEW).
+    # INVOKE /plan-issue).
     STATEMENTS_CONFIG=$("$SCRIPT_DIR/dispatch-config-load" statements)
     if [[ "$STATEMENTS_CONFIG" == "no-config" ]]; then
       CONFIGURED_LABELS=""
@@ -151,10 +151,10 @@ case "$PHASE" in
       ISSUE_LABELS=""
       ISSUE_LABELS=$(gh issue view "$N" --json labels | jq -r '.labels[].name') || {
         # gh failure (network error, auth issue, etc.) — fall back to the safe
-        # default of RELEVANCE-REVIEW rather than exiting non-zero without a
+        # default of INVOKE /plan-issue rather than exiting non-zero without a
         # directive, which would leave the stop hook with a misleading reason.
-        echo "dispatch-route: gh issue view $N --json labels failed; defaulting to RELEVANCE-REVIEW" >&2
-        echo "RELEVANCE-REVIEW"
+        echo "dispatch-route: gh issue view $N --json labels failed; defaulting to INVOKE /plan-issue" >&2
+        echo "INVOKE /plan-issue"
         exit 0
       }
       # Non-empty intersection of the issue's labels with the configured
@@ -170,7 +170,7 @@ case "$PHASE" in
     if [[ "$PARSE_JOB" -eq 1 ]]; then
       echo "INVOKE /budget-parse-job"
     else
-      echo "RELEVANCE-REVIEW"
+      echo "INVOKE /plan-issue"
     fi
     ;;
   implement)
