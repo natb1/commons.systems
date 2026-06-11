@@ -440,6 +440,69 @@ func TestIdempotency(t *testing.T) {
 	}
 }
 
+func TestUnrelatedSameAmountNotMerged(t *testing.T) {
+	// A positive spending line on one account and a negative income line on a
+	// different account — same magnitude, timestamps one day apart (well within
+	// DefaultPairWindow) — must NOT merge because neither is Transfer:*.
+	txns := []budget.TransactionData{
+		{
+			Institution:   "Example Bank",
+			Account:       "Credit Card",
+			Description:   "Grocery Store",
+			Amount:        2500, // spending
+			Timestamp:     ts("2025-03-01"),
+			StatementID:   "s",
+			TransactionID: "grocery",
+			Category:      "Groceries",
+		},
+		{
+			Institution:   "Example Bank",
+			Account:       "Checking",
+			Description:   "Refund",
+			Amount:        -2500, // income / credit
+			Timestamp:     ts("2025-03-02"),
+			StatementID:   "s",
+			TransactionID: "refund",
+			Category:      "Income",
+		},
+	}
+	r := Build(txns, nil, DefaultPairWindow)
+
+	if len(r.Entries) != 2 {
+		t.Fatalf("expected 2 distinct entries (not merged), got %d", len(r.Entries))
+	}
+	assertBalanced(t, r.Legs)
+
+	byEntry := legsByEntry(r.Legs)
+	for _, e := range r.Entries {
+		assertBalanced(t, byEntry[e.ID])
+	}
+
+	ids := accountIDs(r.Accounts)
+
+	// Neither line is Transfer:* — Unresolved Transfers must not appear.
+	if _, ok := ids[acctUnresolvedTransfers]; ok {
+		t.Errorf("Unresolved Transfers should not be emitted for unrelated non-transfer lines")
+	}
+
+	// The spending line lands on Uncategorized Expense; the income line on
+	// Uncategorized Income.
+	if ids[acctUncategorizedExpense] != "expense" {
+		t.Errorf("Uncategorized Expense should be emitted for the spending line, got %q", ids[acctUncategorizedExpense])
+	}
+	if ids[acctUncategorizedIncome] != "income" {
+		t.Errorf("Uncategorized Income should be emitted for the income line, got %q", ids[acctUncategorizedIncome])
+	}
+
+	// Each entry must have exactly 2 legs (single-line tentative form).
+	for _, e := range r.Entries {
+		legs := byEntry[e.ID]
+		if len(legs) != 2 {
+			t.Errorf("entry %s should have 2 legs, got %d", e.ID, len(legs))
+		}
+	}
+}
+
 func TestEmptyInputNonNilSlices(t *testing.T) {
 	r := Build(nil, nil, DefaultPairWindow)
 	if r.Entries == nil || r.Legs == nil || r.Accounts == nil {

@@ -6,9 +6,10 @@
 // imported bank account and a balancing counter leg on a placeholder account
 // (Uncategorized Expense / Uncategorized Income, or Unresolved Transfers for
 // Transfer:* lines). After per-line emission, the batch is scanned for transfer
-// pairs — opposite-sign amounts on different accounts within a time window —
-// and each matched pair is merged into a single entry that debits the
-// destination account and credits the source account, dropping the placeholders.
+// pairs — opposite-sign amounts on different accounts within a time window,
+// where at least one leg is categorized Transfer:* — and each matched pair is
+// merged into a single entry that debits the destination account and credits
+// the source account, dropping the placeholders.
 package journal
 
 import (
@@ -232,10 +233,11 @@ type pair struct {
 
 // detectPairs finds transfer pairs via greedy nearest-time matching. A
 // candidate pair has different (institution, account), opposite-sign amounts
-// equal within a one-cent tolerance, and |Δtimestamp| <= window. Candidates are
-// consumed in ascending timestamp-delta order, skipping lines already taken, so
-// two pairs in one window match to their nearest partner. Marks matched
-// tentatives as paired and returns the chosen pairs.
+// equal within a one-cent tolerance, at least one leg categorized Transfer:*,
+// and |Δtimestamp| <= window. Candidates are consumed in ascending
+// timestamp-delta order, skipping lines already taken, so two pairs in one
+// window match to their nearest partner. Marks matched tentatives as paired and
+// returns the chosen pairs.
 func detectPairs(tents []*tentative, window time.Duration) []pair {
 	type candidate struct {
 		i, j  int
@@ -255,6 +257,11 @@ func detectPairs(tents []*tentative, window time.Duration) []pair {
 			}
 			// Equal magnitude within tolerance.
 			if absInt64(a.txn.Amount+b.txn.Amount) > centTolerance {
+				continue
+			}
+			// At least one leg must be categorized Transfer:* to merge — otherwise two
+			// unrelated equal-and-opposite amounts would be falsely merged.
+			if !a.isTransfer && !b.isTransfer {
 				continue
 			}
 			delta := a.txn.Timestamp.Sub(b.txn.Timestamp)
