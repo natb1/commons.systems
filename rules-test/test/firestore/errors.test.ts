@@ -255,6 +255,38 @@ describe("error logs", () => {
         setDoc(doc(db, "budget/emulator-/errors/err1"), validErrorDoc()),
       );
     });
+
+    it("allows qa-<32-char suffix> env (at cap)", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertSucceeds(
+        setDoc(doc(db, `budget/qa-${"a".repeat(32)}/errors/err1`), validErrorDoc()),
+      );
+    });
+
+    it("denies qa-<33-char suffix> env (over cap)", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertFails(
+        setDoc(doc(db, `budget/qa-${"a".repeat(33)}/errors/err1`), validErrorDoc()),
+      );
+    });
+
+    it("allows emulator-<32-char suffix> env (at cap)", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertSucceeds(
+        setDoc(doc(db, `budget/emulator-${"a".repeat(32)}/errors/err1`), validErrorDoc()),
+      );
+    });
+
+    it("denies emulator-<33-char suffix> env (over cap)", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertFails(
+        setDoc(doc(db, `budget/emulator-${"a".repeat(33)}/errors/err1`), validErrorDoc()),
+      );
+    });
   });
 
   // ---------------------------------------------------------------------------
