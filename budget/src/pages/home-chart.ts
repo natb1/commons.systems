@@ -10,6 +10,13 @@ export type ChartMode = "spending" | "credits";
 /** Custom event name dispatched by home-hydrate.ts after scroll-loading older transactions. The chart listens for this to incorporate the new data and re-apply filters. */
 export const TRANSACTIONS_APPENDED_EVENT = "transactions-appended";
 
+/** The currently-registered TRANSACTIONS_APPENDED_EVENT handler.
+ * hydrateCategorySankey re-runs on every navigation back to /transactions
+ * (MutationObserver re-hydrate), so each run removes the prior run's handler
+ * before registering its own — otherwise listeners accumulate, keep dead
+ * containers alive, and re-run filterTable with stale closure state (#1267). */
+let appendedListener: EventListener | null = null;
+
 export interface SerializedChartTransaction {
   category: string;
   /** Dollars. Positive = spending/debit, negative = credit. Credits mode sign-flips to positive for display. */
@@ -325,7 +332,10 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   // update and the table re-filter run as two independent blocks: a failed chart
   // serialization or render must not skip the table re-filter, which is the only
   // thing that re-applies the active filter to scroll-loaded rows (#578).
-  document.addEventListener(TRANSACTIONS_APPENDED_EVENT, ((e: CustomEvent<SerializedChartTransaction[]>) => {
+  if (appendedListener) {
+    document.removeEventListener(TRANSACTIONS_APPENDED_EVENT, appendedListener);
+  }
+  appendedListener = ((e: CustomEvent<SerializedChartTransaction[]>) => {
     const newTxns = e.detail;
 
     // Chart-update block — skipped when the container is gone. Calls render()
@@ -354,7 +364,8 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     } catch (error) {
       setTimeout(() => { throw error; }, 0);
     }
-  }) as EventListener);
+  }) as EventListener;
+  document.addEventListener(TRANSACTIONS_APPENDED_EVENT, appendedListener);
 
   const debounced = makeDebounced();
 
