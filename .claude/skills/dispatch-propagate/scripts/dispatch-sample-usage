@@ -15,10 +15,11 @@
 #      which writes one office-hours/{env}/usage-samples document via the
 #      firebase-admin SDK (the admin SDK bypasses Firestore security rules, so
 #      this does NOT depend on the sibling #1006 rules being deployed).
-# The writer reads ALL of its config (member emails, group id, namespace, TTL,
-# project id) from env vars that must be pre-set in the environment (e.g., shell
-# profile); dispatch-tick inherits them but does not export them; this sampler
-# does NOT re-read them, except the opt-in gate (Step 1).
+# The writer reads its non-PII config (group id, namespace, TTL, project id)
+# from env vars that must be pre-set in the environment (e.g., shell profile);
+# dispatch-tick inherits them but does not export them; this sampler does NOT
+# re-read them. Member emails are NOT an env var — the writer resolves them
+# from Secret Manager at runtime (see opt-in gate, Step 1).
 #
 # FAIL-SAFE CONTRACT (per .claude/rules/code-style.md; mirrors
 # dispatch-refresh-rate-limits): every failure path logs exactly ONE stderr
@@ -29,8 +30,13 @@
 # without capacity-sampling config stay inert. A genuine success exits 0 too.
 #
 # TEST SEAMS (mirroring dispatch-target-workers / lib-claude-agents.sh):
-#   DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS      the opt-in switch (Step 1); also
-#                                             consumed by the writer.
+#   DISPATCH_USAGE_SAMPLES_ENABLED            opt-in switch (Step 1): set to "1"
+#                                             to enable per-tick sampling; any
+#                                             other value (unset/empty/other)
+#                                             exits 0 (no-op). Member emails are
+#                                             NOT sourced from an env var — the
+#                                             writer resolves them from Secret
+#                                             Manager at runtime.
 #   DISPATCH_USAGE_SAMPLES_RATE_LIMITS_PATH   override the rate_limits.json path.
 #   CLAUDE_AGENTS_CMD                          consumed by lib-claude-agents.sh
 #                                             for the busy-worker count.
@@ -42,9 +48,11 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # === STEP 1 — OPT-IN GATE =====================================================
-# No member emails configured → this machine is not set up for capacity
-# sampling. Exit 0 (a no-op, NOT a failure) so the tick stays inert here.
-if [[ -z "${DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS:-}" ]]; then
+# DISPATCH_USAGE_SAMPLES_ENABLED not set to "1" → this machine is not configured
+# for capacity sampling. Exit 0 (a no-op, NOT a failure) so the tick stays
+# inert here. Member emails are resolved from Secret Manager by the writer (Unit
+# 1 of #1377) — they are never an env var on this side.
+if [[ "${DISPATCH_USAGE_SAMPLES_ENABLED:-}" != "1" ]]; then
   exit 0
 fi
 

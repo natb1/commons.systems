@@ -402,7 +402,7 @@ describe("createEpubRenderer", () => {
       expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 
-    it("revokes blob URLs after replacement", async () => {
+    it("does not revoke blob URLs after replacement", async () => {
       const hookCb = await initAndGetHook();
       const doc = makeMockDoc([{ rel: "stylesheet", href: "blob:http://localhost/xyz-789" }]);
 
@@ -413,7 +413,37 @@ describe("createEpubRenderer", () => {
 
       await hookCb({ document: doc });
 
-      expect(revokeStub).toHaveBeenCalledWith("blob:http://localhost/xyz-789");
+      expect(revokeStub).not.toHaveBeenCalled();
+    });
+
+    it("styles every chapter when multiple chapters share one blob URL", async () => {
+      const hookCb = await initAndGetHook();
+      const sharedHref = "blob:http://localhost/shared-1";
+      const revokedUrls = new Set<string>();
+      revokeStub.mockImplementation((url: string) => { revokedUrls.add(url); });
+
+      globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+        if (revokedUrls.has(url)) {
+          return Promise.reject(new Error(`blob URL already revoked: ${url}`));
+        }
+        return Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve("body { color: red; }"),
+        });
+      });
+
+      const doc1 = makeMockDoc([{ rel: "stylesheet", href: sharedHref }]);
+      const doc2 = makeMockDoc([{ rel: "stylesheet", href: sharedHref }]);
+
+      await hookCb({ document: doc1 });
+      await hookCb({ document: doc2 });
+
+      for (const doc of [doc1, doc2]) {
+        const style = doc.head.querySelector("style");
+        expect(style).not.toBeNull();
+        expect(style!.textContent).toBe("body { color: red; }");
+        expect(doc.head.querySelector('link[rel="stylesheet"]')).toBeNull();
+      }
     });
 
     it("propagates fetch failure and calls reportError", async () => {
