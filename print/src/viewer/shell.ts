@@ -170,21 +170,33 @@ export function initViewer(
 
   // Persist position after each navigation — debounced (500ms), deduplicated (skips matching position).
   // Skips Firestore writes if the initial read failed.
+  function persistPosition() {
+    const pos = getSpreadPosition();
+    if (!pos || pos === lastSavedPosition) return;
+    lastSavedPosition = pos;
+    if (uid && !firestoreReadFailed) {
+      saveReadingPosition(uid, mediaId, pos).catch((err) => {
+        reportError(new Error("Failed to save reading position", { cause: err }));
+      });
+    } else {
+      saveLocalPosition(mediaId, pos);
+    }
+  }
+
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveTimer = null;
-      const pos = getSpreadPosition();
-      if (!pos || pos === lastSavedPosition) return;
-      lastSavedPosition = pos;
-      if (uid && !firestoreReadFailed) {
-        saveReadingPosition(uid, mediaId, pos).catch((err) => {
-          reportError(new Error("Failed to save reading position", { cause: err }));
-        });
-      } else {
-        saveLocalPosition(mediaId, pos);
-      }
+      persistPosition();
     }, 500);
+  }
+
+  function flushSave() {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    persistPosition();
   }
 
   // Zoom controls — update enabled/disabled state
@@ -358,7 +370,7 @@ export function initViewer(
   });
 
   return () => {
-    if (saveTimer) clearTimeout(saveTimer);
+    flushSave();
     document.body.classList.remove("viewer-active");
     orientationQuery.removeEventListener("change", updateOrientation);
     toggleBtn.removeEventListener("click", handleToggle);
