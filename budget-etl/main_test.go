@@ -1169,6 +1169,116 @@ func TestMergeStatementsPreservesRealOverDerivedAnchor(t *testing.T) {
 	}
 }
 
+// TestRunInputJSONPreservesDerivedAnchors is an end-to-end round-trip guard for
+// the runInputJSON path: runMerge generates derived virtual anchors from a
+// multi-month statement file, and feeding that output back through runInputJSON
+// must preserve those anchors. This catches the regression where runInputJSON's
+// statement loop drops every virtual statement (the `if s.Virtual { continue }`
+// at main.go:438), silently discarding derived balance-history anchors on a
+// --input-json run.
+func TestRunInputJSONPreservesDerivedAnchors(t *testing.T) {
+	tmp := t.TempDir()
+
+	// A single statement file for one account whose transactions span three
+	// months (Jan, Feb, Mar) with an ending balance — exactly the shape
+	// deriveMonthlyStatements turns into intermediate monthly anchors for the
+	// months before the file's own period (2026-03). The metadata toDate
+	// 2026/03/31 drives the inferred period and the $500.00 ending balance the
+	// anchors are derived from.
+	csvPath := filepath.Join(tmp, "statements", "test_bank", "1234", "2026-03", "stmt.csv")
+	writeCSVFixtureMeta(t, csvPath,
+		"0000000000,2026/01/01,2026/03/31,100.00,500.00",
+		[][6]string{
+			{"2026/01/10", "10.00", "TEST PURCHASE JAN", "", "TXN-JAN", "DEBIT"},
+			{"2026/02/15", "20.00", "TEST PURCHASE FEB", "", "TXN-FEB", "DEBIT"},
+			{"2026/03/05", "5.00", "TEST PURCHASE MAR", "", "TXN-MAR", "DEBIT"},
+		})
+
+	// Minimal input JSON: one transaction (the reader requires a non-empty
+	// transactions field) plus a categorization rule covering every
+	// transaction so the merge does not fail on uncategorized transactions.
+	inputJSON := export.Output{
+		Version:   1,
+		GroupName: "test-group",
+		Transactions: []export.Transaction{
+			{
+				ID:                budget.TransactionDocID("test_bank-1234-2026-03", "TXN-JAN"),
+				Institution:       "test_bank",
+				Account:           "1234",
+				Description:       "TEST PURCHASE JAN",
+				Amount:            10.00,
+				Timestamp:         "2026-01-10T00:00:00Z",
+				StatementID:       "test_bank-1234-2026-03",
+				NormalizedPrimary: true,
+			},
+		},
+		Rules: []export.Rule{
+			{ID: "cat-test", Type: "categorization", Pattern: "TEST PURCHASE", Target: "Test:General", Priority: 10},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input JSON: %v", err)
+	}
+
+	// Step 1: runMerge produces an output that includes derived virtual anchors.
+	mergedPath := filepath.Join(tmp, "merged.json")
+	statementsDir := filepath.Join(tmp, "statements")
+	if err := runMerge(fileOpts{path: inputPath}, statementsDir, "", parse.DiscoverOpts{}, fileOpts{path: mergedPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+
+	mergedData, err := os.ReadFile(mergedPath)
+	if err != nil {
+		t.Fatalf("reading merged output: %v", err)
+	}
+	var merged export.Output
+	if err := json.Unmarshal(mergedData, &merged); err != nil {
+		t.Fatalf("parsing merged output: %v", err)
+	}
+
+	// Confirm the precondition: runMerge actually emitted derived virtual
+	// anchors. Without them the round-trip below would be vacuous.
+	var mergedVirtualIDs []string
+	for _, s := range merged.Statements {
+		if s.Virtual {
+			mergedVirtualIDs = append(mergedVirtualIDs, s.StatementID)
+		}
+	}
+	if len(mergedVirtualIDs) == 0 {
+		t.Fatalf("precondition failed: runMerge emitted no virtual anchors (statements: %d)", len(merged.Statements))
+	}
+
+	// Step 2: feed the merged output back into runInputJSON as input.
+	roundtripPath := filepath.Join(tmp, "roundtrip.json")
+	if err := runInputJSON(fileOpts{path: mergedPath}, fileOpts{path: roundtripPath}); err != nil {
+		t.Fatalf("runInputJSON: %v", err)
+	}
+
+	roundtripData, err := os.ReadFile(roundtripPath)
+	if err != nil {
+		t.Fatalf("reading roundtrip output: %v", err)
+	}
+	var roundtrip export.Output
+	if err := json.Unmarshal(roundtripData, &roundtrip); err != nil {
+		t.Fatalf("parsing roundtrip output: %v", err)
+	}
+
+	// Step 3: every derived virtual anchor must survive the round-trip.
+	survived := make(map[string]bool, len(roundtrip.Statements))
+	for _, s := range roundtrip.Statements {
+		if s.Virtual {
+			survived[s.StatementID] = true
+		}
+	}
+	for _, id := range mergedVirtualIDs {
+		if !survived[id] {
+			t.Errorf("derived virtual anchor %q dropped by runInputJSON round-trip", id)
+		}
+	}
+}
+
 // TestMain lets TestRemovedFlagsRejected re-exec this test binary as the real
 // budget-etl CLI: when BUDGET_ETL_TEST_RUN_MAIN=1 is set, it runs main()
 // instead of the test suite. main() parses flags via flag.CommandLine, and an

@@ -431,11 +431,15 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	weeklyAggregates := computeExportWeeklyAggregatesFromFull(fullTxns)
 
 	// Compute lastTransactionDate on statements from all transactions.
-	// Filter out virtual statements from prior runs.
+	// Filter out Synchrony virtual statements from prior runs — those are
+	// re-generated below from transaction data (vsr.statements). Other virtual
+	// statements (e.g. derived monthly anchors) are NOT re-derivable here, since
+	// runInputJSON has no access to the original parsed statement files, so they
+	// must be retained or balance-history coverage is permanently lost.
 	maxDates := maxTransactionDates(allTxns)
 	var updatedStmts []export.Statement
 	for _, s := range inp.Statements {
-		if s.Virtual {
+		if s.Virtual && strings.HasPrefix(s.StatementID, "synchrony-virtual-") {
 			continue
 		}
 		updated := s
