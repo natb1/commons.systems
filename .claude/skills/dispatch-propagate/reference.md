@@ -520,6 +520,84 @@ router via a `parked-router` line, so a human can resume it. This makes a
 genuinely terminal stall visible rather than silently losing it to a missed
 heartbeat window.
 
+## Capacity telemetry sampling (#1007 / #1377)
+
+The office-hours Capacity "HISTORY" chart is driven by
+`office-hours/<env>/usage-samples` documents written locally once per dispatch
+tick by `dispatch-sample-usage` → `usage-sample-writer.mjs`. The hosted app
+cannot read the author's local telemetry (`rate_limits.json` and `claude agents
+--json`), so the time series is sampled locally and pushed to Firestore via the
+firebase-admin SDK.
+
+### Opt-in switch
+
+Sampling is **off by default**. Set `DISPATCH_USAGE_SAMPLES_ENABLED=1` in the
+dispatch machine's shell environment (e.g. `~/.zshrc` or `~/.bashrc`) to enable
+per-tick sampling. Any value other than exactly `"1"` — unset, empty, `"true"`,
+`"0"`, or anything else — causes the sampler to exit 0 as a no-op, leaving the
+tick unaffected.
+
+### Member-email source (PII handling)
+
+Member emails are **not** read from the environment. In real mode the writer
+resolves the member-email list from the **`OFFICE_HOURS_MEMBER_EMAILS`** Firebase
+/ GCP Secret Manager secret — the same canonical secret the `office-hours-sync`
+Cloud Function reads (established in #1257, reused here in #1377). The PII
+therefore lives only in Secret Manager, never in the repo, a shell var, or a
+local file.
+
+Optional non-PII override: set `DISPATCH_USAGE_SAMPLES_SECRET_NAME` to a
+different secret id if you need to point the local sampler at a distinct secret.
+The value must be non-empty and must contain no `/` (it is interpolated into the
+Secret Manager resource path). Default: `"OFFICE_HOURS_MEMBER_EMAILS"`.
+
+### Authentication (ADC)
+
+The writer uses **Application Default Credentials (ADC)** for both the Secret
+Manager read and the firebase-admin Firestore write — the same credentials,
+shared between the two operations. Configure ADC via either:
+
+- `GOOGLE_APPLICATION_CREDENTIALS` pointing at a service-account JSON key file, or
+- `gcloud auth application-default login` (interactive, suitable for local
+  development).
+
+The service account (or the logged-in principal) must have
+`roles/secretmanager.secretAccessor` on the `OFFICE_HOURS_MEMBER_EMAILS` secret.
+No separate credential or token is needed for sampling beyond what the Firestore
+write already requires.
+
+### Non-PII config
+
+All other sampler config is non-PII and may be committed or set in the
+environment. These variables and their defaults:
+
+| Variable | Default | Notes |
+|---|---|---|
+| `DISPATCH_USAGE_SAMPLES_GROUP_ID` | *(required, no default)* | Owning group id; must be non-empty and contain no `/`. |
+| `DISPATCH_USAGE_SAMPLES_NAMESPACE` | `"office-hours/prod"` | Firestore path prefix; must match `office-hours/<env>`. |
+| `DISPATCH_USAGE_SAMPLES_PROJECT_ID` | `"commons-systems"` | GCP project id for Secret Manager and Firestore. |
+| `DISPATCH_USAGE_SAMPLES_TTL_DAYS` | `"60"` | Retention in days; integer in `[30, 90]`. Feeds the `expireAt` TTL field. |
+
+### Fail-safe contract
+
+When `DISPATCH_USAGE_SAMPLES_ENABLED=1` but any required resource is missing or
+invalid — secret not found, credentials absent or expired, empty member-email
+list after resolving the secret, invalid config — the writer prints exactly one
+stderr diagnostic prefixed `usage-sample-writer:` and exits non-zero (1).
+Credentials and secret payloads are never echoed. No document is written; a doc
+with empty or wrong `memberEmails` is never created. The `dispatch-tick` caller
+wraps the sampler so a sample failure never errors the tick — the chain continues
+regardless.
+
+### Dry-run / test seam
+
+`usage-sample-writer.mjs --dry-run` does not import `@google-cloud/secret-manager`
+or `firebase-admin`, keeping the bash unit tests (`test-dispatch-scripts.sh`)
+dependency-free. In dry-run mode the member-email payload is injected via the
+`DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE` env var (the raw comma-separated string
+the secret would return). This seam is for testing only — it is never consulted
+in real mode, which always reads Secret Manager.
+
 ## Target-keyed CI-wait reseed (#979)
 
 CI-wait handling splits on available queue size, not invocation mode. In a
