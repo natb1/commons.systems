@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockDataSource = {
   updateBudget: vi.fn(),
+  updateBudgetOverrides: vi.fn(),
 };
 vi.mock("../../src/active-data-source.js", () => ({
   getActiveDataSource: () => mockDataSource,
@@ -12,8 +13,9 @@ vi.mock("@commons-systems/errorutil/log", () => ({
   registerErrorSink: vi.fn(),
 }));
 
-import { hydrateBudgetTable } from "../../src/pages/budgets-hydrate";
+import { hydrateBudgetTable, hydrateOverridesTable } from "../../src/pages/budgets-hydrate";
 import { logError } from "@commons-systems/errorutil/log";
+import { parseUploadedJson, UploadValidationError } from "../../src/upload";
 
 function flush(): Promise<void> {
   return new Promise(r => setTimeout(r, 0));
@@ -712,5 +714,109 @@ describe("hydrateBudgetTable — variance", () => {
 
     const funRadio12 = fun.querySelector<HTMLInputElement>('input[value="12"]')!;
     expect(funRadio12.checked).toBe(true);
+  });
+});
+
+// ── hydrateOverridesTable — duplicate-date normalization ──────────────────────
+
+function createOverridesContainer(budgetId: string, rows: Array<{ date: string; balance: string }>): HTMLElement {
+  const container = document.createElement("div");
+  for (const { date, balance } of rows) {
+    const row = document.createElement("div");
+    row.className = "override-row";
+    row.dataset.budgetId = budgetId;
+    const dateInput = document.createElement("input");
+    dateInput.type = "date";
+    dateInput.className = "edit-override-date";
+    dateInput.value = date;
+    dateInput.defaultValue = date;
+    const balanceInput = document.createElement("input");
+    balanceInput.type = "number";
+    balanceInput.className = "edit-override-balance";
+    balanceInput.value = balance;
+    balanceInput.defaultValue = balance;
+    row.appendChild(dateInput);
+    row.appendChild(balanceInput);
+    container.appendChild(row);
+  }
+  document.body.appendChild(container);
+  return container;
+}
+
+describe("hydrateOverridesTable — duplicate-date normalization", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mockDataSource.updateBudgetOverrides.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("last-wins: two rows with the same date produce one override with the last row's balance", async () => {
+    const container = createOverridesContainer("food", [
+      { date: "2025-06-10", balance: "100" },
+      { date: "2025-06-10", balance: "250" },
+    ]);
+    hydrateOverridesTable(container);
+
+    // Trigger a blur on the second row's balance input (value !== defaultValue to force save)
+    const rows = container.querySelectorAll<HTMLElement>(".override-row");
+    const secondBalanceInput = rows[1].querySelector<HTMLInputElement>(".edit-override-balance")!;
+    secondBalanceInput.value = "250";
+    secondBalanceInput.defaultValue = "999"; // make it differ so the blur handler proceeds
+    secondBalanceInput.dispatchEvent(new Event("blur", { bubbles: true, composed: true }));
+    await flush();
+
+    expect(mockDataSource.updateBudgetOverrides).toHaveBeenCalledTimes(1);
+    const [calledBudgetId, calledOverrides] = mockDataSource.updateBudgetOverrides.mock.calls[0];
+    expect(calledBudgetId).toBe("food");
+    expect(calledOverrides).toHaveLength(1);
+    expect(calledOverrides[0].balance).toBe(250);
+    expect(calledOverrides[0].date.toMillis()).toBe(new Date("2025-06-10T00:00:00Z").getTime());
+  });
+
+  it("round-trip: last-wins normalized overrides pass the load-side validator", async () => {
+    const container = createOverridesContainer("food", [
+      { date: "2025-06-10", balance: "100" },
+      { date: "2025-06-10", balance: "250" },
+    ]);
+    hydrateOverridesTable(container);
+
+    // Trigger the blur to populate updateBudgetOverrides call
+    const rows = container.querySelectorAll<HTMLElement>(".override-row");
+    const secondBalanceInput = rows[1].querySelector<HTMLInputElement>(".edit-override-balance")!;
+    secondBalanceInput.defaultValue = "999";
+    secondBalanceInput.dispatchEvent(new Event("blur", { bubbles: true, composed: true }));
+    await flush();
+
+    expect(mockDataSource.updateBudgetOverrides).toHaveBeenCalledTimes(1);
+    const [, collectedOverrides] = mockDataSource.updateBudgetOverrides.mock.calls[0];
+
+    // Build a minimal snapshot using the collected overrides in their raw ISO form
+    const snapshot = {
+      version: 1,
+      exportedAt: "2025-06-15T10:30:00Z",
+      groupName: "household",
+      transactions: [],
+      budgets: [
+        {
+          id: "food",
+          name: "Food",
+          allowance: 150,
+          allowancePeriod: "weekly",
+          rollover: "none",
+          overrides: collectedOverrides.map((o: { date: { toMillis: () => number }; balance: number }) => ({
+            date: new Date(o.date.toMillis()).toISOString(),
+            balance: o.balance,
+          })),
+        },
+      ],
+    };
+
+    // parseUploadedJson reaches requireRawOverrides (the load-side validator).
+    // If the overrides are not strictly ascending this throws UploadValidationError.
+    expect(() => parseUploadedJson(JSON.stringify(snapshot))).not.toThrow(UploadValidationError);
   });
 });

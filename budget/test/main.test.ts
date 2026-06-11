@@ -736,4 +736,181 @@ describe("main module", () => {
     // the FSA handle — the handle is valid, only this file version is bad.
     expect(mockClearFileHandle).not.toHaveBeenCalled();
   });
+
+  // AC1 — any committed load disarms the prior file-sync session.
+  // A committed plaintext load (non-FSA upload) calls resetFileSync and does NOT
+  // call configureFileSync (no handle to re-arm with).
+  it("AC1: committed plaintext upload calls resetFileSync and leaves sync disarmed", async () => {
+    // Start with no persisted handle and no meta so the module initialises to seed state.
+    mockGetFileHandle.mockResolvedValue(undefined);
+    mockGetMeta.mockResolvedValue(undefined);
+
+    resetAndMockAll();
+
+    const { parseUploadedJson, toParsedData } = await import("../src/upload.js");
+    (parseUploadedJson as ReturnType<typeof vi.fn>).mockReturnValue({ groupName: "household" });
+    (toParsedData as ReturnType<typeof vi.fn>).mockReturnValue({ meta: { groupName: "household" } });
+    mockStoreParsedData.mockResolvedValue(undefined);
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Simulate a plaintext non-FSA upload by dispatching a change event on the hidden
+    // file input. The input is wired to handleFileUpload which calls loadFromFile.
+    const uploadInput = document.querySelector(".upload-input") as HTMLInputElement;
+    expect(uploadInput).not.toBeNull();
+
+    const file = new File(['{"groupName":"household"}'], "budget.json");
+    // Inject the file into the input's file list via a DataTransfer.
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(file);
+    Object.defineProperty(uploadInput, "files", { value: dataTransfer.files, configurable: true });
+
+    uploadInput.dispatchEvent(new Event("change"));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // loadFromFile calls resetFileSync before storeParsedData — every committed load
+    // disarms whatever prior session was armed.
+    expect(mockResetFileSync).toHaveBeenCalled();
+    // Plaintext upload has no FSA handle, so configureFileSync must never be called.
+    expect(mockConfigureFileSync).not.toHaveBeenCalled();
+  });
+
+  // AC2 — cancelling the password prompt for a new encrypted file does NOT arm
+  // write-back with the prior session's password. The prior session must be left
+  // armed (IndexedDB is unchanged) and must NOT be re-pointed at the new handle.
+  it("AC2: cancelling the password prompt for encrypted file B does not arm B with the prior password", async () => {
+    const handleA = { name: "a.benc" } as unknown as FileSystemFileHandle;
+    // Start with handle A already persisted and permission granted — the startup
+    // path auto-loads it as an encrypted file with password "pw-A".
+    mockGetFileHandle.mockResolvedValue(handleA);
+    mockQueryReadWritePermission.mockResolvedValue("granted");
+    mockReadFileFromHandle.mockResolvedValue(new File(["enc-a"], "a.benc"));
+    mockIsEncrypted.mockReturnValue(true);
+    mockDecrypt.mockResolvedValue("{}");
+    mockIsFsaSupported.mockReturnValue(true);
+
+    resetAndMockAll();
+
+    const { parseUploadedJson, toParsedData } = await import("../src/upload.js");
+    (parseUploadedJson as ReturnType<typeof vi.fn>).mockReturnValue({ groupName: "household" });
+    (toParsedData as ReturnType<typeof vi.fn>).mockReturnValue({ meta: { groupName: "household" } });
+    mockStoreParsedData.mockResolvedValue(undefined);
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Submit password "pw-A" to complete the initial encrypted load and arm handleA.
+    const inputA = document.querySelector(".password-input") as HTMLInputElement;
+    expect(inputA).not.toBeNull();
+    inputA.value = "pw-A";
+    (inputA.closest("form") as HTMLFormElement).requestSubmit();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // handleA should now be armed.
+    expect(mockConfigureFileSync).toHaveBeenCalledWith(handleA, "pw-A", expect.any(Number));
+    mockConfigureFileSync.mockClear();
+    mockResetFileSync.mockClear();
+
+    // Now pick handleB (also encrypted). Point mockReadFileFromHandle at the new file.
+    const handleB = { name: "b.benc" } as unknown as FileSystemFileHandle;
+    mockPickBencFile.mockResolvedValue(handleB);
+    mockReadFileFromHandle.mockResolvedValue(new File(["enc-b"], "b.benc"));
+
+    // Click the upload label to trigger the FSA picker → loadFromHandle(handleB).
+    const label = document.querySelector(".upload-label") as HTMLLabelElement;
+    label.click();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // The password dialog for file B should now be open. Cancel it.
+    const cancelBtn = document.querySelector(".password-cancel") as HTMLButtonElement;
+    expect(cancelBtn).not.toBeNull();
+    cancelBtn.click();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // A cancel must never arm write-back — configureFileSync must not be called at
+    // all after the cancel, and in particular must never be called with handleB.
+    expect(mockConfigureFileSync).not.toHaveBeenCalled();
+    // The cancel also must not re-point sync at handleA: resetFileSync was not
+    // triggered by the cancelled load (IndexedDB is unchanged, so the prior
+    // session remains correctly armed).
+    expect(mockResetFileSync).not.toHaveBeenCalled();
+  });
+
+  // AC3 — switching from encrypted file A to encrypted file B must not leave
+  // write-back armed to handleA after the switch. After the committed load of B:
+  //   • resetFileSync was called (prior session disarmed),
+  //   • the final configureFileSync call targets handleB (not handleA), and
+  //   • no configureFileSync call after the switch targets handleA.
+  it("AC3: switching from encrypted A to encrypted B disarms A and arms B only", async () => {
+    const handleA = { name: "a.benc" } as unknown as FileSystemFileHandle;
+    mockGetFileHandle.mockResolvedValue(handleA);
+    mockQueryReadWritePermission.mockResolvedValue("granted");
+    mockReadFileFromHandle.mockResolvedValue(new File(["enc-a"], "a.benc"));
+    mockIsEncrypted.mockReturnValue(true);
+    mockDecrypt.mockResolvedValue("{}");
+    mockIsFsaSupported.mockReturnValue(true);
+
+    resetAndMockAll();
+
+    const { parseUploadedJson, toParsedData } = await import("../src/upload.js");
+    (parseUploadedJson as ReturnType<typeof vi.fn>).mockReturnValue({ groupName: "household" });
+    (toParsedData as ReturnType<typeof vi.fn>).mockReturnValue({ meta: { groupName: "household" } });
+    mockStoreParsedData.mockResolvedValue(undefined);
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Complete the initial encrypted load with password "pw-A".
+    const inputA = document.querySelector(".password-input") as HTMLInputElement;
+    expect(inputA).not.toBeNull();
+    inputA.value = "pw-A";
+    (inputA.closest("form") as HTMLFormElement).requestSubmit();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Verify handleA is armed.
+    expect(mockConfigureFileSync).toHaveBeenCalledWith(handleA, "pw-A", expect.any(Number));
+    mockConfigureFileSync.mockClear();
+    mockResetFileSync.mockClear();
+
+    // Now switch to encrypted handleB via the FSA picker.
+    const handleB = { name: "b.benc" } as unknown as FileSystemFileHandle;
+    mockPickBencFile.mockResolvedValue(handleB);
+    mockReadFileFromHandle.mockResolvedValue(new File(["enc-b"], "b.benc"));
+    mockPutFileHandle.mockResolvedValue(undefined);
+
+    const label = document.querySelector(".upload-label") as HTMLLabelElement;
+    label.click();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Submit password "pw-B" for the new file.
+    const inputB = document.querySelector(".password-input") as HTMLInputElement;
+    expect(inputB).not.toBeNull();
+    inputB.value = "pw-B";
+    (inputB.closest("form") as HTMLFormElement).requestSubmit();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // After the committed switch:
+    // 1. resetFileSync must have been called (prior session disarmed).
+    expect(mockResetFileSync).toHaveBeenCalled();
+    // 2. The final configureFileSync call must target handleB with password "pw-B".
+    expect(mockConfigureFileSync).toHaveBeenCalledWith(handleB, "pw-B", expect.any(Number));
+    // 3. No configureFileSync call after the switch may target handleA.
+    const postSwitchCalls = mockConfigureFileSync.mock.calls;
+    const armedHandleA = postSwitchCalls.some(([h]) => h === handleA);
+    expect(armedHandleA).toBe(false);
+  });
 });
