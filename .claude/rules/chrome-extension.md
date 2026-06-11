@@ -41,7 +41,11 @@ failures; one retry is enough.
 ## Which tools hit the gate
 
 Auto-approved via the `.claude/settings.json` allowlist (never prompt):
-`tabs_context_mcp`, `read_console_messages`, `read_network_requests`.
+`tabs_context_mcp`, `read_console_messages`, `read_network_requests`,
+`list_connected_browsers`, `select_browser`. The latter two are auto-approved so
+the browser-selection step (§ Browser selection) runs without a prompt — in the
+autonomous `/qa-fix` context a permission prompt would fire
+`dispatch-input-block.sh` and escalate to office-hours.
 
 Gated (prompt on first use per origin): `navigate`, `javascript_tool`,
 `computer`, `gif_creator`, `tabs_create_mcp`. Inside a `browser_batch` the gate
