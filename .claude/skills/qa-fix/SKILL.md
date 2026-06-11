@@ -166,15 +166,16 @@ Otherwise run all steps in order.
 
       1. Load chrome tools via:
          ```
-         ToolSearch("select:mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__read_console_messages,mcp__claude-in-chrome__read_network_requests,mcp__claude-in-chrome__gif_creator,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__form_input,mcp__claude-in-chrome__tabs_context_mcp")
+         ToolSearch("select:mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__read_console_messages,mcp__claude-in-chrome__read_network_requests,mcp__claude-in-chrome__gif_creator,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__form_input,mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__list_connected_browsers,mcp__claude-in-chrome__select_browser")
          ```
          If ToolSearch fails or tools are unavailable → skip the browser walkthrough, note "Chrome extension unavailable" in results, and fall through to the non-browser walkthrough (Step 4) for the same plan.
-      2. Create a new tab via `tabs_create_mcp`, capture `tabId`.
-      3. Navigate to the App URL.
-      4. Suppress JS dialogs via `javascript_tool`: override `window.alert`, `window.confirm`, `window.prompt` with no-ops.
-      5. Clear baselines: `read_console_messages` and `read_network_requests` with `clear: true`.
-      6. Start GIF recording: `gif_creator` with `action: "start_recording"`. Take an initial screenshot.
-      7. **For each machine-verifiable plan item:**
+      2. **Select the browser.** Default to the Windows Chrome — it reaches the WSL QA server over WSL2's shared `localhost` with no tunnel. Call `list_connected_browsers`, find the entry whose `osPlatform` is `"Windows"`, and `select_browser` it. (DeviceIds change on re-registration — never hard-code one; always match on `osPlatform`.) Use the macOS Chrome only on explicit user request: because macOS is a separate machine, first hand the user the `ssh -L` tunnel command that `run-qa-server.sh` printed in its "Remote access" block (it forwards the Vite port plus every emulator port); once the tunnel is up, `select_browser` the entry whose `osPlatform` is `"macOS"`. See `.claude/rules/chrome-extension.md` § Browser selection for the authoritative policy.
+      3. Create a new tab via `tabs_create_mcp`, capture `tabId`.
+      4. Navigate to the App URL.
+      5. Suppress JS dialogs via `javascript_tool`: override `window.alert`, `window.confirm`, `window.prompt` with no-ops.
+      6. Clear baselines: `read_console_messages` and `read_network_requests` with `clear: true`.
+      7. Start GIF recording: `gif_creator` with `action: "start_recording"`. Take an initial screenshot.
+      8. **For each machine-verifiable plan item:**
          a. **Set up state.** Navigate to the item's URL path (if not "current"). Execute the steps using `computer`, `form_input`, `navigate`. Capture extra GIF frames before and after.
          b. **Check output.** Take a screenshot. Read `get_page_text` to verify the expected outcome. Check `read_console_messages` (filter for errors). Check `read_network_requests` for 4xx/5xx.
          c. **Record the result** — **PASS** or **FAIL**, directly from this
@@ -184,8 +185,8 @@ Otherwise run all steps in order.
             - Stay on the App URL domain — do not follow external links.
             - **On the first FAIL** → a bug. Stop the walkthrough, finalize the QA
               session (Steps 5 and 6), and escalate per the **Escalation** section.
-      8. Stop GIF recording: `gif_creator` with `action: "stop_recording"`. Export to `tmp/qa-fix-walkthrough-<n>.gif` (where `<n>` is the Step-0-resolved issue number `<N>`).
-      9. Write per-item results (PASS/FAIL/SKIP, console errors, network failures, deferred judgment items, summary counts) to `tmp/qa-fix-results-<n>.txt`.
+      9. Stop GIF recording: `gif_creator` with `action: "stop_recording"`. Export to `tmp/qa-fix-walkthrough-<n>.gif` (where `<n>` is the Step-0-resolved issue number `<N>`).
+      10. Write per-item results (PASS/FAIL/SKIP, console errors, network failures, deferred judgment items, summary counts) to `tmp/qa-fix-results-<n>.txt`.
 
 4. **Non-browser path.**
 
