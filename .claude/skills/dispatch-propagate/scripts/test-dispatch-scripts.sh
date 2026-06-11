@@ -22383,7 +22383,7 @@ cmp_setup() {
   CMP_CLONE="$CMP_TMPDIR/clone"
 
   # Create a bare origin.
-  git init --bare -q "$CMP_BARE"
+  git init --bare -b main -q "$CMP_BARE"
 
   # Bootstrap the bare origin with an initial commit on main via a seed clone.
   local seed="$CMP_TMPDIR/seed"
