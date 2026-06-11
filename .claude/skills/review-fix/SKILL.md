@@ -211,18 +211,50 @@ findings — only this compact summary.
 
 ### 3. Commit the Workflow's working-tree edits via one commit-merge-push
 
-Fork **one** `/commit-merge-push` to commit every pending working-tree change —
-the Workflow's Opus fix edits — and push. Issue an Agent tool call with
-`subagent_type: general-purpose` and `model: sonnet` whose prompt invokes
-`/commit-merge-push` via the Skill tool, the canonical fork recipe
-`/implement-unit` Step 2 documents (`subagent_type` is `general-purpose`, never the
-skill name). The `/commit-merge-push` fork stays on `model: sonnet`: it is
-orchestration (commit/merge/push), not fix-authoring. If there were no code
-changes at all, `/commit-merge-push` tolerates the no-op and creates no commit.
-Even on that no-op it pushes `origin HEAD`, so it carries any pending local merge
-(left by `dispatch-merge-main` / `/fix-conflicts`) to origin; Step 7's flush guard
-is the authoritative backstop when this fork is skipped entirely. Capture the
-resulting fix commit SHA(s) for the Step 7 comment.
+Call the script first (use `dangerouslyDisableSandbox: true` — git writes +
+`git push` over HTTPS; see `.claude/rules/sandbox.md`). Compute the changed files:
+
+```bash
+git status --porcelain
+```
+
+- **If empty** → call `commit-merge-push --merge-only`. Even with no code changes
+  this still pushes `origin HEAD`, carrying any pending local merge left by
+  `dispatch-merge-main` / `/fix-conflicts` to origin (the no-op-push contract this
+  step relies on — Step 7's flush guard is the authoritative backstop only when
+  this entire step is skipped).
+- **If non-empty** → call:
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/commit-merge-push \
+    --intent "review fixes for #<N>" \
+    --file "<path>" [--file "<path>" ...]
+  ```
+
+  Quote every `--file` value and pass one `--file` per path; never interpolate the
+  raw `git status --porcelain` output as a single bare word. Iterate the changed
+  files into separate quoted arguments with a safe loop, e.g.:
+
+  ```bash
+  args=()
+  while IFS= read -r path; do
+    args+=(--file "$path")
+  done < <(git status --porcelain | sed 's/^...//')
+  .claude/skills/dispatch-propagate/scripts/commit-merge-push \
+    --intent "review fixes for #<N>" "${args[@]}"
+  ```
+
+  This lands all Workflow fix edits as **one commit** rather than a model-judged
+  split; the fork fallback (script exit 5) handles any genuine multi-unit case.
+
+On a non-zero exit, fall back to the fork — the canonical fork recipe
+`/implement-unit` Step 2 documents (`subagent_type` is `general-purpose`, never
+the skill name; `model: sonnet`).
+
+On exit 0, capture the fix commit SHA(s) for the Step 6 PR comment — **except**
+when `--merge-only` was used (empty working tree): that path pushes but creates no
+new commit, so there is no fix SHA to record. In that case omit the SHA from the
+Step 6 comment or note that no code changes were applied.
 
 ### 4. Disposition table
 

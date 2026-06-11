@@ -1,0 +1,350 @@
+#!/usr/bin/env bash
+# commit-merge-push [--worktree <path>] [--merge-only | --intent <text> --file <path> [--file <path>...]]
+#
+# Deterministic happy-path for committing a single logical unit (or just merging
+# origin/main), merging origin/main, and pushing to origin HEAD — the two paths
+# that need no model turn. Sibling to dispatch-merge-main / dispatch-handoff.
+# Callers fall back to the model-driven /commit-merge-push skill fork ONLY on a
+# non-zero exit (codes 3–7), routing on the one-line stderr diagnostic.
+#
+# Sandbox: this script runs git writes (`git add`, `git commit`, `git merge`) and
+# `git push` over HTTPS. It does NOT self-escalate — its CALLERS must invoke it
+# with `dangerouslyDisableSandbox: true` per `.claude/rules/sandbox.md`.
+#
+# Two modes (selected by args):
+#   merge-only — `--merge-only`, or neither `--file` nor `--intent`. The working
+#     tree must have no STAGED changes. Runs fetch → merge origin/main → push.
+#   single-unit — `--intent <text>` plus one or more `--file <path>`. Pre-flight
+#     guards, then `git add -- <named files>` (NEVER `git add -A`/`git add .`),
+#     `git commit -m "<intent>"` (NO --no-verify, NO --amend, NEVER force-push),
+#     then fetch → merge → push.
+#
+# Exit-code contract:
+#   0 — success (merge-only clean, or single-unit committed+merged+pushed); pushed.
+#   1 — other failure (fetch failure, unexpected git error); unchanged / safe.
+#   2 — usage error (bad/missing/conflicting args, un-cd-able worktree, or staged
+#       changes in merge-only mode); unchanged.
+#   3 — merge conflict; `git merge --abort` run, tree left clean; not pushed.
+#       In single-unit mode the local commit has ALREADY been made before the
+#       merge, so after exit 3 local HEAD is one commit ahead of its pre-script
+#       value: "committed locally, merge conflicted, merge aborted, not pushed".
+#       The fallback /commit-merge-push fork inherits a clean working tree plus
+#       that local commit and a conflicting origin/main; it must re-run the merge
+#       and resolve the resulting in-tree conflict markers, then push.
+#   4 — secret-bearing file among the named files (pre-commit guard); NOT committed.
+#   5 — multi-unit / undeclared changes (pending or pre-staged changes to files
+#       not named); NOT committed; index restored to pre-script state.
+#   6 — pre-commit hook failed (`git commit` rejected); NOT committed.
+#   7 — non-fast-forward push rejection; committed locally, not pushed.
+#
+# Codes 3–7 are the fall-back-to-skill triggers; each prints a one-line stderr
+# diagnostic naming the reason. The script prints nothing meaningful to stdout —
+# callers check only the exit code.
+set -euo pipefail
+
+PROG="commit-merge-push"
+
+WORKTREE=""
+MERGE_ONLY=0
+INTENT=""
+INTENT_SET=0
+FILES=()
+
+# --- Parse args -------------------------------------------------------------
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --worktree)
+      if [[ $# -lt 2 ]]; then
+        echo "$PROG: --worktree requires a path argument" >&2
+        exit 2
+      fi
+      WORKTREE="$2"
+      shift 2
+      ;;
+    --merge-only)
+      MERGE_ONLY=1
+      shift
+      ;;
+    --intent)
+      if [[ $# -lt 2 ]]; then
+        echo "$PROG: --intent requires a text argument" >&2
+        exit 2
+      fi
+      INTENT="$2"
+      INTENT_SET=1
+      shift 2
+      ;;
+    --file)
+      if [[ $# -lt 2 ]]; then
+        echo "$PROG: --file requires a path argument" >&2
+        exit 2
+      fi
+      FILES+=("$2")
+      shift 2
+      ;;
+    *)
+      echo "$PROG: unknown argument '$1'" >&2
+      exit 2
+      ;;
+  esac
+done
+
+# --- Validate mode selection ------------------------------------------------
+HAVE_SINGLE_UNIT_ARGS=0
+if [[ $INTENT_SET -eq 1 || ${#FILES[@]} -gt 0 ]]; then
+  HAVE_SINGLE_UNIT_ARGS=1
+fi
+
+if [[ $MERGE_ONLY -eq 1 && $HAVE_SINGLE_UNIT_ARGS -eq 1 ]]; then
+  echo "$PROG: --merge-only cannot be combined with --intent/--file" >&2
+  exit 2
+fi
+
+MODE=""
+if [[ $MERGE_ONLY -eq 1 || $HAVE_SINGLE_UNIT_ARGS -eq 0 ]]; then
+  MODE="merge-only"
+else
+  MODE="single-unit"
+  if [[ $INTENT_SET -ne 1 ]]; then
+    echo "$PROG: --file requires --intent" >&2
+    exit 2
+  fi
+  if [[ ${#FILES[@]} -eq 0 ]]; then
+    echo "$PROG: --intent requires at least one --file" >&2
+    exit 2
+  fi
+  if [[ -z "$INTENT" ]]; then
+    echo "$PROG: --intent text must be non-empty" >&2
+    exit 2
+  fi
+fi
+
+# --- cd to worktree ---------------------------------------------------------
+if [[ -n "$WORKTREE" ]]; then
+  cd "$WORKTREE" || {
+    echo "$PROG: cannot cd to worktree '$WORKTREE'" >&2
+    exit 2
+  }
+fi
+
+# --- Shared fetch/merge/push helpers ---------------------------------------
+# Fetch origin main; exit 1 on failure.
+do_fetch() {
+  if ! git fetch origin main; then
+    echo "$PROG: git fetch origin main failed" >&2
+    exit 1
+  fi
+}
+
+# Merge origin/main. A clean merge or already-up-to-date returns 0. A conflict is
+# aborted (tree left clean) and exits 3; any other merge failure exits 1.
+do_merge() {
+  if git merge origin/main >/dev/null 2>&1; then
+    return 0
+  fi
+  if git merge --abort 2>/dev/null; then
+    echo "$PROG: merge of origin/main conflicts; aborted, tree left clean (single-unit: local commit already made, not pushed — fallback fork must re-merge, resolve markers, and push)" >&2
+    exit 3
+  fi
+  echo "$PROG: git merge origin/main failed (non-conflict)" >&2
+  exit 1
+}
+
+# Push to origin HEAD. Success returns 0. A non-fast-forward rejection exits 7;
+# any other push failure exits 1.
+do_push() {
+  local push_out
+  if push_out=$(git push origin HEAD 2>&1); then
+    return 0
+  fi
+  if grep -qi "rejected" <<<"$push_out" \
+     && { grep -qi "non-fast-forward" <<<"$push_out" || grep -qi "fetch first" <<<"$push_out"; }; then
+    echo "$PROG: push rejected (non-fast-forward); not pushed" >&2
+    exit 7
+  fi
+  echo "$PROG: git push origin HEAD failed" >&2
+  exit 1
+}
+
+# --- Merge-only mode --------------------------------------------------------
+if [[ "$MODE" == "merge-only" ]]; then
+  # The working tree must have no STAGED changes — a staged change here is a
+  # caller error (they should have used single-unit mode).
+  if ! git diff --cached --quiet; then
+    echo "$PROG: merge-only mode but the index has staged changes" >&2
+    exit 2
+  fi
+  do_fetch
+  do_merge
+  do_push
+  exit 0
+fi
+
+# --- Single-unit mode -------------------------------------------------------
+# Repo root, for normalizing named files to repo-root-relative paths.
+if ! REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null); then
+  echo "$PROG: not inside a git working tree" >&2
+  exit 1
+fi
+
+# Secret guard (exit 4) — runs BEFORE any staging/commit. Match on basename.
+secret_basename() {
+  local base="$1"
+  case "$base" in
+    .env|.env.*|*.env) return 0 ;;
+    credentials.json|*credentials*.json|*-key.json|token.json|service_account*.json) return 0 ;;
+    google-services.json|GoogleService-Info.plist|firebase-adminsdk*.json) return 0 ;;
+    *.secret|*-secret|*-secret.*|*.pem|*.key|*.p12|*.pfx) return 0 ;;
+    id_rsa|id_dsa|id_ecdsa|id_ed25519) return 0 ;;
+  esac
+  return 1
+}
+
+for f in "${FILES[@]}"; do
+  base="${f##*/}"
+  if secret_basename "$base"; then
+    echo "$PROG: refusing to commit secret-bearing file '$f'" >&2
+    exit 4
+  fi
+done
+
+# Pre-staged guard — any path already staged in the index BEFORE this script ran
+# is an undeclared change the caller did not name. A pre-staged secret-bearing
+# file (e.g. an adversarial `git add .env`) must be rejected as a secret (exit 4);
+# any other pre-staged path is rejected as undeclared (exit 5). Run this BEFORE
+# staging the named files so the named set has not yet entered the index. The
+# index is left untouched on rejection (nothing was staged here).
+prestaged_secret=""
+prestaged_other=""
+while IFS= read -r prest; do
+  [[ -z "$prest" ]] && continue
+  pbase="${prest##*/}"
+  if secret_basename "$pbase"; then
+    prestaged_secret="$prest"
+    break
+  fi
+  prestaged_other="$prest"
+done < <(git -C "$REPO_ROOT" diff --cached --name-only)
+if [[ -n "$prestaged_secret" ]]; then
+  echo "$PROG: a secret-bearing file '$prestaged_secret' is already staged; refusing to commit" >&2
+  exit 4
+fi
+if [[ -n "$prestaged_other" ]]; then
+  echo "$PROG: pre-staged file '$prestaged_other' was not declared via --file; unstage it or declare the full changeset" >&2
+  exit 5
+fi
+
+# Normalize each named file to a repo-root-relative path for staging and for the
+# undeclared-changes comparison. git status --porcelain emits repo-root-relative
+# paths, so the named set must match that frame.
+NAMED_REL=()
+for f in "${FILES[@]}"; do
+  if rel=$(git -C "$REPO_ROOT" ls-files --full-name --error-unmatch -- "$f" 2>/dev/null); then
+    # Tracked file: ls-files gives the canonical repo-root-relative path.
+    NAMED_REL+=("$rel")
+  else
+    # Untracked / new file: resolve against repo root manually.
+    abs=$(cd "$(dirname -- "$f")" 2>/dev/null && printf '%s/%s' "$(pwd)" "$(basename -- "$f")") || {
+      echo "$PROG: cannot resolve path for named file '$f'" >&2
+      exit 1
+    }
+    case "$abs" in
+      "$REPO_ROOT"/*) NAMED_REL+=("${abs#"$REPO_ROOT"/}") ;;
+      *)
+        echo "$PROG: named file '$f' is outside the repo root" >&2
+        exit 1
+        ;;
+    esac
+  fi
+done
+
+# Stage ONLY the named files (never `git add -A` / `git add .`). Use the
+# repo-root-relative NAMED_REL paths (resolved above) against the repo root so a
+# subdirectory invocation cannot stage a path that mismatches the undeclared-
+# changes comparison frame.
+if ! git -C "$REPO_ROOT" add -- "${NAMED_REL[@]}"; then
+  echo "$PROG: git add of named files failed" >&2
+  exit 1
+fi
+
+# Undeclared-changes guard (exit 5) — after staging only the named files, any
+# worktree-side modification or untracked file OUTSIDE the named set means the
+# caller did not declare its full changeset. Surface it; do not sweep it in.
+#
+# git status --porcelain lines are "XY <path>" where X is the index status and Y
+# the worktree status. A staged named file shows e.g. "A  path" / "M  path"
+# (Y == space). A file with a worktree-side change shows Y != space (e.g. " M",
+# "MM"), and an untracked file shows "??". Any such path not in the named set
+# trips the guard.
+is_named() {
+  local p="$1"
+  local n
+  for n in "${NAMED_REL[@]}"; do
+    if [[ "$n" == "$p" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+undeclared=""
+while IFS= read -r line; do
+  [[ -z "$line" ]] && continue
+  x="${line:0:1}"
+  y="${line:1:1}"
+  path="${line:3}"
+  # Rename entries look like "R  old -> new"; take the destination path.
+  if [[ "$path" == *" -> "* ]]; then
+    path="${path##* -> }"
+  fi
+  # Strip optional surrounding quotes git adds for paths with special chars.
+  if [[ "$path" == \"*\" ]]; then
+    path="${path#\"}"
+    path="${path%\"}"
+  fi
+  if [[ "$x" == "?" && "$y" == "?" ]]; then
+    # Untracked, brand-new file.
+    if ! is_named "$path"; then
+      undeclared="$path"
+      break
+    fi
+  elif [[ "$x" != " " && "$x" != "?" ]]; then
+    # Staged index entry (modified/added/deleted/renamed). After staging only
+    # the named files, the only staged entries should be the named set; any
+    # other staged path is undeclared (defense-in-depth for the pre-staged guard
+    # and for staged deletes/renames of files outside the named set).
+    if ! is_named "$path"; then
+      undeclared="$path"
+      break
+    fi
+  elif [[ "$y" != " " ]]; then
+    # Worktree-side modification (unstaged) outside the named set.
+    if ! is_named "$path"; then
+      undeclared="$path"
+      break
+    fi
+  fi
+done < <(git -C "$REPO_ROOT" status --porcelain)
+
+if [[ -n "$undeclared" ]]; then
+  # Restore the index to its pre-script state so the fallback /commit-merge-push
+  # skill fork starts from a clean, unmodified index (we staged only NAMED_REL
+  # above; the pre-staged guard already rejected any pre-existing staged entry).
+  git -C "$REPO_ROOT" restore --staged -- "${NAMED_REL[@]}" 2>/dev/null || true
+  echo "$PROG: undeclared change '$undeclared' outside the named files; declare the full changeset or split into units" >&2
+  exit 5
+fi
+
+# Commit (exit 6 on pre-commit hook rejection). No --no-verify, no --amend.
+# Keep stderr so a failing pre-commit hook's own diagnostic reaches the caller;
+# only the commit's success summary on stdout is silenced.
+if ! git commit -m "$INTENT" >/dev/null; then
+  echo "$PROG: git commit rejected (pre-commit hook failure or nothing to commit)" >&2
+  exit 6
+fi
+
+# Fetch → merge → push.
+do_fetch
+do_merge
+do_push
+exit 0
