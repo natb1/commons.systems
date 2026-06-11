@@ -21872,9 +21872,15 @@ else
 fi
 
 # --- 3. Inactive self-heal --------------------------------------------------
-# Content matches but is-active reports inactive → enable --now IS invoked to
-# revive it (but the write branch is skipped, so no daemon-reload).
+# Content matches but is-active reports inactive → the write branch is skipped
+# (the unit is NOT rewritten — same inode), yet daemon-reload AND enable --now
+# both run on the slow path to revive it. Running daemon-reload even on the
+# unchanged-content slow path is the stuck-state fix (see test 3b): a reload
+# that failed on a prior call left the unit on disk but unloaded, and the
+# content compare would otherwise skip it forever. So "not rewritten" is
+# asserted by inode stability, not by the absence of daemon-reload.
 : > "$eds_log"
+eds_inode_before=$(stat -c '%i' "$eds_unit")
 if (
   export DISPATCH_DAEMON_UNIT_DIR="$eds_unit_dir"
   export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
@@ -21891,13 +21897,19 @@ if (
     FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal did not run enable --now"
   fi
   TOTAL=$((TOTAL + 1))
-  if ! grep -q 'daemon-reload' "$eds_log"; then
-    PASS=$((PASS + 1)); echo "  PASS: inactive self-heal did not rewrite the unit (no daemon-reload)"
+  if grep -q 'daemon-reload' "$eds_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: inactive self-heal ran daemon-reload (stuck-state retry)"
   else
-    FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal rewrote the unchanged unit"
+    FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal skipped daemon-reload"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if [ "$(stat -c '%i' "$eds_unit")" = "$eds_inode_before" ]; then
+    PASS=$((PASS + 1)); echo "  PASS: inactive self-heal did not rewrite the unchanged unit (inode stable)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal rewrote the unchanged unit (inode changed)"
   fi
 else
-  TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
+  TOTAL=$((TOTAL + 3)); FAIL=$((FAIL + 3))
   echo "  FAIL: ensure_daemon_service (inactive self-heal) returned non-zero"
 fi
 
