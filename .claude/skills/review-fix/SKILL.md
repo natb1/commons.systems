@@ -228,16 +228,33 @@ git status --porcelain
   ```bash
   .claude/skills/dispatch-propagate/scripts/commit-merge-push \
     --intent "review fixes for #<N>" \
-    --file <each changed file listed by git status>
+    --file "<path>" [--file "<path>" ...]
+  ```
+
+  Quote every `--file` value and pass one `--file` per path; never interpolate the
+  raw `git status --porcelain` output as a single bare word. Iterate the changed
+  files into separate quoted arguments with a safe loop, e.g.:
+
+  ```bash
+  args=()
+  while IFS= read -r path; do
+    args+=(--file "$path")
+  done < <(git status --porcelain | sed 's/^...//')
+  .claude/skills/dispatch-propagate/scripts/commit-merge-push \
+    --intent "review fixes for #<N>" "${args[@]}"
   ```
 
   This lands all Workflow fix edits as **one commit** rather than a model-judged
   split; the fork fallback (script exit 5) handles any genuine multi-unit case.
 
-Both invocations: exit 0 → capture the resulting fix commit SHA(s) for the Step 6
-PR comment. On a non-zero exit, fall back to the fork — the canonical fork recipe
+On a non-zero exit, fall back to the fork — the canonical fork recipe
 `/implement-unit` Step 2 documents (`subagent_type` is `general-purpose`, never
 the skill name; `model: sonnet`).
+
+On exit 0, capture the fix commit SHA(s) for the Step 6 PR comment — **except**
+when `--merge-only` was used (empty working tree): that path pushes but creates no
+new commit, so there is no fix SHA to record. In that case omit the SHA from the
+Step 6 comment or note that no code changes were applied.
 
 ### 4. Disposition table
 

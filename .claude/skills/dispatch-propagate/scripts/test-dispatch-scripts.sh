@@ -22733,6 +22733,36 @@ local_head_after=$(git -C "$CMP_CLONE" rev-parse HEAD)
 assert_eq "multi-unit → local HEAD unchanged" "$local_head_before" "$local_head_after"
 cmp_teardown
 
+# --- Case 3b: pre-staged unnamed file → exit 5, no commit, index clean -------
+# X != ' ', Y == ' ': an unnamed file is already staged before the script runs.
+# This is the most dangerous undeclared-changes variant — a pre-staged file
+# must not be swept into the single-unit commit.
+echo "Test: pre-staged unnamed file → exit 5, origin unchanged, index clean"
+cmp_setup
+# Both files tracked on origin.
+printf 'file b content\n' > "$CMP_CLONE/fileb.txt"
+git -C "$CMP_CLONE" add fileb.txt
+git -C "$CMP_CLONE" commit -q -m "add fileb"
+git -C "$CMP_CLONE" push -q origin main
+# Modify the named file (seed.txt) and pre-stage a change to the unnamed file.
+printf 'change a\n' > "$CMP_CLONE/seed.txt"
+printf 'staged change b\n' > "$CMP_CLONE/fileb.txt"
+git -C "$CMP_CLONE" add fileb.txt
+origin_tip_before=$(git -C "$CMP_BARE" rev-parse main)
+local_head_before=$(git -C "$CMP_CLONE" rev-parse HEAD)
+set +e
+"$CMP" --worktree "$CMP_CLONE" --intent "only seed" --file seed.txt
+cmp3b_rc=$?
+set -e
+assert_eq "pre-staged unnamed → exit 5" "5" "$cmp3b_rc"
+origin_tip_after=$(git -C "$CMP_BARE" rev-parse main)
+assert_eq "pre-staged unnamed → origin tip unchanged (not committed)" "$origin_tip_before" "$origin_tip_after"
+local_head_after=$(git -C "$CMP_CLONE" rev-parse HEAD)
+assert_eq "pre-staged unnamed → local HEAD unchanged" "$local_head_before" "$local_head_after"
+fileb_committed=$(git -C "$CMP_CLONE" log -1 --format=%H -- fileb.txt 2>/dev/null)
+assert_eq "pre-staged unnamed → fileb.txt change not committed" "$local_head_before" "$fileb_committed"
+cmp_teardown
+
 # --- Case 4: merge conflict → exit 3, tree clean, nothing pushed -------------
 echo "Test: merge conflict → exit 3, tree clean, nothing pushed"
 cmp_setup
@@ -22761,6 +22791,40 @@ status_out=$(git -C "$CMP_CLONE" status --porcelain)
 assert_eq "merge conflict → tree clean after abort" "" "$status_out"
 origin_tip_after=$(git -C "$CMP_BARE" rev-parse main)
 assert_eq "merge conflict → origin tip unchanged" "$origin_tip_before" "$origin_tip_after"
+cmp_teardown
+
+# --- Case 4b: single-unit + merge conflict → exit 3, local commit made -------
+# The single-unit path makes a local commit, THEN the origin/main merge
+# conflicts. Exit 3 must leave the local commit in place (for the fallback fork
+# to carry forward), abort the merge (tree clean), and push nothing.
+echo "Test: single-unit + merge conflict → exit 3, local commit made, origin unchanged"
+cmp_setup
+# Advance origin/main with a conflicting change to seed.txt.
+helper="$CMP_TMPDIR/helper4b"
+git clone -q "$CMP_BARE" "$helper"
+git -C "$helper" config user.email "test@test"
+git -C "$helper" config user.name "Test"
+printf 'origin line\n' > "$helper/seed.txt"
+git -C "$helper" add seed.txt
+git -C "$helper" commit -q -m "origin conflict commit"
+git -C "$helper" push -q origin main
+rm -rf "$helper"
+# In the clone, modify the same file (uncommitted) and invoke single-unit mode.
+printf 'clone line\n' > "$CMP_CLONE/seed.txt"
+origin_tip_before=$(git -C "$CMP_BARE" rev-parse main)
+local_head_before=$(git -C "$CMP_CLONE" rev-parse HEAD)
+set +e
+"$CMP" --worktree "$CMP_CLONE" --intent "single-unit conflict" --file seed.txt
+cmp4b_rc=$?
+set -e
+assert_eq "single-unit + conflict → exit 3" "3" "$cmp4b_rc"
+local_head_after=$(git -C "$CMP_CLONE" rev-parse HEAD)
+assert_eq "single-unit + conflict → local HEAD advanced (commit was made)" \
+  "yes" "$([[ "$local_head_after" != "$local_head_before" ]] && echo yes || echo no)"
+status_out=$(git -C "$CMP_CLONE" status --porcelain)
+assert_eq "single-unit + conflict → tree clean after abort" "" "$status_out"
+origin_tip_after=$(git -C "$CMP_BARE" rev-parse main)
+assert_eq "single-unit + conflict → origin tip unchanged" "$origin_tip_before" "$origin_tip_after"
 cmp_teardown
 
 # --- Case 5: pre-commit hook failure → exit 6, nothing committed/pushed ------

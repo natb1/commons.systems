@@ -50,21 +50,28 @@ The caller supplies:
 
    **2a. Call the script first** (use `dangerouslyDisableSandbox: true` — git
    writes + `git push` over HTTPS; see `.claude/rules/sandbox.md`). After the
-   Step-1 subagent returns, compute the changed files:
+   Step-1 subagent returns, build the `--file` arguments from the changed files
+   and invoke the script in one command. Use `git diff --name-only HEAD`, which
+   emits **bare** paths (one per line, no status prefix) — never parse
+   `git status --porcelain` by hand, whose lines carry a 2-character status code
+   and a leading space (e.g. ` M file.txt`) that would be passed verbatim and
+   break `git add`. Read each path with a `while`/`read` loop into a quoted
+   array so paths containing spaces or shell metacharacters are passed safely
+   (never interpolate raw filenames into the command line):
 
    ```bash
-   git status --porcelain
-   ```
-
-   Then call:
-
-   ```bash
+   args=()
+   while IFS= read -r f; do args+=(--file "$f"); done < <(git diff --name-only HEAD)
    .claude/skills/dispatch-propagate/scripts/commit-merge-push \
      --intent "<commit_intent>" \
-     --file <each changed file listed by git status>
+     "${args[@]}"
    ```
 
-   Exit 0 → unit landed; proceed to Step 4 (Return).
+   `git diff --name-only HEAD` lists modified and staged tracked files; if the
+   unit added new untracked files, append them the same way via
+   `git ls-files --others --exclude-standard` (also bare, NUL-safe paths) — both
+   feed the same quoted `args` array. Exit 0 → unit landed; proceed to Step 4
+   (Return).
 
    **2b. On a non-zero exit, fall back to the fork** — this is the **canonical
    commit-merge-push fork recipe**: issue an Agent tool call with

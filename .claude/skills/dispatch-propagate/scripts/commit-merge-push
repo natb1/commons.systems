@@ -25,8 +25,15 @@
 #   2 — usage error (bad/missing/conflicting args, un-cd-able worktree, or staged
 #       changes in merge-only mode); unchanged.
 #   3 — merge conflict; `git merge --abort` run, tree left clean; not pushed.
+#       In single-unit mode the local commit has ALREADY been made before the
+#       merge, so after exit 3 local HEAD is one commit ahead of its pre-script
+#       value: "committed locally, merge conflicted, merge aborted, not pushed".
+#       The fallback /commit-merge-push fork inherits a clean working tree plus
+#       that local commit and a conflicting origin/main; it must re-run the merge
+#       and resolve the resulting in-tree conflict markers, then push.
 #   4 — secret-bearing file among the named files (pre-commit guard); NOT committed.
-#   5 — multi-unit / undeclared changes (pending changes to files not named); NOT committed.
+#   5 — multi-unit / undeclared changes (pending or pre-staged changes to files
+#       not named); NOT committed; index restored to pre-script state.
 #   6 — pre-commit hook failed (`git commit` rejected); NOT committed.
 #   7 — non-fast-forward push rejection; committed locally, not pushed.
 #
@@ -123,7 +130,7 @@ fi
 # --- Shared fetch/merge/push helpers ---------------------------------------
 # Fetch origin main; exit 1 on failure.
 do_fetch() {
-  if ! git fetch origin main 2>&1; then
+  if ! git fetch origin main; then
     echo "$PROG: git fetch origin main failed" >&2
     exit 1
   fi
@@ -136,7 +143,7 @@ do_merge() {
     return 0
   fi
   if git merge --abort 2>/dev/null; then
-    echo "$PROG: merge of origin/main conflicts; aborted, tree left clean" >&2
+    echo "$PROG: merge of origin/main conflicts; aborted, tree left clean (single-unit: local commit already made, not pushed — fallback fork must re-merge, resolve markers, and push)" >&2
     exit 3
   fi
   echo "$PROG: git merge origin/main failed (non-conflict)" >&2
@@ -185,8 +192,9 @@ secret_basename() {
   local base="$1"
   case "$base" in
     .env|.env.*|*.env) return 0 ;;
-    credentials.json) return 0 ;;
-    *.pem|*.key|*.p12|*.pfx) return 0 ;;
+    credentials.json|*credentials*.json|*-key.json|token.json|service_account*.json) return 0 ;;
+    google-services.json|GoogleService-Info.plist|firebase-adminsdk*.json) return 0 ;;
+    *.secret|*-secret|*-secret.*|*.pem|*.key|*.p12|*.pfx) return 0 ;;
     id_rsa|id_dsa|id_ecdsa|id_ed25519) return 0 ;;
   esac
   return 1
@@ -199,6 +207,32 @@ for f in "${FILES[@]}"; do
     exit 4
   fi
 done
+
+# Pre-staged guard — any path already staged in the index BEFORE this script ran
+# is an undeclared change the caller did not name. A pre-staged secret-bearing
+# file (e.g. an adversarial `git add .env`) must be rejected as a secret (exit 4);
+# any other pre-staged path is rejected as undeclared (exit 5). Run this BEFORE
+# staging the named files so the named set has not yet entered the index. The
+# index is left untouched on rejection (nothing was staged here).
+prestaged_secret=""
+prestaged_other=""
+while IFS= read -r prest; do
+  [[ -z "$prest" ]] && continue
+  pbase="${prest##*/}"
+  if secret_basename "$pbase"; then
+    prestaged_secret="$prest"
+    break
+  fi
+  prestaged_other="$prest"
+done < <(git -C "$REPO_ROOT" diff --cached --name-only)
+if [[ -n "$prestaged_secret" ]]; then
+  echo "$PROG: a secret-bearing file '$prestaged_secret' is already staged; refusing to commit" >&2
+  exit 4
+fi
+if [[ -n "$prestaged_other" ]]; then
+  echo "$PROG: pre-staged file '$prestaged_other' was not declared via --file; unstage it or declare the full changeset" >&2
+  exit 5
+fi
 
 # Normalize each named file to a repo-root-relative path for staging and for the
 # undeclared-changes comparison. git status --porcelain emits repo-root-relative
@@ -224,8 +258,11 @@ for f in "${FILES[@]}"; do
   fi
 done
 
-# Stage ONLY the named files (never `git add -A` / `git add .`).
-if ! git add -- "${FILES[@]}" 2>&1; then
+# Stage ONLY the named files (never `git add -A` / `git add .`). Use the
+# repo-root-relative NAMED_REL paths (resolved above) against the repo root so a
+# subdirectory invocation cannot stage a path that mismatches the undeclared-
+# changes comparison frame.
+if ! git -C "$REPO_ROOT" add -- "${NAMED_REL[@]}"; then
   echo "$PROG: git add of named files failed" >&2
   exit 1
 fi
@@ -271,6 +308,15 @@ while IFS= read -r line; do
       undeclared="$path"
       break
     fi
+  elif [[ "$x" != " " && "$x" != "?" ]]; then
+    # Staged index entry (modified/added/deleted/renamed). After staging only
+    # the named files, the only staged entries should be the named set; any
+    # other staged path is undeclared (defense-in-depth for the pre-staged guard
+    # and for staged deletes/renames of files outside the named set).
+    if ! is_named "$path"; then
+      undeclared="$path"
+      break
+    fi
   elif [[ "$y" != " " ]]; then
     # Worktree-side modification (unstaged) outside the named set.
     if ! is_named "$path"; then
@@ -278,15 +324,21 @@ while IFS= read -r line; do
       break
     fi
   fi
-done < <(git status --porcelain)
+done < <(git -C "$REPO_ROOT" status --porcelain)
 
 if [[ -n "$undeclared" ]]; then
+  # Restore the index to its pre-script state so the fallback /commit-merge-push
+  # skill fork starts from a clean, unmodified index (we staged only NAMED_REL
+  # above; the pre-staged guard already rejected any pre-existing staged entry).
+  git -C "$REPO_ROOT" restore --staged -- "${NAMED_REL[@]}" 2>/dev/null || true
   echo "$PROG: undeclared change '$undeclared' outside the named files; declare the full changeset or split into units" >&2
   exit 5
 fi
 
 # Commit (exit 6 on pre-commit hook rejection). No --no-verify, no --amend.
-if ! git commit -m "$INTENT" >/dev/null 2>&1; then
+# Keep stderr so a failing pre-commit hook's own diagnostic reaches the caller;
+# only the commit's success summary on stdout is silenced.
+if ! git commit -m "$INTENT" >/dev/null; then
   echo "$PROG: git commit rejected (pre-commit hook failure or nothing to commit)" >&2
   exit 6
 fi
