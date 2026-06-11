@@ -138,6 +138,11 @@ func TestParseCSV_DuplicateIDCollision(t *testing.T) {
 		t.Errorf("expected 3 distinct IDs, got %d: %v", len(seen), seen)
 	}
 
+	// The duplicate X row (row 2) must skip the taken X-2 and become X-3.
+	if txns[1].TransactionID != "X-3" {
+		t.Errorf("txn 1: ID = %q, want %q", txns[1].TransactionID, "X-3")
+	}
+
 	// The real X-2 row (row 3) must keep its original ID.
 	if txns[2].TransactionID != "X-2" {
 		t.Errorf("txn 2: ID = %q, want %q", txns[2].TransactionID, "X-2")
