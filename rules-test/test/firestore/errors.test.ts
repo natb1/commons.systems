@@ -192,6 +192,22 @@ describe("error logs", () => {
       );
     });
 
+    it("allows preview-pr-123456 env (6 digits, at cap)", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertSucceeds(
+        setDoc(doc(db, "budget/preview-pr-123456/errors/err1"), validErrorDoc()),
+      );
+    });
+
+    it("denies preview-pr-1234567 env (7 digits, over cap)", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertFails(
+        setDoc(doc(db, "budget/preview-pr-1234567/errors/err1"), validErrorDoc()),
+      );
+    });
+
     it("allows qa-<id> env", async () => {
       const ctx = unauthenticatedContext(env);
       const db = ctx.firestore();
