@@ -8,12 +8,13 @@
 # round-trip and never branches on intermediate exit codes itself. Prints exactly
 # one directive line to stdout:
 #
-#   INVOKE /verify-pr               phase verify       (draft PR, CI failed)
+#   INVOKE /fix-checks              phase fix-checks   (draft PR, CI failed)
 #   INVOKE /qa-fix                  phase qa           (draft, CI green, no label)
 #   INVOKE /review-fix              phase review       (dispatch:qa-done / reviewed re-entry)
-#   INVOKE /budget-parse-job       phase implement    (no PR, statements:<key> label) — parse-job issue
-#   INVOKE /dispatch-resolve-conflict  provisioning hit an origin/main merge conflict
-#   RELEVANCE-REVIEW                phase implement    (no PR) — routes to SKILL.md Step 2
+#   INVOKE /budget-parse-job       phase plan         (no PR, unplanned, statements:<key> label) — parse-job issue
+#   INVOKE /implement              phase implement    (no PR + dispatch:planned)
+#   INVOKE /fix-conflicts              provisioning hit an origin/main merge conflict
+#   RELEVANCE-REVIEW                phase plan         (no PR, unplanned) — routes to SKILL.md Step 2
 #   STOP done                       phase done         (non-draft PR)
 #   PUSH-STRANDED                   phase done, but worktree ahead of origin/<branch> — push then park
 #   STOP waiting                    dispatch-ci-ready reports not-ready (draft PR CI pending)
@@ -90,8 +91,8 @@ fi
 PROVISION_RC=0
 "$SCRIPT_DIR/dispatch-provision-worktree" "$WORKTREE_PATH" || PROVISION_RC=$?
 if [[ "$PROVISION_RC" -eq 3 ]]; then
-  # A clean origin/main merge conflict — hand off to the conflict-resolver skill.
-  echo "INVOKE /dispatch-resolve-conflict"
+  # A clean origin/main merge conflict — route to the fix-conflicts phase.
+  echo "INVOKE /fix-conflicts"
   exit 0
 elif [[ "$PROVISION_RC" -ne 0 ]]; then
   # Fetch failure or a non-conflict merge failure — park the issue to office-hours.
@@ -108,7 +109,7 @@ fi
 
 # Fetch the open-PR list once; reuse it for every sibling call via the
 # DISPATCH_PR_LIST env contract (dispatch-ci-ready and dispatch-phase both honor it).
-DISPATCH_PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+DISPATCH_PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable)
 export DISPATCH_PR_LIST
 
 # Initial CI-ready gate. exit 0 (ready) → continue; exit 1 (waiting) → STOP waiting;
@@ -128,9 +129,9 @@ PHASE=$("$SCRIPT_DIR/dispatch-phase" "$N")
 
 # Map the phase string to its directive.
 case "$PHASE" in
-  implement)
-    # A no-PR target is normally an implement-phase issue → RELEVANCE-REVIEW. But
-    # a statement parse-job issue (filed by dispatch-statements-scan, carrying a
+  plan)
+    # A no-PR unplanned target is normally a plan-phase issue → RELEVANCE-REVIEW.
+    # But a statement parse-job issue (filed by dispatch-statements-scan, carrying a
     # configured statements:<key> label, with no PR) routes to /budget-parse-job
     # instead — it is a one-phase handler that never opens a code PR. The label
     # fetch happens ONLY here, inside the no-PR arm, so PR-bearing phases add no
@@ -172,7 +173,15 @@ case "$PHASE" in
       echo "RELEVANCE-REVIEW"
     fi
     ;;
-  verify)       echo "INVOKE /verify-pr" ;;
+  implement)
+    # A planned (dispatch:planned) no-PR issue routes straight to /implement, which
+    # builds from the persisted <!-- dispatch:plan --> comment — planning already
+    # happened in the plan phase, so no relevance review and no parse-job check (a
+    # planned issue is never a parse-job).
+    echo "INVOKE /implement"
+    ;;
+  fix-conflicts) echo "INVOKE /fix-conflicts" ;;
+  fix-checks)   echo "INVOKE /fix-checks" ;;
   qa)           echo "INVOKE /qa-fix" ;;
   review)       echo "INVOKE /review-fix" ;;
   done)

@@ -82,11 +82,11 @@ the reseed.
 `dispatch-finalize-selection` writes the recovery marker but no longer releases.
 The pre-finalize stop paths — `notify target-blocked`, `drain worktree-conflict`,
 plus the internal `exit 2` error paths — release at the guard, unchanged. A
-merge conflict detected during materialize-spawn spawns a
-`/dispatch-resolve-conflict <N> <worktree>` bg job (named for the worktree
-basename `<N>-slug`, which locks the worktree via the existing name-keyed
-liveness skip and consumes a concurrency slot); the lock is released before the
-resolver job is spawned. Crash safety: a router that dies mid-spawn holding the lock is
+merge conflict detected during materialize-spawn routes to
+`INVOKE /fix-conflicts` via `dispatch-route`; the worker invokes `/fix-conflicts`
+as a normal in-place phase skill (no `<N> <worktree>` args), which writes the
+standard phase marker and owns its `dispatch:fix-conflicts-attempt-*` label;
+the lock is released before the worker is spawned. Crash safety: a router that dies mid-spawn holding the lock is
 recovered by the lock's existing dead-holder reclaim (the recorded sessionId
 absent from `claude agents --json`) on the next `--wait`. Such a router also
 strands any reservation marker it wrote before dying; `reservation_sweep`
@@ -177,8 +177,8 @@ tier — every topic category, every phase — before considering any `priority=
 item, so a `priority` item in a low-ranked topic outranks every non-priority
 item in a higher-ranked topic. Within one priority level, categories run
 highest first: `security` → `bug` → `testing infrastructure` → `dispatch` →
-`budget` → `print` → `audio` → `other`. The
-`priority` label is human-applied — `/ready` never applies it automatically.
+`landing` → `fellspiral` → `budget` → `print` → `audio` → `other`. The
+`priority` label is human-applied — `/file-issue` never applies it automatically.
 A PR's category is the highest-priority topic among the labels of every issue
 it closes; an issue's category is the highest-priority topic among its own
 labels; anything with no topic label is `other`.
@@ -187,9 +187,15 @@ Within each category the ladder is (highest first; within a tier, oldest PR
 wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
 whose closing issue is `blocked_by` an open issue is skipped; not-ready PRs
 (no CI verdict yet, per `dispatch-ci-ready`) are skipped entirely): oldest `review` PR → oldest
-`verify` PR → oldest `help wanted` issue → oldest `qa` PR. Non-QA PRs are
+`fix-checks` PR → oldest `help wanted` issue (planned before unplanned — see
+*Phase model* below) → oldest `qa` PR. Non-QA PRs are
 ranked closest-to-done first — `review` is the closest-to-done non-QA tier;
-`help wanted` issues rank below all non-QA PRs but above QA PRs. A queue with
+`help wanted` issues rank below all non-QA PRs but above QA PRs. Within the
+`help wanted` issue tier, a planned issue (carrying `dispatch:planned`,
+`implement` phase) outranks an unplanned issue (`plan` phase) in the same
+(category, priority) bucket — in-flight work advances before new planning
+begins. The resolved winner is the leaf (from `dispatch-trace-leaf`), not the
+`help wanted` root; the `dispatch:planned` check is on the leaf. A queue with
 no topic-labeled items resolves entirely to `other`, reproducing the flat
 ladder; `empty` when no category yields a task.
 
@@ -198,6 +204,34 @@ worktree-conflicted — every reachable open leaf already has a worktree owned b
 another session — exactly as a directly-worktree'd issue is skipped; selection
 falls through to the next tier. The tier emits the resolved startable leaf, so
 a queue-selected `issue <num>` is always a directly-startable target.
+
+### Phase model
+
+Each issue progresses through five phases in order:
+
+`plan` → `implement` → `fix-checks` → `qa` → `review`
+
+- **`plan`** — the issue has no PR and no `dispatch:planned` label. `/plan-issue`
+  plans the work, fans out `Explore` and `Plan` subagents, produces an ordered
+  unit breakdown, persists the plan to a `<!-- dispatch:plan -->` comment on the
+  issue, and applies `dispatch:planned`. If planning hits genuine ambiguity, it
+  escalates via `AskUserQuestion` → `dispatch:office-hours` rather than guessing.
+- **`implement`** — the issue has `dispatch:planned` but no PR. `/implement` reads
+  the persisted plan, builds each unit via `/implement-unit`, and opens the draft
+  PR via `dispatch-open-pr`.
+- **`fix-checks`** — the draft PR exists but CI is failing. A `fix-checks` worker patches
+  the failing checks.
+- **`qa`** — the draft PR is CI-green and review labels are absent. `/qa-fix` runs
+  the autonomous acceptance-test pass.
+- **`review`** — the draft PR has passed QA. `/review-fix` is the terminal pass:
+  it runs code review + security review, applies in-scope fixes, and flips the PR
+  from draft to ready.
+
+`dispatch-phase` derives the current phase from PR/CI ground truth on each tick
+(no stored phase state beyond the `dispatch:planned` label and the draft PR's
+existence). The ladder's issue-tier split — planned (`implement`) above unplanned
+(`plan`) — reflects this lifecycle: an issue already in `implement` is closer to
+done than one still in `plan`, so it advances first.
 
 ## Statements scan
 
@@ -502,5 +536,5 @@ That schedules a transient `systemd.user` timer
 cap (default 3) the target is parked on `dispatch:office-hours` and no further
 reseed is scheduled. Because `dispatch-ci-ready` reports not-ready only for
 genuinely in-progress checks — a CI *failure* is a verdict, so the PR reports
-ready and `dispatch-phase` resolves it to `verify`, an actionable phase — the
+ready and `dispatch-phase` resolves it to `fix-checks`, an actionable phase — the
 wait terminates on its own when CI finishes.

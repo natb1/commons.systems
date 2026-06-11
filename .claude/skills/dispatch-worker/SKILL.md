@@ -50,12 +50,13 @@ Act on the one directive:
 
 | Directive | Exit | Meaning | Action |
 |---|---|---|---|
-| `INVOKE /verify-pr` | 0 | draft PR, CI completed and failed | invoke `/verify-pr` |
+| `INVOKE /fix-checks` | 0 | draft PR, CI completed and failed | invoke `/fix-checks` |
 | `INVOKE /qa-fix` | 0 | draft PR, CI green, no `dispatch:*` label | invoke `/qa-fix` |
 | `INVOKE /review-fix` | 0 | draft PR + `dispatch:qa-done` (or `dispatch:reviewed` re-entry) | invoke `/review-fix` |
 | `INVOKE /budget-parse-job` | 0 | a statement parse-job issue (`statements:<key>` label, no PR) | invoke `/budget-parse-job` (see below) |
-| `INVOKE /dispatch-resolve-conflict` | 0 | provisioning hit an `origin/main` merge conflict | invoke `/dispatch-resolve-conflict` (see below) |
-| `RELEVANCE-REVIEW` | 0 | no PR on the target (`implement`) | run the Step 2 relevance review, then dispatch its verdict |
+| `INVOKE /fix-conflicts` | 0 | provisioning hit an `origin/main` merge conflict | invoke `/fix-conflicts` (the generic INVOKE path below) |
+| `INVOKE /implement` | 0 | no PR + `dispatch:planned` (`implement` phase) | invoke `/implement` (the generic INVOKE path below) |
+| `RELEVANCE-REVIEW` | 0 | no PR, unplanned (`plan` phase) | run the Step 2 relevance review, then dispatch its verdict |
 | `STOP done` | 0 | non-draft (ready) PR — should-never-happen; spawn boundary (#1109) prevents it upstream | stop without invoking a phase skill |
 | `PUSH-STRANDED` | 0 | `done` PR, but the worktree has commits `origin/<branch>` hasn't seen | push `origin HEAD`, write an office-hours reason, stop with no marker |
 | `STOP waiting` | 0 | draft PR's CI has no verdict yet | print the verbatim message below and stop |
@@ -70,19 +71,27 @@ Invoke the one named phase skill via the Skill tool. Run exactly one phase per
 action. Each phase skill owns and applies its own `dispatch:*` label — the worker
 applies none:
 
-- **`/verify-pr`** — runs a single pass: fix one set of failed CI checks, record
+- **`/fix-checks`** — runs a single pass: fix one set of failed CI checks, record
   the outcome, post it, stop. No label.
 - **`/qa-fix`** — runs the autonomous portion of QA and applies `dispatch:qa-done`
   itself on a clean pass. On a user-input blocker (a needs-human-judgment item, a
   bug, a failed pre-QA check) it escalates to the office-hours queue instead,
   where `/office-hours` runs the interactive residue.
-- **`/review-fix`** — the single terminal review pass. It runs `/code-review max
-  --fix`, `/review`, and the full surface-gated security fan-out as direct
-  subagents over the same diff, unifies and de-duplicates the findings, applies
-  the in-scope fixes via one `/commit-merge-push`, files meaningful out-of-scope
-  findings as `blocked_by` follow-ups, posts one PR comment covering every
-  finding, applies `dispatch:reviewed`, and marks the PR ready. It is idempotent
-  on re-entry.
+- **`/review-fix`** — the single terminal review pass. It invokes the Workflow
+  tool on `.claude/workflows/review-fix.js`, which fans out surface-conditional
+  finders (`/code-review max` findings-only, `/review`, and the surface-gated
+  security reviewers) over the same diff, de-duplicates and classifies the
+  findings in code, adversarially verifies `Required` findings before spending an
+  Opus fix, and runs an Opus fix fan-out. The skill then commits the fixes via one
+  `/commit-merge-push`, files meaningful out-of-scope findings as `blocked_by`
+  follow-ups, posts one PR comment covering every finding, applies
+  `dispatch:reviewed`, and marks the PR ready. It is idempotent on re-entry.
+- **`/implement`** — the `implement`-phase build skill for a no-PR issue carrying
+  `dispatch:planned`. It reads the plan persisted to the issue's
+  `<!-- dispatch:plan -->` comment, builds each unit via `/implement-unit`, and
+  opens a draft PR. Planning already happened in the `plan` phase, so the worker
+  runs no relevance review before it. No `dispatch:*` label — the draft PR it opens
+  is its own marker.
 
 After the phase skill returns, the worker session ends; the Stop hook reads the
 marker the phase skill wrote and propagates the chain. The worker does not advance
@@ -90,17 +99,6 @@ to the next phase in the same tick — one phase per `/dispatch-worker` invocati
 
 `/ultrareview` is intentionally **never** invoked: it is user-triggered and
 billed, so `/dispatch-worker` cannot launch it.
-
-### `INVOKE /dispatch-resolve-conflict` — hand off the merge conflict
-
-Provisioning found that `origin/main` does not merge cleanly into this worktree.
-Invoke `/dispatch-resolve-conflict $N $WORKTREE_PATH` via the Skill tool **instead
-of** any phase skill. The worker is already a session in the worktree, named
-`<N>-slug`, with `CLAUDE_JOB_DIR` set — exactly the environment that skill expects
-(it normally runs as a bg job the router spawns). Write **no** phase marker: the
-Stop hook's conflict-resolver branch owns the disposition — re-seed at `<N>` on
-`resolved`, or park an ambiguous conflict to office-hours — via the
-`conflict-resolver` / `conflict-resolved` sentinels that skill writes. Then stop.
 
 ### `INVOKE /budget-parse-job` — merge one statement, close the issue
 
@@ -120,8 +118,9 @@ stops with no sentinel, so the Stop hook parks the still-open issue on
 ### `RELEVANCE-REVIEW` — run the relevance review, then dispatch its verdict
 
 Run the Step 2 relevance review and dispatch the verdict it returns (`proceed` /
-`adjust` / `stop` — see Step 2). The draft PR's existence plus its CI status is
-its own marker — `/plan-implement` gets **no** `dispatch:*` label.
+`adjust` / `stop` — see Step 2). This gates the `plan` phase — a no-PR, unplanned
+issue. `/plan-issue` gets **no** `dispatch:*` label here; it applies
+`dispatch:planned` itself when it finishes and persists the plan.
 
 ### `STOP waiting` — re-gate to the router, no marker
 
@@ -139,7 +138,7 @@ Stop-hook re-gate rationale.
 ### `PUSH-STRANDED` — push unpushed local commits, then park
 
 A `done` PR's worktree is ahead of its remote branch — unpushed
-`dispatch-merge-main` / `/dispatch-resolve-conflict` merge commits that, if
+`dispatch-merge-main` / `/fix-conflicts` merge commits that, if
 left, keep the PR `CONFLICTING` with no later tick able to push them.
 
 Run `git push origin HEAD` to flush them. This is sandbox-safe: it uses HTTPS
@@ -182,16 +181,17 @@ normal-case done PR is caught upstream and no worker is spawned. For
 rejected the spawn cwd, or the positional `<worktree-path>` disagreed with `git
 rev-parse --show-toplevel`; see `reference.md`.
 
-## 2. Pre-Implementation Relevance Review
+## 2. Pre-Planning Relevance Review
 
-This step runs **only** for the `implement` phase — a no-PR target. Every phase
-with an existing PR (`verify` onward) skips it: implementation is already
-underway. It is the implementation-time counterpart of `ref-ready`'s Step 3e
-relevance check; the two are deliberately separate — Step 3e is creation-time
-and `$BASELINE_BRANCH`-anchored, this step is pre-implementation and
+This step runs **only** for the `plan` phase — a no-PR, unplanned target. Every
+phase with an existing PR (`fix-checks` onward) skips it, as does the `implement`
+phase (a planned no-PR issue routes straight to its build skill): implementation
+is already planned or underway. It is the planning-time counterpart of
+the creation-time relevance check; the two are deliberately separate — the
+creation-time check is `$BASELINE_BRANCH`-anchored, this step is pre-planning and
 `createdAt`-anchored.
 
-Before invoking `/plan-implement` on an `implement`-phase issue, confirm no PR
+Before invoking `/plan-issue` on a `plan`-phase issue, confirm no PR
 exists for the target by running:
 
 ```bash
@@ -217,7 +217,7 @@ moved, or removed is flagged `[ABSENT]`/`[NOT FOUND]`). It mines those
 references from the single-backtick spans in the issue body; read its header for
 what the heuristic does and does not cover. When the merged-PR query hits its
 100-result limit the script prints a `WINDOW-TOO-WIDE` marker recommending
-`/ready` instead of a partial scan — treat that as the too-wide-window signal in
+`/file-issue` instead of a partial scan — treat that as the too-wide-window signal in
 the verdict below.
 
 Two judgments stay with the dispatching session, after reading the script's
@@ -234,13 +234,13 @@ evidence:
 
 ### Three-way verdict
 
-- **`proceed`** — drift absent or cosmetic; invoke `/plan-implement`.
+- **`proceed`** — drift absent or cosmetic; invoke `/plan-issue`.
 - **`adjust`** — issue still wanted but references, conventions, or scope have
   shifted; invoke `/new-requirement` with the drift findings as the revised
-  understanding, then `/plan-implement`.
+  understanding, then `/plan-issue`.
 - **`stop`** — codebase has moved past the need; report what changed and
-  recommend closing the issue or re-running `/ready`. Do **not** invoke
-  `/plan-implement`; print the drift report and stop. The Stop hook
+  recommend closing the issue or re-running `/file-issue`. Do **not** invoke
+  `/plan-issue`; print the drift report and stop. The Stop hook
   applies `dispatch:office-hours` to the issue because no marker was
   written.
 

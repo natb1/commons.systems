@@ -338,15 +338,25 @@ func TestApplyTransactionRulesSkippedByGeneral(t *testing.T) {
 	}
 }
 
-// writeCSVFixture writes a minimal bank statement CSV file to path.
-// Each entry is [date, amount, description, "", txnID, type].
+// writeCSVFixture writes a minimal bank statement CSV file to path with a
+// default metadata line (toDate 2025/01/31). Each entry is
+// [date, amount, description, "", txnID, type].
 func writeCSVFixture(t *testing.T, path string, rows [][6]string) {
+	t.Helper()
+	writeCSVFixtureMeta(t, path, "0000000000,2025/01/01,2025/01/31,100.00,50.00", rows)
+}
+
+// writeCSVFixtureMeta writes a bank statement CSV file to path with an explicit
+// metadata line (acctNumber,fromDate,toDate,startingBalance,endingBalance). The
+// metadata toDate drives the inferred statement period (see ParseResult.InferPeriod),
+// so two fixtures with different toDates produce different statementIDs even with
+// identical transaction rows.
+func writeCSVFixtureMeta(t *testing.T, path, meta string, rows [][6]string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		t.Fatalf("creating fixture dir: %v", err)
 	}
-	var lines []string
-	lines = append(lines, "0000000000,2025/01/01,2025/01/31,100.00,50.00")
+	lines := []string{meta}
 	for _, r := range rows {
 		lines = append(lines, strings.Join(r[:], ","))
 	}
@@ -636,6 +646,140 @@ func TestRunMergeDedupOverlappingFiles(t *testing.T) {
 	}
 }
 
+// TestRunMergeCrossStatementDuplicateJournalAggregatesAgree is the end-to-end
+// acceptance test for issue #1271. One real purchase appears in two overlapping
+// statements (same institution/account, same description/amount/date, but
+// different statement periods → different statementIDs). autoNormalize flags the
+// cross-statement pair (no normalization rule needed), marking one primary and
+// one non-primary duplicate. The journal must credit the bank account for the
+// purchase exactly once — not twice — and the budget aggregate must count it
+// once. The two computed numbers must agree.
+func TestRunMergeCrossStatementDuplicateJournalAggregatesAgree(t *testing.T) {
+	tmp := t.TempDir()
+
+	// The same purchase ($7.25, "DUP PURCHASE", dated 2025-01-10) appears in two
+	// overlapping statements for the same account, producing two distinct
+	// statementIDs: test_bank-1234-2025-01 and test_bank-1234-2025-02. The period
+	// is inferred from each file's metadata toDate (InferPeriod prefers BalanceDate),
+	// so the two files carry different toDates (2025/01/31 vs 2025/02/28). The
+	// transaction row date — used by autoNormalize — is identical in both files.
+	csvJan := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "stmt.csv")
+	writeCSVFixtureMeta(t, csvJan, "0000000000,2025/01/01,2025/01/31,100.00,50.00", [][6]string{
+		{"2025/01/10", "7.25", "DUP PURCHASE", "", "TXN-DUP", "DEBIT"},
+	})
+	csvFeb := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-02", "stmt.csv")
+	writeCSVFixtureMeta(t, csvFeb, "0000000000,2025/02/01,2025/02/28,50.00,40.00", [][6]string{
+		{"2025/01/10", "7.25", "DUP PURCHASE", "", "TXN-DUP", "DEBIT"},
+	})
+
+	const purchaseAmount = 7.25
+
+	stmtJan := "test_bank-1234-2025-01"
+	stmtFeb := "test_bank-1234-2025-02"
+	docJan := budget.TransactionDocID(stmtJan, "TXN-DUP")
+	docFeb := budget.TransactionDocID(stmtFeb, "TXN-DUP")
+
+	// Empty NormalizationRules: auto-normalization of exact cross-statement
+	// duplicates needs no rule. A categorization + budget_assignment rule lands
+	// the purchase in a budget period.
+	inputJSON := export.Output{
+		Version:      1,
+		GroupName:    "test-group",
+		Transactions: []export.Transaction{},
+		Rules: []export.Rule{
+			{ID: "cat-dup", Type: "categorization", Pattern: "DUP PURCHASE", Target: "Test:Dup", Priority: 10},
+			{ID: "bud-dup", Type: "budget_assignment", Pattern: "DUP PURCHASE", Target: "dup-budget", Priority: 10},
+		},
+		Budgets: []export.Budget{
+			{ID: "dup-budget", Name: "Dup Budget", Allowance: 100},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input JSON: %v", err)
+	}
+
+	outputPath := filepath.Join(tmp, "output.json")
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	var out export.Output
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parsing output: %v", err)
+	}
+
+	// Sanity: both transactions survive dedup (distinct statementIDs), and exactly
+	// one is the non-primary normalized duplicate.
+	if len(out.Transactions) != 2 {
+		t.Fatalf("expected 2 transactions (distinct statementIDs), got %d", len(out.Transactions))
+	}
+	txnByID := make(map[string]export.Transaction, len(out.Transactions))
+	for _, txn := range out.Transactions {
+		txnByID[txn.ID] = txn
+	}
+	primaries, dups := 0, 0
+	for _, id := range []string{docJan, docFeb} {
+		txn, ok := txnByID[id]
+		if !ok {
+			t.Fatalf("expected transaction %q in output", id)
+		}
+		if txn.NormalizedID != nil && *txn.NormalizedID != "" && !txn.NormalizedPrimary {
+			dups++
+		} else if txn.NormalizedPrimary {
+			primaries++
+		}
+	}
+	if primaries != 1 || dups != 1 {
+		t.Fatalf("expected exactly 1 primary and 1 non-primary duplicate, got %d primary / %d duplicate", primaries, dups)
+	}
+
+	// Assertion 1: the journal credits the bank account (test_bank_1234) for the
+	// purchase exactly ONCE. Sum the credits minus debits on the bank account; the
+	// net credit equals one purchase amount, not two. (A spending line credits the
+	// imported bank account.)
+	const bankAccountID = "test_bank_1234"
+	var journalNetCredit float64
+	for _, leg := range out.JournalLegs {
+		if leg.AccountID == bankAccountID {
+			journalNetCredit += leg.Credit - leg.Debit
+		}
+	}
+	if journalNetCredit != purchaseAmount {
+		t.Errorf("journal bank-account net credit: got %v, want %v (one purchase, not two)", journalNetCredit, purchaseAmount)
+	}
+
+	// Assertion 2: the budget aggregate counts the purchase exactly ONCE. The
+	// dup-budget period total equals one purchase amount (net, reimbursement 0),
+	// with count 1.
+	var aggregateTotal float64
+	var periodCount int
+	for _, p := range out.BudgetPeriods {
+		if p.BudgetID == "dup-budget" {
+			aggregateTotal += p.Total
+			periodCount += p.Count
+		}
+	}
+	if periodCount != 1 {
+		t.Errorf("dup-budget aggregate count: got %d, want 1 (one purchase, not two)", periodCount)
+	}
+	if aggregateTotal != purchaseAmount {
+		t.Errorf("dup-budget aggregate total: got %v, want %v (one purchase, not two)", aggregateTotal, purchaseAmount)
+	}
+
+	// Assertion 3 (the explicit acceptance criterion): the journal's net for the
+	// purchase agrees with the aggregate total.
+	if journalNetCredit != aggregateTotal {
+		t.Errorf("journal net (%v) and aggregate total (%v) disagree", journalNetCredit, aggregateTotal)
+	}
+}
+
 func TestGenerateVirtualSynchrony(t *testing.T) {
 	allTxns := []budget.TransactionData{
 		{
@@ -888,6 +1032,251 @@ func TestDeriveMonthlyStatements(t *testing.T) {
 			t.Errorf("expected 0 derived statements for zero balance, got %d", len(derived))
 		}
 	})
+}
+
+// TestDeriveMonthlyStatementsVirtual asserts that every derived anchor produced
+// by deriveMonthlyStatements carries Virtual == true.
+func TestDeriveMonthlyStatementsVirtual(t *testing.T) {
+	parsed := []parsedFile{{
+		sf: parse.StatementFile{
+			Institution: "testbank",
+			Account:     "9999",
+			Period:      "2026-03",
+		},
+		result: parse.ParseResult{
+			Balance:     500000, // $5000.00
+			BalanceDate: time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC),
+			Transactions: []parse.Transaction{
+				{Date: time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC), Amount: 10000},
+				{Date: time.Date(2026, 2, 15, 0, 0, 0, 0, time.UTC), Amount: 20000},
+				{Date: time.Date(2026, 3, 5, 0, 0, 0, 0, time.UTC), Amount: 5000},
+			},
+		},
+	}}
+
+	derived := deriveMonthlyStatements(parsed)
+	if len(derived) == 0 {
+		t.Fatal("expected at least one derived anchor, got none")
+	}
+	for i, s := range derived {
+		if !s.Virtual {
+			t.Errorf("derived[%d] (period=%q) has Virtual=false, want true", i, s.Period)
+		}
+	}
+}
+
+// TestMergeStatementsPreservesRealOverDerivedAnchor asserts the three-way merge
+// priority: real dir > real input > derived/virtual anchor.
+//
+//  1. Core criterion: a real input statement is preserved when a derived
+//     (Virtual=true) dir anchor exists for the same StatementID.
+//  2. Gap-fill: a derived anchor IS emitted for a period that has no real
+//     statement in either dir or input.
+func TestMergeStatementsPreservesRealOverDerivedAnchor(t *testing.T) {
+	// Two derived dir anchors:
+	//   anchor-A: "testbank-acct-2026-01" (Virtual=true, balance=$10 estimate)
+	//   anchor-B: "testbank-acct-2026-02" (Virtual=true, balance=$20 estimate — gap month)
+	//
+	// One real input statement:
+	//   real-A: "testbank-acct-2026-01" (Virtual=false, balance=$99 real value)
+	//
+	// After merge, the result for "testbank-acct-2026-01" must be the $99 real
+	// input statement (not the $10 derived estimate), and "testbank-acct-2026-02"
+	// must still appear (gap-fill preserved).
+
+	const (
+		stmtIDJanuary  = "testbank-acct-2026-01"
+		stmtIDFebruary = "testbank-acct-2026-02"
+	)
+
+	bdJan := time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC)
+	bdFeb := time.Date(2026, 2, 28, 0, 0, 0, 0, time.UTC)
+
+	dirStmts := []budget.StatementData{
+		{
+			StatementID: stmtIDJanuary,
+			Institution: "testbank",
+			Account:     "acct",
+			Balance:     1000, // $10.00 — derived estimate
+			Period:      "2026-01",
+			BalanceDate: &bdJan,
+			Virtual:     true,
+		},
+		{
+			StatementID: stmtIDFebruary,
+			Institution: "testbank",
+			Account:     "acct",
+			Balance:     2000, // $20.00 — derived estimate, gap month
+			Period:      "2026-02",
+			BalanceDate: &bdFeb,
+			Virtual:     true,
+		},
+	}
+
+	inputStmts := []export.Statement{
+		{
+			ID:          budget.StatementDocID(stmtIDJanuary),
+			StatementID: stmtIDJanuary,
+			Institution: "testbank",
+			Account:     "acct",
+			Balance:     99.00, // $99.00 — real measured balance
+			Period:      "2026-01",
+			BalanceDate: "2026-01-28",
+			Virtual:     false,
+		},
+	}
+
+	maxDates := map[string]*time.Time{} // no transactions; LastTransactionDate stays nil
+
+	result := mergeStatements(dirStmts, inputStmts, maxDates)
+
+	// Index the result by StatementID for easy lookup.
+	byStmtID := make(map[string]export.Statement, len(result))
+	for _, s := range result {
+		if _, dup := byStmtID[s.StatementID]; dup {
+			t.Errorf("duplicate StatementID %q in merge result", s.StatementID)
+		}
+		byStmtID[s.StatementID] = s
+	}
+
+	// 1. Core criterion: real input wins — $99 balance, Virtual=false.
+	jan, ok := byStmtID[stmtIDJanuary]
+	if !ok {
+		t.Fatalf("StatementID %q missing from merge result", stmtIDJanuary)
+	}
+	if jan.Virtual {
+		t.Errorf("result for %q has Virtual=true, want false (real input should win)", stmtIDJanuary)
+	}
+	if jan.Balance != 99.00 {
+		t.Errorf("result for %q has Balance=%.2f, want 99.00 (real input balance)", stmtIDJanuary, jan.Balance)
+	}
+
+	// 2. Gap-fill preserved: derived anchor for February still appears.
+	feb, ok := byStmtID[stmtIDFebruary]
+	if !ok {
+		t.Fatalf("StatementID %q missing from merge result — gap-fill regressed", stmtIDFebruary)
+	}
+	if !feb.Virtual {
+		t.Errorf("result for %q has Virtual=false, want true (should be the derived anchor)", stmtIDFebruary)
+	}
+	if feb.Balance != 20.00 {
+		t.Errorf("result for %q has Balance=%.2f, want 20.00 (derived anchor balance)", stmtIDFebruary, feb.Balance)
+	}
+
+	// 3. Exactly the two expected statements — no extras.
+	if len(result) != 2 {
+		t.Errorf("expected 2 statements in merge result, got %d", len(result))
+	}
+}
+
+// TestRunInputJSONPreservesDerivedAnchors is an end-to-end round-trip guard for
+// the runInputJSON path: runMerge generates derived virtual anchors from a
+// multi-month statement file, and feeding that output back through runInputJSON
+// must preserve those anchors. This catches the regression where runInputJSON's
+// statement loop drops every virtual statement (the `if s.Virtual { continue }`
+// at main.go:438), silently discarding derived balance-history anchors on a
+// --input-json run.
+func TestRunInputJSONPreservesDerivedAnchors(t *testing.T) {
+	tmp := t.TempDir()
+
+	// A single statement file for one account whose transactions span three
+	// months (Jan, Feb, Mar) with an ending balance — exactly the shape
+	// deriveMonthlyStatements turns into intermediate monthly anchors for the
+	// months before the file's own period (2026-03). The metadata toDate
+	// 2026/03/31 drives the inferred period and the $500.00 ending balance the
+	// anchors are derived from.
+	csvPath := filepath.Join(tmp, "statements", "test_bank", "1234", "2026-03", "stmt.csv")
+	writeCSVFixtureMeta(t, csvPath,
+		"0000000000,2026/01/01,2026/03/31,100.00,500.00",
+		[][6]string{
+			{"2026/01/10", "10.00", "TEST PURCHASE JAN", "", "TXN-JAN", "DEBIT"},
+			{"2026/02/15", "20.00", "TEST PURCHASE FEB", "", "TXN-FEB", "DEBIT"},
+			{"2026/03/05", "5.00", "TEST PURCHASE MAR", "", "TXN-MAR", "DEBIT"},
+		})
+
+	// Minimal input JSON: one transaction (the reader requires a non-empty
+	// transactions field) plus a categorization rule covering every
+	// transaction so the merge does not fail on uncategorized transactions.
+	inputJSON := export.Output{
+		Version:   1,
+		GroupName: "test-group",
+		Transactions: []export.Transaction{
+			{
+				ID:                budget.TransactionDocID("test_bank-1234-2026-03", "TXN-JAN"),
+				Institution:       "test_bank",
+				Account:           "1234",
+				Description:       "TEST PURCHASE JAN",
+				Amount:            10.00,
+				Timestamp:         "2026-01-10T00:00:00Z",
+				StatementID:       "test_bank-1234-2026-03",
+				NormalizedPrimary: true,
+			},
+		},
+		Rules: []export.Rule{
+			{ID: "cat-test", Type: "categorization", Pattern: "TEST PURCHASE", Target: "Test:General", Priority: 10},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input JSON: %v", err)
+	}
+
+	// Step 1: runMerge produces an output that includes derived virtual anchors.
+	mergedPath := filepath.Join(tmp, "merged.json")
+	statementsDir := filepath.Join(tmp, "statements")
+	if err := runMerge(fileOpts{path: inputPath}, statementsDir, "", parse.DiscoverOpts{}, fileOpts{path: mergedPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+
+	mergedData, err := os.ReadFile(mergedPath)
+	if err != nil {
+		t.Fatalf("reading merged output: %v", err)
+	}
+	var merged export.Output
+	if err := json.Unmarshal(mergedData, &merged); err != nil {
+		t.Fatalf("parsing merged output: %v", err)
+	}
+
+	// Confirm the precondition: runMerge actually emitted derived virtual
+	// anchors. Without them the round-trip below would be vacuous.
+	var mergedVirtualIDs []string
+	for _, s := range merged.Statements {
+		if s.Virtual {
+			mergedVirtualIDs = append(mergedVirtualIDs, s.StatementID)
+		}
+	}
+	if len(mergedVirtualIDs) == 0 {
+		t.Fatalf("precondition failed: runMerge emitted no virtual anchors (statements: %d)", len(merged.Statements))
+	}
+
+	// Step 2: feed the merged output back into runInputJSON as input.
+	roundtripPath := filepath.Join(tmp, "roundtrip.json")
+	if err := runInputJSON(fileOpts{path: mergedPath}, fileOpts{path: roundtripPath}); err != nil {
+		t.Fatalf("runInputJSON: %v", err)
+	}
+
+	roundtripData, err := os.ReadFile(roundtripPath)
+	if err != nil {
+		t.Fatalf("reading roundtrip output: %v", err)
+	}
+	var roundtrip export.Output
+	if err := json.Unmarshal(roundtripData, &roundtrip); err != nil {
+		t.Fatalf("parsing roundtrip output: %v", err)
+	}
+
+	// Step 3: every derived virtual anchor must survive the round-trip.
+	survived := make(map[string]bool, len(roundtrip.Statements))
+	for _, s := range roundtrip.Statements {
+		if s.Virtual {
+			survived[s.StatementID] = true
+		}
+	}
+	for _, id := range mergedVirtualIDs {
+		if !survived[id] {
+			t.Errorf("derived virtual anchor %q dropped by runInputJSON round-trip", id)
+		}
+	}
 }
 
 // TestMain lets TestRemovedFlagsRejected re-exec this test binary as the real

@@ -1,9 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Skill(ready)",
+      "Skill(file-issue)",
+      "Skill(ref-issue-labels)",
       "Skill(ref-memory-management)",
-      "Skill(ref-ready)",
       "Skill(ref-write-instructions)",
       "Skill(roadmap)",
       "Skill(dispatch-token-audit)",
@@ -53,7 +53,9 @@
       "Bash(npx vitest:*)",
       "mcp__claude-in-chrome__tabs_context_mcp",
       "mcp__claude-in-chrome__read_console_messages",
-      "mcp__claude-in-chrome__read_network_requests"
+      "mcp__claude-in-chrome__read_network_requests",
+      "mcp__claude-in-chrome__list_connected_browsers",
+      "mcp__claude-in-chrome__select_browser"
     ]
   },
   "hooks": {

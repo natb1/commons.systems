@@ -32,20 +32,19 @@ jobs:
       # syncOfficeHours's non-secret defineString params come from repository
       # Variables, written into the dotenv firebase-tools reads at deploy time.
       # Unset Variables yield empty values, which deploy the function dormant.
-      # The private key is the only secret and lives in Secret Manager, not here.
+      # The App private key and member emails are both secrets in Secret Manager;
+      # neither flows through this workflow.
       - name: Write office-hours function config
         env:
           OFFICE_HOURS_GITHUB_APP_ID: ${{ vars.OFFICE_HOURS_GITHUB_APP_ID }}
           OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID: ${{ vars.OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID }}
           OFFICE_HOURS_GROUP_REPO: ${{ vars.OFFICE_HOURS_GROUP_REPO }}
-          OFFICE_HOURS_MEMBER_EMAILS: ${{ vars.OFFICE_HOURS_MEMBER_EMAILS }}
           OFFICE_HOURS_FIRESTORE_NAMESPACE: ${{ vars.OFFICE_HOURS_FIRESTORE_NAMESPACE || 'office-hours/prod' }}
         run: |
           cat > functions/.env.commons-systems <<EOF
           OFFICE_HOURS_GITHUB_APP_ID=${OFFICE_HOURS_GITHUB_APP_ID}
           OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID=${OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID}
           OFFICE_HOURS_GROUP_REPO=${OFFICE_HOURS_GROUP_REPO}
-          OFFICE_HOURS_MEMBER_EMAILS=${OFFICE_HOURS_MEMBER_EMAILS}
           OFFICE_HOURS_FIRESTORE_NAMESPACE=${OFFICE_HOURS_FIRESTORE_NAMESPACE}
           EOF
       - name: Deploy functions

@@ -68,7 +68,7 @@
 # phase — before considering any `priority=0` item, so a `priority` item in a
 # low-ranked topic still outranks every non-priority item in a higher-ranked
 # topic. Within one priority level, topic categories run highest priority first:
-#   security → bug → testing infrastructure → dispatch → budget → print → audio → other
+#   security → bug → testing infrastructure → dispatch → landing → fellspiral → budget → print → audio → other
 # and within each (priority, topic) bucket the phase ladder runs innermost.
 #
 # A PR's category is the highest-priority topic among the labels of every issue
@@ -80,10 +80,11 @@
 #
 # Within each (priority, topic) bucket, default-mode priority (oldest PR wins
 # within a tier):
-#   1. Oldest "review"      PR (draft + dispatch:qa-done)
-#   2. Oldest "verify"      PR (draft, CI completed and failed)
-#   3. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
-#   4. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
+#   1. Oldest "fix-conflicts" PR (draft, mergeable == CONFLICTING)
+#   2. Oldest "review"      PR (draft + dispatch:qa-done)
+#   3. Oldest "fix-checks"  PR (draft, CI completed and failed)
+#   4. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
+#   5. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
 #      by a live Claude session, and which is not already closed by a non-draft
 #      (ready) PR (#920), resolved to a startable open leaf (an issue whose
 #      entire open-leaf subtree is owned by live sessions is skipped, exactly as
@@ -466,7 +467,7 @@ issue_worktree_claimed() {
 # (passed as DISPATCH_PR_LIST) instead of re-running gh pr list.
 # closingIssuesReferences drives topic-category resolution: a PR inherits the
 # highest-priority topic among the labels of every issue it closes.
-PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences)
+PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences,mergeable)
 # The office-hours skip is ISSUE-anchored (issue #909): dispatch:office-hours
 # lives on the issue, not the PR, so it is not filtered here on PR labels.
 # Instead the main PR loop below resolves each candidate PR's issue from its
@@ -489,6 +490,16 @@ ISSUE_LIST=$(gh issue list --state open --limit 300 --json number,createdAt,labe
 # (set -e + pipefail); mirrors PR_SORTED.
 ISSUE_LABELS_JSON=$(printf '%s' "$ISSUE_LIST" \
   | jq -c 'reduce .[] as $i ({}; .[$i.number | tostring] = ($i.labels // []))')
+
+# Planned-issue lookup: number → 1 for every open issue carrying
+# dispatch:planned (the implement-phase discriminator, per dispatch-phase).
+# Reuses the already-fetched ISSUE_LIST — no extra gh call. A leaf absent from
+# this map defaults to the plan phase (the lower issue-ladder tier).
+declare -A ISSUE_PLANNED
+while IFS= read -r planned_num; do
+  [[ -n "$planned_num" ]] && ISSUE_PLANNED["$planned_num"]=1
+done < <(printf '%s' "$ISSUE_LIST" | jq -r '
+  .[] | select((.labels // []) | any(.name == "dispatch:planned")) | .number')
 
 # Prefetch open-blocker state for every closing issue across all open PRs in a
 # single batched GraphQL call, replacing the former per-PR/per-closing-issue REST
@@ -557,7 +568,7 @@ fi
 # apart from any `dispatch:*` workflow marker by exact-match resolution. A bare
 # `security` label means topic; only the `dispatch:`-prefixed form is a phase
 # label, and the single review phase has no `security` rung in PHASE_PRIORITY.
-TOPIC_CATEGORIES=(security bug "testing infrastructure" dispatch budget print audio)
+TOPIC_CATEGORIES=(security bug "testing infrastructure" dispatch landing fellspiral budget print audio)
 CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
 # Same priority list as a JSON array, for category_of_labels' jq filter.
 TOPIC_CATEGORIES_JSON=$(printf '%s\n' "${TOPIC_CATEGORIES[@]}" | jq -Rcn '[inputs]')
@@ -593,12 +604,17 @@ has_priority_in_labels() {
 # are pre-sorted oldest-first, so the first PR captured for a key is the oldest
 # in that bucket.
 declare -A FIRST_PR
-# First-seen help-wanted issue per (category, priority-bit): key =
-# "<category>|<priority-bit>", value = "<num>".
+# First-seen help-wanted issue per (category, priority-bit, phase): key =
+# "<category>|<priority-bit>|<phase>" where phase ∈ {implement, plan},
+# value = "<num>". Splitting the bucket by phase lets a planned issue
+# (implement) be selected ahead of an unplanned one (plan) in the same bucket.
 declare -A FIRST_ISSUE
 
 # Within-category phase ladder, highest priority first.
-PHASE_PRIORITY=(review verify)
+PHASE_PRIORITY=(fix-conflicts review fix-checks)
+# Within-category issue ladder, highest priority first: a planned issue
+# (implement phase) advances ahead of an unplanned issue (plan phase).
+ISSUE_PHASE_PRIORITY=(implement plan)
 
 while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "$pr_num" ]] && continue
@@ -740,8 +756,12 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   # --priority-only scans only the priority=1 tier — skip non-priority issues
   # before the expensive dispatch-trace-leaf descent.
   [[ "$PRIORITY_ONLY" == "true" && "$issue_pri" != "1" ]] && continue
-  issue_bucket="$issue_cat|$issue_pri"
-  [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]] && continue
+  # Coarse pre-trace skip: only when BOTH phase sub-buckets are already filled
+  # is the expensive leaf trace pointless. If either implement or plan slot is
+  # still open, descend — the leaf's phase isn't known until after the trace.
+  impl_bucket="$issue_cat|$issue_pri|implement"
+  plan_bucket="$issue_cat|$issue_pri|plan"
+  [[ -n "${FIRST_ISSUE[$impl_bucket]:-}" && -n "${FIRST_ISSUE[$plan_bucket]:-}" ]] && continue
   # Resolve a startable open leaf within the issue's subtree. dispatch-trace-leaf
   # in queue mode descends open blockers and sub-issues, skipping any child whose
   # <N>-* worktree is owned by a live session (#914) — an orphan child worktree
@@ -763,14 +783,21 @@ while IFS=$'\t' read -r issue_num issue_labels; do
     # now would only hit dispatch-route's STOP-waiting re-gate, wasting a tick.
     # A leaf with no PR (normal implement) or a concluded-CI draft reports
     # ready and proceeds; a concluded-CI draft is owned by the PR queue
-    # (verify/qa), which precedes the issue within a bucket and recycles the
+    # (fix-checks/qa), which precedes the issue within a bucket and recycles the
     # orphan worktree via `enter` just as the issue path would. dispatch-ci-ready
     # resolves the all-digit leaf to its PR by headRefName prefix. Reuses the
     # PR list fetched above.
     if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$leaf" >/dev/null; then
       continue
     fi
-    FIRST_ISSUE[$issue_bucket]="$leaf"
+    # Phase-key the leaf (NOT the help-wanted root — the traced leaf may differ
+    # from issue_num). dispatch:planned → implement, else plan, mirroring
+    # dispatch-phase. Oldest-wins per phase-bucket: keep the first winner.
+    leaf_phase=plan
+    [[ -n "${ISSUE_PLANNED[$leaf]:-}" ]] && leaf_phase=implement
+    leaf_bucket="$issue_cat|$issue_pri|$leaf_phase"
+    [[ -n "${FIRST_ISSUE[$leaf_bucket]:-}" ]] && continue
+    FIRST_ISSUE[$leaf_bucket]="$leaf"
   else
     trace_status=$?
     [[ "$trace_status" -eq 2 ]] && continue
@@ -807,11 +834,13 @@ for pri in 1 0; do
       exit 0
     fi
 
-    issue_bucket="$category|$pri"
-    if [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]]; then
-      echo "issue ${FIRST_ISSUE[$issue_bucket]}"
-      exit 0
-    fi
+    for iphase in "${ISSUE_PHASE_PRIORITY[@]}"; do
+      issue_key="$category|$pri|$iphase"
+      if [[ -n "${FIRST_ISSUE[$issue_key]:-}" ]]; then
+        echo "issue ${FIRST_ISSUE[$issue_key]}"
+        exit 0
+      fi
+    done
   done
 done
 

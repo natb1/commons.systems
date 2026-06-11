@@ -8,6 +8,10 @@ import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck"
 import { renderReminderList } from "./office-hours.js";
 import { getDemoReminders, getOwnerReminders } from "./data.js";
 import type { Reminder } from "./reminders.js";
+import { renderCapacityBand, selectLatestSample } from "./capacity-band.js";
+import { renderHistoryBand } from "./history-band.js";
+import { getDemoSamples, getOwnerSamples } from "./usage-data.js";
+import type { UsageSample } from "./usage-samples.js";
 import {
   db,
   NAMESPACE,
@@ -26,8 +30,10 @@ if (!authToggle) throw new Error("#auth-toggle element not found");
 
 let currentUser: User | null = null;
 
-function render(reminders: Reminder[]): void {
+function render(samples: UsageSample[], reminders: Reminder[]): void {
   app!.replaceChildren();
+  app!.appendChild(renderCapacityBand(selectLatestSample(samples), new Date()));
+  app!.appendChild(renderHistoryBand(samples));
   app!.appendChild(renderReminderList(reminders, new Date()));
 }
 
@@ -36,29 +42,35 @@ function updateAuthButton(user: User | null): void {
 }
 
 // Paint the demo tier immediately so the view is meaningful before auth resolves.
-render(getDemoReminders());
+render(getDemoSamples(), getDemoReminders());
 
 async function refresh(): Promise<void> {
   const refreshUser = currentUser;
   if (refreshUser === null) {
-    render(getDemoReminders());
+    render(getDemoSamples(), getDemoReminders());
     return;
   }
   try {
-    const owner = await getOwnerReminders(db, NAMESPACE, refreshUser);
-    // Auth may have changed while the Firestore call was in flight — skip the
+    const [samples, reminders] = await Promise.all([
+      getOwnerSamples(db, NAMESPACE, refreshUser),
+      getOwnerReminders(db, NAMESPACE, refreshUser),
+    ]);
+    // Auth may have changed while the Firestore calls were in flight — skip the
     // render so the in-flight result does not clobber the already-updated view.
     if (currentUser !== refreshUser) return;
-    // A signed-in non-owner's query returns empty (rules deny the real data) —
-    // fall back to the demo tier.
-    render(owner.length > 0 ? owner : getDemoReminders());
+    // A signed-in non-owner's queries return empty (rules deny the real data) —
+    // fall back to the demo tier per band.
+    render(
+      samples.length > 0 ? samples : getDemoSamples(),
+      reminders.length > 0 ? reminders : getDemoReminders(),
+    );
   } catch (error) {
     // Intentional silent degradation — show the demo tier rather than an error.
     // A non-owner's read is "permission-denied"; logError classifies it.
     if (!deferProgrammerError(error)) {
-      logError(error, { operation: "load-owner-reminders" });
+      logError(error, { operation: "load-owner-data" });
     }
-    render(getDemoReminders());
+    render(getDemoSamples(), getDemoReminders());
   }
 }
 
