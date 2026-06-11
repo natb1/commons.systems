@@ -229,7 +229,7 @@ func TestConvertExportRulesRejectsCategoryFilterOnCategorization(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := convertExportRules([]export.Rule{tc.rule})
 			if tc.wantErr && err == nil {
-				t.Errorf("expected error, got nil")
+				t.Fatalf("expected error, got nil")
 			}
 			if !tc.wantErr && err != nil {
 				t.Errorf("unexpected error: %v", err)
