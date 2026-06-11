@@ -175,6 +175,8 @@ export function parseFirestoreTransaction(docSnap: QueryDocumentSnapshot<Documen
 // ── Raw upload → Transaction ──────────────────────────────────────────────────
 
 export function parseRawTransaction(t: RawTransaction, i: number): Transaction {
+  const reimbursement = t.reimbursement ?? 0;
+  validateReimbursementRange(reimbursement);
   return {
     id: requireUploadId(t.id, "transaction", i) as TransactionId,
     institution: t.institution ?? "",
@@ -183,7 +185,7 @@ export function parseRawTransaction(t: RawTransaction, i: number): Transaction {
     amount: t.amount ?? 0,
     note: t.note ?? "",
     category: t.category ?? "",
-    reimbursement: t.reimbursement ?? 0,
+    reimbursement,
     budget: (t.budget || null) as BudgetId | null,
     timestamp: t.timestamp ? parseISOTimestamp(t.timestamp, "transaction.timestamp") : null,
     statementId: (t.statementId || null) as StatementId | null,
