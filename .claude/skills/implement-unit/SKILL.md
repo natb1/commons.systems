@@ -44,16 +44,38 @@ The caller supplies:
    `model`. The prompt includes `context` and `scope`, plus the explicit constraint:
    *the subagent edits the working tree only — no commits, no pushes.*
 
-2. **Fork `/commit-merge-push`** to commit, merge `origin/main`, and push. This is
-   the **canonical commit-merge-push fork recipe** — `/qa-fix` and `/review-fix`
-   reference this step rather than restating it. Issue an Agent tool call with
-   **`subagent_type: general-purpose`** and **`model: sonnet`** whose prompt invokes
-   `/commit-merge-push` via the Skill tool, passing `commit_intent` so it can write a
-   focused commit message. `/commit-merge-push` is a `context: fork` skill, so its
-   own frontmatter `model: sonnet` does not auto-apply to the subagent — set the model
-   on the Agent call. The `subagent_type` is always `general-purpose` — **never the
-   skill name** (there is no `commit-merge-push` agent type); the subagent runs the
-   skill through its own Skill tool.
+2. **Commit, merge `origin/main`, and push — script-first, skill-fork fallback.**
+   This step is the **canonical commit-merge-push recipe** — `/qa-fix` and
+   `/review-fix` reference this step rather than restating it.
+
+   **2a. Call the script first** (use `dangerouslyDisableSandbox: true` — git
+   writes + `git push` over HTTPS; see `.claude/rules/sandbox.md`). After the
+   Step-1 subagent returns, compute the changed files:
+
+   ```bash
+   git status --porcelain
+   ```
+
+   Then call:
+
+   ```bash
+   .claude/skills/dispatch-propagate/scripts/commit-merge-push \
+     --intent "<commit_intent>" \
+     --file <each changed file listed by git status>
+   ```
+
+   Exit 0 → unit landed; proceed to Step 4 (Return).
+
+   **2b. On a non-zero exit, fall back to the fork** — this is the **canonical
+   commit-merge-push fork recipe**: issue an Agent tool call with
+   **`subagent_type: general-purpose`** and **`model: sonnet`** whose prompt
+   invokes `/commit-merge-push` via the Skill tool, passing `commit_intent` so it
+   can write a focused commit message. `/commit-merge-push` is a `context: fork`
+   skill, so its own frontmatter `model: sonnet` does not auto-apply to the
+   subagent — set the model on the Agent call. The `subagent_type` is always
+   `general-purpose` — **never the skill name** (there is no `commit-merge-push`
+   agent type); the subagent runs the skill through its own Skill tool. Then apply
+   Step 3 recovery as normal.
 
 3. **On a `/commit-merge-push` error, recover:**
    - **Merge conflict** → launch an `opus` subagent to resolve the conflict in the
