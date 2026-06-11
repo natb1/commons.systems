@@ -42,7 +42,7 @@ if (navAuthEl) {
   const localFolderNavEl = document.createElement("span");
   localFolderNavEl.id = "local-folder";
   navEl.insertBefore(localFolderNavEl, navAuthEl);
-  initLocalFolder(localFolderNavEl, app)
+  initLocalFolder(localFolderNavEl, app, () => router.navigate())
     .catch((err) => logError(err, { operation: "init-local-folder" }))
     .finally(() => markLocalFolderReady());
 }

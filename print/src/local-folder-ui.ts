@@ -44,6 +44,7 @@ let focusCleanup: (() => void) | null = null;
 export async function initLocalFolder(
   section: HTMLElement,
   mediaListContainer: HTMLElement,
+  onSourceBound?: () => void,
 ): Promise<(() => void) | null> {
   if (!store.isSupported()) {
     // Non-Chromium: no FSA, stay on the cloud-only path. Render nothing.
@@ -67,6 +68,9 @@ export async function initLocalFolder(
     };
     window.addEventListener("focus", onFocus);
     focusCleanup = () => window.removeEventListener("focus", onFocus);
+    // Signal that localSource is now bound — lets the caller re-render a
+    // viewer route that was stuck on Not Found before this (post-grant) bind.
+    onSourceBound?.();
   }
 
   async function openFolder(): Promise<void> {
