@@ -139,6 +139,14 @@ if [[ -n "$OPEN_MB" ]]; then
   fi
 fi
 
+# --- Step 1d: reconcile router-owned PR readiness (best-effort) -------------
+RECONCILE_OUT=$("$SCRIPT_DIR/dispatch-reconcile-ready") || true
+if [[ -n "$RECONCILE_OUT" ]]; then
+  while IFS= read -r ready_line; do
+    [[ -n "$ready_line" ]] && echo "ready: $ready_line"
+  done <<< "$RECONCILE_OUT"
+fi
+
 # --- Step 1b: run-scoped concurrency gate (autonomous no-arg queue path only) -
 # Runs ONLY on the autonomous no-arg queue path. The explicit-target run (a
 # positional <number> was given) and the `--manual` run (the bare human-typed
