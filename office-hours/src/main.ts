@@ -9,6 +9,7 @@ import { renderReminderList } from "./office-hours.js";
 import { getDemoReminders, getOwnerReminders } from "./data.js";
 import type { Reminder } from "./reminders.js";
 import { renderCapacityBand, selectLatestSample } from "./capacity-band.js";
+import { renderHistoryBand } from "./history-band.js";
 import { getDemoSamples, getOwnerSamples } from "./usage-data.js";
 import type { UsageSample } from "./usage-samples.js";
 import {
@@ -32,6 +33,7 @@ let currentUser: User | null = null;
 function render(samples: UsageSample[], reminders: Reminder[]): void {
   app!.replaceChildren();
   app!.appendChild(renderCapacityBand(selectLatestSample(samples), new Date()));
+  app!.appendChild(renderHistoryBand(samples));
   app!.appendChild(renderReminderList(reminders, new Date()));
 }
 
