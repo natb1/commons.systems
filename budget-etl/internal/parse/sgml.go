@@ -37,6 +37,11 @@ func parseSGML(path string) (ParseResult, error) {
 	result.Balance = bal.cents
 	result.BalanceDate = bal.balanceDate
 
+	// Detect credit-card statements: OFX 1.x SGML card exports carry the
+	// CREDITCARDMSGSRSV1 message set. Mirrors the XML path's len(doc.CCTxns) > 0
+	// check so the journal layer types the account as a liability.
+	result.IsCreditCard = strings.Contains(text, "CREDITCARDMSGSRSV1")
+
 	return result, nil
 }
 
