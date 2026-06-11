@@ -3,7 +3,7 @@
 # Usage: dispatch-phase <issue-num|branch>
 #
 # Prints exactly one actionable phase name to stdout:
-#   implement | verify | qa | review | done
+#   plan | implement | fix-conflicts | fix-checks | qa | review | done
 #
 # This script answers ONLY "which phase skill runs." It does NOT report CI
 # readiness. When a draft PR's CI has no verdict yet (checks still in progress),
@@ -23,12 +23,16 @@
 #     whose headRefName starts with "<issue>-".
 #   - Otherwise: treated as a branch name. Matched exactly.
 #
+# For a no-PR target, the phase is `plan` unless the issue carries the
+# `dispatch:planned` label (then `implement`). This is determined by fetching
+# the issue's labels via `gh issue view`.
+#
 # Environment:
 #   DISPATCH_PR_LIST — optional. A JSON array of open PRs supplied by the
 #     caller (dispatch-select-target passes it to avoid a redundant
 #     gh pr list per PR). When set and non-empty, it is used in place of a
 #     self-issued gh pr list. Must include the fields
-#     number,headRefName,isDraft,statusCheckRollup,labels.
+#     number,headRefName,isDraft,statusCheckRollup,labels,mergeable.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -45,7 +49,7 @@ fi
 if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
   PR_LIST="$DISPATCH_PR_LIST"
 else
-  PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+  PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable)
 fi
 
 # Find the matching PR.
@@ -60,9 +64,29 @@ else
     'map(select(.headRefName == $branch)) | .[0] // empty')
 fi
 
-# No matching PR → implement.
+# No matching PR — derive phase from whether the issue carries dispatch:planned.
+# An issue carrying dispatch:planned already has an approved plan → implement;
+# without it the next phase is plan.
 if [[ -z "$PR" || "$PR" == "null" ]]; then
-  echo "implement"
+  # Resolve issue number: all-digits → use as-is; branch name → strip first segment.
+  if [[ "$ARG" =~ ^[0-9]+$ ]]; then
+    ISSUE_NUM="$ARG"
+  else
+    ISSUE_NUM="${ARG%%-*}"
+    if [[ ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
+      echo "dispatch-phase: cannot resolve issue number from non-numeric branch '$ARG'" >&2
+      exit 1
+    fi
+  fi
+  ISSUE_LABELS=$(gh issue view "$ISSUE_NUM" --json labels | jq -r '.labels[].name' 2>/dev/null) || {
+    echo "plan"
+    exit 0
+  }
+  if grep -qxF "dispatch:planned" <<<"$ISSUE_LABELS"; then
+    echo "implement"
+  else
+    echo "plan"
+  fi
   exit 0
 fi
 
@@ -74,14 +98,20 @@ if [[ "$IS_DRAFT" == "false" ]]; then
   exit 0
 fi
 
+# Draft PR — check mergeable state first (highest-priority outcome).
+# CONFLICTING → fix-conflicts immediately; UNKNOWN falls through (GitHub
+# recomputes it asynchronously; the next tick resolves it — self-healing).
+MERGEABLE=$(printf '%s' "$PR" | jq -r '.mergeable // "UNKNOWN"')
+if [[ "$MERGEABLE" == "CONFLICTING" ]]; then echo "fix-conflicts"; exit 0; fi
+
 # Draft PR — classify CI via statusCheckRollup.
 ROLLUP=$(printf '%s' "$PR" | jq '.statusCheckRollup')
 VERDICT=$(dispatch_classify_rollup "$ROLLUP")
 
-# A concluded failure is actionable: it resolves to verify (a mixed rollup with
+# A concluded failure is actionable: it resolves to fix-checks (a mixed rollup with
 # some failing and some pending also classifies as failing — failure wins).
 if [[ "$VERDICT" == "failing" ]]; then
-  echo "verify"
+  echo "fix-checks"
   exit 0
 fi
 

@@ -1,9 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Skill(ready)",
+      "Skill(file-issue)",
+      "Skill(ref-issue-labels)",
       "Skill(ref-memory-management)",
-      "Skill(ref-ready)",
       "Skill(ref-write-instructions)",
       "Skill(roadmap)",
       "Skill(dispatch-token-audit)",

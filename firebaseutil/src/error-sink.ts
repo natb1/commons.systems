@@ -20,7 +20,41 @@ export interface ErrorSinkOptions {
 // with these names are dropped so caller-provided extras cannot overwrite canonical
 // error values like the original Error message. operation and kind are included
 // for safety even though they are always written from structured fields.
-const RESERVED_KEYS = new Set(["operation", "kind", "message", "stack", "code", "timestamp", "userAgent", "url", "uid", "email"]);
+// "extras" is reserved for the synthesized JSON blob of non-reserved context.
+//
+// WARNING — residual PII risk: the extras field carries unvalidated caller context.
+// Structurally-reserved keys (this set) are dropped before serialization, and
+// sensitive-named keys (see SENSITIVE_KEY_RE below) are stripped by name pattern.
+// However, a sensitive value passed under a non-matching key name (e.g. a session
+// token stored as "sessionData") is still serialized durably to Firestore.
+// Callers must not rely on this filter as a PII/secret sanitizer — it is a
+// best-effort defence, not a guarantee.
+const RESERVED_KEYS = new Set(["operation", "kind", "message", "stack", "code", "timestamp", "userAgent", "url", "uid", "email", "extras"]);
+
+// Strips obviously-sensitive keys from extras by name before serialization.
+// Matches substrings case-insensitively: token, secret, password, auth, key,
+// credential. Note the g flag is intentionally absent — .test() is stateless.
+// Cross-reference: see the RESERVED_KEYS comment above for the residual risk
+// of values stored under non-matching key names.
+const SENSITIVE_KEY_RE = /token|secret|password|auth|key|credential/i;
+
+// Size caps (UTF-16 code units) — must mirror the firestore.rules isValidErrorLog() caps exactly.
+const CAPS = {
+  message: 10000,
+  operation: 200,
+  kind: 32,
+  stack: 50000,
+  code: 200,
+  userAgent: 500,
+  url: 2000,
+  uid: 128,
+  email: 320,
+  extras: 10000,
+} as const;
+
+function truncate(value: string | null | undefined, max: number): string | null {
+  return value == null ? null : String(value).slice(0, max);
+}
 
 export function createFirestoreErrorSink(options: ErrorSinkOptions): ErrorSink {
   const { db, namespace, getCurrentUser } = options;
@@ -56,22 +90,47 @@ export function createFirestoreErrorSink(options: ErrorSinkOptions): ErrorSink {
     recentWrites++;
     const user = getCurrentUser?.() ?? null;
     const doc: Record<string, unknown> = {
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack ?? null : null,
-      code: (error as { code?: string })?.code ?? null,
-      kind: context.kind,
-      operation: context.operation,
+      message: truncate(error instanceof Error ? error.message : String(error), CAPS.message),
+      stack: truncate(error instanceof Error ? error.stack ?? null : null, CAPS.stack),
+      code: truncate((error as { code?: string })?.code ?? null, CAPS.code),
+      kind: truncate(context.kind, CAPS.kind),
+      operation: truncate(context.operation, CAPS.operation),
       timestamp: Timestamp.now(),
-      userAgent: typeof navigator !== "undefined" ? navigator.userAgent : null,
-      url: typeof location !== "undefined" ? location.href : null,
-      uid: user?.uid ?? null,
-      email: user?.email ?? null,
+      userAgent: truncate(typeof navigator !== "undefined" ? navigator.userAgent : null, CAPS.userAgent),
+      url: truncate(typeof location !== "undefined" ? location.href : null, CAPS.url),
+      uid: truncate(user?.uid ?? null, CAPS.uid),
+      email: truncate(user?.email ?? null, CAPS.email),
     };
 
+    // Collect non-reserved context entries into the extras field.
+    // This keeps the doc shape fixed to the 11 enumerated keys the firestore.rules
+    // isValidErrorLog() hasOnly() check allows.
+    const extrasObj: Record<string, unknown> = {};
+    const droppedSensitiveKeys: string[] = [];
     for (const [key, value] of Object.entries(context)) {
-      if (!RESERVED_KEYS.has(key)) {
-        doc[key] = value;
+      if (RESERVED_KEYS.has(key)) continue;
+      if (SENSITIVE_KEY_RE.test(key)) {
+        droppedSensitiveKeys.push(key);
+        continue;
       }
+      extrasObj[key] = value;
+    }
+    if (droppedSensitiveKeys.length > 0) {
+      console.warn(
+        `Firestore error sink: dropped sensitive-named extras keys: ${droppedSensitiveKeys.join(", ")}`,
+      );
+    }
+    if (Object.keys(extrasObj).length > 0) {
+      let extrasStr: string | null = null;
+      try {
+        const serialized = JSON.stringify(extrasObj);
+        extrasStr = serialized.length <= CAPS.extras ? serialized : null;
+      } catch {
+        extrasStr = null;
+      }
+      doc.extras = extrasStr;
+    } else {
+      doc.extras = null;
     }
 
     // Fire-and-forget. Never await — error logging must not block the caller.

@@ -11,7 +11,7 @@
 # run silently drains. Instead of draining, this script schedules a transient
 # systemd.user timer that, after a short delay, re-runs the headless
 # `dispatch-tick <N>` — re-seeding the chain on <N> so it returns to the target
-# when its CI completes (a CI *failure* resolves to `verify`, an actionable
+# when its CI completes (a CI *failure* resolves to `fix-checks`, an actionable
 # phase, so the wait terminates on its own once CI concludes).
 #
 # The wait is bounded by an attempt counter — `dispatch:ci-wait-attempt-<n>`
@@ -25,7 +25,7 @@
 #      this script (the caller only invokes it for a ci-waiting target, which by
 #      definition has a draft PR) → stderr diagnostic + exit 2.
 #   3. Read the highest extant dispatch:ci-wait-attempt-<n> label on the PR →
-#      CUR (max // 0), via the verify-pr jq capture idiom.
+#      CUR (max // 0), via the fix-checks jq capture idiom.
 #   4. Cap check: if CUR >= CAP, park the ISSUE on dispatch:office-hours via
 #      dispatch-apply-office-hours, print `escalated`, schedule NO timer, exit 0.
 #   5. Otherwise (under cap): NEXT=CUR+1. Remove the prior counter label (if
@@ -129,7 +129,7 @@ fi
 
 # ---- Step 3: read the highest ci-wait-attempt counter -----------------------
 #
-# Same label-capture idiom as /verify-pr's verify-attempt counter, adapted to
+# Same label-capture idiom as /fix-checks's fix-checks-attempt counter, adapted to
 # the dispatch:ci-wait-attempt- prefix. `max // 0` yields 0 when no counter
 # label is present yet.
 
