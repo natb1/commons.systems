@@ -376,6 +376,14 @@ fi
 # continuation (#1150).
 ensure_recover_unit "$MAIN_WORKTREE" || true
 
+# Install + activate the durable dispatch-claude-daemon.service (#1197) before
+# scheduling the reseed timer, so when the timer fires the reseed tick's first
+# `claude` call attaches to a daemon already running in a stable cgroup rather
+# than spawning one in the transient reseed unit's cgroup. Best-effort: a
+# failure here is non-fatal — the on-demand daemon then falls back to surviving
+# a finishing reseed tick via KillMode=process (#1196).
+ensure_daemon_service || true
+
 # ---- Step 6: schedule the transient timer -----------------------------------
 #
 # The unit name embeds the epoch resets_at — a repeated call with the same
@@ -425,6 +433,15 @@ ensure_recover_unit "$MAIN_WORKTREE" || true
 # session/process-group, not the cgroup, so cgroup-kill ignores it.
 # KillMode=process confines the kill to the dispatch-tick process itself;
 # the detached bg hosts survive as init orphans across reseed cycles.
+#
+# Durable daemon ownership (#1197 — supersedes the #1196 stop-gap): the durable
+# dispatch-claude-daemon.service installed above (via ensure_daemon_service)
+# now hosts the daemon in a stable, non-transient cgroup, so the reseed tick's
+# first `claude` call attaches to it via the daemon lock instead of spawning
+# one in this transient reseed unit's cgroup. The fleet therefore no longer
+# lives in reseed cgroups, making KillMode=process the degraded-path FALLBACK
+# (for hosts where systemd --user is unavailable and the durable service cannot
+# be installed), not the load-bearing mechanism.
 
 SYSTEMD_RUN_CMD="${DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD:-systemd-run}"
 UNIT_NAME="dispatch-reseed-${RESEED_AT}"
