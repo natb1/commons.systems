@@ -22364,6 +22364,216 @@ assert_eq "dispatch-reconcile-ready is executable" "yes" \
   "$([[ -x "$SCRIPT_DIR/dispatch-reconcile-ready" ]] && echo yes || echo no)"
 
 # ============================================================================
+# commit-merge-push
+# ============================================================================
+# These tests use real git repos (no shared stub harness) because
+# commit-merge-push runs actual git add/commit/fetch/merge/push commands.
+echo ""
+echo "============================================================"
+echo "commit-merge-push tests"
+echo "============================================================"
+
+CMP="$SCRIPT_DIR/commit-merge-push"
+
+# Helper: create an isolated git test environment with a bare origin.
+# Sets CMP_TMPDIR, CMP_BARE, CMP_CLONE.
+cmp_setup() {
+  CMP_TMPDIR=$(mktemp -d)
+  CMP_BARE="$CMP_TMPDIR/origin.git"
+  CMP_CLONE="$CMP_TMPDIR/clone"
+
+  # Create a bare origin.
+  git init --bare -q "$CMP_BARE"
+
+  # Bootstrap the bare origin with an initial commit on main via a seed clone.
+  local seed="$CMP_TMPDIR/seed"
+  git clone -q "$CMP_BARE" "$seed" 2>/dev/null
+  git -C "$seed" config user.email "test@test"
+  git -C "$seed" config user.name "Test"
+  printf 'seed content\n' > "$seed/seed.txt"
+  git -C "$seed" add seed.txt
+  git -C "$seed" commit -q -m "initial"
+  git -C "$seed" push -q origin main
+  rm -rf "$seed"
+
+  # Clone the bare origin to create the local worktree clone.
+  git clone -q "$CMP_BARE" "$CMP_CLONE" 2>/dev/null
+  git -C "$CMP_CLONE" config user.email "test@test"
+  git -C "$CMP_CLONE" config user.name "Test"
+}
+
+cmp_teardown() {
+  rm -rf "$CMP_TMPDIR"
+  unset CMP_TMPDIR CMP_BARE CMP_CLONE
+}
+
+# --- Case 1: merge-only, clean → exit 0, new commit present in clone ----------
+echo "Test: merge-only, clean → exit 0, advanced commit present in clone"
+cmp_setup
+# Advance origin/main via a second helper clone.
+helper="$CMP_TMPDIR/helper1"
+git clone -q "$CMP_BARE" "$helper"
+git -C "$helper" config user.email "test@test"
+git -C "$helper" config user.name "Test"
+printf 'advance\n' > "$helper/advance.txt"
+git -C "$helper" add advance.txt
+git -C "$helper" commit -q -m "origin advance"
+git -C "$helper" push -q origin main
+rm -rf "$helper"
+# Run merge-only.
+set +e
+"$CMP" --worktree "$CMP_CLONE" --merge-only
+cmp1_rc=$?
+set -e
+assert_eq "merge-only clean → exit 0" "0" "$cmp1_rc"
+advance_present="no"
+[[ -f "$CMP_CLONE/advance.txt" ]] && advance_present="yes"
+assert_eq "merge-only clean → advance.txt present after merge" "yes" "$advance_present"
+cmp_teardown
+
+# --- Case 2: single-unit → exit 0, commit message lands on origin -------------
+echo "Test: single-unit → exit 0, commit message on origin"
+cmp_setup
+printf 'changed\n' > "$CMP_CLONE/seed.txt"
+set +e
+"$CMP" --worktree "$CMP_CLONE" --intent "test intent msg" --file seed.txt
+cmp2_rc=$?
+set -e
+assert_eq "single-unit → exit 0" "0" "$cmp2_rc"
+origin_msg=$(git -C "$CMP_BARE" log -1 --format=%s main)
+assert_eq "single-unit → commit message on origin" "test intent msg" "$origin_msg"
+cmp_teardown
+
+# --- Case 3: multi-unit / undeclared → exit 5, no commit created -------------
+echo "Test: multi-unit / undeclared → exit 5, origin unchanged"
+cmp_setup
+# Both files must be tracked; modify both but name only one.
+printf 'change a\n' > "$CMP_CLONE/seed.txt"
+printf 'file b content\n' > "$CMP_CLONE/fileb.txt"
+git -C "$CMP_CLONE" add fileb.txt
+git -C "$CMP_CLONE" commit -q -m "add fileb"
+git -C "$CMP_CLONE" push -q origin main
+printf 'change b again\n' > "$CMP_CLONE/fileb.txt"
+# Now seed.txt and fileb.txt are both modified; name only seed.txt.
+origin_tip_before=$(git -C "$CMP_BARE" rev-parse main)
+local_head_before=$(git -C "$CMP_CLONE" rev-parse HEAD)
+set +e
+"$CMP" --worktree "$CMP_CLONE" --intent "only one file" --file seed.txt
+cmp3_rc=$?
+set -e
+assert_eq "multi-unit → exit 5" "5" "$cmp3_rc"
+origin_tip_after=$(git -C "$CMP_BARE" rev-parse main)
+assert_eq "multi-unit → origin tip unchanged" "$origin_tip_before" "$origin_tip_after"
+local_head_after=$(git -C "$CMP_CLONE" rev-parse HEAD)
+assert_eq "multi-unit → local HEAD unchanged" "$local_head_before" "$local_head_after"
+cmp_teardown
+
+# --- Case 4: merge conflict → exit 3, tree clean, nothing pushed -------------
+echo "Test: merge conflict → exit 3, tree clean, nothing pushed"
+cmp_setup
+# Advance origin/main with a change to seed.txt line 1.
+helper="$CMP_TMPDIR/helper4"
+git clone -q "$CMP_BARE" "$helper"
+git -C "$helper" config user.email "test@test"
+git -C "$helper" config user.name "Test"
+printf 'origin line\n' > "$helper/seed.txt"
+git -C "$helper" add seed.txt
+git -C "$helper" commit -q -m "origin conflict commit"
+git -C "$helper" push -q origin main
+rm -rf "$helper"
+# In the clone, make a diverging local commit on the same file.
+printf 'clone line\n' > "$CMP_CLONE/seed.txt"
+git -C "$CMP_CLONE" add seed.txt
+git -C "$CMP_CLONE" commit -q -m "clone conflict commit"
+origin_tip_before=$(git -C "$CMP_BARE" rev-parse main)
+# Run merge-only — the merge of origin/main will conflict.
+set +e
+"$CMP" --worktree "$CMP_CLONE" --merge-only
+cmp4_rc=$?
+set -e
+assert_eq "merge conflict → exit 3" "3" "$cmp4_rc"
+status_out=$(git -C "$CMP_CLONE" status --porcelain)
+assert_eq "merge conflict → tree clean after abort" "" "$status_out"
+origin_tip_after=$(git -C "$CMP_BARE" rev-parse main)
+assert_eq "merge conflict → origin tip unchanged" "$origin_tip_before" "$origin_tip_after"
+cmp_teardown
+
+# --- Case 5: pre-commit hook failure → exit 6, nothing committed/pushed ------
+echo "Test: pre-commit hook failure → exit 6, no commit"
+cmp_setup
+# Install a failing pre-commit hook.
+mkdir -p "$CMP_CLONE/.git/hooks"
+printf '#!/bin/sh\nexit 1\n' > "$CMP_CLONE/.git/hooks/pre-commit"
+chmod +x "$CMP_CLONE/.git/hooks/pre-commit"
+printf 'changed\n' > "$CMP_CLONE/seed.txt"
+local_head_before=$(git -C "$CMP_CLONE" rev-parse HEAD)
+origin_tip_before=$(git -C "$CMP_BARE" rev-parse main)
+set +e
+"$CMP" --worktree "$CMP_CLONE" --intent "hook test" --file seed.txt
+cmp5_rc=$?
+set -e
+assert_eq "pre-commit hook failure → exit 6" "6" "$cmp5_rc"
+local_head_after=$(git -C "$CMP_CLONE" rev-parse HEAD)
+assert_eq "pre-commit hook failure → local HEAD unchanged" "$local_head_before" "$local_head_after"
+origin_tip_after=$(git -C "$CMP_BARE" rev-parse main)
+assert_eq "pre-commit hook failure → origin tip unchanged" "$origin_tip_before" "$origin_tip_after"
+cmp_teardown
+
+# --- Case 6: secret-bearing file → exit 4, nothing committed/pushed ----------
+echo "Test: secret-bearing file → exit 4, no commit"
+cmp_setup
+printf 'SECRET=abc\n' > "$CMP_CLONE/.env"
+local_head_before=$(git -C "$CMP_CLONE" rev-parse HEAD)
+origin_tip_before=$(git -C "$CMP_BARE" rev-parse main)
+set +e
+"$CMP" --worktree "$CMP_CLONE" --intent "secret" --file .env
+cmp6_rc=$?
+set -e
+assert_eq "secret-bearing file → exit 4" "4" "$cmp6_rc"
+local_head_after=$(git -C "$CMP_CLONE" rev-parse HEAD)
+assert_eq "secret-bearing file → local HEAD unchanged" "$local_head_before" "$local_head_after"
+origin_tip_after=$(git -C "$CMP_BARE" rev-parse main)
+assert_eq "secret-bearing file → origin tip unchanged" "$origin_tip_before" "$origin_tip_after"
+cmp_teardown
+
+# --- Case 7: non-ff push rejection → exit 7, local HEAD advanced, origin unchanged
+echo "Test: non-ff push rejection → exit 7, local commit made, origin not force-pushed"
+cmp_setup
+# Check out feature-x in clone and push it to origin.
+git -C "$CMP_CLONE" checkout -q -b feature-x
+git -C "$CMP_CLONE" push -q origin feature-x
+# From a second helper clone, advance origin/feature-x.
+helper="$CMP_TMPDIR/helper7"
+git clone -q "$CMP_BARE" "$helper"
+git -C "$helper" config user.email "test@test"
+git -C "$helper" config user.name "Test"
+git -C "$helper" checkout -q --track origin/feature-x
+printf 'helper advance\n' > "$helper/helper.txt"
+git -C "$helper" add helper.txt
+git -C "$helper" commit -q -m "helper advance feature-x"
+git -C "$helper" push -q origin feature-x
+helper_tip=$(git -C "$CMP_BARE" rev-parse feature-x)
+rm -rf "$helper"
+# Back in clone (still on feature-x, now behind origin/feature-x): make a local change.
+printf 'local change\n' > "$CMP_CLONE/seed.txt"
+local_head_before=$(git -C "$CMP_CLONE" rev-parse HEAD)
+# origin/main is still at initial commit — merge of origin/main is clean.
+set +e
+"$CMP" --worktree "$CMP_CLONE" --intent "local commit for nff test" --file seed.txt
+cmp7_rc=$?
+set -e
+assert_eq "non-ff push rejection → exit 7" "7" "$cmp7_rc"
+local_head_after=$(git -C "$CMP_CLONE" rev-parse HEAD)
+# The script committed locally (advancing HEAD) before the push was rejected.
+assert_eq "non-ff push rejection → local HEAD advanced (commit was made)" \
+  "yes" "$([[ "$local_head_after" != "$local_head_before" ]] && echo yes || echo no)"
+# origin/feature-x must be the helper's commit — NOT force-pushed by the script.
+origin_feature_tip=$(git -C "$CMP_BARE" rev-parse feature-x)
+assert_eq "non-ff push rejection → origin feature-x tip is helper's (not force-pushed)" \
+  "$helper_tip" "$origin_feature_tip"
+cmp_teardown
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
