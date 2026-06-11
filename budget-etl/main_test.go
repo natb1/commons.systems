@@ -152,6 +152,92 @@ func TestConvertExportRulesEmpty(t *testing.T) {
 	}
 }
 
+func TestConvertExportRulesRejectsCategoryFilterOnCategorization(t *testing.T) {
+	tests := []struct {
+		name    string
+		rule    export.Rule
+		wantErr bool
+	}{
+		{
+			name: "categorization with MatchCategory errors",
+			rule: export.Rule{
+				ID:            "r1",
+				Type:          "categorization",
+				Pattern:       "coffee",
+				Target:        "Food:Coffee",
+				MatchCategory: "Food",
+			},
+			wantErr: true,
+		},
+		{
+			name: "categorization with ExcludeCategory errors",
+			rule: export.Rule{
+				ID:              "r2",
+				Type:            "categorization",
+				Pattern:         "coffee",
+				Target:          "Food:Coffee",
+				ExcludeCategory: "Dining",
+			},
+			wantErr: true,
+		},
+		{
+			name: "categorization with Category errors",
+			rule: export.Rule{
+				ID:       "r3",
+				Type:     "categorization",
+				Pattern:  "coffee",
+				Target:   "Food:Coffee",
+				Category: "Food",
+			},
+			wantErr: true,
+		},
+		{
+			name: "budget_assignment with MatchCategory succeeds",
+			rule: export.Rule{
+				ID:            "r4",
+				Type:          "budget_assignment",
+				Pattern:       "coffee",
+				Target:        "budget-food",
+				MatchCategory: "Food",
+			},
+			wantErr: false,
+		},
+		{
+			name: "budget_assignment with ExcludeCategory succeeds",
+			rule: export.Rule{
+				ID:              "r5",
+				Type:            "budget_assignment",
+				Pattern:         "coffee",
+				Target:          "budget-food",
+				ExcludeCategory: "Dining",
+			},
+			wantErr: false,
+		},
+		{
+			name: "budget_assignment with Category succeeds",
+			rule: export.Rule{
+				ID:       "r6",
+				Type:     "budget_assignment",
+				Pattern:  "coffee",
+				Target:   "budget-food",
+				Category: "Food",
+			},
+			wantErr: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := convertExportRules([]export.Rule{tc.rule})
+			if tc.wantErr && err == nil {
+				t.Errorf("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestApplyTransactionRules(t *testing.T) {
 	ts := time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)
 
