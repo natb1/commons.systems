@@ -131,6 +131,62 @@ func TestParseSGMLBalance_Bounded(t *testing.T) {
 	})
 }
 
+// TestDecodeWindows1252 verifies the CP1252 byte-to-rune decoding, including the
+// 0x80–0x9F high range and the five CP1252-undefined bytes mapped to U+FFFD.
+func TestDecodeWindows1252(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []byte
+		want string
+	}{
+		{"ascii identity", []byte("Hello"), "Hello"},
+		{"euro sign 0x80", []byte{0x80}, string(rune(0x20AC))},
+		{"left double quote 0x93", []byte{0x93}, string(rune(0x201C))},
+		{"right double quote 0x94", []byte{0x94}, string(rune(0x201D))},
+		{"latin1 e-acute 0xE9", []byte{0xE9}, string(rune(0xE9))},
+		{"undefined 0x81", []byte{0x81}, "�"},
+		{"undefined 0x8D", []byte{0x8D}, "�"},
+		{"undefined 0x8F", []byte{0x8F}, "�"},
+		{"undefined 0x90", []byte{0x90}, "�"},
+		{"undefined 0x9D", []byte{0x9D}, "�"},
+		{"mixed right single quote", []byte{0x41, 0x92, 0x42}, "A’B"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := decodeWindows1252(tt.in); got != tt.want {
+				t.Errorf("decodeWindows1252(%v) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestSGMLCharset verifies CHARSET: header extraction.
+func TestSGMLCharset(t *testing.T) {
+	tests := []struct {
+		name   string
+		header string
+		want   string
+	}{
+		{
+			name:   "charset present",
+			header: "OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\nCHARSET:1252\nCOMPRESSION:NONE\n",
+			want:   "1252",
+		},
+		{
+			name:   "charset absent",
+			header: "OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\nCOMPRESSION:NONE\n",
+			want:   "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sgmlCharset(tt.header); got != tt.want {
+				t.Errorf("sgmlCharset() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestParseSGML_CreditCardLiability covers both acceptance criteria of #1270 at
 // the real seam: parseSGML detects CREDITCARDMSGSRSV1 and sets IsCreditCard, and
 // the journal layer then types the card account as a liability.

@@ -139,6 +139,47 @@ func parseSGMLBalance(text string) (sgmlBalance, error) {
 	return sgmlBalance{cents: cents, balanceDate: balanceDate}, nil
 }
 
+// cp1252High maps Windows-1252 bytes 0x80–0x9F to their Unicode runes
+// (index = byte - 0x80). 0x00–0x7F are ASCII identity and 0xA0–0xFF are
+// Latin-1 identity, so only this 32-entry high range needs a table. The five
+// bytes undefined in CP1252 (0x81, 0x8D, 0x8F, 0x90, 0x9D) map to U+FFFD.
+// Reference: the Unicode CP1252 0x80–0x9F mapping.
+var cp1252High = [32]rune{
+	'€', '�', '‚', 'ƒ', '„', '…', '†', '‡',
+	'ˆ', '‰', 'Š', '‹', 'Œ', '�', 'Ž', '�',
+	'�', '‘', '’', '“', '”', '•', '–', '—',
+	'˜', '™', 'š', '›', 'œ', '�', 'ž', 'Ÿ',
+}
+
+// decodeWindows1252 decodes a Windows-1252 (CP1252) byte slice to a UTF-8 Go
+// string. Bytes 0x00–0x7F and 0xA0–0xFF map to rune(b); bytes 0x80–0x9F use the
+// cp1252High table (with the five CP1252-undefined bytes mapped to U+FFFD).
+func decodeWindows1252(data []byte) string {
+	var b strings.Builder
+	b.Grow(len(data))
+	for _, c := range data {
+		if c >= 0x80 && c <= 0x9F {
+			b.WriteRune(cp1252High[c-0x80])
+		} else {
+			b.WriteRune(rune(c))
+		}
+	}
+	return b.String()
+}
+
+// sgmlCharset scans an OFX SGML header for a standalone CHARSET: line (e.g.
+// "CHARSET:1252") and returns the trimmed token after the colon (e.g. "1252").
+// Returns "" if no CHARSET line is present.
+func sgmlCharset(header string) string {
+	for _, line := range strings.Split(header, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "CHARSET:") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "CHARSET:"))
+		}
+	}
+	return ""
+}
+
 // sgmlTagValue extracts the value following <TAG> in SGML content.
 // Returns empty string if tag not found.
 func sgmlTagValue(content, tag string) string {
