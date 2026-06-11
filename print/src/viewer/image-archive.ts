@@ -212,14 +212,21 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void, sto
       const img = document.createElement("img");
       img.alt = `Page ${page}`;
       target.appendChild(img);
-      const url = await getObjectUrl(page - 1);
-      // Supersession: render() cleared the slot with innerHTML="", detaching this
-      // img, so target.contains(img) is false — skip the stale src to avoid
-      // stacking a second image. Destroyed: tear down the img we appended.
-      if (!target.contains(img)) return;
-      if (destroyed) { img.remove(); return; }
-      img.src = url;
-      prefetchNextPage(page);
+      try {
+        const url = await getObjectUrl(page - 1);
+        // Supersession: render() cleared the slot with innerHTML="", detaching this
+        // img, so target.contains(img) is false — skip the stale src to avoid
+        // stacking a second image. Destroyed: tear down the img we appended.
+        if (!target.contains(img)) return;
+        if (destroyed) { img.remove(); return; }
+        img.src = url;
+        prefetchNextPage(page);
+      } catch (err) {
+        // The blob fetch failed — remove the orphaned src-less placeholder so the
+        // error path leaves target clean, then rethrow.
+        img.remove();
+        throw err;
+      }
     },
 
     async goToPage(page: number): Promise<void> {

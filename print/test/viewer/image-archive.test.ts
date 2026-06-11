@@ -939,7 +939,12 @@ describe("createImageArchiveRenderer", () => {
       expect(target2.querySelector("img")).toBeNull();
     });
 
-    it("returns without appending if destroyed during blob fetch", async () => {
+    it("removes the synchronously-appended img if destroyed during blob fetch", async () => {
+      // renderPageInto appends the <img> to target synchronously, before the
+      // blob await. If destroy() runs while the blob is in flight, the
+      // post-await destroyed guard cleans the img up via img.remove(), so the
+      // final state has no img — unlike the early-range-check path, which never
+      // appends anything.
       const entries = makeMockEntries({
         "image-001.png": new Uint8Array([1]),
         "image-002.png": new Uint8Array([2]),
@@ -956,10 +961,13 @@ describe("createImageArchiveRenderer", () => {
 
       const target = makeContainer();
       const renderPromise = renderer.renderPageInto(2, target);
+      // img is appended synchronously, before the blob resolves.
+      expect(target.querySelector("img")).not.toBeNull();
       renderer.destroy();
       resolveBlob(new Blob([new Uint8Array([2])]));
       await renderPromise;
 
+      // The destroyed guard removed the synchronously-appended img.
       expect(target.querySelector("img")).toBeNull();
     });
 
