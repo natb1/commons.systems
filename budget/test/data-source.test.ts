@@ -113,6 +113,16 @@ describe("IdbDataSource", () => {
     ).rejects.toThrow("Transaction nonexistent not found");
   });
 
+  it("updateTransaction rejects out-of-range reimbursement and does not persist", async () => {
+    await storeParsedData(makeParsedData());
+    const ds = new IdbDataSource();
+    await expect(
+      ds.updateTransaction("txn-1" as TransactionId, { reimbursement: 150 }),
+    ).rejects.toThrow(RangeError);
+    const txns = await ds.getTransactions();
+    expect(txns[0].reimbursement).toBe(0); // unchanged — never persisted
+  });
+
   it("adjustBudgetPeriodTotal does read-modify-write correctly", async () => {
     await storeParsedData(makeParsedData());
     const ds = new IdbDataSource();
