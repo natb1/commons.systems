@@ -57,7 +57,7 @@ Act on the one directive:
 | `INVOKE /fix-conflicts` | 0 | provisioning hit an `origin/main` merge conflict | invoke `/fix-conflicts` (the generic INVOKE path below) |
 | `INVOKE /implement` | 0 | no PR + `dispatch:planned` (`implement` phase) | invoke `/implement` (the generic INVOKE path below) |
 | `RELEVANCE-REVIEW` | 0 | no PR, unplanned (`plan` phase) | run the Step 2 relevance review, then dispatch its verdict |
-| `STOP done` | 0 | non-draft (ready) PR — should-never-happen; spawn boundary (#1109) prevents it upstream | stop without invoking a phase skill |
+| `STOP done` | 0 | non-draft (ready) PR, or a draft PR carrying `dispatch:reviewed` (review-complete — draft→ready owned by `dispatch-reconcile-ready`) | stop without invoking a phase skill |
 | `PUSH-STRANDED` | 0 | `done` PR, but the worktree has commits `origin/<branch>` hasn't seen | push `origin HEAD`, write an office-hours reason, stop with no marker |
 | `STOP waiting` | 0 | draft PR's CI has no verdict yet | print the verbatim message below and stop |
 | `STOP provision-failed` | 0 | `direnv`/merge provisioning failed (non-conflict) | stop with no marker (reason already written) |
@@ -66,10 +66,11 @@ Act on the one directive:
 ### `INVOKE` — run exactly one phase skill
 
 Invoke the one named phase skill via the Skill tool. Run exactly one phase per
-`/dispatch-worker` invocation. The PR stays a **draft** through every phase; the
-`review` phase's `/review-fix` flips it to ready as the workflow's terminal
-action. Each phase skill owns and applies its own `dispatch:*` label — the worker
-applies none:
+`/dispatch-worker` invocation. The PR stays a **draft** through every phase;
+after `/review-fix` applies `dispatch:reviewed`, draft→ready promotion is owned
+by the router's `dispatch-reconcile-ready` on a later tick (once CI is passing
+and `mergeable == MERGEABLE`). Each phase skill owns and applies its own
+`dispatch:*` label — the worker applies none:
 
 - **`/fix-checks`** — runs a single pass: fix one set of failed CI checks, record
   the outcome, post it, stop. No label.
@@ -85,7 +86,8 @@ applies none:
   Opus fix, and runs an Opus fix fan-out. The skill then commits the fixes via one
   `/commit-merge-push`, files meaningful out-of-scope findings as `blocked_by`
   follow-ups, posts one PR comment covering every finding, applies
-  `dispatch:reviewed`, and marks the PR ready. It is idempotent on re-entry.
+  `dispatch:reviewed`, and stops — draft→ready promotion is owned by the router's
+  `dispatch-reconcile-ready` on a later tick.
 - **`/implement`** — the `implement`-phase build skill for a no-PR issue carrying
   `dispatch:planned`. It reads the plan persisted to the issue's
   `<!-- dispatch:plan -->` comment, builds each unit via `/implement-unit`, and
@@ -170,14 +172,29 @@ on `dispatch:office-hours`.
 ### `STOP done` / `STOP wrong-worktree` — stop with no marker
 
 Stop without invoking a phase skill and without writing a marker. The Stop hook
-reads marker-absence and applies `dispatch:office-hours` to the issue. For `done`
-(a non-draft PR), no phase skill ran and the slip-past sweep (#843) flags this PR
-for office-hours review. Since #1109 the spawn boundary
-(`dispatch-materialize-spawn`) re-checks done before spawning and refuses to
-dispatch a done target, so `STOP done` is now a defensive guard for the
-sub-millisecond residual window between that re-check and worker boot — the
-normal-case done PR is caught upstream and no worker is spawned. For
-`wrong-worktree`, the spawn was incoherent — the branch-name sanity check
+reads marker-absence and applies `dispatch:office-hours` to the issue.
+
+`dispatch-route` emits `STOP done` for two distinct kinds of `done` PR:
+
+- **A draft PR carrying `dispatch:reviewed`** — `dispatch-phase` derives `done`
+  for it because review is complete (the `dispatch:reviewed` label is the
+  completion signal); draft→ready promotion is owned by the router's
+  `dispatch-reconcile-ready` on a later tick (once CI is passing and
+  `mergeable == MERGEABLE`). This is the **normal** clean-`/review-fix`-pass
+  outcome, not a defensive guard. In the normal flow the review worker already
+  ran `/review-fix` and wrote a `phase=review` marker, so its Stop hook sees the
+  derived `done` advance past `review` and **self-closes** (it does not park on
+  `dispatch:office-hours`). A worker that reaches this directive directly — spawned
+  against an already-reviewed PR with no phase skill to run — stops with no marker
+  and the Stop hook parks it for office-hours review.
+- **A non-draft (ready) PR** — no phase skill ran and the slip-past sweep (#843)
+  flags this PR for office-hours review. Since #1109 the spawn boundary
+  (`dispatch-materialize-spawn`) re-checks done before spawning and refuses to
+  dispatch a done target, so for this case `STOP done` is a defensive guard for
+  the sub-millisecond residual window between that re-check and worker boot — the
+  normal-case ready PR is caught upstream and no worker is spawned.
+
+For `wrong-worktree`, the spawn was incoherent — the branch-name sanity check
 rejected the spawn cwd, or the positional `<worktree-path>` disagreed with `git
 rev-parse --show-toplevel`; see `reference.md`.
 
