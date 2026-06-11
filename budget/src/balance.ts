@@ -146,15 +146,6 @@ function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): BudgetPe
     .sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
 }
 
-/** Return the override with the greatest date <= beforeMs, or null. Requires overrides sorted by date ascending. */
-export function findLatestOverride(overrides: BudgetOverride[], beforeMs: number): BudgetOverride | null {
-  let result: BudgetOverride | null = null;
-  for (const o of overrides) {
-    if (o.date.toMillis() <= beforeMs) result = o;
-    else break;
-  }
-  return result;
-}
 
 /**
  * Latest override whose date falls within the half-open period

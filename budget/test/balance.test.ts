@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeCashFlow, computeDerivedBalances, findLatestOverride, periodAllowance, weeklyEquivalent, periodEquivalent, computeBudgetStatsAndVariances, MATERIALITY_THRESHOLD } from "../src/balance";
+import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeCashFlow, computeDerivedBalances, periodAllowance, weeklyEquivalent, periodEquivalent, computeBudgetStatsAndVariances, MATERIALITY_THRESHOLD } from "../src/balance";
 import type { BudgetDiff, PerBudgetStats } from "../src/balance";
 import type { Budget, BudgetOverride, BudgetPeriod, Statement, Transaction, WeeklyAggregate } from "../src/firestore";
 
@@ -1390,43 +1390,6 @@ function makeOverride(dateStr: string, balance: number): BudgetOverride {
   return { date: ts(dateStr), balance };
 }
 
-describe("findLatestOverride", () => {
-  it("returns null for empty overrides", () => {
-    expect(findLatestOverride([], ts("2025-01-15").toMillis())).toBeNull();
-  });
-
-  it("returns null when all overrides are after beforeMs", () => {
-    const overrides = [makeOverride("2025-01-20", 50), makeOverride("2025-01-27", 75)];
-    expect(findLatestOverride(overrides, ts("2025-01-15").toMillis())).toBeNull();
-  });
-
-  it("returns the only override when it is before beforeMs", () => {
-    const overrides = [makeOverride("2025-01-13", 50)];
-    const result = findLatestOverride(overrides, ts("2025-01-15").toMillis());
-    expect(result).not.toBeNull();
-    expect(result!.balance).toBe(50);
-  });
-
-  it("returns the latest override before beforeMs when there are multiple", () => {
-    const overrides = [
-      makeOverride("2025-01-06", 30),
-      makeOverride("2025-01-13", 50),
-      makeOverride("2025-01-20", 80),
-    ];
-    // beforeMs is Jan 15 — Jan 6 and Jan 13 qualify, Jan 20 does not
-    const result = findLatestOverride(overrides, ts("2025-01-15").toMillis());
-    expect(result).not.toBeNull();
-    expect(result!.balance).toBe(50);
-    expect(result!.date.toMillis()).toBe(ts("2025-01-13").toMillis());
-  });
-
-  it("returns override exactly at the beforeMs boundary (inclusive)", () => {
-    const overrides = [makeOverride("2025-01-13", 50)];
-    const result = findLatestOverride(overrides, ts("2025-01-13").toMillis());
-    expect(result).not.toBeNull();
-    expect(result!.balance).toBe(50);
-  });
-});
 
 describe("computeBudgetBalance with overrides", () => {
   const w1 = makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 40 });
