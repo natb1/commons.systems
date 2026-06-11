@@ -21,7 +21,22 @@ export interface ErrorSinkOptions {
 // error values like the original Error message. operation and kind are included
 // for safety even though they are always written from structured fields.
 // "extras" is reserved for the synthesized JSON blob of non-reserved context.
+//
+// WARNING — residual PII risk: the extras field carries unvalidated caller context.
+// Structurally-reserved keys (this set) are dropped before serialization, and
+// sensitive-named keys (see SENSITIVE_KEY_RE below) are stripped by name pattern.
+// However, a sensitive value passed under a non-matching key name (e.g. a session
+// token stored as "sessionData") is still serialized durably to Firestore.
+// Callers must not rely on this filter as a PII/secret sanitizer — it is a
+// best-effort defence, not a guarantee.
 const RESERVED_KEYS = new Set(["operation", "kind", "message", "stack", "code", "timestamp", "userAgent", "url", "uid", "email", "extras"]);
+
+// Strips obviously-sensitive keys from extras by name before serialization.
+// Matches substrings case-insensitively: token, secret, password, auth, key,
+// credential. Note the g flag is intentionally absent — .test() is stateless.
+// Cross-reference: see the RESERVED_KEYS comment above for the residual risk
+// of values stored under non-matching key names.
+const SENSITIVE_KEY_RE = /token|secret|password|auth|key|credential/i;
 
 // Size caps (UTF-16 code units) — must mirror the firestore.rules isValidErrorLog() caps exactly.
 const CAPS = {
@@ -91,10 +106,19 @@ export function createFirestoreErrorSink(options: ErrorSinkOptions): ErrorSink {
     // This keeps the doc shape fixed to the 11 enumerated keys the firestore.rules
     // isValidErrorLog() hasOnly() check allows.
     const extrasObj: Record<string, unknown> = {};
+    const droppedSensitiveKeys: string[] = [];
     for (const [key, value] of Object.entries(context)) {
-      if (!RESERVED_KEYS.has(key)) {
-        extrasObj[key] = value;
+      if (RESERVED_KEYS.has(key)) continue;
+      if (SENSITIVE_KEY_RE.test(key)) {
+        droppedSensitiveKeys.push(key);
+        continue;
       }
+      extrasObj[key] = value;
+    }
+    if (droppedSensitiveKeys.length > 0) {
+      console.warn(
+        `Firestore error sink: dropped sensitive-named extras keys: ${droppedSensitiveKeys.join(", ")}`,
+      );
     }
     if (Object.keys(extrasObj).length > 0) {
       let extrasStr: string | null = null;

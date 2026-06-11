@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# Deterministically collapse duplicate findings using mechanical location-grouping
+# plus a caller-supplied partition — NO model decisions made here.
+# Usage: printf '%s' '<json>' | dispatch-review-dedup
+#
+# Reads a single JSON object on stdin:
+#   {
+#     "findings": [ <finding>, ... ],
+#     "partition": [ [<id>, <id>, ...], ... ]
+#   }
+#
+# Per-finding input fields (at minimum):
+#   id         — string, unique per finding
+#   Location   — string (path:line)
+#   Source     — string (code-review | review | input-validation | secrets |
+#                        red-team | security-review | auth | data-exposure |
+#                        firebase | codeql | npm)
+#   OWASP      — string ("" for code-review/review findings)
+#   STRIDE     — string ("" for code-review/review findings)
+#   Confidence — "high" | "medium" | "low"
+#   sources    — optional array of strings (pre-existing multi-source list)
+#   (plus arbitrary passthrough fields preserved from the representative)
+#
+# partition: list of id-groups; findings in each group collapse into ONE output
+# finding. Any finding id NOT in any partition group is treated as a singleton
+# (still emitted, normalized to carry a `sources` array).
+# PRECONDITION (trusted): all ids in a partition group share one Location.
+#
+# Merge arithmetic per group (and singletons — no-op except normalizing sources):
+#   confidence rank: high=3, medium=2, low=1.
+#   representative = finding with highest Confidence; tie-break = earliest in
+#                    input findings order. All passthrough fields come from it.
+#   output.Confidence = MAX Confidence across the group.
+#   output.OWASP      = first non-empty OWASP, ordered by (Confidence desc,
+#                       input order); else "".
+#   output.STRIDE     = same rule as OWASP.
+#   output.sources    = sorted-unique union of every group finding's Source
+#                       plus any pre-existing sources entries.
+#
+# Output (stdout): JSON array of deduped findings, ordered by the group's
+# earliest-appearing member's input index.
+#
+# No network access, no git, no gh, no model calls — pure stdin → stdout via jq.
+#
+# Consumer: .claude/workflows/review-fix.js mirrors this merge arithmetic in JS;
+# this script is the normative spec for that inline JS logic.
+set -euo pipefail
+
+jq '
+  # --- helpers ----------------------------------------------------------------
+
+  def confrank: (. // "_") | {"high":3,"medium":2,"low":1}[.] // 0;
+
+  # Build id → input-index map (0-based) for ordering.
+  (.findings | to_entries | map({key: .value.id, value: .key}) | from_entries) as $idx |
+
+  # Build id → finding map for fast lookup.
+  (.findings | map({key: .id, value: .}) | from_entries) as $byid |
+
+  # --- canonicalize partition -------------------------------------------------
+  # Collect all ids that appear in at least one partition group.
+  ([.partition // [] | .[]] | flatten | unique) as $partitioned_ids |
+
+  # Append singleton groups for findings not covered by any partition group.
+  ((.partition // []) + [
+    .findings[].id
+    | select(. as $id | $partitioned_ids | index($id) == null)
+    | [.]
+  ]) as $all_groups |
+
+  # --- merge each group -------------------------------------------------------
+  [
+    $all_groups[] |
+    . as $group |
+
+    # Enrich each id with its finding and input index. Drop ids absent from the
+    # findings map (mirrors the JS `.filter(Boolean)` after `byId.get(id)`) so a
+    # partition referencing an unknown id never feeds a null into the merge.
+    (map({ id: ., finding: $byid[.], idx: $idx[.] })
+      | map(select(.finding != null))) as $members |
+
+    # Earliest-input-index member (for output ordering).
+    ($members | min_by(.idx) | .idx) as $min_idx |
+
+    # Representative: highest Confidence; tie-break by earliest input index.
+    ($members | sort_by([(.finding.Confidence | confrank | -.), .idx]) | .[0].finding) as $rep |
+
+    # Max confidence across all group members.
+    ($members | map(.finding.Confidence | confrank) | max) as $max_conf_rank |
+    ({"3":"high","2":"medium","1":"low"}[$max_conf_rank | tostring]) as $max_conf |
+
+    # OWASP: first non-empty, ordered by (Confidence desc, input index).
+    ($members
+      | sort_by([(.finding.Confidence | confrank | -.), .idx])
+      | map(.finding.OWASP)
+      | map(select(. != null and . != ""))
+      | .[0] // "") as $owasp |
+
+    # STRIDE: same rule.
+    ($members
+      | sort_by([(.finding.Confidence | confrank | -.), .idx])
+      | map(.finding.STRIDE)
+      | map(select(. != null and . != ""))
+      | .[0] // "") as $stride |
+
+    # sources: sorted-unique union of Source + any pre-existing sources entries
+    # across all group members.
+    ([
+      $members[].finding |
+      [.Source] + (.sources // []) |
+      .[]
+    ] | unique | sort) as $sources |
+
+    # Compose the merged finding: representative fields overridden by computed ones.
+    {
+      _sort_key: $min_idx,
+      merged: ($rep + {
+        Confidence: $max_conf,
+        OWASP:      $owasp,
+        STRIDE:     $stride,
+        sources:    $sources
+      })
+    }
+  ] |
+
+  # --- sort by earliest-group-member input index and strip sort key -----------
+  sort_by(._sort_key) |
+  map(.merged)
+' </dev/stdin
