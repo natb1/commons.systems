@@ -52,8 +52,12 @@ export const LOCAL_EXT: Record<string, MediaType> = {
  * Map a top-level local file to a `MediaItem`, or `null` for an unsupported
  * extension. The metadata is inert (real extraction lands in a later unit);
  * `storagePath` is never used to resolve a local item — the directory handle is.
+ *
+ * `folderId` is the chosen folder's `FileSystemDirectoryHandle.name`. It scopes
+ * the item id so same-named files in differently-named folders get distinct ids
+ * and thus distinct localStorage keys.
  */
-export function fileToLocalItem(file: File, name: string): MediaItem | null {
+export function fileToLocalItem(file: File, name: string, folderId: string): MediaItem | null {
   const idx = name.lastIndexOf(".");
   if (idx < 0) return null;
 
@@ -62,7 +66,7 @@ export function fileToLocalItem(file: File, name: string): MediaItem | null {
   if (mediaType === undefined) return null;
 
   return {
-    id: LOCAL_ID_PREFIX + name,
+    id: LOCAL_ID_PREFIX + folderId + "/" + name,
     title: name.slice(0, idx),
     mediaType,
     tags: {},
@@ -81,9 +85,10 @@ let localSource: MediaSource<MediaItem> | null = null;
 
 /** Bind a local-folder source over a chosen directory handle. */
 export function createLocalSource(directory: FileSystemDirectoryHandle): void {
+  const folderId = directory.name;
   localSource = createLocalFolderMediaSource<MediaItem>({
     directory: directory as unknown as LocalDirectoryHandleLike,
-    toItem: fileToLocalItem,
+    toItem: (file, name) => fileToLocalItem(file, name, folderId),
   });
 }
 
