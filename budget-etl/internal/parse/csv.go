@@ -59,8 +59,19 @@ func parseCSV(path string) (ParseResult, error) {
 		}
 	}
 
+	// First pass: collect all original trimmed IDs present in the file so that
+	// synthetic suffixes can never collide with a real later ID.
+	original := make(map[string]struct{})
+	for _, row := range records[1:] {
+		if len(row) >= 5 {
+			if id := strings.TrimSpace(row[4]); id != "" {
+				original[id] = struct{}{}
+			}
+		}
+	}
+
 	var txns []Transaction
-	idCounts := make(map[string]int)
+	used := make(map[string]struct{})
 	for i, row := range records[1:] {
 		if len(row) < 6 {
 			return ParseResult{}, fmt.Errorf("%s: line %d: expected 6 fields, got %d", path, i+2, len(row))
@@ -90,10 +101,18 @@ func parseCSV(path string) (ParseResult, error) {
 			return ParseResult{}, fmt.Errorf("%s: line %d: missing transaction ID", path, i+2)
 		}
 
-		idCounts[txnID]++
-		if n := idCounts[txnID]; n > 1 {
-			txnID = fmt.Sprintf("%s-%d", txnID, n)
+		if _, taken := used[txnID]; taken {
+			for n := 2; ; n++ {
+				candidate := fmt.Sprintf("%s-%d", txnID, n)
+				_, inUsed := used[candidate]
+				_, inOriginal := original[candidate]
+				if !inUsed && !inOriginal {
+					txnID = candidate
+					break
+				}
+			}
 		}
+		used[txnID] = struct{}{}
 
 		txns = append(txns, Transaction{
 			TransactionID: txnID,

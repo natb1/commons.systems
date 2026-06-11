@@ -57,6 +57,9 @@ func parseOFX(path string) (ParseResult, error) {
 		content = content[idx:]
 	}
 
+	// No CharsetReader is set, so xml.Unmarshal errors on a declared non-UTF-8
+	// encoding rather than silently corrupting it; charset decoding is therefore
+	// handled only on the SGML path (see parseSGML).
 	var doc ofxDoc
 	if err := xml.Unmarshal([]byte(content), &doc); err != nil {
 		return ParseResult{}, fmt.Errorf("parsing OFX XML %s: %w", path, err)
