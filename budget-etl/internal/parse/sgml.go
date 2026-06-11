@@ -28,11 +28,16 @@ func parseSGML(path string) (ParseResult, error) {
 		header = header[:i]
 	}
 	var text string
-	if sgmlCharset(header) == "1252" {
+	switch charset := sgmlCharset(header); charset {
+	case "1252":
 		text = decodeWindows1252(data)
-	} else {
-		// Default to UTF-8 when CHARSET is absent or not 1252.
+	case "":
+		// CHARSET is absent: default to UTF-8.
 		text = string(data)
+	default:
+		// A declared but unsupported charset must error rather than silently
+		// decode as UTF-8, which would mangle non-ASCII bytes to garbage.
+		return ParseResult{}, fmt.Errorf("unsupported CHARSET %q in %s; only 1252 is supported", charset, path)
 	}
 
 	// Check for investment account
