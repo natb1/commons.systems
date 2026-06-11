@@ -14,16 +14,13 @@ describe.skipIf(!hasDistBuild)("critical CSS inlining", () => {
     expect(head).toMatch(/<style[\s\S]*?<\/style>/);
   });
 
-  it('stylesheet <link> has media="print" for async loading', () => {
+  it("stylesheet <link> defers without an inline event handler", () => {
     const linkMatch = html.match(/<link[^>]*rel="stylesheet"[^>]*>/);
     expect(linkMatch).not.toBeNull();
-    expect(linkMatch![0]).toContain('media="print"');
-  });
-
-  it("stylesheet <link> has an onload attribute to swap media", () => {
-    const linkMatch = html.match(/<link[^>]*rel="stylesheet"[^>]*>/);
-    expect(linkMatch).not.toBeNull();
-    expect(linkMatch![0]).toMatch(/onload=/);
+    expect(linkMatch![0]).not.toContain('media="print"');
+    expect(linkMatch![0]).not.toMatch(/onload=/);
+    // No inline event handler anywhere in the document.
+    expect(html).not.toMatch(/onload=/);
   });
 
   it("inline <style> contains a containment rule", () => {
@@ -32,13 +29,10 @@ describe.skipIf(!hasDistBuild)("critical CSS inlining", () => {
     expect(styleMatch![0]).toMatch(/contain:/);
   });
 
-  it('<noscript> fallback link does NOT have media="print"', () => {
-    const noscriptMatch = html.match(/<noscript>[\s\S]*?<\/noscript>/);
-    expect(noscriptMatch).not.toBeNull();
-    const noscriptLink = noscriptMatch![0].match(
-      /<link[^>]*rel="stylesheet"[^>]*>/,
-    );
-    expect(noscriptLink).not.toBeNull();
-    expect(noscriptLink![0]).not.toContain('media="print"');
+  it("full stylesheet <link> is moved into the body", () => {
+    const splitIdx = html.indexOf("</head>");
+    expect(splitIdx).toBeGreaterThan(-1);
+    const body = html.slice(splitIdx);
+    expect(body).toMatch(/<link[^>]*rel="stylesheet"[^>]*>/);
   });
 });
