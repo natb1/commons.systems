@@ -11,7 +11,7 @@ import "@commons-systems/components/nav";
 import type { AppNavElement } from "@commons-systems/components/nav";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "./auth.js";
-import { setViewerEmail } from "./library.js";
+import { setViewerEmail, markLocalFolderReady } from "./library.js";
 import { trackPageView } from "./firebase.js";
 import { renderHero } from "./pages/hero.js";
 import { mountHero } from "@commons-systems/components/hero";
@@ -42,9 +42,9 @@ if (navAuthEl) {
   const localFolderNavEl = document.createElement("span");
   localFolderNavEl.id = "local-folder";
   navEl.insertBefore(localFolderNavEl, navAuthEl);
-  initLocalFolder(localFolderNavEl, app).catch((err) =>
-    logError(err, { operation: "init-local-folder" }),
-  );
+  initLocalFolder(localFolderNavEl, app)
+    .catch((err) => logError(err, { operation: "init-local-folder" }))
+    .finally(() => markLocalFolderReady());
 }
 
 let currentUser: User | null = null;

@@ -79,6 +79,21 @@ export function fileToLocalItem(file: File, name: string): MediaItem | null {
 
 let localSource: MediaSource<MediaItem> | null = null;
 
+let resolveLocalFolderReady!: () => void;
+const localFolderReadyPromise = new Promise<void>((resolve) => {
+  resolveLocalFolderReady = resolve;
+});
+
+/** Resolves once the initial local-folder init pass has settled (source bound or not). */
+export function whenLocalFolderReady(): Promise<void> {
+  return localFolderReadyPromise;
+}
+
+/** Mark the initial local-folder init pass settled. Idempotent (Promise resolve no-ops after first). */
+export function markLocalFolderReady(): void {
+  resolveLocalFolderReady();
+}
+
 /** Bind a local-folder source over a chosen directory handle. */
 export function createLocalSource(directory: FileSystemDirectoryHandle): void {
   localSource = createLocalFolderMediaSource<MediaItem>({

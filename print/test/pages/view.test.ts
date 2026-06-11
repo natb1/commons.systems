@@ -42,11 +42,13 @@ vi.mock("../../src/media-cache.js", () => ({
 
 const mockGetLocalItem = vi.fn();
 const mockResolveLocalBlob = vi.fn();
+const mockWhenLocalFolderReady = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("../../src/library.js", () => ({
   isLocalId: (id: string) => id.startsWith("local:"),
   getLocalItem: (...args: unknown[]) => mockGetLocalItem(...args),
   resolveLocalBlob: (...args: unknown[]) => mockResolveLocalBlob(...args),
+  whenLocalFolderReady: (...args: unknown[]) => mockWhenLocalFolderReady(...args),
 }));
 
 import {
@@ -141,6 +143,28 @@ describe("local-folder view path", () => {
       "local:book.pdf",
       null,
     );
+  });
+
+  it("awaits local-folder readiness, then resolves once binding completes", async () => {
+    let bound = false;
+    let resolveReady!: () => void;
+    mockWhenLocalFolderReady.mockReturnValue(
+      new Promise<void>((r) => {
+        resolveReady = r;
+      }),
+    );
+    const item = makeMediaItem({ id: "local:book.pdf", origin: "local" });
+    mockGetLocalItem.mockImplementation(async () => (bound ? item : null));
+
+    // Start the render before readiness settles; it must not resolve to
+    // Not Found while the local source is still unbound.
+    const pending = renderView("local:book.pdf", null);
+    bound = true;
+    resolveReady();
+    const html = await pending;
+
+    expect(html).toContain('class="viewer"');
+    expect(renderViewerShell).toHaveBeenCalledWith(item);
   });
 
   it("resolve closure surfaces the #view-error UI when the file is gone", async () => {
