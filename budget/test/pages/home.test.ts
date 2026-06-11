@@ -23,7 +23,7 @@ vi.mock("../../src/balance.js", async (importOriginal) => {
   };
 });
 
-import { renderHome } from "../../src/pages/home";
+import { renderHome, renderTransactionRows } from "../../src/pages/home";
 import type { Transaction, BudgetPeriod } from "../../src/firestore";
 import { computeAllBudgetBalances } from "../../src/balance";
 
@@ -709,6 +709,39 @@ describe("renderHome", () => {
       }));
       expect(html).toContain('class="expand-row txn-row"');
       expect(html).not.toContain("normalized-group");
+    });
+
+    it("tolerates a normalized group whose primary is outside the current batch", () => {
+      const budgetIdToName = new Map<string, string>();
+      // Older scroll batch: only the non-primary member of the group is present;
+      // its primary fell into an adjacent 12-week batch.
+      const orphanBatch = [
+        txn({ id: "txn-b", description: "Store B", amount: 50, normalizedId: "norm-1", normalizedPrimary: false, timestamp: mockTimestamp("2025-01-04") }),
+      ];
+      expect(() => renderTransactionRows(orphanBatch, "household", true, budgetIdToName)).not.toThrow();
+      const orphanHtml = renderTransactionRows(orphanBatch, "household", true, budgetIdToName);
+      // The orphan duplicate is suppressed — no group row, and it is not shown as a
+      // standalone transaction either.
+      expect(orphanHtml).not.toContain("normalized-group");
+      expect(orphanHtml).not.toContain("Store B");
+
+      // The adjacent batch that holds the primary still renders the group normally.
+      const primaryBatch = [
+        txn({ id: "txn-a", description: "Store A", amount: 50, normalizedId: "norm-1", normalizedPrimary: true, timestamp: mockTimestamp("2025-01-11") }),
+      ];
+      const primaryHtml = renderTransactionRows(primaryBatch, "household", true, budgetIdToName);
+      expect(primaryHtml).toContain("normalized-group");
+    });
+
+    it("renders the table (no data error) when a batch contains only a non-primary member", async () => {
+      mockComputeAllBalances.mockReturnValue(new Map());
+      const html = await renderHome(localOptions({
+        getTransactions: vi.fn().mockResolvedValue([
+          txn({ id: "txn-b", description: "Store B", amount: 50, normalizedId: "norm-1", normalizedPrimary: false, timestamp: mockTimestamp("2025-01-04") }),
+        ]),
+      }));
+      expect(html).toContain('id="transactions-table"');
+      expect(html).not.toContain("transactions-error");
     });
   });
 
