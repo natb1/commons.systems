@@ -66,6 +66,17 @@ describe("renderCapacityBand with sample", () => {
     expect(items).toHaveLength(2);
   });
 
+  it("sub-hour countdown formats as 'in Nm' (the <HOUR branch)", () => {
+    // fiveHourResetsAt is 30 minutes after `now`
+    const subHourNow = new Date("2026-06-07T14:30:00Z");
+    const sample = make({ fiveHourResetsAt: new Date("2026-06-07T15:00:00Z") });
+    const section = renderCapacityBand(sample, subHourNow);
+
+    const fiveHourItem = section.querySelector(".capacity-resets li");
+    const countdown = fiveHourItem!.querySelector(".capacity-reset-countdown");
+    expect(countdown!.textContent).toBe("in 30m");
+  });
+
   it("each reset li has a non-empty clock and a countdown matching /^in \\d/ or 'now'", () => {
     const section = renderCapacityBand(make(), now);
     const items = section.querySelectorAll(".capacity-resets li");
@@ -81,6 +92,16 @@ describe("renderCapacityBand with sample", () => {
       const countdownText = countdown!.textContent ?? "";
       expect(/^in \d/.test(countdownText) || countdownText === "now").toBe(true);
     }
+  });
+
+  it("a reset already in the past renders the countdown as 'now'", () => {
+    // fiveHourResetsAt is one hour before `now`, so delta <= 0 → "now"
+    const sample = make({ fiveHourResetsAt: new Date("2026-06-07T08:00:00Z") });
+    const section = renderCapacityBand(sample, now);
+
+    const fiveHourItem = section.querySelector(".capacity-resets li");
+    const countdown = fiveHourItem!.querySelector(".capacity-reset-countdown");
+    expect(countdown!.textContent).toBe("now");
   });
 });
 

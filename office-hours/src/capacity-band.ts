@@ -23,7 +23,7 @@ function workerState(active: number, target: number): string {
 
 function formatCountdown(resetAt: Date, now: Date): string {
   const delta = resetAt.getTime() - now.getTime();
-  if (delta <= 0) return "now";
+  if (delta < MINUTE) return "now";
   if (delta >= DAY) {
     const d = Math.floor(delta / DAY);
     const h = Math.floor((delta % DAY) / HOUR);

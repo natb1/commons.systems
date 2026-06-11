@@ -66,7 +66,7 @@ async function refresh(): Promise<void> {
     // Intentional silent degradation — show the demo tier rather than an error.
     // A non-owner's read is "permission-denied"; logError classifies it.
     if (!deferProgrammerError(error)) {
-      logError(error, { operation: "load-owner-capacity" });
+      logError(error, { operation: "load-owner-data" });
     }
     render(getDemoSamples(), getDemoReminders());
   }
