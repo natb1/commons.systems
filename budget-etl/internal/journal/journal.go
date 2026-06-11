@@ -86,7 +86,7 @@ type tentative struct {
 // primary's journal entry, so the bank account is credited only once for the real
 // transaction. A nil normMap means no normalization filtering (back-compat).
 func Build(txns []budget.TransactionData, docIDs []string, normMap map[string]budget.NormalizationUpdate, window time.Duration) Result {
-	// skippedDup records each non-primary normalized duplicate skipped above, so
+	// skippedDup records each non-primary normalized duplicate skipped in the import loop below, so
 	// its doc ID can be linked to the primary's entry after EntryIDByDocID is built.
 	type skippedDup struct{ dupDocID, primaryDocID string }
 	var skippedDups []skippedDup
