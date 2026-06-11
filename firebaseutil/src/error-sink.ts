@@ -33,10 +33,10 @@ const RESERVED_KEYS = new Set(["operation", "kind", "message", "stack", "code", 
 
 // Strips obviously-sensitive keys from extras by name before serialization.
 // Matches substrings case-insensitively: token, secret, password, auth, key,
-// credential. Note the g flag is intentionally absent — .test() is stateless.
-// Cross-reference: see the RESERVED_KEYS comment above for the residual risk
-// of values stored under non-matching key names.
-const SENSITIVE_KEY_RE = /token|secret|password|auth|key|credential/i;
+// credential, email, phone, ssn, dob, address. Note the g flag is intentionally
+// absent — .test() is stateless. Cross-reference: see the RESERVED_KEYS comment
+// above for the residual risk of values stored under non-matching key names.
+const SENSITIVE_KEY_RE = /token|secret|password|auth|key|credential|email|phone|ssn|dob|address/i;
 
 // Size caps (UTF-16 code units) — must mirror the firestore.rules isValidErrorLog() caps exactly.
 const CAPS = {
