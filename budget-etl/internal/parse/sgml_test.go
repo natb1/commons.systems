@@ -135,7 +135,7 @@ func TestParseSGML_CreditCardLiability(t *testing.T) {
 	}
 
 	// Criterion 2: the journal layer types the card account as a liability.
-	r := journal.Build(txns, nil, journal.DefaultPairWindow)
+	r := journal.Build(txns, nil, nil, journal.DefaultPairWindow)
 	wantID := inst + "_" + acct
 	var found bool
 	for _, a := range r.Accounts {

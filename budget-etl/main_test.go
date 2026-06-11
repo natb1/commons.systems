@@ -338,15 +338,25 @@ func TestApplyTransactionRulesSkippedByGeneral(t *testing.T) {
 	}
 }
 
-// writeCSVFixture writes a minimal bank statement CSV file to path.
-// Each entry is [date, amount, description, "", txnID, type].
+// writeCSVFixture writes a minimal bank statement CSV file to path with a
+// default metadata line (toDate 2025/01/31). Each entry is
+// [date, amount, description, "", txnID, type].
 func writeCSVFixture(t *testing.T, path string, rows [][6]string) {
+	t.Helper()
+	writeCSVFixtureMeta(t, path, "0000000000,2025/01/01,2025/01/31,100.00,50.00", rows)
+}
+
+// writeCSVFixtureMeta writes a bank statement CSV file to path with an explicit
+// metadata line (acctNumber,fromDate,toDate,startingBalance,endingBalance). The
+// metadata toDate drives the inferred statement period (see ParseResult.InferPeriod),
+// so two fixtures with different toDates produce different statementIDs even with
+// identical transaction rows.
+func writeCSVFixtureMeta(t *testing.T, path, meta string, rows [][6]string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		t.Fatalf("creating fixture dir: %v", err)
 	}
-	var lines []string
-	lines = append(lines, "0000000000,2025/01/01,2025/01/31,100.00,50.00")
+	lines := []string{meta}
 	for _, r := range rows {
 		lines = append(lines, strings.Join(r[:], ","))
 	}
@@ -633,6 +643,140 @@ func TestRunMergeDedupOverlappingFiles(t *testing.T) {
 	}
 	if ids[docUnique] != 1 {
 		t.Errorf("TXN-UNIQUE: expected 1 occurrence, got %d", ids[docUnique])
+	}
+}
+
+// TestRunMergeCrossStatementDuplicateJournalAggregatesAgree is the end-to-end
+// acceptance test for issue #1271. One real purchase appears in two overlapping
+// statements (same institution/account, same description/amount/date, but
+// different statement periods → different statementIDs). autoNormalize flags the
+// cross-statement pair (no normalization rule needed), marking one primary and
+// one non-primary duplicate. The journal must credit the bank account for the
+// purchase exactly once — not twice — and the budget aggregate must count it
+// once. The two computed numbers must agree.
+func TestRunMergeCrossStatementDuplicateJournalAggregatesAgree(t *testing.T) {
+	tmp := t.TempDir()
+
+	// The same purchase ($7.25, "DUP PURCHASE", dated 2025-01-10) appears in two
+	// overlapping statements for the same account, producing two distinct
+	// statementIDs: test_bank-1234-2025-01 and test_bank-1234-2025-02. The period
+	// is inferred from each file's metadata toDate (InferPeriod prefers BalanceDate),
+	// so the two files carry different toDates (2025/01/31 vs 2025/02/28). The
+	// transaction row date — used by autoNormalize — is identical in both files.
+	csvJan := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "stmt.csv")
+	writeCSVFixtureMeta(t, csvJan, "0000000000,2025/01/01,2025/01/31,100.00,50.00", [][6]string{
+		{"2025/01/10", "7.25", "DUP PURCHASE", "", "TXN-DUP", "DEBIT"},
+	})
+	csvFeb := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-02", "stmt.csv")
+	writeCSVFixtureMeta(t, csvFeb, "0000000000,2025/02/01,2025/02/28,50.00,40.00", [][6]string{
+		{"2025/01/10", "7.25", "DUP PURCHASE", "", "TXN-DUP", "DEBIT"},
+	})
+
+	const purchaseAmount = 7.25
+
+	stmtJan := "test_bank-1234-2025-01"
+	stmtFeb := "test_bank-1234-2025-02"
+	docJan := budget.TransactionDocID(stmtJan, "TXN-DUP")
+	docFeb := budget.TransactionDocID(stmtFeb, "TXN-DUP")
+
+	// Empty NormalizationRules: auto-normalization of exact cross-statement
+	// duplicates needs no rule. A categorization + budget_assignment rule lands
+	// the purchase in a budget period.
+	inputJSON := export.Output{
+		Version:      1,
+		GroupName:    "test-group",
+		Transactions: []export.Transaction{},
+		Rules: []export.Rule{
+			{ID: "cat-dup", Type: "categorization", Pattern: "DUP PURCHASE", Target: "Test:Dup", Priority: 10},
+			{ID: "bud-dup", Type: "budget_assignment", Pattern: "DUP PURCHASE", Target: "dup-budget", Priority: 10},
+		},
+		Budgets: []export.Budget{
+			{ID: "dup-budget", Name: "Dup Budget", Allowance: 100},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input JSON: %v", err)
+	}
+
+	outputPath := filepath.Join(tmp, "output.json")
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	var out export.Output
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parsing output: %v", err)
+	}
+
+	// Sanity: both transactions survive dedup (distinct statementIDs), and exactly
+	// one is the non-primary normalized duplicate.
+	if len(out.Transactions) != 2 {
+		t.Fatalf("expected 2 transactions (distinct statementIDs), got %d", len(out.Transactions))
+	}
+	txnByID := make(map[string]export.Transaction, len(out.Transactions))
+	for _, txn := range out.Transactions {
+		txnByID[txn.ID] = txn
+	}
+	primaries, dups := 0, 0
+	for _, id := range []string{docJan, docFeb} {
+		txn, ok := txnByID[id]
+		if !ok {
+			t.Fatalf("expected transaction %q in output", id)
+		}
+		if txn.NormalizedID != nil && *txn.NormalizedID != "" && !txn.NormalizedPrimary {
+			dups++
+		} else if txn.NormalizedPrimary {
+			primaries++
+		}
+	}
+	if primaries != 1 || dups != 1 {
+		t.Fatalf("expected exactly 1 primary and 1 non-primary duplicate, got %d primary / %d duplicate", primaries, dups)
+	}
+
+	// Assertion 1: the journal credits the bank account (test_bank_1234) for the
+	// purchase exactly ONCE. Sum the credits minus debits on the bank account; the
+	// net credit equals one purchase amount, not two. (A spending line credits the
+	// imported bank account.)
+	const bankAccountID = "test_bank_1234"
+	var journalNetCredit float64
+	for _, leg := range out.JournalLegs {
+		if leg.AccountID == bankAccountID {
+			journalNetCredit += leg.Credit - leg.Debit
+		}
+	}
+	if journalNetCredit != purchaseAmount {
+		t.Errorf("journal bank-account net credit: got %v, want %v (one purchase, not two)", journalNetCredit, purchaseAmount)
+	}
+
+	// Assertion 2: the budget aggregate counts the purchase exactly ONCE. The
+	// dup-budget period total equals one purchase amount (net, reimbursement 0),
+	// with count 1.
+	var aggregateTotal float64
+	var periodCount int
+	for _, p := range out.BudgetPeriods {
+		if p.BudgetID == "dup-budget" {
+			aggregateTotal += p.Total
+			periodCount += p.Count
+		}
+	}
+	if periodCount != 1 {
+		t.Errorf("dup-budget aggregate count: got %d, want 1 (one purchase, not two)", periodCount)
+	}
+	if aggregateTotal != purchaseAmount {
+		t.Errorf("dup-budget aggregate total: got %v, want %v (one purchase, not two)", aggregateTotal, purchaseAmount)
+	}
+
+	// Assertion 3 (the explicit acceptance criterion): the journal's net for the
+	// purchase agrees with the aggregate total.
+	if journalNetCredit != aggregateTotal {
+		t.Errorf("journal net (%v) and aggregate total (%v) disagree", journalNetCredit, aggregateTotal)
 	}
 }
 
