@@ -3,6 +3,7 @@ package parse
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,6 +91,123 @@ func TestParseSGML_InvestmentSkip(t *testing.T) {
 	}
 	if result.SkipReason == "" {
 		t.Fatal("expected non-empty skip reason")
+	}
+}
+
+// TestParseSGMLBalance_Bounded verifies that parseSGMLBalance is clamped to the
+// LEDGERBAL aggregate and does not borrow tag values from a later unrelated block.
+func TestParseSGMLBalance_Bounded(t *testing.T) {
+	t.Run("empty BALAMT does not borrow from later block", func(t *testing.T) {
+		// First LEDGERBAL has no BALAMT; a later unrelated block carries one.
+		// Before the fix, parseSGMLBalance would scan past </LEDGERBAL> and find
+		// the later BALAMT, silently returning 999.99. After the fix it must error.
+		text := `<LEDGERBAL>
+<DTASOF>20250101
+</LEDGERBAL>
+<OTHERBLOCK>
+<BALAMT>999.99
+</OTHERBLOCK>`
+		_, err := parseSGMLBalance(text)
+		if err == nil {
+			t.Fatal("expected error for LEDGERBAL with empty BALAMT, got nil")
+		}
+		if !strings.Contains(err.Error(), "BALAMT is empty") {
+			t.Errorf("error = %q, want it to contain %q", err.Error(), "BALAMT is empty")
+		}
+	})
+
+	t.Run("well-formed LEDGERBAL parses correctly", func(t *testing.T) {
+		text := `<LEDGERBAL>
+<BALAMT>123.45
+<DTASOF>20250101
+</LEDGERBAL>`
+		bal, err := parseSGMLBalance(text)
+		if err != nil {
+			t.Fatalf("parseSGMLBalance: %v", err)
+		}
+		if bal.cents != 12345 {
+			t.Errorf("cents = %d, want 12345", bal.cents)
+		}
+	})
+}
+
+// TestDecodeWindows1252 verifies the CP1252 byte-to-rune decoding, including the
+// 0x80–0x9F high range and the five CP1252-undefined bytes mapped to U+FFFD.
+func TestDecodeWindows1252(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []byte
+		want string
+	}{
+		{"ascii identity", []byte("Hello"), "Hello"},
+		{"euro sign 0x80", []byte{0x80}, string(rune(0x20AC))},
+		{"left double quote 0x93", []byte{0x93}, string(rune(0x201C))},
+		{"right double quote 0x94", []byte{0x94}, string(rune(0x201D))},
+		{"latin1 e-acute 0xE9", []byte{0xE9}, string(rune(0xE9))},
+		{"undefined 0x81", []byte{0x81}, "�"},
+		{"undefined 0x8D", []byte{0x8D}, "�"},
+		{"undefined 0x8F", []byte{0x8F}, "�"},
+		{"undefined 0x90", []byte{0x90}, "�"},
+		{"undefined 0x9D", []byte{0x9D}, "�"},
+		{"mixed right single quote", []byte{0x41, 0x92, 0x42}, "A’B"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := decodeWindows1252(tt.in); got != tt.want {
+				t.Errorf("decodeWindows1252(%v) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestSGMLCharset verifies CHARSET: header extraction.
+func TestSGMLCharset(t *testing.T) {
+	tests := []struct {
+		name   string
+		header string
+		want   string
+	}{
+		{
+			name:   "charset present",
+			header: "OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\nCHARSET:1252\nCOMPRESSION:NONE\n",
+			want:   "1252",
+		},
+		{
+			name:   "charset absent",
+			header: "OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\nCOMPRESSION:NONE\n",
+			want:   "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sgmlCharset(tt.header); got != tt.want {
+				t.Errorf("sgmlCharset() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestParseSGML_Charset1252 verifies that a declared CHARSET:1252 is decoded so a
+// Windows-1252 high byte (0xE9 → 'é') reaches the transaction Description as the
+// correct rune rather than the U+FFFD replacement character.
+func TestParseSGML_Charset1252(t *testing.T) {
+	path := filepath.Join("testdata", "charset1252.qfx")
+	result, err := parseSGML(path)
+	if err != nil {
+		t.Fatalf("parseSGML: %v", err)
+	}
+	if result.Skipped {
+		t.Fatal("expected non-skipped result")
+	}
+	if len(result.Transactions) == 0 {
+		t.Fatal("expected at least one transaction")
+	}
+	desc := result.Transactions[0].Description
+	if !strings.Contains(desc, string(rune(0xE9))) {
+		t.Errorf("Description = %q, want it to contain decoded rune 'é' (U+00E9)", desc)
+	}
+	if strings.Contains(desc, "�") {
+		t.Errorf("Description = %q, want no U+FFFD replacement character", desc)
 	}
 }
 
