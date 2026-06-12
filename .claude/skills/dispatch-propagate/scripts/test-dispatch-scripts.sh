@@ -1243,6 +1243,30 @@ assert_eq "no PR, unplanned → INVOKE /plan-issue (directive)" "INVOKE /plan-is
 assert_eq "no PR, unplanned → INVOKE /plan-issue (exit 0)" "0" "$ROUTE_RC"
 teardown
 
+# 1a. Provisioning that writes to STDOUT must NOT leak into the directive.
+# dispatch-provision-worktree execs dispatch-merge-main, whose `git merge
+# origin/main` prints progress ("Updating …/Fast-forward", "Already up to date.")
+# to stdout. dispatch-route's contract is "exactly one directive line on stdout",
+# and dispatch-launch-worker captures ALL of that stdout and exact-prefix-matches
+# it — so leaked merge chatter prepended to the INVOKE line parks the issue as an
+# "unrecognized route directive". Override the provision stub to emit multi-line
+# stdout and assert dispatch-route still prints ONLY the directive.
+echo "Test: provision stdout chatter does not leak into the directive"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+cat > "$TMPDIR_TEST/dispatch-provision-worktree" <<'STUB'
+#!/usr/bin/env bash
+printf 'Updating 648157c..ea3a172\nFast-forward\n 2 files changed, 27 insertions(+)\n'
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-provision-worktree"
+route_run 42 /wt/42-my-feature
+assert_eq "provision stdout chatter → directive is ONLY the INVOKE line" \
+  "INVOKE /plan-issue" "$ROUTE_OUT"
+assert_eq "provision stdout chatter → exit 0" "0" "$ROUTE_RC"
+teardown
+
 # 1b. No PR + dispatch:planned → INVOKE /implement (implement phase). dispatch-phase
 # reads dispatch:planned → implement, and the implement arm routes straight to the
 # build skill with no relevance review and no parse-job check.

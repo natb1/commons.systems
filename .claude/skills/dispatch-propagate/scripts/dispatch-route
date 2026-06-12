@@ -88,8 +88,18 @@ fi
 # are current). dispatch-provision-worktree exits: 0 clean / already-up-to-date;
 # 3 merge conflict (merge aborted, tree left clean); any other non-zero is a fetch
 # or non-conflict merge failure. Capture its code without tripping `set -e`.
+#
+# Redirect provision stdout to stderr (1>&2): dispatch-provision-worktree execs
+# dispatch-merge-main, whose `git merge origin/main` writes progress ("Updating
+# …/Fast-forward", "Already up to date.") to STDOUT. This script's contract is
+# "exactly one directive line on stdout"; its scripted caller (dispatch-launch-
+# worker) captures ALL of stdout as the directive and exact-prefix-matches it, so
+# any leaked merge chatter prepended to the INVOKE line makes the launcher park
+# the issue as an "unrecognized route directive". Keep the chatter on stderr —
+# visible in the launcher's log — and stdout clean. (dispatch-merge-main itself
+# is left untouched; dispatch-select-tick legitimately surfaces its output.)
 PROVISION_RC=0
-"$SCRIPT_DIR/dispatch-provision-worktree" "$WORKTREE_PATH" || PROVISION_RC=$?
+"$SCRIPT_DIR/dispatch-provision-worktree" "$WORKTREE_PATH" 1>&2 || PROVISION_RC=$?
 if [[ "$PROVISION_RC" -eq 3 ]]; then
   # A clean origin/main merge conflict — route to the fix-conflicts phase.
   echo "INVOKE /fix-conflicts"
