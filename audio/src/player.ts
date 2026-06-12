@@ -28,6 +28,7 @@ export function initPlayer(
   const queue: PlayRequest[] = [];
   let currentIndex = -1;
   let currentObjectUrl: string | null = null;
+  let playGeneration = 0;
 
   function renderPlaylist(): void {
     if (queue.length === 0) {
@@ -62,11 +63,16 @@ export function initPlayer(
   function playTrack(index: number): void {
     const item = queue[index];
     if (!item) throw new Error(`playTrack: index ${index} out of range (queue length ${queue.length})`);
+    const generation = ++playGeneration;
     currentIndex = index;
     renderPlaylist();
     revokeCurrentObjectUrl();
     resolveAudioSource(item.storagePath)
       .then((url) => {
+        if (generation !== playGeneration) {
+          URL.revokeObjectURL(url);
+          return;
+        }
         currentObjectUrl = url;
         audioEl.src = url;
         audioEl.play().catch((err) => {
@@ -77,11 +83,13 @@ export function initPlayer(
       .catch((err) => {
         if (deferProgrammerError(err)) return;
         logError(err, { operation: "audio-source-resolve", storagePath: item.storagePath });
-        advanceOrStop(index);
+        if (generation !== playGeneration) return;
+        advanceOrStop(currentIndex);
       });
   }
 
   function stop(): void {
+    playGeneration++;
     currentIndex = -1;
     revokeCurrentObjectUrl();
     audioEl.pause();
