@@ -5963,7 +5963,7 @@ sweep_path_key() {
 # returns sessions keyed by name — matching how claude_sessions_with_name
 # queries the daemon after the #882 Unit 2 name-keyed rewrite.
 # Each argument must be in `name=sid` form; name is the worktree basename
-# (as passed via --name=<basename> by dispatch-spawn-worker). The cwd field is
+# (as passed via --name=<basename> by dispatch-launch-worker). The cwd field is
 # set to "" since name-keyed classification ignores it.
 # The fake ignores any --cwd argument and always returns the full payload; the
 # client-side jq select(.name == $name) in claude_sessions_with_name does the
@@ -11587,7 +11587,7 @@ WORKER_TARGET_WORKTREE=""
 #              claude_sessions_under does no client-side path filtering — it
 #              trusts server-side `--cwd` filtering — so every fixture session
 #              is returned. Fine here: each fixture holds only sessions a test
-#              means dispatch-spawn-worker to see. If SPAWN_BG_REGISTER_AFTER_N
+#              means dispatch-spawn-job to see. If SPAWN_BG_REGISTER_AFTER_N
 #              mode left a pending sidecar, decrement its countdown; when it
 #              reaches zero, merge the pending agent into the registry and
 #              delete the sidecar.
@@ -11685,9 +11685,9 @@ spawn_worker_teardown() {
 echo "=== dispatch-spawn-office-hours ==="
 #
 # dispatch-spawn-office-hours is the office-hours fresh-launch counterpart of
-# dispatch-spawn-worker: it spawns a /office-hours --bg job worker-style (--name
+# dispatch-launch-worker: it spawns a /office-hours --bg job worker-style (--name
 # = worktree basename, --cwd = worktree path) via dispatch-spawn-job, then —
-# unlike the worker, which `exec`s the spawn and is done — resolves the spawned
+# unlike the launcher, which `exec`s the spawn and is done — resolves the spawned
 # (or deduped) session id by the worktree basename and prints it, so the caller
 # can attach a human via `claude --resume`.
 #
@@ -11883,8 +11883,8 @@ spawn_office_hours_teardown
 echo "=== dispatch-spawn-job ==="
 #
 # dispatch-spawn-job is the generalized `claude --bg` spawn primitive that
-# dispatch-spawn-worker `exec`s. It is exercised directly here against a fake
-# `claude`, reusing the same fake-claude harness shape as the spawn-worker
+# dispatch-launch-worker delegates to. It is exercised directly here against a
+# fake `claude`, reusing the same fake-claude harness shape as the spawn-worker
 # tests (a multi-subcommand temp script DISPATCH_SPAWN_JOB_CLAUDE_CMD points at,
 # which also backs the sourced lib-claude-agents.sh via CLAUDE_AGENTS_CMD).
 #
@@ -15908,8 +15908,8 @@ restore_teardown
 # no-op `*)` case, nothing restored. dispatch-phase no longer emits a `waiting`
 # phase; a not-ready draft PR makes it exit 3 with empty stdout, and the hook's
 # `|| PHASE=""` routes the undetermined phase to the no-op `*)` case. After
-# #1392 (dispatch-worker deleted) there is no phase skill to reload — the Stop
-# hook (dispatch-stop.sh) owns the disposition, so the hook emits nothing.
+# #1392 deleted the model worker skill, so there is no phase skill to reload —
+# the Stop hook (dispatch-stop.sh) owns the disposition, so the hook emits nothing.
 echo "Test: restore-dispatch-skill dispatch-phase error (exit 3) → no restore"
 restore_setup
 set_agents_name "903-foo"
@@ -15923,10 +15923,10 @@ else
   echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$output" != *"RESTORE_MARKER_dispatch-worker"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: phase-error: no dispatch-worker marker emitted"
+if [[ "$output" != *"RESTORE_MARKER_"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: phase-error: no deleted-skill marker emitted"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error: no dispatch-worker marker emitted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error: no deleted-skill marker emitted"
   echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
@@ -18163,9 +18163,9 @@ fi
 echo waiting
 exit 1
 FAKE
-  # Detached launcher fake (#1391): dispatch-materialize-spawn now DETACHES
-  # dispatch-launch-worker via `setsid nohup … </dev/null >tmp/…log 2>&1 &`
-  # instead of spawning dispatch-spawn-worker. The launcher is fire-and-forget —
+  # Detached launcher fake (#1391): dispatch-materialize-spawn DETACHES
+  # dispatch-launch-worker via `setsid nohup … </dev/null >tmp/…log 2>&1 &`.
+  # The launcher is fire-and-forget —
   # the router never observes its exit — so this fake just records its argv to a
   # deterministic log of its own (NOT the router's per-target tmp redirect, which
   # captures the fake's stdout) and exits. Because the launch is backgrounded, a
@@ -20568,7 +20568,7 @@ assert_not_contains_local "dispatch-drift-scan: present name ref found even when
 drift_scan_teardown
 
 # --- Regression: slash-commands are not classified as path refs ---
-# Guards defect 2: tokens like /file-issue and /dispatch-worker contain `/`, so the
+# Guards defect 2: tokens like /file-issue and /qa-fix contain `/`, so the
 # old is_path_token treated them as filesystem paths and existence-checked them,
 # flagging [ABSENT]. They are skill references and must fall through to name refs.
 
@@ -20576,7 +20576,7 @@ echo "Test: dispatch-drift-scan does not classify slash-commands as path refs"
 drift_scan_setup
 printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Run `/dispatch-worker` and `/file-issue` then `present.sh`."}
+{"createdAt":"2026-06-03T00:00:00Z","body":"Run `/qa-fix` and `/file-issue` then `present.sh`."}
 EOF
 cat > "$TMPDIR_TEST/prs.json" <<'EOF'
 []
@@ -20586,7 +20586,7 @@ cd "$TMPDIR_TEST/tree"
 out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
 assert_eq "dispatch-drift-scan: slash-command scan exits 0" "0" "$rc"
 assert_not_contains_local "dispatch-drift-scan: /file-issue not existence-checked as a path" "/file-issue [ABSENT]" "$out"
-assert_not_contains_local "dispatch-drift-scan: /dispatch-worker not existence-checked as a path" "/dispatch-worker [ABSENT]" "$out"
+assert_not_contains_local "dispatch-drift-scan: /qa-fix not existence-checked as a path" "/qa-fix [ABSENT]" "$out"
 drift_scan_teardown
 
 # --- Security regression: backtick-span globs are not expanded against the cwd ---
