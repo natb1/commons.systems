@@ -29,10 +29,10 @@ const CHART_HEIGHT = 220;
  *
  * Weekly-only — the 5-hour series stays in the capacity snapshot band.
  *
- * Pure: does not mutate the input array. `now` is not needed because each
- * sample carries its own reset time; the latest sample defines "now".
+ * Pure: does not mutate the input array. Each sample carries its own reset
+ * time; the latest sample defines "now".
  */
-export function renderPacePositionPanel(samples: UsageSample[], _now: Date): HTMLElement {
+export function renderPacePositionPanel(samples: UsageSample[]): HTMLElement {
   const section = document.createElement("section");
   section.className = "capacity-pace";
 

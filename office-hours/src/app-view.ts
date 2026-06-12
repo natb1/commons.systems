@@ -24,12 +24,12 @@ export function renderApp(container: Element, state: ViewState, now: Date): void
 
     const samples = getDemoSamples();
     container.appendChild(renderCapacityBand(selectLatestSample(samples), now));
-    container.appendChild(renderPacePositionPanel(samples, now));
+    container.appendChild(renderPacePositionPanel(samples));
     container.appendChild(renderHistoryBand(samples));
     container.appendChild(renderReminderList(getDemoReminders(), now));
   } else if (state.tier === "owner") {
     container.appendChild(renderCapacityBand(selectLatestSample(state.samples), now));
-    container.appendChild(renderPacePositionPanel(state.samples, now));
+    container.appendChild(renderPacePositionPanel(state.samples));
     container.appendChild(renderHistoryBand(state.samples));
     container.appendChild(renderReminderList(state.reminders, now));
   } else {
