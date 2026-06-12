@@ -113,6 +113,26 @@ describe("parseXml", () => {
     });
   });
 
+  it("falls through to updated when Atom published is present but unparseable", () => {
+    // A present-but-invalid <published> must not block the valid <updated>
+    // fallback: the parse-boundary guard prefers the first parseable source.
+    const feed = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Bad Published Good Updated</title>
+    <link href="https://example.com/bad-published-good-updated"/>
+    <published>not-a-date</published>
+    <updated>2026-02-01T00:00:00Z</updated>
+  </entry>
+</feed>`;
+    const result = parseXml(feed);
+    expect(result).toEqual({
+      title: "Bad Published Good Updated",
+      url: "https://example.com/bad-published-good-updated",
+      publishedAt: "2026-02-01T00:00:00Z",
+    });
+  });
+
   it("uses updated date when published is absent", () => {
     const feedWithUpdated = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">

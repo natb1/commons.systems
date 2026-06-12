@@ -7,13 +7,18 @@ function parseAtomFeed(doc: Document): LatestPost | null {
   const title = entry.querySelector("title")?.textContent ?? "";
   const linkEl = entry.querySelector('link[rel="alternate"][href]') ?? entry.querySelector("link[href]");
   const url = linkEl?.getAttribute("href") ?? "";
-  const published =
-    entry.querySelector("published")?.textContent ??
-    entry.querySelector("updated")?.textContent ??
-    undefined;
+  const rawPublished = entry.querySelector("published")?.textContent;
+  const rawUpdated = entry.querySelector("updated")?.textContent;
   if (!title || !url) return null;
   if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
-  const publishedAt = published && isParseableDate(published) ? published : undefined;
+  // Prefer the first parseable source: when <published> is present but
+  // unparseable, fall back to <updated> instead of dropping the date entirely.
+  const publishedAt =
+    rawPublished && isParseableDate(rawPublished)
+      ? rawPublished
+      : rawUpdated && isParseableDate(rawUpdated)
+        ? rawUpdated
+        : undefined;
   return { title, url, publishedAt };
 }
 
