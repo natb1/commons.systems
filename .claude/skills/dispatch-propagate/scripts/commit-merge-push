@@ -22,8 +22,9 @@
 # Exit-code contract:
 #   0 — success (merge-only clean, or single-unit committed+merged+pushed); pushed.
 #   1 — other failure (fetch failure, unexpected git error); unchanged / safe.
-#   2 — usage error (bad/missing/conflicting args, un-cd-able worktree, or staged
-#       changes in merge-only mode); unchanged.
+#   2 — usage error (bad/missing/conflicting args, a --worktree not under the
+#       worktrees root, an un-cd-able worktree, or staged changes in merge-only
+#       mode); unchanged.
 #   3 — merge conflict; `git merge --abort` run, tree left clean; not pushed.
 #       In single-unit mode the local commit has ALREADY been made before the
 #       merge, so after exit 3 local HEAD is one commit ahead of its pre-script
@@ -117,6 +118,52 @@ else
     echo "$PROG: --intent text must be non-empty" >&2
     exit 2
   fi
+fi
+
+# --- Validate --worktree is under the project worktrees root ----------------
+# A --worktree argument is attacker-influenceable (prompt injection). Before the
+# cd, resolve it canonically and require it to be a strict subdirectory of the
+# project's worktrees root — otherwise the script would run git add/commit/push
+# in a foreign repo. The worktrees root is anchored on this SCRIPT's own
+# location (trusted), never on cwd or the argument. Derivation mirrors lib.sh's
+# resolve_project_root: project root = parent of the git common dir; worktrees
+# root = <project-root>/worktrees. An explicit DISPATCH_WORKTREES_ROOT overrides
+# the git lookup (test seam, same convention as DISPATCH_CONFIG_DIR /
+# DISPATCH_LOCK_FILE).
+if [[ -n "$WORKTREE" ]]; then
+  SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+  if [[ -n "${DISPATCH_WORKTREES_ROOT:-}" ]]; then
+    WORKTREES_ROOT="$DISPATCH_WORKTREES_ROOT"
+  else
+    if ! COMMON_DIR=$(git -C "$SCRIPT_DIR" rev-parse --path-format=absolute \
+        --git-common-dir 2>/dev/null); then
+      echo "$PROG: cannot resolve the script's repository (for worktrees-root check)" >&2
+      exit 2
+    fi
+    WORKTREES_ROOT="$(dirname -- "$COMMON_DIR")/worktrees"
+  fi
+  if ! WORKTREES_ROOT_REAL=$(realpath -- "$WORKTREES_ROOT" 2>/dev/null); then
+    echo "$PROG: cannot resolve worktrees root '$WORKTREES_ROOT'" >&2
+    exit 2
+  fi
+  # realpath -e (GNU) / --canonicalize-existing fails on a nonexistent path on
+  # Linux too; without -e, GNU realpath resolves nonexistent paths syntactically
+  # and returns 0, so the "does not exist" diagnostic would never fire.
+  if ! WORKTREE_REAL=$(realpath -e -- "$WORKTREE" 2>/dev/null); then
+    echo "$PROG: --worktree path '$WORKTREE' does not exist" >&2
+    exit 2
+  fi
+  # Require a strict subdirectory of the worktrees root: reject the root itself
+  # and anything outside it. The `/?*` pattern requires at least one character
+  # to follow the root's trailing slash, so WORKTREE_REAL == WORKTREES_ROOT_REAL
+  # is rejected (a `*`-only pattern would wrongly accept the root, since `*`
+  # matches the empty string after the appended trailing slash).
+  if [[ "$WORKTREE_REAL" == "$WORKTREES_ROOT_REAL" \
+        || "$WORKTREE_REAL/" != "$WORKTREES_ROOT_REAL"/?* ]]; then
+    echo "$PROG: --worktree '$WORKTREE' (resolved '$WORKTREE_REAL') is not under the worktrees root '$WORKTREES_ROOT_REAL'; refusing" >&2
+    exit 2
+  fi
+  WORKTREE="$WORKTREE_REAL"
 fi
 
 # --- cd to worktree ---------------------------------------------------------

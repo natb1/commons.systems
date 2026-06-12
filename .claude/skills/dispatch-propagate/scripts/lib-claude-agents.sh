@@ -28,7 +28,7 @@
 #               free — a `[]` from a down daemon is indistinguishable from a
 #               `[]` of genuinely no sessions, so the detectable failures fail
 #               safe here and the rest is mitigated operationally (see below).
-#   Used by `dispatch-spawn-worker` / `dispatch-spawn-job` to filter on
+#   Used by `dispatch-launch-worker` / `dispatch-spawn-job` to filter on
 #   SPAWN_CWD — callers that want cwd-based semantics.
 #
 # claude_sessions_with_name <name>
@@ -62,7 +62,7 @@
 # worktree_has_live_session <path>
 #   The ergonomic fail-safe predicate. Now name-keyed: delegates to
 #   `claude_sessions_with_name "$(basename "$path")"`, matching the worker
-#   session spawned with `--name=<basename>` by `dispatch-spawn-worker`.
+#   session spawned with `--name=<basename>` by `dispatch-launch-worker`.
 #   Folds unknown into the occupied branch:
 #     return 0 — occupied OR unknown: do NOT start a session under <path>.
 #     return 1 — definitely no live session for the worktree's name.
@@ -86,7 +86,7 @@
 #               line: the count of matching sessions.
 #     return 1 — UNKNOWN. Stdout is empty. Callers that gate on the count
 #               should fail open (proceed to spawn) — the per-worktree dedup
-#               inside `dispatch-spawn-worker` is the last-line defense.
+#               inside `dispatch-spawn-job` is the last-line defense.
 #
 # verify_agent_registered_under <agent-name> <cwd>
 #   Bounded retry of `claude_sessions_under` that closes the async-registration
@@ -106,7 +106,7 @@
 #   diagnostic and exits non-zero.
 #     return 0 — a row with the given <agent-name> was observed.
 #     return 1 — exhaustion: the agent never appeared within the budget.
-#   Used by `dispatch-spawn-worker` / `dispatch-spawn-job` Step 4 verify.
+#   Used by `dispatch-launch-worker` / `dispatch-spawn-job` Step 4 verify.
 #
 # Test override: CLAUDE_AGENTS_CMD replaces the `claude` invocation with an
 # arbitrary command (e.g. an absolute path to a fake script), so the helper is

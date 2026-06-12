@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# dispatch-launch-worker — the scripted phase-initiation worker (replaces the
-# /dispatch-worker model session for routing + mechanical dispositions).
+# dispatch-launch-worker — the scripted phase-initiation worker (provisions the
+# worktree, routes, handles mechanical dispositions, and spawns the phase skill).
 #
 # Usage: dispatch-launch-worker <N> <worktree-path>
 #
@@ -19,8 +19,8 @@
 #     provision-failed, PUSH-STRANDED) → handled here with NO `claude` session
 #     spawned (zero tokens).
 #
-# HEARTBEAT RATIONALE (decision 2 of #1391): today every /dispatch-worker — even
-# one that hits a mechanical disposition — fires the Stop hook
+# HEARTBEAT RATIONALE (decision 2 of #1391): every phase-skill worker session —
+# even one that hits a mechanical disposition — fires the Stop hook
 # (.claude/hooks/dispatch-stop.sh), which always calls dispatch-spawn-tick (the
 # chain's heartbeat). A DETACHED launcher that handles a mechanical disposition
 # fires NO Stop hook, so an all-mechanical fan-out would stall the chain.
@@ -44,13 +44,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ---- Step 0: parse and validate arguments -----------------------------------
-# Mirrors dispatch-spawn-worker's validation: exactly two positionals
-# <N> <worktree-path>; N a positive integer; the worktree path an existing dir
-# whose name is restricted to a safe charset (it flows into the `claude --bg`
-# prompt and the session --name via basename). No --model flag — the launcher
-# derives the model from the routed phase. This validation is a deliberate
-# temporary duplication of dispatch-spawn-worker's; #1392 (sub-issue C) removes
-# the original.
+# Exactly two positionals: <N> <worktree-path>; N a positive integer; the
+# worktree path an existing dir whose name is restricted to a safe charset (it
+# flows into the `claude --bg` prompt and the session --name via basename). No
+# --model flag — the launcher derives the model from the routed phase.
 if [[ $# -lt 2 ]]; then
   echo "dispatch-launch-worker: expected 2 arguments: <N> <worktree-path>" >&2
   exit 2
@@ -83,8 +80,7 @@ fi
 # dispatch-route (Step 2) derives the worktree from `git rev-parse --show-toplevel`
 # — its CURRENT WORKING DIRECTORY — and cross-checks that against the expected
 # `<N>-` branch; its contract is "the spawner must invoke with cwd matching
-# <worktree-path>". The old /dispatch-worker model session satisfied that via the
-# router's `dispatch-spawn-job --cwd`. This launcher is detached (`setsid nohup …
+# <worktree-path>". This launcher is detached (`setsid nohup …
 # &`) from the router and so inherits the router's cwd (the `main` worktree), not
 # the target. Without this cd, dispatch-route fails `STOP wrong-worktree` on every
 # tick and no phase session is ever spawned. cd here, after validation, so every

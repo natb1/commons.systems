@@ -3,9 +3,9 @@
 #
 # This lock is the dispatch ROUTER's selection lock — held only across the
 # router's selection step (origin/main sync, JIT engine, dispatch-select-
-# target, leaf trace, worktree resolution). The worker (`/dispatch-worker`)
-# holds no selection lock; its phase skill runs lock-free and concurrent
-# workers advance their own issues' phases without contention. See
+# target, leaf trace, worktree resolution). Phase-skill workers hold no
+# selection lock; they run lock-free and concurrent workers advance their own
+# issues' phases without contention. See
 # `.claude/skills/dispatch-propagate/SKILL.md` Step 0 (Acquire / Releasing / Per-
 # worktree invariant) for the full scoping story. The lock is shared with the
 # manual `/dispatch` shim, so a manual run cannot select the same target as
@@ -14,7 +14,7 @@
 # The lock serializes two routers racing on the same target selection — two
 # concurrent routers can pick the same `help wanted` issue or the same PR if
 # selection isn't serialized. It does not (and should not) cover phase
-# execution: per-worktree dedup at `dispatch-spawn-worker` is what serializes
+# execution: per-worktree dedup at `dispatch-spawn-job` is what serializes
 # per-issue work.
 #
 # An fd-based `flock` cannot serialize /dispatch-propagate: the skill runs as many

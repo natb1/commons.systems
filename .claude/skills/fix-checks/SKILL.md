@@ -197,9 +197,9 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
    Step 4 and never applies a fix-checks-attempt label.
 
    The cap at 3 means a fourth entry still leaves the label at `dispatch:fix-checks-attempt-3`.
-   Step 4 of `/dispatch-worker` reads this counter: when the re-derived phase is still
-   `fix-checks` and the counter is `>= 3`, it escalates to `dispatch:office-hours` instead
-   of self-closing.
+   `.claude/hooks/dispatch-stop.sh` (Branch C/D) reads this counter: when the re-derived
+   phase is still `fix-checks` and the counter is `>= 3`, it escalates to
+   `dispatch:office-hours` instead of self-closing.
 
    Remove the prior label if one exists, then apply the new one. Use the apply-first /
    create-on-"not found" idiom — the label may not exist yet on a fresh repo
