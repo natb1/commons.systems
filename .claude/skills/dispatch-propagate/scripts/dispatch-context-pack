@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# dispatch-context-pack — emit live per-issue context to stdout in one tool
+# result, with sections selected by flag, so a phase skill collapses its 4-8
+# call live-state preamble into a single scripted call.
+#
+# Usage:
+#   dispatch-context-pack <N> [--issue] [--relations] [--pr] [--diff]
+#
+#   <N>            Issue number (digits only, positive).
+#   --issue        Issue title, state, body, and comments.
+#   --relations    Blockers / sub-issues / parent / siblings as
+#                  titles + state + URL only (never full bodies).
+#   --pr           PR number, labels, CI rollup, and body.
+#   --diff         merge-base, --stat, changed-file list, and capped hunks.
+#
+# At least one section flag is required. Sections are emitted in a fixed
+# canonical order — issue → relations → pr → diff — regardless of the order
+# the flags are given on the command line.
+#
+# Exit codes:
+#   0   success — every requested section built and flushed.
+#   2   usage error (missing/non-positive <N>, unknown flag, or zero flags).
+#   1   a gh/git call failed mid-build — the pack aborts with NO partial
+#       output on stdout (see the buffer-then-flush note at the flush point).
+#
+# Note: callers invoke this with dangerouslyDisableSandbox: true — it calls
+# gh (see .claude/rules/sandbox.md).
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+# ---- Step 0: parse the positional issue number ------------------------------
+
+N="${1:-}"
+if [[ -z "$N" || ! "$N" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: usage: dispatch-context-pack <N> [--issue] [--relations] [--pr] [--diff] — <N> must be a positive integer" >&2
+  exit 2
+fi
+shift
+
+# ---- Step 1: parse the section flags ----------------------------------------
+
+WANT_ISSUE=0
+WANT_RELATIONS=0
+WANT_PR=0
+WANT_DIFF=0
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --issue)     WANT_ISSUE=1 ;;
+    --relations) WANT_RELATIONS=1 ;;
+    --pr)        WANT_PR=1 ;;
+    --diff)      WANT_DIFF=1 ;;
+    *)
+      echo "error: unknown flag '$1' — expected --issue, --relations, --pr, or --diff" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+# A zero-flag invocation is a usage error, not a silent no-op: an empty pack
+# masks a caller bug (input validation at the edge, per .claude/rules/code-style.md).
+if (( WANT_ISSUE + WANT_RELATIONS + WANT_PR + WANT_DIFF == 0 )); then
+  echo "error: no section selected — pass at least one of --issue, --relations, --pr, --diff" >&2
+  exit 2
+fi
+
+# ---- Step 2: build each requested section into its own variable -------------
+#
+# Buffer-then-flush is mandatory (NOT a stylistic choice): each section is built
+# into its own variable and the whole pack is printed only at the single flush
+# point below, AFTER every requested section has succeeded. A section's failing
+# gh/git call must carry an explicit `|| { echo "error: ..." >&2; exit 1; }` so
+# a mid-build failure aborts non-zero with NO half-pack on stdout — the
+# "one tool result" / no-partial-success contract (.claude/rules/code-style.md;
+# guarded by the test "failed gh issue view → exit non-zero AND empty stdout").
+#
+# CRITICAL: under `set -e`, never write `local VAR=$(failing_cmd)` — the `local`
+# declaration's own (zero) exit status masks the command-substitution failure.
+# Use plain assignment + an explicit `|| { ...; exit 1; }` check instead.
+
+ISSUE_OUT=""
+REL_OUT=""
+PR_OUT=""
+DIFF_OUT=""
+
+if [[ "$WANT_ISSUE" == 1 ]]; then
+  # Unit 2 fills this: --issue slice (gh issue view --json
+  # number,title,state,body,comments → jq-rendered markdown incl. ### Comments).
+  ISSUE_OUT="=== ISSUE #$N ==="
+fi
+
+if [[ "$WANT_RELATIONS" == 1 ]]; then
+  # Unit 2 fills this: --relations slice (blockers / sub-issues / parent /
+  # siblings as titles + state + URL only — never full bodies).
+  REL_OUT="=== RELATIONS #$N ==="
+fi
+
+if [[ "$WANT_PR" == 1 ]]; then
+  # Unit 3 fills this: --pr slice (resolve via dispatch-find-pr, then emit
+  # number, labels, ci rollup, and body; "PR: none" exit 0 when no PR exists).
+  PR_OUT="=== PR ==="
+fi
+
+if [[ "$WANT_DIFF" == 1 ]]; then
+  # Unit 4 fills this: --diff slice (merge-base vs origin/main, --stat,
+  # --name-only, capped whole-file hunks). The Unit-4 build computes the base
+  # sha and emits the "=== DIFF (base <sha>) ===" header; this bare-header form
+  # is a Unit-1 placeholder (no base sha computed yet).
+  DIFF_OUT="=== DIFF ==="
+fi
+
+# ---- Step 3: single flush point — print sections in canonical order ---------
+#
+# Reaching here means every requested section built successfully, so it is now
+# safe to write to stdout. Emit in the fixed canonical order (issue → relations
+# → pr → diff) regardless of flag order, with a blank line between sections so
+# the pack is scannable.
+
+emit() {
+  # Print one section's buffered output followed by a trailing blank line.
+  printf '%s\n\n' "$1"
+}
+
+[[ -n "$ISSUE_OUT" ]] && emit "$ISSUE_OUT"
+[[ -n "$REL_OUT" ]] && emit "$REL_OUT"
+[[ -n "$PR_OUT" ]] && emit "$PR_OUT"
+[[ -n "$DIFF_OUT" ]] && emit "$DIFF_OUT"
+
+exit 0
