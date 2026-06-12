@@ -25,10 +25,10 @@ export interface Router {
   showTerminalError(html: string): void;
 }
 
-function matchRoute(routes: [Route, ...Route[]], path: string): Route {
+function matchRoute(routes: [Route, ...Route[]], path: string): Route | undefined {
   return routes.find((r) =>
     typeof r.path === "string" ? r.path === path : r.path.test(path),
-  ) ?? routes[0];
+  );
 }
 
 /**
@@ -54,7 +54,7 @@ function createNavigator(
     } catch (e) {
       if (!deferProgrammerError(e)) reportError(e);
     }
-    const route = matchRoute(routes, path);
+    const route = matchRoute(routes, path) ?? routes[0];
     try {
       const html = await route.render(path);
       if (id === navigationId) {
@@ -114,10 +114,13 @@ export function createHistoryRouter(
     if (e.button !== 0) return;
     const anchor = (e.target as Element).closest("a");
     if (!anchor) return;
-    if (anchor.getAttribute("target") === "_blank") return;
+    if (anchor.hasAttribute("download")) return;
+    if (anchor.getAttribute("target")) return;
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const href = anchor.getAttribute("href");
-    if (!href || !href.startsWith("/")) return;
+    if (!href || !href.startsWith("/") || href.startsWith("//")) return;
+    const path = new URL(href, location.origin).pathname.replace(/\/$/, "") || "/";
+    if (!matchRoute(routes, path)) return;
     e.preventDefault();
     history.pushState({}, "", href);
     void nav.navigate();
