@@ -8,7 +8,7 @@ import { createPdfRenderer } from "../viewer/pdf.js";
 import { createEpubRenderer } from "../viewer/epub.js";
 import { createImageArchiveRenderer } from "../viewer/image-archive.js";
 import { getFile, putFile } from "../media-cache.js";
-import { isLocalId, getLocalItem, resolveLocalBlob } from "../library.js";
+import { isLocalId, getLocalItem, resolveLocalBlob, whenLocalFolderReady } from "../library.js";
 
 const BACK_LINK = '<a href="/" class="viewer-back">&larr; Back to Library</a>';
 
@@ -58,6 +58,10 @@ export async function renderView(id: string, _user: User | null): Promise<string
   }
 
   if (isLocalId(id)) {
+    // Wait for the initial local-folder init pass to settle before deciding
+    // Not Found — a deep link / refresh navigates before the persisted handle
+    // has bound `localSource`, which would otherwise read as a false miss.
+    await whenLocalFolderReady();
     const item = await getLocalItem(id);
     if (!item) return NOT_FOUND_HTML;
     pendingItem = item;
