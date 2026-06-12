@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockResolveAudioSource = vi.fn();
+const mockRemoveFile = vi.fn();
 
 vi.mock("../src/storage.js", () => ({
   resolveAudioSource: (...args: unknown[]) => mockResolveAudioSource(...args),
+  removeFile: (...args: unknown[]) => mockRemoveFile(...args),
 }));
 
 const mockLogError = vi.fn();
@@ -69,6 +71,7 @@ describe("initPlayer", () => {
     vi.spyOn(audioEl, "play").mockResolvedValue();
     revokeObjectURLSpy = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     mockResolveAudioSource.mockResolvedValue("blob:http://localhost/track-blob");
+    mockRemoveFile.mockResolvedValue(undefined);
   });
 
   it("renders empty state on init", () => {
@@ -213,6 +216,89 @@ describe("initPlayer", () => {
 
       expect(pauseSpy).toHaveBeenCalled();
       expect(playlistEl.querySelector(".playlist-active")).toBeNull();
+    });
+  });
+
+  describe("error event", () => {
+    it("advances to next track on error", async () => {
+      mockResolveAudioSource
+        .mockResolvedValueOnce("blob:http://localhost/t1-blob")
+        .mockResolvedValueOnce("blob:http://localhost/t2-blob");
+
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(track1);
+      player.add(track2);
+
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(1);
+      });
+
+      audioEl.dispatchEvent(new Event("error"));
+
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(2);
+      });
+      expect(mockResolveAudioSource).toHaveBeenCalledWith("media/t2.mp3");
+      expect(mockLogError).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: "audio-element-error",
+          storagePath: "media/t1.mp3",
+        }),
+      );
+      expect(mockRemoveFile).toHaveBeenCalledWith("media/t1.mp3");
+    });
+
+    it("logs the MediaError and its code", async () => {
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(track1);
+
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(1);
+      });
+
+      // jsdom does not populate audioEl.error; stub a MediaError-like object.
+      const mediaError = { code: 3 };
+      Object.defineProperty(audioEl, "error", { configurable: true, value: mediaError });
+      audioEl.dispatchEvent(new Event("error"));
+
+      await vi.waitFor(() => {
+        expect(mockLogError).toHaveBeenCalledWith(
+          mediaError,
+          expect.objectContaining({
+            operation: "audio-element-error",
+            storagePath: "media/t1.mp3",
+            code: 3,
+          }),
+        );
+      });
+    });
+
+    it("stops cleanly at end of queue on error", async () => {
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(track1);
+
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(1);
+      });
+
+      const pauseSpy = vi.spyOn(audioEl, "pause");
+      audioEl.dispatchEvent(new Event("error"));
+
+      expect(pauseSpy).toHaveBeenCalled();
+      expect(playlistEl.querySelector(".playlist-active")).toBeNull();
+      expect(mockRemoveFile).toHaveBeenCalledWith("media/t1.mp3");
+    });
+
+    it("does nothing when no track is current (spurious stop()-triggered error)", () => {
+      // Fresh player with an empty queue: currentIndex is -1, nothing has logged.
+      initPlayer(audioEl, playlistEl);
+
+      audioEl.dispatchEvent(new Event("error"));
+
+      expect(mockLogError).not.toHaveBeenCalled();
+      expect(mockRemoveFile).not.toHaveBeenCalled();
+      expect(audioEl.play).not.toHaveBeenCalled();
     });
   });
 
