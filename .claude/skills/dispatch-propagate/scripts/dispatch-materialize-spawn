@@ -18,14 +18,16 @@
 # supporting detail (a path, a blocker list, the CI line) precedes the token.
 #
 # With `--gap <N>` and `queue` mode, the script FANS OUT: it spawns up to N
-# workers in one held-lock run, selecting a distinct next target each iteration
-# via dispatch-select-target. The first target is the passed-in <issue-N>;
-# targets 2..N come from successive dispatch-select-target calls. The worker no
-# longer registers synchronously (#1048), so the loop threads its SEEN set as
-# `--exclude` to dispatch-select-target AND the just-written reservation marker
-# makes dispatch-select-target's reserved-skip (#1046) skip the reserved
-# worktree — so the next selection yields a distinct target even though the prior
-# worker has not yet registered.
+# workers in one held-lock run. The seed (target 1) is the passed-in <issue-N>;
+# targets 2..GAP come from ONE `dispatch-select-target --top <GAP-after-seed>`
+# scan (#1317) — a single queue pass that returns up to that many distinct
+# ranked targets, instead of one serialized selector call per slot. The seed's
+# just-written reservation marker (dispatch-select-target's reserved-skip, #1046)
+# plus a single static `--exclude <issue-N>` on that one scan close the seed
+# re-selection race; selection dedups the remaining targets internally within
+# that one scan, so no per-slot SEEN threading is needed. The worker no longer
+# registers synchronously (#1048); the reservation marker, not registration,
+# closes the spawn-gap race for each spawned slot.
 # `explicit` mode and `--gap 1` process a single target (backward-compatible).
 # Fan-out (`--gap N` with N>1) is autonomous-only; a manual run arrives as
 # `--gap 1` and takes the single-target path.
@@ -434,33 +436,30 @@ if [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); then
   exit 0
 fi
 
-# Fan out: fill up to GAP slots in one held-lock run. Target 1 is the passed-in
-# N; targets 2..GAP come from successive dispatch-select-target calls. The loop
-# passes its SEEN set as `--exclude` to dispatch-select-target so selection
-# yields the NEXT distinct target instead of re-returning an already-processed
-# one (#1062). The worker is no longer verified-registered (the spawn is async —
-# #1048), so within-loop de-confliction rests on the SEEN `--exclude` AND the
-# reservation marker (dispatch-select-target's reserved-skip, #1046), not on
-# registration visibility. A re-return would otherwise happen via two mechanisms:
-# (1) a target whose just-written reservation or SEEN membership is not honored;
-# or (2) a fast self-close leaving an orphan worktree, which selection treats as
-# a reuse signal (not a conflict) and does not skip. The
-# exclusion defeats both: an excluded target is filtered during the queue scan
-# (and threaded into the leaf trace), so the loop advances to the next distinct
-# startable leaf. The loop stops only on a genuine `empty`, a deferred selection
-# (main-broken / jit-reminder), or a hard error — plus a defensive backstop if
-# selection ever re-returns a SEEN target despite the exclusion (a selector
-# contract violation), to prevent an infinite loop. Per-target park/skip
-# outcomes are recorded and the loop continues; the lock is released ONCE at the
-# end.
-declare -A SEEN=()
-spawned=0
-stop_reason="gap filled"
-cur_n="$N"
-cur_mode="$MODE"
-while :; do
-  process_one_target "$cur_n" "$cur_mode" || { release_lock; exit 2; }
-  SEEN["$cur_n"]=1
+# Fan out: fill up to GAP slots in one held-lock run. The seed (slot 1) is the
+# passed-in N; slots 2..GAP come from ONE `dispatch-select-target --top
+# <GAP-after-seed>` scan (#1317) — a single queue pass yields up to that many
+# distinct ranked targets, replacing the old once-per-slot serialized selector
+# calls (~131s each) that pinned the lock for O(N) scans and never let
+# concurrency accumulate. Per-run fill may be `< GAP` when targets skip (parked /
+# done / worktree-conflict) or when the single scan returns fewer than the gap's
+# worth of eligible targets — that is normal; the next tick compounds toward the
+# target. The seed's reservation marker (dispatch-select-target's reserved-skip,
+# #1046) plus the single static `--exclude "$N"` on that one scan close the seed
+# re-selection race; selection dedups the remaining targets internally within the
+# scan. A defensive SEEN dedup on consumption is the backstop against a
+# re-returned target (it should never fire) so a stray duplicate is skipped
+# rather than re-dispatched. The loop stops on a genuine `empty`, a deferred
+# selection (main-broken / jit-reminder), the gap being filled, or a hard error.
+# Per-target park/skip outcomes are recorded and consumption continues; the lock
+# is released ONCE at the end (or on a hard `exit 2`).
+
+# record_outcome <cur_n>: apply the per-target OUTCOME → detail-line mapping to
+# the (just-processed) target $1, reading the global OUTCOME and mutating the
+# outer `spawned`. Used for both the seed and each consumed selector line so the
+# two paths print identical detail lines and bump the count identically.
+record_outcome() {
+  local cur_n="$1"
   case "$OUTCOME" in
     spawned)        spawned=$(( spawned + 1 )); echo "propagate: spawned #$cur_n" ;;
     target-blocked) echo "propagate: parked #$cur_n ($OUTCOME)" ;;
@@ -485,34 +484,54 @@ while :; do
       esac
       ;;
   esac
-  (( spawned >= GAP )) && break
-  exclude_args=()
-  (( ${#SEEN[@]} > 0 )) && exclude_args=(--exclude "${!SEEN[@]}")
-  SELECTED=$("$SCRIPT_DIR/dispatch-select-target" "${exclude_args[@]}") || true
-  case "$SELECTED" in
-    pr\ *)
-      # Extract the branch from "pr <pr_num> <branch> <phase>" without clobbering $@.
-      { IFS=' ' read -r _f1 _f2 _pr_branch _f4 <<<"$SELECTED"; }
-      cur_n="${_pr_branch%%-*}"; cur_mode=queue
-      ;;
-    issue\ *) cur_n="${SELECTED#issue }"; cur_mode=queue ;;
-    empty)    stop_reason="queue exhausted"; break ;;
-    main-broken\ *|jit-reminder\ *) stop_reason="selection deferred (${SELECTED%% *})"; break ;;
-    *) release_lock
-       echo "dispatch-materialize-spawn: dispatch-select-target emitted unexpected '$SELECTED' in fan-out" >&2
-       exit 2 ;;
-  esac
-  # Defensive backstop (#1062): the loop passes SEEN as --exclude, so
-  # dispatch-select-target must never return an already-processed target. If it
-  # somehow does, that is a selector contract violation — break rather than spin
-  # forever. This stop is unreachable in normal operation; the loop's real
-  # terminators are `empty`, a deferred selection, and hard errors above.
-  if [[ -n "${SEEN[$cur_n]:-}" ]]; then
-    echo "dispatch-materialize-spawn: dispatch-select-target re-returned already-processed target #$cur_n despite --exclude (contract violation); stopping fan-out to avoid an infinite loop" >&2
-    stop_reason="selection re-returned an excluded target (unexpected)"
-    break
+}
+
+declare -A SEEN=()
+spawned=0
+stop_reason="gap filled"
+
+# --- seed: process the passed-in N first (unchanged semantics) ---
+process_one_target "$N" "$MODE" || { release_lock; exit 2; }
+SEEN["$N"]=1
+record_outcome "$N"
+
+if (( spawned < GAP )); then
+  # --- ONE selector scan fills slots 2..GAP (#1317): O(1) scans, not O(N) ---
+  # The single static --exclude "$N" is belt-and-suspenders atop the seed's
+  # just-written reservation marker; selection dedups the rest internally in
+  # this one scan.
+  SELECTED=$("$SCRIPT_DIR/dispatch-select-target" --top "$(( GAP - spawned ))" --exclude "$N") || true
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    case "$line" in
+      pr\ *)
+        # Extract the branch from "pr <pr_num> <branch> <phase>" without clobbering $@.
+        { IFS=' ' read -r _f1 _f2 _pr_branch _f4 <<<"$line"; }
+        cur_n="${_pr_branch%%-*}"; cur_mode=queue ;;
+      issue\ *) cur_n="${line#issue }"; cur_mode=queue ;;
+      empty) stop_reason="queue exhausted"; break ;;
+      main-broken\ *|jit-reminder\ *) stop_reason="selection deferred (${line%% *})"; break ;;
+      *) release_lock
+         echo "dispatch-materialize-spawn: dispatch-select-target emitted unexpected '$line' in fan-out" >&2
+         exit 2 ;;
+    esac
+    # Defensive dedup backstop: the single scan dedups internally and the seed
+    # is --exclude'd, so a SEEN target should never appear; if it does, skip it
+    # quietly rather than re-dispatching.
+    if [[ -n "${SEEN[$cur_n]:-}" ]]; then continue; fi
+    process_one_target "$cur_n" "$cur_mode" || { release_lock; exit 2; }
+    SEEN["$cur_n"]=1
+    record_outcome "$cur_n"
+    (( spawned >= GAP )) && { stop_reason="gap filled"; break; }
+  done <<< "$SELECTED"
+  # Ran off the end of a short list without filling the gap or hitting a
+  # break: the single --top scan returned fewer than GAP-spawned eligible
+  # targets, so the queue is exhausted for this run (the next tick compounds).
+  if (( spawned < GAP )) && [[ "$stop_reason" == "gap filled" ]]; then
+    stop_reason="queue exhausted"
   fi
-done
+fi
+
 release_lock
 if [[ "$stop_reason" == "gap filled" ]]; then
   echo "propagate: spawned $spawned of gap $GAP"

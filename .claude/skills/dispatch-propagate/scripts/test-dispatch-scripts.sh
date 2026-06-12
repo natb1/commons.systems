@@ -3083,6 +3083,178 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 20)
 assert_eq "excluded PR 20 filtered → empty" "empty" "$result"
 teardown
 
+# --- --top N: single-pass multi-target selection (#1317) ---------------------
+# `--top N` emits up to N DISTINCT ranked decision lines in ONE queue scan,
+# preserving the existing priority order (priority axis 1→0, then topic category,
+# then the phase ladder), oldest-first within a bucket — replacing the old
+# once-per-slot serialized selector calls. `--top 1` is byte-identical to the
+# no-flag call. These run end-to-end through the real trace/ci-ready/phase copies.
+
+# T1. --top N returns N distinct ranked lines across buckets, in the priority-
+#     axis → topic-category → phase order. Three help-wanted issues, all
+#     priority 0, no PRs (so all in `plan` phase) but in DIFFERENT topic
+#     categories: 30 (security) → 20 (bug) → 10 (no topic = other). The category
+#     order is the only discriminator, so the output is deterministically
+#     security, bug, other regardless of issue-number or createdAt order.
+echo "Test: --top 3 returns 3 distinct ranked lines in topic-category order"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 3)
+assert_eq "--top 3 ranked across topic categories" "$(printf 'issue 30\nissue 20\nissue 10')" "$result"
+teardown
+
+# T2. --top N honors --exclude: the excluded number never appears. Excluding the
+#     top-ranked security issue 30 leaves bug 20 then other 10.
+echo "Test: --top 3 honors --exclude (excluded number absent)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 3 --exclude 30)
+assert_eq "--top 3 --exclude 30 omits 30" "$(printf 'issue 20\nissue 10')" "$result"
+assert_eq "--top 3 --exclude 30: 30 absent" "0" "$(printf '%s\n' "$result" | grep -c '^issue 30$')"
+teardown
+
+# T3a. --top N with FEWER than N eligible returns all available, no padding.
+#      Only two issues exist; --top 5 returns exactly those two lines.
+echo "Test: --top 5 with 2 eligible returns 2 lines, no padding"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 5)
+assert_eq "--top 5 with 2 eligible → 2 lines" "$(printf 'issue 30\nissue 20')" "$result"
+assert_eq "--top 5 with 2 eligible → no empty padding" "0" "$(printf '%s\n' "$result" | grep -c '^empty$')"
+teardown
+
+# T3b. --top N with NOTHING eligible prints exactly `empty` (one line).
+echo "Test: --top 5 with nothing eligible → empty"
+setup
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 5)
+assert_eq "--top 5 nothing eligible → empty" "empty" "$result"
+teardown
+
+# T4. Multi-leaf descent in ONE scan: a single help-wanted root with several
+#     startable leaves yields MULTIPLE `issue <leaf>` lines from one invocation
+#     (the in-scan growing-local-exclude enumeration, #1317). Root 55 has three
+#     sub-issues 5500/5501/5502, none worktree'd or parked. --top 3 enumerates
+#     all three leaves oldest(lowest-leaf)-first in a single scan.
+echo "Test: --top 3 enumerates multiple startable leaves of one root in one scan"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500},{"number":5501},{"number":5502}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' > "$STUB_DIR/issue-5500.json"
+printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' > "$STUB_DIR/issue-5501.json"
+printf '{"title":"Issue 5502","body":"","comments":[],"number":5502,"state":"OPEN"}\n' > "$STUB_DIR/issue-5502.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 3)
+assert_eq "--top 3 multi-leaf descent in one scan" "$(printf 'issue 5500\nissue 5501\nissue 5502')" "$result"
+teardown
+
+# T4b. A leaf whose worktree is LIVE (a live session owns <leaf>-*) is NOT
+#      returned: the descent skips it (#914) and surfaces the next startable
+#      leaf. Leaf 5500's worktree is live, so --top 3 returns 5501, 5502.
+echo "Test: --top 3 multi-leaf descent skips a live-session-owned leaf"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500},{"number":5501},{"number":5502}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' > "$STUB_DIR/issue-5500.json"
+printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' > "$STUB_DIR/issue-5501.json"
+printf '{"title":"Issue 5502","body":"","comments":[],"number":5502,"state":"OPEN"}\n' > "$STUB_DIR/issue-5502.json"
+# Leaf 5500 has an on-disk worktree owned by a live session.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/5500-leaf\nHEAD def456\nbranch refs/heads/5500-leaf\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "5500-leaf"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 3)
+assert_eq "--top 3 descent skips live leaf 5500 → 5501,5502" "$(printf 'issue 5501\nissue 5502')" "$result"
+assert_eq "--top 3 descent: live leaf 5500 absent" "0" "$(printf '%s\n' "$result" | grep -c '^issue 5500$')"
+teardown
+
+# T4c. A leaf whose worktree is RESERVED (reservation marker present, no live
+#      session) is NOT returned either (#1046): the reserved-skip closes the
+#      spawn-gap race. Leaf 5500 is reserved → --top 3 returns 5501, 5502.
+echo "Test: --top 3 multi-leaf descent skips a reserved leaf"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500},{"number":5501},{"number":5502}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' > "$STUB_DIR/issue-5500.json"
+printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' > "$STUB_DIR/issue-5501.json"
+printf '{"title":"Issue 5502","body":"","comments":[],"number":5502,"state":"OPEN"}\n' > "$STUB_DIR/issue-5502.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/5500-leaf\nHEAD def456\nbranch refs/heads/5500-leaf\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live session, but 5500-leaf carries a reservation marker.
+select_target_fake_claude
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv-sess\nissue=5500\ntimestamp=2026-01-01T00:00:00Z\n' > "$DISPATCH_RESERVATION_DIR/5500-leaf"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 3)
+assert_eq "--top 3 descent skips reserved leaf 5500 → 5501,5502" "$(printf 'issue 5501\nissue 5502')" "$result"
+teardown
+
+# T4d. A leaf whose ISSUE carries dispatch:office-hours is NOT returned: the
+#      office-hours-parked leaf is filtered from the descent. Root 55's leaf 5501
+#      is parked, so --top 3 returns 5500, 5502.
+echo "Test: --top 3 multi-leaf descent skips an office-hours-parked leaf"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500},{"number":5501},{"number":5502}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' > "$STUB_DIR/issue-5500.json"
+printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' > "$STUB_DIR/issue-5501.json"
+printf '{"title":"Issue 5502","body":"","comments":[],"number":5502,"state":"OPEN"}\n' > "$STUB_DIR/issue-5502.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Leaf 5501 is parked: it appears in the dispatch:office-hours parked set the
+# queue-mode trace reads (#1011). The descent must skip it and surface 5502.
+printf '[{"number":5501}]\n' > "$STUB_DIR/trace-parked.json"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 3)
+assert_eq "--top 3 descent skips parked leaf 5501 → 5500,5502" "$(printf 'issue 5500\nissue 5502')" "$result"
+assert_eq "--top 3 descent: parked leaf 5501 absent" "0" "$(printf '%s\n' "$result" | grep -c '^issue 5501$')"
+teardown
+
+# T5. --top 1 byte-parity: on a representative fixture, `--top 1` output is
+#     byte-identical to the plain (no-flag) call. Guards that the default path is
+#     unchanged for every existing caller.
+echo "Test: --top 1 is byte-identical to the no-flag call"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-qa-me" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":99,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+plain=$("$TMPDIR_TEST/dispatch-select-target")
+top1=$("$TMPDIR_TEST/dispatch-select-target" --top 1)
+assert_eq "--top 1 byte-parity (same fixture)" "$plain" "$top1"
+assert_eq "--top 1 parity: expected single decision line" "pr 10 10-verify-me fix-checks" "$top1"
+teardown
+
+# T6. --top is rejected when combined with --qa / --priority-only /
+#     --health-only / --main-broken-sha (default-mode-only flag). Each exits
+#     non-zero with a clear stderr error, mirroring the existing mutual-exclusion
+#     checks.
+for other_flag in --qa --priority-only --health-only --main-broken-sha; do
+  echo "Test: --top 3 $other_flag → usage error (exit 1)"
+  setup
+  echo '[]' > "$STUB_DIR/pr-list-union.json"
+  echo '[]' > "$STUB_DIR/issue-list.json"
+  printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+  err_file="$TMPDIR_TEST/err.txt"
+  if "$TMPDIR_TEST/dispatch-select-target" --top 3 "$other_flag" >/dev/null 2>"$err_file"; then rc=0; else rc=$?; fi
+  assert_eq "--top 3 $other_flag → exit 1" "1" "$rc"
+  err_contents=$(cat "$err_file")
+  [[ "$err_contents" == *"--top cannot combine"* ]] && err_msg=ok || err_msg="missing: $err_contents"
+  assert_eq "--top 3 $other_flag → error mentions --top cannot combine" "ok" "$err_msg"
+  teardown
+done
+
 # --- ready-PR gate (#920) ---
 # An open help-wanted issue whose closing PR is non-draft (ready) is excluded
 # from the issue queue. The gate uses closingIssuesReferences from PR_LIST —
@@ -18351,18 +18523,47 @@ FAKE
 #!/usr/bin/env bash
 echo "\${MAT_WT_DECISION:-create \$1-test}"
 FAKE
+  # Single-scan --top selector fake (#1317): the real dispatch-materialize-spawn
+  # now issues ONE `dispatch-select-target --top <k> --exclude <seed>` scan per
+  # fan-out run instead of one call per slot. This fake honors --top <k> (emits up
+  # to k DISTINCT lines in one call) and --exclude <seed>... (never emits an
+  # excluded number, modelling the selector's internal de-dup against the seed it
+  # is told to skip), drawing targets from MAT_QUEUE in order. It logs EXACTLY ONE
+  # line per invocation, so `wc -l logs/select-target.log` is the scan count — the
+  # #1317 single-scan acceptance assertion reads exactly 1. When fewer than k
+  # eligible targets remain it emits all available then a trailing `empty` (the
+  # selector's genuine-exhaustion contract); when none remain it emits just
+  # `empty`.
   cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
+top=1
+declare -A EX=()
+while [[ \$# -gt 0 ]]; do
+  case "\$1" in
+    --top) shift; top="\$1"; shift ;;
+    --exclude) shift; while [[ \$# -gt 0 && "\$1" =~ ^[0-9]+\$ ]]; do EX["\$1"]=1; shift; done ;;
+    *) shift ;;
+  esac
+done
 read -r -a Q <<< "\${MAT_QUEUE:-}"
-idx_file="$TMPDIR_TEST/logs/select-target.idx"
-i=\$(cat "\$idx_file" 2>/dev/null || echo 0)
-echo "called \$i \${Q[\$i]:-empty}" >> "$TMPDIR_TEST/logs/select-target.log"
-if (( i < \${#Q[@]} )); then
-  echo "issue \${Q[\$i]}"
-  echo \$(( i + 1 )) > "\$idx_file"
-else
-  echo empty
-fi
+# Build the exclude key list explicitly: \${!EX[*]:-} (key-listing + default) yields
+# empty under bash even when keys exist, so iterate instead.
+ex_keys=""
+if (( \${#EX[@]} > 0 )); then ex_keys="\${!EX[*]}"; fi
+echo "called top=\$top exclude=\$ex_keys" >> "$TMPDIR_TEST/logs/select-target.log"
+emitted=0
+declare -A SEEN_OUT=()
+for n in "\${Q[@]}"; do
+  (( emitted >= top )) && break
+  [[ -n "\${EX[\$n]:-}" ]] && continue
+  [[ -n "\${SEEN_OUT[\$n]:-}" ]] && continue
+  SEEN_OUT["\$n"]=1
+  echo "issue \$n"
+  emitted=\$(( emitted + 1 ))
+done
+# Fewer than k eligible → the selector's genuine-exhaustion line so the consumer
+# stops cleanly with "queue exhausted" rather than spinning.
+if (( emitted < top )); then echo empty; fi
 FAKE
   cat > "$TMPDIR_TEST/dispatch-phase" <<'FAKE'
 #!/usr/bin/env bash
@@ -18997,137 +19198,176 @@ assert_eq "spawnfail-fanout: stderr warns on each spawn-failed" "3" \
 assert_eq "spawnfail-fanout: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
-# --- fan-out: dispatch-select-target invoked between spawns ------------------
-echo "Test: materialize-spawn fan-out invokes dispatch-select-target between spawns"
+# --- fan-out: ONE dispatch-select-target scan fills slots 2..GAP (#1317) -----
+# #1317 acceptance: a --gap N fan-out performs O(1) selector scans, not O(N). The
+# seed (839) is processed first, then a SINGLE `--top` scan supplies the rest of
+# the gap (720, 508). The fake selector logs one line per invocation, so the
+# scan count is `wc -l logs/select-target.log` — it MUST be exactly 1.
+echo "Test: materialize-spawn fan-out issues exactly ONE selector scan (#1317)"
 mat_setup
 export MAT_QUEUE="720 508"
 out=$(run_mat 839 queue --gap 3)
-# 3 spawns (839 + 720 + 508); select-target invoked at least twice (for targets 2 and 3).
-assert_eq "distinct: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
-assert_eq "distinct: select-target invoked >=2" "1" \
-  "$([ "$(wc -l < "$TMPDIR_TEST/logs/select-target.log")" -ge 2 ] && echo 1 || echo 0)"
-assert_eq "distinct: worktrees all unique" "3" \
+# 3 spawns (839 + 720 + 508), all from the seed + ONE single-pass selector scan.
+assert_eq "single-scan: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+# #1317 single-scan acceptance assertion: exactly ONE selector invocation.
+assert_eq "single-scan: select-target invoked exactly once (#1317)" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/select-target.log" | tr -d ' ')"
+assert_eq "single-scan: worktrees all unique" "3" \
   "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
+# The single scan was asked for the gap-after-seed slot count and told to exclude
+# the seed (belt-and-suspenders atop the seed's reservation marker).
+assert_eq "single-scan: scan asked for --top 2, --exclude 839" "called top=2 exclude=839" \
+  "$(cat "$TMPDIR_TEST/logs/select-target.log")"
 mat_teardown
 
-# --- fan-out exclusion (#1062): the loop passes its SEEN set as --exclude so ---
-# dispatch-select-target yields the NEXT distinct target instead of re-returning
-# an already-processed one. Each of the following tests overrides the default
-# (arg-ignoring) select-target fake with an EXCLUDE-HONORING fake that returns
-# the first MAT_QUEUE entry NOT in the passed --exclude set. WITHOUT --exclude
-# this fake returns the queue HEAD on every call — re-surfacing an already-
-# spawned target — the exact scenario the loop's exclusion must defeat. The
-# helper below writes that fake into the live TMPDIR_TEST.
-write_exclude_honoring_select_target() {
-  cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+# --- fan-out single-scan consumption (#1317, replacing the #1062 loop tests) --
+# Pre-#1317 the loop re-invoked dispatch-select-target once per slot, threading a
+# growing --exclude SEEN set to defeat a re-surfaced (lagged-live / orphan
+# self-close) target and to drain a multi-leaf subtree past an already-processed
+# leaf. Single-pass selection (#1317) moves ALL of that de-dup INTO the selector:
+# one `--top` scan returns distinct ranked targets, so the loop's job is now just
+# to CONSUME that one multi-line list. The de-dup-mechanism coverage (re-surface
+# exclusion, multi-leaf-subtree descent) moved to the dispatch-select-target
+# `--top` section above; the cases that remain here are what the loop still owns:
+# consuming a multi-line list across distinct worktrees, the defensive SEEN
+# backstop, and stopping cleanly on `empty` / a deferred selection line.
+
+# (consume) multi-line list: the seed (839) plus a single `--top` scan returning
+# 720 and 508 in one call → 3 distinct-worktree spawns from ONE selector scan.
+echo "Test: materialize-spawn fan-out consumes a multi-line --top list across distinct worktrees (#1317)"
+mat_setup
+export MAT_QUEUE="720 508"
+out=$(run_mat 839 queue --gap 3)
+assert_eq "consume-list: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "consume-list: distinct worktrees" "3" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
+assert_eq "consume-list: ONE selector scan (#1317)" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/select-target.log" | tr -d ' ')"
+assert_eq "consume-list: summary 3 of gap 3" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 3 of gap 3')"
+assert_eq "consume-list: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+
+# (consume PR lines) the single scan can return `pr <num> <branch> <phase>` lines
+# too; the loop keys the spawn on the branch prefix (<N>-), exactly as the
+# single-target path does. Here the scan yields a PR on branch 720-feature plus an
+# issue 508; the seed 839 + both → 3 distinct-worktree spawns from one scan.
+echo "Test: materialize-spawn fan-out consumes pr <branch> lines, keys spawn on branch prefix (#1317)"
+mat_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
-# Exclude-honoring fake (#1062): returns the first MAT_QUEUE entry NOT in the
-# passed --exclude set, modelling a real selector yielding the next distinct
-# target. WITHOUT --exclude it returns the first entry every call — re-surfacing
-# an already-spawned target (registration lag / orphan self-close), the exact
-# scenario the loop's exclusion must defeat.
-declare -A EX=()
-while [[ \$# -gt 0 ]]; do
-  case "\$1" in
-    --exclude) shift; while [[ \$# -gt 0 && "\$1" =~ ^[0-9]+\$ ]]; do EX["\$1"]=1; shift; done ;;
-    *) shift ;;
-  esac
-done
-read -r -a Q <<< "\${MAT_QUEUE:-}"
-echo "called exclude=\${!EX[*]:-}" >> "$TMPDIR_TEST/logs/select-target.log"
-for n in "\${Q[@]}"; do
-  if [[ -z "\${EX[\$n]:-}" ]]; then echo "issue \$n"; exit 0; fi
-done
-echo empty
+echo "scan \$*" >> "$TMPDIR_TEST/logs/select-target.log"
+echo "pr 9001 720-feature fix-checks"
+echo "issue 508"
 FAKE
-  chmod +x "$TMPDIR_TEST/dispatch-select-target"
-}
-
-# (a) lagged-live re-surface: queue HEAD 839 is the already-spawned arg, re-
-# surfacing because its live ownership is not yet visible to the next selection
-# (mechanism 1). Without the loop's --exclude the fake would re-return 839 every
-# call and the run would stall at 1 spawn. With it, selection advances 720, 508.
-echo "Test: materialize-spawn fan-out excludes lagged-live re-surfaced target (#1062)"
-mat_setup
-write_exclude_honoring_select_target
-export MAT_QUEUE="839 720 508"
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_mat 839 queue --gap 3)
-assert_eq "fanout-lag: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
-assert_eq "fanout-lag: distinct worktrees" "3" \
+assert_eq "consume-pr: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "consume-pr: ONE selector scan (#1317)" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/select-target.log" | tr -d ' ')"
+# The pr line's worktree is keyed on the branch prefix 720, not the PR number 9001.
+assert_eq "consume-pr: pr line keyed on branch prefix 720" "1" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | grep -cx '720')"
+assert_eq "consume-pr: distinct worktrees (839,720,508)" "3" \
   "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
-assert_eq "fanout-lag: summary 3 of gap 3" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 3 of gap 3')"
-assert_eq "fanout-lag: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "fanout-lag: no 'no further distinct targets' stop" "0" \
-  "$(printf '%s\n' "$out" | grep -c 'no further distinct targets')"
+assert_eq "consume-pr: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
 mat_teardown
 
-# (a') orphan (self-closed) re-surface: 720 re-surfaces because it self-closed
-# fast, leaving an orphan worktree selection does not skip (mechanism 2). The
-# duplicate 720 in the queue is spawned once; the exclusion carries it past.
-echo "Test: materialize-spawn fan-out excludes orphan self-closed re-surfaced target (#1062)"
+# (backstop) defensive SEEN de-dup: the selector should never re-return the seed
+# (the loop passes --exclude <seed>, and single-pass selection de-dups
+# internally), but if a stray duplicate ever appears the loop must SKIP it
+# silently rather than re-dispatch it. Here the scan returns the seed 839 again
+# plus a genuine 720: 839 is skipped (already SEEN), 720 spawns → 2 spawns, NOT 3.
+echo "Test: materialize-spawn fan-out defensive SEEN de-dup skips a re-returned target (#1317)"
 mat_setup
-write_exclude_honoring_select_target
-export MAT_QUEUE="720 720 508"
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+echo "scan \$*" >> "$TMPDIR_TEST/logs/select-target.log"
+echo "issue 839"
+echo "issue 720"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_mat 839 queue --gap 3)
-assert_eq "fanout-orphan: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
-assert_eq "fanout-orphan: distinct worktrees (839,720,508)" "3" \
+assert_eq "seen-dedup: spawn count (seed + 720, not the re-returned 839)" "2" \
+  "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "seen-dedup: 839 spawned exactly once" "1" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | grep -cx '839')"
+assert_eq "seen-dedup: distinct worktrees (839,720)" "2" \
   "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
-assert_eq "fanout-orphan: summary 3 of gap 3" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 3 of gap 3')"
-assert_eq "fanout-orphan: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "fanout-orphan: no 'no further distinct targets' stop" "0" \
-  "$(printf '%s\n' "$out" | grep -c 'no further distinct targets')"
+assert_eq "seen-dedup: ONE selector scan (#1317)" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/select-target.log" | tr -d ' ')"
+assert_eq "seen-dedup: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
 mat_teardown
 
-# (b) multi-leaf subtree, first leaf excluded drains to the next: the exclusion
-# threads into the leaf trace, so a subtree whose first startable leaf (5500) was
-# already processed advances to its sibling (5501) rather than abandoning the
-# parent's remaining leaves.
-echo "Test: materialize-spawn fan-out drains multi-leaf subtree past excluded first leaf (#1062)"
+# (stop on empty) genuinely empty frontier: the seed spawns, then the single scan
+# returns `empty` (nothing else eligible) → the loop stops cleanly with the
+# "queue exhausted" stop reason, NOT a re-selection spin.
+echo "Test: materialize-spawn fan-out stops cleanly on an empty selector result (#1317)"
 mat_setup
-write_exclude_honoring_select_target
-export MAT_QUEUE="5500 5501"
-out=$(run_mat 5500 queue --gap 2)
-assert_eq "fanout-subtree: spawn count" "2" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
-assert_eq "fanout-subtree: distinct worktrees (5500,5501)" "2" \
-  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
-assert_eq "fanout-subtree: summary 2 of gap 2" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 2 of gap 2')"
-assert_eq "fanout-subtree: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-mat_teardown
-
-# (c) genuinely empty frontier: once 839 is excluded the queue has nothing left,
-# so selection returns `empty` and the loop stops cleanly on a real empty — not
-# on a re-selection.
-echo "Test: materialize-spawn fan-out stops cleanly on a genuinely empty frontier (#1062)"
-mat_setup
-write_exclude_honoring_select_target
 export MAT_QUEUE=""
 out=$(run_mat 839 queue --gap 5)
 assert_eq "fanout-empty: spawn count" "1" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "fanout-empty: ONE selector scan (#1317)" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/select-target.log" | tr -d ' ')"
 assert_eq "fanout-empty: summary 1 of gap 5 (queue exhausted)" "1" \
   "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 5 (queue exhausted)')"
 assert_eq "fanout-empty: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "fanout-empty: no 'no further distinct targets' stop" "0" \
-  "$(printf '%s\n' "$out" | grep -c 'no further distinct targets')"
 mat_teardown
 
-# (backstop) contract violation: dispatch-select-target ALWAYS returns 839 (the
-# already-processed arg) regardless of --exclude. The loop's defensive backstop
-# (#1062) must break rather than spin forever: it records SEEN[839] for target 1,
-# the fake re-returns 839, SEEN[839] is set → backstop fires.
-echo "Test: materialize-spawn fan-out backstop breaks on selector contract violation (#1062)"
+# (stop on deferred) a deferred selection line (main-broken / jit-reminder) breaks
+# the consumption loop: the seed spawns, the scan returns a `main-broken <sha>`
+# line, the loop stops with the "selection deferred (main-broken)" stop reason and
+# spawns nothing further. The next tick re-evaluates once the deferral clears.
+echo "Test: materialize-spawn fan-out stops on a deferred (main-broken) selection line (#1317)"
 mat_setup
-cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
-echo "issue 839"
+echo "scan \$*" >> "$TMPDIR_TEST/logs/select-target.log"
+echo "main-broken deadbeef"
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-select-target"
-out=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue --gap 5 2>"$TMPDIR_TEST/logs/mat-stderr.log")
-assert_eq "backstop: spawn count (only the arg)" "1" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
-assert_eq "backstop: summary 1 of gap 5 (unexpected re-selection)" "1" \
-  "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 5 (selection re-returned an excluded target (unexpected))')"
-assert_eq "backstop: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "backstop: stderr names the contract violation" "1" \
-  "$(grep -c 'contract violation' "$TMPDIR_TEST/logs/mat-stderr.log")"
+out=$(run_mat 839 queue --gap 5)
+assert_eq "deferred: spawn count (seed only)" "1" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+assert_eq "deferred: summary names the deferred stop reason" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 5 (selection deferred (main-broken))')"
+assert_eq "deferred: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+
+# (stop on deferred → drain) the same deferral when the SEED itself did not spawn
+# (a done seed) yields zero net spawns → terminal `drain`.
+echo "Test: materialize-spawn fan-out deferred line with a non-spawning seed → drain (#1317)"
+mat_setup
+export MAT_PHASE=done
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+echo "scan \$*" >> "$TMPDIR_TEST/logs/select-target.log"
+echo "jit-reminder 4242 digest"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_mat 839 queue --gap 5)
+assert_eq "deferred-drain: spawn count" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ' || echo 0)"
+assert_eq "deferred-drain: summary 0 of gap 5 (selection deferred (jit-reminder))" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 0 of gap 5 (selection deferred (jit-reminder))')"
+assert_eq "deferred-drain: terminal token" "drain" "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+
+# (unexpected line) an unrecognized selector line is a hard error: release the
+# lock and exit 2 (it must NOT be silently consumed or treated as a target).
+echo "Test: materialize-spawn fan-out unexpected selector line → exit 2 + lock released (#1317)"
+mat_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+echo "scan \$*" >> "$TMPDIR_TEST/logs/select-target.log"
+echo "garbage not-a-decision-line"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+err=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue --gap 5 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"emitted unexpected"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "unexpected-line: error + exit 2" "ok" "$status"
+assert_eq "unexpected-line: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
 # --- --gap unbounded is removed → usage error exit 2 -------------------------
