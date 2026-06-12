@@ -174,6 +174,82 @@ build_pr_section() {
   printf '\n%s\n' "$pr_body"
 }
 
+# --diff: diff the worktree branch against its merge-base with the already-merged
+# origin/main, emitting the FULL section incl. its own
+# "=== DIFF (base <sha>) ===" header — unlike --issue/--relations/--pr (whose
+# call sites prepend a fixed header), only this builder knows the base sha, which
+# is computed here. NO `git fetch`: the worktree already has origin/main merged at
+# provision/phase-entry, so relying on the local ref keeps the slice
+# deterministic, read-only, and test-friendly; a missing origin/main / failed
+# merge-base exits non-zero (no fallback, per .claude/rules/code-style.md).
+#
+# CWD TRAP: all git ops run in the inherited cwd (the worktree) — NEVER cd to
+# resolve_project_root(), which returns the .bare parent (NOT the branch
+# checkout); a merge-base HEAD origin/main there resolves the wrong HEAD.
+#
+# One consistent diff form — `git diff "$base"` (working-tree mode, incl.
+# uncommitted) — across --stat, --name-only, and the hunk loop, so the file count
+# and the truncation line reconcile. Hunks are capped at DISPATCH_CONTEXT_DIFF_CAP
+# bytes (default 60000), whole-file granular, CHECK-BEFORE-EMIT: before emitting a
+# file's hunk, if adding its byte length would exceed the cap, STOP and count that
+# file plus all remaining files as omitted, printing exactly one
+# "truncated: N files omitted" line. Never truncate mid-file (the silent over-cap
+# the spec forbids). A single file whose hunk alone exceeds the cap emits ZERO
+# hunks and is itself counted among the omitted N — the --stat/--name-only output
+# still names every file, so nothing is hidden; only hunk bodies are capped.
+build_diff_section() {
+  local n="$1"
+  local cap="${DISPATCH_CONTEXT_DIFF_CAP:-60000}"
+
+  local base
+  base=$(git merge-base HEAD origin/main) || { echo "error: --diff: git merge-base HEAD origin/main failed (origin/main missing?)" >&2; return 1; }
+
+  local stat name_only
+  stat=$(git diff --stat "$base") || { echo "error: --diff: git diff --stat failed" >&2; return 1; }
+  name_only=$(git diff --name-only "$base") || { echo "error: --diff: git diff --name-only failed" >&2; return 1; }
+
+  printf '=== DIFF (base %s) ===\n' "$base"
+  printf '\n--- stat ---\n%s\n' "$stat"
+  printf '\n--- files ---\n%s\n' "$name_only"
+  printf '\n--- hunks ---\n'
+
+  # Iterate the changed-file list. `name_only` is newline-separated; an empty
+  # diff yields an empty string, which mapfile turns into a zero-length array.
+  local files=()
+  if [[ -n "$name_only" ]]; then
+    mapfile -t files <<<"$name_only"
+  fi
+
+  local total=${#files[@]}
+  local emitted_bytes=0 omitted=0 i
+  for (( i = 0; i < total; i++ )); do
+    local file="${files[$i]}"
+    local hunk hlen
+    # Anchor the pathspec with :(top) so it resolves repo-root-relative (matching
+    # the repo-root-relative paths --name-only emits) regardless of the inherited
+    # cwd — a bare `-- "$file"` would interpret $file relative to cwd and miss the
+    # file when invoked from a subdir. This is a pathspec anchor only; it does NOT
+    # cd, so merge-base still runs against the inherited-cwd HEAD (no cd to .bare).
+    hunk=$(git diff "$base" -- ":(top)$file") || { echo "error: --diff: git diff for '$file' failed" >&2; return 1; }
+    # Byte length (NOT ${#hunk}, which counts characters — multibyte content like
+    # this repo's em-dashes would undercount). wc -c is the byte measure.
+    hlen=$(printf '%s' "$hunk" | wc -c) || return 1
+    hlen=${hlen//[[:space:]]/}
+    # Check BEFORE emitting: if this file would push past the cap, stop and count
+    # this file plus all remaining files as omitted (never truncate mid-file).
+    if (( emitted_bytes + hlen > cap )); then
+      omitted=$(( total - i ))
+      break
+    fi
+    printf '%s\n' "$hunk"
+    emitted_bytes=$(( emitted_bytes + hlen ))
+  done
+
+  if (( omitted > 0 )); then
+    printf 'truncated: %d files omitted\n' "$omitted"
+  fi
+}
+
 # ---- Step 2: build each requested section into its own variable -------------
 #
 # Buffer-then-flush is mandatory (NOT a stylistic choice): each section is built
@@ -219,11 +295,11 @@ $PR_BODY"
 fi
 
 if [[ "$WANT_DIFF" == 1 ]]; then
-  # Unit 4 fills this: --diff slice (merge-base vs origin/main, --stat,
-  # --name-only, capped whole-file hunks). The Unit-4 build computes the base
-  # sha and emits the "=== DIFF (base <sha>) ===" header; this bare-header form
-  # is a Unit-1 placeholder (no base sha computed yet).
-  DIFF_OUT="=== DIFF ==="
+  # --diff slice (merge-base vs origin/main, --stat, --name-only, capped
+  # whole-file hunks). Unlike the slices above, the builder owns its
+  # "=== DIFF (base <sha>) ===" header — the base sha is computed during the
+  # build, so only build_diff_section knows it; no separate header prepend here.
+  DIFF_OUT=$(build_diff_section "$N") || { echo "error: --diff: failed to build diff section for #$N" >&2; exit 1; }
 fi
 
 # ---- Step 3: single flush point — print sections in canonical order ---------
