@@ -68,6 +68,81 @@ if (( WANT_ISSUE + WANT_RELATIONS + WANT_PR + WANT_DIFF == 0 )); then
   exit 2
 fi
 
+# ---- Section builders (Unit 2: --issue, --relations) ------------------------
+#
+# Each builder renders its section to stdout and returns non-zero on any gh
+# failure (NEVER prints a partial section + returns 0). The call sites below
+# assign the builder's output into the section variable and convert a non-zero
+# return into a clear-error `exit 1` — so a failure aborts before the flush with
+# no half-pack on stdout. Inside a builder, command substitutions use the
+# two-line `local x; x=$(cmd) || return 1` form: `local x=$(cmd)` would mask the
+# substitution's failure under set -e.
+
+# --issue: one `gh issue view --json` fetch rendered to clean markdown prose —
+# a `## Issue #N (state): title` heading, the body, then a `### Comments`
+# subsection (each comment as `**@author** (date): body`). Renders from the
+# single JSON object so the body AND the comment thread both appear (plain
+# `gh issue view` prints one or the other; raw JSON re-adds the escaping bloat
+# this script exists to remove). The comment render reuses the field shape from
+# sync-issue-context's render_issue_body (.author.login, .createdAt).
+build_issue_section() {
+  local n="$1"
+  local json
+  json=$(gh_retry gh issue view "$n" --json number,title,state,body,comments) || return 1
+  jq -r '
+    "## Issue #\(.number) (\(.state)): \(.title)\n\n" +
+    (.body // "") +
+    (if (.comments | length) > 0 then
+       "\n\n### Comments\n\n" +
+       ([.comments[] | "**@\(.author.login // "unknown")** (\(.createdAt // "")): \(.body // "")"] | join("\n\n"))
+     else "" end)
+  ' <<<"$json" || return 1
+}
+
+# --relations: blockers / sub-issues / parent / siblings as titles + state + URL
+# only — NEVER any related issue's body or comments. The three array endpoints
+# carry number/state/title/html_url inline, so one gh_api_array call each
+# projects them with no per-issue body fetch. Parent is an OBJECT endpoint (not
+# an array): raw `gh api` with 404 discrimination (no parent → emit nothing for
+# parent or siblings, exit stays 0 — matching issue-parent). Siblings are the
+# parent's sub-issues minus self, only when a parent exists.
+build_relations_section() {
+  local n="$1"
+  local rel_proj='.[] | "#\(.number) [\(.state)] \(.title) — \(.html_url)"'
+  local blockers sub_issues
+  blockers=$(gh_api_array "/repos/{owner}/{repo}/issues/$n/dependencies/blocked_by" "$rel_proj") || return 1
+  sub_issues=$(gh_api_array "/repos/{owner}/{repo}/issues/$n/sub_issues" "$rel_proj") || return 1
+
+  printf 'Blockers:\n'
+  if [[ -n "$blockers" ]]; then printf '%s\n' "$blockers" | sed 's/^/  /'; else printf '  (none)\n'; fi
+  printf 'Sub-issues:\n'
+  if [[ -n "$sub_issues" ]]; then printf '%s\n' "$sub_issues" | sed 's/^/  /'; else printf '  (none)\n'; fi
+
+  # Parent: raw gh api (NOT gh_api_array — the endpoint returns an object, and
+  # NOT gh_retry — gh_retry forwards the 404 to stderr, defeating discrimination).
+  # Capture stderr so a 404 / "No parent issue found" body is visible: that means
+  # "no parent" (not an error) → skip parent and siblings, exit stays 0. Any other
+  # failure exits non-zero (no fallback, per .claude/rules/code-style.md).
+  local parent_json parent_num parent_line
+  if parent_json=$(gh api "/repos/{owner}/{repo}/issues/$n/parent" 2>&1); then
+    parent_num=$(jq -r '.number' <<<"$parent_json") || return 1
+    parent_line=$(jq -r '"#\(.number) [\(.state)] \(.title) — \(.html_url)"' <<<"$parent_json") || return 1
+    printf 'Parent:\n  %s\n' "$parent_line"
+
+    # Siblings: the parent's sub-issues minus self.
+    local sib_filter siblings
+    sib_filter=".[] | select(.number != $n) | \"#\\(.number) [\\(.state)] \\(.title) — \\(.html_url)\""
+    siblings=$(gh_api_array "/repos/{owner}/{repo}/issues/$parent_num/sub_issues" "$sib_filter") || return 1
+    printf 'Siblings:\n'
+    if [[ -n "$siblings" ]]; then printf '%s\n' "$siblings" | sed 's/^/  /'; else printf '  (none)\n'; fi
+  elif [[ "$parent_json" == *"404"* || "$parent_json" == *"No parent issue found"* ]]; then
+    : # no parent → emit nothing for parent or siblings; not an error
+  else
+    echo "error: --relations: failed to fetch parent for #$n: $parent_json" >&2
+    return 1
+  fi
+}
+
 # ---- Step 2: build each requested section into its own variable -------------
 #
 # Buffer-then-flush is mandatory (NOT a stylistic choice): each section is built
@@ -88,15 +163,19 @@ PR_OUT=""
 DIFF_OUT=""
 
 if [[ "$WANT_ISSUE" == 1 ]]; then
-  # Unit 2 fills this: --issue slice (gh issue view --json
-  # number,title,state,body,comments → jq-rendered markdown incl. ### Comments).
-  ISSUE_OUT="=== ISSUE #$N ==="
+  # --issue slice (gh issue view --json number,title,state,body,comments →
+  # jq-rendered markdown incl. ### Comments). Header line, blank line, then prose.
+  ISSUE_BODY=$(build_issue_section "$N") || { echo "error: --issue: failed to build issue section for #$N" >&2; exit 1; }
+  ISSUE_OUT="=== ISSUE #$N ===
+$ISSUE_BODY"
 fi
 
 if [[ "$WANT_RELATIONS" == 1 ]]; then
-  # Unit 2 fills this: --relations slice (blockers / sub-issues / parent /
-  # siblings as titles + state + URL only — never full bodies).
-  REL_OUT="=== RELATIONS #$N ==="
+  # --relations slice (blockers / sub-issues / parent / siblings as titles +
+  # state + URL only — never full bodies). Header line, blank line, then groups.
+  REL_BODY=$(build_relations_section "$N") || { echo "error: --relations: failed to build relations section for #$N" >&2; exit 1; }
+  REL_OUT="=== RELATIONS #$N ===
+$REL_BODY"
 fi
 
 if [[ "$WANT_PR" == 1 ]]; then
