@@ -22612,11 +22612,16 @@ cmp_setup() {
   git clone -q "$CMP_BARE" "$CMP_CLONE" 2>/dev/null
   git -C "$CMP_CLONE" config user.email "test@test"
   git -C "$CMP_CLONE" config user.name "Test"
+
+  # Override the worktrees root to $CMP_TMPDIR so that $CMP_CLONE (=
+  # $CMP_TMPDIR/clone) is treated as a valid worktree by the validation guard.
+  export DISPATCH_WORKTREES_ROOT="$CMP_TMPDIR"
 }
 
 cmp_teardown() {
   rm -rf "$CMP_TMPDIR"
   unset CMP_TMPDIR CMP_BARE CMP_CLONE
+  unset DISPATCH_WORKTREES_ROOT
 }
 
 # --- Case 1: merge-only, clean → exit 0, new commit present in clone ----------
@@ -22847,6 +22852,62 @@ assert_eq "non-ff push rejection → local HEAD advanced (commit was made)" \
 origin_feature_tip=$(git -C "$CMP_BARE" rev-parse feature-x)
 assert_eq "non-ff push rejection → origin feature-x tip is helper's (not force-pushed)" \
   "$helper_tip" "$origin_feature_tip"
+cmp_teardown
+
+# --- Case 8: foreign --worktree outside worktrees root → exit 2, no commit ---
+echo "Test: foreign --worktree outside worktrees root → exit 2, no commit"
+cmp_setup
+unset DISPATCH_WORKTREES_ROOT          # exercise the real derivation
+ATTACKER=$(mktemp -d)                   # independent dir, not under CMP_TMPDIR
+git init -q -b main "$ATTACKER"
+git -C "$ATTACKER" config user.email "atk@atk"
+git -C "$ATTACKER" config user.name "Attacker"
+printf 'seed\n' > "$ATTACKER/seed.txt"
+git -C "$ATTACKER" add seed.txt
+git -C "$ATTACKER" commit -q -m "attacker seed"
+atk_head_before=$(git -C "$ATTACKER" rev-parse HEAD)
+printf 'pwned\n' > "$ATTACKER/seed.txt"
+set +e
+"$CMP" --worktree "$ATTACKER" --intent "exfil" --file seed.txt
+cmp8_rc=$?
+set -e
+assert_eq "foreign --worktree → exit 2" "2" "$cmp8_rc"
+atk_head_after=$(git -C "$ATTACKER" rev-parse HEAD)
+assert_eq "foreign --worktree → attacker HEAD unchanged (no commit)" \
+  "$atk_head_before" "$atk_head_after"
+rm -rf "$ATTACKER"
+export DISPATCH_WORKTREES_ROOT="$CMP_TMPDIR"   # restore for symmetry before teardown
+cmp_teardown
+
+# --- Case 9: nonexistent --worktree outside the worktrees root → exit 2 -------
+# Exercise the worktrees-root guard, not the later cd failure. On Linux, GNU
+# realpath returns rc=0 for a nonexistent path, so a nonexistent path *under*
+# the override root (e.g. "$CMP_TMPDIR/does-not-exist") would pass the
+# case-statement prefix check and reach the cd — exiting 2 only because cd
+# fails, which tests the wrong guard. By pointing at a nonexistent path OUTSIDE
+# the worktrees root, the case-statement rejection fires before any cd on every
+# platform (on macOS the realpath failure catches it even earlier).
+echo "Test: nonexistent --worktree outside worktrees root → exit 2"
+cmp_setup
+set +e
+"$CMP" --worktree "$CMP_TMPDIR/../outside-does-not-exist" --merge-only
+cmp9_rc=$?
+set -e
+assert_eq "nonexistent --worktree outside root → exit 2" "2" "$cmp9_rc"
+cmp_teardown
+
+# --- Case 10: --worktree under the root but un-cd-able → exit 2 ----------------
+# A nonexistent path UNDER the worktrees root passes the realpath/prefix guard
+# on Linux (GNU realpath succeeds for nonexistent paths) and is rejected only by
+# the subsequent cd failure. This pins that distinct exit-2 path so Case 9's
+# guard coverage and the cd-failure coverage stay separate.
+echo "Test: --worktree under root but un-cd-able → exit 2"
+cmp_setup
+set +e
+"$CMP" --worktree "$CMP_TMPDIR/does-not-exist" --merge-only
+cmp10_rc=$?
+set -e
+assert_eq "un-cd-able --worktree under root → exit 2" "2" "$cmp10_rc"
 cmp_teardown
 
 # ============================================================================
