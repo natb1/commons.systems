@@ -1,4 +1,5 @@
 import type { LatestPost } from "./types.ts";
+import { isParseableDate } from "../date.ts";
 
 function parseAtomFeed(doc: Document): LatestPost | null {
   const entry = doc.querySelector("feed > entry");
@@ -12,7 +13,8 @@ function parseAtomFeed(doc: Document): LatestPost | null {
     undefined;
   if (!title || !url) return null;
   if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
-  return { title, url, publishedAt: published };
+  const publishedAt = published && isParseableDate(published) ? published : undefined;
+  return { title, url, publishedAt };
 }
 
 function parseRssFeed(doc: Document): LatestPost | null {
@@ -23,7 +25,8 @@ function parseRssFeed(doc: Document): LatestPost | null {
   const pubDate = item.querySelector("pubDate")?.textContent ?? undefined;
   if (!title || !url) return null;
   if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
-  return { title, url, publishedAt: pubDate };
+  const publishedAt = pubDate && isParseableDate(pubDate) ? pubDate : undefined;
+  return { title, url, publishedAt };
 }
 
 export function parseXml(text: string): LatestPost | null {

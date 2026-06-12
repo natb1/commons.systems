@@ -75,6 +75,44 @@ describe("parseXml", () => {
     });
   });
 
+  it("drops publishedAt when Atom date is unparseable", () => {
+    const feed = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Test Blog</title>
+  <entry>
+    <title>Bad Date Post</title>
+    <link href="https://example.com/bad-date-atom"/>
+    <published>not-a-date</published>
+  </entry>
+</feed>`;
+    const result = parseXml(feed);
+    expect(result).toEqual({
+      title: "Bad Date Post",
+      url: "https://example.com/bad-date-atom",
+      publishedAt: undefined,
+    });
+  });
+
+  it("drops publishedAt when RSS pubDate is unparseable", () => {
+    const feed = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Test Blog</title>
+    <item>
+      <title>Bad Date RSS Post</title>
+      <link>https://example.com/bad-date-rss</link>
+      <pubDate>garbage</pubDate>
+    </item>
+  </channel>
+</rss>`;
+    const result = parseXml(feed);
+    expect(result).toEqual({
+      title: "Bad Date RSS Post",
+      url: "https://example.com/bad-date-rss",
+      publishedAt: undefined,
+    });
+  });
+
   it("uses updated date when published is absent", () => {
     const feedWithUpdated = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
