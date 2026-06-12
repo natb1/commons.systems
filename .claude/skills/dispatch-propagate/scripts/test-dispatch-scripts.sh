@@ -23329,10 +23329,15 @@ lw_setup() {
   LW_WT_BASENAME="$(basename "$LW_WT")"
 
   # dispatch-route stub: print the chosen directive, exit with the chosen code.
+  # Records its cwd ($PWD) so the launcher's worktree-entry contract is testable:
+  # the REAL dispatch-route derives the worktree from `git rev-parse --show-toplevel`
+  # (its cwd), so the launcher must cd into <worktree-path> before calling it
+  # (regression guard for the #1405 detach dropping the old --cwd spawn's cwd).
   cat > "$LW_DIR/dispatch-route" <<'STUB'
 #!/usr/bin/env bash
 D="$(cd "$(dirname "$0")" && pwd)"
 echo "route $*" >> "$D/route-argv"
+pwd > "$D/route-pwd"
 [[ -f "$D/route-directive" ]] && cat "$D/route-directive"
 if [[ -f "$D/route-exit" ]]; then exit "$(cat "$D/route-exit")"; fi
 exit 0
@@ -23421,6 +23426,13 @@ lw_setup
 lw_write_marker
 lw_run "INVOKE /implement"
 assert_eq "launch INVOKE /implement: exit 0" "0" "$LW_RC"
+# Regression guard (#1405): the launcher must cd into <worktree-path> before
+# calling dispatch-route, whose cross-check derives the worktree from its cwd.
+# A detached launcher inherits the router's cwd (main), so without the cd the
+# route runs against the wrong worktree and STOPs wrong-worktree — no phase ever
+# spawns. Assert the stub route observed the worktree as its cwd.
+assert_eq "launch INVOKE /implement: route invoked from worktree cwd" \
+  "$(cd "$LW_WT" && pwd)" "$(cat "$LW_DIR/route-pwd" 2>/dev/null || echo MISSING)"
 sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /implement: spawn-job logged once" "1" \
   "$([[ -f "$LW_DIR/spawn-job-argv" ]] && wc -l < "$LW_DIR/spawn-job-argv" | tr -d ' ' || echo 0)"

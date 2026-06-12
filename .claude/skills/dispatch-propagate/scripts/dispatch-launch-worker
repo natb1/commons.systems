@@ -79,6 +79,21 @@ if [[ ! "$WORKTREE_PATH" =~ ^[A-Za-z0-9/_.-]+$ ]]; then
   exit 2
 fi
 
+# ---- Step 0b: enter the worktree --------------------------------------------
+# dispatch-route (Step 2) derives the worktree from `git rev-parse --show-toplevel`
+# — its CURRENT WORKING DIRECTORY — and cross-checks that against the expected
+# `<N>-` branch; its contract is "the spawner must invoke with cwd matching
+# <worktree-path>". The old /dispatch-worker model session satisfied that via the
+# router's `dispatch-spawn-job --cwd`. This launcher is detached (`setsid nohup …
+# &`) from the router and so inherits the router's cwd (the `main` worktree), not
+# the target. Without this cd, dispatch-route fails `STOP wrong-worktree` on every
+# tick and no phase session is ever spawned. cd here, after validation, so every
+# downstream `$SCRIPT_DIR/…` call (an absolute path) is unaffected.
+cd "$WORKTREE_PATH" || {
+  echo "dispatch-launch-worker: cannot cd into worktree '$WORKTREE_PATH'" >&2
+  exit 2
+}
+
 # ---- Step 1: source the reservation ledger ----------------------------------
 # reservation_clear is called on every mechanical path so the router-written
 # marker is released the instant the launcher resolves the slot (the sweep's
