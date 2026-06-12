@@ -55,6 +55,8 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
    - Type-check → `npx tsc --noEmit --project <pkg>`
    - Other → best-effort map from the failing workflow name
 
+   Before running a **bare** `npx tsc` / `npm run build` reproduce command (the type-check path or any *Other* path that resolves to a bare workspace build rather than a `run-*.sh` wrapper), `Read .claude/docs/build.md` for the workspace-build conventions: `npm ci` at the workspace root (never `npm install --prefix <pkg>`, which fails E404 on `@commons-systems/*`), and the `This is not the tsc command you are looking for` stub symptom that means deps were not installed. The `run-*.sh` wrapper paths are already `ensure_deps`-protected and need no read.
+
    The subagent returns `{ reproduced: bool, reproduce_command, failure_excerpt,
    why_not_caught, is_flake: bool, needs_human: bool, required_action: string }`.
    `why_not_caught` is a free-text diagnosis (missing test, disabled rule, skipped

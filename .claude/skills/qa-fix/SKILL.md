@@ -106,6 +106,14 @@ Otherwise run all steps in order.
 
    Pure-backend PRs (e.g. `functions/`-only, scripts-only) take the **non-browser path**.
 
+   From the same diff: if any changed path is `firestore.rules` or a Firestore
+   query module, `Read .claude/docs/firestore.md` for the rules-deploy/permission
+   caveat: on a feature branch, smoke tests can fail permission-denied until the
+   standalone rules PR merges and deploys (`firestore.rules` deploys via
+   `firestore-deploy.yml` only on merge to `main`, independent of any app's
+   prod-deploy). Treat such a permission-denied smoke failure as this known caveat,
+   not as a product bug.
+
    If a browser component is detected, identify the **app dir** (`budget`,
    `fellspiral`, `landing`, or `print`) from the changed paths. If multiple app
    dirs are touched, this is a judgment call needing a human — record it as a
@@ -171,8 +179,8 @@ Otherwise run all steps in order.
          ```
          ToolSearch("select:mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__read_console_messages,mcp__claude-in-chrome__read_network_requests,mcp__claude-in-chrome__gif_creator,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__form_input,mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__list_connected_browsers,mcp__claude-in-chrome__select_browser")
          ```
-         If ToolSearch fails or tools are unavailable → skip the browser walkthrough, note "Chrome extension unavailable" in results, and fall through to the non-browser walkthrough (the **Non-browser path** section below) for the same plan.
-      2. **Select the browser.** Default to the Windows Chrome — it reaches the WSL QA server over WSL2's shared `localhost` with no tunnel. Call `list_connected_browsers`, find the entry whose `osPlatform` is `"Windows"`, and `select_browser` it. (DeviceIds change on re-registration — never hard-code one; always match on `osPlatform`.) If no Windows entry is found and the user has not explicitly requested macOS → record this as a user-input blocker and escalate per the **Escalation** section (do not silently fall back to macOS). Use the macOS Chrome only on explicit user request: because macOS is a separate machine, first hand the user the `ssh -L` tunnel command that `run-qa-server.sh` printed in its "Remote access" block (it forwards the Vite port plus every emulator port) — if that block has scrolled out of context, reproduce it from the known Vite and emulator ports: `http://localhost:<vite>/` plus `ssh -L <vite>:localhost:<vite> [-L <emu>:localhost:<emu> ...] <ssh-host>`; once the tunnel is up, `select_browser` the entry whose `osPlatform` is `"macOS"`. See `.claude/rules/chrome-extension.md` § Browser selection for the authoritative policy.
+         If ToolSearch fails or tools are unavailable → skip the browser walkthrough, note "Chrome extension unavailable" in results, and fall through to the non-browser walkthrough (the **Non-browser path** section below) for the same plan. Then `Read .claude/docs/chrome-extension.md` for the authoritative browser-selection, permission-retry-once, and emulator-reachability policy (it is no longer ambiently loaded).
+      2. **Select the browser.** Default to the Windows Chrome — it reaches the WSL QA server over WSL2's shared `localhost` with no tunnel. Call `list_connected_browsers`, find the entry whose `osPlatform` is `"Windows"`, and `select_browser` it. (DeviceIds change on re-registration — never hard-code one; always match on `osPlatform`.) If no Windows entry is found and the user has not explicitly requested macOS → record this as a user-input blocker and escalate per the **Escalation** section (do not silently fall back to macOS). Use the macOS Chrome only on explicit user request: because macOS is a separate machine, first hand the user the `ssh -L` tunnel command that `run-qa-server.sh` printed in its "Remote access" block (it forwards the Vite port plus every emulator port) — if that block has scrolled out of context, reproduce it from the known Vite and emulator ports: `http://localhost:<vite>/` plus `ssh -L <vite>:localhost:<vite> [-L <emu>:localhost:<emu> ...] <ssh-host>`; once the tunnel is up, `select_browser` the entry whose `osPlatform` is `"macOS"`. See `.claude/docs/chrome-extension.md` § Browser selection for the authoritative policy.
       3. Create a new tab via `tabs_create_mcp`, capture `tabId`.
       4. Navigate to the App URL.
       5. Suppress JS dialogs via `javascript_tool`: override `window.alert`, `window.confirm`, `window.prompt` with no-ops.
