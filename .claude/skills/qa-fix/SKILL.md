@@ -163,6 +163,10 @@ Otherwise run all steps in order.
       extension.** Needs-human-judgment items are **not** walked — they are
       recorded as deferred-to-office-hours.
 
+      Any `javascript_tool` snippet that uses `await` must be wrapped in an async
+      IIFE — `(async () => { … })()` — because a top-level `await` raises
+      `SyntaxError: await is only valid in async functions`.
+
       1. Load chrome tools via:
          ```
          ToolSearch("select:mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__read_console_messages,mcp__claude-in-chrome__read_network_requests,mcp__claude-in-chrome__gif_creator,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__form_input,mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__list_connected_browsers,mcp__claude-in-chrome__select_browser")
@@ -176,7 +180,7 @@ Otherwise run all steps in order.
       7. Start GIF recording: `gif_creator` with `action: "start_recording"`. Take an initial screenshot.
       8. **For each machine-verifiable plan item:**
          a. **Set up state.** Navigate to the item's URL path (if not "current"). Execute the steps using `computer`, `form_input`, `navigate`. Capture extra GIF frames before and after.
-         b. **Check output.** Take a screenshot. Read `get_page_text` to verify the expected outcome. Check `read_console_messages` (filter for errors). Check `read_network_requests` for 4xx/5xx.
+         b. **Check output.** Take a screenshot only on genuine state transitions — not on every iterative debug step. Read `get_page_text` to verify the expected outcome. Check `read_console_messages` (filter for errors). Check `read_network_requests` for 4xx/5xx using the tool's filter parameter (e.g. filter to error status codes); request a count rather than full metadata when only request counts or specific requests matter — do not pull the full request dump.
          c. **Record the result** — **PASS** or **FAIL**, directly from this
             skill's own checks. **No user prompt.**
             - On interaction failure: retry once, then record **SKIP** and continue.
@@ -184,6 +188,8 @@ Otherwise run all steps in order.
             - Stay on the App URL domain — do not follow external links.
             - **On the first FAIL** → a bug. Stop the walkthrough, finalize the QA
               session (Steps 5 and 6), and escalate per the **Escalation** section.
+              After escalating, the session **stops** — do not restart the QA
+              server or re-run the walkthrough.
       9. Stop GIF recording: `gif_creator` with `action: "stop_recording"`. Export to `tmp/qa-fix-walkthrough-<n>.gif` (where `<n>` is the Step-0-resolved issue number `<N>`).
       10. Write per-item results (PASS/FAIL/SKIP, console errors, network failures, deferred judgment items, summary counts) to `tmp/qa-fix-results-<n>.txt`.
 
@@ -289,6 +295,8 @@ residue).
 
 Tailor the reason text to the blocker that actually fired (judgment item, machine
 FAIL, failed pre-QA check, multi-app choice, merge conflict). Then **stop**.
+Marking a deviation is **terminal** for the walkthrough — do not restart the QA
+server or re-run the walkthrough after escalating.
 
 ## Notes
 
