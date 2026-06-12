@@ -19,16 +19,21 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
 
 ## Steps
 
-1. **Resolve the draft PR.** Resolve the draft PR for the target into `PR_NUM`
-   (`dangerouslyDisableSandbox: true` — `gh`):
+1. **Resolve the draft PR.** Run the context pack (`dangerouslyDisableSandbox:
+   true` — calls `gh`):
 
    ```bash
-   PR_NUM=$(.claude/skills/dispatch-propagate/scripts/dispatch-find-pr <issue-N>)
+   .claude/skills/dispatch-propagate/scripts/dispatch-context-pack <issue-N> --pr
    ```
 
-   The PR number resolved here is used in Steps 3, 4 (the Flake sub-path's
-   `gh pr view <pr-num>` body read), 5 (the fix-checks-attempt label edit), and 8 —
-   carry it forward.
+   This single call resolves the PR and captures its labels and body. From the
+   `=== PR ===` section: read `PR_NUM` from the `PR #<num>` line (or detect `PR:
+   none` and stop with a clear error). The **labels** line and **body** captured
+   here are reused in later steps — Step 4's Flake sub-path reads the PR body for
+   the `Closes #N` parse, and Step 5's attempt-counter computation reads the labels
+   line — so they need not be re-fetched from GitHub. The `PR_NUM` resolved here is
+   used in Steps 3, 5 (the fix-checks-attempt label edit), and 8 — carry it
+   forward.
 
 2. **Read the accumulator.** Read `tmp/fix-checks-summary.md` if it exists — it holds the
    prior iterations' records. On the first fix-checks pass the file does not yet exist;
@@ -154,10 +159,9 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
         subagent reads the `<disposition> <N>` record(s) between the sentinels (a
         flake is one topic, so normally one record — iterate if more) and returns
         each `<N>` with its `CREATED`/`EXISTING` disposition to this thread.
-     3. **Block the PR's tracked issue on the flake issue.** In this thread, read
-        the PR body (`gh pr view <pr-num> --json body --jq .body`,
-        `dangerouslyDisableSandbox: true`) and parse its `Closes #N` line(s) for
-        the issue(s) this PR implements. For **each** tracked issue, record a
+     3. **Block the PR's tracked issue on the flake issue.** In this thread, use
+        the PR body already captured in Step 1's pack output (`=== PR ===` section)
+        and parse its `Closes #N` line(s) for the issue(s) this PR implements. For **each** tracked issue, record a
         `blocked_by` dependency **on that tracked issue, targeting each flake issue
         `<N>`** returned — the PR's own work is blocked by the unrelated flake. Note the
         direction: this is the **reverse** of `/review-fix`,
@@ -184,15 +188,14 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
    Step 5**. The other three (generic, main-fixed, flake) set their own push
    disposition here and then fall through to the shared tail Steps 7→9.
 
-5. **Increment the fix-checks-attempt counter.** Read the PR's labels and find the highest
-   extant `dispatch:fix-checks-attempt-<n>` label (`dangerouslyDisableSandbox: true` —
-   `gh`):
-
-   ```bash
-   N=$(gh pr view "$PR_NUM" --json labels \
-     --jq '[.labels[].name | capture("^dispatch:fix-checks-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0')
-   NEXT=$(( N < 3 ? N + 1 : 3 ))
-   ```
+5. **Increment the fix-checks-attempt counter.** From the **labels line already
+   captured in Step 1's pack output** (`=== PR ===` section), find the highest
+   extant `dispatch:fix-checks-attempt-<n>` label. The preamble labels are valid
+   here: between the preamble and Step 5 no `fix-checks-attempt` label is added
+   (Step 5 itself adds it), so the preamble's label snapshot is current. Read the
+   labels, find the highest `dispatch:fix-checks-attempt-<n>` value (call it `N`; use
+   0 if none), then set `NEXT` = N+1 capped at 3 (`N < 3 ? N + 1 : 3`). Substitute
+   `N` and `NEXT` as literals in the label-edit commands below.
 
    This step runs for the `fixed`, `main-fixed`, `flake`, and `generic` outcomes —
    the ones that consume the retry budget. The needs-human outcome already stopped in
