@@ -27,8 +27,10 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
    ```
 
    This single call resolves the PR and captures its labels and body. From the
-   `=== PR ===` section: read `PR_NUM` from the `PR #<num>` line (or detect `PR:
-   none` and stop with a clear error). The **labels** line and **body** captured
+   `=== PR ===` section: read `PR_NUM` from the `PR #<num>` line (or, if it
+   prints `PR: none`, fix-checks was dispatched without a PR — a router state
+   error — so call `dispatch-mark-deviation '/fix-checks: dispatched without a PR
+   — router state error'` and stop). The **labels** line and **body** captured
    here are reused in later steps — Step 4's Flake sub-path reads the PR body for
    the `Closes #N` parse, and Step 5's attempt-counter computation reads the labels
    line — so they need not be re-fetched from GitHub. The `PR_NUM` resolved here is

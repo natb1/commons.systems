@@ -47,7 +47,7 @@ N="${BRANCH%%-*}"
   | tee "tmp/pack-$N.txt"
 ```
 
-The `tee` keeps the output on disk at `tmp/pack-<N>.txt` so Step 1 can extract the
+The `tee` keeps the output on disk at `tmp/pack-$N.txt` so Step 1 can extract the
 `--- files ---` block from it without a second pack call. Read these from the
 output — do not re-resolve any of them later:
 
@@ -55,7 +55,9 @@ output — do not re-resolve any of them later:
   `dispatch:reviewed` re-entry check below and carried through to every later
   step). If that section prints the single line `PR: none` (the pack exits 0 in
   both cases — detect no-PR by this line, never by exit code), the branch has no
-  open PR.
+  open PR — **stop with a clear error**: review-fix requires an open PR, and
+  every later step (the Workflow `pr_num` arg, Step 6's `post-pr-comment.sh`)
+  needs a non-empty PR number.
 - The PR **body** from the `=== PR ===` section — Step 2 parses its `Closes #N`
   line(s) to resolve the issue(s) this PR implements (`implementing_issues`). There
   is no `PR_JSON`; the body lives only in this pack output.
@@ -89,20 +91,16 @@ arg). Dropping `git fetch origin main` is valid by #1426 design: the phase-entry
 merge already keeps `origin/main` current and the pack does no fetch of its own.
 
 To classify the changed surface, feed `dispatch-security-surface` the changed-file
-list from the pack's `--- files ---` block — already on disk at `tmp/pack-<N>.txt`
+list from the pack's `--- files ---` block — already on disk at `tmp/pack-$N.txt`
 from the preamble's `tee`. Extract the file list between the markers (`sed '1d;$d'`
 strips the two marker lines themselves) and pipe it to the classifier (no
-`dangerouslyDisableSandbox` needed — pure stdin→stdout):
-
-```bash
-sed -n '/^--- files ---$/,/^--- hunks ---$/p' tmp/pack-<N>.txt | sed '1d;$d' \
-  | .claude/skills/dispatch-propagate/scripts/dispatch-security-surface
-```
-
-Capture that classifier output as `SURFACE_OUT` and extract the fields exactly as
+`dangerouslyDisableSandbox` needed — pure stdin→stdout). Capture that classifier
+output as `SURFACE_OUT` in the same block, then extract the fields exactly as
 before:
 
 ```bash
+SURFACE_OUT=$(sed -n '/^--- files ---$/,/^--- hunks ---$/p' "tmp/pack-$N.txt" | sed '1d;$d' \
+  | .claude/skills/dispatch-propagate/scripts/dispatch-security-surface)
 surface=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^surface=//p')
 deps=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^deps=//p')
 app_or_rules=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^app_or_rules=//p')

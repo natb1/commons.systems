@@ -44,8 +44,9 @@ N="${BRANCH%%-*}"
 ```
 
 Read `PR_NUM` and the labels line from the `=== PR ===` section of the output.
-If the output shows `PR: none`, there is no PR yet — proceed normally. If it
-shows `PR #<num>`, that is `PR_NUM`.
+If the output shows `PR: none`, stop with a clear error — qa-fix requires an
+open PR and should not have been dispatched here. If it shows `PR #<num>`, that
+is `PR_NUM`.
 
 qa-fix adopts `--pr` only and does **not** add `--diff` here: the only diff use
 in this skill is Step 1's local `git diff --name-only origin/main...HEAD` for
