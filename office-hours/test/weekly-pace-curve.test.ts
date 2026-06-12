@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   weeklyPaceCurve,
+  elapsedWeekFraction,
+  paceCurveAtFraction,
   WEEK_SECONDS,
   WINDOW_SECONDS,
   T,
@@ -79,5 +81,57 @@ describe("weeklyPaceCurve", () => {
     const late = weeklyPaceCurve(at(WEEK_SECONDS * 0.25), RESET);
     expect(early).toBeLessThan(mid);
     expect(mid).toBeLessThan(late);
+  });
+});
+
+describe("elapsedWeekFraction", () => {
+  it("is 0 a full week before the reset", () => {
+    // remaining = WEEK_SECONDS → (WEEK - WEEK)/WEEK = 0.
+    expect(elapsedWeekFraction(at(WEEK_SECONDS), RESET)).toBe(0);
+  });
+
+  it("is 0.5 half a week before the reset", () => {
+    expect(elapsedWeekFraction(at(WEEK_SECONDS / 2), RESET)).toBeCloseTo(0.5, 12);
+  });
+
+  it("is 1 at the reset", () => {
+    // remaining = 0 → (WEEK - 0)/WEEK = 1.
+    expect(elapsedWeekFraction(at(0), RESET)).toBe(1);
+  });
+
+  it("clamps to 0 when remaining exceeds a full week", () => {
+    // remaining = 2*WEEK → (WEEK - 2*WEEK)/WEEK = -1, clamps to 0.
+    expect(elapsedWeekFraction(at(2 * WEEK_SECONDS), RESET)).toBe(0);
+  });
+
+  it("clamps to 1 when remaining is negative (sampled past the reset)", () => {
+    // remaining < 0 → (WEEK - remaining)/WEEK > 1, clamps to 1.
+    expect(elapsedWeekFraction(at(-WINDOW_SECONDS), RESET)).toBe(1);
+  });
+});
+
+describe("paceCurveAtFraction", () => {
+  it("matches the smooth-curve mid-week value at x=0.5", () => {
+    // Same assertion as weeklyPaceCurve at x=0.5: W = 31.0.
+    expect(paceCurveAtFraction(0.5)).toBeCloseTo(31.0, 6);
+  });
+
+  it("recomposes weeklyPaceCurve via elapsedWeekFraction (remaining > 0)", () => {
+    // For several samples within the week, the decomposition must reproduce
+    // weeklyPaceCurve exactly.
+    const offsets = [
+      WEEK_SECONDS * 0.9,
+      WEEK_SECONDS * 0.75,
+      WEEK_SECONDS * 0.5,
+      WEEK_SECONDS * 0.25,
+      WINDOW_SECONDS,
+      1,
+    ];
+    for (const offset of offsets) {
+      const s = at(offset);
+      expect(paceCurveAtFraction(elapsedWeekFraction(s, RESET))).toBe(
+        weeklyPaceCurve(s, RESET),
+      );
+    }
   });
 });

@@ -3,7 +3,8 @@ import "./style/theme.css";
 import { createHistoryRouter } from "@commons-systems/router";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError } from "@commons-systems/errorutil/log";
-import { renderHome, afterRenderHome } from "./pages/home.js";
+import { renderHome, afterRenderHome, wireDownloadActions } from "./pages/home.js";
+import { wireMarkdownActions } from "./markdown-actions.js";
 import { initLocalFolder } from "./local-folder-ui.js";
 import { renderView, afterRenderView, cleanupView, NOT_FOUND_HTML } from "./pages/view.js";
 import { renderAbout } from "./pages/about.js";
@@ -51,6 +52,9 @@ let currentUser: User | null = null;
 
 // Show login UI immediately; onAuthStateChanged will update once auth resolves.
 navEl.user = null;
+
+wireDownloadActions(app);
+wireMarkdownActions(app);
 
 const router = createHistoryRouter(
   app,

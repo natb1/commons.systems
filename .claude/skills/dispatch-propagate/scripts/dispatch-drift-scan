@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # dispatch-drift-scan — gather the deterministic evidence for the
-# /dispatch-worker implement-phase relevance-drift review (Step 3) in a single
+# /plan-issue pre-planning relevance review (Step 1) in a single
 # invocation, so the dispatching session only owns the verdict.
 #
-# The implement-phase relevance review asks: has the codebase drifted away from
+# The pre-planning relevance review asks: has the codebase drifted away from
 # what this issue assumes since the issue was filed? The *evidence* for that
 # question is mechanical — issue createdAt (the drift window anchor), commits to
 # the named paths since then, PRs merged in the window, and whether the issue's
