@@ -99,6 +99,7 @@ describe("readingPositionUid", () => {
 describe("local-folder view path", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockWhenLocalFolderReady.mockResolvedValue(undefined);
     cleanupView();
     if (typeof globalThis.reportError !== "function") {
       globalThis.reportError = () => {};

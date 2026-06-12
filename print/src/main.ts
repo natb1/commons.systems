@@ -46,6 +46,11 @@ if (navAuthEl) {
   initLocalFolder(localFolderNavEl, app, () => router.navigate())
     .catch((err) => logError(err, { operation: "init-local-folder" }))
     .finally(() => markLocalFolderReady());
+} else {
+  // No .nav-auth means the local-folder UI is never mounted, so initLocalFolder
+  // never runs to settle the readiness gate. Mark it ready here so renderView()
+  // for a local: id never hangs forever waiting on a promise that can't resolve.
+  markLocalFolderReady();
 }
 
 let currentUser: User | null = null;

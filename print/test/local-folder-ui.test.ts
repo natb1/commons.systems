@@ -23,7 +23,7 @@ const { mockHandle, mockStore } = vi.hoisted(() => ({
   mockHandle: {} as FileSystemDirectoryHandle,
   mockStore: {
     isSupported: vi.fn(() => true),
-    get: vi.fn(() => Promise.resolve({} as FileSystemDirectoryHandle)),
+    get: vi.fn(() => Promise.resolve(mockHandle)),
     queryPermission: vi.fn(() => Promise.resolve("granted")),
     requestPermission: vi.fn(() => Promise.resolve("granted")),
     put: vi.fn(() => Promise.resolve()),
