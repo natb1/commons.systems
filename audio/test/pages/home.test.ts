@@ -15,6 +15,12 @@ vi.mock("../../src/storage.js", () => ({
   getMediaDownloadUrl: vi.fn(),
 }));
 
+vi.mock("../../src/audio-cache.js", () => ({
+  getCacheStats: vi.fn().mockResolvedValue({ trackCount: 0, totalBytes: 0 }),
+  clearCache: vi.fn().mockResolvedValue(undefined),
+  CACHE_UPDATED_EVENT: "audio-cache-updated",
+}));
+
 const mockLogError = vi.fn();
 
 vi.mock("@commons-systems/errorutil/log", () => ({
@@ -306,5 +312,45 @@ describe("afterRenderHome", () => {
     const checkbox = outlet.querySelector<HTMLInputElement>("input[data-queue-toggle]")!;
     expect(checkbox.checked).toBe(true);
     expect(player.isQueued).toHaveBeenCalledWith("x1");
+  });
+
+  it("does not log cache-stats error when CACHE_UPDATED_EVENT fires after navigation away", async () => {
+    const outlet = document.createElement("div");
+    outlet.innerHTML = `
+      <section id="cache-info"><p><span id="cache-stats"></span></p></section>
+      <details class="expand-row audio-row" data-id="x1" data-storage-path="media/x1.mp3" data-title="Track" data-artist="Art" data-album="Alb">
+        <summary><div class="expand-summary">
+          <label class="queue-checkbox"><input type="checkbox" data-queue-toggle /></label>
+          <span class="title">Track</span>
+        </div></summary>
+      </details>
+    `;
+
+    const player = makeMockPlayer();
+    afterRenderHome(outlet, player);
+
+    // Clear any errors logged during mount (e.g. from previous tests' afterRenderHome
+    // calls on outlets without #cache-info sections).
+    mockLogError.mockClear();
+
+    // Simulate navigation away: replace outlet content with non-Home markup,
+    // detaching the original #cache-info element.
+    outlet.innerHTML = "<p>About page content</p>";
+
+    // Dispatch the cache event that would fire from a background cache write.
+    document.dispatchEvent(new Event("audio-cache-updated"));
+
+    // Flush microtasks so any async work triggered by the listener can settle.
+    await Promise.resolve();
+
+    // The staleness guard should have returned early without calling refreshCacheStats,
+    // so the "#cache-stats element not found" error must not have been logged.
+    const calls = mockLogError.mock.calls;
+    const staleError = calls.find(
+      (args) =>
+        args[0] instanceof Error &&
+        (args[0] as Error).message.includes("#cache-stats element not found"),
+    );
+    expect(staleError).toBeUndefined();
   });
 });

@@ -1,6 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { logError } from "@commons-systems/errorutil/log";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
+import { isOutletCurrent } from "@commons-systems/router/hydrate";
 import type { User } from "../auth.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { getPublicMedia, getAllAccessibleMedia } from "../firestore.js";
@@ -111,6 +112,7 @@ export function afterRenderHome(
 
   clickAbort?.abort();
   clickAbort = new AbortController();
+  const cacheInfo = outlet.querySelector("#cache-info");
 
   // stopPropagation prevents the click from toggling the parent <details> element
   outlet.addEventListener("click", (e) => {
@@ -148,7 +150,13 @@ export function afterRenderHome(
 
   document.addEventListener(
     CACHE_UPDATED_EVENT,
-    () => refreshCacheStats(outlet),
+    () => {
+      // The document-level listener outlives the Home view until the next
+      // afterRenderHome aborts it; skip stale events fired after navigation
+      // away (outlet re-rendered by the router).
+      if (cacheInfo && !isOutletCurrent(outlet, cacheInfo)) return;
+      refreshCacheStats(outlet);
+    },
     { signal: clickAbort.signal },
   );
 
