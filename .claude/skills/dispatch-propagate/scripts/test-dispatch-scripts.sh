@@ -23240,6 +23240,314 @@ assert_eq "non-ff push rejection → origin feature-x tip is helper's (not force
 cmp_teardown
 
 # ============================================================================
+# dispatch-launch-worker tests
+# ============================================================================
+echo "=== dispatch-launch-worker ==="
+#
+# dispatch-launch-worker is the scripted phase-initiation worker: it routes once
+# via dispatch-route and acts on the single directive — exec'ing the phase-skill
+# spawn for a real phase, or handling a mechanical disposition with no `claude`
+# session. These tests isolate the launcher from the full provision/route stack
+# by stubbing its DIRECT dependencies, each of which it calls as
+# "$SCRIPT_DIR/<name>" — so the launcher copy and every stub sit together in one
+# scratch dir, and $SCRIPT_DIR (resolved from the copy) points at the stubs.
+#
+# Stubs (all log their argv to per-stub log files):
+#   dispatch-route          — prints the directive from $LW_DIR/route-directive
+#                             and exits with the code in $LW_DIR/route-exit
+#                             (default 0). The wrong-worktree case sets exit 1
+#                             while still printing STOP wrong-worktree.
+#   dispatch-spawn-job      — logs argv to spawn-job-argv, exits 0. The launcher
+#                             `exec`s it, so the launcher process is replaced;
+#                             the test asserts on the log afterward.
+#   dispatch-spawn-tick     — logs a line to spawn-tick.log, exits 0.
+#   dispatch-apply-office-hours — logs argv to apply-oh-argv, exits 0.
+#   git                     — logs argv to git-argv (PUSH-STRANDED `git -C … push`)
+#                             and exits 0.
+# dispatch-phase-model is the REAL script (copied in), so the model-derivation
+# assertions exercise the actual qa/review → claude-sonnet-4-6 policy.
+#
+# The reservation ledger points at $LW_DIR/reservations via DISPATCH_RESERVATION_DIR
+# (so reservation_clear/_dir never need a git repo). Each mechanical-path test
+# pre-creates a marker named by the worktree basename and asserts it is removed;
+# the INVOKE test asserts the marker is RETAINED (the sweep reclaims it on the
+# phase session's registration, not the launcher).
+#
+# The test shell runs under `set -e`; the launcher can exit non-zero (arg
+# validation), so each invocation is wrapped to capture the rc.
+
+LW_DIR=""
+LW_WT=""
+LW_WT_BASENAME=""
+
+lw_setup() {
+  LW_DIR=$(mktemp -d)
+  # The launcher resolves siblings via $SCRIPT_DIR (its own dir), so the copy
+  # and every stub live together in $LW_DIR. The sourced ledger pulls in lib.sh
+  # and lib-claude-agents.sh from the same dir.
+  cp "$SCRIPT_DIR/dispatch-launch-worker" "$LW_DIR/dispatch-launch-worker"
+  cp "$SCRIPT_DIR/dispatch-phase-model" "$LW_DIR/dispatch-phase-model"
+  cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$LW_DIR/lib-reservation-ledger.sh"
+  cp "$SCRIPT_DIR/lib.sh" "$LW_DIR/lib.sh"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$LW_DIR/lib-claude-agents.sh"
+  chmod +x "$LW_DIR/dispatch-launch-worker" "$LW_DIR/dispatch-phase-model"
+
+  # The target worktree (arg 2): an existing dir with a safe-charset basename.
+  LW_WT="$LW_DIR/839-test-launch"
+  mkdir -p "$LW_WT"
+  LW_WT_BASENAME="$(basename "$LW_WT")"
+
+  # dispatch-route stub: print the chosen directive, exit with the chosen code.
+  cat > "$LW_DIR/dispatch-route" <<'STUB'
+#!/usr/bin/env bash
+D="$(cd "$(dirname "$0")" && pwd)"
+echo "route $*" >> "$D/route-argv"
+[[ -f "$D/route-directive" ]] && cat "$D/route-directive"
+if [[ -f "$D/route-exit" ]]; then exit "$(cat "$D/route-exit")"; fi
+exit 0
+STUB
+
+  # dispatch-spawn-job stub: log argv, exit 0 (the launcher exec's it).
+  cat > "$LW_DIR/dispatch-spawn-job" <<'STUB'
+#!/usr/bin/env bash
+D="$(cd "$(dirname "$0")" && pwd)"
+printf '%s\n' "$*" >> "$D/spawn-job-argv"
+exit 0
+STUB
+
+  # dispatch-spawn-tick stub: log a heartbeat line, exit 0.
+  cat > "$LW_DIR/dispatch-spawn-tick" <<'STUB'
+#!/usr/bin/env bash
+D="$(cd "$(dirname "$0")" && pwd)"
+echo "tick $*" >> "$D/spawn-tick.log"
+exit 0
+STUB
+
+  # dispatch-apply-office-hours stub: log argv, exit 0.
+  cat > "$LW_DIR/dispatch-apply-office-hours" <<'STUB'
+#!/usr/bin/env bash
+D="$(cd "$(dirname "$0")" && pwd)"
+printf '%s\n' "$*" >> "$D/apply-oh-argv"
+exit 0
+STUB
+
+  # git stub on PATH: log argv (PUSH-STRANDED's `git -C … push origin HEAD`),
+  # exit 0. The launcher's only git call is the explicit `git -C` push.
+  cat > "$LW_DIR/git" <<'STUB'
+#!/usr/bin/env bash
+D="$(cd "$(dirname "$0")" && pwd)"
+printf '%s\n' "$*" >> "$D/git-argv"
+exit 0
+STUB
+  chmod +x "$LW_DIR/dispatch-route" "$LW_DIR/dispatch-spawn-job" \
+    "$LW_DIR/dispatch-spawn-tick" "$LW_DIR/dispatch-apply-office-hours" \
+    "$LW_DIR/git"
+
+  # Point the ledger at a scratch dir (no git repo needed) and put the stub dir
+  # first on PATH so the `git` stub is found.
+  export DISPATCH_RESERVATION_DIR="$LW_DIR/reservations"
+  LW_SAVED_PATH="$PATH"
+  export PATH="$LW_DIR:$PATH"
+}
+
+lw_teardown() {
+  export PATH="$LW_SAVED_PATH"
+  unset DISPATCH_RESERVATION_DIR
+  rm -rf "$LW_DIR"
+  LW_DIR=""
+  LW_WT=""
+  LW_WT_BASENAME=""
+}
+
+# lw_write_marker — pre-create a reservation marker for the worktree basename.
+lw_write_marker() {
+  mkdir -p "$DISPATCH_RESERVATION_DIR"
+  printf 'session=sess-router\nissue=839\ntimestamp=2026-01-01T00:00:00Z\n' \
+    > "$DISPATCH_RESERVATION_DIR/$LW_WT_BASENAME"
+}
+
+# lw_marker_exists — yes/no whether the reservation marker is present.
+lw_marker_exists() {
+  [[ -f "$DISPATCH_RESERVATION_DIR/$LW_WT_BASENAME" ]] && echo yes || echo no
+}
+
+# lw_run — set the routed directive (+ optional route exit code), invoke the
+# launcher, capture rc. Args: <directive> [<route-exit>]
+lw_run() {
+  printf '%s' "$1" > "$LW_DIR/route-directive"
+  [[ $# -ge 2 ]] && printf '%s' "$2" > "$LW_DIR/route-exit"
+  set +e
+  "$LW_DIR/dispatch-launch-worker" 839 "$LW_WT" >/dev/null 2>&1
+  LW_RC=$?
+  set -e
+}
+
+# 1. INVOKE /implement → exec dispatch-spawn-job with the unmapped-phase flags
+# (no --model), reservation RETAINED, no park, no tick (the exec path hands the
+# heartbeat to the phase skill's Stop hook).
+echo "Test: INVOKE /implement → spawn-job exec, reservation retained, no tick"
+lw_setup
+lw_write_marker
+lw_run "INVOKE /implement"
+assert_eq "launch INVOKE /implement: exit 0" "0" "$LW_RC"
+sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
+assert_eq "launch INVOKE /implement: spawn-job logged once" "1" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && wc -l < "$LW_DIR/spawn-job-argv" | tr -d ' ' || echo 0)"
+assert_eq "launch INVOKE /implement: spawn-job argv" \
+  "--no-verify --name $LW_WT_BASENAME --cwd $LW_WT /implement 839 $LW_WT" "$sj"
+assert_eq "launch INVOKE /implement: no --model in argv" "no" \
+  "$([[ "$sj" == *"--model"* ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /implement: reservation RETAINED" "yes" "$(lw_marker_exists)"
+assert_eq "launch INVOKE /implement: no apply-office-hours" "no" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /implement: no spawn-tick (exec path)" "no" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+lw_teardown
+
+# 2. INVOKE /qa-fix → spawn-job carries --model claude-sonnet-4-6 (real
+# dispatch-phase-model qa policy) and the /qa-fix prompt.
+echo "Test: INVOKE /qa-fix → spawn-job with --model claude-sonnet-4-6"
+lw_setup
+lw_write_marker
+lw_run "INVOKE /qa-fix"
+assert_eq "launch INVOKE /qa-fix: exit 0" "0" "$LW_RC"
+sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
+assert_eq "launch INVOKE /qa-fix: spawn-job argv (with model)" \
+  "--no-verify --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /qa-fix 839 $LW_WT" \
+  "$sj"
+assert_eq "launch INVOKE /qa-fix: reservation RETAINED" "yes" "$(lw_marker_exists)"
+lw_teardown
+
+# 3. INVOKE /review-fix → spawn-job carries --model claude-sonnet-4-6 (review policy).
+echo "Test: INVOKE /review-fix → spawn-job with --model claude-sonnet-4-6"
+lw_setup
+lw_write_marker
+lw_run "INVOKE /review-fix"
+assert_eq "launch INVOKE /review-fix: exit 0" "0" "$LW_RC"
+sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
+assert_eq "launch INVOKE /review-fix: spawn-job argv (with model)" \
+  "--no-verify --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /review-fix 839 $LW_WT" \
+  "$sj"
+lw_teardown
+
+# 4. STOP done → reservation cleared + spawn-tick called; no spawn-job, no park.
+echo "Test: STOP done → reservation cleared + tick, no spawn/park"
+lw_setup
+lw_write_marker
+lw_run "STOP done"
+assert_eq "launch STOP done: exit 0" "0" "$LW_RC"
+assert_eq "launch STOP done: reservation CLEARED" "no" "$(lw_marker_exists)"
+assert_eq "launch STOP done: spawn-tick called" "yes" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+assert_eq "launch STOP done: no spawn-job" "no" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && echo yes || echo no)"
+assert_eq "launch STOP done: no apply-office-hours" "no" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+lw_teardown
+
+# 5. STOP waiting → reservation cleared + tick; no spawn/park.
+echo "Test: STOP waiting → reservation cleared + tick, no spawn/park"
+lw_setup
+lw_write_marker
+lw_run "STOP waiting"
+assert_eq "launch STOP waiting: exit 0" "0" "$LW_RC"
+assert_eq "launch STOP waiting: reservation CLEARED" "no" "$(lw_marker_exists)"
+assert_eq "launch STOP waiting: spawn-tick called" "yes" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+assert_eq "launch STOP waiting: no apply-office-hours" "no" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+lw_teardown
+
+# 6. STOP wrong-worktree → handled even though dispatch-route exits 1; reservation
+# cleared + tick; no spawn/park.
+echo "Test: STOP wrong-worktree (route exit 1) → reservation cleared + tick"
+lw_setup
+lw_write_marker
+lw_run "STOP wrong-worktree" 1
+assert_eq "launch STOP wrong-worktree: exit 0" "0" "$LW_RC"
+assert_eq "launch STOP wrong-worktree: reservation CLEARED" "no" "$(lw_marker_exists)"
+assert_eq "launch STOP wrong-worktree: spawn-tick called" "yes" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+assert_eq "launch STOP wrong-worktree: no apply-office-hours" "no" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+lw_teardown
+
+# 7. STOP provision-failed → park (apply-office-hours <N> <reason>) + reservation
+# cleared + tick; no spawn-job.
+echo "Test: STOP provision-failed → park + reservation cleared + tick"
+lw_setup
+lw_write_marker
+lw_run "STOP provision-failed"
+assert_eq "launch STOP provision-failed: exit 0" "0" "$LW_RC"
+oh=$(cat "$LW_DIR/apply-oh-argv" 2>/dev/null || echo "")
+assert_eq "launch STOP provision-failed: apply-office-hours targets #839" "yes" \
+  "$([[ "$oh" == 839\ * ]] && echo yes || echo no)"
+assert_eq "launch STOP provision-failed: reservation CLEARED" "no" "$(lw_marker_exists)"
+assert_eq "launch STOP provision-failed: spawn-tick called" "yes" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+assert_eq "launch STOP provision-failed: no spawn-job" "no" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && echo yes || echo no)"
+lw_teardown
+
+# 8. PUSH-STRANDED → git push origin HEAD logged + park + reservation cleared +
+# tick; no spawn-job.
+echo "Test: PUSH-STRANDED → git push + park + reservation cleared + tick"
+lw_setup
+lw_write_marker
+lw_run "PUSH-STRANDED"
+assert_eq "launch PUSH-STRANDED: exit 0" "0" "$LW_RC"
+g=$(cat "$LW_DIR/git-argv" 2>/dev/null || echo "")
+assert_eq "launch PUSH-STRANDED: git push origin HEAD logged" \
+  "-C $LW_WT push origin HEAD" "$g"
+assert_eq "launch PUSH-STRANDED: apply-office-hours targets #839" "yes" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+assert_eq "launch PUSH-STRANDED: reservation CLEARED" "no" "$(lw_marker_exists)"
+assert_eq "launch PUSH-STRANDED: spawn-tick called" "yes" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+assert_eq "launch PUSH-STRANDED: no spawn-job" "no" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && echo yes || echo no)"
+lw_teardown
+
+# 9. Defensive: an unrecognized directive parks with a clear reason + tick.
+echo "Test: unrecognized directive → park + tick"
+lw_setup
+lw_write_marker
+lw_run "SOMETHING UNEXPECTED"
+assert_eq "launch unrecognized: exit 0" "0" "$LW_RC"
+oh=$(cat "$LW_DIR/apply-oh-argv" 2>/dev/null || echo "")
+assert_eq "launch unrecognized: apply-office-hours targets #839" "yes" \
+  "$([[ "$oh" == 839\ * ]] && echo yes || echo no)"
+assert_eq "launch unrecognized: reason names the bad directive" "yes" \
+  "$([[ "$oh" == *"unrecognized route directive"* ]] && echo yes || echo no)"
+assert_eq "launch unrecognized: reservation CLEARED" "no" "$(lw_marker_exists)"
+assert_eq "launch unrecognized: spawn-tick called" "yes" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+assert_eq "launch unrecognized: no spawn-job" "no" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && echo yes || echo no)"
+lw_teardown
+
+# 10. Arg validation: each malformed call exits 2.
+echo "Test: arg validation → exit 2"
+lw_setup
+# missing second positional
+set +e; "$LW_DIR/dispatch-launch-worker" 839 >/dev/null 2>&1; rc_missing=$?; set -e
+assert_eq "launch arg: missing worktree → exit 2" "2" "$rc_missing"
+# extra positional
+set +e; "$LW_DIR/dispatch-launch-worker" 839 "$LW_WT" extra >/dev/null 2>&1; rc_extra=$?; set -e
+assert_eq "launch arg: extra positional → exit 2" "2" "$rc_extra"
+# non-numeric N
+set +e; "$LW_DIR/dispatch-launch-worker" abc "$LW_WT" >/dev/null 2>&1; rc_nan=$?; set -e
+assert_eq "launch arg: non-numeric N → exit 2" "2" "$rc_nan"
+# missing worktree dir
+set +e; "$LW_DIR/dispatch-launch-worker" 839 "$LW_DIR/no-such-dir" >/dev/null 2>&1; rc_nodir=$?; set -e
+assert_eq "launch arg: missing worktree dir → exit 2" "2" "$rc_nodir"
+# unsafe-char path (a real dir whose name carries a disallowed char)
+mkdir -p "$LW_DIR/bad worktree"
+set +e; "$LW_DIR/dispatch-launch-worker" 839 "$LW_DIR/bad worktree" >/dev/null 2>&1; rc_unsafe=$?; set -e
+assert_eq "launch arg: unsafe-char path → exit 2" "2" "$rc_unsafe"
+lw_teardown
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
