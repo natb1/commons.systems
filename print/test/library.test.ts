@@ -42,8 +42,9 @@ function makeFakeEntry(entry: FakeEntry): LocalDirEntryLike {
   } as LocalDirEntryLike;
 }
 
-function makeFakeDirectory(entries: FakeEntry[]): FileSystemDirectoryHandle {
+function makeFakeDirectory(name: string, entries: FakeEntry[]): FileSystemDirectoryHandle {
   return {
+    name,
     values(): AsyncIterableIterator<LocalDirEntryLike> {
       const fakeEntries = entries.map(makeFakeEntry);
       return (async function* () {
@@ -56,19 +57,19 @@ function makeFakeDirectory(entries: FakeEntry[]): FileSystemDirectoryHandle {
 describe("fileToLocalItem", () => {
   it("maps a .pdf file to a local pdf item", () => {
     const file = new File(["bytes"], "book.pdf", { lastModified: 1000 });
-    const item = fileToLocalItem(file, "book.pdf");
+    const item = fileToLocalItem(file, "book.pdf", "books");
 
     expect(item).not.toBeNull();
     expect(item?.mediaType).toBe("pdf");
     expect(item?.title).toBe("book");
-    expect(item?.id).toBe(LOCAL_ID_PREFIX + "book.pdf");
+    expect(item?.id).toBe(LOCAL_ID_PREFIX + "books/book.pdf");
     expect(item?.origin).toBe("local");
     expect(item?.addedAt).toBe(new Date(1000).toISOString());
   });
 
   it("maps a .epub file to a local epub item", () => {
     const file = new File(["bytes"], "novel.epub", { lastModified: 2000 });
-    const item = fileToLocalItem(file, "novel.epub");
+    const item = fileToLocalItem(file, "novel.epub", "books");
 
     expect(item?.mediaType).toBe("epub");
     expect(item?.title).toBe("novel");
@@ -76,21 +77,31 @@ describe("fileToLocalItem", () => {
 
   it("matches the extension case-insensitively (book.PDF → pdf)", () => {
     const file = new File(["bytes"], "book.PDF", { lastModified: 3000 });
-    const item = fileToLocalItem(file, "book.PDF");
+    const item = fileToLocalItem(file, "book.PDF", "books");
 
     expect(item?.mediaType).toBe("pdf");
     expect(item?.title).toBe("book");
-    expect(item?.id).toBe(LOCAL_ID_PREFIX + "book.PDF");
+    expect(item?.id).toBe(LOCAL_ID_PREFIX + "books/book.PDF");
   });
 
   it("returns null for an unsupported extension", () => {
     const file = new File(["bytes"], "notes.txt", { lastModified: 1000 });
-    expect(fileToLocalItem(file, "notes.txt")).toBeNull();
+    expect(fileToLocalItem(file, "notes.txt", "books")).toBeNull();
   });
 
   it("returns null for a name with no dot", () => {
     const file = new File(["bytes"], "README", { lastModified: 1000 });
-    expect(fileToLocalItem(file, "README")).toBeNull();
+    expect(fileToLocalItem(file, "README", "books")).toBeNull();
+  });
+
+  it("produces non-colliding ids for the same filename in differently-named folders", () => {
+    const file = new File(["bytes"], "Notes.pdf", { lastModified: 1000 });
+    const itemA = fileToLocalItem(file, "Notes.pdf", "folderA");
+    const itemB = fileToLocalItem(file, "Notes.pdf", "folderB");
+
+    expect(itemA?.id).toBe(LOCAL_ID_PREFIX + "folderA/Notes.pdf");
+    expect(itemB?.id).toBe(LOCAL_ID_PREFIX + "folderB/Notes.pdf");
+    expect(itemA?.id).not.toBe(itemB?.id);
   });
 });
 
@@ -132,7 +143,7 @@ describe("local source — after binding", () => {
     const content = "pdf-bytes-here";
     const pdf = new File([content], "book.pdf", { lastModified: 1000 });
     const epub = new File(["epub-bytes"], "novel.epub", { lastModified: 2000 });
-    const dir = makeFakeDirectory([
+    const dir = makeFakeDirectory("library", [
       { kind: "file", name: "book.pdf", file: pdf },
       { kind: "file", name: "novel.epub", file: epub },
       { kind: "file", name: "skip.txt", file: new File(["t"], "skip.txt", { lastModified: 500 }) },
@@ -145,15 +156,15 @@ describe("local source — after binding", () => {
     const items = await listLocal();
     expect(items).toHaveLength(2);
     // newest-first by addedAt: epub (2000) before pdf (1000)
-    expect(items[0].id).toBe(LOCAL_ID_PREFIX + "novel.epub");
-    expect(items[1].id).toBe(LOCAL_ID_PREFIX + "book.pdf");
+    expect(items[0].id).toBe(LOCAL_ID_PREFIX + "library/novel.epub");
+    expect(items[1].id).toBe(LOCAL_ID_PREFIX + "library/book.pdf");
     expect(items.every((i) => i.origin === "local")).toBe(true);
 
-    const fetched = await getLocalItem(LOCAL_ID_PREFIX + "book.pdf");
-    expect(fetched?.id).toBe(LOCAL_ID_PREFIX + "book.pdf");
+    const fetched = await getLocalItem(LOCAL_ID_PREFIX + "library/book.pdf");
+    expect(fetched?.id).toBe(LOCAL_ID_PREFIX + "library/book.pdf");
     expect(fetched?.mediaType).toBe("pdf");
 
-    const pdfItem = items.find((i) => i.id === LOCAL_ID_PREFIX + "book.pdf")!;
+    const pdfItem = items.find((i) => i.id === LOCAL_ID_PREFIX + "library/book.pdf")!;
     const buf = await resolveLocalBlob(pdfItem);
     expect(buf).not.toBeNull();
     expect(new TextDecoder().decode(buf!)).toBe(content);

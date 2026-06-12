@@ -1,3 +1,9 @@
+// Third-party feed dates arrive unvalidated. Callers drop unparseable values
+// at the parse boundary so formatUtcDate never receives garbage.
+export function isParseableDate(value: string): boolean {
+  return !isNaN(new Date(value).getTime());
+}
+
 // Posts store publishedAt as UTC ISO strings; format in UTC to avoid
 // timezone-dependent date shifts (e.g. Feb 1 UTC displaying as Jan 31).
 export function formatUtcDate(
