@@ -163,6 +163,33 @@ describe("LRU eviction", () => {
     vi.restoreAllMocks();
     await cache.closeDb();
   });
+
+  it("rejects an oversized entry without evicting the cache", async () => {
+    const cache = createLruBlobCache({ name: uniqueDbName(), version: 1, maxBytes: 1024 });
+    await cache.putEntry("keep", new ArrayBuffer(500));
+    await expect(cache.putEntry("toobig", new ArrayBuffer(2048))).rejects.toThrow();
+    expect(await cache.getEntry("keep")).not.toBeNull();
+    expect(await cache.getEntry("toobig")).toBeNull();
+    const stats = await cache.getStats();
+    expect(stats.totalBytes).toBe(500);
+    expect(stats.entryCount).toBe(1);
+    await cache.closeDb();
+  });
+
+  it("replace evicts on the size delta, not gross incoming size", async () => {
+    const cache = createLruBlobCache({ name: uniqueDbName(), version: 1, maxBytes: 250 });
+    vi.spyOn(Date, "now").mockReturnValue(1000);
+    await cache.putEntry("b", new ArrayBuffer(100));
+    vi.mocked(Date.now).mockReturnValue(2000);
+    await cache.putEntry("a", new ArrayBuffer(100));
+    vi.mocked(Date.now).mockReturnValue(3000);
+    await cache.putEntry("a", new ArrayBuffer(120));
+    expect(await cache.getEntry("b")).not.toBeNull();
+    expect(await cache.getEntry("a")).not.toBeNull();
+    expect((await cache.getStats()).totalBytes).toBe(220);
+    vi.restoreAllMocks();
+    await cache.closeDb();
+  });
 });
 
 describe("clearCache", () => {

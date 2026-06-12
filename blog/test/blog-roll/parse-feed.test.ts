@@ -75,6 +75,64 @@ describe("parseXml", () => {
     });
   });
 
+  it("drops publishedAt when Atom date is unparseable", () => {
+    const feed = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Test Blog</title>
+  <entry>
+    <title>Bad Date Post</title>
+    <link href="https://example.com/bad-date-atom"/>
+    <published>not-a-date</published>
+  </entry>
+</feed>`;
+    const result = parseXml(feed);
+    expect(result).toEqual({
+      title: "Bad Date Post",
+      url: "https://example.com/bad-date-atom",
+      publishedAt: undefined,
+    });
+  });
+
+  it("drops publishedAt when RSS pubDate is unparseable", () => {
+    const feed = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Test Blog</title>
+    <item>
+      <title>Bad Date RSS Post</title>
+      <link>https://example.com/bad-date-rss</link>
+      <pubDate>garbage</pubDate>
+    </item>
+  </channel>
+</rss>`;
+    const result = parseXml(feed);
+    expect(result).toEqual({
+      title: "Bad Date RSS Post",
+      url: "https://example.com/bad-date-rss",
+      publishedAt: undefined,
+    });
+  });
+
+  it("falls through to updated when Atom published is present but unparseable", () => {
+    // A present-but-invalid <published> must not block the valid <updated>
+    // fallback: the parse-boundary guard prefers the first parseable source.
+    const feed = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Bad Published Good Updated</title>
+    <link href="https://example.com/bad-published-good-updated"/>
+    <published>not-a-date</published>
+    <updated>2026-02-01T00:00:00Z</updated>
+  </entry>
+</feed>`;
+    const result = parseXml(feed);
+    expect(result).toEqual({
+      title: "Bad Published Good Updated",
+      url: "https://example.com/bad-published-good-updated",
+      publishedAt: "2026-02-01T00:00:00Z",
+    });
+  });
+
   it("uses updated date when published is absent", () => {
     const feedWithUpdated = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">

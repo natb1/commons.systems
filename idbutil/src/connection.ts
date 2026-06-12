@@ -24,19 +24,28 @@ export function createDbConnection(config: DbConnectionConfig): {
   function openDb(): Promise<IDBDatabase> {
     if (!dbPromise) {
       dbPromise = new Promise((resolve, reject) => {
+        let upgradeError: unknown;
         const request = indexedDB.open(config.name, config.version);
         request.onupgradeneeded = (event) => {
-          config.onUpgrade(request.result, event.oldVersion);
+          try {
+            config.onUpgrade(request.result, event.oldVersion);
+          } catch (err) {
+            upgradeError = err;
+            request.transaction?.abort();
+          }
         };
         request.onsuccess = () => {
-          request.result.onclose = () => { dbPromise = null; };
-          resolve(request.result);
+          const db = request.result;
+          db.onclose = () => { dbPromise = null; };
+          db.onversionchange = () => { db.close(); dbPromise = null; };
+          resolve(db);
         };
         request.onblocked = () => {
-          dbPromise = null;
-          reject(new Error("Database upgrade blocked. Close other tabs using this app and try again."));
+          console.warn(
+            `IndexedDB upgrade of "${config.name}" is blocked by another connection; waiting for it to close.`,
+          );
         };
-        request.onerror = () => { dbPromise = null; reject(request.error); };
+        request.onerror = () => { dbPromise = null; reject(upgradeError ?? request.error); };
       });
     }
     return dbPromise;
