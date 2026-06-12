@@ -195,8 +195,8 @@ export function initViewer(
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;
+      persistPosition();
     }
-    persistPosition();
   }
 
   // Zoom controls — update enabled/disabled state
