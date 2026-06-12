@@ -114,14 +114,11 @@ export function afterRenderHome(
   clickAbort = new AbortController();
   const cacheInfo = outlet.querySelector("#cache-info");
 
-  // stopPropagation prevents the click from toggling the parent <details> element
   outlet.addEventListener("click", (e) => {
     const checkbox = (e.target as HTMLElement).closest(
       "input[data-queue-toggle]",
     ) as HTMLInputElement | null;
     if (!checkbox) return;
-
-    e.stopPropagation();
 
     const row = checkbox.closest(".audio-row") as HTMLElement | null;
     if (!row) return;
