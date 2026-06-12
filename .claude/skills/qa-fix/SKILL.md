@@ -142,18 +142,13 @@ Otherwise run all steps in order.
 
 3. **Browser feature path.** Skip to Step 4 if the non-browser path applies.
 
-   a. **Start the QA server in the background.** Use a Bash tool call with `run_in_background: true`:
+   a. **Start the QA server (foreground, returns when ready).** Use a single foreground Bash call with `--detach`; it runs the readiness poll internally and exits 0 with the server still running:
       ```bash
-      .claude/skills/dispatch-propagate/scripts/run-qa-server.sh <app-dir>
+      .claude/skills/dispatch-propagate/scripts/run-qa-server.sh <app-dir> --detach
       ```
-      Capture the App URL printed to stdout. The QA server seeds public data only — do not re-run it or any seed step with `SEED_TEST_ONLY=true` (see [QA data policy](#qa-data-policy)).
+      Capture the App URL from its stdout summary block. The QA server seeds public data only — do not re-run it or any seed step with `SEED_TEST_ONLY=true` (see [QA data policy](#qa-data-policy)).
 
-   b. **Wait for the server:**
-      ```bash
-      .claude/skills/dispatch-propagate/scripts/wait-for-url.sh <url>
-      ```
-
-   c. **Pre-QA acceptance check:**
+   b. **Pre-QA acceptance check:**
       ```bash
       .claude/skills/dispatch-propagate/scripts/run-acceptance-tests.sh <app-dir> <url>
       ```
@@ -164,7 +159,7 @@ Otherwise run all steps in order.
         run cleanup Step 6), and escalate per the **Escalation** section.
       - **If the check passes** → continue to the walkthrough.
 
-   d. **Walk through only the machine-verifiable QA-plan items via the Chrome
+   c. **Walk through only the machine-verifiable QA-plan items via the Chrome
       extension.** Needs-human-judgment items are **not** walked — they are
       recorded as deferred-to-office-hours.
 
