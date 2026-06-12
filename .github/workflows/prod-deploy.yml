@@ -23,13 +23,15 @@ jobs:
   deploy-and-smoke:
     if: >-
       (github.event_name == 'push') ||
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+      (github.event_name == 'workflow_dispatch')
+    concurrency:
+      group: prod-deploy
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -50,6 +52,7 @@ jobs:
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           DEPLOY_ALL: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
+          DIFF_BASE: ${{ github.event.before }}
         run: .claude/skills/dispatch-propagate/scripts/run-all-prod-deploy-smoke.sh
       - name: Cleanup credentials
         if: always()
