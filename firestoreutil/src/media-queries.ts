@@ -22,7 +22,9 @@ export function createMediaQueries<T extends { id: string; addedAt: string }>(
   async function getUserMedia(email: string): Promise<T[]> {
     const q = query(collection(db, path), where("memberEmails", "array-contains", email));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => toItem(docSnap.id, docSnap.data()));
+    const items = snapshot.docs.map((docSnap) => toItem(docSnap.id, docSnap.data()));
+    items.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
+    return items;
   }
 
   async function getAllAccessibleMedia(email: string): Promise<T[]> {
