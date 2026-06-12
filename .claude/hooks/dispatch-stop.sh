@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# dispatch-stop: dispatch-worker phase-completion + propagation handler.
+# dispatch-stop: phase-skill worker session phase-completion + propagation handler.
 #
-# Wired to the Stop event. Owns the post-phase disposition that used to live
-# in /dispatch-worker Step 4: read the phase-completed marker, decide whether
+# Wired to the Stop event. Owns the post-phase disposition: read the
+# phase-completed marker, decide whether
 # the phase advanced or stalled, manage the dispatch:office-hours label,
 # spawn the next headless dispatch-tick (via dispatch-spawn-tick), and
 # self-close on a clean advance. Moving
@@ -72,7 +72,7 @@
 # marker-absent TOCTOU hand-back — are deliberate human-review parks or router
 # hand-backs, not idle waiters.
 #
-# Discriminator: only acts for a /dispatch-worker job. Skipped when
+# Discriminator: only acts for a phase-skill worker session. Skipped when
 # CLAUDE_JOB_DIR is unset (interactive session), state.json is missing, or the
 # recorded --name does NOT match ^[0-9]+- (router names like
 # `dispatch-<short-id>` are skipped — they don't run phase skills).

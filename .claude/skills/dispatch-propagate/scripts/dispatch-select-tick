@@ -164,7 +164,7 @@ fi
 # run may spawn, and normal selection (Step 3) already runs priority-first, so a
 # priority item under budget is handled there. Daemon UNKNOWN (the busy-worker
 # read fails; reservation_count never fails) → fail open (GAP=1); the
-# per-worktree dedup in dispatch-spawn-worker is the last-line defense.
+# per-worktree dedup in dispatch-spawn-job is the last-line defense.
 #
 # AT cap (LIVE_COUNT >= TARGET_N) the budget no longer hard-stops the run. The
 # budget paces only NON-priority autonomous fan-out; priority/main-broken work

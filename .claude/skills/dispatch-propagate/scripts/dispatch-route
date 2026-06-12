@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Collapse the deterministic /dispatch-worker prelude into one call and print one
-# directive. Usage: dispatch-route <N> <worktree-path>
+# Runs the deterministic phase-launch prelude consumed by dispatch-launch-worker.
+# Usage: dispatch-route <N> <worktree-path>
 #
-# Runs the entire deterministic worker prelude — the worktree cross-check, the
+# Runs the entire deterministic prelude — the worktree cross-check, the
 # worktree provisioning + origin/main merge, the dispatch-ci-ready gate, and
-# dispatch-phase — in a single invocation, so the worker model makes one Bash
-# round-trip and never branches on intermediate exit codes itself. Prints exactly
+# dispatch-phase — in a single invocation, so the launcher script receives one
+# directive and never branches on intermediate exit codes itself. Prints exactly
 # one directive line to stdout:
 #
 #   INVOKE /fix-checks              phase fix-checks   (draft PR, CI failed)
@@ -60,10 +60,9 @@ if [[ ! "$N" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
-# Step 0 — worktree cross-check (the defensive prelude now owned by this script,
-# described in dispatch-worker SKILL.md Step 1): derive the branch from the
-# worktree toplevel's basename, assert the "<N>-" prefix and that the toplevel
-# equals the passed <worktree-path>.
+# Step 0 — worktree cross-check (the defensive prelude now owned by this script):
+# derive the branch from the worktree toplevel's basename, assert the "<N>-"
+# prefix and that the toplevel equals the passed <worktree-path>.
 ACTUAL_TOPLEVEL=$(git rev-parse --show-toplevel)
 ACTUAL_BRANCH=$(basename "$ACTUAL_TOPLEVEL")
 EXPECTED="${N}-"
