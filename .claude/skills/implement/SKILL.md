@@ -87,9 +87,6 @@ Exit codes:
   `dispatch-mark-deviation` (skip the `phase-completed` marker) and stop.
 - **exit 2** — non-numeric arg.
 
-`sync-issue-context` also renders this plan under `### Comments` in
-`CLAUDE.local.md`, so it is available as context too.
-
 ### 2. Build each unit
 
 For each unit in the plan read in Step 1, in dependency order, invoke
@@ -173,5 +170,5 @@ router, strips `dispatch:office-hours` if present, and self-closes this job.
 ## Requirement changes mid-session
 
 If the user revises a requirement during this session, invoke `/new-requirement` —
-it clarifies, updates remote issues, re-syncs `CLAUDE.local.md`, and revises this
-plan. Do not handle re-sync inline.
+it clarifies, updates remote issues, and revises this plan. Do not handle the
+revision inline.
