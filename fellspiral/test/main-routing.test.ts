@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Issue #1285 — fellspiral routing regression.
 //
@@ -96,13 +96,64 @@ function scaffoldDom(): void {
   `;
 }
 
+// main.ts does not export the router it constructs at module load, so the test
+// cannot call router.destroy() directly. Instead, capture the listeners the
+// router registers during import (popstate on window, click on document) by
+// patching addEventListener around the import, then remove them in afterEach.
+// Without this, each imported module's router listeners would linger on
+// window/document into the next test and fire on its popstate dispatch.
+type CapturedListener = {
+  target: EventTarget;
+  type: string;
+  listener: EventListenerOrEventListenerObject;
+  options?: boolean | AddEventListenerOptions;
+};
+let capturedListeners: CapturedListener[] = [];
+
+async function importMainTrackingListeners(): Promise<void> {
+  const targets: EventTarget[] = [window, document];
+  const originals = targets.map((target) => ({
+    target,
+    original: target.addEventListener,
+  }));
+  for (const { target } of originals) {
+    target.addEventListener = function (
+      this: EventTarget,
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions,
+    ) {
+      capturedListeners.push({ target: this, type, listener, options });
+      const original = originals.find((o) => o.target === this)!.original;
+      return original.call(this, type, listener, options);
+    } as typeof target.addEventListener;
+  }
+  try {
+    await import("../src/main");
+  } finally {
+    for (const { target, original } of originals) {
+      target.addEventListener = original;
+    }
+  }
+}
+
 describe("fellspiral main routing (#1285)", () => {
   beforeEach(() => {
     vi.resetModules();
     renderHomeHtml.mockClear();
     renderAdmin.mockClear();
+    capturedListeners = [];
     globalThis.ResizeObserver =
       ResizeObserverStub as unknown as typeof ResizeObserver;
+  });
+
+  afterEach(() => {
+    // Remove the router's popstate/click listeners so a prior test's router
+    // (whose closures point at stale DOM) does not fire during later tests.
+    for (const { target, type, listener, options } of capturedListeners) {
+      target.removeEventListener(type, listener, options);
+    }
+    capturedListeners = [];
   });
 
   it("rebuilds home content after a direct /admin entry, not leaving stale admin DOM", async () => {
@@ -111,7 +162,7 @@ describe("fellspiral main routing (#1285)", () => {
     scaffoldDom();
 
     // 2. Run the entry fresh.
-    await import("../src/main");
+    await importMainTrackingListeners();
 
     const app = document.getElementById("app")!;
 
@@ -142,7 +193,7 @@ describe("fellspiral main routing (#1285)", () => {
     history.pushState({}, "", "/");
     scaffoldDom();
 
-    await import("../src/main");
+    await importMainTrackingListeners();
 
     const app = document.getElementById("app")!;
 
