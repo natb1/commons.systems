@@ -143,6 +143,37 @@ build_relations_section() {
   fi
 }
 
+# --pr: resolve the PR via dispatch-find-pr, then emit number, labels, CI
+# verdict, and body as clean markdown prose. Empty dispatch-find-pr output (exit
+# 0) means no PR exists yet → emit "PR: none" and return 0 (legitimate
+# plan-phase case). A non-zero dispatch-find-pr exit is a real failure → return 1.
+# Inside the helper, all command substitutions use the two-line form to avoid
+# masking failures under `local`.
+build_pr_section() {
+  local n="$1"
+  local pr_num
+  pr_num=$("$SCRIPT_DIR/dispatch-find-pr" "$n") || return 1
+
+  if [[ -z "$pr_num" ]]; then
+    printf 'PR: none\n'
+    return 0
+  fi
+
+  local pr_json
+  pr_json=$(gh_retry gh pr view "$pr_num" --json number,labels,statusCheckRollup,body) || return 1
+
+  local pr_number labels_str ci_verdict pr_body
+  pr_number=$(jq -r '.number' <<<"$pr_json") || return 1
+  labels_str=$(jq -r '[ .labels[].name ] | if length == 0 then "(none)" else join(", ") end' <<<"$pr_json") || return 1
+  ci_verdict=$(dispatch_classify_rollup "$(jq -c '.statusCheckRollup' <<<"$pr_json")") || return 1
+  pr_body=$(jq -r '.body // ""' <<<"$pr_json") || return 1
+
+  printf 'PR #%s\n' "$pr_number"
+  printf 'labels: %s\n' "$labels_str"
+  printf 'ci: %s\n' "$ci_verdict"
+  printf '\n%s\n' "$pr_body"
+}
+
 # ---- Step 2: build each requested section into its own variable -------------
 #
 # Buffer-then-flush is mandatory (NOT a stylistic choice): each section is built
@@ -179,9 +210,12 @@ $REL_BODY"
 fi
 
 if [[ "$WANT_PR" == 1 ]]; then
-  # Unit 3 fills this: --pr slice (resolve via dispatch-find-pr, then emit
-  # number, labels, ci rollup, and body; "PR: none" exit 0 when no PR exists).
-  PR_OUT="=== PR ==="
+  # --pr slice (dispatch-find-pr → gh pr view --json number,labels,
+  # statusCheckRollup,body → jq-rendered markdown). "PR: none" exit 0 when no
+  # PR exists yet (plan phase). Header line, blank line, then prose.
+  PR_BODY=$(build_pr_section "$N") || { echo "error: --pr: failed to build PR section for #$N" >&2; exit 1; }
+  PR_OUT="=== PR ===
+$PR_BODY"
 fi
 
 if [[ "$WANT_DIFF" == 1 ]]; then
