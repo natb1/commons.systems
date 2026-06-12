@@ -23274,6 +23274,117 @@ assert_eq "launch arg: unsafe-char path → exit 2" "2" "$rc_unsafe"
 lw_teardown
 
 # ============================================================================
+# run-qa-server.sh --detach
+# ============================================================================
+# Drives the REAL run-qa-server.sh tail to prove --detach takes the `exit 0`
+# branch (returns) instead of `wait` (blocks). An extracted-primitive test would
+# not prove the script took that branch, so this section runs the real script
+# against a feature-free, Vite-only fixture: a throwaway git repo with no
+# firebase imports (detect_features → all USES_*=false → no emulator path), an
+# empty node_modules (ensure_deps no-ops), and no functions/ dir. Only npx and
+# curl are stubbed; real git/node/jq/flock/setsid/ps/nohup come via SAVED_PATH.
+
+qd_setup() {
+  QD_DIR=$(mktemp -d)
+  cp "$SCRIPT_DIR/run-qa-server.sh" "$QD_DIR/run-qa-server.sh"
+  cp "$SCRIPT_DIR/run-qa-cleanup.sh" "$QD_DIR/run-qa-cleanup.sh"
+  cp "$SCRIPT_DIR/lib.sh" "$QD_DIR/lib.sh"
+  chmod +x "$QD_DIR/run-qa-server.sh" "$QD_DIR/run-qa-cleanup.sh"
+
+  # Real throwaway git repo fixture. Canonicalize so the path equals what
+  # `git rev-parse --show-toplevel` and the script's $(pwd) both resolve to
+  # (logical-vs-physical /tmp symlink would otherwise break the argv match).
+  QD_REPO="$QD_DIR/repo"
+  mkdir -p "$QD_REPO"
+  QD_REPO="$(cd "$QD_REPO" && pwd -P)"
+  mkdir -p "$QD_REPO/myapp/src"
+  echo 'export const x = 1;' > "$QD_REPO/myapp/src/main.ts"   # no firebase imports → Vite-only
+  mkdir -p "$QD_REPO/node_modules"                            # empty → ensure_deps no-ops
+  git init -q "$QD_REPO"
+  git -C "$QD_REPO" config user.email qa@example.com
+  git -C "$QD_REPO" config user.name "QA Test"
+  git -C "$QD_REPO" add -A
+  git -C "$QD_REPO" commit -q -m init
+
+  # Stubs: ONLY npx + curl. Real git/node/jq/flock/setsid/ps/nohup via SAVED_PATH.
+  QD_BIN="$QD_DIR/bin"
+  mkdir -p "$QD_BIN"
+  # npx stand-in: a long-running process whose argv carries the repo path so
+  # kill_worktree_processes (argv substring match on "$QD_REPO/") can kill it.
+  # Vite is launched with cwd=$QD_REPO/myapp, so $PWD contains $QD_REPO/.
+  # The path is placed in argv0 via `exec -a`; the inner `bash -c` uses a
+  # compound command (`sleep …; :`) so bash does NOT exec-optimize away its own
+  # argv0 (a single command would `exec sleep`, dropping the marker). coreutils
+  # `sleep` is a multicall binary that dispatches on argv0 basename, so we must
+  # NOT make the marker `sleep`'s own argv0 — hence the bash wrapper.
+  cat > "$QD_BIN/npx" <<'NPX'
+#!/usr/bin/env bash
+exec -a "qa-vite-standin $PWD/strictport" bash -c 'sleep 100000; :'
+NPX
+  # curl stand-in: always reports 200 so the Vite readiness poll passes with no
+  # real listener (python3/nc are unreliable in this env).
+  cat > "$QD_BIN/curl" <<'CURL'
+#!/usr/bin/env bash
+echo 200
+CURL
+  chmod +x "$QD_BIN/npx" "$QD_BIN/curl"
+  export PATH="$QD_BIN:$SAVED_PATH"
+
+  export FIREBASE_PROJECT_ID=demo-qa-detach
+  QD_SAVED_TMPDIR="${TMPDIR:-}"
+  export TMPDIR="$QD_DIR/tmp"
+  mkdir -p "$QD_DIR/tmp"
+}
+
+qd_teardown() {
+  ( cd "$QD_REPO" 2>/dev/null && "$QD_DIR/run-qa-cleanup.sh" >/dev/null 2>&1 ) || true
+  cd "$SCRIPT_DIR"
+  rm -rf "$QD_DIR"
+  export PATH="$SAVED_PATH"
+  unset FIREBASE_PROJECT_ID
+  if [ -n "$QD_SAVED_TMPDIR" ]; then export TMPDIR="$QD_SAVED_TMPDIR"; else unset TMPDIR; fi
+}
+
+echo "Test: run-qa-server.sh --detach returns while the server stays up"
+qd_setup
+
+# 1. --detach returns (does not block). timeout turns a hang into rc 124.
+cd "$QD_REPO"
+set +e
+timeout 30 "$QD_DIR/run-qa-server.sh" myapp --detach >"$QD_DIR/detach.out" 2>&1
+rc=$?
+set -e
+assert_eq "run-qa-server --detach: returns rc 0 (did not block)" "0" "$rc"
+
+# 2. The detached stand-in is still alive after return.
+up=$( . "$QD_DIR/lib.sh" >/dev/null 2>&1; _pids_matching_arg "$QD_REPO/" )
+assert_eq "run-qa-server --detach: server stays up" "yes" \
+  "$([ -n "$up" ] && echo yes || echo no)"
+
+# 3. run-qa-cleanup.sh stops it (bounded poll for kill latency).
+cd "$QD_REPO"
+"$QD_DIR/run-qa-cleanup.sh" >/dev/null 2>&1 || true
+gone=no
+for _ in $(seq 1 15); do
+  rem=$( . "$QD_DIR/lib.sh" >/dev/null 2>&1; _pids_matching_arg "$QD_REPO/" )
+  [ -z "$rem" ] && { gone=yes; break; }
+  sleep 0.3
+done
+assert_eq "run-qa-cleanup: server stopped" "yes" "$gone"
+
+# 4. No-flag form still blocks on wait (rc 124 = timed out = blocking).
+cd "$QD_REPO"
+set +e
+timeout 3 "$QD_DIR/run-qa-server.sh" myapp >/dev/null 2>&1
+rc_block=$?
+set -e
+assert_eq "run-qa-server (no flag): still blocks on wait" "124" "$rc_block"
+cd "$QD_REPO"
+"$QD_DIR/run-qa-cleanup.sh" >/dev/null 2>&1 || true
+
+qd_teardown
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
