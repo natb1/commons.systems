@@ -91,7 +91,7 @@ export async function renderView(id: string, _user: User | null): Promise<string
   }
 }
 
-async function resolveFileSource(url: string, storagePath: string): Promise<string | ArrayBuffer> {
+export async function resolveFileSource(url: string, storagePath: string): Promise<string | ArrayBuffer> {
   try {
     const cached = await getFile(storagePath);
     if (cached) return cached;
@@ -101,8 +101,12 @@ async function resolveFileSource(url: string, storagePath: string): Promise<stri
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch media: ${res.status}`);
   const buf = await res.arrayBuffer();
-  // Cache write is best-effort; failure does not affect the current view
-  putFile(storagePath, buf).catch((err) => {
+  // Cache write is best-effort; failure does not affect the current view.
+  // Hand the cache its own copy: pdf.js transfers (detaches) the returned
+  // buffer to its worker, and that detach can win the race against putFile's
+  // deferred store.put. buf.slice(0) is evaluated synchronously here, while
+  // buf is still intact, so the cached bytes are decoupled from the transfer.
+  putFile(storagePath, buf.slice(0)).catch((err) => {
     reportError(new Error("Failed to cache media file", { cause: err }));
   });
   return buf;
