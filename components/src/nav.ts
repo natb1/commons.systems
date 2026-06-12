@@ -109,6 +109,8 @@ class AppNavElement extends HTMLElement {
   }
 }
 
-customElements.define("app-nav", AppNavElement);
+if (!customElements.get("app-nav")) {
+  customElements.define("app-nav", AppNavElement);
+}
 
 export type { AppNavElement };
