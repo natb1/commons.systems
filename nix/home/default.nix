@@ -85,6 +85,7 @@
     pkgs.jq
     pkgs.google-cloud-sdk
     pkgs.pass
+    pkgs.python3
   ];
 
   # Eastern time. America/New_York tracks EST/EDT automatically.
