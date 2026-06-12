@@ -106,6 +106,14 @@ Otherwise run all steps in order.
 
    Pure-backend PRs (e.g. `functions/`-only, scripts-only) take the **non-browser path**.
 
+   From the same diff: if any changed path is `firestore.rules` or a Firestore
+   query module, `Read .claude/docs/firestore.md` for the rules-deploy/permission
+   caveat: on a feature branch, smoke tests can fail permission-denied until the
+   standalone rules PR merges and deploys (`firestore.rules` deploys via
+   `firestore-deploy.yml` only on merge to `main`, independent of any app's
+   prod-deploy). Treat such a permission-denied smoke failure as this known caveat,
+   not as a product bug.
+
    If a browser component is detected, identify the **app dir** (`budget`,
    `fellspiral`, `landing`, or `print`) from the changed paths. If multiple app
    dirs are touched, this is a judgment call needing a human — record it as a

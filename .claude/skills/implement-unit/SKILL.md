@@ -44,6 +44,22 @@ The caller supplies:
    `model`. The prompt includes `context` and `scope`, plus the explicit constraint:
    *the subagent edits the working tree only — no commits, no pushes.*
 
+   - **If the unit's `scope` touches `firestore.rules` or Firestore queries**
+     (collection/query reads or writes, or security-rule code), `Read
+     .claude/docs/firestore.md` FIRST and fold its load-bearing code constraints
+     into the `context` passed to the implementation subagent — the subagent does
+     not auto-load the doc, so the constraints must travel in its prompt. Fold in:
+     (1) **list-query `where`-clause compatibility** — an unauthenticated
+     `orderBy` list query is rejected by the rules unless it carries a `where`
+     filter matching the rule condition; use `where("published", "==", true)` and
+     sort client-side; (2) the **`{appName}/{envSuffix}/{collection}/{docId}` path
+     schema** — each app owns a top-level collection and environments are documents
+     within it; (3) the **serialized standalone-rules-PR workflow** — rules changes
+     ride the feature branch through preview/smoke, then ship as a separate
+     rules-only PR to `main`, and only one worktree may carry unmerged rules
+     changes at a time. `.claude/docs/firestore.md` is the authoritative source for
+     all three.
+
 2. **Commit, merge `origin/main`, and push — script-first, skill-fork fallback.**
    This step is the **canonical commit-merge-push recipe** — `/qa-fix` and
    `/review-fix` reference this step rather than restating it.
