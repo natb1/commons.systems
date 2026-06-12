@@ -320,7 +320,11 @@ if [ "$USES_FUNCTIONS" = true ]; then
   echo "  Functions emulator: localhost:${FUNCTIONS_PORT}"
 fi
 echo ""
-echo "  Press Ctrl+C to stop"
+if [ "$DETACH" = true ]; then
+  echo "  Stop: run-qa-cleanup.sh"
+else
+  echo "  Press Ctrl+C to stop"
+fi
 echo "========================================"
 echo ""
 
