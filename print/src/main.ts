@@ -12,7 +12,7 @@ import "@commons-systems/components/nav";
 import type { AppNavElement } from "@commons-systems/components/nav";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "./auth.js";
-import { setViewerEmail } from "./library.js";
+import { setViewerEmail, markLocalFolderReady } from "./library.js";
 import { trackPageView } from "./firebase.js";
 import { renderHero } from "./pages/hero.js";
 import { mountHero } from "@commons-systems/components/hero";
@@ -43,9 +43,14 @@ if (navAuthEl) {
   const localFolderNavEl = document.createElement("span");
   localFolderNavEl.id = "local-folder";
   navEl.insertBefore(localFolderNavEl, navAuthEl);
-  initLocalFolder(localFolderNavEl, app).catch((err) =>
-    logError(err, { operation: "init-local-folder" }),
-  );
+  initLocalFolder(localFolderNavEl, app, () => router.navigate())
+    .catch((err) => logError(err, { operation: "init-local-folder" }))
+    .finally(() => markLocalFolderReady());
+} else {
+  // No .nav-auth means the local-folder UI is never mounted, so initLocalFolder
+  // never runs to settle the readiness gate. Mark it ready here so renderView()
+  // for a local: id never hangs forever waiting on a promise that can't resolve.
+  markLocalFolderReady();
 }
 
 let currentUser: User | null = null;

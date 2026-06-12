@@ -5963,7 +5963,7 @@ sweep_path_key() {
 # returns sessions keyed by name — matching how claude_sessions_with_name
 # queries the daemon after the #882 Unit 2 name-keyed rewrite.
 # Each argument must be in `name=sid` form; name is the worktree basename
-# (as passed via --name=<basename> by dispatch-spawn-worker). The cwd field is
+# (as passed via --name=<basename> by dispatch-launch-worker). The cwd field is
 # set to "" since name-keyed classification ignores it.
 # The fake ignores any --cwd argument and always returns the full payload; the
 # client-side jq select(.name == $name) in claude_sessions_with_name does the
@@ -11550,30 +11550,30 @@ if grep -q -- '/code-review max --fix' "$RF_SKILL"; then rf_fix=yes; else rf_fix
 assert_eq "review-fix: no /code-review max --fix invocation" "no" "$rf_fix"
 
 # ============================================================================
-# dispatch-spawn-worker tests
+# spawn fake-claude harness (shared)
 # ============================================================================
-echo "=== dispatch-spawn-worker ==="
+echo "=== spawn fake-claude harness (shared) ==="
 #
-# dispatch-spawn-worker is exercised against a fake `claude` — a multi-subcommand
-# temp script DISPATCH_SPAWN_WORKER_CLAUDE_CMD points at by absolute path, so
-# no real daemon is needed. The same fake also backs the sourced
-# lib-claude-agents.sh helper (dispatch-spawn-worker exports CLAUDE_AGENTS_CMD
-# to it).
+# This section defines only the shared fake-`claude` harness reused by the
+# dispatch-spawn-office-hours and dispatch-spawn-job test sections that follow:
+# the write_fake_spawn_worker_claude / spawn_worker_setup / spawn_worker_teardown
+# helpers and the SPAWN_WORKER_* fixture globals. (The dedicated
+# dispatch-spawn-worker tests were removed with that script in #1392; the
+# helper names retain their historical "spawn_worker" prefix.)
 #
-# Each test gets a fresh tmp tree:
-#   $TMPDIR_TEST/scripts/dispatch-spawn-worker  copy of the script under test
+# The fake `claude` is a multi-subcommand temp script the script-under-test
+# points at by absolute path, so no real daemon is needed. The same fake also
+# backs the sourced lib-claude-agents.sh helper (via CLAUDE_AGENTS_CMD).
+#
+# Each test that calls spawn_worker_setup gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/dispatch-spawn-job     the generalized spawn primitive
 #   $TMPDIR_TEST/scripts/lib-claude-agents.sh   sourced helper (not chmod'd)
-#   $TMPDIR_TEST/worktrees/main/                backdrop only (not used by script)
-#   $TMPDIR_TEST/worktrees/839-test-worker/     the target worktree path (arg 2)
+#   $TMPDIR_TEST/worktrees/main/                backdrop cwd
+#   $TMPDIR_TEST/worktrees/839-test-worker/     the target worktree path
 #   $TMPDIR_TEST/fake-claude                    the multi-subcommand fake `claude`
 #   $TMPDIR_TEST/registry.json                  `claude agents --json` fixture
 #   $TMPDIR_TEST/bg-argv                        recorded argv of each `claude --bg` call
 #   $TMPDIR_TEST/pwd-log                        records the spawn subshell's $PWD
-#                                               so Test 2 can assert the script
-#                                               cd'd into the target worktree.
-#
-# The test shell runs under `set -e`; dispatch-spawn-worker can exit non-zero,
-# so every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
 
 SPAWN_WORKER_REGISTRY=""
 SPAWN_WORKER_BG_ARGV=""
@@ -11587,7 +11587,7 @@ WORKER_TARGET_WORKTREE=""
 #              claude_sessions_under does no client-side path filtering — it
 #              trusts server-side `--cwd` filtering — so every fixture session
 #              is returned. Fine here: each fixture holds only sessions a test
-#              means dispatch-spawn-worker to see. If SPAWN_BG_REGISTER_AFTER_N
+#              means dispatch-spawn-job to see. If SPAWN_BG_REGISTER_AFTER_N
 #              mode left a pending sidecar, decrement its countdown; when it
 #              reaches zero, merge the pending agent into the registry and
 #              delete the sidecar.
@@ -11650,14 +11650,12 @@ spawn_worker_setup() {
     "$TMPDIR_TEST/worktrees/main" \
     "$TMPDIR_TEST/worktrees/839-test-worker"
 
-  # dispatch-spawn-worker sources lib-claude-agents.sh from its own directory
-  # and `exec`s dispatch-spawn-job (the generalized spawn primitive) from there
-  # too, so both must sit alongside the copy. lib-claude-agents.sh is sourced,
-  # not executed — no chmod; dispatch-spawn-job is exec'd, so it is chmod'd.
-  cp "$SCRIPT_DIR/dispatch-spawn-worker" "$TMPDIR_TEST/scripts/dispatch-spawn-worker"
+  # dispatch-spawn-job (the generalized spawn primitive) sources
+  # lib-claude-agents.sh from its own directory, so both must sit alongside the
+  # copy. lib-claude-agents.sh is sourced, not executed — no chmod;
+  # dispatch-spawn-job is run, so it is chmod'd.
   cp "$SCRIPT_DIR/dispatch-spawn-job" "$TMPDIR_TEST/scripts/dispatch-spawn-job"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
-  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-worker"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-job"
 
   SPAWN_WORKER_REGISTRY="$TMPDIR_TEST/registry.json"
@@ -11666,9 +11664,6 @@ spawn_worker_setup() {
   SPAWN_WORKER_PENDING="$TMPDIR_TEST/pending"
   WORKER_TARGET_WORKTREE="$TMPDIR_TEST/worktrees/839-test-worker"
   printf '[]' > "$SPAWN_WORKER_REGISTRY"
-
-  export DISPATCH_SPAWN_WORKER_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
-  export DISPATCH_SPAWN_WORKER_SESSION_ID="sess-self"
 }
 
 spawn_worker_teardown() {
@@ -11679,300 +11674,10 @@ spawn_worker_teardown() {
   SPAWN_WORKER_PWD_LOG=""
   SPAWN_WORKER_PENDING=""
   WORKER_TARGET_WORKTREE=""
-  unset DISPATCH_SPAWN_WORKER_CLAUDE_CMD DISPATCH_SPAWN_WORKER_SESSION_ID \
-    DISPATCH_SPAWN_JOB_CLAUDE_CMD DISPATCH_SPAWN_JOB_SESSION_ID \
+  unset DISPATCH_SPAWN_JOB_CLAUDE_CMD DISPATCH_SPAWN_JOB_SESSION_ID \
     SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
     LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 }
-
-# --- Test 1: spawn success ---------------------------------------------------
-
-echo "Test: an empty registry spawns one /dispatch-worker background job"
-spawn_worker_setup
-write_fake_spawn_worker_claude
-# Run from a stable known cwd so Test 2 (and 1's name/positional-arg
-# assertions) can compare against it. The spawn subshell cd's into the target
-# worktree; the script's own cwd is the caller's cwd.
-SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
-if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
-assert_eq "spawn-worker: dispatch-spawn-worker exits 0" "0" "$rc"
-assert_eq "spawn-worker: stdout is 'spawned'" "spawned" "$out"
-# The recorded argv must be exactly:
-#   --bg --name <worktree-basename> --permission-mode auto
-#   "/dispatch-worker 839 <worktree-path>"
-mapfile -t sw_bg_argv < "$SPAWN_WORKER_BG_ARGV"
-assert_eq "spawn-worker: argv[0] is --bg" "--bg" "${sw_bg_argv[0]:-}"
-assert_eq "spawn-worker: argv[1] is --name" "--name" "${sw_bg_argv[1]:-}"
-assert_eq "spawn-worker: argv[2] is the worktree basename" \
-  "839-test-worker" "${sw_bg_argv[2]:-}"
-assert_eq "spawn-worker: argv[3] is --permission-mode" "--permission-mode" "${sw_bg_argv[3]:-}"
-assert_eq "spawn-worker: argv[4] is auto" "auto" "${sw_bg_argv[4]:-}"
-assert_eq "spawn-worker: argv[5] is '/dispatch-worker 839 <worktree-path>'" \
-  "/dispatch-worker 839 $WORKER_TARGET_WORKTREE" "${sw_bg_argv[5]:-}"
-spawn_worker_teardown
-
-# --- Test 2: spawn cwd is the target worktree path --------------------------
-
-echo "Test: dispatch-spawn-worker invokes 'claude --bg' from the target worktree path, NOT the caller's cwd"
-spawn_worker_setup
-write_fake_spawn_worker_claude
-SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
-if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
-assert_eq "spawn-worker-cwd: exits 0" "0" "$rc"
-# Read the first line of the pwd-log and compare it (via realpath) to the
-# target worktree path. realpath is used to normalize platform-specific path
-# differences (e.g. macOS /private/ prefix on /tmp).
-sw_pwd_line=$(head -1 "$SPAWN_WORKER_PWD_LOG" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" == "$(realpath "$WORKER_TARGET_WORKTREE")" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: 'claude --bg' ran with cwd = target worktree path"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: 'claude --bg' ran with cwd = target worktree path"
-  echo "    pwd-log:  '$sw_pwd_line'"
-  echo "    expected: '$WORKER_TARGET_WORKTREE'"
-fi
-# Independently assert the cwd is NOT the caller's cwd — that is the
-# regression the fix prevents (worker born in the wrong worktree).
-TOTAL=$((TOTAL + 1))
-if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" != "$(realpath "$SPAWN_CALLER_CWD")" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: 'claude --bg' did NOT run from the caller's cwd"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: 'claude --bg' did NOT run from the caller's cwd"
-  echo "    pwd-log: '$sw_pwd_line'"
-fi
-spawn_worker_teardown
-
-# --- Test 3: per-worktree dedup ----------------------------------------------
-
-echo "Test: another live same-name (worktree-basename) session deduplicates the spawn"
-spawn_worker_setup
-# The dedup is keyed on `name == <worktree-basename>` — i.e. `839-test-worker`
-# in this test fixture. Prime the registry with a different sessionId whose
-# name matches the worktree-basename the spawn would use.
-printf '%s' \
-  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"839-test-worker"}]' \
-  > "$SPAWN_WORKER_REGISTRY"
-write_fake_spawn_worker_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "dedup-worker: dispatch-spawn-worker exits 0" "0" "$rc"
-assert_eq "dedup-worker: stdout is 'deduped' (name-keyed dedup hit)" "deduped" "$out"
-# No --bg invocation was recorded — nothing was spawned.
-TOTAL=$((TOTAL + 1))
-if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: dedup-worker: no 'claude --bg' invocation recorded"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: dedup-worker: no 'claude --bg' invocation recorded"
-  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
-fi
-spawn_worker_teardown
-
-# --- Test 4: self-exclusion --------------------------------------------------
-
-echo "Test: a same-name session that is this session does not deduplicate"
-spawn_worker_setup
-# The only worker-named session in the registry IS this session (sess-self).
-# Self-exclusion makes name-keyed dedup ignore sessionId == DISPATCH_SPAWN_WORKER_SESSION_ID.
-printf '%s' \
-  '[{"sessionId":"sess-self","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"839-test-worker"}]' \
-  > "$SPAWN_WORKER_REGISTRY"
-write_fake_spawn_worker_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "self-exclude-worker: dispatch-spawn-worker exits 0" "0" "$rc"
-assert_eq "self-exclude-worker: stdout is 'spawned' (own session is not 'another')" \
-  "spawned" "$out"
-spawn_worker_teardown
-
-# --- Test 5: --no-verify behavior (kick is the came-up signal) ---------------
-# The worker passes --no-verify (#1048), so the registration wait is gone. A
-# kick that never registers SUCCEEDS (the kick itself returns 0); only a
-# non-zero kick fails.
-
-echo "Test: a kick that never registers still exits 0 (--no-verify, no registration wait)"
-spawn_worker_setup
-write_fake_spawn_worker_claude
-# SPAWN_BG_REGISTERS=0: the --bg handler returns 0 but never appends to the
-# registry. Under the old verify path this exited 1; with --no-verify the worker
-# exits 0 with stdout 'spawned' and no verify poll.
-export SPAWN_BG_REGISTERS=0
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "spawn-worker-noverify: a never-registering kick exits 0" "0" "$rc"
-assert_eq "spawn-worker-noverify: stdout is 'spawned'" "spawned" "$out"
-spawn_worker_teardown
-
-echo "Test: a non-zero 'claude --bg' kick exits 1 with a diagnostic (--no-verify)"
-spawn_worker_setup
-# Inline fake whose --bg branch exits non-zero. dedup (Step 2) queries `agents`
-# first, so that branch must print a parseable empty array.
-cat > "$TMPDIR_TEST/fake-claude" <<FAKE
-#!/usr/bin/env bash
-set -uo pipefail
-case "\${1:-}" in
-  agents) echo '[]' ;;
-  --bg) echo "boom" >&2; exit 3 ;;
-esac
-FAKE
-chmod +x "$TMPDIR_TEST/fake-claude"
-rc=0
-err=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>&1 1>/dev/null) || rc=$?
-TOTAL=$((TOTAL + 1))
-if [[ "$rc" -ne 0 ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-failkick: dispatch-spawn-worker exits non-zero"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-failkick: dispatch-spawn-worker exits non-zero (rc=$rc)"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ -n "${err//[[:space:]]/}" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-failkick: stderr reports the failed kick"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-failkick: stderr reports the failed kick"
-  echo "    stderr: $err"
-fi
-spawn_worker_teardown
-
-# --- Test 6: unqueryable registry fails safe ---------------------------------
-
-echo "Test: an unparseable session registry fails safe — spawns nothing"
-spawn_worker_setup
-# A registry that is not a JSON array: lib-claude-agents.sh's
-# claude_sessions_under cannot parse it and returns 1 (unknown).
-# dispatch-spawn-worker must treat unknown as "a dispatch agent may be running"
-# and spawn nothing — the documented fail-safe in the script's Step 2 dedup
-# guard.
-printf '%s' 'not-a-json-array' > "$SPAWN_WORKER_REGISTRY"
-write_fake_spawn_worker_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "unknown-registry-worker: dispatch-spawn-worker exits 0" "0" "$rc"
-assert_eq "unknown-registry-worker: stdout is 'deduped'" "deduped" "$out"
-# No --bg invocation was recorded — nothing was spawned.
-TOTAL=$((TOTAL + 1))
-if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: unknown-registry-worker: no 'claude --bg' invocation recorded"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: unknown-registry-worker: no 'claude --bg' invocation recorded"
-  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
-fi
-spawn_worker_teardown
-
-# --- Test 7: missing args ----------------------------------------------------
-
-echo "Test: missing arguments exit 2"
-spawn_worker_setup
-write_fake_spawn_worker_claude
-
-# Sub-case A: no args at all
-if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 2>/dev/null; then sw_rc_a=0; else sw_rc_a=$?; fi
-assert_eq "missing-args-worker: no args → exit 2" "2" "$sw_rc_a"
-
-# Sub-case B: only <N> given (no <worktree-path>)
-if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 2>/dev/null; then sw_rc_b=0; else sw_rc_b=$?; fi
-assert_eq "missing-args-worker: only <N> given → exit 2" "2" "$sw_rc_b"
-
-# Sub-case C: three args given (extra argument)
-if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" extra 2>/dev/null; then sw_rc_c=0; else sw_rc_c=$?; fi
-assert_eq "missing-args-worker: three args → exit 2" "2" "$sw_rc_c"
-
-# Sub-case D: non-integer issue number rejected
-if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" "not-a-number" "$WORKER_TARGET_WORKTREE" 2>/dev/null; then sw_rc_d=0; else sw_rc_d=$?; fi
-assert_eq "missing-args-worker: non-integer <N> → exit 2" "2" "$sw_rc_d"
-
-# Sub-case E: non-existent worktree path rejected at the spawner edge
-if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$TMPDIR_TEST/worktrees/does-not-exist" 2>/dev/null; then sw_rc_e=0; else sw_rc_e=$?; fi
-assert_eq "missing-args-worker: non-existent <worktree-path> → exit 2" "2" "$sw_rc_e"
-
-# Sub-case F: unsafe characters in <worktree-path> rejected (defense-in-depth
-# against shell-metacharacter / whitespace injection into the prompt string
-# passed to `claude --bg`). Path must exist so the `-d` check passes first,
-# isolating the new char-validation step.
-unsafe_path="$TMPDIR_TEST/worktrees/839 unsafe"
-mkdir -p "$unsafe_path"
-if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$unsafe_path" 2>/dev/null; then sw_rc_f=0; else sw_rc_f=$?; fi
-assert_eq "missing-args-worker: unsafe chars in <worktree-path> → exit 2" "2" "$sw_rc_f"
-
-spawn_worker_teardown
-
-# --- Test 8: dedup queries the worktree path, not the spawner cwd -----------
-#
-# Regression guard: in production the daemon server-side-filters `agents
-# --json --cwd <path>` to sessions started under <path>. Since
-# dispatch-spawn-worker `cd`s into the target worktree before `claude --bg`,
-# the new worker registers under <worktree-path>, not under the spawner cwd
-# (worktrees/main). Under --no-verify (#1048) only DEDUP queries the worktree
-# path now (there is no verify step). If dedup queried the spawner cwd instead,
-# the fixture would still be correct here, but the dedup query is the path-keyed
-# query this test pins.
-#
-# The default fake `claude` (write_fake_spawn_worker_claude) ignores --cwd,
-# so the existing Tests 1–7 do not exercise this filter and would not catch
-# the regression. This test installs a cwd-aware fake: its `agents` handler
-# filters its registry-emit by --cwd, and its --bg handler records the new
-# worker with cwd = $(pwd) at spawn time. dedup finds nothing under the path,
-# so the worker is spawned and the kick succeeds.
-echo "Test: dedup queries the worktree path, not the spawner cwd"
-spawn_worker_setup
-cat > "$TMPDIR_TEST/fake-claude" <<FAKE
-#!/usr/bin/env bash
-set -uo pipefail
-case "\${1:-}" in
-  agents)
-    shift
-    requested_cwd=""
-    while [[ \$# -gt 0 ]]; do
-      case "\$1" in
-        --cwd) requested_cwd="\${2:-}"; shift 2 ;;
-        *) shift ;;
-      esac
-    done
-    if [[ -n "\$requested_cwd" ]]; then
-      jq --arg cwd "\$requested_cwd" '[.[] | select(.cwd == \$cwd)]' \
-        "$SPAWN_WORKER_REGISTRY"
-    else
-      cat "$SPAWN_WORKER_REGISTRY"
-    fi
-    ;;
-  --bg)
-    bg_cwd="\$(pwd)"
-    pwd >> "$SPAWN_WORKER_PWD_LOG"
-    printf '%s\n' "\$@" > "$SPAWN_WORKER_BG_ARGV"
-    name=""
-    while [[ \$# -gt 0 ]]; do
-      if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
-      shift
-    done
-    tmp=\$(mktemp)
-    jq --arg name "\$name" --arg cwd "\$bg_cwd" \
-      '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":\$cwd,"kind":"background","status":"busy","name":\$name}]' \
-      "$SPAWN_WORKER_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_WORKER_REGISTRY"
-    ;;
-  rm) ;;
-esac
-FAKE
-chmod +x "$TMPDIR_TEST/fake-claude"
-SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
-if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
-assert_eq "cwd-aware-spawn: exits 0" "0" "$rc"
-assert_eq "cwd-aware-spawn: stdout is 'spawned' (dedup queried under worktree path; nothing found, so the worker is spawned)" \
-  "spawned" "$out"
-spawn_worker_teardown
-
-# --- Test 9: --model is forwarded through to the bg argv (#1171) -------------
-
-echo "Test: dispatch-spawn-worker forwards a leading --model into the bg argv"
-spawn_worker_setup
-write_fake_spawn_worker_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" --model claude-sonnet-4-6 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "spawn-worker-model: dispatch-spawn-worker exits 0" "0" "$rc"
-assert_eq "spawn-worker-model: stdout is 'spawned'" "spawned" "$out"
-mapfile -t sw_bg_argv < "$SPAWN_WORKER_BG_ARGV"
-assert_eq "spawn-worker-model: argv[0] is --bg" "--bg" "${sw_bg_argv[0]:-}"
-assert_eq "spawn-worker-model: argv[1] is --name" "--name" "${sw_bg_argv[1]:-}"
-assert_eq "spawn-worker-model: argv[2] is the worktree basename" "839-test-worker" "${sw_bg_argv[2]:-}"
-assert_eq "spawn-worker-model: argv[3] is --model" "--model" "${sw_bg_argv[3]:-}"
-assert_eq "spawn-worker-model: argv[4] is claude-sonnet-4-6" "claude-sonnet-4-6" "${sw_bg_argv[4]:-}"
-assert_eq "spawn-worker-model: argv[5] is --permission-mode" "--permission-mode" "${sw_bg_argv[5]:-}"
-assert_eq "spawn-worker-model: argv[6] is auto" "auto" "${sw_bg_argv[6]:-}"
-assert_eq "spawn-worker-model: argv[7] is '/dispatch-worker 839 <worktree-path>'" \
-  "/dispatch-worker 839 $WORKER_TARGET_WORKTREE" "${sw_bg_argv[7]:-}"
-spawn_worker_teardown
 
 # ============================================================================
 # dispatch-spawn-office-hours tests
@@ -11980,9 +11685,9 @@ spawn_worker_teardown
 echo "=== dispatch-spawn-office-hours ==="
 #
 # dispatch-spawn-office-hours is the office-hours fresh-launch counterpart of
-# dispatch-spawn-worker: it spawns a /office-hours --bg job worker-style (--name
+# dispatch-launch-worker: it spawns a /office-hours --bg job worker-style (--name
 # = worktree basename, --cwd = worktree path) via dispatch-spawn-job, then —
-# unlike the worker, which `exec`s the spawn and is done — resolves the spawned
+# unlike the launcher, which `exec`s the spawn and is done — resolves the spawned
 # (or deduped) session id by the worktree basename and prints it, so the caller
 # can attach a human via `claude --resume`.
 #
@@ -12178,8 +11883,8 @@ spawn_office_hours_teardown
 echo "=== dispatch-spawn-job ==="
 #
 # dispatch-spawn-job is the generalized `claude --bg` spawn primitive that
-# dispatch-spawn-worker `exec`s. It is exercised directly here against a fake
-# `claude`, reusing the same fake-claude harness shape as the spawn-worker
+# dispatch-launch-worker delegates to. It is exercised directly here against a
+# fake `claude`, reusing the same fake-claude harness shape as the spawn-worker
 # tests (a multi-subcommand temp script DISPATCH_SPAWN_JOB_CLAUDE_CMD points at,
 # which also backs the sourced lib-claude-agents.sh via CLAUDE_AGENTS_CMD).
 #
@@ -15603,152 +15308,6 @@ STUB_DIR=""
 export PATH="$SAVED_PATH"
 
 # ============================================================================
-# /dispatch-propagate router smoke (Step 5 create + Step 6 spawn)
-# ============================================================================
-# Pin the shell sequence documented in /dispatch-propagate SKILL.md Step 5's `create`
-# branch and Step 6, by faking every external binary the sequence calls and
-# asserting each fake was invoked with the expected arguments. This is a
-# documentation-pinning test, not a behaviour test of the router itself: it
-# catches the case where someone edits Step 5/6 in SKILL.md and forgets to
-# update the spawn call, or where the documented shell sequence drifts from
-# what the script expects.
-#
-# Tested sequence (matches /dispatch-propagate SKILL.md Step 5 create + Step 6):
-#   GIT_COMMON_DIR=...                                       # faked git
-#   PROJECT_ROOT=...
-#   WORKTREE_PATH="$PROJECT_ROOT/worktrees/<branch>"
-#   git worktree add -b <branch> "$WORKTREE_PATH" origin/main
-#   # direnv/npm provisioning and merge-main are deferred to the worker (#1047)
-#   (cd "$WORKTREE_PATH" && sync-issue-context <N>)
-#   dispatch-finalize-selection "$WORKTREE_PATH"   # cds in, writes marker (no release — #945)
-#   dispatch-spawn-worker <N> "$WORKTREE_PATH"
-echo ""
-echo "=== /dispatch-propagate router smoke (Step 5 create + Step 6 spawn) ==="
-
-router_smoke_setup() {
-  TMPDIR_TEST=$(mktemp -d)
-  mkdir -p "$TMPDIR_TEST/bin" "$TMPDIR_TEST/logs"
-
-  # Faked PROJECT_ROOT — mock the layout `git rev-parse --git-common-dir`
-  # would return (parent is the project root by the same idiom dispatch-spawn-tick /
-  # dispatch-acquire-lock use).
-  mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
-
-  # Fake `git` — only supports the two subcommands the Step 5 create sequence
-  # calls: `rev-parse --git-common-dir` (used for resolving PROJECT_ROOT) and
-  # `worktree add -b <branch> <path> origin/main`. Each invocation appends its
-  # full argv to a per-binary log. The rev-parse path returns the faked
-  # .bare/ absolute path.
-  cat > "$TMPDIR_TEST/bin/git" <<STUB
-#!/usr/bin/env bash
-echo "\$*" >> "$TMPDIR_TEST/logs/git.log"
-case "\$*" in
-  "rev-parse --path-format=absolute --git-common-dir")
-    echo "$TMPDIR_TEST/project/.bare"
-    ;;
-  "worktree add -b "*)
-    # No-op; the smoke test does not need a real worktree on disk.
-    ;;
-  *)
-    echo "fake git: unexpected invocation: \$*" >&2
-    exit 99
-    ;;
-esac
-STUB
-  chmod +x "$TMPDIR_TEST/bin/git"
-
-  # Fake `sync-issue-context` — record cwd + argv.
-  cat > "$TMPDIR_TEST/bin/sync-issue-context" <<STUB
-#!/usr/bin/env bash
-echo "cwd=\$PWD argv=\$*" >> "$TMPDIR_TEST/logs/sync-issue-context.log"
-STUB
-  chmod +x "$TMPDIR_TEST/bin/sync-issue-context"
-
-  # Fake `dispatch-spawn-worker` — record argv only.
-  cat > "$TMPDIR_TEST/bin/dispatch-spawn-worker" <<STUB
-#!/usr/bin/env bash
-echo "\$*" >> "$TMPDIR_TEST/logs/dispatch-spawn-worker.log"
-echo spawned
-STUB
-  chmod +x "$TMPDIR_TEST/bin/dispatch-spawn-worker"
-
-  export PATH="$TMPDIR_TEST/bin:$SAVED_PATH"
-}
-
-router_smoke_teardown() {
-  rm -rf "$TMPDIR_TEST"
-  TMPDIR_TEST=""
-  export PATH="$SAVED_PATH"
-}
-
-echo "Test: Step 5 create + Step 6 sequence invokes git, sync, finalize-selection, and spawn-worker with the right args"
-router_smoke_setup
-
-# Run the documented shell sequence inline. The variable names match SKILL.md.
-# direnv/npm provisioning and dispatch-merge-main are deferred to the worker
-# (#1047/#1044) and are NOT part of the held-lock router sequence.
-BRANCH="839-test"
-ISSUE_NUM="839"
-GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir)
-PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
-WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
-# The fake `git worktree add` does not actually create the directory, so make
-# it here so the subshell `cd "$WORKTREE_PATH"` for sync-issue-context and the
-# dispatch-finalize-selection wrapper's marker write succeed.
-mkdir -p "$WORKTREE_PATH"
-
-# Stub the router-cwd context so we control the lock file rather than the real
-# repo's lock, and we can assert the regression: the marker does NOT land in the
-# router's starting cwd (the cwd-vs-target asymmetry that fixes #896). Since
-# #945, dispatch-finalize-selection writes the marker but does NOT release the
-# lock — the caller holds it through the spawn — so we assert the lock is STILL
-# held after finalize.
-ROUTER_CWD="$TMPDIR_TEST/router-cwd"
-mkdir -p "$ROUTER_CWD"
-export DISPATCH_LOCK_FILE="$TMPDIR_TEST/dispatch.lock"
-export CLAUDE_CODE_SESSION_ID="router-smoke-session"
-# Pre-fill the lock with our own sessionId; finalize-selection must leave it
-# untouched (#945).
-echo "$CLAUDE_CODE_SESSION_ID" > "$DISPATCH_LOCK_FILE"
-
-# cd into the router-equivalent cwd so the regression assertion below is
-# meaningful — finalize-selection must NOT write a marker here.
-SMOKE_ORIG_PWD="$PWD"
-cd "$ROUTER_CWD"
-
-git worktree add -b "$BRANCH" "$WORKTREE_PATH" origin/main
-(cd "$WORKTREE_PATH" && sync-issue-context "$ISSUE_NUM")
-"$SCRIPT_DIR/dispatch-finalize-selection" "$WORKTREE_PATH"
-dispatch-spawn-worker "$ISSUE_NUM" "$WORKTREE_PATH"
-
-# Restore cwd so the rest of the test file is unaffected.
-cd "$SMOKE_ORIG_PWD"
-
-# Assertions: each fake binary's log captures one expected invocation.
-assert_eq "git worktree add args" \
-  "worktree add -b 839-test $WORKTREE_PATH origin/main" \
-  "$(grep '^worktree add' "$TMPDIR_TEST/logs/git.log")"
-assert_eq "recovery marker created in target worktree" "1" \
-  "$([ -f "$WORKTREE_PATH/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
-# Regression for #896: the wrapper must not leak the marker into the
-# router's starting cwd.
-assert_eq "no marker leaked into router cwd" "0" \
-  "$([ -f "$ROUTER_CWD/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
-# Since #945 the wrapper no longer releases the lock — it must remain held
-# (the caller releases after the worker registers).
-assert_eq "lock still held after finalize-selection (#945)" "$CLAUDE_CODE_SESSION_ID" \
-  "$(cat "$DISPATCH_LOCK_FILE")"
-assert_eq "sync-issue-context cwd + arg" \
-  "cwd=$WORKTREE_PATH argv=839" \
-  "$(cat "$TMPDIR_TEST/logs/sync-issue-context.log")"
-assert_eq "dispatch-spawn-worker args" \
-  "839 $WORKTREE_PATH" \
-  "$(cat "$TMPDIR_TEST/logs/dispatch-spawn-worker.log")"
-
-unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID
-router_smoke_teardown
-
-# ============================================================================
 # dispatch-finalize-selection tests (#896)
 # ============================================================================
 # Pin the cd-first contract introduced for #896. The wrapper takes one
@@ -15989,7 +15548,7 @@ restore_setup() {
     "$TMPDIR_TEST/bin" \
     "$STUB_DIR"
   for skill in plan-issue implement fix-checks fix-conflicts qa-fix office-hours \
-               review-fix dispatch-worker; do
+               review-fix; do
     mkdir -p "$TMPDIR_TEST/.claude/skills/$skill"
     cat > "$TMPDIR_TEST/.claude/skills/$skill/SKILL.md" <<EOF
 ---
@@ -16010,7 +15569,7 @@ EOF
   # dispatch-phase shim: read $STUB_DIR/current-phase.txt. The sentinel ERROR
   # models the real dispatch-phase's not-ready contract (a draft PR whose CI has
   # no verdict yet): empty stdout, exit 3. The hook's `|| PHASE=""` then routes
-  # to the dispatch-worker fallback.
+  # the undetermined phase to the no-op `*)` case (nothing restored).
   cat > "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts/dispatch-phase" <<'FAKE'
 #!/usr/bin/env bash
 if [[ -f "$STUB_DIR/current-phase.txt" ]]; then
@@ -16346,57 +15905,57 @@ fi
 restore_teardown
 
 # --- Test 7: dispatch-phase error (not-ready CI, exit 3 → empty PHASE) →
-# dispatch-worker fallback body + ARGUMENTS: <N> <path>. dispatch-phase no longer
-# emits a `waiting` phase; a not-ready draft PR makes it exit 3 with empty stdout,
-# and the hook's `|| PHASE=""` routes the empty phase to the worker fallback.
-echo "Test: restore-dispatch-skill dispatch-phase error (exit 3) → dispatch-worker fallback"
+# no-op `*)` case, nothing restored. dispatch-phase no longer emits a `waiting`
+# phase; a not-ready draft PR makes it exit 3 with empty stdout, and the hook's
+# `|| PHASE=""` routes the undetermined phase to the no-op `*)` case. After
+# #1392 deleted the model worker skill, there is no phase skill to reload —
+# the Stop hook (dispatch-stop.sh) owns the disposition, so the hook emits nothing.
+echo "Test: restore-dispatch-skill dispatch-phase error (exit 3) → no restore"
 restore_setup
 set_agents_name "903-foo"
 echo "ERROR" > "$STUB_DIR/current-phase.txt"
 output=$(run_restore)
 TOTAL=$((TOTAL + 1))
-expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/dispatch-worker"
-if [[ "$output" == *"$expected_dir"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: phase-error fallback: base directory line emitted"
+if [[ "$output" != *"Base directory for this skill:"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: phase-error: no base directory line (nothing restored)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error fallback: base directory line emitted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error: no base directory line (nothing restored)"
   echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"RESTORE_MARKER_dispatch-worker"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: phase-error fallback: SKILL.md body marker emitted"
+if [[ "$output" != *"RESTORE_MARKER_"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: phase-error: no deleted-skill marker emitted"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error fallback: SKILL.md body marker emitted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error: no deleted-skill marker emitted"
+  echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
-expected_args="ARGUMENTS: 903 $TMPDIR_TEST/worktrees/903-foo"
-if [[ "$output" == *"$expected_args"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: phase-error fallback: ARGUMENTS line with worktree path"
+if [[ "$output" != *"ARGUMENTS:"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: phase-error: no ARGUMENTS line emitted"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error fallback: ARGUMENTS line with worktree path"
+  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error: no ARGUMENTS line emitted"
   echo "    output: $output"
-  echo "    expected to contain: $expected_args"
 fi
 restore_teardown
 
 # --- Test 7b: name-lookup path wins over a divergent branch (#875) -----------
-# Proves the worktree basename derives from the session .name (the
+# Proves the issue number / worktree basename derive from the session .name (the
 # `claude agents --json` primary path), NOT from `git rev-parse --abbrev-ref
 # HEAD`. The two sources are made to DIVERGE: .name=875-from-name,
-# branch=999-from-branch. phase=ERROR routes to the dispatch-worker fallback,
-# which emits the worktree path on the ARGUMENTS line.
+# branch=999-from-branch. A real phase (implement) routes to the implement
+# skill, which emits the issue number on the ARGUMENTS line.
 echo "Test: restore-dispatch-skill name-lookup wins over divergent branch"
 restore_setup
 set_agents_name "875-from-name"
 echo "999-from-branch" > "$STUB_DIR/current-branch.txt"
-echo "ERROR" > "$STUB_DIR/current-phase.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
 output=$(run_restore)
 TOTAL=$((TOTAL + 1))
-expected_args="ARGUMENTS: 875 $TMPDIR_TEST/worktrees/875-from-name"
+expected_args="ARGUMENTS: 875"
 if [[ "$output" == *"$expected_args"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: name-lookup: ARGUMENTS path derived from .name"
+  PASS=$((PASS + 1)); echo "  PASS: name-lookup: ARGUMENTS issue number derived from .name"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: name-lookup: ARGUMENTS path derived from .name"
+  FAIL=$((FAIL + 1)); echo "  FAIL: name-lookup: ARGUMENTS issue number derived from .name"
   echo "    output: $output"
   echo "    expected to contain: $expected_args"
 fi
@@ -16414,20 +15973,20 @@ restore_teardown
 # --- Test 7c: empty registry → branch-name fallback (#875) -------------------
 # With no claude-agents.json fixture the `claude` stub returns `[]`, so .name is
 # empty and the hook falls through to `git rev-parse --abbrev-ref HEAD`. The
-# branch (999-from-branch) then supplies the basename. Same phase=ERROR routing
-# emits the worktree path on the ARGUMENTS line.
+# branch (999-from-branch) then supplies the basename. A real phase (implement)
+# emits the issue number on the ARGUMENTS line.
 echo "Test: restore-dispatch-skill empty registry → branch-name fallback"
 restore_setup
 # Deliberately do NOT call set_agents_name — the claude stub returns [].
 echo "999-from-branch" > "$STUB_DIR/current-branch.txt"
-echo "ERROR" > "$STUB_DIR/current-phase.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
 output=$(run_restore)
 TOTAL=$((TOTAL + 1))
-expected_args="ARGUMENTS: 999 $TMPDIR_TEST/worktrees/999-from-branch"
+expected_args="ARGUMENTS: 999"
 if [[ "$output" == *"$expected_args"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: empty-registry fallback: ARGUMENTS path derived from branch"
+  PASS=$((PASS + 1)); echo "  PASS: empty-registry fallback: ARGUMENTS issue number derived from branch"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: empty-registry fallback: ARGUMENTS path derived from branch"
+  FAIL=$((FAIL + 1)); echo "  FAIL: empty-registry fallback: ARGUMENTS issue number derived from branch"
   echo "    output: $output"
   echo "    expected to contain: $expected_args"
 fi
@@ -16554,14 +16113,11 @@ restore_teardown
 echo "=== dispatch chain: no EnterWorktree/ExitWorktree mid-session ==="
 #
 # Regression guard for #839: the dispatch chain — router /dispatch-propagate and the
-# skills the worker (/dispatch-worker) invokes — must not call EnterWorktree
-# or ExitWorktree. The worker is born in its target worktree (cwd set by
-# dispatch-spawn-worker); any mid-session worktree switch is at best a no-op
-# and at worst an error. The router runs in worktrees/main and materializes
-# the target worktree explicitly (git worktree add).
-#
-# Allowed exception: dispatch-worker/SKILL.md mentions the words in its
-# preamble contract: "It never calls EnterWorktree or ExitWorktree."
+# phase skills it spawns — must not call EnterWorktree or ExitWorktree. A phase
+# skill is born in its target worktree (cwd set by dispatch-launch-worker); any
+# mid-session worktree switch is at best a no-op and at worst an error. The
+# router runs in worktrees/main and materializes the target worktree explicitly
+# (git worktree add).
 
 PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 
@@ -16569,7 +16125,6 @@ PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 # substring mentions (grep -oE counts each occurrence, not each line).
 declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/dispatch-propagate/SKILL.md"]=0
-  [".claude/skills/dispatch-worker/SKILL.md"]=2
   # Phase skills do not call EnterWorktree/ExitWorktree (#868): they write the
   # phase-completed marker and stop; the Stop hook (`.claude/hooks/dispatch-stop.sh`)
   # owns post-phase disposition (label management, router spawn, self-close).
@@ -18608,9 +18163,9 @@ fi
 echo waiting
 exit 1
 FAKE
-  # Detached launcher fake (#1391): dispatch-materialize-spawn now DETACHES
-  # dispatch-launch-worker via `setsid nohup … </dev/null >tmp/…log 2>&1 &`
-  # instead of spawning dispatch-spawn-worker. The launcher is fire-and-forget —
+  # Detached launcher fake (#1391): dispatch-materialize-spawn DETACHES
+  # dispatch-launch-worker via `setsid nohup … </dev/null >tmp/…log 2>&1 &`.
+  # The launcher is fire-and-forget —
   # the router never observes its exit — so this fake just records its argv to a
   # deterministic log of its own (NOT the router's per-target tmp redirect, which
   # captures the fake's stdout) and exits. Because the launch is backgrounded, a
@@ -21013,7 +20568,7 @@ assert_not_contains_local "dispatch-drift-scan: present name ref found even when
 drift_scan_teardown
 
 # --- Regression: slash-commands are not classified as path refs ---
-# Guards defect 2: tokens like /file-issue and /dispatch-worker contain `/`, so the
+# Guards defect 2: tokens like /file-issue and /qa-fix contain `/`, so the
 # old is_path_token treated them as filesystem paths and existence-checked them,
 # flagging [ABSENT]. They are skill references and must fall through to name refs.
 
@@ -21021,7 +20576,7 @@ echo "Test: dispatch-drift-scan does not classify slash-commands as path refs"
 drift_scan_setup
 printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Run `/dispatch-worker` and `/file-issue` then `present.sh`."}
+{"createdAt":"2026-06-03T00:00:00Z","body":"Run `/qa-fix` and `/file-issue` then `present.sh`."}
 EOF
 cat > "$TMPDIR_TEST/prs.json" <<'EOF'
 []
@@ -21031,7 +20586,7 @@ cd "$TMPDIR_TEST/tree"
 out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
 assert_eq "dispatch-drift-scan: slash-command scan exits 0" "0" "$rc"
 assert_not_contains_local "dispatch-drift-scan: /file-issue not existence-checked as a path" "/file-issue [ABSENT]" "$out"
-assert_not_contains_local "dispatch-drift-scan: /dispatch-worker not existence-checked as a path" "/dispatch-worker [ABSENT]" "$out"
+assert_not_contains_local "dispatch-drift-scan: /qa-fix not existence-checked as a path" "/qa-fix [ABSENT]" "$out"
 drift_scan_teardown
 
 # --- Security regression: backtick-span globs are not expanded against the cwd ---
@@ -23057,11 +22612,16 @@ cmp_setup() {
   git clone -q "$CMP_BARE" "$CMP_CLONE" 2>/dev/null
   git -C "$CMP_CLONE" config user.email "test@test"
   git -C "$CMP_CLONE" config user.name "Test"
+
+  # Override the worktrees root to $CMP_TMPDIR so that $CMP_CLONE (=
+  # $CMP_TMPDIR/clone) is treated as a valid worktree by the validation guard.
+  export DISPATCH_WORKTREES_ROOT="$CMP_TMPDIR"
 }
 
 cmp_teardown() {
   rm -rf "$CMP_TMPDIR"
   unset CMP_TMPDIR CMP_BARE CMP_CLONE
+  unset DISPATCH_WORKTREES_ROOT
 }
 
 # --- Case 1: merge-only, clean → exit 0, new commit present in clone ----------
@@ -23292,6 +22852,62 @@ assert_eq "non-ff push rejection → local HEAD advanced (commit was made)" \
 origin_feature_tip=$(git -C "$CMP_BARE" rev-parse feature-x)
 assert_eq "non-ff push rejection → origin feature-x tip is helper's (not force-pushed)" \
   "$helper_tip" "$origin_feature_tip"
+cmp_teardown
+
+# --- Case 8: foreign --worktree outside worktrees root → exit 2, no commit ---
+echo "Test: foreign --worktree outside worktrees root → exit 2, no commit"
+cmp_setup
+unset DISPATCH_WORKTREES_ROOT          # exercise the real derivation
+ATTACKER=$(mktemp -d)                   # independent dir, not under CMP_TMPDIR
+git init -q -b main "$ATTACKER"
+git -C "$ATTACKER" config user.email "atk@atk"
+git -C "$ATTACKER" config user.name "Attacker"
+printf 'seed\n' > "$ATTACKER/seed.txt"
+git -C "$ATTACKER" add seed.txt
+git -C "$ATTACKER" commit -q -m "attacker seed"
+atk_head_before=$(git -C "$ATTACKER" rev-parse HEAD)
+printf 'pwned\n' > "$ATTACKER/seed.txt"
+set +e
+"$CMP" --worktree "$ATTACKER" --intent "exfil" --file seed.txt
+cmp8_rc=$?
+set -e
+assert_eq "foreign --worktree → exit 2" "2" "$cmp8_rc"
+atk_head_after=$(git -C "$ATTACKER" rev-parse HEAD)
+assert_eq "foreign --worktree → attacker HEAD unchanged (no commit)" \
+  "$atk_head_before" "$atk_head_after"
+rm -rf "$ATTACKER"
+export DISPATCH_WORKTREES_ROOT="$CMP_TMPDIR"   # restore for symmetry before teardown
+cmp_teardown
+
+# --- Case 9: nonexistent --worktree outside the worktrees root → exit 2 -------
+# Exercise the worktrees-root guard, not the later cd failure. On Linux, GNU
+# realpath returns rc=0 for a nonexistent path, so a nonexistent path *under*
+# the override root (e.g. "$CMP_TMPDIR/does-not-exist") would pass the
+# case-statement prefix check and reach the cd — exiting 2 only because cd
+# fails, which tests the wrong guard. By pointing at a nonexistent path OUTSIDE
+# the worktrees root, the case-statement rejection fires before any cd on every
+# platform (on macOS the realpath failure catches it even earlier).
+echo "Test: nonexistent --worktree outside worktrees root → exit 2"
+cmp_setup
+set +e
+"$CMP" --worktree "$CMP_TMPDIR/../outside-does-not-exist" --merge-only
+cmp9_rc=$?
+set -e
+assert_eq "nonexistent --worktree outside root → exit 2" "2" "$cmp9_rc"
+cmp_teardown
+
+# --- Case 10: --worktree under the root but un-cd-able → exit 2 ----------------
+# A nonexistent path UNDER the worktrees root passes the realpath/prefix guard
+# on Linux (GNU realpath succeeds for nonexistent paths) and is rejected only by
+# the subsequent cd failure. This pins that distinct exit-2 path so Case 9's
+# guard coverage and the cd-failure coverage stay separate.
+echo "Test: --worktree under root but un-cd-able → exit 2"
+cmp_setup
+set +e
+"$CMP" --worktree "$CMP_TMPDIR/does-not-exist" --merge-only
+cmp10_rc=$?
+set -e
+assert_eq "un-cd-able --worktree under root → exit 2" "2" "$cmp10_rc"
 cmp_teardown
 
 # ============================================================================
