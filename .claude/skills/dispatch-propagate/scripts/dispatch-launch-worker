@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+# dispatch-launch-worker — the scripted phase-initiation worker (replaces the
+# /dispatch-worker model session for routing + mechanical dispositions).
+#
+# Usage: dispatch-launch-worker <N> <worktree-path>
+#
+# Contract: launched DETACHED by the router (dispatch-materialize-spawn) via
+# `setsid nohup dispatch-launch-worker <N> <wt> </dev/null >tmp/…log 2>&1 &`, so
+# this process owns an independent lifetime — its own session/process-group, no
+# job dir, no `claude agents` registry entry while it runs. It runs the whole
+# deterministic prelude once via dispatch-route (worktree cross-check →
+# provision + origin/main merge → CI gate → dispatch-phase) and acts on the
+# single directive dispatch-route prints:
+#   - a real phase (`INVOKE /<skill>`) → exec the phase-skill spawn, with no
+#     model spent on routing; the phase skill is born in the provisioned, merged
+#     worktree (the #1047 merged-tree guarantee holds because dispatch-route
+#     provisions before this exec).
+#   - every mechanical disposition (STOP done/waiting/wrong-worktree/
+#     provision-failed, PUSH-STRANDED) → handled here with NO `claude` session
+#     spawned (zero tokens).
+#
+# HEARTBEAT RATIONALE (decision 2 of #1391): today every /dispatch-worker — even
+# one that hits a mechanical disposition — fires the Stop hook
+# (.claude/hooks/dispatch-stop.sh), which always calls dispatch-spawn-tick (the
+# chain's heartbeat). A DETACHED launcher that handles a mechanical disposition
+# fires NO Stop hook, so an all-mechanical fan-out would stall the chain.
+# Therefore the launcher MUST call dispatch-spawn-tick on every mechanical path.
+# This is harmless in the common mixed case: dispatch-spawn-tick dedups on a
+# fixed systemd unit name, so a redundant tick that hits the held lock simply
+# prints `busy`/`deduped` and exits. For the real-phase (INVOKE) path the
+# launcher `exec`s the phase skill, whose own Stop hook owns the tick — the
+# launcher does NOT tick there.
+#
+# Sandbox: dispatch-route runs gh + git merge + direnv/npm, and dispatch-spawn-job
+# reaches the local Claude daemon over a Unix socket — the detaching caller
+# (the router) runs OUTSIDE Claude's Bash sandbox, so no per-call sandbox flag
+# applies here. (A direct Bash-tool invocation would need
+# `dangerouslyDisableSandbox: true` — see .claude/rules/sandbox.md.)
+#
+# NOT set -e on the route call (wrong-worktree exits non-zero and is a handled
+# directive); exits are otherwise handled explicitly.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ---- Step 0: parse and validate arguments -----------------------------------
+# Mirrors dispatch-spawn-worker's validation: exactly two positionals
+# <N> <worktree-path>; N a positive integer; the worktree path an existing dir
+# whose name is restricted to a safe charset (it flows into the `claude --bg`
+# prompt and the session --name via basename). No --model flag — the launcher
+# derives the model from the routed phase. This validation is a deliberate
+# temporary duplication of dispatch-spawn-worker's; #1392 (sub-issue C) removes
+# the original.
+if [[ $# -lt 2 ]]; then
+  echo "dispatch-launch-worker: expected 2 arguments: <N> <worktree-path>" >&2
+  exit 2
+fi
+if [[ $# -gt 2 ]]; then
+  echo "dispatch-launch-worker: unexpected argument '$3'" >&2
+  exit 2
+fi
+
+N="$1"
+WORKTREE_PATH="$2"
+
+if [[ ! "$N" =~ ^[1-9][0-9]*$ ]]; then
+  echo "dispatch-launch-worker: invalid issue number '$N' (expected a positive integer)" >&2
+  exit 2
+fi
+if [[ ! -d "$WORKTREE_PATH" ]]; then
+  echo "dispatch-launch-worker: worktree path '$WORKTREE_PATH' does not exist" >&2
+  exit 2
+fi
+# Defense-in-depth: WORKTREE_PATH flows into the spawned session's --name (via
+# basename) and into the inline prompt string passed to `claude --bg`. Reject
+# characters that could split the prompt argument or affect downstream parsing.
+if [[ ! "$WORKTREE_PATH" =~ ^[A-Za-z0-9/_.-]+$ ]]; then
+  echo "dispatch-launch-worker: worktree path '$WORKTREE_PATH' contains unsafe characters" >&2
+  exit 2
+fi
+
+# ---- Step 1: source the reservation ledger ----------------------------------
+# reservation_clear is called on every mechanical path so the router-written
+# marker is released the instant the launcher resolves the slot (the sweep's
+# boot-grace rule would otherwise only reclaim it after a delay).
+# shellcheck source=lib-reservation-ledger.sh
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+wt_basename="$(basename "$WORKTREE_PATH")"
+
+# ---- Step 2: route once -----------------------------------------------------
+# dispatch-route provisions + merges + CI-gates + derives the phase, then prints
+# exactly one directive. STOP wrong-worktree exits non-zero (cross-check
+# failure) and is a HANDLED directive, so capture stdout + rc without letting
+# `set -e` abort.
+DIRECTIVE=$("$SCRIPT_DIR/dispatch-route" "$N" "$WORKTREE_PATH") && ROUTE_RC=0 || ROUTE_RC=$?
+
+# ---- Step 3: mechanical-tail helper -----------------------------------------
+# Release the reservation and fire the chain heartbeat (see HEARTBEAT RATIONALE).
+# Both are best-effort: a failed clear or a busy tick must never abort the
+# launcher's disposition.
+release_and_tick() {
+  reservation_clear "$wt_basename" || true
+  "$SCRIPT_DIR/dispatch-spawn-tick" >/dev/null 2>&1 || true
+}
+
+# A non-zero route rc with NO directive is a genuine infrastructure failure
+# (e.g. dispatch-ci-ready exiting 2), not a routing disposition. Surface the real
+# exit code rather than falling into the `*)` arm below, which would park the
+# issue with a misleading "unrecognized route directive ''" reason. The `*)` arm
+# still handles genuinely non-empty unrecognized directives.
+if [[ "$ROUTE_RC" -ne 0 && -z "$DIRECTIVE" ]]; then
+  echo "dispatch-launch-worker: dispatch-route exited $ROUTE_RC for #$N with no directive" >&2
+  release_and_tick
+  exit "$ROUTE_RC"
+fi
+
+# ---- Step 4: act on the directive -------------------------------------------
+case "$DIRECTIVE" in
+  "INVOKE "*)
+    # A real phase. Derive the model from the skill (the policy lives in
+    # dispatch-phase-model: qa/review → Sonnet, everything else → inherit Opus),
+    # then EXEC the phase-skill spawn. Do NOT clear the reservation — the
+    # existing sweep reclaims the marker once the phase session registers under
+    # the worktree basename (#1045/#1048). Do NOT tick — the phase skill's own
+    # Stop hook owns the chain heartbeat.
+    SKILL="${DIRECTIVE#INVOKE }"            # e.g. /qa-fix
+    case "$SKILL" in
+      /qa-fix)     MODEL=$("$SCRIPT_DIR/dispatch-phase-model" qa) ;;
+      /review-fix) MODEL=$("$SCRIPT_DIR/dispatch-phase-model" review) ;;
+      *)           MODEL="" ;;
+    esac
+    args=(--no-verify --name "$wt_basename" --cwd "$WORKTREE_PATH")
+    [[ -n "$MODEL" ]] && args+=(--model "$MODEL")
+    exec "$SCRIPT_DIR/dispatch-spawn-job" "${args[@]}" "$SKILL $N $WORKTREE_PATH"
+    ;;
+  "PUSH-STRANDED")
+    # A done PR whose worktree carries unpushed local commits (#1105). Push them
+    # (sandbox-safe HTTPS to github.com) against the target worktree explicitly —
+    # the launcher's cwd is the router's, not the worktree — then park for review.
+    push_rc=0
+    git -C "$WORKTREE_PATH" push origin HEAD || push_rc=$?
+    if [[ "$push_rc" -eq 0 ]]; then
+      "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" \
+        "dispatch-launch-worker: PUSH-STRANDED — pushed unpushed local commits a done PR left behind; parking for review" || true
+    else
+      "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" \
+        "dispatch-launch-worker: PUSH-STRANDED — push of unpushed local commits a done PR left behind failed (rc=$push_rc); parking for review" || true
+    fi
+    release_and_tick
+    ;;
+  "STOP provision-failed")
+    # dispatch-route already emitted the directive (its CLAUDE_JOB_DIR-guarded
+    # office-hours-reason write is a no-op for the launcher, which has no job
+    # dir). Park directly via the single label write path.
+    "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" \
+      "dispatch-launch-worker: provisioning/merge of origin/main failed for #$N; parking for review" || true
+    release_and_tick
+    ;;
+  "STOP done" | "STOP waiting" | "STOP wrong-worktree")
+    # Benign races — the router's #1109 done re-check, the CI re-gate, and the
+    # spawn-coherence cross-check. No park: just release the slot and tick.
+    release_and_tick
+    ;;
+  *)
+    # Defensive: an unrecognized directive is an unexpected state. Per
+    # .claude/rules/code-style.md, surface it (park with a clear reason) rather
+    # than swallow it.
+    "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" \
+      "dispatch-launch-worker: unrecognized route directive '$DIRECTIVE' for #$N; parking for review" || true
+    release_and_tick
+    ;;
+esac
