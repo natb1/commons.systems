@@ -54,10 +54,7 @@ export function renderPacePositionPanel(samples: UsageSample[]): HTMLElement {
   const backdrop = paceBackdrop();
   const nowX = elapsedWeekFraction(latest.sampledAt, latest.weeklyResetsAt);
 
-  const container = document.createElement("div");
-  container.className = "capacity-pace-chart";
-
-  const fg = getThemeFg(container);
+  const fg = getThemeFg(section);
   const sharedStyle = { background: "transparent", color: fg };
 
   const chartWidth = CONTAINER_WIDTH - AXIS_WIDTH;

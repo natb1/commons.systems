@@ -23,8 +23,6 @@ function oneWeekSamples(): UsageSample[] {
   ];
 }
 
-const NOW = new Date("2026-06-12T00:00:00Z");
-
 function withFg(): HTMLElement {
   // happy-dom has no stylesheet, so missing.css's --fg is absent — set it on
   // the container so getThemeFg reads it live.
@@ -36,7 +34,7 @@ function withFg(): HTMLElement {
 
 describe("renderPacePositionPanel", () => {
   it("shows the empty-state message for an empty array", () => {
-    const el = renderPacePositionPanel([], NOW);
+    const el = renderPacePositionPanel([]);
     const empty = el.querySelector(".empty");
     expect(empty).not.toBeNull();
     expect(empty!.textContent).toBe("No usage history to chart pace position.");
@@ -45,7 +43,7 @@ describe("renderPacePositionPanel", () => {
 
   it("renders the pace panel with chart, delta text, and heading", () => {
     const host = withFg();
-    const el = renderPacePositionPanel(oneWeekSamples(), NOW);
+    const el = renderPacePositionPanel(oneWeekSamples());
     host.appendChild(el);
 
     // The delta text surfaces "pace".

@@ -51,14 +51,9 @@ export function segmentByWeek(samples: UsageSample[]): WeekSegment[] {
     entry.rawSamples.push(s);
   }
 
-  // Find the maximum weeklyResetsAt key.
-  let maxKey = -Infinity;
-  for (const key of map.keys()) {
-    if (key > maxKey) maxKey = key;
-  }
-
-  // Build segments sorted by weeklyResetsAt ascending.
+  // Build segments sorted by weeklyResetsAt ascending; the last key is the max.
   const sortedKeys = Array.from(map.keys()).sort((a, b) => a - b);
+  const maxKey = sortedKeys[sortedKeys.length - 1];
 
   return sortedKeys.map((key) => {
     const { weeklyResetsAt, rawSamples } = map.get(key)!;
