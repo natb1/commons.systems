@@ -1,0 +1,322 @@
+#!/usr/bin/env bash
+# dispatch-context-pack — emit live per-issue context to stdout in one tool
+# result, with sections selected by flag, so a phase skill collapses its 4-8
+# call live-state preamble into a single scripted call.
+#
+# Usage:
+#   dispatch-context-pack <N> [--issue] [--relations] [--pr] [--diff]
+#
+#   <N>            Issue number (digits only, positive).
+#   --issue        Issue title, state, body, and comments.
+#   --relations    Blockers / sub-issues / parent / siblings as
+#                  titles + state + URL only (never full bodies).
+#   --pr           PR number, labels, CI rollup, and body.
+#   --diff         merge-base, --stat, changed-file list, and capped hunks.
+#
+# At least one section flag is required. Sections are emitted in a fixed
+# canonical order — issue → relations → pr → diff — regardless of the order
+# the flags are given on the command line.
+#
+# Exit codes:
+#   0   success — every requested section built and flushed.
+#   2   usage error (missing/non-positive <N>, unknown flag, or zero flags).
+#   1   a gh/git call failed mid-build — the pack aborts with NO partial
+#       output on stdout (see the buffer-then-flush note at the flush point).
+#
+# Note: callers invoke this with dangerouslyDisableSandbox: true — it calls
+# gh (see .claude/rules/sandbox.md).
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+# ---- Step 0: parse the positional issue number ------------------------------
+
+N="${1:-}"
+if [[ -z "$N" || ! "$N" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: usage: dispatch-context-pack <N> [--issue] [--relations] [--pr] [--diff] — <N> must be a positive integer" >&2
+  exit 2
+fi
+shift
+
+# ---- Step 1: parse the section flags ----------------------------------------
+
+WANT_ISSUE=0
+WANT_RELATIONS=0
+WANT_PR=0
+WANT_DIFF=0
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --issue)     WANT_ISSUE=1 ;;
+    --relations) WANT_RELATIONS=1 ;;
+    --pr)        WANT_PR=1 ;;
+    --diff)      WANT_DIFF=1 ;;
+    *)
+      echo "error: unknown flag '$1' — expected --issue, --relations, --pr, or --diff" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+# A zero-flag invocation is a usage error, not a silent no-op: an empty pack
+# masks a caller bug (input validation at the edge, per .claude/rules/code-style.md).
+if (( WANT_ISSUE + WANT_RELATIONS + WANT_PR + WANT_DIFF == 0 )); then
+  echo "error: no section selected — pass at least one of --issue, --relations, --pr, --diff" >&2
+  exit 2
+fi
+
+# ---- Section builders (Unit 2: --issue, --relations) ------------------------
+#
+# Each builder renders its section to stdout and returns non-zero on any gh
+# failure (NEVER prints a partial section + returns 0). The call sites below
+# assign the builder's output into the section variable and convert a non-zero
+# return into a clear-error `exit 1` — so a failure aborts before the flush with
+# no half-pack on stdout. Inside a builder, command substitutions use the
+# two-line `local x; x=$(cmd) || return 1` form: `local x=$(cmd)` would mask the
+# substitution's failure under set -e.
+
+# --issue: one `gh issue view --json` fetch rendered to clean markdown prose —
+# a `## Issue #N (state): title` heading, the body, then a `### Comments`
+# subsection (each comment as `**@author** (date): body`). Renders from the
+# single JSON object so the body AND the comment thread both appear (plain
+# `gh issue view` prints one or the other; raw JSON re-adds the escaping bloat
+# this script exists to remove). The comment render reuses the field shape from
+# sync-issue-context's render_issue_body (.author.login, .createdAt).
+build_issue_section() {
+  local n="$1"
+  local json
+  json=$(gh_retry gh issue view "$n" --json number,title,state,body,comments) || return 1
+  jq -r '
+    "## Issue #\(.number) (\(.state)): \(.title)\n\n" +
+    (.body // "") +
+    (if (.comments | length) > 0 then
+       "\n\n### Comments\n\n" +
+       ([.comments[] | "**@\(.author.login // "unknown")** (\(.createdAt // "")): \(.body // "")"] | join("\n\n"))
+     else "" end)
+  ' <<<"$json" || return 1
+}
+
+# --relations: blockers / sub-issues / parent / siblings as titles + state + URL
+# only — NEVER any related issue's body or comments. The three array endpoints
+# carry number/state/title/html_url inline, so one gh_api_array call each
+# projects them with no per-issue body fetch. Parent is an OBJECT endpoint (not
+# an array): raw `gh api` with 404 discrimination (no parent → emit nothing for
+# parent or siblings, exit stays 0 — matching issue-parent). Siblings are the
+# parent's sub-issues minus self, only when a parent exists.
+build_relations_section() {
+  local n="$1"
+  local rel_proj='.[] | "#\(.number) [\(.state)] \(.title) — \(.html_url)"'
+  local blockers sub_issues
+  blockers=$(gh_api_array "/repos/{owner}/{repo}/issues/$n/dependencies/blocked_by" "$rel_proj") || return 1
+  sub_issues=$(gh_api_array "/repos/{owner}/{repo}/issues/$n/sub_issues" "$rel_proj") || return 1
+
+  printf 'Blockers:\n'
+  if [[ -n "$blockers" ]]; then printf '%s\n' "$blockers" | sed 's/^/  /'; else printf '  (none)\n'; fi
+  printf 'Sub-issues:\n'
+  if [[ -n "$sub_issues" ]]; then printf '%s\n' "$sub_issues" | sed 's/^/  /'; else printf '  (none)\n'; fi
+
+  # Parent: raw gh api (NOT gh_api_array — the endpoint returns an object, and
+  # NOT gh_retry — gh_retry forwards the 404 to stderr, defeating discrimination).
+  # Capture stderr so a 404 / "No parent issue found" body is visible: that means
+  # "no parent" (not an error) → skip parent and siblings, exit stays 0. Any other
+  # failure exits non-zero (no fallback, per .claude/rules/code-style.md).
+  local parent_json parent_num parent_line
+  if parent_json=$(gh api "/repos/{owner}/{repo}/issues/$n/parent" 2>&1); then
+    parent_num=$(jq -r '.number' <<<"$parent_json") || return 1
+    parent_line=$(jq -r '"#\(.number) [\(.state)] \(.title) — \(.html_url)"' <<<"$parent_json") || return 1
+    printf 'Parent:\n  %s\n' "$parent_line"
+
+    # Siblings: the parent's sub-issues minus self.
+    local sib_filter siblings
+    sib_filter=".[] | select(.number != $n) | \"#\\(.number) [\\(.state)] \\(.title) — \\(.html_url)\""
+    siblings=$(gh_api_array "/repos/{owner}/{repo}/issues/$parent_num/sub_issues" "$sib_filter") || return 1
+    printf 'Siblings:\n'
+    if [[ -n "$siblings" ]]; then printf '%s\n' "$siblings" | sed 's/^/  /'; else printf '  (none)\n'; fi
+  elif [[ "$parent_json" == *"404"* || "$parent_json" == *"No parent issue found"* ]]; then
+    : # no parent → emit nothing for parent or siblings; not an error
+  else
+    echo "error: --relations: failed to fetch parent for #$n: $parent_json" >&2
+    return 1
+  fi
+}
+
+# --pr: resolve the PR via dispatch-find-pr, then emit number, labels, CI
+# verdict, and body as clean markdown prose. Empty dispatch-find-pr output (exit
+# 0) means no PR exists yet → emit "PR: none" and return 0 (legitimate
+# plan-phase case). A non-zero dispatch-find-pr exit is a real failure → return 1.
+# Inside the helper, all command substitutions use the two-line form to avoid
+# masking failures under `local`.
+build_pr_section() {
+  local n="$1"
+  local pr_num
+  pr_num=$("$SCRIPT_DIR/dispatch-find-pr" "$n") || return 1
+
+  if [[ -z "$pr_num" ]]; then
+    printf 'PR: none\n'
+    return 0
+  fi
+
+  local pr_json
+  pr_json=$(gh_retry gh pr view "$pr_num" --json number,labels,statusCheckRollup,body) || return 1
+
+  local pr_number labels_str ci_verdict pr_body
+  pr_number=$(jq -r '.number' <<<"$pr_json") || return 1
+  labels_str=$(jq -r '[ .labels[].name ] | if length == 0 then "(none)" else join(", ") end' <<<"$pr_json") || return 1
+  ci_verdict=$(dispatch_classify_rollup "$(jq -c '.statusCheckRollup' <<<"$pr_json")") || return 1
+  pr_body=$(jq -r '.body // ""' <<<"$pr_json") || return 1
+
+  printf 'PR #%s\n' "$pr_number"
+  printf 'labels: %s\n' "$labels_str"
+  printf 'ci: %s\n' "$ci_verdict"
+  printf '\n%s\n' "$pr_body"
+}
+
+# --diff: diff the worktree branch against its merge-base with the already-merged
+# origin/main, emitting the FULL section incl. its own
+# "=== DIFF (base <sha>) ===" header — unlike --issue/--relations/--pr (whose
+# call sites prepend a fixed header), only this builder knows the base sha, which
+# is computed here. NO `git fetch`: the worktree already has origin/main merged at
+# provision/phase-entry, so relying on the local ref keeps the slice
+# deterministic, read-only, and test-friendly; a missing origin/main / failed
+# merge-base exits non-zero (no fallback, per .claude/rules/code-style.md).
+#
+# CWD TRAP: all git ops run in the inherited cwd (the worktree) — NEVER cd to
+# resolve_project_root(), which returns the .bare parent (NOT the branch
+# checkout); a merge-base HEAD origin/main there resolves the wrong HEAD.
+#
+# One consistent diff form — `git diff "$base"` (working-tree mode, incl.
+# uncommitted) — across --stat, --name-only, and the hunk loop, so the file count
+# and the truncation line reconcile. Hunks are capped at DISPATCH_CONTEXT_DIFF_CAP
+# bytes (default 60000), whole-file granular, CHECK-BEFORE-EMIT: before emitting a
+# file's hunk, if adding its byte length would exceed the cap, STOP and count that
+# file plus all remaining files as omitted, printing exactly one
+# "truncated: N files omitted" line. Never truncate mid-file (the silent over-cap
+# the spec forbids). A single file whose hunk alone exceeds the cap emits ZERO
+# hunks and is itself counted among the omitted N — the --stat/--name-only output
+# still names every file, so nothing is hidden; only hunk bodies are capped.
+build_diff_section() {
+  local n="$1"
+  local cap="${DISPATCH_CONTEXT_DIFF_CAP:-60000}"
+
+  local base
+  base=$(git merge-base HEAD origin/main) || { echo "error: --diff: git merge-base HEAD origin/main failed (origin/main missing?)" >&2; return 1; }
+
+  local stat name_only
+  stat=$(git diff --stat "$base") || { echo "error: --diff: git diff --stat failed" >&2; return 1; }
+  name_only=$(git diff --name-only "$base") || { echo "error: --diff: git diff --name-only failed" >&2; return 1; }
+
+  printf '=== DIFF (base %s) ===\n' "$base"
+  printf '\n--- stat ---\n%s\n' "$stat"
+  printf '\n--- files ---\n%s\n' "$name_only"
+  printf '\n--- hunks ---\n'
+
+  # Iterate the changed-file list. `name_only` is newline-separated; an empty
+  # diff yields an empty string, which mapfile turns into a zero-length array.
+  local files=()
+  if [[ -n "$name_only" ]]; then
+    mapfile -t files <<<"$name_only"
+  fi
+
+  local total=${#files[@]}
+  local emitted_bytes=0 omitted=0 i
+  for (( i = 0; i < total; i++ )); do
+    local file="${files[$i]}"
+    local hunk hlen
+    # Anchor the pathspec with :(top) so it resolves repo-root-relative (matching
+    # the repo-root-relative paths --name-only emits) regardless of the inherited
+    # cwd — a bare `-- "$file"` would interpret $file relative to cwd and miss the
+    # file when invoked from a subdir. This is a pathspec anchor only; it does NOT
+    # cd, so merge-base still runs against the inherited-cwd HEAD (no cd to .bare).
+    hunk=$(git diff "$base" -- ":(top)$file") || { echo "error: --diff: git diff for '$file' failed" >&2; return 1; }
+    # Byte length (NOT ${#hunk}, which counts characters — multibyte content like
+    # this repo's em-dashes would undercount). wc -c is the byte measure.
+    hlen=$(printf '%s' "$hunk" | wc -c) || return 1
+    hlen=${hlen//[[:space:]]/}
+    # Check BEFORE emitting: if this file would push past the cap, stop and count
+    # this file plus all remaining files as omitted (never truncate mid-file).
+    if (( emitted_bytes + hlen > cap )); then
+      omitted=$(( total - i ))
+      break
+    fi
+    printf '%s\n' "$hunk"
+    emitted_bytes=$(( emitted_bytes + hlen ))
+  done
+
+  if (( omitted > 0 )); then
+    printf 'truncated: %d files omitted\n' "$omitted"
+  fi
+}
+
+# ---- Step 2: build each requested section into its own variable -------------
+#
+# Buffer-then-flush is mandatory (NOT a stylistic choice): each section is built
+# into its own variable and the whole pack is printed only at the single flush
+# point below, AFTER every requested section has succeeded. A section's failing
+# gh/git call must carry an explicit `|| { echo "error: ..." >&2; exit 1; }` so
+# a mid-build failure aborts non-zero with NO half-pack on stdout — the
+# "one tool result" / no-partial-success contract (.claude/rules/code-style.md;
+# guarded by the test "failed gh issue view → exit non-zero AND empty stdout").
+#
+# CRITICAL: under `set -e`, never write `local VAR=$(failing_cmd)` — the `local`
+# declaration's own (zero) exit status masks the command-substitution failure.
+# Use plain assignment + an explicit `|| { ...; exit 1; }` check instead.
+
+ISSUE_OUT=""
+REL_OUT=""
+PR_OUT=""
+DIFF_OUT=""
+
+if [[ "$WANT_ISSUE" == 1 ]]; then
+  # --issue slice (gh issue view --json number,title,state,body,comments →
+  # jq-rendered markdown incl. ### Comments). Header line, blank line, then prose.
+  ISSUE_BODY=$(build_issue_section "$N") || { echo "error: --issue: failed to build issue section for #$N" >&2; exit 1; }
+  ISSUE_OUT="=== ISSUE #$N ===
+$ISSUE_BODY"
+fi
+
+if [[ "$WANT_RELATIONS" == 1 ]]; then
+  # --relations slice (blockers / sub-issues / parent / siblings as titles +
+  # state + URL only — never full bodies). Header line, blank line, then groups.
+  REL_BODY=$(build_relations_section "$N") || { echo "error: --relations: failed to build relations section for #$N" >&2; exit 1; }
+  REL_OUT="=== RELATIONS #$N ===
+$REL_BODY"
+fi
+
+if [[ "$WANT_PR" == 1 ]]; then
+  # --pr slice (dispatch-find-pr → gh pr view --json number,labels,
+  # statusCheckRollup,body → jq-rendered markdown). "PR: none" exit 0 when no
+  # PR exists yet (plan phase). Header line, blank line, then prose.
+  PR_BODY=$(build_pr_section "$N") || { echo "error: --pr: failed to build PR section for #$N" >&2; exit 1; }
+  PR_OUT="=== PR ===
+$PR_BODY"
+fi
+
+if [[ "$WANT_DIFF" == 1 ]]; then
+  # --diff slice (merge-base vs origin/main, --stat, --name-only, capped
+  # whole-file hunks). Unlike the slices above, the builder owns its
+  # "=== DIFF (base <sha>) ===" header — the base sha is computed during the
+  # build, so only build_diff_section knows it; no separate header prepend here.
+  DIFF_OUT=$(build_diff_section "$N") || { echo "error: --diff: failed to build diff section for #$N" >&2; exit 1; }
+fi
+
+# ---- Step 3: single flush point — print sections in canonical order ---------
+#
+# Reaching here means every requested section built successfully, so it is now
+# safe to write to stdout. Emit in the fixed canonical order (issue → relations
+# → pr → diff) regardless of flag order, with a blank line between sections so
+# the pack is scannable.
+
+emit() {
+  # Print one section's buffered output followed by a trailing blank line.
+  printf '%s\n\n' "$1"
+}
+
+[[ -n "$ISSUE_OUT" ]] && emit "$ISSUE_OUT"
+[[ -n "$REL_OUT" ]] && emit "$REL_OUT"
+[[ -n "$PR_OUT" ]] && emit "$PR_OUT"
+[[ -n "$DIFF_OUT" ]] && emit "$DIFF_OUT"
+
+exit 0
