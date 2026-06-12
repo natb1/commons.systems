@@ -23324,14 +23324,35 @@ rm -rf "$ATTACKER"
 export DISPATCH_WORKTREES_ROOT="$CMP_TMPDIR"   # restore for symmetry before teardown
 cmp_teardown
 
-# --- Case 9: nonexistent --worktree → exit 2 ----------------------------------
-echo "Test: nonexistent --worktree → exit 2"
+# --- Case 9: nonexistent --worktree outside the worktrees root → exit 2 -------
+# Exercise the worktrees-root guard, not the later cd failure. On Linux, GNU
+# realpath returns rc=0 for a nonexistent path, so a nonexistent path *under*
+# the override root (e.g. "$CMP_TMPDIR/does-not-exist") would pass the
+# case-statement prefix check and reach the cd — exiting 2 only because cd
+# fails, which tests the wrong guard. By pointing at a nonexistent path OUTSIDE
+# the worktrees root, the case-statement rejection fires before any cd on every
+# platform (on macOS the realpath failure catches it even earlier).
+echo "Test: nonexistent --worktree outside worktrees root → exit 2"
+cmp_setup
+set +e
+"$CMP" --worktree "$CMP_TMPDIR/../outside-does-not-exist" --merge-only
+cmp9_rc=$?
+set -e
+assert_eq "nonexistent --worktree outside root → exit 2" "2" "$cmp9_rc"
+cmp_teardown
+
+# --- Case 10: --worktree under the root but un-cd-able → exit 2 ----------------
+# A nonexistent path UNDER the worktrees root passes the realpath/prefix guard
+# on Linux (GNU realpath succeeds for nonexistent paths) and is rejected only by
+# the subsequent cd failure. This pins that distinct exit-2 path so Case 9's
+# guard coverage and the cd-failure coverage stay separate.
+echo "Test: --worktree under root but un-cd-able → exit 2"
 cmp_setup
 set +e
 "$CMP" --worktree "$CMP_TMPDIR/does-not-exist" --merge-only
-cmp9_rc=$?
+cmp10_rc=$?
 set -e
-assert_eq "nonexistent --worktree → exit 2" "2" "$cmp9_rc"
+assert_eq "un-cd-able --worktree under root → exit 2" "2" "$cmp10_rc"
 cmp_teardown
 
 # ============================================================================

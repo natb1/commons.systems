@@ -146,17 +146,23 @@ if [[ -n "$WORKTREE" ]]; then
     echo "$PROG: cannot resolve worktrees root '$WORKTREES_ROOT'" >&2
     exit 2
   fi
-  if ! WORKTREE_REAL=$(realpath -- "$WORKTREE" 2>/dev/null); then
+  # realpath -e (GNU) / --canonicalize-existing fails on a nonexistent path on
+  # Linux too; without -e, GNU realpath resolves nonexistent paths syntactically
+  # and returns 0, so the "does not exist" diagnostic would never fire.
+  if ! WORKTREE_REAL=$(realpath -e -- "$WORKTREE" 2>/dev/null); then
     echo "$PROG: --worktree path '$WORKTREE' does not exist" >&2
     exit 2
   fi
-  case "$WORKTREE_REAL/" in
-    "$WORKTREES_ROOT_REAL"/*) : ;;  # strict subdir of the worktrees root — OK
-    *)
-      echo "$PROG: --worktree '$WORKTREE' (resolved '$WORKTREE_REAL') is not under the worktrees root '$WORKTREES_ROOT_REAL'; refusing" >&2
-      exit 2
-      ;;
-  esac
+  # Require a strict subdirectory of the worktrees root: reject the root itself
+  # and anything outside it. The `/?*` pattern requires at least one character
+  # to follow the root's trailing slash, so WORKTREE_REAL == WORKTREES_ROOT_REAL
+  # is rejected (a `*`-only pattern would wrongly accept the root, since `*`
+  # matches the empty string after the appended trailing slash).
+  if [[ "$WORKTREE_REAL" == "$WORKTREES_ROOT_REAL" \
+        || "$WORKTREE_REAL/" != "$WORKTREES_ROOT_REAL"/?* ]]; then
+    echo "$PROG: --worktree '$WORKTREE' (resolved '$WORKTREE_REAL') is not under the worktrees root '$WORKTREES_ROOT_REAL'; refusing" >&2
+    exit 2
+  fi
   WORKTREE="$WORKTREE_REAL"
 fi
 
