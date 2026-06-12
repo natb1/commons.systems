@@ -64,7 +64,7 @@ TEMP_FIREBASE_JSON="${REPO_ROOT}/.firebase-qa-$$.json"
 # Build emulators config. Each emulator binds "0.0.0.0" (all interfaces) instead
 # of the default 127.0.0.1 so its port is reachable from Chrome on the Windows
 # host — WSL2 NAT networking does not reliably forward 127.0.0.1-only emulator
-# ports. See .claude/rules/chrome-extension.md.
+# ports. See .claude/docs/chrome-extension.md.
 EMULATORS_JSON="{"
 EMULATOR_LIST=""
 if [ "$USES_FIRESTORE" = true ]; then
