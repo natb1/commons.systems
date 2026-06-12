@@ -970,6 +970,12 @@ else
       fi
       (( ${#results[@]} >= TOP )) && return 0
     done
+    # The for-loop's last evaluated command is the `(( ... ))` test above; when it
+    # is false (results still under TOP) it returns 1, which — as drain_bucket's
+    # final command — would make the function return 1 and, under `set -e`, abort
+    # the whole scan at the bare `drain_bucket` call site. Return success
+    # explicitly so a not-yet-full results array keeps the scan going (#1317).
+    return 0
   }
 
   for pri in 1 0; do
