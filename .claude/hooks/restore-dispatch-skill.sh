@@ -29,7 +29,7 @@ ISSUE_NUM=""
 WORKTREE_BASENAME=""
 
 # Primary path: session --name matches worker shape ^[0-9]+-. The name IS the
-# worktree basename for workers spawned by dispatch-spawn-worker.
+# worktree basename for workers spawned by dispatch-launch-worker.
 if printf '%s\n' "$NAME" | grep -qE '^[0-9]+-'; then
   ISSUE_NUM=$(printf '%s\n' "$NAME" | grep -oE '^[0-9]+')
   WORKTREE_BASENAME="$NAME"

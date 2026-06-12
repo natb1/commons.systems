@@ -69,12 +69,13 @@ later at `dispatch-resolve-worktree`, wasting a `drain worktree-conflict` tick.
 Holding the lock through the spawn closes that window: the next tick blocks on
 the lock until the worker is registered, then the orphan-recycle check sees a
 live session and skips. With the lock held through registration,
-`dispatch-spawn-worker`'s per-worktree dedup at the spawn boundary is now
+`dispatch-spawn-job`'s per-worktree dedup at the spawn boundary is now
 belt-and-suspenders rather than the load-bearing guard it was during the old
 early-release window.
 
 `dispatch-materialize-spawn` releases at each terminal point: on the `propagate`
-path after `dispatch-spawn-worker` returns success (worker verified-registered),
+path after `dispatch-launch-worker` detaches and the reservation ledger records
+the slot,
 on `notify spawn-failed` after the failed spawn returns, and at the single-target
 CI-wait stop (now emitting `drain ci-reseeded` / `notify ci-wait-exhausted`, or
 `drain ci-waiting` on a scheduler hard-failure), which releases before scheduling
@@ -132,11 +133,11 @@ step (so two routers cannot race on the same target). It is one of two
 mechanisms; the other is per-worktree and enforced elsewhere.
 
 The **per-worktree invariant**: at most one live worker agent per issue
-worktree. The router's Step 6 spawn primitive (`dispatch-spawn-worker`)
-enforces this at the spawn boundary. Every worker is born with the target
-worktree's basename as its `--name` — the `dispatch-spawn-worker` script's
-own cwd stays at the spawner's cwd (`worktrees/main`), but the spawn
-subshell `cd`s into `<worktree-path>` before invoking `claude --bg`, so the
+worktree. The launcher's spawn step (`dispatch-launch-worker`, via
+`dispatch-spawn-job`) enforces this at the spawn boundary. Every worker is born
+with the target worktree's basename as its `--name`, and the worker's cwd is set
+to `<worktree-path>` by `dispatch-spawn-job --cwd` (the detached
+`dispatch-launch-worker` `cd`s into the worktree before routing), so the
 new worker registers and runs in its target worktree. Per-worktree name
 uniqueness is automatic. The dedup query lists live sessions under
 `<worktree-path>` (not the spawner cwd — that's where every same-target
@@ -150,9 +151,9 @@ The two mechanisms have orthogonal scopes:
 
 - **Selection lock** — per-repo, held by the router for the
   duration of Steps 1–5. Prevents two routers from selecting the same target.
-- **Per-worktree dedup** (`dispatch-spawn-worker`) — per-worktree-path,
-  enforced at every router-to-worker spawn. Prevents two workers from racing
-  on the same issue.
+- **Per-worktree dedup** (`dispatch-launch-worker`, via `dispatch-spawn-job`) —
+  per-worktree-path, enforced at every router-to-worker spawn. Prevents two
+  workers from racing on the same issue.
 
 N concurrent issues in flight = N concurrent workers, each in its own
 worktree, each advancing its own issue's phase without contention. Only the

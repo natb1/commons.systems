@@ -15908,7 +15908,7 @@ restore_teardown
 # no-op `*)` case, nothing restored. dispatch-phase no longer emits a `waiting`
 # phase; a not-ready draft PR makes it exit 3 with empty stdout, and the hook's
 # `|| PHASE=""` routes the undetermined phase to the no-op `*)` case. After
-# #1392 deleted the model worker skill, so there is no phase skill to reload —
+# #1392 deleted the model worker skill, there is no phase skill to reload —
 # the Stop hook (dispatch-stop.sh) owns the disposition, so the hook emits nothing.
 echo "Test: restore-dispatch-skill dispatch-phase error (exit 3) → no restore"
 restore_setup

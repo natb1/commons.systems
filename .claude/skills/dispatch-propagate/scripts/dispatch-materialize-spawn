@@ -360,8 +360,7 @@ process_one_target() {
     echo "dispatch-materialize-spawn: reservation_write failed for $wt_basename; spawning without a ledger entry (budget may undercount this slot)" >&2
   fi
   # Detach the per-target launcher (#1391, sub-issue B). dispatch-launch-worker
-  # is a plain shell process started DETACHED (setsid nohup … &) so it owns an
-  # independent
+  # is a plain shell process started DETACHED (setsid nohup … &) so it owns an independent
   # lifetime. It provisions + routes on the merged tree, handles every mechanical
   # disposition with no model, and execs the phase skill only for a real phase —
   # so it also OWNS the phase→model derivation now (the router's old WORKER_MODEL
