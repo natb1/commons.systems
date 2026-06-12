@@ -18184,17 +18184,12 @@ echo "\$*" >> "$TMPDIR_TEST/logs/schedule-target-reseed.log"
 printf '%s\n' "\${MAT_RESEED_OUT:-reseeded dispatch-reseed-target-\$1-10300 at 10300}"
 exit \${MAT_RESEED_RC:-0}
 FAKE
-  cat > "$TMPDIR_TEST/sync-issue-context" <<FAKE
-#!/usr/bin/env bash
-echo "cwd=\$PWD argv=\$*" >> "$TMPDIR_TEST/logs/sync-issue-context.log"
-FAKE
   chmod +x "$TMPDIR_TEST"/dispatch-find-pr "$TMPDIR_TEST"/dispatch-trace-leaf \
     "$TMPDIR_TEST"/dispatch-check-blockers "$TMPDIR_TEST"/dispatch-apply-office-hours \
     "$TMPDIR_TEST"/dispatch-resolve-worktree \
     "$TMPDIR_TEST"/dispatch-phase "$TMPDIR_TEST"/dispatch-ci-ready \
     "$TMPDIR_TEST"/dispatch-select-target \
-    "$TMPDIR_TEST"/dispatch-launch-worker "$TMPDIR_TEST"/dispatch-schedule-target-reseed \
-    "$TMPDIR_TEST"/sync-issue-context
+    "$TMPDIR_TEST"/dispatch-launch-worker "$TMPDIR_TEST"/dispatch-schedule-target-reseed
 
   mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
   cat > "$TMPDIR_TEST/bin/git" <<STUB
@@ -18209,8 +18204,11 @@ esac
 STUB
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
-# Only the explicit closed-check uses gh here.
-echo "${MAT_ISSUE_STATE:-OPEN}"
+# Closed-check (--json state) and identity-stub title fetch (--json title).
+case "$*" in
+  *"--json title"*) echo "${MAT_ISSUE_TITLE:-Test issue title}" ;;
+  *) echo "${MAT_ISSUE_STATE:-OPEN}" ;;
+esac
 STUB
   chmod +x "$TMPDIR_TEST/bin/git" "$TMPDIR_TEST/bin/gh"
   export PATH="$TMPDIR_TEST/bin:$SAVED_PATH"
@@ -18223,7 +18221,7 @@ mat_teardown() {
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     DISPATCH_RESERVATION_DIR \
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_PHASE \
-    MAT_CI_READY MAT_LAUNCH_SLEEP MAT_ISSUE_STATE MAT_QUEUE \
+    MAT_CI_READY MAT_LAUNCH_SLEEP MAT_ISSUE_STATE MAT_ISSUE_TITLE MAT_QUEUE \
     MAT_RESEED_OUT MAT_RESEED_RC
   # Per-issue phase overrides (MAT_PHASE_<N>, #1126) have dynamic names the fixed
   # unset list cannot enumerate; clear any a test set so they don't leak forward.
@@ -18487,16 +18485,25 @@ assert_eq "resolve-wt fail: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- enter path → sync-issue-context runs in the worktree --------------------
-echo "Test: materialize-spawn enter path syncs context + spawns"
+# --- enter path → identity stub written in the worktree ----------------------
+echo "Test: materialize-spawn enter path writes identity stub + spawns"
 mat_setup
 EXISTING_WT="$TMPDIR_TEST/existing-wt"
 mkdir -p "$EXISTING_WT"
 export MAT_WT_DECISION="enter $EXISTING_WT"
 out=$(run_mat 839 queue)
 assert_eq "enter: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "enter: sync-issue-context ran in the worktree" "cwd=$EXISTING_WT argv=839" \
-  "$(cat "$TMPDIR_TEST/logs/sync-issue-context.log")"
+STUB_FILE="$EXISTING_WT/CLAUDE.local.md"
+assert_eq "enter: identity stub written" "1" \
+  "$([ -f "$STUB_FILE" ] && echo 1 || echo 0)"
+assert_eq "enter: stub has issue heading" "1" \
+  "$(grep -c '^# Issue #839:' "$STUB_FILE" || true)"
+assert_eq "enter: stub names the branch" "1" \
+  "$(grep -c 'existing-wt' "$STUB_FILE" || true)"
+assert_eq "enter: stub points at dispatch-context-pack" "1" \
+  "$(grep -c 'dispatch-context-pack 839' "$STUB_FILE" || true)"
+assert_eq "enter: stub carries no issue body/comments" "0" \
+  "$(grep -c '### Comments' "$STUB_FILE" || true)"
 assert_eq "enter: marker written into the entered worktree" "1" \
   "$([ -f "$EXISTING_WT/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
 mat_teardown
