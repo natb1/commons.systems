@@ -2,7 +2,6 @@ import type { User } from "../auth.js";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { getMediaItem } from "../firestore.js";
 import { getMediaDownloadUrl } from "../storage.js";
-import { wireMarkdownActions } from "../markdown-actions.js";
 import type { MediaItem } from "../types.js";
 import { renderViewerShell, initViewer } from "../viewer/shell.js";
 import { createPdfRenderer } from "../viewer/pdf.js";
@@ -147,7 +146,6 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
       default:
         reportError(new Error(`Unsupported local mediaType in viewer: ${item.mediaType}`));
     }
-    wireMarkdownActions(outlet);
     return;
   }
 
@@ -170,6 +168,4 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
       if (pos) pos.textContent = `Unsupported media type: ${_exhaustive}`;
     }
   }
-
-  wireMarkdownActions(outlet);
 }
