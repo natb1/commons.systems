@@ -119,7 +119,9 @@ export function createHistoryRouter(
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const href = anchor.getAttribute("href");
     if (!href || !href.startsWith("/") || href.startsWith("//")) return;
-    const path = new URL(href, location.origin).pathname.replace(/\/$/, "") || "/";
+    const url = new URL(href, location.origin);
+    if (url.origin !== location.origin) return;
+    const path = url.pathname.replace(/\/$/, "") || "/";
     if (!matchRoute(routes, path)) return;
     e.preventDefault();
     history.pushState({}, "", href);
