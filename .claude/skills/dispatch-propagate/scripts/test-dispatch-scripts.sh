@@ -15548,7 +15548,7 @@ restore_setup() {
     "$TMPDIR_TEST/bin" \
     "$STUB_DIR"
   for skill in plan-issue implement fix-checks fix-conflicts qa-fix office-hours \
-               review-fix dispatch-worker; do
+               review-fix; do
     mkdir -p "$TMPDIR_TEST/.claude/skills/$skill"
     cat > "$TMPDIR_TEST/.claude/skills/$skill/SKILL.md" <<EOF
 ---
@@ -15569,7 +15569,7 @@ EOF
   # dispatch-phase shim: read $STUB_DIR/current-phase.txt. The sentinel ERROR
   # models the real dispatch-phase's not-ready contract (a draft PR whose CI has
   # no verdict yet): empty stdout, exit 3. The hook's `|| PHASE=""` then routes
-  # to the dispatch-worker fallback.
+  # the undetermined phase to the no-op `*)` case (nothing restored).
   cat > "$TMPDIR_TEST/.claude/skills/dispatch-propagate/scripts/dispatch-phase" <<'FAKE'
 #!/usr/bin/env bash
 if [[ -f "$STUB_DIR/current-phase.txt" ]]; then
@@ -15905,57 +15905,57 @@ fi
 restore_teardown
 
 # --- Test 7: dispatch-phase error (not-ready CI, exit 3 → empty PHASE) →
-# dispatch-worker fallback body + ARGUMENTS: <N> <path>. dispatch-phase no longer
-# emits a `waiting` phase; a not-ready draft PR makes it exit 3 with empty stdout,
-# and the hook's `|| PHASE=""` routes the empty phase to the worker fallback.
-echo "Test: restore-dispatch-skill dispatch-phase error (exit 3) → dispatch-worker fallback"
+# no-op `*)` case, nothing restored. dispatch-phase no longer emits a `waiting`
+# phase; a not-ready draft PR makes it exit 3 with empty stdout, and the hook's
+# `|| PHASE=""` routes the undetermined phase to the no-op `*)` case. After
+# #1392 (dispatch-worker deleted) there is no phase skill to reload — the Stop
+# hook (dispatch-stop.sh) owns the disposition, so the hook emits nothing.
+echo "Test: restore-dispatch-skill dispatch-phase error (exit 3) → no restore"
 restore_setup
 set_agents_name "903-foo"
 echo "ERROR" > "$STUB_DIR/current-phase.txt"
 output=$(run_restore)
 TOTAL=$((TOTAL + 1))
-expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/dispatch-worker"
-if [[ "$output" == *"$expected_dir"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: phase-error fallback: base directory line emitted"
+if [[ "$output" != *"Base directory for this skill:"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: phase-error: no base directory line (nothing restored)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error fallback: base directory line emitted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error: no base directory line (nothing restored)"
   echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"RESTORE_MARKER_dispatch-worker"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: phase-error fallback: SKILL.md body marker emitted"
+if [[ "$output" != *"RESTORE_MARKER_dispatch-worker"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: phase-error: no dispatch-worker marker emitted"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error fallback: SKILL.md body marker emitted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error: no dispatch-worker marker emitted"
+  echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
-expected_args="ARGUMENTS: 903 $TMPDIR_TEST/worktrees/903-foo"
-if [[ "$output" == *"$expected_args"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: phase-error fallback: ARGUMENTS line with worktree path"
+if [[ "$output" != *"ARGUMENTS:"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: phase-error: no ARGUMENTS line emitted"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error fallback: ARGUMENTS line with worktree path"
+  FAIL=$((FAIL + 1)); echo "  FAIL: phase-error: no ARGUMENTS line emitted"
   echo "    output: $output"
-  echo "    expected to contain: $expected_args"
 fi
 restore_teardown
 
 # --- Test 7b: name-lookup path wins over a divergent branch (#875) -----------
-# Proves the worktree basename derives from the session .name (the
+# Proves the issue number / worktree basename derive from the session .name (the
 # `claude agents --json` primary path), NOT from `git rev-parse --abbrev-ref
 # HEAD`. The two sources are made to DIVERGE: .name=875-from-name,
-# branch=999-from-branch. phase=ERROR routes to the dispatch-worker fallback,
-# which emits the worktree path on the ARGUMENTS line.
+# branch=999-from-branch. A real phase (implement) routes to the implement
+# skill, which emits the issue number on the ARGUMENTS line.
 echo "Test: restore-dispatch-skill name-lookup wins over divergent branch"
 restore_setup
 set_agents_name "875-from-name"
 echo "999-from-branch" > "$STUB_DIR/current-branch.txt"
-echo "ERROR" > "$STUB_DIR/current-phase.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
 output=$(run_restore)
 TOTAL=$((TOTAL + 1))
-expected_args="ARGUMENTS: 875 $TMPDIR_TEST/worktrees/875-from-name"
+expected_args="ARGUMENTS: 875"
 if [[ "$output" == *"$expected_args"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: name-lookup: ARGUMENTS path derived from .name"
+  PASS=$((PASS + 1)); echo "  PASS: name-lookup: ARGUMENTS issue number derived from .name"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: name-lookup: ARGUMENTS path derived from .name"
+  FAIL=$((FAIL + 1)); echo "  FAIL: name-lookup: ARGUMENTS issue number derived from .name"
   echo "    output: $output"
   echo "    expected to contain: $expected_args"
 fi
@@ -15973,20 +15973,20 @@ restore_teardown
 # --- Test 7c: empty registry → branch-name fallback (#875) -------------------
 # With no claude-agents.json fixture the `claude` stub returns `[]`, so .name is
 # empty and the hook falls through to `git rev-parse --abbrev-ref HEAD`. The
-# branch (999-from-branch) then supplies the basename. Same phase=ERROR routing
-# emits the worktree path on the ARGUMENTS line.
+# branch (999-from-branch) then supplies the basename. A real phase (implement)
+# emits the issue number on the ARGUMENTS line.
 echo "Test: restore-dispatch-skill empty registry → branch-name fallback"
 restore_setup
 # Deliberately do NOT call set_agents_name — the claude stub returns [].
 echo "999-from-branch" > "$STUB_DIR/current-branch.txt"
-echo "ERROR" > "$STUB_DIR/current-phase.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
 output=$(run_restore)
 TOTAL=$((TOTAL + 1))
-expected_args="ARGUMENTS: 999 $TMPDIR_TEST/worktrees/999-from-branch"
+expected_args="ARGUMENTS: 999"
 if [[ "$output" == *"$expected_args"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: empty-registry fallback: ARGUMENTS path derived from branch"
+  PASS=$((PASS + 1)); echo "  PASS: empty-registry fallback: ARGUMENTS issue number derived from branch"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: empty-registry fallback: ARGUMENTS path derived from branch"
+  FAIL=$((FAIL + 1)); echo "  FAIL: empty-registry fallback: ARGUMENTS issue number derived from branch"
   echo "    output: $output"
   echo "    expected to contain: $expected_args"
 fi
@@ -16113,14 +16113,11 @@ restore_teardown
 echo "=== dispatch chain: no EnterWorktree/ExitWorktree mid-session ==="
 #
 # Regression guard for #839: the dispatch chain — router /dispatch-propagate and the
-# skills the worker (/dispatch-worker) invokes — must not call EnterWorktree
-# or ExitWorktree. The worker is born in its target worktree (cwd set by
-# dispatch-spawn-worker); any mid-session worktree switch is at best a no-op
-# and at worst an error. The router runs in worktrees/main and materializes
-# the target worktree explicitly (git worktree add).
-#
-# Allowed exception: dispatch-worker/SKILL.md mentions the words in its
-# preamble contract: "It never calls EnterWorktree or ExitWorktree."
+# phase skills it spawns — must not call EnterWorktree or ExitWorktree. A phase
+# skill is born in its target worktree (cwd set by dispatch-launch-worker); any
+# mid-session worktree switch is at best a no-op and at worst an error. The
+# router runs in worktrees/main and materializes the target worktree explicitly
+# (git worktree add).
 
 PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 
@@ -16128,7 +16125,6 @@ PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 # substring mentions (grep -oE counts each occurrence, not each line).
 declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/dispatch-propagate/SKILL.md"]=0
-  [".claude/skills/dispatch-worker/SKILL.md"]=2
   # Phase skills do not call EnterWorktree/ExitWorktree (#868): they write the
   # phase-completed marker and stop; the Stop hook (`.claude/hooks/dispatch-stop.sh`)
   # owns post-phase disposition (label management, router spawn, self-close).
