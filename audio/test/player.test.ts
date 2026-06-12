@@ -313,12 +313,12 @@ describe("initPlayer", () => {
 
       // now resolve the pending promise — should be treated as stale
       deferred[0]!.resolve("blob:http://localhost/t1-blob");
-      await Promise.resolve();
-      await Promise.resolve();
 
+      await vi.waitFor(() => {
+        expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:http://localhost/t1-blob");
+      });
       expect(audioEl.play).not.toHaveBeenCalled();
       expect(audioEl.getAttribute("src")).toBeNull();
-      expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:http://localhost/t1-blob");
     });
 
     it("out-of-order resolve does not desync: gen-1 blob is revoked and src ends on gen-2 blob", async () => {
@@ -338,17 +338,19 @@ describe("initPlayer", () => {
 
       // resolve gen-2 first, then gen-1
       deferred[1]!.resolve("blob:http://localhost/t2-blob");
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.waitFor(() => {
+        // src should be the gen-2 blob
+        expect(audioEl.src).toContain("t2-blob");
+      });
 
       deferred[0]!.resolve("blob:http://localhost/t1-blob");
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.waitFor(() => {
+        // gen-1 blob was never stored; it should have been revoked as stale
+        expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:http://localhost/t1-blob");
+      });
 
-      // src should be the gen-2 blob
+      // src should still be the gen-2 blob
       expect(audioEl.src).toContain("t2-blob");
-      // gen-1 blob was never stored; it should have been revoked as stale
-      expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:http://localhost/t1-blob");
       // gen-1 blob was never assigned to src
       expect(audioEl.src).not.toContain("t1-blob");
     });
@@ -370,17 +372,19 @@ describe("initPlayer", () => {
 
       // reject gen-1 promise (stale) — should not advance
       const playCallsBefore = (audioEl.play as ReturnType<typeof vi.fn>).mock.calls.length;
+      // after the remove there are 2 pending resolves (gen-1 for track1, gen-2 for track2)
+      expect(deferred).toHaveLength(2);
       deferred[0]!.reject(new Error("network error"));
-      await Promise.resolve();
-      await Promise.resolve();
 
-      // no additional play calls from the stale failure
-      expect((audioEl.play as ReturnType<typeof vi.fn>).mock.calls.length).toBe(playCallsBefore);
+      // drain the catch chain, then assert the stale reject did NOT advance the
+      // queue — a stale advance would call playTrack(track3), pushing a 3rd deferred.
+      await vi.waitFor(() => {
+        expect((audioEl.play as ReturnType<typeof vi.fn>).mock.calls.length).toBe(playCallsBefore);
+      });
+      expect(deferred).toHaveLength(2);
 
       // now reject gen-2 (live) — should advance from live currentIndex (track2 -> track3)
       deferred[1]!.reject(new Error("network error"));
-      await Promise.resolve();
-      await Promise.resolve();
 
       // gen-3 resolve (track3) is now pending; resolve it to confirm advancement happened
       await vi.waitFor(() => {
