@@ -480,4 +480,142 @@ describe("createHistoryRouter", () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(outlet.innerHTML).toBe("<p>Fatal error</p>");
   });
+
+  it("does not intercept anchor with download attribute", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/about");
+    anchor.setAttribute("download", "");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("does not intercept anchor with target=_self", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/about");
+    anchor.setAttribute("target", "_self");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("does not intercept protocol-relative href and does not throw", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "//external.com/path");
+    document.body.appendChild(anchor);
+
+    try {
+      expect(() => anchor.click()).not.toThrow();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("does not intercept backslash-prefixed href that resolves cross-origin", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    // "/\evil.com/about" — passes startsWith("/") && !startsWith("//")
+    // string guards but the WHATWG URL parser normalizes the backslash to a
+    // slash, resolving cross-origin to //evil.com/about.
+    anchor.setAttribute("href", "/" + "\\" + "evil.com/about");
+    document.body.appendChild(anchor);
+
+    try {
+      expect(() => anchor.click()).not.toThrow();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("does not intercept unknown same-origin path with no matching route", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/feed.xml");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("intercepts same-origin anchor to a real route (positive control)", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/about");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      expect(pushStateSpy).toHaveBeenCalledWith({}, "", "/about");
+      await vi.waitFor(() => {
+        expect(outlet.innerHTML).toBe("<h2>About</h2>");
+      });
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
 });
