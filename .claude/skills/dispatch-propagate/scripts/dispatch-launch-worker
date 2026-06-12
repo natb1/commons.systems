@@ -103,6 +103,17 @@ release_and_tick() {
   "$SCRIPT_DIR/dispatch-spawn-tick" >/dev/null 2>&1 || true
 }
 
+# A non-zero route rc with NO directive is a genuine infrastructure failure
+# (e.g. dispatch-ci-ready exiting 2), not a routing disposition. Surface the real
+# exit code rather than falling into the `*)` arm below, which would park the
+# issue with a misleading "unrecognized route directive ''" reason. The `*)` arm
+# still handles genuinely non-empty unrecognized directives.
+if [[ "$ROUTE_RC" -ne 0 && -z "$DIRECTIVE" ]]; then
+  echo "dispatch-launch-worker: dispatch-route exited $ROUTE_RC for #$N with no directive" >&2
+  release_and_tick
+  exit "$ROUTE_RC"
+fi
+
 # ---- Step 4: act on the directive -------------------------------------------
 case "$DIRECTIVE" in
   "INVOKE "*)
@@ -126,9 +137,15 @@ case "$DIRECTIVE" in
     # A done PR whose worktree carries unpushed local commits (#1105). Push them
     # (sandbox-safe HTTPS to github.com) against the target worktree explicitly —
     # the launcher's cwd is the router's, not the worktree — then park for review.
-    git -C "$WORKTREE_PATH" push origin HEAD || true
-    "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" \
-      "dispatch-launch-worker: PUSH-STRANDED — pushed unpushed local commits a done PR left behind; parking for review"
+    push_rc=0
+    git -C "$WORKTREE_PATH" push origin HEAD || push_rc=$?
+    if [[ "$push_rc" -eq 0 ]]; then
+      "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" \
+        "dispatch-launch-worker: PUSH-STRANDED — pushed unpushed local commits a done PR left behind; parking for review" || true
+    else
+      "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" \
+        "dispatch-launch-worker: PUSH-STRANDED — push of unpushed local commits a done PR left behind failed (rc=$push_rc); parking for review" || true
+    fi
     release_and_tick
     ;;
   "STOP provision-failed")
@@ -136,7 +153,7 @@ case "$DIRECTIVE" in
     # office-hours-reason write is a no-op for the launcher, which has no job
     # dir). Park directly via the single label write path.
     "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" \
-      "dispatch-launch-worker: provisioning/merge of origin/main failed for #$N; parking for review"
+      "dispatch-launch-worker: provisioning/merge of origin/main failed for #$N; parking for review" || true
     release_and_tick
     ;;
   "STOP done" | "STOP waiting" | "STOP wrong-worktree")
@@ -149,7 +166,7 @@ case "$DIRECTIVE" in
     # .claude/rules/code-style.md, surface it (park with a clear reason) rather
     # than swallow it.
     "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" \
-      "dispatch-launch-worker: unrecognized route directive '$DIRECTIVE' for #$N; parking for review"
+      "dispatch-launch-worker: unrecognized route directive '$DIRECTIVE' for #$N; parking for review" || true
     release_and_tick
     ;;
 esac

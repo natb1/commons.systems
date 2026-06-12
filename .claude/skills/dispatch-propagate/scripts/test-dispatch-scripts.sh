@@ -19049,6 +19049,7 @@ mat_setup
 export MAT_CI_READY=waiting
 out=$(run_mat 839 queue)
 assert_eq "queue-no-regate: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+wait_launch_log 1
 assert_eq "queue-no-regate: spawn called once" "839 $TMPDIR_TEST/project/worktrees/839-test" \
   "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
 mat_teardown
@@ -19060,6 +19061,7 @@ echo "Test: materialize-spawn --gap 1 → propagate (single target, default beha
 mat_setup
 out=$(run_mat 839 queue --gap 1)
 assert_eq "gap1: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+wait_launch_log 1
 assert_eq "gap1: spawn called once" "839 $TMPDIR_TEST/project/worktrees/839-test" \
   "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
 mat_teardown
@@ -23433,6 +23435,28 @@ assert_eq "launch INVOKE /implement: no spawn-tick (exec path)" "no" \
   "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
 lw_teardown
 
+# 1b. INVOKE /fix-conflicts → exec dispatch-spawn-job with the unmapped-phase
+# flags (no --model — conflict resolution inherits Opus), reservation RETAINED,
+# no tick. Guards against an inadvertent future model-mapping for this directive.
+echo "Test: INVOKE /fix-conflicts → spawn-job exec, no --model, reservation retained, no tick"
+lw_setup
+lw_write_marker
+lw_run "INVOKE /fix-conflicts"
+assert_eq "launch INVOKE /fix-conflicts: exit 0" "0" "$LW_RC"
+sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
+assert_eq "launch INVOKE /fix-conflicts: spawn-job logged once" "1" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && wc -l < "$LW_DIR/spawn-job-argv" | tr -d ' ' || echo 0)"
+assert_eq "launch INVOKE /fix-conflicts: spawn-job argv" \
+  "--no-verify --name $LW_WT_BASENAME --cwd $LW_WT /fix-conflicts 839 $LW_WT" "$sj"
+assert_eq "launch INVOKE /fix-conflicts: no --model in argv" "no" \
+  "$([[ "$sj" == *"--model"* ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /fix-conflicts: reservation RETAINED" "yes" "$(lw_marker_exists)"
+assert_eq "launch INVOKE /fix-conflicts: no apply-office-hours" "no" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /fix-conflicts: no spawn-tick (exec path)" "no" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+lw_teardown
+
 # 2. INVOKE /qa-fix → spawn-job carries --model claude-sonnet-4-6 (real
 # dispatch-phase-model qa policy) and the /qa-fix prompt.
 echo "Test: INVOKE /qa-fix → spawn-job with --model claude-sonnet-4-6"
@@ -23552,6 +23576,27 @@ assert_eq "launch unrecognized: reservation CLEARED" "no" "$(lw_marker_exists)"
 assert_eq "launch unrecognized: spawn-tick called" "yes" \
   "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
 assert_eq "launch unrecognized: no spawn-job" "no" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && echo yes || echo no)"
+lw_teardown
+
+# 9b. Route failure: a non-zero route exit with NO directive (empty stdout) is a
+# genuine infrastructure failure (e.g. dispatch-ci-ready exiting 2), NOT an
+# office-hours-worthy "unrecognized directive". The launcher must surface the real
+# exit code and release+tick rather than park the issue with a misleading
+# "unrecognized route directive ''" reason (LW-001). It must NOT call
+# apply-office-hours, MUST clear the reservation, MUST tick, and MUST exit with the
+# route's own non-zero code.
+echo "Test: empty directive + route-exit 2 → release+tick, NO park, exit 2"
+lw_setup
+lw_write_marker
+lw_run "" 2
+assert_eq "launch route-fail: surfaces route exit code" "2" "$LW_RC"
+assert_eq "launch route-fail: no apply-office-hours (no park)" "no" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+assert_eq "launch route-fail: reservation CLEARED" "no" "$(lw_marker_exists)"
+assert_eq "launch route-fail: spawn-tick called" "yes" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+assert_eq "launch route-fail: no spawn-job" "no" \
   "$([[ -f "$LW_DIR/spawn-job-argv" ]] && echo yes || echo no)"
 lw_teardown
 
