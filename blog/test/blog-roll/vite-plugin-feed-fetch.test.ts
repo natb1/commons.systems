@@ -48,6 +48,21 @@ describe("parseAtomFeedXml", () => {
     expect(parseAtomFeedXml(xml)?.url).toBe("https://example.com/alternate");
   });
 
+  it("drops publishedAt when Atom date is unparseable", () => {
+    const xml = `<feed>
+        <entry>
+          <title>Bad Date Post</title>
+          <link rel="alternate" href="https://example.com/bad-date-atom" />
+          <published>not-a-date</published>
+        </entry>
+      </feed>`;
+    const result = parseAtomFeedXml(xml);
+    expect(result).not.toBeNull();
+    expect(result?.title).toBe("Bad Date Post");
+    expect(result?.url).toBe("https://example.com/bad-date-atom");
+    expect(result?.publishedAt).toBeUndefined();
+  });
+
   it("falls back to updated when published is absent", () => {
     const xml = `<feed>
         <entry>
@@ -123,6 +138,21 @@ describe("parseRssFeedXml", () => {
         </item>
       </channel></rss>`;
     expect(parseRssFeedXml(xml)).toBeNull();
+  });
+
+  it("drops publishedAt when RSS pubDate is unparseable", () => {
+    const xml = `<rss><channel>
+        <item>
+          <title>Bad Date RSS Post</title>
+          <link>https://example.com/bad-date-rss</link>
+          <pubDate>garbage</pubDate>
+        </item>
+      </channel></rss>`;
+    const result = parseRssFeedXml(xml);
+    expect(result).not.toBeNull();
+    expect(result?.title).toBe("Bad Date RSS Post");
+    expect(result?.url).toBe("https://example.com/bad-date-rss");
+    expect(result?.publishedAt).toBeUndefined();
   });
 
   it("returns null when title is empty", () => {
