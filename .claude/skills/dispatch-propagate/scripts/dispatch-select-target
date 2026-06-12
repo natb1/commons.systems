@@ -201,13 +201,6 @@ if [[ "$TOP_EXPLICIT" == "true" \
   exit 1
 fi
 
-# Build the leaf-trace passthrough once: the excluded numbers thread into
-# dispatch-trace-leaf (#1062) so a multi-leaf subtree descends past an excluded
-# leaf. Only constructed when non-empty so the call site passes no --exclude
-# flag at all when no exclusion was requested.
-EXCLUDE_ARGS=()
-(( ${#EXCLUDED[@]} > 0 )) && EXCLUDE_ARGS=(--exclude "${!EXCLUDED[@]}")
-
 # Print origin/main's HEAD SHA if its CI has a failing check; print nothing if
 # main is healthy or only has in-progress checks. main's CI state spans two
 # sources that must both be aggregated:
