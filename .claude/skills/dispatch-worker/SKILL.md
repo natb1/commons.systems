@@ -56,7 +56,7 @@ Act on the one directive:
 | `INVOKE /budget-parse-job` | 0 | a statement parse-job issue (`statements:<key>` label, no PR) | invoke `/budget-parse-job` (see below) |
 | `INVOKE /fix-conflicts` | 0 | provisioning hit an `origin/main` merge conflict | invoke `/fix-conflicts` (the generic INVOKE path below) |
 | `INVOKE /implement` | 0 | no PR + `dispatch:planned` (`implement` phase) | invoke `/implement` (the generic INVOKE path below) |
-| `RELEVANCE-REVIEW` | 0 | no PR, unplanned (`plan` phase) | run the Step 2 relevance review, then dispatch its verdict |
+| `INVOKE /plan-issue` | 0 | no PR, unplanned (`plan` phase) | invoke `/plan-issue` (the generic INVOKE path below) |
 | `STOP done` | 0 | non-draft (ready) PR, or a draft PR carrying `dispatch:reviewed` (review-complete — draft→ready owned by `dispatch-reconcile-ready`) | stop without invoking a phase skill |
 | `PUSH-STRANDED` | 0 | `done` PR, but the worktree has commits `origin/<branch>` hasn't seen | push `origin HEAD`, write an office-hours reason, stop with no marker |
 | `STOP waiting` | 0 | draft PR's CI has no verdict yet | print the verbatim message below and stop |
@@ -94,6 +94,11 @@ and `mergeable == MERGEABLE`). Each phase skill owns and applies its own
   opens a draft PR. Planning already happened in the `plan` phase, so the worker
   runs no relevance review before it. No `dispatch:*` label — the draft PR it opens
   is its own marker.
+- **`/plan-issue`** — the `plan`-phase skill for a no-PR, unplanned issue. It runs
+  the `createdAt`-anchored pre-planning relevance review itself (the worker no
+  longer gates it), then plans the issue into an ordered unit breakdown, persists
+  the plan to the issue, and applies `dispatch:planned` on completion — the worker
+  applies no label.
 
 After the phase skill returns, the worker session ends; the Stop hook reads the
 marker the phase skill wrote and propagates the chain. The worker does not advance
@@ -116,13 +121,6 @@ missing snapshot or password, or (the central case) an uncategorized transaction
 needing the author's judgment — it escalates via `dispatch-mark-deviation` and
 stops with no sentinel, so the Stop hook parks the still-open issue on
 `dispatch:office-hours` for the `/office-hours` residue.
-
-### `RELEVANCE-REVIEW` — run the relevance review, then dispatch its verdict
-
-Run the Step 2 relevance review and dispatch the verdict it returns (`proceed` /
-`adjust` / `stop` — see Step 2). This gates the `plan` phase — a no-PR, unplanned
-issue. `/plan-issue` gets **no** `dispatch:*` label here; it applies
-`dispatch:planned` itself when it finishes and persists the plan.
 
 ### `STOP waiting` — re-gate to the router, no marker
 
@@ -198,70 +196,7 @@ For `wrong-worktree`, the spawn was incoherent — the branch-name sanity check
 rejected the spawn cwd, or the positional `<worktree-path>` disagreed with `git
 rev-parse --show-toplevel`; see `reference.md`.
 
-## 2. Pre-Planning Relevance Review
-
-This step runs **only** for the `plan` phase — a no-PR, unplanned target. Every
-phase with an existing PR (`fix-checks` onward) skips it, as does the `implement`
-phase (a planned no-PR issue routes straight to its build skill): implementation
-is already planned or underway. It is the planning-time counterpart of
-the creation-time relevance check; the two are deliberately separate — the
-creation-time check is `$BASELINE_BRANCH`-anchored, this step is pre-planning and
-`createdAt`-anchored.
-
-Before invoking `/plan-issue` on a `plan`-phase issue, confirm no PR
-exists for the target by running:
-
-```bash
-.claude/skills/dispatch-propagate/scripts/dispatch-find-pr <N>
-```
-
-If it prints a PR number, **skip this relevance review** and re-run Step 1
-(`dispatch-route`) — a PR already exists and implementation is underway.
-
-If `dispatch-find-pr` prints nothing, run a creation-date-anchored drift
-analysis. Gather the deterministic evidence in one call
-(`dangerouslyDisableSandbox: true` — it calls `gh`):
-
-```bash
-.claude/skills/dispatch-propagate/scripts/dispatch-drift-scan <N>
-```
-
-`dispatch-drift-scan` emits, in one invocation, the three mechanical drift
-inputs anchored on the issue's `createdAt`: commits to the paths the issue body
-names since creation, PRs merged in the window, and the validity of the issue's
-named references (paths existence-checked, names grepped — anything renamed,
-moved, or removed is flagged `[ABSENT]`/`[NOT FOUND]`). It mines those
-references from the single-backtick spans in the issue body; read its header for
-what the heuristic does and does not cover. When the merged-PR query hits its
-100-result limit the script prints a `WINDOW-TOO-WIDE` marker recommending
-`/file-issue` instead of a partial scan — treat that as the too-wide-window signal in
-the verdict below.
-
-Two judgments stay with the dispatching session, after reading the script's
-evidence:
-
-1. **Convention drift** — re-read `CLAUDE.md` and any `.claude/rules/*.md` whose
-   domain the issue touches. Flag approaches the issue assumes that no longer
-   match current conventions (e.g. a deprecated pattern, a renamed package, a
-   changed config shape). The script does not mine conventions; this read is
-   yours.
-2. **Merged-PR overlap** — for any merged PR the script lists whose title
-   plausibly relates to the issue's domain, optionally fetch its changed files
-   to judge whether the overlap is incidental or substantive.
-
-### Three-way verdict
-
-- **`proceed`** — drift absent or cosmetic; invoke `/plan-issue`.
-- **`adjust`** — issue still wanted but references, conventions, or scope have
-  shifted; invoke `/new-requirement` with the drift findings as the revised
-  understanding, then `/plan-issue`.
-- **`stop`** — codebase has moved past the need; report what changed and
-  recommend closing the issue or re-running `/file-issue`. Do **not** invoke
-  `/plan-issue`; print the drift report and stop. The Stop hook
-  applies `dispatch:office-hours` to the issue because no marker was
-  written.
-
-## 3. Stop
+## 2. Stop
 
 The Stop hook (`.claude/hooks/dispatch-stop.sh`) owns label management,
 router spawn, and self-close. The worker reaches the end of its tick by

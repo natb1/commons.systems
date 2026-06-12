@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 const mockListCloud = vi.fn();
@@ -28,7 +28,10 @@ vi.mock("../../src/auth.js", () => ({
   onAuthStateChanged: vi.fn(),
 }));
 
-import { renderHome } from "../../src/pages/home";
+import { renderHome, afterRenderHome, wireDownloadActions } from "../../src/pages/home";
+import { wireMarkdownActions } from "../../src/markdown-actions";
+import { getMediaDownloadUrl } from "../../src/storage.js";
+import { createHistoryRouter, type Router } from "@commons-systems/router";
 import type { MediaItem } from "../../src/types";
 
 function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
@@ -208,5 +211,54 @@ describe("renderHome", () => {
     );
 
     await expect(renderHome(null)).rejects.toThrow(DataIntegrityError);
+  });
+});
+
+describe("download wiring (regression #1280)", () => {
+  let router: Router | undefined;
+  let outlet: HTMLElement | undefined;
+
+  afterEach(() => {
+    router?.destroy();
+    router = undefined;
+    if (outlet) {
+      document.body.removeChild(outlet);
+      outlet = undefined;
+    }
+  });
+
+  it("fires exactly one download per click after N home navigations", async () => {
+    vi.clearAllMocks();
+    vi.mocked(getMediaDownloadUrl).mockResolvedValue("https://example.com/x.pdf");
+    mockListCloud.mockResolvedValue([makeMediaItem({ storagePath: "media/x.pdf" })]);
+
+    // Mirror main.ts: wire the persistent outlet's click delegation ONCE,
+    // before the router's first navigation.
+    outlet = document.createElement("div");
+    document.body.appendChild(outlet);
+    wireDownloadActions(outlet);
+    wireMarkdownActions(outlet);
+
+    router = createHistoryRouter(outlet, [
+      { path: "/", render: () => renderHome(null), afterRender: afterRenderHome },
+    ]);
+
+    // Navigate home N times; the router reuses the one persistent outlet and
+    // runs afterRender on every navigation. Pre-fix this rebound the listener
+    // each time, so N navigations meant N handlers for one click.
+    const N = 5;
+    for (let i = 0; i < N; i++) {
+      router.navigate();
+      await vi.waitFor(() => {
+        expect(outlet.querySelector(".media-download")).not.toBeNull();
+      });
+    }
+
+    const button = outlet.querySelector(".media-download") as HTMLButtonElement;
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    // Flush the microtask queue so the async handleDownload runs to its first await.
+    await Promise.resolve();
+
+    expect(vi.mocked(getMediaDownloadUrl)).toHaveBeenCalledTimes(1);
   });
 });
