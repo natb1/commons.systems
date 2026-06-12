@@ -69,12 +69,13 @@ later at `dispatch-resolve-worktree`, wasting a `drain worktree-conflict` tick.
 Holding the lock through the spawn closes that window: the next tick blocks on
 the lock until the worker is registered, then the orphan-recycle check sees a
 live session and skips. With the lock held through registration,
-`dispatch-spawn-worker`'s per-worktree dedup at the spawn boundary is now
+`dispatch-spawn-job`'s per-worktree dedup at the spawn boundary is now
 belt-and-suspenders rather than the load-bearing guard it was during the old
 early-release window.
 
 `dispatch-materialize-spawn` releases at each terminal point: on the `propagate`
-path after `dispatch-spawn-worker` returns success (worker verified-registered),
+path after `dispatch-launch-worker` detaches and the reservation ledger records
+the slot,
 on `notify spawn-failed` after the failed spawn returns, and at the single-target
 CI-wait stop (now emitting `drain ci-reseeded` / `notify ci-wait-exhausted`, or
 `drain ci-waiting` on a scheduler hard-failure), which releases before scheduling
@@ -132,11 +133,11 @@ step (so two routers cannot race on the same target). It is one of two
 mechanisms; the other is per-worktree and enforced elsewhere.
 
 The **per-worktree invariant**: at most one live worker agent per issue
-worktree. The router's Step 6 spawn primitive (`dispatch-spawn-worker`)
-enforces this at the spawn boundary. Every worker is born with the target
-worktree's basename as its `--name` — the `dispatch-spawn-worker` script's
-own cwd stays at the spawner's cwd (`worktrees/main`), but the spawn
-subshell `cd`s into `<worktree-path>` before invoking `claude --bg`, so the
+worktree. The launcher's spawn step (`dispatch-launch-worker`, via
+`dispatch-spawn-job`) enforces this at the spawn boundary. Every worker is born
+with the target worktree's basename as its `--name`, and the worker's cwd is set
+to `<worktree-path>` by `dispatch-spawn-job --cwd` (the detached
+`dispatch-launch-worker` `cd`s into the worktree before routing), so the
 new worker registers and runs in its target worktree. Per-worktree name
 uniqueness is automatic. The dedup query lists live sessions under
 `<worktree-path>` (not the spawner cwd — that's where every same-target
@@ -150,9 +151,9 @@ The two mechanisms have orthogonal scopes:
 
 - **Selection lock** — per-repo, held by the router for the
   duration of Steps 1–5. Prevents two routers from selecting the same target.
-- **Per-worktree dedup** (`dispatch-spawn-worker`) — per-worktree-path,
-  enforced at every router-to-worker spawn. Prevents two workers from racing
-  on the same issue.
+- **Per-worktree dedup** (`dispatch-launch-worker`, via `dispatch-spawn-job`) —
+  per-worktree-path, enforced at every router-to-worker spawn. Prevents two
+  workers from racing on the same issue.
 
 N concurrent issues in flight = N concurrent workers, each in its own
 worktree, each advancing its own issue's phase without contention. Only the
@@ -264,8 +265,10 @@ The marker is the canonical "Step 5 completed" signal, read by the lock script
 as the post-Step-5 reclaim signal (see *Releasing the lock*). Context-clear
 recovery does **not** read it: `restore-dispatch-skill.sh` (bound to
 `SessionStart:clear`) keys on the session's `--name` shape (`<N>-<slug>` for
-workers) and emits `/dispatch-worker <N> <worktree-path>` so the worker
-re-derives the phase from PR/CI ground truth.
+phase-skill workers) and restores the phase skill body so the session resumes
+from the correct phase. For an undetermined or done phase (where no phase skill
+applies), it restores nothing and exits — the Stop hook (`dispatch-stop.sh`)
+owns the disposition.
 `.claude/hooks/worktree-create.sh` also stamps the marker (an empty `touch`) as
 its final action on every successful worktree creation, so a fresh worktree
 carries a content-less marker the moment the hook returns. That empty marker is
@@ -281,17 +284,15 @@ and removing the worktree removes it. A stale marker naming an older session
 cannot reclaim a different live holder, so no active cleanup is required to
 keep the lock correct.
 
-## Step 6 spawn-cwd trade-off
+## Step 6 spawn-cwd
 
-The `dispatch-spawn-worker` script runs from the router's own cwd
-(`worktrees/main` — the router stays anchored there), but spawns `claude --bg`
-with cwd = `<worktree-path>` via a subshell `cd`, so the worker is born in its
-target worktree. Trade-off: the Claude daemon's "+ new session" launcher
-default cwd tracks the most-recent worker's worktree rather than
-`worktrees/main` — a recoverable UI default, accepted in exchange for
-sessions whose cwd does not silently drift. The previous arrangement — where
-the worker `cd`'d in its own Step 0 — silently broke when subsequent `Bash` /
-`Skill` calls reset cwd back to the spawn cwd.
+`dispatch-launch-worker` is detached (`setsid nohup … &`) from the router,
+which stays anchored at `worktrees/main`. The launcher `cd`s into
+`<worktree-path>` as its first step (after validation), so `dispatch-route` and
+all downstream subprocess calls run from the target worktree. When the phase
+skill is spawned, `dispatch-spawn-job --cwd <worktree-path>` passes the cwd
+explicitly — the phase skill is born in its target worktree regardless of the
+launcher's current directory at exec time.
 
 ## Concurrency budgeting
 
@@ -315,8 +316,8 @@ The reservation ledger is a directory of marker files at
 `tmp/dispatch.lock`), one file per reserved slot keyed by the worktree basename
 (`<N>-slug`). Each marker records the reserving session id, the issue number,
 and a UTC timestamp. `dispatch-materialize-spawn` writes a marker immediately
-before `dispatch-spawn-worker` and clears it immediately after the spawn
-returns; a completed fan-out therefore leaves `effective_live == busy_workers`
+before detaching `dispatch-launch-worker` and clears it immediately after the
+detach returns; a completed fan-out therefore leaves `effective_live == busy_workers`
 with no double-count and no leaked budget. `reservation_sweep` reclaims a
 marker when: (a) the worktree already has a live worker matching the marker
 basename (the reservation converted — redundant backstop, at any age), or (b)
@@ -337,8 +338,8 @@ through a three-stage pipeline: Stage 1 computes the weekly pace curve W;
 Stage 2 applies a binary weekly gate; Stage 3 applies a linear 5h ramp. The
 live count used for the `busy_workers` addend is
 `claude_agents_count_busy_workers` — busy sessions whose name matches the real
-worker shape `^[0-9]+-` (NOT a `dispatch-worker-*` prefix, which never existed
-in production — that was the Defect-B bug this issue fixed). Instead of a flat
+worker shape `^[0-9]+-` (NOT a `dispatch-*`-prefixed name, which never existed
+as a worker session name in production — that was the Defect-B bug this issue fixed). Instead of a flat
 weekly cap, the weekly budget follows a **cumulative-pace curve** keyed to how
 far through the weekly rate-limit window we are (in 5-hour-window terms), so
 token spend spreads smoothly across the week rather than bursting early and

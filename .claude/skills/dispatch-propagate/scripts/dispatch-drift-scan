@@ -94,9 +94,9 @@ under_ref_cap() {
 
 is_path_token() {
   local t="$1"
-  # Slash-commands (/ready, /dispatch-worker) are leading-slash single-segment
-  # tokens — skill references, not filesystem paths. Let them fall through to
-  # the name-ref branch instead of being treated as paths.
+  # Slash-commands (/ready, /qa-fix) are leading-slash single-segment tokens —
+  # skill references, not filesystem paths. Let them fall through to the
+  # name-ref branch instead of being treated as paths.
   [[ "$t" =~ ^/[A-Za-z][A-Za-z0-9._-]*$ ]] && return 1
   [[ "$t" == */* ]] && return 0
   case "$t" in
