@@ -9,23 +9,27 @@
 # path guards (leaf trace, closed-target, open-blocker), resolves the target
 # worktree (entering or creating it — `create` path does only the cheap
 # `git worktree add`, leaving direnv/npm provisioning and the origin/main merge
-# for the worker's startup, per #1047 / #1044), writes the recovery marker via
+# for the launcher's startup, per #1047 / #1044), writes the recovery marker via
 # dispatch-finalize-selection (which no longer releases the lock — #945), runs
-# the explicit-target readiness gate (dispatch-ci-ready), spawns the worker, and
-# releases the lock after the worker spawn is kicked (the spawn is async — #1048;
-# the lock no longer spans registration). Prints exactly ONE terminal
+# the explicit-target readiness gate (dispatch-ci-ready), DETACHES the per-target
+# launcher (dispatch-launch-worker, #1391), and releases the lock after the
+# detach is kicked (the detach is instant and fire-and-forget; the lock never
+# spans provisioning or registration). Prints exactly ONE terminal
 # token as its LAST stdout line;
 # supporting detail (a path, a blocker list, the CI line) precedes the token.
 #
-# With `--gap <N>` and `queue` mode, the script FANS OUT: it spawns up to N
-# workers in one held-lock run, selecting a distinct next target each iteration
-# via dispatch-select-target. The first target is the passed-in <issue-N>;
-# targets 2..N come from successive dispatch-select-target calls. The worker no
-# longer registers synchronously (#1048), so the loop threads its SEEN set as
-# `--exclude` to dispatch-select-target AND the just-written reservation marker
-# makes dispatch-select-target's reserved-skip (#1046) skip the reserved
-# worktree — so the next selection yields a distinct target even though the prior
-# worker has not yet registered.
+# With `--gap <N>` and `queue` mode, the script FANS OUT: it detaches up to N
+# launchers in one held-lock run. The seed (target 1) is the passed-in <issue-N>;
+# targets 2..GAP come from ONE `dispatch-select-target --top <GAP-after-seed>`
+# scan (#1317) — a single queue pass that returns up to that many distinct
+# ranked targets, instead of one serialized selector call per slot. The seed's
+# just-written reservation marker (dispatch-select-target's reserved-skip, #1046)
+# plus a single static `--exclude <issue-N>` on that one scan close the seed
+# re-selection race; selection dedups the remaining targets internally within
+# that one scan, so no per-slot SEEN threading is needed. The launcher provisions
+# off-lock and registers its phase session only after it has provisioned (#1391);
+# the reservation marker, not registration, closes the spawn-gap race for each
+# detached slot.
 # `explicit` mode and `--gap 1` process a single target (backward-compatible).
 # Fan-out (`--gap N` with N>1) is autonomous-only; a manual run arrives as
 # `--gap 1` and takes the single-target path.
@@ -33,16 +37,18 @@
 # <issue-N> is always the ISSUE number (the model derives N=${branch%%-*} for a
 # `pr` row before calling). The two literal `[branch phase]` positionals the
 # queue selection carries are still dropped — no sub-script consumes them. The
-# spawn does consult the phase, but the #1109-recomputed PHASE (Step 5), not the
-# carried positional: it maps PHASE → worker model via dispatch-phase-model so
-# the qa and review phases launch on Sonnet (#1171, #1172); every other phase
-# yields no --model and inherits the session default (Opus).
+# router still recomputes PHASE (Step 5) for the #1109 done re-check, but it no
+# longer maps it to a worker model: the detached launcher (dispatch-launch-worker)
+# routes on the merged tree and derives the phase→model itself (qa/review →
+# Sonnet via dispatch-phase-model, #1171/#1172; every other phase inherits the
+# session default Opus), so the router forwards no --model.
 #
 # Terminal tokens (the last stdout line is always exactly one of):
-#   propagate              the worker spawned (or deduped); the chain advances.
-#                          Lock released after dispatch-spawn-worker kicks the
-#                          (async) worker spawn (#1048); the reservation marker,
-#                          not registration, closes the spawn-gap race.
+#   propagate              the launcher detached; the chain advances. Lock
+#                          released after the launcher is detached (#1391); the
+#                          detach is instant, so provisioning runs off-lock. The
+#                          reservation marker, not registration, closes the
+#                          spawn-gap race.
 #   notify target-blocked  explicit target is closed or has an open blocker; the
 #                          issue is parked via dispatch-apply-office-hours and
 #                          the lock released at the guard.
@@ -56,8 +62,6 @@
 #                          re-check (#1109): same as above but the next tick
 #                          proceeds to the next priority. Lock released after the
 #                          return.
-#   notify spawn-failed    dispatch-spawn-worker exited non-zero; lock released
-#                          after the failed spawn returns.
 #   drain worktree-conflict  the target worktree cannot be safely entered; the
 #                          lock is released at the guard. The conflict path
 #                          precedes this token.
@@ -98,18 +102,20 @@
 #                          distinct target — a normal terminal state, not a
 #                          failure.
 #
-# Lock-release points (#1048): the lock is held THROUGH the reserve + spawn-KICK
-# (not through registration); after release the reservation marker closes the
-# spawn-gap re-selection race so the next tick cannot re-select the target during
-# the worker's boot gap. In a fan-out run the lock is held across the WHOLE loop
-# and released ONCE at the end (or on a hard `exit 2`); per-target park/skip
-# outcomes do NOT release between iterations.
+# Lock-release points (#1048/#1391): the lock is held THROUGH the reserve +
+# launcher-DETACH (not through provisioning or registration); after release the
+# reservation marker closes the spawn-gap re-selection race so the next tick
+# cannot re-select the target during the launcher's provision+boot gap. In a
+# fan-out run the lock is held across the WHOLE loop and released ONCE at the end
+# (or on a hard `exit 2`); per-target park/skip outcomes do NOT release between
+# iterations.
 # dispatch-finalize-selection writes the recovery marker but no longer releases.
 # `notify target-blocked` and `drain worktree-conflict` release explicitly at the
 # guard (the marker does not exist yet on these pre-finalize stop paths).
-# `propagate` and `notify spawn-failed` release AFTER dispatch-spawn-worker
-# returns: on success the spawn was kicked async and the reservation marker is
-# left in place; on failure the marker is cleared.
+# `propagate` releases AFTER the launcher is detached: the detach is instant and
+# fire-and-forget (the router never observes the launcher's exit), so the
+# reservation marker is always left in place — a launcher that dies before
+# spawning leaves a sweepable orphan (#1045/#1048).
 # The single-target ci-waiting stop (now `drain ci-reseeded` / `notify
 # ci-wait-exhausted`, or the fallback `drain ci-waiting` on a scheduler hard-
 # failure) releases the lock at its stop, BEFORE dispatch-schedule-target-reseed
@@ -179,16 +185,17 @@ WAITING_N=""
 # process_one_target <issue-N> <explicit|queue>
 # Runs the per-target sequence (Step 4 guards, the #1109 spawn-boundary done
 # re-check, Step 5 resolve, recovery marker, Step 6a explicit-only readiness
-# gate, Step 6b spawn) for ONE target. Does NOT
+# gate, Step 6b launcher-detach) for ONE target. Does NOT
 # release the lock and does NOT exit — the caller owns lock release and process
-# exit. The Step 6b spawn-kick is async (#1048): on success the reservation
-# marker is left in place as the in-flight contribution; registration is not
-# awaited. Sets the global OUTCOME on every soft path and returns 0; returns 2 on
-# a hard error (the caller maps that to release_lock; exit 2).
+# exit. The Step 6b detach is fire-and-forget (#1391): the reservation marker is
+# always left in place as the in-flight contribution; the launcher provisions and
+# registers its phase session off-lock. Sets the global OUTCOME on every soft
+# path and returns 0; returns 2 on a hard error (the caller maps that to
+# release_lock; exit 2).
 process_one_target() {
   local n="$1" mode="$2"
   local PR LEAF ISSUE_STATE BLOCKERS WT_DECISION WT_ACTION WT_REST
-  local WORKTREE_PATH BRANCH PROJECT_ROOT rc wt_basename PHASE WORKER_MODEL worker_args
+  local WORKTREE_PATH BRANCH PROJECT_ROOT rc wt_basename PHASE PROJECT_ROOT_FOR_LOG
 
   # --- Step 4: explicit-path guards (skipped entirely in queue mode) ---------
   # Queue rows were already vetted by dispatch-select-target (leaf, blockers,
@@ -330,61 +337,50 @@ process_one_target() {
     return 0
   fi
 
-  # --- Step 6b: reserve, then spawn the worker -------------------------------
+  # --- Step 6b: reserve, then detach the launcher ----------------------------
   # The lock is still held here. Write the reservation marker the instant before
-  # the (now async) spawn-kick and LEAVE it in place on success: registration is
-  # no longer awaited (#1048 — dispatch-spawn-worker passes --no-verify), so the
-  # marker, not registration timing, is this slot's in-flight budget/selection
-  # contribution and is what closes the spawn-gap re-selection race #945 closed.
-  # A concurrent acquirer's reserved-skip (#1046) and the budget gate (#1045)
-  # both key on the marker. reservation_sweep reclaims it on registration (rule
-  # (a)) or after the boot grace if the worker never comes up. On a failed kick
-  # no worker is coming, so the marker is cleared (no leaked budget).
+  # the launcher detach and LEAVE it in place: the detach is fire-and-forget
+  # (#1391 — the router never observes the launcher's exit), so the marker, not
+  # registration timing, is this slot's in-flight budget/selection contribution
+  # and is what closes the spawn-gap re-selection race #945 closed. A concurrent
+  # acquirer's reserved-skip (#1046) and the budget gate (#1045) both key on the
+  # marker. reservation_sweep reclaims it once the launcher's phase session
+  # registers (rule (a)) or after the boot grace if the launcher dies before
+  # spawning (its provision+route can take minutes — the marker keeps the slot
+  # counted across that window).
   #
   # The next in-loop selection yields a distinct target because the marker makes
   # dispatch-select-target's reserved-skip (#1046) skip this worktree, and the
   # loop threads its SEEN set as --exclude — neither depends on registration.
   wt_basename="$(basename "$WORKTREE_PATH")"
-  # Best-effort, but surface a failure: a missing marker means the spawn proceeds
+  # Best-effort, but surface a failure: a missing marker means the detach proceeds
   # uncounted, so a silent swallow would hide a budget blind spot. The sweeper
   # still reclaims any stranded state, so a failed write is non-fatal to the loop.
   if ! reservation_write "$wt_basename" "$n" "${CLAUDE_CODE_SESSION_ID:-}" 1>&2; then
     echo "dispatch-materialize-spawn: reservation_write failed for $wt_basename; spawning without a ledger entry (budget may undercount this slot)" >&2
   fi
-  # Resolve the worker model from the #1109-recomputed PHASE (#1171, #1172): the
-  # phase→model map (dispatch-phase-model) returns a non-empty model only for
-  # mapped phases (qa, review → claude-sonnet-4-6); every other phase yields
-  # empty, so no --model is forwarded and the worker inherits the session
-  # default (Opus).
-  # The [[ -n "$PHASE" ]] guard avoids calling dispatch-phase-model with an empty
-  # arg (its usage error) in the defensive case where dispatch-phase exited 3
-  # (pending CI); in normal operation PHASE is non-empty here — queue targets are
-  # CI-pre-gated and explicit targets pass the Step 6a readiness gate.
-  WORKER_MODEL=""
-  if [[ -n "$PHASE" ]]; then
-    if ! WORKER_MODEL=$("$SCRIPT_DIR/dispatch-phase-model" "$PHASE"); then
-      echo "dispatch-materialize-spawn: dispatch-phase-model failed for phase '$PHASE'" >&2
-      return 2
-    fi
-  fi
-  worker_args=()
-  [[ -n "$WORKER_MODEL" ]] && worker_args+=(--model "$WORKER_MODEL")
-  worker_args+=("$n" "$WORKTREE_PATH")
-  if "$SCRIPT_DIR/dispatch-spawn-worker" "${worker_args[@]}" 1>&2; then
-    # Leave the marker in place (#1048): the spawn is async (dispatch-spawn-worker
-    # passes --no-verify), so the worker has not registered yet. The marker is the
-    # in-flight budget/selection contribution that a concurrent acquirer's
-    # reserved-skip (#1046) and the budget gate (#1045) rely on; reservation_sweep
-    # reclaims it once the worker goes live (rule (a)) or after the boot grace if
-    # the worker never comes up.
-    OUTCOME=spawned
-    return 0
-  fi
-  # Failed kick: no worker is coming, so clear the marker (no leaked budget). A
-  # stranded marker would otherwise be reclaimed by the sweep anyway, but clearing
-  # here is immediate and precise.
-  reservation_clear "$wt_basename" 1>&2 || true
-  OUTCOME=spawn-failed
+  # Detach the per-target launcher (#1391, sub-issue B). The router no longer
+  # spawns a /dispatch-worker model session: dispatch-launch-worker is a plain
+  # shell process started DETACHED (setsid nohup … &) so it owns an independent
+  # lifetime. It provisions + routes on the merged tree, handles every mechanical
+  # disposition with no model, and execs the phase skill only for a real phase —
+  # so it also OWNS the phase→model derivation now (the router's old WORKER_MODEL
+  # block is gone). The detach is instant and fire-and-forget: the launcher's
+  # stdout/stderr go to a per-target log under tmp/ (the launcher has no job dir),
+  # and stdin is /dev/null so it never holds the router's stdout pipe (the router
+  # prints terminal tokens a caller reads to EOF).
+  #
+  # No spawn-failed branch: a launcher that dies before spawning leaves the
+  # router-written reservation marker with no live session, which the existing
+  # ledger sweep (#1045/#1048) reclaims after the boot grace — exactly the orphan
+  # signal a dead worker leaves today. So the kick is unconditionally `spawned`:
+  # the marker, not the launcher's exit status (which the router never sees),
+  # is this slot's in-flight budget/selection contribution.
+  PROJECT_ROOT_FOR_LOG="$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
+  mkdir -p "$PROJECT_ROOT_FOR_LOG/tmp"
+  setsid nohup "$SCRIPT_DIR/dispatch-launch-worker" "$n" "$WORKTREE_PATH" \
+    </dev/null >"$PROJECT_ROOT_FOR_LOG/tmp/dispatch-launch-${wt_basename}.log" 2>&1 &
+  OUTCOME=spawned
   return 0
 }
 
@@ -409,7 +405,6 @@ if [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); then
         echo "drain target-done"
       fi
       ;;
-    spawn-failed)      echo "notify spawn-failed" ;;
     worktree-conflict) echo "drain worktree-conflict" ;;
     ci-waiting)
       # Single-target path (#979): instead of draining as a no-op, schedule a
@@ -434,33 +429,30 @@ if [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); then
   exit 0
 fi
 
-# Fan out: fill up to GAP slots in one held-lock run. Target 1 is the passed-in
-# N; targets 2..GAP come from successive dispatch-select-target calls. The loop
-# passes its SEEN set as `--exclude` to dispatch-select-target so selection
-# yields the NEXT distinct target instead of re-returning an already-processed
-# one (#1062). The worker is no longer verified-registered (the spawn is async —
-# #1048), so within-loop de-confliction rests on the SEEN `--exclude` AND the
-# reservation marker (dispatch-select-target's reserved-skip, #1046), not on
-# registration visibility. A re-return would otherwise happen via two mechanisms:
-# (1) a target whose just-written reservation or SEEN membership is not honored;
-# or (2) a fast self-close leaving an orphan worktree, which selection treats as
-# a reuse signal (not a conflict) and does not skip. The
-# exclusion defeats both: an excluded target is filtered during the queue scan
-# (and threaded into the leaf trace), so the loop advances to the next distinct
-# startable leaf. The loop stops only on a genuine `empty`, a deferred selection
-# (main-broken / jit-reminder), or a hard error — plus a defensive backstop if
-# selection ever re-returns a SEEN target despite the exclusion (a selector
-# contract violation), to prevent an infinite loop. Per-target park/skip
-# outcomes are recorded and the loop continues; the lock is released ONCE at the
-# end.
-declare -A SEEN=()
-spawned=0
-stop_reason="gap filled"
-cur_n="$N"
-cur_mode="$MODE"
-while :; do
-  process_one_target "$cur_n" "$cur_mode" || { release_lock; exit 2; }
-  SEEN["$cur_n"]=1
+# Fan out: fill up to GAP slots in one held-lock run. The seed (slot 1) is the
+# passed-in N; slots 2..GAP come from ONE `dispatch-select-target --top
+# <GAP-after-seed>` scan (#1317) — a single queue pass yields up to that many
+# distinct ranked targets, replacing the old once-per-slot serialized selector
+# calls (~131s each) that pinned the lock for O(N) scans and never let
+# concurrency accumulate. Per-run fill may be `< GAP` when targets skip (parked /
+# done / worktree-conflict) or when the single scan returns fewer than the gap's
+# worth of eligible targets — that is normal; the next tick compounds toward the
+# target. The seed's reservation marker (dispatch-select-target's reserved-skip,
+# #1046) plus the single static `--exclude "$N"` on that one scan close the seed
+# re-selection race; selection dedups the remaining targets internally within the
+# scan. A defensive SEEN dedup on consumption is the backstop against a
+# re-returned target (it should never fire) so a stray duplicate is skipped
+# rather than re-dispatched. The loop stops on a genuine `empty`, a deferred
+# selection (main-broken / jit-reminder), the gap being filled, or a hard error.
+# Per-target park/skip outcomes are recorded and consumption continues; the lock
+# is released ONCE at the end (or on a hard `exit 2`).
+
+# record_outcome <cur_n>: apply the per-target OUTCOME → detail-line mapping to
+# the (just-processed) target $1, reading the global OUTCOME and mutating the
+# outer `spawned`. Used for both the seed and each consumed selector line so the
+# two paths print identical detail lines and bump the count identically.
+record_outcome() {
+  local cur_n="$1"
   case "$OUTCOME" in
     spawned)        spawned=$(( spawned + 1 )); echo "propagate: spawned #$cur_n" ;;
     target-blocked) echo "propagate: parked #$cur_n ($OUTCOME)" ;;
@@ -474,45 +466,67 @@ while :; do
       echo "propagate: skipped #$cur_n ($OUTCOME)"
       # ci-waiting never occurs in fan-out: the readiness gate is explicit-only
       # (Step 6a), and queue targets are pre-gated by dispatch-select-target's
-      # dispatch-ci-ready check. spawn-failed / worktree-conflict are real
-      # failures the single-target path surfaces via `notify spawn-failed` /
-      # `drain worktree-conflict`; in fan-out the loop deliberately continues to
-      # fill the gap from other targets, but the failure must not be buried — log
-      # it to stderr so a systemic problem is visible in the router logs.
+      # dispatch-ci-ready check. The launcher detach is fire-and-forget (#1391),
+      # so there is no spawn-failed outcome any more — a launcher that dies leaves
+      # a sweepable reservation orphan. worktree-conflict is the remaining real
+      # failure the single-target path surfaces via `drain worktree-conflict`; in
+      # fan-out the loop deliberately continues to fill the gap from other
+      # targets, but the failure must not be buried — log it to stderr so a
+      # systemic problem is visible in the router logs.
       case "$OUTCOME" in
-        spawn-failed|worktree-conflict)
+        worktree-conflict)
           echo "dispatch-materialize-spawn: #$cur_n $OUTCOME during fan-out (continuing to next target)" >&2 ;;
       esac
       ;;
   esac
-  (( spawned >= GAP )) && break
-  exclude_args=()
-  (( ${#SEEN[@]} > 0 )) && exclude_args=(--exclude "${!SEEN[@]}")
-  SELECTED=$("$SCRIPT_DIR/dispatch-select-target" "${exclude_args[@]}") || true
-  case "$SELECTED" in
-    pr\ *)
-      # Extract the branch from "pr <pr_num> <branch> <phase>" without clobbering $@.
-      { IFS=' ' read -r _f1 _f2 _pr_branch _f4 <<<"$SELECTED"; }
-      cur_n="${_pr_branch%%-*}"; cur_mode=queue
-      ;;
-    issue\ *) cur_n="${SELECTED#issue }"; cur_mode=queue ;;
-    empty)    stop_reason="queue exhausted"; break ;;
-    main-broken\ *|jit-reminder\ *) stop_reason="selection deferred (${SELECTED%% *})"; break ;;
-    *) release_lock
-       echo "dispatch-materialize-spawn: dispatch-select-target emitted unexpected '$SELECTED' in fan-out" >&2
-       exit 2 ;;
-  esac
-  # Defensive backstop (#1062): the loop passes SEEN as --exclude, so
-  # dispatch-select-target must never return an already-processed target. If it
-  # somehow does, that is a selector contract violation — break rather than spin
-  # forever. This stop is unreachable in normal operation; the loop's real
-  # terminators are `empty`, a deferred selection, and hard errors above.
-  if [[ -n "${SEEN[$cur_n]:-}" ]]; then
-    echo "dispatch-materialize-spawn: dispatch-select-target re-returned already-processed target #$cur_n despite --exclude (contract violation); stopping fan-out to avoid an infinite loop" >&2
-    stop_reason="selection re-returned an excluded target (unexpected)"
-    break
+}
+
+declare -A SEEN=()
+spawned=0
+stop_reason="gap filled"
+
+# --- seed: process the passed-in N first (unchanged semantics) ---
+process_one_target "$N" "$MODE" || { release_lock; exit 2; }
+SEEN["$N"]=1
+record_outcome "$N"
+
+if (( spawned < GAP )); then
+  # --- ONE selector scan fills slots 2..GAP (#1317): O(1) scans, not O(N) ---
+  # The single static --exclude "$N" is belt-and-suspenders atop the seed's
+  # just-written reservation marker; selection dedups the rest internally in
+  # this one scan.
+  SELECTED=$("$SCRIPT_DIR/dispatch-select-target" --top "$(( GAP - spawned ))" --exclude "$N") || true
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    case "$line" in
+      pr\ *)
+        # Extract the branch from "pr <pr_num> <branch> <phase>" without clobbering $@.
+        { IFS=' ' read -r _f1 _f2 _pr_branch _f4 <<<"$line"; }
+        cur_n="${_pr_branch%%-*}"; cur_mode=queue ;;
+      issue\ *) cur_n="${line#issue }"; cur_mode=queue ;;
+      empty) stop_reason="queue exhausted"; break ;;
+      main-broken\ *|jit-reminder\ *) stop_reason="selection deferred (${line%% *})"; break ;;
+      *) release_lock
+         echo "dispatch-materialize-spawn: dispatch-select-target emitted unexpected '$line' in fan-out" >&2
+         exit 2 ;;
+    esac
+    # Defensive dedup backstop: the single scan dedups internally and the seed
+    # is --exclude'd, so a SEEN target should never appear; if it does, skip it
+    # quietly rather than re-dispatching.
+    if [[ -n "${SEEN[$cur_n]:-}" ]]; then continue; fi
+    process_one_target "$cur_n" "$cur_mode" || { release_lock; exit 2; }
+    SEEN["$cur_n"]=1
+    record_outcome "$cur_n"
+    (( spawned >= GAP )) && { stop_reason="gap filled"; break; }
+  done <<< "$SELECTED"
+  # Ran off the end of a short list without filling the gap or hitting a
+  # break: the single --top scan returned fewer than GAP-spawned eligible
+  # targets, so the queue is exhausted for this run (the next tick compounds).
+  if (( spawned < GAP )) && [[ "$stop_reason" == "gap filled" ]]; then
+    stop_reason="queue exhausted"
   fi
-done
+fi
+
 release_lock
 if [[ "$stop_reason" == "gap filled" ]]; then
   echo "propagate: spawned $spawned of gap $GAP"

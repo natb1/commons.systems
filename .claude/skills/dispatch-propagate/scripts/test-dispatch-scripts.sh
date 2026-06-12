@@ -1231,16 +1231,40 @@ route_run() {
   ROUTE_OUT=$("$TMPDIR_TEST/dispatch-route" "$@" 2>/dev/null) && ROUTE_RC=0 || ROUTE_RC=$?
 }
 
-# 1. No PR, unplanned → RELEVANCE-REVIEW (plan phase). dispatch-phase fetches the
+# 1. No PR, unplanned → INVOKE /plan-issue (plan phase). dispatch-phase fetches the
 # issue's labels (no issue-labels-42.json → no dispatch:planned → plan), and the
-# plan arm with no statements config falls through to RELEVANCE-REVIEW.
-echo "Test: no PR, unplanned → RELEVANCE-REVIEW"
+# plan arm with no statements config falls through to INVOKE /plan-issue.
+echo "Test: no PR, unplanned → INVOKE /plan-issue"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 route_run 42 /wt/42-my-feature
-assert_eq "no PR, unplanned → RELEVANCE-REVIEW (directive)" "RELEVANCE-REVIEW" "$ROUTE_OUT"
-assert_eq "no PR, unplanned → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
+assert_eq "no PR, unplanned → INVOKE /plan-issue (directive)" "INVOKE /plan-issue" "$ROUTE_OUT"
+assert_eq "no PR, unplanned → INVOKE /plan-issue (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 1a. Provisioning that writes to STDOUT must NOT leak into the directive.
+# dispatch-provision-worktree execs dispatch-merge-main, whose `git merge
+# origin/main` prints progress ("Updating …/Fast-forward", "Already up to date.")
+# to stdout. dispatch-route's contract is "exactly one directive line on stdout",
+# and dispatch-launch-worker captures ALL of that stdout and exact-prefix-matches
+# it — so leaked merge chatter prepended to the INVOKE line parks the issue as an
+# "unrecognized route directive". Override the provision stub to emit multi-line
+# stdout and assert dispatch-route still prints ONLY the directive.
+echo "Test: provision stdout chatter does not leak into the directive"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+cat > "$TMPDIR_TEST/dispatch-provision-worktree" <<'STUB'
+#!/usr/bin/env bash
+printf 'Updating 648157c..ea3a172\nFast-forward\n 2 files changed, 27 insertions(+)\n'
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-provision-worktree"
+route_run 42 /wt/42-my-feature
+assert_eq "provision stdout chatter → directive is ONLY the INVOKE line" \
+  "INVOKE /plan-issue" "$ROUTE_OUT"
+assert_eq "provision stdout chatter → exit 0" "0" "$ROUTE_RC"
 teardown
 
 # 1b. No PR + dispatch:planned → INVOKE /implement (implement phase). dispatch-phase
@@ -1499,7 +1523,7 @@ teardown
 # (#1024). The plan arm fetches the issue's labels (gh issue view --json labels,
 # served from issue-labels-<num>.json) and the configured statements labels (from
 # dispatch-config-load against DISPATCH_CONFIG_DIR), and on a non-empty intersection
-# routes to the parse-job handler instead of RELEVANCE-REVIEW.
+# routes to the parse-job handler instead of INVOKE /plan-issue.
 echo "Test: no PR + statements label → INVOKE /budget-parse-job"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
@@ -1514,8 +1538,8 @@ assert_eq "no PR + statements label → INVOKE /budget-parse-job (exit 0)" "0" "
 teardown
 
 # 22. No-PR issue with a statements config present, but the issue carries no
-# configured label → RELEVANCE-REVIEW (empty intersection, unchanged behavior).
-echo "Test: no PR + non-statements label → RELEVANCE-REVIEW"
+# configured label → INVOKE /plan-issue (empty intersection, unchanged behavior).
+echo "Test: no PR + non-statements label → INVOKE /plan-issue"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
@@ -1523,22 +1547,22 @@ printf '{"statements":[{"key":"acme","dir":"/s","repo":"o/r","label":"statements
   > "$DISPATCH_CONFIG_DIR/statements.json"
 printf '{"labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/issue-labels-42.json"
 route_run 42 /wt/42-my-feature
-assert_eq "no PR + non-statements label → RELEVANCE-REVIEW (directive)" \
-  "RELEVANCE-REVIEW" "$ROUTE_OUT"
-assert_eq "no PR + non-statements label → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
+assert_eq "no PR + non-statements label → INVOKE /plan-issue (directive)" \
+  "INVOKE /plan-issue" "$ROUTE_OUT"
+assert_eq "no PR + non-statements label → INVOKE /plan-issue (exit 0)" "0" "$ROUTE_RC"
 teardown
 
-# 23. No statements config present at all → RELEVANCE-REVIEW (the normal state for
+# 23. No statements config present at all → INVOKE /plan-issue (the normal state for
 # repos without statement scanning; dispatch-config-load prints "no-config", the
 # arm treats it as no configured labels and never fetches the issue's labels).
-echo "Test: no PR + no statements config → RELEVANCE-REVIEW"
+echo "Test: no PR + no statements config → INVOKE /plan-issue"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 route_run 42 /wt/42-my-feature
-assert_eq "no PR + no statements config → RELEVANCE-REVIEW (directive)" \
-  "RELEVANCE-REVIEW" "$ROUTE_OUT"
-assert_eq "no PR + no statements config → RELEVANCE-REVIEW (exit 0)" "0" "$ROUTE_RC"
+assert_eq "no PR + no statements config → INVOKE /plan-issue (directive)" \
+  "INVOKE /plan-issue" "$ROUTE_OUT"
+assert_eq "no PR + no statements config → INVOKE /plan-issue (exit 0)" "0" "$ROUTE_RC"
 teardown
 
 # ============================================================================
@@ -3082,6 +3106,178 @@ printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 20)
 assert_eq "excluded PR 20 filtered → empty" "empty" "$result"
 teardown
+
+# --- --top N: single-pass multi-target selection (#1317) ---------------------
+# `--top N` emits up to N DISTINCT ranked decision lines in ONE queue scan,
+# preserving the existing priority order (priority axis 1→0, then topic category,
+# then the phase ladder), oldest-first within a bucket — replacing the old
+# once-per-slot serialized selector calls. `--top 1` is byte-identical to the
+# no-flag call. These run end-to-end through the real trace/ci-ready/phase copies.
+
+# T1. --top N returns N distinct ranked lines across buckets, in the priority-
+#     axis → topic-category → phase order. Three help-wanted issues, all
+#     priority 0, no PRs (so all in `plan` phase) but in DIFFERENT topic
+#     categories: 30 (security) → 20 (bug) → 10 (no topic = other). The category
+#     order is the only discriminator, so the output is deterministically
+#     security, bug, other regardless of issue-number or createdAt order.
+echo "Test: --top 3 returns 3 distinct ranked lines in topic-category order"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 3)
+assert_eq "--top 3 ranked across topic categories" "$(printf 'issue 30\nissue 20\nissue 10')" "$result"
+teardown
+
+# T2. --top N honors --exclude: the excluded number never appears. Excluding the
+#     top-ranked security issue 30 leaves bug 20 then other 10.
+echo "Test: --top 3 honors --exclude (excluded number absent)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 3 --exclude 30)
+assert_eq "--top 3 --exclude 30 omits 30" "$(printf 'issue 20\nissue 10')" "$result"
+assert_eq "--top 3 --exclude 30: 30 absent" "0" "$(printf '%s\n' "$result" | grep -c '^issue 30$')"
+teardown
+
+# T3a. --top N with FEWER than N eligible returns all available, no padding.
+#      Only two issues exist; --top 5 returns exactly those two lines.
+echo "Test: --top 5 with 2 eligible returns 2 lines, no padding"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 5)
+assert_eq "--top 5 with 2 eligible → 2 lines" "$(printf 'issue 30\nissue 20')" "$result"
+assert_eq "--top 5 with 2 eligible → no empty padding" "0" "$(printf '%s\n' "$result" | grep -c '^empty$')"
+teardown
+
+# T3b. --top N with NOTHING eligible prints exactly `empty` (one line).
+echo "Test: --top 5 with nothing eligible → empty"
+setup
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 5)
+assert_eq "--top 5 nothing eligible → empty" "empty" "$result"
+teardown
+
+# T4. Multi-leaf descent in ONE scan: a single help-wanted root with several
+#     startable leaves yields MULTIPLE `issue <leaf>` lines from one invocation
+#     (the in-scan growing-local-exclude enumeration, #1317). Root 55 has three
+#     sub-issues 5500/5501/5502, none worktree'd or parked. --top 3 enumerates
+#     all three leaves oldest(lowest-leaf)-first in a single scan.
+echo "Test: --top 3 enumerates multiple startable leaves of one root in one scan"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500},{"number":5501},{"number":5502}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' > "$STUB_DIR/issue-5500.json"
+printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' > "$STUB_DIR/issue-5501.json"
+printf '{"title":"Issue 5502","body":"","comments":[],"number":5502,"state":"OPEN"}\n' > "$STUB_DIR/issue-5502.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 3)
+assert_eq "--top 3 multi-leaf descent in one scan" "$(printf 'issue 5500\nissue 5501\nissue 5502')" "$result"
+teardown
+
+# T4b. A leaf whose worktree is LIVE (a live session owns <leaf>-*) is NOT
+#      returned: the descent skips it (#914) and surfaces the next startable
+#      leaf. Leaf 5500's worktree is live, so --top 3 returns 5501, 5502.
+echo "Test: --top 3 multi-leaf descent skips a live-session-owned leaf"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500},{"number":5501},{"number":5502}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' > "$STUB_DIR/issue-5500.json"
+printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' > "$STUB_DIR/issue-5501.json"
+printf '{"title":"Issue 5502","body":"","comments":[],"number":5502,"state":"OPEN"}\n' > "$STUB_DIR/issue-5502.json"
+# Leaf 5500 has an on-disk worktree owned by a live session.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/5500-leaf\nHEAD def456\nbranch refs/heads/5500-leaf\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "5500-leaf"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 3)
+assert_eq "--top 3 descent skips live leaf 5500 → 5501,5502" "$(printf 'issue 5501\nissue 5502')" "$result"
+assert_eq "--top 3 descent: live leaf 5500 absent" "0" "$(printf '%s\n' "$result" | grep -c '^issue 5500$')"
+teardown
+
+# T4c. A leaf whose worktree is RESERVED (reservation marker present, no live
+#      session) is NOT returned either (#1046): the reserved-skip closes the
+#      spawn-gap race. Leaf 5500 is reserved → --top 3 returns 5501, 5502.
+echo "Test: --top 3 multi-leaf descent skips a reserved leaf"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500},{"number":5501},{"number":5502}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' > "$STUB_DIR/issue-5500.json"
+printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' > "$STUB_DIR/issue-5501.json"
+printf '{"title":"Issue 5502","body":"","comments":[],"number":5502,"state":"OPEN"}\n' > "$STUB_DIR/issue-5502.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/5500-leaf\nHEAD def456\nbranch refs/heads/5500-leaf\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No live session, but 5500-leaf carries a reservation marker.
+select_target_fake_claude
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv-sess\nissue=5500\ntimestamp=2026-01-01T00:00:00Z\n' > "$DISPATCH_RESERVATION_DIR/5500-leaf"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 3)
+assert_eq "--top 3 descent skips reserved leaf 5500 → 5501,5502" "$(printf 'issue 5501\nissue 5502')" "$result"
+teardown
+
+# T4d. A leaf whose ISSUE carries dispatch:office-hours is NOT returned: the
+#      office-hours-parked leaf is filtered from the descent. Root 55's leaf 5501
+#      is parked, so --top 3 returns 5500, 5502.
+echo "Test: --top 3 multi-leaf descent skips an office-hours-parked leaf"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500},{"number":5501},{"number":5502}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' > "$STUB_DIR/issue-5500.json"
+printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' > "$STUB_DIR/issue-5501.json"
+printf '{"title":"Issue 5502","body":"","comments":[],"number":5502,"state":"OPEN"}\n' > "$STUB_DIR/issue-5502.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Leaf 5501 is parked: it appears in the dispatch:office-hours parked set the
+# queue-mode trace reads (#1011). The descent must skip it and surface 5502.
+printf '[{"number":5501}]\n' > "$STUB_DIR/trace-parked.json"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 3)
+assert_eq "--top 3 descent skips parked leaf 5501 → 5500,5502" "$(printf 'issue 5500\nissue 5502')" "$result"
+assert_eq "--top 3 descent: parked leaf 5501 absent" "0" "$(printf '%s\n' "$result" | grep -c '^issue 5501$')"
+teardown
+
+# T5. --top 1 byte-parity: on a representative fixture, `--top 1` output is
+#     byte-identical to the plain (no-flag) call. Guards that the default path is
+#     unchanged for every existing caller.
+echo "Test: --top 1 is byte-identical to the no-flag call"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-qa-me" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":99,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+plain=$("$TMPDIR_TEST/dispatch-select-target")
+top1=$("$TMPDIR_TEST/dispatch-select-target" --top 1)
+assert_eq "--top 1 byte-parity (same fixture)" "$plain" "$top1"
+assert_eq "--top 1 parity: expected single decision line" "pr 10 10-verify-me fix-checks" "$top1"
+teardown
+
+# T6. --top is rejected when combined with --qa / --priority-only /
+#     --health-only / --main-broken-sha (default-mode-only flag). Each exits
+#     non-zero with a clear stderr error, mirroring the existing mutual-exclusion
+#     checks.
+for other_flag in --qa --priority-only --health-only --main-broken-sha; do
+  echo "Test: --top 3 $other_flag → usage error (exit 1)"
+  setup
+  echo '[]' > "$STUB_DIR/pr-list-union.json"
+  echo '[]' > "$STUB_DIR/issue-list.json"
+  printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+  err_file="$TMPDIR_TEST/err.txt"
+  if "$TMPDIR_TEST/dispatch-select-target" --top 3 "$other_flag" >/dev/null 2>"$err_file"; then rc=0; else rc=$?; fi
+  assert_eq "--top 3 $other_flag → exit 1" "1" "$rc"
+  err_contents=$(cat "$err_file")
+  [[ "$err_contents" == *"--top cannot combine"* ]] && err_msg=ok || err_msg="missing: $err_contents"
+  assert_eq "--top 3 $other_flag → error mentions --top cannot combine" "ok" "$err_msg"
+  teardown
+done
 
 # --- ready-PR gate (#920) ---
 # An open help-wanted issue whose closing PR is non-draft (ready) is excluded
@@ -18351,18 +18547,47 @@ FAKE
 #!/usr/bin/env bash
 echo "\${MAT_WT_DECISION:-create \$1-test}"
 FAKE
+  # Single-scan --top selector fake (#1317): the real dispatch-materialize-spawn
+  # now issues ONE `dispatch-select-target --top <k> --exclude <seed>` scan per
+  # fan-out run instead of one call per slot. This fake honors --top <k> (emits up
+  # to k DISTINCT lines in one call) and --exclude <seed>... (never emits an
+  # excluded number, modelling the selector's internal de-dup against the seed it
+  # is told to skip), drawing targets from MAT_QUEUE in order. It logs EXACTLY ONE
+  # line per invocation, so `wc -l logs/select-target.log` is the scan count — the
+  # #1317 single-scan acceptance assertion reads exactly 1. When fewer than k
+  # eligible targets remain it emits all available then a trailing `empty` (the
+  # selector's genuine-exhaustion contract); when none remain it emits just
+  # `empty`.
   cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
+top=1
+declare -A EX=()
+while [[ \$# -gt 0 ]]; do
+  case "\$1" in
+    --top) shift; top="\$1"; shift ;;
+    --exclude) shift; while [[ \$# -gt 0 && "\$1" =~ ^[0-9]+\$ ]]; do EX["\$1"]=1; shift; done ;;
+    *) shift ;;
+  esac
+done
 read -r -a Q <<< "\${MAT_QUEUE:-}"
-idx_file="$TMPDIR_TEST/logs/select-target.idx"
-i=\$(cat "\$idx_file" 2>/dev/null || echo 0)
-echo "called \$i \${Q[\$i]:-empty}" >> "$TMPDIR_TEST/logs/select-target.log"
-if (( i < \${#Q[@]} )); then
-  echo "issue \${Q[\$i]}"
-  echo \$(( i + 1 )) > "\$idx_file"
-else
-  echo empty
-fi
+# Build the exclude key list explicitly: \${!EX[*]:-} (key-listing + default) yields
+# empty under bash even when keys exist, so iterate instead.
+ex_keys=""
+if (( \${#EX[@]} > 0 )); then ex_keys="\${!EX[*]}"; fi
+echo "called top=\$top exclude=\$ex_keys" >> "$TMPDIR_TEST/logs/select-target.log"
+emitted=0
+declare -A SEEN_OUT=()
+for n in "\${Q[@]}"; do
+  (( emitted >= top )) && break
+  [[ -n "\${EX[\$n]:-}" ]] && continue
+  [[ -n "\${SEEN_OUT[\$n]:-}" ]] && continue
+  SEEN_OUT["\$n"]=1
+  echo "issue \$n"
+  emitted=\$(( emitted + 1 ))
+done
+# Fewer than k eligible → the selector's genuine-exhaustion line so the consumer
+# stops cleanly with "queue exhausted" rather than spinning.
+if (( emitted < top )); then echo empty; fi
 FAKE
   cat > "$TMPDIR_TEST/dispatch-phase" <<'FAKE'
 #!/usr/bin/env bash
@@ -18383,11 +18608,20 @@ fi
 echo waiting
 exit 1
 FAKE
-  cat > "$TMPDIR_TEST/dispatch-spawn-worker" <<FAKE
+  # Detached launcher fake (#1391): dispatch-materialize-spawn now DETACHES
+  # dispatch-launch-worker via `setsid nohup … </dev/null >tmp/…log 2>&1 &`
+  # instead of spawning dispatch-spawn-worker. The launcher is fire-and-forget —
+  # the router never observes its exit — so this fake just records its argv to a
+  # deterministic log of its own (NOT the router's per-target tmp redirect, which
+  # captures the fake's stdout) and exits. Because the launch is backgrounded, a
+  # detach-timing test (below) overrides this with a sleeping variant to prove the
+  # router does not block on it. MAT_LAUNCH_SLEEP lets a test make the default
+  # fake sleep before logging without a full override.
+  cat > "$TMPDIR_TEST/dispatch-launch-worker" <<FAKE
 #!/usr/bin/env bash
-echo "\$*" >> "$TMPDIR_TEST/logs/spawn-worker.log"
-echo spawned
-exit \${MAT_SPAWN_RC:-0}
+[[ -n "\${MAT_LAUNCH_SLEEP:-}" ]] && sleep "\$MAT_LAUNCH_SLEEP"
+echo "\$*" >> "$TMPDIR_TEST/logs/launch-worker.log"
+exit 0
 FAKE
   cat > "$TMPDIR_TEST/dispatch-schedule-target-reseed" <<FAKE
 #!/usr/bin/env bash
@@ -18404,7 +18638,7 @@ FAKE
     "$TMPDIR_TEST"/dispatch-resolve-worktree \
     "$TMPDIR_TEST"/dispatch-phase "$TMPDIR_TEST"/dispatch-ci-ready \
     "$TMPDIR_TEST"/dispatch-select-target \
-    "$TMPDIR_TEST"/dispatch-spawn-worker "$TMPDIR_TEST"/dispatch-schedule-target-reseed \
+    "$TMPDIR_TEST"/dispatch-launch-worker "$TMPDIR_TEST"/dispatch-schedule-target-reseed \
     "$TMPDIR_TEST"/sync-issue-context
 
   mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
@@ -18413,6 +18647,7 @@ FAKE
 echo "\$*" >> "$TMPDIR_TEST/logs/git.log"
 case "\$*" in
   "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/project/.bare" ;;
+  "rev-parse --show-toplevel") echo "$TMPDIR_TEST/project" ;;
   "worktree add -b "*) mkdir -p "\$5" ;;
   *) : ;;
 esac
@@ -18433,7 +18668,7 @@ mat_teardown() {
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     DISPATCH_RESERVATION_DIR \
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_PHASE \
-    MAT_CI_READY MAT_SPAWN_RC MAT_ISSUE_STATE MAT_QUEUE \
+    MAT_CI_READY MAT_LAUNCH_SLEEP MAT_ISSUE_STATE MAT_QUEUE \
     MAT_RESEED_OUT MAT_RESEED_RC
   # Per-issue phase overrides (MAT_PHASE_<N>, #1126) have dynamic names the fixed
   # unset list cannot enumerate; clear any a test set so they don't leak forward.
@@ -18442,77 +18677,109 @@ mat_teardown() {
 
 run_mat() { "$TMPDIR_TEST/dispatch-materialize-spawn" "$@" 2>/dev/null; }
 
+# The launcher is DETACHED (setsid nohup … &), so dispatch-materialize-spawn
+# returns WITHOUT waiting for it (that non-blocking property is itself asserted
+# below). Its argv log is therefore written asynchronously by the detached child.
+# Tests that read logs/launch-worker.log must first wait for the child to have
+# logged its expected number of lines, else they race the detach. Bounded poll
+# (~5s) so a genuine miss still fails rather than hanging. $1 = expected line
+# count; returns 0 once reached, 1 on timeout.
+wait_launch_log() {
+  local want="$1" i=0 have
+  while (( i < 500 )); do
+    if [[ -f "$TMPDIR_TEST/logs/launch-worker.log" ]]; then
+      have=$(wc -l < "$TMPDIR_TEST/logs/launch-worker.log" | tr -d ' ')
+      (( have >= want )) && return 0
+    fi
+    sleep 0.01
+    i=$(( i + 1 ))
+  done
+  return 1
+}
+
 # --- queue happy path → propagate (spawn called, lock released) --------------
 echo "Test: materialize-spawn queue happy path → propagate"
 mat_setup
 out=$(run_mat 839 queue) ; rc=$?
 assert_eq "queue happy: exit 0" "0" "$rc"
 assert_eq "queue happy: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "queue happy: spawn-worker called with issue + worktree" \
+wait_launch_log 1
+assert_eq "queue happy: launch-worker detached with issue + worktree (no --model)" \
   "839 $TMPDIR_TEST/project/worktrees/839-test" \
-  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
-assert_eq "queue happy: lock released after spawn" "" "$(cat "$DISPATCH_LOCK_FILE")"
+  "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
+assert_eq "queue happy: lock released after detach" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "queue happy: marker written into target worktree" "1" \
   "$([ -f "$TMPDIR_TEST/project/worktrees/839-test/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- #1048 boot-gap: propagate releases the lock ONLY after spawn ------------
-# The headline assertion: the lock must be HELD while dispatch-spawn-worker runs
-# (i.e. through the worker spawn-kick) and released only after it returns. The
-# spawn is async (#1048), so the lock spans the kick, not registration. Override
-# the spawn-worker fake to snapshot the live lock contents at spawn time, then
-# assert the snapshot equals the held session id AND the final lock file is empty
-# (released after the kick).
-echo "Test: materialize-spawn holds the lock during spawn, releases after (#1048)"
+# --- #1391 detach is non-blocking + reservation is pre-detach ----------------
+# The launcher is DETACHED (setsid nohup … &), so the router must NOT wait on it:
+# it writes the reservation marker UNDER THE LOCK (pre-detach), kicks the detach,
+# and returns immediately. Make the launcher fake sleep 2s before logging; the
+# router run must return well under that sleep (proving it does not block on the
+# launcher), AND the reservation marker must already exist the instant the run
+# returns (written pre-detach, under the lock). Timed with SECONDS.
+echo "Test: materialize-spawn detaches the launcher without blocking; reservation is pre-detach (#1391)"
 mat_setup
-cat > "$TMPDIR_TEST/dispatch-spawn-worker" <<FAKE
-#!/usr/bin/env bash
-echo "\$*" >> "$TMPDIR_TEST/logs/spawn-worker.log"
-# Snapshot the lock contents AT spawn time — this is the boot-gap window.
-cat "\$DISPATCH_LOCK_FILE" > "$TMPDIR_TEST/logs/lock-at-spawn.log"
-echo spawned
-exit 0
-FAKE
-chmod +x "$TMPDIR_TEST/dispatch-spawn-worker"
+export MAT_LAUNCH_SLEEP=2
+start=$SECONDS
 out=$(run_mat 839 queue) ; rc=$?
-assert_eq "boot-gap: exit 0" "0" "$rc"
-assert_eq "boot-gap: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-# Lock was HELD during spawn (worker registers under <basename> in this window).
-assert_eq "boot-gap: lock held during spawn (== session id)" "mat-session" \
-  "$(cat "$TMPDIR_TEST/logs/lock-at-spawn.log")"
-# Lock released after the spawn returned.
-assert_eq "boot-gap: lock released after spawn" "" "$(cat "$DISPATCH_LOCK_FILE")"
+elapsed=$(( SECONDS - start ))
+assert_eq "detach-nonblock: exit 0" "0" "$rc"
+assert_eq "detach-nonblock: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+# The run returned BEFORE the 2s launcher sleep elapsed — it did not wait.
+TOTAL=$((TOTAL + 1))
+if (( elapsed < 2 )); then
+  PASS=$((PASS + 1)); echo "  PASS: detach-nonblock: router returned without waiting on the launcher (${elapsed}s < 2s)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: detach-nonblock: router blocked on the launcher (${elapsed}s >= 2s)"
+fi
+# Reservation marker was written PRE-detach, under the lock, so it already exists
+# the instant the run returned (the sleeping launcher has not even logged yet).
+assert_eq "detach-nonblock: reservation marker exists pre-detach (under the lock)" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
+# The launcher's argv log is still empty here (it is mid-sleep) — confirms the
+# router truly did not wait. Then wait it out and confirm it logged the bare
+# <N> <wt> argv (no --model: the launcher derives the model itself).
+assert_eq "detach-nonblock: launcher had not logged yet at return (still detached/sleeping)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && wc -l < "$TMPDIR_TEST/logs/launch-worker.log" | tr -d ' ' || echo 0)"
+wait_launch_log 1
+assert_eq "detach-nonblock: launcher eventually logged bare <N> <wt>" \
+  "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
+# Lock was released after the (instant) detach kick.
+assert_eq "detach-nonblock: lock released after detach" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
-# --- reservation written before spawn, LEFT in place after success (#1048) ----
-# Step 6b writes the marker the instant before the (now async) spawn-kick and
-# LEAVES it in place on success: the spawn is async (dispatch-spawn-worker passes
-# --no-verify), so the worker has not registered yet. The marker is this slot's
-# in-flight budget/selection contribution; the sweep reclaims it on registration
-# (rule (a)) or after the boot grace. Snapshot the marker presence AT spawn time
-# (must be present), then assert it SURVIVES a successful spawn — AND survives the
+# --- reservation written before detach, LEFT in place (#1048/#1391) ----------
+# Step 6b writes the marker UNDER THE LOCK, the instant before the detach, and
+# LEAVES it in place: the detach is fire-and-forget, so the launcher has not
+# provisioned or registered yet. The marker is this slot's in-flight
+# budget/selection contribution; the sweep reclaims it on registration (rule (a))
+# or after the boot grace. The launcher fake snapshots whether the marker exists
+# when it runs (must be present), then we assert it SURVIVES — AND survives the
 # lock release and a fresh reservation_sweep, the reserve→release→reacquire
 # no-double-select property the AC names (the reserved target stays skipped).
-echo "Test: materialize-spawn leaves the reservation in place after a successful async spawn (#1048)"
+echo "Test: materialize-spawn leaves the reservation in place after the detach (#1048/#1391)"
 mat_setup
-cat > "$TMPDIR_TEST/dispatch-spawn-worker" <<FAKE
+cat > "$TMPDIR_TEST/dispatch-launch-worker" <<FAKE
 #!/usr/bin/env bash
-echo "\$*" >> "$TMPDIR_TEST/logs/spawn-worker.log"
-# Snapshot whether the reservation marker exists AT spawn time.
+# Snapshot whether the reservation marker exists when the detached launcher runs.
 [ -f "\$DISPATCH_RESERVATION_DIR/839-test" ] && echo present > "$TMPDIR_TEST/logs/resv-at-spawn.log" || echo absent > "$TMPDIR_TEST/logs/resv-at-spawn.log"
-echo spawned
+echo "\$*" >> "$TMPDIR_TEST/logs/launch-worker.log"
 exit 0
 FAKE
-chmod +x "$TMPDIR_TEST/dispatch-spawn-worker"
+chmod +x "$TMPDIR_TEST/dispatch-launch-worker"
 out=$(run_mat 839 queue) ; rc=$?
 assert_eq "resv-success: exit 0" "0" "$rc"
 assert_eq "resv-success: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "resv-success: reservation present AT spawn time" "present" \
+wait_launch_log 1
+assert_eq "resv-success: reservation present when the launcher ran" "present" \
   "$(cat "$TMPDIR_TEST/logs/resv-at-spawn.log")"
-assert_eq "resv-success: reservation LEFT in place after a successful spawn" "1" \
+assert_eq "resv-success: reservation LEFT in place after the detach" "1" \
   "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
-# Lock was released after the kick (the locked phase is fast).
-assert_eq "resv-success: lock released after the spawn-kick" "" "$(cat "$DISPATCH_LOCK_FILE")"
+# Lock was released after the (instant) detach kick.
+assert_eq "resv-success: lock released after the detach" "" "$(cat "$DISPATCH_LOCK_FILE")"
 # reserve→release→reacquire: with the lock released, the marker still exists, so
 # a concurrent acquirer's reserved-skip (#1046) keeps skipping the target.
 TOTAL=$((TOTAL + 1))
@@ -18530,18 +18797,12 @@ assert_eq "resv-success: reservation survives a fresh reservation_sweep" "1" \
   "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- reservation cleared after a FAILED spawn --------------------------------
-# On a non-zero spawn the worker never registered, so the marker must still be
-# cleared (no leaked budget).
-echo "Test: materialize-spawn clears the reservation after a failed spawn"
-mat_setup
-export MAT_SPAWN_RC=1
-out=$(run_mat 839 queue)
-assert_eq "resv-fail: terminal token" "notify spawn-failed" \
-  "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "resv-fail: reservation cleared after a failed spawn" "0" \
-  "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
-mat_teardown
+# NOTE (#1391): the former "reservation cleared after a FAILED spawn" test is
+# gone — the launcher detach is fire-and-forget, so there is no spawn-failed
+# outcome. A launcher that dies before spawning leaves the router-written
+# reservation marker with no live session, which the existing ledger sweep
+# (#1045/#1048) reclaims after the boot grace. The marker-left-in-place property
+# is covered by the resv-success test above.
 
 # --- pre-spawn (blocked) return path writes NO reservation -------------------
 # A target-blocked outcome returns before Step 6b, so no marker is ever written.
@@ -18588,7 +18849,7 @@ assert_eq "explicit closed: office-hours park reason" "839 named target issue is
   "$(cat "$TMPDIR_TEST/logs/apply-office-hours.log")"
 assert_eq "explicit closed: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "explicit closed: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
 # --- explicit open blocker → notify target-blocked ---------------------------
@@ -18612,9 +18873,10 @@ export MAT_LEAF=901
 out=$(run_mat 839 explicit)
 assert_eq "explicit leaf: terminal token" "propagate" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "explicit leaf: spawn-worker keyed on the leaf 901" \
+wait_launch_log 1
+assert_eq "explicit leaf: launcher keyed on the leaf 901" \
   "901 $TMPDIR_TEST/project/worktrees/901-test" \
-  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+  "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
 mat_teardown
 
 # --- explicit PR exists → leaf trace skipped ---------------------------------
@@ -18627,9 +18889,10 @@ assert_eq "explicit PR: terminal token" "propagate" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "explicit PR: leaf trace not consulted" "0" \
   "$([ -f "$TMPDIR_TEST/logs/trace-leaf.log" ] && echo 1 || echo 0)"
-assert_eq "explicit PR: spawn keyed on original 839" \
+wait_launch_log 1
+assert_eq "explicit PR: launcher keyed on original 839" \
   "839 $TMPDIR_TEST/project/worktrees/839-test" \
-  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+  "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
 mat_teardown
 
 # --- explicit trace-leaf hard failure → exit 2, lock released, no spawn -------
@@ -18648,7 +18911,7 @@ out=$(run_mat 839 explicit) && rc=0 || rc=$?
 assert_eq "trace-leaf fail: exit 2" "2" "$rc"
 assert_eq "trace-leaf fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "trace-leaf fail: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
 # --- resolve-worktree internal failure → exit 2, lock released, no spawn ------
@@ -18666,7 +18929,7 @@ out=$(run_mat 839 queue) && rc=0 || rc=$?
 assert_eq "resolve-wt fail: exit 2" "2" "$rc"
 assert_eq "resolve-wt fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "resolve-wt fail: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
 # --- enter path → sync-issue-context runs in the worktree --------------------
@@ -18694,7 +18957,7 @@ assert_eq "conflict: terminal token" "drain worktree-conflict" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "conflict: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "conflict: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
 # --- dispatch-merge-main NOT called by materialize-spawn (#1047) -------------
@@ -18725,7 +18988,7 @@ assert_eq "ci-reseeded: terminal token" "drain ci-reseeded" \
 assert_eq "ci-reseeded: scheduler called with target" "1" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
 assert_eq "ci-reseeded: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 assert_eq "ci-reseeded: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
@@ -18743,8 +19006,9 @@ assert_eq "gap1-no-regate: terminal token" "propagate" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "gap1-no-regate: scheduler NOT called" "0" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && echo 1 || echo 0)"
-assert_eq "gap1-no-regate: spawn called once" "839 $TMPDIR_TEST/project/worktrees/839-test" \
-  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+wait_launch_log 1
+assert_eq "gap1-no-regate: launcher detached once" "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
 assert_eq "gap1-no-regate: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
@@ -18759,7 +19023,7 @@ assert_eq "ci-exhausted: terminal token" "notify ci-wait-exhausted" \
 assert_eq "ci-exhausted: scheduler called with target" "1" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
 assert_eq "ci-exhausted: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 assert_eq "ci-exhausted: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
@@ -18796,7 +19060,7 @@ assert_eq "ci-wait-fallback: terminal token is drain ci-waiting" "drain ci-waiti
 assert_eq "ci-wait-fallback: scheduler was called" "1" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && grep -qx '839' "$TMPDIR_TEST/logs/schedule-target-reseed.log" && echo 1 || echo 0)"
 assert_eq "ci-wait-fallback: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 assert_eq "ci-wait-fallback: lock released at stop" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
@@ -18809,8 +19073,9 @@ mat_setup
 export MAT_CI_READY=waiting
 out=$(run_mat 839 queue)
 assert_eq "queue-no-regate: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+wait_launch_log 1
 assert_eq "queue-no-regate: spawn called once" "839 $TMPDIR_TEST/project/worktrees/839-test" \
-  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+  "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
 mat_teardown
 
 # --- --gap 1 → propagate (single target, default behavior) -------------------
@@ -18820,8 +19085,9 @@ echo "Test: materialize-spawn --gap 1 → propagate (single target, default beha
 mat_setup
 out=$(run_mat 839 queue --gap 1)
 assert_eq "gap1: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+wait_launch_log 1
 assert_eq "gap1: spawn called once" "839 $TMPDIR_TEST/project/worktrees/839-test" \
-  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+  "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
 mat_teardown
 
 # --- --gap non-integer → usage error exit 2 ----------------------------------
@@ -18835,18 +19101,12 @@ esac
 assert_eq "gap-bad: usage error exit 2" "ok" "$status"
 mat_teardown
 
-# --- spawn failure → notify spawn-failed -------------------------------------
-echo "Test: materialize-spawn spawn failure → notify spawn-failed"
-mat_setup
-export MAT_SPAWN_RC=1
-out=$(run_mat 839 queue)
-assert_eq "spawn-failed: terminal token" "notify spawn-failed" \
-  "$(printf '%s\n' "$out" | tail -n 1)"
-# #945: spawn-failed releases the lock after the failed spawn returns, so the
-# lock must be empty here.
-assert_eq "spawn-failed: lock released at spawn-failed stop" "" \
-  "$(cat "$DISPATCH_LOCK_FILE")"
-mat_teardown
+# NOTE (#1391): the former "spawn failure → notify spawn-failed" single-target
+# test is gone. The launcher detach is fire-and-forget (setsid nohup … &) — the
+# router never observes the launcher's exit, so there is no spawn-failed terminal
+# token. A launcher that dies before spawning leaves the router-written
+# reservation marker with no live session, reclaimed by the existing ledger sweep
+# (#1045/#1048). The propagate path is the only post-detach single-target token.
 
 # --- unexpected resolve-worktree line → release + exit 2 ---------------------
 echo "Test: materialize-spawn unexpected resolve-worktree line → exit 2, lock released"
@@ -18907,7 +19167,7 @@ out=$(run_mat 839 queue) && rc=0 || rc=$?
 assert_eq "wt-add fail: exit 2" "2" "$rc"
 assert_eq "wt-add fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "wt-add fail: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
 # --- finalize-selection failure (worktree path missing) → exit 2 + lock released
@@ -18932,7 +19192,7 @@ out=$(run_mat 839 queue) && rc=0 || rc=$?
 assert_eq "finalize fail: exit 2" "2" "$rc"
 assert_eq "finalize fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "finalize fail: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
 # --- explicit closed-check gh failure → exit 2 + lock released ---------------
@@ -18950,7 +19210,7 @@ out=$(run_mat 839 explicit) && rc=0 || rc=$?
 assert_eq "gh fail: exit 2" "2" "$rc"
 assert_eq "gh fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "gh fail: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
 # --- fan-out: gap 5, 5 distinct spawns, lock released once, summary ----------
@@ -18958,9 +19218,10 @@ echo "Test: materialize-spawn --gap 5 fans out to 5 distinct spawns"
 mat_setup
 export MAT_QUEUE="720 508 991 644"
 out=$(run_mat 839 queue --gap 5)
-assert_eq "fanout5: spawn count" "5" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+wait_launch_log 5
+assert_eq "fanout5: launcher detach count" "5" "$(wc -l < "$TMPDIR_TEST/logs/launch-worker.log" | tr -d ' ')"
 assert_eq "fanout5: distinct worktrees" "5" \
-  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/launch-worker.log" | sort -u | wc -l | tr -d ' ')"
 assert_eq "fanout5: summary line" "1" \
   "$(printf '%s\n' "$out" | grep -c 'spawned 5 of gap 5')"
 assert_eq "fanout5: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
@@ -18972,162 +19233,196 @@ echo "Test: materialize-spawn --gap 5 queue exhausted after 2 → propagate"
 mat_setup
 export MAT_QUEUE="720"
 out=$(run_mat 839 queue --gap 5)
-assert_eq "exhaust: spawn count" "2" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+wait_launch_log 2
+assert_eq "exhaust: launcher detach count" "2" "$(wc -l < "$TMPDIR_TEST/logs/launch-worker.log" | tr -d ' ')"
 assert_eq "exhaust: summary" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 2 of gap 5 (queue exhausted)')"
 assert_eq "exhaust: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
 mat_teardown
 
-# --- fan-out: all spawns fail → 0 spawned, drain, stderr surfaces each one ---
-# Single-target mode surfaces a failed spawn via `notify spawn-failed`; the
-# fan-out loop deliberately continues to fill the gap from other targets, but a
-# failed spawn must not be silently buried. Each spawn-failed skip emits a
-# stderr warning so a systemic spawn problem is visible in the router logs.
-echo "Test: materialize-spawn --gap 3 all spawns fail → drain + per-target stderr warning"
-mat_setup
-export MAT_QUEUE="720 508"
-export MAT_SPAWN_RC=1
-out=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue --gap 3 2>"$TMPDIR_TEST/logs/mat-stderr.log")
-assert_eq "spawnfail-fanout: zero net spawns in summary" "1" \
-  "$(printf '%s\n' "$out" | grep -c 'spawned 0 of gap 3')"
-assert_eq "spawnfail-fanout: skipped detail per target" "3" \
-  "$(printf '%s\n' "$out" | grep -c 'skipped #.* (spawn-failed)')"
-assert_eq "spawnfail-fanout: terminal token" "drain" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "spawnfail-fanout: stderr warns on each spawn-failed" "3" \
-  "$(grep -c 'spawn-failed during fan-out' "$TMPDIR_TEST/logs/mat-stderr.log")"
-assert_eq "spawnfail-fanout: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
-mat_teardown
+# NOTE (#1391): the former "all spawns fail → drain + per-target stderr warning"
+# fan-out test is gone. With the fire-and-forget launcher detach there is no
+# spawn-failed outcome, so a fan-out always detaches one launcher per selected
+# target and reaches `propagate`; a launcher that later dies leaves a sweepable
+# reservation orphan rather than a router-visible failure. The remaining
+# fan-out failure path is worktree-conflict (a per-target skip with a stderr
+# warning), still exercised by the conflict / record_outcome coverage.
 
-# --- fan-out: dispatch-select-target invoked between spawns ------------------
-echo "Test: materialize-spawn fan-out invokes dispatch-select-target between spawns"
+# --- fan-out: ONE dispatch-select-target scan fills slots 2..GAP (#1317) -----
+# #1317 acceptance: a --gap N fan-out performs O(1) selector scans, not O(N). The
+# seed (839) is processed first, then a SINGLE `--top` scan supplies the rest of
+# the gap (720, 508). The fake selector logs one line per invocation, so the
+# scan count is `wc -l logs/select-target.log` — it MUST be exactly 1.
+echo "Test: materialize-spawn fan-out issues exactly ONE selector scan (#1317)"
 mat_setup
 export MAT_QUEUE="720 508"
 out=$(run_mat 839 queue --gap 3)
-# 3 spawns (839 + 720 + 508); select-target invoked at least twice (for targets 2 and 3).
-assert_eq "distinct: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
-assert_eq "distinct: select-target invoked >=2" "1" \
-  "$([ "$(wc -l < "$TMPDIR_TEST/logs/select-target.log")" -ge 2 ] && echo 1 || echo 0)"
-assert_eq "distinct: worktrees all unique" "3" \
-  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
+wait_launch_log 3
+# 3 detached launchers (839 + 720 + 508), from the seed + ONE single-pass scan.
+assert_eq "single-scan: launcher detach count" "3" "$(wc -l < "$TMPDIR_TEST/logs/launch-worker.log" | tr -d ' ')"
+# #1317 single-scan acceptance assertion: exactly ONE selector invocation.
+assert_eq "single-scan: select-target invoked exactly once (#1317)" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/select-target.log" | tr -d ' ')"
+assert_eq "single-scan: worktrees all unique" "3" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/launch-worker.log" | sort -u | wc -l | tr -d ' ')"
+# The single scan was asked for the gap-after-seed slot count and told to exclude
+# the seed (belt-and-suspenders atop the seed's reservation marker).
+assert_eq "single-scan: scan asked for --top 2, --exclude 839" "called top=2 exclude=839" \
+  "$(cat "$TMPDIR_TEST/logs/select-target.log")"
 mat_teardown
 
-# --- fan-out exclusion (#1062): the loop passes its SEEN set as --exclude so ---
-# dispatch-select-target yields the NEXT distinct target instead of re-returning
-# an already-processed one. Each of the following tests overrides the default
-# (arg-ignoring) select-target fake with an EXCLUDE-HONORING fake that returns
-# the first MAT_QUEUE entry NOT in the passed --exclude set. WITHOUT --exclude
-# this fake returns the queue HEAD on every call — re-surfacing an already-
-# spawned target — the exact scenario the loop's exclusion must defeat. The
-# helper below writes that fake into the live TMPDIR_TEST.
-write_exclude_honoring_select_target() {
-  cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+# --- fan-out single-scan consumption (#1317, replacing the #1062 loop tests) --
+# Pre-#1317 the loop re-invoked dispatch-select-target once per slot, threading a
+# growing --exclude SEEN set to defeat a re-surfaced (lagged-live / orphan
+# self-close) target and to drain a multi-leaf subtree past an already-processed
+# leaf. Single-pass selection (#1317) moves ALL of that de-dup INTO the selector:
+# one `--top` scan returns distinct ranked targets, so the loop's job is now just
+# to CONSUME that one multi-line list. The de-dup-mechanism coverage (re-surface
+# exclusion, multi-leaf-subtree descent) moved to the dispatch-select-target
+# `--top` section above; the cases that remain here are what the loop still owns:
+# consuming a multi-line list across distinct worktrees, the defensive SEEN
+# backstop, and stopping cleanly on `empty` / a deferred selection line.
+
+# (consume) multi-line list: the seed (839) plus a single `--top` scan returning
+# 720 and 508 in one call → 3 distinct-worktree spawns from ONE selector scan.
+echo "Test: materialize-spawn fan-out consumes a multi-line --top list across distinct worktrees (#1317)"
+mat_setup
+export MAT_QUEUE="720 508"
+out=$(run_mat 839 queue --gap 3)
+wait_launch_log 3
+assert_eq "consume-list: launcher detach count" "3" "$(wc -l < "$TMPDIR_TEST/logs/launch-worker.log" | tr -d ' ')"
+assert_eq "consume-list: distinct worktrees" "3" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/launch-worker.log" | sort -u | wc -l | tr -d ' ')"
+assert_eq "consume-list: ONE selector scan (#1317)" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/select-target.log" | tr -d ' ')"
+assert_eq "consume-list: summary 3 of gap 3" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 3 of gap 3')"
+assert_eq "consume-list: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+
+# (consume PR lines) the single scan can return `pr <num> <branch> <phase>` lines
+# too; the loop keys the spawn on the branch prefix (<N>-), exactly as the
+# single-target path does. Here the scan yields a PR on branch 720-feature plus an
+# issue 508; the seed 839 + both → 3 distinct-worktree spawns from one scan.
+echo "Test: materialize-spawn fan-out consumes pr <branch> lines, keys spawn on branch prefix (#1317)"
+mat_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
-# Exclude-honoring fake (#1062): returns the first MAT_QUEUE entry NOT in the
-# passed --exclude set, modelling a real selector yielding the next distinct
-# target. WITHOUT --exclude it returns the first entry every call — re-surfacing
-# an already-spawned target (registration lag / orphan self-close), the exact
-# scenario the loop's exclusion must defeat.
-declare -A EX=()
-while [[ \$# -gt 0 ]]; do
-  case "\$1" in
-    --exclude) shift; while [[ \$# -gt 0 && "\$1" =~ ^[0-9]+\$ ]]; do EX["\$1"]=1; shift; done ;;
-    *) shift ;;
-  esac
-done
-read -r -a Q <<< "\${MAT_QUEUE:-}"
-echo "called exclude=\${!EX[*]:-}" >> "$TMPDIR_TEST/logs/select-target.log"
-for n in "\${Q[@]}"; do
-  if [[ -z "\${EX[\$n]:-}" ]]; then echo "issue \$n"; exit 0; fi
-done
-echo empty
+echo "scan \$*" >> "$TMPDIR_TEST/logs/select-target.log"
+echo "pr 9001 720-feature fix-checks"
+echo "issue 508"
 FAKE
-  chmod +x "$TMPDIR_TEST/dispatch-select-target"
-}
-
-# (a) lagged-live re-surface: queue HEAD 839 is the already-spawned arg, re-
-# surfacing because its live ownership is not yet visible to the next selection
-# (mechanism 1). Without the loop's --exclude the fake would re-return 839 every
-# call and the run would stall at 1 spawn. With it, selection advances 720, 508.
-echo "Test: materialize-spawn fan-out excludes lagged-live re-surfaced target (#1062)"
-mat_setup
-write_exclude_honoring_select_target
-export MAT_QUEUE="839 720 508"
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_mat 839 queue --gap 3)
-assert_eq "fanout-lag: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
-assert_eq "fanout-lag: distinct worktrees" "3" \
-  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
-assert_eq "fanout-lag: summary 3 of gap 3" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 3 of gap 3')"
-assert_eq "fanout-lag: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "fanout-lag: no 'no further distinct targets' stop" "0" \
-  "$(printf '%s\n' "$out" | grep -c 'no further distinct targets')"
+wait_launch_log 3
+assert_eq "consume-pr: launcher detach count" "3" "$(wc -l < "$TMPDIR_TEST/logs/launch-worker.log" | tr -d ' ')"
+assert_eq "consume-pr: ONE selector scan (#1317)" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/select-target.log" | tr -d ' ')"
+# The pr line's worktree is keyed on the branch prefix 720, not the PR number 9001.
+assert_eq "consume-pr: pr line keyed on branch prefix 720" "1" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/launch-worker.log" | grep -cx '720')"
+assert_eq "consume-pr: distinct worktrees (839,720,508)" "3" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/launch-worker.log" | sort -u | wc -l | tr -d ' ')"
+assert_eq "consume-pr: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
 mat_teardown
 
-# (a') orphan (self-closed) re-surface: 720 re-surfaces because it self-closed
-# fast, leaving an orphan worktree selection does not skip (mechanism 2). The
-# duplicate 720 in the queue is spawned once; the exclusion carries it past.
-echo "Test: materialize-spawn fan-out excludes orphan self-closed re-surfaced target (#1062)"
+# (backstop) defensive SEEN de-dup: the selector should never re-return the seed
+# (the loop passes --exclude <seed>, and single-pass selection de-dups
+# internally), but if a stray duplicate ever appears the loop must SKIP it
+# silently rather than re-dispatch it. Here the scan returns the seed 839 again
+# plus a genuine 720: 839 is skipped (already SEEN), 720 spawns → 2 spawns, NOT 3.
+echo "Test: materialize-spawn fan-out defensive SEEN de-dup skips a re-returned target (#1317)"
 mat_setup
-write_exclude_honoring_select_target
-export MAT_QUEUE="720 720 508"
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+echo "scan \$*" >> "$TMPDIR_TEST/logs/select-target.log"
+echo "issue 839"
+echo "issue 720"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_mat 839 queue --gap 3)
-assert_eq "fanout-orphan: spawn count" "3" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
-assert_eq "fanout-orphan: distinct worktrees (839,720,508)" "3" \
-  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
-assert_eq "fanout-orphan: summary 3 of gap 3" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 3 of gap 3')"
-assert_eq "fanout-orphan: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "fanout-orphan: no 'no further distinct targets' stop" "0" \
-  "$(printf '%s\n' "$out" | grep -c 'no further distinct targets')"
+wait_launch_log 2
+assert_eq "seen-dedup: launcher detach count (seed + 720, not the re-returned 839)" "2" \
+  "$(wc -l < "$TMPDIR_TEST/logs/launch-worker.log" | tr -d ' ')"
+assert_eq "seen-dedup: 839 spawned exactly once" "1" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/launch-worker.log" | grep -cx '839')"
+assert_eq "seen-dedup: distinct worktrees (839,720)" "2" \
+  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/launch-worker.log" | sort -u | wc -l | tr -d ' ')"
+assert_eq "seen-dedup: ONE selector scan (#1317)" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/select-target.log" | tr -d ' ')"
+assert_eq "seen-dedup: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
 mat_teardown
 
-# (b) multi-leaf subtree, first leaf excluded drains to the next: the exclusion
-# threads into the leaf trace, so a subtree whose first startable leaf (5500) was
-# already processed advances to its sibling (5501) rather than abandoning the
-# parent's remaining leaves.
-echo "Test: materialize-spawn fan-out drains multi-leaf subtree past excluded first leaf (#1062)"
+# (stop on empty) genuinely empty frontier: the seed spawns, then the single scan
+# returns `empty` (nothing else eligible) → the loop stops cleanly with the
+# "queue exhausted" stop reason, NOT a re-selection spin.
+echo "Test: materialize-spawn fan-out stops cleanly on an empty selector result (#1317)"
 mat_setup
-write_exclude_honoring_select_target
-export MAT_QUEUE="5500 5501"
-out=$(run_mat 5500 queue --gap 2)
-assert_eq "fanout-subtree: spawn count" "2" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
-assert_eq "fanout-subtree: distinct worktrees (5500,5501)" "2" \
-  "$(cut -d' ' -f1 "$TMPDIR_TEST/logs/spawn-worker.log" | sort -u | wc -l | tr -d ' ')"
-assert_eq "fanout-subtree: summary 2 of gap 2" "1" "$(printf '%s\n' "$out" | grep -c 'spawned 2 of gap 2')"
-assert_eq "fanout-subtree: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-mat_teardown
-
-# (c) genuinely empty frontier: once 839 is excluded the queue has nothing left,
-# so selection returns `empty` and the loop stops cleanly on a real empty — not
-# on a re-selection.
-echo "Test: materialize-spawn fan-out stops cleanly on a genuinely empty frontier (#1062)"
-mat_setup
-write_exclude_honoring_select_target
 export MAT_QUEUE=""
 out=$(run_mat 839 queue --gap 5)
-assert_eq "fanout-empty: spawn count" "1" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+wait_launch_log 1
+assert_eq "fanout-empty: launcher detach count" "1" "$(wc -l < "$TMPDIR_TEST/logs/launch-worker.log" | tr -d ' ')"
+assert_eq "fanout-empty: ONE selector scan (#1317)" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/select-target.log" | tr -d ' ')"
 assert_eq "fanout-empty: summary 1 of gap 5 (queue exhausted)" "1" \
   "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 5 (queue exhausted)')"
 assert_eq "fanout-empty: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "fanout-empty: no 'no further distinct targets' stop" "0" \
-  "$(printf '%s\n' "$out" | grep -c 'no further distinct targets')"
 mat_teardown
 
-# (backstop) contract violation: dispatch-select-target ALWAYS returns 839 (the
-# already-processed arg) regardless of --exclude. The loop's defensive backstop
-# (#1062) must break rather than spin forever: it records SEEN[839] for target 1,
-# the fake re-returns 839, SEEN[839] is set → backstop fires.
-echo "Test: materialize-spawn fan-out backstop breaks on selector contract violation (#1062)"
+# (stop on deferred) a deferred selection line (main-broken / jit-reminder) breaks
+# the consumption loop: the seed spawns, the scan returns a `main-broken <sha>`
+# line, the loop stops with the "selection deferred (main-broken)" stop reason and
+# spawns nothing further. The next tick re-evaluates once the deferral clears.
+echo "Test: materialize-spawn fan-out stops on a deferred (main-broken) selection line (#1317)"
 mat_setup
-cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
-echo "issue 839"
+echo "scan \$*" >> "$TMPDIR_TEST/logs/select-target.log"
+echo "main-broken deadbeef"
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-select-target"
-out=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue --gap 5 2>"$TMPDIR_TEST/logs/mat-stderr.log")
-assert_eq "backstop: spawn count (only the arg)" "1" "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
-assert_eq "backstop: summary 1 of gap 5 (unexpected re-selection)" "1" \
-  "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 5 (selection re-returned an excluded target (unexpected))')"
-assert_eq "backstop: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "backstop: stderr names the contract violation" "1" \
-  "$(grep -c 'contract violation' "$TMPDIR_TEST/logs/mat-stderr.log")"
+out=$(run_mat 839 queue --gap 5)
+wait_launch_log 1
+assert_eq "deferred: launcher detach count (seed only)" "1" "$(wc -l < "$TMPDIR_TEST/logs/launch-worker.log" | tr -d ' ')"
+assert_eq "deferred: summary names the deferred stop reason" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 5 (selection deferred (main-broken))')"
+assert_eq "deferred: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+
+# (stop on deferred → drain) the same deferral when the SEED itself did not spawn
+# (a done seed) yields zero net spawns → terminal `drain`.
+echo "Test: materialize-spawn fan-out deferred line with a non-spawning seed → drain (#1317)"
+mat_setup
+export MAT_PHASE=done
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+echo "scan \$*" >> "$TMPDIR_TEST/logs/select-target.log"
+echo "jit-reminder 4242 digest"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_mat 839 queue --gap 5)
+assert_eq "deferred-drain: spawn count" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && wc -l < "$TMPDIR_TEST/logs/launch-worker.log" | tr -d ' ' || echo 0)"
+assert_eq "deferred-drain: summary 0 of gap 5 (selection deferred (jit-reminder))" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 0 of gap 5 (selection deferred (jit-reminder))')"
+assert_eq "deferred-drain: terminal token" "drain" "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+
+# (unexpected line) an unrecognized selector line is a hard error: release the
+# lock and exit 2 (it must NOT be silently consumed or treated as a target).
+echo "Test: materialize-spawn fan-out unexpected selector line → exit 2 + lock released (#1317)"
+mat_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+echo "scan \$*" >> "$TMPDIR_TEST/logs/select-target.log"
+echo "garbage not-a-decision-line"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+err=$("$TMPDIR_TEST/dispatch-materialize-spawn" 839 queue --gap 5 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"emitted unexpected"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "unexpected-line: error + exit 2" "ok" "$status"
+assert_eq "unexpected-line: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
 # --- --gap unbounded is removed → usage error exit 2 -------------------------
@@ -19158,7 +19453,7 @@ export MAT_PHASE=done
 out=$(run_mat 839 explicit)
 assert_eq "explicit-done: terminal token" "notify target-done" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "explicit-done: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 assert_eq "explicit-done: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "explicit-done: no office-hours park" "0" \
   "$([ -f "$TMPDIR_TEST/logs/apply-office-hours.log" ] && echo 1 || echo 0)"
@@ -19173,7 +19468,7 @@ export MAT_PHASE=done
 out=$(run_mat 839 queue)
 assert_eq "queue-done: terminal token" "drain target-done" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "queue-done: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 assert_eq "queue-done: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
@@ -19192,7 +19487,7 @@ assert_eq "fanout-done: zero spawns in summary" "1" \
   "$(printf '%s\n' "$out" | grep -c 'spawned 0 of gap 3')"
 assert_eq "fanout-done: terminal token" "drain" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "fanout-done: no spawn" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/spawn-worker.log" ] && echo 1 || echo 0)"
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 assert_eq "fanout-done: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
@@ -19218,58 +19513,58 @@ assert_eq "mixed-fanout: exactly one spawn line" "1" \
   "$(printf '%s\n' "$out" | grep -c 'propagate: spawned #')"
 assert_eq "mixed-fanout: the spawned target is #840" "1" \
   "$(printf '%s\n' "$out" | grep -c 'propagate: spawned #840')"
-assert_eq "mixed-fanout: spawn-worker invoked exactly once" "1" \
-  "$(wc -l < "$TMPDIR_TEST/logs/spawn-worker.log" | tr -d ' ')"
+wait_launch_log 1
+assert_eq "mixed-fanout: launcher detached exactly once" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/launch-worker.log" | tr -d ' ')"
 assert_eq "mixed-fanout: summary spawned 1 of gap 2" "1" \
   "$(printf '%s\n' "$out" | grep -c 'spawned 1 of gap 2')"
 assert_eq "mixed-fanout: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "mixed-fanout: lock released at end" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
 
-# --- phase→model integration: qa phase → --model claude-sonnet-4-6 forwarded --
-# When the recomputed PHASE is qa, dispatch-materialize-spawn calls the real
-# dispatch-phase-model (now staged by mat_setup) which emits claude-sonnet-4-6,
-# and the spawn-worker invocation must include --model claude-sonnet-4-6.
-echo "Test: materialize-spawn qa phase → spawn-worker receives --model claude-sonnet-4-6 (#1171)"
+# --- router no longer derives the worker model (#1391) -----------------------
+# The phase→model derivation moved INTO the launcher (dispatch-launch-worker
+# routes on the merged tree, then maps qa/review → Sonnet via dispatch-phase-model
+# itself). So dispatch-materialize-spawn forwards NO --model to the launcher,
+# whatever the recomputed PHASE: the launcher receives a bare <N> <wt>. The
+# qa/review → Sonnet policy is covered in the dispatch-launch-worker test block;
+# here we assert only that the ROUTER stopped forwarding --model. (The per-phase
+# model coverage that used to live here, #1171/#1172, is exercised in the
+# launcher block.)
+echo "Test: materialize-spawn qa phase → router forwards NO --model to the launcher (#1391)"
 mat_setup
 export MAT_PHASE=qa
 out=$(run_mat 839 queue) ; rc=$?
 assert_eq "qa-model: exit 0" "0" "$rc"
 assert_eq "qa-model: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "qa-model: spawn-worker argv contains --model claude-sonnet-4-6" \
-  "--model claude-sonnet-4-6 839 $TMPDIR_TEST/project/worktrees/839-test" \
-  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+wait_launch_log 1
+assert_eq "qa-model: launcher argv has NO --model (launcher derives it)" \
+  "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
 mat_teardown
 
-# --- phase→model integration: non-qa phase → no --model forwarded (Opus default)
-# An unmapped phase (implement) emits nothing from dispatch-phase-model, so no
-# --model flag is passed to dispatch-spawn-worker and the worker inherits the
-# session default (Opus).
-echo "Test: materialize-spawn implement phase → no --model forwarded (Opus default) (#1171)"
+echo "Test: materialize-spawn implement phase → router forwards NO --model (#1391)"
 mat_setup
 export MAT_PHASE=implement
 out=$(run_mat 839 queue) ; rc=$?
 assert_eq "implement-model: exit 0" "0" "$rc"
 assert_eq "implement-model: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "implement-model: spawn-worker argv has no --model flag" \
+wait_launch_log 1
+assert_eq "implement-model: launcher argv has no --model flag" \
   "839 $TMPDIR_TEST/project/worktrees/839-test" \
-  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+  "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
 mat_teardown
 
-# --- phase→model integration: review phase → --model claude-sonnet-4-6 forwarded
-# When the recomputed PHASE is review, dispatch-materialize-spawn calls the real
-# dispatch-phase-model which emits claude-sonnet-4-6 (the review-fix orchestrator
-# runs on Sonnet; fix-authoring is delegated to an Opus subagent), so the
-# spawn-worker invocation must include --model claude-sonnet-4-6.
-echo "Test: materialize-spawn review phase → spawn-worker receives --model claude-sonnet-4-6 (#1172)"
+echo "Test: materialize-spawn review phase → router forwards NO --model to the launcher (#1391)"
 mat_setup
 export MAT_PHASE=review
 out=$(run_mat 839 queue) ; rc=$?
 assert_eq "review-model: exit 0" "0" "$rc"
 assert_eq "review-model: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "review-model: spawn-worker argv contains --model claude-sonnet-4-6" \
-  "--model claude-sonnet-4-6 839 $TMPDIR_TEST/project/worktrees/839-test" \
-  "$(cat "$TMPDIR_TEST/logs/spawn-worker.log")"
+wait_launch_log 1
+assert_eq "review-model: launcher argv has NO --model (launcher derives it)" \
+  "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
 mat_teardown
 
 echo "=== print_remote_access_block ==="
@@ -23038,6 +23333,369 @@ cmp9_rc=$?
 set -e
 assert_eq "nonexistent --worktree → exit 2" "2" "$cmp9_rc"
 cmp_teardown
+
+# ============================================================================
+# dispatch-launch-worker tests
+# ============================================================================
+echo "=== dispatch-launch-worker ==="
+#
+# dispatch-launch-worker is the scripted phase-initiation worker: it routes once
+# via dispatch-route and acts on the single directive — exec'ing the phase-skill
+# spawn for a real phase, or handling a mechanical disposition with no `claude`
+# session. These tests isolate the launcher from the full provision/route stack
+# by stubbing its DIRECT dependencies, each of which it calls as
+# "$SCRIPT_DIR/<name>" — so the launcher copy and every stub sit together in one
+# scratch dir, and $SCRIPT_DIR (resolved from the copy) points at the stubs.
+#
+# Stubs (all log their argv to per-stub log files):
+#   dispatch-route          — prints the directive from $LW_DIR/route-directive
+#                             and exits with the code in $LW_DIR/route-exit
+#                             (default 0). The wrong-worktree case sets exit 1
+#                             while still printing STOP wrong-worktree.
+#   dispatch-spawn-job      — logs argv to spawn-job-argv, exits 0. The launcher
+#                             `exec`s it, so the launcher process is replaced;
+#                             the test asserts on the log afterward.
+#   dispatch-spawn-tick     — logs a line to spawn-tick.log, exits 0.
+#   dispatch-apply-office-hours — logs argv to apply-oh-argv, exits 0.
+#   git                     — logs argv to git-argv (PUSH-STRANDED `git -C … push`)
+#                             and exits 0.
+# dispatch-phase-model is the REAL script (copied in), so the model-derivation
+# assertions exercise the actual qa/review → claude-sonnet-4-6 policy.
+#
+# The reservation ledger points at $LW_DIR/reservations via DISPATCH_RESERVATION_DIR
+# (so reservation_clear/_dir never need a git repo). Each mechanical-path test
+# pre-creates a marker named by the worktree basename and asserts it is removed;
+# the INVOKE test asserts the marker is RETAINED (the sweep reclaims it on the
+# phase session's registration, not the launcher).
+#
+# The test shell runs under `set -e`; the launcher can exit non-zero (arg
+# validation), so each invocation is wrapped to capture the rc.
+
+LW_DIR=""
+LW_WT=""
+LW_WT_BASENAME=""
+
+lw_setup() {
+  LW_DIR=$(mktemp -d)
+  # The launcher resolves siblings via $SCRIPT_DIR (its own dir), so the copy
+  # and every stub live together in $LW_DIR. The sourced ledger pulls in lib.sh
+  # and lib-claude-agents.sh from the same dir.
+  cp "$SCRIPT_DIR/dispatch-launch-worker" "$LW_DIR/dispatch-launch-worker"
+  cp "$SCRIPT_DIR/dispatch-phase-model" "$LW_DIR/dispatch-phase-model"
+  cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$LW_DIR/lib-reservation-ledger.sh"
+  cp "$SCRIPT_DIR/lib.sh" "$LW_DIR/lib.sh"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$LW_DIR/lib-claude-agents.sh"
+  chmod +x "$LW_DIR/dispatch-launch-worker" "$LW_DIR/dispatch-phase-model"
+
+  # The target worktree (arg 2): an existing dir with a safe-charset basename.
+  LW_WT="$LW_DIR/839-test-launch"
+  mkdir -p "$LW_WT"
+  LW_WT_BASENAME="$(basename "$LW_WT")"
+
+  # dispatch-route stub: print the chosen directive, exit with the chosen code.
+  # Records its cwd ($PWD) so the launcher's worktree-entry contract is testable:
+  # the REAL dispatch-route derives the worktree from `git rev-parse --show-toplevel`
+  # (its cwd), so the launcher must cd into <worktree-path> before calling it
+  # (regression guard for the #1405 detach dropping the old --cwd spawn's cwd).
+  cat > "$LW_DIR/dispatch-route" <<'STUB'
+#!/usr/bin/env bash
+D="$(cd "$(dirname "$0")" && pwd)"
+echo "route $*" >> "$D/route-argv"
+pwd > "$D/route-pwd"
+[[ -f "$D/route-directive" ]] && cat "$D/route-directive"
+if [[ -f "$D/route-exit" ]]; then exit "$(cat "$D/route-exit")"; fi
+exit 0
+STUB
+
+  # dispatch-spawn-job stub: log argv, exit 0 (the launcher exec's it).
+  cat > "$LW_DIR/dispatch-spawn-job" <<'STUB'
+#!/usr/bin/env bash
+D="$(cd "$(dirname "$0")" && pwd)"
+printf '%s\n' "$*" >> "$D/spawn-job-argv"
+exit 0
+STUB
+
+  # dispatch-spawn-tick stub: log a heartbeat line, exit 0.
+  cat > "$LW_DIR/dispatch-spawn-tick" <<'STUB'
+#!/usr/bin/env bash
+D="$(cd "$(dirname "$0")" && pwd)"
+echo "tick $*" >> "$D/spawn-tick.log"
+exit 0
+STUB
+
+  # dispatch-apply-office-hours stub: log argv, exit 0.
+  cat > "$LW_DIR/dispatch-apply-office-hours" <<'STUB'
+#!/usr/bin/env bash
+D="$(cd "$(dirname "$0")" && pwd)"
+printf '%s\n' "$*" >> "$D/apply-oh-argv"
+exit 0
+STUB
+
+  # git stub on PATH: log argv (PUSH-STRANDED's `git -C … push origin HEAD`),
+  # exit 0. The launcher's only git call is the explicit `git -C` push.
+  cat > "$LW_DIR/git" <<'STUB'
+#!/usr/bin/env bash
+D="$(cd "$(dirname "$0")" && pwd)"
+printf '%s\n' "$*" >> "$D/git-argv"
+exit 0
+STUB
+  chmod +x "$LW_DIR/dispatch-route" "$LW_DIR/dispatch-spawn-job" \
+    "$LW_DIR/dispatch-spawn-tick" "$LW_DIR/dispatch-apply-office-hours" \
+    "$LW_DIR/git"
+
+  # Point the ledger at a scratch dir (no git repo needed) and put the stub dir
+  # first on PATH so the `git` stub is found.
+  export DISPATCH_RESERVATION_DIR="$LW_DIR/reservations"
+  LW_SAVED_PATH="$PATH"
+  export PATH="$LW_DIR:$PATH"
+}
+
+lw_teardown() {
+  export PATH="$LW_SAVED_PATH"
+  unset DISPATCH_RESERVATION_DIR
+  rm -rf "$LW_DIR"
+  LW_DIR=""
+  LW_WT=""
+  LW_WT_BASENAME=""
+}
+
+# lw_write_marker — pre-create a reservation marker for the worktree basename.
+lw_write_marker() {
+  mkdir -p "$DISPATCH_RESERVATION_DIR"
+  printf 'session=sess-router\nissue=839\ntimestamp=2026-01-01T00:00:00Z\n' \
+    > "$DISPATCH_RESERVATION_DIR/$LW_WT_BASENAME"
+}
+
+# lw_marker_exists — yes/no whether the reservation marker is present.
+lw_marker_exists() {
+  [[ -f "$DISPATCH_RESERVATION_DIR/$LW_WT_BASENAME" ]] && echo yes || echo no
+}
+
+# lw_run — set the routed directive (+ optional route exit code), invoke the
+# launcher, capture rc. Args: <directive> [<route-exit>]
+lw_run() {
+  printf '%s' "$1" > "$LW_DIR/route-directive"
+  [[ $# -ge 2 ]] && printf '%s' "$2" > "$LW_DIR/route-exit"
+  set +e
+  "$LW_DIR/dispatch-launch-worker" 839 "$LW_WT" >/dev/null 2>&1
+  LW_RC=$?
+  set -e
+}
+
+# 1. INVOKE /implement → exec dispatch-spawn-job with the unmapped-phase flags
+# (no --model), reservation RETAINED, no park, no tick (the exec path hands the
+# heartbeat to the phase skill's Stop hook).
+echo "Test: INVOKE /implement → spawn-job exec, reservation retained, no tick"
+lw_setup
+lw_write_marker
+lw_run "INVOKE /implement"
+assert_eq "launch INVOKE /implement: exit 0" "0" "$LW_RC"
+# Regression guard (#1405): the launcher must cd into <worktree-path> before
+# calling dispatch-route, whose cross-check derives the worktree from its cwd.
+# A detached launcher inherits the router's cwd (main), so without the cd the
+# route runs against the wrong worktree and STOPs wrong-worktree — no phase ever
+# spawns. Assert the stub route observed the worktree as its cwd.
+assert_eq "launch INVOKE /implement: route invoked from worktree cwd" \
+  "$(cd "$LW_WT" && pwd)" "$(cat "$LW_DIR/route-pwd" 2>/dev/null || echo MISSING)"
+sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
+assert_eq "launch INVOKE /implement: spawn-job logged once" "1" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && wc -l < "$LW_DIR/spawn-job-argv" | tr -d ' ' || echo 0)"
+assert_eq "launch INVOKE /implement: spawn-job argv" \
+  "--no-verify --name $LW_WT_BASENAME --cwd $LW_WT /implement 839 $LW_WT" "$sj"
+assert_eq "launch INVOKE /implement: no --model in argv" "no" \
+  "$([[ "$sj" == *"--model"* ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /implement: reservation RETAINED" "yes" "$(lw_marker_exists)"
+assert_eq "launch INVOKE /implement: no apply-office-hours" "no" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /implement: no spawn-tick (exec path)" "no" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+lw_teardown
+
+# 1b. INVOKE /fix-conflicts → exec dispatch-spawn-job with the unmapped-phase
+# flags (no --model — conflict resolution inherits Opus), reservation RETAINED,
+# no tick. Guards against an inadvertent future model-mapping for this directive.
+echo "Test: INVOKE /fix-conflicts → spawn-job exec, no --model, reservation retained, no tick"
+lw_setup
+lw_write_marker
+lw_run "INVOKE /fix-conflicts"
+assert_eq "launch INVOKE /fix-conflicts: exit 0" "0" "$LW_RC"
+sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
+assert_eq "launch INVOKE /fix-conflicts: spawn-job logged once" "1" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && wc -l < "$LW_DIR/spawn-job-argv" | tr -d ' ' || echo 0)"
+assert_eq "launch INVOKE /fix-conflicts: spawn-job argv" \
+  "--no-verify --name $LW_WT_BASENAME --cwd $LW_WT /fix-conflicts 839 $LW_WT" "$sj"
+assert_eq "launch INVOKE /fix-conflicts: no --model in argv" "no" \
+  "$([[ "$sj" == *"--model"* ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /fix-conflicts: reservation RETAINED" "yes" "$(lw_marker_exists)"
+assert_eq "launch INVOKE /fix-conflicts: no apply-office-hours" "no" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /fix-conflicts: no spawn-tick (exec path)" "no" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+lw_teardown
+
+# 2. INVOKE /qa-fix → spawn-job carries --model claude-sonnet-4-6 (real
+# dispatch-phase-model qa policy) and the /qa-fix prompt.
+echo "Test: INVOKE /qa-fix → spawn-job with --model claude-sonnet-4-6"
+lw_setup
+lw_write_marker
+lw_run "INVOKE /qa-fix"
+assert_eq "launch INVOKE /qa-fix: exit 0" "0" "$LW_RC"
+sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
+assert_eq "launch INVOKE /qa-fix: spawn-job argv (with model)" \
+  "--no-verify --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /qa-fix 839 $LW_WT" \
+  "$sj"
+assert_eq "launch INVOKE /qa-fix: reservation RETAINED" "yes" "$(lw_marker_exists)"
+lw_teardown
+
+# 3. INVOKE /review-fix → spawn-job carries --model claude-sonnet-4-6 (review policy).
+echo "Test: INVOKE /review-fix → spawn-job with --model claude-sonnet-4-6"
+lw_setup
+lw_write_marker
+lw_run "INVOKE /review-fix"
+assert_eq "launch INVOKE /review-fix: exit 0" "0" "$LW_RC"
+sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
+assert_eq "launch INVOKE /review-fix: spawn-job argv (with model)" \
+  "--no-verify --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /review-fix 839 $LW_WT" \
+  "$sj"
+lw_teardown
+
+# 4. STOP done → reservation cleared + spawn-tick called; no spawn-job, no park.
+echo "Test: STOP done → reservation cleared + tick, no spawn/park"
+lw_setup
+lw_write_marker
+lw_run "STOP done"
+assert_eq "launch STOP done: exit 0" "0" "$LW_RC"
+assert_eq "launch STOP done: reservation CLEARED" "no" "$(lw_marker_exists)"
+assert_eq "launch STOP done: spawn-tick called" "yes" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+assert_eq "launch STOP done: no spawn-job" "no" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && echo yes || echo no)"
+assert_eq "launch STOP done: no apply-office-hours" "no" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+lw_teardown
+
+# 5. STOP waiting → reservation cleared + tick; no spawn/park.
+echo "Test: STOP waiting → reservation cleared + tick, no spawn/park"
+lw_setup
+lw_write_marker
+lw_run "STOP waiting"
+assert_eq "launch STOP waiting: exit 0" "0" "$LW_RC"
+assert_eq "launch STOP waiting: reservation CLEARED" "no" "$(lw_marker_exists)"
+assert_eq "launch STOP waiting: spawn-tick called" "yes" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+assert_eq "launch STOP waiting: no apply-office-hours" "no" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+lw_teardown
+
+# 6. STOP wrong-worktree → handled even though dispatch-route exits 1; reservation
+# cleared + tick; no spawn/park.
+echo "Test: STOP wrong-worktree (route exit 1) → reservation cleared + tick"
+lw_setup
+lw_write_marker
+lw_run "STOP wrong-worktree" 1
+assert_eq "launch STOP wrong-worktree: exit 0" "0" "$LW_RC"
+assert_eq "launch STOP wrong-worktree: reservation CLEARED" "no" "$(lw_marker_exists)"
+assert_eq "launch STOP wrong-worktree: spawn-tick called" "yes" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+assert_eq "launch STOP wrong-worktree: no apply-office-hours" "no" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+lw_teardown
+
+# 7. STOP provision-failed → park (apply-office-hours <N> <reason>) + reservation
+# cleared + tick; no spawn-job.
+echo "Test: STOP provision-failed → park + reservation cleared + tick"
+lw_setup
+lw_write_marker
+lw_run "STOP provision-failed"
+assert_eq "launch STOP provision-failed: exit 0" "0" "$LW_RC"
+oh=$(cat "$LW_DIR/apply-oh-argv" 2>/dev/null || echo "")
+assert_eq "launch STOP provision-failed: apply-office-hours targets #839" "yes" \
+  "$([[ "$oh" == 839\ * ]] && echo yes || echo no)"
+assert_eq "launch STOP provision-failed: reservation CLEARED" "no" "$(lw_marker_exists)"
+assert_eq "launch STOP provision-failed: spawn-tick called" "yes" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+assert_eq "launch STOP provision-failed: no spawn-job" "no" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && echo yes || echo no)"
+lw_teardown
+
+# 8. PUSH-STRANDED → git push origin HEAD logged + park + reservation cleared +
+# tick; no spawn-job.
+echo "Test: PUSH-STRANDED → git push + park + reservation cleared + tick"
+lw_setup
+lw_write_marker
+lw_run "PUSH-STRANDED"
+assert_eq "launch PUSH-STRANDED: exit 0" "0" "$LW_RC"
+g=$(cat "$LW_DIR/git-argv" 2>/dev/null || echo "")
+assert_eq "launch PUSH-STRANDED: git push origin HEAD logged" \
+  "-C $LW_WT push origin HEAD" "$g"
+assert_eq "launch PUSH-STRANDED: apply-office-hours targets #839" "yes" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+assert_eq "launch PUSH-STRANDED: reservation CLEARED" "no" "$(lw_marker_exists)"
+assert_eq "launch PUSH-STRANDED: spawn-tick called" "yes" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+assert_eq "launch PUSH-STRANDED: no spawn-job" "no" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && echo yes || echo no)"
+lw_teardown
+
+# 9. Defensive: an unrecognized directive parks with a clear reason + tick.
+echo "Test: unrecognized directive → park + tick"
+lw_setup
+lw_write_marker
+lw_run "SOMETHING UNEXPECTED"
+assert_eq "launch unrecognized: exit 0" "0" "$LW_RC"
+oh=$(cat "$LW_DIR/apply-oh-argv" 2>/dev/null || echo "")
+assert_eq "launch unrecognized: apply-office-hours targets #839" "yes" \
+  "$([[ "$oh" == 839\ * ]] && echo yes || echo no)"
+assert_eq "launch unrecognized: reason names the bad directive" "yes" \
+  "$([[ "$oh" == *"unrecognized route directive"* ]] && echo yes || echo no)"
+assert_eq "launch unrecognized: reservation CLEARED" "no" "$(lw_marker_exists)"
+assert_eq "launch unrecognized: spawn-tick called" "yes" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+assert_eq "launch unrecognized: no spawn-job" "no" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && echo yes || echo no)"
+lw_teardown
+
+# 9b. Route failure: a non-zero route exit with NO directive (empty stdout) is a
+# genuine infrastructure failure (e.g. dispatch-ci-ready exiting 2), NOT an
+# office-hours-worthy "unrecognized directive". The launcher must surface the real
+# exit code and release+tick rather than park the issue with a misleading
+# "unrecognized route directive ''" reason (LW-001). It must NOT call
+# apply-office-hours, MUST clear the reservation, MUST tick, and MUST exit with the
+# route's own non-zero code.
+echo "Test: empty directive + route-exit 2 → release+tick, NO park, exit 2"
+lw_setup
+lw_write_marker
+lw_run "" 2
+assert_eq "launch route-fail: surfaces route exit code" "2" "$LW_RC"
+assert_eq "launch route-fail: no apply-office-hours (no park)" "no" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+assert_eq "launch route-fail: reservation CLEARED" "no" "$(lw_marker_exists)"
+assert_eq "launch route-fail: spawn-tick called" "yes" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+assert_eq "launch route-fail: no spawn-job" "no" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && echo yes || echo no)"
+lw_teardown
+
+# 10. Arg validation: each malformed call exits 2.
+echo "Test: arg validation → exit 2"
+lw_setup
+# missing second positional
+set +e; "$LW_DIR/dispatch-launch-worker" 839 >/dev/null 2>&1; rc_missing=$?; set -e
+assert_eq "launch arg: missing worktree → exit 2" "2" "$rc_missing"
+# extra positional
+set +e; "$LW_DIR/dispatch-launch-worker" 839 "$LW_WT" extra >/dev/null 2>&1; rc_extra=$?; set -e
+assert_eq "launch arg: extra positional → exit 2" "2" "$rc_extra"
+# non-numeric N
+set +e; "$LW_DIR/dispatch-launch-worker" abc "$LW_WT" >/dev/null 2>&1; rc_nan=$?; set -e
+assert_eq "launch arg: non-numeric N → exit 2" "2" "$rc_nan"
+# missing worktree dir
+set +e; "$LW_DIR/dispatch-launch-worker" 839 "$LW_DIR/no-such-dir" >/dev/null 2>&1; rc_nodir=$?; set -e
+assert_eq "launch arg: missing worktree dir → exit 2" "2" "$rc_nodir"
+# unsafe-char path (a real dir whose name carries a disallowed char)
+mkdir -p "$LW_DIR/bad worktree"
+set +e; "$LW_DIR/dispatch-launch-worker" 839 "$LW_DIR/bad worktree" >/dev/null 2>&1; rc_unsafe=$?; set -e
+assert_eq "launch arg: unsafe-char path → exit 2" "2" "$rc_unsafe"
+lw_teardown
 
 # ============================================================================
 # summary

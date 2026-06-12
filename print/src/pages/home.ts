@@ -4,7 +4,6 @@ import type { User } from "../auth.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { listCloud } from "../library.js";
 import { getMediaDownloadUrl } from "../storage.js";
-import { wireMarkdownActions } from "../markdown-actions.js";
 import { renderLocalIntoList } from "../local-folder-ui.js";
 import type { MediaItem, MediaType } from "../types.js";
 
@@ -112,7 +111,7 @@ export async function renderHome(user: User | null): Promise<string> {
   `;
 }
 
-export function afterRenderHome(outlet: HTMLElement): void {
+export function wireDownloadActions(outlet: HTMLElement): void {
   outlet.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
     const downloadBtn = target.closest(".media-download") as HTMLButtonElement | null;
@@ -121,8 +120,9 @@ export function afterRenderHome(outlet: HTMLElement): void {
       handleDownload(downloadBtn).catch((err) => logError(err, { operation: "download" }));
     }
   });
-  wireMarkdownActions(outlet);
+}
 
+export function afterRenderHome(outlet: HTMLElement): void {
   // Repopulate local items into the freshly-rendered media list. The folder
   // button itself lives in the nav (initialized once at startup in main.ts).
   renderLocalIntoList(outlet).catch((err) =>
