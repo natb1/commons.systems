@@ -549,6 +549,31 @@ describe("createHistoryRouter", () => {
     }
   });
 
+  it("does not intercept backslash-prefixed href that resolves cross-origin", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    // "/\evil.com/about" — passes startsWith("/") && !startsWith("//")
+    // string guards but the WHATWG URL parser normalizes the backslash to a
+    // slash, resolving cross-origin to //evil.com/about.
+    anchor.setAttribute("href", "/" + "\\" + "evil.com/about");
+    document.body.appendChild(anchor);
+
+    try {
+      expect(() => anchor.click()).not.toThrow();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
   it("does not intercept unknown same-origin path with no matching route", async () => {
     router = createHistoryRouter(outlet, routes);
     await vi.waitFor(() => {
