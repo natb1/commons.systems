@@ -32,25 +32,39 @@ and `npx`-backed scans (CodeQL, the dependency audit) with
 
 ## Idempotency preamble
 
-Before running any step, resolve the PR number, its labels, and its body from the
-current branch (use `dangerouslyDisableSandbox: true` — `gh` needs network):
+Before running any step, hydrate the PR and diff context in **one** call. This
+single `dispatch-context-pack --pr --diff` call replaces both the old idempotency
+PR fetch and Step 1's diff capture — review-fix has no `origin/main` merge between
+the preamble and Step 1 (the dispatch tick merges `origin/main` before spawning
+this skill), so one combined call up top is correct. The branch encodes the issue
+number as `<N>-…`, so derive `N` from it first (the pack takes the issue number,
+not the branch). Use `dangerouslyDisableSandbox: true` — the pack calls `gh`:
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-PR_JSON=$(gh pr view "$BRANCH" --json number,labels,body)
-PR_NUM=$(jq -r .number <<<"$PR_JSON")
-jq -r '.labels[].name' <<<"$PR_JSON"
+N="${BRANCH%%-*}"
+.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --diff \
+  | tee "tmp/pack-$N.txt"
 ```
 
-A here-string (`<<<`) is used, not `echo "$PR_JSON" | jq`, because zsh `echo`
-un-escapes `\t`/`\n` in the JSON and injects raw control chars `jq` rejects — see
-`.claude/rules/shell-json.md`.
+The `tee` keeps the output on disk at `tmp/pack-<N>.txt` so Step 1 can extract the
+`--- files ---` block from it without a second pack call. Read these from the
+output — do not re-resolve any of them later:
 
-`PR_NUM` is carried through to every later step — do not re-resolve. The PR body
-stays in `PR_JSON` (`jq -r .body <<<"$PR_JSON"`); Step 3 parses its
-`Closes #N` line(s) to resolve the issue(s) this PR implements.
+- **`PR_NUM`** and the **labels** line from the `=== PR ===` section (used by the
+  `dispatch:reviewed` re-entry check below and carried through to every later
+  step). If that section prints the single line `PR: none` (the pack exits 0 in
+  both cases — detect no-PR by this line, never by exit code), the branch has no
+  open PR.
+- The PR **body** from the `=== PR ===` section — Step 2 parses its `Closes #N`
+  line(s) to resolve the issue(s) this PR implements (`implementing_issues`). There
+  is no `PR_JSON`; the body lives only in this pack output.
+- **`MERGE_BASE`** — read it from the `=== DIFF (base <sha>) ===` header line. This
+  `<sha>` is exactly the value the old `git merge-base HEAD origin/main` produced.
+- The **changed-file list** — the lines between the literal `--- files ---` and
+  `--- hunks ---` markers in the `=== DIFF ===` section.
 
-If the printed labels already include `dispatch:reviewed` — an interrupted prior
+If the labels line already includes `dispatch:reviewed` — an interrupted prior
 run — **skip Steps 1–6** and go straight to Step 7, which flushes any unpushed
 commits and writes the marker. `dispatch:reviewed` is this skill's terminal
 action and is already applied, so re-entry is a no-op beyond Step 7's terminal
@@ -66,24 +80,40 @@ marker. Otherwise run all steps in order.
 
 ### 1. Capture the diff context and run the inline bash scans
 
-All reviews look at the same diff. Capture it once:
+All reviews look at the same diff — and the preamble's single
+`dispatch-context-pack --pr --diff` call already captured it. Do **not** run a
+fresh `git fetch` / `git merge-base` / `git diff` here. `MERGE_BASE` is the `<sha>`
+read from the pack's `=== DIFF (base <sha>) ===` header (keep this variable name —
+it is referenced downstream by the dependency audit and the Workflow `merge_base`
+arg). Dropping `git fetch origin main` is valid by #1426 design: the phase-entry
+merge already keeps `origin/main` current and the pack does no fetch of its own.
+
+To classify the changed surface, feed `dispatch-security-surface` the changed-file
+list from the pack's `--- files ---` block — already on disk at `tmp/pack-<N>.txt`
+from the preamble's `tee`. Extract the file list between the markers (`sed '1d;$d'`
+strips the two marker lines themselves) and pipe it to the classifier (no
+`dangerouslyDisableSandbox` needed — pure stdin→stdout):
 
 ```bash
-git fetch origin main
-MERGE_BASE=$(git merge-base HEAD origin/main)
-git diff --name-only "$MERGE_BASE"...HEAD
+sed -n '/^--- files ---$/,/^--- hunks ---$/p' tmp/pack-<N>.txt | sed '1d;$d' \
+  | .claude/skills/dispatch-propagate/scripts/dispatch-security-surface
 ```
 
-Classify the changed surface (no `dangerouslyDisableSandbox` needed — pure
-stdin→stdout):
+Capture that classifier output as `SURFACE_OUT` and extract the fields exactly as
+before:
 
 ```bash
-SURFACE_OUT=$(git diff --name-only "$MERGE_BASE"...HEAD \
-  | .claude/skills/dispatch-propagate/scripts/dispatch-security-surface)
 surface=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^surface=//p')
 deps=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^deps=//p')
 app_or_rules=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^app_or_rules=//p')
 ```
+
+Correctness note: the pack's `--diff` uses two-dot `git diff $base` (working-tree,
+includes uncommitted) where review-fix previously used three-dot
+`$MERGE_BASE...HEAD` (committed only); on a clean post-merge worktree the
+changed-file **set** is identical. The `--- files ---` list is never truncated
+(only hunk bodies are capped), so the security-surface feed is complete regardless
+of diff size.
 
 - `surface` is `empty` (no changed files), `docs` (every changed path is
   documentation — markdown/text/license, no executable, config, dependency, or
@@ -161,8 +191,8 @@ change. Normalize each alert to the **Per-finding schema**:
   from non-security rules instead of collapsing them all to `low`.
 - **Recommended fix** — the rule's remediation guidance.
 
-If the branch has no open PR (`gh pr view` exited non-zero in the idempotency
-preamble), skip the fetch and record the CodeQL scan as "could not run (no PR
+If the branch has no open PR (the pack's `=== PR ===` section printed `PR: none`),
+skip the fetch and record the CodeQL scan as "could not run (no PR
 ref)" with no findings. An empty alert array is normal — no open CodeQL alerts —
 and is not an error.
 
@@ -171,14 +201,14 @@ the Workflow.
 
 ### 2. Build `args` and invoke the Workflow
 
-Collect the fields for the Workflow invocation. Parse `Closes #N` from the PR
-body (`jq -r .body <<<"$PR_JSON"`) to resolve `implementing_issues`:
+Collect the fields for the Workflow invocation. Parse `Closes #N` from the pack's
+`=== PR ===` body to resolve `implementing_issues`:
 
 ```
 args = {
   pr_num:              <PR_NUM>,
   merge_base:          <MERGE_BASE>,
-  changed_files:       [ ...from git diff --name-only... ],
+  changed_files:       [ ...from the pack's --- files --- list... ],
   surface:             "empty" | "docs" | "code",
   deps:                <true|false>,
   app_or_rules:        <true|false>,
