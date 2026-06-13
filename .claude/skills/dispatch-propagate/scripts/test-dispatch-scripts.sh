@@ -397,6 +397,17 @@ case "$args" in
     # $STUB_DIR/issue-labels-<num>.json supplies the labels object; absence means
     # the issue carries no labels.
     num=$(echo "$args" | awk '{print $3}')
+    # #1314: a per-issue fail-count sentinel makes the stub emit a transient
+    # (HTTP 503) error and decrement the count, so gh_retry retries. Absent by
+    # default → every existing test is unaffected; exhausted → serve labels.
+    if [[ -f "$STUB_DIR/issue-view-fail-${num}" ]]; then
+      remaining=$(cat "$STUB_DIR/issue-view-fail-${num}")
+      if [[ "$remaining" -gt 0 ]]; then
+        echo $((remaining - 1)) > "$STUB_DIR/issue-view-fail-${num}"
+        echo "HTTP 503: Service Unavailable" >&2
+        exit 1
+      fi
+    fi
     if [[ -f "$STUB_DIR/issue-labels-${num}.json" ]]; then
       cat "$STUB_DIR/issue-labels-${num}.json"
     else
@@ -781,6 +792,30 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf '{"labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/issue-labels-42.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "no PR + non-planned label → plan" "plan" "$result"
+teardown
+
+# 1d. No PR + persistently-transient gh failure → exit non-zero, NOT a silent
+# "plan" (the bug in #1314). GH_RETRY_ATTEMPTS defaults to 4, so a fail count of
+# 5 exhausts every attempt. The fix exits 1.
+echo "Test: no PR + persistently-transient gh failure → exit 1, not plan"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo 5 > "$STUB_DIR/issue-view-fail-42"
+result=$("$TMPDIR_TEST/dispatch-phase" "42" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "transient-exhausted → exit 1" "1" "$rc"
+assert_eq "transient-exhausted → empty stdout (not plan)" "" "$result"
+teardown
+
+# 1e. No PR + transient-then-succeed gh → gh_retry retries within the 4-attempt
+# budget and the phase is derived correctly (implement), proving the retry fires
+# and self-heals instead of the old silent "plan" fallback.
+echo "Test: no PR + transient-then-succeed gh → retries, derives implement"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo 2 > "$STUB_DIR/issue-view-fail-42"
+printf '{"labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "transient-then-succeed → implement" "implement" "$result"
 teardown
 
 # 2. Draft + failing CI → fix-checks
