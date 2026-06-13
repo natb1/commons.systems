@@ -643,4 +643,29 @@ describe("createHistoryRouter", () => {
       document.body.removeChild(anchor);
     }
   });
+
+  it("matches y-flagged RegExp route correctly under the onClick+navigate double call", async () => {
+    const yRoutes: [Route, ...Route[]] = [
+      { path: "/", render: () => "<h2>Home</h2>" },
+      { path: /^\/post\//y, render: (path) => `<h2>Post: ${path}</h2>` },
+    ];
+    router = createHistoryRouter(outlet, yRoutes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/post/a");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await vi.waitFor(() => {
+        expect(outlet.innerHTML).toBe("<h2>Post: /post/a</h2>");
+      });
+      expect(location.pathname).toBe("/post/a");
+    } finally {
+      document.body.removeChild(anchor);
+    }
+  });
 });

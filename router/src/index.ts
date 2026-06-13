@@ -5,8 +5,11 @@ export interface Route {
    * Path to match. A string matches by exact equality; a RegExp matches via
    * `.test(path)`. The router resets the RegExp's `lastIndex` to 0 before each
    * match, so a `g`- or `y`-flagged pattern is matched correctly regardless of
-   * call frequency. Those flags are unnecessary here — matching tests the whole
-   * path string — but they are safe.
+   * call frequency. Those flags are unnecessary here — `lastIndex` is reset
+   * before every call — but they are safe. Note that `.test(path)` returns
+   * `true` if the pattern matches anywhere in the path, not just the whole
+   * string; users who want exact-boundary matching should anchor their
+   * patterns with `^` and `$`.
    */
   readonly path: `/${string}` | RegExp;
   /**
