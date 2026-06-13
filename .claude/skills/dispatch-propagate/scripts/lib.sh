@@ -891,6 +891,16 @@ ensure_recover_unit() {
     echo "WARNING: ensure_recover_unit: main worktree path contains a space; refusing to write unit; OnFailure recovery unavailable" >&2
     return 1
   fi
+  # ExecStart= is double-quoted ("$RECOVER_SCRIPT"); RECOVER_SCRIPT is derived
+  # from main_worktree below. An embedded double-quote in the path would
+  # prematurely close that quoted token, making systemd parse the executable and
+  # arguments wrong (bad-setting) and permanently break the unit. The path never
+  # legitimately contains a double-quote; reject it rather than emit a malformed
+  # unit (same contract: warn + return 1).
+  if [[ "$main_worktree" == *'"'* ]]; then
+    echo "WARNING: ensure_recover_unit: main worktree path contains a double-quote; refusing to write unit; OnFailure recovery unavailable" >&2
+    return 1
+  fi
 
   local RECOVER_SCRIPT="$main_worktree/.claude/skills/dispatch-propagate/scripts/dispatch-tick-recover"
   local UNIT_DIR="${DISPATCH_RECOVER_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
