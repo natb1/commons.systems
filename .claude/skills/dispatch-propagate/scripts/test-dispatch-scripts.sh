@@ -11324,10 +11324,11 @@ if [[ "$log" == *"--unit=dispatch-reseed-target-979-10300"* \
    && "$log" == *"--on-calendar=@10300"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"dispatch-tick 979"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: under-cap systemd-run argv (unit + calendar + cwd + setenv + dispatch-tick 979)"
+  PASS=$((PASS + 1)); echo "  PASS: under-cap systemd-run argv (unit + calendar + cwd + setenv + KillMode + dispatch-tick 979)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap systemd-run argv (unit + calendar + cwd + setenv + dispatch-tick 979)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap systemd-run argv (unit + calendar + cwd + setenv + KillMode + dispatch-tick 979)"
   echo "    log: $log"
 fi
 edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
