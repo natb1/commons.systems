@@ -147,7 +147,14 @@ core::upload_to_gcs() {
   if [ -n "$group_id" ]; then
     META_ARGS+=(-h "x-goog-meta-groupid:${group_id}")
     local joined
-    joined="$(IFS=,; printf '%s' "${emails_ref[*]}" | tr '[:upper:]' '[:lower:]')"
+    local -a trimmed_emails=()
+    local e
+    for e in "${emails_ref[@]}"; do
+      e="${e#"${e%%[![:space:]]*}"}"   # strip leading whitespace
+      e="${e%"${e##*[![:space:]]}"}"   # strip trailing whitespace
+      trimmed_emails+=("$e")
+    done
+    joined="$(IFS=,; printf '%s' "${trimmed_emails[*]}" | tr '[:upper:]' '[:lower:]')"
     META_ARGS+=(-h "x-goog-meta-member_emails:${joined}")
   fi
 
