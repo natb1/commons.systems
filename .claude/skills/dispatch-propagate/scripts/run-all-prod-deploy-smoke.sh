@@ -7,12 +7,15 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
-# Post-merge context: origin/main == HEAD, so use HEAD~1 as base.
+# The workflow checks out github.sha and passes DIFF_BASE=github.event.before, so
+# change detection diffs the merge's own before...sha range, deterministic
+# regardless of run order.
 # DEPLOY_ALL=1 deploys every app with a hosting target (for workflow_dispatch).
 if [ "${DEPLOY_ALL:-}" = "1" ]; then
   CHANGED_APPS=$("$SCRIPT_DIR/get-changed-apps.sh" --all)
 else
-  CHANGED_APPS=$("$SCRIPT_DIR/get-changed-apps.sh" --base HEAD~1)
+  : "${DIFF_BASE:?DIFF_BASE required (set to github.event.before) for change detection}"
+  CHANGED_APPS=$("$SCRIPT_DIR/get-changed-apps.sh" --base "$DIFF_BASE")
 fi
 
 ensure_deps
