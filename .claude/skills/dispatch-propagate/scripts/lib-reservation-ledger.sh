@@ -26,6 +26,8 @@
 #   reservation_clear   <worktree-basename>
 #   reservation_exists  <worktree-basename>
 #   reservation_count
+#   reserved_claimed_nums
+#   claimed_issue_nums
 #   reservation_sweep
 #
 # reservation_dir
@@ -288,6 +290,74 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
     done
     (( had_nullglob )) || shopt -u nullglob
     printf '%s\n' "$count"
+    return 0
+  }
+
+  # reserved_claimed_nums — emit the UNIQUE issue numbers claimed by outstanding
+  # reservation markers, one per line. The durable (reserved) half of selection's
+  # claimed set. Each marker file is named exactly by the reserved worktree
+  # basename (`<N>-slug`), so the claimed number is the basename's numeric prefix
+  # `${bn%%-*}`. Reuses reservation_count's nullglob regular-file scan (the
+  # default glob already excludes the dot-prefixed `.tmp` in-flight tempfiles, so
+  # a concurrent reservation_write is never seen). NEVER fails — no daemon
+  # dependency, so an unresolvable/absent ledger dir emits nothing and returns 0,
+  # matching reservation_count's contract exactly.
+  #     return 0 — always; stdout carries the unique claimed <N> values, one per
+  #               line (empty for an absent/empty ledger).
+  reserved_claimed_nums() {
+    local dir
+    if ! dir=$(reservation_dir) || [[ ! -d "$dir" ]]; then
+      return 0
+    fi
+    local f bn
+    declare -A seen=()
+    # nullglob so a no-match glob expands to nothing rather than the literal
+    # pattern (mirrors reservation_count). Dotfiles (the `.tmp` tempfiles) are
+    # excluded by the default glob.
+    local had_nullglob=0
+    shopt -q nullglob && had_nullglob=1
+    shopt -s nullglob
+    for f in "$dir"/*; do
+      # Count only regular files directly in the dir (no recursion).
+      [[ -f "$f" ]] || continue
+      bn=$(basename "$f")
+      seen["${bn%%-*}"]=1
+    done
+    (( had_nullglob )) || shopt -u nullglob
+    local n
+    for n in "${!seen[@]}"; do
+      printf '%s\n' "$n"
+    done
+    return 0
+  }
+
+  # claimed_issue_nums — emit the DEDUPED union of the claimed issue numbers from
+  # live sessions (live_session_claimed_nums) and outstanding reservation markers
+  # (reserved_claimed_nums), one per line. This is selection's forward-derived
+  # claimed set, replacing the backward worktree walk.
+  #
+  # FAIL OPEN on live-UNKNOWN: live_session_claimed_nums returns 1 when the daemon
+  # is unqueryable. Rather than abort the whole derivation (which would strand
+  # selection), emit a one-line stderr diagnostic and continue with the reserved
+  # set ONLY. The reservation ledger is the durable, daemon-independent record, so
+  # a momentary daemon outage degrades to "reserved-only" rather than failing.
+  #     return 0 — always; stdout carries the deduped union (empty if both halves
+  #               are empty / the live half is UNKNOWN and the ledger is empty).
+  claimed_issue_nums() {
+    local live
+    if ! live=$(live_session_claimed_nums); then
+      printf 'lib-reservation-ledger: claimed_issue_nums — live sessions unqueryable; using reserved set only (fail open)\n' >&2
+      live=""
+    fi
+    local reserved
+    reserved=$(reserved_claimed_nums)
+    # Guard each side so an empty half does not contribute a phantom blank line
+    # that would survive `sort -u`. The `[[ -n ]]` test failing inside the pipe
+    # under pipefail is absorbed by the explicit `return 0` below.
+    {
+      [[ -n "$live" ]] && printf '%s\n' "$live"
+      [[ -n "$reserved" ]] && printf '%s\n' "$reserved"
+    } | sort -u
     return 0
   }
 
