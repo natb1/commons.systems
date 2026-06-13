@@ -14981,6 +14981,35 @@ else
 fi
 ib_teardown
 
+# --- Test 8: open, non-newline stdin → no 1s stall (regression for #1491) ---
+
+echo "Test: open non-newline stdin → hook returns fast (no read stall)"
+ib_setup
+echo '{"name":"123-foo"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+timeout 0.5 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" \
+  < <(printf '%s' '{"notification_type":"permission_prompt"}'; sleep 1) \
+  >/dev/null 2>&1
+rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 124 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: open-stdin: hook completed before the 0.5s timeout (no 1s read stall)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: open-stdin: hook was killed at 0.5s — read is still stalling"
+fi
+# Correctness: the payload must have been read and acted on — not merely
+# timed out empty (which would bypass the notification filter and park by
+# accident rather than by correct payload parsing). Mirror Test 1's check.
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_log" == *123* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: open-stdin: dispatch-apply-office-hours invoked with issue 123 (payload was read and acted on)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: open-stdin: dispatch-apply-office-hours invoked with issue 123 (payload was read and acted on)"
+  echo "    apply-log: $apply_log"
+fi
+ib_teardown
+
 # ============================================================================
 # dispatch-office-hours-strip hook tests
 # ============================================================================
