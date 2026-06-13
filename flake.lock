@@ -8,11 +8,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1781239065,
-        "narHash": "sha256-f0RhbIrYxEcdKdFbiXDWPLz+IssS+E8ORAheC0/vUY0=",
+        "lastModified": 1781314818,
+        "narHash": "sha256-76EizPNWUOPLqwg6OP1KnX7XE7FEdrsJ2zQQaRKLYT4=",
         "owner": "sadjow",
         "repo": "claude-code-nix",
-        "rev": "23a9a631d03d0e06af789996c5c97d7b0b6a1bf1",
+        "rev": "7c3c4413d8dbe29762fb5a9cb5443c3a72a9e18a",
         "type": "github"
       },
       "original": {
@@ -46,11 +46,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1781189114,
-        "narHash": "sha256-5inaamLgUMWy+MOBE9ChF9QAF1o/74LFuHkI0W/9rqc=",
+        "lastModified": 1781365335,
+        "narHash": "sha256-zqDBhXMzfbdlO7F2bGHe7MOtB3xngd/+4ieMHDC+ZXo=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "486595d2cf49cfcd649b58a284fa11ac0e34da22",
+        "rev": "5b6f5733726a1b2ccafb5dec6ac4ca7299fad66c",
         "type": "github"
       },
       "original": {
@@ -102,8 +102,8 @@
     "wezterm-windows-zip": {
       "flake": false,
       "locked": {
-        "lastModified": 1781255764,
-        "narHash": "sha256-XHHkIlQ0GhhAg+8mLXpCnounEz9mz9Cpa1bEyYXGjJA=",
+        "lastModified": 1781342324,
+        "narHash": "sha256-eadQd9US1MDNoKhuOkEeTpYRF2xf1VfOWnUmS26aWso=",
         "type": "tarball",
         "url": "https://github.com/wez/wezterm/releases/download/nightly/WezTerm-windows-nightly.zip"
       },
