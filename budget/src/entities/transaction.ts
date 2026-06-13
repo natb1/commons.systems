@@ -226,6 +226,7 @@ export function transactionToIdbRecord(t: Transaction): IdbTransaction {
 // ── IdbTransaction → Transaction ─────────────────────────────────────────────
 
 export function idbToTransaction(row: IdbTransaction): Transaction {
+  validateReimbursementRange(row.reimbursement);
   return {
     id: row.id as TransactionId,
     institution: row.institution,
