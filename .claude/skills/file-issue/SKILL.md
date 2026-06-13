@@ -389,8 +389,8 @@ Classify from title and body. Type and topic are orthogonal axes.
   `bug` only when the body carries at least one structural defect signal
   (expected-vs-actual behavior, reproduction steps, or an identified failure mode
   with a specific location or root cause) — keyword matches alone are not
-  sufficient. A request whose body lacks structural defect signals is
-  `enhancement` even if it mentions bug-flavored keywords.
+  sufficient. A request whose body lacks structural defect signals is not a
+  structural defect even if it mentions bug-flavored keywords.
 
 - **`enhancement`** — new feature, refinement, refactor, or hardening that adds
   capability or improves a working surface without fixing a defect. It is a
