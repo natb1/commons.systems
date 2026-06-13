@@ -142,6 +142,19 @@ def err_signature(c):
   | gsub("(/[A-Za-z0-9._-]+){3,}"; "PATH")  # long absolute paths -> PATH
   | .[0:120];                                # hard cap — opaque attacker-controlled data
 
+# Normalized command prefix for a Bash command string. Strips leading env-var
+# assignments, then keeps a path-like first token whole, otherwise the first two
+# whitespace tokens. Digit-normalize + cap come LAST so a separate numeric arg is
+# already dropped by prefix selection. Mirrors err_signature's opaque-data spirit.
+def cmd_prefix(c):
+  ( (c // "")
+    | sub("^([A-Za-z_][A-Za-z0-9_]*=[^ ]* +)+"; "")
+    | [splits("[ \t\n]+")] ) as $toks
+  | ( $toks[0] // "" ) as $t0
+  | ( if ($t0 | test("/")) then $t0 else ($toks[0:2] | join(" ")) end )
+  | gsub("[0-9]+"; "N")
+  | .[0:120];
+
 . as $msgs
 | (asst) as $a
 | (input_filename) as $path
@@ -207,6 +220,14 @@ def err_signature(c):
       | err_signature(.content)
     ] ) as $errors
 
+# Ordered per-session token list of tool calls, in document order. Bash calls
+# become "Bash:<cmd_prefix>"; other tools become their name.
+| ( [ $msgs[] | select(.type=="assistant")
+      | (.message.content // []) | if type=="array" then .[] else empty end
+      | select(type=="object" and .type=="tool_use")
+      | if .name=="Bash" then "Bash:" + cmd_prefix(.input.command // "") else .name end
+    ] ) as $tool_calls
+
 | {
     type: $type,
     id: $id,
@@ -220,7 +241,8 @@ def err_signature(c):
     usage: sum_usage([ $rows[].u ]),
     by_skill: $by_skill,
     by_skill_model: $by_skill_model,
-    errors: $errors
+    errors: $errors,
+    tool_calls: $tool_calls
   }
 STAGE1
 
@@ -259,6 +281,11 @@ def add_to_bucket(bucket; u; turns):
       turns: ((bucket.turns // 0) + turns),
       price_proxy_usd: price($nu)
     };
+
+# Consecutive n-grams of a token list as arrays. range upper bound goes negative
+# for lists shorter than n, yielding nothing — no explicit length guard needed.
+def ngrams($L; $n):
+  [ range(0; ($L | length) - $n + 1) as $i | $L[$i:$i+$n] ];
 
 . as $rows
 
@@ -325,6 +352,35 @@ def add_to_bucket(bucket; u; turns):
     | sort_by(.signature) | sort_by(-.count)
   ) as $tool_errors
 
+# ---- tool_sequences (bigrams + trigrams within each session) ----
+# Per-session n-gram arrays, keyed by (sequence | tojson) — collision-free and
+# reversible since tokens may contain spaces. count = total occurrences across
+# sessions; sessions_affected = distinct sessions containing the n-gram. Same
+# accumulation idiom as tool_errors. n=2 and n=3 share one key space.
+| ( [ $rows[] | ( (.tool_calls // []) | (ngrams(.; 2) + ngrams(.; 3)) ) ] ) as $session_ngrams
+| ( reduce $session_ngrams[] as $grams ({};
+      ( [ $grams[] | tojson ] ) as $keys
+      | ( $keys | unique ) as $distinct
+      | reduce ($keys[]) as $k (.;
+          .[$k].count = ((.[$k].count // 0) + 1)
+        )
+      | reduce ($distinct[]) as $k (.;
+          .[$k].sessions_affected = ((.[$k].sessions_affected // 0) + 1)
+        )
+    )
+    | to_entries
+    | map( (.key | fromjson) as $seq
+           | { sequence: $seq, n: ($seq | length),
+               count: .value.count, sessions_affected: .value.sessions_affected,
+               _key: .key } )
+    | sort_by(._key) | sort_by(-.count)
+    | ( length ) as $m
+    | { top: ( .[0:25] | map(del(._key)) ),
+        distinct: $m,
+        kept: (if $m < 25 then $m else 25 end),
+        truncated: (if $m > 25 then $m - 25 else 0 end) }
+  ) as $tool_sequences
+
 # ---- per-session summaries ----
 | ( [ $rows[] | {
         id: .id, file: .file, type: .type,
@@ -371,6 +427,7 @@ def add_to_bucket(bucket; u; turns):
     by_model: $by_model,
     by_phase_model: $by_phase_model,
     tool_errors: $tool_errors,
+    tool_sequences: $tool_sequences,
     lenses: {
       context_over_120k: $ctx_lens,
       small_sessions: $small_lens
@@ -415,6 +472,15 @@ WINDOW_JSON=$(jq -n \
 # Stage-2: fold stage-1 lines into the final document. `jq -s` over an empty file
 # yields [], which the program handles as the zero-files case.
 DOC=$(jq -s --argjson window "$WINDOW_JSON" -f "$TMP/stage2.jq" "$STAGE1_OUT")
+
+# No silent cap: if tool_sequences was truncated, report it to STDERR (never
+# stdout — stdout must stay a pure JSON document).
+TRUNC=$(jq '.tool_sequences.truncated' <<<"$DOC")
+if [[ "$TRUNC" -gt 0 ]]; then
+  KEPT=$(jq '.tool_sequences.kept' <<<"$DOC")
+  DISTINCT=$(jq '.tool_sequences.distinct' <<<"$DOC")
+  echo "aggregate-usage.sh: tool_sequences truncated: kept $KEPT of $DISTINCT distinct sequences" >&2
+fi
 
 if [[ -n "$JSON_OUT" ]]; then
   printf '%s\n' "$DOC" >"$JSON_OUT"

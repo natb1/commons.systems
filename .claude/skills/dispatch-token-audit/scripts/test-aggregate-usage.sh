@@ -57,11 +57,13 @@ setup() {
     >> "$worker_jsonl"
 
   # line 2: assistant — plan-implement, opus, usage input=1000, cc=2000, cr=4000, out=500
-  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"999-fixture","message":{"model":"claude-opus-4-8","usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
+  # Tool calls A,B (context-pack, gh issue). Usage/model unchanged; content added.
+  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"999-fixture","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_001","name":"Bash","input":{"command":".claude/skills/dispatch-propagate/scripts/dispatch-context-pack 999 --pr"}},{"type":"tool_use","id":"toolu_002","name":"Bash","input":{"command":"gh issue view 999 --json labels"}}],"usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
     >> "$worker_jsonl"
 
   # line 3: assistant — same model/skill/branch, usage input=100, cc=200, cr=400, out=50
-  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"999-fixture","message":{"model":"claude-opus-4-8","usage":{"input_tokens":100,"cache_creation_input_tokens":200,"cache_read_input_tokens":400,"output_tokens":50}}}' \
+  # Tool calls A,B again → session document order A,B,A,B. Usage/model unchanged.
+  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"999-fixture","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_003","name":"Bash","input":{"command":".claude/skills/dispatch-propagate/scripts/dispatch-context-pack 999 --pr"}},{"type":"tool_use","id":"toolu_004","name":"Bash","input":{"command":"gh issue view 999 --json labels"}}],"usage":{"input_tokens":100,"cache_creation_input_tokens":200,"cache_read_input_tokens":400,"output_tokens":50}}}' \
     >> "$worker_jsonl"
 
   # line 4: tool-error user line — normalizes to "Exit code N"
@@ -162,6 +164,16 @@ assert_eq 'tool_errors: "Exit code N" count' "1" \
   "$(jq '[.tool_errors[] | select(.signature=="Exit code N")] | length' <<<"$OUT")"
 assert_eq 'tool_errors: "Exit code N" .count field' "1" \
   "$(jq '[.tool_errors[] | select(.signature=="Exit code N")][0].count' <<<"$OUT")"
+
+# tool_sequences: worker session calls A,B,A,B → bigram [A,B] count 2, n 2.
+assert_eq 'tool_sequences [context-pack,gh issue] bigram count' "2" \
+  "$(jq '[.tool_sequences.top[] | select(.sequence==["Bash:.claude/skills/dispatch-propagate/scripts/dispatch-context-pack","Bash:gh issue"])][0].count' <<<"$OUT")"
+assert_eq 'tool_sequences that bigram n==2' "2" \
+  "$(jq '[.tool_sequences.top[] | select(.sequence==["Bash:.claude/skills/dispatch-propagate/scripts/dispatch-context-pack","Bash:gh issue"])][0].n' <<<"$OUT")"
+assert_eq 'tool_sequences.truncated' "0" \
+  "$(jq '.tool_sequences.truncated' <<<"$OUT")"
+assert_eq 'tool_sequences.kept == distinct' "true" \
+  "$(jq '.tool_sequences.kept == .tool_sequences.distinct' <<<"$OUT")"
 
 report_results
 exit $FAIL
