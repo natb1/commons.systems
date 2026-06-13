@@ -150,8 +150,8 @@ core::upload_to_gcs() {
     local -a trimmed_emails=()
     local e
     for e in "${emails_ref[@]}"; do
-      e="${e#"${e%%[![:space:]]*}"}"   # strip leading whitespace
-      e="${e%"${e##*[![:space:]]}"}"   # strip trailing whitespace
+      e="${e#"${e%%[^[:space:]]*}"}"   # strip leading whitespace
+      e="${e%"${e##*[^[:space:]]}"}"   # strip trailing whitespace
       trimmed_emails+=("$e")
     done
     joined="$(IFS=,; printf '%s' "${trimmed_emails[*]}" | tr '[:upper:]' '[:lower:]')"
