@@ -12354,10 +12354,11 @@ assert_eq "backoff: dispatch-tick-recover exits 0" "0" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--on-calendar=@1000600"* \
-   && "$log" == *"--unit=dispatch-reseed-1000600"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: backoff: reseed armed at NOW + 600 (calendar + unit)"
+   && "$log" == *"--unit=dispatch-reseed-1000600"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: backoff: reseed armed at NOW + 600 (calendar + unit + killmode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: backoff: reseed armed at NOW + 600 (calendar + unit)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: backoff: reseed armed at NOW + 600 (calendar + unit + killmode)"
   echo "    log: $log"
 fi
 assert_eq "backoff: state count == 2" "2" "$(tr_state_count)"
@@ -12376,10 +12377,11 @@ assert_eq "reset-window: dispatch-tick-recover exits 0" "0" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--on-calendar=@1000300"* \
-   && "$log" == *"--unit=dispatch-reseed-1000300"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: reset-window: fresh episode armed at NOW + 300"
+   && "$log" == *"--unit=dispatch-reseed-1000300"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: reset-window: fresh episode armed at NOW + 300 (killmode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: reset-window: fresh episode armed at NOW + 300"
+  FAIL=$((FAIL + 1)); echo "  FAIL: reset-window: fresh episode armed at NOW + 300 (killmode)"
   echo "    log: $log"
 fi
 assert_eq "reset-window: state count == 1 (fresh episode)" "1" "$(tr_state_count)"
@@ -12425,10 +12427,11 @@ assert_eq "overflow-clamp: dispatch-tick-recover exits 0" "0" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--on-calendar=@1003600"* \
-   && "$log" == *"--unit=dispatch-reseed-1003600"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: overflow-clamp: backoff clamped to MAX, reseed at NOW + 3600"
+   && "$log" == *"--unit=dispatch-reseed-1003600"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: overflow-clamp: backoff clamped to MAX, reseed at NOW + 3600 (killmode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: overflow-clamp: backoff clamped to MAX, reseed at NOW + 3600"
+  FAIL=$((FAIL + 1)); echo "  FAIL: overflow-clamp: backoff clamped to MAX, reseed at NOW + 3600 (killmode)"
   echo "    log: $log"
 fi
 tr_teardown
