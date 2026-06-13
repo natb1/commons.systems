@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Extract the changed-file list from a dispatch-context-pack output.
+# Usage: dispatch-context-pack <N> --diff | dispatch-changed-files
+#
+# Reads a full dispatch-context-pack output on stdin. Prints the
+# newline-separated changed-file list from the === DIFF === section to stdout,
+# one path per line — nothing else. Composes as a pipe stage feeding
+# dispatch-security-surface.
+#
+# No network access, no git, no gh — pure stdin extraction.
+set -euo pipefail
+
+# --- read stdin once ----------------------------------------------------------
+
+input=$(cat)
+
+# --- validate: DIFF section must be present -----------------------------------
+
+if ! grep -q '^=== DIFF (base ' <<<"$input"; then
+  echo "dispatch-changed-files: error: no '=== DIFF (base ...)' section found in input" >&2
+  echo "dispatch-changed-files: pass --diff to dispatch-context-pack to include the diff section" >&2
+  exit 1
+fi
+
+# --- extract changed-file list ------------------------------------------------
+#
+# Two-stage extraction anchored to the DIFF section:
+#
+# Stage 1: isolate the DIFF section (always last — header to EOF).
+#          Anchored on the specific prefix '^=== DIFF (base ' so a bare
+#          '=== DIFF' line in a PR/issue body cannot start the range early.
+#
+# Stage 2: within the DIFF section, extract the files block between
+#          '--- files ---' and '--- hunks ---', then strip both marker lines.
+
+sed -n '/^=== DIFF (base /,$p' <<<"$input" \
+  | sed -n '/^--- files ---$/,/^--- hunks ---$/p' \
+  | sed '1d;$d'
