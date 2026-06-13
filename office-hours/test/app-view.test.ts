@@ -150,6 +150,24 @@ describe("renderApp — owner tier empty", () => {
     expect(capacityEmpty).not.toBeUndefined();
   });
 
+  it("renders the history-band empty states", () => {
+    const container = document.createElement("div");
+    withThemeFg(() =>
+      renderApp(container, { tier: "owner", samples: [], reminders: [] }, now),
+    );
+
+    const empties = Array.from(container.querySelectorAll(".empty"));
+    const usageEmpty = empties.find(
+      (el) => el.textContent === "No usage history to chart.",
+    );
+    expect(usageEmpty).not.toBeUndefined();
+
+    const workerEmpty = empties.find(
+      (el) => el.textContent === "No worker history to chart.",
+    );
+    expect(workerEmpty).not.toBeUndefined();
+  });
+
   it("does not render an .error element", () => {
     const container = document.createElement("div");
     withThemeFg(() =>

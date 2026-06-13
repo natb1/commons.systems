@@ -28,6 +28,29 @@ resolve_issue_number() {
   echo "$num"
 }
 
+# ---- parse_duration <str> — duration string to whole seconds ----------------
+# Accepts <int><unit> where unit is one of s|m|h|d|w (second/minute/hour/day/
+# week). Prints the duration in seconds on stdout and returns 0. On unparseable
+# input prints nothing and returns 1 — the caller decides how to surface it.
+# 10# forces base-10 so a leading-zero spec like "08h"/"012h" is not read as
+# octal (bash arithmetic treats a leading-zero literal as octal otherwise).
+parse_duration() {
+  local spec="$1" num unit
+  if [[ ! "$spec" =~ ^([0-9]+)([smhdw])$ ]]; then
+    return 1
+  fi
+  num=$(( 10#${BASH_REMATCH[1]} ))
+  unit="${BASH_REMATCH[2]}"
+  case "$unit" in
+    s) printf '%s\n' "$num" ;;
+    m) printf '%s\n' "$(( num * 60 ))" ;;
+    h) printf '%s\n' "$(( num * 3600 ))" ;;
+    d) printf '%s\n' "$(( num * 86400 ))" ;;
+    w) printf '%s\n' "$(( num * 604800 ))" ;;
+  esac
+  return 0
+}
+
 # Classify a captured gh stderr blob as transient (retryable) or deterministic.
 # Args: $1 = the captured stderr text.
 # Returns 0 when the blob matches a known transient class (HTTP 5xx, gateway
