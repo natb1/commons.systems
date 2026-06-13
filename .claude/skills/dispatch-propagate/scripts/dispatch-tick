@@ -303,7 +303,28 @@ run_materialize() {
   # — materialize-spawn now spawns a resolver bg job and emits `propagate`, so the
   # token no longer reaches here, but the branch keeps it a safe exit-0 disposition.
   case "$token" in
-    propagate|drain|drain\ *|notify\ *|resolve\ merge-conflict)
+    propagate|resolve\ merge-conflict)
+      # A worker/resolver was spawned — its Stop-hook carries the chain. Bare
+      # exit; calling recover here would wrongly increment its failure counter.
+      exit 0
+      ;;
+    notify\ *)
+      # Explicit-dispatch user-facing path: a one-shot named target, not the
+      # autonomous heartbeat — no continuation backstop needed.
+      exit 0
+      ;;
+    drain|drain\ *)
+      # #1445 backstop: a no-spawn drain (target-done / worktree-conflict /
+      # fan-out-all-done) spawns no worker and the headless tick never calls
+      # dispatch-self-close, so nothing else guarantees a continuation. Trigger
+      # the continuation-guarantor directly. Best-effort: recover self-limits
+      # (its continuation-check resets the consecutive-failure count when a
+      # reseed timer or busy worker already exists) and escalates past its cap
+      # via a dispatch:chain-stalled issue — both intended. Its OnFailure=
+      # handler is not wired on this direct call, which is fine: recover almost
+      # never fails and any real failure is logged below.
+      "$SCRIPT_DIR/dispatch-tick-recover" || \
+        echo "dispatch-tick: dispatch-tick-recover failed on '$token' (continuation not guaranteed)" >&2
       exit 0
       ;;
     *)
