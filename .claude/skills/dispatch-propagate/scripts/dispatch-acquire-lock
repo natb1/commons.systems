@@ -102,14 +102,16 @@
 #                               probe may run before it is treated as a wedged
 #                               daemon (timeout-bounded, with a SIGKILL
 #                               backstop). A healthy probe is sub-second.
-#                               Default: 10.
+#                               Must be a POSITIVE integer — 0 disables GNU
+#                               `timeout`'s bound and re-opens the unbounded-probe
+#                               hang, so it is rejected (exit 2). Default: 10.
 #   DISPATCH_LOCK_FLOCK_TIMEOUT Max seconds to wait for the in-section flock
 #                               before abandoning the attempt as contended.
-#                               MUST exceed DISPATCH_LOCK_PROBE_TIMEOUT plus
-#                               margin: the probe is the only slow op inside the
-#                               critical section, so a waiter must not abandon a
-#                               holder that is legitimately mid-probe.
-#                               Default: 15.
+#                               MUST strictly exceed DISPATCH_LOCK_PROBE_TIMEOUT:
+#                               the probe is the only slow op inside the critical
+#                               section, so a waiter must not abandon a holder
+#                               that is legitimately mid-probe. Enforced at
+#                               startup (exit 2 on violation). Default: 15.
 #
 # Stdout protocol (exactly one word):
 #   acquired  this dispatch tick holds the lock — proceed with the tick.
@@ -129,8 +131,10 @@
 #      disambiguates).
 #   2  the script cannot operate — not in a git repo and DISPATCH_LOCK_FILE is
 #      unset, CLAUDE_CODE_SESSION_ID is unset, an unknown/extra command-line
-#      argument, or an unexpected internal sentinel from a flock subshell (a
-#      should-never-happen guard).
+#      argument, a misconfigured timeout knob (DISPATCH_LOCK_PROBE_TIMEOUT not a
+#      positive integer, or DISPATCH_LOCK_FLOCK_TIMEOUT not strictly greater than
+#      it; acquire/wait only), or an unexpected internal sentinel from a flock
+#      subshell (a should-never-happen guard).
 #
 # NOT set -e: exits are handled explicitly (matching the sibling dispatch-sweep).
 set -uo pipefail
@@ -342,6 +346,37 @@ try_acquire() {            # 0 = acquired, 1 = contended; sets CONTENDED_SID
        exit 2 ;;
   esac
 }
+
+# ---- validate the timeout knobs ---------------------------------------------
+# Only try_acquire (acquire/wait modes) consumes the probe + in-section flock
+# timeouts; --release uses neither, so leave it unvalidated and unchanged.
+# A misconfigured knob is a broken environment — fail clear (exit 2), do not
+# fall back (matches the clear-error-over-fallback rule; same convention as the
+# git-repo and CLAUDE_CODE_SESSION_ID guards above).
+if [[ "$MODE" != "release" ]]; then
+  # PROBE_TIMEOUT must be a POSITIVE integer. `^[0-9]+$` alone is not enough:
+  # GNU `timeout 0 <cmd>` DISABLES the bound and runs the probe unbounded,
+  # silently re-opening the very wedged-daemon hang this script fixes (#1315).
+  if [[ ! "$PROBE_TIMEOUT" =~ ^[0-9]+$ || "$PROBE_TIMEOUT" -lt 1 ]]; then
+    echo "dispatch-acquire-lock: DISPATCH_LOCK_PROBE_TIMEOUT must be a positive integer (got '$PROBE_TIMEOUT'); 0 disables GNU timeout's bound and re-opens the unbounded-probe hang" >&2
+    exit 2
+  fi
+  if [[ ! "$FLOCK_TIMEOUT" =~ ^[0-9]+$ ]]; then
+    echo "dispatch-acquire-lock: DISPATCH_LOCK_FLOCK_TIMEOUT must be a non-negative integer (got '$FLOCK_TIMEOUT')" >&2
+    exit 2
+  fi
+  # FLOCK_TIMEOUT must STRICTLY exceed PROBE_TIMEOUT. The probe is the only slow
+  # op inside the critical section, so a waiter that gives up at or before the
+  # probe's normal ceiling would abandon a holder that is legitimately mid-probe
+  # and report a false busy. (The `-k 5` SIGKILL grace pushes a SIGTERM-ignoring
+  # probe to PROBE_TIMEOUT+5, but in that pathological case the holder genuinely
+  # IS wedged, so abandoning-to-busy is the fail-safe outcome — hence `>`, not
+  # `> PROBE_TIMEOUT + 5`, which the shipped 15/10 defaults would also fail.)
+  if [[ "$FLOCK_TIMEOUT" -le "$PROBE_TIMEOUT" ]]; then
+    echo "dispatch-acquire-lock: DISPATCH_LOCK_FLOCK_TIMEOUT ($FLOCK_TIMEOUT) must exceed DISPATCH_LOCK_PROBE_TIMEOUT ($PROBE_TIMEOUT); otherwise a waiter abandons a holder that is legitimately mid-probe" >&2
+    exit 2
+  fi
+fi
 
 # ---- dispatch the mode ------------------------------------------------------
 case "$MODE" in

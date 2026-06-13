@@ -6943,9 +6943,13 @@ export CLAUDE_CODE_SESSION_ID="sess-flock-mine"
 # Registry knows only our session → the recorded holder is stale (would be
 # reclaimed if the buggy fall-through ever ran the unlocked read-check-write).
 lock_fake_claude_sessions "sess-flock-mine"
-export DISPATCH_LOCK_FLOCK_TIMEOUT=1
+# FLOCK must strictly exceed PROBE (the startup guard enforces this), so set
+# PROBE=1 and FLOCK=2 — the smallest valid pair that still makes `flock -w 2`
+# time out against the 3s holder below. (The probe never runs here: the flock
+# wait times out before the read-check-write.)
+export DISPATCH_LOCK_PROBE_TIMEOUT=1 DISPATCH_LOCK_FLOCK_TIMEOUT=2
 # Hold the advisory lock on the same file for longer than FLOCK_TIMEOUT so the
-# acquirer's `flock -w 1` genuinely times out.
+# acquirer's `flock -w 2` genuinely times out.
 ( exec 9>>"$DISPATCH_LOCK_FILE"; flock 9; sleep 3 ) &
 flock_holder=$!
 sleep 0.5   # let the holder grab the flock before the acquirer contends
@@ -6955,6 +6959,71 @@ assert_eq "flock-timeout: returns within external budget" "0" "$rc"
 assert_eq "flock-timeout: prints busy" "busy" "$out"
 assert_eq "flock-timeout: lock file NOT clobbered" "sess-flock-stale" \
   "$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)"
+lock_teardown
+
+# --- Test 5d: timeout-knob validation — misconfig → exit 2 (#1315) -----------
+# DISPATCH_LOCK_FLOCK_TIMEOUT must strictly exceed DISPATCH_LOCK_PROBE_TIMEOUT
+# (else a waiter abandons a holder that is legitimately mid-probe), and
+# PROBE_TIMEOUT must be a POSITIVE integer (GNU `timeout 0` DISABLES the bound
+# and silently re-opens the unbounded-probe hang). The acquire/wait path
+# validates both at startup and exits 2 with a clear error rather than letting a
+# misconfigured knob degrade to an always-busy or unbounded probe.
+
+echo "Test: FLOCK_TIMEOUT <= PROBE_TIMEOUT → exit 2 with clear error"
+lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-5d-mine"
+lock_fake_claude_sessions "sess-5d-mine"
+export DISPATCH_LOCK_PROBE_TIMEOUT=10 DISPATCH_LOCK_FLOCK_TIMEOUT=10
+err=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"DISPATCH_LOCK_FLOCK_TIMEOUT"*"must exceed"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "FLOCK<=PROBE → error + exit 2" "ok" "$status"
+lock_teardown
+
+echo "Test: PROBE_TIMEOUT=0 → exit 2 (timeout 0 would disable the bound)"
+lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-5d2-mine"
+lock_fake_claude_sessions "sess-5d2-mine"
+export DISPATCH_LOCK_PROBE_TIMEOUT=0
+err=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"DISPATCH_LOCK_PROBE_TIMEOUT"*"positive integer"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "PROBE=0 → error + exit 2" "ok" "$status"
+lock_teardown
+
+# --- Test 5e: shipped defaults (probe 10, flock 15) PASS the guard (#1315) ----
+# Regression guard for the threshold decision: the constraint is `FLOCK > PROBE`
+# (strict), NOT `FLOCK > PROBE + 5` — a guard that rejected its own shipped
+# defaults (15 vs 10+5=15) would be broken. Setting the defaults explicitly must
+# acquire cleanly, not exit 2.
+
+echo "Test: shipped default timeouts (10/15) pass the guard and acquire"
+lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-5e-mine"
+lock_fake_claude_sessions "sess-5e-mine"
+export DISPATCH_LOCK_PROBE_TIMEOUT=10 DISPATCH_LOCK_FLOCK_TIMEOUT=15
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "default timeouts: guard not tripped (exit 0)" "0" "$rc"
+assert_eq "default timeouts: prints acquired" "acquired" "$out"
+lock_teardown
+
+# --- Test 5f: --release is NOT subject to the timeout-knob guard (#1315) ------
+# The probe + in-section flock timeouts are consumed only by acquire/wait;
+# --release uses neither, so a misconfigured knob must NOT make --release fail.
+# Releasing our own recorded sessionId succeeds even with FLOCK <= PROBE set.
+
+echo "Test: --release unaffected by a misconfigured timeout knob"
+lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-5f-mine"
+printf '%s\n' "sess-5f-mine" > "$DISPATCH_LOCK_FILE"
+export DISPATCH_LOCK_PROBE_TIMEOUT=10 DISPATCH_LOCK_FLOCK_TIMEOUT=5
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
+assert_eq "release with bad knobs: exit 0" "0" "$rc"
+assert_eq "release with bad knobs: prints released" "released" "$out"
 lock_teardown
 
 # --- Test 6a: misconfiguration — non-git dir, no DISPATCH_LOCK_FILE ----------
