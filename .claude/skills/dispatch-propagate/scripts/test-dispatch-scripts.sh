@@ -14891,6 +14891,24 @@ else
 fi
 ib_teardown
 
+# --- Test 8: open, non-newline stdin → no 1s stall (regression for #1491) ---
+
+echo "Test: open non-newline stdin → hook returns fast (no read stall)"
+ib_setup
+echo '{"name":"123-foo"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+timeout 0.5 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" \
+  < <(printf '%s' '{"notification_type":"permission_prompt"}'; sleep 1) \
+  >/dev/null 2>&1
+rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 124 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: open-stdin: hook completed before the 0.5s timeout (no 1s read stall)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: open-stdin: hook was killed at 0.5s — read is still stalling"
+fi
+ib_teardown
+
 # ============================================================================
 # dispatch-office-hours-strip hook tests
 # ============================================================================
