@@ -15249,8 +15249,16 @@ TOTAL=$((TOTAL + 1))
 if [[ "$pr_edit_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: strip open-stdin: 'gh pr edit 456 --remove-label' still invoked (drain did not break strip)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: 'gh pr edit 456 --remove-label' still invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: 'gh pr edit 456 --remove-label' NOT invoked (drain broke strip)"
   echo "    pr-edit-log: $pr_edit_log"
+fi
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip open-stdin: 'gh issue edit 123 --remove-label' still invoked (drain did not break strip)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: 'gh issue edit 123 --remove-label' NOT invoked (drain broke strip)"
+  echo "    issue-edit-log: $issue_edit_log"
 fi
 ohs_teardown
 
