@@ -97,6 +97,8 @@ export class SpreadController {
   }
 
   leave(): number {
+    // Bump the generation counter to cancel any in-flight render() calls.
+    this.renderGen++;
     const spread = this.spreads.length > 0 ? this.spreads[this.spreadIndex]! : null;
     const currentPage = spread !== null
       && this.preSpreadPage >= spread.left
