@@ -135,14 +135,19 @@ describe("office-hours items", () => {
     );
   });
 
-  it("denies non-member list query on items collection", async () => {
+  // A non-member cannot list another member's items: filtering for an email
+  // they are not in is denied, because the matching docs carry a memberEmails
+  // the requester is absent from. (A self-targeted array-contains filter is
+  // always rule-compliant and returns an empty set, so it is not a denial
+  // case.)
+  it("denies authenticated non-member list query for another member's items", async () => {
     const ctx = authenticatedContext(env, "stranger@test.com");
     const db = ctx.firestore();
     await assertFails(
       getDocs(
         query(
           collection(db, `office-hours/${ENV}/items`),
-          where("memberEmails", "array-contains", "stranger@test.com"),
+          where("memberEmails", "array-contains", "owner@test.com"),
         ),
       ),
     );
@@ -291,14 +296,19 @@ describe("office-hours usage-samples", () => {
     );
   });
 
-  it("denies non-member list query on test-env collection", async () => {
+  // A non-member cannot list another member's samples: filtering for an email
+  // they are not in is denied, because the matching docs carry a memberEmails
+  // the requester is absent from. (A self-targeted array-contains filter is
+  // always rule-compliant and returns an empty set, so it is not a denial
+  // case.)
+  it("denies authenticated non-member list query for another member's samples", async () => {
     const ctx = authenticatedContext(env, "stranger@test.com");
     const db = ctx.firestore();
     await assertFails(
       getDocs(
         query(
           collection(db, `office-hours/${ENV}/usage-samples`),
-          where("memberEmails", "array-contains", "stranger@test.com"),
+          where("memberEmails", "array-contains", "owner@test.com"),
         ),
       ),
     );
