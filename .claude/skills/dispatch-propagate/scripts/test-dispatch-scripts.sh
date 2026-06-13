@@ -179,6 +179,11 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  "pr list --state open --limit 5 --json number,headRefName")
+    # #1312 truncation-guard test: exactly 5 PRs at the DISPATCH_PR_LIST_LIMIT=5
+    # boundary so pr_list_open fires the loud guard and returns non-zero.
+    printf '[{"number":1,"headRefName":"1-a"},{"number":2,"headRefName":"2-b"},{"number":3,"headRefName":"3-c"},{"number":4,"headRefName":"4-d"},{"number":5,"headRefName":"5-e"}]\n'
+    ;;
   "pr list --state open --limit 300 --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences,mergeable")
     # dispatch-select-target's union fetch now carries `mergeable` (#1241). The
     # field is forward-compatible (consumed by #1243); the current selection path
@@ -1211,6 +1216,60 @@ else
   call_count=0
 fi
 assert_eq "no self-fetch gh pr list calls when DISPATCH_PR_LIST set" "0" "$call_count"
+teardown
+
+# 11. #1312: No truncation past 30 PRs (proves the --limit 300 fix).
+# Before the fix, gh pr list defaulted to --limit 30, so PR 33 of 35 open PRs
+# would be silently omitted and dispatch-find-pr would return empty.  With
+# --limit 300, the stub case "pr list --state open --limit 300 --json
+# number,headRefName" serves all 35 entries from pr-list-full.json, so PR 33
+# is found on the first fetch.
+echo "Test: #1312 dispatch-find-pr resolves PR 33 of 35 open PRs (no truncation)"
+setup
+jq -nc '[range(1;36) | {number: ., headRefName: (tostring + "-feature")}]' \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "33")
+assert_eq "#1312: dispatch-find-pr resolves PR 33 of 35 open PRs (no truncation)" "33" "$result"
+teardown
+
+# 12. #1312: Loud truncation guard fires when result length equals the limit.
+# With DISPATCH_PR_LIST_LIMIT=5 the stub returns exactly 5 PRs, which equals
+# the limit.  pr_list_open must exit non-zero and write "likely truncated" to
+# stderr so the failure is never silent.
+echo "Test: #1312 pr_list_open exits non-zero and logs loudly when result length equals the limit"
+setup
+if err=$(DISPATCH_PR_LIST_LIMIT=5 bash -c \
+    'source "'"$TMPDIR_TEST"'/lib.sh" && pr_list_open "number,headRefName"' \
+    2>&1 1>/dev/null); then
+  rc=0
+else
+  rc=$?
+fi
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1))
+  TOTAL=$((TOTAL + 1))
+  echo "  PASS: #1312: pr_list_open exits non-zero when result length equals the limit"
+else
+  FAIL=$((FAIL + 1))
+  TOTAL=$((TOTAL + 1))
+  echo "  FAIL: #1312: pr_list_open exits non-zero when result length equals the limit"
+  echo "    expected: non-zero exit"
+  echo "    actual:   exit 0"
+fi
+case "$err" in
+  *"likely truncated"*)
+    PASS=$((PASS + 1))
+    TOTAL=$((TOTAL + 1))
+    echo "  PASS: #1312: pr_list_open writes a loud truncation error to stderr"
+    ;;
+  *)
+    FAIL=$((FAIL + 1))
+    TOTAL=$((TOTAL + 1))
+    echo "  FAIL: #1312: pr_list_open writes a loud truncation error to stderr"
+    echo "    expected: stderr containing 'likely truncated'"
+    echo "    actual:   '$err'"
+    ;;
+esac
 teardown
 
 # ============================================================================
