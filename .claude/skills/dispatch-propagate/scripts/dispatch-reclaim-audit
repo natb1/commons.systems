@@ -1,0 +1,529 @@
+#!/usr/bin/env bash
+# Reclaim audit — characterize the abnormal dead-session-stranded worker reclaim
+# rate reported in issue #1454. Re-runnable, report-only diagnostic. This is the
+# "characterize" deliverable (criterion 1 of epic #1450).
+#
+# THE PROBLEM
+#   The reservation sweep (lib-reservation-ledger.sh reservation_sweep) reclaims
+#   a worktree's reservation marker when the reserving session is no longer live
+#   and the marker has aged past a fixed boot grace. Issue #1454 observed ~185
+#   `dead-session-stranded` reclaims — a suspiciously high abnormal worker death
+#   rate — alongside ~336 clean `live-worker-redundant` reclaims.
+#
+#   "dead-session-stranded" conflates two distinct populations:
+#     1. MEASUREMENT ARTIFACT — a healthy worker that booted fine but slowly, so
+#        the fixed 30s boot grace expired before it registered. Its reservation
+#        was reclaimed even though the session was alive and doing real work.
+#     2. GENUINE DEATH — a worker session that never produced real work: it died
+#        during boot/provision, hit an API error, or silently parked on a prompt.
+#
+#   A transcript-only classifier has a blind spot: population 2's worst case (the
+#   session never started, so there is NO transcript at all) is invisible to it,
+#   which would falsely conclude "mostly measurement artifact". This script
+#   closes that blind spot with an explicit `un-transcripted stranded reclaims`
+#   line.
+#
+# RATE vs CAUSE — the two-source design
+#   RATE (how many, ground truth): read from the reservation sweep's own stderr
+#     lines, retained on the host in the systemd user journal
+#     (`journalctl --user -u dispatch-tick`). The exact lines are:
+#       lib-reservation-ledger: reclaimed reservation <wt> (dead-session-stranded)
+#       lib-reservation-ledger: reclaimed reservation <wt> (live-worker-redundant)
+#     where <wt> is the worktree basename. Transcripts are NOT the rate source —
+#     a reclaimed-but-healthy worker leaves a perfectly normal transcript, so
+#     transcripts cannot tell you the marker was reclaimed.
+#   CAUSE (why, apportionment): for each DISTINCT dead-session-stranded worktree
+#     basename, locate its Claude transcript dir and classify the session's
+#     termination into one bucket (see CLASSIFICATION below). Basenames with no
+#     transcript dir are the un-transcripted strands (population 2).
+#
+#   Note the denominators differ: the RATE is a count of reclaim *events* (a
+#   worktree can be reclaimed, re-reserved, and reclaimed again), but CAUSE
+#   apportionment and the un-transcripted line operate over *distinct* basenames.
+#   Both numbers are printed so the cause buckets visibly reconcile against the
+#   distinct-basename denominator, not against the raw event count.
+#
+# CLASSIFICATION (each transcripted session lands in exactly one bucket)
+#   api-error-death                 — a line has isApiErrorMessage == true.
+#   provision-failed                — the tail carries the `provision-failed`
+#                                     mechanical disposition (genuine boot death).
+#   wrong-worktree / stop-done /    — recognized BENIGN/MECHANICAL dispatch
+#     stop-waiting                    dispositions: a clean mechanical stop, not
+#                                     abnormal death.
+#   silent-park-on-prompt           — the last conversational line is a human-text
+#                                     user prompt (not a tool_result) with no
+#                                     following assistant work: the input-block
+#                                     silent-park signature (fix is #1311, OUT OF
+#                                     SCOPE here).
+#   premature-reclaim-of-healthy-   — produced real assistant work (>=1 assistant
+#     boot                            line with text/tool_use) yet was reclaimed
+#                                     dead-session-stranded: the MEASUREMENT
+#                                     ARTIFACT (a healthy slow boot the fixed 30s
+#                                     grace under-counted). The sweep stderr lines
+#                                     carry no timestamp, so this is detected by
+#                                     "has real assistant work but was reclaimed
+#                                     dead-session-stranded", not by timestamp
+#                                     correlation.
+#   legitimate-fast-self-close      — a clean phase-completed / normal-stop marker
+#                                     is present; NOT death.
+#   unclassified                    — has a transcript but matches none of the
+#                                     above; reported so nothing is silently
+#                                     dropped.
+#
+# POPULATION GROUPING (the load-bearing conclusion)
+#   MEASUREMENT-ARTIFACT = premature-reclaim-of-healthy-boot + legitimate-fast-self-close
+#   GENUINE-DEATH        = un-transcripted + api-error-death + provision-failed + silent-park-on-prompt
+#   BENIGN/MECHANICAL    = wrong-worktree + stop-done + stop-waiting
+#   (unclassified is reported on its own — neither grouped nor dropped.)
+#
+# WHAT IT SCANS
+#   Sweep log: $DISPATCH_RECLAIM_SWEEP_LOG if set (a file of pre-captured journal
+#     / stderr text — used by the test fixture); otherwise the live output of
+#     `journalctl --user -u dispatch-tick`. If journalctl is missing or errors
+#     (host without systemd, or sandboxed), the sweep log is reported unavailable
+#     and the script continues with zero sweep counts rather than crashing.
+#   Transcripts: projects root (default $HOME/.claude/projects, overridable via
+#     DISPATCH_RECLAIM_PROJECTS_ROOT for the fixture). Project dirs matching
+#     *worktrees* or *--bare are searched; a dead-session basename <wt> matches a
+#     project dir whose name ENDS WITH `worktrees-<wt>` (anchored, so sibling
+#     worktrees sharing a prefix are not misattributed). Top-level *.jsonl session
+#     transcripts within the --days window are classified.
+#
+# USAGE
+#   dispatch-reclaim-audit [--days N] [--json]
+#     --days N   window in days (default 7); transcripts with mtime newer than
+#                "N days ago" are scanned. N must be a positive integer.
+#     --json     emit the report as one JSON document instead of readable text.
+#   Env overrides:
+#     DISPATCH_RECLAIM_SWEEP_LOG       path to pre-captured sweep/journal text.
+#     DISPATCH_RECLAIM_PROJECTS_ROOT   override the projects root.
+#
+# BEHAVIOR CONTRACT
+#   - The window filter uses an explicit timestamp computed from `date -d`. The
+#     relative `find -newermt '7 days ago'` form is BROKEN in this environment
+#     (matches 0 files), so it is never used.
+#   - Corrupt/unparseable transcripts are reported to stderr and tallied in
+#     transcripts_failed — never silently dropped, and kept distinct from the
+#     `unclassified` bucket (.claude/rules/code-style.md: clear errors over
+#     defensive fallbacks).
+#   - Missing journalctl / empty projects root → clear stderr note + clean
+#     continue, not a crash.
+#
+# EXIT CODES
+#   0  ok
+#   2  usage error (bad/unknown arg, non-integer --days, no GNU date)
+set -euo pipefail
+
+# Fail fast if GNU date is not available (BSD/macOS date uses a different syntax).
+if ! date -d '1 day ago' +%s >/dev/null 2>&1; then
+  echo "error: GNU date required (this script does not support BSD/macOS date)" >&2
+  exit 2
+fi
+
+DAYS=7
+JSON_OUT=0
+PROJECTS_ROOT="${DISPATCH_RECLAIM_PROJECTS_ROOT:-$HOME/.claude/projects}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --days)
+      if [[ $# -lt 2 || "${2:-}" == -* || -z "${2:-}" ]]; then
+        echo "error: --days requires a value" >&2; exit 2
+      fi
+      DAYS="$2"
+      shift 2
+      ;;
+    --json)
+      JSON_OUT=1
+      shift
+      ;;
+    *)
+      echo "error: unknown argument '$1'" >&2
+      echo "usage: dispatch-reclaim-audit [--days N] [--json]" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ ! "$DAYS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: --days must be a positive integer, got '$DAYS'" >&2
+  exit 2
+fi
+
+# Explicit-timestamp window bound. The relative `-newermt '7 days ago'` form is
+# broken here, so compute the concrete instant.
+SINCE=$(date -d "$DAYS days ago" '+%Y-%m-%d %H:%M:%S')
+UNTIL=$(date '+%Y-%m-%d %H:%M:%S')
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+# ---------------------------------------------------------------------------
+# RATE — read reclaim lines from the sweep log (fixture file or journalctl).
+# ---------------------------------------------------------------------------
+SWEEP_RAW="$TMP/sweep.txt"
+SWEEP_AVAILABLE=1
+SWEEP_SOURCE=""
+
+if [[ -n "${DISPATCH_RECLAIM_SWEEP_LOG:-}" ]]; then
+  SWEEP_SOURCE="$DISPATCH_RECLAIM_SWEEP_LOG"
+  if [[ -r "$DISPATCH_RECLAIM_SWEEP_LOG" ]]; then
+    cat -- "$DISPATCH_RECLAIM_SWEEP_LOG" >"$SWEEP_RAW" 2>/dev/null || : >"$SWEEP_RAW"
+  else
+    echo "dispatch-reclaim-audit: sweep log '$DISPATCH_RECLAIM_SWEEP_LOG' not readable; continuing with zero sweep counts" >&2
+    SWEEP_AVAILABLE=0
+    : >"$SWEEP_RAW"
+  fi
+else
+  SWEEP_SOURCE="journalctl --user -u dispatch-tick"
+  if command -v journalctl >/dev/null 2>&1; then
+    # Capture explicitly so a non-zero exit (no systemd, sandboxed) cannot kill
+    # the script under `set -e`. Window the journal to --since so its denominator
+    # matches the transcript window: an UNwindowed journal would surface ancient
+    # reclaims whose transcripts have aged out, then mis-count them as
+    # un-transcripted (genuine death) when they merely aged out of the window.
+    if journalctl --user -u dispatch-tick --no-pager --since "$SINCE" >"$SWEEP_RAW" 2>/dev/null; then
+      :
+    else
+      echo "dispatch-reclaim-audit: journalctl --user -u dispatch-tick unavailable (no systemd or sandboxed); continuing with zero sweep counts" >&2
+      SWEEP_AVAILABLE=0
+      : >"$SWEEP_RAW"
+    fi
+  else
+    echo "dispatch-reclaim-audit: journalctl not found; continuing with zero sweep counts" >&2
+    SWEEP_AVAILABLE=0
+    : >"$SWEEP_RAW"
+  fi
+fi
+
+# Pull reclaim lines, keyed by worktree basename. Event counts (all lines) and
+# distinct-basename lists are derived separately.
+#   line shape: lib-reservation-ledger: reclaimed reservation <wt> (<reason>)
+DEAD_EVENTS=$(grep -cE 'lib-reservation-ledger: reclaimed reservation .+ \(dead-session-stranded\)' "$SWEEP_RAW" || true)
+REDUNDANT_EVENTS=$(grep -cE 'lib-reservation-ledger: reclaimed reservation .+ \(live-worker-redundant\)' "$SWEEP_RAW" || true)
+DEAD_EVENTS=${DEAD_EVENTS:-0}
+REDUNDANT_EVENTS=${REDUNDANT_EVENTS:-0}
+
+# Distinct dead-session-stranded worktree basenames (one per line).
+DEAD_BASENAMES="$TMP/dead_basenames.txt"
+grep -oE 'reclaimed reservation [^ ]+ \(dead-session-stranded\)' "$SWEEP_RAW" 2>/dev/null \
+  | sed -E 's/^reclaimed reservation ([^ ]+) \(dead-session-stranded\)$/\1/' \
+  | sort -u >"$DEAD_BASENAMES" || : >"$DEAD_BASENAMES"
+
+DEAD_DISTINCT=$(grep -c . "$DEAD_BASENAMES" || true)
+DEAD_DISTINCT=${DEAD_DISTINCT:-0}
+
+# ---------------------------------------------------------------------------
+# CAUSE — classify the transcript (if any) for each distinct dead basename.
+# A single jq -s program over a session's slurped transcript emits one of the
+# classification tokens (or "unclassified"). The shell picks the highest-priority
+# token across a worktree's sessions.
+# ---------------------------------------------------------------------------
+cat >"$TMP/classify.jq" <<'CLASSIFY'
+# Coerce a .message.content (string OR array of blocks) to a flat string.
+def content_to_string(c):
+  if (c|type) == "string" then c
+  elif (c|type) == "array" then
+    ( [ c[]? | if type=="string" then . elif type=="object" then (.text // "") else "" end ] | join(" ") )
+  else "" end;
+
+# Is a user line a human-text prompt (string OR a text block) rather than a
+# tool_result block?
+def is_human_prompt(line):
+  ( line.message.content ) as $c
+  | if ($c|type) == "string" then (($c|gsub("\\s";""))|length) > 0
+    elif ($c|type) == "array" then
+      ( [ $c[]? | select((type=="object") and (.type=="text") and ((.text // "")|gsub("\\s";"")|length>0)) ] | length > 0 )
+    else false end;
+
+# Does an assistant line carry real work (a text block with content, or a
+# tool_use)?
+def is_assistant_work(line):
+  ( line.message.content ) as $c
+  | if ($c|type) == "string" then (($c|gsub("\\s";""))|length) > 0
+    elif ($c|type) == "array" then
+      ( [ $c[]?
+          | select( ((type=="object") and (.type=="tool_use"))
+                    or ((type=="object") and (.type=="text") and ((.text // "")|gsub("\\s";"")|length>0)) ) ]
+        | length > 0 )
+    else false end;
+
+. as $msgs
+
+# --- api-error-death: any line flagged isApiErrorMessage. ---
+| ( [ $msgs[] | select(.isApiErrorMessage == true) ] | length > 0 ) as $has_api_error
+
+# --- assistant work present anywhere? ---
+| ( [ $msgs[] | select(.type=="assistant") | select(is_assistant_work(.)) ] | length > 0 ) as $has_work
+
+# --- mechanical / clean-stop disposition tokens. ---
+# A dispatch disposition is emitted as the worker's FINAL message, so match the
+# tokens in the TAIL of the conversation (last few conversational lines), NOT the
+# whole transcript. A healthy worker that merely *mentions* a token mid-session
+# (e.g. while reading lib-reservation-ledger.sh or working on #1454 itself) must
+# NOT be pulled out of premature-reclaim into provision-failed/benign — that would
+# invert the artifact-vs-genuine conclusion. Take a generous tail (4 lines) so a
+# trailing tool_result after the disposition message is still covered.
+| ( [ $msgs[] | select(.type=="user" or .type=="assistant") ] ) as $conv_lines
+| ( [ $conv_lines[-4:][] | content_to_string(.message.content) ] | join("\n") ) as $tailtext
+| ( $tailtext | test("provision-failed")) as $tok_provision
+| ( $tailtext | test("wrong-worktree")) as $tok_wrongwt
+| ( $tailtext | test("STOP done")) as $tok_stopdone
+| ( $tailtext | test("STOP waiting") ) as $tok_stopwaiting
+
+# --- legitimate fast self-close: a normal phase-completion marker in the tail. ---
+| ( $tailtext | test("phase[- ]?complete|phase completed|completed phase|clean[- ]?stop|self[- ]?close") ) as $tok_selfclose
+
+# --- silent-park-on-prompt: last conversational line is a human prompt with no
+#     following assistant work. ---
+| ( ($conv_lines | length) > 0
+    and ($conv_lines[-1].type == "user")
+    and ( is_human_prompt($conv_lines[-1]) ) ) as $silent_park
+
+# Priority order (most diagnostic first). provision-failed is genuine boot death,
+# so it ranks above the benign mechanical stops. api-error and silent-park rank
+# above premature-reclaim because they are real terminations even if some work
+# preceded them.
+| ( if   $has_api_error      then "api-error-death"
+    elif $tok_provision      then "provision-failed"
+    elif $silent_park        then "silent-park-on-prompt"
+    elif $tok_stopwaiting    then "stop-waiting"
+    elif $tok_stopdone       then "stop-done"
+    elif $tok_wrongwt        then "wrong-worktree"
+    elif $tok_selfclose      then "legitimate-fast-self-close"
+    elif $has_work           then "premature-reclaim-of-healthy-boot"
+    else "unclassified" end )
+CLASSIFY
+
+# Per-worktree winner priority: lower number wins when a worktree has multiple
+# sessions classified differently.
+priority_of() {
+  case "$1" in
+    api-error-death) echo 1 ;;
+    provision-failed) echo 2 ;;
+    silent-park-on-prompt) echo 3 ;;
+    premature-reclaim-of-healthy-boot) echo 4 ;;
+    stop-waiting) echo 5 ;;
+    stop-done) echo 6 ;;
+    wrong-worktree) echo 7 ;;
+    legitimate-fast-self-close) echo 8 ;;
+    unclassified) echo 9 ;;
+    *) echo 99 ;;
+  esac
+}
+
+# Resolve the project dir for a worktree basename: a dir under PROJECTS_ROOT
+# (matching *worktrees* / *--bare) whose name ENDS WITH worktrees-<wt>.
+find_project_dir() {
+  local wt="$1"
+  [[ -d "$PROJECTS_ROOT" ]] || return 1
+  local d
+  while IFS= read -r -d '' d; do
+    case "$(basename "$d")" in
+      *worktrees-"$wt") printf '%s\n' "$d"; return 0 ;;
+    esac
+  done < <(
+    find "$PROJECTS_ROOT" -mindepth 1 -maxdepth 1 -type d \
+      \( -name '*worktrees*' -o -name '*--bare' \) -print0
+  )
+  return 1
+}
+
+# Tallies.
+declare -A BUCKET=(
+  [api-error-death]=0
+  [provision-failed]=0
+  [silent-park-on-prompt]=0
+  [premature-reclaim-of-healthy-boot]=0
+  [stop-waiting]=0
+  [stop-done]=0
+  [wrong-worktree]=0
+  [legitimate-fast-self-close]=0
+  [unclassified]=0
+)
+UN_TRANSCRIPTED=0
+TRANSCRIPTS_SCANNED=0
+TRANSCRIPTS_FAILED=0
+WORKTREES_WITH_TRANSCRIPT=0
+
+while IFS= read -r wt; do
+  [[ -n "$wt" ]] || continue
+  proj_dir=""
+  if proj_dir=$(find_project_dir "$wt"); then
+    :
+  else
+    UN_TRANSCRIPTED=$((UN_TRANSCRIPTED + 1))
+    continue
+  fi
+
+  # Classify each in-window top-level session transcript; keep the highest-
+  # priority winner for this worktree.
+  winner=""
+  winner_prio=100
+  saw_transcript=0
+  while IFS= read -r -d '' sess; do
+    saw_transcript=1
+    TRANSCRIPTS_SCANNED=$((TRANSCRIPTS_SCANNED + 1))
+    if cls=$(jq -rs -f "$TMP/classify.jq" "$sess" 2>/dev/null) && [[ -n "$cls" ]]; then
+      prio=$(priority_of "$cls")
+      if (( prio < winner_prio )); then
+        winner_prio=$prio
+        winner="$cls"
+      fi
+    else
+      TRANSCRIPTS_FAILED=$((TRANSCRIPTS_FAILED + 1))
+      echo "dispatch-reclaim-audit: failed to parse transcript: $sess" >&2
+    fi
+  done < <(
+    find "$proj_dir" -mindepth 1 -maxdepth 1 -name '*.jsonl' -newermt "$SINCE" -print0
+  )
+
+  if (( saw_transcript == 0 )); then
+    # A matching project dir exists but holds no in-window session transcript —
+    # treat as un-transcripted for this window (no evidence the worker ran).
+    UN_TRANSCRIPTED=$((UN_TRANSCRIPTED + 1))
+    continue
+  fi
+
+  WORKTREES_WITH_TRANSCRIPT=$((WORKTREES_WITH_TRANSCRIPT + 1))
+  if [[ -z "$winner" ]]; then
+    winner="unclassified"
+  fi
+  BUCKET[$winner]=$(( ${BUCKET[$winner]} + 1 ))
+done <"$DEAD_BASENAMES"
+
+# ---------------------------------------------------------------------------
+# Population groupings.
+# ---------------------------------------------------------------------------
+GRP_ARTIFACT=$(( ${BUCKET[premature-reclaim-of-healthy-boot]} + ${BUCKET[legitimate-fast-self-close]} ))
+GRP_GENUINE=$(( UN_TRANSCRIPTED + ${BUCKET[api-error-death]} + ${BUCKET[provision-failed]} + ${BUCKET[silent-park-on-prompt]} ))
+GRP_BENIGN=$(( ${BUCKET[wrong-worktree]} + ${BUCKET[stop-done]} + ${BUCKET[stop-waiting]} ))
+
+# ---------------------------------------------------------------------------
+# Output.
+# ---------------------------------------------------------------------------
+if (( JSON_OUT )); then
+  jq -n \
+    --argjson days "$DAYS" --arg since "$SINCE" --arg until "$UNTIL" \
+    --arg sweep_source "$SWEEP_SOURCE" --argjson sweep_available "$SWEEP_AVAILABLE" \
+    --argjson dead_events "$DEAD_EVENTS" --argjson redundant_events "$REDUNDANT_EVENTS" \
+    --argjson dead_distinct "$DEAD_DISTINCT" \
+    --argjson un_transcripted "$UN_TRANSCRIPTED" \
+    --argjson worktrees_with_transcript "$WORKTREES_WITH_TRANSCRIPT" \
+    --argjson transcripts_scanned "$TRANSCRIPTS_SCANNED" \
+    --argjson transcripts_failed "$TRANSCRIPTS_FAILED" \
+    --argjson api_error "${BUCKET[api-error-death]}" \
+    --argjson provision_failed "${BUCKET[provision-failed]}" \
+    --argjson silent_park "${BUCKET[silent-park-on-prompt]}" \
+    --argjson premature "${BUCKET[premature-reclaim-of-healthy-boot]}" \
+    --argjson stop_waiting "${BUCKET[stop-waiting]}" \
+    --argjson stop_done "${BUCKET[stop-done]}" \
+    --argjson wrong_worktree "${BUCKET[wrong-worktree]}" \
+    --argjson self_close "${BUCKET[legitimate-fast-self-close]}" \
+    --argjson unclassified "${BUCKET[unclassified]}" \
+    --argjson grp_artifact "$GRP_ARTIFACT" \
+    --argjson grp_genuine "$GRP_GENUINE" \
+    --argjson grp_benign "$GRP_BENIGN" \
+    '{
+      window: {days:$days, since:$since, until:$until},
+      sweep: {
+        source: $sweep_source, available: ($sweep_available==1),
+        dead_session_stranded_events: $dead_events,
+        live_worker_redundant_events: $redundant_events,
+        dead_session_stranded_distinct_worktrees: $dead_distinct
+      },
+      transcripts: {
+        scanned: $transcripts_scanned, failed: $transcripts_failed,
+        worktrees_with_transcript: $worktrees_with_transcript
+      },
+      un_transcripted_stranded_reclaims: $un_transcripted,
+      cause_buckets: {
+        "api-error-death": $api_error,
+        "provision-failed": $provision_failed,
+        "silent-park-on-prompt": $silent_park,
+        "premature-reclaim-of-healthy-boot": $premature,
+        "stop-waiting": $stop_waiting,
+        "stop-done": $stop_done,
+        "wrong-worktree": $wrong_worktree,
+        "legitimate-fast-self-close": $self_close,
+        "unclassified": $unclassified
+      },
+      populations: {
+        "measurement-artifact": $grp_artifact,
+        "genuine-death": $grp_genuine,
+        "benign-mechanical": $grp_benign,
+        "unclassified": $unclassified
+      }
+    }'
+  exit 0
+fi
+
+# --- human-readable report ---
+print_rank() {
+  # name count -> "  name ......... count" sorted by caller (we sort here)
+  local label="$1" count="$2"
+  printf '  %-38s %d\n' "$label" "$count"
+}
+
+echo "=========================================================="
+echo " dispatch-reclaim-audit  (issue #1454)"
+echo "=========================================================="
+printf 'window: last %s day(s)  [%s .. %s]\n' "$DAYS" "$SINCE" "$UNTIL"
+echo
+
+echo "--- RECLAIM RATE (sweep journal ground truth) ---"
+printf 'source: %s\n' "$SWEEP_SOURCE"
+if (( SWEEP_AVAILABLE == 0 )); then
+  echo "NOTE: sweep log unavailable — rate counts are zero (not measured)."
+fi
+printf '  dead-session-stranded reclaims (events) ..... %d\n' "$DEAD_EVENTS"
+printf '  live-worker-redundant reclaims (events) ..... %d\n' "$REDUNDANT_EVENTS"
+printf '  dead-session-stranded distinct worktrees .... %d\n' "$DEAD_DISTINCT"
+echo "  (RATE is counted in reclaim EVENTS; CAUSE below is apportioned over"
+echo "   DISTINCT worktrees — a worktree may be reclaimed more than once.)"
+echo
+
+echo "--- UN-TRANSCRIPTED STRANDS (blind-spot closer) ---"
+printf 'un-transcripted stranded reclaims = %d\n' "$UN_TRANSCRIPTED"
+echo "  Distinct dead-session-stranded worktrees with NO transcript dir at all."
+echo "  These are genuine boot/provision death where the worker session never"
+echo "  started — invisible to a transcript-only classifier."
+echo
+
+echo "--- CAUSE BREAKDOWN (ranked, over distinct transcripted worktrees) ---"
+printf 'worktrees with a transcript: %d   (transcripts scanned: %d, failed-to-parse: %d)\n' \
+  "$WORKTREES_WITH_TRANSCRIPT" "$TRANSCRIPTS_SCANNED" "$TRANSCRIPTS_FAILED"
+# Build ranked list.
+{
+  printf '%d\t%s\n' "${BUCKET[api-error-death]}"                    "api-error-death"
+  printf '%d\t%s\n' "${BUCKET[provision-failed]}"                   "provision-failed"
+  printf '%d\t%s\n' "${BUCKET[silent-park-on-prompt]}"             "silent-park-on-prompt"
+  printf '%d\t%s\n' "${BUCKET[premature-reclaim-of-healthy-boot]}" "premature-reclaim-of-healthy-boot"
+  printf '%d\t%s\n' "${BUCKET[stop-waiting]}"                       "stop-waiting"
+  printf '%d\t%s\n' "${BUCKET[stop-done]}"                          "stop-done"
+  printf '%d\t%s\n' "${BUCKET[wrong-worktree]}"                     "wrong-worktree"
+  printf '%d\t%s\n' "${BUCKET[legitimate-fast-self-close]}"         "legitimate-fast-self-close"
+  printf '%d\t%s\n' "${BUCKET[unclassified]}"                       "unclassified"
+} | sort -rn -k1,1 | while IFS=$'\t' read -r cnt name; do
+  print_rank "$name" "$cnt"
+done
+echo
+
+echo "--- POPULATION SPLIT (the conclusion) ---"
+printf '  MEASUREMENT-ARTIFACT ........................ %d\n' "$GRP_ARTIFACT"
+echo "    = premature-reclaim-of-healthy-boot + legitimate-fast-self-close"
+echo "    Healthy workers reclaimed too eagerly (slow boot under a fixed 30s"
+echo "    grace) or clean fast self-closes. NOT death — fixing the grace removes"
+echo "    these from the dead-session-stranded count."
+printf '  GENUINE-DEATH ............................... %d\n' "$GRP_GENUINE"
+echo "    = un-transcripted + api-error-death + provision-failed + silent-park-on-prompt"
+echo "    Workers that never produced real work: never started (un-transcripted),"
+echo "    died on an API error, failed to provision, or silently parked on a"
+echo "    prompt (#1311). The real abnormal-death signal."
+printf '  BENIGN/MECHANICAL ........................... %d\n' "$GRP_BENIGN"
+echo "    = wrong-worktree + stop-done + stop-waiting"
+echo "    Clean mechanical dispatch stops — neither artifact nor abnormal death."
+printf '  unclassified (reported, not grouped) ........ %d\n' "${BUCKET[unclassified]}"
+echo
+
+exit 0
