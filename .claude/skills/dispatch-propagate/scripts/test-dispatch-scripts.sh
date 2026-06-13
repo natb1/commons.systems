@@ -23046,7 +23046,7 @@ export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
 export DISPATCH_USAGE_SAMPLES_SECRET_NAME=''
 if out=$(WRITER "$W1_PAYLOAD" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "writer W8 empty SECRET_NAME → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
-assert_eq "writer W8 → diagnostic mentions must be non-empty" "1" "$([[ "$out" == *"must be non-empty"* ]] && echo 1 || echo 0)"
+assert_eq "writer W8 → diagnostic mentions must be non-empty" "1" "$([[ "$out" == *"DISPATCH_USAGE_SAMPLES_SECRET_NAME must be non-empty"* ]] && echo 1 || echo 0)"
 su_teardown
 
 # W9 — slash in DISPATCH_USAGE_SAMPLES_SECRET_NAME → non-zero exit; writer prints
@@ -23058,7 +23058,7 @@ export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
 export DISPATCH_USAGE_SAMPLES_SECRET_NAME='a/b'
 if out=$(WRITER "$W1_PAYLOAD" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "writer W9 slash SECRET_NAME → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
-assert_eq "writer W9 → diagnostic mentions must not contain a slash" "1" "$([[ "$out" == *"must not contain a slash"* ]] && echo 1 || echo 0)"
+assert_eq "writer W9 → diagnostic mentions must not contain a slash" "1" "$([[ "$out" == *"DISPATCH_USAGE_SAMPLES_SECRET_NAME must not contain a slash"* ]] && echo 1 || echo 0)"
 su_teardown
 
 # --- SAMPLER cases (fakes only; no real daemon / firebase) ------------------
