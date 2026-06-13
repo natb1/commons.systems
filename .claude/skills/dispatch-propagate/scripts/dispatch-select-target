@@ -98,21 +98,30 @@
 #   2. Oldest "review"      PR (draft + dispatch:qa-done)
 #   3. Oldest "fix-checks"  PR (draft, CI completed and failed)
 #   4. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
-#   5. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
-#      by a live Claude session, and which is not already closed by a non-draft
-#      (ready) PR (#920), resolved to a startable open leaf (an issue whose
-#      entire open-leaf subtree is owned by live sessions is skipped, exactly as
-#      a live-session-owned direct worktree is — an orphan child worktree stays
-#      descendable, #914)
+#   5. Oldest open help-wanted issue whose <N> is not in the forward-derived
+#      claimed set (live ∪ reserved), and which is not already closed by a
+#      non-draft (ready) PR (#920), resolved to a startable open leaf (an issue
+#      whose entire open-leaf subtree is claimed is skipped, exactly as a claimed
+#      direct issue is — an orphan child worktree stays descendable, #914)
 #
-# A PR or help-wanted issue is skipped only when a live Claude session owns its
-# worktree — the row's branch worktree (PR) or any <N>-* worktree (issue). The
-# check sources lib-claude-agents.sh and keys on worktree_has_live_session,
-# which is fail-safe: an unqueryable daemon counts as owned. An orphan worktree
-# (on disk, no live session) does NOT skip the row — it is a reuse signal for
-# dispatch-resolve-worktree, not a priority skip (#905). Worktree existence is a
-# fast-path miss: a row whose branch / <N>-* has no worktree at all never pays
-# the daemon round-trip.
+# A PR or help-wanted issue is skipped iff its issue <N> is in the forward-
+# derived claimed set (#1474): the deduped union of the <N> values claimed by
+# live Claude sessions (#905) and outstanding reservation markers (#1046). The
+# set is derived FORWARD from live-session names + reservation basenames — one
+# daemon query plus one ledger stat — instead of walking every registered git
+# worktree backward; selection is now O(worker cap), not O(worktrees). Both the
+# PR skip and the issue skip unify onto one <N>-keyed predicate (num_is_claimed):
+# a PR's key is its BRANCH PREFIX (<N>-<slug>, the session/worktree name — NOT its
+# closing-issue number), an issue's key is its own number. The derivation FAILS
+# OPEN on a live-UNKNOWN daemon (degrades to the reserved-only set), so a
+# momentary outage narrows skip coverage rather than aborting selection.
+#
+# The set is <N>-keyed, coarser than the former exact-branch worktree map: a live
+# `10-foo` session now also marks a `10-bar` PR's <N>=10 claimed — deliberate, in
+# the safe (more-conservative-skip) direction. An orphan worktree (on disk, no
+# live session, no reservation) is NOT claimed here and does NOT skip the row — it
+# stays a reuse signal for dispatch-resolve-worktree, the per-target net at the
+# spawn boundary (#905, #1046).
 # A PR is also skipped when an issue it closes is blocked_by an open issue.
 # "done" (non-draft) PRs are skipped entirely.
 # Not-ready PRs (draft, CI still running/queued/not started — no verdict yet,
@@ -133,14 +142,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
-# worktree_has_live_session — a worktree-bearing PR/issue row is skipped only
-# when a live Claude session owns the matching worktree (#905). Sourced here so
-# the queue-scan loops below can ask the liveness question.
-source "$SCRIPT_DIR/lib-claude-agents.sh"
-# reservation_exists — a worktree-bearing row is ALSO skipped when its worktree
-# carries a reservation marker (#1046), even before a live session owns it: a
-# reserved-but-not-yet-registered target must not be re-selected, racing the
-# reservation. Load-guarded; re-sources lib.sh / lib-claude-agents.sh harmlessly.
+# claimed_issue_nums (via lib-reservation-ledger.sh, which transitively loads
+# lib-claude-agents.sh) — the forward-derived claimed-issue set the queue scans
+# skip against (#1474). A PR/issue row is skipped iff its issue <N> is claimed by
+# a live Claude session (#905) OR an outstanding reservation marker (#1046).
+# Selection derives that set FORWARD from live-session names + reservation
+# basenames — one daemon query plus one ledger stat — instead of walking every
+# registered git worktree backward. Load-guarded; re-sources lib.sh /
+# lib-claude-agents.sh harmlessly.
 source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 QA_MODE=false
 HEALTH_ONLY=false
@@ -419,78 +428,28 @@ if [[ "$QA_MODE" == "false" ]]; then
 
 fi
 
-# Map each registered worktree's branch — and its <issue>-number prefix — to its
-# on-disk path. A PR/issue row is skipped only when a *live* Claude session owns
-# the matching worktree (#905): an orphan worktree (on disk, no session) is a
-# reuse signal for dispatch-resolve-worktree, not a priority skip here. Built
-# once via the shared lib.sh record parser so the path is on hand for the
-# liveness query; a bare / detached / non-issue record contributes nothing.
-declare -A WORKTREE_PATH_BY_BRANCH=()
-declare -A WORKTREE_PATHS_BY_NUM=()
-while IFS= read -r wt_record; do
-  split_worktree_record "$wt_record"
-  [[ -z "$WT_PATH" ]] && continue
-  [[ -n "$WT_BRANCH" ]] && WORKTREE_PATH_BY_BRANCH["$WT_BRANCH"]="$WT_PATH"
-  if [[ -n "$WT_NUM" ]]; then
-    WORKTREE_PATHS_BY_NUM["$WT_NUM"]="${WORKTREE_PATHS_BY_NUM[$WT_NUM]:-}$WT_PATH"$'\n'
-  fi
-done < <(list_worktree_records)
+# Forward-derived claimed-issue set, built ONCE (#1474). Placed here — after the
+# --main-broken-sha / --health-only / default-mode JIT+main-broken early exits,
+# right where the former worktree-walk map build sat — so those early-exit paths
+# never pay for it (notably --health-only's cheap heartbeat re-seed never reaches
+# the queue scan that reads it). Selection skips a PR or help-wanted issue iff its
+# <N> is claimed; the claimed set is derived FORWARD from claimed_issue_nums (the
+# deduped union of live-session names and outstanding reservation markers, each
+# keyed by issue <N>), not by walking every registered git worktree backward —
+# selection is O(worker cap), not O(worktrees). claimed_issue_nums FAILS OPEN on a
+# live-UNKNOWN daemon (degrades to the reserved-only set internally), so a
+# momentary daemon outage narrows skip coverage rather than aborting selection.
+# This is a coarse <N>-keyed pre-filter, not the final claim: dispatch-resolve-
+# worktree is the per-target net at the spawn boundary — an orphan worktree (on
+# disk, no live session, no reservation) is NOT claimed here and stays a reuse
+# signal there (#905, #1046).
+declare -A CLAIMED_NUMS=()
+while IFS= read -r claimed_n; do
+  [[ -n "$claimed_n" ]] && CLAIMED_NUMS["$claimed_n"]=1
+done < <(claimed_issue_nums)
 
-# True when a live session owns the worktree checked out at <branch>. No
-# worktree for <branch> → fast-path miss (return 1), no daemon round-trip. A
-# worktree exists → defer to worktree_has_live_session, which is fail-safe: an
-# unqueryable daemon counts as owned, so the row is skipped rather than
-# double-claimed.
-pr_branch_has_live_worktree() {
-  local branch="$1"
-  local path="${WORKTREE_PATH_BY_BRANCH[$branch]:-}"
-  [[ -z "$path" ]] && return 1
-  worktree_has_live_session "$path"
-}
-
-# True when a live session owns any <num>-* worktree. No such worktree →
-# fast-path miss. Several matches → owned if any one is live.
-issue_has_live_worktree() {
-  local num="$1" p
-  local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
-  [[ -z "$paths" ]] && return 1
-  while IFS= read -r p; do
-    [[ -z "$p" ]] && continue
-    if worktree_has_live_session "$p"; then
-      return 0
-    fi
-  done <<< "$paths"
-  return 1
-}
-
-# True when the <branch> worktree is CLAIMED — a live session owns it (#905) OR
-# it carries a reservation marker (#1046). Both close the spawn-gap re-selection
-# race: a reserved-but-not-yet-registered target must not be re-selected. An
-# orphan worktree (on disk, no live session, no marker) is NOT claimed — it stays
-# a reuse signal for dispatch-resolve-worktree. The reserved check is a fast-path
-# file stat keyed on the worktree basename, no daemon round-trip.
-pr_branch_worktree_claimed() {
-  local branch="$1"
-  pr_branch_has_live_worktree "$branch" && return 0
-  local path="${WORKTREE_PATH_BY_BRANCH[$branch]:-}"
-  [[ -z "$path" ]] && return 1
-  reservation_exists "$(basename "$path")"
-}
-
-# True when any <num>-* worktree is CLAIMED — live-owned (#905) OR reserved
-# (#1046). Several matches → claimed if any one is live or reserved. Orphan
-# worktrees (no session, no marker) stay reuse signals, not skips.
-issue_worktree_claimed() {
-  local num="$1" p
-  issue_has_live_worktree "$num" && return 0
-  local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
-  [[ -z "$paths" ]] && return 1
-  while IFS= read -r p; do
-    [[ -z "$p" ]] && continue
-    reservation_exists "$(basename "$p")" && return 0
-  done <<< "$paths"
-  return 1
-}
+# True when issue <N> is in the forward-derived claimed set (live ∪ reserved).
+num_is_claimed() { [[ -n "${CLAIMED_NUMS[$1]:-}" ]]; }
 
 # Fetch all open PRs once, with the union of fields this script and
 # dispatch-phase need. Each per-PR dispatch-phase call below reuses it
@@ -723,6 +682,11 @@ WAITING_NUM=""
 while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "$pr_num" ]] && continue
 
+  # The branch issue-prefix (<N>-<slug>) is this PR's worktree/session key — the
+  # same <N> the office-hours and --exclude checks below key on. Compute it once
+  # here and reuse it (claimed skip, office-hours skip, exclude skip).
+  pr_issue_num="${pr_branch%%-*}"
+
   # --priority-only scans only the priority=1 tier. Skip any PR whose
   # closing-issue label union does not carry `priority` BEFORE the expensive
   # per-PR dispatch-ci-ready / dispatch-phase gh calls — a non-priority PR is
@@ -732,10 +696,15 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
     continue
   fi
 
-  # Skip a PR whose branch worktree is owned by a live session or reserved. An
-  # orphan worktree (no session, no marker) does not skip — it is recycled at
-  # dispatch-resolve-worktree (#905, #1046).
-  if pr_branch_worktree_claimed "$pr_branch"; then
+  # Skip a PR whose branch issue-prefix <N> is in the forward-derived claimed set
+  # — a live session owns a <N>-* worktree (#905) OR a <N>-* reservation marker is
+  # outstanding (#1046). The skip key is the BRANCH PREFIX (the session/worktree
+  # name), NOT the PR's closing-issue number. The set is <N>-keyed, so it is
+  # coarser than the former exact-branch worktree map: a live `10-foo` session now
+  # also marks a `10-bar` PR's <N>=10 claimed — deliberate, in the safe
+  # (more-conservative-skip) direction. An orphan worktree (no session, no marker)
+  # does not skip — it is recycled at dispatch-resolve-worktree (#905, #1046).
+  if num_is_claimed "$pr_issue_num"; then
     continue
   fi
 
@@ -788,9 +757,9 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   esac
 
   # Skip PRs whose ISSUE is parked on a human (dispatch:office-hours). The label
-  # lives on the issue (issue #909), so resolve the issue number from the PR's
-  # branch prefix (<N>-<slug>) and check the issue's labels in ISSUE_LABELS_JSON.
-  pr_issue_num="${pr_branch%%-*}"
+  # lives on the issue (issue #909), so the branch-prefix issue number
+  # (pr_issue_num, computed at the top of the loop) checks the issue's labels in
+  # ISSUE_LABELS_JSON.
   # Skip a PR whose issue is in the --exclude set (#1062): the fan-out caller has
   # already processed this target. Applied during the scan, before FIRST_PR is
   # populated, so the next-oldest PR in an already-tapped bucket surfaces. The
@@ -935,10 +904,11 @@ while IFS=$'\t' read -r issue_num issue_pri issue_catrank issue_cat; do
   fi
   # Skip an open issue already closed by a non-draft (ready) PR (#920).
   [[ -n "${READY_PR_CLOSED_ISSUES[$issue_num]:-}" ]] && continue
-  # Skip an issue whose <N>-* worktree is owned by a live session or reserved.
-  # An orphan <N>-* worktree (no session, no marker) does not skip — it is
-  # recycled at dispatch-resolve-worktree (#905, #1046).
-  if issue_worktree_claimed "$issue_num"; then
+  # Skip an issue whose <N> is in the forward-derived claimed set — a live session
+  # owns its <N>-* worktree (#905) OR a <N>-* reservation marker is outstanding
+  # (#1046). An orphan <N>-* worktree (no session, no marker) does not skip — it
+  # is recycled at dispatch-resolve-worktree (#905, #1046).
+  if num_is_claimed "$issue_num"; then
     continue
   fi
   # Category and priority bit both arrive precomputed from the sorted TSV
