@@ -83,7 +83,9 @@ For each user-facing item, pick the matching case.
 ### Browser-app feature (apps `budget`, `fellspiral`, `landing`, `print`)
 
 Run an interactive live demo against the production app with the Claude Chrome
-extension, per `.claude/rules/chrome-extension.md`:
+extension, per `.claude/docs/chrome-extension.md`:
+
+First `Read .claude/docs/chrome-extension.md` for the browser-selection, permission-retry-once, and emulator-reachability policy (it is no longer ambiently loaded), then:
 
 1. Start the browser context (`tabs_context_mcp`) and confirm Chrome is
    connected. If `list_connected_browsers` returns `[]`, ask the user to start
@@ -103,7 +105,7 @@ at `https://commons.systems`. As of now the mapping is:
 | print | https://cs-print-00af.web.app |
 | landing | https://commons.systems |
 
-Per the chrome-extension rule, the first call to a gated browser tool for a new
+Per `.claude/docs/chrome-extension.md`, the first call to a gated browser tool for a new
 origin is denied before the approval popup surfaces — **retry the failed call
 once**, and the retry succeeds. If browser calls keep failing after that one
 retry, stop and ask the user rather than looping.
