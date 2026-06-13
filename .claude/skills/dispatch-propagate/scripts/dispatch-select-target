@@ -72,6 +72,8 @@
 #   main-broken <sha>           — origin/main's HEAD CI has a failing check
 #   pr <num> <branch> <phase>   — the highest-priority priority=1 PR
 #   issue <num>                 — the highest-priority priority=1 help-wanted issue
+#   waiting <issue#>            — a priority item exists but its draft PR's CI is
+#                                 still pending (skipped solely by dispatch-ci-ready)
 #   empty                       — no priority=1 item eligible
 #
 # Selection is three-tier: the `priority` label is the *outermost* axis, topic
@@ -679,6 +681,27 @@ PHASE_PRIORITY=(fix-conflicts review fix-checks)
 # (implement phase) advances ahead of an unplanned issue (plan phase).
 ISSUE_PHASE_PRIORITY=(implement plan)
 
+# True when the issue (resolved from a PR's branch prefix) is parked on a
+# human via dispatch:office-hours. Reads ISSUE_LABELS_JSON.
+pr_issue_office_hours_parked() {
+  local num="$1"
+  [[ -z "$num" ]] && return 1
+  printf '%s' "$ISSUE_LABELS_JSON" | jq -e --arg n "$num" \
+    '(.[$n] // []) | any(.name == "dispatch:office-hours")' >/dev/null
+}
+
+# True when any issue a PR closes has >0 open blockers (or unknown → fail
+# closed). Reads BLOCKER_COUNTS. Mirrors the inline blocked check.
+pr_blocked_by_open() {
+  local closing="$1" blocked
+  blocked=$(printf '%s' "$closing" \
+    | jq -r --argjson blk "$BLOCKER_COUNTS" \
+      'if any(.[]; $blk[(.number|tostring)] as $c | $c == null or $c > 0)
+       then "true" else "false" end')
+  [[ "$blocked" == "true" ]]
+}
+
+WAITING_NUM=""
 while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "$pr_num" ]] && continue
 
@@ -703,6 +726,37 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   # rollup is still pending; a concluded (passing/failing) rollup, a non-draft
   # PR, or no PR all report ready. Reuses the PR list fetched above.
   if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$pr_branch" >/dev/null; then
+    # --priority-only waiting detection (#1444): a CI-pending priority PR that is
+    # otherwise eligible — not office-hours-parked, not blocked, not excluded
+    # (claimed worktrees already `continue`d above; a CI-pending draft can never
+    # be phase `done`) — is recorded as a waiting candidate so dispatch-select-tick
+    # can arm a CI-cadence reseed instead of the pace reseed. The checks mirror the
+    # office-hours/blocked/exclude skips further down, so `waiting` fires ONLY when
+    # CI is the sole reason this item is unselectable. PR_SORTED is oldest-first,
+    # so the first recorded candidate is the oldest.
+    if [[ "$PRIORITY_ONLY" == "true" && -z "$WAITING_NUM" ]]; then
+      # The reseed target must be the canonical priority issue, NOT the PR
+      # branch prefix (#1444). A branch may diverge from its closing-issue
+      # number (e.g. `100-fix` closing priority issue `200`), and a branch with
+      # no `<N>-` prefix yields a non-numeric value the reseed sink rejects —
+      # silently stranding the very priority item this path exists to rescue.
+      # Resolve the priority-labeled closing issue from `pr_closing` (already in
+      # scope), reusing ISSUE_LABELS_JSON exactly as pr_combined_labels does. The
+      # line-712 gate guarantees at least one closing issue carries `priority` in
+      # --priority-only mode, and dispatch-find-pr resolves issue→PR via the
+      # issue's closedByPullRequestsReferences fallback, so the priority issue
+      # number is the resolvable, correct target.
+      local_issue=$(printf '%s' "$pr_closing" \
+        | jq -r --argjson map "$ISSUE_LABELS_JSON" \
+          'map(.number | tostring
+               | select((($map[.] // []) | any(.name == "priority"))))
+           | .[0] // empty')
+      if [[ "$local_issue" =~ ^[0-9]+$ && -z "${EXCLUDED[$local_issue]:-}" ]] \
+         && ! pr_issue_office_hours_parked "$local_issue" \
+         && ! pr_blocked_by_open "$pr_closing"; then
+        WAITING_NUM="$local_issue"
+      fi
+    fi
     continue
   fi
 
@@ -726,9 +780,7 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   # (${pr_branch%%-*}). Shared loop ⇒ also covers --qa selection — harmless and
   # consistent.
   [[ -n "$pr_issue_num" && -n "${EXCLUDED[$pr_issue_num]:-}" ]] && continue
-  if [[ -n "$pr_issue_num" ]] && printf '%s' "$ISSUE_LABELS_JSON" \
-      | jq -e --arg n "$pr_issue_num" \
-        '(.[$n] // []) | any(.name == "dispatch:office-hours")' >/dev/null; then
+  if [[ -n "$pr_issue_num" ]] && pr_issue_office_hours_parked "$pr_issue_num"; then
     continue
   fi
 
@@ -743,11 +795,9 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   # between the PR-list fetch and the GraphQL call, so its alias came back null
   # and was dropped. Treat unknown as blocked (fail closed) so a gated PR is
   # never advanced on missing data.
-  pr_blocked=$(printf '%s' "$pr_closing" \
-    | jq -r --argjson blk "$BLOCKER_COUNTS" \
-      'if any(.[]; $blk[(.number|tostring)] as $c | $c == null or $c > 0)
-       then "true" else "false" end')
-  [[ "$pr_blocked" == "true" ]] && continue
+  if pr_blocked_by_open "$pr_closing"; then
+    continue
+  fi
 
   # Record the oldest TOP PRs seen in this category+priority+phase. PR_SORTED is
   # oldest-first, so the list accumulates oldest-first; bucket_append caps it at
@@ -791,6 +841,22 @@ while IFS= read -r closed_num; do
 done < <(printf '%s' "$PR_LIST" | jq -r '
   .[] | select(.isDraft == false)
   | (.closingIssuesReferences // [])[].number')
+
+# Issue numbers whose own <N>-* branch carries a non-draft (ready) PR. Unlike
+# READY_PR_CLOSED_ISSUES (which keys on closingIssuesReferences, i.e. the root
+# help-wanted issue), this set keys on the headRefName branch-prefix issue number
+# — the traced leaf — exactly how dispatch-ci-ready/dispatch-phase resolve a PR
+# (by <N>- prefix). A non-draft PR is phase `done` per dispatch-phase's
+# non-draft→done rule, so this set is provably equivalent to dispatch-phase's
+# `done` over the open-PR domain, built with zero extra gh calls (#1445).
+declare -A READY_PR_BRANCH_ISSUES
+while IFS= read -r branch_num; do
+  [[ -z "$branch_num" ]] && continue
+  READY_PR_BRANCH_ISSUES["$branch_num"]=1
+done < <(printf '%s' "$PR_LIST" | jq -r '
+  .[] | select(.isDraft == false)
+  | select(.headRefName | test("^[0-9]+-"))
+  | (.headRefName | capture("^(?<n>[0-9]+)-").n)')
 
 # First-seen help-wanted issue per category. The queue is the open-issue list
 # filtered client-side to "help wanted"; issues whose <N>-* worktree is owned
@@ -870,6 +936,24 @@ while IFS=$'\t' read -r issue_num issue_labels; do
       # which precedes the issue within a bucket and recycles the orphan worktree
       # via `enter` just as the issue path would. dispatch-ci-ready resolves the
       # all-digit leaf to its PR by headRefName prefix. Reuses the PR list above.
+      #
+      # The done-ready exclusion runs FIRST, before dispatch-ci-ready, to skip the
+      # subprocess fork for a done-ready leaf. A non-draft (ready) PR on the leaf's
+      # own <leaf>-* branch makes the leaf phase `done` (dispatch-phase's
+      # non-draft→done rule). dispatch-materialize-spawn would re-derive that done
+      # phase at the spawn boundary and drain it, spawning no worker — killing the
+      # chain. Exclude the done leaf here at selection time, mirroring that
+      # spawn-boundary done re-check, and continue descending the same root to the
+      # next startable leaf — exactly like the not-ready skip below (#1445). The
+      # root-keyed READY_PR_CLOSED_ISSUES skip above only catches a done *root*;
+      # this branch-keyed set is the authoritative check on the traced leaf.
+      # READY_PR_BRANCH_ISSUES membership implies the leaf already has a non-draft
+      # PR, for which dispatch-ci-ready would unconditionally pass — so skipping the
+      # call here changes nothing but the saved fork.
+      if [[ -n "${READY_PR_BRANCH_ISSUES[$leaf]:-}" ]]; then
+        root_excl["$leaf"]=1
+        continue
+      fi
       if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$leaf" >/dev/null; then
         root_excl["$leaf"]=1
         continue
@@ -937,7 +1021,11 @@ if (( TOP == 1 )); then
     done
   done
 
-  echo "empty"
+  if [[ "$PRIORITY_ONLY" == "true" && -n "$WAITING_NUM" ]]; then
+    echo "waiting $WAITING_NUM"
+  else
+    echo "empty"
+  fi
 else
   # TOP>1: a parallel walk over the SAME nesting, draining each bucket's
   # newline list oldest-first into a results array until it holds TOP entries.

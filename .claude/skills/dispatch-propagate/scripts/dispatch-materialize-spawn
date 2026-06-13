@@ -167,11 +167,14 @@ write_identity_stub() {
     echo "write_identity_stub: gh issue view #$n failed; CLAUDE.local.md stub not written" >&2
     return 1
   }
+  local safe_title
+  safe_title=$(printf '%s' "$title" | tr -d '\000-\037\177')
+  safe_title="${safe_title:0:200}"
   cat > "$worktree_path/CLAUDE.local.md" <<EOF
 <!-- AUTO-GENERATED identity stub. Static identity only; do not edit. -->
 <!-- For live issue/PR/diff context, run dispatch-context-pack (pointer below). -->
 
-# Issue #$n: $title
+# Issue #$n: $safe_title
 
 Branch: \`$branch\`
 
