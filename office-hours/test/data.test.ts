@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { registerErrorSink, type EnrichedErrorContext } from "@commons-systems/errorutil/log";
 import { toReminder } from "../src/data.js";
 
@@ -8,6 +8,7 @@ let captured: SinkCall[];
 
 beforeEach(() => {
   captured = [];
+  vi.spyOn(console, "error").mockImplementation(() => {});
   registerErrorSink((error, context) => {
     captured.push({ error, context });
   });
@@ -15,6 +16,7 @@ beforeEach(() => {
 
 afterEach(() => {
   registerErrorSink(undefined);
+  vi.restoreAllMocks();
 });
 
 const validData = {
@@ -37,6 +39,8 @@ describe("toReminder", () => {
     expect(captured).toHaveLength(1);
     expect((captured[0].error as Error).message).toMatch(/jitKey/);
     expect((captured[0].error as Error).message).toMatch(/falling back/);
+    expect(captured[0].context.operation).toBe("reminder-validation");
+    expect(captured[0].context.itemId).toBe(id);
   });
 
   it("(b) missing required field — returns null, logs missing-required-fields, NOT jitKey-fallback", () => {
@@ -46,12 +50,15 @@ describe("toReminder", () => {
       issueNumber: 42,
       dueAt: { toDate: () => new Date("2026-01-01T00:00:00Z") },
     };
-    const result = toReminder("doc-id-xyz", data);
+    const id = "doc-id-xyz";
+    const result = toReminder(id, data);
 
     expect(result).toBeNull();
     expect(captured).toHaveLength(1);
     expect((captured[0].error as Error).message).toMatch(/missing required fields/);
     expect((captured[0].error as Error).message).not.toMatch(/jitKey/);
+    expect(captured[0].context.operation).toBe("reminder-validation");
+    expect(captured[0].context.itemId).toBe(id);
   });
 
   it("(c) present jitKey — returns reminder with correct jitKey, sink NOT fired", () => {
