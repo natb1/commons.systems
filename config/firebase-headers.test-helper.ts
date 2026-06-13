@@ -84,5 +84,26 @@ export function describeFirebaseHeaders(
         expect(rule.source).not.toMatch(/@\(/);
       }
     });
+
+    it("script-src does not contain 'unsafe-inline'", () => {
+      const globalRule = headers.find((h) => h.source === "**");
+      expect(globalRule, "global '**' header rule not found").toBeDefined();
+      const cspHeader = globalRule!.headers.find(
+        (h) => h.key === "Content-Security-Policy",
+      );
+      expect(
+        cspHeader,
+        "Content-Security-Policy header not found in '**' rule",
+      ).toBeDefined();
+      const cspValue = cspHeader!.value;
+      expect(cspValue, "CSP value does not contain a script-src directive").toMatch(
+        /script-src/,
+      );
+      const match = cspValue.match(/script-src([^;]*)/);
+      expect(match, "could not extract script-src directive").not.toBeNull();
+      const scriptSrc = match![1];
+      expect(scriptSrc).toContain("'self'");
+      expect(scriptSrc).not.toContain("'unsafe-inline'");
+    });
   });
 }

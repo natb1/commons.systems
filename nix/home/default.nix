@@ -27,6 +27,7 @@
     ./claude-code.nix
     ./claude-in-chrome-windows.nix
     ./direnv.nix
+    ./dispatch-usage-samples.nix
     ./gh.nix
     ./git.nix
     ./gpg.nix
@@ -85,6 +86,7 @@
     pkgs.jq
     pkgs.google-cloud-sdk
     pkgs.pass
+    pkgs.python3
   ];
 
   # Eastern time. America/New_York tracks EST/EDT automatically.

@@ -151,6 +151,10 @@ func runDirJSON(dir, groupName string, disc parse.DiscoverOpts, output fileOpts)
 	maxDates := maxTransactionDates(allTxns)
 	allStmts := buildStatementData(parsed, maxDates)
 	allStmts = append(allStmts, deriveMonthlyStatements(parsed)...)
+	allStmts, err = dedupStatementData(allStmts)
+	if err != nil {
+		return fmt.Errorf("statements: %w", err)
+	}
 
 	return runOutputJSON(allTxns, allStmts, groupName, output)
 }
@@ -177,7 +181,7 @@ func runOutputJSON(allTxns []budget.TransactionData, allStmts []budget.Statement
 
 	exportStmts := buildExportStatements(allStmts)
 
-	result := journal.Build(allTxns, nil, journal.DefaultPairWindow)
+	result := journal.Build(allTxns, nil, nil, journal.DefaultPairWindow)
 	for i := range exportTxns {
 		if id, ok := result.EntryIDByDocID[exportTxns[i].ID]; ok {
 			idCopy := id
@@ -431,11 +435,15 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	weeklyAggregates := computeExportWeeklyAggregatesFromFull(fullTxns)
 
 	// Compute lastTransactionDate on statements from all transactions.
-	// Filter out virtual statements from prior runs.
+	// Filter out Synchrony virtual statements from prior runs — those are
+	// re-generated below from transaction data (vsr.statements). Other virtual
+	// statements (e.g. derived monthly anchors) are NOT re-derivable here, since
+	// runInputJSON has no access to the original parsed statement files, so they
+	// must be retained or balance-history coverage is permanently lost.
 	maxDates := maxTransactionDates(allTxns)
 	var updatedStmts []export.Statement
 	for _, s := range inp.Statements {
-		if s.Virtual {
+		if s.Virtual && strings.HasPrefix(s.StatementID, "synchrony-virtual-") {
 			continue
 		}
 		updated := s
@@ -452,7 +460,7 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	// Append pet budget if virtual Synchrony transactions exist
 	budgets := appendPetBudgetIfNeeded(inp.Budgets, vsr.transactions)
 
-	result := journal.Build(allTxns, txnDocIDs, journal.DefaultPairWindow)
+	result := journal.Build(allTxns, txnDocIDs, normMap, journal.DefaultPairWindow)
 	for i := range exportTxns {
 		if id, ok := result.EntryIDByDocID[exportTxns[i].ID]; ok {
 			idCopy := id
@@ -513,6 +521,9 @@ func buildRule(r rules.Rule, minAmountDollars, maxAmountDollars *float64) (rules
 func convertExportRules(exportRules []export.Rule) ([]rules.Rule, error) {
 	ruleSet := make([]rules.Rule, len(exportRules))
 	for i, r := range exportRules {
+		if r.Type == "categorization" && (r.MatchCategory != "" || r.ExcludeCategory != "" || r.Category != "") {
+			return nil, fmt.Errorf("rule %s: category-filter fields (matchCategory/excludeCategory/category) are only valid on budget_assignment rules, not categorization rules", r.ID)
+		}
 		built, err := buildRule(rules.Rule{
 			ID:              r.ID,
 			Type:            r.Type,
@@ -1059,6 +1070,10 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 	// Build statements from dir-parsed files (maxDates computed later after merge)
 	dirStmts := buildStatementData(parsed, nil)
 	dirStmts = append(dirStmts, deriveMonthlyStatements(parsed)...)
+	dirStmts, err = dedupStatementData(dirStmts)
+	if err != nil {
+		return fmt.Errorf("statements: %w", err)
+	}
 
 	// Build input lookup by doc ID
 	inputByID := make(map[string]export.Transaction, len(inp.Transactions))
@@ -1166,7 +1181,7 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 	// Append pet budget if virtual Synchrony transactions exist
 	budgets := appendPetBudgetIfNeeded(inp.Budgets, vsr.transactions)
 
-	result := journal.Build(allTxns, allDocIDs, journal.DefaultPairWindow)
+	result := journal.Build(allTxns, allDocIDs, normMap, journal.DefaultPairWindow)
 	for i := range exportTxns {
 		if id, ok := result.EntryIDByDocID[exportTxns[i].ID]; ok {
 			idCopy := id
@@ -1193,7 +1208,11 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 }
 
 // mergeStatements merges dir-parsed statements with input statements.
-// Dir statements override input by statementID; input-only statements are retained.
+// Merge priority by statementID: real dir > real input > derived/virtual anchor.
+// A real dir statement overrides the stale snapshot copy of the same ID. A
+// derived/virtual anchor never shadows a real statement (dir or input); it
+// gap-fills only — emitted solely for a period with no real statement. Virtual
+// input statements (stale prior-snapshot anchors) are skipped and recomputed.
 // Uses maxDates to set LastTransactionDate on all statements (dir and input-only).
 func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statement, maxDates map[string]*time.Time) []export.Statement {
 	for i := range dirStmts {
@@ -1202,14 +1221,33 @@ func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statem
 	}
 	dirExport := buildExportStatements(dirStmts)
 
-	dirByStmtID := make(map[string]bool, len(dirExport))
+	// realDirByStmtID tracks the IDs of non-virtual (real) dir statements so a
+	// stale input copy of the same ID is dropped in favor of the real dir one.
+	realDirByStmtID := make(map[string]bool, len(dirExport))
 	for _, s := range dirExport {
-		dirByStmtID[s.StatementID] = true
+		if !s.Virtual {
+			realDirByStmtID[s.StatementID] = true
+		}
 	}
 
-	result := dirExport
+	// covered tracks IDs already emitted by a real statement (dir or input), so
+	// a derived anchor only fills periods with no real statement.
+	covered := make(map[string]bool, len(dirExport))
+
+	// Seed result with the real (non-virtual) dir statements.
+	var result []export.Statement
+	for _, s := range dirExport {
+		if s.Virtual {
+			continue
+		}
+		result = append(result, s)
+		covered[s.StatementID] = true
+	}
+
+	// Real input statements: skip virtual ones and those overridden by a real
+	// dir statement; otherwise retain and update LastTransactionDate.
 	for _, s := range inputStmts {
-		if dirByStmtID[s.StatementID] || s.Virtual {
+		if s.Virtual || realDirByStmtID[s.StatementID] {
 			continue
 		}
 		// Update input-only statement's LastTransactionDate from merged transactions
@@ -1219,7 +1257,19 @@ func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statem
 			s.LastTransactionDate = &v
 		}
 		result = append(result, s)
+		covered[s.StatementID] = true
 	}
+
+	// Derived/virtual dir anchors gap-fill only: emit one solely when no real
+	// statement (dir or input) already covers its period.
+	for _, s := range dirExport {
+		if !s.Virtual || covered[s.StatementID] {
+			continue
+		}
+		result = append(result, s)
+		covered[s.StatementID] = true
+	}
+
 	return result
 }
 
@@ -1324,6 +1374,7 @@ func deriveMonthlyStatements(parsed []parsedFile) []budget.StatementData {
 				Balance:     derivedBalance,
 				Period:      period,
 				BalanceDate: &bd,
+				Virtual:     true,
 			})
 		}
 		if count := len(derived) - beforeLen; count > 0 {
@@ -1380,6 +1431,7 @@ func buildExportStatements(stmts []budget.StatementData) []export.Statement {
 			BalanceDate:         balanceDate,
 			LastTransactionDate: ltd,
 			SourceFile:          s.SourceFile,
+			Virtual:             s.Virtual,
 		}
 	}
 	return out

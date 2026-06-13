@@ -1,13 +1,20 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
-const mockGetPublicMedia = vi.fn();
-const mockGetAllAccessibleMedia = vi.fn();
+const mockListCloud = vi.fn();
 
-vi.mock("../../src/firestore.js", () => ({
-  getPublicMedia: (...args: unknown[]) => mockGetPublicMedia(...args),
-  getAllAccessibleMedia: (...args: unknown[]) =>
-    mockGetAllAccessibleMedia(...args),
+// renderHome routes its cloud fetch through library.ts's listCloud(); the
+// per-viewer dispatch (public vs. accessible) now lives in library.ts and is
+// covered by library.test.ts. Mock the library seam here so renderHome's
+// rendering is tested without real firebase init.
+vi.mock("../../src/library.js", () => ({
+  listCloud: (...args: unknown[]) => mockListCloud(...args),
+}));
+
+// local-folder-ui.ts transitively imports firebase via library.ts; stub it
+// so renderHome and afterRenderHome tests don't need real firebase init.
+vi.mock("../../src/local-folder-ui.js", () => ({
+  renderLocalIntoList: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../src/storage.js", () => ({
@@ -21,7 +28,10 @@ vi.mock("../../src/auth.js", () => ({
   onAuthStateChanged: vi.fn(),
 }));
 
-import { renderHome } from "../../src/pages/home";
+import { renderHome, afterRenderHome, wireDownloadActions } from "../../src/pages/home";
+import { wireMarkdownActions } from "../../src/markdown-actions";
+import { getMediaDownloadUrl } from "../../src/storage.js";
+import { createHistoryRouter, type Router } from "@commons-systems/router";
 import type { MediaItem } from "../../src/types";
 
 function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
@@ -47,17 +57,16 @@ describe("renderHome", () => {
   });
 
   describe("when user is null (signed out)", () => {
-    it("calls getPublicMedia", async () => {
-      mockGetPublicMedia.mockResolvedValue([]);
+    it("fetches the cloud library via listCloud", async () => {
+      mockListCloud.mockResolvedValue([]);
 
       await renderHome(null);
 
-      expect(mockGetPublicMedia).toHaveBeenCalled();
-      expect(mockGetAllAccessibleMedia).not.toHaveBeenCalled();
+      expect(mockListCloud).toHaveBeenCalled();
     });
 
     it("shows the public notice", async () => {
-      mockGetPublicMedia.mockResolvedValue([]);
+      mockListCloud.mockResolvedValue([]);
 
       const html = await renderHome(null);
 
@@ -73,17 +82,16 @@ describe("renderHome", () => {
       displayName: string;
     };
 
-    it("calls getAllAccessibleMedia with user email", async () => {
-      mockGetAllAccessibleMedia.mockResolvedValue([]);
+    it("fetches the cloud library via listCloud", async () => {
+      mockListCloud.mockResolvedValue([]);
 
       await renderHome(mockUser);
 
-      expect(mockGetAllAccessibleMedia).toHaveBeenCalledWith("user@example.com");
-      expect(mockGetPublicMedia).not.toHaveBeenCalled();
+      expect(mockListCloud).toHaveBeenCalled();
     });
 
     it("does not show the public notice", async () => {
-      mockGetAllAccessibleMedia.mockResolvedValue([]);
+      mockListCloud.mockResolvedValue([]);
 
       const html = await renderHome(mockUser);
 
@@ -92,7 +100,7 @@ describe("renderHome", () => {
   });
 
   it("renders the Library heading", async () => {
-    mockGetPublicMedia.mockResolvedValue([]);
+    mockListCloud.mockResolvedValue([]);
 
     const html = await renderHome(null);
 
@@ -100,7 +108,7 @@ describe("renderHome", () => {
   });
 
   it("renders empty state when no items are returned", async () => {
-    mockGetPublicMedia.mockResolvedValue([]);
+    mockListCloud.mockResolvedValue([]);
 
     const html = await renderHome(null);
 
@@ -109,7 +117,7 @@ describe("renderHome", () => {
   });
 
   it("renders media list with items", async () => {
-    mockGetPublicMedia.mockResolvedValue([
+    mockListCloud.mockResolvedValue([
       makeMediaItem({ id: "book-1", title: "First Book" }),
       makeMediaItem({ id: "book-2", title: "Second Book", mediaType: "epub" }),
     ]);
@@ -122,7 +130,7 @@ describe("renderHome", () => {
   });
 
   it("renders media-item elements with data-id attributes", async () => {
-    mockGetPublicMedia.mockResolvedValue([
+    mockListCloud.mockResolvedValue([
       makeMediaItem({ id: "book-1" }),
     ]);
 
@@ -133,7 +141,7 @@ describe("renderHome", () => {
   });
 
   it("renders a view link for each item", async () => {
-    mockGetPublicMedia.mockResolvedValue([
+    mockListCloud.mockResolvedValue([
       makeMediaItem({ id: "book-1" }),
     ]);
 
@@ -144,7 +152,7 @@ describe("renderHome", () => {
   });
 
   it("renders a download button for each item", async () => {
-    mockGetPublicMedia.mockResolvedValue([
+    mockListCloud.mockResolvedValue([
       makeMediaItem({ storagePath: "media/test.pdf" }),
     ]);
 
@@ -155,7 +163,7 @@ describe("renderHome", () => {
   });
 
   it("renders media type badge", async () => {
-    mockGetPublicMedia.mockResolvedValue([
+    mockListCloud.mockResolvedValue([
       makeMediaItem({ mediaType: "epub" }),
     ]);
 
@@ -166,7 +174,7 @@ describe("renderHome", () => {
   });
 
   it("renders error fallback when Firestore fails", async () => {
-    mockGetPublicMedia.mockRejectedValue(new Error("connection failed"));
+    mockListCloud.mockRejectedValue(new Error("connection failed"));
 
     const html = await renderHome(null);
 
@@ -175,7 +183,7 @@ describe("renderHome", () => {
   });
 
   it("renders markdown buttons when markdownPath is non-null", async () => {
-    mockGetPublicMedia.mockResolvedValue([
+    mockListCloud.mockResolvedValue([
       makeMediaItem({ markdownPath: "media/test.md" }),
     ]);
 
@@ -187,7 +195,7 @@ describe("renderHome", () => {
   });
 
   it("does not render markdown buttons when markdownPath is null", async () => {
-    mockGetPublicMedia.mockResolvedValue([
+    mockListCloud.mockResolvedValue([
       makeMediaItem(),
     ]);
 
@@ -198,10 +206,59 @@ describe("renderHome", () => {
   });
 
   it("re-throws DataIntegrityError", async () => {
-    mockGetPublicMedia.mockRejectedValue(
+    mockListCloud.mockRejectedValue(
       new DataIntegrityError("corrupt data"),
     );
 
     await expect(renderHome(null)).rejects.toThrow(DataIntegrityError);
+  });
+});
+
+describe("download wiring (regression #1280)", () => {
+  let router: Router | undefined;
+  let outlet: HTMLElement | undefined;
+
+  afterEach(() => {
+    router?.destroy();
+    router = undefined;
+    if (outlet) {
+      document.body.removeChild(outlet);
+      outlet = undefined;
+    }
+  });
+
+  it("fires exactly one download per click after N home navigations", async () => {
+    vi.clearAllMocks();
+    vi.mocked(getMediaDownloadUrl).mockResolvedValue("https://example.com/x.pdf");
+    mockListCloud.mockResolvedValue([makeMediaItem({ storagePath: "media/x.pdf" })]);
+
+    // Mirror main.ts: wire the persistent outlet's click delegation ONCE,
+    // before the router's first navigation.
+    outlet = document.createElement("div");
+    document.body.appendChild(outlet);
+    wireDownloadActions(outlet);
+    wireMarkdownActions(outlet);
+
+    router = createHistoryRouter(outlet, [
+      { path: "/", render: () => renderHome(null), afterRender: afterRenderHome },
+    ]);
+
+    // Navigate home N times; the router reuses the one persistent outlet and
+    // runs afterRender on every navigation. Pre-fix this rebound the listener
+    // each time, so N navigations meant N handlers for one click.
+    const N = 5;
+    for (let i = 0; i < N; i++) {
+      router.navigate();
+      await vi.waitFor(() => {
+        expect(outlet.querySelector(".media-download")).not.toBeNull();
+      });
+    }
+
+    const button = outlet.querySelector(".media-download") as HTMLButtonElement;
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    // Flush the microtask queue so the async handleDownload runs to its first await.
+    await Promise.resolve();
+
+    expect(vi.mocked(getMediaDownloadUrl)).toHaveBeenCalledTimes(1);
   });
 });

@@ -51,7 +51,7 @@ export interface Budget {
   readonly allowance: number;
   readonly allowancePeriod: AllowancePeriod;
   readonly rollover: Rollover;
-  /** Sorted by date ascending. findLatestOverride assumes this ordering. */
+  /** Sorted by date ascending. findOverrideInPeriod assumes this ordering. */
   readonly overrides: BudgetOverride[];
   readonly groupId: GroupId | null;
 }

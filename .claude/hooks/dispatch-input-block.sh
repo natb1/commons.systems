@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dispatch-input-block: dispatch-session input-block handler.
+# dispatch-input-block: worker input-block handler.
 #
 # Wired to three harness events through which a session can block on user
 # input:
@@ -7,9 +7,10 @@
 #   Notification with notification_type "permission_prompt"
 #   Elicitation
 #
-# Fires only for a dispatch-* background job. On fire:
-#   1. resolves the issue number from the current branch name
-#      (the <N>-* prefix idiom restore-dispatch-skill.sh already uses);
+# Fires only for a worker or parse-job session (name matches ^[0-9]+-). On
+# fire:
+#   1. resolves the issue number from the job name's <N>- prefix
+#      (${JOB_NAME%%-*}, mirroring dispatch-stop.sh);
 #   2. parks the ISSUE on a human via dispatch-apply-office-hours — the single
 #      write path for dispatch:office-hours. It applies the label to the issue
 #      (never a PR), creates the label on first use, and posts a why-comment;
@@ -22,9 +23,12 @@
 #
 # Discriminator: this is a hook on a generic harness event. We only act when:
 #   - CLAUDE_JOB_DIR is set (so this is a managed background job), AND
-#   - the recorded --name in $CLAUDE_JOB_DIR/state.json starts with "dispatch-".
-# That precisely targets a dispatch-* job. Interactive user sessions running
-# /dispatch (no CLAUDE_JOB_DIR) and other background jobs are excluded.
+#   - the recorded --name in $CLAUDE_JOB_DIR/state.json matches ^[0-9]+-
+#     (phase workers and parse-job sessions, both <N>-slug).
+# office-hours-<N> sessions are EXCLUDED by design — they have no leading
+# digit, so the regex does not match, and they legitimately block on input
+# and must not be parked. Interactive user sessions (no CLAUDE_JOB_DIR) are
+# also excluded.
 set -uo pipefail
 trap 'echo "[dispatch-input-block] WARNING: unexpected error on line $LINENO" >&2; exit 0' ERR
 
@@ -38,16 +42,18 @@ if [ ! -f "$STATE_FILE" ]; then
   exit 0
 fi
 
-# Discriminator 2: this job is a dispatch-* job.
+# Discriminator 2: this job is a worker (name starts with <N>-). Phase workers
+# and parse-job sessions are named <N>-slug; office-hours sessions are named
+# office-hours-<N> (no leading digit) and are excluded by design — they
+# legitimately block on input and must not be parked.
 JOB_NAME=$(jq -r '.name // empty' "$STATE_FILE" 2>/dev/null) || JOB_NAME=""
-case "$JOB_NAME" in
-  dispatch-*) ;;
-  *) exit 0 ;;
-esac
+if ! [[ "$JOB_NAME" =~ ^[0-9]+- ]]; then
+  exit 0
+fi
 
 # Consume the payload (defensive — some events pass JSON on stdin). Only
-# dispatch-* jobs reach this point; we read so the Notification filter below
-# can act. Read with a timeout so a wired event without stdin doesn't hang.
+# worker jobs reach this point; we read so the Notification filter below can
+# act. Read with a timeout so a wired event without stdin doesn't hang.
 PAYLOAD=""
 if read -t 1 -d '' PAYLOAD; then :; fi
 
@@ -61,10 +67,9 @@ if [ -n "$PAYLOAD" ]; then
   fi
 fi
 
-# Resolve issue number from the current branch (<N>-<slug>).
-BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || exit 0
-ISSUE_NUM=$(printf '%s\n' "$BRANCH" | grep -oE '^[0-9]+') || exit 0
-[ -n "$ISSUE_NUM" ] || exit 0
+# Resolve issue number from the validated JOB_NAME (<N>-<slug>). Discriminator 2
+# guarantees JOB_NAME matches ^[0-9]+-, so the numeric prefix is non-empty.
+ISSUE_NUM="${JOB_NAME%%-*}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"

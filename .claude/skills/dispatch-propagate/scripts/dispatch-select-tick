@@ -139,6 +139,14 @@ if [[ -n "$OPEN_MB" ]]; then
   fi
 fi
 
+# --- Step 1d: reconcile router-owned PR readiness (best-effort) -------------
+RECONCILE_OUT=$("$SCRIPT_DIR/dispatch-reconcile-ready") || true
+if [[ -n "$RECONCILE_OUT" ]]; then
+  while IFS= read -r ready_line; do
+    [[ -n "$ready_line" ]] && echo "ready: $ready_line"
+  done <<< "$RECONCILE_OUT"
+fi
+
 # --- Step 1b: run-scoped concurrency gate (autonomous no-arg queue path only) -
 # Runs ONLY on the autonomous no-arg queue path. The explicit-target run (a
 # positional <number> was given) and the `--manual` run (the bare human-typed
@@ -156,7 +164,7 @@ fi
 # run may spawn, and normal selection (Step 3) already runs priority-first, so a
 # priority item under budget is handled there. Daemon UNKNOWN (the busy-worker
 # read fails; reservation_count never fails) → fail open (GAP=1); the
-# per-worktree dedup in dispatch-spawn-worker is the last-line defense.
+# per-worktree dedup in dispatch-spawn-job is the last-line defense.
 #
 # AT cap (LIVE_COUNT >= TARGET_N) the budget no longer hard-stops the run. The
 # budget paces only NON-priority autonomous fan-out; priority/main-broken work
@@ -178,6 +186,16 @@ fi
 #          still counted by claude_agents_count_busy_workers on later ticks, so
 #          it suppresses non-priority fan-out: it bypasses the GATE, not the
 #          COUNT.
+#        - `waiting <N>` → a priority PR exists but its CI is pending (#1444).
+#          At target=0 there is no busy worker re-probing priority on a
+#          baton-pass, so the pace reseed would strand the item until the pace
+#          window reopens. Arm the CI-cadence reseed instead:
+#          `dispatch-schedule-target-reseed <N>` re-runs dispatch-tick <N> on a
+#          short delay (CI concluded → spawns gate-exempt; still pending →
+#          re-arms, bounded by the ci-wait attempt counter → office-hours).
+#          At target>0 a busy worker already re-probes priority on each
+#          baton-pass, so the existing pace reseed (`dispatch-schedule-reseed`)
+#          is correct. Both paths release the lock and emit `concurrency-cap`.
 #   3. `empty` (no priority/main-broken item waiting) → the unchanged hard cap:
 #      release the lock, schedule the #725 re-seed, emit `concurrency-cap`.
 GAP=1
@@ -189,7 +207,14 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
   TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")
   # Reconcile the ledger before counting so the gate sees no stranded
   # reservations (sweep reclaim notes → stderr; best-effort).
+  # reservation_sweep internally calls claude_agents_list_all, which reads
+  # DISPATCH_AGENTS_SNAPSHOT (captured once by dispatch-tick before invoking
+  # this script, #1452) when it is set — no live `claude agents --json` call.
   reservation_sweep 1>&2 || true
+  # claude_agents_count_busy_workers also reads DISPATCH_AGENTS_SNAPSHOT (#1452),
+  # so the gate issues zero live `claude agents --json` round-trips when the
+  # snapshot is present. Both agent reads in this block are served from the same
+  # per-tick snapshot.
   if BUSY=$(claude_agents_count_busy_workers); then
     RESV=$(reservation_count)
     LIVE_COUNT=$(( BUSY + RESV ))
@@ -235,6 +260,25 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
           # No priority/main-broken item waiting → hard cap as before.
           release_lock
           "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+          echo "concurrency-cap"
+          exit 0
+          ;;
+        waiting\ *)
+          # A CI-pending priority item exists (#1444). At target=0 the at-cap
+          # state has no busy worker re-probing priority on a baton-pass, so the
+          # pace reseed would strand it until the pace window reopens. Arm a
+          # CI-cadence reseed instead — dispatch-schedule-target-reseed re-runs
+          # dispatch-tick <N> on a short delay (CI concluded → spawns gate-exempt;
+          # still pending → re-arms, bounded by the ci-wait attempt counter →
+          # office-hours). At target>0 a busy worker already re-probes priority on
+          # each baton-pass, so the existing pace reseed is correct.
+          WAIT_NUM="${PRIO#waiting }"
+          release_lock
+          if (( TARGET_N == 0 )); then
+            "$SCRIPT_DIR/dispatch-schedule-target-reseed" "$WAIT_NUM" 1>&2 || true
+          else
+            "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+          fi
           echo "concurrency-cap"
           exit 0
           ;;

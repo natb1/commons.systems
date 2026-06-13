@@ -12,7 +12,7 @@ and push-rejection recovery.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
 launch subagents via the Agent tool and fork `/commit-merge-push`. Callers (e.g.
-`/plan-implement`, `/verify-pr`) invoke it once per unit.
+`/implement`, `/fix-checks`) invoke it once per unit.
 
 This skill is the **single canonical home** of the model-selection heuristic. Other
 skills choosing a model reference this section rather than restating it.
@@ -44,16 +44,61 @@ The caller supplies:
    `model`. The prompt includes `context` and `scope`, plus the explicit constraint:
    *the subagent edits the working tree only — no commits, no pushes.*
 
-2. **Fork `/commit-merge-push`** to commit, merge `origin/main`, and push. This is
-   the **canonical commit-merge-push fork recipe** — `/qa-fix` and `/review-fix`
-   reference this step rather than restating it. Issue an Agent tool call with
-   **`subagent_type: general-purpose`** and **`model: sonnet`** whose prompt invokes
-   `/commit-merge-push` via the Skill tool, passing `commit_intent` so it can write a
-   focused commit message. `/commit-merge-push` is a `context: fork` skill, so its
-   own frontmatter `model: sonnet` does not auto-apply to the subagent — set the model
-   on the Agent call. The `subagent_type` is always `general-purpose` — **never the
-   skill name** (there is no `commit-merge-push` agent type); the subagent runs the
-   skill through its own Skill tool.
+   - **If the unit's `scope` touches `firestore.rules` or Firestore queries**
+     (collection/query reads or writes, or security-rule code), `Read
+     .claude/docs/firestore.md` FIRST and fold its load-bearing code constraints
+     into the `context` passed to the implementation subagent — the subagent does
+     not auto-load the doc, so the constraints must travel in its prompt. Fold in:
+     (1) **list-query `where`-clause compatibility** — an unauthenticated
+     `orderBy` list query is rejected by the rules unless it carries a `where`
+     filter matching the rule condition; use `where("published", "==", true)` and
+     sort client-side; (2) the **`{appName}/{envSuffix}/{collection}/{docId}` path
+     schema** — each app owns a top-level collection and environments are documents
+     within it; (3) the **serialized standalone-rules-PR workflow** — rules changes
+     ride the feature branch through preview/smoke, then ship as a separate
+     rules-only PR to `main`, and only one worktree may carry unmerged rules
+     changes at a time. `.claude/docs/firestore.md` is the authoritative source for
+     all three.
+
+2. **Commit, merge `origin/main`, and push — script-first, skill-fork fallback.**
+   This step is the **canonical commit-merge-push recipe** — `/qa-fix` and
+   `/review-fix` reference this step rather than restating it.
+
+   **2a. Call the script first** (use `dangerouslyDisableSandbox: true` — git
+   writes + `git push` over HTTPS; see `.claude/rules/sandbox.md`). After the
+   Step-1 subagent returns, build the `--file` arguments from the changed files
+   and invoke the script in one command. Use `git diff --name-only HEAD`, which
+   emits **bare** paths (one per line, no status prefix) — never parse
+   `git status --porcelain` by hand, whose lines carry a 2-character status code
+   and a leading space (e.g. ` M file.txt`) that would be passed verbatim and
+   break `git add`. Read each path with a `while`/`read` loop into a quoted
+   array so paths containing spaces or shell metacharacters are passed safely
+   (never interpolate raw filenames into the command line):
+
+   ```bash
+   args=()
+   while IFS= read -r f; do args+=(--file "$f"); done < <(git diff --name-only HEAD)
+   .claude/skills/dispatch-propagate/scripts/commit-merge-push \
+     --intent "<commit_intent>" \
+     "${args[@]}"
+   ```
+
+   `git diff --name-only HEAD` lists modified and staged tracked files; if the
+   unit added new untracked files, append them the same way via
+   `git ls-files --others --exclude-standard` (also bare, NUL-safe paths) — both
+   feed the same quoted `args` array. Exit 0 → unit landed; proceed to Step 4
+   (Return).
+
+   **2b. On a non-zero exit, fall back to the fork** — this is the **canonical
+   commit-merge-push fork recipe**: issue an Agent tool call with
+   **`subagent_type: general-purpose`** and **`model: sonnet`** whose prompt
+   invokes `/commit-merge-push` via the Skill tool, passing `commit_intent` so it
+   can write a focused commit message. `/commit-merge-push` is a `context: fork`
+   skill, so its own frontmatter `model: sonnet` does not auto-apply to the
+   subagent — set the model on the Agent call. The `subagent_type` is always
+   `general-purpose` — **never the skill name** (there is no `commit-merge-push`
+   agent type); the subagent runs the skill through its own Skill tool. Then apply
+   Step 3 recovery as normal.
 
 3. **On a `/commit-merge-push` error, recover:**
    - **Merge conflict** → launch an `opus` subagent to resolve the conflict in the

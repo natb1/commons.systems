@@ -2,13 +2,17 @@ import "missing.css";
 import "./style/theme.css";
 import { createHistoryRouter } from "@commons-systems/router";
 import { classifyError } from "@commons-systems/errorutil/classify";
-import { renderHome, afterRenderHome } from "./pages/home.js";
-import { renderView, afterRenderView, cleanupView } from "./pages/view.js";
+import { logError } from "@commons-systems/errorutil/log";
+import { renderHome, afterRenderHome, wireDownloadActions } from "./pages/home.js";
+import { wireMarkdownActions } from "./markdown-actions.js";
+import { initLocalFolder } from "./local-folder-ui.js";
+import { renderView, afterRenderView, cleanupView, NOT_FOUND_HTML } from "./pages/view.js";
 import { renderAbout } from "./pages/about.js";
 import "@commons-systems/components/nav";
 import type { AppNavElement } from "@commons-systems/components/nav";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "./auth.js";
+import { setViewerEmail, markLocalFolderReady } from "./library.js";
 import { trackPageView } from "./firebase.js";
 import { renderHero } from "./pages/hero.js";
 import { mountHero } from "@commons-systems/components/hero";
@@ -29,10 +33,33 @@ navEl.links = [
 navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => void signOut());
 
+// Insert the local-folder button into the nav, immediately before the
+// Login/user controls. Inserted as a sibling of .nav-auth (not inside it) so
+// the nav component's innerHTML rewrite on auth state change does not touch it.
+// The CSS rule `app-nav > .nav-links + * { margin-left: auto }` then pushes
+// this span (and .nav-auth) to the right.
+const navAuthEl = navEl.querySelector(".nav-auth");
+if (navAuthEl) {
+  const localFolderNavEl = document.createElement("span");
+  localFolderNavEl.id = "local-folder";
+  navEl.insertBefore(localFolderNavEl, navAuthEl);
+  initLocalFolder(localFolderNavEl, app, () => router.navigate())
+    .catch((err) => logError(err, { operation: "init-local-folder" }))
+    .finally(() => markLocalFolderReady());
+} else {
+  // No .nav-auth means the local-folder UI is never mounted, so initLocalFolder
+  // never runs to settle the readiness gate. Mark it ready here so renderView()
+  // for a local: id never hangs forever waiting on a promise that can't resolve.
+  markLocalFolderReady();
+}
+
 let currentUser: User | null = null;
 
 // Show login UI immediately; onAuthStateChanged will update once auth resolves.
 navEl.user = null;
+
+wireDownloadActions(app);
+wireMarkdownActions(app);
 
 const router = createHistoryRouter(
   app,
@@ -44,7 +71,17 @@ const router = createHistoryRouter(
     },
     {
       path: /^\/view\/([^/]+)$/,
-      render: (path) => renderView(path.slice("/view/".length), currentUser),
+      render: (path) => {
+        let id: string;
+        try {
+          id = decodeURIComponent(path.slice("/view/".length));
+        } catch {
+          // Malformed percent-encoding (e.g. /view/%ZZ) is normal user input,
+          // not an error to report — treat it as a missing item.
+          return NOT_FOUND_HTML;
+        }
+        return renderView(id, currentUser);
+      },
       afterRender: (outlet) => afterRenderView(outlet, currentUser),
     },
     { path: "/about", render: renderAbout },
@@ -66,5 +103,6 @@ onAuthStateChanged((user) => {
   currentUser = user;
   navEl.user = user;
   heroContainer.hidden = user !== null;
+  setViewerEmail(user?.email ?? null);
   router.navigate();
 });

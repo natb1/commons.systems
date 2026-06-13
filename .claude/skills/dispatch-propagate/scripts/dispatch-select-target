@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Select the single highest-priority task from the queue.
-# Usage: dispatch-select-target [--qa | --health-only | --main-broken-sha | --priority-only] [--exclude <n>...]
+# Usage: dispatch-select-target [--qa | --health-only | --main-broken-sha | --priority-only] [--top <N>] [--exclude <n>...]
 #
 # --exclude <n>... names issue numbers the caller has already processed (the
 # fan-out loop's SEEN set, #1062); the selector never returns an excluded target
@@ -28,6 +28,18 @@
 #                                 every PR/issue tier; inert when no local
 #                                 dispatch.config/jit.json is present.
 #   main-broken <sha>           — origin/main's HEAD CI has a failing check; no task selected
+#
+# --top <N> (default 1, default-mode only) emits up to N distinct decision lines
+# in the existing priority order (priority axis → topic category → phase ladder),
+# one per line — the fan-out caller consumes the list in a single scan instead of
+# re-invoking the selector once per slot (#1317). Each scan dedups internally: no
+# target is returned twice, and live/reserved/office-hours/excluded targets are
+# skipped exactly as in single-target mode. A tripped JIT or main-broken gate
+# still emits its single line (the single-target contract is unchanged — the
+# consumer treats it as deferred), and `empty` is still one line when nothing is
+# eligible. --top is rejected when combined with --qa / --health-only /
+# --main-broken-sha / --priority-only. The default --top 1 is byte-identical to
+# the no-flag behavior for every existing caller.
 #
 # Default-mode priority, top to bottom:
 #   1. JIT scan (jit-reminder)
@@ -60,6 +72,8 @@
 #   main-broken <sha>           — origin/main's HEAD CI has a failing check
 #   pr <num> <branch> <phase>   — the highest-priority priority=1 PR
 #   issue <num>                 — the highest-priority priority=1 help-wanted issue
+#   waiting <issue#>            — a priority item exists but its draft PR's CI is
+#                                 still pending (skipped solely by dispatch-ci-ready)
 #   empty                       — no priority=1 item eligible
 #
 # Selection is three-tier: the `priority` label is the *outermost* axis, topic
@@ -68,7 +82,7 @@
 # phase — before considering any `priority=0` item, so a `priority` item in a
 # low-ranked topic still outranks every non-priority item in a higher-ranked
 # topic. Within one priority level, topic categories run highest priority first:
-#   security → bug → testing infrastructure → dispatch → budget → print → audio → other
+#   security → bug → testing infrastructure → dispatch → landing → fellspiral → budget → print → audio → other
 # and within each (priority, topic) bucket the phase ladder runs innermost.
 #
 # A PR's category is the highest-priority topic among the labels of every issue
@@ -80,10 +94,11 @@
 #
 # Within each (priority, topic) bucket, default-mode priority (oldest PR wins
 # within a tier):
-#   1. Oldest "review"      PR (draft + dispatch:qa-done)
-#   2. Oldest "verify"      PR (draft, CI completed and failed)
-#   3. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
-#   4. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
+#   1. Oldest "fix-conflicts" PR (draft, mergeable == CONFLICTING)
+#   2. Oldest "review"      PR (draft + dispatch:qa-done)
+#   3. Oldest "fix-checks"  PR (draft, CI completed and failed)
+#   4. Oldest "qa"          PR (draft, CI green, no dispatch:* label)
+#   5. Oldest open help-wanted issue whose <N>-* worktree, if any, is not owned
 #      by a live Claude session, and which is not already closed by a non-draft
 #      (ready) PR (#920), resolved to a startable open leaf (an issue whose
 #      entire open-leaf subtree is owned by live sessions is skipped, exactly as
@@ -131,6 +146,8 @@ QA_MODE=false
 HEALTH_ONLY=false
 MAIN_BROKEN_SHA_ONLY=false
 PRIORITY_ONLY=false
+TOP=1
+TOP_EXPLICIT=false
 declare -A EXCLUDED=()
 
 while [[ $# -gt 0 ]]; do
@@ -139,6 +156,16 @@ while [[ $# -gt 0 ]]; do
     --health-only) HEALTH_ONLY=true; shift ;;
     --main-broken-sha) MAIN_BROKEN_SHA_ONLY=true; shift ;;
     --priority-only) PRIORITY_ONLY=true; shift ;;
+    --top)
+      shift
+      if [[ $# -eq 0 || ! "$1" =~ ^[1-9][0-9]*$ ]]; then
+        echo "error: --top requires a positive integer argument" >&2
+        exit 1
+      fi
+      TOP="$1"
+      TOP_EXPLICIT=true
+      shift
+      ;;
     --exclude)
       shift
       while [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; do
@@ -165,12 +192,16 @@ if [[ "$PRIORITY_ONLY" == "true" \
   exit 1
 fi
 
-# Build the leaf-trace passthrough once: the excluded numbers thread into
-# dispatch-trace-leaf (#1062) so a multi-leaf subtree descends past an excluded
-# leaf. Only constructed when non-empty so the call site passes no --exclude
-# flag at all when no exclusion was requested.
-EXCLUDE_ARGS=()
-(( ${#EXCLUDED[@]} > 0 )) && EXCLUDE_ARGS=(--exclude "${!EXCLUDED[@]}")
+# --top is meaningful only in default mode — the --qa / --health-only /
+# --main-broken-sha / --priority-only modes run their own single-line selection
+# or exit early. Reject an explicit --top alongside any of them rather than
+# silently ignoring it. The default TOP=1 (no --top passed) never trips this.
+if [[ "$TOP_EXPLICIT" == "true" \
+      && ( "$QA_MODE" == "true" || "$HEALTH_ONLY" == "true" \
+           || "$MAIN_BROKEN_SHA_ONLY" == "true" || "$PRIORITY_ONLY" == "true" ) ]]; then
+  echo "error: --top cannot combine with --qa, --health-only, --main-broken-sha, or --priority-only" >&2
+  exit 1
+fi
 
 # Print origin/main's HEAD SHA if its CI has a failing check; print nothing if
 # main is healthy or only has in-progress checks. main's CI state spans two
@@ -466,7 +497,7 @@ issue_worktree_claimed() {
 # (passed as DISPATCH_PR_LIST) instead of re-running gh pr list.
 # closingIssuesReferences drives topic-category resolution: a PR inherits the
 # highest-priority topic among the labels of every issue it closes.
-PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences)
+PR_LIST=$(pr_list_open "number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences,mergeable")
 # The office-hours skip is ISSUE-anchored (issue #909): dispatch:office-hours
 # lives on the issue, not the PR, so it is not filtered here on PR labels.
 # Instead the main PR loop below resolves each candidate PR's issue from its
@@ -489,6 +520,16 @@ ISSUE_LIST=$(gh issue list --state open --limit 300 --json number,createdAt,labe
 # (set -e + pipefail); mirrors PR_SORTED.
 ISSUE_LABELS_JSON=$(printf '%s' "$ISSUE_LIST" \
   | jq -c 'reduce .[] as $i ({}; .[$i.number | tostring] = ($i.labels // []))')
+
+# Planned-issue lookup: number → 1 for every open issue carrying
+# dispatch:planned (the implement-phase discriminator, per dispatch-phase).
+# Reuses the already-fetched ISSUE_LIST — no extra gh call. A leaf absent from
+# this map defaults to the plan phase (the lower issue-ladder tier).
+declare -A ISSUE_PLANNED
+while IFS= read -r planned_num; do
+  [[ -n "$planned_num" ]] && ISSUE_PLANNED["$planned_num"]=1
+done < <(printf '%s' "$ISSUE_LIST" | jq -r '
+  .[] | select((.labels // []) | any(.name == "dispatch:planned")) | .number')
 
 # Prefetch open-blocker state for every closing issue across all open PRs in a
 # single batched GraphQL call, replacing the former per-PR/per-closing-issue REST
@@ -557,7 +598,7 @@ fi
 # apart from any `dispatch:*` workflow marker by exact-match resolution. A bare
 # `security` label means topic; only the `dispatch:`-prefixed form is a phase
 # label, and the single review phase has no `security` rung in PHASE_PRIORITY.
-TOPIC_CATEGORIES=(security bug "testing infrastructure" dispatch budget print audio)
+TOPIC_CATEGORIES=(security bug "testing infrastructure" dispatch landing fellspiral budget print audio)
 CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
 # Same priority list as a JSON array, for category_of_labels' jq filter.
 TOPIC_CATEGORIES_JSON=$(printf '%s\n' "${TOPIC_CATEGORIES[@]}" | jq -Rcn '[inputs]')
@@ -586,20 +627,99 @@ has_priority_in_labels() {
   printf '%s' "$1" | jq -r '[.[].name] | if index("priority") then 1 else 0 end'
 }
 
-# First-seen PR per (category, priority-bit, phase): key =
-# "<category>|<priority-bit>|<phase>", value = "<num> <branch>". The "|"
-# separator is collision-free — priority bits are literal `0`/`1`, phase names
-# are fixed identifiers, and no TOPIC_CATEGORIES name contains "|". Both lists
-# are pre-sorted oldest-first, so the first PR captured for a key is the oldest
-# in that bucket.
+# Top-N ranked PRs per (category, priority-bit, phase): key =
+# "<category>|<priority-bit>|<phase>", value = a NEWLINE-DELIMITED list (no
+# leading/trailing newline) of up to TOP entries, each "<num> <branch>", oldest
+# first. The "|" separator is collision-free — priority bits are literal `0`/`1`,
+# phase names are fixed identifiers, and no TOPIC_CATEGORIES name contains "|".
+# PR_SORTED is pre-sorted oldest-first, so entries accumulate oldest-first. For
+# TOP=1 a bucket holds at most one entry — the oldest — and expands to the bare
+# entry with no trailing newline, byte-identical to the former single-entry map.
 declare -A FIRST_PR
-# First-seen help-wanted issue per (category, priority-bit): key =
-# "<category>|<priority-bit>", value = "<num>".
+# Top-N ranked help-wanted issues per (category, priority-bit, phase): key =
+# "<category>|<priority-bit>|<phase>" where phase ∈ {implement, plan}, value = a
+# NEWLINE-DELIMITED list (no leading/trailing newline) of up to TOP "<num>"
+# entries, oldest first. Splitting the bucket by phase lets a planned issue
+# (implement) be selected ahead of an unplanned one (plan) in the same bucket.
 declare -A FIRST_ISSUE
 
-# Within-category phase ladder, highest priority first.
-PHASE_PRIORITY=(review verify)
+# Count the newline-delimited entries stored at <map-name>[<key>] (0 if unset or
+# empty). Entries are joined by single newlines with no trailing newline, so a
+# one-entry bucket has zero internal newlines. Counting via an array split on
+# newline yields the exact count for the 0/1/2... cases: an empty value splits to
+# a zero-element array, a single entry to one element, N entries to N elements.
+bucket_count() {
+  local -n _bc_ref="$1"
+  local _bc_key="$2"
+  local _bc_val="${_bc_ref[$_bc_key]:-}"
+  [[ -z "$_bc_val" ]] && { echo 0; return; }
+  local -a _bc_arr=()
+  IFS=$'\n' read -rd '' -a _bc_arr <<<"$_bc_val" || true
+  echo "${#_bc_arr[@]}"
+}
 
+# Append <entry> to <map-name>[<key>]'s newline list, but only while the bucket
+# holds fewer than TOP entries (the per-bucket cap). An empty bucket is set to
+# the bare entry (no leading newline), so a TOP=1 bucket expands to exactly the
+# entry — preserving the former single-entry map's byte layout for the emission
+# path.
+bucket_append() {
+  local -n _ba_ref="$1"
+  local _ba_key="$2" _ba_entry="$3"
+  (( $(bucket_count "$1" "$_ba_key") >= TOP )) && return 0
+  local _ba_cur="${_ba_ref[$_ba_key]:-}"
+  if [[ -z "$_ba_cur" ]]; then
+    _ba_ref[$_ba_key]="$_ba_entry"
+  else
+    _ba_ref[$_ba_key]="$_ba_cur"$'\n'"$_ba_entry"
+  fi
+}
+
+# group_emittable_count <category> <priority-bit> — total entries the emission
+# loops could draw from this (category, priority) group: FIRST_PR across the PR
+# phase ladder (PHASE_PRIORITY) plus qa, and FIRST_ISSUE across the issue ladder
+# (ISSUE_PHASE_PRIORITY). Drives the walk's global early-exit (#1452): once the
+# strictly-higher-rank groups already hold TOP such entries combined, emission
+# fills its TOP results from them before reaching any lower-rank group, so the
+# remaining lower-rank roots cannot change the output and the walk can stop.
+group_emittable_count() {
+  local _gec_cat="$1" _gec_pri="$2" _gec_total=0 _gec_p
+  for _gec_p in "${PHASE_PRIORITY[@]}" qa; do
+    _gec_total=$(( _gec_total + $(bucket_count FIRST_PR "$_gec_cat|$_gec_pri|$_gec_p") ))
+  done
+  for _gec_p in "${ISSUE_PHASE_PRIORITY[@]}"; do
+    _gec_total=$(( _gec_total + $(bucket_count FIRST_ISSUE "$_gec_cat|$_gec_pri|$_gec_p") ))
+  done
+  echo "$_gec_total"
+}
+
+# Within-category phase ladder, highest priority first.
+PHASE_PRIORITY=(fix-conflicts review fix-checks)
+# Within-category issue ladder, highest priority first: a planned issue
+# (implement phase) advances ahead of an unplanned issue (plan phase).
+ISSUE_PHASE_PRIORITY=(implement plan)
+
+# True when the issue (resolved from a PR's branch prefix) is parked on a
+# human via dispatch:office-hours. Reads ISSUE_LABELS_JSON.
+pr_issue_office_hours_parked() {
+  local num="$1"
+  [[ -z "$num" ]] && return 1
+  printf '%s' "$ISSUE_LABELS_JSON" | jq -e --arg n "$num" \
+    '(.[$n] // []) | any(.name == "dispatch:office-hours")' >/dev/null
+}
+
+# True when any issue a PR closes has >0 open blockers (or unknown → fail
+# closed). Reads BLOCKER_COUNTS. Mirrors the inline blocked check.
+pr_blocked_by_open() {
+  local closing="$1" blocked
+  blocked=$(printf '%s' "$closing" \
+    | jq -r --argjson blk "$BLOCKER_COUNTS" \
+      'if any(.[]; $blk[(.number|tostring)] as $c | $c == null or $c > 0)
+       then "true" else "false" end')
+  [[ "$blocked" == "true" ]]
+}
+
+WAITING_NUM=""
 while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "$pr_num" ]] && continue
 
@@ -624,6 +744,37 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   # rollup is still pending; a concluded (passing/failing) rollup, a non-draft
   # PR, or no PR all report ready. Reuses the PR list fetched above.
   if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$pr_branch" >/dev/null; then
+    # --priority-only waiting detection (#1444): a CI-pending priority PR that is
+    # otherwise eligible — not office-hours-parked, not blocked, not excluded
+    # (claimed worktrees already `continue`d above; a CI-pending draft can never
+    # be phase `done`) — is recorded as a waiting candidate so dispatch-select-tick
+    # can arm a CI-cadence reseed instead of the pace reseed. The checks mirror the
+    # office-hours/blocked/exclude skips further down, so `waiting` fires ONLY when
+    # CI is the sole reason this item is unselectable. PR_SORTED is oldest-first,
+    # so the first recorded candidate is the oldest.
+    if [[ "$PRIORITY_ONLY" == "true" && -z "$WAITING_NUM" ]]; then
+      # The reseed target must be the canonical priority issue, NOT the PR
+      # branch prefix (#1444). A branch may diverge from its closing-issue
+      # number (e.g. `100-fix` closing priority issue `200`), and a branch with
+      # no `<N>-` prefix yields a non-numeric value the reseed sink rejects —
+      # silently stranding the very priority item this path exists to rescue.
+      # Resolve the priority-labeled closing issue from `pr_closing` (already in
+      # scope), reusing ISSUE_LABELS_JSON exactly as pr_combined_labels does. The
+      # line-712 gate guarantees at least one closing issue carries `priority` in
+      # --priority-only mode, and dispatch-find-pr resolves issue→PR via the
+      # issue's closedByPullRequestsReferences fallback, so the priority issue
+      # number is the resolvable, correct target.
+      local_issue=$(printf '%s' "$pr_closing" \
+        | jq -r --argjson map "$ISSUE_LABELS_JSON" \
+          'map(.number | tostring
+               | select((($map[.] // []) | any(.name == "priority"))))
+           | .[0] // empty')
+      if [[ "$local_issue" =~ ^[0-9]+$ && -z "${EXCLUDED[$local_issue]:-}" ]] \
+         && ! pr_issue_office_hours_parked "$local_issue" \
+         && ! pr_blocked_by_open "$pr_closing"; then
+        WAITING_NUM="$local_issue"
+      fi
+    fi
     continue
   fi
 
@@ -647,9 +798,7 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   # (${pr_branch%%-*}). Shared loop ⇒ also covers --qa selection — harmless and
   # consistent.
   [[ -n "$pr_issue_num" && -n "${EXCLUDED[$pr_issue_num]:-}" ]] && continue
-  if [[ -n "$pr_issue_num" ]] && printf '%s' "$ISSUE_LABELS_JSON" \
-      | jq -e --arg n "$pr_issue_num" \
-        '(.[$n] // []) | any(.name == "dispatch:office-hours")' >/dev/null; then
+  if [[ -n "$pr_issue_num" ]] && pr_issue_office_hours_parked "$pr_issue_num"; then
     continue
   fi
 
@@ -664,19 +813,19 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   # between the PR-list fetch and the GraphQL call, so its alias came back null
   # and was dropped. Treat unknown as blocked (fail closed) so a gated PR is
   # never advanced on missing data.
-  pr_blocked=$(printf '%s' "$pr_closing" \
-    | jq -r --argjson blk "$BLOCKER_COUNTS" \
-      'if any(.[]; $blk[(.number|tostring)] as $c | $c == null or $c > 0)
-       then "true" else "false" end')
-  [[ "$pr_blocked" == "true" ]] && continue
+  if pr_blocked_by_open "$pr_closing"; then
+    continue
+  fi
 
-  # Record the oldest PR seen in this category+priority+phase. The :- guard
-  # keeps the unset-key read from aborting under set -u.
+  # Record the oldest TOP PRs seen in this category+priority+phase. PR_SORTED is
+  # oldest-first, so the list accumulates oldest-first; bucket_append caps it at
+  # TOP. For TOP=1 this keeps only the oldest — identical to the former
+  # first-seen guard.
   pr_combined=$(pr_combined_labels "$pr_closing")
   pr_cat=$(category_of_labels "$pr_combined")
   pr_pri=$(has_priority_in_labels "$pr_combined")
   pr_key="$pr_cat|$pr_pri|$phase"
-  [[ -z "${FIRST_PR[$pr_key]:-}" ]] && FIRST_PR[$pr_key]="$pr_num $pr_branch"
+  bucket_append FIRST_PR "$pr_key" "$pr_num $pr_branch"
 done <<< "$PR_SORTED"
 
 if [[ "$QA_MODE" == "true" ]]; then
@@ -711,19 +860,79 @@ done < <(printf '%s' "$PR_LIST" | jq -r '
   .[] | select(.isDraft == false)
   | (.closingIssuesReferences // [])[].number')
 
+# Issue numbers whose own <N>-* branch carries a non-draft (ready) PR. Unlike
+# READY_PR_CLOSED_ISSUES (which keys on closingIssuesReferences, i.e. the root
+# help-wanted issue), this set keys on the headRefName branch-prefix issue number
+# — the traced leaf — exactly how dispatch-ci-ready/dispatch-phase resolve a PR
+# (by <N>- prefix). A non-draft PR is phase `done` per dispatch-phase's
+# non-draft→done rule, so this set is provably equivalent to dispatch-phase's
+# `done` over the open-PR domain, built with zero extra gh calls (#1445).
+declare -A READY_PR_BRANCH_ISSUES
+while IFS= read -r branch_num; do
+  [[ -z "$branch_num" ]] && continue
+  READY_PR_BRANCH_ISSUES["$branch_num"]=1
+done < <(printf '%s' "$PR_LIST" | jq -r '
+  .[] | select(.isDraft == false)
+  | select(.headRefName | test("^[0-9]+-"))
+  | (.headRefName | capture("^(?<n>[0-9]+)-").n)')
+
 # First-seen help-wanted issue per category. The queue is the open-issue list
 # filtered client-side to "help wanted"; issues whose <N>-* worktree is owned
 # by a live session are skipped. Each candidate is resolved to a
 # startable open leaf within its subtree, and the leaf — not the top-level
 # help-wanted issue — is what gets recorded; the category is still the
 # top-level issue's own.
-ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r '
-  sort_by(.createdAt) | .[]
-  | select((.labels // []) | any(.name == "help wanted"))
-  | select((.labels // []) | any(.name == "dispatch:office-hours") | not)
-  | [.number, ((.labels // []) | tojson)] | @tsv')
-while IFS=$'\t' read -r issue_num issue_labels; do
+#
+# The roots are now emitted in (priority desc, category-rank asc, createdAt asc)
+# order — the SAME rank order the emission loops drain — so each (priority,
+# category) group's roots are contiguous, enabling the walk's global early-exit
+# (#1452). The category/priority/cat-rank expressions are the exact ones used by
+# category_of_labels / has_priority_in_labels / the CATEGORIES iteration order,
+# so bucket keys are unchanged. (1 - .pri) sorts priority=1 first; jq sort_by is
+# stable and createdAt is an ISO string sorting chronologically, so within a
+# (pri, cat-rank) group roots stay oldest-first — byte-identical to the old order
+# for that group. The TSV now carries the precomputed pri/cat-rank/cat columns.
+ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r --argjson cats "$TOPIC_CATEGORIES_JSON" '
+  [ .[]
+    | select((.labels // []) | any(.name == "help wanted"))
+    | select((.labels // []) | any(.name == "dispatch:office-hours") | not)
+    | ([(.labels // [])[].name]) as $names
+    | ($names | if index("priority") then 1 else 0 end) as $pri
+    | (first($cats[] | select(. as $c | $names | index($c))) // "other") as $catname
+    | (($cats | index($catname)) // ($cats | length)) as $catrank
+    | { number: .number, createdAt: .createdAt, pri: $pri, catrank: $catrank, catname: $catname }
+  ]
+  | sort_by([ (1 - .pri), .catrank, .createdAt ])
+  | .[] | [.number, .pri, .catrank, .catname] | @tsv')
+walk_prev_group=""
+walk_prev_cat=""
+walk_prev_pri=""
+walk_cum_emittable=0
+while IFS=$'\t' read -r issue_num issue_pri issue_catrank issue_cat; do
   [[ -z "$issue_num" ]] && continue
+  # Global early-exit across (priority, category) groups (#1452). The walk now
+  # runs in (pri desc, cat-rank asc, createdAt asc) order — the SAME rank order
+  # the emission loops drain. Roots of one group are contiguous, so when the
+  # group changes the previous group is fully resolved: fold its emittable count
+  # (FIRST_PR + FIRST_ISSUE across all its phases) into the cumulative. If the
+  # strictly-higher-rank groups already hold TOP emittable entries combined,
+  # emission reaches TOP within them before ever draining this or any lower-rank
+  # group, so no remaining root can change the output — stop the whole walk.
+  # Sound because EXCLUDED is frozen before the walk: each group's FIRST_ISSUE
+  # buckets are fed only by that group's own roots, so the reorder leaves bucket
+  # contents byte-identical (the within-group createdAt order is preserved).
+  cur_group="$issue_pri|$issue_catrank"
+  if [[ "$cur_group" != "$walk_prev_group" ]]; then
+    if [[ -n "$walk_prev_group" ]]; then
+      walk_cum_emittable=$(( walk_cum_emittable + $(group_emittable_count "$walk_prev_cat" "$walk_prev_pri") ))
+    fi
+    if (( walk_cum_emittable >= TOP )); then
+      break
+    fi
+    walk_prev_group="$cur_group"
+    walk_prev_cat="$issue_cat"
+    walk_prev_pri="$issue_pri"
+  fi
   # Skip an open issue already closed by a non-draft (ready) PR (#920).
   [[ -n "${READY_PR_CLOSED_ISSUES[$issue_num]:-}" ]] && continue
   # Skip an issue whose <N>-* worktree is owned by a live session or reserved.
@@ -732,51 +941,104 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   if issue_worktree_claimed "$issue_num"; then
     continue
   fi
-  # Category is the top-level help-wanted issue's own labels. Priority bit is
-  # derived alongside it. Once a (category, priority) bucket has a winner the
-  # remaining issues in it are skipped — including the expensive leaf trace.
-  issue_cat=$(category_of_labels "$issue_labels")
-  issue_pri=$(has_priority_in_labels "$issue_labels")
+  # Category and priority bit both arrive precomputed from the sorted TSV
+  # (issue_cat / issue_pri), derived from the top-level help-wanted issue's own
+  # labels by the same expressions category_of_labels / has_priority_in_labels
+  # use. Once a (category, priority) bucket has a winner the remaining issues in
+  # it are skipped — including the expensive leaf trace.
   # --priority-only scans only the priority=1 tier — skip non-priority issues
   # before the expensive dispatch-trace-leaf descent.
   [[ "$PRIORITY_ONLY" == "true" && "$issue_pri" != "1" ]] && continue
-  issue_bucket="$issue_cat|$issue_pri"
-  [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]] && continue
-  # Resolve a startable open leaf within the issue's subtree. dispatch-trace-leaf
-  # in queue mode descends open blockers and sub-issues, skipping any child whose
-  # <N>-* worktree is owned by a live session (#914) — an orphan child worktree
-  # stays descendable. The --exclude set (#1062) is threaded in so a leaf the
-  # fan-out caller already processed — including this help-wanted issue itself as
-  # the trace root, and a multi-leaf subtree's first leaf that self-closed and
-  # left an orphan worktree (not live-skipped) — is descended past to the next
-  # startable leaf, rather than re-returned:
-  #   exit 0 — a startable open leaf was found; record it for this bucket.
-  #   exit 2 — every reachable open leaf is owned by a live session or excluded.
-  #            Skip this issue exactly as a direct live-owned worktree is skipped;
-  #            a later issue in the same bucket may still fill the slot.
-  #   exit 1 — usage error; propagate as a hard failure, never swallow as a skip.
-  if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue "${EXCLUDE_ARGS[@]}"); then
-    # Readiness gate, symmetric with the PR-loop gate above (#1106). A
-    # help-wanted issue can already carry a draft PR whose CI is in progress —
-    # a draft closing PR does not evict its issue from this queue (#920), so a
-    # stalled/orphaned draft is recyclable. Skip such a leaf: spawning a worker
-    # now would only hit dispatch-route's STOP-waiting re-gate, wasting a tick.
-    # A leaf with no PR (normal implement) or a concluded-CI draft reports
-    # ready and proceeds; a concluded-CI draft is owned by the PR queue
-    # (verify/qa), which precedes the issue within a bucket and recycles the
-    # orphan worktree via `enter` just as the issue path would. dispatch-ci-ready
-    # resolves the all-digit leaf to its PR by headRefName prefix. Reuses the
-    # PR list fetched above.
-    if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$leaf" >/dev/null; then
-      continue
-    fi
-    FIRST_ISSUE[$issue_bucket]="$leaf"
-  else
-    trace_status=$?
-    [[ "$trace_status" -eq 2 ]] && continue
-    echo "error: dispatch-trace-leaf $issue_num queue failed (exit $trace_status)" >&2
-    exit 1
+  # Coarse pre-trace skip: only when BOTH phase sub-buckets already hold TOP
+  # entries is the expensive leaf trace pointless. If either implement or plan
+  # slot is still under TOP, descend — the leaf's phase isn't known until after
+  # the trace.
+  impl_bucket="$issue_cat|$issue_pri|implement"
+  plan_bucket="$issue_cat|$issue_pri|plan"
+  if (( $(bucket_count FIRST_ISSUE "$impl_bucket") >= TOP )) \
+     && (( $(bucket_count FIRST_ISSUE "$plan_bucket") >= TOP )); then
+    continue
   fi
+  # Resolve up to TOP startable open leaves within the issue's subtree, in one
+  # descent. dispatch-trace-leaf in queue mode descends open blockers and
+  # sub-issues, skipping any child whose <N>-* worktree is owned by a live
+  # session (#914) — an orphan child worktree stays descendable. The --exclude
+  # set threaded in starts from the GLOBAL excluded numbers (#1062) and GROWS by
+  # every leaf recorded (or skipped not-ready) within THIS root, so each pass
+  # descends past the leaves already seen to the next startable one — enumerating
+  # the subtree's startable leaves one at a time, the same mechanism the per-slot
+  # --exclude loop relied on across calls (#1317), now within a single scan:
+  #   exit 0 — a startable open leaf was found; gate it and (if ready) record it.
+  #   exit 2 — every reachable open leaf is owned by a live session or excluded;
+  #            stop descending this root. A later issue in the same bucket may
+  #            still fill the slot.
+  #   exit 1 — usage error; propagate as a hard failure, never swallow as a skip.
+  declare -A root_excl=()
+  for _ge in "${!EXCLUDED[@]}"; do root_excl["$_ge"]=1; done
+  root_recorded=0
+  while :; do
+    # Stop once this root has supplied TOP leaves, or both phase buckets are at
+    # TOP globally — no further descent of this root can contribute.
+    (( root_recorded >= TOP )) && break
+    if (( $(bucket_count FIRST_ISSUE "$impl_bucket") >= TOP )) \
+       && (( $(bucket_count FIRST_ISSUE "$plan_bucket") >= TOP )); then
+      break
+    fi
+    root_excl_args=()
+    (( ${#root_excl[@]} > 0 )) && root_excl_args=(--exclude "${!root_excl[@]}")
+    if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue "${root_excl_args[@]}"); then
+      # Readiness gate, symmetric with the PR-loop gate above (#1106). A
+      # help-wanted issue can already carry a draft PR whose CI is in progress —
+      # a draft closing PR does not evict its issue from this queue (#920), so a
+      # stalled/orphaned draft is recyclable. A not-ready leaf is excluded and the
+      # descent continues to the next startable leaf of the SAME root (rather than
+      # abandoning the whole root), so a sibling can still be picked up. A leaf
+      # with no PR (normal implement) or a concluded-CI draft reports ready and
+      # proceeds; a concluded-CI draft is owned by the PR queue (fix-checks/qa),
+      # which precedes the issue within a bucket and recycles the orphan worktree
+      # via `enter` just as the issue path would. dispatch-ci-ready resolves the
+      # all-digit leaf to its PR by headRefName prefix. Reuses the PR list above.
+      #
+      # The done-ready exclusion runs FIRST, before dispatch-ci-ready, to skip the
+      # subprocess fork for a done-ready leaf. A non-draft (ready) PR on the leaf's
+      # own <leaf>-* branch makes the leaf phase `done` (dispatch-phase's
+      # non-draft→done rule). dispatch-materialize-spawn would re-derive that done
+      # phase at the spawn boundary and drain it, spawning no worker — killing the
+      # chain. Exclude the done leaf here at selection time, mirroring that
+      # spawn-boundary done re-check, and continue descending the same root to the
+      # next startable leaf — exactly like the not-ready skip below (#1445). The
+      # root-keyed READY_PR_CLOSED_ISSUES skip above only catches a done *root*;
+      # this branch-keyed set is the authoritative check on the traced leaf.
+      # READY_PR_BRANCH_ISSUES membership implies the leaf already has a non-draft
+      # PR, for which dispatch-ci-ready would unconditionally pass — so skipping the
+      # call here changes nothing but the saved fork.
+      if [[ -n "${READY_PR_BRANCH_ISSUES[$leaf]:-}" ]]; then
+        root_excl["$leaf"]=1
+        continue
+      fi
+      if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$leaf" >/dev/null; then
+        root_excl["$leaf"]=1
+        continue
+      fi
+      # Phase-key the leaf (NOT the help-wanted root — the traced leaf may differ
+      # from issue_num). dispatch:planned → implement, else plan, mirroring
+      # dispatch-phase. bucket_append caps each phase bucket at TOP and keeps the
+      # oldest entries; a leaf traced into an already-full bucket is silently
+      # dropped (the cap subsumes the former first-seen guard).
+      leaf_phase=plan
+      [[ -n "${ISSUE_PLANNED[$leaf]:-}" ]] && leaf_phase=implement
+      leaf_bucket="$issue_cat|$issue_pri|$leaf_phase"
+      bucket_append FIRST_ISSUE "$leaf_bucket" "$leaf"
+      root_excl["$leaf"]=1
+      root_recorded=$(( root_recorded + 1 ))
+    else
+      trace_status=$?
+      [[ "$trace_status" -eq 2 ]] && break
+      echo "error: dispatch-trace-leaf $issue_num queue failed (exit $trace_status)" >&2
+      exit 1
+    fi
+  done
+  unset root_excl
 done <<< "$ISSUE_SORTED"
 
 # Default mode: priority is the outermost axis (1 then 0), topic category nests
@@ -791,28 +1053,95 @@ done <<< "$ISSUE_SORTED"
 # pass below is then a guaranteed no-op (every lookup misses). It is left in the
 # shared loop rather than special-cased — the empty-map iteration is harmless
 # and keeps the default and --priority-only output paths identical.
-for pri in 1 0; do
-  for category in "${CATEGORIES[@]}"; do
-    for phase in "${PHASE_PRIORITY[@]}"; do
-      pr_key="$category|$pri|$phase"
-      if [[ -n "${FIRST_PR[$pr_key]:-}" ]]; then
-        echo "pr ${FIRST_PR[$pr_key]} $phase"
+if (( TOP == 1 )); then
+  # TOP=1: emit the single highest-priority decision line and exit. Each bucket
+  # holds at most one entry (no trailing newline), so the direct expansion below
+  # is byte-identical to the former single-entry map's output.
+  for pri in 1 0; do
+    for category in "${CATEGORIES[@]}"; do
+      for phase in "${PHASE_PRIORITY[@]}"; do
+        pr_key="$category|$pri|$phase"
+        if [[ -n "${FIRST_PR[$pr_key]:-}" ]]; then
+          echo "pr ${FIRST_PR[$pr_key]} $phase"
+          exit 0
+        fi
+      done
+
+      qa_key="$category|$pri|qa"
+      if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
+        echo "pr ${FIRST_PR[$qa_key]} qa"
         exit 0
       fi
+
+      for iphase in "${ISSUE_PHASE_PRIORITY[@]}"; do
+        issue_key="$category|$pri|$iphase"
+        if [[ -n "${FIRST_ISSUE[$issue_key]:-}" ]]; then
+          echo "issue ${FIRST_ISSUE[$issue_key]}"
+          exit 0
+        fi
+      done
     done
-
-    qa_key="$category|$pri|qa"
-    if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
-      echo "pr ${FIRST_PR[$qa_key]} qa"
-      exit 0
-    fi
-
-    issue_bucket="$category|$pri"
-    if [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]]; then
-      echo "issue ${FIRST_ISSUE[$issue_bucket]}"
-      exit 0
-    fi
   done
-done
 
-echo "empty"
+  if [[ "$PRIORITY_ONLY" == "true" && -n "$WAITING_NUM" ]]; then
+    echo "waiting $WAITING_NUM"
+  else
+    echo "empty"
+  fi
+else
+  # TOP>1: a parallel walk over the SAME nesting, draining each bucket's
+  # newline list oldest-first into a results array until it holds TOP entries.
+  # Reads a possibly-empty/unset bucket into an array that yields zero elements
+  # for an empty value (the [[ -z ]] guard skips read entirely), so set -u never
+  # sees a spurious empty element.
+  results=()
+  drain_bucket() {
+    # $1 = map name, $2 = key, $3 = line prefix template ("pr"/"issue"),
+    # $4 = optional phase suffix appended after each entry ("" for none).
+    local -n _db_ref="$1"
+    local _db_key="$2" _db_prefix="$3" _db_suffix="${4:-}"
+    local _db_val="${_db_ref[$_db_key]:-}"
+    [[ -z "$_db_val" ]] && return 0
+    local -a _db_entries=()
+    IFS=$'\n' read -rd '' -a _db_entries <<<"$_db_val" || true
+    local _db_e
+    for _db_e in "${_db_entries[@]}"; do
+      if [[ -n "$_db_suffix" ]]; then
+        results+=("$_db_prefix $_db_e $_db_suffix")
+      else
+        results+=("$_db_prefix $_db_e")
+      fi
+      (( ${#results[@]} >= TOP )) && return 0
+    done
+    # The for-loop's last evaluated command is the `(( ... ))` test above; when it
+    # is false (results still under TOP) it returns 1, which — as drain_bucket's
+    # final command — would make the function return 1 and, under `set -e`, abort
+    # the whole scan at the bare `drain_bucket` call site. Return success
+    # explicitly so a not-yet-full results array keeps the scan going (#1317).
+    return 0
+  }
+
+  for pri in 1 0; do
+    for category in "${CATEGORIES[@]}"; do
+      for phase in "${PHASE_PRIORITY[@]}"; do
+        drain_bucket FIRST_PR "$category|$pri|$phase" pr "$phase"
+        (( ${#results[@]} >= TOP )) && { printf '%s\n' "${results[@]}"; exit 0; }
+      done
+
+      drain_bucket FIRST_PR "$category|$pri|qa" pr qa
+      (( ${#results[@]} >= TOP )) && { printf '%s\n' "${results[@]}"; exit 0; }
+
+      for iphase in "${ISSUE_PHASE_PRIORITY[@]}"; do
+        drain_bucket FIRST_ISSUE "$category|$pri|$iphase" issue ""
+        (( ${#results[@]} >= TOP )) && { printf '%s\n' "${results[@]}"; exit 0; }
+      done
+    done
+  done
+
+  if (( ${#results[@]} > 0 )); then
+    printf '%s\n' "${results[@]}"
+  else
+    echo "empty"
+  fi
+  exit 0
+fi
