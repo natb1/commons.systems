@@ -8893,20 +8893,31 @@ else
 fi
 config_teardown
 
-# --- Test 13d: floor == cap accepted; only floor-alone (default cap) accepted -
+# --- Test 13d: floor == cap accepted; large floor alone now rejected (#930) ---
 
-echo "Test: weekly_increment_floor_pct == cap accepted; floor alone accepted"
+echo "Test: weekly_increment_floor_pct == cap accepted; large floor alone rejected (monotonicity)"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
 {"weekly_increment_floor_pct": 5, "weekly_increment_cap_pct": 5}
 EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
 assert_eq "floor == cap exits 0" "0" "$rc"
-# Cross-check only fires when both are present: floor alone (cap defaulted) is
-# not flagged here, by design — the validator does not know the script default.
+# #930 added a curve-monotonicity constraint that applies algorithm defaults for
+# absent fields. floor=50 alone gives min = 34*50*1/2 = 850 > 90 (default
+# target_weekly_usage_pct), so the config is now rejected even without a cap
+# field present. This changed the pre-#930 behaviour where floor alone with a
+# defaulted cap was silently accepted.
 echo '{"weekly_increment_floor_pct": 50}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
-out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
-assert_eq "floor alone (cap absent) exits 0" "0" "$rc"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "large floor alone (cap absent) exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"monotonicity"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: large floor alone stderr contains monotonicity"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: large floor alone stderr contains monotonicity"
+  echo "    stderr: $err"
+fi
 config_teardown
 
 # --- Test 13e: five_hour_target_floor_pct > ceiling rejected (cross-field) ---
@@ -9009,6 +9020,85 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: exhaustion_threshold_pct 101 stderr says <= 100"
   echo "    stderr: $err"
 fi
+config_teardown
+
+# --- Test 13k: target_weekly_usage_pct: 10 rejected (10 < 17, default floor/power) ---
+
+echo "Test: target_weekly_usage_pct: 10 exits 1, stderr names target_weekly_usage_pct and monotonicity"
+config_setup
+echo '{"target_weekly_usage_pct": 10}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "target_weekly_usage_pct 10 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"target_weekly_usage_pct"* && "$err" == *"monotonicity"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: target_weekly_usage_pct 10 stderr names field and monotonicity"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: target_weekly_usage_pct 10 stderr names field and monotonicity"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 13l: target_weekly_usage_pct: 17 accepted (boundary; 17 < 17 is false) ---
+
+echo "Test: target_weekly_usage_pct: 17 exits 0 (boundary, min = 34*1*1/2 = 17, inclusive-accept)"
+config_setup
+echo '{"target_weekly_usage_pct": 17}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "target_weekly_usage_pct 17 exits 0" "0" "$rc"
+config_teardown
+
+# --- Test 13m: target_weekly_usage_pct: 16 rejected (16 < 17) ----------------
+
+echo "Test: target_weekly_usage_pct: 16 exits 1, stderr contains monotonicity"
+config_setup
+echo '{"target_weekly_usage_pct": 16}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "target_weekly_usage_pct 16 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"monotonicity"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: target_weekly_usage_pct 16 stderr contains monotonicity"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: target_weekly_usage_pct 16 stderr contains monotonicity"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 13n: weekly_curve_power shifts the threshold -----------------------
+# With power=3: min = 34*1*3/(3+1) = 25.5; so target=20 is rejected.
+# With default power=1: min = 34*1*1/(1+1) = 17; so target=20 is accepted.
+
+echo "Test: power=3 raises threshold (target=20 rejected); default power=1 accepts target=20"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"target_weekly_usage_pct": 20, "weekly_curve_power": 3}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "target=20 power=3 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"monotonicity"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: target=20 power=3 stderr contains monotonicity"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: target=20 power=3 stderr contains monotonicity"
+  echo "    stderr: $err"
+fi
+echo '{"target_weekly_usage_pct": 20}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "target=20 default power=1 exits 0" "0" "$rc"
+config_teardown
+
+# --- Test 13o: valid combined floor and target accepted ----------------------
+# floor=5, target=90: min = 34*5*1/2 = 85 <= 90, so accepted.
+
+echo "Test: target_weekly_usage_pct=90 weekly_increment_floor_pct=5 exits 0 (min=85 <= 90)"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"target_weekly_usage_pct": 90, "weekly_increment_floor_pct": 5}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "target=90 floor=5 exits 0" "0" "$rc"
 config_teardown
 
 # ============================================================================
@@ -13630,6 +13720,51 @@ else
 fi
 jit_teardown
 
+# --- Test 3-roadmap: roadmap jit (7d/14d) within window — skipped, no issue created ---
+
+echo "Test: dispatch-jit-engine roadmap jit within remindAfterClose is skipped"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "roadmap",
+      "repo": "test-owner/test-repo",
+      "label": "jit:roadmap",
+      "title": "Roadmap review",
+      "body": "Recurring roadmap review.",
+      "project": "test-project",
+      "remindAfterClose": "7d",
+      "dueAfterClose": "14d",
+      "skill": "roadmap"
+    }
+  ]
+}
+EOF
+# Newest closed issue closed 5d before "now" — within the 7d window.
+closed_at=$(date -u -d "@$((JIT_NOW_EPOCH - 5*86400))" +%Y-%m-%dT%H:%M:%SZ)
+printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
+  > "$STUB_DIR/closed-issues.json"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
+assert_eq "roadmap within-window exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"roadmap: skipped (within remindAfterClose)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap within-window reports skipped (within remindAfterClose)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap within-window reports skipped (within remindAfterClose)"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap within-window made no issue create call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap within-window made no issue create call"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+jit_teardown
+
 # --- Test 4: cadence past window creates an issue ----------------------------
 
 echo "Test: dispatch-jit-engine cadence past remindAfterClose creates an issue"
@@ -13761,6 +13896,48 @@ if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: open-guard made no issue create call"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: open-guard made no issue create call"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+jit_teardown
+
+# --- Test 5-roadmap: roadmap jit (7d/14d) open-issue guard — skipped when an open issue exists ---
+
+echo "Test: dispatch-jit-engine roadmap jit skips when an open issue with the label exists"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "roadmap",
+      "repo": "test-owner/test-repo",
+      "label": "jit:roadmap",
+      "title": "Roadmap review",
+      "body": "Recurring roadmap review.",
+      "project": "test-project",
+      "remindAfterClose": "7d",
+      "dueAfterClose": "14d",
+      "skill": "roadmap"
+    }
+  ]
+}
+EOF
+echo '[{"number":50}]' > "$STUB_DIR/open-issues.json"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
+assert_eq "roadmap open-guard exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"roadmap: skipped (open issue exists)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap open-guard reports skipped (open issue exists)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap open-guard reports skipped (open issue exists)"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap open-guard made no issue create call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap open-guard made no issue create call"
   echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
 fi
 jit_teardown
@@ -14889,6 +15066,35 @@ if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: office-hours: dispatch-spawn was not invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: dispatch-spawn was not invoked"
+fi
+ib_teardown
+
+# --- Test 8: open, non-newline stdin → no 1s stall (regression for #1491) ---
+
+echo "Test: open non-newline stdin → hook returns fast (no read stall)"
+ib_setup
+echo '{"name":"123-foo"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+timeout 0.5 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" \
+  < <(printf '%s' '{"notification_type":"permission_prompt"}'; sleep 1) \
+  >/dev/null 2>&1
+rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 124 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: open-stdin: hook completed before the 0.5s timeout (no 1s read stall)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: open-stdin: hook was killed at 0.5s — read is still stalling"
+fi
+# Correctness: the payload must have been read and acted on — not merely
+# timed out empty (which would bypass the notification filter and park by
+# accident rather than by correct payload parsing). Mirror Test 1's check.
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_log" == *123* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: open-stdin: dispatch-apply-office-hours invoked with issue 123 (payload was read and acted on)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: open-stdin: dispatch-apply-office-hours invoked with issue 123 (payload was read and acted on)"
+  echo "    apply-log: $apply_log"
 fi
 ib_teardown
 
@@ -20995,6 +21201,146 @@ deps=false
 app_or_rules=false" "$out"
 
 # ============================================================================
+# === dispatch-changed-files ===
+# ============================================================================
+
+echo "Test: dispatch-changed-files"
+
+# 1. POISONED PR BODY: a pack with a PR section whose body contains bare
+#    '--- files ---' / decoy paths / '--- hunks ---' lines, followed by a
+#    real '=== DIFF (base SHA) ===' section listing the TRUE files.
+#    The old one-stage sed would have returned decoys; the two-stage extraction
+#    must return only the true files.
+poisoned_pack=$(cat <<'EOF'
+=== ISSUE #1442 ===
+
+Some issue body text.
+
+=== PR #99 ===
+
+This PR is important.
+
+--- files ---
+decoy/path/poison1.ts
+decoy/path/poison2.sh
+--- hunks ---
+
+diff --git a/decoy/path/poison1.ts b/decoy/path/poison1.ts
+index 0000000..1111111 100644
+--- a/decoy/path/poison1.ts
++++ b/decoy/path/poison1.ts
+@@ -1 +1 @@
+-old
++new
+
+=== DIFF (base abc1234def5678) ===
+
+--- stat ---
+ path/to/real1.ts | 2 +-
+ path/to/real2.sh | 1 +
+
+--- files ---
+path/to/real1.ts
+path/to/real2.sh
+
+--- hunks ---
+diff --git a/path/to/real1.ts b/path/to/real1.ts
+index 0000000..1111111 100644
+--- a/path/to/real1.ts
++++ b/path/to/real1.ts
+@@ -1 +1 @@
+-old
++new
+EOF
+)
+out=$("$SCRIPT_DIR/dispatch-changed-files" <<<"$poisoned_pack")
+assert_eq "changed-files: poisoned PR body → true diff files only" "path/to/real1.ts
+path/to/real2.sh" "$out"
+
+# 2. EMPTY DIFF: a pack with a real '=== DIFF (base SHA) ===' section where
+#    the files block is empty (--- files --- immediately followed by
+#    --- hunks ---). Must emit nothing and exit 0.
+empty_diff_pack=$(cat <<'EOF'
+=== DIFF (base 0000000000000000000000000000000000000000) ===
+
+--- stat ---
+
+--- files ---
+
+--- hunks ---
+EOF
+)
+rc=0
+out=$("$SCRIPT_DIR/dispatch-changed-files" <<<"$empty_diff_pack") || rc=$?
+assert_eq "changed-files: empty diff → exit 0" "0" "$rc"
+assert_eq "changed-files: empty diff → empty output" "" "$out"
+
+# 3. NO DIFF SECTION: input with no '=== DIFF (base ' header → non-zero exit.
+nodiff_input=$(cat <<'EOF'
+=== ISSUE #1442 ===
+
+Some issue body text with no diff section at all.
+EOF
+)
+rc=0
+out=$("$SCRIPT_DIR/dispatch-changed-files" <<<"$nodiff_input" 2>/dev/null) || rc=$?
+assert_eq "changed-files: no DIFF section → non-zero exit" "1" "$rc"
+
+# 4. POISONED PR BODY WITH FAKE DIFF HEADER: a pack whose === PR === body
+#    itself contains a line of the exact form '=== DIFF (base <hex>) ===',
+#    followed by a decoy files block, BEFORE the real DIFF section. Stage 1
+#    must anchor on the LAST DIFF header (the real one at the end of the
+#    pack), not the first, so the decoys behind the fake header are skipped
+#    and only the true files are emitted.
+poisoned_pack2=$(cat <<'EOF'
+=== ISSUE #1442 ===
+
+Some issue body text.
+
+=== PR #99 ===
+
+This PR is important. The author pasted a fake diff section below:
+
+=== DIFF (base deadbeefdeadbeefdeadbeefdeadbeefdeadbeef) ===
+
+--- files ---
+decoy/path/poison1.ts
+decoy/path/poison2.sh
+
+--- hunks ---
+diff --git a/decoy/path/poison1.ts b/decoy/path/poison1.ts
+index 0000000..1111111 100644
+--- a/decoy/path/poison1.ts
++++ b/decoy/path/poison1.ts
+@@ -1 +1 @@
+-old
++new
+
+=== DIFF (base abc1234def5678) ===
+
+--- stat ---
+ path/to/real1.ts | 2 +-
+ path/to/real2.sh | 1 +
+
+--- files ---
+path/to/real1.ts
+path/to/real2.sh
+
+--- hunks ---
+diff --git a/path/to/real1.ts b/path/to/real1.ts
+index 0000000..1111111 100644
+--- a/path/to/real1.ts
++++ b/path/to/real1.ts
+@@ -1 +1 @@
+-old
++new
+EOF
+)
+out=$("$SCRIPT_DIR/dispatch-changed-files" <<<"$poisoned_pack2")
+assert_eq "changed-files: PR-body fake DIFF header → true diff files only" "path/to/real1.ts
+path/to/real2.sh" "$out"
+
+# ============================================================================
 # === dispatch-security-followup ===
 # ============================================================================
 
@@ -21206,6 +21552,31 @@ assert_eq "dedup: distinct locations → length 2" "2" "$(printf '%s' "$out" | j
 IN3='{"findings":[{"id":"a","Location":"f.ts:1","Source":"review","OWASP":"","STRIDE":"","Confidence":"low"},{"id":"b","Location":"f.ts:1","Source":"secrets","OWASP":"A02:2021 Cryptographic Failures","STRIDE":"Information Disclosure","Confidence":"medium"}],"partition":[["a"],["b"]]}'
 out=$(printf '%s' "$IN3" | "$SCRIPT_DIR/dispatch-review-dedup")
 assert_eq "dedup: same-location distinct-root partition → length 2" "2" "$(printf '%s' "$out" | jq -r 'length')"
+
+# absent-id partition: unknown id is skipped, present finding survives, exit 0
+IN4='{"findings":[{"id":"a","Location":"f.ts:1","Source":"review","OWASP":"","STRIDE":"","Confidence":"low"}],"partition":[["a","zzz"]]}'
+if out=$(printf '%s' "$IN4" | "$SCRIPT_DIR/dispatch-review-dedup"); then rc=0; else rc=$?; fi
+assert_eq "dedup: absent-id partition → exit 0" "0" "$rc"
+assert_eq "dedup: absent-id partition → length 1 (unknown id skipped)" "1" "$(printf '%s' "$out" | jq -r 'length')"
+assert_eq "dedup: absent-id partition → present finding emitted" "a" "$(printf '%s' "$out" | jq -r '.[0].id')"
+# Discriminating assertion: WITHOUT the map(select(.finding != null)) filter
+# (dispatch-review-dedup:79-80), the null member pollutes the union →
+# ["review", null]. exit/length/id all still pass without the filter, so this
+# sources check is the only one that actually guards the absent-id fix.
+assert_eq "dedup: absent-id partition → sources unpolluted by null member" '["review"]' "$(printf '%s' "$out" | jq -c '.[0].sources')"
+
+# empty findings → [], exit 0
+IN5='{"findings":[],"partition":[]}'
+if out=$(printf '%s' "$IN5" | "$SCRIPT_DIR/dispatch-review-dedup"); then rc=0; else rc=$?; fi
+assert_eq "dedup: empty findings → exit 0" "0" "$rc"
+assert_eq "dedup: empty findings → []" "[]" "$(printf '%s' "$out" | jq -c '.')"
+
+# missing Confidence field → graceful fallback (Confidence: null), exit 0
+IN6='{"findings":[{"id":"a","Location":"f.ts:1","Source":"review","OWASP":"","STRIDE":""}],"partition":[]}'
+if out=$(printf '%s' "$IN6" | "$SCRIPT_DIR/dispatch-review-dedup"); then rc=0; else rc=$?; fi
+assert_eq "dedup: missing Confidence → exit 0" "0" "$rc"
+assert_eq "dedup: missing Confidence → length 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
+assert_eq "dedup: missing Confidence → Confidence null fallback" "null" "$(printf '%s' "$out" | jq -c '.[0].Confidence')"
 
 # ============================================================================
 # === dispatch-review-verify-drop ===
