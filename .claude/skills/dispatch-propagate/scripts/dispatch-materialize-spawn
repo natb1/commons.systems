@@ -31,8 +31,11 @@
 # the reservation marker, not registration, closes the spawn-gap race for each
 # detached slot.
 # `explicit` mode and `--gap 1` process a single target (backward-compatible).
-# Fan-out (`--gap N` with N>1) is autonomous-only; a manual run arrives as
-# `--gap 1` and takes the single-target path.
+# Fan-out (`--gap N` with N>1) now serves BOTH the autonomous chain AND a bare
+# `--manual` /dispatch — which arrives as `--gap SPAWN_N` (possibly >1) and
+# takes the fan-out path. Explicit `dispatch <N>` still arrives as `--gap 1`
+# and takes the single-target path. (No logic change — this script already
+# handles `--gap N`.)
 #
 # <issue-N> is always the ISSUE number (the model derives N=${branch%%-*} for a
 # `pr` row before calling). The two literal `[branch phase]` positionals the

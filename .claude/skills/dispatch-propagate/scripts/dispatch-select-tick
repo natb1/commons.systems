@@ -40,9 +40,11 @@
 # explicit-target run (a positional <number> is given) skips the concurrency gate
 # entirely (no sweep, no ledger count) and forces <gap> = 1 — a deliberately-named
 # target is not paced by the autonomous budget.
-# A `--manual` run (the bare human-typed `/dispatch` shim) ALSO skips the gate —
-# no live-count query, never emits `concurrency-cap` — and like the explicit path
-# emits <gap> = 1, spawning ONE gate-exempt worker. Fan-out is autonomous-only.
+# A `--manual` run (the bare human-typed `/dispatch` shim) QUERIES the live-count
+# and computes a context-dependent SPAWN_N = min(HEADROOM, max(N_PRIO, GAP, 1));
+# it overrides the pace-curve throttle but honors the `--exhausted` floor
+# (SPAWN_N=0 → emits `concurrency-cap`) and the MAX_WORKERS ceiling, and emits
+# <gap> = SPAWN_N.
 # The autonomous no-arg queue path keeps the full gate, but with a priority
 # bypass at cap (see the gate narrative below): a waiting priority/main-broken
 # item is still selected and spawned as ONE gate-exempt worker (<gap> = 1) even
@@ -150,10 +152,13 @@ fi
 # --- Step 1b: run-scoped concurrency gate (autonomous no-arg queue path only) -
 # Runs ONLY on the autonomous no-arg queue path. The explicit-target run (a
 # positional <number> was given) and the `--manual` run (the bare human-typed
-# `/dispatch` shim) CONVERGE: both skip the gate entirely — no live-count query,
-# never emit `concurrency-cap` — and keep GAP=1, spawning ONE gate-exempt worker
-# that is not paced by the autonomous concurrency budget. Fan-out is
-# autonomous-only.
+# `/dispatch` shim) DIVERGE here. The explicit-target run skips this gate
+# entirely — a deliberately-named target is not paced by the autonomous budget —
+# and keeps GAP=1. The `--manual` run runs its OWN context-dependent fan-out
+# computation (the `elif [[ -n "$MANUAL" ]]` branch below): it queries the
+# live-count, overrides the pace-curve throttle but honors the `--exhausted`
+# floor and the MAX_WORKERS ceiling, and emits <gap> = SPAWN_N (or
+# `concurrency-cap` when SPAWN_N=0).
 # On the autonomous queue path the gate is evaluated ONCE per run. Before
 # counting, the gate sweeps stranded reservations (reservation_sweep) so it
 # reconciles the ledger first. LIVE_COUNT is then the effective-live count,
@@ -182,7 +187,7 @@ fi
 #        - `main-broken <sha>` → release the lock, echo it (the lock-free
 #          diagnose bg job spawns downstream).
 #        - `pr ...` / `issue ...` → HOLD the lock, append GAP=1 — ONE
-#          gate-exempt worker, exactly like manual/explicit dispatch. It is
+#          gate-exempt worker, exactly like explicit dispatch. It is
 #          still counted by claude_agents_count_busy_workers on later ticks, so
 #          it suppresses non-priority fan-out: it bypasses the GATE, not the
 #          COUNT.
@@ -215,7 +220,7 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
       echo "router: $LIVE_COUNT effective live ($BUSY busy + $RESV reserved) >= target $TARGET_N"
       # At the worker budget. The budget paces NON-priority autonomous fan-out;
       # priority / main-broken work bypasses it (one gate-exempt worker, GAP=1),
-      # exactly like a manual or explicit-target run. The only hard stop is
+      # exactly like an explicit-target run. The only hard stop is
       # genuine token exhaustion: when the 5-hour or weekly window is actually
       # out of tokens (~100% used, reset still ahead), spawn nothing — including
       # the main-broken diagnose job. Distinguish "paced to 0 / at cap" (a
@@ -242,7 +247,7 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
           exit 0
           ;;
         pr\ *|issue\ *)
-          # One gate-exempt worker, exactly like manual / explicit dispatch:
+          # One gate-exempt worker, exactly like an explicit dispatch <N>:
           # hold the lock, append GAP=1. Counted by
           # claude_agents_count_busy_workers on later ticks, so it suppresses
           # non-priority fan-out — it bypasses the GATE, not the COUNT.

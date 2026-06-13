@@ -18,8 +18,8 @@
 # tick is launched by systemd (the #725 heartbeat) and by the worker Stop-hook in
 # a later unit; it runs bare and keeps the concurrency gate. A human-typed
 # `dispatch` runs one tick as foreground bash, passing `--manual` to spawn a
-# single gate-exempt worker (exempt from the pace curve and the `MAX_WORKERS`
-# ceiling); fan-out is autonomous-only.
+# context-dependent SPAWN_N workers (priority-first), exempt from the pace-curve
+# throttle but bounded by the `MAX_WORKERS` ceiling and the `--exhausted` floor.
 # The audit record is this script's journal output
 # (every captured stdout line is echoed through) plus the spawned workers'
 # transcripts plus durable GitHub side effects (PR comments, `dispatch:*`
@@ -31,19 +31,21 @@
 #   processes that one target (gap=1). A human forcing a specific target is never
 #   paced by the autonomous budget.
 #
-#   `dispatch` (bare, no argument): skips BOTH the pace-curve budget
-#   (`dispatch-target-workers`, which a budget pause can drop to 0) AND the
-#   `MAX_WORKERS` concurrency ceiling, and spawns exactly ONE gate-exempt worker
-#   (the highest-priority queue target), never emitting `concurrency-cap`. Fan-out
-#   is the autonomous chain's behavior only.
+#   `dispatch` (bare, no argument): skips the pace-curve throttle (a budget pause
+#   to TARGET_N=0 still fans out) but honors the `MAX_WORKERS` ceiling and the
+#   `--exhausted` hard floor; spawns SPAWN_N = min(HEADROOM, max(N_PRIO, GAP, 1))
+#   workers, priority-first (the highest-priority queue targets). Emits
+#   `concurrency-cap` when SPAWN_N=0 (at the ceiling or exhausted).
 #
-#   Exhaustion hard floor (autonomous path only): when the 5-hour or weekly
-#   rate-limit window is at/near 100% used with `resets_at` still in the future,
-#   `dispatch-target-workers --exhausted` reports `exhausted`. In that state the
-#   tick emits `concurrency-cap`, arms a reseed at the window reset, and spawns
-#   nothing — even a waiting `priority` or `dispatch:main-broken` item. This is a
-#   hard stop on genuine token exhaustion, not the self-imposed pacing throttle
-#   that the priority bypass is meant to override.
+#   Exhaustion hard floor (both autonomous and manual paths): when the 5-hour or
+#   weekly rate-limit window is at/near 100% used with `resets_at` still in the
+#   future, `dispatch-target-workers --exhausted` reports `exhausted`. On BOTH the
+#   autonomous and manual paths the tick emits `concurrency-cap` and spawns nothing
+#   — even a waiting `priority` or `dispatch:main-broken` item. This is a hard stop
+#   on genuine token exhaustion, not the self-imposed pacing throttle that the
+#   priority bypass is meant to override. The reseed-at-reset arm (scheduling a
+#   #725 reseed when the window resets) is autonomous-only: a manual run is a
+#   one-shot and does not arm a reseed.
 #
 #   Priority/main-broken bypass (autonomous path, at-cap, not exhausted): when
 #   `LIVE_COUNT >= TARGET_N` but `--exhausted` reports `ok`, the tick does NOT
@@ -52,7 +54,7 @@
 #   gate first, then scans only the `priority=1` queue tier. If a
 #   `priority`-labeled PR or help-wanted issue (including any `dispatch:main-broken`
 #   issue) is found, the tick holds the lock and spawns exactly ONE gate-exempt
-#   worker (`GAP=1`) — the same treatment as a manual `dispatch`. This also closes
+#   worker (`GAP=1`) — the same treatment as an explicit `dispatch <N>`. This also closes
 #   the gap where a main that breaks while at the worker cap was previously
 #   suppressed: the old pre-selection gate exited before the main-broken health
 #   check ran; the bypass now runs that check first, so `main-broken <sha>` can
