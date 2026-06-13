@@ -210,6 +210,71 @@ describe("clearCache", () => {
   });
 });
 
+describe("deleteEntry", () => {
+  it("removes the target entry and leaves the other intact", async () => {
+    const cache = createLruBlobCache({ name: uniqueDbName(), version: 1 });
+    const a = new Uint8Array([1, 2, 3, 4]);
+    const b = new Uint8Array([5, 6, 7, 8, 9]);
+    await cache.putEntry("a", a);
+    await cache.putEntry("b", b);
+
+    await cache.deleteEntry("a");
+
+    expect(await cache.getEntry("a")).toBeNull();
+    expect(await cache.getEntry("b")).toEqual(b);
+
+    await cache.closeDb();
+  });
+
+  it("decrements totalBytes by exactly the deleted entry's size", async () => {
+    const cache = createLruBlobCache({ name: uniqueDbName(), version: 1 });
+    await cache.putEntry("a", new ArrayBuffer(100));
+    await cache.putEntry("b", new ArrayBuffer(250));
+
+    const before = (await cache.getStats()).totalBytes;
+    await cache.deleteEntry("a");
+    const after = await cache.getStats();
+
+    expect(before - after.totalBytes).toBe(100);
+    expect(after.totalBytes).toBe(250);
+    expect(after.entryCount).toBe(1);
+
+    await cache.closeDb();
+  });
+
+  it("is a no-op for a never-inserted key", async () => {
+    const cache = createLruBlobCache({ name: uniqueDbName(), version: 1 });
+    await cache.putEntry("a", new ArrayBuffer(100));
+
+    const before = await cache.getStats();
+    await cache.deleteEntry("missing");
+    const after = await cache.getStats();
+
+    expect(after.totalBytes).toBe(before.totalBytes);
+    expect(after.entryCount).toBe(before.entryCount);
+    expect(await cache.getEntry("a")).not.toBeNull();
+
+    await cache.closeDb();
+  });
+
+  it("keeps total accounting correct across delete then re-put", async () => {
+    const cache = createLruBlobCache({ name: uniqueDbName(), version: 1 });
+    const sA = 100;
+    const sB = 250;
+    await cache.putEntry("a", new ArrayBuffer(sA));
+    await cache.putEntry("b", new ArrayBuffer(sB));
+
+    await cache.deleteEntry("a");
+    await cache.putEntry("a", new ArrayBuffer(sA));
+
+    const stats = await cache.getStats();
+    expect(stats.totalBytes).toBe(sA + sB);
+    expect(stats.entryCount).toBe(2);
+
+    await cache.closeDb();
+  });
+});
+
 describe("closeDb", () => {
   it("is idempotent and allows reopening", async () => {
     const name = uniqueDbName();

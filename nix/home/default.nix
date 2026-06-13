@@ -27,6 +27,7 @@
     ./claude-code.nix
     ./claude-in-chrome-windows.nix
     ./direnv.nix
+    ./dispatch-usage-samples.nix
     ./gh.nix
     ./git.nix
     ./gpg.nix

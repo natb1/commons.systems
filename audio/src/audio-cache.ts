@@ -25,6 +25,10 @@ export function putFile(storagePath: string, data: ArrayBuffer): Promise<void> {
   return cache.putEntry(storagePath, data);
 }
 
+export function removeFile(storagePath: string): Promise<void> {
+  return cache.deleteEntry(storagePath);
+}
+
 export async function getCacheStats(): Promise<{ trackCount: number; totalBytes: number }> {
   const { entryCount, totalBytes } = await cache.getStats();
   return { trackCount: entryCount, totalBytes };
