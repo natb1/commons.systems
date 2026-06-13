@@ -27,12 +27,17 @@ fi
 # Two-stage extraction anchored to the DIFF section:
 #
 # Stage 1: isolate the DIFF section (always last — header to EOF).
-#          Anchored on the specific prefix '^=== DIFF (base ' so a bare
-#          '=== DIFF' line in a PR/issue body cannot start the range early.
+#          Anchored on the LAST line matching the specific prefix
+#          '^=== DIFF (base ' so that neither a bare '=== DIFF' line nor a
+#          forged '=== DIFF (base <hex>) ===' line pasted into a PR/issue body
+#          can start the range early. The context-pack always appends the real
+#          diff section last, so the last such header is the authoritative one.
+#          The grep -q validation above guarantees at least one match.
 #
 # Stage 2: within the DIFF section, extract the files block between
 #          '--- files ---' and '--- hunks ---', then strip both marker lines.
 
-sed -n '/^=== DIFF (base /,$p' <<<"$input" \
+last_diff=$(grep -n '^=== DIFF (base ' <<<"$input" | tail -n1 | cut -d: -f1)
+tail -n +"$last_diff" <<<"$input" \
   | sed -n '/^--- files ---$/,/^--- hunks ---$/p' \
   | sed '1d;$d'

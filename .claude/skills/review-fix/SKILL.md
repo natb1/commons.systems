@@ -47,8 +47,8 @@ N="${BRANCH%%-*}"
   | tee "tmp/pack-$N.txt"
 ```
 
-The `tee` keeps the output on disk at `tmp/pack-$N.txt` so Step 1 can extract the
-`--- files ---` block from it without a second pack call. Read these from the
+The `tee` keeps the output on disk at `tmp/pack-$N.txt` so Step 1 feeds it to
+`dispatch-changed-files` without a second pack call. Read these from the
 output — do not re-resolve any of them later:
 
 - **`PR_NUM`** and the **labels** line from the `=== PR ===` section (used by the
@@ -63,8 +63,8 @@ output — do not re-resolve any of them later:
   is no `PR_JSON`; the body lives only in this pack output.
 - **`MERGE_BASE`** — read it from the `=== DIFF (base <sha>) ===` header line. This
   `<sha>` is exactly the value the old `git merge-base HEAD origin/main` produced.
-- The **changed-file list** — the lines between the literal `--- files ---` and
-  `--- hunks ---` markers in the `=== DIFF ===` section.
+- The **changed-file list** — extracted by `dispatch-changed-files` from the
+  `=== DIFF ===` section (same list Step 1 reads via the script).
 
 If the labels line already includes `dispatch:reviewed` — an interrupted prior
 run — **skip Steps 1–6** and go straight to Step 7, which flushes any unpushed
