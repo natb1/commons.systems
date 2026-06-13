@@ -12207,6 +12207,23 @@ exit 0
 STUB
   chmod +x "$TMPDIR_TEST/bin/gh"
 
+  # ensure_daemon_service (lib.sh) would otherwise write to the real
+  # ~/.config/systemd/user/ and run a real `systemctl --user`. Wire a separate
+  # logging stub (distinct from the recover systemctl) so ensure_daemon_service
+  # calls land in daemon-systemctl-log and are separately assertable.
+  cat > "$TMPDIR_TEST/bin/daemon-systemctl" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/daemon-systemctl-log"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/daemon-systemctl"
+  export DISPATCH_DAEMON_UNIT_DIR="$TMPDIR_TEST/daemon-systemd-user"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/daemon-systemctl"
+  # ensure_daemon_service only needs a non-empty, newline/quote-free path; it
+  # does not execute this binary in tests — the claude stub already exists for
+  # the CLAUDE_AGENTS_CMD path, so reuse it.
+  export DISPATCH_DAEMON_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+
   export DISPATCH_TICK_RECOVER_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
   export DISPATCH_TICK_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_TICK_RECOVER_GH_CMD="$TMPDIR_TEST/bin/gh"
@@ -12235,6 +12252,7 @@ tr_teardown() {
   unset DISPATCH_TICK_RECOVER_BASE_BACKOFF
   unset DISPATCH_TICK_RECOVER_MAX_BACKOFF
   unset DISPATCH_TICK_RECOVER_RESET_WINDOW
+  unset DISPATCH_DAEMON_UNIT_DIR DISPATCH_DAEMON_SYSTEMCTL_CMD DISPATCH_DAEMON_CLAUDE_CMD
 }
 
 # tr_seed_state <count> <last_failure> — write the consecutive-failure state.
@@ -12279,6 +12297,27 @@ fi
 assert_eq "first-fail: state count == 1" "1" "$(tr_state_count)"
 tr_teardown
 
+# --- Test 1b: first failure → ensure_daemon_service ran on the arming path ---
+# Same scenario as Test 1 (first failure, no continuation). Assert that
+# ensure_daemon_service ran and called `systemctl --user enable --now
+# dispatch-claude-daemon.service` — proving the durable daemon is set up
+# before the recovery reseed is armed (#1197/#1196).
+
+echo "Test: first failure arming path calls ensure_daemon_service (daemon enabled)"
+tr_setup
+# No state file, empty timer list, 0 busy workers → arming path.
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "first-fail-daemon: dispatch-tick-recover exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'enable --now dispatch-claude-daemon.service' \
+     "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: first-fail-daemon: ensure_daemon_service ran enable --now"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: first-fail-daemon: ensure_daemon_service ran enable --now"
+  echo "    daemon-systemctl-log: $(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || echo '(absent)')"
+fi
+tr_teardown
+
 # --- Test 2: continuation present (busy worker) → no reseed, count reset -----
 
 echo "Test: a live busy worker is a continuation → no reseed, count reset to 0"
@@ -12290,6 +12329,9 @@ assert_eq "busy-worker: dispatch-tick-recover exits 0" "0" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 assert_eq "busy-worker: no reseed armed (systemd-run log empty)" "" "$log"
 assert_eq "busy-worker: state count reset to 0" "0" "$(tr_state_count)"
+# Continuation no-op path: ensure_daemon_service must NOT have run (no arming).
+assert_eq "busy-worker: daemon service not touched (continuation no-op)" \
+  "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
 tr_teardown
 
 # --- Test 3: continuation present (pending dispatch-reseed* timer) → no reseed -
@@ -12303,6 +12345,9 @@ if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "pending-timer: dispatch-tick-recover exits 0" "0" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 assert_eq "pending-timer: no reseed armed (systemd-run log empty)" "" "$log"
+# Continuation no-op path: ensure_daemon_service must NOT have run (no arming).
+assert_eq "pending-timer: daemon service not touched (continuation no-op)" \
+  "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
 tr_teardown
 
 # --- Test 4: cap reached → escalate, not retry -------------------------------

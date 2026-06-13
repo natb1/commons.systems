@@ -344,6 +344,13 @@ fi
 RESEED_AT=$(( NOW + BACKOFF ))
 UNIT_NAME="dispatch-reseed-${RESEED_AT}"
 
+# Install + activate the durable dispatch-claude-daemon.service (#1197) before
+# arming the recovery reseed, so the reseed's tick attaches to a daemon already
+# running in a stable cgroup rather than spawning one in the transient reseed
+# unit's cgroup. Best-effort: a failure here is non-fatal — the on-demand daemon
+# then falls back to surviving via KillMode=process (#1196).
+ensure_daemon_service || true
+
 RUN_STDERR=$(mktemp)
 trap 'rm -f "$RUN_STDERR"' EXIT
 # Capture the exit code directly — after `if cmd; then ... fi`, `$?` is the exit
