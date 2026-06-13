@@ -8,13 +8,13 @@
 # The fixture is engineered so the four dead-session-stranded reclaim EVENTS land
 # one each in came-and-went / slow-boot-artifact / alive-across / genuine-strand:
 #
-#   aaa  came-and-went      single assistant line at T-3600 (last work < reclaim T)
-#   bbb  slow-boot-artifact single assistant line at T+60  (first work just after T,
-#                           within GRACE=300 → premature reclaim of a still-booting
-#                           worker)
-#   ccc  alive-across       two assistant lines at T-3600 and T+3600 (first<=T<=last
-#                           → a live worker falsely reclaimed)
-#   ddd  genuine-strand     NO project dir at all → no contemporaneous worker
+#   1001-aaa  came-and-went      single assistant line at T-3600 (last work < reclaim T)
+#   1002-bbb  slow-boot-artifact single assistant line at T+60  (first work just after T,
+#                                within GRACE=300 → premature reclaim of a still-booting
+#                                worker)
+#   1003-ccc  alive-across       two assistant lines at T-3600 and T+3600 (first<=T<=last
+#                                → a live worker falsely reclaimed)
+#   1004-ddd  genuine-strand     NO project dir at all → no contemporaneous worker
 #
 # TIMEZONE SUBTLETY: iso_to_epoch is `date -d`, which reads a zoneless timestamp
 # in the runner's local TZ. The slow-boot bucket's +60s delta sits close to the
@@ -81,35 +81,35 @@ setup() {
   # The audit parses field 1 as the ISO ts and seds <wt> from the message body.
   SWEEP_LOG="$ROOT/sweep.txt"
   {
-    printf '%s host dispatch-tick[111]: lib-reservation-ledger: reclaimed reservation aaa (dead-session-stranded)\n' "$T"
-    printf '%s host dispatch-tick[112]: lib-reservation-ledger: reclaimed reservation bbb (dead-session-stranded)\n' "$T"
-    printf '%s host dispatch-tick[113]: lib-reservation-ledger: reclaimed reservation ccc (dead-session-stranded)\n' "$T"
-    printf '%s host dispatch-tick[114]: lib-reservation-ledger: reclaimed reservation ddd (dead-session-stranded)\n' "$T"
-    printf '%s host dispatch-tick[115]: lib-reservation-ledger: reclaimed reservation eee (live-worker-redundant)\n' "$T"
-    printf '%s host dispatch-tick[116]: lib-reservation-ledger: reclaimed reservation fff (live-worker-redundant)\n' "$T"
+    printf '%s host dispatch-tick[111]: lib-reservation-ledger: reclaimed reservation 1001-aaa (dead-session-stranded)\n' "$T"
+    printf '%s host dispatch-tick[112]: lib-reservation-ledger: reclaimed reservation 1002-bbb (dead-session-stranded)\n' "$T"
+    printf '%s host dispatch-tick[113]: lib-reservation-ledger: reclaimed reservation 1003-ccc (dead-session-stranded)\n' "$T"
+    printf '%s host dispatch-tick[114]: lib-reservation-ledger: reclaimed reservation 1004-ddd (dead-session-stranded)\n' "$T"
+    printf '%s host dispatch-tick[115]: lib-reservation-ledger: reclaimed reservation 1005-eee (live-worker-redundant)\n' "$T"
+    printf '%s host dispatch-tick[116]: lib-reservation-ledger: reclaimed reservation 1006-fff (live-worker-redundant)\n' "$T"
   } > "$SWEEP_LOG"
 
   # --- projects tree: dirs ending with worktrees-<wt> -------------------------
   # The audit matches a project dir whose basename ENDS WITH worktrees-<wt>.
   # The .jsonl must be a DIRECT child (find -maxdepth 1). No project dir for ddd.
 
-  # aaa — came-and-went: single line BEFORE T (last work < T).
-  local aaa_dir="$ROOT/-home-x-worktrees-aaa"
+  # 1001-aaa — came-and-went: single line BEFORE T (last work < T).
+  local aaa_dir="$ROOT/-home-x-worktrees-1001-aaa"
   mkdir -p "$aaa_dir"
   emit_assistant "$aaa_dir/sess.jsonl" "2026-06-01T11:00:00+00:00"  # T-3600
 
-  # bbb — slow-boot-artifact: single line just AFTER T (first - T = 60 <= 300).
-  local bbb_dir="$ROOT/-home-x-worktrees-bbb"
+  # 1002-bbb — slow-boot-artifact: single line just AFTER T (first - T = 60 <= 300).
+  local bbb_dir="$ROOT/-home-x-worktrees-1002-bbb"
   mkdir -p "$bbb_dir"
   emit_assistant "$bbb_dir/sess.jsonl" "2026-06-01T12:01:00+00:00"  # T+60
 
-  # ccc — alive-across: lines on BOTH sides of T (first <= T <= last).
-  local ccc_dir="$ROOT/-home-x-worktrees-ccc"
+  # 1003-ccc — alive-across: lines on BOTH sides of T (first <= T <= last).
+  local ccc_dir="$ROOT/-home-x-worktrees-1003-ccc"
   mkdir -p "$ccc_dir"
   emit_assistant "$ccc_dir/sess.jsonl" "2026-06-01T11:00:00+00:00"  # T-3600
   emit_assistant "$ccc_dir/sess.jsonl" "2026-06-01T13:00:00+00:00"  # T+3600
 
-  # ddd — genuine-strand: deliberately NO project dir.
+  # 1004-ddd — genuine-strand: deliberately NO project dir.
 
   # Validate the fixture transcript lines are well-formed JSON.
   jq . "$aaa_dir/sess.jsonl" >/dev/null
