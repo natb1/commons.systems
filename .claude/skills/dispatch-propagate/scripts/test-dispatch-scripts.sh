@@ -3324,6 +3324,77 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "issue closed only by draft PR is still selectable" "issue 55" "$result"
 teardown
 
+# --- done-ready branch-keyed leaf gate (#1445) ---
+# A non-draft (ready) PR on a traced leaf's own <leaf>-* branch makes the leaf
+# phase `done` (dispatch-phase non-draft→done). At the spawn boundary
+# dispatch-materialize-spawn re-derives that done phase and drains it, spawning
+# no worker — killing the chain. dispatch-select-target now excludes such a leaf
+# via the branch-keyed READY_PR_BRANCH_ISSUES set, distinct from the root-keyed
+# READY_PR_CLOSED_ISSUES (#920) which only catches a done *root* via
+# closingIssuesReferences. These cases use EMPTY closing refs so only the
+# branch-keyed set can fire — proving it is the authoritative leaf check.
+
+echo "Test: --priority-only — done-ready priority leaf (non-draft <N>- PR) excluded → empty (#1445)"
+setup
+UNION='['"$(make_pr_union 100 "100-foo" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "done-ready priority leaf excluded → empty" "empty" "$result"
+teardown
+
+echo "Test: --priority-only — done-ready sub-issue LEAF (non-draft <leaf>- PR) excluded → empty (#1445)"
+setup
+UNION='['"$(make_pr_union 5500 "5500-foo" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5500.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "done-ready sub-issue leaf excluded → empty" "empty" "$result"
+teardown
+
+echo "Test: default mode — done-ready leaf skipped, next eligible issue selected (#1445)"
+setup
+UNION='['"$(make_pr_union 100 "100-foo" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]},{"number":200,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "done-ready issue skipped → next issue selected" "issue 200" "$result"
+teardown
+
+# 41-bis. Sibling fallback WITHIN one root: the done-ready skip must continue the
+#         descent to the next leaf, not abandon the whole root. Root 55 has
+#         sub-issues 5500 (non-draft PR on its own 5500-* branch → done-ready,
+#         excluded by READY_PR_BRANCH_ISSUES) and 5501 (open, no PR, startable).
+#         EMPTY closingIssuesReferences keeps the root-keyed #920 set silent, so
+#         only the branch-keyed leaf set fires. The selector must return 5501 —
+#         a regression that terminated the root on the done-ready leaf would
+#         yield empty here.
+echo "Test: default mode — done-ready leaf skipped, sibling leaf in same root selected (#1445)"
+setup
+UNION='['"$(make_pr_union 5500 "5500-foo" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500},{"number":5501}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5500.json"
+printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5501.json"
+# No worktrees — only the done-ready PR on 5500 distinguishes the leaves.
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "done-ready leaf 5500 skipped → sibling leaf 5501 selected" "issue 5501" "$result"
+teardown
+
 # --- issue-queue CI-ready gate (#1106) ---
 # A help-wanted issue can carry a draft PR whose CI is in progress (#920 leaves
 # such an issue selectable). The issue loop now applies the same readiness gate
@@ -19653,10 +19724,18 @@ FAKE
 echo refresh >> "$TMPDIR_TEST/logs/order.log"
 exit \${TICK_REFRESH_RC:-0}
 FAKE
+  # Fake dispatch-tick-recover (#1445): records that it ran so a test can assert
+  # the no-spawn-drain backstop fired. Exits 0.
+  cat > "$TMPDIR_TEST/dispatch-tick-recover" <<FAKE
+#!/usr/bin/env bash
+echo "recover" >> "$TMPDIR_TEST/logs/recover.log"
+exit 0
+FAKE
   chmod +x "$TMPDIR_TEST/dispatch-select-tick" \
            "$TMPDIR_TEST/dispatch-materialize-spawn" \
            "$TMPDIR_TEST/dispatch-spawn-job" \
-           "$TMPDIR_TEST/dispatch-refresh-rate-limits"
+           "$TMPDIR_TEST/dispatch-refresh-rate-limits" \
+           "$TMPDIR_TEST/dispatch-tick-recover"
 }
 
 tick_teardown() {
@@ -19756,6 +19835,52 @@ for t in "propagate" "notify target-blocked" "notify spawn-failed" "notify ci-wa
   assert_eq "token '$t': exit 0" "0" "$rc"
   tick_teardown
 done
+
+# --- #1445: a no-spawn drain invokes dispatch-tick-recover; a spawning token does not ---
+echo "Test: dispatch-tick drain target-done → invokes recover, exit 0 (#1445)"
+tick_setup
+export TICK_DECISION="issue 707 1" TICK_TOKEN="drain target-done"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "drain target-done: exit 0" "0" "$rc"
+assert_eq "drain target-done: recover invoked" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick bare drain → invokes recover, exit 0 (#1445)"
+tick_setup
+export TICK_DECISION="issue 707 1" TICK_TOKEN="drain"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "drain: exit 0" "0" "$rc"
+assert_eq "drain: recover invoked" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick propagate → does NOT invoke recover (#1445)"
+tick_setup
+export TICK_DECISION="issue 707 1" TICK_TOKEN="propagate"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "propagate: exit 0" "0" "$rc"
+assert_eq "propagate: recover NOT invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick notify target-blocked → does NOT invoke recover (#1445)"
+tick_setup
+export TICK_DECISION="issue 707 1" TICK_TOKEN="notify target-blocked"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "notify: exit 0" "0" "$rc"
+assert_eq "notify: recover NOT invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick resolve merge-conflict → does NOT invoke recover (#1445)"
+tick_setup
+export TICK_DECISION="issue 707 1" TICK_TOKEN="resolve merge-conflict"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "resolve merge-conflict: exit 0" "0" "$rc"
+assert_eq "resolve merge-conflict: recover NOT invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
+tick_teardown
 
 # --- materialize-spawn exits non-zero → dispatch-tick exits 2 ----------------
 echo "Test: dispatch-tick materialize non-zero exit → exit 2"
