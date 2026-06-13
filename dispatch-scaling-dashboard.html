@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dispatch worker scaling — W → F → N</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel2: #1c2330;
+    --line: #2a3340;
+    --ink: #e6edf3;
+    --muted: #8b97a6;
+    --accent: #4ea1ff;
+    --good: #3fb950;
+    --warn: #d29922;
+    --bad: #f85149;
+    --curve: #4ea1ff;
+    --used: #f85149;
+    --band: #2d7d46;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    padding: 18px 24px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  .wrap { display: grid; grid-template-columns: 320px 1fr; gap: 0; min-height: calc(100vh - 60px); }
+  .controls { padding: 18px 20px; border-right: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
+  .stage { padding: 18px 24px 0; }
+  .group { margin-bottom: 18px; }
+  .group h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); margin: 0 0 10px; font-weight: 600;
+  }
+  .ctrl { margin-bottom: 12px; }
+  .ctrl label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px; }
+  .ctrl label .v { font-family: var(--mono); color: var(--accent); }
+  .ctrl input[type=range] { width: 100%; accent-color: var(--accent); }
+  .ctrl .hint { color: var(--muted); font-size: 11px; margin-top: 1px; }
+  button.reset {
+    width: 100%; padding: 8px; background: var(--panel2); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px; cursor: pointer; font-size: 12px;
+  }
+  button.reset:hover { border-color: var(--accent); }
+
+  .bignums { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
+  .stat {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 16px; min-width: 120px; flex: 1;
+  }
+  .stat .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .stat .val { font-size: 26px; font-family: var(--mono); font-weight: 600; margin-top: 2px; }
+  .stat .note { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .stat.spotlight { border-color: var(--accent); }
+  .stat.ahead { border-color: var(--bad); background: #2a1618; }
+  .stat.behind { border-color: var(--good); background: #16241a; }
+  .stat .delta { font-weight: 600; }
+  .stat .delta.ahead { color: var(--bad); }
+  .stat .delta.behind { color: var(--good); }
+  .verdict { font-size: 13px; padding: 10px 14px; border-radius: 8px; margin: 4px 0 14px;
+             background: var(--panel2); border: 1px solid var(--line); }
+  .verdict.paused { border-color: var(--warn); }
+  .verdict.go { border-color: var(--good); }
+
+  .resets { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 14px; }
+  .reset { flex: 1; min-width: 220px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+  .reset.fiveh { border-left: 3px solid var(--used); }
+  .reset.weekly { border-left: 3px solid var(--curve); }
+  .reset .rk { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .reset .rv { display: block; font-size: 18px; font-family: var(--mono); font-weight: 600; margin-top: 3px; }
+  .reset .rr { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .charts { display: grid; grid-template-columns: 1fr; gap: 18px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .card h2 { font-size: 13px; margin: 0 0 4px; font-weight: 600; }
+  .card .desc { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+  svg { width: 100%; display: block; }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+  .swatch.box { height: 12px; opacity: .35; }
+  code { font-family: var(--mono); background: var(--panel2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .pipe { font-family: var(--mono); font-size: 12px; color: var(--muted); line-height: 1.8; }
+  .pipe b { color: var(--ink); }
+  footer { padding: 14px 24px 28px; color: var(--muted); font-size: 11px; }
+  .barwrap { position: relative; height: 46px; background: var(--panel2); border-radius: 8px; border: 1px solid var(--line); overflow: hidden; }
+  .barwrap .seg { position: absolute; top: 0; bottom: 0; }
+  .barwrap .tick { position: absolute; top: 0; bottom: 0; width: 2px; }
+  .barwrap .lbl { position: absolute; font-size: 10px; font-family: var(--mono); color: var(--ink); top: 3px; transform: translateX(-50%); white-space: nowrap; }
+  .barwrap .lbl.bot { top: auto; bottom: 3px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Dispatch worker scaling</h1>
+  <span class="sub">the <code>W → F → N</code> pace pipeline in <code>dispatch-target-workers</code>, with the #965 terminal-sprint envelope · live snapshot pre-loaded</span>
+</header>
+
+<div class="wrap">
+  <!-- ============ CONTROLS ============ -->
+  <aside class="controls">
+    <div class="group">
+      <h3>Where we are now</h3>
+      <div class="ctrl">
+        <label>5-hour windows left in week <span class="v" id="v_windows"></span></label>
+        <input type="range" id="windows" min="0" max="34" step="0.1">
+        <div class="hint">Time axis. Week has T≈34 windows. Maps to elapsed fraction x.</div>
+      </div>
+      <div class="ctrl">
+        <label>used_weekly (% of 7-day limit) <span class="v" id="v_uw"></span></label>
+        <input type="range" id="uw" min="0" max="100" step="0.5">
+        <div class="hint">seven_day.used_percentage from rate_limits.json</div>
+      </div>
+      <div class="ctrl">
+        <label>used_5h (% of 5-hour limit) <span class="v" id="v_u5"></span></label>
+        <input type="range" id="u5" min="0" max="100" step="0.5">
+        <div class="hint">five_hour.used_percentage</div>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3>Stage 1 — weekly curve</h3>
+      <div class="ctrl">
+        <label>target_weekly_usage_pct <span class="v" id="v_tw"></span></label>
+        <input type="range" id="tw" min="10" max="100" step="1">
+        <div class="hint">smooth-curve terminal W(1)</div>
+      </div>
+      <div class="ctrl">
+        <label>weekly_terminal_pct (envelope W(1)) <span class="v" id="v_term"></span></label>
+        <input type="range" id="term" min="50" max="100" step="1">
+        <div class="hint">terminal-sprint envelope target at week end (#965)</div>
+      </div>
+      <div class="ctrl">
+        <label>weekly_increment_floor_pct <span class="v" id="v_wf"></span></label>
+        <input type="range" id="wf" min="0" max="10" step="0.25">
+        <div class="hint">minimum spend per window</div>
+      </div>
+      <div class="ctrl">
+        <label>weekly_increment_cap_pct <span class="v" id="v_wc"></span></label>
+        <input type="range" id="wc" min="1" max="30" step="0.5">
+        <div class="hint">per-window hard ceiling (clamps end)</div>
+      </div>
+      <div class="ctrl">
+        <label>weekly_curve_power (p) <span class="v" id="v_p"></span></label>
+        <input type="range" id="p" min="0.25" max="6" step="0.25">
+        <div class="hint">&gt;1 back-loads spend to late week</div>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3>Stage 2 — 5h target band</h3>
+      <div class="ctrl">
+        <label>weekly_headroom_taper_pct (Hw) <span class="v" id="v_hwt"></span></label>
+        <input type="range" id="hwt" min="1" max="50" step="1">
+        <div class="hint">weekly headroom earning the full ceiling</div>
+      </div>
+      <div class="ctrl">
+        <label>five_hour_target_floor_pct <span class="v" id="v_f5"></span></label>
+        <input type="range" id="f5" min="0" max="100" step="1">
+      </div>
+      <div class="ctrl">
+        <label>five_hour_target_ceiling_pct <span class="v" id="v_c5"></span></label>
+        <input type="range" id="c5" min="0" max="100" step="1">
+      </div>
+    </div>
+
+    <div class="group">
+      <h3>Stage 3 — worker count</h3>
+      <div class="ctrl">
+        <label>five_hour_headroom_taper_pct (H5) <span class="v" id="v_h5t"></span></label>
+        <input type="range" id="h5t" min="1" max="50" step="1">
+        <div class="hint">5h headroom that earns max workers</div>
+      </div>
+      <div class="ctrl">
+        <label>max_concurrent_workers <span class="v" id="v_mw"></span></label>
+        <input type="range" id="mw" min="1" max="16" step="1">
+      </div>
+    </div>
+
+    <button class="reset" id="reset">Reset to live snapshot + defaults</button>
+  </aside>
+
+  <!-- ============ STAGE OUTPUT ============ -->
+  <main class="stage">
+    <div class="bignums">
+      <div class="stat" id="s_uw"><div class="k">Weekly usage (now)</div><div class="val" id="o_uw"></div><div class="note" id="o_uwnote"></div></div>
+      <div class="stat"><div class="k">Elapsed x</div><div class="val" id="o_x"></div><div class="note" id="o_windows"></div></div>
+      <div class="stat"><div class="k">Stage 1 · W (weekly target now)</div><div class="val" id="o_W"></div><div class="note" id="o_hw"></div></div>
+      <div class="stat"><div class="k">Stage 2 · F (5h target)</div><div class="val" id="o_F"></div><div class="note" id="o_h5"></div></div>
+      <div class="stat spotlight"><div class="k">Stage 3 · N workers</div><div class="val" id="o_N"></div><div class="note">target concurrent</div></div>
+    </div>
+    <div class="verdict" id="verdict"></div>
+    <div class="resets" id="resets"></div>
+
+    <div class="charts">
+      <!-- weekly curve chart -->
+      <div class="card">
+        <h2>Stage 1 — weekly pace curve W(x)</h2>
+        <p class="desc">Cumulative weekly budget you're <em>allowed</em> to have spent by now. The router throttles whenever actual <b>used_weekly</b> runs above this curve — even far below the weekly cap. The smooth term tops out at <code>target_weekly</code> and would idle the final stretch; the <b>terminal-sprint envelope</b> floors W from the end so it reaches <code>weekly_terminal</code> (100% by default) at week close, lifting the last ~1.7 windows. X-axis is 5-hour windows elapsed (0 → 34).</p>
+        <svg id="curve" viewBox="0 0 720 320" preserveAspectRatio="none"></svg>
+        <div class="legend">
+          <span><i class="swatch" style="background:var(--curve)"></i> effective W = max(smooth, envelope)</span>
+          <span><i class="swatch" style="background:var(--curve);opacity:.35"></i> smooth term</span>
+          <span><i class="swatch" style="background:var(--good)"></i> terminal-sprint envelope</span>
+          <span><i class="swatch" style="background:var(--used)"></i> used_weekly (actual)</span>
+          <span><i class="swatch" style="background:var(--warn)"></i> now (current window)</span>
+          <span><i class="swatch box" style="background:var(--used)"></i> over-pace → paused</span>
+        </div>
+      </div>
+
+      <!-- 5h band chart -->
+      <div class="card">
+        <h2>Stage 2 → 3 — the 5-hour band and worker count</h2>
+        <p class="desc">Weekly headroom <code>hw = W − used_weekly</code> opens the 5h target <b>F</b> between floor and ceiling. Then <code>h5 = F − used_5h</code> scales workers 0…max.</p>
+        <div class="barwrap" id="band"></div>
+        <div class="legend">
+          <span><i class="swatch box" style="background:var(--band)"></i> headroom below F (drives N)</span>
+          <span><i class="swatch" style="background:var(--used)"></i> used_5h</span>
+          <span><i class="swatch" style="background:var(--accent)"></i> F target</span>
+          <span>floor / ceiling band edges</span>
+        </div>
+      </div>
+
+      <!-- pipeline explainer -->
+      <div class="card">
+        <h2>The pipeline, evaluated</h2>
+        <div class="pipe" id="pipe"></div>
+      </div>
+    </div>
+    <footer>
+      Re-implements <code>.claude/skills/dispatch-propagate/scripts/dispatch-target-workers</code> exactly, including the terminal-sprint envelope <code>W = max(smooth, terminal − wcap·rem_windows)</code> (WEEK_SECONDS=604800, T=round(604800/18000)=34). Verified against the script: live snapshot → N=0, sprint (r=1 window, used_weekly=70) → N=8.
+      Telemetry source: <code>~/.local/share/productivity-tui/rate_limits.json</code>. All math runs in-browser; nothing is sent anywhere.
+    </footer>
+  </main>
+</div>
+
+<script>
+// ---- live snapshot baked in at generation time -------------------------------
+const LIVE = {
+  now:            1780425725,
+  weekly_used:    6,
+  weekly_resets:  1780880400,
+  fiveh_used:     0,
+  fiveh_resets:   1780443000,
+};
+const WEEK_SECONDS = 604800;
+const WINDOW_SECONDS = 18000;            // 5 hours
+const T = Math.round(WEEK_SECONDS / WINDOW_SECONDS);  // = 34
+
+const DEFAULTS = {
+  windows: +(((LIVE.weekly_resets - LIVE.now) / WINDOW_SECONDS).toFixed(1)),
+  uw: LIVE.weekly_used, u5: LIVE.fiveh_used,
+  tw: 90, term: 100, wf: 1, wc: 10, p: 1, hwt: 20, f5: 50, c5: 80, h5t: 15, mw: 8,
+};
+
+const ids = ['windows','uw','u5','tw','term','wf','wc','p','hwt','f5','c5','h5t','mw'];
+const el = {}; ids.forEach(i => el[i] = document.getElementById(i));
+
+function setDefaults() { ids.forEach(i => el[i].value = DEFAULTS[i]); }
+
+// ---- the algorithm (mirror of the awk block) ---------------------------------
+function clamp(v, lo, hi){ return v < lo ? lo : v > hi ? hi : v; }
+
+function compute(s) {
+  // time: windows-left -> remaining seconds -> elapsed fraction x
+  const remaining = s.windows * WINDOW_SECONDS;
+  if (remaining <= 0) return { x:1, W:0, hw:0, F:0, h5:0, N:0, end:0, paused:true, reason:'weekly window expired' };
+  const x = clamp((WEEK_SECONDS - remaining) / WEEK_SECONDS, 0, 1);
+
+  // Stage 1: weekly pace curve (smooth term)
+  let end = s.wf + (s.p + 1) * (s.tw / T - s.wf);
+  if (end > s.wc) end = s.wc;
+  const smooth = T * (s.wf * x + (end - s.wf) * Math.pow(x, s.p + 1) / (s.p + 1));
+
+  // Stage 1b: terminal-sprint envelope — floor W from the end so spending at
+  // most wcap per remaining window still reaches `term` at week close (#965).
+  const remWindows = remaining / WINDOW_SECONDS;
+  const envelope = s.term - s.wc * remWindows;
+  const W = Math.max(smooth, envelope);
+  const envActive = envelope > smooth;
+
+  // Stage 2: 5h target F
+  const hw = W - s.uw;
+  let F = 0;
+  if (hw > 0) F = s.f5 + (s.c5 - s.f5) * clamp(hw / s.hwt, 0, 1);
+
+  // Stage 3: workers
+  const h5 = F - s.u5;
+  let N = 0;
+  if (h5 > 0) N = clamp(Math.round(s.mw * h5 / s.h5t), 1, s.mw);
+
+  return { x, W, smooth, envelope, envActive, hw, F, h5, N: Math.round(N), end, paused: N === 0,
+           reason: hw <= 0 ? 'used_weekly ≥ W — ahead of pace' : (h5 <= 0 ? 'used_5h ≥ F — 5h target reached' : '') };
+}
+
+// smooth term only (no envelope)
+function smoothW(s, x) {
+  let end = s.wf + (s.p + 1) * (s.tw / T - s.wf);
+  if (end > s.wc) end = s.wc;
+  return T * (s.wf * x + (end - s.wf) * Math.pow(x, s.p + 1) / (s.p + 1));
+}
+
+// envelope floor at elapsed fraction x: remaining windows = (1-x)*T
+function envelopeW(s, x) {
+  return s.term - s.wc * (1 - x) * T;
+}
+
+// effective curve = max(smooth, envelope), matching the script
+function curveW(s, x) {
+  return Math.max(smoothW(s, x), envelopeW(s, x));
+}
+
+// ---- rendering ----------------------------------------------------------------
+function vals() {
+  const s = {}; ids.forEach(i => s[i] = parseFloat(el[i].value)); return s;
+}
+
+function fmt(n, d=1){ return Number(n).toFixed(d); }
+
+// absolute wall-clock for a unix timestamp (seconds), in the viewer's local tz
+function fmtClock(unixSec){
+  return new Date(unixSec * 1000).toLocaleString(undefined, {
+    weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+  });
+}
+// time-from-now relative to the baked snapshot instant (LIVE.now)
+function fmtRel(unixSec){
+  let s = unixSec - LIVE.now;
+  if (s <= 0) return 'window has reset';
+  const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+  return 'in ' + (h > 0 ? h + 'h ' : '') + m + 'm';
+}
+
+function drawCurve(s, r) {
+  const svg = document.getElementById('curve');
+  const W=720,H=320, ml=42, mr=12, mt=14, mb=28;
+  const pw = W-ml-mr, ph = H-mt-mb;
+  // y scale 0..100 (%), x scale 0..T windows
+  const X = w => ml + (w / T) * pw;
+  const Ymax = 100;
+  const Y = v => mt + (1 - clamp(v,0,Ymax)/Ymax) * ph;
+
+  let path = '', smoothPath = '', envPath = '';
+  for (let i=0;i<=120;i++){
+    const x = i/120;                 // elapsed fraction
+    const w = x * T;                 // windows elapsed
+    path     += (i===0?'M':'L') + X(w).toFixed(1) + ',' + Y(curveW(s, x)).toFixed(1) + ' ';
+    smoothPath += (i===0?'M':'L') + X(w).toFixed(1) + ',' + Y(smoothW(s, x)).toFixed(1) + ' ';
+    const ev = envelopeW(s, x);
+    if (ev >= 0) envPath += (envPath===''?'M':'L') + X(w).toFixed(1) + ',' + Y(ev).toFixed(1) + ' ';
+  }
+  // current position
+  const elapsedWindows = (1 - r.x) >= 0 ? r.x * T : T;
+  const curX = X(r.x * T);
+
+  // grid lines every 25%
+  let grid='';
+  for (let g=0; g<=100; g+=25){
+    grid += `<line x1="${ml}" y1="${Y(g)}" x2="${W-mr}" y2="${Y(g)}" stroke="var(--line)" stroke-width="1"/>`;
+    grid += `<text x="${ml-6}" y="${Y(g)+4}" fill="var(--muted)" font-size="10" text-anchor="end">${g}%</text>`;
+  }
+  // x ticks every ~5 windows
+  let xticks='';
+  for (let w=0; w<=T; w+=5){
+    xticks += `<text x="${X(w)}" y="${H-8}" fill="var(--muted)" font-size="10" text-anchor="middle">${w}</text>`;
+  }
+  xticks += `<text x="${ml+pw/2}" y="${H-8}" fill="var(--muted)" font-size="10" text-anchor="middle" opacity="0"> </text>`;
+
+  // shade region where used_weekly is above the curve at current x (over-pace marker box)
+  const overPace = r.hw <= 0;
+  const usedY = Y(s.uw);
+
+  svg.innerHTML = `
+    ${grid}
+    ${xticks}
+    <text x="${ml+pw/2}" y="${H+4}" fill="var(--muted)" font-size="10" text-anchor="middle" opacity="0">windows</text>
+    <path d="${envPath}" fill="none" stroke="var(--good)" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.8"/>
+    <path d="${smoothPath}" fill="none" stroke="var(--curve)" stroke-width="1.25" opacity="0.35"/>
+    <path d="${path}" fill="none" stroke="var(--curve)" stroke-width="2.5"/>
+    <line x1="${ml}" y1="${usedY}" x2="${W-mr}" y2="${usedY}" stroke="var(--used)" stroke-width="2" stroke-dasharray="${overPace?'0':'5 4'}"/>
+    <line x1="${curX}" y1="${mt}" x2="${curX}" y2="${H-mb}" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="3 3"/>
+    ${overPace ? `<rect x="${curX-3}" y="${Math.min(Y(r.W),usedY)}" width="6" height="${Math.abs(usedY-Y(r.W))}" fill="var(--used)" opacity="0.35"/>` : ''}
+    <circle cx="${curX}" cy="${Y(r.W)}" r="5" fill="var(--curve)" stroke="#0e1116" stroke-width="2"/>
+    <circle cx="${curX}" cy="${usedY}" r="6" fill="var(--used)" stroke="#0e1116" stroke-width="2"/>
+    <text x="${ml+4}" y="${usedY - 6}" fill="var(--used)" font-size="12" font-weight="700" font-family="var(--mono)">used_weekly ${fmt(s.uw,1)}%</text>
+    <text x="${curX + (curX > W-110 ? -8 : 8)}" y="${Y(r.W) + (usedY < Y(r.W) ? 14 : -8)}" fill="var(--curve)" font-size="11" font-family="var(--mono)" text-anchor="${curX > W-110 ? 'end' : 'start'}">W ${fmt(r.W,1)}%</text>
+  `;
+}
+
+function drawBand(s, r) {
+  const wrap = document.getElementById('band');
+  const pct = v => clamp(v,0,100) + '%';
+  const floor = Math.min(s.f5, s.c5), ceil = Math.max(s.f5, s.c5);
+  wrap.innerHTML = `
+    <div class="seg" style="left:${pct(floor)};width:${pct(ceil-floor)};background:var(--line);opacity:.5"></div>
+    ${r.F>0 ? `<div class="seg" style="left:${pct(s.u5)};width:${pct(Math.max(0,r.F-s.u5))};background:var(--band);opacity:.5"></div>`:''}
+    <div class="tick" style="left:${pct(floor)};background:var(--muted)"></div>
+    <div class="tick" style="left:${pct(ceil)};background:var(--muted)"></div>
+    <div class="tick" style="left:${pct(s.u5)};background:var(--used)"></div>
+    <div class="tick" style="left:${pct(r.F)};background:var(--accent);width:3px"></div>
+    <div class="lbl" style="left:${pct(floor)}">floor ${fmt(floor,0)}</div>
+    <div class="lbl" style="left:${pct(ceil)}">ceil ${fmt(ceil,0)}</div>
+    <div class="lbl bot" style="left:${pct(s.u5)};color:var(--used)">used_5h ${fmt(s.u5)}</div>
+    <div class="lbl bot" style="left:${pct(r.F)};color:var(--accent)">F ${fmt(r.F)}</div>
+  `;
+}
+
+function render() {
+  const s = vals();
+  // keep slider value labels in sync
+  el.windows && (document.getElementById('v_windows').textContent = fmt(s.windows));
+  document.getElementById('v_uw').textContent = fmt(s.uw)+'%';
+  document.getElementById('v_u5').textContent = fmt(s.u5)+'%';
+  document.getElementById('v_tw').textContent = fmt(s.tw,0)+'%';
+  document.getElementById('v_term').textContent = fmt(s.term,0)+'%';
+  document.getElementById('v_wf').textContent = fmt(s.wf,2);
+  document.getElementById('v_wc').textContent = fmt(s.wc,1);
+  document.getElementById('v_p').textContent = fmt(s.p,2);
+  document.getElementById('v_hwt').textContent = fmt(s.hwt,0);
+  document.getElementById('v_f5').textContent = fmt(s.f5,0);
+  document.getElementById('v_c5').textContent = fmt(s.c5,0);
+  document.getElementById('v_h5t').textContent = fmt(s.h5t,0);
+  document.getElementById('v_mw').textContent = fmt(s.mw,0);
+
+  const r = compute(s);
+
+  // current weekly usage vs. the pace allowance W (hw = W − used_weekly)
+  const ahead = r.hw < 0;                       // used more than the curve allows
+  const mag = Math.abs(r.hw);
+  document.getElementById('o_uw').textContent = fmt(s.uw,1)+'%';
+  document.getElementById('o_uwnote').innerHTML =
+    `pace allows ${fmt(r.W,1)}% by now · ` +
+    `<span class="delta ${ahead?'ahead':'behind'}">${fmt(mag,1)} pts ${ahead?'ahead of':'under'} pace</span>`;
+  document.getElementById('s_uw').className = 'stat ' + (ahead ? 'ahead' : 'behind');
+
+  document.getElementById('o_x').textContent = fmt(r.x*100,1)+'%';
+  document.getElementById('o_windows').textContent = fmt(s.windows,1)+' windows left · '+fmt(r.x*T,1)+' elapsed';
+  document.getElementById('o_W').textContent = fmt(r.W,1)+'%';
+  document.getElementById('o_hw').textContent = 'hw = '+fmt(r.hw,1)+' (W − used_weekly)';
+  document.getElementById('o_F').textContent = fmt(r.F,1)+'%';
+  document.getElementById('o_h5').textContent = 'h5 = '+fmt(r.h5,1)+' (F − used_5h)';
+  document.getElementById('o_N').textContent = r.N;
+
+  const v = document.getElementById('verdict');
+  if (r.N === 0) {
+    v.className = 'verdict paused';
+    v.innerHTML = `<b>Paused — target 0 workers.</b> ${r.reason || 'no headroom'}. The router won't spawn; on a real cap-hit it schedules a re-seed timer at the blocking window's reset.`;
+  } else {
+    v.className = 'verdict go';
+    v.innerHTML = `<b>Spawn up to ${r.N} concurrent worker${r.N>1?'s':''}.</b> Under both the weekly pace curve and the 5h target — router fills toward this count, one spawn per tick.`;
+  }
+
+  // window-close times: 5h is the baked snapshot reset; weekly tracks the
+  // windows-left slider (now + windows·5h), matching the slider's default.
+  const weeklyReset = LIVE.now + s.windows * WINDOW_SECONDS;
+  document.getElementById('resets').innerHTML =
+    `<div class="reset fiveh">` +
+      `<span class="rk">5-hour window closes</span>` +
+      `<span class="rv">${fmtClock(LIVE.fiveh_resets)}</span>` +
+      `<span class="rr">${fmtRel(LIVE.fiveh_resets)} · used_5h resets to 0</span>` +
+    `</div>` +
+    `<div class="reset weekly">` +
+      `<span class="rk">Weekly window closes</span>` +
+      `<span class="rv">${fmtClock(weeklyReset)}</span>` +
+      `<span class="rr">${fmtRel(weeklyReset)} · ${fmt(s.windows,1)} windows left · used_weekly resets to 0</span>` +
+    `</div>`;
+
+  document.getElementById('pipe').innerHTML =
+    `<b>T</b> = round(604800/18000) = <b>${T}</b> windows/week<br>` +
+    `<b>x</b> = clamp((604800 − ${fmt(s.windows*WINDOW_SECONDS,0)}) / 604800) = <b>${fmt(r.x,4)}</b> elapsed<br>` +
+    `<b>end</b> = min(wcap, floor + (p+1)(target/T − floor)) = <b>${fmt(r.end,3)}</b><br>` +
+    `<b>smooth</b> = T·(floor·x + (end−floor)·x^(p+1)/(p+1)) = <b>${fmt(r.smooth,2)}%</b><br>` +
+    `<b>envelope</b> = terminal − wcap·rem_windows = ${fmt(s.term,0)} − ${fmt(s.wc,1)}·${fmt(s.windows,1)} = <b>${fmt(r.envelope,2)}%</b><br>` +
+    `<b>W</b> = max(smooth, envelope) = <b>${fmt(r.W,2)}%</b> ${r.envActive?'← envelope active (terminal sprint)':'(smooth dominates)'}<br>` +
+    `<b>hw</b> = W − used_weekly = ${fmt(r.W,2)} − ${fmt(s.uw,1)} = <b>${fmt(r.hw,2)}</b> ${r.hw<=0?'≤ 0 → F=0 (ahead of pace)':''}<br>` +
+    `<b>F</b> = ${r.hw<=0?'0':'floor5 + (ceil5−floor5)·clamp(hw/Hw)'} = <b>${fmt(r.F,2)}%</b><br>` +
+    `<b>h5</b> = F − used_5h = ${fmt(r.F,2)} − ${fmt(s.u5,1)} = <b>${fmt(r.h5,2)}</b><br>` +
+    `<b>N</b> = ${r.h5<=0?'0':'clamp(round(max·h5/H5), 1, max)'} = <b>${r.N}</b>`;
+
+  drawCurve(s, r);
+  drawBand(s, r);
+}
+
+ids.forEach(i => el[i].addEventListener('input', render));
+document.getElementById('reset').addEventListener('click', () => { setDefaults(); render(); });
+
+setDefaults();
+render();
+</script>
+</body>
+</html>
