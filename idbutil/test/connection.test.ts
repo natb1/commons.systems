@@ -33,6 +33,23 @@ describe("input validation", () => {
     expect(() => createDbConnection({ name: "x", version: 1.5, onUpgrade() {} }))
       .toThrow("DbConnectionConfig.version must be a positive integer, got 1.5");
   });
+
+  it("throws on zero blockedTimeoutMs", () => {
+    expect(() => createDbConnection({ name: "x", version: 1, onUpgrade() {}, blockedTimeoutMs: 0 }))
+      .toThrow("DbConnectionConfig.blockedTimeoutMs must be a positive number, got 0");
+  });
+
+  it("throws on negative blockedTimeoutMs", () => {
+    expect(() => createDbConnection({ name: "x", version: 1, onUpgrade() {}, blockedTimeoutMs: -1 }))
+      .toThrow("DbConnectionConfig.blockedTimeoutMs must be a positive number, got -1");
+  });
+
+  it("throws on non-finite blockedTimeoutMs", () => {
+    expect(() => createDbConnection({ name: "x", version: 1, onUpgrade() {}, blockedTimeoutMs: Infinity }))
+      .toThrow("DbConnectionConfig.blockedTimeoutMs must be a positive number, got Infinity");
+    expect(() => createDbConnection({ name: "x", version: 1, onUpgrade() {}, blockedTimeoutMs: NaN }))
+      .toThrow("DbConnectionConfig.blockedTimeoutMs must be a positive number, got NaN");
+  });
 });
 
 describe("openDb", () => {
@@ -227,8 +244,9 @@ describe("openDb", () => {
       setTimeout(() => db1.close(), 0);
     };
 
-    // Tab 2 uses a generous blockedTimeoutMs. The timer must be cancelled on
-    // onsuccess, so tab2 resolves to a v2 database rather than timing out.
+    // Tab 2 uses a generous blockedTimeoutMs. onsuccess must cancel the timer;
+    // if it leaks, the timer fires past the deadline and nulls dbPromise,
+    // poisoning the memoization cache. We assert the cache survives.
     const tab2 = createDbConnection({
       name,
       version: 2,
@@ -238,12 +256,32 @@ describe("openDb", () => {
       },
     });
 
-    const db2 = await tab2.openDb();
-    expect(db2).toBeInstanceOf(IDBDatabase);
-    expect(db2.version).toBe(2);
+    vi.useFakeTimers();
+    try {
+      // Don't await inline: the v2 open only completes after tab1's deferred
+      // close fires, and that close is itself a faked setTimeout(0). Drive the
+      // clock to fire it (interleaving microtask flushes) so the open settles,
+      // then await the already-resolved promise.
+      const p = tab2.openDb();
+      await vi.advanceTimersByTimeAsync(10);
+      const db2 = await p;
+      expect(db2).toBeInstanceOf(IDBDatabase);
+      expect(db2.version).toBe(2);
 
-    await tab1.closeDb();
-    await tab2.closeDb();
+      // Advance well past the deadline. If the blocked timer had leaked, it
+      // would now fire and null dbPromise.
+      await vi.advanceTimersByTimeAsync(250);
+
+      // The memoized promise must be intact: a fresh openDb() returns the same
+      // promise by reference. A different promise would mean dbPromise was
+      // spuriously nulled by a leaked timer.
+      expect(tab2.openDb()).toBe(p);
+
+      await tab1.closeDb();
+      await tab2.closeDb();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

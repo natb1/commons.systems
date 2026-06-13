@@ -24,6 +24,16 @@ export function createDbConnection(config: DbConnectionConfig): {
   if (!Number.isInteger(config.version) || config.version < 1) {
     throw new Error(`DbConnectionConfig.version must be a positive integer, got ${config.version}`);
   }
+  if (
+    config.blockedTimeoutMs !== undefined &&
+    (typeof config.blockedTimeoutMs !== "number" ||
+      !Number.isFinite(config.blockedTimeoutMs) ||
+      config.blockedTimeoutMs <= 0)
+  ) {
+    throw new Error(
+      `DbConnectionConfig.blockedTimeoutMs must be a positive number, got ${config.blockedTimeoutMs}`,
+    );
+  }
   const blockedTimeoutMs = config.blockedTimeoutMs ?? 30000;
   let dbPromise: Promise<IDBDatabase> | null = null;
 
