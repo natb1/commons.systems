@@ -228,6 +228,28 @@ def cmd_prefix(c):
       | if .name=="Bash" then "Bash:" + cmd_prefix(.input.command // "") else .name end
     ] ) as $tool_calls
 
+# Per-session tool_use_id -> tool name map (assistant tool_use blocks).
+| ( reduce ( $msgs[] | select(.type=="assistant")
+             | (.message.content // []) | if type=="array" then .[] else empty end
+             | select(type=="object" and .type=="tool_use") ) as $b
+      ({}; .[$b.id] = $b.name) ) as $tool_name_by_id
+
+# Tool-result payload bytes attributed to the originating tool name. The
+# tool_use_id is guarded with `// ""` before object lookup: a null key would
+# raise "Cannot index object with null" in jq 1.8.x, and an absent/empty key
+# falls through to "unknown".
+| ( reduce ( $msgs[] | select(.type=="user")
+             | (.message.content // []) | if type=="array" then .[] else empty end
+             | select(type=="object" and .type=="tool_result") ) as $r
+      ( {total:0, by_tool:{}};
+        ($r.tool_use_id // "") as $tid
+        | ($tool_name_by_id[$tid] // "unknown") as $tn
+        | ($r.content | tostring | utf8bytelength) as $b
+        | .total += $b
+        | .by_tool[$tn].bytes = ((.by_tool[$tn].bytes // 0) + $b)
+        | .by_tool[$tn].results = ((.by_tool[$tn].results // 0) + 1) )
+    ) as $payload
+
 | {
     type: $type,
     id: $id,
@@ -242,7 +264,8 @@ def cmd_prefix(c):
     by_skill: $by_skill,
     by_skill_model: $by_skill_model,
     errors: $errors,
-    tool_calls: $tool_calls
+    tool_calls: $tool_calls,
+    payload: $payload
   }
 STAGE1
 
@@ -381,6 +404,27 @@ def ngrams($L; $n):
         truncated: (if $m > 25 then $m - 25 else 0 end) }
   ) as $tool_sequences
 
+# ---- payload_bytes (tool-result payload folded across sessions) ----
+# total: sum of session payload totals. by_tool: per-tool bytes+results,
+# sorted by descending bytes. worst_sessions: top-10 sessions by payload bytes.
+| ( reduce $rows[] as $r ({};
+      reduce (($r.payload.by_tool // {}) | to_entries[]) as $e (.;
+        .[$e.key].bytes = ((.[$e.key].bytes // 0) + ($e.value.bytes // 0))
+        | .[$e.key].results = ((.[$e.key].results // 0) + ($e.value.results // 0))
+      )
+    )
+    | to_entries
+    | map({ tool: .key, bytes: .value.bytes, results: .value.results })
+    | sort_by(-.bytes)
+  ) as $payload_by_tool
+| ( {
+      total: ([ $rows[] | (.payload.total // 0) ] | add // 0),
+      by_tool: $payload_by_tool,
+      worst_sessions:
+        ( [ $rows[] | { id, type, bytes: (.payload.total // 0) } ]
+          | sort_by(-.bytes) | .[0:10] )
+    } ) as $payload_bytes
+
 # ---- per-session summaries ----
 | ( [ $rows[] | {
         id: .id, file: .file, type: .type,
@@ -428,6 +472,7 @@ def ngrams($L; $n):
     by_phase_model: $by_phase_model,
     tool_errors: $tool_errors,
     tool_sequences: $tool_sequences,
+    payload_bytes: $payload_bytes,
     lenses: {
       context_over_120k: $ctx_lens,
       small_sessions: $small_lens

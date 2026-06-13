@@ -73,6 +73,12 @@ setup() {
   printf '%s\n' '{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"Exit code 1\nsome detail"}]}}' \
     >> "$worker_jsonl"
 
+  # line 5: tool-result user line for the toolu_001 Bash call — known-length
+  # ASCII payload "PAYLOAD_0123456789" (18 bytes) attributed to Bash. The error
+  # result above has NO tool_use_id → attributed to "unknown" (23 bytes).
+  printf '%s\n' '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_001","content":"PAYLOAD_0123456789"}]}}' \
+    >> "$worker_jsonl"
+
   # Verify fixture line is valid JSON
   jq . "$worker_jsonl" >/dev/null
 
@@ -174,6 +180,24 @@ assert_eq 'tool_sequences.truncated' "0" \
   "$(jq '.tool_sequences.truncated' <<<"$OUT")"
 assert_eq 'tool_sequences.kept == distinct' "true" \
   "$(jq '.tool_sequences.kept == .tool_sequences.distinct' <<<"$OUT")"
+
+# payload_bytes: Bash payload "PAYLOAD_0123456789" (18 bytes) + the no-id error
+# result "Exit code 1\nsome detail" parsed to 23 bytes (the \n becomes a real
+# newline) → total 41 bytes.
+PAYLOAD_TOTAL=$(jq -n '("PAYLOAD_0123456789"|utf8bytelength) + ("Exit code 1\nsome detail"|utf8bytelength)')
+PAYLOAD_BASH=$(jq -n '"PAYLOAD_0123456789"|utf8bytelength')
+PAYLOAD_UNKNOWN=$(jq -n '"Exit code 1\nsome detail"|utf8bytelength')
+
+assert_eq "payload_bytes.total" "$PAYLOAD_TOTAL" \
+  "$(jq '.payload_bytes.total' <<<"$OUT")"
+assert_eq "payload_bytes Bash bytes" "$PAYLOAD_BASH" \
+  "$(jq '[.payload_bytes.by_tool[] | select(.tool=="Bash")][0].bytes' <<<"$OUT")"
+assert_eq "payload_bytes Bash results" "1" \
+  "$(jq '[.payload_bytes.by_tool[] | select(.tool=="Bash")][0].results' <<<"$OUT")"
+assert_eq "payload_bytes unknown bytes" "$PAYLOAD_UNKNOWN" \
+  "$(jq '[.payload_bytes.by_tool[] | select(.tool=="unknown")][0].bytes' <<<"$OUT")"
+assert_eq "payload_bytes worst_sessions[0].id" "sess-worker" \
+  "$(jq -r '.payload_bytes.worst_sessions[0].id' <<<"$OUT")"
 
 report_results
 exit $FAIL
