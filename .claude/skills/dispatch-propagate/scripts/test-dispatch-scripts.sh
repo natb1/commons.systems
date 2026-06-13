@@ -18184,17 +18184,12 @@ echo "\$*" >> "$TMPDIR_TEST/logs/schedule-target-reseed.log"
 printf '%s\n' "\${MAT_RESEED_OUT:-reseeded dispatch-reseed-target-\$1-10300 at 10300}"
 exit \${MAT_RESEED_RC:-0}
 FAKE
-  cat > "$TMPDIR_TEST/sync-issue-context" <<FAKE
-#!/usr/bin/env bash
-echo "cwd=\$PWD argv=\$*" >> "$TMPDIR_TEST/logs/sync-issue-context.log"
-FAKE
   chmod +x "$TMPDIR_TEST"/dispatch-find-pr "$TMPDIR_TEST"/dispatch-trace-leaf \
     "$TMPDIR_TEST"/dispatch-check-blockers "$TMPDIR_TEST"/dispatch-apply-office-hours \
     "$TMPDIR_TEST"/dispatch-resolve-worktree \
     "$TMPDIR_TEST"/dispatch-phase "$TMPDIR_TEST"/dispatch-ci-ready \
     "$TMPDIR_TEST"/dispatch-select-target \
-    "$TMPDIR_TEST"/dispatch-launch-worker "$TMPDIR_TEST"/dispatch-schedule-target-reseed \
-    "$TMPDIR_TEST"/sync-issue-context
+    "$TMPDIR_TEST"/dispatch-launch-worker "$TMPDIR_TEST"/dispatch-schedule-target-reseed
 
   mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
   cat > "$TMPDIR_TEST/bin/git" <<STUB
@@ -18209,8 +18204,11 @@ esac
 STUB
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
-# Only the explicit closed-check uses gh here.
-echo "${MAT_ISSUE_STATE:-OPEN}"
+# Closed-check (--json state) and identity-stub title fetch (--json title).
+case "$*" in
+  *"--json title"*) echo "${MAT_ISSUE_TITLE:-Test issue title}" ;;
+  *) echo "${MAT_ISSUE_STATE:-OPEN}" ;;
+esac
 STUB
   chmod +x "$TMPDIR_TEST/bin/git" "$TMPDIR_TEST/bin/gh"
   export PATH="$TMPDIR_TEST/bin:$SAVED_PATH"
@@ -18223,7 +18221,7 @@ mat_teardown() {
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     DISPATCH_RESERVATION_DIR \
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_PHASE \
-    MAT_CI_READY MAT_LAUNCH_SLEEP MAT_ISSUE_STATE MAT_QUEUE \
+    MAT_CI_READY MAT_LAUNCH_SLEEP MAT_ISSUE_STATE MAT_ISSUE_TITLE MAT_QUEUE \
     MAT_RESEED_OUT MAT_RESEED_RC
   # Per-issue phase overrides (MAT_PHASE_<N>, #1126) have dynamic names the fixed
   # unset list cannot enumerate; clear any a test set so they don't leak forward.
@@ -18487,16 +18485,25 @@ assert_eq "resolve-wt fail: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- enter path → sync-issue-context runs in the worktree --------------------
-echo "Test: materialize-spawn enter path syncs context + spawns"
+# --- enter path → identity stub written in the worktree ----------------------
+echo "Test: materialize-spawn enter path writes identity stub + spawns"
 mat_setup
 EXISTING_WT="$TMPDIR_TEST/existing-wt"
 mkdir -p "$EXISTING_WT"
 export MAT_WT_DECISION="enter $EXISTING_WT"
 out=$(run_mat 839 queue)
 assert_eq "enter: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "enter: sync-issue-context ran in the worktree" "cwd=$EXISTING_WT argv=839" \
-  "$(cat "$TMPDIR_TEST/logs/sync-issue-context.log")"
+STUB_FILE="$EXISTING_WT/CLAUDE.local.md"
+assert_eq "enter: identity stub written" "1" \
+  "$([ -f "$STUB_FILE" ] && echo 1 || echo 0)"
+assert_eq "enter: stub has issue heading" "1" \
+  "$(grep -c '^# Issue #839:' "$STUB_FILE" || true)"
+assert_eq "enter: stub names the branch" "1" \
+  "$(grep -c 'existing-wt' "$STUB_FILE" || true)"
+assert_eq "enter: stub points at dispatch-context-pack" "1" \
+  "$(grep -c 'dispatch-context-pack 839' "$STUB_FILE" || true)"
+assert_eq "enter: stub carries no issue body/comments" "0" \
+  "$(grep -c '### Comments' "$STUB_FILE" || true)"
 assert_eq "enter: marker written into the entered worktree" "1" \
   "$([ -f "$EXISTING_WT/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
 mat_teardown
@@ -23272,6 +23279,805 @@ mkdir -p "$LW_DIR/bad worktree"
 set +e; "$LW_DIR/dispatch-launch-worker" 839 "$LW_DIR/bad worktree" >/dev/null 2>&1; rc_unsafe=$?; set -e
 assert_eq "launch arg: unsafe-char path → exit 2" "2" "$rc_unsafe"
 lw_teardown
+
+# ============================================================================
+# run-qa-server.sh --detach
+# ============================================================================
+# Drives the REAL run-qa-server.sh tail to prove --detach takes the `exit 0`
+# branch (returns) instead of `wait` (blocks). An extracted-primitive test would
+# not prove the script took that branch, so this section runs the real script
+# against a feature-free, Vite-only fixture: a throwaway git repo with no
+# firebase imports (detect_features → all USES_*=false → no emulator path), an
+# empty node_modules (ensure_deps no-ops), and no functions/ dir. Only npx and
+# curl are stubbed; real git/node/jq/flock/setsid/ps/nohup come via SAVED_PATH.
+
+qd_setup() {
+  QD_DIR=$(mktemp -d)
+  cp "$SCRIPT_DIR/run-qa-server.sh" "$QD_DIR/run-qa-server.sh"
+  cp "$SCRIPT_DIR/run-qa-cleanup.sh" "$QD_DIR/run-qa-cleanup.sh"
+  cp "$SCRIPT_DIR/lib.sh" "$QD_DIR/lib.sh"
+  chmod +x "$QD_DIR/run-qa-server.sh" "$QD_DIR/run-qa-cleanup.sh"
+
+  # Real throwaway git repo fixture. Canonicalize so the path equals what
+  # `git rev-parse --show-toplevel` and the script's $(pwd) both resolve to
+  # (logical-vs-physical /tmp symlink would otherwise break the argv match).
+  QD_REPO="$QD_DIR/repo"
+  mkdir -p "$QD_REPO"
+  QD_REPO="$(cd "$QD_REPO" && pwd -P)"
+  mkdir -p "$QD_REPO/myapp/src"
+  echo 'export const x = 1;' > "$QD_REPO/myapp/src/main.ts"   # no firebase imports → Vite-only
+  mkdir -p "$QD_REPO/node_modules"                            # empty → ensure_deps no-ops
+  git init -q "$QD_REPO"
+  git -C "$QD_REPO" config user.email qa@example.com
+  git -C "$QD_REPO" config user.name "QA Test"
+  git -C "$QD_REPO" add -A
+  git -C "$QD_REPO" commit -q -m init
+
+  # Stubs: ONLY npx + curl. Real git/node/jq/flock/setsid/ps/nohup via SAVED_PATH.
+  QD_BIN="$QD_DIR/bin"
+  mkdir -p "$QD_BIN"
+  # npx stand-in: a long-running process whose argv carries the repo path so
+  # kill_worktree_processes (argv substring match on "$QD_REPO/") can kill it.
+  # Vite is launched with cwd=$QD_REPO/myapp, so $PWD contains $QD_REPO/.
+  # The path is placed in argv0 via `exec -a`; the inner `bash -c` uses a
+  # compound command (`sleep …; :`) so bash does NOT exec-optimize away its own
+  # argv0 (a single command would `exec sleep`, dropping the marker). coreutils
+  # `sleep` is a multicall binary that dispatches on argv0 basename, so we must
+  # NOT make the marker `sleep`'s own argv0 — hence the bash wrapper.
+  cat > "$QD_BIN/npx" <<'NPX'
+#!/usr/bin/env bash
+exec -a "qa-vite-standin $PWD/strictport" bash -c 'sleep 100000; :'
+NPX
+  # curl stand-in: always reports 200 so the Vite readiness poll passes with no
+  # real listener (python3/nc are unreliable in this env).
+  cat > "$QD_BIN/curl" <<'CURL'
+#!/usr/bin/env bash
+echo 200
+CURL
+  chmod +x "$QD_BIN/npx" "$QD_BIN/curl"
+  export PATH="$QD_BIN:$SAVED_PATH"
+
+  export FIREBASE_PROJECT_ID=demo-qa-detach
+  QD_SAVED_TMPDIR="${TMPDIR:-}"
+  export TMPDIR="$QD_DIR/tmp"
+  mkdir -p "$QD_DIR/tmp"
+}
+
+qd_teardown() {
+  ( cd "$QD_REPO" 2>/dev/null && "$QD_DIR/run-qa-cleanup.sh" >/dev/null 2>&1 ) || true
+  cd "$SCRIPT_DIR"
+  rm -rf "$QD_DIR"
+  export PATH="$SAVED_PATH"
+  unset FIREBASE_PROJECT_ID
+  if [ -n "$QD_SAVED_TMPDIR" ]; then export TMPDIR="$QD_SAVED_TMPDIR"; else unset TMPDIR; fi
+}
+
+echo "Test: run-qa-server.sh --detach returns while the server stays up"
+qd_setup
+
+# 1. --detach returns (does not block). timeout turns a hang into rc 124.
+cd "$QD_REPO"
+set +e
+timeout 30 "$QD_DIR/run-qa-server.sh" myapp --detach >"$QD_DIR/detach.out" 2>&1
+rc=$?
+set -e
+assert_eq "run-qa-server --detach: returns rc 0 (did not block)" "0" "$rc"
+
+# 2. The detached stand-in is still alive after return.
+up=$( . "$QD_DIR/lib.sh" >/dev/null 2>&1; _pids_matching_arg "$QD_REPO/" )
+assert_eq "run-qa-server --detach: server stays up" "yes" \
+  "$([ -n "$up" ] && echo yes || echo no)"
+
+# 3. run-qa-cleanup.sh stops it (bounded poll for kill latency).
+cd "$QD_REPO"
+"$QD_DIR/run-qa-cleanup.sh" >/dev/null 2>&1 || true
+gone=no
+for _ in $(seq 1 15); do
+  rem=$( . "$QD_DIR/lib.sh" >/dev/null 2>&1; _pids_matching_arg "$QD_REPO/" )
+  [ -z "$rem" ] && { gone=yes; break; }
+  sleep 0.3
+done
+assert_eq "run-qa-cleanup: server stopped" "yes" "$gone"
+
+# 4. No-flag form still blocks on wait (rc 124 = timed out = blocking).
+cd "$QD_REPO"
+set +e
+timeout 3 "$QD_DIR/run-qa-server.sh" myapp >/dev/null 2>&1
+rc_block=$?
+set -e
+assert_eq "run-qa-server (no flag): still blocks on wait" "124" "$rc_block"
+cd "$QD_REPO"
+"$QD_DIR/run-qa-cleanup.sh" >/dev/null 2>&1 || true
+
+qd_teardown
+
+# === dispatch-context-pack ===================================================
+# ============================================================================
+#
+# Self-contained section: own temp dir + PATH-shimmed gh/git stubs.
+# The script sources lib.sh and calls dispatch-find-pr via SCRIPT_DIR, so all
+# three live together in $CTXPACK_DIR. gh/git stubs read per-test fixture files
+# from $CTXPACK_STUB. Failures are injected via marker files, never via
+# non-transient stderr strings.
+
+echo ""
+echo "=== dispatch-context-pack ==="
+
+CTXPACK_DIR=""
+CTXPACK_STUB=""
+CTXPACK_SAVED_PATH="$PATH"
+
+ctxpack_setup() {
+  CTXPACK_DIR=$(mktemp -d)
+  CTXPACK_STUB="$CTXPACK_DIR/stub"
+  mkdir -p "$CTXPACK_DIR/bin" "$CTXPACK_STUB"
+
+  # Co-locate the three files that cross-reference via SCRIPT_DIR.
+  cp "$SCRIPT_DIR/dispatch-context-pack" "$CTXPACK_DIR/dispatch-context-pack"
+  cp "$SCRIPT_DIR/dispatch-find-pr" "$CTXPACK_DIR/dispatch-find-pr"
+  cp "$SCRIPT_DIR/lib.sh" "$CTXPACK_DIR/lib.sh"
+  chmod +x "$CTXPACK_DIR/dispatch-context-pack" "$CTXPACK_DIR/dispatch-find-pr"
+
+  # Avoid sleeps in dispatch-find-pr and gh_retry.
+  export DISPATCH_FIND_PR_RETRY_DELAY=0
+  export GH_RETRY_BASE_DELAY=0
+
+  # --- gh stub -----------------------------------------------------------------
+  # Arms are matched on the full "$*" string.  Per-test fixtures live under
+  # $CTXPACK_STUB/; see the per-test setup for which fixtures are written.
+  #
+  # Failure injection: if $CTXPACK_STUB/fail-issue-view exists, the
+  # "issue view <N> --json number,title,state,body,comments" arm exits 1 with a
+  # non-transient diagnostic (avoids gh_retry retrying).  Similarly
+  # $CTXPACK_STUB/fail-merge-base causes the git merge-base arm to exit 1.
+  cat > "$CTXPACK_DIR/bin/gh" <<'GHSTUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  # --issue slice: dispatch-context-pack calls gh_retry gh issue view <N> --json number,title,state,body,comments
+  issue\ view\ *\ --json\ number,title,state,body,comments)
+    if [[ -f "$STUB_DIR/fail-issue-view" ]]; then
+      echo "error: simulated failure fetching issue" >&2
+      exit 1
+    fi
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/issue-full-${num}.json" ]]; then
+      cat "$STUB_DIR/issue-full-${num}.json"
+    else
+      echo "{\"number\":$num,\"title\":\"Issue $num\",\"state\":\"OPEN\",\"body\":\"body text\",\"comments\":[]}"
+    fi
+    ;;
+  # --pr slice cross-check: dispatch-find-pr calls gh issue view <N> --json closedByPullRequestsReferences
+  issue\ view\ *\ --json\ closedByPullRequestsReferences)
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/issue-closing-prs-${num}.json" ]]; then
+      cat "$STUB_DIR/issue-closing-prs-${num}.json"
+    else
+      echo '{"closedByPullRequestsReferences":[]}'
+    fi
+    ;;
+  # dispatch-find-pr self-fetch
+  "pr list --state open --json number,headRefName")
+    if [[ -f "$STUB_DIR/pr-list.json" ]]; then
+      cat "$STUB_DIR/pr-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  # --pr slice: gh pr view <prNum> --json number,labels,statusCheckRollup,body
+  pr\ view\ *\ --json\ number,labels,statusCheckRollup,body)
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/pr-view-${num}.json" ]]; then
+      cat "$STUB_DIR/pr-view-${num}.json"
+    else
+      echo "{\"number\":$num,\"labels\":[],\"statusCheckRollup\":[],\"body\":\"pr body\"}"
+    fi
+    ;;
+  # --relations: blocked_by (array)
+  api\ */issues/*/dependencies/blocked_by)
+    num=$(echo "$args" | grep -oE '[0-9]+' | tail -1)
+    if [[ -f "$STUB_DIR/blockedby-${num}.json" ]]; then
+      cat "$STUB_DIR/blockedby-${num}.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  # --relations: sub_issues (array) — keyed by the number in the path
+  api\ */issues/*/sub_issues)
+    num=$(echo "$args" | grep -oE '[0-9]+' | tail -1)
+    if [[ -f "$STUB_DIR/subissues-${num}.json" ]]; then
+      cat "$STUB_DIR/subissues-${num}.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  # --relations: parent (object, not array)
+  api\ */issues/*/parent)
+    num=$(echo "$args" | grep -oE '[0-9]+' | tail -1)
+    if [[ -f "$STUB_DIR/no-parent-${num}" ]]; then
+      echo "Not Found (HTTP 404)" >&2
+      exit 1
+    fi
+    if [[ -f "$STUB_DIR/parent-${num}.json" ]]; then
+      cat "$STUB_DIR/parent-${num}.json"
+    else
+      # Default: no parent — 404 exit
+      echo "Not Found (HTTP 404)" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+GHSTUB
+  chmod +x "$CTXPACK_DIR/bin/gh"
+
+  # --- git stub ----------------------------------------------------------------
+  # Failure injection: $CTXPACK_STUB/fail-merge-base → merge-base exits 1.
+  # Hunk stubs: each "diff <base> -- :(top)<file>" call emits a fixed-size hunk
+  # whose byte length is CTXPACK_HUNK_BYTES (default 100, set in individual
+  # tests when needed).  The exact string is 100 x "A" + newline = 101 bytes
+  # after printf; we keep hunks uniform so cap math is trivial.
+  cat > "$CTXPACK_DIR/bin/git" <<'GITSTUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  "merge-base HEAD origin/main")
+    if [[ -f "$STUB_DIR/fail-merge-base" ]]; then
+      echo "error: simulated merge-base failure" >&2
+      exit 1
+    fi
+    echo "BASE0SHA"
+    ;;
+  "diff --stat BASE0SHA")
+    echo " 2 files changed, 10 insertions(+), 2 deletions(-)"
+    ;;
+  "diff --name-only BASE0SHA")
+    # Return the file list from a fixture if present, else two default files.
+    if [[ -f "$STUB_DIR/changed-files.txt" ]]; then
+      cat "$STUB_DIR/changed-files.txt"
+    else
+      printf 'foo/bar.ts\nbaz/qux.ts\n'
+    fi
+    ;;
+  diff\ BASE0SHA\ --\ :\(top\)*)
+    # Per-file hunk: emit CTXPACK_HUNK_BYTES A's + newline so byte size is
+    # deterministic.  Default 100 bytes (101 with trailing newline stripped
+    # by command substitution → 100 bytes).  Each test exports DISPATCH_CONTEXT_DIFF_CAP
+    # as needed; individual file-fixture override via stub/hunk-<file>.txt.
+    file="${args#diff BASE0SHA -- :(top)}"
+    hunk_file="$STUB_DIR/hunk-${file//\//_}.txt"
+    if [[ -f "$hunk_file" ]]; then
+      cat "$hunk_file"
+    else
+      sz="${CTXPACK_HUNK_BYTES:-100}"
+      printf '%*s\n' "$sz" | tr ' ' 'A'
+    fi
+    ;;
+  *)
+    echo "git stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+GITSTUB
+  chmod +x "$CTXPACK_DIR/bin/git"
+
+  PATH="$CTXPACK_DIR/bin:$PATH"
+}
+
+ctxpack_teardown() {
+  rm -rf "$CTXPACK_DIR"
+  PATH="$CTXPACK_SAVED_PATH"
+  CTXPACK_DIR=""
+  CTXPACK_STUB=""
+  unset DISPATCH_CONTEXT_DIFF_CAP 2>/dev/null || true
+  unset CTXPACK_HUNK_BYTES 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# Test 1: --issue in isolation
+# ---------------------------------------------------------------------------
+echo "Test: ctxpack --issue renders title, body, and comment thread"
+ctxpack_setup
+
+# Fixture: issue 5 with one seeded comment. The body and the comment author +
+# body must both appear in output — this proves the --json render path (plain
+# `gh issue view` without --json would suppress comments).
+cat > "$CTXPACK_STUB/issue-full-5.json" <<'EOF'
+{
+  "number": 5,
+  "title": "My test issue",
+  "state": "OPEN",
+  "body": "Issue body content here.",
+  "comments": [
+    {
+      "author": {"login": "alice"},
+      "createdAt": "2026-01-15T10:00:00Z",
+      "body": "SEEDED_COMMENT_BODY"
+    }
+  ]
+}
+EOF
+
+rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --issue 2>/dev/null) || rc=$?
+assert_eq "ctxpack --issue: exit 0" "0" "$rc"
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"## Issue #5 (OPEN): My test issue"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --issue: contains title heading"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --issue: contains title heading"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"Issue body content here."* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --issue: contains body text"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --issue: contains body text"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"### Comments"* && "$out" == *"**@alice**"* && "$out" == *"SEEDED_COMMENT_BODY"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --issue: contains comment thread"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --issue: contains comment thread"
+  echo "    actual: $out"
+fi
+# Section isolation: other section headers must be absent.
+TOTAL=$((TOTAL+1))
+if [[ "$out" != *"=== RELATIONS"* && "$out" != *"=== PR ==="* && "$out" != *"=== DIFF"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --issue: no other section headers"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --issue: no other section headers"
+  echo "    actual: $out"
+fi
+ctxpack_teardown
+
+# ---------------------------------------------------------------------------
+# Test 2: --relations in isolation
+# ---------------------------------------------------------------------------
+echo "Test: ctxpack --relations emits titles+state+URL only, excludes bodies and self"
+ctxpack_setup
+
+# Fixtures: one blocker (with a body field that must NOT leak), one sub-issue,
+# a parent, and siblings (parent's sub_issues includes self N=5 + one sibling).
+# The "DISTINCTIVE_BODY_LEAK_MARKER" is in the body field; it must be absent
+# from the rendered output.
+cat > "$CTXPACK_STUB/blockedby-5.json" <<'EOF'
+[
+  {"number":3,"state":"OPEN","title":"Blocker issue","html_url":"https://github.com/natb1/commons.systems/issues/3","body":"DISTINCTIVE_BODY_LEAK_MARKER"}
+]
+EOF
+cat > "$CTXPACK_STUB/subissues-5.json" <<'EOF'
+[
+  {"number":7,"state":"OPEN","title":"Sub-issue title","html_url":"https://github.com/natb1/commons.systems/issues/7","body":"DISTINCTIVE_BODY_LEAK_MARKER"}
+]
+EOF
+# Parent object (not array).
+cat > "$CTXPACK_STUB/parent-5.json" <<'EOF'
+{"number":2,"state":"OPEN","title":"Parent issue","html_url":"https://github.com/natb1/commons.systems/issues/2","body":"DISTINCTIVE_BODY_LEAK_MARKER"}
+EOF
+# Parent's sub_issues — includes self (5) and one sibling (8). Self must be excluded.
+cat > "$CTXPACK_STUB/subissues-2.json" <<'EOF'
+[
+  {"number":5,"state":"OPEN","title":"SELF_EXCLUDED_TITLE","html_url":"https://github.com/natb1/commons.systems/issues/5","body":"body"},
+  {"number":8,"state":"OPEN","title":"Sibling issue","html_url":"https://github.com/natb1/commons.systems/issues/8","body":"DISTINCTIVE_BODY_LEAK_MARKER"}
+]
+EOF
+
+rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --relations 2>/dev/null) || rc=$?
+assert_eq "ctxpack --relations: exit 0" "0" "$rc"
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"#3 [OPEN] Blocker issue"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --relations: blocker rendered"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --relations: blocker rendered"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"#7 [OPEN] Sub-issue title"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --relations: sub-issue rendered"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --relations: sub-issue rendered"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"#2 [OPEN] Parent issue"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --relations: parent rendered"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --relations: parent rendered"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"#8 [OPEN] Sibling issue"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --relations: sibling rendered"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --relations: sibling rendered"
+  echo "    actual: $out"
+fi
+# Self must be excluded from siblings.
+TOTAL=$((TOTAL+1))
+if [[ "$out" != *"SELF_EXCLUDED_TITLE"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --relations: self excluded from siblings"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --relations: self excluded from siblings"
+  echo "    actual: $out"
+fi
+# Body text must not leak.
+TOTAL=$((TOTAL+1))
+if [[ "$out" != *"DISTINCTIVE_BODY_LEAK_MARKER"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --relations: no body text leaked"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --relations: no body text leaked"
+  echo "    actual: $out"
+fi
+# Section isolation.
+TOTAL=$((TOTAL+1))
+if [[ "$out" != *"=== ISSUE"* && "$out" != *"=== PR ==="* && "$out" != *"=== DIFF"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --relations: no other section headers"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --relations: no other section headers"
+  echo "    actual: $out"
+fi
+ctxpack_teardown
+
+# ---------------------------------------------------------------------------
+# Test 3: --pr in isolation, populated PR
+# ---------------------------------------------------------------------------
+echo "Test: ctxpack --pr renders PR number, labels, ci verdict, and body"
+ctxpack_setup
+
+# dispatch-find-pr: a PR with headRefName "5-my-feature" is open.
+cat > "$CTXPACK_STUB/pr-list.json" <<'EOF'
+[{"number":42,"headRefName":"5-my-feature"}]
+EOF
+# gh pr view fixture: labels + all-SUCCESS rollup → ci: passing.
+# Status-context shape: {"state":"SUCCESS"} classifies passing without needing status/conclusion.
+cat > "$CTXPACK_STUB/pr-view-42.json" <<'EOF'
+{
+  "number": 42,
+  "labels": [{"name":"dispatch:planned"},{"name":"size:medium"}],
+  "statusCheckRollup": [{"state":"SUCCESS"},{"state":"SUCCESS"}],
+  "body": "PR body text here."
+}
+EOF
+
+rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --pr 2>/dev/null) || rc=$?
+assert_eq "ctxpack --pr: exit 0" "0" "$rc"
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"PR #42"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --pr: PR number present"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --pr: PR number present"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"dispatch:planned"* && "$out" == *"size:medium"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --pr: labels present"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --pr: labels present"
+  echo "    actual: $out"
+fi
+assert_eq "ctxpack --pr: ci: passing" "yes" "$([[ "$out" == *'ci: passing'* ]] && echo yes || echo no)"
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"PR body text here."* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --pr: body present"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --pr: body present"
+  echo "    actual: $out"
+fi
+# Section isolation.
+TOTAL=$((TOTAL+1))
+if [[ "$out" != *"=== ISSUE"* && "$out" != *"=== RELATIONS"* && "$out" != *"=== DIFF"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --pr: no other section headers"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --pr: no other section headers"
+  echo "    actual: $out"
+fi
+ctxpack_teardown
+
+# ---------------------------------------------------------------------------
+# Test 4: --pr no-PR case
+# ---------------------------------------------------------------------------
+echo "Test: ctxpack --pr with no open PR emits PR: none and exits 0"
+ctxpack_setup
+
+# dispatch-find-pr: no open PR matching the prefix, and cross-check also empty.
+cat > "$CTXPACK_STUB/pr-list.json" <<'EOF'
+[]
+EOF
+cat > "$CTXPACK_STUB/issue-closing-prs-5.json" <<'EOF'
+{"closedByPullRequestsReferences":[]}
+EOF
+
+rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --pr 2>/dev/null) || rc=$?
+assert_eq "ctxpack --pr no-PR: exit 0" "0" "$rc"
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"=== PR ==="* && "$out" == *"PR: none"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --pr no-PR: emits PR: none"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --pr no-PR: emits PR: none"
+  echo "    actual: $out"
+fi
+ctxpack_teardown
+
+# ---------------------------------------------------------------------------
+# Test 5: --diff with normal cap (both files emitted, no truncation)
+# ---------------------------------------------------------------------------
+echo "Test: ctxpack --diff emits stat, file list, and hunks with no truncation"
+ctxpack_setup
+
+# Two small files; default cap (60000) vastly exceeds their hunk sizes.
+# CTXPACK_HUNK_BYTES default 100 → each hunk ~100 bytes (100 A's + newline).
+rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --diff 2>/dev/null) || rc=$?
+assert_eq "ctxpack --diff normal: exit 0" "0" "$rc"
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"=== DIFF (base BASE0SHA) ==="* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --diff normal: header with base sha"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --diff normal: header with base sha"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"2 files changed"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --diff normal: stat present"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --diff normal: stat present"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"foo/bar.ts"* && "$out" == *"baz/qux.ts"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --diff normal: file list present"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --diff normal: file list present"
+  echo "    actual: $out"
+fi
+# Both hunk bodies must appear (AAAA... strings).
+TOTAL=$((TOTAL+1))
+hunk_count=$(echo "$out" | grep -c 'AAAA' 2>/dev/null || echo 0)
+if [[ "$hunk_count" -ge 2 ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --diff normal: both file hunks present"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --diff normal: both file hunks present (hunk_count=$hunk_count)"
+  echo "    actual: $out"
+fi
+# No truncation line.
+TOTAL=$((TOTAL+1))
+if [[ "$out" != *"truncated:"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --diff normal: no truncation line"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --diff normal: no truncation line"
+  echo "    actual: $out"
+fi
+ctxpack_teardown
+
+# ---------------------------------------------------------------------------
+# Test 6a: --diff all-omitted truncation (cap < first hunk size)
+# ---------------------------------------------------------------------------
+echo "Test: ctxpack --diff all-omitted truncation when cap < first hunk"
+ctxpack_setup
+
+# Hunk bytes = 200 per file; cap = 50 → first file (200 > 50) triggers stop
+# immediately → omitted = 2 (all files), zero hunks emitted.
+export CTXPACK_HUNK_BYTES=200
+export DISPATCH_CONTEXT_DIFF_CAP=50
+
+rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --diff 2>/dev/null) || rc=$?
+assert_eq "ctxpack --diff all-omit: exit 0" "0" "$rc"
+# File list must still name both files.
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"foo/bar.ts"* && "$out" == *"baz/qux.ts"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --diff all-omit: file list names all files"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --diff all-omit: file list names all files"
+  echo "    actual: $out"
+fi
+# Zero hunks emitted (no AAAA content).
+TOTAL=$((TOTAL+1))
+if [[ "$out" != *"AAAA"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --diff all-omit: zero hunks emitted"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --diff all-omit: zero hunks emitted"
+  echo "    actual: $out"
+fi
+# Truncation line with count = 2 (both files omitted).
+assert_eq "ctxpack --diff all-omit: truncation line" "yes" \
+  "$([[ "$out" == *'truncated: 2 files omitted'* ]] && echo yes || echo no)"
+ctxpack_teardown
+
+# ---------------------------------------------------------------------------
+# Test 6b: --diff mid-list truncation (first file fits, second pushes over)
+# ---------------------------------------------------------------------------
+echo "Test: ctxpack --diff mid-list truncation when cap between first and second hunk"
+ctxpack_setup
+
+# Hunk bytes = 100 per file; cap = 150 → first file (100 <= 150) fits,
+# second (100+100=200 > 150) triggers stop → omitted = 1, one hunk emitted.
+export CTXPACK_HUNK_BYTES=100
+export DISPATCH_CONTEXT_DIFF_CAP=150
+
+rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --diff 2>/dev/null) || rc=$?
+assert_eq "ctxpack --diff mid-omit: exit 0" "0" "$rc"
+# Exactly one hunk emitted.
+TOTAL=$((TOTAL+1))
+hunk_count=$(echo "$out" | grep -c 'AAAA' 2>/dev/null || echo 0)
+if [[ "$hunk_count" -ge 1 ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --diff mid-omit: first hunk emitted"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --diff mid-omit: first hunk emitted"
+  echo "    actual: $out"
+fi
+# Truncation line with count = 1 (second file omitted).
+assert_eq "ctxpack --diff mid-omit: truncation line count=1" "yes" \
+  "$([[ "$out" == *'truncated: 1 files omitted'* ]] && echo yes || echo no)"
+ctxpack_teardown
+
+# ---------------------------------------------------------------------------
+# Test 7: combined flags — canonical order regardless of flag order given
+# ---------------------------------------------------------------------------
+echo "Test: ctxpack combined flags emit sections in canonical order issue→relations→pr→diff"
+ctxpack_setup
+
+# Provide minimal fixtures for all four slices.
+cat > "$CTXPACK_STUB/issue-full-5.json" <<'EOF'
+{"number":5,"title":"Combined test","state":"OPEN","body":"combo body","comments":[]}
+EOF
+# No parent for relations (default → no-parent exit).
+touch "$CTXPACK_STUB/no-parent-5"
+cat > "$CTXPACK_STUB/pr-list.json" <<'EOF'
+[{"number":20,"headRefName":"5-combo"}]
+EOF
+cat > "$CTXPACK_STUB/pr-view-20.json" <<'EOF'
+{"number":20,"labels":[],"statusCheckRollup":[],"body":"combo pr body"}
+EOF
+
+# Pass flags in REVERSE canonical order.
+rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --diff --pr --relations --issue 2>/dev/null) || rc=$?
+assert_eq "ctxpack combined: exit 0" "0" "$rc"
+
+# Check canonical order by line numbers of each header.
+line_issue=$(echo "$out" | grep -n '=== ISSUE' | head -1 | cut -d: -f1)
+line_rel=$(echo "$out" | grep -n '=== RELATIONS' | head -1 | cut -d: -f1)
+line_pr=$(echo "$out" | grep -n '=== PR ===' | head -1 | cut -d: -f1)
+line_diff=$(echo "$out" | grep -n '=== DIFF' | head -1 | cut -d: -f1)
+
+TOTAL=$((TOTAL+1))
+if [[ -n "$line_issue" && -n "$line_rel" && -n "$line_pr" && -n "$line_diff" ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack combined: all four section headers present"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack combined: all four section headers present"
+  echo "    issue=$line_issue rel=$line_rel pr=$line_pr diff=$line_diff"
+fi
+TOTAL=$((TOTAL+1))
+if [[ -n "$line_issue" && -n "$line_rel" && -n "$line_pr" && -n "$line_diff" \
+   && "$line_issue" -lt "$line_rel" && "$line_rel" -lt "$line_pr" && "$line_pr" -lt "$line_diff" ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack combined: canonical order issue<relations<pr<diff"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack combined: canonical order issue<relations<pr<diff"
+  echo "    line_issue=$line_issue line_rel=$line_rel line_pr=$line_pr line_diff=$line_diff"
+fi
+ctxpack_teardown
+
+# ---------------------------------------------------------------------------
+# Test 8: --relations parent-404 path — no parent → exits 0, no parent/sibling output
+# ---------------------------------------------------------------------------
+echo "Test: ctxpack --relations with no parent exits 0 and omits parent/siblings"
+ctxpack_setup
+
+# The no-parent-5 marker causes the gh stub's parent arm to exit 1 with "404".
+touch "$CTXPACK_STUB/no-parent-5"
+# Blockers and sub-issues return empty arrays (default).
+
+rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --relations 2>/dev/null) || rc=$?
+assert_eq "ctxpack --relations no-parent: exit 0" "0" "$rc"
+# The output must contain Blockers and Sub-issues sections but no Parent: or Siblings:.
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"Blockers:"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --relations no-parent: Blockers section present"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --relations no-parent: Blockers section present"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL+1))
+if [[ "$out" != *"Parent:"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --relations no-parent: no Parent line"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --relations no-parent: no Parent line"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL+1))
+if [[ "$out" != *"Siblings:"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --relations no-parent: no Siblings line"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --relations no-parent: no Siblings line"
+  echo "    actual: $out"
+fi
+ctxpack_teardown
+
+# ---------------------------------------------------------------------------
+# Test 9: error paths — bad/missing issue number and zero flags
+# ---------------------------------------------------------------------------
+echo "Test: ctxpack arg-validation errors exit 2"
+ctxpack_setup
+
+# Non-positive N (0 is not matched by ^[1-9][0-9]*$).
+rc=0; "$CTXPACK_DIR/dispatch-context-pack" 0 --issue >/dev/null 2>&1 || rc=$?
+assert_eq "ctxpack arg: N=0 exits 2" "2" "$rc"
+# No N (first arg is a flag).
+rc=0; "$CTXPACK_DIR/dispatch-context-pack" --issue >/dev/null 2>&1 || rc=$?
+assert_eq "ctxpack arg: no N exits 2" "2" "$rc"
+# No args at all.
+rc=0; "$CTXPACK_DIR/dispatch-context-pack" >/dev/null 2>&1 || rc=$?
+assert_eq "ctxpack arg: no args exits 2" "2" "$rc"
+# Unknown flag.
+rc=0; "$CTXPACK_DIR/dispatch-context-pack" 5 --unknown >/dev/null 2>&1 || rc=$?
+assert_eq "ctxpack arg: unknown flag exits 2" "2" "$rc"
+
+ctxpack_teardown
+
+# ---------------------------------------------------------------------------
+# Test 10: error path — zero flags (valid N but no section selected)
+# ---------------------------------------------------------------------------
+echo "Test: ctxpack with valid N but zero flags exits 2"
+ctxpack_setup
+
+rc=0; "$CTXPACK_DIR/dispatch-context-pack" 5 >/dev/null 2>&1 || rc=$?
+assert_eq "ctxpack zero-flags: exits 2" "2" "$rc"
+
+ctxpack_teardown
+
+# ---------------------------------------------------------------------------
+# Test 11: THE CRITICAL CONTRACT TEST — failed gh issue view → exit non-zero
+#          AND stdout is EMPTY (buffer-then-flush, no partial pack)
+# ---------------------------------------------------------------------------
+echo "Test: ctxpack failed gh mid-build exits non-zero with EMPTY stdout"
+ctxpack_setup
+
+# fail-issue-view marker causes gh stub to exit 1 with a non-transient message.
+touch "$CTXPACK_STUB/fail-issue-view"
+
+# Capture stdout and stderr separately; allow non-zero exit.
+rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --issue --diff 2>/dev/null) || rc=$?
+TOTAL=$((TOTAL+1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack failed-gh: exit non-zero"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack failed-gh: exit non-zero (got rc=$rc)"
+fi
+assert_eq "ctxpack failed-gh: stdout EMPTY (buffer-then-flush contract)" "" "$out"
+
+ctxpack_teardown
+
+# ---------------------------------------------------------------------------
+# Test 12: THE GENUINE BUFFER-THEN-FLUSH DISCRIMINATOR — first section succeeds,
+#          second section fails → stdout EMPTY (not the first section's output).
+#          A print-as-you-go regression would leak the issue section to stdout
+#          even though diff failed.  This is the only ordering that distinguishes
+#          correct buffering from a buggy emit-on-success implementation.
+# ---------------------------------------------------------------------------
+echo "Test: ctxpack first-section-success then diff-failure → stdout EMPTY (buffer-then-flush)"
+ctxpack_setup
+
+# fail-merge-base causes --diff to fail after --issue has already succeeded.
+touch "$CTXPACK_STUB/fail-merge-base"
+# No issue fixture needed: the default gh stub arm returns a valid issue JSON.
+
+rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --issue --diff 2>/dev/null) || rc=$?
+TOTAL=$((TOTAL+1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack buffer-flush: exit non-zero after mid-build failure"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack buffer-flush: exit non-zero after mid-build failure (got rc=$rc)"
+fi
+# THE CONTRACT: stdout must be EMPTY even though --issue succeeded.
+# A print-as-you-go script would emit the issue section before hitting the
+# diff failure; the buffer-then-flush contract keeps stdout empty.
+assert_eq "ctxpack buffer-flush: stdout EMPTY (no partial pack leaked)" "" "$out"
+
+ctxpack_teardown
 
 # ============================================================================
 # summary
