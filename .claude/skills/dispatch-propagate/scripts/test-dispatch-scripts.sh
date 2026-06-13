@@ -158,7 +158,7 @@ STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 # Reconstruct full args string for matching.
 args="$*"
 case "$args" in
-  "pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
+  "pr list --state open --limit 300 --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
       cat "$STUB_DIR/pr-list-full.json"
@@ -166,7 +166,7 @@ case "$args" in
       echo "[]"
     fi
     ;;
-  "pr list --state open --json number,headRefName")
+  "pr list --state open --limit 300 --json number,headRefName")
     # dispatch-find-pr self-fetch: only the two correlation fields.
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     echo "pr list" >> "$STUB_DIR/gh-find-pr-calls.log"
@@ -179,7 +179,7 @@ case "$args" in
       echo "[]"
     fi
     ;;
-  "pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences,mergeable")
+  "pr list --state open --limit 300 --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences,mergeable")
     # dispatch-select-target's union fetch now carries `mergeable` (#1241). The
     # field is forward-compatible (consumed by #1243); the current selection path
     # does not read it, and make_pr_union fixtures omit it (jq yields null).
@@ -451,7 +451,7 @@ case "$args" in
         ;;
     esac
     ;;
-  "pr list --state open --json number,isDraft,labels,statusCheckRollup,mergeable")
+  "pr list --state open --limit 300 --json number,isDraft,labels,statusCheckRollup,mergeable")
     # dispatch-reconcile-ready's one fetch. $STUB_DIR/reconcile-pr-list.json
     # supplies the per-test PR array; absence means no open PRs.
     echo "pr list" >> "$STUB_DIR/gh-reconcile-pr-list.log"
@@ -1204,7 +1204,7 @@ printf '{"closedByPullRequestsReferences":[{"number":851,"state":"OPEN"}]}\n' \
 result=$(DISPATCH_PR_LIST='[{"number":850,"headRefName":"999-unrelated"}]' \
   "$TMPDIR_TEST/dispatch-find-pr" "822")
 assert_eq "DISPATCH_PR_LIST no prefix match; cross-check finds OPEN PR → PR number" "851" "$result"
-# Verify no self-fetch: gh pr list --state open --json number,headRefName was not called.
+# Verify no self-fetch: pr_list_open (number,headRefName) was not called.
 if [[ -f "$STUB_DIR/gh-find-pr-calls.log" ]]; then
   call_count=$(wc -l < "$STUB_DIR/gh-find-pr-calls.log")
 else
@@ -14124,6 +14124,11 @@ stop_setup() {
     "$TMPDIR_TEST/hooks/dispatch-stop.sh"
   chmod +x "$TMPDIR_TEST/hooks/dispatch-stop.sh"
 
+  # dispatch-stop.sh sources lib.sh via $SCRIPTS; provide it so pr_list_open
+  # is defined when the hook runs.
+  cp "$SCRIPT_DIR/lib.sh" \
+    "$TMPDIR_TEST/skills/dispatch-propagate/scripts/lib.sh"
+
   # Fake dispatch-find-pr: prints contents of $STUB_DIR/find-pr-output if
   # present, else nothing.
   cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr" <<'FAKE'
@@ -17440,7 +17445,7 @@ case "$args" in
   issue\ close\ *)
     echo "$args" >> "$STUB_DIR/gh-issue-close.log"
     ;;
-  "pr list --state open --json number,isDraft,labels,statusCheckRollup,mergeable")
+  "pr list --state open --limit 300 --json number,isDraft,labels,statusCheckRollup,mergeable")
     # dispatch-reconcile-ready's one fetch. $STUB_DIR/reconcile-pr-list.json
     # supplies the per-test PR array; absence means no open PRs.
     echo "pr list" >> "$STUB_DIR/gh-reconcile-pr-list.log"
@@ -23458,7 +23463,7 @@ case "$args" in
     fi
     ;;
   # dispatch-find-pr self-fetch
-  "pr list --state open --json number,headRefName")
+  "pr list --state open --limit 300 --json number,headRefName")
     if [[ -f "$STUB_DIR/pr-list.json" ]]; then
       cat "$STUB_DIR/pr-list.json"
     else

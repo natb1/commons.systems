@@ -51,8 +51,7 @@ source "$SCRIPT_DIR/lib.sh"  # dispatch_classify_rollup
 
 # ---- Step 1: one fetch of every open PR -------------------------------------
 PR_LIST_RC=0
-PR_LIST=$(gh pr list --state open \
-  --json number,isDraft,labels,statusCheckRollup,mergeable) || PR_LIST_RC=$?
+PR_LIST=$(pr_list_open "number,isDraft,labels,statusCheckRollup,mergeable") || PR_LIST_RC=$?
 if [[ "$PR_LIST_RC" -ne 0 ]]; then
   echo "dispatch-reconcile-ready: error: gh pr list failed (rc=$PR_LIST_RC)" >&2
   exit 1

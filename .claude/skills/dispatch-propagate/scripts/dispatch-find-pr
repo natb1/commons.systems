@@ -34,6 +34,9 @@
 #     (default: 1). Set to 0 in tests to avoid sleeps.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
 ARG="${1:-}"
 if [[ -z "$ARG" || ! "$ARG" =~ ^[0-9]+$ ]]; then
   echo "error: usage: dispatch-find-pr <issue-num>" >&2
@@ -50,7 +53,7 @@ prefix_match() {
 if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
   PR_LIST="$DISPATCH_PR_LIST"
 else
-  PR_LIST=$(gh pr list --state open --json number,headRefName)
+  PR_LIST=$(pr_list_open "number,headRefName")
 fi
 
 RESULT=$(prefix_match "$PR_LIST")
@@ -59,7 +62,7 @@ if [[ -n "$RESULT" ]]; then echo "$RESULT"; exit 0; fi
 # Retry-on-empty (self-fetch path only).
 if [[ -z "${DISPATCH_PR_LIST:-}" ]]; then
   sleep "${DISPATCH_FIND_PR_RETRY_DELAY:-1}"
-  PR_LIST=$(gh pr list --state open --json number,headRefName)
+  PR_LIST=$(pr_list_open "number,headRefName")
   RESULT=$(prefix_match "$PR_LIST")
   if [[ -n "$RESULT" ]]; then echo "$RESULT"; exit 0; fi
 fi
