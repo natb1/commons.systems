@@ -27,6 +27,8 @@ jobs:
     concurrency:
       group: prod-deploy
       cancel-in-progress: false
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
@@ -40,6 +42,21 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: .github/scripts/firebase-auth.sh
+      - name: Resolve deploy base
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "workflow_dispatch: deploying all apps"
+            echo "DEPLOY_ALL=1" >> "$GITHUB_ENV"
+          else
+            SHA=$(git ls-remote origin refs/tags/last-prod-deploy | cut -f1)
+            if [ -n "$SHA" ]; then
+              echo "Diffing from last-prod-deploy ($SHA)"
+              echo "DIFF_BASE=$SHA" >> "$GITHUB_ENV"
+            else
+              echo "No last-prod-deploy tag on origin; bootstrapping with full deploy"
+              echo "DEPLOY_ALL=1" >> "$GITHUB_ENV"
+            fi
+          fi
       - name: Deploy to production and run smoke tests
         env:
           GA_MEASUREMENT_ID_AUDIO: ${{ secrets.GA_MEASUREMENT_ID_AUDIO }}
@@ -51,9 +68,12 @@ jobs:
           VITE_RECAPTCHA_SITE_KEY: ${{ secrets.RECAPTCHA_SITE_KEY }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          DEPLOY_ALL: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
-          DIFF_BASE: ${{ github.event.before }}
         run: .claude/skills/dispatch-propagate/scripts/run-all-prod-deploy-smoke.sh
+      - name: Record last-prod-deploy marker
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git tag -f last-prod-deploy "$GITHUB_SHA"
+          git push -f origin refs/tags/last-prod-deploy
       - name: Cleanup credentials
         if: always()
         run: .github/scripts/firebase-auth-cleanup.sh
