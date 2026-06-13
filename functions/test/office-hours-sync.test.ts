@@ -54,7 +54,9 @@ interface InMemoryDocRef {
   delete: () => Promise<void>;
 }
 
-function createInMemoryFirestore() {
+function createInMemoryFirestore(
+  opts: { failBulkWriterSetFor?: (ref: InMemoryDocRef) => boolean } = {},
+) {
   const docs = new Map<string, Record<string, unknown>>();
 
   const doc = (path: string): InMemoryDocRef => ({
@@ -112,6 +114,11 @@ function createInMemoryFirestore() {
     const ops: Array<() => void> = [];
     return {
       set: (ref: InMemoryDocRef, data: Record<string, unknown>) => {
+        if (opts.failBulkWriterSetFor?.(ref)) {
+          return Promise.reject(
+            new Error("BulkWriter set failed: simulated per-op write failure"),
+          );
+        }
         ops.push(() => docs.set(ref.path, data));
         return Promise.resolve();
       },
@@ -317,6 +324,30 @@ describe("syncOfficeHoursCore", () => {
     for (let i = 0; i < 5; i++) {
       expect(store2._docs.has(`office-hours/prod/items/fresh-${i}`)).toBe(true);
     }
+  });
+
+  it("throws when a BulkWriter set() op fails — Promise.all(writes) re-raises it", async () => {
+    // BulkWriter routes per-op failures to the individual set() promise, not to
+    // close(); the failing op below leaves close() resolving cleanly. Only the
+    // `await Promise.all(writes)` line in syncOfficeHoursCore re-raises it, so
+    // deleting that line makes this assertion go green-when-it-should-be-red.
+    const store = createInMemoryFirestore({
+      failBulkWriterSetFor: (ref) =>
+        ref.path === "office-hours/prod/items/daily-chore",
+    });
+    const issue = makeIssue({ number: 1, jitKey: "daily-chore" });
+
+    await expect(
+      syncOfficeHoursCore({
+        fetchOpenJitIssues: async () => [issue],
+        firestore: store as unknown as Firestore,
+        namespace: "office-hours/prod",
+        memberEmails: ["owner@example.com"],
+      }),
+    ).rejects.toThrow(/simulated per-op write failure/);
+
+    // The failed op must not have written its doc.
+    expect(store._docs.has("office-hours/prod/items/daily-chore")).toBe(false);
   });
 });
 
