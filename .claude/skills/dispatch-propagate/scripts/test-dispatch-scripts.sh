@@ -6746,7 +6746,8 @@ lock_teardown() {
   TMPDIR_TEST=""
   STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
-    DISPATCH_LOCK_WAIT_INTERVAL DISPATCH_LOCK_WAIT_TIMEOUT
+    DISPATCH_LOCK_WAIT_INTERVAL DISPATCH_LOCK_WAIT_TIMEOUT \
+    DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT
 }
 
 # Helper: install a fake `claude` whose `agents --json` invocation prints a
@@ -6893,6 +6894,67 @@ lock_fake_claude_sessions "sess-500"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
 assert_eq "re-entry exits 0" "0" "$rc"
 assert_eq "re-entry prints acquired" "acquired" "$out"
+lock_teardown
+
+# --- Test 5b: wedged daemon — probe times out → fail-safe LIVE → busy (#1315) -
+# A foreign holder is recorded; resolving its liveness queries the daemon. A
+# wedged daemon that hangs (and IGNORES SIGTERM) must not deadlock the acquirer:
+# the probe is `timeout -k 5 "$PROBE_TIMEOUT"`, so the SIGKILL backstop guarantees
+# return, the failed probe folds to fail-safe LIVE, and we stay busy. The fake
+# `trap '' TERM; sleep 30` proves the `-k` backstop (plain `timeout` would itself
+# block on a SIGTERM-ignoring child). The EXTERNAL `timeout` turns a regression
+# (no bound, or a missing `-k`) into a visible rc-124 failure instead of a hang.
+
+echo "Test: wedged daemon — probe times out, acquirer stays busy without deadlock"
+lock_setup
+printf '%s\n' "sess-wedged-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-wedged-mine"
+# Slow fake `claude` that ignores SIGTERM and sleeps far past the probe timeout.
+cat > "$TMPDIR_TEST/fake/claude" <<'FAKE'
+#!/usr/bin/env bash
+trap '' TERM
+sleep 30
+FAKE
+chmod +x "$TMPDIR_TEST/fake/claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake/claude"
+export DISPATCH_LOCK_PROBE_TIMEOUT=1
+# External bound: the probe's own SIGKILL fires at PROBE_TIMEOUT+5≈6s, so 12s
+# leaves ample margin on a healthy fix while still catching a real hang.
+out=$(timeout 12 "$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "wedged-daemon: returns within external budget (not rc 124)" "0" "$rc"
+assert_eq "wedged-daemon: prints busy" "busy" "$out"
+assert_eq "wedged-daemon: foreign holder untouched" "sess-wedged-foreign" \
+  "$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)"
+lock_teardown
+
+# --- Test 5c: in-section flock wait times out → busy, lock NOT clobbered (#1315)
+# When the in-section `flock -w "$FLOCK_TIMEOUT"` cannot be acquired in time, the
+# acquirer must report contended (busy) WITHOUT running the read-check-write —
+# falling through unlocked would race and could clobber a live holder. Setup is
+# discriminating: a held flock plus a STALE recorded holder (absent from the
+# registry). Correct (guarded) code → busy, lock unchanged. The fall-through bug
+# would instead reclaim the stale holder and WRITE our sid (acquired + clobbered),
+# which these assertions catch.
+
+echo "Test: in-section flock wait timeout → busy, lock file not clobbered"
+lock_setup
+printf '%s\n' "sess-flock-stale" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-flock-mine"
+# Registry knows only our session → the recorded holder is stale (would be
+# reclaimed if the buggy fall-through ever ran the unlocked read-check-write).
+lock_fake_claude_sessions "sess-flock-mine"
+export DISPATCH_LOCK_FLOCK_TIMEOUT=1
+# Hold the advisory lock on the same file for longer than FLOCK_TIMEOUT so the
+# acquirer's `flock -w 1` genuinely times out.
+( exec 9>>"$DISPATCH_LOCK_FILE"; flock 9; sleep 3 ) &
+flock_holder=$!
+sleep 0.5   # let the holder grab the flock before the acquirer contends
+out=$(timeout 12 "$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+wait "$flock_holder" 2>/dev/null || true
+assert_eq "flock-timeout: returns within external budget" "0" "$rc"
+assert_eq "flock-timeout: prints busy" "busy" "$out"
+assert_eq "flock-timeout: lock file NOT clobbered" "sess-flock-stale" \
+  "$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)"
 lock_teardown
 
 # --- Test 6a: misconfiguration — non-git dir, no DISPATCH_LOCK_FILE ----------
@@ -18310,7 +18372,8 @@ sel_tick_teardown() {
     FAKE_GIT_BRANCH FAKE_GIT_FETCH_FAIL FAKE_GIT_MERGE_FAIL \
     SEL_TARGET_N SEL_LIVE_COUNT SEL_LIVE_COUNT_FAIL \
     SEL_EXHAUSTED SEL_PRIORITY_ONLY \
-    DISPATCH_RESERVATION_DIR SEL_AGENTS_TSV SEL_AGENTS_LIST_FAIL
+    DISPATCH_RESERVATION_DIR SEL_AGENTS_TSV SEL_AGENTS_LIST_FAIL \
+    DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT
 }
 
 # Run the orchestrator, capturing full stdout; the decision is the last line.
@@ -18553,6 +18616,58 @@ case "$err" in
   *) status="bad: $err" ;;
 esac
 assert_eq "extra args → usage error, exit 2" "ok" "$status"
+sel_tick_teardown
+
+# --- TARGET_N validation: non-numeric → release + exit 2 (#1315) -------------
+# dispatch-target-workers always prints a number in count mode (its own fallback
+# to 1), so a non-numeric TARGET_N here means a broken environment. The guard
+# must release the lock and exit 2 with a clear error rather than letting the
+# arithmetic gate throw "operand expected" and silently skip the cap.
+echo "Test: select-tick non-numeric TARGET_N → release + exit 2"
+sel_tick_setup
+export SEL_TARGET_N="not-a-number"
+err=$("$TMPDIR_TEST/dispatch-select-tick" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"dispatch-target-workers"*"non-numeric"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "non-numeric TARGET_N → error + exit 2" "ok" "$status"
+assert_eq "non-numeric TARGET_N: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- TARGET_N validation: empty stdout → release + exit 2 (#1315) ------------
+# A crashed dispatch-target-workers prints nothing; empty stdout also fails the
+# `^[0-9]+$` regex, so no separate exit-code check is needed. Override the stub
+# to emit nothing on the no-arg query (keeping --exhausted intact).
+echo "Test: select-tick empty TARGET_N → release + exit 2"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-target-workers" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--exhausted" ]]; then echo "${SEL_EXHAUSTED:-ok}"; exit 0; fi
+# no-arg: emit nothing (simulate a crashed dispatch-target-workers)
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-target-workers"
+err=$("$TMPDIR_TEST/dispatch-select-tick" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"dispatch-target-workers"*"non-numeric"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "empty TARGET_N → error + exit 2" "ok" "$status"
+assert_eq "empty TARGET_N: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- TARGET_N validation: 0 is valid, must NOT trip the guard (#1315) --------
+# The regex is `^[0-9]+$` (not `^[1-9]`) — TARGET_N=0 is a legitimate value (the
+# gate compares LIVE_COUNT >= 0). Regression guard for that decision: a 0 target
+# proceeds normally (at-cap concurrency-cap here), it does NOT exit 2.
+echo "Test: select-tick TARGET_N=0 passes the guard (no exit 2)"
+sel_tick_setup
+export SEL_LIVE_COUNT=0 SEL_TARGET_N=0 SEL_EXHAUSTED=ok SEL_PRIORITY_ONLY=empty
+out=$(run_sel_tick) ; rc=$?
+assert_eq "TARGET_N=0: exit 0 (guard not tripped)" "0" "$rc"
+assert_eq "TARGET_N=0: decision line" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
 sel_tick_teardown
 
 # --- gate at cap, not exhausted, no priority item → concurrency-cap ----------
