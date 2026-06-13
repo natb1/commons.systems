@@ -12180,10 +12180,11 @@ TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--on-calendar=@1000300"* \
    && "$log" == *"--unit=dispatch-reseed-1000300"* \
    && "$log" == *"--collect"* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: first-fail systemd-run argv (calendar + unit + collect + exec)"
+  PASS=$((PASS + 1)); echo "  PASS: first-fail systemd-run argv (calendar + unit + collect + killmode + exec)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: first-fail systemd-run argv (calendar + unit + collect + exec)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: first-fail systemd-run argv (calendar + unit + collect + killmode + exec)"
   echo "    log: $log"
 fi
 assert_eq "first-fail: state count == 1" "1" "$(tr_state_count)"
