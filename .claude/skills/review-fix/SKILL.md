@@ -90,16 +90,17 @@ it is referenced downstream by the dependency audit and the Workflow `merge_base
 arg). Dropping `git fetch origin main` is valid by #1426 design: the phase-entry
 merge already keeps `origin/main` current and the pack does no fetch of its own.
 
-To classify the changed surface, feed `dispatch-security-surface` the changed-file
-list from the pack's `--- files ---` block — already on disk at `tmp/pack-$N.txt`
-from the preamble's `tee`. Extract the file list between the markers (`sed '1d;$d'`
-strips the two marker lines themselves) and pipe it to the classifier (no
-`dangerouslyDisableSandbox` needed — pure stdin→stdout). Capture that classifier
-output as `SURFACE_OUT` in the same block, then extract the fields exactly as
-before:
+To classify the changed surface, extract the changed-file list from the pack's
+`=== DIFF` section — already on disk at `tmp/pack-$N.txt` from the preamble's
+`tee` — via `dispatch-changed-files`, which anchors on the DIFF section so a
+PR/issue body containing bare `--- files ---`/`--- hunks ---` markers cannot
+poison the list. Pipe that directly to the `dispatch-security-surface` classifier
+(no `dangerouslyDisableSandbox` needed — both are pure stdin→stdout). Capture
+that classifier output as `SURFACE_OUT` in the same block, then extract the
+fields exactly as before:
 
 ```bash
-SURFACE_OUT=$(sed -n '/^--- files ---$/,/^--- hunks ---$/p' "tmp/pack-$N.txt" | sed '1d;$d' \
+SURFACE_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-changed-files < "tmp/pack-$N.txt" \
   | .claude/skills/dispatch-propagate/scripts/dispatch-security-surface)
 surface=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^surface=//p')
 deps=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^deps=//p')
@@ -206,7 +207,7 @@ Collect the fields for the Workflow invocation. Parse `Closes #N` from the pack'
 args = {
   pr_num:              <PR_NUM>,
   merge_base:          <MERGE_BASE>,
-  changed_files:       [ ...from the pack's --- files --- list... ],
+  changed_files:       [ ...the changed-file list from the pack's === DIFF section (same list dispatch-changed-files extracts)... ],
   surface:             "empty" | "docs" | "code",
   deps:                <true|false>,
   app_or_rules:        <true|false>,
