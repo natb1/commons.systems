@@ -47,7 +47,7 @@ const RESERVED_KEYS = new Set(["operation", "kind", "message", "stack", "code", 
 // to collide with common identifiers, so they remain as plain case-insensitive
 // substrings; word-bounding them would be over-engineering for little gain.
 const SENSITIVE_KEY_RE = /token|secret|password|auth|key|credential|email|phone|ssn|address/i;
-const SENSITIVE_DOB_RE = /(?:^|[^A-Za-z])(?:dob|Dob|DOB)(?![a-z])|[A-Za-z](?:Dob|DOB)(?![a-z])/;
+const SENSITIVE_DOB_RE = /(?:^|[^A-Za-z])(?:dob|Dob|DOB)(?![a-z])|[a-z](?:Dob|DOB)(?![a-z])/;
 
 // Size caps (UTF-16 code units) — must mirror the firestore.rules isValidErrorLog() caps exactly.
 const CAPS = {
