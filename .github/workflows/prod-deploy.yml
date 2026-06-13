@@ -70,7 +70,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: .claude/skills/dispatch-propagate/scripts/run-all-prod-deploy-smoke.sh
       - name: Record last-prod-deploy marker
-        if: github.ref == 'refs/heads/main'
+        if: success() && github.ref == 'refs/heads/main'
         run: |
           git tag -f last-prod-deploy "$GITHUB_SHA"
           git push -f origin refs/tags/last-prod-deploy
