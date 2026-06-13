@@ -49,7 +49,7 @@ fi
 if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
   PR_LIST="$DISPATCH_PR_LIST"
 else
-  PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable)
+  PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
 fi
 
 # Find the matching PR.

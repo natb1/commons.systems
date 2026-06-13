@@ -111,6 +111,31 @@ gh_api_array() {
   fi
 }
 
+# The explicit open-PR fetch cap. gh pr list defaults to 30, which silently
+# truncates the open-PR snapshot once a fan-out crosses 30 open PRs. 300 mirrors
+# dispatch-select-target's open-issue cap. Overridable for tests.
+DISPATCH_PR_LIST_LIMIT="${DISPATCH_PR_LIST_LIMIT:-300}"
+
+# Fetch all open PRs with an explicit --limit and a loud truncation guard.
+# Args: $1 = comma-separated --json field set (e.g. "number,headRefName").
+# Output: the gh pr list JSON array on stdout.
+# Returns non-zero on gh failure (propagated) OR on truncation — when the result
+# length equals the limit, meaning the snapshot is likely cut off. Errors to
+# stderr in the truncation case so the failure is never silent.
+pr_list_open() {
+  local fields="$1"
+  local out rc len
+  out=$(gh pr list --state open --limit "$DISPATCH_PR_LIST_LIMIT" --json "$fields")
+  rc=$?
+  [[ "$rc" -ne 0 ]] && return "$rc"
+  len=$(printf '%s' "$out" | jq 'length')
+  if [[ "$len" -eq "$DISPATCH_PR_LIST_LIMIT" ]]; then
+    echo "error: gh pr list returned exactly $DISPATCH_PR_LIST_LIMIT open PRs (the --limit) — the open-PR snapshot is likely truncated. Raise DISPATCH_PR_LIST_LIMIT." >&2
+    return 1
+  fi
+  printf '%s\n' "$out"
+}
+
 # Count the open blockers of <issue-num> via GitHub's blocked_by dependency
 # edges. Prints an integer; closed blockers do not gate work, so only open
 # blockers are counted.
