@@ -138,7 +138,7 @@ fi
 # dispatch-find-pr accepts it too (mirrors dispatch-select-target's
 # DISPATCH_PR_LIST).
 if [[ -n "$FRESH_NUM" ]]; then
-  PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable)
+  PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
   # Readiness gate: dispatch-phase no longer emits `waiting`; check CI readiness
   # first. A not-ready draft PR (exit non-zero) maps to phase=waiting, preserving
   # the byte-identical output contract callers expect.
