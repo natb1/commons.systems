@@ -4226,9 +4226,9 @@ assert_eq "resumes the oldest live item's session" "LAUNCH: --resume s-42-x" "$r
 teardown
 
 # OH3. Labeled items but none with a live session → launch the fresh /office-hours
-# session worker-style (a --bg job named after the <N>-* worktree, cwd = that
-# worktree) via dispatch-spawn-office-hours, then attach the human by resuming the
-# spawned session id. Fixes the originally-reported label leak (#1160): born in the
+# session worker-style (a --bg job named office-hours-<N>, cwd = that worktree)
+# via dispatch-spawn-office-hours, then attach the human by resuming the spawned
+# session id. Fixes the originally-reported label leak (#1160): born in the
 # worktree, the session's branch is <N>-..., so the strip hook clears the label.
 echo "Test: labeled item, none live → spawn worker-style --bg then resume"
 setup
@@ -4239,18 +4239,31 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD
 office_hours_fresh_fake_claude
 result=$("$TMPDIR_TEST/office-hours")
 # Attaches the human by resuming the just-spawned session id.
-assert_eq "fresh path resumes the spawned session id" "LAUNCH: --resume sess-42-x" "$result"
-# The spawn was a --bg job named after the worktree basename running /office-hours.
+assert_eq "fresh path resumes the spawned session id" "LAUNCH: --resume sess-office-hours-42" "$result"
+# The spawn was a --bg job named office-hours-<N> running /office-hours.
 mapfile -t oh_argv < "$TMPDIR_TEST/oh-bg-argv"
 assert_eq "fresh: --bg" "--bg" "${oh_argv[0]:-}"
 assert_eq "fresh: --name" "--name" "${oh_argv[1]:-}"
-assert_eq "fresh: name is the worktree basename" "42-x" "${oh_argv[2]:-}"
+assert_eq "fresh: name is office-hours-<N>" "office-hours-42" "${oh_argv[2]:-}"
 assert_eq "fresh: --permission-mode" "--permission-mode" "${oh_argv[3]:-}"
 assert_eq "fresh: permission mode is auto" "auto" "${oh_argv[4]:-}"
 assert_eq "fresh: prompt is /office-hours with args" "/office-hours 42 plan -" "${oh_argv[5]:-}"
 # The --bg job was born in the worktree (cwd = worktree path).
 oh_pwd=$(head -1 "$TMPDIR_TEST/oh-pwd-log" 2>/dev/null || true)
 assert_eq "fresh: spawn cwd is the worktree" "$(realpath "$TMPDIR_TEST/worktrees/42-x")" "$(realpath "$oh_pwd" 2>/dev/null)"
+teardown
+
+# OH3c. A labeled item whose worktree has a live session named office-hours-<N>
+# (the renamed office-hours session, #1311) → resume it directly. Before the
+# two-name fix the selector keyed only on the basename and missed it.
+echo "Test: live office-hours-<N> session → selector resumes it directly"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_fake_claude "office-hours-42"   # the live session is the office-hours-<N> one
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "resumes the live office-hours-<N> session by its sessionId" "LAUNCH: --resume s-office-hours-42" "$result"
 teardown
 
 # OH3b. Sessionless item with NO <N>-* worktree on disk (the worktree was swept) →
@@ -7196,6 +7209,20 @@ if out=$(claude_sessions_under "$CA_DIR"); then rc=0; else rc=$?; fi
 assert_eq "empty-output: claude_sessions_under exits non-zero (unknown)" "1" "$rc"
 if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
 assert_eq "empty-output: worktree_has_live_session reports occupied" "occupied" "$live"
+ca_teardown
+
+# --- Test 8b: an office-hours-<N> session occupies the <N>-slug worktree ------
+
+echo "Test: an office-hours-<N> session marks the <N>-slug worktree occupied (#1311)"
+ca_setup
+# A worktree basename <N>-slug; the only live session is named office-hours-<N>
+# (the renamed office-hours session — distinct from the basename). The guard must
+# query both names and report occupied via the office-hours-<N> match.
+wt="$CA_DIR/1311-foo"
+mkdir -p "$wt"
+write_fake_claude '[{"sessionId":"oh-1","pid":99,"status":"busy","name":"office-hours-1311"}]' 0
+if worktree_has_live_session "$wt"; then live=occupied; else live=free; fi
+assert_eq "office-hours occupancy: worktree_has_live_session reports occupied" "occupied" "$live"
 ca_teardown
 
 # --- Test 9: claude_sessions_under invokes `claude` with --cwd <path> -------
@@ -11685,16 +11712,16 @@ spawn_worker_teardown() {
 echo "=== dispatch-spawn-office-hours ==="
 #
 # dispatch-spawn-office-hours is the office-hours fresh-launch counterpart of
-# dispatch-launch-worker: it spawns a /office-hours --bg job worker-style (--name
-# = worktree basename, --cwd = worktree path) via dispatch-spawn-job, then —
-# unlike the launcher, which `exec`s the spawn and is done — resolves the spawned
-# (or deduped) session id by the worktree basename and prints it, so the caller
-# can attach a human via `claude --resume`.
+# dispatch-launch-worker: it spawns a /office-hours --bg job with --name
+# office-hours-<N> (not the worktree basename) and --cwd = worktree path via
+# dispatch-spawn-job, then — unlike the launcher, which `exec`s the spawn and is
+# done — resolves the spawned (or deduped) session id by office-hours-<N> and
+# prints it, so the caller can attach a human via `claude --resume`.
 #
 # It reuses the spawn-worker fake-`claude` harness (write_fake_spawn_worker_claude)
 # and the SPAWN_WORKER_* fixture globals: that fake's `--bg` handler registers
 # `{"sessionId":"sess-<name>",...,"name":"<name>"}`, so the resolved id for the
-# 839-test-worker target is deterministically `sess-839-test-worker`.
+# 839-test-worker target is deterministically `sess-office-hours-839`.
 #
 # The test shell runs under `set -e`; the script can exit non-zero, so every
 # invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
@@ -11751,15 +11778,15 @@ SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
 if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-oh: dispatch-spawn-office-hours exits 0" "0" "$rc"
 # stdout is exactly the resolved session id (the only thing printed).
-assert_eq "spawn-oh: stdout is the resolved session id" "sess-839-test-worker" "$out"
+assert_eq "spawn-oh: stdout is the resolved session id" "sess-office-hours-839" "$out"
 # The recorded argv must be exactly:
-#   --bg --name <worktree-basename> --permission-mode auto
+#   --bg --name office-hours-<N> --permission-mode auto
 #   "/office-hours 839 implement -"
 mapfile -t oh_bg_argv < "$SPAWN_WORKER_BG_ARGV"
 assert_eq "spawn-oh: argv[0] is --bg" "--bg" "${oh_bg_argv[0]:-}"
 assert_eq "spawn-oh: argv[1] is --name" "--name" "${oh_bg_argv[1]:-}"
-assert_eq "spawn-oh: argv[2] is the worktree basename" \
-  "839-test-worker" "${oh_bg_argv[2]:-}"
+assert_eq "spawn-oh: argv[2] is office-hours-<N>" \
+  "office-hours-839" "${oh_bg_argv[2]:-}"
 assert_eq "spawn-oh: argv[3] is --permission-mode" "--permission-mode" "${oh_bg_argv[3]:-}"
 assert_eq "spawn-oh: argv[4] is auto" "auto" "${oh_bg_argv[4]:-}"
 assert_eq "spawn-oh: argv[5] is '/office-hours 839 implement -'" \
@@ -11789,11 +11816,11 @@ spawn_office_hours_teardown
 
 echo "Test: a live same-name session deduplicates the spawn; its id is resolved for resume"
 spawn_office_hours_setup
-# Prime the registry with a different sessionId whose name matches the worktree
-# basename the spawn would use. dispatch-spawn-job dedups (no --bg); the resolve
+# Prime the registry with a different sessionId whose name matches office-hours-<N>
+# (the name the spawn now uses). dispatch-spawn-job dedups (no --bg); the resolve
 # then returns this existing session — the one to resume.
 printf '%s' \
-  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"839-test-worker"}]' \
+  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"office-hours-839"}]' \
   > "$SPAWN_WORKER_REGISTRY"
 write_fake_spawn_worker_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
@@ -13694,20 +13721,21 @@ statements_teardown
 echo ""
 echo "=== dispatch-input-block ==="
 #
-# The hook discriminates on CLAUDE_JOB_DIR/state.json {.name} starting with
-# "dispatch-"; resolves the issue number from the current branch (the <N>-*
-# prefix); parks the ISSUE via dispatch-apply-office-hours (the single write
-# path — issue target, create-on-first-use, why-comment); runs dispatch-spawn.
-# Always exits 0.
+# The hook discriminates on CLAUDE_JOB_DIR/state.json {.name} matching
+# ^[0-9]+- (phase workers and parse-job sessions, both <N>-slug; office-hours-<N>
+# sessions are excluded — no leading digit); resolves the issue number from the
+# job name's <N>- prefix (${JOB_NAME%%-*}, no longer from the branch); parks the
+# ISSUE via dispatch-apply-office-hours (the single write path — issue target,
+# create-on-first-use, why-comment); runs dispatch-spawn-tick. Always exits 0.
 #
 # Each test gets a fresh tmp tree:
 #   $TMPDIR_TEST/hooks/dispatch-input-block.sh     — the hook under test
 #   $TMPDIR_TEST/skills/dispatch-propagate/scripts/  — fakes for
 #                                                    dispatch-apply-office-hours,
 #                                                    dispatch-spawn
-#   $TMPDIR_TEST/bin/{gh,git}                      — PATH shims
+#   $TMPDIR_TEST/bin/{gh}                          — PATH shims
 #   $TMPDIR_TEST/jobs/<id>/state.json              — fake CLAUDE_JOB_DIR ledger
-#   $TMPDIR_TEST/stub/{gh,git,spawn}-calls.log     — recorded invocations
+#   $TMPDIR_TEST/stub/{gh,spawn}-calls.log         — recorded invocations
 #
 # HOOK_SCRIPT_DIR — the project hooks directory the test copies from. SCRIPT_DIR
 # here is .claude/skills/dispatch-propagate/scripts; the hooks live at .claude/hooks.
@@ -13781,25 +13809,6 @@ esac
 STUB
   chmod +x "$TMPDIR_TEST/bin/gh"
 
-  # git PATH stub. The hook reads `rev-parse --abbrev-ref HEAD` to derive the
-  # issue number. current-branch.txt is the per-test fixture.
-  cat > "$TMPDIR_TEST/bin/git" <<'STUB'
-#!/usr/bin/env bash
-STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
-args="$*"
-case "$args" in
-  "rev-parse --abbrev-ref HEAD")
-    if [[ -f "$STUB_DIR/current-branch.txt" ]]; then
-      cat "$STUB_DIR/current-branch.txt"
-    else
-      echo "main"
-    fi
-    ;;
-  *) echo "git stub: unknown invocation: $args" >&2; exit 1 ;;
-esac
-STUB
-  chmod +x "$TMPDIR_TEST/bin/git"
-
   export PATH="$TMPDIR_TEST/bin:$PATH"
   export STUB_DIR  # fakes resolve STUB_DIR from env
 }
@@ -13812,13 +13821,12 @@ ib_teardown() {
   unset CLAUDE_JOB_DIR
 }
 
-# --- Test 1: dispatch-* job + PR exists → still parks the ISSUE, spawn baton --
+# --- Test 1: worker job (name <N>-slug) + PR exists → park ISSUE, spawn baton --
 
-echo "Test: dispatch-* job + branch <N>-* + PR exists → park ISSUE via apply-office-hours, spawn baton"
+echo "Test: worker job (name <N>-slug) + PR exists → park ISSUE via apply-office-hours, spawn baton"
 ib_setup
-echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
-echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
 rc=$?
@@ -13828,7 +13836,7 @@ apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
 apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
 if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: input-block: dispatch-apply-office-hours invoked with issue 123 + non-empty reason (issue target even with a PR)"
+  PASS=$((PASS + 1)); echo "  PASS: input-block: dispatch-apply-office-hours invoked with issue 123 + non-empty reason (issue target even with a PR, resolved from job name)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: input-block: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
   echo "    apply-log: $apply_log"
@@ -13843,12 +13851,11 @@ spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "input-block: dispatch-spawn invoked exactly once" "1" "$spawn_calls"
 ib_teardown
 
-# --- Test 2: dispatch-* job + no PR → park the ISSUE, spawn baton ------------
+# --- Test 2: worker job (name <N>-slug) + no PR → park ISSUE, spawn baton -----
 
-echo "Test: dispatch-* job + branch <N>-* + no PR → park ISSUE (implement phase)"
+echo "Test: worker job (name <N>-slug) + no PR → park ISSUE (implement phase)"
 ib_setup
-echo "789-bare" > "$STUB_DIR/current-branch.txt"
-echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo '{"name":"789-bare"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
 rc=$?
@@ -13863,13 +13870,14 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: input-block (no PR): dispatch-apply-office-hours invoked with issue 789 + non-empty reason"
   echo "    apply-log: $apply_log"
 fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "input-block (no PR): dispatch-spawn invoked exactly once" "1" "$spawn_calls"
 ib_teardown
 
 # --- Test 3: CLAUDE_JOB_DIR unset → no-op (no label, no spawn) ---------------
 
 echo "Test: CLAUDE_JOB_DIR unset → no-op (interactive session is excluded)"
 ib_setup
-echo "123-foo" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
 unset CLAUDE_JOB_DIR
 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
@@ -13889,28 +13897,27 @@ else
 fi
 ib_teardown
 
-# --- Test 4: non-dispatch job name → no-op -----------------------------------
+# --- Test 4: non-worker name → no-op -----------------------------------------
 
-echo "Test: state.json name is not 'dispatch-*' → no-op (other background jobs excluded)"
+echo "Test: state.json name does not match ^[0-9]+- → no-op (other background jobs excluded)"
 ib_setup
-echo "123-foo" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
 echo '{"name":"manual-session"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
 rc=$?
-assert_eq "non-dispatch: hook exits 0" "0" "$rc"
+assert_eq "non-worker: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: non-dispatch: no office-hours apply was invoked"
+  PASS=$((PASS + 1)); echo "  PASS: non-worker: no office-hours apply was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: non-dispatch: no office-hours apply was invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-worker: no office-hours apply was invoked"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: non-dispatch: dispatch-spawn was not invoked"
+  PASS=$((PASS + 1)); echo "  PASS: non-worker: dispatch-spawn was not invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: non-dispatch: dispatch-spawn was not invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-worker: dispatch-spawn was not invoked"
 fi
 ib_teardown
 
@@ -13918,9 +13925,8 @@ ib_teardown
 
 echo "Test: Notification with non-permission-prompt type → no-op (passes through silently)"
 ib_setup
-echo "123-foo" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
-echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo '{"name":"123-foo"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 printf '%s' '{"notification_type":"session_complete"}' \
   | "$TMPDIR_TEST/hooks/dispatch-input-block.sh" >/dev/null 2>&1
@@ -13934,27 +13940,49 @@ else
 fi
 ib_teardown
 
-# --- Test 6: non-issue branch with dispatch job → no-op ----------------------
+# --- Test 6: non-worker job name (e.g. stray dispatch-* router) → no-op ------
 
-echo "Test: non-issue branch (main) + dispatch-* job → no-op (no label, no spawn)"
+echo "Test: non-worker job name (e.g. a stray dispatch-* router) → no-op (resolution is job-name-based)"
 ib_setup
-echo "main" > "$STUB_DIR/current-branch.txt"
-echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo '{"name":"dispatch-router01"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
 rc=$?
-assert_eq "non-issue-branch: hook exits 0" "0" "$rc"
+assert_eq "non-worker-router: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: non-issue-branch: no office-hours apply was invoked"
+  PASS=$((PASS + 1)); echo "  PASS: non-worker-router: no office-hours apply was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: non-issue-branch: no office-hours apply was invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-worker-router: no office-hours apply was invoked"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: non-issue-branch: dispatch-spawn was not invoked"
+  PASS=$((PASS + 1)); echo "  PASS: non-worker-router: dispatch-spawn was not invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: non-issue-branch: dispatch-spawn was not invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-worker-router: dispatch-spawn was not invoked"
+fi
+ib_teardown
+
+# --- Test 7: office-hours-<N> job name → no-op (excluded by ^[0-9]+-) ---------
+
+echo "Test: office-hours-<N> job name → no-op (interactive office-hours session is excluded)"
+ib_setup
+echo '{"name":"office-hours-1311"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "office-hours: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours: no office-hours apply was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: no office-hours apply was invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours: dispatch-spawn was not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: dispatch-spawn was not invoked"
 fi
 ib_teardown
 

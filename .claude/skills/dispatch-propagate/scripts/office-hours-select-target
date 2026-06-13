@@ -78,23 +78,32 @@ done < <(list_worktree_records)
 # Returns the sessionId of a live <num>-* worktree on stdout (rc 0), rc 1 if the
 # item is sessionless (no worktree, or every worktree queried clean), or rc 2 if
 # liveness is UNKNOWN for some worktree (daemon unqueryable) and none was live.
-# Single per-item liveness call; name-keyed via claude_sessions_with_name, the
-# same primitive worktree_has_live_session delegates to.
+# Two-name check per worktree (#1311): queries both the worktree basename (phase
+# worker) and office-hours-<N> (the renamed office-hours session). Mirrors
+# worktree_has_live_session's basename-then-office-hours ordering so a
+# basename-named session still resolves first.
 issue_live_session_id() {
-  local num="$1" p sessions sid saw_unknown=0
+  local num="$1" p base nm sessions sid saw_unknown=0
   local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
   [[ -z "$paths" ]] && return 1
   while IFS= read -r p; do
     [[ -z "$p" ]] && continue
-    if sessions=$(claude_sessions_with_name "$(basename "$p")"); then
-      if [[ -n "$sessions" ]]; then
-        sid=$(printf '%s\n' "$sessions" | head -n 1 | cut -f1)
-        printf '%s' "$sid"
-        return 0
+    base=$(basename "$p")
+    # Two-name liveness (#1311): a live session named after the worktree basename
+    # (phase worker) OR office-hours-<N> (the renamed office-hours session) occupies
+    # this worktree. Mirrors worktree_has_live_session's basename-then-office-hours
+    # ordering, so a basename-named session still resolves first.
+    for nm in "$base" "office-hours-$num"; do
+      if sessions=$(claude_sessions_with_name "$nm"); then
+        if [[ -n "$sessions" ]]; then
+          sid=$(printf '%s\n' "$sessions" | head -n 1 | cut -f1)
+          printf '%s' "$sid"
+          return 0
+        fi
+      else
+        saw_unknown=1
       fi
-    else
-      saw_unknown=1
-    fi
+    done
   done <<< "$paths"
   (( saw_unknown )) && return 2
   return 1
