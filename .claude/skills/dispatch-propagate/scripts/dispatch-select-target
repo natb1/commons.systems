@@ -675,6 +675,24 @@ bucket_append() {
   fi
 }
 
+# group_emittable_count <category> <priority-bit> — total entries the emission
+# loops could draw from this (category, priority) group: FIRST_PR across the PR
+# phase ladder (PHASE_PRIORITY) plus qa, and FIRST_ISSUE across the issue ladder
+# (ISSUE_PHASE_PRIORITY). Drives the walk's global early-exit (#1452): once the
+# strictly-higher-rank groups already hold TOP such entries combined, emission
+# fills its TOP results from them before reaching any lower-rank group, so the
+# remaining lower-rank roots cannot change the output and the walk can stop.
+group_emittable_count() {
+  local _gec_cat="$1" _gec_pri="$2" _gec_total=0 _gec_p
+  for _gec_p in "${PHASE_PRIORITY[@]}" qa; do
+    _gec_total=$(( _gec_total + $(bucket_count FIRST_PR "$_gec_cat|$_gec_pri|$_gec_p") ))
+  done
+  for _gec_p in "${ISSUE_PHASE_PRIORITY[@]}"; do
+    _gec_total=$(( _gec_total + $(bucket_count FIRST_ISSUE "$_gec_cat|$_gec_pri|$_gec_p") ))
+  done
+  echo "$_gec_total"
+}
+
 # Within-category phase ladder, highest priority first.
 PHASE_PRIORITY=(fix-conflicts review fix-checks)
 # Within-category issue ladder, highest priority first: a planned issue
@@ -864,13 +882,57 @@ done < <(printf '%s' "$PR_LIST" | jq -r '
 # startable open leaf within its subtree, and the leaf — not the top-level
 # help-wanted issue — is what gets recorded; the category is still the
 # top-level issue's own.
-ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r '
-  sort_by(.createdAt) | .[]
-  | select((.labels // []) | any(.name == "help wanted"))
-  | select((.labels // []) | any(.name == "dispatch:office-hours") | not)
-  | [.number, ((.labels // []) | tojson)] | @tsv')
-while IFS=$'\t' read -r issue_num issue_labels; do
+#
+# The roots are now emitted in (priority desc, category-rank asc, createdAt asc)
+# order — the SAME rank order the emission loops drain — so each (priority,
+# category) group's roots are contiguous, enabling the walk's global early-exit
+# (#1452). The category/priority/cat-rank expressions are the exact ones used by
+# category_of_labels / has_priority_in_labels / the CATEGORIES iteration order,
+# so bucket keys are unchanged. (1 - .pri) sorts priority=1 first; jq sort_by is
+# stable and createdAt is an ISO string sorting chronologically, so within a
+# (pri, cat-rank) group roots stay oldest-first — byte-identical to the old order
+# for that group. The TSV now carries the precomputed pri/cat-rank/cat columns.
+ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r --argjson cats "$TOPIC_CATEGORIES_JSON" '
+  [ .[]
+    | select((.labels // []) | any(.name == "help wanted"))
+    | select((.labels // []) | any(.name == "dispatch:office-hours") | not)
+    | ([(.labels // [])[].name]) as $names
+    | ($names | if index("priority") then 1 else 0 end) as $pri
+    | (first($cats[] | select(. as $c | $names | index($c))) // "other") as $catname
+    | (($cats | index($catname)) // ($cats | length)) as $catrank
+    | { number: .number, createdAt: .createdAt, pri: $pri, catrank: $catrank, catname: $catname }
+  ]
+  | sort_by([ (1 - .pri), .catrank, .createdAt ])
+  | .[] | [.number, .pri, .catrank, .catname] | @tsv')
+walk_prev_group=""
+walk_prev_cat=""
+walk_prev_pri=""
+walk_cum_emittable=0
+while IFS=$'\t' read -r issue_num issue_pri issue_catrank issue_cat; do
   [[ -z "$issue_num" ]] && continue
+  # Global early-exit across (priority, category) groups (#1452). The walk now
+  # runs in (pri desc, cat-rank asc, createdAt asc) order — the SAME rank order
+  # the emission loops drain. Roots of one group are contiguous, so when the
+  # group changes the previous group is fully resolved: fold its emittable count
+  # (FIRST_PR + FIRST_ISSUE across all its phases) into the cumulative. If the
+  # strictly-higher-rank groups already hold TOP emittable entries combined,
+  # emission reaches TOP within them before ever draining this or any lower-rank
+  # group, so no remaining root can change the output — stop the whole walk.
+  # Sound because EXCLUDED is frozen before the walk: each group's FIRST_ISSUE
+  # buckets are fed only by that group's own roots, so the reorder leaves bucket
+  # contents byte-identical (the within-group createdAt order is preserved).
+  cur_group="$issue_pri|$issue_catrank"
+  if [[ "$cur_group" != "$walk_prev_group" ]]; then
+    if [[ -n "$walk_prev_group" ]]; then
+      walk_cum_emittable=$(( walk_cum_emittable + $(group_emittable_count "$walk_prev_cat" "$walk_prev_pri") ))
+    fi
+    if (( walk_cum_emittable >= TOP )); then
+      break
+    fi
+    walk_prev_group="$cur_group"
+    walk_prev_cat="$issue_cat"
+    walk_prev_pri="$issue_pri"
+  fi
   # Skip an open issue already closed by a non-draft (ready) PR (#920).
   [[ -n "${READY_PR_CLOSED_ISSUES[$issue_num]:-}" ]] && continue
   # Skip an issue whose <N>-* worktree is owned by a live session or reserved.
@@ -879,11 +941,11 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   if issue_worktree_claimed "$issue_num"; then
     continue
   fi
-  # Category is the top-level help-wanted issue's own labels. Priority bit is
-  # derived alongside it. Once a (category, priority) bucket has a winner the
-  # remaining issues in it are skipped — including the expensive leaf trace.
-  issue_cat=$(category_of_labels "$issue_labels")
-  issue_pri=$(has_priority_in_labels "$issue_labels")
+  # Category and priority bit both arrive precomputed from the sorted TSV
+  # (issue_cat / issue_pri), derived from the top-level help-wanted issue's own
+  # labels by the same expressions category_of_labels / has_priority_in_labels
+  # use. Once a (category, priority) bucket has a winner the remaining issues in
+  # it are skipped — including the expensive leaf trace.
   # --priority-only scans only the priority=1 tier — skip non-priority issues
   # before the expensive dispatch-trace-leaf descent.
   [[ "$PRIORITY_ONLY" == "true" && "$issue_pri" != "1" ]] && continue
