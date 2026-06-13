@@ -8014,6 +8014,17 @@ if printf '%s' "$err" | grep -q 'dead-session-stranded'; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-dead: note mentions dead-session-stranded"
 fi
+# #1454: the dead-session-stranded reclaim now emits an additive diagnostic line
+# pointing at the per-target launch log, naming the worktree basename. The benign
+# reclaims (live-worker-redundant) must stay silent (asserted in Test 5).
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'inspect tmp/dispatch-launch' \
+   && printf '%s' "$err" | grep -q '910-slug'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-dead: diagnostic points at tmp/dispatch-launch log for the basename"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-dead: diagnostic points at tmp/dispatch-launch log for the basename"
+  echo "    stderr: $err"
+fi
 rl_teardown
 
 # --- Test 4: sweep keeps a marker whose reserving session is LIVE -------------
@@ -8044,6 +8055,15 @@ if printf '%s' "$err" | grep -q 'live-worker-redundant'; then
   PASS=$((PASS + 1)); echo "  PASS: rl-sweep-redundant: note mentions live-worker-redundant"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-redundant: note mentions live-worker-redundant"
+fi
+# #1454: a benign live-worker-redundant reclaim must NOT emit the dead-strand
+# launch-log diagnostic — only genuine dead-session-stranded reclaims do.
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'inspect tmp/dispatch-launch'; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-redundant: benign reclaim stays silent (no launch-log diagnostic)"
+  echo "    stderr: $err"
+else
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-redundant: benign reclaim stays silent (no launch-log diagnostic)"
 fi
 rl_teardown
 
@@ -12912,6 +12932,99 @@ else
 fi
 spawn_worker_teardown
 
+# --- Test 5b: --park-issue parks the failure to office-hours (#1454) ----------
+# On a non-zero --bg kick under --no-verify, dispatch-spawn-job parks the issue
+# durably via the sibling dispatch-apply-office-hours. SCRIPT_DIR resolves to the
+# copied-script dir ($TMPDIR_TEST/scripts), so the stub sibling lives there.
+# The stub records its $@ to park.log so we can assert the issue number + reason.
+
+# write_failing_kick_fake — fake `claude` whose --bg exits non-zero (kick fails)
+# but whose `agents` prints [] so dedup passes. $1 is the target fake path.
+write_failing_kick_fake() {
+  cat > "$1" <<FAKE
+#!/usr/bin/env bash
+set -uo pipefail
+case "\${1:-}" in
+  agents) echo '[]' ;;
+  --bg) echo "boom-kick-output" >&2; exit 3 ;;
+esac
+FAKE
+  chmod +x "$1"
+}
+
+# write_park_recorder_stub — stub dispatch-apply-office-hours at the resolved
+# sibling path; it appends its full argv to $TMPDIR_TEST/park.log and exits 0.
+write_park_recorder_stub() {
+  cat > "$TMPDIR_TEST/scripts/dispatch-apply-office-hours" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$TMPDIR_PARK_LOG"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-apply-office-hours"
+}
+
+echo "Test: --no-verify --park-issue parks the failed kick to office-hours (#1454)"
+spawn_worker_setup
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+write_failing_kick_fake "$TMPDIR_TEST/fake-claude"
+export TMPDIR_PARK_LOG="$TMPDIR_TEST/park.log"
+write_park_recorder_stub
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-spawn-job" --no-verify --park-issue 1454 \
+  --name diagnose-main --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc" \
+  >/dev/null 2>&1 || rc=$?
+assert_eq "spawn-job-park: a failed kick with --park-issue exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ -s "$TMPDIR_PARK_LOG" ]] \
+   && grep -q '1454' "$TMPDIR_PARK_LOG" \
+   && grep -q 'worker never started' "$TMPDIR_PARK_LOG"; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-job-park: office-hours parked with the issue number + spawn output"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-job-park: office-hours parked with the issue number + spawn output"
+  echo "    park.log: $(cat "$TMPDIR_PARK_LOG" 2>/dev/null || echo MISSING)"
+fi
+unset TMPDIR_PARK_LOG
+spawn_worker_teardown
+
+echo "Test: --no-verify WITHOUT --park-issue does NOT park (generic callers unaffected) (#1454)"
+spawn_worker_setup
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+write_failing_kick_fake "$TMPDIR_TEST/fake-claude"
+export TMPDIR_PARK_LOG="$TMPDIR_TEST/park.log"
+write_park_recorder_stub
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-spawn-job" --no-verify \
+  --name diagnose-main --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc" \
+  >/dev/null 2>&1 || rc=$?
+assert_eq "spawn-job-nopark: a failed kick without --park-issue exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_PARK_LOG" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-job-nopark: no office-hours park (park.log absent/empty)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-job-nopark: no office-hours park (park.log absent/empty)"
+  echo "    park.log: $(cat "$TMPDIR_PARK_LOG" 2>/dev/null || echo MISSING)"
+fi
+unset TMPDIR_PARK_LOG
+spawn_worker_teardown
+
+echo "Test: --park-issue with a non-integer value exits 2 (usage error) (#1454)"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+if "$TMPDIR_TEST/scripts/dispatch-spawn-job" --park-issue abc \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc" 2>/dev/null; then
+  sj_rc_park=0
+else
+  sj_rc_park=$?
+fi
+assert_eq "spawn-job-park-badint: non-integer --park-issue → exit 2" "2" "$sj_rc_park"
+spawn_worker_teardown
+
 # --- Test 6: default (verify) path absorbs delayed registration --------------
 # The unledgered one-off spawns (main-broken / jit-reminder) keep the default
 # verify, so the delayed-registration retry coverage lives here on the DEFAULT
@@ -14944,6 +15057,12 @@ stop_setup() {
     "$TMPDIR_TEST/hooks/dispatch-stop.sh"
   chmod +x "$TMPDIR_TEST/hooks/dispatch-stop.sh"
 
+  # The hook sources lib-reservation-ledger.sh from $SCRIPTS to release this
+  # worker's reservation marker on session end (#1454). Stage the REAL lib
+  # alongside the other fakes so the sourced reservation_clear actually runs.
+  cp "$SCRIPT_DIR/lib-reservation-ledger.sh" \
+    "$TMPDIR_TEST/skills/dispatch-propagate/scripts/lib-reservation-ledger.sh"
+
   # dispatch-stop.sh sources lib.sh via $SCRIPTS; provide it so pr_list_open
   # is defined when the hook runs.
   cp "$SCRIPT_DIR/lib.sh" \
@@ -15151,6 +15270,40 @@ if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; 
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: no add-label calls were made"
 fi
+stop_teardown
+
+# --- Test 1a2: dispatch-stop clears the worker's reservation marker (#1454) ---
+# Unit 3: the hook releases the worktree's reservation marker (named by JOB_NAME
+# = state.json .name) on session end, BEFORE any tick spawn, so a normally-
+# completed worker no longer leaves an orphan marker for the next sweep to
+# reclaim and mislabel dead-session-stranded. Hermetic via DISPATCH_RESERVATION_DIR
+# so the clear never touches the real shared ledger.
+
+echo "Test: dispatch-stop releases the worker's reservation marker on session end (#1454)"
+stop_setup
+echo "1454-stop-clear-fixture" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "fix-checks" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"1454-stop-clear-fixture"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=implement" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Hermetic ledger: a scratch dir with a pre-planted marker named exactly by the
+# worker's JOB_NAME. EXPORT so the hook's `( . lib … )` subshell inherits it.
+export DISPATCH_RESERVATION_DIR="$TMPDIR_TEST/reservations"
+mkdir -p -m 0700 "$DISPATCH_RESERVATION_DIR"
+printf 'session=sess-worker\nissue=1454\ntimestamp=2026-01-01T00:00:00Z\n' \
+  > "$DISPATCH_RESERVATION_DIR/1454-stop-clear-fixture"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop clear-marker: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$DISPATCH_RESERVATION_DIR/1454-stop-clear-fixture" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop clear-marker: reservation marker removed on session end"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop clear-marker: reservation marker removed on session end"
+  echo "    marker still present: $DISPATCH_RESERVATION_DIR/1454-stop-clear-fixture"
+fi
+unset DISPATCH_RESERVATION_DIR
 stop_teardown
 
 # --- Test 1b: dispatch-stop: clean review pass (marker=review, current=done) self-closes, no office-hours --
@@ -24140,7 +24293,7 @@ sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /implement: spawn-job logged once" "1" \
   "$([[ -f "$LW_DIR/spawn-job-argv" ]] && wc -l < "$LW_DIR/spawn-job-argv" | tr -d ' ' || echo 0)"
 assert_eq "launch INVOKE /implement: spawn-job argv" \
-  "--no-verify --name $LW_WT_BASENAME --cwd $LW_WT /implement 839 $LW_WT" "$sj"
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT /implement 839 $LW_WT" "$sj"
 assert_eq "launch INVOKE /implement: no --model in argv" "no" \
   "$([[ "$sj" == *"--model"* ]] && echo yes || echo no)"
 assert_eq "launch INVOKE /implement: reservation RETAINED" "yes" "$(lw_marker_exists)"
@@ -24162,7 +24315,7 @@ sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /fix-conflicts: spawn-job logged once" "1" \
   "$([[ -f "$LW_DIR/spawn-job-argv" ]] && wc -l < "$LW_DIR/spawn-job-argv" | tr -d ' ' || echo 0)"
 assert_eq "launch INVOKE /fix-conflicts: spawn-job argv" \
-  "--no-verify --name $LW_WT_BASENAME --cwd $LW_WT /fix-conflicts 839 $LW_WT" "$sj"
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT /fix-conflicts 839 $LW_WT" "$sj"
 assert_eq "launch INVOKE /fix-conflicts: no --model in argv" "no" \
   "$([[ "$sj" == *"--model"* ]] && echo yes || echo no)"
 assert_eq "launch INVOKE /fix-conflicts: reservation RETAINED" "yes" "$(lw_marker_exists)"
@@ -24181,7 +24334,7 @@ lw_run "INVOKE /qa-fix"
 assert_eq "launch INVOKE /qa-fix: exit 0" "0" "$LW_RC"
 sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /qa-fix: spawn-job argv (with model)" \
-  "--no-verify --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /qa-fix 839 $LW_WT" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /qa-fix 839 $LW_WT" \
   "$sj"
 assert_eq "launch INVOKE /qa-fix: reservation RETAINED" "yes" "$(lw_marker_exists)"
 lw_teardown
@@ -24194,7 +24347,7 @@ lw_run "INVOKE /review-fix"
 assert_eq "launch INVOKE /review-fix: exit 0" "0" "$LW_RC"
 sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /review-fix: spawn-job argv (with model)" \
-  "--no-verify --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /review-fix 839 $LW_WT" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /review-fix 839 $LW_WT" \
   "$sj"
 lw_teardown
 
