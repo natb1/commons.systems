@@ -21296,6 +21296,13 @@ IN3='{"findings":[{"id":"a","Location":"f.ts:1","Source":"review","OWASP":"","ST
 out=$(printf '%s' "$IN3" | "$SCRIPT_DIR/dispatch-review-dedup")
 assert_eq "dedup: same-location distinct-root partition → length 2" "2" "$(printf '%s' "$out" | jq -r 'length')"
 
+# same location, partition splits into separate sub-groups → length 2, each sub-group keeps its own Confidence (no cross-boundary max)
+IN4='{"findings":[{"id":"a","Location":"f.ts:1","Source":"security-review","OWASP":"A03:2021 Injection","STRIDE":"Tampering","Confidence":"high"},{"id":"b","Location":"f.ts:1","Source":"review","OWASP":"","STRIDE":"","Confidence":"low"}],"partition":[["a"],["b"]]}'
+out=$(printf '%s' "$IN4" | "$SCRIPT_DIR/dispatch-review-dedup")
+assert_eq "dedup: partition-split → length 2" "2" "$(printf '%s' "$out" | jq -r 'length')"
+assert_eq "dedup: partition-split → output[0] Confidence preserved (high)" "high" "$(printf '%s' "$out" | jq -r '.[0].Confidence')"
+assert_eq "dedup: partition-split → output[1] Confidence preserved (low)" "low" "$(printf '%s' "$out" | jq -r '.[1].Confidence')"
+
 # ============================================================================
 # === dispatch-review-verify-drop ===
 # ============================================================================
