@@ -792,6 +792,22 @@ done < <(printf '%s' "$PR_LIST" | jq -r '
   .[] | select(.isDraft == false)
   | (.closingIssuesReferences // [])[].number')
 
+# Issue numbers whose own <N>-* branch carries a non-draft (ready) PR. Unlike
+# READY_PR_CLOSED_ISSUES (which keys on closingIssuesReferences, i.e. the root
+# help-wanted issue), this set keys on the headRefName branch-prefix issue number
+# — the traced leaf — exactly how dispatch-ci-ready/dispatch-phase resolve a PR
+# (by <N>- prefix). A non-draft PR is phase `done` per dispatch-phase's
+# non-draft→done rule, so this set is provably equivalent to dispatch-phase's
+# `done` over the open-PR domain, built with zero extra gh calls (#1445).
+declare -A READY_PR_BRANCH_ISSUES
+while IFS= read -r branch_num; do
+  [[ -z "$branch_num" ]] && continue
+  READY_PR_BRANCH_ISSUES["$branch_num"]=1
+done < <(printf '%s' "$PR_LIST" | jq -r '
+  .[] | select(.isDraft == false)
+  | select(.headRefName | test("^[0-9]+-"))
+  | (.headRefName | capture("^(?<n>[0-9]+)-").n)')
+
 # First-seen help-wanted issue per category. The queue is the open-issue list
 # filtered client-side to "help wanted"; issues whose <N>-* worktree is owned
 # by a live session are skipped. Each candidate is resolved to a
@@ -871,6 +887,19 @@ while IFS=$'\t' read -r issue_num issue_labels; do
       # via `enter` just as the issue path would. dispatch-ci-ready resolves the
       # all-digit leaf to its PR by headRefName prefix. Reuses the PR list above.
       if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$leaf" >/dev/null; then
+        root_excl["$leaf"]=1
+        continue
+      fi
+      # A non-draft (ready) PR on the leaf's own <leaf>-* branch makes the leaf
+      # phase `done` (dispatch-phase's non-draft→done rule). dispatch-materialize-spawn
+      # would re-derive that done phase at the spawn boundary and drain it,
+      # spawning no worker — killing the chain. Exclude the done leaf here at
+      # selection time, mirroring that spawn-boundary done re-check, and continue
+      # descending the same root to the next startable leaf — exactly like the
+      # not-ready skip above (#1445). The root-keyed READY_PR_CLOSED_ISSUES skip
+      # above only catches a done *root*; this branch-keyed set is the
+      # authoritative check on the traced leaf.
+      if [[ -n "${READY_PR_BRANCH_ISSUES[$leaf]:-}" ]]; then
         root_excl["$leaf"]=1
         continue
       fi
