@@ -29,7 +29,8 @@
 #                                 dispatch.config/jit.json is present.
 #   main-broken <sha>           — origin/main's HEAD CI has a failing check; no task selected
 #
-# --top <N> (default 1, default-mode only) emits up to N distinct decision lines
+# --top <N> (default 1; valid in default mode and with --priority-only) emits up
+# to N distinct decision lines
 # in the existing priority order (priority axis → topic category → phase ladder),
 # one per line — the fan-out caller consumes the list in a single scan instead of
 # re-invoking the selector once per slot (#1317). Each scan dedups internally: no
@@ -38,7 +39,7 @@
 # still emits its single line (the single-target contract is unchanged — the
 # consumer treats it as deferred), and `empty` is still one line when nothing is
 # eligible. --top is rejected when combined with --qa / --health-only /
-# --main-broken-sha / --priority-only. The default --top 1 is byte-identical to
+# --main-broken-sha. The default --top 1 is byte-identical to
 # the no-flag behavior for every existing caller.
 #
 # Default-mode priority, top to bottom:
@@ -67,14 +68,23 @@
 # default-mode skip rule is preserved (worktree ownership/reservation,
 # blocked_by, ready-PR-closes-issue, not-ready PR). dispatch-select-tick consults
 # it when the autonomous tick is at the worker cap but not token-exhausted, to
-# spawn a priority/main-broken item as one gate-exempt worker.
-# Output is exactly one line:
+# spawn a priority/main-broken item as one gate-exempt worker; its manual fan-out
+# also uses `--priority-only --top N` to count available priority work (N_PRIO).
+#
+# Output for the no-`--top` (TOP=1) case is exactly one line:
 #   main-broken <sha>           — origin/main's HEAD CI has a failing check
 #   pr <num> <branch> <phase>   — the highest-priority priority=1 PR
 #   issue <num>                 — the highest-priority priority=1 help-wanted issue
 #   waiting <issue#>            — a priority item exists but its draft PR's CI is
 #                                 still pending (skipped solely by dispatch-ci-ready)
 #   empty                       — no priority=1 item eligible
+#
+# With --top N, --priority-only returns UP TO N eligible priority=1 decision
+# lines (`pr <num> <branch> <phase>` / `issue <num>`), one per line, or `empty`.
+# The TOP>1 path has NO `waiting` branch: a priority tier whose only items are
+# CI-pending yields `empty` under `--priority-only --top N` — correct, since
+# CI-pending items are not selectable. (The single-line contract above, including
+# `waiting <issue#>` and `main-broken <sha>`, still holds for the TOP=1 case.)
 #
 # Selection is three-tier: the `priority` label is the *outermost* axis, topic
 # *category* nests inside it, and the phase *ladder* runs innermost. The
@@ -192,14 +202,15 @@ if [[ "$PRIORITY_ONLY" == "true" \
   exit 1
 fi
 
-# --top is meaningful only in default mode — the --qa / --health-only /
-# --main-broken-sha / --priority-only modes run their own single-line selection
-# or exit early. Reject an explicit --top alongside any of them rather than
-# silently ignoring it. The default TOP=1 (no --top passed) never trips this.
+# --priority-only now ACCEPTS --top to return up to N priority=1 lines — the
+# manual fan-out's N_PRIO counting primitive (#1458). The --qa / --health-only /
+# --main-broken-sha modes still reject an explicit --top: they run their own
+# single-line selection or exit early, so a --top alongside them would be
+# silently ignored. The default TOP=1 (no --top passed) never trips this.
 if [[ "$TOP_EXPLICIT" == "true" \
       && ( "$QA_MODE" == "true" || "$HEALTH_ONLY" == "true" \
-           || "$MAIN_BROKEN_SHA_ONLY" == "true" || "$PRIORITY_ONLY" == "true" ) ]]; then
-  echo "error: --top cannot combine with --qa, --health-only, --main-broken-sha, or --priority-only" >&2
+           || "$MAIN_BROKEN_SHA_ONLY" == "true" ) ]]; then
+  echo "error: --top cannot combine with --qa, --health-only, or --main-broken-sha" >&2
   exit 1
 fi
 
