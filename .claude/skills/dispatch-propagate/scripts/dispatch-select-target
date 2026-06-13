@@ -886,20 +886,25 @@ while IFS=$'\t' read -r issue_num issue_labels; do
       # which precedes the issue within a bucket and recycles the orphan worktree
       # via `enter` just as the issue path would. dispatch-ci-ready resolves the
       # all-digit leaf to its PR by headRefName prefix. Reuses the PR list above.
-      if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$leaf" >/dev/null; then
+      #
+      # The done-ready exclusion runs FIRST, before dispatch-ci-ready, to skip the
+      # subprocess fork for a done-ready leaf. A non-draft (ready) PR on the leaf's
+      # own <leaf>-* branch makes the leaf phase `done` (dispatch-phase's
+      # non-draft→done rule). dispatch-materialize-spawn would re-derive that done
+      # phase at the spawn boundary and drain it, spawning no worker — killing the
+      # chain. Exclude the done leaf here at selection time, mirroring that
+      # spawn-boundary done re-check, and continue descending the same root to the
+      # next startable leaf — exactly like the not-ready skip below (#1445). The
+      # root-keyed READY_PR_CLOSED_ISSUES skip above only catches a done *root*;
+      # this branch-keyed set is the authoritative check on the traced leaf.
+      # READY_PR_BRANCH_ISSUES membership implies the leaf already has a non-draft
+      # PR, for which dispatch-ci-ready would unconditionally pass — so skipping the
+      # call here changes nothing but the saved fork.
+      if [[ -n "${READY_PR_BRANCH_ISSUES[$leaf]:-}" ]]; then
         root_excl["$leaf"]=1
         continue
       fi
-      # A non-draft (ready) PR on the leaf's own <leaf>-* branch makes the leaf
-      # phase `done` (dispatch-phase's non-draft→done rule). dispatch-materialize-spawn
-      # would re-derive that done phase at the spawn boundary and drain it,
-      # spawning no worker — killing the chain. Exclude the done leaf here at
-      # selection time, mirroring that spawn-boundary done re-check, and continue
-      # descending the same root to the next startable leaf — exactly like the
-      # not-ready skip above (#1445). The root-keyed READY_PR_CLOSED_ISSUES skip
-      # above only catches a done *root*; this branch-keyed set is the
-      # authoritative check on the traced leaf.
-      if [[ -n "${READY_PR_BRANCH_ISSUES[$leaf]:-}" ]]; then
+      if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$leaf" >/dev/null; then
         root_excl["$leaf"]=1
         continue
       fi

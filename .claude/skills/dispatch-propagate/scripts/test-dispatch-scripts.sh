@@ -3369,6 +3369,31 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "done-ready issue skipped → next issue selected" "issue 200" "$result"
 teardown
 
+# 41-bis. Sibling fallback WITHIN one root: the done-ready skip must continue the
+#         descent to the next leaf, not abandon the whole root. Root 55 has
+#         sub-issues 5500 (non-draft PR on its own 5500-* branch → done-ready,
+#         excluded by READY_PR_BRANCH_ISSUES) and 5501 (open, no PR, startable).
+#         EMPTY closingIssuesReferences keeps the root-keyed #920 set silent, so
+#         only the branch-keyed leaf set fires. The selector must return 5501 —
+#         a regression that terminated the root on the done-ready leaf would
+#         yield empty here.
+echo "Test: default mode — done-ready leaf skipped, sibling leaf in same root selected (#1445)"
+setup
+UNION='['"$(make_pr_union 5500 "5500-foo" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500},{"number":5501}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5500.json"
+printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5501.json"
+# No worktrees — only the done-ready PR on 5500 distinguishes the leaves.
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "done-ready leaf 5500 skipped → sibling leaf 5501 selected" "issue 5501" "$result"
+teardown
+
 # --- issue-queue CI-ready gate (#1106) ---
 # A help-wanted issue can carry a draft PR whose CI is in progress (#920 leaves
 # such an issue selectable). The issue loop now applies the same readiness gate
