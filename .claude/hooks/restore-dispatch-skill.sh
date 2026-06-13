@@ -80,9 +80,11 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 #
 # An office-hours-<N> session (started by the /office-hours entry point, #759)
 # is not a phase worker — it restores the /office-hours skill body, not a phase
-# skill, so its plan-mode paths survive a context clear. This case is matched by
-# session --name ahead of the phase routing below; it is inert until
-# office-hours-* sessions exist.
+# skill, so its plan-mode paths survive a context clear. These sessions now
+# exist: dispatch-spawn-office-hours spawns them with --name office-hours-<N>
+# (since #1311). The name has no leading digit, so it misses the primary
+# ^[0-9]+- check and reaches ^office-hours-[0-9]+$ via the git-branch
+# fallback — this is correct and intended.
 #
 # Falls back to the one-line Reload directive if SKILL.md is missing or
 # unreadable — defensive against a packaging error breaking recovery.

@@ -241,9 +241,12 @@ it up. The resumed session (`/office-hours`) re-runs `/plan-issue` once the user
 has resolved the ambiguity.
 
 Note: do **not** call `AskUserQuestion` as the escalation mechanism. The
-`dispatch-input-block.sh` hook that would intercept it only fires for
-`dispatch-*`-named background sessions; worker sessions (named after their
-worktree basename) are excluded and the call would block the session indefinitely.
+`dispatch-input-block.sh` hook *would* intercept it — this skill runs in an
+`<N>-slug` worker the hook fires for — and park the issue with
+`dispatch:office-hours`, but only with a generic "blocked on user input" reason.
+Prefer `dispatch-mark-deviation` (the mechanism above), which carries the
+specific clarification question into the office-hours why-comment so the user
+knows exactly what decision is needed.
 
 Otherwise proceed autonomously to Step 7. **Never call `ExitPlanMode`** — that is
 the user-approval gate this design removes. This skill's terminus is either
