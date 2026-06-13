@@ -271,7 +271,7 @@ describe("handleFeedProxy", () => {
     await handleFeedProxy(createMockReq({ url: allowedUrl }), res as never);
 
     expect(res.statusCode).toBe(200);
-    expect(res.body).not.toBe("Upstream feed exceeded maximum allowed size");
+    expect(res.body.length).toBe(MAX_FEED_BYTES);
   });
 
   it("returns 502 with generic message when fetch throws (no error leak)", async () => {
