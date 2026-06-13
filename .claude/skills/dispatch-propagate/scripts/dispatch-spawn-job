@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # dispatch-spawn-job — the generalized `claude --bg` spawn primitive.
 #
-# This is the dedup → spawn → verify core extracted from dispatch-spawn-worker,
-# parameterized by an arbitrary `--name <name>`, `--cwd <cwd>`, and a single
-# positional `<prompt>`. It spawns one `claude --bg` job that runs <prompt>,
-# born with cwd = <cwd> (via a subshell `cd`) so SessionStart-derived attributes
-# (title, restored skill set, sandbox allowlist) key on the right directory.
+# The generalized dedup → spawn → verify core, parameterized by an arbitrary
+# `--name <name>`, `--cwd <cwd>`, and a single positional `<prompt>`. It spawns
+# one `claude --bg` job that runs <prompt>, born with cwd = <cwd> (via a
+# subshell `cd`) so SessionStart-derived attributes (title, restored skill set,
+# sandbox allowlist) key on the right directory.
 #
 # Reused by:
-#   - dispatch-spawn-worker — the router → phase-worker spawn (--name is the
-#     target worktree basename, --cwd the worktree path, prompt the
-#     /dispatch-worker invocation). The worker-specific arg validation lives in
-#     that wrapper; this primitive stays generic.
+#   - dispatch-launch-worker — the router → phase-worker spawn path (--name is
+#     the target worktree basename, --cwd the worktree path, prompt the phase
+#     skill invocation). The launcher's arg validation lives in that script;
+#     this primitive stays generic.
 #   - the `main-broken` → /dispatch-diagnose-main and `jit-reminder` →
 #     /dispatch-jit-reminder bg-job spawns, which run those sub-skills in their
 #     own session rather than in the router's.
@@ -84,8 +84,7 @@
 # socket; callers must invoke this script with `dangerouslyDisableSandbox:
 # true` — see `.claude/rules/sandbox.md § claude agents --json`.
 #
-# NOT set -e: exits are handled explicitly (matching dispatch-spawn-worker /
-# dispatch-acquire-lock).
+# NOT set -e: exits are handled explicitly (matching dispatch-acquire-lock).
 set -uo pipefail
 
 # ---- Step 0: parse and validate arguments -----------------------------------

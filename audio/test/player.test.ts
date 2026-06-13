@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockResolveAudioSource = vi.fn();
+const mockRemoveFile = vi.fn();
 
 vi.mock("../src/storage.js", () => ({
   resolveAudioSource: (...args: unknown[]) => mockResolveAudioSource(...args),
+  removeFile: (...args: unknown[]) => mockRemoveFile(...args),
 }));
 
 const mockLogError = vi.fn();
@@ -69,6 +71,7 @@ describe("initPlayer", () => {
     vi.spyOn(audioEl, "play").mockResolvedValue();
     revokeObjectURLSpy = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     mockResolveAudioSource.mockResolvedValue("blob:http://localhost/track-blob");
+    mockRemoveFile.mockResolvedValue(undefined);
   });
 
   it("renders empty state on init", () => {
@@ -216,6 +219,89 @@ describe("initPlayer", () => {
     });
   });
 
+  describe("error event", () => {
+    it("advances to next track on error", async () => {
+      mockResolveAudioSource
+        .mockResolvedValueOnce("blob:http://localhost/t1-blob")
+        .mockResolvedValueOnce("blob:http://localhost/t2-blob");
+
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(track1);
+      player.add(track2);
+
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(1);
+      });
+
+      audioEl.dispatchEvent(new Event("error"));
+
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(2);
+      });
+      expect(mockResolveAudioSource).toHaveBeenCalledWith("media/t2.mp3");
+      expect(mockLogError).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: "audio-element-error",
+          storagePath: "media/t1.mp3",
+        }),
+      );
+      expect(mockRemoveFile).toHaveBeenCalledWith("media/t1.mp3");
+    });
+
+    it("logs the MediaError and its code", async () => {
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(track1);
+
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(1);
+      });
+
+      // jsdom does not populate audioEl.error; stub a MediaError-like object.
+      const mediaError = { code: 3 };
+      Object.defineProperty(audioEl, "error", { configurable: true, value: mediaError });
+      audioEl.dispatchEvent(new Event("error"));
+
+      await vi.waitFor(() => {
+        expect(mockLogError).toHaveBeenCalledWith(
+          mediaError,
+          expect.objectContaining({
+            operation: "audio-element-error",
+            storagePath: "media/t1.mp3",
+            code: 3,
+          }),
+        );
+      });
+    });
+
+    it("stops cleanly at end of queue on error", async () => {
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(track1);
+
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(1);
+      });
+
+      const pauseSpy = vi.spyOn(audioEl, "pause");
+      audioEl.dispatchEvent(new Event("error"));
+
+      expect(pauseSpy).toHaveBeenCalled();
+      expect(playlistEl.querySelector(".playlist-active")).toBeNull();
+      expect(mockRemoveFile).toHaveBeenCalledWith("media/t1.mp3");
+    });
+
+    it("does nothing when no track is current (spurious stop()-triggered error)", () => {
+      // Fresh player with an empty queue: currentIndex is -1, nothing has logged.
+      initPlayer(audioEl, playlistEl);
+
+      audioEl.dispatchEvent(new Event("error"));
+
+      expect(mockLogError).not.toHaveBeenCalled();
+      expect(mockRemoveFile).not.toHaveBeenCalled();
+      expect(audioEl.play).not.toHaveBeenCalled();
+    });
+  });
+
   describe("object URL revocation", () => {
     it("revokes object URL when changing tracks", async () => {
       mockResolveAudioSource
@@ -295,6 +381,120 @@ describe("initPlayer", () => {
       // Dispatching ended after destroy should not cause errors or state changes
       audioEl.dispatchEvent(new Event("ended"));
       expect(playlistEl.querySelector(".playlist-empty")).not.toBeNull();
+    });
+
+    it("removes error event listener", () => {
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(track1);
+      player.destroy();
+
+      mockLogError.mockClear();
+      mockRemoveFile.mockClear();
+
+      // Dispatching error after destroy should not log or remove stale state
+      audioEl.dispatchEvent(new Event("error"));
+      expect(mockLogError).not.toHaveBeenCalled();
+      expect(mockRemoveFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("generation token", () => {
+    it("play-after-remove: stale resolve does not start playback and revokes the blob", async () => {
+      const deferred: Array<{ resolve: (u: string) => void; reject: (e: unknown) => void }> = [];
+      mockResolveAudioSource.mockImplementation(
+        () => new Promise<string>((resolve, reject) => deferred.push({ resolve, reject })),
+      );
+
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(track1);
+
+      // resolve is pending; remove the track (calls stop(), bumping the generation)
+      player.remove(track1.id);
+
+      // now resolve the pending promise — should be treated as stale
+      deferred[0]!.resolve("blob:http://localhost/t1-blob");
+
+      await vi.waitFor(() => {
+        expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:http://localhost/t1-blob");
+      });
+      expect(audioEl.play).not.toHaveBeenCalled();
+      expect(audioEl.getAttribute("src")).toBeNull();
+    });
+
+    it("out-of-order resolve does not desync: gen-1 blob is revoked and src ends on gen-2 blob", async () => {
+      const deferred: Array<{ resolve: (u: string) => void; reject: (e: unknown) => void }> = [];
+      mockResolveAudioSource.mockImplementation(
+        () => new Promise<string>((resolve, reject) => deferred.push({ resolve, reject })),
+      );
+
+      const player = initPlayer(audioEl, playlistEl);
+      // gen 1: add track1 (resolve pending)
+      player.add(track1);
+      // gen 2: add track2, then fire ended to advance (but track1 never resolved,
+      // so use remove-current to switch tracks synchronously)
+      player.add(track2);
+      // remove track1 while its resolve is pending — player switches to track2 (gen 2)
+      player.remove(track1.id);
+
+      // resolve gen-2 first, then gen-1
+      deferred[1]!.resolve("blob:http://localhost/t2-blob");
+      await vi.waitFor(() => {
+        // src should be the gen-2 blob
+        expect(audioEl.src).toContain("t2-blob");
+      });
+
+      deferred[0]!.resolve("blob:http://localhost/t1-blob");
+      await vi.waitFor(() => {
+        // gen-1 blob was never stored; it should have been revoked as stale
+        expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:http://localhost/t1-blob");
+      });
+
+      // src should still be the gen-2 blob
+      expect(audioEl.src).toContain("t2-blob");
+      // gen-1 blob was never assigned to src
+      expect(audioEl.src).not.toContain("t1-blob");
+    });
+
+    it("stale failed resolve does not advance; live failure advances from live index", async () => {
+      const deferred: Array<{ resolve: (u: string) => void; reject: (e: unknown) => void }> = [];
+      mockResolveAudioSource.mockImplementation(
+        () => new Promise<string>((resolve, reject) => deferred.push({ resolve, reject })),
+      );
+
+      const player = initPlayer(audioEl, playlistEl);
+      // gen 1: add track1 (resolve pending)
+      player.add(track1);
+      player.add(track2);
+      player.add(track3);
+
+      // supersede gen-1 by removing track1 while resolve is pending (switches to track2, gen 2)
+      player.remove(track1.id);
+
+      // reject gen-1 promise (stale) — should not advance
+      const playCallsBefore = (audioEl.play as ReturnType<typeof vi.fn>).mock.calls.length;
+      // after the remove there are 2 pending resolves (gen-1 for track1, gen-2 for track2)
+      expect(deferred).toHaveLength(2);
+      deferred[0]!.reject(new Error("network error"));
+
+      // drain the catch chain, then assert the stale reject did NOT advance the
+      // queue — a stale advance would call playTrack(track3), pushing a 3rd deferred.
+      await vi.waitFor(() => {
+        expect((audioEl.play as ReturnType<typeof vi.fn>).mock.calls.length).toBe(playCallsBefore);
+      });
+      expect(deferred).toHaveLength(2);
+
+      // now reject gen-2 (live) — should advance from live currentIndex (track2 -> track3)
+      deferred[1]!.reject(new Error("network error"));
+
+      // gen-3 resolve (track3) is now pending; resolve it to confirm advancement happened
+      await vi.waitFor(() => {
+        expect(deferred).toHaveLength(3);
+      });
+      deferred[2]!.resolve("blob:http://localhost/t3-blob");
+      await vi.waitFor(() => {
+        expect(audioEl.src).toContain("t3-blob");
+      });
+      expect(audioEl.play).toHaveBeenCalled();
     });
   });
 });

@@ -82,6 +82,9 @@ test.describe("export", () => {
 
     const download = await triggerExportDownload(page);
 
+    const today = new Date().toISOString().slice(0, 10);
+    expect(download.suggestedFilename()).toBe(`budget-Test Household-${today}.benc`);
+
     const content = await (await download.createReadStream()).toArray();
     const buf = Buffer.concat(content);
     expect(buf.subarray(0, 4).toString()).toBe("BENC");

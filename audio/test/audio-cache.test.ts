@@ -4,6 +4,7 @@ import {
   MAX_CACHE_BYTES,
   getFile,
   putFile,
+  removeFile,
   clearCache,
   closeDb,
   getCacheStats,
@@ -145,6 +146,50 @@ describe("lastAccessed update on get", () => {
     expect(resultB).toBeNull();
 
     vi.restoreAllMocks();
+  });
+});
+
+describe("removeFile", () => {
+  it("removes the entry so getFile returns null", async () => {
+    const buf = new ArrayBuffer(64);
+    new Uint8Array(buf).set([1, 2, 3, 4]);
+
+    await putFile("tracks/song.mp3", buf);
+    await removeFile("tracks/song.mp3");
+
+    const result = await getFile("tracks/song.mp3");
+    expect(result).toBeNull();
+  });
+
+  it("leaves other entries intact", async () => {
+    await putFile("tracks/a.mp3", new ArrayBuffer(32));
+    await putFile("tracks/b.mp3", new ArrayBuffer(32));
+
+    await removeFile("tracks/a.mp3");
+
+    expect(await getFile("tracks/a.mp3")).toBeNull();
+    expect(await getFile("tracks/b.mp3")).not.toBeNull();
+  });
+
+  it("reflects removal in getCacheStats", async () => {
+    await putFile("tracks/a.mp3", new ArrayBuffer(100));
+    await putFile("tracks/b.mp3", new ArrayBuffer(200));
+
+    await removeFile("tracks/a.mp3");
+
+    const stats = await getCacheStats();
+    expect(stats.trackCount).toBe(1);
+    expect(stats.totalBytes).toBe(200);
+  });
+
+  it("is a no-op for a key that was never inserted", async () => {
+    await putFile("tracks/a.mp3", new ArrayBuffer(100));
+
+    await removeFile("tracks/nonexistent.mp3");
+
+    const stats = await getCacheStats();
+    expect(stats.trackCount).toBe(1);
+    expect(stats.totalBytes).toBe(100);
   });
 });
 

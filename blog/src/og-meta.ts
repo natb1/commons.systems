@@ -44,8 +44,8 @@ export function siteDefaultOgEntries(siteUrl: string, defaults: SiteDefaults): O
   ];
 }
 
-// Base twitter:card and twitter:title are emitted unconditionally here. Prerender reaches them for
-// every post; on the client updateOgMeta path they only apply when previewDescription is present.
+// Base og:title/og:url/og:type/twitter:card/twitter:title apply to every post on both the prerender
+// and client updateOgMeta paths. Only description and image entries are conditional on previewDescription/previewImage.
 export function postOgEntries(siteUrl: string, post: PostMeta): OgTagEntry[] {
   const entries: OgTagEntry[] = [
     { attr: "property", key: "og:title", content: post.title },
@@ -132,7 +132,7 @@ export function updateOgMeta(
   titleSuffix?: string,
   siteDefaults?: SiteDefaults,
 ): void {
-  if (!post?.previewDescription) {
+  if (!post) {
     if (siteDefaults) {
       if (titleSuffix) document.title = titleSuffix;
       siteDefaultOgEntries(siteUrl, siteDefaults).forEach((e) => setMetaTag(e.attr, e.key, e.content));
@@ -145,6 +145,11 @@ export function updateOgMeta(
   }
   document.title = titleSuffix ? formatPageTitle(titleSuffix, post.title) : post.title;
   postOgEntries(siteUrl, post).forEach((e) => setMetaTag(e.attr, e.key, e.content));
+  if (!post.previewDescription) {
+    document.querySelector('meta[property="og:description"]')?.remove();
+    document.querySelector('meta[name="description"]')?.remove();
+    document.querySelector('meta[name="twitter:description"]')?.remove();
+  }
   if (!post.previewImage) {
     document.querySelector('meta[property="og:image"]')?.remove();
     document.querySelector('meta[name="twitter:image"]')?.remove();

@@ -114,8 +114,8 @@ test.describe("transactions", () => {
     const countBefore = await visibleRows.count();
     expect(countBefore).toBeGreaterThan(0);
     await page.locator("#sankey-unbudgeted").check();
+    await expect.poll(async () => visibleRows.count()).toBeLessThan(countBefore);
     const countAfter = await visibleRows.count();
-    expect(countAfter).toBeLessThan(countBefore);
     expect(countAfter).toBeGreaterThan(0);
   });
 

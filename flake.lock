@@ -8,11 +8,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1780640922,
-        "narHash": "sha256-Mc2z1SM/GvzIXsXi8DxaipVV98252r6tp80KQz/LQKc=",
+        "lastModified": 1781314818,
+        "narHash": "sha256-76EizPNWUOPLqwg6OP1KnX7XE7FEdrsJ2zQQaRKLYT4=",
         "owner": "sadjow",
         "repo": "claude-code-nix",
-        "rev": "dd4b0a31f01cca5ebaaeffa5acdb593ba96df788",
+        "rev": "7c3c4413d8dbe29762fb5a9cb5443c3a72a9e18a",
         "type": "github"
       },
       "original": {
@@ -46,11 +46,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1780593650,
-        "narHash": "sha256-CHo7k65YTL3HY+WQVedDTupji+LMgNlKCdrtRHZFAK4=",
+        "lastModified": 1781365335,
+        "narHash": "sha256-zqDBhXMzfbdlO7F2bGHe7MOtB3xngd/+4ieMHDC+ZXo=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "447fd9ff62501dae7206dfe180ee89f8de27b7d5",
+        "rev": "5b6f5733726a1b2ccafb5dec6ac4ca7299fad66c",
         "type": "github"
       },
       "original": {
@@ -62,11 +62,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1780243769,
-        "narHash": "sha256-x5UQuRsH3MqI0U9afaXSNqzTPSeZlRLvFAav2Ux1pNw=",
+        "lastModified": 1781074563,
+        "narHash": "sha256-md8WlXOlfnIeHeOScMTTHFyf2d6iaTwPl2apR5EQ3P4=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "331800de5053fcebacf6813adb5db9c9dca22a0c",
+        "rev": "9ae611a455b90cf061d8f332b977e387bda8e1ca",
         "type": "github"
       },
       "original": {
@@ -80,8 +80,7 @@
       "inputs": {
         "claude-code-nix": "claude-code-nix",
         "home-manager": "home-manager",
-        "nixpkgs": "nixpkgs",
-        "wezterm-windows-zip": "wezterm-windows-zip"
+        "nixpkgs": "nixpkgs"
       }
     },
     "systems": {
@@ -97,19 +96,6 @@
         "owner": "nix-systems",
         "repo": "default",
         "type": "github"
-      }
-    },
-    "wezterm-windows-zip": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1778043088,
-        "narHash": "sha256-1UuHrBNCER6eYXpStwq68Y64tHTh8o3Ihz9xtRpkkec=",
-        "type": "tarball",
-        "url": "https://github.com/wez/wezterm/releases/download/nightly/WezTerm-windows-nightly.zip"
-      },
-      "original": {
-        "type": "tarball",
-        "url": "https://github.com/wez/wezterm/releases/download/nightly/WezTerm-windows-nightly.zip"
       }
     }
   },

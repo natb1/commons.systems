@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # dispatch-drift-scan — gather the deterministic evidence for the
-# /dispatch-worker implement-phase relevance-drift review (Step 3) in a single
+# /plan-issue pre-planning relevance review (Step 1) in a single
 # invocation, so the dispatching session only owns the verdict.
 #
-# The implement-phase relevance review asks: has the codebase drifted away from
+# The pre-planning relevance review asks: has the codebase drifted away from
 # what this issue assumes since the issue was filed? The *evidence* for that
 # question is mechanical — issue createdAt (the drift window anchor), commits to
 # the named paths since then, PRs merged in the window, and whether the issue's
@@ -94,9 +94,9 @@ under_ref_cap() {
 
 is_path_token() {
   local t="$1"
-  # Slash-commands (/ready, /dispatch-worker) are leading-slash single-segment
-  # tokens — skill references, not filesystem paths. Let them fall through to
-  # the name-ref branch instead of being treated as paths.
+  # Slash-commands (/ready, /qa-fix) are leading-slash single-segment tokens —
+  # skill references, not filesystem paths. Let them fall through to the
+  # name-ref branch instead of being treated as paths.
   [[ "$t" =~ ^/[A-Za-z][A-Za-z0-9._-]*$ ]] && return 1
   [[ "$t" == */* ]] && return 0
   case "$t" in

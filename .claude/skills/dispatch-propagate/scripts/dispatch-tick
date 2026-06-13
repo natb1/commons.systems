@@ -121,6 +121,30 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
+# --- Single cleanup trap for this tick (sentinel + workspace) (#1068, #1452) --
+# Bash `trap` OVERWRITES per signal — it does not stack. The headless-liveness
+# sentinel (#1068) and the per-tick snapshot/trace-cache workspace (#1452) both
+# need removal on exit, so ONE cleanup function handles both and ONE trap installs
+# it. A second `trap ... EXIT` anywhere below would silently drop one of these.
+# SENTINEL is declared empty here and set later only on the headless path; the
+# `${SENTINEL:-}` guard keeps cleanup safe under `set -u` regardless.
+#
+# Install the trap BEFORE the workspace creation and the sentinel write below, so
+# it clears a partial workspace or partial sentinel if either setup fails and we
+# abort. A single EXIT trap covers every `exit` below this point — intended.
+SENTINEL=""
+_dispatch_tick_cleanup() {
+  [[ -n "${SENTINEL:-}" ]] && rm -f "$SENTINEL"
+  [[ -n "${DISPATCH_TICK_WORKSPACE:-}" ]] && rm -rf "$DISPATCH_TICK_WORKSPACE"
+}
+trap '_dispatch_tick_cleanup' EXIT INT TERM
+
+# Tick-scoped workspace holding the agents snapshot and the trace cache (#1452).
+# Created unconditionally (autonomous, --manual, and explicit <N> paths all run
+# the selection/fan-out that consumes the snapshot), independent of the headless
+# sentinel dir. The cleanup trap above removes it on every exit.
+DISPATCH_TICK_WORKSPACE=$(mktemp -d "${TMPDIR:-/tmp}/dispatch-tick.XXXXXX")
+
 # Resolve the canonical main worktree — the --cwd for the advisory diagnose-main
 # and jit-reminder bg jobs. These are repo-global concerns (diagnose origin/main
 # CI; remind about a JIT issue), not feature-worktree work, so they must spawn
@@ -226,10 +250,9 @@ if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
   if SENTINEL_LOCK_FILE=$(dispatch_lock_file); then
     SENTINEL=$(headless_sentinel_path "$CLAUDE_CODE_SESSION_ID" "$SENTINEL_LOCK_FILE")
     mkdir -p "$(dirname "$SENTINEL")" 2>/dev/null || true
-    # Install the trap before the write so it also clears any partial sentinel
-    # if the write fails and we abort. A single EXIT trap covers every `exit`
-    # below this point — intended.
-    trap 'rm -f "$SENTINEL"' EXIT INT TERM
+    # The consolidated EXIT/INT/TERM trap installed near the top of this script
+    # already covers this write: SENTINEL is set just above, so a partial sentinel
+    # is cleared if the write fails and we abort below.
     if ! printf '%s\n' "$$" >"$SENTINEL"; then
       echo "dispatch-tick: ERROR: failed to write headless sentinel '$SENTINEL'; cannot signal liveness — aborting so a concurrent tick does not reclaim this lock mid-selection (#1068)" >&2
       exit 2
@@ -259,6 +282,34 @@ fi
 if ! "$SCRIPT_DIR/dispatch-sample-usage"; then
   echo "dispatch-tick: usage sample failed; proceeding (#1007)" >&2
 fi
+
+# --- Snapshot the live-session registry once per tick (#1452) -----------------
+# The selection phase below — dispatch-select-tick's concurrency gate and the
+# dispatch-materialize-spawn fan-out (sibling subprocesses) — makes many
+# machine-wide `claude agents --json` calls (the gate's busy-worker count and
+# every worktree_has_live_session probe during the trace). Capture ONE snapshot
+# here and export its path so both subprocesses' lib-claude-agents.sh reads reuse
+# it (DISPATCH_AGENTS_SNAPSHOT) — one daemon query per tick instead of hundreds.
+# dispatch-tick already runs the whole headless chain with the sandbox disabled
+# (.claude/rules/sandbox.md), so this is the one place the Unix-socket-backed
+# `claude agents` call is made. Also create a tick-scoped trace cache dir
+# (DISPATCH_TRACE_CACHE_DIR, consumed by dispatch-trace-leaf). Both live under the
+# mktemp -d workspace the EXIT/INT/TERM trap removes.
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+_SNAPSHOT_FILE="$DISPATCH_TICK_WORKSPACE/agents-snapshot.json"
+if claude_agents_snapshot_capture "$_SNAPSHOT_FILE"; then
+  export DISPATCH_AGENTS_SNAPSHOT="$_SNAPSHOT_FILE"
+else
+  # Capture failed (daemon momentarily unreachable). Remove any partial file and
+  # leave DISPATCH_AGENTS_SNAPSHOT unset so every machine-wide read falls back to
+  # its live per-call path and the UNKNOWN fail-safe is preserved bit-for-bit. Do
+  # NOT abort the tick — degrade to the pre-#1452 behavior. (#1452)
+  rm -f "$_SNAPSHOT_FILE"
+  echo "dispatch-tick: claude agents snapshot capture failed; selection will use live per-call reads (#1452)" >&2
+fi
+export DISPATCH_TRACE_CACHE_DIR="$DISPATCH_TICK_WORKSPACE/trace-cache"
+mkdir -p "$DISPATCH_TRACE_CACHE_DIR"
 
 # --- Step 1: select the target ------------------------------------------------
 # Capture select-tick's full stdout and echo every line through (jit:/calendar:
@@ -299,11 +350,53 @@ run_materialize() {
   token=$(printf '%s\n' "$mat_out" | tail -n 1)
   # Every recognized terminal token is a log-and-exit-0 disposition for a headless
   # tick: the token is already in the journal via the passthrough above, and there
-  # is no managed job to self-close. `resolve merge-conflict` is a defensive no-op
-  # — materialize-spawn now spawns a resolver bg job and emits `propagate`, so the
-  # token no longer reaches here, but the branch keeps it a safe exit-0 disposition.
+  # is no managed job to self-close. A no-spawn `drain` additionally triggers the
+  # dispatch-tick-recover continuation backstop before exiting 0 (see that arm,
+  # #1445). `resolve merge-conflict` is a defensive no-op — materialize-spawn now
+  # spawns a resolver bg job and emits `propagate`, so the token no longer reaches
+  # here, but the branch keeps it a safe exit-0 disposition.
   case "$token" in
-    propagate|drain|drain\ *|notify\ *|resolve\ merge-conflict)
+    propagate|resolve\ merge-conflict)
+      # A worker/resolver was spawned — its Stop-hook carries the chain. Bare
+      # exit; calling recover here would wrongly increment its failure counter.
+      #
+      # Convergence safety net (#1453): on a `propagate` token from an AUTONOMOUS
+      # tick, arm a short-delay convergence reseed. The called script re-counts
+      # effective-live workers (busy + reservations) and arms a no-arg dispatch-tick
+      # ONLY when the fleet is still below target and not gated (it self-suppresses
+      # on converged / pace-gate-closed / exhausted). Placing the call here — on the
+      # token taken when the tick had a normal materialize decision — makes the
+      # trigger a FRESH recount rather than the stale `spawned < GAP` signal,
+      # catching both the partial-fill case and a drain-during-tick.
+      #
+      # Autonomous-only: an explicit `dispatch <N>` (ARG set) and a bare manual
+      # `dispatch` (MANUAL set) are gate-exempt single-target spawns that must NOT
+      # drive fleet convergence. `resolve merge-conflict` is excluded by the
+      # `propagate`-only test below. Best-effort: a failed arm logs ONE note and the
+      # tick still exits 0 — never wedge the tick on a convergence arm.
+      if [[ "$token" == propagate && -z "$MANUAL" && -z "$ARG" ]]; then
+        "$SCRIPT_DIR/dispatch-schedule-convergence-reseed" \
+          || echo "dispatch-tick: convergence reseed arm failed (best-effort)" >&2
+      fi
+      exit 0
+      ;;
+    notify\ *)
+      # Explicit-dispatch user-facing path: a one-shot named target, not the
+      # autonomous heartbeat — no continuation backstop needed.
+      exit 0
+      ;;
+    drain|drain\ *)
+      # #1445 backstop: a no-spawn drain (target-done / worktree-conflict /
+      # fan-out-all-done) spawns no worker and the headless tick never calls
+      # dispatch-self-close, so nothing else guarantees a continuation. Trigger
+      # the continuation-guarantor directly. Best-effort: recover self-limits
+      # (its continuation-check resets the consecutive-failure count when a
+      # reseed timer or busy worker already exists) and escalates past its cap
+      # via a dispatch:chain-stalled issue — both intended. Its OnFailure=
+      # handler is not wired on this direct call, which is fine: recover almost
+      # never fails and any real failure is logged below.
+      "$SCRIPT_DIR/dispatch-tick-recover" || \
+        echo "dispatch-tick: dispatch-tick-recover failed on '$token' (continuation not guaranteed)" >&2
       exit 0
       ;;
     *)

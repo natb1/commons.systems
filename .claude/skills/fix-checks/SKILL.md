@@ -19,16 +19,23 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
 
 ## Steps
 
-1. **Resolve the draft PR.** Resolve the draft PR for the target into `PR_NUM`
-   (`dangerouslyDisableSandbox: true` — `gh`):
+1. **Resolve the draft PR.** Run the context pack (`dangerouslyDisableSandbox:
+   true` — calls `gh`):
 
    ```bash
-   PR_NUM=$(.claude/skills/dispatch-propagate/scripts/dispatch-find-pr <issue-N>)
+   .claude/skills/dispatch-propagate/scripts/dispatch-context-pack <issue-N> --pr
    ```
 
-   The PR number resolved here is used in Steps 3, 4 (the Flake sub-path's
-   `gh pr view <pr-num>` body read), 5 (the fix-checks-attempt label edit), and 8 —
-   carry it forward.
+   This single call resolves the PR and captures its labels and body. From the
+   `=== PR ===` section: read `PR_NUM` from the `PR #<num>` line (or, if it
+   prints `PR: none`, fix-checks was dispatched without a PR — a router state
+   error — so call `dispatch-mark-deviation '/fix-checks: dispatched without a PR
+   — router state error'` and stop). The **labels** line and **body** captured
+   here are reused in later steps — Step 4's Flake sub-path reads the PR body for
+   the `Closes #N` parse, and Step 5's attempt-counter computation reads the labels
+   line — so they need not be re-fetched from GitHub. The `PR_NUM` resolved here is
+   used in Steps 3, 5 (the fix-checks-attempt label edit), and 8 — carry it
+   forward.
 
 2. **Read the accumulator.** Read `tmp/fix-checks-summary.md` if it exists — it holds the
    prior iterations' records. On the first fix-checks pass the file does not yet exist;
@@ -54,6 +61,8 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
    - Acceptance test check → `.claude/skills/dispatch-propagate/scripts/run-acceptance-tests.sh`
    - Type-check → `npx tsc --noEmit --project <pkg>`
    - Other → best-effort map from the failing workflow name
+
+   Before running a **bare** `npx tsc` / `npm run build` reproduce command (the type-check path or any *Other* path that resolves to a bare workspace build rather than a `run-*.sh` wrapper), `Read .claude/docs/build.md` for the workspace-build conventions: `npm ci` at the workspace root (never `npm install --prefix <pkg>`, which fails E404 on `@commons-systems/*`), and the `This is not the tsc command you are looking for` stub symptom that means deps were not installed. The `run-*.sh` wrapper paths are already `ensure_deps`-protected and need no read.
 
    The subagent returns `{ reproduced: bool, reproduce_command, failure_excerpt,
    why_not_caught, is_flake: bool, needs_human: bool, required_action: string }`.
@@ -147,15 +156,16 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
         `/file-issue` runs the full pipeline: duplicate detection, 8-category
         evaluation, decomposition gate, type/topic classification, creation (or
         match of an existing open issue), `@me` assignment, `help wanted`, type
-        label, and any matched topic label. It prints `CREATED <N>` or
-        `EXISTING <N>` on its own line. The subagent parses that line and returns
-        `<N>` and the `CREATED`/`EXISTING` disposition to this thread.
-     3. **Block the PR's tracked issue on the flake issue.** In this thread, read
-        the PR body (`gh pr view <pr-num> --json body --jq .body`,
-        `dangerouslyDisableSandbox: true`) and parse its `Closes #N` line(s) for
-        the issue(s) this PR implements. For **each** tracked issue, record a
-        `blocked_by` dependency **on that tracked issue, targeting the flake issue
-        `<N>`** — the PR's own work is blocked by the unrelated flake. Note the
+        label, and any matched topic label. It ends with a
+        `===FILE-ISSUE-RESULTS===` … `===FILE-ISSUE-RESULTS-END===` block; the
+        subagent reads the `<disposition> <N>` record(s) between the sentinels (a
+        flake is one topic, so normally one record — iterate if more) and returns
+        each `<N>` with its `CREATED`/`EXISTING` disposition to this thread.
+     3. **Block the PR's tracked issue on the flake issue.** In this thread, use
+        the PR body already captured in Step 1's pack output (`=== PR ===` section)
+        and parse its `Closes #N` line(s) for the issue(s) this PR implements. For **each** tracked issue, record a
+        `blocked_by` dependency **on that tracked issue, targeting each flake issue
+        `<N>`** returned — the PR's own work is blocked by the unrelated flake. Note the
         direction: this is the **reverse** of `/review-fix`,
         which records `blocked_by` on the *new* issue; here the new flake issue is
         the *blocker* and the PR's existing tracked issue is the *blocked* one.
@@ -180,24 +190,23 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
    Step 5**. The other three (generic, main-fixed, flake) set their own push
    disposition here and then fall through to the shared tail Steps 7→9.
 
-5. **Increment the fix-checks-attempt counter.** Read the PR's labels and find the highest
-   extant `dispatch:fix-checks-attempt-<n>` label (`dangerouslyDisableSandbox: true` —
-   `gh`):
-
-   ```bash
-   N=$(gh pr view "$PR_NUM" --json labels \
-     --jq '[.labels[].name | capture("^dispatch:fix-checks-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0')
-   NEXT=$(( N < 3 ? N + 1 : 3 ))
-   ```
+5. **Increment the fix-checks-attempt counter.** From the **labels line already
+   captured in Step 1's pack output** (`=== PR ===` section), find the highest
+   extant `dispatch:fix-checks-attempt-<n>` label. The preamble labels are valid
+   here: between the preamble and Step 5 no `fix-checks-attempt` label is added
+   (Step 5 itself adds it), so the preamble's label snapshot is current. Read the
+   labels, find the highest `dispatch:fix-checks-attempt-<n>` value (call it `N`; use
+   0 if none), then set `NEXT` = N+1 capped at 3 (`N < 3 ? N + 1 : 3`). Substitute
+   `N` and `NEXT` as literals in the label-edit commands below.
 
    This step runs for the `fixed`, `main-fixed`, `flake`, and `generic` outcomes —
    the ones that consume the retry budget. The needs-human outcome already stopped in
    Step 4 and never applies a fix-checks-attempt label.
 
    The cap at 3 means a fourth entry still leaves the label at `dispatch:fix-checks-attempt-3`.
-   Step 4 of `/dispatch-worker` reads this counter: when the re-derived phase is still
-   `fix-checks` and the counter is `>= 3`, it escalates to `dispatch:office-hours` instead
-   of self-closing.
+   `.claude/hooks/dispatch-stop.sh` (Branch C/D) reads this counter: when the re-derived
+   phase is still `fix-checks` and the counter is `>= 3`, it escalates to
+   `dispatch:office-hours` instead of self-closing.
 
    Remove the prior label if one exists, then apply the new one. Use the apply-first /
    create-on-"not found" idiom — the label may not exist yet on a fresh repo

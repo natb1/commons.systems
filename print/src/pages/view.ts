@@ -2,14 +2,13 @@ import type { User } from "../auth.js";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { getMediaItem } from "../firestore.js";
 import { getMediaDownloadUrl } from "../storage.js";
-import { wireMarkdownActions } from "../markdown-actions.js";
 import type { MediaItem } from "../types.js";
 import { renderViewerShell, initViewer } from "../viewer/shell.js";
 import { createPdfRenderer } from "../viewer/pdf.js";
 import { createEpubRenderer } from "../viewer/epub.js";
 import { createImageArchiveRenderer } from "../viewer/image-archive.js";
 import { getFile, putFile } from "../media-cache.js";
-import { isLocalId, getLocalItem, resolveLocalBlob } from "../library.js";
+import { isLocalId, getLocalItem, resolveLocalBlob, whenLocalFolderReady } from "../library.js";
 
 const BACK_LINK = '<a href="/" class="viewer-back">&larr; Back to Library</a>';
 
@@ -59,6 +58,10 @@ export async function renderView(id: string, _user: User | null): Promise<string
   }
 
   if (isLocalId(id)) {
+    // Wait for the initial local-folder init pass to settle before deciding
+    // Not Found — a deep link / refresh navigates before the persisted handle
+    // has bound `localSource`, which would otherwise read as a false miss.
+    await whenLocalFolderReady();
     const item = await getLocalItem(id);
     if (!item) return NOT_FOUND_HTML;
     pendingItem = item;
@@ -88,7 +91,7 @@ export async function renderView(id: string, _user: User | null): Promise<string
   }
 }
 
-async function resolveFileSource(url: string, storagePath: string): Promise<string | ArrayBuffer> {
+export async function resolveFileSource(url: string, storagePath: string): Promise<string | ArrayBuffer> {
   try {
     const cached = await getFile(storagePath);
     if (cached) return cached;
@@ -98,8 +101,12 @@ async function resolveFileSource(url: string, storagePath: string): Promise<stri
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch media: ${res.status}`);
   const buf = await res.arrayBuffer();
-  // Cache write is best-effort; failure does not affect the current view
-  putFile(storagePath, buf).catch((err) => {
+  // Cache write is best-effort; failure does not affect the current view.
+  // Hand the cache its own copy: pdf.js transfers (detaches) the returned
+  // buffer to its worker, and that detach can win the race against putFile's
+  // deferred store.put. buf.slice(0) is evaluated synchronously here, while
+  // buf is still intact, so the cached bytes are decoupled from the transfer.
+  putFile(storagePath, buf.slice(0)).catch((err) => {
     reportError(new Error("Failed to cache media file", { cause: err }));
   });
   return buf;
@@ -147,7 +154,6 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
       default:
         reportError(new Error(`Unsupported local mediaType in viewer: ${item.mediaType}`));
     }
-    wireMarkdownActions(outlet);
     return;
   }
 
@@ -170,6 +176,4 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
       if (pos) pos.textContent = `Unsupported media type: ${_exhaustive}`;
     }
   }
-
-  wireMarkdownActions(outlet);
 }

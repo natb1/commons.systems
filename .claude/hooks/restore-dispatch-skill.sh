@@ -29,7 +29,7 @@ ISSUE_NUM=""
 WORKTREE_BASENAME=""
 
 # Primary path: session --name matches worker shape ^[0-9]+-. The name IS the
-# worktree basename for workers spawned by dispatch-spawn-worker.
+# worktree basename for workers spawned by dispatch-launch-worker.
 if printf '%s\n' "$NAME" | grep -qE '^[0-9]+-'; then
   ISSUE_NUM=$(printf '%s\n' "$NAME" | grep -oE '^[0-9]+')
   WORKTREE_BASENAME="$NAME"
@@ -73,15 +73,18 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 # regardless of whether the Skill tool was invoked.
 #
 # Routing: plan→plan-issue; implement→implement; fix-conflicts→fix-conflicts;
-# fix-checks→fix-checks; qa→qa-fix; review→review-fix;
-# done/unknown/dispatch-phase failure (incl. not-ready CI, exit 3)→dispatch-worker (the worker's
-# Step 2 CI-monitor loop and Step 2 done variance handling still run).
+# fix-checks→fix-checks; qa→qa-fix; review→review-fix. An undetermined/done
+# phase (done/unknown/dispatch-phase failure, incl. not-ready CI, exit 3) has no
+# phase skill to reload, so nothing is restored — the Stop hook
+# (dispatch-stop.sh) owns the disposition.
 #
 # An office-hours-<N> session (started by the /office-hours entry point, #759)
 # is not a phase worker — it restores the /office-hours skill body, not a phase
-# skill, so its plan-mode paths survive a context clear. This case is matched by
-# session --name ahead of the phase routing below; it is inert until
-# office-hours-* sessions exist.
+# skill, so its plan-mode paths survive a context clear. These sessions now
+# exist: dispatch-spawn-office-hours spawns them with --name office-hours-<N>
+# (since #1311). The name has no leading digit, so it misses the primary
+# ^[0-9]+- check and reaches ^office-hours-[0-9]+$ via the git-branch
+# fallback — this is correct and intended.
 #
 # Falls back to the one-line Reload directive if SKILL.md is missing or
 # unreadable — defensive against a packaging error breaking recovery.
@@ -126,9 +129,11 @@ else
       DIRECTIVE="/review-fix"
       ;;
     *)
-      SKILL_DIR_NAME="dispatch-worker"
-      SKILL_ARGS="$ISSUE_NUM $WORKTREE_PATH"
-      DIRECTIVE="/dispatch-worker $ISSUE_NUM $WORKTREE_PATH"
+      # Undetermined or done phase (unknown / dispatch-phase failure, incl.
+      # not-ready CI exit 3): no phase skill to reload. The Stop hook
+      # (dispatch-stop.sh) owns the disposition. Defensive no-op, mirroring the
+      # `dispatch-*) exit 0` case above.
+      exit 0
       ;;
   esac
 fi
