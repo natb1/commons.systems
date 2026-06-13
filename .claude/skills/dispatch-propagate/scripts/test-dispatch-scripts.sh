@@ -17488,6 +17488,11 @@ FAKE
 echo called >> "$TMPDIR_TEST/logs/schedule-reseed.log"
 exit 0
 FAKE
+  cat > "$TMPDIR_TEST/dispatch-schedule-target-reseed" <<FAKE
+#!/usr/bin/env bash
+echo "\$1" >> "$TMPDIR_TEST/logs/schedule-target-reseed.log"
+exit 0
+FAKE
   # Sourced helper: provides claude_agents_count_busy_workers (driven by
   # SEL_LIVE_COUNT*) and claude_agents_list_all (driven by SEL_AGENTS_*, used by
   # the reservation-ledger sweep the gate runs before counting). The heredoc is
@@ -17511,7 +17516,8 @@ FAKE
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/dispatch-target-workers" \
-           "$TMPDIR_TEST/dispatch-schedule-reseed"
+           "$TMPDIR_TEST/dispatch-schedule-reseed" \
+           "$TMPDIR_TEST/dispatch-schedule-target-reseed"
 
   # PATH-shimmed git: branch defaults to main; fetch/merge succeed unless a
   # FAKE_GIT_*_FAIL env var is set.
@@ -17845,6 +17851,36 @@ assert_eq "cap: priority-only probe ran (returned empty)" "1" \
   "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
 assert_eq "cap: normal no-arg selection did NOT run" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- AC4: target=0, waiting <N> → CI-cadence reseed, not pace reseed (#1444) --
+# At target=0 there is no busy worker re-probing priority on a baton-pass, so
+# dispatch-schedule-target-reseed <N> must be armed (not the pace reseed).
+echo "Test: select-tick at cap, target=0, waiting <N> → CI-cadence reseed with issue number (#1444 AC4)"
+sel_tick_setup
+export SEL_LIVE_COUNT=0 SEL_TARGET_N=0 SEL_EXHAUSTED=ok SEL_PRIORITY_ONLY="waiting 1444"
+out=$(run_sel_tick)
+assert_eq "AC4: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "AC4: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "AC4: CI-cadence reseed got issue number 1444" "1444" \
+  "$(cat "$TMPDIR_TEST/logs/schedule-target-reseed.log" 2>/dev/null)"
+assert_eq "AC4: pace reseed NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- AC5: target>0 at cap, waiting <N> → pace reseed (not CI-cadence) (#1444) -
+# At target>0 a busy worker already re-probes priority on each baton-pass, so
+# the existing pace reseed (dispatch-schedule-reseed) is correct.
+echo "Test: select-tick at cap, target>0, waiting <N> → pace reseed, not CI-cadence (#1444 AC5)"
+sel_tick_setup
+export SEL_LIVE_COUNT=3 SEL_TARGET_N=1 SEL_EXHAUSTED=ok SEL_PRIORITY_ONLY="waiting 1444"
+out=$(run_sel_tick)
+assert_eq "AC5: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "AC5: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "AC5: pace reseed called" "called" \
+  "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
+assert_eq "AC5: CI-cadence reseed NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
 # --- concurrency-cap tick still runs reconcile (Step 1d before the gate) -----
