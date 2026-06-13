@@ -6070,20 +6070,29 @@ sweep_setup() {
   cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/scripts/lib-reservation-ledger.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
 
-  # Default empty gh output (each test may overwrite).
-  echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
-
   # Default empty worktree list (each test should overwrite with its records).
   : > "$STUB_DIR/worktree-list.txt"
 
   # gh shim — handles dispatch-sweep's calls.
+  # Shims:
+  #   gh   — per-worktree PR query uses pr-state-<branch>.json (holding
+  #          [{"state":"MERGED"|"OPEN","number":<N>}]); returns '[]' by default
+  #          when no fixture exists. SWEEP_GH_PR_FAIL=<branch> makes the
+  #          --head query fail for that branch. Issue-view uses issue-state-<N>.txt.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  "pr list --state all --json number,headRefName,state --limit 200")
-    cat "$STUB_DIR/gh-pr-list-all.json"
+  "pr list --head "*" --state all --json state,number")
+    # dispatch-sweep per-worktree PR query: gh pr list --head <branch> --state all --json state,number
+    br=$(echo "$args" | awk '{print $4}')
+    if [[ "${SWEEP_GH_PR_FAIL:-}" == "$br" ]]; then
+      echo "gh sweep stub: simulated gh pr list --head failure for $br" >&2
+      exit 1
+    fi
+    f="$STUB_DIR/pr-state-${br}.json"
+    if [[ -f "$f" ]]; then cat "$f"; else echo '[]'; fi
     ;;
   issue\ view\ *\ --json\ state\ -q\ .state)
     # dispatch-sweep closed-issue check: gh issue view <N> --json state -q .state
@@ -6197,6 +6206,7 @@ FAKE
   export CLAUDE_AGENTS_CMD="$default_fake"
   export DISPATCH_SWEEP_LOG_FILE="$STUB_DIR/sweep.log"
   export DISPATCH_SWEEP_NOW="2026-01-01T00:00:00Z"
+  export GH_RETRY_BASE_DELAY=0
   # Point the reservation ledger at a scratch dir that is absent by default — no
   # marker files, so reservation_exists is false for every row and the
   # reserved-skip is inert. A reserved-skip test opts in by creating a marker here.
@@ -6208,7 +6218,7 @@ sweep_teardown() {
   TMPDIR_TEST=""
   STUB_DIR=""
   export PATH="$SAVED_PATH"
-  unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR
+  unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR GH_RETRY_BASE_DELAY SWEEP_GH_PR_FAIL SWEEP_GH_ISSUE_FAIL
 }
 
 # Helper: register a worktree in the porcelain list AND create its directory.
@@ -6263,8 +6273,8 @@ echo "Test: merged worktree (in-sync) is removed + branch deleted"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/42-feature"
 sweep_register_wt "$WT_PATH" "42-feature"
-echo '[{"number":100,"headRefName":"42-feature","state":"MERGED"}]' \
-  > "$STUB_DIR/gh-pr-list-all.json"
+echo '[{"state":"MERGED","number":100}]' \
+  > "$STUB_DIR/pr-state-42-feature.json"
 # Clean tree + zero unpushed (defaults already match this — explicit for clarity).
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
@@ -6308,8 +6318,7 @@ echo "Test: closed-issue worktree (in-sync) is removed + branch deleted"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/57-closed-feature"
 sweep_register_wt "$WT_PATH" "57-closed-feature"
-# No merged PRs — the closed-issue path must fire.
-echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+# No pr-state fixture — stub returns '[]' by default, sending this to the issue path.
 # Issue 57 is CLOSED.
 echo "CLOSED" > "$STUB_DIR/issue-state-57.txt"
 # Clean tree + zero unpushed (defaults).
@@ -6351,7 +6360,7 @@ echo "Test: closed-issue worktree (not-in-sync) is kept"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/58-closed-dirty"
 sweep_register_wt "$WT_PATH" "58-closed-dirty"
-echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+# No pr-state fixture — stub returns '[]' by default, sending this to the issue path.
 echo "CLOSED" > "$STUB_DIR/issue-state-58.txt"
 # Not-in-sync: has an uncommitted change.
 key=$(sweep_path_key "$WT_PATH")
@@ -6384,7 +6393,7 @@ echo "Test: open-issue worktree is kept (regression guard)"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/59-open-feature"
 sweep_register_wt "$WT_PATH" "59-open-feature"
-echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+# No pr-state fixture — stub returns '[]' by default, sending this to the issue path.
 echo "OPEN" > "$STUB_DIR/issue-state-59.txt"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
@@ -6403,24 +6412,47 @@ else
 fi
 sweep_teardown
 
-# --- Test 1e: gh issue view fails → ERROR_ISSUE_STATE_FETCH, exit 1 ----------
+# --- Test 1e: gh issue view fails → isolated ERROR_ISSUE_STATE_FETCH, exit 0, sibling still removed ---
+#
+# The old contract (exit 1) is gone. A per-worktree gh issue view failure is now
+# isolated: logged as ERROR_ISSUE_STATE_FETCH and skipped, never aborting the sweep.
+# A sibling in-sync MERGED worktree in the same run must still be removed to prove
+# the sweep continues past the failure.
 
-echo "Test: gh issue view fails → ERROR_ISSUE_STATE_FETCH on stderr, exit 1"
+echo "Test: gh issue view fails → isolated log+continue+exit 0, sibling still removed"
 sweep_setup
+# Failing worktree: no pr-state fixture (stub returns '[]') → issue path → gh issue view fails.
 WT_PATH="$TMPDIR_TEST/project/worktrees/60-closed-feature"
 sweep_register_wt "$WT_PATH" "60-closed-feature"
-echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
-# No issue-state-60.txt — let gh fail via the SWEEP_GH_ISSUE_FAIL env var.
+# No issue-state-60.txt — let gh issue view fail via the SWEEP_GH_ISSUE_FAIL env var.
 export SWEEP_GH_ISSUE_FAIL="60"
 
-stderr_out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>&1 1>/dev/null) && rc=0 || rc=$?
-assert_eq "gh issue view fail → exit 1" "1" "$rc"
+# Sibling in-sync MERGED worktree to prove the sweep continues.
+WT_PATH_60B="$TMPDIR_TEST/project/worktrees/60b-sibling-merged"
+sweep_register_wt "$WT_PATH_60B" "60b-sibling-merged"
+echo '[{"state":"MERGED","number":600}]' > "$STUB_DIR/pr-state-60b-sibling-merged.json"
+key_60b=$(sweep_path_key "$WT_PATH_60B")
+: > "$STUB_DIR/status${key_60b}.txt"
+echo "0" > "$STUB_DIR/revlist${key_60b}.txt"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "gh issue view fail → exit 0 (isolated, not fatal)" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if echo "$stderr_out" | grep -q "60"; then
-  PASS=$((PASS + 1)); echo "  PASS: ERROR_ISSUE_STATE_FETCH stderr mentions issue number"
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH_60B"; then
+  PASS=$((PASS + 1)); echo "  PASS: sibling was removed (sweep continued past issue-view failure)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: ERROR_ISSUE_STATE_FETCH stderr mentions issue number"
-  echo "    stderr: $stderr_out"
+  FAIL=$((FAIL + 1)); echo "  FAIL: sibling was removed (sweep continued past issue-view failure)"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "ERROR_ISSUE_STATE_FETCH: branch=60-closed-feature issue=60 gh issue view failed" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ERROR_ISSUE_STATE_FETCH log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ERROR_ISSUE_STATE_FETCH log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
 unset SWEEP_GH_ISSUE_FAIL
 sweep_teardown
@@ -6431,9 +6463,9 @@ echo "Test: open-PR worktree with closed issue is kept (OPEN_BY_BRANCH guard)"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/61-active-pr"
 sweep_register_wt "$WT_PATH" "61-active-pr"
-echo '[{"state":"OPEN","headRefName":"61-active-pr","number":888}]' \
-  > "$STUB_DIR/gh-pr-list-all.json"
-# Issue is CLOSED, but the OPEN_BY_BRANCH guard must short-circuit before gh issue view.
+echo '[{"state":"OPEN","number":888}]' \
+  > "$STUB_DIR/pr-state-61-active-pr.json"
+# Issue is CLOSED, but the OPEN PR precedence guard must short-circuit before gh issue view.
 echo "CLOSED" > "$STUB_DIR/issue-state-61.txt"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
@@ -6465,8 +6497,8 @@ sweep_register_wt "$WT_PATH" "70-live-merged"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
 echo "0" > "$STUB_DIR/revlist${key}.txt"
-echo '[{"number":300,"headRefName":"70-live-merged","state":"MERGED"}]' \
-  > "$STUB_DIR/gh-pr-list-all.json"
+echo '[{"state":"MERGED","number":300}]' \
+  > "$STUB_DIR/pr-state-70-live-merged.json"
 # Register a live session whose name matches the worktree's basename.
 sweep_fake_claude_sessions_by_name "70-live-merged=sess-live-70"
 
@@ -6503,8 +6535,8 @@ sweep_register_wt "$WT_PATH" "71-no-live-merged"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
 echo "0" > "$STUB_DIR/revlist${key}.txt"
-echo '[{"number":301,"headRefName":"71-no-live-merged","state":"MERGED"}]' \
-  > "$STUB_DIR/gh-pr-list-all.json"
+echo '[{"state":"MERGED","number":301}]' \
+  > "$STUB_DIR/pr-state-71-no-live-merged.json"
 # Default fake (no live sessions) — the worktree is free to remove.
 
 out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
@@ -6541,8 +6573,7 @@ WT_PATH="$TMPDIR_TEST/project/worktrees/80-detached"
 mkdir -p "$WT_PATH"
 # Write a branchless porcelain record directly (no branch line).
 printf 'worktree %s\nHEAD deadbeef\n\n' "$WT_PATH" >> "$STUB_DIR/worktree-list.txt"
-# No merged PRs.
-echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+# No pr-state fixture needed — the branch guard fires before any gh call.
 
 out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
 assert_eq "detached-HEAD sweep exits 0" "0" "$rc"
@@ -6576,8 +6607,8 @@ echo "Test: non-issue branch (hotfix-login) in merged map is reaped"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/hotfix-login"
 sweep_register_wt "$WT_PATH" "hotfix-login"
-echo '[{"number":400,"headRefName":"hotfix-login","state":"MERGED"}]' \
-  > "$STUB_DIR/gh-pr-list-all.json"
+echo '[{"state":"MERGED","number":400}]' \
+  > "$STUB_DIR/pr-state-hotfix-login.json"
 # Clean tree + zero unpushed.
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
@@ -6616,8 +6647,8 @@ echo "Test: merged worktree with a reservation marker is skipped (SKIP_RESERVED)
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/90-reserved-merged"
 sweep_register_wt "$WT_PATH" "90-reserved-merged"
-echo '[{"number":500,"headRefName":"90-reserved-merged","state":"MERGED"}]' \
-  > "$STUB_DIR/gh-pr-list-all.json"
+echo '[{"state":"MERGED","number":500}]' \
+  > "$STUB_DIR/pr-state-90-reserved-merged.json"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
 echo "0" > "$STUB_DIR/revlist${key}.txt"
@@ -6651,7 +6682,7 @@ echo "Test: closed-issue worktree with a reservation marker is skipped (SKIP_RES
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/91-reserved-closed"
 sweep_register_wt "$WT_PATH" "91-reserved-closed"
-echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+# No pr-state fixture — stub returns '[]' by default, but the reservation guard fires first.
 echo "CLOSED" > "$STUB_DIR/issue-state-91.txt"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
@@ -6686,7 +6717,7 @@ echo "Test: closed-issue worktree with a live session is skipped (SKIP_CLOSED_LI
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/92-closed-live"
 sweep_register_wt "$WT_PATH" "92-closed-live"
-echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+# No pr-state fixture — stub returns '[]' by default, sending this to the issue path.
 echo "CLOSED" > "$STUB_DIR/issue-state-92.txt"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
@@ -6711,6 +6742,91 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_CLOSED_LIVE_SESSION log line present"
   echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
+sweep_teardown
+
+# --- Test I1: unexpected issue state is isolated (ERROR_ISSUE_STATE_FETCH) ---
+#
+# A branch whose issue returns a non-OPEN, non-CLOSED state (e.g. "GARBAGE")
+# must be logged as ERROR_ISSUE_STATE_FETCH and skipped, not fatal. A sibling
+# in-sync MERGED worktree in the same run must still be removed.
+
+echo "Test: unexpected issue state is isolated (exit 0, sibling still removed)"
+sweep_setup
+# Worktree with garbage issue state: no pr-state fixture (stub returns '[]') → issue path.
+WT_PATH="$TMPDIR_TEST/project/worktrees/62-garbage-issue"
+sweep_register_wt "$WT_PATH" "62-garbage-issue"
+echo "GARBAGE" > "$STUB_DIR/issue-state-62.txt"
+
+# Sibling in-sync MERGED worktree to prove the sweep continues.
+WT_PATH_62B="$TMPDIR_TEST/project/worktrees/62b-sibling-merged"
+sweep_register_wt "$WT_PATH_62B" "62b-sibling-merged"
+echo '[{"state":"MERGED","number":620}]' > "$STUB_DIR/pr-state-62b-sibling-merged.json"
+key_62b=$(sweep_path_key "$WT_PATH_62B")
+: > "$STUB_DIR/status${key_62b}.txt"
+echo "0" > "$STUB_DIR/revlist${key_62b}.txt"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "unexpected-state sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH_62B"; then
+  PASS=$((PASS + 1)); echo "  PASS: sibling was removed (sweep continued past unexpected-state)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: sibling was removed (sweep continued past unexpected-state)"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "ERROR_ISSUE_STATE_FETCH: branch=62-garbage-issue issue=62 unexpected state='GARBAGE'" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ERROR_ISSUE_STATE_FETCH unexpected-state log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ERROR_ISSUE_STATE_FETCH unexpected-state log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test I2: pr-list --head failure is isolated (ERROR_PR_STATE_FETCH) -----
+#
+# A branch whose `gh pr list --head` call fails must be logged as
+# ERROR_PR_STATE_FETCH and skipped, not fatal. A sibling in-sync MERGED
+# worktree in the same run must still be removed.
+
+echo "Test: gh pr list --head failure is isolated (exit 0, sibling still removed)"
+sweep_setup
+# Failing worktree: SWEEP_GH_PR_FAIL makes the stub exit 1 for this branch.
+WT_PATH="$TMPDIR_TEST/project/worktrees/63-pr-fail"
+sweep_register_wt "$WT_PATH" "63-pr-fail"
+export SWEEP_GH_PR_FAIL="63-pr-fail"
+
+# Sibling in-sync MERGED worktree to prove the sweep continues.
+WT_PATH_63B="$TMPDIR_TEST/project/worktrees/63b-pr-ok"
+sweep_register_wt "$WT_PATH_63B" "63b-pr-ok"
+echo '[{"state":"MERGED","number":630}]' > "$STUB_DIR/pr-state-63b-pr-ok.json"
+key_63b=$(sweep_path_key "$WT_PATH_63B")
+: > "$STUB_DIR/status${key_63b}.txt"
+echo "0" > "$STUB_DIR/revlist${key_63b}.txt"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "pr-list-fail sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH_63B"; then
+  PASS=$((PASS + 1)); echo "  PASS: sibling was removed (sweep continued past pr-list failure)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: sibling was removed (sweep continued past pr-list failure)"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "ERROR_PR_STATE_FETCH: branch=63-pr-fail gh pr list --head failed" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ERROR_PR_STATE_FETCH log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ERROR_PR_STATE_FETCH log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+unset SWEEP_GH_PR_FAIL
 sweep_teardown
 
 # ============================================================================
