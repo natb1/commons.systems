@@ -19727,11 +19727,21 @@ FAKE
 echo "recover" >> "$TMPDIR_TEST/logs/recover.log"
 exit 0
 FAKE
+  # Fake dispatch-schedule-convergence-reseed (#1453): records each invocation so
+  # a test can assert the convergence safety net was (or was NOT) armed on a
+  # `propagate` token. Exits TICK_CONVERGE_RC (default 0). Same PATH-stub pattern
+  # as the dispatch-spawn-job fake above.
+  cat > "$TMPDIR_TEST/dispatch-schedule-convergence-reseed" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/converge.log"
+exit \${TICK_CONVERGE_RC:-0}
+FAKE
   chmod +x "$TMPDIR_TEST/dispatch-select-tick" \
            "$TMPDIR_TEST/dispatch-materialize-spawn" \
            "$TMPDIR_TEST/dispatch-spawn-job" \
            "$TMPDIR_TEST/dispatch-refresh-rate-limits" \
-           "$TMPDIR_TEST/dispatch-tick-recover"
+           "$TMPDIR_TEST/dispatch-tick-recover" \
+           "$TMPDIR_TEST/dispatch-schedule-convergence-reseed"
 }
 
 tick_teardown() {
@@ -19739,7 +19749,7 @@ tick_teardown() {
   TMPDIR_TEST=""
   unset TICK_DECISION TICK_TOKEN TICK_SEL_RC TICK_MAT_RC \
     TICK_SEL_PRE TICK_MAT_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
-    DISPATCH_LOCK_FILE TICK_REFRESH_RC
+    DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -19820,6 +19830,85 @@ out=$(run_tick) && rc=0 || rc=$?
 assert_eq "issue: exit 0" "0" "$rc"
 assert_eq "issue: materialize argv" "707 queue --gap 2" \
   "$(cat "$TMPDIR_TEST/logs/materialize.log")"
+tick_teardown
+
+# --- #1453: convergence reseed armed on a propagate token (autonomous only) ---
+# On a `propagate` token from an AUTONOMOUS tick (no --manual, no explicit <N>),
+# dispatch-tick calls dispatch-schedule-convergence-reseed exactly once. The
+# autonomous-only guard keys on the $MANUAL/$ARG globals, NOT the decision string:
+# the explicit and --manual tests below set those globals through the real
+# invocation (an arg trips ARG; --manual trips MANUAL), mirroring the existing
+# arg-forward test.
+echo "Test: dispatch-tick autonomous issue + propagate → convergence reseed armed once (#1453)"
+tick_setup
+export TICK_DECISION="issue 707 2" TICK_TOKEN="propagate"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "converge-issue: exit 0" "0" "$rc"
+assert_eq "converge-issue: convergence script called exactly once" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/converge.log" | tr -d ' ')"
+tick_teardown
+
+echo "Test: dispatch-tick autonomous pr + propagate → convergence reseed armed once (#1453)"
+tick_setup
+export TICK_DECISION="pr 660 660-some-branch review 3" TICK_TOKEN="propagate"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "converge-pr: exit 0" "0" "$rc"
+assert_eq "converge-pr: convergence script called exactly once" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/converge.log" | tr -d ' ')"
+tick_teardown
+
+echo "Test: dispatch-tick explicit + propagate → convergence reseed NOT armed (autonomous-only) (#1453)"
+tick_setup
+export TICK_DECISION="explicit 55 1" TICK_TOKEN="propagate"
+out=$(run_tick '#55') && rc=0 || rc=$?
+assert_eq "converge-explicit: exit 0" "0" "$rc"
+assert_eq "converge-explicit: convergence script NOT called (ARG set)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/converge.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick --manual + propagate → convergence reseed NOT armed (autonomous-only) (#1453)"
+tick_setup
+export TICK_DECISION="issue 707 1" TICK_TOKEN="propagate"
+out=$(run_tick --manual) && rc=0 || rc=$?
+assert_eq "converge-manual: exit 0" "0" "$rc"
+assert_eq "converge-manual: convergence script NOT called (MANUAL set)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/converge.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick convergence reseed failure is best-effort → tick still exits 0 (#1453)"
+tick_setup
+export TICK_DECISION="issue 707 2" TICK_TOKEN="propagate" TICK_CONVERGE_RC=1
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "converge-besteffort: exit 0 despite arm failure" "0" "$rc"
+assert_eq "converge-besteffort: convergence script was called" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/converge.log" | tr -d ' ')"
+tick_teardown
+
+echo "Test: dispatch-tick concurrency-cap → convergence reseed NOT armed (#1453)"
+tick_setup
+export TICK_DECISION="concurrency-cap"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "converge-cap: exit 0" "0" "$rc"
+assert_eq "converge-cap: convergence script NOT called (no propagate branch)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/converge.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick drain → convergence reseed NOT armed (#1453)"
+tick_setup
+export TICK_DECISION="issue 707 1" TICK_TOKEN="drain"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "converge-drain: exit 0" "0" "$rc"
+assert_eq "converge-drain: convergence script NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/converge.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick drain target-done → convergence reseed NOT armed (#1453)"
+tick_setup
+export TICK_DECISION="issue 707 1" TICK_TOKEN="drain target-done"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "converge-drain-td: exit 0" "0" "$rc"
+assert_eq "converge-drain-td: convergence script NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/converge.log" ] && echo 1 || echo 0)"
 tick_teardown
 
 # --- terminal token routing: every recognized token → exit 0 -----------------
