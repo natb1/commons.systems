@@ -3320,6 +3320,62 @@ assert_eq "--top 3 descent skips parked leaf 5501 → 5500,5502" "$(printf 'issu
 assert_eq "--top 3 descent: parked leaf 5501 absent" "0" "$(printf '%s\n' "$result" | grep -c '^issue 5501$')"
 teardown
 
+# T4e. Mixed-phase root descent is not short-circuited by full-bucket drops
+#      (#1403). `root_recorded` counts only leaves actually INSERTED, so a root
+#      whose first leaves drop into an already-full bucket still descends to its
+#      other-phase leaf. Prior roots 6010, 6011 (no sub-issues → each its own
+#      plan leaf) fill the `plan` bucket to TOP=2. Root 6020 then descends three
+#      sub-issues in order: 6021, 6022 (both plan → both DROP into the full plan
+#      bucket) then 6023 (dispatch:planned → implement). With the fix the two
+#      plan drops do not advance `root_recorded`, so descent reaches 6023, which
+#      lands in the empty `implement` bucket; emission ranks implement above plan,
+#      so `--top 2` yields `issue 6023` then the oldest plan entry `issue 6010`.
+#      The pre-fix code increments `root_recorded` on every append (drops
+#      included): the two plan drops inflate it to TOP=2, the loop breaks before
+#      reaching 6023, and the output is `issue 6010\nissue 6011` — 6023 never
+#      appears. This test is RED against the pre-fix script and GREEN after it.
+echo "Test: --top 2 mixed-phase descent reaches the implement leaf past full-plan drops"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":6010,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6011,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6020,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6023,"createdAt":"2024-01-04T00:00:00Z","labels":[{"name":"dispatch:planned"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":6021},{"number":6022},{"number":6023}]\n' > "$STUB_DIR/subissues-6020.json"
+printf '{"title":"Issue 6021","body":"","comments":[],"number":6021,"state":"OPEN"}\n' > "$STUB_DIR/issue-6021.json"
+printf '{"title":"Issue 6022","body":"","comments":[],"number":6022,"state":"OPEN"}\n' > "$STUB_DIR/issue-6022.json"
+printf '{"title":"Issue 6023","body":"","comments":[],"number":6023,"state":"OPEN"}\n' > "$STUB_DIR/issue-6023.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 2)
+assert_eq "--top 2 mixed-phase: implement leaf 6023 reached past full-plan drops" "$(printf 'issue 6023\nissue 6010')" "$result"
+assert_eq "--top 2 mixed-phase: implement leaf 6023 present exactly once" "1" "$(printf '%s\n' "$result" | grep -c '^issue 6023$')"
+teardown
+
+# T4f. TOP=1 byte-parity freeze (#1403, criterion #3). At TOP=1 the fix keeps the
+#      historical short-circuit: a root that hits a full bucket on a landed-append
+#      attempt stops descending, so `--top 1` stays byte-identical to the pre-fix
+#      loop AND to the plain no-flag call. Prior root 6110 (its own plan leaf)
+#      fills the `plan` bucket to TOP=1. Root 6120 descends 6121 (plan → DROPS
+#      into the full plan bucket) then 6122 (dispatch:planned → implement). The
+#      `(( TOP == 1 )) && break` freeze breaks on the first dropped plan leaf, so
+#      6122 is never reached and the output is `issue 6110`. This is the lock on
+#      the freeze: a naive fix that gated the counter on insert WITHOUT the
+#      TOP==1 break would descend to 6122 and emit `issue 6122` (implement
+#      outranks plan), changing the single TOP=1 winner. RED against that naive
+#      variant; GREEN with the freeze (and against the pre-fix code, which it must
+#      match byte-for-byte).
+echo "Test: --top 1 freeze keeps byte-parity, implement leaf not reached past a full-plan drop"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":6110,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6120,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6122,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"dispatch:planned"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":6121},{"number":6122}]\n' > "$STUB_DIR/subissues-6120.json"
+printf '{"title":"Issue 6121","body":"","comments":[],"number":6121,"state":"OPEN"}\n' > "$STUB_DIR/issue-6121.json"
+printf '{"title":"Issue 6122","body":"","comments":[],"number":6122,"state":"OPEN"}\n' > "$STUB_DIR/issue-6122.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+plain=$("$TMPDIR_TEST/dispatch-select-target")
+top1=$("$TMPDIR_TEST/dispatch-select-target" --top 1)
+assert_eq "--top 1 freeze: plan winner 6110 (implement leaf not reached)" "issue 6110" "$top1"
+assert_eq "--top 1 freeze: byte-parity with no-flag call" "$plain" "$top1"
+assert_eq "--top 1 freeze: implement leaf 6122 absent" "0" "$(printf '%s\n' "$top1" | grep -c '^issue 6122$')"
+teardown
+
 # T5. --top 1 byte-parity: on a representative fixture, `--top 1` output is
 #     byte-identical to the plain (no-flag) call. Guards that the default path is
 #     unchanged for every existing caller.
