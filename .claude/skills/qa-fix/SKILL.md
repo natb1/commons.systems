@@ -45,22 +45,30 @@ The QA pass covers **public data only** — documents present in both the QA ser
 
 ## Idempotency preamble
 
-Before running any step, resolve the PR number and its labels from the
-current branch (use `dangerouslyDisableSandbox: true` — `gh` needs network):
+Before running any step, resolve the PR number and its labels via
+`dispatch-context-pack` (use `dangerouslyDisableSandbox: true` — it calls `gh`).
+The branch name encodes the issue number (`<N>-…`), so derive `N` first:
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-PR_JSON=$(gh pr view "$BRANCH" --json number,labels)
-PR_NUM=$(jq -r .number <<<"$PR_JSON")
-jq -r '.labels[].name' <<<"$PR_JSON"
+N="${BRANCH%%-*}"
+.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr
 ```
 
-A here-string (`<<<`) is used, not `echo "$PR_JSON" | jq`, because zsh `echo`
-un-escapes `\t`/`\n` in the JSON and injects raw control chars `jq` rejects — see
-`.claude/rules/shell-json.md`.
+Read `PR_NUM` and the labels line from the `=== PR ===` section of the output.
+If the output shows `PR: none`, stop with a clear error — qa-fix requires an
+open PR and should not have been dispatched here. If it shows `PR #<num>`, that
+is `PR_NUM`.
+
+qa-fix adopts `--pr` only and does **not** add `--diff` here: the only diff use
+in this skill is Step 1's local `git diff --name-only origin/main...HEAD` for
+browser-component detection — a free, local, name-only call that must run after
+Step 0.5's `origin/main` merge. A pack `--diff` here would be a redundant
+post-merge call duplicating that local diff, and this pre-merge idempotency call
+cannot carry a post-merge diff anyway.
 
 `PR_NUM` is carried through to Steps 4, 5, and 6 — do not
-re-resolve. If the PR already carries the `dispatch:qa-done` label — an
+re-resolve. If the labels line includes `dispatch:qa-done` — an
 interrupted prior run — **skip Steps 0.5–6 entirely** and return; the label is
 this skill's terminal action and is already applied, so re-entry is a true no-op.
 Otherwise run all steps in order.
