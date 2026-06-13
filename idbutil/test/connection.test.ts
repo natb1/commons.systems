@@ -173,6 +173,78 @@ describe("openDb", () => {
     await tab1.closeDb();
     await tab2.closeDb();
   });
+
+  it("openDb times out and nulls the cache when a blocking connection never closes", async () => {
+    const name = uniqueDbName();
+    // Tab 1 holds a v1 connection and refuses to close — permanent block.
+    const tab1 = createDbConnection({
+      name,
+      version: 1,
+      onUpgrade(db) { db.createObjectStore("s"); },
+    });
+    const db1 = await tab1.openDb();
+    db1.onversionchange = () => {}; // never closes → permanent block
+
+    const tab2 = createDbConnection({
+      name,
+      version: 2,
+      blockedTimeoutMs: 20,
+      onUpgrade(db) {
+        if (!db.objectStoreNames.contains("s2")) db.createObjectStore("s2");
+      },
+    });
+
+    // p1 must reject with the timeout error message containing the DB name
+    // and the "Close other tabs" guidance.
+    const p1 = tab2.openDb();
+    await expect(p1).rejects.toThrow(name);
+    await expect(p1).rejects.toThrow("Close other tabs");
+
+    // Prove dbPromise was nulled: a subsequent openDb() call must return a
+    // fresh promise (not p1).
+    const p2 = tab2.openDb();
+    expect(p2).not.toBe(p1); // fresh promise == dbPromise was nulled
+
+    // fake-indexeddb does not re-fire onblocked for p2's fresh open while the DB
+    // is already blocked, so p2 has no timeout timer of its own. Close tab1 to
+    // unblock; p2's request then completes the upgrade and resolves to a v2
+    // connection, which we close.
+    await tab1.closeDb();
+    await p2.then((db) => db.close(), () => {});
+  });
+
+  it("onblocked timer is cancelled when the open succeeds before the deadline", async () => {
+    const name = uniqueDbName();
+    // Tab 1 holds a v1 connection. It will close after one tick, briefly
+    // blocking tab2's upgrade before unblocking.
+    const tab1 = createDbConnection({
+      name,
+      version: 1,
+      onUpgrade(db) { db.createObjectStore("s"); },
+    });
+    const db1 = await tab1.openDb();
+    db1.onversionchange = () => {
+      setTimeout(() => db1.close(), 0);
+    };
+
+    // Tab 2 uses a generous blockedTimeoutMs. The timer must be cancelled on
+    // onsuccess, so tab2 resolves to a v2 database rather than timing out.
+    const tab2 = createDbConnection({
+      name,
+      version: 2,
+      blockedTimeoutMs: 200,
+      onUpgrade(db) {
+        if (!db.objectStoreNames.contains("s2")) db.createObjectStore("s2");
+      },
+    });
+
+    const db2 = await tab2.openDb();
+    expect(db2).toBeInstanceOf(IDBDatabase);
+    expect(db2.version).toBe(2);
+
+    await tab1.closeDb();
+    await tab2.closeDb();
+  });
 });
 
 describe("closeDb", () => {
