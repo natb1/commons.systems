@@ -735,8 +735,23 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
     # CI is the sole reason this item is unselectable. PR_SORTED is oldest-first,
     # so the first recorded candidate is the oldest.
     if [[ "$PRIORITY_ONLY" == "true" && -z "$WAITING_NUM" ]]; then
-      local_issue="${pr_branch%%-*}"
-      if [[ -n "$local_issue" && -z "${EXCLUDED[$local_issue]:-}" ]] \
+      # The reseed target must be the canonical priority issue, NOT the PR
+      # branch prefix (#1444). A branch may diverge from its closing-issue
+      # number (e.g. `100-fix` closing priority issue `200`), and a branch with
+      # no `<N>-` prefix yields a non-numeric value the reseed sink rejects —
+      # silently stranding the very priority item this path exists to rescue.
+      # Resolve the priority-labeled closing issue from `pr_closing` (already in
+      # scope), reusing ISSUE_LABELS_JSON exactly as pr_combined_labels does. The
+      # line-712 gate guarantees at least one closing issue carries `priority` in
+      # --priority-only mode, and dispatch-find-pr resolves issue→PR via the
+      # issue's closedByPullRequestsReferences fallback, so the priority issue
+      # number is the resolvable, correct target.
+      local_issue=$(printf '%s' "$pr_closing" \
+        | jq -r --argjson map "$ISSUE_LABELS_JSON" \
+          'map(.number | tostring
+               | select((($map[.] // []) | any(.name == "priority"))))
+           | .[0] // empty')
+      if [[ "$local_issue" =~ ^[0-9]+$ && -z "${EXCLUDED[$local_issue]:-}" ]] \
          && ! pr_issue_office_hours_parked "$local_issue" \
          && ! pr_blocked_by_open "$pr_closing"; then
         WAITING_NUM="$local_issue"
