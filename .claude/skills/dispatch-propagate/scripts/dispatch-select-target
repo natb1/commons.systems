@@ -651,17 +651,20 @@ bucket_count() {
 # holds fewer than TOP entries (the per-bucket cap). An empty bucket is set to
 # the bare entry (no leading newline), so a TOP=1 bucket expands to exactly the
 # entry — preserving the former single-entry map's byte layout for the emission
-# path.
+# path. Returns 0 when the entry is inserted, 1 when the bucket is already at TOP
+# and the entry is dropped (the caller observes this to decide whether the entry
+# actually landed).
 bucket_append() {
   local -n _ba_ref="$1"
   local _ba_key="$2" _ba_entry="$3"
-  (( $(bucket_count "$1" "$_ba_key") >= TOP )) && return 0
+  (( $(bucket_count "$1" "$_ba_key") >= TOP )) && return 1
   local _ba_cur="${_ba_ref[$_ba_key]:-}"
   if [[ -z "$_ba_cur" ]]; then
     _ba_ref[$_ba_key]="$_ba_entry"
   else
     _ba_ref[$_ba_key]="$_ba_cur"$'\n'"$_ba_entry"
   fi
+  return 0
 }
 
 # group_emittable_count <category> <priority-bit> — total entries the emission
@@ -814,7 +817,7 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   pr_cat=$(category_of_labels "$pr_combined")
   pr_pri=$(has_priority_in_labels "$pr_combined")
   pr_key="$pr_cat|$pr_pri|$phase"
-  bucket_append FIRST_PR "$pr_key" "$pr_num $pr_branch"
+  bucket_append FIRST_PR "$pr_key" "$pr_num $pr_branch" || true
 done <<< "$PR_SORTED"
 
 if [[ "$QA_MODE" == "true" ]]; then
@@ -1017,9 +1020,16 @@ while IFS=$'\t' read -r issue_num issue_pri issue_catrank issue_cat; do
       leaf_phase=plan
       [[ -n "${ISSUE_PLANNED[$leaf]:-}" ]] && leaf_phase=implement
       leaf_bucket="$issue_cat|$issue_pri|$leaf_phase"
-      bucket_append FIRST_ISSUE "$leaf_bucket" "$leaf"
       root_excl["$leaf"]=1
-      root_recorded=$(( root_recorded + 1 ))
+      if bucket_append FIRST_ISSUE "$leaf_bucket" "$leaf"; then
+        root_recorded=$(( root_recorded + 1 ))
+      else
+        # Bucket already at TOP — this leaf was dropped. Criterion #3 freezes
+        # TOP=1: a root that hits a full bucket on a landed-append attempt stops
+        # descending, byte-identical to the pre-fix loop. TOP>1 keeps descending
+        # past the drop to this root's other-phase leaves (#1403).
+        (( TOP == 1 )) && break
+      fi
     else
       trace_status=$?
       [[ "$trace_status" -eq 2 ]] && break
