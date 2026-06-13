@@ -233,7 +233,7 @@ describe("SpreadController", () => {
 
     const { controller } = makeController({ renderPageInto });
 
-    // enter(2) => index 1, two-page spread {left:2,right:3}; exercises both slots.
+    // enter(2) => index 1, two-page spread {left:2,right:3}; only the left slot is reached before leave() cancels the render.
     controller.enter(2);
 
     // Start a render that appends one left child then hangs on left renderPageInto.
