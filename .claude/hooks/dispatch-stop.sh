@@ -106,6 +106,7 @@ ISSUE_NUM="${JOB_NAME%%-*}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
+source "$SCRIPTS/lib.sh"
 
 # Release this worker's reservation marker (#1454). The marker is named by the
 # worktree basename, which equals JOB_NAME (the session --name). Clearing it the
@@ -163,6 +164,11 @@ spawn_tick() {
     || echo "[dispatch-stop] WARNING: dispatch-spawn-tick failed" >&2
 }
 
+spawn_sweep() {
+  "$SCRIPTS/dispatch-spawn-sweep" >/dev/null 2>&1 \
+    || echo "[dispatch-stop] WARNING: dispatch-spawn-sweep failed" >&2
+}
+
 self_close() {
   "$SCRIPTS/dispatch-self-close" >/dev/null 2>&1 \
     || echo "[dispatch-stop] WARNING: dispatch-self-close failed" >&2
@@ -178,6 +184,7 @@ self_close() {
 # here.) Checked BEFORE the PR-centric branches.
 if [ -f "$CLAUDE_JOB_DIR/parse-job-done" ]; then
   spawn_tick
+  spawn_sweep
   self_close
   exit 0
 fi
@@ -189,8 +196,7 @@ PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
 # phase derivation below via DISPATCH_PR_LIST, avoiding a redundant `gh pr list`
 # per predicate. On fetch failure DISPATCH_PR_LIST stays empty and each script
 # falls back to its own self-fetch.
-DISPATCH_PR_LIST=$(gh pr list --state open \
-  --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable 2>/dev/null) \
+DISPATCH_PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable" 2>/dev/null) \
   || DISPATCH_PR_LIST=""
 export DISPATCH_PR_LIST
 
@@ -227,6 +233,7 @@ if ! "$SCRIPTS/dispatch-ci-ready" "$ISSUE_NUM" >/dev/null 2>&1; then
   if [ -n "$MARKER_PHASE" ]; then
     # Marker present (see the block above): the phase completed and only CI
     # is still running — self-close so the session does not leak idle.
+    spawn_sweep
     self_close
   fi
   # No marker: a genuine mid-phase exit during a CI restart — hand back to
@@ -251,6 +258,7 @@ if [ -n "$CURRENT_PHASE" ] && [ "$MARKER_PHASE" != "$CURRENT_PHASE" ]; then
   # Branch B — phase advanced.
   strip_office_hours_label
   spawn_tick
+  spawn_sweep
   self_close
   exit 0
 fi
@@ -268,6 +276,7 @@ case "$CURRENT_PHASE" in
         # pending. Self-close so the session does not leak idle holding its
         # worktree; the next tick re-runs the fix-* phase or escalates at the cap.
         spawn_tick
+        spawn_sweep
         self_close
         exit 0
       fi
@@ -279,6 +288,7 @@ case "$CURRENT_PHASE" in
       # re-seed the chain rather than parking — the marker being present means
       # the fix-* skill completed successfully.
       spawn_tick
+      spawn_sweep
       self_close
       exit 0
     fi
