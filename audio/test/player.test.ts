@@ -382,6 +382,20 @@ describe("initPlayer", () => {
       audioEl.dispatchEvent(new Event("ended"));
       expect(playlistEl.querySelector(".playlist-empty")).not.toBeNull();
     });
+
+    it("removes error event listener", () => {
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(track1);
+      player.destroy();
+
+      mockLogError.mockClear();
+      mockRemoveFile.mockClear();
+
+      // Dispatching error after destroy should not log or remove stale state
+      audioEl.dispatchEvent(new Event("error"));
+      expect(mockLogError).not.toHaveBeenCalled();
+      expect(mockRemoveFile).not.toHaveBeenCalled();
+    });
   });
 
   describe("generation token", () => {
