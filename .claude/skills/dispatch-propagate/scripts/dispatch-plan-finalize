@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# dispatch-plan-finalize — compose the three plan-completion sub-steps in the
+# correct order, closing the crash window that issue #1230 describes.
+#
+# Usage: dispatch-plan-finalize <issue-num>   (plan markdown on STDIN)
+#
+# Runs the three sub-steps in this fixed order:
+#   1. dispatch-write-plan <issue-num>     — persist the plan comment (durable)
+#   2. dispatch-mark-complete --phase plan — write the per-session marker (ephemeral)
+#   3. dispatch-apply-planned <issue-num>  — apply the dispatch:planned label (durable)
+#
+# Load-bearing invariant: the marker (step 2) is written BEFORE the label
+# (step 3). The durable label's presence therefore guarantees the ephemeral
+# per-session marker was also written in the same session. If a session crashes
+# between step 2 and step 3, the label is absent — dispatch-phase returns
+# "plan" and the issue is recoverable via office-hours plan-clarification. The
+# previous (reversed) order left the label set but the marker gone, causing
+# dispatch-phase to derive "implement" (no PR) and dead-end in office-hours
+# deviation-review, which never re-runs the plan.
+#
+# Each sub-step is individually idempotent: dispatch-write-plan finds or
+# updates the existing sentinel comment (never stacks a second); dispatch-
+# mark-complete does an atomic tempfile+mv and no-ops when CLAUDE_JOB_DIR is
+# unset; dispatch-apply-planned uses --add-label (naturally idempotent). The
+# whole sequence is therefore safe to re-run.
+#
+# A missing arg or non-numeric issue-num is a clear error, not a fallback
+# (exit 2). Empty STDIN is not re-validated here — dispatch-write-plan already
+# rejects it with exit 2, which propagates through set -euo pipefail.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+N="${1:-}"
+if [[ $# -ne 1 || -z "$N" ]]; then
+  echo "dispatch-plan-finalize: exactly one issue-num argument is required" >&2
+  echo "usage: dispatch-plan-finalize <issue-num>   (plan markdown on STDIN)" >&2
+  exit 2
+fi
+if [[ ! "$N" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-plan-finalize: issue-num must be a positive integer, got: $N" >&2
+  echo "usage: dispatch-plan-finalize <issue-num>   (plan markdown on STDIN)" >&2
+  exit 2
+fi
+
+CONTENT="$(cat)"
+
+# Step 1: persist the plan comment — durable, idempotent (find-or-update).
+printf '%s' "$CONTENT" | "$SCRIPT_DIR/dispatch-write-plan" "$N"
+
+# Step 2: write the per-session phase-completed marker — BEFORE the label.
+"$SCRIPT_DIR/dispatch-mark-complete" --phase plan
+
+# Step 3: apply the dispatch:planned label — LAST action.
+"$SCRIPT_DIR/dispatch-apply-planned" "$N"
