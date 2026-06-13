@@ -166,6 +166,91 @@ describe("SpreadController", () => {
     }).not.toThrow();
   });
 
+  it("concurrent render() calls do not stack children in a slot (#1279)", async () => {
+    // renderPageInto appends its child synchronously (as pdf.ts appends its
+    // wrapper before any await) then awaits. A render() superseded after its
+    // left renderPageInto must bail before calling the right renderPageInto and
+    // before its tail continues — otherwise the stale render appends a second
+    // child into a slot the winning render already cleared and repopulated.
+    let resolveFirstLeft: (() => void) | null = null;
+    const renderPageInto = vi
+      .fn()
+      .mockImplementationOnce((_page: number, target: HTMLElement) => {
+        // First (stale) left render: append synchronously, then hang.
+        target.appendChild(document.createElement("img"));
+        return new Promise<void>(resolve => {
+          resolveFirstLeft = resolve;
+        });
+      })
+      .mockImplementation(async (_page: number, target: HTMLElement) => {
+        target.appendChild(document.createElement("img"));
+      });
+
+    const { controller, canvasWrap } = makeController({ renderPageInto });
+
+    // enter(2) => index 1, two-page spread {left:2,right:3}; exercises both slots.
+    controller.enter(2);
+
+    // First render appends one left child, then hangs on that left renderPageInto.
+    const first = controller.render();
+
+    // Supersede with a second render that clears both slots and completes fully.
+    await controller.render();
+
+    // Release the stale first render last; its generation guard must bail before
+    // calling the right renderPageInto or re-entering the cleared slots.
+    resolveFirstLeft!();
+    await first;
+
+    const leftEl = canvasWrap.querySelector(".spread-left") as HTMLElement;
+    const rightEl = canvasWrap.querySelector(".spread-right") as HTMLElement;
+    // Each slot holds exactly one rendered child despite the overlapping renders.
+    expect(leftEl.querySelectorAll("img")).toHaveLength(1);
+    expect(rightEl.querySelectorAll("img")).toHaveLength(1);
+    // The stale render never reached its right renderPageInto: only the two left
+    // calls (stale + winner) plus the winner's one right call ran.
+    expect(renderPageInto).toHaveBeenCalledTimes(3);
+    // Latest spread index (1 => spread {2,3}) is reflected.
+    expect(controller.position).toBe("2");
+  });
+
+  it("leave() during render() cancels the in-flight render before the right slot (#1383)", async () => {
+    // leave() bumps renderGen, so an in-flight render() that is awaiting its
+    // left renderPageInto must bail before calling the right renderPageInto.
+    let resolveFirstLeft: (() => void) | null = null;
+    const renderPageInto = vi
+      .fn()
+      .mockImplementationOnce((_page: number, target: HTMLElement) => {
+        // First (stale) left render: append synchronously, then hang.
+        target.appendChild(document.createElement("img"));
+        return new Promise<void>(resolve => {
+          resolveFirstLeft = resolve;
+        });
+      })
+      .mockImplementation(async (_page: number, target: HTMLElement) => {
+        target.appendChild(document.createElement("img"));
+      });
+
+    const { controller } = makeController({ renderPageInto });
+
+    // enter(2) => index 1, two-page spread {left:2,right:3}; only the left slot is reached before leave() cancels the render.
+    controller.enter(2);
+
+    // Start a render that appends one left child then hangs on left renderPageInto.
+    const first = controller.render();
+
+    // leave() bumps renderGen and removes the spread slot elements.
+    controller.leave();
+
+    // Release the stale render last; its generation guard must bail before
+    // calling the right renderPageInto.
+    resolveFirstLeft!();
+    await first;
+
+    // Only the hung left renderPageInto call ran; the right was never reached.
+    expect(renderPageInto).toHaveBeenCalledTimes(1);
+  });
+
   it("invokes onRenderError when a resize-triggered render rejects (#616 guard)", async () => {
     vi.useFakeTimers();
 

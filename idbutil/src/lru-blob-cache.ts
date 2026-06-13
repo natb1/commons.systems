@@ -46,6 +46,7 @@ export interface LruBlobCache {
     key: string,
   ): Promise<T | null>;
   putEntry(key: string, data: ArrayBuffer | Uint8Array): Promise<void>;
+  deleteEntry(key: string): Promise<void>;
   clearCache(): Promise<void>;
   closeDb(): Promise<void>;
   getStats(): Promise<{ entryCount: number; totalBytes: number }>;
@@ -54,6 +55,11 @@ export interface LruBlobCache {
 
 export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
   const maxBytes = config.maxBytes ?? DEFAULT_MAX_BYTES;
+  if (!Number.isInteger(maxBytes) || maxBytes <= 0) {
+    throw new Error(
+      `LruBlobCache: maxBytes must be a positive integer, got ${maxBytes}`,
+    );
+  }
 
   const { openDb, closeDb } = createDbConnection({
     name: config.name,
@@ -87,15 +93,24 @@ export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
     };
   }
 
-  async function getTotalSize(db: IDBDatabase): Promise<number> {
+  async function getTotalAndOldSize(
+    db: IDBDatabase,
+    key: string,
+  ): Promise<{ totalSize: number; oldSize: number }> {
     return new Promise((resolve, reject) => {
       const tx = db.transaction(META_STORE, "readonly");
-      const req = tx.objectStore(META_STORE).get(TOTAL_KEY);
-      req.onsuccess = () => {
-        const entry = req.result as MetaEntry | undefined;
-        resolve(entry ? entry.size : 0);
+      const store = tx.objectStore(META_STORE);
+      const totalReq = store.get(TOTAL_KEY);
+      const oldReq = store.get(key);
+      tx.oncomplete = () => {
+        const totalEntry = totalReq.result as MetaEntry | undefined;
+        const oldEntry = oldReq.result as MetaEntry | undefined;
+        resolve({
+          totalSize: totalEntry ? totalEntry.size : 0,
+          oldSize: oldEntry ? oldEntry.size : 0,
+        });
       };
-      req.onerror = () => reject(req.error);
+      tx.onerror = () => reject(tx.error);
     });
   }
 
@@ -121,10 +136,11 @@ export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
    * the subsequent put in the caller (putEntry); concurrent writes may briefly
    * exceed the cap, which is acceptable for a best-effort cache.
    */
-  async function evictIfNeeded(db: IDBDatabase, incomingSize: number): Promise<void> {
-    const totalSize = await getTotalSize(db);
+  async function evictIfNeeded(db: IDBDatabase, key: string, incomingSize: number): Promise<void> {
+    const { totalSize, oldSize } = await getTotalAndOldSize(db, key);
+    const delta = incomingSize - oldSize;
 
-    if (totalSize + incomingSize <= maxBytes) return;
+    if (totalSize + delta <= maxBytes) return;
 
     const evictTx = db.transaction([DATA_STORE, META_STORE], "readwrite");
     const metaStore = evictTx.objectStore(META_STORE);
@@ -132,7 +148,7 @@ export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
     const evictIndex = metaStore.index("lastAccessed");
 
     await new Promise<void>((resolve, reject) => {
-      let remaining = totalSize + incomingSize - maxBytes;
+      let remaining = totalSize + delta - maxBytes;
       let evictedSize = 0;
       const req = evictIndex.openCursor();
       req.onsuccess = () => {
@@ -146,7 +162,7 @@ export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
           return;
         }
         const entry = cursor.value as MetaEntry;
-        if (entry.key === TOTAL_KEY) { cursor.continue(); return; }
+        if (entry.key === TOTAL_KEY || entry.key === key) { cursor.continue(); return; }
         remaining -= entry.size;
         evictedSize += entry.size;
         dataStore.delete(entry.key);
@@ -178,8 +194,13 @@ export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
   }
 
   async function putEntry(key: string, data: ArrayBuffer | Uint8Array): Promise<void> {
+    if (data.byteLength > maxBytes) {
+      throw new Error(
+        `Blob (${data.byteLength} bytes) exceeds cache maxBytes (${maxBytes}); not cached`,
+      );
+    }
     const db = await openDb();
-    await evictIfNeeded(db, data.byteLength);
+    await evictIfNeeded(db, key, data.byteLength);
     return new Promise((resolve, reject) => {
       const tx = db.transaction([DATA_STORE, META_STORE], "readwrite");
       const dataStore = tx.objectStore(DATA_STORE);
@@ -198,6 +219,38 @@ export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
           const totalEntry = totalReq.result as MetaEntry | undefined;
           const currentTotal = totalEntry ? totalEntry.size : 0;
           metaStore.put({ key: TOTAL_KEY, size: currentTotal - oldSize + data.byteLength, lastAccessed: 0 });
+        };
+        totalReq.onerror = () => reject(totalReq.error);
+      };
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function deleteEntry(key: string): Promise<void> {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([DATA_STORE, META_STORE], "readwrite");
+      const dataStore = tx.objectStore(DATA_STORE);
+      const metaStore = tx.objectStore(META_STORE);
+
+      const existingReq = metaStore.get(key);
+      existingReq.onsuccess = () => {
+        const existing = existingReq.result as MetaEntry | undefined;
+        // Absent: no-op. Never decrement __total__ by a size we did not
+        // remove, or the sentinel drifts.
+        if (!existing) return;
+        const deletedSize = existing.size;
+
+        dataStore.delete(key);
+        metaStore.delete(key);
+
+        const totalReq = metaStore.get(TOTAL_KEY);
+        totalReq.onsuccess = () => {
+          const totalEntry = totalReq.result as MetaEntry | undefined;
+          const currentTotal = totalEntry ? totalEntry.size : 0;
+          metaStore.put({ key: TOTAL_KEY, size: Math.max(0, currentTotal - deletedSize), lastAccessed: 0 });
         };
         totalReq.onerror = () => reject(totalReq.error);
       };
@@ -240,5 +293,5 @@ export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
     });
   }
 
-  return { getEntry, putEntry, clearCache, closeDb, getStats, maxBytes };
+  return { getEntry, putEntry, deleteEntry, clearCache, closeDb, getStats, maxBytes };
 }

@@ -3,7 +3,7 @@
 # Usage: dispatch-phase <issue-num|branch>
 #
 # Prints exactly one actionable phase name to stdout:
-#   plan | implement | verify | qa | review | done
+#   plan | implement | fix-conflicts | fix-checks | qa | review | done
 #
 # This script answers ONLY "which phase skill runs." It does NOT report CI
 # readiness. When a draft PR's CI has no verdict yet (checks still in progress),
@@ -32,7 +32,7 @@
 #     caller (dispatch-select-target passes it to avoid a redundant
 #     gh pr list per PR). When set and non-empty, it is used in place of a
 #     self-issued gh pr list. Must include the fields
-#     number,headRefName,isDraft,statusCheckRollup,labels.
+#     number,headRefName,isDraft,statusCheckRollup,labels,mergeable.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -49,7 +49,7 @@ fi
 if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
   PR_LIST="$DISPATCH_PR_LIST"
 else
-  PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+  PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
 fi
 
 # Find the matching PR.
@@ -98,14 +98,20 @@ if [[ "$IS_DRAFT" == "false" ]]; then
   exit 0
 fi
 
+# Draft PR — check mergeable state first (highest-priority outcome).
+# CONFLICTING → fix-conflicts immediately; UNKNOWN falls through (GitHub
+# recomputes it asynchronously; the next tick resolves it — self-healing).
+MERGEABLE=$(printf '%s' "$PR" | jq -r '.mergeable // "UNKNOWN"')
+if [[ "$MERGEABLE" == "CONFLICTING" ]]; then echo "fix-conflicts"; exit 0; fi
+
 # Draft PR — classify CI via statusCheckRollup.
 ROLLUP=$(printf '%s' "$PR" | jq '.statusCheckRollup')
 VERDICT=$(dispatch_classify_rollup "$ROLLUP")
 
-# A concluded failure is actionable: it resolves to verify (a mixed rollup with
+# A concluded failure is actionable: it resolves to fix-checks (a mixed rollup with
 # some failing and some pending also classifies as failing — failure wins).
 if [[ "$VERDICT" == "failing" ]]; then
-  echo "verify"
+  echo "fix-checks"
   exit 0
 fi
 
@@ -117,9 +123,22 @@ if [[ "$VERDICT" == "pending" ]]; then
 fi
 
 # VERDICT == passing — CI is green; map the highest dispatch:* label to the next phase.
-# The single review phase is terminal: dispatch:qa-done maps to "review".
-# dispatch:reviewed is a /review-fix re-entry marker — it maps back to "review";
-# the skill is idempotent and just finishes "gh pr ready".
+# dispatch:reviewed is the review-COMPLETE signal, applied by /review-fix on a
+# clean pass — NOT a re-entry marker. The review phase is terminal once
+# dispatch:reviewed is present, so a reviewed draft PR derives to "done".
+# draft→ready promotion is owned by the router's dispatch-reconcile-ready on a
+# later tick (once CI is passing and mergeable == MERGEABLE), NOT by /review-fix
+# — /review-fix no longer runs "gh pr ready". Returning "done" composes with the
+# worker Stop hook (Branch B self-close) and the spawn boundary
+# (dispatch-materialize-spawn's "target-done" refusal), so a reviewed draft PR
+# self-closes its worker and is not re-selected for a phase skill.
+#
+# A FAILING reviewed PR never reaches this passing-CI mapping: the
+# failing-verdict branch above already returned "fix-checks", and CONFLICTING
+# returned "fix-conflicts" — so a PR demoted back to draft on CI regression
+# routes to the fixer via those earlier branches, not here. dispatch:qa-done
+# still maps to the still-actionable "review" phase (qa complete, review not yet
+# run).
 #
 # In-flight legacy tolerance: an open draft PR may still carry
 # dispatch:code-reviewed or dispatch:security-reviewed from the old three-phase
@@ -127,9 +146,9 @@ fi
 # pass instead of stalling on an orphaned label.
 LABELS=$(printf '%s' "$PR" | jq -r '[.labels[].name | select(startswith("dispatch:"))] | join(" ")')
 
-if echo "$LABELS" | grep -qF "dispatch:security-reviewed"; then
-  echo "review"
-elif echo "$LABELS" | grep -qF "dispatch:reviewed"; then
+if echo "$LABELS" | grep -qF "dispatch:reviewed"; then
+  echo "done"
+elif echo "$LABELS" | grep -qF "dispatch:security-reviewed"; then
   echo "review"
 elif echo "$LABELS" | grep -qF "dispatch:code-reviewed"; then
   echo "review"

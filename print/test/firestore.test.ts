@@ -106,6 +106,7 @@ describe("getPublicMedia", () => {
         groupId: null,
         memberEmails: ["user@example.com"],
         addedAt: "2026-01-02T00:00:00Z",
+        origin: "cloud",
       },
       {
         id: "doc-1",
@@ -119,6 +120,7 @@ describe("getPublicMedia", () => {
         groupId: null,
         memberEmails: ["user@example.com"],
         addedAt: "2026-01-01T00:00:00Z",
+        origin: "cloud",
       },
     ]);
   });
@@ -380,6 +382,7 @@ describe("getMediaItem", () => {
       groupId: null,
       memberEmails: ["user@example.com"],
       addedAt: "2026-01-01T00:00:00Z",
+      origin: "cloud",
     });
   });
 

@@ -2,6 +2,11 @@ interface DbConnectionConfig {
   name: string;
   version: number;
   onUpgrade: (db: IDBDatabase, oldVersion: number) => void;
+  /**
+   * Bounds how long an open waits for a blocking connection to close before
+   * rejecting. Defaults to 30000 ms.
+   */
+  blockedTimeoutMs?: number;
 }
 
 /**
@@ -19,24 +24,60 @@ export function createDbConnection(config: DbConnectionConfig): {
   if (!Number.isInteger(config.version) || config.version < 1) {
     throw new Error(`DbConnectionConfig.version must be a positive integer, got ${config.version}`);
   }
+  if (
+    config.blockedTimeoutMs !== undefined &&
+    (typeof config.blockedTimeoutMs !== "number" ||
+      !Number.isFinite(config.blockedTimeoutMs) ||
+      config.blockedTimeoutMs <= 0)
+  ) {
+    throw new Error(
+      `DbConnectionConfig.blockedTimeoutMs must be a positive number, got ${config.blockedTimeoutMs}`,
+    );
+  }
+  const blockedTimeoutMs = config.blockedTimeoutMs ?? 30000;
   let dbPromise: Promise<IDBDatabase> | null = null;
 
   function openDb(): Promise<IDBDatabase> {
     if (!dbPromise) {
       dbPromise = new Promise((resolve, reject) => {
+        let upgradeError: unknown;
+        let blockedTimer: ReturnType<typeof setTimeout> | undefined;
+        let settledByTimeout = false;
         const request = indexedDB.open(config.name, config.version);
         request.onupgradeneeded = (event) => {
-          config.onUpgrade(request.result, event.oldVersion);
+          try {
+            config.onUpgrade(request.result, event.oldVersion);
+          } catch (err) {
+            upgradeError = err;
+            request.transaction?.abort();
+          }
         };
         request.onsuccess = () => {
-          request.result.onclose = () => { dbPromise = null; };
-          resolve(request.result);
+          clearTimeout(blockedTimer);
+          if (settledByTimeout) {
+            request.result.close();
+            return;
+          }
+          const db = request.result;
+          db.onclose = () => { dbPromise = null; };
+          db.onversionchange = () => { db.close(); dbPromise = null; };
+          resolve(db);
         };
         request.onblocked = () => {
-          dbPromise = null;
-          reject(new Error("Database upgrade blocked. Close other tabs using this app and try again."));
+          console.warn(
+            `IndexedDB upgrade of "${config.name}" is blocked by another connection; waiting for it to close.`,
+          );
+          if (blockedTimer === undefined) {
+            blockedTimer = setTimeout(() => {
+              settledByTimeout = true;
+              dbPromise = null;
+              reject(new Error(
+                `IndexedDB upgrade of "${config.name}" timed out waiting for another tab to close its connection. Close other tabs using this app and retry.`,
+              ));
+            }, blockedTimeoutMs);
+          }
         };
-        request.onerror = () => { dbPromise = null; reject(request.error); };
+        request.onerror = () => { clearTimeout(blockedTimer); dbPromise = null; reject(upgradeError ?? request.error); };
       });
     }
     return dbPromise;

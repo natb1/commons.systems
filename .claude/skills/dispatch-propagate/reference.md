@@ -69,12 +69,13 @@ later at `dispatch-resolve-worktree`, wasting a `drain worktree-conflict` tick.
 Holding the lock through the spawn closes that window: the next tick blocks on
 the lock until the worker is registered, then the orphan-recycle check sees a
 live session and skips. With the lock held through registration,
-`dispatch-spawn-worker`'s per-worktree dedup at the spawn boundary is now
+`dispatch-spawn-job`'s per-worktree dedup at the spawn boundary is now
 belt-and-suspenders rather than the load-bearing guard it was during the old
 early-release window.
 
 `dispatch-materialize-spawn` releases at each terminal point: on the `propagate`
-path after `dispatch-spawn-worker` returns success (worker verified-registered),
+path after `dispatch-launch-worker` detaches and the reservation ledger records
+the slot,
 on `notify spawn-failed` after the failed spawn returns, and at the single-target
 CI-wait stop (now emitting `drain ci-reseeded` / `notify ci-wait-exhausted`, or
 `drain ci-waiting` on a scheduler hard-failure), which releases before scheduling
@@ -82,11 +83,11 @@ the reseed.
 `dispatch-finalize-selection` writes the recovery marker but no longer releases.
 The pre-finalize stop paths — `notify target-blocked`, `drain worktree-conflict`,
 plus the internal `exit 2` error paths — release at the guard, unchanged. A
-merge conflict detected during materialize-spawn spawns a
-`/dispatch-resolve-conflict <N> <worktree>` bg job (named for the worktree
-basename `<N>-slug`, which locks the worktree via the existing name-keyed
-liveness skip and consumes a concurrency slot); the lock is released before the
-resolver job is spawned. Crash safety: a router that dies mid-spawn holding the lock is
+merge conflict detected during materialize-spawn routes to
+`INVOKE /fix-conflicts` via `dispatch-route`; the worker invokes `/fix-conflicts`
+as a normal in-place phase skill (no `<N> <worktree>` args), which writes the
+standard phase marker and owns its `dispatch:fix-conflicts-attempt-*` label;
+the lock is released before the worker is spawned. Crash safety: a router that dies mid-spawn holding the lock is
 recovered by the lock's existing dead-holder reclaim (the recorded sessionId
 absent from `claude agents --json`) on the next `--wait`. Such a router also
 strands any reservation marker it wrote before dying; `reservation_sweep`
@@ -132,11 +133,11 @@ step (so two routers cannot race on the same target). It is one of two
 mechanisms; the other is per-worktree and enforced elsewhere.
 
 The **per-worktree invariant**: at most one live worker agent per issue
-worktree. The router's Step 6 spawn primitive (`dispatch-spawn-worker`)
-enforces this at the spawn boundary. Every worker is born with the target
-worktree's basename as its `--name` — the `dispatch-spawn-worker` script's
-own cwd stays at the spawner's cwd (`worktrees/main`), but the spawn
-subshell `cd`s into `<worktree-path>` before invoking `claude --bg`, so the
+worktree. The launcher's spawn step (`dispatch-launch-worker`, via
+`dispatch-spawn-job`) enforces this at the spawn boundary. Every worker is born
+with the target worktree's basename as its `--name`, and the worker's cwd is set
+to `<worktree-path>` by `dispatch-spawn-job --cwd` (the detached
+`dispatch-launch-worker` `cd`s into the worktree before routing), so the
 new worker registers and runs in its target worktree. Per-worktree name
 uniqueness is automatic. The dedup query lists live sessions under
 `<worktree-path>` (not the spawner cwd — that's where every same-target
@@ -150,9 +151,9 @@ The two mechanisms have orthogonal scopes:
 
 - **Selection lock** — per-repo, held by the router for the
   duration of Steps 1–5. Prevents two routers from selecting the same target.
-- **Per-worktree dedup** (`dispatch-spawn-worker`) — per-worktree-path,
-  enforced at every router-to-worker spawn. Prevents two workers from racing
-  on the same issue.
+- **Per-worktree dedup** (`dispatch-launch-worker`, via `dispatch-spawn-job`) —
+  per-worktree-path, enforced at every router-to-worker spawn. Prevents two
+  workers from racing on the same issue.
 
 N concurrent issues in flight = N concurrent workers, each in its own
 worktree, each advancing its own issue's phase without contention. Only the
@@ -177,8 +178,8 @@ tier — every topic category, every phase — before considering any `priority=
 item, so a `priority` item in a low-ranked topic outranks every non-priority
 item in a higher-ranked topic. Within one priority level, categories run
 highest first: `security` → `bug` → `testing infrastructure` → `dispatch` →
-`budget` → `print` → `audio` → `other`. The
-`priority` label is human-applied — `/ready` never applies it automatically.
+`landing` → `fellspiral` → `budget` → `print` → `audio` → `other`. The
+`priority` label is human-applied — `/file-issue` never applies it automatically.
 A PR's category is the highest-priority topic among the labels of every issue
 it closes; an issue's category is the highest-priority topic among its own
 labels; anything with no topic label is `other`.
@@ -187,7 +188,7 @@ Within each category the ladder is (highest first; within a tier, oldest PR
 wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
 whose closing issue is `blocked_by` an open issue is skipped; not-ready PRs
 (no CI verdict yet, per `dispatch-ci-ready`) are skipped entirely): oldest `review` PR → oldest
-`verify` PR → oldest `help wanted` issue (planned before unplanned — see
+`fix-checks` PR → oldest `help wanted` issue (planned before unplanned — see
 *Phase model* below) → oldest `qa` PR. Non-QA PRs are
 ranked closest-to-done first — `review` is the closest-to-done non-QA tier;
 `help wanted` issues rank below all non-QA PRs but above QA PRs. Within the
@@ -209,7 +210,7 @@ a queue-selected `issue <num>` is always a directly-startable target.
 
 Each issue progresses through five phases in order:
 
-`plan` → `implement` → `verify` → `qa` → `review`
+`plan` → `implement` → `fix-checks` → `qa` → `review`
 
 - **`plan`** — the issue has no PR and no `dispatch:planned` label. `/plan-issue`
   plans the work, fans out `Explore` and `Plan` subagents, produces an ordered
@@ -219,7 +220,7 @@ Each issue progresses through five phases in order:
 - **`implement`** — the issue has `dispatch:planned` but no PR. `/implement` reads
   the persisted plan, builds each unit via `/implement-unit`, and opens the draft
   PR via `dispatch-open-pr`.
-- **`verify`** — the draft PR exists but CI is failing. A `verify` worker patches
+- **`fix-checks`** — the draft PR exists but CI is failing. A `fix-checks` worker patches
   the failing checks.
 - **`qa`** — the draft PR is CI-green and review labels are absent. `/qa-fix` runs
   the autonomous acceptance-test pass.
@@ -264,8 +265,10 @@ The marker is the canonical "Step 5 completed" signal, read by the lock script
 as the post-Step-5 reclaim signal (see *Releasing the lock*). Context-clear
 recovery does **not** read it: `restore-dispatch-skill.sh` (bound to
 `SessionStart:clear`) keys on the session's `--name` shape (`<N>-<slug>` for
-workers) and emits `/dispatch-worker <N> <worktree-path>` so the worker
-re-derives the phase from PR/CI ground truth.
+phase-skill workers) and restores the phase skill body so the session resumes
+from the correct phase. For an undetermined or done phase (where no phase skill
+applies), it restores nothing and exits — the Stop hook (`dispatch-stop.sh`)
+owns the disposition.
 `.claude/hooks/worktree-create.sh` also stamps the marker (an empty `touch`) as
 its final action on every successful worktree creation, so a fresh worktree
 carries a content-less marker the moment the hook returns. That empty marker is
@@ -281,17 +284,15 @@ and removing the worktree removes it. A stale marker naming an older session
 cannot reclaim a different live holder, so no active cleanup is required to
 keep the lock correct.
 
-## Step 6 spawn-cwd trade-off
+## Step 6 spawn-cwd
 
-The `dispatch-spawn-worker` script runs from the router's own cwd
-(`worktrees/main` — the router stays anchored there), but spawns `claude --bg`
-with cwd = `<worktree-path>` via a subshell `cd`, so the worker is born in its
-target worktree. Trade-off: the Claude daemon's "+ new session" launcher
-default cwd tracks the most-recent worker's worktree rather than
-`worktrees/main` — a recoverable UI default, accepted in exchange for
-sessions whose cwd does not silently drift. The previous arrangement — where
-the worker `cd`'d in its own Step 0 — silently broke when subsequent `Bash` /
-`Skill` calls reset cwd back to the spawn cwd.
+`dispatch-launch-worker` is detached (`setsid nohup … &`) from the router,
+which stays anchored at `worktrees/main`. The launcher `cd`s into
+`<worktree-path>` as its first step (after validation), so `dispatch-route` and
+all downstream subprocess calls run from the target worktree. When the phase
+skill is spawned, `dispatch-spawn-job --cwd <worktree-path>` passes the cwd
+explicitly — the phase skill is born in its target worktree regardless of the
+launcher's current directory at exec time.
 
 ## Concurrency budgeting
 
@@ -315,8 +316,8 @@ The reservation ledger is a directory of marker files at
 `tmp/dispatch.lock`), one file per reserved slot keyed by the worktree basename
 (`<N>-slug`). Each marker records the reserving session id, the issue number,
 and a UTC timestamp. `dispatch-materialize-spawn` writes a marker immediately
-before `dispatch-spawn-worker` and clears it immediately after the spawn
-returns; a completed fan-out therefore leaves `effective_live == busy_workers`
+before detaching `dispatch-launch-worker` and clears it immediately after the
+detach returns; a completed fan-out therefore leaves `effective_live == busy_workers`
 with no double-count and no leaked budget. `reservation_sweep` reclaims a
 marker when: (a) the worktree already has a live worker matching the marker
 basename (the reservation converted — redundant backstop, at any age), or (b)
@@ -337,8 +338,8 @@ through a three-stage pipeline: Stage 1 computes the weekly pace curve W;
 Stage 2 applies a binary weekly gate; Stage 3 applies a linear 5h ramp. The
 live count used for the `busy_workers` addend is
 `claude_agents_count_busy_workers` — busy sessions whose name matches the real
-worker shape `^[0-9]+-` (NOT a `dispatch-worker-*` prefix, which never existed
-in production — that was the Defect-B bug this issue fixed). Instead of a flat
+worker shape `^[0-9]+-` (NOT a `dispatch-*`-prefixed name, which never existed
+as a worker session name in production — that was the Defect-B bug this issue fixed). Instead of a flat
 weekly cap, the weekly budget follows a **cumulative-pace curve** keyed to how
 far through the weekly rate-limit window we are (in 5-hour-window terms), so
 token spend spreads smoothly across the week rather than bursting early and
@@ -520,6 +521,84 @@ router via a `parked-router` line, so a human can resume it. This makes a
 genuinely terminal stall visible rather than silently losing it to a missed
 heartbeat window.
 
+## Capacity telemetry sampling (#1007 / #1377)
+
+The office-hours Capacity "HISTORY" chart is driven by
+`office-hours/<env>/usage-samples` documents written locally once per dispatch
+tick by `dispatch-sample-usage` → `usage-sample-writer.mjs`. The hosted app
+cannot read the author's local telemetry (`rate_limits.json` and `claude agents
+--json`), so the time series is sampled locally and pushed to Firestore via the
+firebase-admin SDK.
+
+### Opt-in switch
+
+Sampling is **off by default**. Set `DISPATCH_USAGE_SAMPLES_ENABLED=1` in the
+dispatch machine's shell environment (e.g. `~/.zshrc` or `~/.bashrc`) to enable
+per-tick sampling. Any value other than exactly `"1"` — unset, empty, `"true"`,
+`"0"`, or anything else — causes the sampler to exit 0 as a no-op, leaving the
+tick unaffected.
+
+### Member-email source (PII handling)
+
+Member emails are **not** read from the environment. In real mode the writer
+resolves the member-email list from the **`OFFICE_HOURS_MEMBER_EMAILS`** Firebase
+/ GCP Secret Manager secret — the same canonical secret the `office-hours-sync`
+Cloud Function reads (established in #1257, reused here in #1377). The PII
+therefore lives only in Secret Manager, never in the repo, a shell var, or a
+local file.
+
+Optional non-PII override: set `DISPATCH_USAGE_SAMPLES_SECRET_NAME` to a
+different secret id if you need to point the local sampler at a distinct secret.
+The value must be non-empty and must contain no `/` (it is interpolated into the
+Secret Manager resource path). Default: `"OFFICE_HOURS_MEMBER_EMAILS"`.
+
+### Authentication (ADC)
+
+The writer uses **Application Default Credentials (ADC)** for both the Secret
+Manager read and the firebase-admin Firestore write — the same credentials,
+shared between the two operations. Configure ADC via either:
+
+- `GOOGLE_APPLICATION_CREDENTIALS` pointing at a service-account JSON key file, or
+- `gcloud auth application-default login` (interactive, suitable for local
+  development).
+
+The service account (or the logged-in principal) must have
+`roles/secretmanager.secretAccessor` on the `OFFICE_HOURS_MEMBER_EMAILS` secret.
+No separate credential or token is needed for sampling beyond what the Firestore
+write already requires.
+
+### Non-PII config
+
+All other sampler config is non-PII and may be committed or set in the
+environment. These variables and their defaults:
+
+| Variable | Default | Notes |
+|---|---|---|
+| `DISPATCH_USAGE_SAMPLES_GROUP_ID` | *(required, no default)* | Owning group id; must be non-empty and contain no `/`. |
+| `DISPATCH_USAGE_SAMPLES_NAMESPACE` | `"office-hours/prod"` | Firestore path prefix; must match `office-hours/<env>`. |
+| `DISPATCH_USAGE_SAMPLES_PROJECT_ID` | `"commons-systems"` | GCP project id for Secret Manager and Firestore. |
+| `DISPATCH_USAGE_SAMPLES_TTL_DAYS` | `"60"` | Retention in days; integer in `[30, 90]`. Feeds the `expireAt` TTL field. |
+
+### Fail-safe contract
+
+When `DISPATCH_USAGE_SAMPLES_ENABLED=1` but any required resource is missing or
+invalid — secret not found, credentials absent or expired, empty member-email
+list after resolving the secret, invalid config — the writer prints exactly one
+stderr diagnostic prefixed `usage-sample-writer:` and exits non-zero (1).
+Credentials and secret payloads are never echoed. No document is written; a doc
+with empty or wrong `memberEmails` is never created. The `dispatch-tick` caller
+wraps the sampler so a sample failure never errors the tick — the chain continues
+regardless.
+
+### Dry-run / test seam
+
+`usage-sample-writer.mjs --dry-run` does not import `@google-cloud/secret-manager`
+or `firebase-admin`, keeping the bash unit tests (`test-dispatch-scripts.sh`)
+dependency-free. In dry-run mode the member-email payload is injected via the
+`DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE` env var (the raw comma-separated string
+the secret would return). This seam is for testing only — it is never consulted
+in real mode, which always reads Secret Manager.
+
 ## Target-keyed CI-wait reseed (#979)
 
 CI-wait handling splits on available queue size, not invocation mode. In a
@@ -536,5 +615,5 @@ That schedules a transient `systemd.user` timer
 cap (default 3) the target is parked on `dispatch:office-hours` and no further
 reseed is scheduled. Because `dispatch-ci-ready` reports not-ready only for
 genuinely in-progress checks — a CI *failure* is a verdict, so the PR reports
-ready and `dispatch-phase` resolves it to `verify`, an actionable phase — the
+ready and `dispatch-phase` resolves it to `fix-checks`, an actionable phase — the
 wait terminates on its own when CI finishes.

@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
-# Collapse the deterministic /dispatch-worker prelude into one call and print one
-# directive. Usage: dispatch-route <N> <worktree-path>
+# Runs the deterministic phase-launch prelude consumed by dispatch-launch-worker.
+# Usage: dispatch-route <N> <worktree-path>
 #
-# Runs the entire deterministic worker prelude — the worktree cross-check, the
+# Runs the entire deterministic prelude — the worktree cross-check, the
 # worktree provisioning + origin/main merge, the dispatch-ci-ready gate, and
-# dispatch-phase — in a single invocation, so the worker model makes one Bash
-# round-trip and never branches on intermediate exit codes itself. Prints exactly
+# dispatch-phase — in a single invocation, so the launcher script receives one
+# directive and never branches on intermediate exit codes itself. Prints exactly
 # one directive line to stdout:
 #
-#   INVOKE /verify-pr               phase verify       (draft PR, CI failed)
+#   INVOKE /fix-checks              phase fix-checks   (draft PR, CI failed)
 #   INVOKE /qa-fix                  phase qa           (draft, CI green, no label)
 #   INVOKE /review-fix              phase review       (dispatch:qa-done / reviewed re-entry)
 #   INVOKE /budget-parse-job       phase plan         (no PR, unplanned, statements:<key> label) — parse-job issue
 #   INVOKE /implement              phase implement    (no PR + dispatch:planned)
-#   INVOKE /dispatch-resolve-conflict  provisioning hit an origin/main merge conflict
-#   RELEVANCE-REVIEW                phase plan         (no PR, unplanned) — routes to SKILL.md Step 2
+#   INVOKE /fix-conflicts              provisioning hit an origin/main merge conflict
+#   INVOKE /plan-issue              phase plan         (no PR, unplanned) — plan phase
 #   STOP done                       phase done         (non-draft PR)
 #   PUSH-STRANDED                   phase done, but worktree ahead of origin/<branch> — push then park
 #   STOP waiting                    dispatch-ci-ready reports not-ready (draft PR CI pending)
 #   STOP provision-failed           direnv/merge provisioning failed (non-conflict);
+#                                   an office-hours-reason is written here before printing it
+#   STOP pr-list-failed             pr_list_open failed (gh error or truncation guard);
 #                                   an office-hours-reason is written here before printing it
 #   STOP wrong-worktree             cross-check failed (diagnostic on stderr); exits non-zero
 #
@@ -48,6 +50,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 N="${1:-}"
 WORKTREE_PATH="${2:-}"
@@ -60,10 +63,9 @@ if [[ ! "$N" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
-# Step 0 — worktree cross-check (the defensive prelude now owned by this script,
-# described in dispatch-worker SKILL.md Step 1): derive the branch from the
-# worktree toplevel's basename, assert the "<N>-" prefix and that the toplevel
-# equals the passed <worktree-path>.
+# Step 0 — worktree cross-check (the defensive prelude now owned by this script):
+# derive the branch from the worktree toplevel's basename, assert the "<N>-"
+# prefix and that the toplevel equals the passed <worktree-path>.
 ACTUAL_TOPLEVEL=$(git rev-parse --show-toplevel)
 ACTUAL_BRANCH=$(basename "$ACTUAL_TOPLEVEL")
 EXPECTED="${N}-"
@@ -88,11 +90,21 @@ fi
 # are current). dispatch-provision-worktree exits: 0 clean / already-up-to-date;
 # 3 merge conflict (merge aborted, tree left clean); any other non-zero is a fetch
 # or non-conflict merge failure. Capture its code without tripping `set -e`.
+#
+# Redirect provision stdout to stderr (1>&2): dispatch-provision-worktree execs
+# dispatch-merge-main, whose `git merge origin/main` writes progress ("Updating
+# …/Fast-forward", "Already up to date.") to STDOUT. This script's contract is
+# "exactly one directive line on stdout"; its scripted caller (dispatch-launch-
+# worker) captures ALL of stdout as the directive and exact-prefix-matches it, so
+# any leaked merge chatter prepended to the INVOKE line makes the launcher park
+# the issue as an "unrecognized route directive". Keep the chatter on stderr —
+# visible in the launcher's log — and stdout clean. (dispatch-merge-main itself
+# is left untouched; dispatch-select-tick legitimately surfaces its output.)
 PROVISION_RC=0
-"$SCRIPT_DIR/dispatch-provision-worktree" "$WORKTREE_PATH" || PROVISION_RC=$?
+"$SCRIPT_DIR/dispatch-provision-worktree" "$WORKTREE_PATH" 1>&2 || PROVISION_RC=$?
 if [[ "$PROVISION_RC" -eq 3 ]]; then
-  # A clean origin/main merge conflict — hand off to the conflict-resolver skill.
-  echo "INVOKE /dispatch-resolve-conflict"
+  # A clean origin/main merge conflict — route to the fix-conflicts phase.
+  echo "INVOKE /fix-conflicts"
   exit 0
 elif [[ "$PROVISION_RC" -ne 0 ]]; then
   # Fetch failure or a non-conflict merge failure — park the issue to office-hours.
@@ -109,7 +121,20 @@ fi
 
 # Fetch the open-PR list once; reuse it for every sibling call via the
 # DISPATCH_PR_LIST env contract (dispatch-ci-ready and dispatch-phase both honor it).
-DISPATCH_PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+PR_LIST_RC=0
+DISPATCH_PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable") || PR_LIST_RC=$?
+if [[ "$PR_LIST_RC" -ne 0 ]]; then
+  # gh failure or truncation guard (>= DISPATCH_PR_LIST_LIMIT open PRs). Don't let
+  # set -e abort silently with no directive — park the issue to office-hours so the
+  # worker's Stop hook escalates rather than leaving the chain in an inconsistent state.
+  if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+    printf '%s\n' "dispatch-route: pr_list_open failed for #${N} (exit ${PR_LIST_RC})" \
+      > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+    mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" "$CLAUDE_JOB_DIR/office-hours-reason"
+  fi
+  echo "STOP pr-list-failed"
+  exit 0
+fi
 export DISPATCH_PR_LIST
 
 # Initial CI-ready gate. exit 0 (ready) → continue; exit 1 (waiting) → STOP waiting;
@@ -130,7 +155,7 @@ PHASE=$("$SCRIPT_DIR/dispatch-phase" "$N")
 # Map the phase string to its directive.
 case "$PHASE" in
   plan)
-    # A no-PR unplanned target is normally a plan-phase issue → RELEVANCE-REVIEW.
+    # A no-PR unplanned target is normally a plan-phase issue → INVOKE /plan-issue.
     # But a statement parse-job issue (filed by dispatch-statements-scan, carrying a
     # configured statements:<key> label, with no PR) routes to /budget-parse-job
     # instead — it is a one-phase handler that never opens a code PR. The label
@@ -139,7 +164,7 @@ case "$PHASE" in
     # "no-config", exit 0 — the normal state for repos without statement scanning)
     # from "config present but malformed" (exit 1) — surface the latter as an
     # error, treat the former as no configured labels (empty intersection →
-    # unchanged RELEVANCE-REVIEW).
+    # INVOKE /plan-issue).
     STATEMENTS_CONFIG=$("$SCRIPT_DIR/dispatch-config-load" statements)
     if [[ "$STATEMENTS_CONFIG" == "no-config" ]]; then
       CONFIGURED_LABELS=""
@@ -151,10 +176,10 @@ case "$PHASE" in
       ISSUE_LABELS=""
       ISSUE_LABELS=$(gh issue view "$N" --json labels | jq -r '.labels[].name') || {
         # gh failure (network error, auth issue, etc.) — fall back to the safe
-        # default of RELEVANCE-REVIEW rather than exiting non-zero without a
+        # default of INVOKE /plan-issue rather than exiting non-zero without a
         # directive, which would leave the stop hook with a misleading reason.
-        echo "dispatch-route: gh issue view $N --json labels failed; defaulting to RELEVANCE-REVIEW" >&2
-        echo "RELEVANCE-REVIEW"
+        echo "dispatch-route: gh issue view $N --json labels failed; defaulting to INVOKE /plan-issue" >&2
+        echo "INVOKE /plan-issue"
         exit 0
       }
       # Non-empty intersection of the issue's labels with the configured
@@ -170,7 +195,7 @@ case "$PHASE" in
     if [[ "$PARSE_JOB" -eq 1 ]]; then
       echo "INVOKE /budget-parse-job"
     else
-      echo "RELEVANCE-REVIEW"
+      echo "INVOKE /plan-issue"
     fi
     ;;
   implement)
@@ -180,7 +205,8 @@ case "$PHASE" in
     # planned issue is never a parse-job).
     echo "INVOKE /implement"
     ;;
-  verify)       echo "INVOKE /verify-pr" ;;
+  fix-conflicts) echo "INVOKE /fix-conflicts" ;;
+  fix-checks)   echo "INVOKE /fix-checks" ;;
   qa)           echo "INVOKE /qa-fix" ;;
   review)       echo "INVOKE /review-fix" ;;
   done)

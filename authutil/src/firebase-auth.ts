@@ -74,7 +74,7 @@ function showAuthError(message: string): void {
  * page load (user returning from GitHub OAuth or emulator picker).
  * Auth errors display a dismissible toast rather than throwing, to
  * prevent unhandled rejections from blocking app initialization.
- * The auth/popup-closed-by-user error is intentionally dismissed without
+ * The auth/user-cancelled error is intentionally dismissed without
  * showing a toast, since it indicates normal user cancellation.
  */
 export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptions): AppAuth {
@@ -85,7 +85,7 @@ export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptio
   }
 
   getRedirectResult(auth).catch((error) => {
-    if (isAuthError(error) && error.code === "auth/popup-closed-by-user") {
+    if (isAuthError(error) && error.code === "auth/user-cancelled") {
       console.debug("Auth redirect cancelled by user");
       return;
     }

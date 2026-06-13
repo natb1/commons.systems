@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # dispatch-drift-scan — gather the deterministic evidence for the
-# /dispatch-worker implement-phase relevance-drift review (Step 3) in a single
+# /plan-issue pre-planning relevance review (Step 1) in a single
 # invocation, so the dispatching session only owns the verdict.
 #
-# The implement-phase relevance review asks: has the codebase drifted away from
+# The pre-planning relevance review asks: has the codebase drifted away from
 # what this issue assumes since the issue was filed? The *evidence* for that
 # question is mechanical — issue createdAt (the drift window anchor), commits to
 # the named paths since then, PRs merged in the window, and whether the issue's
@@ -94,9 +94,9 @@ under_ref_cap() {
 
 is_path_token() {
   local t="$1"
-  # Slash-commands (/ready, /dispatch-worker) are leading-slash single-segment
-  # tokens — skill references, not filesystem paths. Let them fall through to
-  # the name-ref branch instead of being treated as paths.
+  # Slash-commands (/ready, /qa-fix) are leading-slash single-segment tokens —
+  # skill references, not filesystem paths. Let them fall through to the
+  # name-ref branch instead of being treated as paths.
   [[ "$t" =~ ^/[A-Za-z][A-Za-z0-9._-]*$ ]] && return 1
   [[ "$t" == */* ]] && return 0
   case "$t" in
@@ -190,7 +190,7 @@ PR_COUNT=$(printf '%s' "$PRS" | jq 'length')
 
 if [[ "$PR_COUNT" -ge 100 ]]; then
   echo "WINDOW-TOO-WIDE: the merged-PR query hit the 100-result limit, so this"
-  echo "window is too wide to scan reliably. Re-run /ready on this issue to"
+  echo "window is too wide to scan reliably. Re-run /file-issue on this issue to"
   echo "narrow its window rather than trusting a partial merged-PR scan."
   echo "(partial PR enumeration suppressed for this input)"
 elif [[ "$PR_COUNT" -eq 0 ]]; then
@@ -260,7 +260,7 @@ echo "absence. These flags are advisory; the model judges them.)"
 if [[ "$REFS_TRUNCATED" -eq 1 ]]; then
   echo "  NOTE: reference extraction hit the ${MAX_REFS}-ref cap — the issue body"
   echo "  cites an unusually large number of references, so the scan was"
-  echo "  truncated. Re-run /ready to tighten the issue if this is unexpected."
+  echo "  truncated. Re-run /file-issue to tighten the issue if this is unexpected."
 fi
 if [[ "${#FLAGGED[@]}" -gt 0 ]]; then
   for f in "${FLAGGED[@]}"; do

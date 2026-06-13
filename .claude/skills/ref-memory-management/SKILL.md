@@ -10,22 +10,26 @@ When creating any plan (issue implementation, review, security review, or ad hoc
 
 # Issue Context Loading
 
-When loading issue context (at session start, after context loss, or when a skill requests issue data), run:
-`.claude/skills/dispatch-propagate/scripts/sync-issue-context <issue-number>`
+`CLAUDE.local.md` in a dispatch worktree is a **static identity stub** — issue
+number, title, branch, and a pointer to the context-pack script. It carries no
+issue body, comments, or related-issue context, so it stays tiny and never goes
+stale.
 
-This script consolidates all context types into a single invocation:
+For live, on-demand issue context (at session start, after context loss, or when
+a skill requests issue data), run the context pack with the slices you need:
 
-| Content type | Detail level |
+`.claude/skills/dispatch-propagate/scripts/dispatch-context-pack <issue-number> [--issue] [--relations] [--pr] [--diff]`
+
+| Slice | Content |
 |---|---|
-| **Primary issue** | Full |
-| **Blockers** | Full for each blocking issue |
-| **Sub-issues** | Full for each sub-issue |
-| **Parent issue** (if primary is a sub-issue) | Full |
-| **Sibling issues** (if primary is a sub-issue) | Full for open siblings; Summary for closed |
+| `--issue` | Primary issue title, body, and comments (live). |
+| `--relations` | Blockers / sub-issues / parent / siblings as **titles + state + URL only** (never full bodies — read a single related issue explicitly if you need its body). |
+| `--pr` | PR number, labels, and CI status rollup. |
+| `--diff` | Merge-base, `--stat`, changed-file list, and size-capped hunks. |
 
-Full = `title, body, comments, number, state`. Summary = `title, number, state`. Consumers that need additional fields (e.g., `ref-ready` uses `labels, assignees` for evaluation) extend the base set.
-
-Individual scripts for standalone use are in `.claude/skills/dispatch-propagate/scripts/`. Each accepts an optional issue number argument; otherwise it derives the number from the branch name.
+Context is live and flag-sliced: pass only the slices a task needs rather than
+loading a full snapshot. Individual issue-relationship scripts remain in
+`.claude/skills/dispatch-propagate/scripts/` for standalone use.
 
 # Commit Guidelines
 

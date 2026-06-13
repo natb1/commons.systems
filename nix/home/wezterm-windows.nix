@@ -1,26 +1,29 @@
 # Windows WezTerm Installer (WSL only)
 #
-# Builds the WezTerm Windows binary set from the wezterm-windows-zip flake input
+# Builds the WezTerm Windows binary set from the upstream WezTerm Windows nightly zip
 # and installs it declaratively into the Windows user's %LOCALAPPDATA%\WezTerm\
 # on each home-manager activation.
 #
 # Why: the Windows GUI auto-connects to the NixOS mux server over SSH; when the
 # Windows binary and the NixOS wezterm package drift in version, the mux PDU
-# protocol fails and the GUI window closes immediately. Pinning both sides to a
-# flake-tracked version keeps them in lockstep across rebuilds.
+# protocol fails and the GUI window closes immediately. Both sides track upstream
+# nightly: the NixOS package via nixpkgs, the Windows binary via an impure
+# builtins.fetchurl, so each switch picks up the same rolling nightly.
 #
 # Update workflow:
-#   nix flake update wezterm-windows-zip
-#   home-manager switch --flake .#default --impure
+#   The Windows zip auto-tracks upstream's rolling "nightly" tag via an in-module
+#   impure builtins.fetchurl (no flake input / lock pin), so each switch picks up
+#   current nightly content. Fetches are tarball-ttl-gated (default 1h); to force
+#   a fresh pull immediately, add --refresh:
+#     home-manager switch --flake .#default --impure --refresh
 #
-# When bumping nixpkgs (and thus wezterm), update both inputs in the same commit
-# so the two sides advance together.
+# When bumping nixpkgs (and thus wezterm), the impure fetch already tracks the
+# latest nightly, keeping the two sides in lockstep.
 
 {
   config,
   pkgs,
   lib,
-  inputs,
   ...
 }:
 
@@ -29,7 +32,12 @@ let
     pname = "wezterm-windows";
     version = "nightly";
 
-    src = inputs.wezterm-windows-zip;
+    # Impure raw-file fetch of the rolling upstream "nightly" Windows asset.
+    # Hashless (no flake input / lock pin) so a cold-cache re-fetch tolerates an
+    # upstream republish instead of failing a stale narHash check. Requires
+    # --impure eval (already the only mode used here). Raw .zip, no unpacking —
+    # the unzip nativeBuildInput + default unpackPhase extract it below.
+    src = builtins.fetchurl "https://github.com/wez/wezterm/releases/download/nightly/WezTerm-windows-nightly.zip";
 
     nativeBuildInputs = [ pkgs.unzip ];
 

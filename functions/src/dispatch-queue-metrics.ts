@@ -48,7 +48,7 @@ import { mintInstallationToken } from "./office-hours-sync.js";
 const GH_APP_PRIVATE_KEY = defineSecret("OFFICE_HOURS_GITHUB_APP_PRIVATE_KEY");
 const GH_APP_ID = defineString("OFFICE_HOURS_GITHUB_APP_ID");
 const GH_APP_INSTALLATION_ID = defineString("OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID");
-const MEMBER_EMAILS = defineString("OFFICE_HOURS_MEMBER_EMAILS");
+const MEMBER_EMAILS = defineSecret("OFFICE_HOURS_MEMBER_EMAILS");
 const NAMESPACE = defineString("OFFICE_HOURS_FIRESTORE_NAMESPACE", { default: "office-hours/prod" });
 
 // New config vars, empty by default so the function deploys dormant until
@@ -199,7 +199,7 @@ export async function sampleDispatchQueueCore(deps: {
 export const sampleDispatchQueueMetrics = onSchedule(
   {
     schedule: "every 60 minutes",
-    secrets: [GH_APP_PRIVATE_KEY],
+    secrets: [GH_APP_PRIVATE_KEY, MEMBER_EMAILS],
     timeoutSeconds: 120,
   },
   async () => {

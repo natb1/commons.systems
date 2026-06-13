@@ -1,7 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="${1:?Usage: run-qa-server.sh <app-dir>}"
+# Parse args: required <app-dir>, optional --detach in any position.
+DETACH=false
+APP_DIR=""
+for arg in "$@"; do
+  case "$arg" in
+    --detach)
+      DETACH=true
+      ;;
+    --*)
+      echo "ERROR: unknown flag: $arg" >&2
+      echo "Usage: run-qa-server.sh <app-dir> [--detach]" >&2
+      exit 1
+      ;;
+    *)
+      if [ -n "$APP_DIR" ]; then
+        echo "ERROR: unexpected extra argument: $arg" >&2
+        echo "Usage: run-qa-server.sh <app-dir> [--detach]" >&2
+        exit 1
+      fi
+      APP_DIR="$arg"
+      ;;
+  esac
+done
+if [ -z "$APP_DIR" ]; then
+  echo "Usage: run-qa-server.sh <app-dir> [--detach]" >&2
+  exit 1
+fi
+
+# Set true only at the very end, immediately before the detach exit 0, so the
+# cleanup trap can tell an intentional detached return from any other exit.
+DETACH_SUCCESS=false
 
 # Remember repo root (script must be invoked from repo root)
 REPO_ROOT="$(pwd)"
@@ -29,8 +59,16 @@ if [ "$USES_AUTH" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
 if [ "$USES_STORAGE" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
 if [ "$USES_FUNCTIONS" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
 
-read -r VITE_PORT EXTRA_PORTS <<< "$(find_available_ports "$PORT_COUNT")"
-echo "Vite dev server will use port $VITE_PORT"
+# Claim the Vite port from a fixed pool (collision-safe via flock, held for the
+# script's lifetime) so the claude-in-chrome extension approves the origin once.
+# Called in the main shell — not a subshell — so the flock'd fd 200 survives.
+claim_fixed_vite_port
+echo "Vite dev server will use port $VITE_PORT (fixed pool — approve once in Chrome)"
+# Emulator ports stay ephemeral — the page's own JS reaches them, never the
+# extension, so they never trigger an approval prompt.
+EMU_PORT_COUNT=$((PORT_COUNT - 1))
+EXTRA_PORTS=""
+[ "$EMU_PORT_COUNT" -gt 0 ] && EXTRA_PORTS="$(find_available_ports "$EMU_PORT_COUNT")"
 
 NAMESPACE=""
 if [ "$USES_FIRESTORE" = true ]; then
@@ -56,7 +94,7 @@ TEMP_FIREBASE_JSON="${REPO_ROOT}/.firebase-qa-$$.json"
 # Build emulators config. Each emulator binds "0.0.0.0" (all interfaces) instead
 # of the default 127.0.0.1 so its port is reachable from Chrome on the Windows
 # host — WSL2 NAT networking does not reliably forward 127.0.0.1-only emulator
-# ports. See .claude/rules/chrome-extension.md.
+# ports. See .claude/docs/chrome-extension.md.
 EMULATORS_JSON="{"
 EMULATOR_LIST=""
 if [ "$USES_FIRESTORE" = true ]; then
@@ -112,6 +150,14 @@ WT_PATH="$(git rev-parse --show-toplevel)"
 
 # Cleanup on exit: kill all processes for this worktree, remove stale hub and temp config
 cleanup() {
+  # Detach success: the server is intentionally left running. Skip the kill and
+  # the shutdown echoes — only drop the temp emulator config (firebase-tools
+  # read --config at startup; kill_worktree_processes matches the emulator argv,
+  # not this file, so removing it does not strand the detached server).
+  if [ "$DETACH" = true ] && [ "$DETACH_SUCCESS" = true ]; then
+    rm -f "$TEMP_FIREBASE_JSON"
+    return
+  fi
   echo ""
   echo "Shutting down..."
   kill_worktree_processes "$WT_PATH" || echo "WARNING: kill_worktree_processes failed" >&2
@@ -129,8 +175,14 @@ fi
 
 # Start Firebase emulators in background (if any emulators needed)
 if [ -n "$EMULATOR_LIST" ]; then
-  FIRESTORE_NAMESPACE="$NAMESPACE" \
-  npx firebase-tools emulators:start --only "$EMULATOR_LIST" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &
+  if [ "$DETACH" = true ]; then
+    EMU_LOG="$(get_tmpdir)/qa-emulators-${APP_NAME}.log"
+    FIRESTORE_NAMESPACE="$NAMESPACE" \
+    setsid nohup npx firebase-tools emulators:start --only "$EMULATOR_LIST" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" >"$EMU_LOG" 2>&1 &
+  else
+    FIRESTORE_NAMESPACE="$NAMESPACE" \
+    npx firebase-tools emulators:start --only "$EMULATOR_LIST" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &
+  fi
 fi
 
 TIMEOUT=30
@@ -222,7 +274,12 @@ VITE_ARGS+=("VITE_RECAPTCHA_SITE_KEY=emulator-recaptcha-key")
 
 # Start Vite dev server
 cd "$REPO_ROOT/$APP_DIR"
-env "${VITE_ARGS[@]}" npx vite --port "${VITE_PORT}" --strictPort &
+if [ "$DETACH" = true ]; then
+  VITE_LOG="$(get_tmpdir)/qa-vite-${APP_NAME}.log"
+  setsid nohup env "${VITE_ARGS[@]}" npx vite --port "${VITE_PORT}" --strictPort >"$VITE_LOG" 2>&1 &
+else
+  env "${VITE_ARGS[@]}" npx vite --port "${VITE_PORT}" --strictPort &
+fi
 cd "$REPO_ROOT"
 
 # Poll until Vite is serving
@@ -263,7 +320,11 @@ if [ "$USES_FUNCTIONS" = true ]; then
   echo "  Functions emulator: localhost:${FUNCTIONS_PORT}"
 fi
 echo ""
-echo "  Press Ctrl+C to stop"
+if [ "$DETACH" = true ]; then
+  echo "  Stop: run-qa-cleanup.sh"
+else
+  echo "  Press Ctrl+C to stop"
+fi
 echo "========================================"
 echo ""
 
@@ -277,6 +338,18 @@ EMU_PORTS=()
 [ -n "$STORAGE_PORT" ] && EMU_PORTS+=("$STORAGE_PORT")
 [ -n "$FUNCTIONS_PORT" ] && EMU_PORTS+=("$FUNCTIONS_PORT")
 print_remote_access_block "$VITE_PORT" "${EMU_PORTS[@]}"
+
+if [ "$DETACH" = true ]; then
+  # Detach: the server is up and ready. Return so the caller's single
+  # foreground Bash call completes; run-qa-cleanup.sh is the stop.
+  #
+  # Trade-off: claim_fixed_vite_port holds an flock on fd 200 for the script's
+  # lifetime; exiting here releases it early. That flock only closed a TOCTOU
+  # window — the function's own OS-level port probe plus Vite --strictPort still
+  # prevent an actual port collision, so early release is safe.
+  DETACH_SUCCESS=true
+  exit 0
+fi
 
 # Block until Ctrl+C
 wait

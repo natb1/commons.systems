@@ -1,13 +1,14 @@
 /**
  * Single source of truth for the WeeklyAggregate entity.
- * WeeklyAggregate is a read-only computed entity: it has Firestore read, IDB storage,
- * upload parse, and seed declaration layers, but no export path (not in exportToJson).
+ * WeeklyAggregate is a computed entity: it has Firestore read, IDB storage,
+ * upload parse, export (exportToJson), and seed declaration layers.
  * All per-entity representations are defined or imported here; adaptor functions live alongside them.
  */
 import { Timestamp } from "firebase/firestore";
 import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { GroupId } from "@commons-systems/authutil/groups";
 import {
+  msToISO,
   optionalString,
   parseISOTimestamp,
   requireMs,
@@ -104,6 +105,17 @@ export function idbToWeeklyAggregate(row: IdbWeeklyAggregate): WeeklyAggregate {
     creditTotal: row.creditTotal,
     unbudgetedTotal: row.unbudgetedTotal,
     groupId: null as GroupId | null,
+  };
+}
+
+// ── IdbWeeklyAggregate → RawWeeklyAggregate (export) ─────────────────────────
+
+export function weeklyAggregateToRawJson(a: IdbWeeklyAggregate): RawWeeklyAggregate {
+  return {
+    id: a.id,
+    weekStart: msToISO(a.weekStartMs),
+    creditTotal: a.creditTotal,
+    unbudgetedTotal: a.unbudgetedTotal,
   };
 }
 

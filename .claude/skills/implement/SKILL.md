@@ -8,7 +8,7 @@ description: Implement phase — read the persisted plan from the issue's `<!-- 
 The `implement` phase of the issue workflow, dispatched by `/dispatch-propagate`.
 Reads the plan persisted to the issue's `<!-- dispatch:plan -->` comment by the
 `plan` phase, builds each unit, and opens a draft PR. One draft PR with a
-`Closes #N` line is the implement→verify transition marker.
+`Closes #N` line is the implement→fix-checks transition marker.
 
 **The main thread never edits files.** It delegates: every code change happens in
 a subagent. Each unit is built by `/implement-unit`, which launches an
@@ -45,26 +45,22 @@ esac
 
 `<N>` is the issue number used by the remaining steps for their `tmp/` filenames.
 
-Then resolve whether a draft PR already exists for the branch (use
-`dangerouslyDisableSandbox: true` — `gh` needs network). `$BRANCH` here is the
-basename resolved above (the `<N>-…` worktree branch name). `gh pr view` exits
-non-zero when no PR exists for the branch — tolerate that and treat it as "no PR":
+Then resolve whether a draft PR already exists by running the context pack (use
+`dangerouslyDisableSandbox: true` — it calls `gh`):
 
 ```bash
-PR_JSON=$(gh pr view "$BRANCH" --json number,state,isDraft 2>/dev/null) || PR_JSON=""
-if [ -n "$PR_JSON" ]; then
-  PR_NUM=$(jq -r .number <<<"$PR_JSON")
-fi
+.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr
 ```
 
-A here-string (`<<<`) is used, not `echo "$PR_JSON" | jq`, because zsh `echo`
-un-escapes `\t`/`\n` in the JSON and injects raw control chars `jq` rejects — see
-`.claude/rules/shell-json.md`.
+Read the `=== PR ===` section of the output. **CRITICAL: detect no-PR by the
+`PR: none` line, NOT by exit code — the pack exits 0 in both cases.** If the
+output contains `PR: none`, no PR exists yet — run all steps. If it contains
+`PR #<num>`, capture that number as `PR_NUM`.
 
 If a PR already exists, the build + PR already happened: capture its number as
 `PR_NUM`, **skip Steps 1–3**, and go straight to the Step 4 marker write (this
 covers a same-tick crash between PR-open and marker-write). If no PR exists, run
-all steps. (`dispatch-route` normally routes a PR-bearing issue to verify/qa/review,
+all steps. (`dispatch-route` normally routes a PR-bearing issue to fix-checks/qa/review,
 not implement, so this is a same-tick crash-recovery edge.)
 
 ## Steps
@@ -86,9 +82,6 @@ Exit codes:
   should-never-happen for a `dispatch:planned` issue. Escalate via
   `dispatch-mark-deviation` (skip the `phase-completed` marker) and stop.
 - **exit 2** — non-numeric arg.
-
-`sync-issue-context` also renders this plan under `### Comments` in
-`CLAUDE.local.md`, so it is available as context too.
 
 ### 2. Build each unit
 
@@ -125,7 +118,7 @@ any additional implemented sub-issues or blockers (whitespace- or
 comma-separated, with or without a leading `#`). The script writes one
 `Closes #N` line per issue, appends the prose from `--body-file` (omit the flag
 to read prose from stdin), and echoes the created PR number — the only thing it
-prints on stdout. This draft PR is the implement→verify transition marker.
+prints on stdout. This draft PR is the implement→fix-checks transition marker.
 
 The script then verifies GitHub parsed exactly the intended close set, per
 `.claude/rules/issue-references.md`: narrative prose can carry a stray closing
@@ -173,5 +166,5 @@ router, strips `dispatch:office-hours` if present, and self-closes this job.
 ## Requirement changes mid-session
 
 If the user revises a requirement during this session, invoke `/new-requirement` —
-it clarifies, updates remote issues, re-syncs `CLAUDE.local.md`, and revises this
-plan. Do not handle re-sync inline.
+it clarifies, updates remote issues, and revises this plan. Do not handle the
+revision inline.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dispatch-sweep — reconcile worktrees once per /dispatch-propagate queue-scan tick.
+# dispatch-sweep — reconcile worktrees: reap merged/closed worktrees. Fired by the worker Stop-hook via dispatch-spawn-sweep (the retired /dispatch-propagate router was the old caller).
 #
 # Usage:
 #   dispatch-sweep   — cleanup merged worktrees.
@@ -21,18 +21,18 @@
 #   2  invalid invocation (not in a git repo).
 #
 # NOT set -e: per-worktree errors should not abort the sweep — bookkeeping
-# decisions must keep flowing into the log so the next /dispatch-propagate tick can act.
+# decisions must keep flowing into the log so the next worker Stop (via dispatch-spawn-sweep) can act.
 set -uo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-source "$SCRIPT_DIR/lib.sh"
-
 # shellcheck source=./lib.sh
 source "$SCRIPT_DIR/lib.sh"
 # shellcheck source=./lib-worktree-in-sync.sh
 source "$SCRIPT_DIR/lib-worktree-in-sync.sh"
 # shellcheck source=./lib-claude-agents.sh
 source "$SCRIPT_DIR/lib-claude-agents.sh"
+# shellcheck source=./lib-reservation-ledger.sh
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 
 # Resolve project root + worktrees root via resolve_project_root (lib.sh), which
 # returns the project root in both classic (.git) and bare (.bare) layouts.
@@ -113,6 +113,13 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
   wt_num="${WT_NUMS[$i]}"
   i=$((i + 1))
 
+  # Reservation guard (loop-top, covers BOTH removal paths in one place): a
+  # reserved worktree is claimed by a worker about to start — never reap it.
+  if reservation_exists "$(basename "$wt_path")"; then
+    log "SKIP_RESERVED: '$wt_path' branch=$wt_branch"
+    continue
+  fi
+
   pr_num="${MERGED_BY_BRANCH[$wt_branch]:-}"
   if [[ -z "$pr_num" ]]; then
     # Not a merged-PR branch. Check if this is a dispatch-style branch (has an
@@ -130,7 +137,9 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
       }
       case "$issue_state" in
         CLOSED)
-          if worktree_in_sync "$wt_path" "$LOG_FILE" "dispatch-sweep"; then
+          if worktree_has_live_session "$wt_path"; then
+            log "SKIP_CLOSED_LIVE_SESSION: '$wt_path' branch=$wt_branch issue=#$issue_num"
+          elif worktree_in_sync "$wt_path" "$LOG_FILE" "dispatch-sweep"; then
             if git worktree remove "$wt_path" 2>>"$LOG_FILE"; then
               git worktree prune 2>/dev/null || true
               if ! git branch -D "$wt_branch" >>"$LOG_FILE" 2>&1; then

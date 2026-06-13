@@ -64,6 +64,8 @@ export function createEpubRenderer(
       // epub.js creates blob: URLs for EPUB stylesheets without setting a MIME type.
       // Browsers ignore stylesheets served without text/css, so we fetch each blob,
       // read its CSS text, and replace the <link> with an inline <style> element.
+      // These blob URLs are epub.js-owned and cached/reused across chapters, so the
+      // hook must not revoke them — epub.js revokes them itself in book.destroy().
       rendition.hooks.content.register(async (contents: { document: Document }) => {
         try {
           const doc = contents.document;
@@ -78,11 +80,10 @@ export function createEpubRenderer(
               const href = link.getAttribute("href")!;
               const response = await fetch(href);
               if (!response.ok) throw new Error(`Failed to fetch EPUB blob stylesheet: ${response.status} ${response.statusText}`);
-              return { link, href, cssText: await response.text() };
+              return { link, cssText: await response.text() };
             }),
           );
-          for (const { link, href, cssText } of results) {
-            URL.revokeObjectURL(href);
+          for (const { link, cssText } of results) {
             const style = doc.createElement("style");
             style.textContent = cssText;
             if (!link.parentNode) throw new Error("EPUB stylesheet link has no parent node");
