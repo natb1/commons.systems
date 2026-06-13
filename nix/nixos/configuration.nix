@@ -61,13 +61,12 @@
     shell = pkgs.zsh;
   };
 
-  environment.systemPackages = with pkgs; [ ];
+  # environment.systemPackages = with pkgs; [ ]; # add system packages here
 
   programs.zsh.enable = true;
   users.defaultUserShell = pkgs.zsh;
 
   virtualisation.docker.enable = true;
-  users.extraGroups.docker.members = [ "nixos" "n8" ];
 
   environment.variables.EDITOR = "nvim";
 }

@@ -6,8 +6,9 @@
 #
 # Why: the Windows GUI auto-connects to the NixOS mux server over SSH; when the
 # Windows binary and the NixOS wezterm package drift in version, the mux PDU
-# protocol fails and the GUI window closes immediately. Pinning both sides to a
-# flake-tracked version keeps them in lockstep across rebuilds.
+# protocol fails and the GUI window closes immediately. Both sides track upstream
+# nightly: the NixOS package via nixpkgs, the Windows binary via an impure
+# builtins.fetchurl, so each switch picks up the same rolling nightly.
 #
 # Update workflow:
 #   The Windows zip auto-tracks upstream's rolling "nightly" tag via an in-module

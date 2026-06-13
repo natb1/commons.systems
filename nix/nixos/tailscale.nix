@@ -20,8 +20,6 @@
 
 {
   config,
-  pkgs,
-  lib,
   ...
 }:
 
@@ -57,10 +55,4 @@
   #   "net.ipv4.ip_forward" = 1;
   #   "net.ipv6.conf.all.forwarding" = 1;
   # };
-
-  # System packages (Tailscale CLI is included in the service)
-  # But you can add it to environment for convenience
-  environment.systemPackages = with pkgs; [
-    tailscale
-  ];
 }
