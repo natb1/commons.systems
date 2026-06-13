@@ -375,7 +375,7 @@ describe("maxBytes validation", () => {
   it("throws at construction when maxBytes is -1", () => {
     expect(() =>
       createLruBlobCache({ name: uniqueDbName(), version: 1, maxBytes: -1 }),
-    ).toThrow(/got -1/);
+    ).toThrow("got -1");
   });
 
   it("throws at construction when maxBytes is a non-integer", () => {
