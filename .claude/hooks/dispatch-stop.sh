@@ -107,6 +107,26 @@ ISSUE_NUM="${JOB_NAME%%-*}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
 
+# Release this worker's reservation marker (#1454). The marker is named by the
+# worktree basename, which equals JOB_NAME (the session --name). Clearing it the
+# instant the worker session ends means a normally-completed worker no longer
+# leaves an orphan marker for the next tick's reservation_sweep to reclaim and
+# MISLABEL `dead-session-stranded` — the dominant ~85% of those reclaims were
+# exactly this: completed workers whose marker outlived them between 8-min ticks.
+# The sweep stays a backstop for genuine strands (a worker that died before
+# reaching this hook never gets here, so its marker is still reclaimed). Clear
+# BEFORE spawn_tick so no tick this hook triggers re-finds the orphan.
+#
+# Race (narrow, degrades safely): if a concurrent tick already spawned the NEXT
+# phase for this same worktree (same basename → same marker name) before this
+# clear runs, this clear removes that fresh marker — degrading to the pre-#1454
+# sweep-backstop behavior (the next phase's boot gap is briefly uncounted in the
+# budget), never a lost worker. Best-effort: a clear failure must not abort Stop.
+(
+  . "$SCRIPTS/lib-reservation-ledger.sh" && reservation_clear "$JOB_NAME"
+) >/dev/null 2>&1 \
+  || echo "[dispatch-stop] WARNING: reservation_clear for '$JOB_NAME' failed (non-fatal)" >&2
+
 # Resolve the why-comment reason. The #826 enrichment hook may write a
 # context-specific reason to $CLAUDE_JOB_DIR/office-hours-reason; when present
 # and non-empty it wins over the caller-supplied branch default.
