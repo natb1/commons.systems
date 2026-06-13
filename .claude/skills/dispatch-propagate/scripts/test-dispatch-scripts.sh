@@ -15228,6 +15228,32 @@ else
 fi
 ohs_teardown
 
+# --- Test: open non-newline stdin → hook returns fast (no 1s read stall) (#1519) ---
+echo "Test: strip hook open non-newline stdin → returns fast, still strips label"
+ohs_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+timeout 0.5 "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh" \
+  < <(printf '%s' '{"some":"payload"}'; sleep 1) \
+  >/dev/null 2>&1
+rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 124 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip open-stdin: hook completed before the 0.5s timeout (no 1s read stall)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: hook killed at 0.5s — read is still stalling"
+fi
+# Correctness: the payload is drain-only, so assert the strip still fired.
+pr_edit_log=$(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$pr_edit_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip open-stdin: 'gh pr edit 456 --remove-label' still invoked (drain did not break strip)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: 'gh pr edit 456 --remove-label' still invoked"
+  echo "    pr-edit-log: $pr_edit_log"
+fi
+ohs_teardown
+
 # ============================================================================
 # dispatch-stop hook tests
 # ============================================================================
