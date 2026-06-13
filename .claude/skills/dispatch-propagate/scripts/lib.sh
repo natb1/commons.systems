@@ -688,6 +688,34 @@ split_worktree_record() {
   WT_BRANCH="${rest#*$'\t'}"
 }
 
+# True when a live Claude session owns any worktree registered for issue
+# <num>. <paths_ref> names the caller's associative array mapping issue-number
+# → newline-joined worktree path(s) (built from list_worktree_records /
+# split_worktree_record). No worktree for <num> → fast-path miss (return 1),
+# no daemon round-trip. Several matches → owned if any one is live.
+#
+# Consolidates dispatch-select-target's issue_has_live_worktree (#905) and
+# dispatch-trace-leaf's child_has_live_worktree (#914), which were byte-
+# identical (#971).
+#
+# DEPENDENCY: calls worktree_has_live_session, defined in lib-claude-agents.sh
+# (not lib.sh). A consumer must source lib-claude-agents.sh before any call.
+# worktree_has_live_session is fail-safe: an unqueryable daemon counts as
+# owned, so the caller skips the row rather than double-claim.
+num_has_live_worktree() {
+  local -n _wt_paths_by_num="$1"
+  local num="$2" p
+  local paths="${_wt_paths_by_num[$num]:-}"
+  [[ -z "$paths" ]] && return 1
+  while IFS= read -r p; do
+    [[ -z "$p" ]] && continue
+    if worktree_has_live_session "$p"; then
+      return 0
+    fi
+  done <<< "$paths"
+  return 1
+}
+
 # Kill processes belonging to worktrees that no longer exist.
 # Scopes the search to this repo's worktree directory (derived from git
 # common dir) to avoid killing processes from unrelated repositories.

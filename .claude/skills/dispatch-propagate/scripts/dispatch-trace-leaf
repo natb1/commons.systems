@@ -139,25 +139,6 @@ if [[ "$MODE" == "queue" ]]; then
   done < <(printf '%s' "$parked_json" | jq -r '.[].number')
 fi
 
-# True when a live Claude session owns any <num>-* worktree. No such worktree →
-# fast-path miss (return 1), no daemon round-trip. Several matches → owned if any
-# one is live. A faithful copy of dispatch-select-target's issue_has_live_worktree
-# (#905), applied here to subtree children (#914). worktree_has_live_session is
-# fail-safe: an unqueryable daemon counts as owned, so the child is skipped
-# rather than double-claimed.
-child_has_live_worktree() {
-  local num="$1" p
-  local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
-  [[ -z "$paths" ]] && return 1
-  while IFS= read -r p; do
-    [[ -z "$p" ]] && continue
-    if worktree_has_live_session "$p"; then
-      return 0
-    fi
-  done <<< "$paths"
-  return 1
-}
-
 # True when any <num>-* child worktree is CLAIMED — live-owned (#914) OR reserved
 # (#1046). Mirrors dispatch-select-target's issue_worktree_claimed, applied to
 # subtree children: a reserved-but-not-yet-registered child must not be descended
@@ -166,7 +147,7 @@ child_has_live_worktree() {
 # daemon round-trip.
 child_worktree_claimed() {
   local num="$1" p
-  child_has_live_worktree "$num" && return 0
+  num_has_live_worktree WORKTREE_PATHS_BY_NUM "$num" && return 0
   local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
   [[ -z "$paths" ]] && return 1
   while IFS= read -r p; do
@@ -178,7 +159,7 @@ child_worktree_claimed() {
 
 # True when the given issue number is parked on dispatch:office-hours (#1011).
 # A parked node is filtered from queue-mode descent exactly like a
-# live-session-owned child (child_has_live_worktree, #914): neither descended
+# live-session-owned child (num_has_live_worktree, #914): neither descended
 # into nor returned as a startable leaf. The descent then falls through to the
 # next startable sibling, or bubbles up (exit 2) when every reachable open leaf
 # is parked or live-owned. Map lookup against OFFICE_HOURS_PARKED, populated

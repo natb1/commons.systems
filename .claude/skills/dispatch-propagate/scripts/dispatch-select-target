@@ -448,21 +448,6 @@ pr_branch_has_live_worktree() {
   worktree_has_live_session "$path"
 }
 
-# True when a live session owns any <num>-* worktree. No such worktree →
-# fast-path miss. Several matches → owned if any one is live.
-issue_has_live_worktree() {
-  local num="$1" p
-  local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
-  [[ -z "$paths" ]] && return 1
-  while IFS= read -r p; do
-    [[ -z "$p" ]] && continue
-    if worktree_has_live_session "$p"; then
-      return 0
-    fi
-  done <<< "$paths"
-  return 1
-}
-
 # True when the <branch> worktree is CLAIMED — a live session owns it (#905) OR
 # it carries a reservation marker (#1046). Both close the spawn-gap re-selection
 # race: a reserved-but-not-yet-registered target must not be re-selected. An
@@ -482,7 +467,7 @@ pr_branch_worktree_claimed() {
 # worktrees (no session, no marker) stay reuse signals, not skips.
 issue_worktree_claimed() {
   local num="$1" p
-  issue_has_live_worktree "$num" && return 0
+  num_has_live_worktree WORKTREE_PATHS_BY_NUM "$num" && return 0
   local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
   [[ -z "$paths" ]] && return 1
   while IFS= read -r p; do

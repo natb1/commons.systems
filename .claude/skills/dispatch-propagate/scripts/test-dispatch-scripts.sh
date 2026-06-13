@@ -5980,6 +5980,56 @@ assert_eq "active_paths holds every full worktree path" \
 teardown
 
 # ============================================================================
+# num_has_live_worktree (lib.sh) tests
+# ============================================================================
+echo ""
+echo "=== num_has_live_worktree ==="
+
+# num_has_live_worktree is the shared helper that consolidates
+# dispatch-select-target's issue_has_live_worktree and dispatch-trace-leaf's
+# child_has_live_worktree (#971). It is pure (no git, no daemon), so each test
+# sources lib.sh in a subshell, defines a stub worktree_has_live_session, then
+# exercises three behaviors together in one subshell to share the fixture and
+# avoid running under set -e with bare non-zero returns.
+#
+# All three assertions are collected inside a single subshell that prints a
+# composite "rc_a|rc_b|rc_c" result — each rc is captured with
+# `if …; then rc=0; else rc=$?; fi` so set -euo pipefail does not abort on
+# the expected non-zero returns.
+
+echo "Test: no-worktree fast-path miss / any-live early return / all-dead miss"
+result=$(
+  source "$SCRIPT_DIR/lib.sh"
+
+  # Stub: path containing 'live' is live; all others are dead.
+  worktree_has_live_session() {
+    case "$1" in
+      */live*) return 0 ;;
+      *)       return 1 ;;
+    esac
+  }
+
+  declare -A WORKTREE_PATHS_BY_NUM
+  # Issue 5: no entry → fast-path miss (no stub call)
+  # Issue 7: one dead path, one live path → any-live early return
+  WORKTREE_PATHS_BY_NUM[7]=$'/wt/dead\n/wt/live'
+  # Issue 9: both paths are dead → all-dead miss
+  WORKTREE_PATHS_BY_NUM[9]=$'/wt/dead1\n/wt/dead2'
+
+  # (a) no worktree for num 5 → return 1
+  if num_has_live_worktree WORKTREE_PATHS_BY_NUM 5; then rc_a=0; else rc_a=$?; fi
+
+  # (b) num 7 has a live path → return 0
+  if num_has_live_worktree WORKTREE_PATHS_BY_NUM 7; then rc_b=0; else rc_b=$?; fi
+
+  # (c) num 9, all paths dead → return 1
+  if num_has_live_worktree WORKTREE_PATHS_BY_NUM 9; then rc_c=0; else rc_c=$?; fi
+
+  printf '%s|%s|%s' "$rc_a" "$rc_b" "$rc_c"
+)
+assert_eq "no-worktree miss / any-live hit / all-dead miss" "1|0|1" "$result"
+
+# ============================================================================
 # resolve_project_root (lib.sh) tests
 # ============================================================================
 echo ""
