@@ -16267,6 +16267,32 @@ else
 fi
 stop_teardown
 
+# --- Test: open non-newline stdin → hook returns fast (no 1s read stall) (#1519) ---
+echo "Test: stop hook open non-newline stdin → returns fast, normal disposition still fires"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "fix-checks" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=implement" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+timeout 0.5 "$TMPDIR_TEST/hooks/dispatch-stop.sh" \
+  < <(printf '%s' '{"some":"payload"}'; sleep 1) \
+  >/dev/null 2>&1
+rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 124 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop open-stdin: hook completed before the 0.5s timeout (no 1s read stall)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop open-stdin: hook killed at 0.5s — read is still stalling"
+fi
+# Correctness: the payload is drain-only and unused, so assert the normal
+# disposition still fired (Branch B advance: spawn invoked exactly once) —
+# NOT that the payload was parsed (it never is in this hook).
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop open-stdin: spawn invoked exactly once (disposition unaffected)" "1" "$spawn_calls"
+stop_teardown
+
 # ============================================================================
 # ensure_deps (lib.sh) retry tests
 # ============================================================================
