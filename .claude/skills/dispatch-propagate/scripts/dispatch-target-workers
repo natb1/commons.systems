@@ -31,6 +31,10 @@
 #   dispatch-target-workers --exhausted  exhausted mode: print `exhausted` when
 #                                        the weekly OR 5-hour window is genuinely
 #                                        out of tokens, else `ok`.
+#   dispatch-target-workers --max        max mode: print the resolved MAX_WORKERS
+#                                        concurrency ceiling (config
+#                                        max_concurrent_workers, default 8) and
+#                                        exit.
 #
 # Stdout protocol:
 #   count mode (default):
@@ -173,6 +177,8 @@ set -euo pipefail
 # Optional first arg selects the output:
 #   (absent / empty) → count mode (default): print the worker target.
 #   --reopen-at      → reopen mode: print the earliest reopen epoch or `none`.
+#   --max            → max mode: print the configured MAX_WORKERS ceiling and
+#                      exit.
 #   anything else    → error, exit 2.
 
 MODE="count"
@@ -180,8 +186,9 @@ case "${1:-}" in
   "")           MODE="count" ;;
   --reopen-at)  MODE="reopen" ;;
   --exhausted)  MODE="exhausted" ;;
+  --max)        MODE="max" ;;
   *)
-    echo "dispatch-target-workers: unrecognized argument '$1' (expected --reopen-at, --exhausted, or none)" >&2
+    echo "dispatch-target-workers: unrecognized argument '$1' (expected --reopen-at, --exhausted, --max, or none)" >&2
     exit 2
     ;;
 esac
@@ -232,6 +239,15 @@ if [[ -n "$CONFIG_JSON" ]]; then
   [[ -n "$val" ]] && MAX_WORKERS="$val"
   val=$(jq -r '.exhaustion_threshold_pct // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && EXHAUSTION_THRESHOLD="$val"
+fi
+
+# ---- --max mode: print the concurrency ceiling and exit ---------------------
+# MAX_WORKERS is a config-only constant (no telemetry input), so short-circuit
+# before the rate-limit load. dispatch-select-tick's manual fan-out reads it as
+# the absolute HEADROOM ceiling (#1458).
+if [[ "$MODE" == "max" ]]; then
+  echo "$MAX_WORKERS"
+  exit 0
 fi
 
 # ---- Step 1: load telemetry -------------------------------------------------

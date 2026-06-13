@@ -285,6 +285,72 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
     GAP=$(( TARGET_N - LIVE_COUNT ))
   fi
   # daemon UNKNOWN (busy-worker read failed) → GAP stays 1 (fail open).
+elif [[ -n "$MANUAL" ]]; then
+  # --- manual context-dependent fan-out (#1458) ------------------------------
+  # A bare human-typed `/dispatch` spawns enough workers to cover available
+  # priority work eagerly while honoring the absolute MAX_WORKERS ceiling. It
+  # OVERRIDES the pace-curve throttle (a budget pause to TARGET_N=0 still fans
+  # out) but HONORS the genuine rate-limit floor (--exhausted) and the ceiling:
+  #   HEADROOM = max(0, MAX_WORKERS − LIVE_COUNT)   absolute ceiling
+  #   GAP      = max(0, TARGET_N − LIVE_COUNT)      pace-curve budget gap
+  #   N_PRIO   = count of selectable priority=1 targets, capped at HEADROOM
+  #   SPAWN_N  = min(HEADROOM, max(N_PRIO, GAP, 1))
+  # Priority and gap combine as a max (union), not additive buckets, so the
+  # total is capped at MAX_WORKERS. The fan-out itself runs priority-first
+  # through dispatch-materialize-spawn's existing --gap N machinery (the
+  # priority=1 tier is globally exhausted first). LIVE_COUNT mirrors the
+  # autonomous block's effective-live count (busy workers + reservations); the
+  # manual path does NOT sweep the reservation ledger (a possibly-stale count
+  # can only make manual fan-out more conservative, which is safe).
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-claude-agents.sh"
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+  if BUSY=$(claude_agents_count_busy_workers); then
+    RESV=$(reservation_count)
+    LIVE_COUNT=$(( BUSY + RESV ))
+    TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")
+    MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max)
+    EXHAUSTED=$("$SCRIPT_DIR/dispatch-target-workers" --exhausted 2>/dev/null) || EXHAUSTED="ok"
+    HEADROOM=$(( MAX_WORKERS - LIVE_COUNT ))
+    (( HEADROOM < 0 )) && HEADROOM=0
+    if [[ "$EXHAUSTED" == exhausted ]] || (( HEADROOM == 0 )); then
+      # Genuine token exhaustion (the one hard floor priority cannot override),
+      # or no headroom under the ceiling → spawn nothing. Mirror the autonomous
+      # at-cap disposition: release the lock and emit concurrency-cap. No reseed
+      # — a manual run is a one-shot; the autonomous chain owns reseeds.
+      release_lock
+      if [[ "$EXHAUSTED" == exhausted ]]; then
+        echo "router: manual fan-out: rate-limit window exhausted; nothing spawned"
+      else
+        echo "router: manual fan-out: $LIVE_COUNT live >= MAX_WORKERS $MAX_WORKERS; nothing spawned"
+      fi
+      echo "concurrency-cap"
+      exit 0
+    fi
+    GAP_BUDGET=$(( TARGET_N - LIVE_COUNT ))
+    (( GAP_BUDGET < 0 )) && GAP_BUDGET=0
+    # N_PRIO: count selectable priority=1 targets, capped at HEADROOM via --top.
+    # Only `pr`/`issue` lines count; `waiting` / `empty` / `main-broken` are 0
+    # (CI-pending priority items are not selectable — keeps N_PRIO consistent
+    # with #1448's CI-cadence reseed instead of double-counting against it).
+    N_PRIO=0
+    PRIO_LINES=$("$SCRIPT_DIR/dispatch-select-target" --priority-only --top "$HEADROOM") || PRIO_LINES=""
+    while IFS= read -r prio_line; do
+      case "$prio_line" in
+        pr\ *|issue\ *) N_PRIO=$(( N_PRIO + 1 )) ;;
+      esac
+    done <<< "$PRIO_LINES"
+    # SPAWN_N = min(HEADROOM, max(N_PRIO, GAP_BUDGET, 1))
+    SPAWN_N=$N_PRIO
+    (( GAP_BUDGET > SPAWN_N )) && SPAWN_N=$GAP_BUDGET
+    (( SPAWN_N < 1 )) && SPAWN_N=1
+    (( SPAWN_N > HEADROOM )) && SPAWN_N=$HEADROOM
+    echo "router: manual fan-out: SPAWN_N=$SPAWN_N (headroom=$HEADROOM, n_prio=$N_PRIO, gap=$GAP_BUDGET, live=$LIVE_COUNT, max=$MAX_WORKERS)"
+    GAP=$SPAWN_N
+  fi
+  # daemon UNKNOWN (busy-worker read failed) → GAP stays 1 (fail open), matching
+  # the autonomous fallback and today's one-worker manual behavior.
 fi
 
 # --- Step 2: run the JIT engine (best-effort) --------------------------------
