@@ -83,8 +83,8 @@ fi
 # subsection (each comment as `**@author** (date): body`). Renders from the
 # single JSON object so the body AND the comment thread both appear (plain
 # `gh issue view` prints one or the other; raw JSON re-adds the escaping bloat
-# this script exists to remove). The comment render reuses the field shape from
-# sync-issue-context's render_issue_body (.author.login, .createdAt).
+# this script exists to remove). The comment render uses each comment object's
+# .author.login and .createdAt fields.
 build_issue_section() {
   local n="$1"
   local json
