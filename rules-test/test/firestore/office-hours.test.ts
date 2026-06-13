@@ -244,10 +244,26 @@ describe("office-hours usage-samples", () => {
     );
   });
 
-  it("denies non-member list query on test-env collection", async () => {
+  it("denies non-member list query for another member's docs", async () => {
     const ctx = authenticatedContext(env, "stranger@test.com");
     const db = ctx.firestore();
     await assertFails(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/usage-samples`),
+          where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+  });
+
+  // "Rules are not filters": a list query is allowed when its where-clause
+  // provably satisfies the rule. A non-member filtering to their own membership
+  // is allowed and simply returns the empty subset they are entitled to.
+  it("allows non-member list query filtered to own (empty) membership", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertSucceeds(
       getDocs(
         query(
           collection(db, `office-hours/${ENV}/usage-samples`),
