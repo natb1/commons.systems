@@ -62,6 +62,12 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   cp "$SCRIPT_DIR/dispatch-apply-office-hours" "$TMPDIR_TEST/dispatch-apply-office-hours"
   cp "$SCRIPT_DIR/dispatch-apply-planned" "$TMPDIR_TEST/dispatch-apply-planned"
+  # dispatch-plan-finalize resolves its three siblings (dispatch-write-plan,
+  # dispatch-mark-complete, dispatch-apply-planned) via SCRIPT_DIR, which
+  # resolves to TMPDIR_TEST for this copy — so a test stubs those siblings here
+  # in TMPDIR_TEST to observe the call order (#1230).
+  cp "$SCRIPT_DIR/dispatch-plan-finalize" "$TMPDIR_TEST/dispatch-plan-finalize"
+  chmod +x "$TMPDIR_TEST/dispatch-plan-finalize"
   cp "$SCRIPT_DIR/dispatch-resolve-worktree" "$TMPDIR_TEST/dispatch-resolve-worktree"
   # dispatch-reconcile-ready sources lib.sh (for dispatch_classify_rollup) via its
   # SCRIPT_DIR, which resolves to TMPDIR_TEST for this copy — lib.sh is copied
@@ -5499,6 +5505,69 @@ echo "Test: missing issue number → non-zero exit"
 setup
 if "$TMPDIR_TEST/dispatch-apply-planned" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "missing issue number exits non-zero" "1" "$rc"
+teardown
+
+# ============================================================================
+# dispatch-plan-finalize tests (#1230)
+# ============================================================================
+echo ""
+echo "=== dispatch-plan-finalize ==="
+
+# #1230: dispatch-plan-finalize composes the three plan-completion sub-steps in a
+# fixed order whose load-bearing invariant is marker-BEFORE-label:
+#   1. dispatch-write-plan       (persist the plan comment — durable)
+#   2. dispatch-mark-complete    (write the per-session phase-completed marker)
+#   3. dispatch-apply-planned    (apply the dispatch:planned label — LAST)
+# Because the durable label is written last, its presence guarantees the
+# ephemeral marker was already written in the same session. A crash in the
+# window between step 2 and step 3 leaves the label ABSENT, so dispatch-phase
+# returns "plan" (recoverable via office-hours plan-clarification) instead of
+# "implement" (the old dead-end). This test pins that order so it cannot silently
+# drift back to the pre-fix (label-before-marker) sequence.
+echo "Test: dispatch-plan-finalize runs siblings in marker-before-label order (#1230)"
+setup
+export STUB_DIR  # the order-logging sibling stubs read STUB_DIR from the env
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/job"
+mkdir -p "$CLAUDE_JOB_DIR"
+# Overwrite the three siblings in TMPDIR_TEST (where dispatch-plan-finalize's
+# SCRIPT_DIR resolves) with order-logging stubs.
+cat > "$TMPDIR_TEST/dispatch-write-plan" <<'STUB'
+#!/usr/bin/env bash
+cat >/dev/null
+echo write-plan >> "$STUB_DIR/finalize-order.log"
+STUB
+# dispatch-mark-complete logs AND touches the marker — load-bearing: the
+# apply-planned stub asserts the marker already exists when it runs, so a stub
+# that only logged would make the order assertion misleading.
+cat > "$TMPDIR_TEST/dispatch-mark-complete" <<'STUB'
+#!/usr/bin/env bash
+echo mark-complete >> "$STUB_DIR/finalize-order.log"
+touch "$CLAUDE_JOB_DIR/phase-completed"
+STUB
+cat > "$TMPDIR_TEST/dispatch-apply-planned" <<'STUB'
+#!/usr/bin/env bash
+if [[ -f "$CLAUDE_JOB_DIR/phase-completed" ]]; then
+  echo apply-planned >> "$STUB_DIR/finalize-order.log"
+else
+  echo apply-planned-NO-MARKER >> "$STUB_DIR/finalize-order.log"
+fi
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-write-plan" \
+         "$TMPDIR_TEST/dispatch-mark-complete" \
+         "$TMPDIR_TEST/dispatch-apply-planned"
+"$TMPDIR_TEST/dispatch-plan-finalize" 55 <<<'plan body text'
+# The order log records the three steps in sequence. apply-planned (not
+# apply-planned-NO-MARKER) confirms the marker existed when apply-planned ran —
+# i.e. the marker was written before the label.
+assert_eq "dispatch-plan-finalize: marker before label (#1230)" \
+  "$(printf 'write-plan\nmark-complete\napply-planned\n')" \
+  "$(cat "$STUB_DIR/finalize-order.log")"
+# Arg-validation smoke: a non-numeric issue-num exits 2. This path returns at the
+# integer check BEFORE reading STDIN or calling any sibling, so </dev/null is
+# harmless, finalize-order.log is untouched, and no network is reached.
+if "$TMPDIR_TEST/dispatch-plan-finalize" abc </dev/null 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "dispatch-plan-finalize: non-numeric arg exits 2" "2" "$rc"
+unset CLAUDE_JOB_DIR
 teardown
 
 # ============================================================================
@@ -15627,6 +15696,65 @@ if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop marker-absent: self-close not invoked"
 fi
+stop_teardown
+
+# --- Test 5a1: #1230 crash-before-label routing regression -------------------
+# #1230 hardened the plan phase so the per-session phase-completed marker is
+# written BEFORE the durable dispatch:planned label. This test models the
+# post-fix crash window: a session crashed after writing the marker (phase=plan)
+# but before applying the label, so the label is ABSENT and no PR exists yet.
+#
+# In that window dispatch-phase derives "plan" (no label + no PR → plan), so the
+# Stop hook sees MARKER_PHASE=plan, CURRENT_PHASE=plan (equal → not Branch B),
+# and plan is not a fix-* phase (→ not Branch C) → Branch D: park the ISSUE on a
+# human via dispatch-apply-office-hours, spawn the next tick, exit 0, NO
+# self-close, NO strip. The issue is recoverable via office-hours
+# plan-clarification — NOT the pre-fix dead-end where a present label + absent
+# marker drove dispatch-phase to "implement" and stranded the issue in
+# deviation-review.
+#
+# Scope: this test pins the ROUTING decision GIVEN CURRENT_PHASE=plan — it does
+# NOT itself derive the phase (the dispatch-phase fake just echoes
+# current-phase.txt). The hinge derivation (no-label/no-PR → plan vs.
+# label/no-PR → implement) is pinned SEPARATELY by two existing dispatch-phase
+# tests, which together show the two halves of the crash-window invariant:
+#   - assert "issue 6 does not match branch 60-foo → plan"  (no dispatch:planned + no PR → plan;
+#     in the dispatch-phase section — the bare echo title is shared, but this assert label is unique)
+#   - "Test: no PR + dispatch:planned → INVOKE /implement"   (dispatch:planned + no PR → implement)
+
+echo "Test: stop hook + marker=plan + no label + no PR (#1230 crash window) → Branch D park, no self-close, no strip"
+stop_setup
+echo "55-harden-idempotency" > "$STUB_DIR/current-branch.txt"
+echo '{"name":"55-harden-idempotency"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=plan" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+# No find-pr-output → dispatch-find-pr returns "" → PR_NUM="" (the no-PR window).
+# No ci-ready.txt → dispatch-ci-ready exits 0 (ready), so the early not-ready
+# gate PASSES and execution reaches the branch logic.
+echo "plan" > "$STUB_DIR/current-phase.txt"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop #1230 crash-window: hook exits 0" "0" "$rc"
+# Parked recoverably on the RIGHT issue: JOB_NAME 55-harden-idempotency → issue 55.
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "55" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop #1230 crash-window: office-hours parked on issue 55 + non-empty reason (recoverable)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop #1230 crash-window: office-hours parked on issue 55 + non-empty reason (recoverable)"
+  echo "    apply-log: $apply_log"
+fi
+# Did NOT self-close (Branch D is a non-advance, not an advance).
+assert_eq "stop #1230 crash-window: self-close NOT invoked" "absent" "$(log_state self-close-calls.log)"
+# Did NOT strip — Branch B's strip is the only remove path; its absence proves
+# we did NOT take Branch B (no false advance).
+assert_eq "stop #1230 crash-window: no PR remove-label (no strip)" "absent" "$(log_state gh-pr-remove.log)"
+assert_eq "stop #1230 crash-window: no issue remove-label (no strip)" "absent" "$(log_state gh-issue-remove.log)"
+# Branch D still re-seeds the chain.
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop #1230 crash-window: spawn invoked exactly once" "1" "$spawn_calls"
 stop_teardown
 
 # --- Test 5b: not-ready (CI back in progress) → early gate: spawn only, no office-hours
