@@ -176,7 +176,7 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       printf 'lib-claude-agents: claude_agents_snapshot_capture requires a <path> argument\n' >&2
       return 1
     fi
-    "${CLAUDE_AGENTS_CMD:-claude}" agents --json >"$path"
+    "${CLAUDE_AGENTS_CMD:-claude}" agents --json >"$path" 2>/dev/null
   }
 
   # claude_sessions_under <path> — emit live sessions under <path> as TSV.
