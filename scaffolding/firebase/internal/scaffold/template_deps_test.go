@@ -36,7 +36,7 @@ func TestTemplateDepsMatchRoot(t *testing.T) {
 	// Build the root dependency set as the UNION of root dependencies +
 	// devDependencies. The root package.json has NO "dependencies" key —
 	// firebase and the whole toolchain live under devDependencies. Reading
-	// only root.dependencies would make assertion (2) vacuously green.
+	// only root.dependencies would make assertion (1) vacuously green.
 	rootUnion := map[string]string{}
 	for name, ver := range decodeDepMap(t, root, "dependencies", rootPath) {
 		rootUnion[name] = ver
@@ -45,7 +45,7 @@ func TestTemplateDepsMatchRoot(t *testing.T) {
 		rootUnion[name] = ver
 	}
 
-	// (2) Shared-dep version match: for every dep present in both the
+	// (1) Shared-dep version match: for every dep present in both the
 	// template's dependencies and the root union, versions must be byte-equal.
 	sharedSeen := 0
 	for name, tmplVer := range templateDeps {
@@ -65,14 +65,14 @@ func TestTemplateDepsMatchRoot(t *testing.T) {
 			"\"dependencies\" key — firebase lives under devDependencies)")
 	}
 
-	// (3) No per-app toolchain devDeps: the template must have no
+	// (2) No per-app toolchain devDeps: the template must have no
 	// devDependencies KEY at all.
 	if _, present := template["devDependencies"]; present {
 		t.Error("template package.json must not declare a devDependencies key; " +
 			"the shared toolchain is hoisted to the root package.json")
 	}
 
-	// (4) Workspace deps use "*": every @commons-systems/* entry must be "*".
+	// (3) Workspace deps use "*": every @commons-systems/* entry must be "*".
 	for name, ver := range templateDeps {
 		if !strings.HasPrefix(name, "@commons-systems/") {
 			continue
@@ -83,7 +83,7 @@ func TestTemplateDepsMatchRoot(t *testing.T) {
 		}
 	}
 
-	// (5) errorutil present.
+	// (4) errorutil present.
 	if _, present := templateDeps["@commons-systems/errorutil"]; !present {
 		t.Error("template dependencies must include @commons-systems/errorutil")
 	}
