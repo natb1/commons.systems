@@ -21206,6 +21206,31 @@ IN3='{"findings":[{"id":"a","Location":"f.ts:1","Source":"review","OWASP":"","ST
 out=$(printf '%s' "$IN3" | "$SCRIPT_DIR/dispatch-review-dedup")
 assert_eq "dedup: same-location distinct-root partition → length 2" "2" "$(printf '%s' "$out" | jq -r 'length')"
 
+# absent-id partition: unknown id is skipped, present finding survives, exit 0
+IN4='{"findings":[{"id":"a","Location":"f.ts:1","Source":"review","OWASP":"","STRIDE":"","Confidence":"low"}],"partition":[["a","zzz"]]}'
+if out=$(printf '%s' "$IN4" | "$SCRIPT_DIR/dispatch-review-dedup"); then rc=0; else rc=$?; fi
+assert_eq "dedup: absent-id partition → exit 0" "0" "$rc"
+assert_eq "dedup: absent-id partition → length 1 (unknown id skipped)" "1" "$(printf '%s' "$out" | jq -r 'length')"
+assert_eq "dedup: absent-id partition → present finding emitted" "a" "$(printf '%s' "$out" | jq -r '.[0].id')"
+# Discriminating assertion: WITHOUT the map(select(.finding != null)) filter
+# (dispatch-review-dedup:79-80), the null member pollutes the union →
+# ["review", null]. exit/length/id all still pass without the filter, so this
+# sources check is the only one that actually guards the absent-id fix.
+assert_eq "dedup: absent-id partition → sources unpolluted by null member" '["review"]' "$(printf '%s' "$out" | jq -c '.[0].sources')"
+
+# empty findings → [], exit 0
+IN5='{"findings":[],"partition":[]}'
+if out=$(printf '%s' "$IN5" | "$SCRIPT_DIR/dispatch-review-dedup"); then rc=0; else rc=$?; fi
+assert_eq "dedup: empty findings → exit 0" "0" "$rc"
+assert_eq "dedup: empty findings → []" "[]" "$(printf '%s' "$out" | jq -c '.')"
+
+# missing Confidence field → graceful fallback (Confidence: null), exit 0
+IN6='{"findings":[{"id":"a","Location":"f.ts:1","Source":"review","OWASP":"","STRIDE":""}],"partition":[]}'
+if out=$(printf '%s' "$IN6" | "$SCRIPT_DIR/dispatch-review-dedup"); then rc=0; else rc=$?; fi
+assert_eq "dedup: missing Confidence → exit 0" "0" "$rc"
+assert_eq "dedup: missing Confidence → length 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
+assert_eq "dedup: missing Confidence → Confidence null fallback" "null" "$(printf '%s' "$out" | jq -c '.[0].Confidence')"
+
 # ============================================================================
 # === dispatch-review-verify-drop ===
 # ============================================================================
