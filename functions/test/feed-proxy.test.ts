@@ -246,6 +246,34 @@ describe("handleFeedProxy", () => {
     expect(res.body).toBe("Upstream feed exceeded maximum allowed size");
   });
 
+  it("returns 200 when upstream body is exactly MAX_FEED_BYTES (cap is inclusive)", async () => {
+    // Exactly at the cap: total === MAX_FEED_BYTES, which the strict `>`
+    // comparison in feed-proxy.ts admits. Pins the boundary as inclusive — a
+    // regression from `>` to `>=` would reject this and fail the test.
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(MAX_FEED_BYTES).fill(0x41));
+        controller.close();
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(stream, {
+          status: 200,
+          headers: { "content-type": "application/xml" },
+        }),
+      ),
+    );
+
+    const allowedUrl = [...ALLOWED_FEED_URLS][0];
+    const res = createMockRes();
+    await handleFeedProxy(createMockReq({ url: allowedUrl }), res as never);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).not.toBe("Upstream feed exceeded maximum allowed size");
+  });
+
   it("returns 502 with generic message when fetch throws (no error leak)", async () => {
     vi.stubGlobal(
       "fetch",
