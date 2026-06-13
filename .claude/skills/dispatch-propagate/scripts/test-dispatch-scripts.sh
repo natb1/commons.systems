@@ -13629,6 +13629,51 @@ else
 fi
 jit_teardown
 
+# --- Test 3-roadmap: roadmap jit (7d/14d) within window — skipped, no issue created ---
+
+echo "Test: dispatch-jit-engine roadmap jit within remindAfterClose is skipped"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "roadmap",
+      "repo": "test-owner/test-repo",
+      "label": "jit:roadmap",
+      "title": "Roadmap review",
+      "body": "Recurring roadmap review.",
+      "project": "test-project",
+      "remindAfterClose": "7d",
+      "dueAfterClose": "14d",
+      "skill": "roadmap"
+    }
+  ]
+}
+EOF
+# Newest closed issue closed 5d before "now" — within the 7d window.
+closed_at=$(date -u -d "@$((JIT_NOW_EPOCH - 5*86400))" +%Y-%m-%dT%H:%M:%SZ)
+printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
+  > "$STUB_DIR/closed-issues.json"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
+assert_eq "roadmap within-window exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"roadmap: skipped (within remindAfterClose)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap within-window reports skipped (within remindAfterClose)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap within-window reports skipped (within remindAfterClose)"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap within-window made no issue create call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap within-window made no issue create call"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+jit_teardown
+
 # --- Test 4: cadence past window creates an issue ----------------------------
 
 echo "Test: dispatch-jit-engine cadence past remindAfterClose creates an issue"
@@ -13760,6 +13805,48 @@ if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: open-guard made no issue create call"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: open-guard made no issue create call"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+jit_teardown
+
+# --- Test 5-roadmap: roadmap jit (7d/14d) open-issue guard — skipped when an open issue exists ---
+
+echo "Test: dispatch-jit-engine roadmap jit skips when an open issue with the label exists"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "roadmap",
+      "repo": "test-owner/test-repo",
+      "label": "jit:roadmap",
+      "title": "Roadmap review",
+      "body": "Recurring roadmap review.",
+      "project": "test-project",
+      "remindAfterClose": "7d",
+      "dueAfterClose": "14d",
+      "skill": "roadmap"
+    }
+  ]
+}
+EOF
+echo '[{"number":50}]' > "$STUB_DIR/open-issues.json"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
+assert_eq "roadmap open-guard exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"roadmap: skipped (open issue exists)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap open-guard reports skipped (open issue exists)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap open-guard reports skipped (open issue exists)"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap open-guard made no issue create call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap open-guard made no issue create call"
   echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
 fi
 jit_teardown
