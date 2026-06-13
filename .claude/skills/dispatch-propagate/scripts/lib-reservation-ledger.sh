@@ -374,6 +374,7 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
         # grace, and it never converted — stranded.
         reservation_clear "$bn"
         printf 'lib-reservation-ledger: reclaimed reservation %s (dead-session-stranded)\n' "$bn" >&2
+        printf 'lib-reservation-ledger:   (stranded reclaim of %s — if retained, inspect tmp/dispatch-launch-%s.log for the launcher last output)\n' "$bn" "$bn" >&2
       fi
       # (d) reserving session alive, no live worker yet → in-flight → KEEP.
     done
