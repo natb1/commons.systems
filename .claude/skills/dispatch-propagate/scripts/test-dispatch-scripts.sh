@@ -8432,6 +8432,8 @@ roadmap_skill=$(printf '%s' "$out" | jq -r '.jits[0].skill')
 assert_eq "roadmap jit skill value" "roadmap" "$roadmap_skill"
 roadmap_remind=$(printf '%s' "$out" | jq -r '.jits[0].remindAfterClose')
 assert_eq "roadmap jit remindAfterClose value" "7d" "$roadmap_remind"
+roadmap_due=$(printf '%s' "$out" | jq -r '.jits[0].dueAfterClose')
+assert_eq "roadmap jit dueAfterClose value" "14d" "$roadmap_due"
 config_teardown
 
 # --- Test 3: absent file prints no-config and exits 0 ------------------------
