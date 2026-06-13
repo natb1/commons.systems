@@ -795,15 +795,18 @@ assert_eq "no PR + non-planned label → plan" "plan" "$result"
 teardown
 
 # 1d. No PR + persistently-transient gh failure → exit non-zero, NOT a silent
-# "plan" (the bug in #1314). GH_RETRY_ATTEMPTS defaults to 4, so a fail count of
-# 5 exhausts every attempt. The fix exits 1.
+# "plan" (the bug in #1314). Pin GH_RETRY_ATTEMPTS=4 explicitly (matching the
+# gh_retry unit tests) so a fail count of 5 exhausts every attempt regardless of
+# the lib.sh default. The fix exits 1.
 echo "Test: no PR + persistently-transient gh failure → exit 1, not plan"
 setup
+export GH_RETRY_ATTEMPTS=4
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo 5 > "$STUB_DIR/issue-view-fail-42"
 result=$("$TMPDIR_TEST/dispatch-phase" "42" 2>/dev/null) && rc=0 || rc=$?
 assert_eq "transient-exhausted → exit 1" "1" "$rc"
 assert_eq "transient-exhausted → empty stdout (not plan)" "" "$result"
+unset GH_RETRY_ATTEMPTS
 teardown
 
 # 1e. No PR + transient-then-succeed gh → gh_retry retries within the 4-attempt
