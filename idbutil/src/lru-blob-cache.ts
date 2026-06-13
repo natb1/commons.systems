@@ -55,6 +55,11 @@ export interface LruBlobCache {
 
 export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
   const maxBytes = config.maxBytes ?? DEFAULT_MAX_BYTES;
+  if (!Number.isInteger(maxBytes) || maxBytes <= 0) {
+    throw new Error(
+      `LruBlobCache: maxBytes must be a positive integer, got ${maxBytes}`,
+    );
+  }
 
   const { openDb, closeDb } = createDbConnection({
     name: config.name,

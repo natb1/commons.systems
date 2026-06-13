@@ -260,26 +260,6 @@ main_broken_latch() {
   echo "$sha"
 }
 
-# Convert a duration string ("12h", "7d", "30m") to whole seconds. Units:
-# s second, m minute, h hour, d day, w week. Any other form is a config error.
-parse_duration() {
-  local spec="$1"
-  if [[ ! "$spec" =~ ^([0-9]+)([smhdw])$ ]]; then
-    echo "error: invalid duration '$spec' (expected <integer><s|m|h|d|w>)" >&2
-    exit 1
-  fi
-  # 10# forces base-10: bash arithmetic reads a leading-zero literal as octal,
-  # so an unforced "010h" would compute as 8h and "08h"/"09d" would hard-error.
-  local n=$(( 10#${BASH_REMATCH[1]} )) unit="${BASH_REMATCH[2]}"
-  case "$unit" in
-    s) echo "$n" ;;
-    m) echo "$(( n * 60 ))" ;;
-    h) echo "$(( n * 3600 ))" ;;
-    d) echo "$(( n * 86400 ))" ;;
-    w) echo "$(( n * 604800 ))" ;;
-  esac
-}
-
 # Scan configured JITs and, if any open JIT issue is due, print the most
 # pressing one as: jit-reminder <repo> <num> <project> <item-id>. Prints
 # nothing when no config is present or no JIT is eligible. Emitted before the
@@ -325,7 +305,10 @@ jit_scan() {
       # most-recently-created closed issues contain the most-recently-closed one.
       closed_json=$(gh issue list --repo "$repo" --label "$label" --state closed --limit 100 --json closedAt)
       max_closed=$(printf '%s' "$closed_json" | jq -r 'map(.closedAt) | max // empty')
-      offset=$(parse_duration "$due_after_close")
+      if ! offset=$(parse_duration "$due_after_close"); then
+        echo "error: invalid duration '$due_after_close' (expected <integer><s|m|h|d|w>)" >&2
+        exit 1
+      fi
       if [[ -n "$max_closed" ]]; then
         anchor=$(date -d "$max_closed" +%s)
         due=$(( anchor + offset ))
@@ -335,13 +318,19 @@ jit_scan() {
           exit 1
         fi
         local remind_offset
-        remind_offset=$(parse_duration "$remind_after_close")
+        if ! remind_offset=$(parse_duration "$remind_after_close"); then
+          echo "error: invalid duration '$remind_after_close' (expected <integer><s|m|h|d|w>)" >&2
+          exit 1
+        fi
         anchor=$(date -d "$open_created" +%s)
         due=$(( anchor + offset - remind_offset ))
       fi
     elif [[ -n "$due_after_create" ]]; then
       local offset anchor
-      offset=$(parse_duration "$due_after_create")
+      if ! offset=$(parse_duration "$due_after_create"); then
+        echo "error: invalid duration '$due_after_create' (expected <integer><s|m|h|d|w>)" >&2
+        exit 1
+      fi
       anchor=$(date -d "$open_created" +%s)
       due=$(( anchor + offset ))
     else

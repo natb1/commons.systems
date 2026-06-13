@@ -51,11 +51,12 @@ if ! [[ "$JOB_NAME" =~ ^[0-9]+- ]]; then
   exit 0
 fi
 
-# Consume the payload (defensive — some events pass JSON on stdin). Only
-# worker jobs reach this point; we read so the Notification filter below can
-# act. Read with a timeout so a wired event without stdin doesn't hang.
+# Consume any buffered single-line JSON payload fast. Short timeout so an
+# open, idle stdin (hook events never close stdin at EOF) returns quickly
+# rather than stalling for a full second. -r keeps backslashes in JSON intact
+# so the downstream jq parse cannot be corrupted.
 PAYLOAD=""
-if read -t 1 -d '' PAYLOAD; then :; fi
+if read -rt 0.1 PAYLOAD; then :; fi
 
 # Notification self-filter: only act on permission_prompt notifications.
 # Other notification_type values (e.g. session_complete) reach this hook and
