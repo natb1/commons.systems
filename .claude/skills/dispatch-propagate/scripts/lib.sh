@@ -385,7 +385,7 @@ sync_repair_attempts_file() {
 
 # Print the integer stored in the sync-repair attempts file, or 0 if absent/empty/non-numeric.
 sync_repair_read_attempts() {
-  local file n
+  local file n=0
   file=$(sync_repair_attempts_file) || { printf '0\n'; return 0; }
   if [[ -f "$file" ]]; then
     n=$(<"$file")
