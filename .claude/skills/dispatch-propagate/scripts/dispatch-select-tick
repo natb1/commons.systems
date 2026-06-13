@@ -207,7 +207,14 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
   TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")
   # Reconcile the ledger before counting so the gate sees no stranded
   # reservations (sweep reclaim notes → stderr; best-effort).
+  # reservation_sweep internally calls claude_agents_list_all, which reads
+  # DISPATCH_AGENTS_SNAPSHOT (captured once by dispatch-tick before invoking
+  # this script, #1452) when it is set — no live `claude agents --json` call.
   reservation_sweep 1>&2 || true
+  # claude_agents_count_busy_workers also reads DISPATCH_AGENTS_SNAPSHOT (#1452),
+  # so the gate issues zero live `claude agents --json` round-trips when the
+  # snapshot is present. Both agent reads in this block are served from the same
+  # per-tick snapshot.
   if BUSY=$(claude_agents_count_busy_workers); then
     RESV=$(reservation_count)
     LIVE_COUNT=$(( BUSY + RESV ))
