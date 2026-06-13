@@ -365,6 +365,32 @@ describe("onUpgrade hook", () => {
   });
 });
 
+describe("maxBytes validation", () => {
+  it("throws at construction when maxBytes is 0", () => {
+    expect(() =>
+      createLruBlobCache({ name: uniqueDbName(), version: 1, maxBytes: 0 }),
+    ).toThrow("got 0");
+  });
+
+  it("throws at construction when maxBytes is -1", () => {
+    expect(() =>
+      createLruBlobCache({ name: uniqueDbName(), version: 1, maxBytes: -1 }),
+    ).toThrow("got -1");
+  });
+
+  it("throws at construction when maxBytes is a non-integer", () => {
+    expect(() =>
+      createLruBlobCache({ name: uniqueDbName(), version: 1, maxBytes: 1.5 }),
+    ).toThrow("got 1.5");
+  });
+
+  it("constructs successfully with a valid positive integer maxBytes", async () => {
+    const cache = createLruBlobCache({ name: uniqueDbName(), version: 1, maxBytes: 1024 });
+    expect(cache.maxBytes).toBe(1024);
+    await cache.closeDb();
+  });
+});
+
 describe("error paths", () => {
   // Opening an existing database at a version lower than the stored one is a
   // spec-defined failure: the open request errors instead of upgrading. This
