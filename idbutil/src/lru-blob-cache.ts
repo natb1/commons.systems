@@ -46,6 +46,7 @@ export interface LruBlobCache {
     key: string,
   ): Promise<T | null>;
   putEntry(key: string, data: ArrayBuffer | Uint8Array): Promise<void>;
+  deleteEntry(key: string): Promise<void>;
   clearCache(): Promise<void>;
   closeDb(): Promise<void>;
   getStats(): Promise<{ entryCount: number; totalBytes: number }>;
@@ -222,6 +223,38 @@ export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
     });
   }
 
+  async function deleteEntry(key: string): Promise<void> {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([DATA_STORE, META_STORE], "readwrite");
+      const dataStore = tx.objectStore(DATA_STORE);
+      const metaStore = tx.objectStore(META_STORE);
+
+      const existingReq = metaStore.get(key);
+      existingReq.onsuccess = () => {
+        const existing = existingReq.result as MetaEntry | undefined;
+        // Absent: no-op. Never decrement __total__ by a size we did not
+        // remove, or the sentinel drifts.
+        if (!existing) return;
+        const deletedSize = existing.size;
+
+        dataStore.delete(key);
+        metaStore.delete(key);
+
+        const totalReq = metaStore.get(TOTAL_KEY);
+        totalReq.onsuccess = () => {
+          const totalEntry = totalReq.result as MetaEntry | undefined;
+          const currentTotal = totalEntry ? totalEntry.size : 0;
+          metaStore.put({ key: TOTAL_KEY, size: Math.max(0, currentTotal - deletedSize), lastAccessed: 0 });
+        };
+        totalReq.onerror = () => reject(totalReq.error);
+      };
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
   async function clearCache(): Promise<void> {
     const db = await openDb();
     return new Promise((resolve, reject) => {
@@ -255,5 +288,5 @@ export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
     });
   }
 
-  return { getEntry, putEntry, clearCache, closeDb, getStats, maxBytes };
+  return { getEntry, putEntry, deleteEntry, clearCache, closeDb, getStats, maxBytes };
 }
