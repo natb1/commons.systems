@@ -3260,11 +3260,12 @@ assert_eq "--top 1 byte-parity (same fixture)" "$plain" "$top1"
 assert_eq "--top 1 parity: expected single decision line" "pr 10 10-verify-me fix-checks" "$top1"
 teardown
 
-# T6. --top is rejected when combined with --qa / --priority-only /
-#     --health-only / --main-broken-sha (default-mode-only flag). Each exits
+# T6. --top is rejected when combined with --qa / --health-only /
+#     --main-broken-sha (default-mode-only flag). Each exits
 #     non-zero with a clear stderr error, mirroring the existing mutual-exclusion
-#     checks.
-for other_flag in --qa --priority-only --health-only --main-broken-sha; do
+#     checks. (--priority-only is no longer rejected — see the
+#     --priority-only --top tests below.)
+for other_flag in --qa --health-only --main-broken-sha; do
   echo "Test: --top 3 $other_flag → usage error (exit 1)"
   setup
   echo '[]' > "$STUB_DIR/pr-list-union.json"
@@ -3710,6 +3711,83 @@ echo "Test: --priority-only + --main-broken-sha → error exit"
 setup
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --main-broken-sha 2>/dev/null) && rc=0 || rc=$?
 assert_eq "--priority-only --main-broken-sha → exit 1" "1" "$rc"
+teardown
+
+# --- --priority-only --top N: priority-tier multi-target selection (#1458) ----
+# The manual fan-out path (dispatch-select-tick --manual) counts selectable
+# priority=1 targets via `--priority-only --top HEADROOM`. The combination is no
+# longer rejected (the T6 guard dropped --priority-only): it emits UP TO N
+# priority=1 decision lines (pr/issue), one per line, in the same priority-axis →
+# topic-category → phase order as plain --top, or `empty`. Unlike TOP==1, the
+# TOP>1 path has NO `waiting` branch — a CI-pending-only priority tier yields
+# `empty`.
+
+# PT1. --priority-only --top 3 returns up to 3 priority lines in topic-category
+#      order. All three issues carry BOTH `help wanted` and `priority`, so the
+#      priority axis does not discriminate; topic category (security > bug >
+#      other) is the only discriminator — mirrors T1 with priority labels added.
+echo "Test: --priority-only --top 3 returns 3 priority lines in topic-category order"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3)
+assert_eq "--priority-only --top 3 ranked across topic categories" "$(printf 'issue 30\nissue 20\nissue 10')" "$result"
+teardown
+
+# PT2. --priority-only --top 5 with only 2 priority issues returns 2 lines, no
+#      padding (mirrors T3a).
+echo "Test: --priority-only --top 5 with 2 priority issues → 2 lines, no padding"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --top 5)
+assert_eq "--priority-only --top 5 with 2 priority → 2 lines" "$(printf 'issue 30\nissue 20')" "$result"
+assert_eq "--priority-only --top 5 with 2 priority → no empty padding" "0" "$(printf '%s\n' "$result" | grep -c '^empty$')"
+teardown
+
+# PT3. --priority-only --top 3 with a non-priority issue present returns ONLY the
+#      priority ones — the non-priority help-wanted issue is excluded by the
+#      PRIORITY_ONLY tier guard.
+echo "Test: --priority-only --top 3 with a non-priority issue → only the priority ones"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]},{"number":40,"createdAt":"2024-01-04T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3)
+assert_eq "--priority-only --top 3 only priority issues returned" "$(printf 'issue 30\nissue 20')" "$result"
+assert_eq "--priority-only --top 3: non-priority 40 absent" "0" "$(printf '%s\n' "$result" | grep -c '^issue 40$')"
+teardown
+
+# PT4. --priority-only --top 3 with a CI-pending-only priority tier → `empty`.
+#      The #1448 alignment: TOP>1 has NO `waiting` branch, so a lone CI-pending
+#      priority PR (no selectable priority issue) yields `empty`, not `waiting`.
+#      Reuses the AC1 (#1444) waiting fixture verbatim; only the invocation
+#      (--top 3) and expected (empty) change.
+echo "Test: --priority-only --top 3 with CI-pending-only priority tier → empty (#1448)"
+setup
+UNION='['"$(make_pr_union 100 "100-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":100}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3)
+assert_eq "--priority-only --top 3 CI-pending tier → empty (no waiting)" "empty" "$result"
+teardown
+
+# PT5. --priority-only --top 3 does NOT error — the old exit-1 rejection is lifted.
+echo "Test: --priority-only --top 3 does not error (rejection lifted)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+"$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3 >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "--priority-only --top 3 → exit 0 (no rejection)" "0" "$rc"
 teardown
 
 # ============================================================================
@@ -17533,15 +17611,27 @@ echo "$1"
 FAKE
   cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
-# --priority-only probe (the at-cap bypass): logged separately so a test can
-# assert whether the priority probe ran, and driven by SEL_PRIORITY_ONLY.
+# --priority-only probe (the at-cap bypass / manual N_PRIO count): logged
+# separately so a test can assert whether the priority probe ran.
 if [[ "\$1" == "--priority-only" ]]; then
   echo called >> "$TMPDIR_TEST/logs/select-target-priority.log"
+  if [[ "\$2" == "--top" ]]; then
+    # Manual N_PRIO count: emit min(SEL_NPRIO_AVAIL, \$3) priority issue lines.
+    top="\$3"
+    avail="\${SEL_NPRIO_AVAIL:-0}"
+    n=\$(( avail < top ? avail : top ))
+    if (( n == 0 )); then
+      echo empty
+    else
+      for i in \$(seq 1 \$n); do echo "issue \$(( 600 + i ))"; done
+    fi
+    exit 0
+  fi
   echo "\${SEL_PRIORITY_ONLY:-empty}"
   exit 0
 fi
 echo called >> "$TMPDIR_TEST/logs/select-target.log"
-echo empty
+echo "\${SEL_DEFAULT_TARGET:-empty}"
 FAKE
   # Run-scoped concurrency gate fakes (overridable per test via SEL_* env vars).
   # Arg-aware: --exhausted reports the rate-limit exhaustion floor (SEL_EXHAUSTED,
@@ -17550,6 +17640,10 @@ FAKE
 #!/usr/bin/env bash
 if [[ "$1" == "--exhausted" ]]; then
   echo "${SEL_EXHAUSTED:-ok}"
+  exit 0
+fi
+if [[ "$1" == "--max" ]]; then
+  echo "${SEL_MAX_WORKERS:-8}"
   exit 0
 fi
 echo "${SEL_TARGET_N:-1}"
@@ -17661,6 +17755,7 @@ sel_tick_teardown() {
     FAKE_GIT_BRANCH FAKE_GIT_FETCH_FAIL FAKE_GIT_MERGE_FAIL \
     SEL_TARGET_N SEL_LIVE_COUNT SEL_LIVE_COUNT_FAIL \
     SEL_EXHAUSTED SEL_PRIORITY_ONLY \
+    SEL_MAX_WORKERS SEL_NPRIO_AVAIL SEL_DEFAULT_TARGET \
     DISPATCH_RESERVATION_DIR SEL_AGENTS_TSV SEL_AGENTS_LIST_FAIL
 }
 
@@ -18090,60 +18185,132 @@ esac
 assert_eq "removed flag → unknown flag error, exit 2" "ok" "$status"
 sel_tick_teardown
 
-# --- --manual with TARGET_N=0 (pace pause) → no concurrency-cap, gap=1 --------
-# A bare human-typed /dispatch is exempt from the pace-curve budget: even when
-# TARGET_N drops to 0 (budget pause) the --manual path skips the concurrency gate
-# entirely and emits an issue line with gap=1 (one gate-exempt worker), never
-# emitting concurrency-cap.
-echo "Test: select-tick --manual with TARGET_N=0 → no concurrency-cap, gap=1"
+# --- --manual context-dependent fan-out (#1458) ------------------------------
+# A bare human-typed /dispatch fans out enough workers to cover available
+# priority work eagerly while honoring the MAX_WORKERS ceiling. It OVERRIDES the
+# pace-curve throttle (a budget pause to TARGET_N=0 still fans out) but HONORS
+# the --exhausted floor and the ceiling:
+#   HEADROOM = max(0, MAX_WORKERS − LIVE_COUNT)
+#   GAP      = max(0, TARGET_N − LIVE_COUNT)
+#   N_PRIO   = count of selectable priority targets, capped at HEADROOM
+#   SPAWN_N  = min(HEADROOM, max(N_PRIO, GAP, 1))
+# These cases drive SPAWN_N via the shared fakes (B2/B1): SEL_DEFAULT_TARGET is
+# the decision-line target; SEL_NPRIO_AVAIL is how many priority lines the
+# `--priority-only --top N` probe emits; the defaults are LIVE=0, MAX=8.
+# The probe's `issue 60X` lines are only counted into N_PRIO — the decision line
+# is the default-mode target (issue 707).
+
+# Case 1: prio3-gap0. N_PRIO=3, GAP=0 → SPAWN_N=min(8,max(3,0,1))=3.
+echo "Test: select-tick --manual prio3-gap0 → issue 707 3"
 sel_tick_setup
-export SEL_LIVE_COUNT=3 SEL_TARGET_N=0
-cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
-#!/usr/bin/env bash
-echo called >> "$TMPDIR_TEST/logs/select-target.log"
-echo "issue 707"
-FAKE
-chmod +x "$TMPDIR_TEST/dispatch-select-target"
+export SEL_TARGET_N=0 SEL_NPRIO_AVAIL=3 SEL_DEFAULT_TARGET="issue 707"
 out=$(run_sel_tick --manual)
-assert_eq "manual-pace0: no concurrency-cap emitted" "0" \
-  "$(printf '%s\n' "$out" | grep -cF 'concurrency-cap')"
-assert_eq "manual-pace0: decision line shows gap=1 (one gate-exempt worker)" "issue 707 1" \
-  "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "manual-pace0: no reseed scheduled" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
-assert_eq "manual-pace0: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
-assert_eq "manual-pace0: select-target invoked (selection ran)" "1" \
-  "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
+assert_eq "manual-prio3-gap0: decision line" "issue 707 3" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-prio3-gap0: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "manual-prio3-gap0: no concurrency-cap" "0" "$(printf '%s\n' "$out" | grep -cF 'concurrency-cap')"
 sel_tick_teardown
 
-# --- --manual with LIVE_COUNT >= MAX_WORKERS → no cap, gap=1 ------------------
-# A bare human-typed /dispatch is also exempt from the MAX_WORKERS concurrency
-# ceiling: even when LIVE_COUNT exceeds the target the --manual path skips the
-# gate entirely.
-echo "Test: select-tick --manual with LIVE_COUNT >= MAX_WORKERS → no cap, gap=1"
+# Case 2: prio10-gap0, capped to MAX. N_PRIO=min(10,8)=8, GAP=0 → SPAWN_N=8.
+echo "Test: select-tick --manual prio10-gap0 (cap to MAX) → issue 707 8"
 sel_tick_setup
-export SEL_LIVE_COUNT=10 SEL_TARGET_N=1
-cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
-#!/usr/bin/env bash
-echo called >> "$TMPDIR_TEST/logs/select-target.log"
-echo "issue 839"
-FAKE
-chmod +x "$TMPDIR_TEST/dispatch-select-target"
-cat > "$TMPDIR_TEST/dispatch-target-workers" <<FAKE
-#!/usr/bin/env bash
-echo called >> "$TMPDIR_TEST/logs/target-workers.log"
-echo "\${SEL_TARGET_N:-1}"
-FAKE
-chmod +x "$TMPDIR_TEST/dispatch-target-workers"
+export SEL_TARGET_N=0 SEL_NPRIO_AVAIL=10 SEL_DEFAULT_TARGET="issue 707"
 out=$(run_sel_tick --manual)
-assert_eq "manual-overcap: no concurrency-cap emitted" "0" \
-  "$(printf '%s\n' "$out" | grep -cF 'concurrency-cap')"
-assert_eq "manual-overcap: decision line shows gap=1 (one gate-exempt worker)" "issue 839 1" \
-  "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "manual-overcap: no reseed scheduled" "0" \
+assert_eq "manual-prio10-gap0: decision line (capped to MAX)" "issue 707 8" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-prio10-gap0: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# Case 3: gap0-noprio. N_PRIO=0, GAP=0 → SPAWN_N=min(8,max(0,0,1))=1.
+echo "Test: select-tick --manual gap0-noprio → issue 707 1"
+sel_tick_setup
+export SEL_TARGET_N=0 SEL_NPRIO_AVAIL=0 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-gap0-noprio: decision line (floor 1)" "issue 707 1" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-gap0-noprio: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# Case 4: gap5-noprio. N_PRIO=0, GAP=5 → SPAWN_N=min(8,max(0,5,1))=5.
+echo "Test: select-tick --manual gap5-noprio → issue 707 5"
+sel_tick_setup
+export SEL_TARGET_N=5 SEL_NPRIO_AVAIL=0 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-gap5-noprio: decision line (gap drives)" "issue 707 5" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-gap5-noprio: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# Case 5: gap5-prio2. N_PRIO=2, GAP=5 → SPAWN_N=min(8,max(2,5,1))=5.
+echo "Test: select-tick --manual gap5-prio2 → issue 707 5"
+sel_tick_setup
+export SEL_TARGET_N=5 SEL_NPRIO_AVAIL=2 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-gap5-prio2: decision line (gap beats prio)" "issue 707 5" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-gap5-prio2: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# Case 6: prio6-gap4. N_PRIO=6, GAP=4 → SPAWN_N=min(8,max(6,4,1))=6.
+echo "Test: select-tick --manual prio6-gap4 → issue 707 6"
+sel_tick_setup
+export SEL_TARGET_N=4 SEL_NPRIO_AVAIL=6 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-prio6-gap4: decision line (prio beats gap)" "issue 707 6" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-prio6-gap4: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# Case 7: at-max-live. LIVE=8 → HEADROOM=0 → cap path. concurrency-cap, lock
+# released, NO reseed, priority probe NOT consulted (HEADROOM=0 short-circuits
+# before the probe).
+echo "Test: select-tick --manual at-max-live (HEADROOM=0) → concurrency-cap"
+sel_tick_setup
+export SEL_LIVE_COUNT=8 SEL_TARGET_N=1 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-at-max-live: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-at-max-live: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "manual-at-max-live: no reseed" "0" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
-assert_eq "manual-overcap: pace-curve dispatch-target-workers NOT invoked (gate skipped)" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/target-workers.log" ] && echo 1 || echo 0)"
+assert_eq "manual-at-max-live: no target-reseed" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && echo 1 || echo 0)"
+assert_eq "manual-at-max-live: priority probe NOT consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# Case 8: exhausted. --exhausted floor → cap path. concurrency-cap, lock
+# released, NO reseed (a manual run is one-shot; the autonomous chain owns
+# reseeds).
+echo "Test: select-tick --manual exhausted → concurrency-cap, no reseed"
+sel_tick_setup
+export SEL_EXHAUSTED=exhausted SEL_TARGET_N=0 SEL_NPRIO_AVAIL=5 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-exhausted: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-exhausted: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "manual-exhausted: no reseed" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
+assert_eq "manual-exhausted: no target-reseed" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# Case 9: daemon-UNKNOWN. The busy-worker read fails → the whole manual block is
+# skipped (it is gated on that read succeeding) and GAP stays 1 (fail open). The
+# priority probe is NOT consulted.
+echo "Test: select-tick --manual daemon-UNKNOWN → issue 707 1 (fail open)"
+sel_tick_setup
+export SEL_LIVE_COUNT_FAIL=1 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-daemon-unknown: decision line (fail open gap 1)" "issue 707 1" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-daemon-unknown: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "manual-daemon-unknown: no concurrency-cap" "0" "$(printf '%s\n' "$out" | grep -cF 'concurrency-cap')"
+assert_eq "manual-daemon-unknown: priority probe NOT consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# Regression: explicit-still-gap1. The explicit dispatch <N> path is UNCHANGED by
+# the manual SPAWN_N math — it still appends GAP=1. Even with LIVE/TARGET set so
+# the manual computation WOULD have produced a different gap, the explicit path
+# emits `explicit 909 1`.
+echo "Test: select-tick explicit 909 → explicit 909 1 (manual math never runs)"
+sel_tick_setup
+export SEL_LIVE_COUNT=5 SEL_TARGET_N=2 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick 909)
+assert_eq "explicit-still-gap1: decision line" "explicit 909 1" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "explicit-still-gap1: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
 # --- autonomous no-arg at cap, not exhausted, no priority item → concurrency-cap ---
