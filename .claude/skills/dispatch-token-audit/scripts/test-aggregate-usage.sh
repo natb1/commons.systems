@@ -100,6 +100,20 @@ setup() {
 
   jq . "$subagent_jsonl" >/dev/null
 
+  # 2b. Second subagent transcript (over-120k context, review-fix phase):
+  #     $ROOT/-home-x-worktrees-999-fixture/sess-worker/subagents/agent-bbb.jsonl
+  local subagent_b_jsonl="$subagent_dir/agent-bbb.jsonl"
+
+  printf '%s\n' '{"type":"user","message":{"content":"review-fix subagent task"}}' \
+    >> "$subagent_b_jsonl"
+
+  # assistant — review-fix, sonnet, isSidechain true,
+  # usage input=0, cc=0, cr=130000, out=0 → peak_context=130000 > 120000
+  printf '%s\n' '{"type":"assistant","attributionSkill":"review-fix","isSidechain":true,"gitBranch":"999-fixture","message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":130000,"output_tokens":0}}}' \
+    >> "$subagent_b_jsonl"
+
+  jq . "$subagent_b_jsonl" >/dev/null
+
   # 3. Bare router session:
   #    $ROOT/-home-x--bare/sess-router.jsonl
   local bare_dir="$ROOT/-home-x--bare"
@@ -119,7 +133,7 @@ setup() {
   jq . "$router_jsonl" >/dev/null
 
   # 4. Touch every .jsonl to now so they fall inside the window
-  touch "$worker_jsonl" "$subagent_jsonl" "$router_jsonl"
+  touch "$worker_jsonl" "$subagent_jsonl" "$router_jsonl" "$subagent_b_jsonl"
 
   export DISPATCH_AUDIT_PROJECTS_ROOT="$ROOT"
 }
@@ -142,23 +156,23 @@ OUT=$(bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7)
 # Hand-computed expected totals:
 #   input = 1000 + 100 + 10 + 1 = 1111
 #   cache_creation = 2000 + 200 + 20 + 2 = 2222
-#   cache_read = 4000 + 400 + 40 + 4 = 4444
+#   cache_read = 4000 + 400 + 40 + 4 + 130000 = 134444  (agent-bbb adds cr=130000)
 #   output = 500 + 50 + 5 + 1 = 556
-#   price = (1111*15 + 2222*18.75 + 4444*1.5 + 556*75) / 1e6
-EXPECTED_PRICE=$(jq -n '(1111*15 + 2222*18.75 + 4444*1.5 + 556*75)/1e6')
+#   price = (1111*15 + 2222*18.75 + 134444*1.5 + 556*75) / 1e6
+EXPECTED_PRICE=$(jq -n '(1111*15 + 2222*18.75 + 134444*1.5 + 556*75)/1e6')
 
 echo ""
 echo "--- assertions ---"
 
 assert_eq "totals.input" "1111" "$(jq '.totals.input' <<<"$OUT")"
 assert_eq "totals.cache_creation" "2222" "$(jq '.totals.cache_creation' <<<"$OUT")"
-assert_eq "totals.cache_read" "4444" "$(jq '.totals.cache_read' <<<"$OUT")"
+assert_eq "totals.cache_read" "134444" "$(jq '.totals.cache_read' <<<"$OUT")"
 assert_eq "totals.output" "556" "$(jq '.totals.output' <<<"$OUT")"
 assert_eq "totals.price_proxy_usd" "$EXPECTED_PRICE" "$(jq '.totals.price_proxy_usd' <<<"$OUT")"
 
 assert_eq "by_session_type.worker.sessions" "1" \
   "$(jq '.by_session_type.worker.sessions' <<<"$OUT")"
-assert_eq "by_session_type.subagent.sessions" "1" \
+assert_eq "by_session_type.subagent.sessions" "2" \
   "$(jq '.by_session_type.subagent.sessions' <<<"$OUT")"
 assert_eq 'by_session_type["router-tick"].sessions' "1" \
   "$(jq '.by_session_type["router-tick"].sessions' <<<"$OUT")"
@@ -198,6 +212,14 @@ assert_eq "payload_bytes unknown bytes" "$PAYLOAD_UNKNOWN" \
   "$(jq '[.payload_bytes.by_tool[] | select(.tool=="unknown")][0].bytes' <<<"$OUT")"
 assert_eq "payload_bytes worst_sessions[0].id" "sess-worker" \
   "$(jq -r '.payload_bytes.worst_sessions[0].id' <<<"$OUT")"
+
+# context_over_120k lens: only agent-bbb (cr=130000) crosses threshold.
+# worker peaks at input+cc+cr of its largest msg = 1000+2000+4000=7000;
+# agent-aaa peaks at 10+20+40=70; router peaks at 1+2+4=7.
+assert_eq "context_over_120k.sessions" "1" \
+  "$(jq '.lenses.context_over_120k.sessions' <<<"$OUT")"
+assert_eq 'context_over_120k.by_phase["review-fix"].sessions' "1" \
+  "$(jq '.lenses.context_over_120k.by_phase["review-fix"].sessions' <<<"$OUT")"
 
 report_results
 exit $FAIL

@@ -439,12 +439,20 @@ def ngrams($L; $n):
 # ---- lenses ----
 | 120000 as $ctx_threshold
 | ( [ $sessions[] | select(.peak_context > $ctx_threshold) ] ) as $big
+| ( reduce $big[] as $s ({};
+      ( ($s.phases | to_entries) as $pe
+        | (if ($pe|length)==0 then "<none>"
+           else ($pe | sort_by([-(.value), .key]) | .[0].key) end) ) as $dom
+      | .[$dom].sessions = ((.[$dom].sessions // 0) + 1)
+      | .[$dom].price_proxy_usd = ((.[$dom].price_proxy_usd // 0) + $s.price_proxy_usd)
+    ) ) as $ctx_by_phase
 | ( {
       threshold: $ctx_threshold,
       sessions: ($big | length),
       price_proxy_usd: ([ $big[].price_proxy_usd ] | add // 0),
       examples: ( $big | sort_by(-.peak_context) | .[0:5]
-                  | map({ id, type, peak_context, price_proxy_usd }) )
+                  | map({ id, type, peak_context, price_proxy_usd }) ),
+      by_phase: $ctx_by_phase
     } ) as $ctx_lens
 | 20000 as $small_threshold
 | ( [ $rows[] | select(.peak_context < $small_threshold) ] ) as $small
