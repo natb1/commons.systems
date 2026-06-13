@@ -106,6 +106,7 @@ ISSUE_NUM="${JOB_NAME%%-*}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
+source "$SCRIPTS/lib.sh"
 
 # Resolve the why-comment reason. The #826 enrichment hook may write a
 # context-specific reason to $CLAUDE_JOB_DIR/office-hours-reason; when present
@@ -169,8 +170,7 @@ PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
 # phase derivation below via DISPATCH_PR_LIST, avoiding a redundant `gh pr list`
 # per predicate. On fetch failure DISPATCH_PR_LIST stays empty and each script
 # falls back to its own self-fetch.
-DISPATCH_PR_LIST=$(gh pr list --state open \
-  --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable 2>/dev/null) \
+DISPATCH_PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable" 2>/dev/null) \
   || DISPATCH_PR_LIST=""
 export DISPATCH_PR_LIST
 

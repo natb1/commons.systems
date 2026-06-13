@@ -158,7 +158,7 @@ STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 # Reconstruct full args string for matching.
 args="$*"
 case "$args" in
-  "pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
+  "pr list --state open --limit 300 --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
       cat "$STUB_DIR/pr-list-full.json"
@@ -166,7 +166,7 @@ case "$args" in
       echo "[]"
     fi
     ;;
-  "pr list --state open --json number,headRefName")
+  "pr list --state open --limit 300 --json number,headRefName")
     # dispatch-find-pr self-fetch: only the two correlation fields.
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     echo "pr list" >> "$STUB_DIR/gh-find-pr-calls.log"
@@ -179,7 +179,12 @@ case "$args" in
       echo "[]"
     fi
     ;;
-  "pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences,mergeable")
+  "pr list --state open --limit 5 --json number,headRefName")
+    # #1312 truncation-guard test: exactly 5 PRs at the DISPATCH_PR_LIST_LIMIT=5
+    # boundary so pr_list_open fires the loud guard and returns non-zero.
+    printf '[{"number":1,"headRefName":"1-a"},{"number":2,"headRefName":"2-b"},{"number":3,"headRefName":"3-c"},{"number":4,"headRefName":"4-d"},{"number":5,"headRefName":"5-e"}]\n'
+    ;;
+  "pr list --state open --limit 300 --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences,mergeable")
     # dispatch-select-target's union fetch now carries `mergeable` (#1241). The
     # field is forward-compatible (consumed by #1243); the current selection path
     # does not read it, and make_pr_union fixtures omit it (jq yields null).
@@ -451,7 +456,7 @@ case "$args" in
         ;;
     esac
     ;;
-  "pr list --state open --json number,isDraft,labels,statusCheckRollup,mergeable")
+  "pr list --state open --limit 300 --json number,isDraft,labels,statusCheckRollup,mergeable")
     # dispatch-reconcile-ready's one fetch. $STUB_DIR/reconcile-pr-list.json
     # supplies the per-test PR array; absence means no open PRs.
     echo "pr list" >> "$STUB_DIR/gh-reconcile-pr-list.log"
@@ -1204,13 +1209,67 @@ printf '{"closedByPullRequestsReferences":[{"number":851,"state":"OPEN"}]}\n' \
 result=$(DISPATCH_PR_LIST='[{"number":850,"headRefName":"999-unrelated"}]' \
   "$TMPDIR_TEST/dispatch-find-pr" "822")
 assert_eq "DISPATCH_PR_LIST no prefix match; cross-check finds OPEN PR → PR number" "851" "$result"
-# Verify no self-fetch: gh pr list --state open --json number,headRefName was not called.
+# Verify no self-fetch: pr_list_open (number,headRefName) was not called.
 if [[ -f "$STUB_DIR/gh-find-pr-calls.log" ]]; then
   call_count=$(wc -l < "$STUB_DIR/gh-find-pr-calls.log")
 else
   call_count=0
 fi
 assert_eq "no self-fetch gh pr list calls when DISPATCH_PR_LIST set" "0" "$call_count"
+teardown
+
+# 11. #1312: No truncation past 30 PRs (proves the --limit 300 fix).
+# Before the fix, gh pr list defaulted to --limit 30, so PR 33 of 35 open PRs
+# would be silently omitted and dispatch-find-pr would return empty.  With
+# --limit 300, the stub case "pr list --state open --limit 300 --json
+# number,headRefName" serves all 35 entries from pr-list-full.json, so PR 33
+# is found on the first fetch.
+echo "Test: #1312 dispatch-find-pr resolves PR 33 of 35 open PRs (no truncation)"
+setup
+jq -nc '[range(1;36) | {number: ., headRefName: (tostring + "-feature")}]' \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "33")
+assert_eq "#1312: dispatch-find-pr resolves PR 33 of 35 open PRs (no truncation)" "33" "$result"
+teardown
+
+# 12. #1312: Loud truncation guard fires when result length equals the limit.
+# With DISPATCH_PR_LIST_LIMIT=5 the stub returns exactly 5 PRs, which equals
+# the limit.  pr_list_open must exit non-zero and write "likely truncated" to
+# stderr so the failure is never silent.
+echo "Test: #1312 pr_list_open exits non-zero and logs loudly when result length equals the limit"
+setup
+if err=$(DISPATCH_PR_LIST_LIMIT=5 bash -c \
+    'source "'"$TMPDIR_TEST"'/lib.sh" && pr_list_open "number,headRefName"' \
+    2>&1 1>/dev/null); then
+  rc=0
+else
+  rc=$?
+fi
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1))
+  TOTAL=$((TOTAL + 1))
+  echo "  PASS: #1312: pr_list_open exits non-zero when result length equals the limit"
+else
+  FAIL=$((FAIL + 1))
+  TOTAL=$((TOTAL + 1))
+  echo "  FAIL: #1312: pr_list_open exits non-zero when result length equals the limit"
+  echo "    expected: non-zero exit"
+  echo "    actual:   exit 0"
+fi
+case "$err" in
+  *"likely truncated"*)
+    PASS=$((PASS + 1))
+    TOTAL=$((TOTAL + 1))
+    echo "  PASS: #1312: pr_list_open writes a loud truncation error to stderr"
+    ;;
+  *)
+    FAIL=$((FAIL + 1))
+    TOTAL=$((TOTAL + 1))
+    echo "  FAIL: #1312: pr_list_open writes a loud truncation error to stderr"
+    echo "    expected: stderr containing 'likely truncated'"
+    echo "    actual:   '$err'"
+    ;;
+esac
 teardown
 
 # ============================================================================
@@ -14298,6 +14357,11 @@ stop_setup() {
     "$TMPDIR_TEST/hooks/dispatch-stop.sh"
   chmod +x "$TMPDIR_TEST/hooks/dispatch-stop.sh"
 
+  # dispatch-stop.sh sources lib.sh via $SCRIPTS; provide it so pr_list_open
+  # is defined when the hook runs.
+  cp "$SCRIPT_DIR/lib.sh" \
+    "$TMPDIR_TEST/skills/dispatch-propagate/scripts/lib.sh"
+
   # Fake dispatch-find-pr: prints contents of $STUB_DIR/find-pr-output if
   # present, else nothing.
   cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr" <<'FAKE'
@@ -17620,7 +17684,7 @@ case "$args" in
   issue\ close\ *)
     echo "$args" >> "$STUB_DIR/gh-issue-close.log"
     ;;
-  "pr list --state open --json number,isDraft,labels,statusCheckRollup,mergeable")
+  "pr list --state open --limit 300 --json number,isDraft,labels,statusCheckRollup,mergeable")
     # dispatch-reconcile-ready's one fetch. $STUB_DIR/reconcile-pr-list.json
     # supplies the per-test PR array; absence means no open PRs.
     echo "pr list" >> "$STUB_DIR/gh-reconcile-pr-list.log"
@@ -23765,7 +23829,7 @@ case "$args" in
     fi
     ;;
   # dispatch-find-pr self-fetch
-  "pr list --state open --json number,headRefName")
+  "pr list --state open --limit 300 --json number,headRefName")
     if [[ -f "$STUB_DIR/pr-list.json" ]]; then
       cat "$STUB_DIR/pr-list.json"
     else
