@@ -9954,10 +9954,11 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/systemd-run"
   export DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
 
-  # dispatch-schedule-reseed now calls ensure_recover_unit (lib.sh), which
-  # without isolation would write to the real ~/.config/systemd/user/ and run a
-  # real `systemctl --user daemon-reload`. Redirect the unit dir into the tmp
-  # tree and point its systemctl at a no-op stub so daemon-reload is harmless.
+  # dispatch-schedule-reseed now calls ensure_recover_unit + ensure_daemon_service
+  # (lib.sh), which without isolation would write to the real
+  # ~/.config/systemd/user/ and run a real `systemctl --user`. Redirect both unit
+  # dirs into the tmp tree and point their systemctl at a no-op stub so neither
+  # function writes outside the test sandbox.
   cat > "$TMPDIR_TEST/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
 exit 0
@@ -9965,6 +9966,14 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
   export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  # Stub ensure_daemon_service's three overrides. Point the daemon unit dir at a
+  # subdir of the tmp tree (so any written unit file lands there, not in
+  # ~/.config/systemd/user/), reuse the same no-op systemctl stub, and point the
+  # claude binary at the no-op systemctl so path-validation passes without needing
+  # a real claude binary (the unit is never enabled in tests).
+  export DISPATCH_DAEMON_UNIT_DIR="$TMPDIR_TEST/systemd-user"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$TMPDIR_TEST/bin/systemctl"
 }
 
 sr_teardown() {
@@ -9983,6 +9992,7 @@ sr_teardown() {
   unset DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD
   unset DISPATCH_SCHEDULE_RESEED_SHORT_DELAY
   unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
+  unset DISPATCH_DAEMON_UNIT_DIR DISPATCH_DAEMON_SYSTEMCTL_CMD DISPATCH_DAEMON_CLAUDE_CMD
 }
 
 # sr_write_rl <file-name> <used_weekly> <resets_weekly> <used_5h> <resets_5h>
@@ -10671,7 +10681,8 @@ STUB
 
   # ensure_recover_unit + ensure_daemon_service (lib.sh) would otherwise write to
   # the real ~/.config/systemd/user/ and run a real `systemctl --user`. Redirect
-  # the unit dir into the tmp tree and point its systemctl at a no-op stub.
+  # both unit dirs into the tmp tree and point their systemctl at a no-op stub
+  # so neither function writes outside the test sandbox.
   cat > "$TMPDIR_TEST/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
 exit 0
@@ -10679,6 +10690,14 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
   export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  # Stub ensure_daemon_service's three overrides. Point the daemon unit dir at a
+  # subdir of the tmp tree (so any written unit file lands there, not in
+  # ~/.config/systemd/user/), reuse the same no-op systemctl stub, and point the
+  # claude binary at the no-op systemctl so path-validation passes without needing
+  # a real claude binary (the unit is never enabled in tests).
+  export DISPATCH_DAEMON_UNIT_DIR="$TMPDIR_TEST/systemd-user"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$TMPDIR_TEST/bin/systemctl"
 
   export DISPATCH_CONVERGE_RESEED_MAIN_WORKTREE="$TMPDIR_TEST/main"
 
@@ -10698,6 +10717,7 @@ cr_teardown() {
   unset DISPATCH_CONVERGE_RESEED_NOW
   unset DISPATCH_CONVERGE_RESEED_DELAY
   unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
+  unset DISPATCH_DAEMON_UNIT_DIR DISPATCH_DAEMON_SYSTEMCTL_CMD DISPATCH_DAEMON_CLAUDE_CMD
   unset CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_DIR
 }
 
@@ -19965,6 +19985,15 @@ out=$(run_tick) && rc=0 || rc=$?
 assert_eq "resolve merge-conflict: exit 0" "0" "$rc"
 assert_eq "resolve merge-conflict: recover NOT invoked" "0" \
   "$([ -f "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick resolve merge-conflict → convergence reseed NOT armed (#1453)"
+tick_setup
+export TICK_DECISION="issue 707 1" TICK_TOKEN="resolve merge-conflict"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "resolve merge-conflict: exit 0" "0" "$rc"
+assert_eq "resolve merge-conflict: convergence script NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/converge.log" ] && echo 1 || echo 0)"
 tick_teardown
 
 # --- materialize-spawn exits non-zero → dispatch-tick exits 2 ----------------
