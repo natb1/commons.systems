@@ -14907,6 +14907,17 @@ if [[ "$rc" -ne 124 ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: open-stdin: hook was killed at 0.5s — read is still stalling"
 fi
+# Correctness: the payload must have been read and acted on — not merely
+# timed out empty (which would bypass the notification filter and park by
+# accident rather than by correct payload parsing). Mirror Test 1's check.
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_log" == *123* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: open-stdin: dispatch-apply-office-hours invoked with issue 123 (payload was read and acted on)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: open-stdin: dispatch-apply-office-hours invoked with issue 123 (payload was read and acted on)"
+  echo "    apply-log: $apply_log"
+fi
 ib_teardown
 
 # ============================================================================
