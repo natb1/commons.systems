@@ -54,6 +54,12 @@ existing issue rather than creating one — there `$FOLLOW_UP` stays unset, and
 re-filing reclassifies the issue's type label under the relaxed invariant (see the
 Step 6 Type classification, which strips a stale `enhancement` in that case).
 
+Once mode detection (below) resolves to a bare issue number, force `$FOLLOW_UP`
+off: a malformed `--follow-up <N>` that both sets the flag and resolves to an issue
+number is treated as flag-off. This makes "`$FOLLOW_UP` is always unset in issue
+number mode" true by construction rather than by convention, so the Step 6 stale-
+`enhancement` strip can rely on it.
+
 ### Detect mode
 
 Detect mode from `$INPUT`:
