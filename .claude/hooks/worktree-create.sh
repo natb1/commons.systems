@@ -86,11 +86,13 @@ ISSUE_NUM="${BRANCH%%-*}"
 # provisioning path). Fail-hard, matching the hook's existing posture.
 TITLE=$(gh issue view "$ISSUE_NUM" --json title --jq .title) \
   || { echo "[worktree-create] ERROR: gh issue view #$ISSUE_NUM failed; cannot write CLAUDE.local.md stub" >&2; exit 1; }
+SAFE_TITLE=$(printf '%s' "$TITLE" | tr -d '\000-\037\177')
+SAFE_TITLE="${SAFE_TITLE:0:200}"
 cat > "$NEW_PATH/CLAUDE.local.md" <<EOF
 <!-- AUTO-GENERATED identity stub. Static identity only; do not edit. -->
 <!-- For live issue/PR/diff context, run dispatch-context-pack (pointer below). -->
 
-# Issue #$ISSUE_NUM: $TITLE
+# Issue #$ISSUE_NUM: $SAFE_TITLE
 
 Branch: \`$BRANCH\`
 
