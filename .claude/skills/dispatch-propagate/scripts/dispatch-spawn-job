@@ -40,8 +40,10 @@
 #                   --model flag is omitted entirely and the session inherits the
 #                   launcher's default model (Opus). See dispatch-phase-model for
 #                   the phase → model policy (#1171).
-#   --park-issue <N> Optional positive integer. Best-effort: only meaningful with
-#                   --no-verify (only the worker path passes it). On a non-zero
+#   --park-issue <N> Optional positive integer. Best-effort, and requires
+#                   --no-verify — passing it without --no-verify is rejected with
+#                   exit 2 (parking only applies to the --no-verify kick-failure
+#                   path; only the worker path passes it). On a non-zero
 #                   `claude --bg` kick under --no-verify, the otherwise-vanishing
 #                   failure is parked durably to office-hours for issue #N via the
 #                   sibling dispatch-apply-office-hours, so an abnormal early
@@ -75,8 +77,9 @@
 #   1  default path: the successor never registered in 'claude agents --json';
 #      --no-verify path: the `claude --bg` kick exited non-zero — see stderr.
 #   2  the script cannot operate — usage / validation failed (missing or empty
-#      --name, --cwd, or <prompt>; an unexpected extra positional; or a --cwd
-#      that is not an existing directory).
+#      --name, --cwd, or <prompt>; an unexpected extra positional; a --cwd
+#      that is not an existing directory; or --park-issue passed without
+#      --no-verify).
 #
 # Environment overrides for testability:
 #   DISPATCH_SPAWN_JOB_CLAUDE_CMD   The `claude` command. The script's own
@@ -175,6 +178,14 @@ if [[ -z "$PROMPT" ]]; then
 fi
 if [[ ! -d "$CWD" ]]; then
   echo "dispatch-spawn-job: cwd '$CWD' does not exist or is not a directory" >&2
+  exit 2
+fi
+# --park-issue parks a non-zero kick to office-hours, which only happens on the
+# --no-verify branch (Step 3b). On the default verify path there is no kick
+# failure to park, so the flag would be silently ignored. Reject the combination
+# up front so the constraint is enforced rather than advisory.
+if [[ -n "$PARK_ISSUE" && -z "$NO_VERIFY" ]]; then
+  echo "dispatch-spawn-job: --park-issue requires --no-verify (parking only applies to the --no-verify kick-failure path)" >&2
   exit 2
 fi
 

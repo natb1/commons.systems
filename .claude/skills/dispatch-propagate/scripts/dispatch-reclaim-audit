@@ -203,7 +203,7 @@ DEAD_EVENTS_FILE="$TMP/dead_events.tsv"
 : >"$DEAD_EVENTS_FILE"
 while IFS= read -r line; do
   ts=$(printf '%s\n' "$line" | awk '{print $1}')
-  wt=$(printf '%s\n' "$line" | sed -n 's/.*reclaimed reservation \(.*\) (dead-session-stranded)/\1/p')
+  wt=$(printf '%s\n' "$line" | sed -n 's/.*reclaimed reservation \([0-9][0-9]*-[^ ]*\) (dead-session-stranded)/\1/p')
   [[ -n "$wt" ]] || continue
   printf '%s\t%s\n' "$ts" "$wt" >>"$DEAD_EVENTS_FILE"
 done < <(grep -E 'lib-reservation-ledger: reclaimed reservation .+ \(dead-session-stranded\)' "$SWEEP_RAW" || true)
@@ -249,9 +249,10 @@ find_project_dir() {
   [[ -d "$PROJECTS_ROOT" ]] || return 1
   local d
   while IFS= read -r -d '' d; do
-    case "$(basename "$d")" in
-      *worktrees-"$wt") printf '%s\n' "$d"; return 0 ;;
-    esac
+    if [[ "$(basename "$d")" == *"worktrees-${wt}" ]]; then
+      printf '%s\n' "$d"
+      return 0
+    fi
   done < <(
     find "$PROJECTS_ROOT" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null
   )
@@ -270,8 +271,7 @@ iso_to_epoch() {
 
 while IFS= read -r wt; do
   [[ -n "$wt" ]] || continue
-  proj_dir=""
-  find_project_dir "$wt" >"$TMP/proj_dir.txt" 2>/dev/null && proj_dir=$(cat "$TMP/proj_dir.txt") || proj_dir=""
+  proj_dir=$(find_project_dir "$wt") || proj_dir=""
   [[ -n "$proj_dir" ]] || continue
 
   : >"$TMP/intervals/$wt"
