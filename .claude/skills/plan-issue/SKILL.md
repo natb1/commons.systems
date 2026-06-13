@@ -24,7 +24,7 @@ fan out the built-in `Explore` and `Plan` subagents directly (no orchestrator
 skill, no nesting). The exploration and design subagents are direct children of
 this session.
 
-Run `gh` commands and the scripts that invoke `gh` (`dispatch-find-pr`,
+Run `gh` commands and the scripts that invoke `gh` (`dispatch-context-pack`,
 `dispatch-drift-scan`, `dispatch-write-plan`, `dispatch-apply-planned`,
 `dispatch-mark-complete`) with `dangerouslyDisableSandbox: true` — see
 `.claude/rules/sandbox.md`.
@@ -78,21 +78,32 @@ counterpart of the creation-time relevance check; the two are deliberately
 separate — the creation-time check is `$BASELINE_BRANCH`-anchored, this step is
 pre-planning and `createdAt`-anchored.
 
-First confirm no PR exists for the target by running
-(`dangerouslyDisableSandbox: true` — it calls `gh`):
+Run the opening live-context call (`dangerouslyDisableSandbox: true` — it calls
+`gh`):
 
 ```bash
-.claude/skills/dispatch-propagate/scripts/dispatch-find-pr "$N"
+.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --issue --relations --pr
 ```
 
-This is a belt-and-suspenders check — the router already confirmed no PR before
-emitting `INVOKE /plan-issue`. If it nonetheless prints a PR number, this is an
-already-in-flight target that should not be re-planned: **stop without a marker**.
-The Stop hook applies `dispatch:office-hours` and parks it, since the router should
-not have routed a PR-bearing issue to the plan phase.
+This is one call to the pack — plan-issue's preamble becomes this pack call plus
+the `dispatch-drift-scan` call below, so "single context-pack call" means one call
+*to the pack*, not one call total.
 
-If `dispatch-find-pr` prints nothing, gather the deterministic drift evidence in
-one call (`dangerouslyDisableSandbox: true` — it calls `gh`):
+Read the `=== PR ===` section for the belt-and-suspenders no-PR check — the router
+already confirmed no PR before emitting `INVOKE /plan-issue`. If the section prints
+`PR #<num>`, this is an already-in-flight target that should not be re-planned:
+**stop without a marker**. The Stop hook applies `dispatch:office-hours` and parks
+it, since the router should not have routed a PR-bearing issue to the plan phase. If
+the section prints `PR: none`, proceed. **CRITICAL**: detect the no-PR case by the
+`PR: none` line, NOT by exit code — the pack exits 0 in both cases.
+
+The `=== ISSUE #N ===` and `=== RELATIONS #N ===` sections supply the live issue
+body (title/state/body/comments) and relations (blockers / sub-issues / parent /
+siblings as titles + state + URL only, never full bodies) — the convention-drift and
+merged-PR-overlap judgments below read from these sections.
+
+If the pack reported `PR: none`, gather the deterministic drift evidence in one call
+(`dangerouslyDisableSandbox: true` — it calls `gh`):
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-drift-scan "$N"
