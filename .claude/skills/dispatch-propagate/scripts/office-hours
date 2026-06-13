@@ -60,11 +60,13 @@ case "$verb" in
     ;;
   office-hours)
     # a b c d = <N> <phase> <pr-or-dash> <worktree-path>. Launch a fresh
-    # /office-hours session worker-style — a --bg job named after the <N>-*
-    # worktree, rooted in it — then attach the human via --resume. Rooting it in
-    # the worktree clears the dispatch:office-hours label (the strip hook
-    # resolves <N> from the cwd branch) and registers the session under the
-    # worktree basename, so it holds the per-worktree concurrency lock.
+    # /office-hours session worker-style — a --bg job named office-hours-<N>,
+    # rooted in the <N>-* worktree — then attach the human via --resume. Rooting
+    # it in the worktree clears the dispatch:office-hours label (the strip hook
+    # resolves <N> from the cwd branch). The per-worktree concurrency lock is
+    # held via the occupancy guard's office-hours-name check (see
+    # worktree_has_live_session), which recognizes the office-hours-<N> session
+    # as occupying the <N>-slug worktree.
     if [[ -z "$d" || "$d" == "-" ]]; then
       echo "office-hours: no <N>-* worktree resolved for #$a — cannot launch a fresh session (the worktree may have been swept). Re-create the worktree or re-run /ready." >&2
       exit 1
