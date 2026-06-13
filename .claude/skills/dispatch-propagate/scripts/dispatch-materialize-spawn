@@ -151,6 +151,42 @@ release_lock() {
   "$SCRIPT_DIR/dispatch-acquire-lock" --release >/dev/null 2>&1 || true
 }
 
+# Write the static identity stub to <worktree>/CLAUDE.local.md. Static identity
+# only (issue number, title, branch, pointer to dispatch-context-pack) — no
+# issue body/comments/related-issue bodies, so it stays tiny and never goes
+# stale; any session needing live context runs dispatch-context-pack. On gh
+# failure, prints a clear note to stderr and returns non-zero; callers keep
+# their `|| true` so a missing stub never wedges the spawn (the worker still has
+# dispatch-context-pack). Must stay byte-identical to the worktree-create.sh
+# inline stub write (the other provisioning path).
+write_identity_stub() {
+  local worktree_path="$1" n="$2"
+  local branch title
+  branch="$(basename "$worktree_path")"
+  title="$(gh issue view "$n" --json title --jq .title)" || {
+    echo "write_identity_stub: gh issue view #$n failed; CLAUDE.local.md stub not written" >&2
+    return 1
+  }
+  cat > "$worktree_path/CLAUDE.local.md" <<EOF
+<!-- AUTO-GENERATED identity stub. Static identity only; do not edit. -->
+<!-- For live issue/PR/diff context, run dispatch-context-pack (pointer below). -->
+
+# Issue #$n: $title
+
+Branch: \`$branch\`
+
+This worktree is provisioned for GitHub issue #$n. This file is a static
+identity anchor — it intentionally carries no issue body, comments, or
+related-issue context, so it stays tiny and never goes stale.
+
+For live, on-demand context, run:
+
+    .claude/skills/dispatch-propagate/scripts/dispatch-context-pack $n --issue --relations --pr --diff
+
+Pass only the slices you need (e.g. \`--issue\`).
+EOF
+}
+
 N="${1:-}"
 MODE="${2:-}"
 GAP=1
@@ -285,7 +321,7 @@ process_one_target() {
   case "$WT_ACTION" in
     enter)
       WORKTREE_PATH="$WT_REST"
-      ( cd "$WORKTREE_PATH" && "$SCRIPT_DIR/sync-issue-context" "$n" ) 1>&2 || true
+      write_identity_stub "$WORKTREE_PATH" "$n" 1>&2 || true
       ;;
     create)
       BRANCH="$WT_REST"
@@ -303,7 +339,7 @@ process_one_target() {
         echo "dispatch-materialize-spawn: git worktree add failed for $BRANCH" >&2
         return 2
       fi
-      ( cd "$WORKTREE_PATH" && "$SCRIPT_DIR/sync-issue-context" "$n" ) 1>&2 || true
+      write_identity_stub "$WORKTREE_PATH" "$n" 1>&2 || true
       ;;
     conflict)
       echo "path: $WT_REST"

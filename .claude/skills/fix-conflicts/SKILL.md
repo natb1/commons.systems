@@ -50,17 +50,25 @@ case "$BRANCH" in
 esac
 ```
 
-Resolve the draft PR for the target into `PR_NUM` (`dangerouslyDisableSandbox: true`
-— `gh`):
+Fetch live context for the issue and PR in one call (`dangerouslyDisableSandbox: true`
+— calls `gh`):
 
 ```bash
-PR_NUM=$(.claude/skills/dispatch-propagate/scripts/dispatch-find-pr "$N")
+.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --issue --pr
 ```
+
+This single call captures the PR (number, labels, body) via the `=== PR ===` section
+and the issue body via the `=== ISSUE #N ===` section. Read `PR_NUM` from the `PR
+#<num>` line in the `=== PR ===` section. If that section prints `PR: none` instead,
+`PR_NUM` is empty — this is the legitimate `implement`-phase provisioning-backstop
+case (`dispatch-merge-main` exit 3 fires before any PR exists). **Detect no-PR by
+the `PR: none` line, not by exit code** — the pack exits 0 in both cases.
 
 `PR_NUM` **may be empty** — `/fix-conflicts` is also the provisioning conflict
 backstop (`dispatch-merge-main` exit 3) which can fire in the `implement` phase
 before any PR exists. Carry `PR_NUM` forward; every PR-scoped step below is guarded
-on it being non-empty.
+on it being non-empty. The PR labels, PR body, and issue body captured here are
+reused in Steps 3 and 4 — no re-fetch needed.
 
 ### 2. Reproduce the conflict
 
@@ -96,14 +104,13 @@ Carry this list to Step 6.
 no-PR provisioning backstop has no PR to label and relies on the
 ambiguous→office-hours fast path (Step 7) for its escape hatch.
 
-Read the PR's labels and find the highest extant
-`dispatch:fix-conflicts-attempt-<n>` label (`dangerouslyDisableSandbox: true` — `gh`):
-
-```bash
-N_ATT=$(gh pr view "$PR_NUM" --json labels \
-  --jq '[.labels[].name | capture("^dispatch:fix-conflicts-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0')
-NEXT=$(( N_ATT < 3 ? N_ATT + 1 : 3 ))
-```
+Read the highest extant `dispatch:fix-conflicts-attempt-<n>` label from the **labels
+line already captured in Step 1's pack output** (`=== PR ===` section). Between the
+Step 1 preamble and Step 3 no `fix-conflicts-attempt` label is added (Step 3 adds
+it), so the preamble's label snapshot is current for this computation. Inspect the
+`labels: <comma-list>` line, find the highest `dispatch:fix-conflicts-attempt-<n>`
+value (call it `N_ATT`, 0 if none), and set `NEXT` = N_ATT+1 capped at 3.
+Substitute them as literals into the label-edit commands below.
 
 The cap at 3 means a fourth encounter still leaves the label at
 `dispatch:fix-conflicts-attempt-3`. The Stop hook's #831 non-advancement invariant
@@ -137,10 +144,10 @@ by the canonical definition, not the writer).
 - The conflicting hunks: `git diff`.
 - Both sides' commit messages: `git log` on `HEAD` and on `origin/main` since their
   merge-base.
-- The PR description, if one exists: `gh pr view "$PR_NUM"` when `PR_NUM` is non-empty
-  (`dangerouslyDisableSandbox: true`). There may be no PR in the `implement`-phase
-  backstop.
-- The issue body: `gh issue view "$N"` (or `CLAUDE.local.md`).
+- The PR description, if one exists: the body from the `=== PR ===` section captured
+  in Step 1 (when `PR_NUM` is non-empty — there may be no PR in the `implement`-phase
+  provisioning backstop, in which case it is absent).
+- The issue body: from the `=== ISSUE #N ===` section captured in Step 1.
 
 ### 5. Launch the opus subagent
 
