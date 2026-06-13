@@ -105,6 +105,7 @@ func parseCSV(path string) (ParseResult, error) {
 		if _, taken := used[txnID]; taken {
 			origID := txnID
 			n := nextSuffix[origID]
+			// zero value means first duplicate for this ID; suffixes start at 2
 			if n < 2 {
 				n = 2
 			}
