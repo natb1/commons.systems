@@ -60,13 +60,16 @@
 #               unknown as "cannot reconcile" and reclaim nothing (fail safe).
 #
 # worktree_has_live_session <path>
-#   The ergonomic fail-safe predicate. Name-keyed, two-name check: queries
-#   `claude_sessions_with_name` for BOTH the worktree basename (matching the
-#   worker session spawned with `--name=<basename>` by `dispatch-launch-worker`)
-#   AND `office-hours-<N>`, where <N> is the basename's numeric prefix (matching
-#   the office-hours session, renamed off the basename in #1311 and carrying no
-#   reservation-ledger marker). Reports occupied if either name matches a live
-#   session or either query is UNKNOWN. Folds unknown into the occupied branch:
+#   The ergonomic fail-safe predicate. Name-keyed, two-name check against a
+#   SINGLE `claude_agents_list_all` fetch (not two `claude_sessions_with_name`
+#   calls — one daemon round-trip per worktree on dispatch-sweep's hot path).
+#   Exact-matches the live-session name column against BOTH the worktree basename
+#   (matching the worker session spawned with `--name=<basename>` by
+#   `dispatch-launch-worker`) AND `office-hours-<N>`, where <N> is the basename's
+#   numeric prefix (matching the office-hours session, renamed off the basename
+#   in #1311 and carrying no reservation-ledger marker). Reports occupied if
+#   either name matches a live session or the query is UNKNOWN. Folds unknown
+#   into the occupied branch:
 #     return 0 — occupied OR unknown: do NOT start a session under <path>.
 #     return 1 — definitely no live session under either name for the worktree.
 #   `if worktree_has_live_session <path>` is fail-safe by construction.
@@ -253,14 +256,15 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   }
 
   # worktree_has_live_session <path> — fail-safe liveness predicate.
-  # Name-keyed, two-name check: queries both the worktree basename (the
-  # phase-worker session spawned with --name=<basename> by
-  # dispatch-launch-worker) AND `office-hours-<N>` (the office-hours session
-  # name, where <N> is the basename's numeric prefix — office-hours sessions
-  # were renamed off the basename in #1311 and write no reservation-ledger
-  # marker, so this is the sole backstop keeping the router from spawning a
-  # phase worker into an office-hours-occupied worktree). Reports occupied if
-  # EITHER name matches a live session OR EITHER query returns UNKNOWN.
+  # Name-keyed, two-name check against a SINGLE claude_agents_list_all fetch
+  # (one daemon round-trip per worktree, not two): exact-matches the live-session
+  # name against both the worktree basename (the phase-worker session spawned
+  # with --name=<basename> by dispatch-launch-worker) AND `office-hours-<N>`
+  # (the office-hours session name, where <N> is the basename's numeric prefix —
+  # office-hours sessions were renamed off the basename in #1311 and write no
+  # reservation-ledger marker, so this is the sole backstop keeping the router
+  # from spawning a phase worker into an office-hours-occupied worktree). Reports
+  # occupied if EITHER name matches a live session OR the query returns UNKNOWN.
   # See the header comment for the return-code contract.
   worktree_has_live_session() {
     local path="${1:-}"
@@ -272,30 +276,29 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     base="$(basename "$path")"
     num="${base%%-*}"
 
-    # Phase-worker name: the session spawned with --name=<basename>.
-    local worker_sessions
-    if ! worker_sessions=$(claude_sessions_with_name "$base"); then
+    # One machine-wide fetch covers both names — `claude_agents_list_all` is the
+    # fetch-once primitive, so we avoid two separate daemon round-trips per clean
+    # worktree on dispatch-sweep's hot path.
+    local all
+    if ! all=$(claude_agents_list_all); then
       # Unknown — the daemon could not be queried. Fail safe: occupied.
       return 0
     fi
-    if [[ -n "$worker_sessions" ]]; then
-      # A live phase-worker session occupies this worktree.
+
+    # `claude_agents_list_all` emits sessionId<TAB>status<TAB>name (name is
+    # column 3). Match column 3 exactly against EITHER the phase-worker name
+    # (the worktree basename, spawned with --name=<basename>) OR the office-hours
+    # name (office-hours-<N>, renamed off the basename in #1311). Exact match —
+    # never a substring grep, which would conflate office-hours-1 with
+    # office-hours-12.
+    if awk -F'\t' -v base="$base" -v oh="office-hours-$num" \
+        '$3 == base || $3 == oh { found = 1; exit } END { exit !found }' \
+        <<<"$all"; then
+      # A live phase-worker or office-hours session occupies this worktree.
       return 0
     fi
 
-    # Office-hours name: an office-hours-<N> session occupies the <N>-slug
-    # worktree even though its --name differs from the basename (renamed in #1311).
-    local oh_sessions
-    if ! oh_sessions=$(claude_sessions_with_name "office-hours-$num"); then
-      # Unknown — the daemon could not be queried. Fail safe: occupied.
-      return 0
-    fi
-    if [[ -n "$oh_sessions" ]]; then
-      # A live office-hours session occupies this worktree.
-      return 0
-    fi
-
-    # Both queries succeeded and matched nothing: definitely free.
+    # The query succeeded and matched neither name: definitely free.
     return 1
   }
 

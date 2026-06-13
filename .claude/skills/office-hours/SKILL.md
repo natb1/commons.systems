@@ -12,9 +12,9 @@ two ways:
 1. **Mid-phase input block** — a dispatch phase reached a user-input point
    (a QA judgment-call walkthrough item or
    first-found bug, an unexpected permission prompt). The input-block hook
-   (`dispatch-input-block.sh`) is a passive reactor: it fires when the worker
-   hits `ExitPlanMode`/`AskUserQuestion`/a permission prompt/elicitation, applied
-   `dispatch:office-hours` to the issue, and passed the baton — the session stays
+   (`dispatch-input-block.sh`) is a passive reactor: when the worker
+   hits `ExitPlanMode`/`AskUserQuestion`/a permission prompt/elicitation, it applies
+   `dispatch:office-hours` to the issue and passes the baton — the session stays
    blocked on the prompt rather than terminating.
 2. **Completion-time deviation or planning-time ambiguity** — a phase ran to
    completion but surfaced a deviation from the approved plan or the acceptance
