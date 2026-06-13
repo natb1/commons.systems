@@ -2214,8 +2214,9 @@ teardown
 
 # --- --health-only mode (issue #683 AC: gate before sweep) ------------------
 # --health-only runs the JIT scan and the gate, then exits without the queue
-# scan. /dispatch-propagate SKILL.md calls it before dispatch-sweep so the sweep does
-# not run while main is red.
+# scan. The dispatch flow runs the gate before the sweep (now fired by the
+# worker Stop-hook via dispatch-spawn-sweep) so the sweep does not run while
+# main is red.
 
 # 27a. --health-only, main green, not in a worktree → "ok", exit 0.
 echo "Test: --health-only + main green → ok"
@@ -5908,6 +5909,7 @@ sweep_setup() {
   cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/scripts/lib-worktree-in-sync.sh"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/scripts/lib-reservation-ledger.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
 
   # Default empty gh output (each test may overwrite).
@@ -6037,6 +6039,10 @@ FAKE
   export CLAUDE_AGENTS_CMD="$default_fake"
   export DISPATCH_SWEEP_LOG_FILE="$STUB_DIR/sweep.log"
   export DISPATCH_SWEEP_NOW="2026-01-01T00:00:00Z"
+  # Point the reservation ledger at a scratch dir that is absent by default — no
+  # marker files, so reservation_exists is false for every row and the
+  # reserved-skip is inert. A reserved-skip test opts in by creating a marker here.
+  export DISPATCH_RESERVATION_DIR="$STUB_DIR/reservations"
 }
 
 sweep_teardown() {
@@ -6044,7 +6050,7 @@ sweep_teardown() {
   TMPDIR_TEST=""
   STUB_DIR=""
   export PATH="$SAVED_PATH"
-  unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW
+  unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR
 }
 
 # Helper: register a worktree in the porcelain list AND create its directory.
@@ -6443,6 +6449,108 @@ if grep -q "REMOVE_MERGED: '$WT_PATH' branch=hotfix-login pr=#400" \
   PASS=$((PASS + 1)); echo "  PASS: REMOVE_MERGED log line present for non-issue branch"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_MERGED log line present for non-issue branch"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test R1: merged worktree WITH a reservation marker is skipped (SKIP_RESERVED) ---
+echo "Test: merged worktree with a reservation marker is skipped (SKIP_RESERVED)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/90-reserved-merged"
+sweep_register_wt "$WT_PATH" "90-reserved-merged"
+echo '[{"number":500,"headRefName":"90-reserved-merged","state":"MERGED"}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+# Opt in: create the reservation marker for this worktree's basename.
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv\nissue=90\ntimestamp=2026-01-01T00:00:00Z\n' \
+  > "$DISPATCH_RESERVATION_DIR/90-reserved-merged"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "reserved-merged sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: reserved merged worktree not removed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reserved merged worktree not removed"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_RESERVED: '$WT_PATH' branch=90-reserved-merged" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_RESERVED log line present (merged)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_RESERVED log line present (merged)"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test R2: closed-issue worktree WITH a reservation marker is skipped (SKIP_RESERVED) ---
+echo "Test: closed-issue worktree with a reservation marker is skipped (SKIP_RESERVED)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/91-reserved-closed"
+sweep_register_wt "$WT_PATH" "91-reserved-closed"
+echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+echo "CLOSED" > "$STUB_DIR/issue-state-91.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+# Opt in: create the reservation marker for this worktree's basename.
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv\nissue=91\ntimestamp=2026-01-01T00:00:00Z\n' \
+  > "$DISPATCH_RESERVATION_DIR/91-reserved-closed"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "reserved-closed sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: reserved closed worktree not removed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reserved closed worktree not removed"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_RESERVED: '$WT_PATH' branch=91-reserved-closed" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_RESERVED log line present (closed)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_RESERVED log line present (closed)"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test R3: closed-issue worktree WITH a live session (NO reservation) is skipped (SKIP_CLOSED_LIVE_SESSION) ---
+echo "Test: closed-issue worktree with a live session is skipped (SKIP_CLOSED_LIVE_SESSION)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/92-closed-live"
+sweep_register_wt "$WT_PATH" "92-closed-live"
+echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+echo "CLOSED" > "$STUB_DIR/issue-state-92.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+sweep_fake_claude_sessions_by_name "92-closed-live=sess-live-92"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "closed-live sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: closed live-session worktree not removed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: closed live-session worktree not removed"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_CLOSED_LIVE_SESSION: '$WT_PATH' branch=92-closed-live issue=#92" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_CLOSED_LIVE_SESSION log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_CLOSED_LIVE_SESSION log line present"
   echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
 sweep_teardown
@@ -11298,6 +11406,154 @@ else
   echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
 fi
 st_teardown
+
+# ============================================================================
+# dispatch-spawn-sweep tests (#1451)
+# ============================================================================
+echo ""
+echo "=== dispatch-spawn-sweep ==="
+#
+# dispatch-spawn-sweep launches the dispatch-sweep reaper as a transient
+# `systemd-run --user` unit. Exercised against a fake `systemd-run` (stub at the
+# path DISPATCH_SPAWN_SWEEP_SYSTEMD_RUN_CMD points to) that records its argv — no
+# real systemd. DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE points at a synthetic main
+# worktree so no git repo is required. The throttle is driven deterministically
+# via DISPATCH_SPAWN_SWEEP_THROTTLE_FILE + DISPATCH_SPAWN_SWEEP_NOW. Unlike
+# spawn-tick, the sweep installs no recovery/daemon units, so no systemctl stub
+# is needed. The test shell runs under `set -e`; each invocation is wrapped to
+# capture the exit code.
+
+sw_setup() {
+  local stub_body="${1:-}"
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/main"
+
+  cp "$SCRIPT_DIR/dispatch-spawn-sweep" "$TMPDIR_TEST/scripts/dispatch-spawn-sweep"
+  # dispatch-spawn-sweep sources lib.sh via its SCRIPT_DIR — so lib.sh must sit
+  # alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-sweep"
+
+  if [[ -z "$stub_body" ]]; then
+    stub_body="echo \"\$*\" >> \"$TMPDIR_TEST/systemd-log\""
+  fi
+  cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+$stub_body
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemd-run"
+
+  export DISPATCH_SPAWN_SWEEP_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
+  export DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE="$TMPDIR_TEST/main"
+  export DISPATCH_SPAWN_SWEEP_THROTTLE_FILE="$TMPDIR_TEST/throttle"
+}
+
+sw_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_SPAWN_SWEEP_SYSTEMD_RUN_CMD DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE \
+        DISPATCH_SPAWN_SWEEP_THROTTLE_FILE DISPATCH_SWEEP_THROTTLE_S \
+        DISPATCH_SPAWN_SWEEP_NOW
+}
+
+# --- Test SW1: clean launch → spawned + correct argv -------------------------
+echo "Test: a clean dispatch-spawn-sweep launches the dispatch-sweep unit (spawned)"
+sw_setup
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-sweep" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "spawned: dispatch-spawn-sweep exits 0" "0" "$rc"
+assert_eq "spawned: stdout is 'spawned'" "spawned" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-sweep"* \
+   && "$log" == *"--collect"* \
+   && "$log" == *"--property=KillMode=process"* \
+   && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
+   && "$log" == *"--setenv=PATH="* \
+   && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-sweep"* \
+   && "$log" != *"OnFailure"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawned systemd-run argv (unit + collect + KillMode + cwd + setenv + exec, no OnFailure)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawned systemd-run argv (unit + collect + KillMode + cwd + setenv + exec, no OnFailure)"
+  echo "    log: $log"
+fi
+sw_teardown
+
+# --- Test SW2: already-exists collision → deduped ----------------------------
+echo "Test: an already-exists systemd-run collision yields 'deduped' (exit 0)"
+sw_setup 'echo "Unit dispatch-sweep.service already exists" >&2; exit 1'
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-sweep" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "deduped: dispatch-spawn-sweep exits 0" "0" "$rc"
+assert_eq "deduped: stdout is 'deduped'" "deduped" "$out"
+sw_teardown
+
+# --- Test SW3: generic failure → stderr surfaced, code passed through --------
+echo "Test: a generic systemd-run failure surfaces stderr and passes the code through"
+sw_setup 'echo "boom" >&2; exit 1'
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn-sweep" 2>&1 1>/dev/null) || rc=$?
+assert_eq "fail: dispatch-spawn-sweep passes the exit code through (1)" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"boom"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: fail: systemd-run stderr is surfaced"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: fail: systemd-run stderr is surfaced"
+  echo "    stderr: $err"
+fi
+sw_teardown
+
+# --- Test SW4: recent throttle file → throttled, no launch ------------------
+echo "Test: a recent throttle file yields 'throttled' and launches nothing"
+sw_setup
+mkdir -p "$(dirname "$DISPATCH_SPAWN_SWEEP_THROTTLE_FILE")"
+: > "$DISPATCH_SPAWN_SWEEP_THROTTLE_FILE"
+mtime=$(stat -c %Y "$DISPATCH_SPAWN_SWEEP_THROTTLE_FILE")
+export DISPATCH_SPAWN_SWEEP_NOW=$((mtime + 10))
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-sweep" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "throttled: dispatch-spawn-sweep exits 0" "0" "$rc"
+assert_eq "throttled: stdout is 'throttled'" "throttled" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: throttled: no systemd-run invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: throttled: no systemd-run invocation recorded"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+unset DISPATCH_SPAWN_SWEEP_NOW
+sw_teardown
+
+# --- Test SW5: stale throttle file → launches (spawned) ----------------------
+echo "Test: a stale throttle file (older than the window) launches the sweep (spawned)"
+sw_setup
+mkdir -p "$(dirname "$DISPATCH_SPAWN_SWEEP_THROTTLE_FILE")"
+: > "$DISPATCH_SPAWN_SWEEP_THROTTLE_FILE"
+mtime=$(stat -c %Y "$DISPATCH_SPAWN_SWEEP_THROTTLE_FILE")
+export DISPATCH_SPAWN_SWEEP_NOW=$((mtime + 600))
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-sweep" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "stale-throttle: dispatch-spawn-sweep exits 0" "0" "$rc"
+assert_eq "stale-throttle: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ -e "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stale-throttle: systemd-run invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stale-throttle: systemd-run invocation recorded"
+fi
+unset DISPATCH_SPAWN_SWEEP_NOW
+sw_teardown
+
+# --- Test SW6: positional argument rejected (exit 2), launches nothing -------
+echo "Test: a positional argument exits 2 and launches nothing"
+sw_setup
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn-sweep" foo 2>&1 1>/dev/null) || rc=$?
+assert_eq "bad-arg: dispatch-spawn-sweep exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: bad-arg: no systemd-run invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: bad-arg: no systemd-run invocation recorded"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+sw_teardown
 
 # ============================================================================
 # dispatch-tick-recover tests (#1150)
