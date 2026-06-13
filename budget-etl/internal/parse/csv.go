@@ -109,7 +109,7 @@ func parseCSV(path string) (ParseResult, error) {
 			// breaks that invariant; the error is not reachable on any input (you
 			// cannot pack more distinct X-n blockers into the file than it has rows).
 			found := false
-			for n := 2; n <= len(records); n++ {
+			for n := 2; n <= len(records)-1; n++ {
 				candidate := fmt.Sprintf("%s-%d", txnID, n)
 				_, inUsed := used[candidate]
 				_, inOriginal := original[candidate]
@@ -120,7 +120,7 @@ func parseCSV(path string) (ParseResult, error) {
 				}
 			}
 			if !found {
-				return ParseResult{}, fmt.Errorf("%s: line %d: cannot find unique suffix for duplicate ID %q within %d candidates", path, i+2, txnID, len(records))
+				return ParseResult{}, fmt.Errorf("%s: line %d: cannot find unique suffix for duplicate ID %q within %d candidates", path, i+2, txnID, len(records)-1)
 			}
 		}
 		used[txnID] = struct{}{}
