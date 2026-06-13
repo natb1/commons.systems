@@ -113,6 +113,53 @@ describe("office-hours items", () => {
       }),
     );
   });
+
+  it("allows owner list query on items collection", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/items`),
+          where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+  });
+
+  it("denies unfiltered owner list query on items collection", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(collection(db, `office-hours/${ENV}/items`)),
+    );
+  });
+
+  it("denies non-member list query on items collection", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/items`),
+          where("memberEmails", "array-contains", "stranger@test.com"),
+        ),
+      ),
+    );
+  });
+
+  it("denies unauthenticated list query on items collection", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/items`),
+          where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+  });
 });
 
 describe("office-hours usage-samples", () => {
