@@ -28,17 +28,26 @@ Type and topic are orthogonal axes — apply one of each as warranted.
   signals is `enhancement` even if it mentions bug-flavored keywords.
 
 - **`enhancement`** — new feature, refinement, refactor, or hardening that
-  adds capability or improves a working surface without fixing a defect.
-  This is the default when the issue is not a bug. Keyword signals: "add",
-  "extract", "refactor", "extend", "support", "improve".
+  adds capability or improves a working surface without fixing a defect. It is
+  a PROVENANCE marker: it applies only when the caller signals auto-follow-up
+  provenance (the `--follow-up` flag in `/file-issue`) AND the issue is non-bug,
+  non-security. This skill classifies the defect/security dimension from the
+  body; the enhancement-vs-none decision is provenance-gated and caller-signaled,
+  not derivable from title/body alone. Keyword signals: "add", "extract",
+  "refactor", "extend", "support", "improve".
 
-Apply exactly one of `bug` / `enhancement`. Record the matched label as
-`<type>` for the apply template below. If the issue already carries the
-*other* type label from a prior run or manual edit, pass
-`--remove-label "<other-type>"` in the same `gh issue edit` call that adds
-`<type>` — a single atomic swap avoids the race window of two separate calls
-and prevents the issue from transiently carrying both `bug` and
-`enhancement`.
+Apply the relaxed invariant `{bug} | {enhancement, follow-up only} | {none}`:
+a structural defect → `bug`; a non-bug, non-security, auto-follow-up issue →
+`enhancement`; a non-bug, non-security, user-filed issue → no type label.
+Security-topic issues never carry `enhancement` (the topic axis documents the
+security tie-break below). Record the matched label as `<type>` for the apply
+template below, or leave `<type>` empty when no type matched. If the issue
+already carries a now-incorrect type label from a prior run or manual edit — the
+*other* type label, or a stale `enhancement`/`bug` when the new classification
+yields no type label — pass `--remove-label "<other-type>"` in the same
+`gh issue edit` call. A single atomic swap avoids the race window of two separate
+calls and prevents transiently carrying both `bug` and `enhancement`; the same
+swap strips a stale `enhancement` when the relaxed invariant now yields none.
 
 ### Topic classification
 
@@ -131,6 +140,9 @@ call:
 ```bash
 gh issue edit <N> --add-label "<type>" --add-label "<topic>"
 # drop the trailing --add-label "<topic>" when no topic matched;
+# drop --add-label "<type>" when no type matched;
 # add --remove-label "<other-type>" in this SAME call only when the issue
-# already carries the opposite type label (the atomic type-swap).
+# already carries a now-incorrect type label (the atomic type-swap, including a
+# stale enhancement). This --remove-label may fire alone when --add-label "<type>"
+# is dropped — that standalone removal strips the stale type label.
 ```
