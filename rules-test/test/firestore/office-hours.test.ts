@@ -1,4 +1,4 @@
-import { describe, it, beforeAll, beforeEach } from "vitest";
+import { describe, it, beforeAll, beforeEach, expect } from "vitest";
 import { assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
 import type { RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import {
@@ -164,6 +164,24 @@ describe("office-hours items", () => {
         ),
       ),
     );
+  });
+
+  // Documents the non-obvious converse of the denial above: a non-member's
+  // self-targeted filter is rule-compliant and succeeds, returning an empty
+  // set rather than being denied. This guards against re-introducing the
+  // false "self-targeted non-member filter is denied" assumption.
+  it("allows authenticated non-member self-targeted list query (returns empty)", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    const snap = await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/items`),
+          where("memberEmails", "array-contains", "stranger@test.com"),
+        ),
+      ),
+    );
+    expect(snap.empty).toBe(true);
   });
 });
 
