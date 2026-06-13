@@ -151,7 +151,7 @@ export function afterRenderHome(
       // The document-level listener outlives the Home view until the next
       // afterRenderHome aborts it; skip stale events fired after navigation
       // away (outlet re-rendered by the router).
-      if (cacheInfo && !isOutletCurrent(outlet, cacheInfo)) return;
+      if (!cacheInfo || !isOutletCurrent(outlet, cacheInfo)) return;
       refreshCacheStats(outlet);
     },
     { signal: clickAbort.signal },
