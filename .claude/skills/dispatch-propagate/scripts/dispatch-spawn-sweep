@@ -30,6 +30,23 @@
 #       throttle limits frequency; the dedup prevents overlap. They solve
 #       different problems.
 #
+#       Stamp-AFTER-launch: the throttle file is stamped only on the spawned and
+#       deduped success paths, never before the systemd-run call. Stamping before
+#       would let a non-dedup launch failure (D-Bus unavailable, systemd user
+#       instance not running, unit-file permission error) consume the full
+#       throttle window — the stamp would carry a fresh mtime even though no
+#       sweep ran, so every worker Stop for the next DISPATCH_SWEEP_THROTTLE_S
+#       seconds would print `throttled` and skip relaunching, opening
+#       multi-minute sweep-coverage gaps on a WSL host whose systemd user session
+#       is transiently unavailable. Stamping only on success lets a failed launch
+#       retry on the very next worker Stop.
+#
+#       Fail-open on an uncreatable stamp path: the stamp is best-effort. If
+#       MAIN_WORKTREE/tmp/ cannot be created (e.g. a missing main worktree), the
+#       stamp never persists and throttling becomes a no-op — every Stop fires a
+#       sweep (bounded by the dedup). This fails OPEN (more sweeps), not closed,
+#       which is the safer direction for stale-worktree GC.
+#
 # --collect:
 #   Makes systemd garbage-collect a finished OR FAILED transient unit so the
 #   fixed name `dispatch-sweep` frees for the next sweep. Without --collect a
@@ -62,7 +79,9 @@
 # DELIBERATE OMISSIONS (vs dispatch-spawn-tick):
 #   (a) NO OnFailure recovery unit / no ensure_recover_unit. The sweep is
 #       best-effort, not chain-critical: a failed sweep simply retries on the
-#       next worker Stop (subject to the throttle). dispatch-spawn-tick IS
+#       next worker Stop. (A failed LAUNCH does not stamp the throttle — see
+#       (b) above — so the retry is immediate, not throttle-delayed.)
+#       dispatch-spawn-tick IS
 #       chain-critical, so it installs dispatch-tick-recover.service to
 #       guarantee a chain continuation; the sweep needs no such guarantee.
 #   (b) NO ensure_daemon_service call. The sweep does not host the fleet — the
@@ -151,10 +170,23 @@ if [[ -e "$THROTTLE_FILE" ]]; then
   fi
 fi
 
-# Stamp the throttle file (best-effort — a failure to stamp must NOT block the
-# launch). Create the parent dir, then write the now-epoch into the file.
-mkdir -p "$(dirname "$THROTTLE_FILE")" 2>/dev/null || true
-printf '%s\n' "$NOW" >"$THROTTLE_FILE" 2>/dev/null || true
+# The throttle is stamped AFTER a successful launch (see stamp_throttle below),
+# NOT before. Stamping before would let a non-dedup launch failure (D-Bus down,
+# systemd user instance not running, unit-file permission error) consume the full
+# throttle window: the stamp would carry a fresh mtime even though no sweep ran,
+# so every worker Stop for the next DISPATCH_SWEEP_THROTTLE_S seconds would print
+# `throttled` and skip relaunching — multi-minute sweep-coverage gaps on a WSL
+# host whose systemd user session is transiently unavailable. Stamping only on
+# the spawned/deduped paths lets a failed launch retry on the very next Stop.
+#
+# Note the stamp is best-effort: if MAIN_WORKTREE/tmp/ cannot be created (e.g. a
+# missing main worktree), the stamp never persists and throttling becomes a
+# no-op — every Stop fires a sweep. This fails OPEN (more sweeps, bounded by the
+# dedup), not closed, which is the safer direction for stale-worktree GC.
+stamp_throttle() {
+  mkdir -p "$(dirname "$THROTTLE_FILE")" 2>/dev/null || true
+  printf '%s\n' "$NOW" >"$THROTTLE_FILE" 2>/dev/null || true
+}
 
 # ---- Step 3: launch the transient sweep unit immediately --------------------
 SYSTEMD_RUN_CMD="${DISPATCH_SPAWN_SWEEP_SYSTEMD_RUN_CMD:-systemd-run}"
@@ -181,6 +213,7 @@ trap 'rm -f "$RUN_STDERR"' EXIT
 RC=$?
 
 if (( RC == 0 )); then
+  stamp_throttle
   echo spawned
   exit 0
 fi
@@ -194,10 +227,15 @@ err=$(cat "$RUN_STDERR")
 # stderr happens to contain "already exists" from being silently treated as a
 # dedup no-op (which would mask a real launch failure).
 if [[ "$err" == *"already exists"* && "$err" == *"$UNIT_NAME"* ]]; then
+  # A sweep is already running — stamp the throttle so the next Stop respects the
+  # rate window (a sweep DID fire recently, just not by this caller).
+  stamp_throttle
   echo deduped
   exit 0
 fi
 
-# Some other failure — surface stderr and pass the exit code through.
+# Some other failure — surface stderr and pass the exit code through. Crucially,
+# do NOT stamp the throttle here: an un-launched sweep must be retryable on the
+# very next worker Stop, not blocked for the full throttle window.
 echo "$err" >&2
 exit "$RC"

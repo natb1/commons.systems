@@ -21,12 +21,10 @@
 #   2  invalid invocation (not in a git repo).
 #
 # NOT set -e: per-worktree errors should not abort the sweep — bookkeeping
-# decisions must keep flowing into the log so the next /dispatch-propagate tick can act.
+# decisions must keep flowing into the log so the next worker Stop (via dispatch-spawn-sweep) can act.
 set -uo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-source "$SCRIPT_DIR/lib.sh"
-
 # shellcheck source=./lib.sh
 source "$SCRIPT_DIR/lib.sh"
 # shellcheck source=./lib-worktree-in-sync.sh

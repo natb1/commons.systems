@@ -11570,6 +11570,20 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: fail: systemd-run stderr is surfaced"
   echo "    stderr: $err"
 fi
+# Stamp-AFTER-launch: dispatch-spawn-sweep stamps the throttle file only on the
+# spawned/deduped success paths, NOT before systemd-run. A non-dedup launch
+# failure (D-Bus down, systemd user instance not running, unit-file permission
+# error) must NOT consume the throttle window — stamping before would suppress
+# every worker Stop for the next ~300s even though no sweep ran, opening
+# multi-minute sweep-coverage gaps on a WSL host with a transiently-unavailable
+# systemd user session. Lock that in: after a failed launch the file is ABSENT,
+# so the very next worker Stop retries immediately.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$TMPDIR_TEST/throttle" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: fail: throttle file NOT stamped on a failed launch (next Stop retries)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: fail: throttle file NOT stamped on a failed launch (next Stop retries)"
+fi
 sw_teardown
 
 # --- Test SW4: recent throttle file → throttled, no launch ------------------
