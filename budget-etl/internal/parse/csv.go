@@ -106,13 +106,13 @@ func parseCSV(path string) (ParseResult, error) {
 			base := txnID
 			n := nextSuffix[base]
 			if n < 2 {
-				n = 2 // map zero-value guard: first collision starts at X-2, never X-0
+				n = 2 // map zero-value guard: first collision starts at X-2; stored values are always >= 3, so n is never 0 or 1
 			}
 			for {
 				candidate := fmt.Sprintf("%s-%d", base, n)
 				_, inUsed := used[candidate]
 				_, inOriginal := original[candidate]
-				n++
+				n++ // advance before acceptance check so nextSuffix stores the slot after the one just taken
 				if !inUsed && !inOriginal {
 					txnID = candidate
 					break
