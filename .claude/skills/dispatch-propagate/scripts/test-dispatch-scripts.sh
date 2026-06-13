@@ -3517,6 +3517,109 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
 assert_eq "--priority-only JIT suppressed → priority issue returned" "issue 400" "$result"
 teardown
 
+# --- --priority-only `waiting` split (#1444) --------------------------------
+# A lone priority PR whose CI is still pending is skipped by the dispatch-ci-ready
+# readiness gate. Before #1444 that produced `empty`, conflating "no priority work"
+# with "priority work exists but is CI-pending". --priority-only now emits
+# `waiting <issue#>` when CI is the SOLE reason a priority item is unselectable, so
+# dispatch-select-tick can arm a CI-cadence reseed instead of the pace reseed.
+
+# AC1 (#1444). A CI-pending priority PR — otherwise eligible — yields `waiting <N>`.
+# Issue 100 carries `priority` but NOT `help wanted`: a help-wanted priority issue
+# would be returned by the issue queue as `issue 100` before the waiting/empty
+# fallback, masking the split under test.
+echo "Test: --priority-only — CI-pending priority PR → waiting <N> (#1444)"
+setup
+UNION='['"$(make_pr_union 100 "100-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":100}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only CI-pending priority PR → waiting 100" "waiting 100" "$result"
+teardown
+
+# AC2 (#1444). No priority item at all → `empty` stays `empty` (the waiting split
+# must not fire when there is no priority work). PO4 above already covers a
+# non-priority CI-pending PR → empty; this adds an explicit minimal guard with a
+# single non-priority CI-pending PR so the empty-vs-waiting boundary is pinned.
+echo "Test: --priority-only — no priority item, CI-pending non-priority PR → empty (#1444)"
+setup
+UNION='['"$(make_pr_union 100 "100-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":100}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only no priority item → empty (not waiting)" "empty" "$result"
+teardown
+
+# AC3a (#1444). A CI-pending priority PR whose issue is ALSO office-hours-parked is
+# NOT a waiting candidate — office-hours is an independent reason it is unselectable,
+# so the split must read `empty`, not `waiting`.
+echo "Test: --priority-only — CI-pending priority PR also office-hours-parked → empty (#1444)"
+setup
+UNION='['"$(make_pr_union 100 "100-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":100}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"},{"name":"dispatch:office-hours"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only CI-pending + office-hours-parked → empty" "empty" "$result"
+teardown
+
+# AC3b (#1444). A CI-pending priority PR whose closing issue is ALSO blocked_by an
+# open issue is NOT a waiting candidate — blocked is an independent reason, so the
+# split reads `empty`. The blocker fixture mirrors the existing blocked-skip tests
+# (`{"number":999,"state":"open"}`): the stub projects `.state` into the GraphQL
+# `blockedBy.nodes[].state` shape, which dispatch-select-target filters on `OPEN`.
+echo "Test: --priority-only — CI-pending priority PR also blocked → empty (#1444)"
+setup
+UNION='['"$(make_pr_union 100 "100-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":100}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf '[{"number":999,"state":"open"}]\n' > "$STUB_DIR/blockers-100.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only CI-pending + blocked → empty" "empty" "$result"
+teardown
+
+# Guard (#1444). A selectable priority item must NOT be preempted by the waiting
+# probe: one CI-pending priority PR 100 AND one ready priority PR 200 (failing CI →
+# fix-checks). The selection emits `pr 200 ... fix-checks`; `waiting` is only the
+# TOP==1 terminal fallback, reached only when nothing is selectable.
+echo "Test: --priority-only — selectable priority item not preempted by waiting (#1444)"
+setup
+UNION='['
+UNION+="$(make_pr_union 100 "100-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":100}]')"','
+UNION+="$(make_pr_union 200 "200-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only selectable priority PR beats waiting" "pr 200 200-priority-pr fix-checks" "$result"
+teardown
+
+# Ordering guarantee (#1444). A CI-pending priority PR whose branch worktree is
+# owned by a live session is `continue`d at the claimed-worktree skip, which
+# precedes the CI gate — so it never reaches the waiting capture and the split
+# reads `empty`. Models the live-session fixture on the claimed-skip tests above.
+echo "Test: --priority-only — claimed CI-pending priority PR → empty (#1444)"
+setup
+UNION='['"$(make_pr_union 100 "100-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":100}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/100-priority-pr\nHEAD def456\nbranch refs/heads/100-priority-pr\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "100-priority-pr"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only claimed CI-pending priority PR → empty" "empty" "$result"
+teardown
+
 # PO6. --priority-only rejects combination with the other modes. The guard
 # condition covers all three sibling modes, so exercise each arm: --qa,
 # --health-only, and --main-broken-sha must each be rejected with exit 1.
