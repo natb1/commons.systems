@@ -102,14 +102,25 @@ func parseCSV(path string) (ParseResult, error) {
 		}
 
 		if _, taken := used[txnID]; taken {
-			for n := 2; ; n++ {
+			// Defensive termination guard. The scan is implicitly bounded: every
+			// blocking X-n candidate must be an ID present in the finite file, so a
+			// free suffix always exists at or below n = len(records)-1. This explicit
+			// cap makes termination guaranteed in source against a future change that
+			// breaks that invariant; the error is not reachable on any input (you
+			// cannot pack more distinct X-n blockers into the file than it has rows).
+			found := false
+			for n := 2; n <= len(records); n++ {
 				candidate := fmt.Sprintf("%s-%d", txnID, n)
 				_, inUsed := used[candidate]
 				_, inOriginal := original[candidate]
 				if !inUsed && !inOriginal {
 					txnID = candidate
+					found = true
 					break
 				}
+			}
+			if !found {
+				return ParseResult{}, fmt.Errorf("%s: line %d: cannot find unique suffix for duplicate ID %q within %d candidates", path, i+2, txnID, len(records))
 			}
 		}
 		used[txnID] = struct{}{}
