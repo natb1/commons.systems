@@ -299,9 +299,11 @@ run_materialize() {
   token=$(printf '%s\n' "$mat_out" | tail -n 1)
   # Every recognized terminal token is a log-and-exit-0 disposition for a headless
   # tick: the token is already in the journal via the passthrough above, and there
-  # is no managed job to self-close. `resolve merge-conflict` is a defensive no-op
-  # — materialize-spawn now spawns a resolver bg job and emits `propagate`, so the
-  # token no longer reaches here, but the branch keeps it a safe exit-0 disposition.
+  # is no managed job to self-close. A no-spawn `drain` additionally triggers the
+  # dispatch-tick-recover continuation backstop before exiting 0 (see that arm,
+  # #1445). `resolve merge-conflict` is a defensive no-op — materialize-spawn now
+  # spawns a resolver bg job and emits `propagate`, so the token no longer reaches
+  # here, but the branch keeps it a safe exit-0 disposition.
   case "$token" in
     propagate|resolve\ merge-conflict)
       # A worker/resolver was spawned — its Stop-hook carries the chain. Bare
