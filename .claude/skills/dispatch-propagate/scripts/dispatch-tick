@@ -359,6 +359,25 @@ run_materialize() {
     propagate|resolve\ merge-conflict)
       # A worker/resolver was spawned — its Stop-hook carries the chain. Bare
       # exit; calling recover here would wrongly increment its failure counter.
+      #
+      # Convergence safety net (#1453): on a `propagate` token from an AUTONOMOUS
+      # tick, arm a short-delay convergence reseed. The called script re-counts
+      # effective-live workers (busy + reservations) and arms a no-arg dispatch-tick
+      # ONLY when the fleet is still below target and not gated (it self-suppresses
+      # on converged / pace-gate-closed / exhausted). Placing the call here — on the
+      # token taken when the tick had a normal materialize decision — makes the
+      # trigger a FRESH recount rather than the stale `spawned < GAP` signal,
+      # catching both the partial-fill case and a drain-during-tick.
+      #
+      # Autonomous-only: an explicit `dispatch <N>` (ARG set) and a bare manual
+      # `dispatch` (MANUAL set) are gate-exempt single-target spawns that must NOT
+      # drive fleet convergence. `resolve merge-conflict` is excluded by the
+      # `propagate`-only test below. Best-effort: a failed arm logs ONE note and the
+      # tick still exits 0 — never wedge the tick on a convergence arm.
+      if [[ "$token" == propagate && -z "$MANUAL" && -z "$ARG" ]]; then
+        "$SCRIPT_DIR/dispatch-schedule-convergence-reseed" \
+          || echo "dispatch-tick: convergence reseed arm failed (best-effort)" >&2
+      fi
       exit 0
       ;;
     notify\ *)

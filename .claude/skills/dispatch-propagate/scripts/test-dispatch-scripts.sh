@@ -158,7 +158,7 @@ STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 # Reconstruct full args string for matching.
 args="$*"
 case "$args" in
-  "pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
+  "pr list --state open --limit 300 --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
       cat "$STUB_DIR/pr-list-full.json"
@@ -166,7 +166,7 @@ case "$args" in
       echo "[]"
     fi
     ;;
-  "pr list --state open --json number,headRefName")
+  "pr list --state open --limit 300 --json number,headRefName")
     # dispatch-find-pr self-fetch: only the two correlation fields.
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     echo "pr list" >> "$STUB_DIR/gh-find-pr-calls.log"
@@ -179,7 +179,12 @@ case "$args" in
       echo "[]"
     fi
     ;;
-  "pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences,mergeable")
+  "pr list --state open --limit 5 --json number,headRefName")
+    # #1312 truncation-guard test: exactly 5 PRs at the DISPATCH_PR_LIST_LIMIT=5
+    # boundary so pr_list_open fires the loud guard and returns non-zero.
+    printf '[{"number":1,"headRefName":"1-a"},{"number":2,"headRefName":"2-b"},{"number":3,"headRefName":"3-c"},{"number":4,"headRefName":"4-d"},{"number":5,"headRefName":"5-e"}]\n'
+    ;;
+  "pr list --state open --limit 300 --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences,mergeable")
     # dispatch-select-target's union fetch now carries `mergeable` (#1241). The
     # field is forward-compatible (consumed by #1243); the current selection path
     # does not read it, and make_pr_union fixtures omit it (jq yields null).
@@ -451,7 +456,7 @@ case "$args" in
         ;;
     esac
     ;;
-  "pr list --state open --json number,isDraft,labels,statusCheckRollup,mergeable")
+  "pr list --state open --limit 300 --json number,isDraft,labels,statusCheckRollup,mergeable")
     # dispatch-reconcile-ready's one fetch. $STUB_DIR/reconcile-pr-list.json
     # supplies the per-test PR array; absence means no open PRs.
     echo "pr list" >> "$STUB_DIR/gh-reconcile-pr-list.log"
@@ -1214,13 +1219,67 @@ printf '{"closedByPullRequestsReferences":[{"number":851,"state":"OPEN"}]}\n' \
 result=$(DISPATCH_PR_LIST='[{"number":850,"headRefName":"999-unrelated"}]' \
   "$TMPDIR_TEST/dispatch-find-pr" "822")
 assert_eq "DISPATCH_PR_LIST no prefix match; cross-check finds OPEN PR → PR number" "851" "$result"
-# Verify no self-fetch: gh pr list --state open --json number,headRefName was not called.
+# Verify no self-fetch: pr_list_open (number,headRefName) was not called.
 if [[ -f "$STUB_DIR/gh-find-pr-calls.log" ]]; then
   call_count=$(wc -l < "$STUB_DIR/gh-find-pr-calls.log")
 else
   call_count=0
 fi
 assert_eq "no self-fetch gh pr list calls when DISPATCH_PR_LIST set" "0" "$call_count"
+teardown
+
+# 11. #1312: No truncation past 30 PRs (proves the --limit 300 fix).
+# Before the fix, gh pr list defaulted to --limit 30, so PR 33 of 35 open PRs
+# would be silently omitted and dispatch-find-pr would return empty.  With
+# --limit 300, the stub case "pr list --state open --limit 300 --json
+# number,headRefName" serves all 35 entries from pr-list-full.json, so PR 33
+# is found on the first fetch.
+echo "Test: #1312 dispatch-find-pr resolves PR 33 of 35 open PRs (no truncation)"
+setup
+jq -nc '[range(1;36) | {number: ., headRefName: (tostring + "-feature")}]' \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "33")
+assert_eq "#1312: dispatch-find-pr resolves PR 33 of 35 open PRs (no truncation)" "33" "$result"
+teardown
+
+# 12. #1312: Loud truncation guard fires when result length equals the limit.
+# With DISPATCH_PR_LIST_LIMIT=5 the stub returns exactly 5 PRs, which equals
+# the limit.  pr_list_open must exit non-zero and write "likely truncated" to
+# stderr so the failure is never silent.
+echo "Test: #1312 pr_list_open exits non-zero and logs loudly when result length equals the limit"
+setup
+if err=$(DISPATCH_PR_LIST_LIMIT=5 bash -c \
+    'source "'"$TMPDIR_TEST"'/lib.sh" && pr_list_open "number,headRefName"' \
+    2>&1 1>/dev/null); then
+  rc=0
+else
+  rc=$?
+fi
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1))
+  TOTAL=$((TOTAL + 1))
+  echo "  PASS: #1312: pr_list_open exits non-zero when result length equals the limit"
+else
+  FAIL=$((FAIL + 1))
+  TOTAL=$((TOTAL + 1))
+  echo "  FAIL: #1312: pr_list_open exits non-zero when result length equals the limit"
+  echo "    expected: non-zero exit"
+  echo "    actual:   exit 0"
+fi
+case "$err" in
+  *"likely truncated"*)
+    PASS=$((PASS + 1))
+    TOTAL=$((TOTAL + 1))
+    echo "  PASS: #1312: pr_list_open writes a loud truncation error to stderr"
+    ;;
+  *)
+    FAIL=$((FAIL + 1))
+    TOTAL=$((TOTAL + 1))
+    echo "  FAIL: #1312: pr_list_open writes a loud truncation error to stderr"
+    echo "    expected: stderr containing 'likely truncated'"
+    echo "    actual:   '$err'"
+    ;;
+esac
 teardown
 
 # ============================================================================
@@ -2229,8 +2288,9 @@ teardown
 
 # --- --health-only mode (issue #683 AC: gate before sweep) ------------------
 # --health-only runs the JIT scan and the gate, then exits without the queue
-# scan. /dispatch-propagate SKILL.md calls it before dispatch-sweep so the sweep does
-# not run while main is red.
+# scan. The dispatch flow runs the gate before the sweep (now fired by the
+# worker Stop-hook via dispatch-spawn-sweep) so the sweep does not run while
+# main is red.
 
 # 27a. --health-only, main green, not in a worktree → "ok", exit 0.
 echo "Test: --health-only + main green → ok"
@@ -5994,6 +6054,7 @@ sweep_setup() {
   cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/scripts/lib-worktree-in-sync.sh"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/scripts/lib-reservation-ledger.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
 
   # Default empty gh output (each test may overwrite).
@@ -6123,6 +6184,10 @@ FAKE
   export CLAUDE_AGENTS_CMD="$default_fake"
   export DISPATCH_SWEEP_LOG_FILE="$STUB_DIR/sweep.log"
   export DISPATCH_SWEEP_NOW="2026-01-01T00:00:00Z"
+  # Point the reservation ledger at a scratch dir that is absent by default — no
+  # marker files, so reservation_exists is false for every row and the
+  # reserved-skip is inert. A reserved-skip test opts in by creating a marker here.
+  export DISPATCH_RESERVATION_DIR="$STUB_DIR/reservations"
 }
 
 sweep_teardown() {
@@ -6130,7 +6195,7 @@ sweep_teardown() {
   TMPDIR_TEST=""
   STUB_DIR=""
   export PATH="$SAVED_PATH"
-  unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW
+  unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR
 }
 
 # Helper: register a worktree in the porcelain list AND create its directory.
@@ -6529,6 +6594,108 @@ if grep -q "REMOVE_MERGED: '$WT_PATH' branch=hotfix-login pr=#400" \
   PASS=$((PASS + 1)); echo "  PASS: REMOVE_MERGED log line present for non-issue branch"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_MERGED log line present for non-issue branch"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test R1: merged worktree WITH a reservation marker is skipped (SKIP_RESERVED) ---
+echo "Test: merged worktree with a reservation marker is skipped (SKIP_RESERVED)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/90-reserved-merged"
+sweep_register_wt "$WT_PATH" "90-reserved-merged"
+echo '[{"number":500,"headRefName":"90-reserved-merged","state":"MERGED"}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+# Opt in: create the reservation marker for this worktree's basename.
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv\nissue=90\ntimestamp=2026-01-01T00:00:00Z\n' \
+  > "$DISPATCH_RESERVATION_DIR/90-reserved-merged"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "reserved-merged sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: reserved merged worktree not removed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reserved merged worktree not removed"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_RESERVED: '$WT_PATH' branch=90-reserved-merged" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_RESERVED log line present (merged)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_RESERVED log line present (merged)"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test R2: closed-issue worktree WITH a reservation marker is skipped (SKIP_RESERVED) ---
+echo "Test: closed-issue worktree with a reservation marker is skipped (SKIP_RESERVED)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/91-reserved-closed"
+sweep_register_wt "$WT_PATH" "91-reserved-closed"
+echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+echo "CLOSED" > "$STUB_DIR/issue-state-91.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+# Opt in: create the reservation marker for this worktree's basename.
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv\nissue=91\ntimestamp=2026-01-01T00:00:00Z\n' \
+  > "$DISPATCH_RESERVATION_DIR/91-reserved-closed"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "reserved-closed sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: reserved closed worktree not removed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reserved closed worktree not removed"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_RESERVED: '$WT_PATH' branch=91-reserved-closed" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_RESERVED log line present (closed)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_RESERVED log line present (closed)"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test R3: closed-issue worktree WITH a live session (NO reservation) is skipped (SKIP_CLOSED_LIVE_SESSION) ---
+echo "Test: closed-issue worktree with a live session is skipped (SKIP_CLOSED_LIVE_SESSION)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/92-closed-live"
+sweep_register_wt "$WT_PATH" "92-closed-live"
+echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+echo "CLOSED" > "$STUB_DIR/issue-state-92.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+sweep_fake_claude_sessions_by_name "92-closed-live=sess-live-92"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "closed-live sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: closed live-session worktree not removed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: closed live-session worktree not removed"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_CLOSED_LIVE_SESSION: '$WT_PATH' branch=92-closed-live issue=#92" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_CLOSED_LIVE_SESSION log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_CLOSED_LIVE_SESSION log line present"
   echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
 sweep_teardown
@@ -9969,10 +10136,11 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/systemd-run"
   export DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
 
-  # dispatch-schedule-reseed now calls ensure_recover_unit (lib.sh), which
-  # without isolation would write to the real ~/.config/systemd/user/ and run a
-  # real `systemctl --user daemon-reload`. Redirect the unit dir into the tmp
-  # tree and point its systemctl at a no-op stub so daemon-reload is harmless.
+  # dispatch-schedule-reseed now calls ensure_recover_unit + ensure_daemon_service
+  # (lib.sh), which without isolation would write to the real
+  # ~/.config/systemd/user/ and run a real `systemctl --user`. Redirect both unit
+  # dirs into the tmp tree and point their systemctl at a no-op stub so neither
+  # function writes outside the test sandbox.
   cat > "$TMPDIR_TEST/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
 exit 0
@@ -9980,6 +10148,14 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
   export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  # Stub ensure_daemon_service's three overrides. Point the daemon unit dir at a
+  # subdir of the tmp tree (so any written unit file lands there, not in
+  # ~/.config/systemd/user/), reuse the same no-op systemctl stub, and point the
+  # claude binary at the no-op systemctl so path-validation passes without needing
+  # a real claude binary (the unit is never enabled in tests).
+  export DISPATCH_DAEMON_UNIT_DIR="$TMPDIR_TEST/systemd-user"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$TMPDIR_TEST/bin/systemctl"
 }
 
 sr_teardown() {
@@ -9998,6 +10174,7 @@ sr_teardown() {
   unset DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD
   unset DISPATCH_SCHEDULE_RESEED_SHORT_DELAY
   unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
+  unset DISPATCH_DAEMON_UNIT_DIR DISPATCH_DAEMON_SYSTEMCTL_CMD DISPATCH_DAEMON_CLAUDE_CMD
 }
 
 # sr_write_rl <file-name> <used_weekly> <resets_weekly> <used_5h> <resets_5h>
@@ -10638,6 +10815,268 @@ else
   echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
 fi
 sr_teardown
+
+# ============================================================================
+# dispatch-schedule-convergence-reseed tests
+# ============================================================================
+#
+# dispatch-schedule-convergence-reseed re-counts effective-live workers
+# (busy workers + reservations) and arms a short-delay transient NO-ARG
+# dispatch-tick timer ONLY when the fleet is below target and not gated. The
+# harness stubs `systemd-run` (records argv), stubs dispatch-target-workers (so
+# the test controls both the count-mode target and the --exhausted token),
+# points CLAUDE_AGENTS_CMD at a controllable fake (busy-worker count) and
+# DISPATCH_RESERVATION_DIR at a scratch dir (reservation_count = marker count).
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/      script under test + lib.sh + lib-claude-agents.sh
+#                             + lib-reservation-ledger.sh
+#   $TMPDIR_TEST/bin/          systemd-run + systemctl + dispatch-target-workers stubs
+#   $TMPDIR_TEST/systemd-log   recorded systemd-run argv (one line per call)
+#   $TMPDIR_TEST/resv/         reservation ledger scratch dir
+#   $TMPDIR_TEST/main/         a synthetic main worktree path
+echo ""
+echo "=== dispatch-schedule-convergence-reseed ==="
+
+cr_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/resv" \
+    "$TMPDIR_TEST/main"
+
+  cp "$SCRIPT_DIR/dispatch-schedule-convergence-reseed" \
+     "$TMPDIR_TEST/scripts/dispatch-schedule-convergence-reseed"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-schedule-convergence-reseed"
+  # The script sources lib.sh + lib-claude-agents.sh + lib-reservation-ledger.sh
+  # via its SCRIPT_DIR, so all three must sit alongside it. Sourced, not
+  # executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/scripts/lib-reservation-ledger.sh"
+
+  # systemd-run stub: records its argv (one line per call), exits 0.
+  cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/systemd-log"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemd-run"
+  export DISPATCH_CONVERGE_RESEED_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
+
+  # ensure_recover_unit + ensure_daemon_service (lib.sh) would otherwise write to
+  # the real ~/.config/systemd/user/ and run a real `systemctl --user`. Redirect
+  # both unit dirs into the tmp tree and point their systemctl at a no-op stub
+  # so neither function writes outside the test sandbox.
+  cat > "$TMPDIR_TEST/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  # Stub ensure_daemon_service's three overrides. Point the daemon unit dir at a
+  # subdir of the tmp tree (so any written unit file lands there, not in
+  # ~/.config/systemd/user/), reuse the same no-op systemctl stub, and point the
+  # claude binary at the no-op systemctl so path-validation passes without needing
+  # a real claude binary (the unit is never enabled in tests).
+  export DISPATCH_DAEMON_UNIT_DIR="$TMPDIR_TEST/systemd-user"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$TMPDIR_TEST/bin/systemctl"
+
+  export DISPATCH_CONVERGE_RESEED_MAIN_WORKTREE="$TMPDIR_TEST/main"
+
+  # Recount inputs. Default the busy-worker daemon to UNKNOWN (a non-existent
+  # binary → claude_agents_count_busy_workers returns non-zero → BUSY=0) and the
+  # reservation ledger to the scratch dir (reservation_count = marker count).
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
+  export DISPATCH_RESERVATION_DIR="$TMPDIR_TEST/resv"
+}
+
+cr_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_CONVERGE_RESEED_SYSTEMD_RUN_CMD
+  unset DISPATCH_CONVERGE_RESEED_MAIN_WORKTREE
+  unset DISPATCH_CONVERGE_RESEED_TARGET_WORKERS_CMD
+  unset DISPATCH_CONVERGE_RESEED_NOW
+  unset DISPATCH_CONVERGE_RESEED_DELAY
+  unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
+  unset DISPATCH_DAEMON_UNIT_DIR DISPATCH_DAEMON_SYSTEMCTL_CMD DISPATCH_DAEMON_CLAUDE_CMD
+  unset CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_DIR
+}
+
+# cr_write_target <count> <exhausted-token>
+#   Install a dispatch-target-workers stub: default (count mode) prints <count>,
+#   and `--exhausted` prints <exhausted-token>. Wires the override.
+cr_write_target() {
+  local count="$1" exhausted="$2"
+  cat > "$TMPDIR_TEST/bin/dispatch-target-workers" <<STUB
+#!/usr/bin/env bash
+if [[ "\${1:-}" == "--exhausted" ]]; then echo "$exhausted"; else echo "$count"; fi
+STUB
+  chmod +x "$TMPDIR_TEST/bin/dispatch-target-workers"
+  export DISPATCH_CONVERGE_RESEED_TARGET_WORKERS_CMD="$TMPDIR_TEST/bin/dispatch-target-workers"
+}
+
+# cr_write_resv <n>
+#   Write <n> reservation marker files into the scratch ledger dir → RESV = <n>.
+cr_write_resv() {
+  local n="$1" i
+  for (( i = 1; i <= n; i++ )); do
+    printf 'session=s\nissue=%s\ntimestamp=2026-01-01T00:00:00Z\n' "$i" \
+      > "$TMPDIR_TEST/resv/${i}-feature"
+  done
+}
+
+# cr_busy_fake_claude <name:status> [<name:status> ...]
+#   Install a fake `claude` whose `agents --json` returns the given rows, so
+#   claude_agents_count_busy_workers yields a real positive count (a row counts
+#   iff name matches ^[0-9]+- AND status == busy). Mirrors parked_router_fake_claude.
+cr_busy_fake_claude() {
+  local payload="[" pair name status first=1
+  for pair in "$@"; do
+    name="${pair%%:*}"; status="${pair#*:}"
+    if (( first )); then first=0; else payload+=","; fi
+    payload+="{\"sessionId\":\"s-$name\",\"pid\":1,\"status\":\"$status\",\"name\":\"$name\",\"cwd\":\"\"}"
+  done
+  payload+="]"
+  printf '%s' "$payload" > "$TMPDIR_TEST/claude-payload.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+cat "$(cd "$(dirname "$0")/.." && pwd)/claude-payload.json"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/claude"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+}
+
+# --- Test 1: below target → schedules a no-arg dispatch-tick reseed -----------
+#
+# BUSY=0 (UNKNOWN daemon) + RESV=3 = LIVE=3 < TARGET=8 → arm at NOW+DELAY.
+echo "Test: below target arms a short-delay no-arg dispatch-tick reseed"
+cr_setup
+export DISPATCH_CONVERGE_RESEED_NOW=10000
+export DISPATCH_CONVERGE_RESEED_DELAY=120
+cr_write_target 8 ok
+cr_write_resv 3
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-convergence-reseed" 2>"$TMPDIR_TEST/stderr")
+assert_eq "below target stdout names the convergence unit" \
+  "scheduled dispatch-converge-10120 at 10120" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-converge-10120"* \
+   && "$log" == *"--on-calendar=@10120"* \
+   && "$log" == *"--collect"* \
+   && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
+   && "$log" == *"--property=KillMode=process"* \
+   && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
+   && "$log" == *"--setenv=PATH="* \
+   && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: below target systemd-run argv (unit + calendar + collect + OnFailure + KillMode + cwd + setenv + no-arg exec)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: below target systemd-run argv (unit + calendar + collect + OnFailure + KillMode + cwd + setenv + no-arg exec)"
+  echo "    log: $log"
+fi
+cr_teardown
+
+# --- Test 2: below target with a real busy worker → BUSY+RESV both counted ----
+#
+# BUSY=2 (two busy `^[0-9]+-` workers) + RESV=1 = LIVE=3 < TARGET=8 → arm. A
+# router (dispatch-*) and an idle worker are NOT counted, exercising the helper's
+# filter and the BUSY+RESV addition.
+echo "Test: below target counts busy workers + reservations together"
+cr_setup
+export DISPATCH_CONVERGE_RESEED_NOW=10000
+export DISPATCH_CONVERGE_RESEED_DELAY=120
+cr_write_target 8 ok
+cr_write_resv 1
+cr_busy_fake_claude "101-a:busy" "102-b:busy" "103-c:input" "dispatch-xyz:busy"
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-convergence-reseed" 2>/dev/null)
+assert_eq "BUSY=2 + RESV=1 = 3 < 8 → arms" \
+  "scheduled dispatch-converge-10120 at 10120" "$out"
+cr_teardown
+
+# --- Test 3: at/above target → converged, no systemd-run call ----------------
+#
+# BUSY=0 + RESV=8 = LIVE=8 >= TARGET=8 → converged no-op.
+echo "Test: at target → converged (no systemd-run call)"
+cr_setup
+export DISPATCH_CONVERGE_RESEED_NOW=10000
+cr_write_target 8 ok
+cr_write_resv 8
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-convergence-reseed" 2>/dev/null)
+assert_eq "at target stdout is converged" "converged" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: at target; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: at target; no systemd-run invocation"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+cr_teardown
+
+# --- Test 4: pace gate closed (TARGET=0) → converged, no systemd-run call -----
+#
+# A pace pause makes dispatch-target-workers return 0; LIVE >= 0 always holds, so
+# the script reports converged WITHOUT consulting --exhausted (gate order).
+echo "Test: pace gate closed (TARGET=0) → converged (no systemd-run call)"
+cr_setup
+export DISPATCH_CONVERGE_RESEED_NOW=10000
+# Even with some live workers, TARGET=0 means at-or-above target.
+cr_write_target 0 ok
+cr_write_resv 2
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-convergence-reseed" 2>/dev/null)
+assert_eq "pace-gate-closed stdout is converged" "converged" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: pace gate closed; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: pace gate closed; no systemd-run invocation"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+cr_teardown
+
+# --- Test 5: token-exhaustion → exhausted, no systemd-run call ---------------
+#
+# Below target (RESV=1 < TARGET=8) but --exhausted returns `exhausted` → no-op.
+echo "Test: below target but token-exhausted → exhausted (no systemd-run call)"
+cr_setup
+export DISPATCH_CONVERGE_RESEED_NOW=10000
+cr_write_target 8 exhausted
+cr_write_resv 1
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-convergence-reseed" 2>/dev/null)
+assert_eq "exhausted stdout is exhausted" "exhausted" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: exhausted; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: exhausted; no systemd-run invocation"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+cr_teardown
+
+# --- Test 6: idempotent re-arm → already-exists collision is a no-op ----------
+#
+# systemd-run emits `already exists` on stderr and exits non-zero (the unit for
+# this exact FIRE epoch is already armed). The script treats it as a no-op:
+# exit 0, stdout still names the unit (so a caller routes it as scheduled).
+echo "Test: idempotent re-arm (systemd already-exists) → exit 0 no-op"
+cr_setup
+export DISPATCH_CONVERGE_RESEED_NOW=10000
+export DISPATCH_CONVERGE_RESEED_DELAY=120
+cr_write_target 8 ok
+cr_write_resv 3
+# Override the systemd-run stub to simulate the collision.
+cat > "$TMPDIR_TEST/bin/systemd-run" <<'STUB'
+#!/usr/bin/env bash
+echo "Failed to start transient timer unit: Unit dispatch-converge-10120.timer already exists." >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/bin/systemd-run"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-convergence-reseed" 2>"$TMPDIR_TEST/stderr") || rc=$?
+assert_eq "idempotent re-arm exit code is 0" "0" "$rc"
+assert_eq "idempotent re-arm stdout names the unit" \
+  "scheduled dispatch-converge-10120 at 10120" "$out"
+cr_teardown
 
 # ============================================================================
 # dispatch-schedule-target-reseed tests
@@ -11384,6 +11823,168 @@ else
   echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
 fi
 st_teardown
+
+# ============================================================================
+# dispatch-spawn-sweep tests (#1451)
+# ============================================================================
+echo ""
+echo "=== dispatch-spawn-sweep ==="
+#
+# dispatch-spawn-sweep launches the dispatch-sweep reaper as a transient
+# `systemd-run --user` unit. Exercised against a fake `systemd-run` (stub at the
+# path DISPATCH_SPAWN_SWEEP_SYSTEMD_RUN_CMD points to) that records its argv — no
+# real systemd. DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE points at a synthetic main
+# worktree so no git repo is required. The throttle is driven deterministically
+# via DISPATCH_SPAWN_SWEEP_THROTTLE_FILE + DISPATCH_SPAWN_SWEEP_NOW. Unlike
+# spawn-tick, the sweep installs no recovery/daemon units, so no systemctl stub
+# is needed. The test shell runs under `set -e`; each invocation is wrapped to
+# capture the exit code.
+
+sw_setup() {
+  local stub_body="${1:-}"
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/main"
+
+  cp "$SCRIPT_DIR/dispatch-spawn-sweep" "$TMPDIR_TEST/scripts/dispatch-spawn-sweep"
+  # dispatch-spawn-sweep sources lib.sh via its SCRIPT_DIR — so lib.sh must sit
+  # alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-sweep"
+
+  if [[ -z "$stub_body" ]]; then
+    stub_body="echo \"\$*\" >> \"$TMPDIR_TEST/systemd-log\""
+  fi
+  cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+$stub_body
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemd-run"
+
+  export DISPATCH_SPAWN_SWEEP_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
+  export DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE="$TMPDIR_TEST/main"
+  export DISPATCH_SPAWN_SWEEP_THROTTLE_FILE="$TMPDIR_TEST/throttle"
+}
+
+sw_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_SPAWN_SWEEP_SYSTEMD_RUN_CMD DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE \
+        DISPATCH_SPAWN_SWEEP_THROTTLE_FILE DISPATCH_SWEEP_THROTTLE_S \
+        DISPATCH_SPAWN_SWEEP_NOW
+}
+
+# --- Test SW1: clean launch → spawned + correct argv -------------------------
+echo "Test: a clean dispatch-spawn-sweep launches the dispatch-sweep unit (spawned)"
+sw_setup
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-sweep" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "spawned: dispatch-spawn-sweep exits 0" "0" "$rc"
+assert_eq "spawned: stdout is 'spawned'" "spawned" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-sweep"* \
+   && "$log" == *"--collect"* \
+   && "$log" == *"--property=KillMode=process"* \
+   && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
+   && "$log" == *"--setenv=PATH="* \
+   && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-sweep"* \
+   && "$log" != *"OnFailure"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawned systemd-run argv (unit + collect + KillMode + cwd + setenv + exec, no OnFailure)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawned systemd-run argv (unit + collect + KillMode + cwd + setenv + exec, no OnFailure)"
+  echo "    log: $log"
+fi
+sw_teardown
+
+# --- Test SW2: already-exists collision → deduped ----------------------------
+echo "Test: an already-exists systemd-run collision yields 'deduped' (exit 0)"
+sw_setup 'echo "Unit dispatch-sweep.service already exists" >&2; exit 1'
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-sweep" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "deduped: dispatch-spawn-sweep exits 0" "0" "$rc"
+assert_eq "deduped: stdout is 'deduped'" "deduped" "$out"
+sw_teardown
+
+# --- Test SW3: generic failure → stderr surfaced, code passed through --------
+echo "Test: a generic systemd-run failure surfaces stderr and passes the code through"
+sw_setup 'echo "boom" >&2; exit 1'
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn-sweep" 2>&1 1>/dev/null) || rc=$?
+assert_eq "fail: dispatch-spawn-sweep passes the exit code through (1)" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"boom"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: fail: systemd-run stderr is surfaced"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: fail: systemd-run stderr is surfaced"
+  echo "    stderr: $err"
+fi
+# Stamp-AFTER-launch: dispatch-spawn-sweep stamps the throttle file only on the
+# spawned/deduped success paths, NOT before systemd-run. A non-dedup launch
+# failure (D-Bus down, systemd user instance not running, unit-file permission
+# error) must NOT consume the throttle window — stamping before would suppress
+# every worker Stop for the next ~300s even though no sweep ran, opening
+# multi-minute sweep-coverage gaps on a WSL host with a transiently-unavailable
+# systemd user session. Lock that in: after a failed launch the file is ABSENT,
+# so the very next worker Stop retries immediately.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$TMPDIR_TEST/throttle" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: fail: throttle file NOT stamped on a failed launch (next Stop retries)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: fail: throttle file NOT stamped on a failed launch (next Stop retries)"
+fi
+sw_teardown
+
+# --- Test SW4: recent throttle file → throttled, no launch ------------------
+echo "Test: a recent throttle file yields 'throttled' and launches nothing"
+sw_setup
+mkdir -p "$(dirname "$DISPATCH_SPAWN_SWEEP_THROTTLE_FILE")"
+: > "$DISPATCH_SPAWN_SWEEP_THROTTLE_FILE"
+mtime=$(stat -c %Y "$DISPATCH_SPAWN_SWEEP_THROTTLE_FILE")
+export DISPATCH_SPAWN_SWEEP_NOW=$((mtime + 10))
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-sweep" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "throttled: dispatch-spawn-sweep exits 0" "0" "$rc"
+assert_eq "throttled: stdout is 'throttled'" "throttled" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: throttled: no systemd-run invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: throttled: no systemd-run invocation recorded"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+unset DISPATCH_SPAWN_SWEEP_NOW
+sw_teardown
+
+# --- Test SW5: stale throttle file → launches (spawned) ----------------------
+echo "Test: a stale throttle file (older than the window) launches the sweep (spawned)"
+sw_setup
+mkdir -p "$(dirname "$DISPATCH_SPAWN_SWEEP_THROTTLE_FILE")"
+: > "$DISPATCH_SPAWN_SWEEP_THROTTLE_FILE"
+mtime=$(stat -c %Y "$DISPATCH_SPAWN_SWEEP_THROTTLE_FILE")
+export DISPATCH_SPAWN_SWEEP_NOW=$((mtime + 600))
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-sweep" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "stale-throttle: dispatch-spawn-sweep exits 0" "0" "$rc"
+assert_eq "stale-throttle: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ -e "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stale-throttle: systemd-run invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stale-throttle: systemd-run invocation recorded"
+fi
+unset DISPATCH_SPAWN_SWEEP_NOW
+sw_teardown
+
+# --- Test SW6: positional argument rejected (exit 2), launches nothing -------
+echo "Test: a positional argument exits 2 and launches nothing"
+sw_setup
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn-sweep" foo 2>&1 1>/dev/null) || rc=$?
+assert_eq "bad-arg: dispatch-spawn-sweep exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: bad-arg: no systemd-run invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: bad-arg: no systemd-run invocation recorded"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+sw_teardown
 
 # ============================================================================
 # dispatch-tick-recover tests (#1150)
@@ -14312,6 +14913,11 @@ stop_setup() {
   cp "$HOOK_SCRIPT_DIR/dispatch-stop.sh" \
     "$TMPDIR_TEST/hooks/dispatch-stop.sh"
   chmod +x "$TMPDIR_TEST/hooks/dispatch-stop.sh"
+
+  # dispatch-stop.sh sources lib.sh via $SCRIPTS; provide it so pr_list_open
+  # is defined when the hook runs.
+  cp "$SCRIPT_DIR/lib.sh" \
+    "$TMPDIR_TEST/skills/dispatch-propagate/scripts/lib.sh"
 
   # Fake dispatch-find-pr: prints contents of $STUB_DIR/find-pr-output if
   # present, else nothing.
@@ -17635,7 +18241,7 @@ case "$args" in
   issue\ close\ *)
     echo "$args" >> "$STUB_DIR/gh-issue-close.log"
     ;;
-  "pr list --state open --json number,isDraft,labels,statusCheckRollup,mergeable")
+  "pr list --state open --limit 300 --json number,isDraft,labels,statusCheckRollup,mergeable")
     # dispatch-reconcile-ready's one fetch. $STUB_DIR/reconcile-pr-list.json
     # supplies the per-test PR array; absence means no open PRs.
     echo "pr list" >> "$STUB_DIR/gh-reconcile-pr-list.log"
@@ -19490,11 +20096,21 @@ FAKE
 echo "recover" >> "$TMPDIR_TEST/logs/recover.log"
 exit 0
 FAKE
+  # Fake dispatch-schedule-convergence-reseed (#1453): records each invocation so
+  # a test can assert the convergence safety net was (or was NOT) armed on a
+  # `propagate` token. Exits TICK_CONVERGE_RC (default 0). Same PATH-stub pattern
+  # as the dispatch-spawn-job fake above.
+  cat > "$TMPDIR_TEST/dispatch-schedule-convergence-reseed" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/converge.log"
+exit \${TICK_CONVERGE_RC:-0}
+FAKE
   chmod +x "$TMPDIR_TEST/dispatch-select-tick" \
            "$TMPDIR_TEST/dispatch-materialize-spawn" \
            "$TMPDIR_TEST/dispatch-spawn-job" \
            "$TMPDIR_TEST/dispatch-refresh-rate-limits" \
-           "$TMPDIR_TEST/dispatch-tick-recover"
+           "$TMPDIR_TEST/dispatch-tick-recover" \
+           "$TMPDIR_TEST/dispatch-schedule-convergence-reseed"
 }
 
 tick_teardown() {
@@ -19502,7 +20118,7 @@ tick_teardown() {
   TMPDIR_TEST=""
   unset TICK_DECISION TICK_TOKEN TICK_SEL_RC TICK_MAT_RC \
     TICK_SEL_PRE TICK_MAT_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
-    DISPATCH_LOCK_FILE TICK_REFRESH_RC
+    DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -19585,6 +20201,85 @@ assert_eq "issue: materialize argv" "707 queue --gap 2" \
   "$(cat "$TMPDIR_TEST/logs/materialize.log")"
 tick_teardown
 
+# --- #1453: convergence reseed armed on a propagate token (autonomous only) ---
+# On a `propagate` token from an AUTONOMOUS tick (no --manual, no explicit <N>),
+# dispatch-tick calls dispatch-schedule-convergence-reseed exactly once. The
+# autonomous-only guard keys on the $MANUAL/$ARG globals, NOT the decision string:
+# the explicit and --manual tests below set those globals through the real
+# invocation (an arg trips ARG; --manual trips MANUAL), mirroring the existing
+# arg-forward test.
+echo "Test: dispatch-tick autonomous issue + propagate → convergence reseed armed once (#1453)"
+tick_setup
+export TICK_DECISION="issue 707 2" TICK_TOKEN="propagate"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "converge-issue: exit 0" "0" "$rc"
+assert_eq "converge-issue: convergence script called exactly once" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/converge.log" | tr -d ' ')"
+tick_teardown
+
+echo "Test: dispatch-tick autonomous pr + propagate → convergence reseed armed once (#1453)"
+tick_setup
+export TICK_DECISION="pr 660 660-some-branch review 3" TICK_TOKEN="propagate"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "converge-pr: exit 0" "0" "$rc"
+assert_eq "converge-pr: convergence script called exactly once" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/converge.log" | tr -d ' ')"
+tick_teardown
+
+echo "Test: dispatch-tick explicit + propagate → convergence reseed NOT armed (autonomous-only) (#1453)"
+tick_setup
+export TICK_DECISION="explicit 55 1" TICK_TOKEN="propagate"
+out=$(run_tick '#55') && rc=0 || rc=$?
+assert_eq "converge-explicit: exit 0" "0" "$rc"
+assert_eq "converge-explicit: convergence script NOT called (ARG set)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/converge.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick --manual + propagate → convergence reseed NOT armed (autonomous-only) (#1453)"
+tick_setup
+export TICK_DECISION="issue 707 1" TICK_TOKEN="propagate"
+out=$(run_tick --manual) && rc=0 || rc=$?
+assert_eq "converge-manual: exit 0" "0" "$rc"
+assert_eq "converge-manual: convergence script NOT called (MANUAL set)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/converge.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick convergence reseed failure is best-effort → tick still exits 0 (#1453)"
+tick_setup
+export TICK_DECISION="issue 707 2" TICK_TOKEN="propagate" TICK_CONVERGE_RC=1
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "converge-besteffort: exit 0 despite arm failure" "0" "$rc"
+assert_eq "converge-besteffort: convergence script was called" "1" \
+  "$(wc -l < "$TMPDIR_TEST/logs/converge.log" | tr -d ' ')"
+tick_teardown
+
+echo "Test: dispatch-tick concurrency-cap → convergence reseed NOT armed (#1453)"
+tick_setup
+export TICK_DECISION="concurrency-cap"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "converge-cap: exit 0" "0" "$rc"
+assert_eq "converge-cap: convergence script NOT called (no propagate branch)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/converge.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick drain → convergence reseed NOT armed (#1453)"
+tick_setup
+export TICK_DECISION="issue 707 1" TICK_TOKEN="drain"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "converge-drain: exit 0" "0" "$rc"
+assert_eq "converge-drain: convergence script NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/converge.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick drain target-done → convergence reseed NOT armed (#1453)"
+tick_setup
+export TICK_DECISION="issue 707 1" TICK_TOKEN="drain target-done"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "converge-drain-td: exit 0" "0" "$rc"
+assert_eq "converge-drain-td: convergence script NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/converge.log" ] && echo 1 || echo 0)"
+tick_teardown
+
 # --- terminal token routing: every recognized token → exit 0 -----------------
 for t in "propagate" "notify target-blocked" "notify spawn-failed" "notify ci-wait-exhausted" "drain worktree-conflict" "drain ci-reseeded" "drain ci-waiting" "drain" "resolve merge-conflict"; do
   echo "Test: dispatch-tick token '$t' → exit 0"
@@ -19639,6 +20334,15 @@ out=$(run_tick) && rc=0 || rc=$?
 assert_eq "resolve merge-conflict: exit 0" "0" "$rc"
 assert_eq "resolve merge-conflict: recover NOT invoked" "0" \
   "$([ -f "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick resolve merge-conflict → convergence reseed NOT armed (#1453)"
+tick_setup
+export TICK_DECISION="issue 707 1" TICK_TOKEN="resolve merge-conflict"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "resolve merge-conflict: exit 0" "0" "$rc"
+assert_eq "resolve merge-conflict: convergence script NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/converge.log" ] && echo 1 || echo 0)"
 tick_teardown
 
 # --- materialize-spawn exits non-zero → dispatch-tick exits 2 ----------------
@@ -23780,7 +24484,7 @@ case "$args" in
     fi
     ;;
   # dispatch-find-pr self-fetch
-  "pr list --state open --json number,headRefName")
+  "pr list --state open --limit 300 --json number,headRefName")
     if [[ -f "$STUB_DIR/pr-list.json" ]]; then
       cat "$STUB_DIR/pr-list.json"
     else
