@@ -48,11 +48,10 @@ export async function getOwnerReminders(
   return reminders;
 }
 
-function toReminder(id: string, data: Record<string, unknown>): Reminder | null {
+export function toReminder(id: string, data: Record<string, unknown>): Reminder | null {
   const title = typeof data.title === "string" ? data.title : null;
   const repo = typeof data.repo === "string" ? data.repo : null;
   const issueNumber = typeof data.issueNumber === "number" ? data.issueNumber : null;
-  const jitKey = typeof data.jitKey === "string" ? data.jitKey : id;
   const dueAtRaw = data.dueAt;
   const dueAt =
     dueAtRaw && typeof (dueAtRaw as { toDate?: unknown }).toDate === "function"
@@ -64,6 +63,16 @@ function toReminder(id: string, data: Record<string, unknown>): Reminder | null 
       itemId: id,
     });
     return null;
+  }
+  let jitKey: string;
+  if (typeof data.jitKey === "string") {
+    jitKey = data.jitKey;
+  } else {
+    logError(new Error("office-hours item missing jitKey; falling back to document id"), {
+      operation: "reminder-validation",
+      itemId: id,
+    });
+    jitKey = id;
   }
   return { jitKey, title, repo, issueNumber, dueAt };
 }
