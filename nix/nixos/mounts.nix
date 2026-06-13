@@ -26,6 +26,8 @@
       "gid=100"
       "metadata"
       "x-mount.mkdir"
+      "nofail"
+      "x-systemd.automount"
     ];
   };
 }
