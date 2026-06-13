@@ -1,6 +1,13 @@
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 
 export interface Route {
+  /**
+   * Path to match. A string matches by exact equality; a RegExp matches via
+   * `.test(path)`. The router resets the RegExp's `lastIndex` to 0 before each
+   * match, so a `g`- or `y`-flagged pattern is matched correctly regardless of
+   * call frequency. Those flags are unnecessary here — matching tests the whole
+   * path string — but they are safe.
+   */
   readonly path: `/${string}` | RegExp;
   /**
    * Return HTML to replace the outlet contents, or `null` to preserve
@@ -26,9 +33,11 @@ export interface Router {
 }
 
 function matchRoute(routes: [Route, ...Route[]], path: string): Route | undefined {
-  return routes.find((r) =>
-    typeof r.path === "string" ? r.path === path : r.path.test(path),
-  );
+  return routes.find((r) => {
+    if (typeof r.path === "string") return r.path === path;
+    r.path.lastIndex = 0;
+    return r.path.test(path);
+  });
 }
 
 /**
