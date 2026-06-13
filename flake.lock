@@ -80,8 +80,7 @@
       "inputs": {
         "claude-code-nix": "claude-code-nix",
         "home-manager": "home-manager",
-        "nixpkgs": "nixpkgs",
-        "wezterm-windows-zip": "wezterm-windows-zip"
+        "nixpkgs": "nixpkgs"
       }
     },
     "systems": {
@@ -97,19 +96,6 @@
         "owner": "nix-systems",
         "repo": "default",
         "type": "github"
-      }
-    },
-    "wezterm-windows-zip": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1781082806,
-        "narHash": "sha256-FCZrQ37YeEPd+tRizmmjCi3vQBqjfCMK8YwCuqgjv3Y=",
-        "type": "tarball",
-        "url": "https://github.com/wez/wezterm/releases/download/nightly/WezTerm-windows-nightly.zip"
-      },
-      "original": {
-        "type": "tarball",
-        "url": "https://github.com/wez/wezterm/releases/download/nightly/WezTerm-windows-nightly.zip"
       }
     }
   },

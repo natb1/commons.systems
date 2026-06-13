@@ -1,7 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
-import { resolveAudioSource } from "./storage.js";
+import { removeFile, resolveAudioSource } from "./storage.js";
 import type { AudioItem } from "./types.js";
 
 export type PlayRequest = Pick<AudioItem, "id" | "title" | "artist" | "album" | "storagePath">;
@@ -103,7 +103,22 @@ export function initPlayer(
     advanceOrStop(currentIndex);
   }
 
+  function onError(): void {
+    if (currentIndex < 0) return;
+    const item = queue[currentIndex];
+    logError(audioEl.error ?? new Error("audio element error"), {
+      operation: "audio-element-error",
+      storagePath: item.storagePath,
+      code: audioEl.error?.code,
+    });
+    removeFile(item.storagePath).catch((err) =>
+      logError(err, { operation: "audio-cache-evict", storagePath: item.storagePath }),
+    );
+    advanceOrStop(currentIndex);
+  }
+
   audioEl.addEventListener("ended", onEnded);
+  audioEl.addEventListener("error", onError);
   renderPlaylist();
 
   return {
@@ -139,6 +154,7 @@ export function initPlayer(
 
     destroy(): void {
       audioEl.removeEventListener("ended", onEnded);
+      audioEl.removeEventListener("error", onError);
       queue.length = 0;
       stop();
     },
