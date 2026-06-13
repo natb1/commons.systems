@@ -15903,6 +15903,42 @@ else
 fi
 stop_teardown
 
+# --- Test FC1c: fix-checks marker, same phase, no PR (non-fix-conflicts fix-*) → Branch D park
+# A fix-checks pass with no PR (empty PR_NUM) must NOT take the Branch C no-PR
+# self-close (which is fix-conflicts-specific). Instead it falls through to
+# Branch D (office-hours park). This test FAILS before the elif guard (bare else
+# would self-close) and PASSES after.
+echo "Test: stop hook + same phase + fix-checks (non-fix-conflicts fix-*) + no PR → Branch D park (no Branch C self-close)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+# OMIT find-pr-output → PR_NUM="" (no PR)
+echo "fix-checks" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=fix-checks" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop fix-checks-no-pr-fallthrough: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-checks-no-pr-fallthrough: dispatch-apply-office-hours invoked with issue 123 + non-empty reason (Branch D park)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-checks-no-pr-fallthrough: dispatch-apply-office-hours invoked with issue 123 + non-empty reason (Branch D park)"
+  echo "    apply-log: $apply_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop fix-checks-no-pr-fallthrough: spawn invoked exactly once" "1" "$spawn_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-checks-no-pr-fallthrough: self-close not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-checks-no-pr-fallthrough: self-close not invoked"
+fi
+stop_teardown
+
 # --- Test FC2: fix-conflicts marker, same phase, counter >= 3 → Branch D (fuse)
 # A conflict that recurs three times blows the fuse: at attempt 3 the #831
 # invariant falls through to Branch D, parking the issue on dispatch:office-hours
