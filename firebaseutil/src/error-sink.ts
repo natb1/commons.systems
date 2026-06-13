@@ -33,10 +33,21 @@ const RESERVED_KEYS = new Set(["operation", "kind", "message", "stack", "code", 
 
 // Strips obviously-sensitive keys from extras by name before serialization.
 // Matches substrings case-insensitively: token, secret, password, auth, key,
-// credential, email, phone, ssn, dob, address. Note the g flag is intentionally
+// credential, email, phone, ssn, address. Note the g flag is intentionally
 // absent — .test() is stateless. Cross-reference: see the RESERVED_KEYS comment
 // above for the residual risk of values stored under non-matching key names.
-const SENSITIVE_KEY_RE = /token|secret|password|auth|key|credential|email|phone|ssn|dob|address/i;
+//
+// `dob` (date of birth) is NOT included here because the bare substring `dob`
+// false-matches the word `adobe` (a-dob-e) under the `i` flag (#1359).
+// Instead it is handled by the separate case-sensitive SENSITIVE_DOB_RE below,
+// which matches `dob` only as a standalone identifier token — as a standalone
+// word, a camelCase hump (e.g. userDob, myDOB), or after a snake/other separator
+// (e.g. user_dob) — without matching compound words like `adobe` or `photobooth`.
+// The other alternatives (token, key, ssn, etc.) are longer or far less likely
+// to collide with common identifiers, so they remain as plain case-insensitive
+// substrings; word-bounding them would be over-engineering for little gain.
+const SENSITIVE_KEY_RE = /token|secret|password|auth|key|credential|email|phone|ssn|address/i;
+const SENSITIVE_DOB_RE = /(?:^|[^A-Za-z])(?:dob|Dob|DOB)(?![a-z])|[A-Za-z](?:Dob|DOB)(?![a-z])/;
 
 // Size caps (UTF-16 code units) — must mirror the firestore.rules isValidErrorLog() caps exactly.
 const CAPS = {
@@ -109,7 +120,7 @@ export function createFirestoreErrorSink(options: ErrorSinkOptions): ErrorSink {
     const droppedSensitiveKeys: string[] = [];
     for (const [key, value] of Object.entries(context)) {
       if (RESERVED_KEYS.has(key)) continue;
-      if (SENSITIVE_KEY_RE.test(key)) {
+      if (SENSITIVE_KEY_RE.test(key) || SENSITIVE_DOB_RE.test(key)) {
         droppedSensitiveKeys.push(key);
         continue;
       }

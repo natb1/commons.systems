@@ -435,5 +435,18 @@ describe("createFirestoreErrorSink", () => {
       expect(extras.mailingAddress).toBeUndefined();
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("mailingAddress"));
     });
+
+    it("retains a key containing 'adobe' (adobeId does not false-match 'dob')", () => {
+      // Spy only to suppress any drop warning; restored in beforeEach.
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const sink = createFirestoreErrorSink(makeOptions());
+      const ctx = makeContext({ txnId: "123" } as Partial<EnrichedErrorContext>);
+      (ctx as Record<string, unknown>).adobeId = "font-42";
+      sink(new Error("boom"), ctx);
+
+      const doc = getWrittenDoc();
+      const extras = JSON.parse(doc.extras as string);
+      expect(extras.adobeId).toBe("font-42");
+    });
   });
 });
