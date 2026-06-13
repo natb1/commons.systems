@@ -604,6 +604,10 @@ STUB_DIR="$(cd "$(dirname "$0")/stub" && pwd)"
 num="${1:-}"
 # Strip leading # if present.
 num="${num#\#}"
+# Log every lookup by number (#1452), BEFORE the failure-injection check so a
+# failing call is still recorded. The trace-cache memo test asserts a given
+# number is looked up once despite being reachable from multiple roots.
+echo "$num" >> "$STUB_DIR/issue-blocking-calls.log"
 # Failure injection: a marker file models a transient gh API failure on this
 # issue's blocked_by lookup. The real issue-blocking exits non-zero (with a
 # gh_api_array stderr diagnostic) on a genuine gh failure — the fake mirrors
@@ -649,6 +653,9 @@ FAKE
 STUB_DIR="$(cd "$(dirname "$0")/stub" && pwd)"
 num="${1:-}"
 num="${num#\#}"
+# Log every lookup by number (#1452), BEFORE the failure-injection check (same
+# rationale as issue-blocking's log above).
+echo "$num" >> "$STUB_DIR/issue-sub-issues-calls.log"
 # Failure injection — same contract as issue-blocking's, for the sub_issues
 # lookup.
 if [[ -f "$STUB_DIR/gh-fail-sub_issues-${num}" ]]; then
@@ -683,6 +690,9 @@ teardown() {
   # Per-test exports for the liveness gate must not leak across tests.
   unset CLAUDE_AGENTS_CMD
   unset CLAUDE_CODE_SESSION_ID
+  # The #1452 tick-snapshot / trace-cache exports must not leak across tests
+  # either — both default OFF so existing tests keep the live/uncached path.
+  unset DISPATCH_AGENTS_SNAPSHOT DISPATCH_TRACE_CACHE_DIR
   # The reservation-ledger override (#1046) must not leak across tests either.
   unset DISPATCH_RESERVATION_DIR
 }
@@ -1740,7 +1750,12 @@ select_target_fake_claude() {
 #!/usr/bin/env bash
 # Ignore all args (including --cwd); return the full payload. The caller's jq
 # name filter selects the matching session, as the real daemon path does.
-cat "$(cd "$(dirname "$0")/.." && pwd)/claude-payload.json"
+# Log every live `agents` invocation (#1452): a test that sets
+# DISPATCH_AGENTS_SNAPSHOT asserts this log stays empty (the machine-wide
+# liveness functions read the snapshot file instead of shelling out here).
+_root="$(cd "$(dirname "$0")/.." && pwd)"
+echo "agents $*" >> "$_root/stub/claude-agents-calls.log"
+cat "$_root/claude-payload.json"
 exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/bin/claude"
@@ -4460,9 +4475,9 @@ assert_eq "resumes the oldest live item's session" "LAUNCH: --resume s-42-x" "$r
 teardown
 
 # OH3. Labeled items but none with a live session → launch the fresh /office-hours
-# session worker-style (a --bg job named after the <N>-* worktree, cwd = that
-# worktree) via dispatch-spawn-office-hours, then attach the human by resuming the
-# spawned session id. Fixes the originally-reported label leak (#1160): born in the
+# session worker-style (a --bg job named office-hours-<N>, cwd = that worktree)
+# via dispatch-spawn-office-hours, then attach the human by resuming the spawned
+# session id. Fixes the originally-reported label leak (#1160): born in the
 # worktree, the session's branch is <N>-..., so the strip hook clears the label.
 echo "Test: labeled item, none live → spawn worker-style --bg then resume"
 setup
@@ -4473,18 +4488,31 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD
 office_hours_fresh_fake_claude
 result=$("$TMPDIR_TEST/office-hours")
 # Attaches the human by resuming the just-spawned session id.
-assert_eq "fresh path resumes the spawned session id" "LAUNCH: --resume sess-42-x" "$result"
-# The spawn was a --bg job named after the worktree basename running /office-hours.
+assert_eq "fresh path resumes the spawned session id" "LAUNCH: --resume sess-office-hours-42" "$result"
+# The spawn was a --bg job named office-hours-<N> running /office-hours.
 mapfile -t oh_argv < "$TMPDIR_TEST/oh-bg-argv"
 assert_eq "fresh: --bg" "--bg" "${oh_argv[0]:-}"
 assert_eq "fresh: --name" "--name" "${oh_argv[1]:-}"
-assert_eq "fresh: name is the worktree basename" "42-x" "${oh_argv[2]:-}"
+assert_eq "fresh: name is office-hours-<N>" "office-hours-42" "${oh_argv[2]:-}"
 assert_eq "fresh: --permission-mode" "--permission-mode" "${oh_argv[3]:-}"
 assert_eq "fresh: permission mode is auto" "auto" "${oh_argv[4]:-}"
 assert_eq "fresh: prompt is /office-hours with args" "/office-hours 42 plan -" "${oh_argv[5]:-}"
 # The --bg job was born in the worktree (cwd = worktree path).
 oh_pwd=$(head -1 "$TMPDIR_TEST/oh-pwd-log" 2>/dev/null || true)
 assert_eq "fresh: spawn cwd is the worktree" "$(realpath "$TMPDIR_TEST/worktrees/42-x")" "$(realpath "$oh_pwd" 2>/dev/null)"
+teardown
+
+# OH3c. A labeled item whose worktree has a live session named office-hours-<N>
+# (the renamed office-hours session, #1311) → resume it directly. Before the
+# two-name fix the selector keyed only on the basename and missed it.
+echo "Test: live office-hours-<N> session → selector resumes it directly"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_fake_claude "office-hours-42"   # the live session is the office-hours-<N> one
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "resumes the live office-hours-<N> session by its sessionId" "LAUNCH: --resume s-office-hours-42" "$result"
 teardown
 
 # OH3b. Sessionless item with NO <N>-* worktree on disk (the worktree was swept) →
@@ -7537,6 +7565,20 @@ if out=$(claude_sessions_under "$CA_DIR"); then rc=0; else rc=$?; fi
 assert_eq "empty-output: claude_sessions_under exits non-zero (unknown)" "1" "$rc"
 if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
 assert_eq "empty-output: worktree_has_live_session reports occupied" "occupied" "$live"
+ca_teardown
+
+# --- Test 8b: an office-hours-<N> session occupies the <N>-slug worktree ------
+
+echo "Test: an office-hours-<N> session marks the <N>-slug worktree occupied (#1311)"
+ca_setup
+# A worktree basename <N>-slug; the only live session is named office-hours-<N>
+# (the renamed office-hours session — distinct from the basename). The guard must
+# query both names and report occupied via the office-hours-<N> match.
+wt="$CA_DIR/1311-foo"
+mkdir -p "$wt"
+write_fake_claude '[{"sessionId":"oh-1","pid":99,"status":"busy","name":"office-hours-1311"}]' 0
+if worktree_has_live_session "$wt"; then live=occupied; else live=free; fi
+assert_eq "office-hours occupancy: worktree_has_live_session reports occupied" "occupied" "$live"
 ca_teardown
 
 # --- Test 9: claude_sessions_under invokes `claude` with --cwd <path> -------
@@ -12480,16 +12522,16 @@ spawn_worker_teardown() {
 echo "=== dispatch-spawn-office-hours ==="
 #
 # dispatch-spawn-office-hours is the office-hours fresh-launch counterpart of
-# dispatch-launch-worker: it spawns a /office-hours --bg job worker-style (--name
-# = worktree basename, --cwd = worktree path) via dispatch-spawn-job, then —
-# unlike the launcher, which `exec`s the spawn and is done — resolves the spawned
-# (or deduped) session id by the worktree basename and prints it, so the caller
-# can attach a human via `claude --resume`.
+# dispatch-launch-worker: it spawns a /office-hours --bg job with --name
+# office-hours-<N> (not the worktree basename) and --cwd = worktree path via
+# dispatch-spawn-job, then — unlike the launcher, which `exec`s the spawn and is
+# done — resolves the spawned (or deduped) session id by office-hours-<N> and
+# prints it, so the caller can attach a human via `claude --resume`.
 #
 # It reuses the spawn-worker fake-`claude` harness (write_fake_spawn_worker_claude)
 # and the SPAWN_WORKER_* fixture globals: that fake's `--bg` handler registers
 # `{"sessionId":"sess-<name>",...,"name":"<name>"}`, so the resolved id for the
-# 839-test-worker target is deterministically `sess-839-test-worker`.
+# 839-test-worker target is deterministically `sess-office-hours-839`.
 #
 # The test shell runs under `set -e`; the script can exit non-zero, so every
 # invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
@@ -12546,15 +12588,15 @@ SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
 if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-oh: dispatch-spawn-office-hours exits 0" "0" "$rc"
 # stdout is exactly the resolved session id (the only thing printed).
-assert_eq "spawn-oh: stdout is the resolved session id" "sess-839-test-worker" "$out"
+assert_eq "spawn-oh: stdout is the resolved session id" "sess-office-hours-839" "$out"
 # The recorded argv must be exactly:
-#   --bg --name <worktree-basename> --permission-mode auto
+#   --bg --name office-hours-<N> --permission-mode auto
 #   "/office-hours 839 implement -"
 mapfile -t oh_bg_argv < "$SPAWN_WORKER_BG_ARGV"
 assert_eq "spawn-oh: argv[0] is --bg" "--bg" "${oh_bg_argv[0]:-}"
 assert_eq "spawn-oh: argv[1] is --name" "--name" "${oh_bg_argv[1]:-}"
-assert_eq "spawn-oh: argv[2] is the worktree basename" \
-  "839-test-worker" "${oh_bg_argv[2]:-}"
+assert_eq "spawn-oh: argv[2] is office-hours-<N>" \
+  "office-hours-839" "${oh_bg_argv[2]:-}"
 assert_eq "spawn-oh: argv[3] is --permission-mode" "--permission-mode" "${oh_bg_argv[3]:-}"
 assert_eq "spawn-oh: argv[4] is auto" "auto" "${oh_bg_argv[4]:-}"
 assert_eq "spawn-oh: argv[5] is '/office-hours 839 implement -'" \
@@ -12584,11 +12626,11 @@ spawn_office_hours_teardown
 
 echo "Test: a live same-name session deduplicates the spawn; its id is resolved for resume"
 spawn_office_hours_setup
-# Prime the registry with a different sessionId whose name matches the worktree
-# basename the spawn would use. dispatch-spawn-job dedups (no --bg); the resolve
+# Prime the registry with a different sessionId whose name matches office-hours-<N>
+# (the name the spawn now uses). dispatch-spawn-job dedups (no --bg); the resolve
 # then returns this existing session — the one to resume.
 printf '%s' \
-  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"839-test-worker"}]' \
+  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"office-hours-839"}]' \
   > "$SPAWN_WORKER_REGISTRY"
 write_fake_spawn_worker_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
@@ -14582,20 +14624,21 @@ statements_teardown
 echo ""
 echo "=== dispatch-input-block ==="
 #
-# The hook discriminates on CLAUDE_JOB_DIR/state.json {.name} starting with
-# "dispatch-"; resolves the issue number from the current branch (the <N>-*
-# prefix); parks the ISSUE via dispatch-apply-office-hours (the single write
-# path — issue target, create-on-first-use, why-comment); runs dispatch-spawn.
-# Always exits 0.
+# The hook discriminates on CLAUDE_JOB_DIR/state.json {.name} matching
+# ^[0-9]+- (phase workers and parse-job sessions, both <N>-slug; office-hours-<N>
+# sessions are excluded — no leading digit); resolves the issue number from the
+# job name's <N>- prefix (${JOB_NAME%%-*}, no longer from the branch); parks the
+# ISSUE via dispatch-apply-office-hours (the single write path — issue target,
+# create-on-first-use, why-comment); runs dispatch-spawn-tick. Always exits 0.
 #
 # Each test gets a fresh tmp tree:
 #   $TMPDIR_TEST/hooks/dispatch-input-block.sh     — the hook under test
 #   $TMPDIR_TEST/skills/dispatch-propagate/scripts/  — fakes for
 #                                                    dispatch-apply-office-hours,
 #                                                    dispatch-spawn
-#   $TMPDIR_TEST/bin/{gh,git}                      — PATH shims
+#   $TMPDIR_TEST/bin/{gh}                          — PATH shims
 #   $TMPDIR_TEST/jobs/<id>/state.json              — fake CLAUDE_JOB_DIR ledger
-#   $TMPDIR_TEST/stub/{gh,git,spawn}-calls.log     — recorded invocations
+#   $TMPDIR_TEST/stub/{gh,spawn}-calls.log         — recorded invocations
 #
 # HOOK_SCRIPT_DIR — the project hooks directory the test copies from. SCRIPT_DIR
 # here is .claude/skills/dispatch-propagate/scripts; the hooks live at .claude/hooks.
@@ -14669,25 +14712,6 @@ esac
 STUB
   chmod +x "$TMPDIR_TEST/bin/gh"
 
-  # git PATH stub. The hook reads `rev-parse --abbrev-ref HEAD` to derive the
-  # issue number. current-branch.txt is the per-test fixture.
-  cat > "$TMPDIR_TEST/bin/git" <<'STUB'
-#!/usr/bin/env bash
-STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
-args="$*"
-case "$args" in
-  "rev-parse --abbrev-ref HEAD")
-    if [[ -f "$STUB_DIR/current-branch.txt" ]]; then
-      cat "$STUB_DIR/current-branch.txt"
-    else
-      echo "main"
-    fi
-    ;;
-  *) echo "git stub: unknown invocation: $args" >&2; exit 1 ;;
-esac
-STUB
-  chmod +x "$TMPDIR_TEST/bin/git"
-
   export PATH="$TMPDIR_TEST/bin:$PATH"
   export STUB_DIR  # fakes resolve STUB_DIR from env
 }
@@ -14700,13 +14724,12 @@ ib_teardown() {
   unset CLAUDE_JOB_DIR
 }
 
-# --- Test 1: dispatch-* job + PR exists → still parks the ISSUE, spawn baton --
+# --- Test 1: worker job (name <N>-slug) + PR exists → park ISSUE, spawn baton --
 
-echo "Test: dispatch-* job + branch <N>-* + PR exists → park ISSUE via apply-office-hours, spawn baton"
+echo "Test: worker job (name <N>-slug) + PR exists → park ISSUE via apply-office-hours, spawn baton"
 ib_setup
-echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
-echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
 rc=$?
@@ -14716,7 +14739,7 @@ apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
 apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
 TOTAL=$((TOTAL + 1))
 if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: input-block: dispatch-apply-office-hours invoked with issue 123 + non-empty reason (issue target even with a PR)"
+  PASS=$((PASS + 1)); echo "  PASS: input-block: dispatch-apply-office-hours invoked with issue 123 + non-empty reason (issue target even with a PR, resolved from job name)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: input-block: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
   echo "    apply-log: $apply_log"
@@ -14731,12 +14754,11 @@ spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "input-block: dispatch-spawn invoked exactly once" "1" "$spawn_calls"
 ib_teardown
 
-# --- Test 2: dispatch-* job + no PR → park the ISSUE, spawn baton ------------
+# --- Test 2: worker job (name <N>-slug) + no PR → park ISSUE, spawn baton -----
 
-echo "Test: dispatch-* job + branch <N>-* + no PR → park ISSUE (implement phase)"
+echo "Test: worker job (name <N>-slug) + no PR → park ISSUE (implement phase)"
 ib_setup
-echo "789-bare" > "$STUB_DIR/current-branch.txt"
-echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo '{"name":"789-bare"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
 rc=$?
@@ -14751,13 +14773,14 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: input-block (no PR): dispatch-apply-office-hours invoked with issue 789 + non-empty reason"
   echo "    apply-log: $apply_log"
 fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "input-block (no PR): dispatch-spawn invoked exactly once" "1" "$spawn_calls"
 ib_teardown
 
 # --- Test 3: CLAUDE_JOB_DIR unset → no-op (no label, no spawn) ---------------
 
 echo "Test: CLAUDE_JOB_DIR unset → no-op (interactive session is excluded)"
 ib_setup
-echo "123-foo" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
 unset CLAUDE_JOB_DIR
 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
@@ -14777,28 +14800,27 @@ else
 fi
 ib_teardown
 
-# --- Test 4: non-dispatch job name → no-op -----------------------------------
+# --- Test 4: non-worker name → no-op -----------------------------------------
 
-echo "Test: state.json name is not 'dispatch-*' → no-op (other background jobs excluded)"
+echo "Test: state.json name does not match ^[0-9]+- → no-op (other background jobs excluded)"
 ib_setup
-echo "123-foo" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
 echo '{"name":"manual-session"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
 rc=$?
-assert_eq "non-dispatch: hook exits 0" "0" "$rc"
+assert_eq "non-worker: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: non-dispatch: no office-hours apply was invoked"
+  PASS=$((PASS + 1)); echo "  PASS: non-worker: no office-hours apply was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: non-dispatch: no office-hours apply was invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-worker: no office-hours apply was invoked"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: non-dispatch: dispatch-spawn was not invoked"
+  PASS=$((PASS + 1)); echo "  PASS: non-worker: dispatch-spawn was not invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: non-dispatch: dispatch-spawn was not invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-worker: dispatch-spawn was not invoked"
 fi
 ib_teardown
 
@@ -14806,9 +14828,8 @@ ib_teardown
 
 echo "Test: Notification with non-permission-prompt type → no-op (passes through silently)"
 ib_setup
-echo "123-foo" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
-echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo '{"name":"123-foo"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 printf '%s' '{"notification_type":"session_complete"}' \
   | "$TMPDIR_TEST/hooks/dispatch-input-block.sh" >/dev/null 2>&1
@@ -14822,27 +14843,49 @@ else
 fi
 ib_teardown
 
-# --- Test 6: non-issue branch with dispatch job → no-op ----------------------
+# --- Test 6: non-worker job name (e.g. stray dispatch-* router) → no-op ------
 
-echo "Test: non-issue branch (main) + dispatch-* job → no-op (no label, no spawn)"
+echo "Test: non-worker job name (e.g. a stray dispatch-* router) → no-op (resolution is job-name-based)"
 ib_setup
-echo "main" > "$STUB_DIR/current-branch.txt"
-echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo '{"name":"dispatch-router01"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
 rc=$?
-assert_eq "non-issue-branch: hook exits 0" "0" "$rc"
+assert_eq "non-worker-router: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: non-issue-branch: no office-hours apply was invoked"
+  PASS=$((PASS + 1)); echo "  PASS: non-worker-router: no office-hours apply was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: non-issue-branch: no office-hours apply was invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-worker-router: no office-hours apply was invoked"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: non-issue-branch: dispatch-spawn was not invoked"
+  PASS=$((PASS + 1)); echo "  PASS: non-worker-router: dispatch-spawn was not invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: non-issue-branch: dispatch-spawn was not invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-worker-router: dispatch-spawn was not invoked"
+fi
+ib_teardown
+
+# --- Test 7: office-hours-<N> job name → no-op (excluded by ^[0-9]+-) ---------
+
+echo "Test: office-hours-<N> job name → no-op (interactive office-hours session is excluded)"
+ib_setup
+echo '{"name":"office-hours-1311"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "office-hours: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours: no office-hours apply was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: no office-hours apply was invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours: dispatch-spawn was not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: dispatch-spawn was not invoked"
 fi
 ib_teardown
 
@@ -25242,6 +25285,224 @@ fi
 assert_eq "ctxpack buffer-flush: stdout EMPTY (no partial pack leaked)" "" "$out"
 
 ctxpack_teardown
+
+# ============================================================================
+# === #1452: tick snapshot consumption + trace-cache memo + early-exit ========
+# ============================================================================
+# Covers the snapshot/memo/early-exit changes in Units 1-4:
+#   1. the per-tick `claude agents --json` snapshot is consumed by the
+#      machine-wide liveness functions instead of shelling out, and captured once
+#      per tick;
+#   2. dispatch-trace-leaf memoizes each (script, number) blocker/sub-issue
+#      lookup once per tick under DISPATCH_TRACE_CACHE_DIR, while a sibling gh
+#      hard error still propagates and is never cached;
+#   3. the help-wanted issue walk early-exits once strictly-higher-rank
+#      (priority, category) groups already hold TOP emittable entries, never
+#      tracing lower-rank roots, and the new (pri desc, cat-rank asc, createdAt
+#      asc) root order leaves emission byte-identical.
+# Both DISPATCH_AGENTS_SNAPSHOT and DISPATCH_TRACE_CACHE_DIR default OFF, so every
+# existing test keeps the live/uncached path; teardown unsets them.
+echo "=== #1452: snapshot / trace-cache memo / early-exit ==="
+
+# B. Snapshot consumed (criterion 1). select-target's machine-wide liveness
+#    functions read DISPATCH_AGENTS_SNAPSHOT instead of shelling out to `claude`.
+#    The liveness path only runs for a row with an on-disk <N>-* worktree
+#    (issue_worktree_claimed early-returns on no worktree), so issue 55 is given
+#    an ORPHAN 55-* worktree: the predicate then actually reads the snapshot. A
+#    `[]` snapshot reports the orphan as free, so 55 is selected and the live
+#    fake is never invoked → claude-agents-calls.log has 0 lines.
+echo "Test: #1452 B — snapshot consumed; no live claude call during selection"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+# Orphan 55-* worktree: on disk, no live session → forces the liveness query.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/55-feature\nHEAD def456\nbranch refs/heads/55-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # logging fake; orphan world ([])
+snap="$TMPDIR_TEST/agents-snapshot.json"
+printf '[]' > "$snap"
+export DISPATCH_AGENTS_SNAPSHOT="$snap"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1452 B — orphan issue 55 selected (snapshot reports free)" "issue 55" "$result"
+calls=$([[ -f "$STUB_DIR/claude-agents-calls.log" ]] && wc -l < "$STUB_DIR/claude-agents-calls.log" | tr -d ' ' || echo 0)
+assert_eq "#1452 B — snapshot consumed: 0 live claude agents calls" "0" "$calls"
+teardown
+
+# B (contrast). Same backlog + orphan worktree, but snapshot UNSET: the liveness
+#    functions fall back to the live per-call path, so the fake IS invoked at
+#    least once. Proves the 0-count above is the snapshot doing its job, not an
+#    artifact of the no-worktree fast-path miss.
+echo "Test: #1452 B contrast — without snapshot, the live claude fake is invoked"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/55-feature\nHEAD def456\nbranch refs/heads/55-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # no DISPATCH_AGENTS_SNAPSHOT exported
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1452 B contrast — orphan issue 55 still selected" "issue 55" "$result"
+calls=$([[ -f "$STUB_DIR/claude-agents-calls.log" ]] && wc -l < "$STUB_DIR/claude-agents-calls.log" | tr -d ' ' || echo 0)
+[[ "$calls" -ge 1 ]] && contrast=ok || contrast="bad: $calls calls"
+assert_eq "#1452 B contrast — live path makes >=1 claude agents call" "ok" "$contrast"
+teardown
+
+# C. Capture once per tick (criterion 1). dispatch-tick has heavy side effects
+#    (worktree provisioning, git merges), so this is a SEAM-level test of the two
+#    halves dispatch-tick wires together: (1) claude_agents_snapshot_capture runs
+#    `claude agents --json` exactly once and writes the array to the snapshot
+#    file; (2) a subsequent select-target scan with DISPATCH_AGENTS_SNAPSHOT set
+#    adds ZERO further claude calls. Capture(1) + consumption(0) = one daemon
+#    query per tick.
+echo "Test: #1452 C — capture once, then snapshot-backed scan adds no claude calls"
+setup
+snap="$TMPDIR_TEST/agents-snapshot.json"
+# Reuse the logging fake's generator to install the recording `claude` and point
+# CLAUDE_AGENTS_CMD at it. Orphan world ([]).
+select_target_fake_claude
+# Capture half: source the lib copy in a subshell (mirrors the lib.sh-sourcing
+# pattern elsewhere) so the helper is callable here and no env leaks.
+cap_rc=0
+( source "$TMPDIR_TEST/lib-claude-agents.sh"; claude_agents_snapshot_capture "$snap" ) || cap_rc=$?
+assert_eq "#1452 C — snapshot_capture exits 0" "0" "$cap_rc"
+snap_contents=$(cat "$snap")
+assert_eq "#1452 C — capture wrote the agents array to the snapshot" "[]" "$snap_contents"
+calls_after_capture=$([[ -f "$STUB_DIR/claude-agents-calls.log" ]] && wc -l < "$STUB_DIR/claude-agents-calls.log" | tr -d ' ' || echo 0)
+assert_eq "#1452 C — capture made exactly one claude agents call" "1" "$calls_after_capture"
+# Consumption half: a select-target scan with the snapshot set must add 0 calls.
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/55-feature\nHEAD def456\nbranch refs/heads/55-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_AGENTS_SNAPSHOT="$snap"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1452 C — orphan issue 55 selected from snapshot" "issue 55" "$result"
+calls_total=$([[ -f "$STUB_DIR/claude-agents-calls.log" ]] && wc -l < "$STUB_DIR/claude-agents-calls.log" | tr -d ' ' || echo 0)
+assert_eq "#1452 C — capture(1) + snapshot-backed scan(0) = 1 call per tick" "1" "$calls_total"
+teardown
+
+# D. Memo once per number (criterion 2). The SAME child C is reachable as a
+#    blocker under TWO help-wanted roots A and B in the SAME (pri0, other) group.
+#    Run with --top 5 so the walk does not early-exit and BOTH roots are walked.
+#    With DISPATCH_TRACE_CACHE_DIR set, the (issue-blocking, C) and
+#    (issue-sub-issues, C) lookups are memoized once per tick — so C is looked up
+#    exactly once each despite being traced through both roots. Assert only the
+#    log counts: bucket_append does not dedup, so the leaf list / output is a
+#    brittle duplicate-laden value, not asserted here.
+echo "Test: #1452 D — trace-cache memo: child looked up once across two roots"
+setup
+setup_union_pr_list '[]'
+# Roots 810 and 820 are both plain help-wanted (pri0, category other). Each is
+# blocked by the same open child 830. No worktrees → no liveness round-trips.
+printf '[{"number":810,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":820,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf '[{"number":830}]\n' > "$STUB_DIR/blockers-810.json"
+printf '[{"number":830}]\n' > "$STUB_DIR/blockers-820.json"
+printf '{"title":"Issue 830","body":"","comments":[],"number":830,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-830.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+cache=$(mktemp -d "$TMPDIR_TEST/trace-cache.XXXXXX")
+export DISPATCH_TRACE_CACHE_DIR="$cache"
+"$TMPDIR_TEST/dispatch-select-target" --top 5 >/dev/null
+blk_c=$(grep -c "^830$" "$STUB_DIR/issue-blocking-calls.log" || true)
+sub_c=$(grep -c "^830$" "$STUB_DIR/issue-sub-issues-calls.log" || true)
+assert_eq "#1452 D — issue-blocking 830 looked up once (memoized)" "1" "$blk_c"
+assert_eq "#1452 D — issue-sub-issues 830 looked up once (memoized)" "1" "$sub_c"
+teardown
+
+# D (contrast). Same backlog, no DISPATCH_TRACE_CACHE_DIR: every trace runs the
+#    sibling lookups directly, so child 830 is looked up multiple times (each
+#    root drives two trace-leaf invocations — the second with --exclude 830
+#    returns exit 2 — and open_children(830) runs before the EXCLUDED check, so
+#    the uncached count is >=2). Proves the memo is what collapses it to 1 above.
+echo "Test: #1452 D contrast — without cache, child looked up multiple times"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":810,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":820,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf '[{"number":830}]\n' > "$STUB_DIR/blockers-810.json"
+printf '[{"number":830}]\n' > "$STUB_DIR/blockers-820.json"
+printf '{"title":"Issue 830","body":"","comments":[],"number":830,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-830.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+"$TMPDIR_TEST/dispatch-select-target" --top 5 >/dev/null
+blk_c=$(grep -c "^830$" "$STUB_DIR/issue-blocking-calls.log" || true)
+[[ "$blk_c" -ge 2 ]] && uncached=ok || uncached="bad: $blk_c lookups"
+assert_eq "#1452 D contrast — uncached child lookup count >= 2" "ok" "$uncached"
+teardown
+
+# E. Hard error survives caching (criterion 2). With DISPATCH_TRACE_CACHE_DIR set,
+#    inject a gh blocked_by failure on child 830 reachable from root 810. The
+#    trace must hard-fail (exit 1) — the gh failure is NOT swallowed or cached as
+#    an empty result — and no `blocking-830` cache file is written. Invoked via
+#    dispatch-trace-leaf directly, mirroring the existing failure tests (~4815).
+echo "Test: #1452 E — sibling gh failure hard-fails and is never cached"
+setup
+cache=$(mktemp -d "$TMPDIR_TEST/trace-cache.XXXXXX")
+export DISPATCH_TRACE_CACHE_DIR="$cache"
+# 810 has sub-issue 830; 830's blocked_by lookup fails. (issue-blocking on 810
+# succeeds with no blockers, so the descent reaches 830 via sub-issues.)
+printf '[{"number":830}]\n' > "$STUB_DIR/subissues-810.json"
+printf '{"title":"Issue 830","body":"","comments":[],"number":830,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-830.json"
+: > "$STUB_DIR/gh-fail-blocked_by-830"
+stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "810" "queue" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "#1452 E — sibling gh failure → exit 1" "1" "$rc"
+assert_eq "#1452 E — sibling gh failure → no leaf on stdout" "" "$stdout"
+[[ -f "$cache/blocking-830" ]] && cached=present || cached=absent
+assert_eq "#1452 E — failed blocked_by lookup is never cached" "absent" "$cached"
+teardown
+
+# F(a). Early-exit ordering — same emitted set. The new sort walks roots in
+#    (pri desc, cat-rank asc, createdAt asc) order, but emission already preferred
+#    the higher-rank group, so the selected leaf is unchanged. Case 1: a security
+#    root created LATER than an audio root — security (cat-rank 0) outranks audio
+#    (cat-rank 8), so the security leaf wins (as the old order's emission did).
+echo "Test: #1452 F(a) — security root (newer) beats audio root (older)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":910,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"}]},{"number":920,"createdAt":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1452 F(a) — security leaf 920 wins over audio leaf 910" "issue 920" "$result"
+teardown
+
+# F(a) case 2: a priority (pri1) root vs a pri0 root created EARLIER — priority is
+#    the outermost axis, so the priority leaf wins regardless of age.
+echo "Test: #1452 F(a) — priority root beats earlier non-priority root"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":930,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":940,"createdAt":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1452 F(a) — priority leaf 940 wins over earlier pri0 leaf 930" "issue 940" "$result"
+teardown
+
+# F(b). Lower tiers not traced. R_hi (priority help-wanted root 940) traces to an
+#    emittable leaf in orphan world; R_lo (pri0/other root 950) is a strictly
+#    lower-rank group. With default TOP=1, once R_hi's group holds its one
+#    emittable entry the walk early-exits BEFORE tracing R_lo — so R_lo's
+#    blocker lookup never fires (grep count 0). R_hi and R_lo MUST sit in
+#    different (pri, cat-rank) groups for the group-boundary fold to fire, and
+#    R_hi's leaf must be emittable (no ready closing PR, orphan world) so it fills
+#    TOP=1.
+echo "Test: #1452 F(b) — early-exit skips tracing the lower-rank root"
+setup
+setup_union_pr_list '[]'
+# 940 = priority help-wanted (pri1), its own emittable leaf. 950 = plain
+# help-wanted (pri0, other) — strictly lower rank. No worktrees, no closing PRs.
+printf '[{"number":940,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]},{"number":950,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1452 F(b) — priority leaf 940 selected" "issue 940" "$result"
+lo_c=$(grep -c "^950$" "$STUB_DIR/issue-blocking-calls.log" 2>/dev/null || true)
+assert_eq "#1452 F(b) — lower-rank root 950 never traced (early-exit)" "0" "$lo_c"
+teardown
 
 # ============================================================================
 # summary

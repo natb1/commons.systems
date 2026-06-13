@@ -12,8 +12,10 @@ two ways:
 1. **Mid-phase input block** — a dispatch phase reached a user-input point
    (a QA judgment-call walkthrough item or
    first-found bug, an unexpected permission prompt). The input-block hook
-   (`dispatch-input-block.sh`) applied `dispatch:office-hours` to the issue and
-   parked the session.
+   (`dispatch-input-block.sh`) is a passive reactor: when the worker
+   hits `ExitPlanMode`/`AskUserQuestion`/a permission prompt/elicitation, it applies
+   `dispatch:office-hours` to the issue and passes the baton — the session stays
+   blocked on the prompt rather than terminating.
 2. **Completion-time deviation or planning-time ambiguity** — a phase ran to
    completion but surfaced a deviation from the approved plan or the acceptance
    criteria; or `/plan-issue` hit genuine ambiguity it could not resolve and
@@ -36,7 +38,9 @@ So engaging an item here clears the label automatically; this skill does **not**
 clear it itself, and on completion the item is dispatch-eligible again. The
 session simply ends; the next `/dispatch-propagate` router (re-seeded by the
 heartbeat) returns the de-labeled item to the dispatch chain. There is no in-skill
-hand-off and no Stop-hook action — the Stop hook ignores non-`<N>-` session names.
+hand-off and no Stop-hook action — the Stop hook ignores non-`<N>-` session names,
+and office-hours sessions are named `office-hours-<N>` (which does not match its
+`^[0-9]+-` discriminator).
 
 ## Steps
 

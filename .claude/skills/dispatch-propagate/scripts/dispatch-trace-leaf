@@ -187,6 +187,36 @@ child_is_office_hours_parked() {
   [[ -n "${OFFICE_HOURS_PARKED[$1]:-}" ]]
 }
 
+# cached_child_lookup <script-name> <cache-prefix> <num> — run a sibling
+# blocker/sub-issue lookup, memoized per tick under DISPATCH_TRACE_CACHE_DIR.
+# Prints the sibling's JSON stdout. Returns 1 on a sibling hard error (gh API
+# failure), exactly as a direct call would — and writes NOTHING to the cache, so
+# a failure is never memoized. Hit/miss is keyed by EXIT CODE, not output
+# emptiness: an empty-but-successful result is a valid cached value. When
+# DISPATCH_TRACE_CACHE_DIR is unset (isolated trace-leaf tests, manual runs), the
+# sibling runs directly with no caching — current behavior preserved. The same
+# issue is traced through multiple help-wanted roots within one tick, so this
+# collapses each (script, num) pair to a single gh round-trip per tick. (#1452)
+cached_child_lookup() {
+  local script_name="$1" prefix="$2" num="$3"
+  if [[ -z "${DISPATCH_TRACE_CACHE_DIR:-}" ]]; then
+    "$SCRIPT_DIR/$script_name" "$num"   # exit status (and the gh-failure hard error) propagates
+    return
+  fi
+  local cache_file="$DISPATCH_TRACE_CACHE_DIR/$prefix-$num"
+  if [[ -f "$cache_file" ]]; then
+    cat "$cache_file"
+    return 0
+  fi
+  # Miss: capture stdout, propagating a sibling hard error via `|| return 1`
+  # BEFORE any cache write — a failed lookup must never be memoized.
+  local out
+  out=$("$SCRIPT_DIR/$script_name" "$num") || return 1
+  printf '%s' "$out" >"$cache_file"
+  printf '%s' "$out"
+  return 0
+}
+
 # Collect open children of an issue: open blockers union open sub-issues.
 # Outputs sorted unique issue numbers, one per line, lowest first.
 open_children() {
@@ -198,7 +228,7 @@ open_children() {
   # it as a hard error instead of collapsing it into "this issue has no
   # children". No 2>/dev/null: let issue-blocking's stderr diagnostic surface.
   local blocker_json
-  blocker_json=$("$SCRIPT_DIR/issue-blocking" "$n") || return 1
+  blocker_json=$(cached_child_lookup issue-blocking blocking "$n") || return 1
   if [[ -n "$blocker_json" ]]; then
     while IFS= read -r num; do
       [[ -n "$num" ]] && children+=("$num")
@@ -207,7 +237,7 @@ open_children() {
 
   # Gather open sub-issues. Same hard-error contract as the blocker lookup.
   local sub_json
-  sub_json=$("$SCRIPT_DIR/issue-sub-issues" "$n") || return 1
+  sub_json=$(cached_child_lookup issue-sub-issues sub-issues "$n") || return 1
   if [[ -n "$sub_json" ]]; then
     while IFS= read -r num; do
       [[ -n "$num" ]] && children+=("$num")
