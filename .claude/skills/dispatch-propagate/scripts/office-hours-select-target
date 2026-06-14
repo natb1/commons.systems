@@ -113,11 +113,11 @@ issue_live_session_id() {
 # over FRESH: a live item is attached in preference to any sessionless sibling.
 SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[].number')
 FRESH_NUM=""
-RESUME_ID=""
+LIVE_ID=""
 while IFS= read -r issue_num; do
   [[ -z "$issue_num" ]] && continue
   if sid=$(issue_live_session_id "$issue_num"); then
-    RESUME_ID="$sid"
+    LIVE_ID="$sid"
     break
   else
     rc=$?
@@ -127,8 +127,8 @@ while IFS= read -r issue_num; do
 done <<< "$SORTED"
 
 # Priority 1: emit the oldest live item.
-if [[ -n "$RESUME_ID" ]]; then
-  printf 'live %s\n' "$RESUME_ID"
+if [[ -n "$LIVE_ID" ]]; then
+  printf 'live %s\n' "$LIVE_ID"
   exit 0
 fi
 

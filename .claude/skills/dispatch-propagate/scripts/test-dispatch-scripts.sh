@@ -4700,7 +4700,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude "42-x"   # 42's worktree has a live session; 99 sessionless
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "live item resumed over sessionless sibling 99" "live s-42-x" "$result"
+assert_eq "live item attached over sessionless sibling 99" "live s-42-x" "$result"
 teardown
 
 # OHST3b. Two labeled items both live → attach the oldest one's session
@@ -4714,7 +4714,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude "42-x" "99-y"   # both worktrees live
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "oldest of two live items resumed" "live s-42-x" "$result"
+assert_eq "oldest of two live items attached" "live s-42-x" "$result"
 teardown
 
 # OHST3c. Older sessionless item + newer live item → attach the live one
@@ -4729,7 +4729,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude "99-y"   # only 99's worktree is live
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "live item resumed regardless of age order" "live s-99-y" "$result"
+assert_eq "live item attached regardless of age order" "live s-99-y" "$result"
 teardown
 
 # OHST4. An empty office-hours queue with no parked router prints `empty`. The
@@ -4901,7 +4901,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "42-x"   # 42's worktree has a live session
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "resumes the live session by its sessionId" "LAUNCH: attach s-42-x" "$result"
+assert_eq "attaches the live session by its sessionId" "LAUNCH: attach s-42-x" "$result"
 teardown
 
 # OH2. Two labeled items both live → attach the oldest one's session.
@@ -4913,7 +4913,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "42-x" "99-y"   # both worktrees live
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "resumes the oldest live item's session" "LAUNCH: attach s-42-x" "$result"
+assert_eq "attaches the oldest live item's session" "LAUNCH: attach s-42-x" "$result"
 teardown
 
 # OH3. Labeled items but none with a live session → launch the fresh /office-hours
@@ -13697,9 +13697,9 @@ else
 fi
 spawn_office_hours_teardown
 
-# --- Test 3: dedup hit — resolve the existing same-name session for resume ----
+# --- Test 3: dedup hit — resolve the existing same-name session for attach ----
 
-echo "Test: a live same-name session deduplicates the spawn; its id is resolved for resume"
+echo "Test: a live same-name session deduplicates the spawn; its id is resolved for attach"
 spawn_office_hours_setup
 # Prime the registry with a different sessionId whose name matches office-hours-<N>
 # (the name the spawn now uses). dispatch-spawn-job dedups (no --bg); the resolve
@@ -13710,7 +13710,7 @@ printf '%s' \
 write_fake_spawn_worker_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "dedup-oh: dispatch-spawn-office-hours exits 0" "0" "$rc"
-assert_eq "dedup-oh: stdout is the existing session id (resolved for resume)" "sess-other" "$out"
+assert_eq "dedup-oh: stdout is the existing session id (resolved for attach)" "sess-other" "$out"
 # No --bg invocation was recorded — nothing was spawned.
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
