@@ -79,6 +79,10 @@ setup() {
   # SCRIPT_DIR, which resolves to TMPDIR_TEST for this copy — lib.sh is copied
   # below alongside the other scripts, so the source resolves.
   cp "$SCRIPT_DIR/dispatch-reconcile-ready" "$TMPDIR_TEST/dispatch-reconcile-ready"
+  # dispatch-sync-merge-queue sources lib.sh (for pr_list_open and
+  # dispatch_classify_rollup) via its SCRIPT_DIR, which resolves to TMPDIR_TEST
+  # for this copy — lib.sh is already copied below, so the source resolves.
+  cp "$SCRIPT_DIR/dispatch-sync-merge-queue" "$TMPDIR_TEST/dispatch-sync-merge-queue"
   # dispatch-select-target's JIT scan calls dispatch-config-load and
   # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
   # TMPDIR_TEST for the copied dispatch-select-target, so the two helpers must
@@ -117,7 +121,8 @@ setup() {
            "$TMPDIR_TEST/dispatch-resolve-worktree" \
            "$TMPDIR_TEST/dispatch-reconcile-ready" \
            "$TMPDIR_TEST/dispatch-config-load" \
-           "$TMPDIR_TEST/dispatch-project-status-read"
+           "$TMPDIR_TEST/dispatch-project-status-read" \
+           "$TMPDIR_TEST/dispatch-sync-merge-queue"
 
   # Default no-op stub for dispatch-provision-worktree. dispatch-route now invokes
   # it (after the worktree cross-check, before phase derivation). The real script
@@ -172,6 +177,59 @@ STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 # Reconstruct full args string for matching.
 args="$*"
 case "$args" in
+  # ---- #1480 dispatch-sync-merge-queue branches (FIRST — most specific) ------
+  # The mergeable-PR fetch. Field set pinned byte-for-byte to the script's
+  # pr_list_open call; --limit glob absorbs DISPATCH_PR_LIST_LIMIT (default 300).
+  "pr list --state open --limit "*" --json number,title,url,isDraft,statusCheckRollup,mergeable")
+    echo "pr list" >> "$STUB_DIR/gh-merge-pr-list.log"
+    if [[ -f "$STUB_DIR/merge-pr-list.json" ]]; then
+      cat "$STUB_DIR/merge-pr-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  label\ create\ merge-pr:*)
+    # Idempotent per-PR label create. Log and succeed.
+    echo "$args" >> "$STUB_DIR/gh-merge-label-create.log"
+    ;;
+  issue\ list\ --repo\ natb1/office-hours-nate\ --label\ merge-pr:*\ --state\ open\ --json\ number,title)
+    # Per-PR open-issue guard. MUST precede the bare enumerate branch below.
+    # Recover the PR number from the --label to key the fixture.
+    set -- $args
+    oh_lbl=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in --label) oh_lbl="$2"; shift 2 ;; *) shift ;; esac
+    done
+    oh_n="${oh_lbl#merge-pr:}"
+    if [[ -f "$STUB_DIR/oh-issue-merge-pr-${oh_n}.json" ]]; then
+      cat "$STUB_DIR/oh-issue-merge-pr-${oh_n}.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  "issue list --repo natb1/office-hours-nate --state open --limit "*" --json number,labels")
+    # Close-path enumerate (no --label). Serves the open-tracking-issue set.
+    if [[ -f "$STUB_DIR/oh-issue-enum.json" ]]; then
+      cat "$STUB_DIR/oh-issue-enum.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  issue\ create\ --repo\ natb1/office-hours-nate\ *)
+    # Create a tracking issue. MUST echo a URL so the script's ${URL##*/} yields
+    # the number. Log the full args (carries --title, the merge-pr:<n> label, and
+    # the oh-merge-pr marker) for the create assertion.
+    echo "$args" >> "$STUB_DIR/gh-merge-issue-create.log"
+    echo "https://github.com/natb1/office-hours-nate/issues/77"
+    ;;
+  issue\ edit\ *--repo\ natb1/office-hours-nate*)
+    # Title/marker refresh on drift. MUST precede the generic `issue edit *`.
+    echo "$args" >> "$STUB_DIR/gh-merge-issue-edit.log"
+    ;;
+  issue\ close\ *--repo\ natb1/office-hours-nate*)
+    # Close a tracking issue. MUST precede the generic `issue close *`.
+    echo "$args" >> "$STUB_DIR/gh-merge-issue-close.log"
+    ;;
   "pr list --state open --limit 300 --json number,headRefName,isDraft,headRefOid,labels,mergeable")
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
@@ -24913,6 +24971,18 @@ assert_eq "dedup: partition-split → length 2" "2" "$(printf '%s' "$out" | jq -
 assert_eq "dedup: partition-split → output[0] Confidence preserved (high)" "high" "$(printf '%s' "$out" | jq -r '.[0].Confidence')"
 assert_eq "dedup: partition-split → output[1] Confidence preserved (low)" "low" "$(printf '%s' "$out" | jq -r '.[1].Confidence')"
 
+# all-absent partition group: every member absent from findings → group
+# collapses to nothing (not a junk finding), exit 0. Distinct from IN5
+# (empty partition): here the partition is NON-empty but references only
+# absent ids. Discriminating: WITHOUT the empty-group drop, this group
+# emits {"Confidence":null,...} and length is 1, so the [] / length-0
+# assertion is the one that guards the fix.
+IN8='{"findings":[],"partition":[["zzz","yyy"]]}'
+if out=$(printf '%s' "$IN8" | "$SCRIPT_DIR/dispatch-review-dedup"); then rc=0; else rc=$?; fi
+assert_eq "dedup: all-absent partition group → exit 0" "0" "$rc"
+assert_eq "dedup: all-absent partition group → length 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+assert_eq "dedup: all-absent partition group → []" "[]" "$(printf '%s' "$out" | jq -c '.')"
+
 # ============================================================================
 # === dispatch-review-verify-drop ===
 # ============================================================================
@@ -29787,6 +29857,97 @@ assert_eq "#1490 classify: other issue (110) sorted_pri is 0" "0" "$spot_other_s
 assert_eq "#1490 classify: other issue (110) helper_pri is 0" "0" "$spot_other_hpri"
 assert_eq "#1490 classify: testing issue (103) sorted_cat is 'testing infrastructure'" "testing infrastructure" "$spot_testing_scat"
 assert_eq "#1490 classify: testing issue (103) helper_cat is 'testing infrastructure'" "testing infrastructure" "$spot_testing_hcat"
+teardown
+
+# ============================================================================
+# dispatch-sync-merge-queue (#1480)
+# ============================================================================
+echo "=== dispatch-sync-merge-queue ==="
+
+# A check-run rollup entry classifies `passing` only when status==COMPLETED AND
+# conclusion in {SUCCESS,NEUTRAL,SKIPPED}; a bare {"conclusion":"SUCCESS"} (no
+# status) is `pending` and would be skipped. So the mergeable fixtures pin both.
+MERGE_PR_ONE='[{"number":42,"title":"Add widget","url":"https://github.com/natb1/commons.systems/pull/42","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"}]}]'
+
+# (a) mergeable PR with no tracking issue → create
+echo "Test: mergeable PR, no tracking issue → create"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "create: issue-create log present" "present" "$(log_state gh-merge-issue-create.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q -- '--title' "$STUB_DIR/gh-merge-issue-create.log" \
+   && grep -q 'merge-pr:42' "$STUB_DIR/gh-merge-issue-create.log" \
+   && grep -q 'oh-merge-pr' "$STUB_DIR/gh-merge-issue-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: create args carry --title, merge-pr:42 label, and oh-merge-pr marker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: create args carry --title, merge-pr:42 label, and oh-merge-pr marker"
+fi
+teardown
+
+# (b) existing tracking issue with matching title → idempotent (no create, no edit)
+echo "Test: existing tracking issue, matching title → no create, no edit"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":77,"title":"Add widget"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "idempotent: no create" "absent" "$(log_state gh-merge-issue-create.log)"
+assert_eq "idempotent: no edit" "absent" "$(log_state gh-merge-issue-edit.log)"
+teardown
+
+# (c) existing tracking issue with stale title → update (title + refreshed marker)
+echo "Test: existing tracking issue, stale title → update"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":77,"title":"Old stale title"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "update: issue-edit log present" "present" "$(log_state gh-merge-issue-edit.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'Add widget' "$STUB_DIR/gh-merge-issue-edit.log" \
+   && grep -q 'oh-merge-pr' "$STUB_DIR/gh-merge-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: edit args carry the new title and the refreshed oh-merge-pr marker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: edit args carry the new title and the refreshed oh-merge-pr marker"
+fi
+assert_eq "update: no spurious create" "absent" "$(log_state gh-merge-issue-create.log)"
+teardown
+
+# (d) PR no longer mergeable but tracking issue still open → close
+echo "Test: PR no longer mergeable, tracking issue open → close"
+setup
+printf '[]\n' > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":88,"labels":[{"name":"merge-pr:42"}]}]\n' > "$STUB_DIR/oh-issue-enum.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "close: issue-close log present" "present" "$(log_state gh-merge-issue-close.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issue close 88' "$STUB_DIR/gh-merge-issue-close.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: closed the tracking issue (#88) for the no-longer-mergeable PR"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: closed the tracking issue (#88) for the no-longer-mergeable PR"
+fi
+teardown
+
+# (e) pr_list_open fails (truncation guard) → bail before the close pass
+# Safety-critical: if the mergeable set cannot be computed, the script must exit
+# non-zero immediately and run NO close pass — otherwise a stale tracking issue
+# would be wrongly closed against an empty/unknown mergeable set. Force the
+# failure by pinning DISPATCH_PR_LIST_LIMIT to the fixture length (1): pr_list_open
+# sees len == limit, fires its loud truncation guard, and returns non-zero.
+echo "Test: pr_list_open fails (truncation) → bail, no close pass"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+# A stale tracking issue that WOULD be closed if the close pass ran against an
+# empty mergeable set — so its survival proves the bail short-circuited it.
+printf '[{"number":88,"labels":[{"name":"merge-pr:42"}]}]\n' > "$STUB_DIR/oh-issue-enum.json"
+# `set -e` is in effect and this invocation exits non-zero by design, so capture
+# the code with an if/else rather than letting it abort the suite.
+if DISPATCH_PR_LIST_LIMIT=1 "$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "bail: script exits non-zero when the mergeable set cannot be computed" "1" "$rc"
+assert_eq "bail: close pass did not run (no gh issue close)" "absent" "$(log_state gh-merge-issue-close.log)"
 teardown
 
 # ============================================================================
