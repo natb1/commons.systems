@@ -64,6 +64,15 @@ describe("renderQueueBand runway readout", () => {
     expect(state!.classList.contains("growing")).toBe(true);
   });
 
+  it("negative runway falls through to the null-runway path: 'queue growing'", () => {
+    const section = renderQueueBand(make({ runwayDays: -5, netDrainPerDay: -0.5 }));
+
+    const state = section.querySelector(".queue-runway-state");
+    expect(state!.textContent).toBe("queue growing");
+    expect(state!.classList.contains("growing")).toBe(true);
+    expect(/-\d/.test(state!.textContent ?? "")).toBe(false);
+  });
+
   it("empty queue wins over null runway: 'queue empty'", () => {
     const section = renderQueueBand(
       make({ openHelpWanted: 0, runwayDays: null, netDrainPerDay: 0 }),

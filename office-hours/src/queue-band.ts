@@ -22,7 +22,7 @@ function runwayReadout(metrics: QueueMetricsSnapshot): { text: string; state: st
   if (metrics.openHelpWanted === 0) {
     return { text: "queue empty", state: "empty" };
   }
-  if (metrics.runwayDays !== null) {
+  if (metrics.runwayDays !== null && metrics.runwayDays >= 0) {
     return {
       text: `~${Math.ceil(metrics.runwayDays)} days until the queue empties`,
       state: "draining",
