@@ -27859,6 +27859,72 @@ calls=$([[ -f "$STUB_DIR/claude-agents-calls.log" ]] && wc -l < "$STUB_DIR/claud
 assert_eq "#1474 E4 — zero live claude agents calls during selection" "0" "$calls"
 teardown
 
+# #1490 — --debug-classify: inline ISSUE_SORTED jq classification agrees with
+# shell helpers (category_of_labels / has_priority_in_labels).
+# One issue per TOPIC_CATEGORIES entry + one "other" + one priority-flagged
+# dispatch issue. --debug-classify exits before PR selection, so no UNION
+# and no fake claude are required.
+echo "Test: #1490 -- --debug-classify: jq sort classification matches shell helpers"
+setup
+setup_union_pr_list '[]'
+# Numbers:
+#   101 security   (help wanted + security)
+#   102 bug        (help wanted + bug)
+#   103 testing    (help wanted + testing infrastructure)
+#   104 dispatch   (help wanted + dispatch)
+#   105 landing    (help wanted + landing)
+#   106 fellspiral (help wanted + fellspiral)
+#   107 budget     (help wanted + budget)
+#   108 print      (help wanted + print)
+#   109 audio      (help wanted + audio)
+#   110 other      (help wanted, no topic label)
+#   111 priority   (help wanted + dispatch + priority) — priority spot-check
+printf '[
+  {"number":101,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]},
+  {"number":102,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},
+  {"number":103,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"testing infrastructure"}]},
+  {"number":104,"createdAt":"2024-01-04T00:00:00Z","labels":[{"name":"help wanted"},{"name":"dispatch"}]},
+  {"number":105,"createdAt":"2024-01-05T00:00:00Z","labels":[{"name":"help wanted"},{"name":"landing"}]},
+  {"number":106,"createdAt":"2024-01-06T00:00:00Z","labels":[{"name":"help wanted"},{"name":"fellspiral"}]},
+  {"number":107,"createdAt":"2024-01-07T00:00:00Z","labels":[{"name":"help wanted"},{"name":"budget"}]},
+  {"number":108,"createdAt":"2024-01-08T00:00:00Z","labels":[{"name":"help wanted"},{"name":"print"}]},
+  {"number":109,"createdAt":"2024-01-09T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"}]},
+  {"number":110,"createdAt":"2024-01-10T00:00:00Z","labels":[{"name":"help wanted"}]},
+  {"number":111,"createdAt":"2024-01-11T00:00:00Z","labels":[{"name":"help wanted"},{"name":"dispatch"},{"name":"priority"}]}
+]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --debug-classify)
+# Spot-check values captured from the row loop (to avoid set -e aborting on a
+# failed grep; find by number inside the loop instead).
+spot_security_scat=""
+spot_security_hcat=""
+spot_priority_spri=""
+spot_priority_hpri=""
+row_count=0
+while IFS=$'\t' read -r dc_num dc_spri dc_scat dc_hpri dc_hcat; do
+  [[ -z "$dc_num" ]] && continue
+  row_count=$((row_count + 1))
+  assert_eq "#1490 classify: issue $dc_num sorted_pri == helper_pri" "$dc_spri" "$dc_hpri"
+  assert_eq "#1490 classify: issue $dc_num sorted_cat == helper_cat" "$dc_scat" "$dc_hcat"
+  # Stash spot-check values while iterating (avoids grep that would abort on miss).
+  if [[ "$dc_num" == "101" ]]; then
+    spot_security_scat="$dc_scat"
+    spot_security_hcat="$dc_hcat"
+  fi
+  if [[ "$dc_num" == "111" ]]; then
+    spot_priority_spri="$dc_spri"
+    spot_priority_hpri="$dc_hpri"
+  fi
+done <<< "$result"
+# Confirm expected row count (all 11 issues survive: none carry dispatch:office-hours).
+assert_eq "#1490 classify: 11 rows emitted (all issues survive)" "11" "$row_count"
+# Spot-assert absolute values — guards against a both-sides-wrong regression.
+assert_eq "#1490 classify: security issue (101) sorted_cat is 'security'" "security" "$spot_security_scat"
+assert_eq "#1490 classify: security issue (101) helper_cat is 'security'" "security" "$spot_security_hcat"
+assert_eq "#1490 classify: priority issue (111) sorted_pri is 1" "1" "$spot_priority_spri"
+assert_eq "#1490 classify: priority issue (111) helper_pri is 1" "1" "$spot_priority_hpri"
+teardown
+
 # ============================================================================
 # summary
 # ============================================================================
