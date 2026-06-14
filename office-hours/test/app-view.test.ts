@@ -43,6 +43,18 @@ function makeReminder(title: string, offsetMs: number): Reminder {
   };
 }
 
+const queueMetricsFixture = {
+  openHelpWanted: 12,
+  closedPerDay: 3.2,
+  createdPerDay: 1.7,
+  netDrainPerDay: 1.5,
+  runwayDays: 8,
+  windowDays: 14,
+  computedAt: new Date("2026-06-10T00:00:00Z"),
+  groupId: "group-abc",
+  memberEmails: ["owner@example.com"],
+};
+
 describe("renderApp — demo tier", () => {
   it("renders a .demo-banner with the correct text", () => {
     const container = document.createElement("div");
@@ -92,14 +104,14 @@ describe("renderApp — owner tier with data", () => {
 
   it("does not render a .demo-banner", () => {
     const container = document.createElement("div");
-    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders }, now));
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture }, now));
 
     expect(container.querySelector(".demo-banner")).toBeNull();
   });
 
   it("renders a reminder list item for each reminder", () => {
     const container = document.createElement("div");
-    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders }, now));
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture }, now));
 
     const items = container.querySelectorAll("li.reminder");
     expect(items.length).toBe(2);
@@ -107,7 +119,7 @@ describe("renderApp — owner tier with data", () => {
 
   it("does not render an .error element", () => {
     const container = document.createElement("div");
-    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders }, now));
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture }, now));
 
     expect(container.querySelector(".error")).toBeNull();
   });
@@ -117,7 +129,7 @@ describe("renderApp — owner tier empty", () => {
   it("does not render a .demo-banner", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
     );
 
     expect(container.querySelector(".demo-banner")).toBeNull();
@@ -126,7 +138,7 @@ describe("renderApp — owner tier empty", () => {
   it('renders the reminder-list empty state "No reminders."', () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
     );
 
     const list = container.querySelector("#reminder-list");
@@ -142,7 +154,7 @@ describe("renderApp — owner tier empty", () => {
   it('renders the capacity empty state "No capacity data."', () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
     );
 
     const empties = Array.from(container.querySelectorAll(".empty"));
@@ -153,7 +165,7 @@ describe("renderApp — owner tier empty", () => {
   it("renders the history-band empty states", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
     );
 
     const empties = Array.from(container.querySelectorAll(".empty"));
@@ -171,7 +183,7 @@ describe("renderApp — owner tier empty", () => {
   it("does not render an .error element", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
     );
 
     expect(container.querySelector(".error")).toBeNull();

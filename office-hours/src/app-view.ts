@@ -2,6 +2,7 @@ import { renderCapacityBand, selectLatestSample } from "./capacity-band.js";
 import { renderPacePositionPanel } from "./pace-position-panel.js";
 import { renderHistoryBand } from "./history-band.js";
 import { renderReminderList } from "./office-hours.js";
+import { renderQueueMetricsPanel } from "./queue-metrics-panel.js";
 import { getDemoSamples } from "./usage-data.js";
 import { getDemoReminders, getDemoQueueMetrics } from "./data.js";
 import type { UsageSample } from "./usage-samples.js";
@@ -10,7 +11,7 @@ import type { QueueMetricsSnapshot } from "./queue-metrics.js";
 
 export type ViewState =
   | { tier: "demo" }                                                  // unauthenticated → labeled demo
-  | { tier: "owner"; samples: UsageSample[]; reminders: Reminder[] }  // authenticated → real (possibly empty)
+  | { tier: "owner"; samples: UsageSample[]; reminders: Reminder[]; queueMetrics: QueueMetricsSnapshot | null }  // authenticated → real (possibly empty)
   | { tier: "error" };                                                // authenticated load failed
 
 type PanelTier = "demo" | "owner";
@@ -77,6 +78,13 @@ const PANELS: readonly Panel[] = [
     load: (c) => c.reminders,
     render: (r, now) => renderReminderList(r, now),
   }),
+  definePanel({
+    id: "queue-metrics",
+    title: "Queue",
+    availableIn: ["demo", "owner"],
+    load: (c) => c.queueMetrics,
+    render: (m, now) => renderQueueMetricsPanel(m, now),
+  }),
 ];
 
 function buildContext(
@@ -93,7 +101,7 @@ function buildContext(
   return {
     samples: state.samples,
     reminders: state.reminders,
-    queueMetrics: null, // → state.queueMetrics in a later unit
+    queueMetrics: state.queueMetrics,
     now,
   };
 }
