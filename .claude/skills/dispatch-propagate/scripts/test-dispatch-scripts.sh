@@ -783,6 +783,24 @@ teardown() {
 }
 trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
 
+# Write the REST check-runs fixture for <sha> from an uppercase GraphQL-shape
+# rollup. The real `commits/<sha>/check-runs` endpoint returns status/conclusion
+# in LOWERCASE (`completed`, `success`, `in_progress`), whereas the *_ROLLUP test
+# constants carry the UPPERCASE statusCheckRollup enum shape. Downcase here so the
+# fixture matches the real REST shape — this is what genuinely exercises
+# dispatch_ci_verdict_rest's `ascii_upcase` conversion. Feeding it already-
+# uppercase data would let the conversion be deleted with the suite still green
+# (the exact verdict-fidelity gap #1601's migration introduced). A null
+# conclusion (pending check run) is preserved as null, matching REST.
+write_rest_check_runs() {
+  local sha="$1" rollup_json="$2"
+  local rest
+  rest=$(jq -c 'map({status: (.status | ascii_downcase),
+                     conclusion: (.conclusion | if . == null then null else ascii_downcase end)})' \
+    <<<"$rollup_json")
+  printf '%s' "{\"check_runs\": $rest}" > "$STUB_DIR/check-runs-${sha}.json"
+}
+
 # Helper to build a PR JSON entry for the full PR list (dispatch-phase).
 # Emits headRefOid (a per-PR synthetic sha) instead of statusCheckRollup, and
 # writes the matching REST check-runs fixture so dispatch_ci_verdict_rest's
@@ -790,7 +808,7 @@ trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
 make_pr() {
   local num="$1" branch="$2" is_draft="$3" labels_json="$4" rollup_json="$5"
   local sha="sha${num}"
-  printf '%s' "{\"check_runs\": $rollup_json}" > "$STUB_DIR/check-runs-${sha}.json"
+  write_rest_check_runs "$sha" "$rollup_json"
   printf '{"number":%s,"headRefName":"%s","isDraft":%s,"labels":%s,"headRefOid":"%s"}' \
     "$num" "$branch" "$is_draft" "$labels_json" "$sha"
 }
@@ -803,7 +821,7 @@ make_pr() {
 make_pr_union() {
   local num="$1" branch="$2" created="$3" is_draft="$4" labels_json="$5" rollup_json="$6" closing_json="${7:-[]}"
   local sha="sha${num}"
-  printf '%s' "{\"check_runs\": $rollup_json}" > "$STUB_DIR/check-runs-${sha}.json"
+  write_rest_check_runs "$sha" "$rollup_json"
   printf '{"number":%s,"createdAt":"%s","headRefName":"%s","isDraft":%s,"labels":%s,"headRefOid":"%s","closingIssuesReferences":%s}' \
     "$num" "$created" "$branch" "$is_draft" "$labels_json" "$sha" "$closing_json"
 }
@@ -815,7 +833,7 @@ make_pr_union() {
 make_pr_union_mergeable() {
   local num="$1" branch="$2" created="$3" is_draft="$4" labels_json="$5" rollup_json="$6" mergeable="$7" closing_json="${8:-[]}"
   local sha="sha${num}"
-  printf '%s' "{\"check_runs\": $rollup_json}" > "$STUB_DIR/check-runs-${sha}.json"
+  write_rest_check_runs "$sha" "$rollup_json"
   printf '{"number":%s,"createdAt":"%s","headRefName":"%s","isDraft":%s,"labels":%s,"headRefOid":"%s","mergeable":"%s","closingIssuesReferences":%s}' \
     "$num" "$created" "$branch" "$is_draft" "$labels_json" "$sha" "$mergeable" "$closing_json"
 }
@@ -828,7 +846,7 @@ make_pr_union_mergeable() {
 make_pr_mergeable() {
   local num="$1" branch="$2" is_draft="$3" labels_json="$4" rollup_json="$5" mergeable="$6"
   local sha="sha${num}"
-  printf '%s' "{\"check_runs\": $rollup_json}" > "$STUB_DIR/check-runs-${sha}.json"
+  write_rest_check_runs "$sha" "$rollup_json"
   printf '{"number":%s,"headRefName":"%s","isDraft":%s,"labels":%s,"headRefOid":"%s","mergeable":"%s"}' \
     "$num" "$branch" "$is_draft" "$labels_json" "$sha" "$mergeable"
 }
@@ -845,6 +863,78 @@ MIXED_ROLLUP='[{"status":"COMPLETED","conclusion":"FAILURE"},{"status":"IN_PROGR
 EMPTY_ROLLUP='[]'
 # No labels.
 NO_LABELS='[]'
+
+# ============================================================================
+# dispatch_ci_verdict_rest verdict-fidelity tests (#1601)
+# ============================================================================
+# The REST check-runs endpoint returns status/conclusion in LOWERCASE
+# (`completed`, `success`, `timed_out`); dispatch_classify_rollup matches the
+# UPPERCASE statusCheckRollup enum. dispatch_ci_verdict_rest bridges the two by
+# `ascii_upcase`ing every entry before classifying. These tests feed the helper
+# the real lowercase REST shape directly (NOT the make_pr* uppercase fixtures)
+# and assert hardcoded verdicts, so the conversion is genuinely exercised:
+# delete the `ascii_upcase` from dispatch_ci_verdict_rest and the passing cases
+# below flip to `pending` (lowercase `success` no longer matches `SUCCESS`),
+# turning the suite RED. They also cover conclusions the selection fixtures
+# never use (neutral-only, skipped, timed_out, cancelled, action_required) and
+# the DISPATCH_CI_VERDICT_CACHE memoisation hit.
+echo "=== dispatch_ci_verdict_rest (verdict fidelity) ==="
+
+# Each case: write a lowercase REST check-runs fixture for a synthetic sha, then
+# call the real helper (sourced from the copied lib.sh) against the stub gh.
+verdict_rest_case() {
+  local label="$1" sha="$2" check_runs_json="$3" expected="$4"
+  printf '%s' "{\"check_runs\": $check_runs_json}" > "$STUB_DIR/check-runs-${sha}.json"
+  local actual
+  actual=$(source "$TMPDIR_TEST/lib.sh"; dispatch_ci_verdict_rest "$sha")
+  assert_eq "$label" "$expected" "$actual"
+}
+
+echo "Test: REST verdict fidelity across conclusions"
+setup
+verdict_rest_case "verdict: lowercase success → passing" \
+  "sha-success" '[{"status":"completed","conclusion":"success"}]' "passing"
+verdict_rest_case "verdict: neutral-only → passing" \
+  "sha-neutral" '[{"status":"completed","conclusion":"neutral"}]' "passing"
+verdict_rest_case "verdict: skipped-only → passing" \
+  "sha-skipped" '[{"status":"completed","conclusion":"skipped"}]' "passing"
+verdict_rest_case "verdict: success + neutral + skipped → passing" \
+  "sha-mixed-pass" '[{"status":"completed","conclusion":"success"},{"status":"completed","conclusion":"neutral"},{"status":"completed","conclusion":"skipped"}]' "passing"
+verdict_rest_case "verdict: timed_out → failing" \
+  "sha-timeout" '[{"status":"completed","conclusion":"timed_out"}]' "failing"
+verdict_rest_case "verdict: cancelled → failing" \
+  "sha-cancelled" '[{"status":"completed","conclusion":"cancelled"}]' "failing"
+verdict_rest_case "verdict: action_required → failing" \
+  "sha-action" '[{"status":"completed","conclusion":"action_required"}]' "failing"
+verdict_rest_case "verdict: failure → failing" \
+  "sha-failure" '[{"status":"completed","conclusion":"failure"}]' "failing"
+verdict_rest_case "verdict: in_progress (null conclusion) → pending" \
+  "sha-inprog" '[{"status":"in_progress","conclusion":null}]' "pending"
+verdict_rest_case "verdict: queued → pending" \
+  "sha-queued" '[{"status":"queued","conclusion":null}]' "pending"
+verdict_rest_case "verdict: failing + still-running → failing (failure wins)" \
+  "sha-mixed-fail" '[{"status":"completed","conclusion":"failure"},{"status":"in_progress","conclusion":null}]' "failing"
+verdict_rest_case "verdict: empty check-runs → pending" \
+  "sha-empty" '[]' "pending"
+teardown
+
+echo "Test: REST verdict cache hit serves stored verdict without re-fetch"
+setup
+# Prime the cache with a passing verdict, then overwrite the fixture with a
+# failing one. A second call must return the cached `passing` (no REST call),
+# proving the DISPATCH_CI_VERDICT_CACHE memoisation short-circuit.
+export DISPATCH_CI_VERDICT_CACHE="$TMPDIR_TEST/ci-verdict-cache"
+mkdir -p "$DISPATCH_CI_VERDICT_CACHE"
+printf '%s' '{"check_runs":[{"status":"completed","conclusion":"success"}]}' \
+  > "$STUB_DIR/check-runs-sha-cache.json"
+primed=$(source "$TMPDIR_TEST/lib.sh"; dispatch_ci_verdict_rest "sha-cache")
+assert_eq "verdict cache: first call → passing (and primes cache)" "passing" "$primed"
+printf '%s' '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/check-runs-sha-cache.json"
+cached=$(source "$TMPDIR_TEST/lib.sh"; dispatch_ci_verdict_rest "sha-cache")
+assert_eq "verdict cache: second call → cached passing despite changed fixture" "passing" "$cached"
+unset DISPATCH_CI_VERDICT_CACHE
+teardown
 
 # ============================================================================
 # dispatch-phase tests
@@ -26625,7 +26715,7 @@ echo "=== dispatch-reconcile-ready ==="
 make_reconcile_pr() {
   local num="$1" is_draft="$2" mergeable="$3" rollup_json="$4" labels_json="$5"
   local sha="sha${num}"
-  printf '%s' "{\"check_runs\": $rollup_json}" > "$STUB_DIR/check-runs-${sha}.json"
+  write_rest_check_runs "$sha" "$rollup_json"
   printf '[{"number":%s,"isDraft":%s,"mergeable":"%s","headRefOid":"%s","labels":%s}]' \
     "$num" "$is_draft" "$mergeable" "$sha" "$labels_json"
 }
