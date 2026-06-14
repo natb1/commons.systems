@@ -9624,20 +9624,22 @@ echo "Test: valid target-workers.json prints normalized JSON"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
 {
-  "target_weekly_usage_pct": 85,
+  "weekly_pace_floor_pct": 60,
   "weekly_increment_cap_pct": 8,
+  "weekly_terminal_windows": 2,
   "five_hour_target_floor_pct": 55,
   "weekly_curve_power": 2
 }
 EOF
+# shoulder = 100 - 8*2 = 84 >= 60, admissible
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
 assert_eq "valid target-workers.json exits 0" "0" "$rc"
-tw_target=$(printf '%s' "$out" | jq -r '.target_weekly_usage_pct')
-assert_eq "valid target-workers.json target_weekly_usage_pct" "85" "$tw_target"
+tw_floor=$(printf '%s' "$out" | jq -r '.weekly_pace_floor_pct')
+assert_eq "valid target-workers.json weekly_pace_floor_pct" "60" "$tw_floor"
 tw_cap=$(printf '%s' "$out" | jq -r '.weekly_increment_cap_pct')
 assert_eq "valid target-workers.json weekly_increment_cap_pct" "8" "$tw_cap"
-tw_floor5=$(printf '%s' "$out" | jq -r '.five_hour_target_floor_pct')
-assert_eq "valid target-workers.json five_hour_target_floor_pct" "55" "$tw_floor5"
+tw_windows=$(printf '%s' "$out" | jq -r '.weekly_terminal_windows')
+assert_eq "valid target-workers.json weekly_terminal_windows" "2" "$tw_windows"
 tw_power=$(printf '%s' "$out" | jq -r '.weekly_curve_power')
 assert_eq "valid target-workers.json weekly_curve_power" "2" "$tw_power"
 config_teardown
@@ -9656,13 +9658,13 @@ config_teardown
 echo "Test: target-workers.json with non-number field exits 1 and stderr names it"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"target_weekly_usage_pct": "ninety"}
+{"weekly_pace_floor_pct": "fifty"}
 EOF
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
 assert_eq "non-number tunable exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"target_weekly_usage_pct"* && "$err" == *"number"* ]]; then
+if [[ "$err" == *"weekly_pace_floor_pct"* && "$err" == *"number"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: non-number tunable stderr names the field and type"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: non-number tunable stderr names the field and type"
@@ -9782,50 +9784,31 @@ out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); r
 assert_eq "max_concurrent_workers 200 exits 0 (no upper bound)" "0" "$rc"
 config_teardown
 
-# --- Test 13c: weekly_increment_floor_pct > cap rejected (cross-field) -------
+# --- Test 13c: anchor-ordering rejection (floor > derived shoulder) ----------
 
-echo "Test: weekly_increment_floor_pct > weekly_increment_cap_pct exits 1"
+echo "Test: weekly_pace_floor_pct: 85 exits 1 (shoulder defaults to 80 < 85)"
 config_setup
-cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"weekly_increment_floor_pct": 20, "weekly_increment_cap_pct": 5}
-EOF
+echo '{"weekly_pace_floor_pct": 85}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
-assert_eq "floor > cap exits 1" "1" "$rc"
+assert_eq "floor 85 > shoulder 80 exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"weekly_increment_floor_pct"* && "$err" == *"<= weekly_increment_cap_pct"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: floor > cap stderr names the ordering rule"
+if [[ "$err" == *"weekly_pace_floor_pct"* && "$err" == *"shoulder"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: floor > shoulder stderr names field and shoulder"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: floor > cap stderr names the ordering rule"
+  FAIL=$((FAIL + 1)); echo "  FAIL: floor > shoulder stderr names field and shoulder"
   echo "    stderr: $err"
 fi
 config_teardown
 
-# --- Test 13d: floor == cap accepted; large floor alone now rejected (#930) ---
+# --- Test 13d: anchor-ordering boundary accept (floor == shoulder) -----------
 
-echo "Test: weekly_increment_floor_pct == cap accepted; large floor alone rejected (monotonicity)"
+echo "Test: weekly_pace_floor_pct: 80 exits 0 (floor == shoulder 80, boundary accepted)"
 config_setup
-cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"weekly_increment_floor_pct": 5, "weekly_increment_cap_pct": 5}
-EOF
+echo '{"weekly_pace_floor_pct": 80}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+# shoulder = 100 - 10*2 = 80; floor 80 is NOT > shoulder 80, so accepted
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
-assert_eq "floor == cap exits 0" "0" "$rc"
-# #930 added a curve-monotonicity constraint that applies algorithm defaults for
-# absent fields. floor=50 alone gives min = 34*50*1/2 = 850 > 90 (default
-# target_weekly_usage_pct), so the config is now rejected even without a cap
-# field present. This changed the pre-#930 behaviour where floor alone with a
-# defaulted cap was silently accepted.
-echo '{"weekly_increment_floor_pct": 50}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
-rc=0
-err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
-assert_eq "large floor alone (cap absent) exits 1" "1" "$rc"
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"monotonicity"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: large floor alone stderr contains monotonicity"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: large floor alone stderr contains monotonicity"
-  echo "    stderr: $err"
-fi
+assert_eq "floor == shoulder exits 0" "0" "$rc"
 config_teardown
 
 # --- Test 13e: five_hour_target_floor_pct > ceiling rejected (cross-field) ---
@@ -9930,83 +9913,125 @@ else
 fi
 config_teardown
 
-# --- Test 13k: target_weekly_usage_pct: 10 rejected (10 < 17, default floor/power) ---
+# --- Test 13k: weekly_terminal_windows: 0.5 rejected (fractional, must be >= 1) ---
 
-echo "Test: target_weekly_usage_pct: 10 exits 1, stderr names target_weekly_usage_pct and monotonicity"
+echo "Test: weekly_terminal_windows: 0.5 exits 1 and stderr names field and >= 1"
 config_setup
-echo '{"target_weekly_usage_pct": 10}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+echo '{"weekly_terminal_windows": 0.5}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
-assert_eq "target_weekly_usage_pct 10 exits 1" "1" "$rc"
+assert_eq "weekly_terminal_windows 0.5 exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"target_weekly_usage_pct"* && "$err" == *"monotonicity"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: target_weekly_usage_pct 10 stderr names field and monotonicity"
+if [[ "$err" == *"weekly_terminal_windows"* && "$err" == *">= 1"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_terminal_windows 0.5 stderr names field and >= 1"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: target_weekly_usage_pct 10 stderr names field and monotonicity"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_terminal_windows 0.5 stderr names field and >= 1"
   echo "    stderr: $err"
 fi
 config_teardown
 
-# --- Test 13l: target_weekly_usage_pct: 17 accepted (boundary; 17 < 17 is false) ---
+# --- Test 13l: weekly_terminal_windows: 0 rejected (must be > 0) ------------
 
-echo "Test: target_weekly_usage_pct: 17 exits 0 (boundary, min = 34*1*1/2 = 17, inclusive-accept)"
+echo "Test: weekly_terminal_windows: 0 exits 1 and stderr says must be > 0"
 config_setup
-echo '{"target_weekly_usage_pct": 17}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
-out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
-assert_eq "target_weekly_usage_pct 17 exits 0" "0" "$rc"
-config_teardown
-
-# --- Test 13m: target_weekly_usage_pct: 16 rejected (16 < 17) ----------------
-
-echo "Test: target_weekly_usage_pct: 16 exits 1, stderr contains monotonicity"
-config_setup
-echo '{"target_weekly_usage_pct": 16}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+echo '{"weekly_terminal_windows": 0}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
-assert_eq "target_weekly_usage_pct 16 exits 1" "1" "$rc"
+assert_eq "weekly_terminal_windows 0 exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"monotonicity"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: target_weekly_usage_pct 16 stderr contains monotonicity"
+if [[ "$err" == *"weekly_terminal_windows"* && "$err" == *"must be > 0"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_terminal_windows 0 stderr says must be > 0"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: target_weekly_usage_pct 16 stderr contains monotonicity"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_terminal_windows 0 stderr says must be > 0"
   echo "    stderr: $err"
 fi
 config_teardown
 
-# --- Test 13n: weekly_curve_power shifts the threshold -----------------------
-# With power=3: min = 34*1*3/(3+1) = 25.5; so target=20 is rejected.
-# With default power=1: min = 34*1*1/(1+1) = 17; so target=20 is accepted.
+# --- Test 13m: weekly_pace_floor_pct round-trip (value preserved) ------------
 
-echo "Test: power=3 raises threshold (target=20 rejected); default power=1 accepts target=20"
+echo "Test: weekly_pace_floor_pct: 40 exits 0 and round-trips"
 config_setup
-cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"target_weekly_usage_pct": 20, "weekly_curve_power": 3}
-EOF
-rc=0
-err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
-assert_eq "target=20 power=3 exits 1" "1" "$rc"
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"monotonicity"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: target=20 power=3 stderr contains monotonicity"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: target=20 power=3 stderr contains monotonicity"
-  echo "    stderr: $err"
-fi
-echo '{"target_weekly_usage_pct": 20}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+echo '{"weekly_pace_floor_pct": 40}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+# shoulder = 100 - 10*2 = 80 >= 40, admissible
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
-assert_eq "target=20 default power=1 exits 0" "0" "$rc"
+assert_eq "weekly_pace_floor_pct 40 exits 0" "0" "$rc"
+tw_floor=$(printf '%s' "$out" | jq -r '.weekly_pace_floor_pct')
+assert_eq "weekly_pace_floor_pct 40 preserved" "40" "$tw_floor"
 config_teardown
 
-# --- Test 13o: valid combined floor and target accepted ----------------------
-# floor=5, target=90: min = 34*5*1/2 = 85 <= 90, so accepted.
+# --- Test 13n: weekly_pace_floor_pct: 0 rejected (must be > 0) --------------
 
-echo "Test: target_weekly_usage_pct=90 weekly_increment_floor_pct=5 exits 0 (min=85 <= 90)"
+echo "Test: weekly_pace_floor_pct: 0 exits 1 and stderr says must be > 0"
 config_setup
-cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"target_weekly_usage_pct": 90, "weekly_increment_floor_pct": 5}
-EOF
+echo '{"weekly_pace_floor_pct": 0}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "weekly_pace_floor_pct 0 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"weekly_pace_floor_pct"* && "$err" == *"must be > 0"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_pace_floor_pct 0 stderr says must be > 0"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_pace_floor_pct 0 stderr says must be > 0"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 13o: weekly_pace_floor_pct: 150 rejected (must be <= 100) ----------
+
+echo "Test: weekly_pace_floor_pct: 150 exits 1 and stderr says must be <= 100"
+config_setup
+echo '{"weekly_pace_floor_pct": 150}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "weekly_pace_floor_pct 150 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"weekly_pace_floor_pct"* && "$err" == *"<= 100"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_pace_floor_pct 150 stderr says <= 100"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_pace_floor_pct 150 stderr says <= 100"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 13p: weekly_terminal_windows round-trip (value preserved) ----------
+
+echo "Test: weekly_terminal_windows: 3 exits 0 and round-trips"
+config_setup
+echo '{"weekly_terminal_windows": 3}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+# shoulder = 100 - 10*3 = 70 >= default floor 50, admissible
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
-assert_eq "target=90 floor=5 exits 0" "0" "$rc"
+assert_eq "weekly_terminal_windows 3 exits 0" "0" "$rc"
+tw_windows=$(printf '%s' "$out" | jq -r '.weekly_terminal_windows')
+assert_eq "weekly_terminal_windows 3 preserved" "3" "$tw_windows"
+config_teardown
+
+# --- Test 13q: weekly_terminal_windows: 5 accepted (no pct upper bound) -----
+# shoulder = 100 - 10*5 = 50 == default floor 50; floor NOT > shoulder, accepted.
+
+echo "Test: weekly_terminal_windows: 5 exits 0 (no <= 100 upper-bound restriction)"
+config_setup
+echo '{"weekly_terminal_windows": 5}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "weekly_terminal_windows 5 exits 0 (no upper bound)" "0" "$rc"
+tw_windows=$(printf '%s' "$out" | jq -r '.weekly_terminal_windows')
+assert_eq "weekly_terminal_windows 5 preserved" "5" "$tw_windows"
+config_teardown
+
+# --- Test 13r: weekly_terminal_windows non-number rejected -------------------
+
+echo "Test: weekly_terminal_windows: \"two\" exits 1 and stderr names field and number"
+config_setup
+echo '{"weekly_terminal_windows": "two"}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "weekly_terminal_windows string exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"weekly_terminal_windows"* && "$err" == *"number"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_terminal_windows string stderr names field and number"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_terminal_windows string stderr names field and number"
+  echo "    stderr: $err"
+fi
 config_teardown
 
 # ============================================================================
