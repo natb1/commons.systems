@@ -99,12 +99,38 @@ if ! [[ "$JOB_NAME" =~ ^[0-9]+- ]]; then
   exit 0
 fi
 
-# Drain any buffered single-line JSON payload fast (defensive — Stop may
-# pass JSON on stdin, but this hook never reads a field from it). Short
-# timeout so an open, idle stdin (hook events never close stdin at EOF)
-# returns in ~0.1s rather than stalling a full second on the NUL delimiter.
+# Drain any buffered single-line JSON payload fast. Short timeout so an open,
+# idle stdin (hook events never close stdin at EOF) returns in ~0.1s rather
+# than stalling a full second on the NUL delimiter. The payload is KEPT (not
+# discarded) so Branch A's idle-poll discriminator can resolve the stopping
+# session's transcript path below.
 PAYLOAD=""
 if read -rt 0.1 PAYLOAD; then :; fi
+
+# Resolve the stopping session's transcript path for the Branch A idle-poll
+# discriminator (session_scheduled_wakeup). Two sources, in order:
+#   (a) the Stop payload's `transcript_path` field (standard Claude Code Stop
+#       hook schema) — the primary source; and
+#   (b) a state.json-derived fallback when (a) is empty: sessionId + cwd, with
+#       cwd mapped to the Claude Code project-dir slug by replacing every `/`
+#       and `.` with `-`. The derived path
+#       ~/.claude/projects/<slug>/<sessionId>.jsonl is the live transcript
+#       location (confirmed to exist for a running managed-bg worker), and the
+#       running session's final assistant turn IS flushed to that file before
+#       the Stop hook reads it.
+# A here-string feeds jq (NOT `echo "$PAYLOAD" | jq` — zsh-style echo
+# un-escapes \t/\n in the payload JSON and corrupts it; see
+# .claude/rules/shell-json.md). If both sources fail, TRANSCRIPT_PATH stays
+# empty and the discriminator falls through to today's fail-safe park.
+TRANSCRIPT_PATH=$(jq -r '.transcript_path // empty' <<<"$PAYLOAD" 2>/dev/null) || TRANSCRIPT_PATH=""
+if [ -z "$TRANSCRIPT_PATH" ] && [ -n "${CLAUDE_JOB_DIR:-}" ] && [ -f "$STATE_FILE" ]; then
+  _sid=$(jq -r '.sessionId // empty' "$STATE_FILE" 2>/dev/null)
+  _cwd=$(jq -r '.cwd // empty' "$STATE_FILE" 2>/dev/null)
+  if [ -n "$_sid" ] && [ -n "$_cwd" ]; then
+    _slug=$(printf '%s' "$_cwd" | tr '/.' '--')
+    TRANSCRIPT_PATH="$HOME/.claude/projects/$_slug/$_sid.jsonl"
+  fi
+fi
 
 # Resolve issue number from the validated JOB_NAME (<N>-<slug>). Discriminator 2
 # guarantees JOB_NAME matches ^[0-9]+-, so the numeric prefix is non-empty.
@@ -178,6 +204,26 @@ spawn_sweep() {
 self_close() {
   "$SCRIPTS/dispatch-self-close" >/dev/null 2>&1 \
     || echo "[dispatch-stop] WARNING: dispatch-self-close failed" >&2
+}
+
+# Branch A idle-poll discriminator (#1590). Returns 0 ("will resume on its own")
+# ONLY when the stopping session's transcript shows its FINAL assistant turn
+# contained a `ScheduleWakeup` tool_use; returns 1 in EVERY other case —
+# including all uncertainty: empty TRANSCRIPT_PATH, missing/unreadable file,
+# malformed JSONL, or no trailing wakeup. The fail-safe direction (positive
+# evidence only) is load-bearing: any doubt falls through to today's
+# office-hours park, so a genuine death still parks byte-identically.
+#
+# jq emits one array-of-tool-use-names per assistant turn; a polling worker
+# schedules one ScheduleWakeup PER poll cycle, so only the LAST assistant turn
+# matters — hence `tail -1`. Non-assistant trailing lines (tool_result / user
+# events) are correctly ignored because the jq `select` keeps only assistant
+# turns. Reading the file directly with jq (not via echo) avoids the
+# control-char trap (.claude/rules/shell-json.md).
+session_scheduled_wakeup() {
+  [ -n "$TRANSCRIPT_PATH" ] && [ -r "$TRANSCRIPT_PATH" ] || return 1
+  jq -rc 'select(.type=="assistant") | [.message.content[]? | select(.type=="tool_use") | .name]' "$TRANSCRIPT_PATH" 2>/dev/null \
+    | tail -1 | grep -q '"ScheduleWakeup"'
 }
 
 # Branch P — parse-job clean completion (#1024): a /budget-parse-job session is
@@ -273,6 +319,14 @@ CURRENT_PHASE=$("$SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || CURRENT_P
 
 if [ -z "$MARKER_PHASE" ]; then
   # Branch A — marker absent.
+  if session_scheduled_wakeup; then
+    # Live idle-polling worker — its final turn scheduled a ScheduleWakeup,
+    # so it will resume on its own poll cadence. Do NOT park on office-hours
+    # and do NOT spawn a redundant tick (the live worker drives the chain
+    # itself). Without this gate Branch A re-parks the issue once per poll
+    # cycle, oscillating dispatch:office-hours (#1590).
+    exit 0
+  fi
   "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
     "$(resolve_office_hours_reason "phase exited before completion (mid-phase exit or context compaction)")" \
     || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
