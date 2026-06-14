@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Compose follow-up issues from QA needs-main residue items.
+# Usage: printf '%s' '<json-array>' | dispatch-qa-needs-main-followup <issue-N> <pr-number>
+#
+# Reads a JSON array of needs-main residue items on stdin. Writes a JSON
+# array of follow-ups to stdout, one object per input item, each exactly:
+#   { "identifier": ..., "title": ..., "body": ... }
+# Emits [] when the input array is empty.
+#
+# Args:
+#   $1 = issue number under QA (<N>)
+#   $2 = PR number (used only in the provenance line)
+#
+# The args are used ONLY in the body provenance line and the stable identifier.
+# This script makes NO network/git/gh calls. Pure stdin -> stdout via jq.
+#
+# Per-item input fields consumed:
+#   id               — stable plan-item identifier
+#   title            — human-readable item title
+#   kind             — accepted in input but not reflected in emitter output;
+#                      available for future use (residue kind:
+#                      main-gated-fail, fail, needs-human-judgment)
+#   url_path         — URL path for the item (may be "", null, or "current")
+#   expected_outcome — what the item expects to be true post-merge
+#   finding          — what was actually observed during QA
+#
+# Stable identifier design (url_path-first with title-slug fallback):
+#   "qa-needs-main #<N>: <key>"
+#   where <key> is:
+#     - url_path when it is non-empty AND not the literal string "current"
+#     - else a deterministic slug of the item title: lowercase; every run of
+#       non-alphanumeric chars collapsed to a single dash; leading/trailing
+#       dashes trimmed.
+#
+# Tradeoff: url_path is the stable, dedup-friendly key. The dominant
+# main-gated-fail residue kind frequently has an empty url_path (the
+# permission-denied smoke test does not always carry a URL path), so the
+# title-slug fallback is best-effort — triage-generated titles can drift
+# run-to-run. dispatch-followup-exists with --state all is the backstop
+# against duplicate filing in that case.
+#
+# The identifier is embedded verbatim in the title so downstream
+# dispatch-followup-exists dedup (which matches on title substring) can
+# find it — same contract as dispatch-security-followup.
+set -euo pipefail
+
+n="$1"
+pr="$2"
+
+jq --arg n "$n" --arg pr "$pr" '
+  def slug: ascii_downcase | gsub("[^a-z0-9]+"; "-") | gsub("^-+|-+$"; "");
+
+  [ .[]
+    | (.url_path // "") as $path
+    | (if $path != "" and $path != "current" then $path else (.title | slug) end) as $key
+    | ("qa-needs-main #" + $n + ": " + $key) as $identifier
+    | {
+        identifier: $identifier,
+        title: ("qa: verify against main — " + $identifier),
+        body: ([
+          ("**Expected outcome:** " + .expected_outcome),
+          ("**Finding during QA:** " + .finding)
+        ]
+        + (if $path != "" and $path != "current" then ["**URL path:** " + $path] else [] end)
+        + [
+          "",
+          ("Surfaced during QA of PR #" + $pr + " for issue #" + $n + "; this behavior is only verifiable against merged main / production.")
+        ] | join("\n"))
+      }
+  ]
+' </dev/stdin
