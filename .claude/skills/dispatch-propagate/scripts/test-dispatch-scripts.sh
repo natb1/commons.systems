@@ -14130,6 +14130,12 @@ echo "=== dispatch-tick-recover ==="
 #
 # The test shell runs under `set -e`; dispatch-tick-recover always exits 0 on
 # these paths, but each invocation is still wrapped to capture the code.
+#
+# Continuation semantics: a pending dispatch-reseed* timer is the ONLY
+# continuation signal — a busy worker is NOT a continuation. A busy worker
+# instead drives Step 5's deferred backstop: a flat HEARTBEAT reseed is armed
+# at NOW + HEARTBEAT (default 1800) and the count advances normally so the cap
+# can be reached and escalation fires even under a persistent phantom-busy stall.
 
 tr_setup() {
   TMPDIR_TEST=$(mktemp -d)
@@ -14227,6 +14233,7 @@ tr_teardown() {
   unset DISPATCH_TICK_RECOVER_BASE_BACKOFF
   unset DISPATCH_TICK_RECOVER_MAX_BACKOFF
   unset DISPATCH_TICK_RECOVER_RESET_WINDOW
+  unset DISPATCH_TICK_RECOVER_HEARTBEAT
   unset DISPATCH_DAEMON_UNIT_DIR DISPATCH_DAEMON_SYSTEMCTL_CMD DISPATCH_DAEMON_CLAUDE_CMD
 }
 
@@ -14294,26 +14301,44 @@ else
 fi
 tr_teardown
 
-# --- Test 2: continuation present (busy worker) → no reseed, count reset -----
+# --- Test 2: busy worker is no longer a continuation → arms heartbeat reseed ---
+# A busy worker used to short-circuit recovery (old "continuation" semantics).
+# Under the new behavior it is NOT a continuation: the count advances and a
+# flat HEARTBEAT reseed is armed as a deferred backstop. With count 2→3 and
+# NOW - last_failure = 1000 < RESET_WINDOW → no aging reset → reseed_at =
+# NOW + HEARTBEAT = 1000000 + 1800 = 1001800.
 
-echo "Test: a live busy worker is a continuation → no reseed, count reset to 0"
+echo "Test: a busy worker is no longer a continuation → arms a heartbeat reseed, count advances"
 tr_setup
 tr_busy_worker
 tr_seed_state 2 999000
 if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "busy-worker: dispatch-tick-recover exits 0" "0" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
-assert_eq "busy-worker: no reseed armed (systemd-run log empty)" "" "$log"
-assert_eq "busy-worker: state count reset to 0" "0" "$(tr_state_count)"
-# Continuation no-op path: ensure_daemon_service must NOT have run (no arming).
-assert_eq "busy-worker: daemon service not touched (continuation no-op)" \
-  "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@1001800"* \
+   && "$log" == *"--unit=dispatch-reseed-1001800"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: busy-worker: heartbeat reseed armed at NOW + 1800"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: busy-worker: heartbeat reseed armed at NOW + 1800"
+  echo "    log: $log"
+fi
+assert_eq "busy-worker: state count advances to 3" "3" "$(tr_state_count)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'enable --now dispatch-claude-daemon.service' \
+     "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: busy-worker: ensure_daemon_service ran (arming path)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: busy-worker: ensure_daemon_service ran (arming path)"
+  echo "    daemon-systemctl-log: $(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || echo '(absent)')"
+fi
 tr_teardown
 
 # --- Test 3: continuation present (pending dispatch-reseed* timer) → no reseed -
 
 echo "Test: a pending dispatch-reseed* timer is a continuation → no reseed armed"
 tr_setup
+tr_seed_state 2 999000
 # A pending reseed timer row drives the continuation signal; 0 busy workers.
 printf 'dispatch-reseed-1234.timer  active  waiting  Dispatch reseed\n' \
   > "$TMPDIR_TEST/timer-units"
@@ -14324,6 +14349,8 @@ assert_eq "pending-timer: no reseed armed (systemd-run log empty)" "" "$log"
 # Continuation no-op path: ensure_daemon_service must NOT have run (no arming).
 assert_eq "pending-timer: daemon service not touched (continuation no-op)" \
   "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
+# The timer continuation branch must NOT reset the count (state left untouched).
+assert_eq "pending-timer: state count preserved (not reset)" "2" "$(tr_state_count)"
 tr_teardown
 
 # --- Test 4: cap reached → escalate, not retry -------------------------------
@@ -14458,6 +14485,68 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: overflow-clamp: backoff clamped to MAX, reseed at NOW + 3600 (killmode)"
   echo "    log: $log"
 fi
+tr_teardown
+
+# --- Test 10: phantom-busy stall escalates within the cap (criterion 3) -------
+# A persistent busy worker that never actually carries the chain (its Stop hook
+# never fires → timer-units stays empty). Each generation must advance the count
+# (the busy reading no longer short-circuits) so the cap is reached and
+# escalation fires — rather than the count resetting to 0 every generation and
+# the chain stalling forever.
+echo "Test: repeated phantom-busy generations advance the count to escalation"
+tr_setup
+tr_busy_worker                      # busy>0 every round; timer-units stays empty
+for i in 1 2 3 4; do
+  export DISPATCH_TICK_RECOVER_NOW=$(( 1000000 + i*600 ))   # delta 600 < RESET_WINDOW
+  "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null || true
+done
+unset DISPATCH_TICK_RECOVER_NOW
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
+# Rounds 1-3 each arm a heartbeat reseed at NOW_i + 1800: @1002400, @1003000,
+# @1003600 (the heartbeat window is flat — it does NOT grow). Round 4 (= CAP+1)
+# escalates and arms NO reseed, so systemd-log has exactly 3 lines.
+TOTAL=$((TOTAL + 1))
+nlines=$(grep -c 'on-calendar' "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+if [[ "$log" == *"--on-calendar=@1002400"* \
+   && "$log" == *"--on-calendar=@1003000"* \
+   && "$log" == *"--on-calendar=@1003600"* \
+   && "$nlines" == "3" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: phantom-busy: exactly 3 heartbeat reseeds (rounds 1-3)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: phantom-busy: exactly 3 heartbeat reseeds (rounds 1-3)"
+  echo "    log: $log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"--label dispatch:chain-stalled"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: phantom-busy: round 4 escalates (chain-stalled issue)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: phantom-busy: round 4 escalates (chain-stalled issue)"
+  echo "    gh-log: $ghlog"
+fi
+assert_eq "phantom-busy: state count advances to 4" "4" "$(tr_state_count)"
+tr_teardown
+
+# --- Test 11: HEARTBEAT=0 is rejected (non-positive) -------------------------
+echo "Test: DISPATCH_TICK_RECOVER_HEARTBEAT=0 is rejected (exit 2, no reseed)"
+tr_setup
+export DISPATCH_TICK_RECOVER_HEARTBEAT=0
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "heartbeat-zero: dispatch-tick-recover exits 2" "2" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "heartbeat-zero: no reseed armed (systemd-run log empty)" "" "$log"
+tr_teardown
+
+# --- Test 12: HEARTBEAT >= RESET_WINDOW is rejected (defeats the cap) ---------
+# If the deferred heartbeat window is >= the reset window, the count would age
+# back to a fresh episode every generation and the cap would never be reached.
+echo "Test: DISPATCH_TICK_RECOVER_HEARTBEAT >= RESET_WINDOW is rejected (exit 2, no reseed)"
+tr_setup
+export DISPATCH_TICK_RECOVER_HEARTBEAT=3600   # == RESET_WINDOW (3600 from tr_setup)
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "heartbeat-ge-reset: dispatch-tick-recover exits 2" "2" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "heartbeat-ge-reset: no reseed armed (systemd-run log empty)" "" "$log"
 tr_teardown
 
 # ============================================================================
