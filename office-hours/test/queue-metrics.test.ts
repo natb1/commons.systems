@@ -59,10 +59,22 @@ describe("serializeQueueMetrics / parseQueueMetrics", () => {
   });
 
   it("returns a valid snapshot when runwayDays field is absent (Firestore omits stored nulls)", () => {
-    const serialized = serializeQueueMetrics({ ...base, runwayDays: null }) as Record<string, unknown>;
+    const serialized = serializeQueueMetrics({ ...base, netDrainPerDay: 0, runwayDays: null }) as Record<string, unknown>;
     delete serialized.runwayDays;
     const parsed = parseQueueMetrics(serialized);
     expect(parsed).not.toBeNull();
     expect(parsed!.runwayDays).toBeNull();
+  });
+
+  it("returns null for an inconsistent snapshot: netDrainPerDay > 0 with runwayDays null", () => {
+    // base.netDrainPerDay is 2.0 (> 0); a null runwayDays violates the invariant.
+    const doc = { ...serializeQueueMetrics(base), runwayDays: null };
+    expect(parseQueueMetrics(doc)).toBeNull();
+  });
+
+  it("returns null for the symmetric inconsistency: runwayDays non-null with netDrainPerDay <= 0", () => {
+    // base.runwayDays is 24 (non-null); netDrainPerDay 0 violates the invariant.
+    const doc = { ...serializeQueueMetrics(base), netDrainPerDay: 0 };
+    expect(parseQueueMetrics(doc)).toBeNull();
   });
 });
