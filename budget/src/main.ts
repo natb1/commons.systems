@@ -33,7 +33,7 @@ import {
   readFileFromHandle,
 } from "./local-file.js";
 import { SeedDataSource, IdbDataSource, FileSyncingDataSource, type DataSource } from "./data-source.js";
-import { configureFileSync, flushWriteBack, resetFileSync, getSyncHandle, getLastSyncedModified } from "./file-sync.js";
+import { configureFileSync, flushWriteBack, resetFileSync, getSyncHandle, getLastSyncedModified, setWriteBackStatusListener } from "./file-sync.js";
 import { setActiveDataSource } from "./active-data-source.js";
 import { exportToJson } from "./export.js";
 import { isEncrypted, decrypt, encrypt } from "./crypto.js";
@@ -85,6 +85,8 @@ const errorEl = document.createElement("p");
 errorEl.className = "nav-error";
 errorEl.hidden = true;
 authContainer.appendChild(errorEl);
+
+const FILE_SYNC_WARNING = "Changes could not be saved to disk — file permission may have been revoked.";
 
 function showNavError(message: string): void {
   errorEl.textContent = message;
@@ -445,6 +447,13 @@ exportButton.addEventListener("click", async () => {
 // tab close does not lose the last edit. Registered once at the top level.
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") void flushWriteBack();
+});
+
+// Surface write-back failures: show a persistent nav warning while writes fail,
+// clear it once a write succeeds again. Registered once at the top level.
+setWriteBackStatusListener((ok) => {
+  if (!ok) showNavError(FILE_SYNC_WARNING);
+  else if (errorEl.textContent === FILE_SYNC_WARNING) clearNavError();
 });
 
 // External-change reload: when the window regains focus, re-read the on-disk
