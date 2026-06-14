@@ -348,6 +348,10 @@ func ReadFile(path, password string) (Output, error) {
 // before serialization, mirroring the TypeScript upload-path validation so the
 // two halves stay in lockstep. WriteFile calls Validate before serializing;
 // callers that only need the check can call Validate directly.
+//
+// Referential integrity: every JournalLeg must reference an Account that exists
+// in Accounts (via AccountID) and a JournalEntry that exists in JournalEntries
+// (via EntryID). A leg naming a phantom account or entry is rejected.
 func (o Output) Validate() error {
 	for i, l := range o.JournalLegs {
 		if err := l.Validate(); err != nil {
@@ -357,6 +361,22 @@ func (o Output) Validate() error {
 	for i, a := range o.Accounts {
 		if err := a.Validate(); err != nil {
 			return fmt.Errorf("accounts[%d]: %w", i, err)
+		}
+	}
+	accountIDs := make(map[string]bool, len(o.Accounts))
+	for _, a := range o.Accounts {
+		accountIDs[a.ID] = true
+	}
+	entryIDs := make(map[string]bool, len(o.JournalEntries))
+	for _, e := range o.JournalEntries {
+		entryIDs[e.ID] = true
+	}
+	for i, l := range o.JournalLegs {
+		if !accountIDs[l.AccountID] {
+			return fmt.Errorf("journalLegs[%d]: accountId %q does not reference any account in accounts", i, l.AccountID)
+		}
+		if !entryIDs[l.EntryID] {
+			return fmt.Errorf("journalLegs[%d]: entryId %q does not reference any journal entry in journalEntries", i, l.EntryID)
 		}
 	}
 	return nil
