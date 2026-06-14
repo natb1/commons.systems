@@ -17,17 +17,20 @@
 #                                   invariant keeps alive. No skill is loaded.
 #   office-hours <N> <phase> <pr> <worktree-path>
 #                                 → launch the fresh /office-hours session
-#                                   worker-style: a `--bg` job named after the
-#                                   item's <N>-* worktree, with cwd = that
+#                                   worker-style: a `--bg` job named
+#                                   office-hours-<N>, with cwd = that
 #                                   worktree (5th field), via
 #                                   dispatch-spawn-office-hours; then exec
 #                                   `claude --resume <sessionId>` to attach the
 #                                   human. Born in the worktree, the session's
 #                                   branch is <N>-..., so the strip hook clears
 #                                   the dispatch:office-hours label and the
-#                                   session registers under the worktree
-#                                   basename, holding the per-worktree
-#                                   concurrency lock. When no <N>-* worktree
+#                                   session holds the per-worktree concurrency
+#                                   lock via the occupancy guard's
+#                                   office-hours-name check in
+#                                   worktree_has_live_session, which recognizes
+#                                   the office-hours-<N> session as occupying the
+#                                   <N>-slug worktree. When no <N>-* worktree
 #                                   resolves (5th field `-`), exit non-zero with
 #                                   a diagnostic and launch nothing.
 #   empty                         → print a queue-empty message and exit WITHOUT
@@ -60,11 +63,13 @@ case "$verb" in
     ;;
   office-hours)
     # a b c d = <N> <phase> <pr-or-dash> <worktree-path>. Launch a fresh
-    # /office-hours session worker-style — a --bg job named after the <N>-*
-    # worktree, rooted in it — then attach the human via --resume. Rooting it in
-    # the worktree clears the dispatch:office-hours label (the strip hook
-    # resolves <N> from the cwd branch) and registers the session under the
-    # worktree basename, so it holds the per-worktree concurrency lock.
+    # /office-hours session worker-style — a --bg job named office-hours-<N>,
+    # rooted in the <N>-* worktree — then attach the human via --resume. Rooting
+    # it in the worktree clears the dispatch:office-hours label (the strip hook
+    # resolves <N> from the cwd branch). The per-worktree concurrency lock is
+    # held via the occupancy guard's office-hours-name check (see
+    # worktree_has_live_session), which recognizes the office-hours-<N> session
+    # as occupying the <N>-slug worktree.
     if [[ -z "$d" || "$d" == "-" ]]; then
       echo "office-hours: no <N>-* worktree resolved for #$a — cannot launch a fresh session (the worktree may have been swept). Re-create the worktree or re-run /ready." >&2
       exit 1

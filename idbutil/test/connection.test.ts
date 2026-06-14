@@ -33,6 +33,23 @@ describe("input validation", () => {
     expect(() => createDbConnection({ name: "x", version: 1.5, onUpgrade() {} }))
       .toThrow("DbConnectionConfig.version must be a positive integer, got 1.5");
   });
+
+  it("throws on zero blockedTimeoutMs", () => {
+    expect(() => createDbConnection({ name: "x", version: 1, onUpgrade() {}, blockedTimeoutMs: 0 }))
+      .toThrow("DbConnectionConfig.blockedTimeoutMs must be a positive number, got 0");
+  });
+
+  it("throws on negative blockedTimeoutMs", () => {
+    expect(() => createDbConnection({ name: "x", version: 1, onUpgrade() {}, blockedTimeoutMs: -1 }))
+      .toThrow("DbConnectionConfig.blockedTimeoutMs must be a positive number, got -1");
+  });
+
+  it("throws on non-finite blockedTimeoutMs", () => {
+    expect(() => createDbConnection({ name: "x", version: 1, onUpgrade() {}, blockedTimeoutMs: Infinity }))
+      .toThrow("DbConnectionConfig.blockedTimeoutMs must be a positive number, got Infinity");
+    expect(() => createDbConnection({ name: "x", version: 1, onUpgrade() {}, blockedTimeoutMs: NaN }))
+      .toThrow("DbConnectionConfig.blockedTimeoutMs must be a positive number, got NaN");
+  });
 });
 
 describe("openDb", () => {
@@ -172,6 +189,99 @@ describe("openDb", () => {
 
     await tab1.closeDb();
     await tab2.closeDb();
+  });
+
+  it("openDb times out and nulls the cache when a blocking connection never closes", async () => {
+    const name = uniqueDbName();
+    // Tab 1 holds a v1 connection and refuses to close — permanent block.
+    const tab1 = createDbConnection({
+      name,
+      version: 1,
+      onUpgrade(db) { db.createObjectStore("s"); },
+    });
+    const db1 = await tab1.openDb();
+    db1.onversionchange = () => {}; // never closes → permanent block
+
+    const tab2 = createDbConnection({
+      name,
+      version: 2,
+      blockedTimeoutMs: 20,
+      onUpgrade(db) {
+        if (!db.objectStoreNames.contains("s2")) db.createObjectStore("s2");
+      },
+    });
+
+    // p1 must reject with the timeout error message containing the DB name
+    // and the "Close other tabs" guidance.
+    const p1 = tab2.openDb();
+    await expect(p1).rejects.toThrow(name);
+    await expect(p1).rejects.toThrow("Close other tabs");
+
+    // Prove dbPromise was nulled: a subsequent openDb() call must return a
+    // fresh promise (not p1).
+    const p2 = tab2.openDb();
+    expect(p2).not.toBe(p1); // fresh promise == dbPromise was nulled
+
+    // fake-indexeddb does not re-fire onblocked for p2's fresh open while the DB
+    // is already blocked, so p2 has no timeout timer of its own. Close tab1 to
+    // unblock; p2's request then completes the upgrade and resolves to a v2
+    // connection, which we close.
+    await tab1.closeDb();
+    await p2.then((db) => db.close(), () => {});
+  });
+
+  it("onblocked timer is cancelled when the open succeeds before the deadline", async () => {
+    const name = uniqueDbName();
+    // Tab 1 holds a v1 connection. It will close after one tick, briefly
+    // blocking tab2's upgrade before unblocking.
+    const tab1 = createDbConnection({
+      name,
+      version: 1,
+      onUpgrade(db) { db.createObjectStore("s"); },
+    });
+    const db1 = await tab1.openDb();
+    db1.onversionchange = () => {
+      setTimeout(() => db1.close(), 0);
+    };
+
+    // Tab 2 uses a generous blockedTimeoutMs. onsuccess must cancel the timer;
+    // if it leaks, the timer fires past the deadline and nulls dbPromise,
+    // poisoning the memoization cache. We assert the cache survives.
+    const tab2 = createDbConnection({
+      name,
+      version: 2,
+      blockedTimeoutMs: 200,
+      onUpgrade(db) {
+        if (!db.objectStoreNames.contains("s2")) db.createObjectStore("s2");
+      },
+    });
+
+    vi.useFakeTimers();
+    try {
+      // Don't await inline: the v2 open only completes after tab1's deferred
+      // close fires, and that close is itself a faked setTimeout(0). Drive the
+      // clock to fire it (interleaving microtask flushes) so the open settles,
+      // then await the already-resolved promise.
+      const p = tab2.openDb();
+      await vi.advanceTimersByTimeAsync(10);
+      const db2 = await p;
+      expect(db2).toBeInstanceOf(IDBDatabase);
+      expect(db2.version).toBe(2);
+
+      // Advance well past the deadline. If the blocked timer had leaked, it
+      // would now fire and null dbPromise.
+      await vi.advanceTimersByTimeAsync(250);
+
+      // The memoized promise must be intact: a fresh openDb() returns the same
+      // promise by reference. A different promise would mean dbPromise was
+      // spuriously nulled by a leaked timer.
+      expect(tab2.openDb()).toBe(p);
+
+      await tab1.closeDb();
+      await tab2.closeDb();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

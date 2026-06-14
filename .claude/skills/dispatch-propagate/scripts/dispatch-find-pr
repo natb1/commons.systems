@@ -19,7 +19,9 @@
 #   2. Cross-check via closedByPullRequestsReferences: fetches the issue's
 #      own list of closing PRs and returns any OPEN reference. This catches
 #      the branch-renamed-away case and provides a second authority on the
-#      "no PR" question regardless of which path resolved PR_LIST.
+#      "no PR" question regardless of which path successfully resolved
+#      PR_LIST. (On the self-fetch path, a gh failure or truncation guard in
+#      pr_list_open aborts before this cross-check runs — see below.)
 #
 # Environment:
 #   DISPATCH_PR_LIST           — optional. A JSON array of open PRs supplied
@@ -33,6 +35,9 @@
 #   DISPATCH_FIND_PR_RETRY_DELAY — delay in seconds before the retry fetch
 #     (default: 1). Set to 0 in tests to avoid sleeps.
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 ARG="${1:-}"
 if [[ -z "$ARG" || ! "$ARG" =~ ^[0-9]+$ ]]; then
@@ -50,7 +55,20 @@ prefix_match() {
 if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
   PR_LIST="$DISPATCH_PR_LIST"
 else
-  PR_LIST=$(gh pr list --state open --json number,headRefName)
+  # pr_list_open returns non-zero on a gh failure OR when its truncation guard
+  # fires (the snapshot hit --limit and is likely cut off). On either, abort
+  # loudly and propagate the code rather than continuing.
+  #
+  # This is a deliberate behavior change from the pre-#1312 code, where
+  # gh pr list returned exit 0 even on truncation, so the retry below always
+  # ran on the self-fetch path. Now:
+  #   - No retry on truncation: a second fetch hits the same --limit and
+  #     truncates identically, so retrying cannot help.
+  #   - No fall-through to the cross-check: that endpoint only sees PRs linked
+  #     as closing the issue, so a truncated list silently resolving to "no PR"
+  #     is exactly the #1312 bug (caller would create a duplicate PR). A loud
+  #     abort is the safe outcome (see .claude/rules/code-style.md).
+  PR_LIST=$(pr_list_open "number,headRefName") || exit "$?"
 fi
 
 RESULT=$(prefix_match "$PR_LIST")
@@ -59,7 +77,7 @@ if [[ -n "$RESULT" ]]; then echo "$RESULT"; exit 0; fi
 # Retry-on-empty (self-fetch path only).
 if [[ -z "${DISPATCH_PR_LIST:-}" ]]; then
   sleep "${DISPATCH_FIND_PR_RETRY_DELAY:-1}"
-  PR_LIST=$(gh pr list --state open --json number,headRefName)
+  PR_LIST=$(pr_list_open "number,headRefName")
   RESULT=$(prefix_match "$PR_LIST")
   if [[ -n "$RESULT" ]]; then echo "$RESULT"; exit 0; fi
 fi
