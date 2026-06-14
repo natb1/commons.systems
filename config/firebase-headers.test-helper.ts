@@ -85,7 +85,7 @@ export function describeFirebaseHeaders(
       }
     });
 
-    it("script-src does not contain 'unsafe-inline'", () => {
+    it("script-src does not contain unsafe keywords", () => {
       const globalRule = headers.find((h) => h.source === "**");
       expect(globalRule, "global '**' header rule not found").toBeDefined();
       const cspHeader = globalRule!.headers.find(
@@ -104,6 +104,9 @@ export function describeFirebaseHeaders(
       const scriptSrc = match![1];
       expect(scriptSrc).toContain("'self'");
       expect(scriptSrc).not.toContain("'unsafe-inline'");
+      expect(scriptSrc).not.toContain("'unsafe-eval'");
+      expect(scriptSrc).not.toContain("'unsafe-hashes'");
+      expect(scriptSrc).not.toContain("'wasm-unsafe-eval'");
     });
   });
 }
