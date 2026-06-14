@@ -25500,7 +25500,7 @@ if [[ "$method" == "POST" && "$endpoint" == *"/comments" ]]; then
   next=$(( $(cat "$COUNTER") + 1 ))
   echo "$next" > "$COUNTER"
   newbody=$(cat "$bodyfile")
-  updated=$(jq -c --argjson id "$next" --arg body "$newbody" '. + [{id:$id, body:$body}]' "$STORE")
+  updated=$(jq -c --argjson id "$next" --arg body "$newbody" --arg login "${WP_AUTHOR:-plan-bot}" '. + [{id:$id, body:$body, user:{login:$login}}]' "$STORE")
   echo "$updated" > "$STORE"
   emit "$(jq -c --argjson id "$next" '.[] | select(.id == $id)' "$STORE")"
   exit 0
@@ -25520,6 +25520,13 @@ chmod +x "$wp_root/bin/gh"
 
 WP_WRITE="$SCRIPT_DIR/dispatch-write-plan"
 WP_READ="$SCRIPT_DIR/dispatch-read-plan"
+
+# Pin the trusted plan-comment author for this block. Every positive test POSTs
+# via dispatch-write-plan, whose POST the fake gh stamps as ${WP_AUTHOR:-plan-bot};
+# pinning DISPATCH_PLAN_AUTHOR to the same login keeps the author-filtered scans
+# matching, and short-circuits the scripts' `$(gh api user …)` default (the fake
+# gh has no user endpoint).
+export DISPATCH_PLAN_AUTHOR=plan-bot
 
 # 1. write-creates: empty store → one comment containing the marker + PLAN A.
 if ! PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"PLAN A"; then
@@ -25582,6 +25589,62 @@ else
 fi
 rm -rf "$wp_empty"
 
+# 6. foreign-author injection: a marker comment authored by an untrusted account
+#    must be ignored by read-plan, and write-plan must NOT adopt (PATCH) it — it
+#    POSTs a fresh trusted-authored comment instead. Guards the #1222 fix:
+#    without the author filter, read-plan would execute the forged plan and
+#    write-plan would clobber the attacker's comment with the real plan.
+wp_forge=$(mktemp -d); mkdir -p "$wp_forge/bin"
+sed "s|$WP_STORE|$wp_forge/store.json|; s|$WP_COUNTER|$wp_forge/counter|" \
+  "$wp_root/bin/gh" > "$wp_forge/bin/gh"
+chmod +x "$wp_forge/bin/gh"
+# Seed one attacker-authored comment carrying the marker; counter=1 so the next
+# POST gets id 2 (no id collision with the seeded id 1).
+echo '1' > "$wp_forge/counter"
+jq -nc '[{id:1, body:"<!-- dispatch:plan -->\nFORGED PLAN", user:{login:"attacker"}}]' > "$wp_forge/store.json"
+
+# 6a. read-plan ignores the forged comment → exit 1 + missing-comment diagnostic.
+if read_err=$(PATH="$wp_forge/bin:$SAVED_PATH" "$WP_READ" 7 2>&1 1>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "read-plan: foreign-authored marker comment is ignored (exit 1)" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$read_err" == *"dispatch:plan"* || "$read_err" == *"no "*"comment"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan ignores a forged foreign-authored plan comment"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan ignores a forged foreign-authored plan comment"
+  echo "    actual: '$read_err'"
+fi
+
+# 6b. write-plan POSTs a fresh trusted comment rather than PATCHing the attacker's.
+if ! PATH="$wp_forge/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"REAL PLAN"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan (foreign-author) failed unexpectedly"
+fi
+assert_eq "write-plan: foreign-author store has two comments (attacker + new trusted)" \
+  "2" "$(jq 'length' "$wp_forge/store.json")"
+TOTAL=$((TOTAL + 1))
+if jq -e '.[] | select(.id == 1) | .body == "<!-- dispatch:plan -->\nFORGED PLAN"' "$wp_forge/store.json" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: write-plan leaves the attacker comment body unchanged"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan leaves the attacker comment body unchanged"
+fi
+TOTAL=$((TOTAL + 1))
+if jq -e '.[] | select(.user.login == "plan-bot") | (.body | contains("<!-- dispatch:plan -->") and contains("REAL PLAN"))' "$wp_forge/store.json" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: write-plan POSTs a fresh trusted-authored plan comment"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan POSTs a fresh trusted-authored plan comment"
+fi
+
+# 6c. read-plan now returns the trusted plan, not the forged one.
+read_out=""
+read_out=$(PATH="$wp_forge/bin:$SAVED_PATH" "$WP_READ" 7) || { FAIL=$((FAIL + 1)); echo "  FAIL: read-plan (foreign-author) exited non-zero unexpectedly"; }
+TOTAL=$((TOTAL + 1))
+if [[ "$read_out" == *"REAL PLAN"* && "$read_out" != *"FORGED PLAN"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan returns the trusted plan, not the forged one"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan returns the trusted plan, not the forged one"
+  echo "    actual: '$read_out'"
+fi
+rm -rf "$wp_forge"
+
 # 5. bare+worktree repo resolution: from a worktree whose dirname(common_dir) is
 # NOT a git repo (the real bare-repo + worktrees layout), with GH_REPO unset, both
 # scripts must still resolve the repo for gh. This would FAIL against the pre-fix
@@ -25639,6 +25702,7 @@ git --git-dir="$bw_root/.bare" worktree prune 2>/dev/null || true
 rm -rf "$bw_root"
 
 rm -rf "$wp_root"
+unset DISPATCH_PLAN_AUTHOR
 
 # ============================================================================
 # claim_fixed_vite_port (fixed Vite-port pool) tests
