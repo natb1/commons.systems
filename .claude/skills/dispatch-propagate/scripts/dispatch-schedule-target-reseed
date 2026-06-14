@@ -246,6 +246,19 @@ fi
 # /usr/bin/env can't resolve bash (exit 127) and the tick can't find
 # claude/git/jq. The caller (a /dispatch tick) always carries the full
 # nix-store PATH, so capturing it at schedule time makes the unit self-sufficient.
+#
+# --property=KillMode=process (#1196): Claude Code's per-user bg supervisor
+# daemon and its --bg-spare / --bg-pty-host worker children can be born inside
+# this transient unit's cgroup — the first `claude` call during the tick the
+# timer fires spawns them. systemd's default KillMode=control-group SIGTERMs the
+# entire cgroup when the tick finishes, reaping the daemon and every worker. The
+# bg hosts are spawned detached (setsid) to outlive their launcher, but setsid
+# only changes the session/process-group, not the cgroup, so cgroup-kill ignores
+# it. KillMode=process confines the kill to the dispatch-tick process itself, so
+# the detached bg hosts survive as init orphans across reseed cycles. (Unlike the
+# dispatch-schedule-reseed sibling, this script does not install a durable daemon
+# service, so the daemon can live in this transient cgroup and KillMode=process
+# is load-bearing here, not a degraded-path fallback.)
 
 UNIT_NAME="dispatch-reseed-target-${N}-${FIRE}"
 
@@ -260,6 +273,7 @@ trap 'rm -f "$RUN_STDERR"' EXIT
      --on-calendar="@$FIRE" \
      --working-directory="$MAIN_WORKTREE" \
      --timer-property=Persistent=true \
+     --property=KillMode=process \
      --setenv=PATH="$PATH" \
      "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-tick" "$N" \
      2>"$RUN_STDERR"
