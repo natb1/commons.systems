@@ -11856,10 +11856,11 @@ if [[ "$log" == *"--unit=dispatch-reseed-target-979-10300"* \
    && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"dispatch-tick 979"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: under-cap systemd-run argv (unit + calendar + OnFailure + cwd + setenv + dispatch-tick 979)"
+  PASS=$((PASS + 1)); echo "  PASS: under-cap systemd-run argv (unit + calendar + OnFailure + KillMode + cwd + setenv + dispatch-tick 979)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap systemd-run argv (unit + calendar + OnFailure + cwd + setenv + dispatch-tick 979)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap systemd-run argv (unit + calendar + OnFailure + KillMode + cwd + setenv + dispatch-tick 979)"
   echo "    log: $log"
 fi
 edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
@@ -11891,11 +11892,18 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: counter-bump removes attempt-1 and adds attempt-2"
   echo "    edits: $edits"
 fi
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ -s "$TMPDIR_TEST/systemd-log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: counter-bump schedules a timer"
+if [[ "$log" == *"--unit=dispatch-reseed-target-979-10300"* \
+   && "$log" == *"--on-calendar=@10300"* \
+   && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
+   && "$log" == *"--setenv=PATH="* \
+   && "$log" == *"--property=KillMode=process"* \
+   && "$log" == *"dispatch-tick 979"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: counter-bump systemd-run argv (unit + calendar + cwd + setenv + KillMode + dispatch-tick 979)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: counter-bump schedules a timer"
+  FAIL=$((FAIL + 1)); echo "  FAIL: counter-bump systemd-run argv (unit + calendar + cwd + setenv + KillMode + dispatch-tick 979)"
+  echo "    log: $log"
 fi
 tr_teardown
 
@@ -12739,6 +12747,23 @@ exit 0
 STUB
   chmod +x "$TMPDIR_TEST/bin/gh"
 
+  # ensure_daemon_service (lib.sh) would otherwise write to the real
+  # ~/.config/systemd/user/ and run a real `systemctl --user`. Wire a separate
+  # logging stub (distinct from the recover systemctl) so ensure_daemon_service
+  # calls land in daemon-systemctl-log and are separately assertable.
+  cat > "$TMPDIR_TEST/bin/daemon-systemctl" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/daemon-systemctl-log"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/daemon-systemctl"
+  export DISPATCH_DAEMON_UNIT_DIR="$TMPDIR_TEST/daemon-systemd-user"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/daemon-systemctl"
+  # ensure_daemon_service only needs a non-empty, newline/quote-free path; it
+  # does not execute this binary in tests — the claude stub already exists for
+  # the CLAUDE_AGENTS_CMD path, so reuse it.
+  export DISPATCH_DAEMON_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+
   export DISPATCH_TICK_RECOVER_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
   export DISPATCH_TICK_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_TICK_RECOVER_GH_CMD="$TMPDIR_TEST/bin/gh"
@@ -12767,6 +12792,7 @@ tr_teardown() {
   unset DISPATCH_TICK_RECOVER_BASE_BACKOFF
   unset DISPATCH_TICK_RECOVER_MAX_BACKOFF
   unset DISPATCH_TICK_RECOVER_RESET_WINDOW
+  unset DISPATCH_DAEMON_UNIT_DIR DISPATCH_DAEMON_SYSTEMCTL_CMD DISPATCH_DAEMON_CLAUDE_CMD
 }
 
 # tr_seed_state <count> <last_failure> — write the consecutive-failure state.
@@ -12812,6 +12838,27 @@ fi
 assert_eq "first-fail: state count == 1" "1" "$(tr_state_count)"
 tr_teardown
 
+# --- Test 1b: first failure → ensure_daemon_service ran on the arming path ---
+# Same scenario as Test 1 (first failure, no continuation). Assert that
+# ensure_daemon_service ran and called `systemctl --user enable --now
+# dispatch-claude-daemon.service` — proving the durable daemon is set up
+# before the recovery reseed is armed (#1197/#1196).
+
+echo "Test: first failure arming path calls ensure_daemon_service (daemon enabled)"
+tr_setup
+# No state file, empty timer list, 0 busy workers → arming path.
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "first-fail-daemon: dispatch-tick-recover exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'enable --now dispatch-claude-daemon.service' \
+     "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: first-fail-daemon: ensure_daemon_service ran enable --now"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: first-fail-daemon: ensure_daemon_service ran enable --now"
+  echo "    daemon-systemctl-log: $(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || echo '(absent)')"
+fi
+tr_teardown
+
 # --- Test 2: continuation present (busy worker) → no reseed, count reset -----
 
 echo "Test: a live busy worker is a continuation → no reseed, count reset to 0"
@@ -12823,6 +12870,9 @@ assert_eq "busy-worker: dispatch-tick-recover exits 0" "0" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 assert_eq "busy-worker: no reseed armed (systemd-run log empty)" "" "$log"
 assert_eq "busy-worker: state count reset to 0" "0" "$(tr_state_count)"
+# Continuation no-op path: ensure_daemon_service must NOT have run (no arming).
+assert_eq "busy-worker: daemon service not touched (continuation no-op)" \
+  "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
 tr_teardown
 
 # --- Test 3: continuation present (pending dispatch-reseed* timer) → no reseed -
@@ -12836,6 +12886,9 @@ if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "pending-timer: dispatch-tick-recover exits 0" "0" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 assert_eq "pending-timer: no reseed armed (systemd-run log empty)" "" "$log"
+# Continuation no-op path: ensure_daemon_service must NOT have run (no arming).
+assert_eq "pending-timer: daemon service not touched (continuation no-op)" \
+  "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
 tr_teardown
 
 # --- Test 4: cap reached → escalate, not retry -------------------------------
@@ -12872,6 +12925,10 @@ assert_eq "cap-latched: no issue create (latch already open)" \
   "0" "$([[ "$ghlog" != *"issue create"* ]] && echo 0 || echo 1)"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 assert_eq "cap-latched: no reseed armed (systemd-run log empty)" "" "$log"
+# Cap-escalation path exits before the arming step: ensure_daemon_service must
+# NOT have run (mirrors the continuation no-op negative assertions above).
+assert_eq "cap: daemon service not touched (cap-escalation path)" \
+  "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
 tr_teardown
 
 # --- Test 5: backoff grows with the consecutive-failure count ----------------
@@ -21423,11 +21480,13 @@ assert_eq "busy: no spawn-job call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
 tick_teardown
 
-# --- empty / resolver-failed / concurrency-cap / sync-repair-pending / sync-broken ---
-# All pass-through dispositions: exit 0, no materialize, no spawn-job. #1495 adds
+# --- resolver-failed / concurrency-cap / sync-repair-pending / sync-broken ---
+# Pass-through dispositions: exit 0, no materialize, no spawn-job. #1495 adds
 # the two sync pass-throughs (sync-repair-pending, sync-broken); sync-failed moved
-# out of this loop because it now spawns the repair job (covered below).
-for d in empty resolver-failed concurrency-cap sync-repair-pending sync-broken; do
+# out of this loop because it now spawns the repair job (covered below). `empty`
+# moved out because #1557 routes it through dispatch-tick-recover on the
+# autonomous path (covered by its own tests below).
+for d in resolver-failed concurrency-cap sync-repair-pending sync-broken; do
   echo "Test: dispatch-tick $d → exit 0, no materialize/spawn"
   tick_setup
   export TICK_DECISION="$d"
@@ -21612,6 +21671,26 @@ export TICK_DECISION="issue 707 1" TICK_TOKEN="drain"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "drain: exit 0" "0" "$rc"
 assert_eq "drain: recover invoked" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick autonomous empty → invokes recover, exit 0 (#1557)"
+tick_setup
+export TICK_DECISION="empty"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "empty: exit 0" "0" "$rc"
+assert_eq "empty: recover invoked" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
+assert_eq "empty: no materialize call" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick --manual empty → does NOT invoke recover (autonomous-only) (#1557)"
+tick_setup
+export TICK_DECISION="empty"
+out=$(run_tick --manual) && rc=0 || rc=$?
+assert_eq "empty-manual: exit 0" "0" "$rc"
+assert_eq "empty-manual: recover NOT invoked (MANUAL set)" "0" \
   "$([ -f "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
 tick_teardown
 
