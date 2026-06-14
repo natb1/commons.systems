@@ -7,6 +7,11 @@
 #                     uses <path>.
 #   create <branch> — no <issue>-* worktree exists; the caller materializes
 #                     <branch> and uses its path.
+#   create-existing <branch>
+#                   — no <issue>-* worktree exists, but the target has an open
+#                     PR (hence an existing branch); the caller materializes its
+#                     existing PR-head <branch> rather than branching a fresh
+#                     <issue>-<slug> from origin/main (#943).
 #   conflict <path> — an existing <issue>-* worktree is owned by another live
 #                     Claude session; /dispatch-propagate reports <path> and stops.
 #
@@ -35,6 +40,10 @@
 #     worktree is re-pointed to the PR head branch (lossless), then `enter`.
 #   - worktree on a different branch carrying unique commits → `conflict`,
 #     rather than silently discarding them.
+#
+# The `create` path checks dispatch-find-pr first (#943) — the create-path
+# sibling of #913's enter-path reconciliation: a target with an open PR but no
+# worktree yields `create-existing <pr-head>` instead of a fresh slug branch.
 #
 # The branch name printed by `create` matches the WorktreeCreate hook's
 # accepted form ^[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$, full name <= 32 characters.
@@ -71,6 +80,22 @@ source "$SCRIPT_DIR/lib.sh"
 # the check (#905), explicit mode made it mode-independent (#837).
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 
+# Resolve and validate a PR's head branch name. Shared by the `enter`-path
+# reconciliation and the `create`-path PR check (#943).
+# A PR was found, so an empty/malformed headRefName is a failed lookup, not a
+# no-op — surfacing it as an error beats silently proceeding. The format guard
+# also blocks option/refspec injection (leading '-', '..') via this
+# GitHub-sourced name before it reaches git fetch/rev-list/checkout.
+resolve_pr_head() {
+  local pr="$1" pr_head
+  pr_head=$(gh pr view "$pr" --json headRefName | jq -r '.headRefName // empty')
+  if [[ -z "$pr_head" || "$pr_head" == -* || "$pr_head" == *..* || ! "$pr_head" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+    echo "error: PR #$pr returned an unusable head branch name '$pr_head' for issue $ISSUE" >&2
+    exit 1
+  fi
+  printf '%s\n' "$pr_head"
+}
+
 # Reconcile a reused worktree's checked-out branch against the target PR's head
 # branch, then emit the `enter`/`conflict` decision (#913). Called on every
 # `enter`-bound path (explicit, and queue-orphan recycle).
@@ -87,15 +112,7 @@ emit_enter_reconciled() {
     exit 1
   fi
   if [[ -z "$pr" ]]; then echo "enter $wt_path"; return 0; fi   # no PR → unchanged
-  pr_head=$(gh pr view "$pr" --json headRefName | jq -r '.headRefName // empty')
-  # A PR was found, so an empty/malformed headRefName is a failed lookup, not a
-  # no-op — surfacing it as an error beats silently entering unreconciled. The
-  # format guard also blocks option/refspec injection (leading '-', '..') via
-  # this GitHub-sourced name before it reaches git fetch/rev-list/checkout.
-  if [[ -z "$pr_head" || "$pr_head" == -* || "$pr_head" == *..* || ! "$pr_head" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-    echo "error: PR #$pr returned an unusable head branch name '$pr_head' for issue $ISSUE" >&2
-    exit 1
-  fi
+  pr_head=$(resolve_pr_head "$pr") || exit 1
   if [[ "$pr_head" == "$wt_branch" ]]; then     # already on PR head branch → no-op
     echo "enter $wt_path"; return 0
   fi
@@ -131,6 +148,23 @@ done < <(list_worktree_records)
 # `create` — no worktree matched. Build a sanitized <issue>-<slug> branch name
 # from the issue title. `jq -e` exits non-zero on a null/missing .title, so the
 # guard catches a malformed response instead of slugging the literal "null".
+
+# Before slugifying a fresh branch, check whether the target already has an
+# open PR (hence an existing branch) but simply no worktree on disk — e.g. the
+# worktree was swept while the branch survived because its PR is still open
+# (#943). If so, the caller must materialize that existing PR-head branch, not
+# branch a fresh <issue>-<slug> from origin/main. This mirrors the enter path's
+# #913 reconciliation. No PR → fall through to the unchanged create logic.
+if ! pr=$("$SCRIPT_DIR/dispatch-find-pr" "$ISSUE"); then
+  echo "error: dispatch-find-pr failed for issue $ISSUE; cannot resolve create path" >&2
+  exit 1
+fi
+if [[ -n "$pr" ]]; then
+  pr_head=$(resolve_pr_head "$pr") || exit 1
+  echo "create-existing $pr_head"
+  exit 0
+fi
+
 if ! TITLE=$(gh issue view "$ISSUE" --json title | jq -er '.title'); then
   echo "error: failed to fetch title for issue $ISSUE" >&2
   exit 1

@@ -41,7 +41,7 @@ import { defineSecret, defineString } from "firebase-functions/params";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import type { Firestore } from "firebase-admin/firestore";
-import { mintInstallationToken } from "./office-hours-sync.js";
+import { mintInstallationToken, truncateForLog } from "./office-hours-sync.js";
 
 // Reuse the SAME param names as office-hours-sync.ts so firebase-functions
 // dedupes them across modules (params are keyed by name).
@@ -99,13 +99,6 @@ export function computeQueueMetrics(input: {
   const netDrainPerDay = closedPerDay - createdPerDay;
   const runwayDays = netDrainPerDay > 0 ? input.openHelpWanted / netDrainPerDay : null;
   return { closedPerDay, createdPerDay, netDrainPerDay, runwayDays };
-}
-
-// Truncates a third-party HTTP response body before it enters an Error message
-// (and thus the function logs). Mirrors the helper in office-hours-sync.ts,
-// which is not exported.
-function truncateForLog(text: string, max = 200): string {
-  return text.length > max ? `${text.slice(0, max)}…[truncated]` : text;
 }
 
 interface GraphQLResponse<T> {

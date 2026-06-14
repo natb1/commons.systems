@@ -333,21 +333,67 @@ process_one_target() {
       WORKTREE_PATH="$WT_REST"
       write_identity_stub "$WORKTREE_PATH" "$n" 1>&2 || true
       ;;
-    create)
+    create|create-existing)
+      # Shared setup for both create arms (#943): derive PROJECT_ROOT and the
+      # WORKTREE_PATH from the resolver-emitted branch name once, then branch on
+      # the specific action below.
       BRANCH="$WT_REST"
       PROJECT_ROOT=$(resolve_project_root) || {
         echo "dispatch-materialize-spawn: resolve_project_root failed for #$n" >&2
         return 2
       }
       WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
-      # Only the cheap `git worktree add` runs under the held lock (#1047/#1044).
-      # direnv/npm provisioning and the `origin/main` merge are deferred to the
-      # worker's startup — dispatch-route runs dispatch-provision-worktree after
-      # its cross-check and before phase derivation — so the multi-minute,
-      # budget-irrelevant work runs off the critical section.
-      if ! git worktree add -b "$BRANCH" "$WORKTREE_PATH" origin/main 1>&2; then
-        echo "dispatch-materialize-spawn: git worktree add failed for $BRANCH" >&2
-        return 2
+      if [[ "$WT_ACTION" == "create" ]]; then
+        # Only the cheap `git worktree add` runs under the held lock (#1047/#1044).
+        # direnv/npm provisioning and the `origin/main` merge are deferred to the
+        # worker's startup — dispatch-route runs dispatch-provision-worktree after
+        # its cross-check and before phase derivation — so the multi-minute,
+        # budget-irrelevant work runs off the critical section.
+        if ! git worktree add -b "$BRANCH" "$WORKTREE_PATH" origin/main 1>&2; then
+          echo "dispatch-materialize-spawn: git worktree add failed for $BRANCH" >&2
+          return 2
+        fi
+      # The target has an open PR; check out its existing head branch (#943)
+      # rather than branching a fresh <N>-<slug> from origin/main. Local branch →
+      # fetch and reconcile against origin/<branch> before checkout, mirroring
+      # the enter-path reconcile (#913): if the local ref is a strict ancestor of
+      # the remote tip (no unique commits) fast-forward it to origin so the worker
+      # starts on the actual PR head; if it carries commits origin lacks the ref
+      # has diverged from the PR head, so refuse with a worktree-conflict rather
+      # than start on a stale or divergent base. Remote-only → fetch then track.
+      elif git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+        if ! git fetch --quiet origin "$BRANCH" 1>&2; then
+          echo "dispatch-materialize-spawn: git fetch origin $BRANCH failed" >&2
+          return 2
+        fi
+        UNIQUE=$(git rev-list --count "origin/${BRANCH}..${BRANCH}") || {
+          echo "dispatch-materialize-spawn: git rev-list failed for $BRANCH" >&2
+          return 2
+        }
+        if [[ "$UNIQUE" -ne 0 ]]; then
+          # Local ref has commits not on origin/<branch> → diverged from the PR
+          # head. Same disposition as the enter-path's unique-commits conflict.
+          echo "path: $WORKTREE_PATH"
+          OUTCOME=worktree-conflict
+          return 0
+        fi
+        if ! git branch -f "$BRANCH" "origin/$BRANCH" 1>&2; then
+          echo "dispatch-materialize-spawn: git branch -f $BRANCH failed" >&2
+          return 2
+        fi
+        if ! git worktree add "$WORKTREE_PATH" "$BRANCH" 1>&2; then
+          echo "dispatch-materialize-spawn: git worktree add (local existing) failed for $BRANCH" >&2
+          return 2
+        fi
+      else
+        if ! git fetch --quiet origin "$BRANCH" 1>&2; then
+          echo "dispatch-materialize-spawn: git fetch origin $BRANCH failed" >&2
+          return 2
+        fi
+        if ! git worktree add --track -b "$BRANCH" "$WORKTREE_PATH" "origin/$BRANCH" 1>&2; then
+          echo "dispatch-materialize-spawn: git worktree add (remote-only) failed for $BRANCH" >&2
+          return 2
+        fi
       fi
       write_identity_stub "$WORKTREE_PATH" "$n" 1>&2 || true
       ;;
