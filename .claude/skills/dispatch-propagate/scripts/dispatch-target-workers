@@ -145,16 +145,20 @@
 # - Gate closed (hw <= 0, used_weekly at/over W) → 0 workers regardless of 5h
 #   usage. The weekly pace curve simply pauses spending.
 # - Gate open (hw > 0) → N is a pure function of used_5h: max_workers at/below
-#   floor5, ramping linearly to 0 at/above ceil5. The clamp floor keeps N >= 1
-#   for any used_5h strictly under ceil5, so there is no `0 >= 0` router
-#   deadlock during healthy under-pace operation.
+#   floor5, ramping linearly to 0 at/above ceil5_eff (the dynamic catch-up
+#   ceiling, which equals the static ceil5 mid-week and rises above it near
+#   end-of-week — see below). The clamp floor keeps N >= 1 for any used_5h
+#   strictly under ceil5_eff, so there is no `0 >= 0` router deadlock during
+#   healthy under-pace operation.
 # - The 5h ramp ceiling is dynamic: ceil5_eff rises above the static ceil5
 #   near end-of-week when the remaining windows r cannot close the weekly
 #   deficit D = terminal - used_weekly at the default per-window burn rate
 #   (required 5h usage u = 100*D/(r*wcap)). It is accelerator-only — the clamp
 #   lower bound is ceil5, so it never reduces N (over-pace slowdown stays the
-#   weekly gate's job). It is inert mid-week (large r makes the term tiny →
-#   clamps to ceil5) and saturates at 100 for a large deficit (required rate >
+#   weekly gate's job). It is inert mid-week when usage is near pace (r large
+#   and D/r small → term < ceil5 → clamps to ceil5); when far behind pace it
+#   activates earlier, proportionally to the deficit. It saturates at 100 for a
+#   large deficit (required rate >
 #   wcap%/window), so it does not always catch up.
 #
 #   # Reopen crossing (--reopen-at mode)

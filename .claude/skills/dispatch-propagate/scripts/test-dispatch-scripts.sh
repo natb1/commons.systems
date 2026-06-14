@@ -10799,7 +10799,7 @@ tw_setup
 #     remaining=45000, x=(604800-45000)/604800≈0.9256 → W≈79.45. hw≈2.45>0 → open.
 #   Stage 3: D = 100-77 = 23. D/r = 9.2 → 100*23/(2.5*10) = 92 →
 #     clamp(92,80,100) = ceil5_eff=92. span=92-50=42, h5=92-90=2 →
-#     N=int(8*2/42+0.5)=int(0.88)=0... clamp(0,1,8)? No: int(8*2/42+0.5)=int(0.881)=0,
+#     N=int(8*2/42+0.5)=int(0.881)=0... clamp(0,1,8)? No: int(8*2/42+0.5)=int(0.881)=0,
 #     but the round is 8*2/42=0.381, +0.5=0.881, int=0 → then clamp(0,1,8)=1.
 #   (Static ceiling 80 → h5=80-90=-10 → N=0.)
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
