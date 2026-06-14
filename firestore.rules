@@ -488,6 +488,9 @@ service cloud.firestore {
     // Office Hours reminders are the synced JIT queue, scoped to the owner via a
     // denormalized `memberEmails` field. Client writes are denied; only the
     // Admin-SDK sync Function (functions/src/office-hours-sync.ts) writes here.
+    // Because the read rule references resource.data.memberEmails, a list query
+    // (getDocs) must include where("memberEmails", "array-contains", <email>);
+    // Firestore rejects unfiltered list queries even when every document would pass.
     match /office-hours/{env}/items/{itemId} {
       allow read: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails;
