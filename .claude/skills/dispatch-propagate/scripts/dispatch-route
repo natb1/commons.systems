@@ -195,7 +195,24 @@ case "$PHASE" in
     if [[ "$PARSE_JOB" -eq 1 ]]; then
       echo "INVOKE /budget-parse-job"
     else
-      echo "INVOKE /plan-issue"
+      # Not a parse-job: check if the issue is a spent epic (≥1 sub-issue, all
+      # closed as completed) before defaulting to /plan-issue.  The candidate
+      # predicate exits 0 (resolved candidate), 1 (not a candidate), or 3 (hard
+      # gh/issue-sub-issues failure).  Capture the exit code without tripping
+      # set -e by using the || idiom.  Discard stdout/stderr — branch on code only.
+      CAND_RC=0
+      "$SCRIPT_DIR/dispatch-epic-resolved-candidate" "$N" >/dev/null 2>&1 || CAND_RC=$?
+      if [[ "$CAND_RC" -eq 0 ]]; then
+        echo "INVOKE /resolve-epic"
+      elif [[ "$CAND_RC" -eq 1 ]]; then
+        echo "INVOKE /plan-issue"
+      else
+        # Candidate hard error (e.g. exit 3 from a gh/issue-sub-issues failure, or any
+        # unexpected code): do NOT abort the route — fall back to today's behavior so
+        # the stop hook always gets a directive. Mirrors the gh-failure fallback above.
+        echo "dispatch-route: dispatch-epic-resolved-candidate exited $CAND_RC for $N; defaulting to INVOKE /plan-issue" >&2
+        echo "INVOKE /plan-issue"
+      fi
     fi
     ;;
   implement)
