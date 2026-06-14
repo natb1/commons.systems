@@ -34,6 +34,35 @@ jobs:
       - name: Run unit tests
         run: .claude/skills/dispatch-propagate/scripts/run-unit-tests.sh
 
+  rules-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      - name: Set up Java (if firestore.rules changed)
+        if: steps.changes.outputs.rules == 'true'
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .node-version
+          cache: 'npm'
+      - name: Cache Firebase emulators
+        if: steps.changes.outputs.rules == 'true'
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}
+      - name: Run rules-test suite
+        if: steps.changes.outputs.rules == 'true'
+        run: .claude/skills/dispatch-propagate/scripts/run-rules-test.sh
+
   lint:
     runs-on: ubuntu-latest
     steps:
