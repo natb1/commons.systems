@@ -6318,6 +6318,34 @@ result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "no worktree + no PR → create <N>-<slug>" "create 42-add-a-feature" "$result"
 teardown
 
+# 10c. #1612: the create path's #943/#1591 PR-existence check forces
+#      dispatch-find-pr's retry delay to 0. The create-path dispatch-find-pr call
+#      (added by #1591) also runs under the dispatch lock, so its 1s self-fetch
+#      retry sleep must be suppressed (DISPATCH_FIND_PR_RETRY_DELAY=0) even when
+#      the inherited environment sets a non-zero delay — a genuine-new-issue (the
+#      common queue path) returns no PR here and would otherwise pay the full
+#      sleep under the lock.
+echo "Test: #1612 create path forces dispatch-find-pr retry delay 0 under the lock"
+setup
+echo '{"title":"Add a feature"}' > "$STUB_DIR/issue-title-42.json"
+# Probe find-pr: record the retry delay observed, then return empty (no PR →
+# fall through to fresh-slug create). Overwrites the real copy setup installed.
+cat > "$TMPDIR_TEST/dispatch-find-pr" <<'PROBE'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")" && pwd)/stub"
+printf '%s\n' "${DISPATCH_FIND_PR_RETRY_DELAY:-unset}" > "$STUB_DIR/find-pr-delay-seen.txt"
+exit 0
+PROBE
+chmod +x "$TMPDIR_TEST/dispatch-find-pr"
+export DISPATCH_FIND_PR_RETRY_DELAY=99   # a non-zero inherited delay the call must override
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+export DISPATCH_FIND_PR_RETRY_DELAY=0    # restore harness default for later tests
+assert_eq "#1612 create path → create <N>-<slug> (probe returns no PR)" \
+  "create 42-add-a-feature" "$result"
+assert_eq "#1612 create path forced find-pr retry delay to 0 (not the inherited 99)" \
+  "0" "$(cat "$STUB_DIR/find-pr-delay-seen.txt")"
+teardown
+
 # ----------------------------------------------------------------------------
 # Branch reconciliation on the `enter` path (#913). PR existence is driven via
 # pr-list-full.json (dispatch-find-pr's prefix match on headRefName); the PR
