@@ -293,6 +293,15 @@ for var in WEEKLY_USED FIVEH_USED; do
     echo "dispatch-target-workers: $var has non-numeric value '${!var}'; treating as missing" >&2
     printf -v "$var" ""
   fi
+  # A used_percentage above 100 is physically impossible — reject it to missing
+  # so the PRESENT check routes it to the fail-closed fallback rather than acting
+  # on a poisoned value. 100 is a valid fully-used reading, so the bound is a
+  # strict `>`. awk (not bash `(( ))`) because the value may be a decimal —
+  # `(( 100.5 > 100 ))` is a fatal arithmetic syntax error under set -e.
+  if [[ -n "${!var}" ]] && awk -v u="${!var}" 'BEGIN{ exit !(u + 0 > 100) }'; then
+    echo "dispatch-target-workers: $var out of range (>100): '${!var}'; treating as missing" >&2
+    printf -v "$var" ""
+  fi
 done
 
 # Sanitize the weekly anchor inputs the curve depends on. `now` must be an
@@ -305,6 +314,17 @@ if [[ ! "$NOW" =~ ^[0-9]+$ ]]; then
 fi
 if [[ -n "$WEEKLY_RESETS" && ! "$WEEKLY_RESETS" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
   echo "dispatch-target-workers: WEEKLY_RESETS has non-numeric value '$WEEKLY_RESETS'; treating as missing" >&2
+  WEEKLY_RESETS=""
+fi
+# A weekly reset more than 8 days out is physically impossible for a 7-day
+# window (8 days = ~1 day margin over the nominal 7) — a hardcoded property of
+# the window, not a config knob. Reject to missing → weekly anchor drops →
+# fallback 1. Guard on both being non-empty (NOW may have been reset above;
+# WEEKLY_RESETS may have been emptied by the numeric check). awk (not bash
+# `(( ))`) because WEEKLY_RESETS may be a decimal.
+if [[ -n "$NOW" && -n "$WEEKLY_RESETS" ]] \
+   && awk -v r="$WEEKLY_RESETS" -v now="$NOW" 'BEGIN{ exit !(r + 0 > now + 691200) }'; then
+  echo "dispatch-target-workers: WEEKLY_RESETS '$WEEKLY_RESETS' more than 8 days past now ($NOW); treating as missing" >&2
   WEEKLY_RESETS=""
 fi
 
@@ -335,6 +355,17 @@ if [[ "$MODE" == "exhausted" ]]; then
   if [[ -z "$NOW" ]]; then
     echo ok
     exit 0
+  fi
+  # A 5h reset more than 6 hours out is physically impossible for a 5-hour
+  # window (6h = ~1h margin) — a hardcoded window property, not a config knob.
+  # Reject → that window cannot be "exhausted" (fail open, consistent with this
+  # mode's fail-open-on-invalid posture). This bound lives ONLY in exhausted
+  # mode — count/reopen never read the 5h reset. awk (not bash `(( ))`) because
+  # FIVEH_RESETS may be a decimal; NOW is guaranteed non-empty here.
+  if [[ -n "$FIVEH_RESETS" ]] \
+     && awk -v r="$FIVEH_RESETS" -v now="$NOW" 'BEGIN{ exit !(r + 0 > now + 21600) }'; then
+    echo "dispatch-target-workers: FIVEH_RESETS '$FIVEH_RESETS' more than 6 hours past now ($NOW); treating as missing" >&2
+    FIVEH_RESETS=""
   fi
   awk -v now="$NOW" \
       -v used_weekly="$WEEKLY_USED" -v resets_weekly="$WEEKLY_RESETS" \
