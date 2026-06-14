@@ -2,7 +2,9 @@
 set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 ISSUE_NUM=$(resolve_issue_number "${1:-}")
+# Lean default covers both hot-path consumers; callers may pass a wider set if ever needed.
+FIELDS="${2:-number,state,stateReason}"
 SUBS=$(gh_api_array "/repos/{owner}/{repo}/issues/$ISSUE_NUM/sub_issues" '.[].number')
 for sub in $SUBS; do
-  gh_retry gh issue view "$sub" --json title,body,comments,number,state,stateReason
+  gh_retry gh issue view "$sub" --json "$FIELDS"
 done
