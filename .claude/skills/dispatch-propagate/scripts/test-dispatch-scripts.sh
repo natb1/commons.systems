@@ -52,6 +52,12 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-find-pr" "$TMPDIR_TEST/dispatch-find-pr"
   cp "$SCRIPT_DIR/dispatch-route" "$TMPDIR_TEST/dispatch-route"
   cp "$SCRIPT_DIR/dispatch-resolve-arg" "$TMPDIR_TEST/dispatch-resolve-arg"
+  # dispatch-route resolves the resolved-epic candidate predicate via
+  # "$SCRIPT_DIR/dispatch-epic-resolved-candidate" (#1456); SCRIPT_DIR resolves
+  # to TMPDIR_TEST for the copied dispatch-route, so the candidate (and its own
+  # close helper, exercised directly) must sit alongside it.
+  cp "$SCRIPT_DIR/dispatch-epic-resolved-candidate" "$TMPDIR_TEST/dispatch-epic-resolved-candidate"
+  cp "$SCRIPT_DIR/dispatch-close-resolved" "$TMPDIR_TEST/dispatch-close-resolved"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
   cp "$SCRIPT_DIR/office-hours" "$TMPDIR_TEST/office-hours"
@@ -95,6 +101,8 @@ setup() {
            "$TMPDIR_TEST/dispatch-ci-ready" \
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-route" \
+           "$TMPDIR_TEST/dispatch-epic-resolved-candidate" \
+           "$TMPDIR_TEST/dispatch-close-resolved" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/office-hours-select-target" \
@@ -537,6 +545,21 @@ case "$args" in
     else
       echo '{"items":[],"totalCount":0}'
     fi
+    ;;
+  issue\ view\ *\ --json\ state\ --jq\ .state)
+    # dispatch-close-resolved state read (#1456): gh issue view <num> --json state --jq .state.
+    # The real --jq flag projects .state to a bare string; the fixture file
+    # holds {"state":"..."}, so project it here. Absent fixture → OPEN.
+    num=$(printf '%s' "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/issue-state-${num}.json" ]]; then
+      jq -r .state "$STUB_DIR/issue-state-${num}.json"
+    else
+      echo "OPEN"
+    fi
+    ;;
+  issue\ close\ *)
+    # dispatch-close-resolved (#1456): gh issue close <num> --reason completed --comment ...
+    echo "$args" >> "$STUB_DIR/gh-issue-close.log"
     ;;
   *)
     echo "gh stub: unknown invocation: $args" >&2
@@ -1676,6 +1699,234 @@ route_run 42 /wt/42-my-feature
 assert_eq "no PR + no statements config → INVOKE /plan-issue (directive)" \
   "INVOKE /plan-issue" "$ROUTE_OUT"
 assert_eq "no PR + no statements config → INVOKE /plan-issue (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 24. No-PR unplanned issue that IS a spent epic → INVOKE /resolve-epic (#1456).
+# Same no-PR-unplanned fixtures as test #1 (no dispatch:planned → plan phase, no
+# statements config → not a parse-job), PLUS a sub-issues fixture whose children
+# are all CLOSED/COMPLETED. The plan arm runs dispatch-epic-resolved-candidate,
+# which exits 0, so the route forks to /resolve-epic instead of /plan-issue.
+echo "Test: no PR + spent epic → INVOKE /resolve-epic"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/55-epic" > "$STUB_DIR/worktree-toplevel.txt"
+printf '[{"number":561},{"number":562}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"c","body":"","comments":[],"number":561,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-561.json"
+printf '{"title":"c","body":"","comments":[],"number":562,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-562.json"
+route_run 55 /wt/55-epic
+assert_eq "no PR + spent epic → INVOKE /resolve-epic (directive)" \
+  "INVOKE /resolve-epic" "$ROUTE_OUT"
+assert_eq "no PR + spent epic → INVOKE /resolve-epic (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 25. No-PR unplanned issue that is NOT a spent epic → INVOKE /plan-issue (#1456).
+# Replicate test #1 exactly (no subissues fixture). The candidate predicate exits
+# 1 (zero sub-issues → not a candidate), so the route falls through to the
+# unchanged default of INVOKE /plan-issue with the candidate wired in.
+echo "Test: no PR + not a spent epic → INVOKE /plan-issue"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/56-foo" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 56 /wt/56-foo
+assert_eq "no PR + not a spent epic → INVOKE /plan-issue (directive)" \
+  "INVOKE /plan-issue" "$ROUTE_OUT"
+assert_eq "no PR + not a spent epic → INVOKE /plan-issue (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 26. Parse-job check short-circuits the candidate (#1456). Replicate test #21's
+# statements-config setup so the parse-job arm fires, AND write an all-closed-
+# completed sub-issues fixture. The parse-job check precedes the candidate, so the
+# route routes to /budget-parse-job and never consults the candidate predicate.
+echo "Test: no PR + statements label + spent-epic shape → INVOKE /budget-parse-job (parse-job wins)"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/57-stmt" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"statements":[{"key":"acme","dir":"/s","repo":"o/r","label":"statements:acme","project":"p"}]}\n' \
+  > "$DISPATCH_CONFIG_DIR/statements.json"
+printf '{"labels":[{"name":"statements:acme"}]}\n' > "$STUB_DIR/issue-labels-57.json"
+printf '[{"number":571}]\n' > "$STUB_DIR/subissues-57.json"
+printf '{"title":"c","body":"","comments":[],"number":571,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-571.json"
+route_run 57 /wt/57-stmt
+assert_eq "parse-job wins over candidate → INVOKE /budget-parse-job (directive)" \
+  "INVOKE /budget-parse-job" "$ROUTE_OUT"
+assert_eq "parse-job wins over candidate → INVOKE /budget-parse-job (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# ============================================================================
+# dispatch-epic-resolved-candidate tests
+# ============================================================================
+echo ""
+echo "=== dispatch-epic-resolved-candidate ==="
+
+# Mechanical predicate (#1456): exit 0 = epic candidate (≥1 sub-issue, ALL closed
+# as completed), exit 1 = clean "not a candidate", exit 3 = hard error
+# (issue-sub-issues / gh failure). State + stateReason match case-insensitively.
+# The fake issue-sub-issues reads subissues-<N>.json for child numbers, then cat's
+# each issue-<child>.json VERBATIM (a child with no issue-<child>.json fixture
+# defaults to state OPEN, no stateReason). So a child's stateReason lives in its
+# own issue-<child>.json fixture. Capture the exit code with the if/else idiom
+# (the suite runs set -e, so a bare non-zero call would abort).
+
+# 1. Two children, both CLOSED/COMPLETED → candidate (exit 0).
+echo "Test: candidate — 2 children all CLOSED/COMPLETED → exit 0"
+setup
+printf '[{"number":611},{"number":612}]\n' > "$STUB_DIR/subissues-61.json"
+printf '{"title":"c","body":"","comments":[],"number":611,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-611.json"
+printf '{"title":"c","body":"","comments":[],"number":612,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-612.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 61 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "candidate: all CLOSED/COMPLETED → exit 0" "0" "$rc"
+teardown
+
+# 2. Case-insensitive: a lowercase closed/completed child still → candidate.
+echo "Test: candidate — lowercase closed/completed → exit 0"
+setup
+printf '[{"number":621}]\n' > "$STUB_DIR/subissues-62.json"
+printf '{"title":"c","body":"","comments":[],"number":621,"state":"closed","stateReason":"completed"}\n' \
+  > "$STUB_DIR/issue-621.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 62 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "candidate: lowercase closed/completed → exit 0" "0" "$rc"
+teardown
+
+# 3. No sub-issues → not a candidate (exit 1).
+echo "Test: not a candidate — zero sub-issues → exit 1"
+setup
+printf '[]\n' > "$STUB_DIR/subissues-63.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 63 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "not a candidate: zero sub-issues → exit 1" "1" "$rc"
+teardown
+
+# 4. An OPEN child alongside a closed-completed one → not a candidate (exit 1).
+echo "Test: not a candidate — an OPEN child → exit 1"
+setup
+printf '[{"number":641},{"number":642}]\n' > "$STUB_DIR/subissues-64.json"
+printf '{"title":"c","body":"","comments":[],"number":641,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-641.json"
+printf '{"title":"c","body":"","comments":[],"number":642,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-642.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 64 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "not a candidate: an OPEN child → exit 1" "1" "$rc"
+teardown
+
+# 5. A CLOSED child with stateReason NOT_PLANNED → not a candidate (exit 1).
+echo "Test: not a candidate — CLOSED/NOT_PLANNED child → exit 1"
+setup
+printf '[{"number":651}]\n' > "$STUB_DIR/subissues-65.json"
+printf '{"title":"c","body":"","comments":[],"number":651,"state":"CLOSED","stateReason":"NOT_PLANNED"}\n' \
+  > "$STUB_DIR/issue-651.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 65 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "not a candidate: CLOSED/NOT_PLANNED child → exit 1" "1" "$rc"
+teardown
+
+# 6. A CLOSED child with NO stateReason key (null) → not a candidate (exit 1).
+echo "Test: not a candidate — CLOSED child with null stateReason → exit 1"
+setup
+printf '[{"number":661}]\n' > "$STUB_DIR/subissues-66.json"
+printf '{"title":"c","body":"","comments":[],"number":661,"state":"CLOSED"}\n' \
+  > "$STUB_DIR/issue-661.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 66 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "not a candidate: CLOSED child with null stateReason → exit 1" "1" "$rc"
+teardown
+
+# 7. issue-sub-issues hard failure → exit 3 (distinct from "not a candidate").
+echo "Test: hard error — issue-sub-issues fails → exit 3"
+setup
+touch "$STUB_DIR/gh-fail-sub_issues-67"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 67 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "hard error: issue-sub-issues fails → exit 3" "3" "$rc"
+teardown
+
+# ============================================================================
+# dispatch-close-resolved tests
+# ============================================================================
+echo ""
+echo "=== dispatch-close-resolved ==="
+
+# dispatch-close-resolved <N> --reason "<text>" (#1456): reads state via
+# `gh issue view <N> --json state --jq .state`; if not closed, runs
+# `gh issue close <N> --reason completed --comment "$REASON"`; if already CLOSED,
+# skips the close (idempotent, no dup comment). ALWAYS writes the resolved-closed
+# sentinel under $CLAUDE_JOB_DIR (atomic), UNLESS CLAUDE_JOB_DIR is unset/not-a-dir
+# (then a no-op exit 0). Arg violations → exit 2 before any gh call.
+# CRITICAL: any case that exports CLAUDE_JOB_DIR must unset it before the next
+# case — the main teardown() does NOT unset it, so a leak would corrupt every
+# downstream suite. Case (c) also unsets defensively at the start.
+
+# (a) OPEN issue + JOB_DIR set → closes the issue and writes the sentinel.
+echo "Test: close-resolved — OPEN issue + JOB_DIR → close + sentinel"
+setup
+echo '{"state":"OPEN"}' > "$STUB_DIR/issue-state-700.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/job"
+mkdir -p "$CLAUDE_JOB_DIR"
+"$TMPDIR_TEST/dispatch-close-resolved" 700 --reason "epic done"
+TOTAL=$((TOTAL + 1))
+if [[ -f "$STUB_DIR/gh-issue-close.log" ]] \
+   && grep -q "issue close 700 --reason completed" "$STUB_DIR/gh-issue-close.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: close-resolved OPEN: gh issue close invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: close-resolved OPEN: gh issue close invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ -f "$CLAUDE_JOB_DIR/resolved-closed" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: close-resolved OPEN: resolved-closed sentinel written"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: close-resolved OPEN: resolved-closed sentinel written"
+fi
+unset CLAUDE_JOB_DIR
+teardown
+
+# (b) already-CLOSED issue + JOB_DIR set → skips the close (no dup comment) but
+# still writes the sentinel (re-entry idempotency).
+echo "Test: close-resolved — already-CLOSED issue + JOB_DIR → no re-close, sentinel still written"
+setup
+echo '{"state":"CLOSED"}' > "$STUB_DIR/issue-state-701.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/job"
+mkdir -p "$CLAUDE_JOB_DIR"
+"$TMPDIR_TEST/dispatch-close-resolved" 701 --reason "epic done"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-issue-close.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: close-resolved CLOSED: gh issue close NOT invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: close-resolved CLOSED: gh issue close NOT invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ -f "$CLAUDE_JOB_DIR/resolved-closed" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: close-resolved CLOSED: resolved-closed sentinel still written"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: close-resolved CLOSED: resolved-closed sentinel still written"
+fi
+unset CLAUDE_JOB_DIR
+teardown
+
+# (c) JOB_DIR unset + OPEN issue → still closes, no-ops the sentinel write, exit 0.
+echo "Test: close-resolved — JOB_DIR unset + OPEN issue → no sentinel, exit 0"
+setup
+unset CLAUDE_JOB_DIR
+echo '{"state":"OPEN"}' > "$STUB_DIR/issue-state-702.json"
+if "$TMPDIR_TEST/dispatch-close-resolved" 702 --reason "epic done" >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "close-resolved no-JOB_DIR: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+# Assert no resolved-closed sentinel exists ANYWHERE under the tmp tree: the
+# $TMPDIR_TEST/job/ dir is never created in this case, so a path-specific check
+# trivially passes. A scan catches a regression that writes to a fallback path.
+if ! find "$TMPDIR_TEST" -name 'resolved-closed' | grep -q .; then
+  PASS=$((PASS + 1)); echo "  PASS: close-resolved no-JOB_DIR: no resolved-closed sentinel"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: close-resolved no-JOB_DIR: no resolved-closed sentinel"
+fi
+teardown
+
+# (d) Arg validation: no args → exit 2; issue number only (missing --reason) → exit 2.
+echo "Test: close-resolved — arg validation → exit 2"
+setup
+if "$TMPDIR_TEST/dispatch-close-resolved" >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "close-resolved: no args → exit 2" "2" "$rc"
+if "$TMPDIR_TEST/dispatch-close-resolved" 703 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "close-resolved: missing --reason → exit 2" "2" "$rc"
 teardown
 
 # ============================================================================
@@ -3448,11 +3699,12 @@ assert_eq "--top 1 byte-parity (same fixture)" "$plain" "$top1"
 assert_eq "--top 1 parity: expected single decision line" "pr 10 10-verify-me fix-checks" "$top1"
 teardown
 
-# T6. --top is rejected when combined with --qa / --priority-only /
-#     --health-only / --main-broken-sha (default-mode-only flag). Each exits
+# T6. --top is rejected when combined with --qa / --health-only /
+#     --main-broken-sha (default-mode-only flag). Each exits
 #     non-zero with a clear stderr error, mirroring the existing mutual-exclusion
-#     checks.
-for other_flag in --qa --priority-only --health-only --main-broken-sha; do
+#     checks. (--priority-only is no longer rejected — see the
+#     --priority-only --top tests below.)
+for other_flag in --qa --health-only --main-broken-sha; do
   echo "Test: --top 3 $other_flag → usage error (exit 1)"
   setup
   echo '[]' > "$STUB_DIR/pr-list-union.json"
@@ -3898,6 +4150,83 @@ echo "Test: --priority-only + --main-broken-sha → error exit"
 setup
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --main-broken-sha 2>/dev/null) && rc=0 || rc=$?
 assert_eq "--priority-only --main-broken-sha → exit 1" "1" "$rc"
+teardown
+
+# --- --priority-only --top N: priority-tier multi-target selection (#1458) ----
+# The manual fan-out path (dispatch-select-tick --manual) counts selectable
+# priority=1 targets via `--priority-only --top HEADROOM`. The combination is no
+# longer rejected (the T6 guard dropped --priority-only): it emits UP TO N
+# priority=1 decision lines (pr/issue), one per line, in the same priority-axis →
+# topic-category → phase order as plain --top, or `empty`. Unlike TOP==1, the
+# TOP>1 path has NO `waiting` branch — a CI-pending-only priority tier yields
+# `empty`.
+
+# PT1. --priority-only --top 3 returns up to 3 priority lines in topic-category
+#      order. All three issues carry BOTH `help wanted` and `priority`, so the
+#      priority axis does not discriminate; topic category (security > bug >
+#      other) is the only discriminator — mirrors T1 with priority labels added.
+echo "Test: --priority-only --top 3 returns 3 priority lines in topic-category order"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3)
+assert_eq "--priority-only --top 3 ranked across topic categories" "$(printf 'issue 30\nissue 20\nissue 10')" "$result"
+teardown
+
+# PT2. --priority-only --top 5 with only 2 priority issues returns 2 lines, no
+#      padding (mirrors T3a).
+echo "Test: --priority-only --top 5 with 2 priority issues → 2 lines, no padding"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --top 5)
+assert_eq "--priority-only --top 5 with 2 priority → 2 lines" "$(printf 'issue 30\nissue 20')" "$result"
+assert_eq "--priority-only --top 5 with 2 priority → no empty padding" "0" "$(printf '%s\n' "$result" | grep -c '^empty$')"
+teardown
+
+# PT3. --priority-only --top 3 with a non-priority issue present returns ONLY the
+#      priority ones — the non-priority help-wanted issue is excluded by the
+#      PRIORITY_ONLY tier guard.
+echo "Test: --priority-only --top 3 with a non-priority issue → only the priority ones"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]},{"number":40,"createdAt":"2024-01-04T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3)
+assert_eq "--priority-only --top 3 only priority issues returned" "$(printf 'issue 30\nissue 20')" "$result"
+assert_eq "--priority-only --top 3: non-priority 40 absent" "0" "$(printf '%s\n' "$result" | grep -c '^issue 40$')"
+teardown
+
+# PT4. --priority-only --top 3 with a CI-pending-only priority tier → `empty`.
+#      The #1448 alignment: TOP>1 has NO `waiting` branch, so a lone CI-pending
+#      priority PR (no selectable priority issue) yields `empty`, not `waiting`.
+#      Reuses the AC1 (#1444) waiting fixture verbatim; only the invocation
+#      (--top 3) and expected (empty) change.
+echo "Test: --priority-only --top 3 with CI-pending-only priority tier → empty (#1448)"
+setup
+UNION='['"$(make_pr_union 100 "100-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":100}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3)
+assert_eq "--priority-only --top 3 CI-pending tier → empty (no waiting)" "empty" "$result"
+teardown
+
+# PT5. --priority-only --top 3 does NOT error — the old exit-1 rejection is lifted.
+echo "Test: --priority-only --top 3 does not error (rejection lifted)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+"$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3 >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq "--priority-only --top 3 → exit 0 (no rejection)" "0" "$rc"
 teardown
 
 # ============================================================================
@@ -7762,9 +8091,10 @@ lock_teardown
 # --- Test 24: live foreign holder with MISMATCHED marker → busy (#928) -------
 #
 # The marker exists but names a DIFFERENT (older, since-finalized) session, not
-# the recorded holder. A live mid-selection holder launched from a previously-
-# marked worktree must NOT have its lock reclaimed: marker_names_holder rejects
-# the content mismatch, so acquire stays busy.
+# the recorded holder. A live foreign holder is unconditionally BUSY as of #945:
+# the BUSY short-circuit fires before any marker is read, so the mismatched
+# marker content is never inspected. The test confirms the live holder is not
+# reclaimed regardless of what the marker contains.
 
 echo "Test: live foreign holder with mismatched marker → busy (#928)"
 lock_setup
@@ -7786,8 +8116,11 @@ lock_teardown
 # --- Test 25: live foreign holder with EMPTY marker → busy (#928) ------------
 #
 # An empty marker is the shape stamped by .claude/hooks/worktree-create.sh's
-# `touch` on every worktree creation. It names no session, so it must never
-# reclaim a live holder co-located in that worktree.
+# `touch` on every worktree creation. As of #945 a live foreign holder is
+# unconditionally BUSY: the BUSY short-circuit fires before any marker is read,
+# so the empty marker's content is never inspected. This is now a regression
+# guard, not a behavioral test of an empty-marker special case — the empty
+# content no longer drives the decision; the live-holder short-circuit does.
 
 echo "Test: live foreign holder with empty (touch) marker → busy (#928)"
 lock_setup
@@ -7808,11 +8141,11 @@ lock_teardown
 
 # --- Test 25b: live foreign holder with FIFO marker → busy (no deadlock) -----
 #
-# marker_names_holder reads the marker's content; a non-regular file (here a
-# FIFO) at that path would block the read indefinitely while the flock is held,
-# deadlocking all routing. The regular-file guard must reject it and stay busy
-# rather than reclaim or hang. A `timeout` bounds the call so a regression
-# (reverting to a blocking read) surfaces as a hang, not a silent pass.
+# Because a live foreign holder is unconditionally BUSY as of #945, the marker
+# is never opened — a FIFO at that path cannot deadlock routing. This test is a
+# regression guard: if a future change reintroduced a marker read for live
+# holders, opening the FIFO would block indefinitely, the `timeout 10` below
+# would fire, and the test would fail as a hang rather than pass silently.
 
 echo "Test: live foreign holder with FIFO marker → busy (no deadlock)"
 lock_setup
@@ -11891,6 +12224,17 @@ echo "\$*" >> "$TMPDIR_TEST/oh-log"
 STUB
   chmod +x "$TMPDIR_TEST/bin/fake-oh"
   export DISPATCH_TARGET_RESEED_OFFICE_HOURS_CMD="$TMPDIR_TEST/bin/fake-oh"
+
+  # #1570: dispatch-schedule-target-reseed now calls ensure_recover_unit (lib.sh)
+  # before scheduling. Point its unit dir into the tmp tree and its systemctl at
+  # a no-op stub so the call never writes outside the test sandbox.
+  cat > "$TMPDIR_TEST/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
 }
 
 tr_teardown() {
@@ -11906,6 +12250,7 @@ tr_teardown() {
   unset DISPATCH_TARGET_RESEED_OFFICE_HOURS_CMD
   unset FAKE_CUR_ATTEMPT
   unset FAKE_PR_NUM
+  unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
 }
 
 # --- Test 1: under-cap reseed (CUR=0 → 1) ------------------------------------
@@ -11921,13 +12266,14 @@ log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-target-979-10300"* \
    && "$log" == *"--on-calendar=@10300"* \
+   && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
    && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"dispatch-tick 979"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: under-cap systemd-run argv (unit + calendar + cwd + setenv + KillMode + dispatch-tick 979)"
+  PASS=$((PASS + 1)); echo "  PASS: under-cap systemd-run argv (unit + calendar + OnFailure + KillMode + cwd + setenv + dispatch-tick 979)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap systemd-run argv (unit + calendar + cwd + setenv + KillMode + dispatch-tick 979)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap systemd-run argv (unit + calendar + OnFailure + KillMode + cwd + setenv + dispatch-tick 979)"
   echo "    log: $log"
 fi
 edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
@@ -11963,13 +12309,14 @@ log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-target-979-10300"* \
    && "$log" == *"--on-calendar=@10300"* \
+   && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
    && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"dispatch-tick 979"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: counter-bump systemd-run argv (unit + calendar + cwd + setenv + KillMode + dispatch-tick 979)"
+  PASS=$((PASS + 1)); echo "  PASS: counter-bump systemd-run argv (unit + calendar + OnFailure + cwd + setenv + KillMode + dispatch-tick 979)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: counter-bump systemd-run argv (unit + calendar + cwd + setenv + KillMode + dispatch-tick 979)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: counter-bump systemd-run argv (unit + calendar + OnFailure + cwd + setenv + KillMode + dispatch-tick 979)"
   echo "    log: $log"
 fi
 tr_teardown
@@ -17056,6 +17403,40 @@ else
 fi
 stop_teardown
 
+# --- Test R1: resolved-closed sentinel → spawn + self-close, no label work (#1456)
+# A /resolve-epic session is named <N>-epic like a worker but writes a
+# `resolved-closed` sentinel (no phase-completed marker) once it has auto-closed a
+# verifiably-complete epic. Branch R (checked right after Branch P) spawns the next
+# tick and self-closes; the handler already closed the epic, so there is NO PR and
+# NO office-hours apply or label edit — exactly like Branch P.
+echo "Test: stop hook + resolved-closed sentinel → spawn + self-close, no label work"
+stop_setup
+echo "700-epic" > "$STUB_DIR/current-branch.txt"
+echo '{"name":"700-epic"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+printf 'resolved 700 epic\n' > "$TMPDIR_TEST/jobs/abcd1234/resolved-closed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "resolved-closed: hook exits 0" "0" "$rc"
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "resolved-closed: spawn invoked exactly once" "1" "$spawn_calls"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "resolved-closed: self-close invoked exactly once" "1" "$self_close_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: resolved-closed: no office-hours apply"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: resolved-closed: no office-hours apply"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: resolved-closed: no label add or remove invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: resolved-closed: no label add or remove invoked"
+fi
+stop_teardown
+
 # --- Test: open non-newline stdin → hook returns fast (no 1s read stall) (#1519) ---
 echo "Test: stop hook open non-newline stdin → returns fast, normal disposition still fires"
 stop_setup
@@ -19364,15 +19745,27 @@ echo "$1"
 FAKE
   cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
 #!/usr/bin/env bash
-# --priority-only probe (the at-cap bypass): logged separately so a test can
-# assert whether the priority probe ran, and driven by SEL_PRIORITY_ONLY.
+# --priority-only probe (the at-cap bypass / manual N_PRIO count): logged
+# separately so a test can assert whether the priority probe ran.
 if [[ "\$1" == "--priority-only" ]]; then
   echo called >> "$TMPDIR_TEST/logs/select-target-priority.log"
+  if [[ "\$2" == "--top" ]]; then
+    # Manual N_PRIO count: emit min(SEL_NPRIO_AVAIL, \$3) priority issue lines.
+    top="\$3"
+    avail="\${SEL_NPRIO_AVAIL:-0}"
+    n=\$(( avail < top ? avail : top ))
+    if (( n == 0 )); then
+      echo empty
+    else
+      for i in \$(seq 1 \$n); do echo "issue \$(( 600 + i ))"; done
+    fi
+    exit 0
+  fi
   echo "\${SEL_PRIORITY_ONLY:-empty}"
   exit 0
 fi
 echo called >> "$TMPDIR_TEST/logs/select-target.log"
-echo empty
+echo "\${SEL_DEFAULT_TARGET:-empty}"
 FAKE
   # Run-scoped concurrency gate fakes (overridable per test via SEL_* env vars).
   # Arg-aware: --exhausted reports the rate-limit exhaustion floor (SEL_EXHAUSTED,
@@ -19381,6 +19774,10 @@ FAKE
 #!/usr/bin/env bash
 if [[ "$1" == "--exhausted" ]]; then
   echo "${SEL_EXHAUSTED:-ok}"
+  exit 0
+fi
+if [[ "$1" == "--max" ]]; then
+  echo "${SEL_MAX_WORKERS:-8}"
   exit 0
 fi
 echo "${SEL_TARGET_N:-1}"
@@ -19520,6 +19917,7 @@ sel_tick_teardown() {
     FAKE_GIT_BRANCH FAKE_GIT_FETCH_FAIL FAKE_GIT_MERGE_FAIL \
     SEL_TARGET_N SEL_LIVE_COUNT SEL_LIVE_COUNT_FAIL \
     SEL_EXHAUSTED SEL_PRIORITY_ONLY \
+    SEL_MAX_WORKERS SEL_NPRIO_AVAIL SEL_DEFAULT_TARGET \
     DISPATCH_RESERVATION_DIR SEL_AGENTS_TSV SEL_AGENTS_LIST_FAIL \
     DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE SEL_GIT_MERGE_LOG \
     SEL_SESSIONS_UNDER_RC SEL_SESSIONS_UNDER_TSV \
@@ -19785,19 +20183,43 @@ assert_eq "explicit '#': decision line" "explicit 88 1" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 sel_tick_teardown
 
-# --- resolver failure (garbage arg) → release + resolver-failed --------------
-echo "Test: select-tick resolver failure → resolver-failed, lock released"
+# --- #1570: transient resolve-arg failure (exit 1) → propagate non-zero ------
+# A transient/infra resolve-arg failure (auth, network) must NOT look like a
+# clean resolver-failed tick: select-tick releases the lock and exits non-zero
+# (2) with no resolver-failed stdout line, so dispatch-tick fails the reseed
+# unit and its OnFailure recover net fires rather than silently dead-ending.
+echo "Test: select-tick transient resolve-arg (exit 1) → exit 2, no resolver-failed, lock released"
 sel_tick_setup
 cat > "$TMPDIR_TEST/dispatch-resolve-arg" <<'FAKE'
 #!/usr/bin/env bash
-echo "error: bad arg" >&2
+echo "error: gh transient failure" >&2
 exit 1
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-resolve-arg"
-out=$(run_sel_tick abc)
-assert_eq "resolver-failed: decision line" "resolver-failed" \
+if out=$(run_sel_tick abc); then rc=0; else rc=$?; fi
+assert_eq "transient resolve-arg: exit 2" "2" "$rc"
+assert_eq "transient resolve-arg: no resolver-failed stdout" "" \
+  "$(printf '%s' "$out")"
+assert_eq "transient resolve-arg: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- #1570: genuine non-resolution (exit 2/3/4) → resolver-failed, exit 0 -----
+# A bad/ambiguous number on the explicit human path (404 / PR with no or many
+# closing issues) keeps its correct resolver-failed → exit 0: there is no
+# autonomous chain to continue.
+echo "Test: select-tick genuine non-resolution (exit 2) → resolver-failed, exit 0, lock released"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-resolve-arg" <<'FAKE'
+#!/usr/bin/env bash
+echo "error: not found (404)" >&2
+exit 2
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-resolve-arg"
+out=$(run_sel_tick abc) ; rc=$?
+assert_eq "resolver-failed (exit 2): exit 0" "0" "$rc"
+assert_eq "resolver-failed (exit 2): decision line" "resolver-failed" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "resolver-failed: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "resolver-failed (exit 2): lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
 # --- sync failure on main → release + sync-failed ----------------------------
@@ -20119,60 +20541,144 @@ esac
 assert_eq "removed flag → unknown flag error, exit 2" "ok" "$status"
 sel_tick_teardown
 
-# --- --manual with TARGET_N=0 (pace pause) → no concurrency-cap, gap=1 --------
-# A bare human-typed /dispatch is exempt from the pace-curve budget: even when
-# TARGET_N drops to 0 (budget pause) the --manual path skips the concurrency gate
-# entirely and emits an issue line with gap=1 (one gate-exempt worker), never
-# emitting concurrency-cap.
-echo "Test: select-tick --manual with TARGET_N=0 → no concurrency-cap, gap=1"
+# --- --manual context-dependent fan-out (#1458) ------------------------------
+# A bare human-typed /dispatch fans out enough workers to cover available
+# priority work eagerly while honoring the MAX_WORKERS ceiling. It OVERRIDES the
+# pace-curve throttle (a budget pause to TARGET_N=0 still fans out) but HONORS
+# the --exhausted floor and the ceiling:
+#   HEADROOM = max(0, MAX_WORKERS − LIVE_COUNT)
+#   GAP      = max(0, TARGET_N − LIVE_COUNT)
+#   N_PRIO   = count of selectable priority targets, capped at HEADROOM
+#   SPAWN_N  = min(HEADROOM, max(N_PRIO, GAP, 1))
+# These cases drive SPAWN_N via the shared fakes (B2/B1): SEL_DEFAULT_TARGET is
+# the decision-line target; SEL_NPRIO_AVAIL is how many priority lines the
+# `--priority-only --top N` probe emits; the defaults are LIVE=0, MAX=8.
+# The probe's `issue 60X` lines are only counted into N_PRIO — the decision line
+# is the default-mode target (issue 707).
+
+# Case 1: prio3-gap0. N_PRIO=3, GAP=0 → SPAWN_N=min(8,max(3,0,1))=3.
+echo "Test: select-tick --manual prio3-gap0 → issue 707 3"
 sel_tick_setup
-export SEL_LIVE_COUNT=3 SEL_TARGET_N=0
-cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
-#!/usr/bin/env bash
-echo called >> "$TMPDIR_TEST/logs/select-target.log"
-echo "issue 707"
-FAKE
-chmod +x "$TMPDIR_TEST/dispatch-select-target"
+export SEL_TARGET_N=0 SEL_NPRIO_AVAIL=3 SEL_DEFAULT_TARGET="issue 707"
 out=$(run_sel_tick --manual)
-assert_eq "manual-pace0: no concurrency-cap emitted" "0" \
-  "$(printf '%s\n' "$out" | grep -cF 'concurrency-cap')"
-assert_eq "manual-pace0: decision line shows gap=1 (one gate-exempt worker)" "issue 707 1" \
-  "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "manual-pace0: no reseed scheduled" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
-assert_eq "manual-pace0: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
-assert_eq "manual-pace0: select-target invoked (selection ran)" "1" \
-  "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
+assert_eq "manual-prio3-gap0: decision line" "issue 707 3" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-prio3-gap0: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "manual-prio3-gap0: no concurrency-cap" "0" "$(printf '%s\n' "$out" | grep -cF 'concurrency-cap')"
 sel_tick_teardown
 
-# --- --manual with LIVE_COUNT >= MAX_WORKERS → no cap, gap=1 ------------------
-# A bare human-typed /dispatch is also exempt from the MAX_WORKERS concurrency
-# ceiling: even when LIVE_COUNT exceeds the target the --manual path skips the
-# gate entirely.
-echo "Test: select-tick --manual with LIVE_COUNT >= MAX_WORKERS → no cap, gap=1"
+# Case 2: prio10-gap0, capped to MAX. N_PRIO=min(10,8)=8, GAP=0 → SPAWN_N=8.
+echo "Test: select-tick --manual prio10-gap0 (cap to MAX) → issue 707 8"
 sel_tick_setup
-export SEL_LIVE_COUNT=10 SEL_TARGET_N=1
-cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
-#!/usr/bin/env bash
-echo called >> "$TMPDIR_TEST/logs/select-target.log"
-echo "issue 839"
-FAKE
-chmod +x "$TMPDIR_TEST/dispatch-select-target"
-cat > "$TMPDIR_TEST/dispatch-target-workers" <<FAKE
-#!/usr/bin/env bash
-echo called >> "$TMPDIR_TEST/logs/target-workers.log"
-echo "\${SEL_TARGET_N:-1}"
-FAKE
-chmod +x "$TMPDIR_TEST/dispatch-target-workers"
+export SEL_TARGET_N=0 SEL_NPRIO_AVAIL=10 SEL_DEFAULT_TARGET="issue 707"
 out=$(run_sel_tick --manual)
-assert_eq "manual-overcap: no concurrency-cap emitted" "0" \
-  "$(printf '%s\n' "$out" | grep -cF 'concurrency-cap')"
-assert_eq "manual-overcap: decision line shows gap=1 (one gate-exempt worker)" "issue 839 1" \
-  "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "manual-overcap: no reseed scheduled" "0" \
+assert_eq "manual-prio10-gap0: decision line (capped to MAX)" "issue 707 8" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-prio10-gap0: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# Case 3: gap0-noprio. N_PRIO=0, GAP=0 → SPAWN_N=min(8,max(0,0,1))=1.
+echo "Test: select-tick --manual gap0-noprio → issue 707 1"
+sel_tick_setup
+export SEL_TARGET_N=0 SEL_NPRIO_AVAIL=0 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-gap0-noprio: decision line (floor 1)" "issue 707 1" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-gap0-noprio: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# Case 4: gap5-noprio. N_PRIO=0, GAP=5 → SPAWN_N=min(8,max(0,5,1))=5.
+echo "Test: select-tick --manual gap5-noprio → issue 707 5"
+sel_tick_setup
+export SEL_TARGET_N=5 SEL_NPRIO_AVAIL=0 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-gap5-noprio: decision line (gap drives)" "issue 707 5" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-gap5-noprio: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# Case 5: gap5-prio2. N_PRIO=2, GAP=5 → SPAWN_N=min(8,max(2,5,1))=5.
+echo "Test: select-tick --manual gap5-prio2 → issue 707 5"
+sel_tick_setup
+export SEL_TARGET_N=5 SEL_NPRIO_AVAIL=2 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-gap5-prio2: decision line (gap beats prio)" "issue 707 5" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-gap5-prio2: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# Case 6: prio6-gap4. N_PRIO=6, GAP=4 → SPAWN_N=min(8,max(6,4,1))=6.
+echo "Test: select-tick --manual prio6-gap4 → issue 707 6"
+sel_tick_setup
+export SEL_TARGET_N=4 SEL_NPRIO_AVAIL=6 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-prio6-gap4: decision line (prio beats gap)" "issue 707 6" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-prio6-gap4: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# Case 7: at-max-live. LIVE=8 → HEADROOM=0 → cap path. concurrency-cap, lock
+# released, NO reseed, priority probe NOT consulted (HEADROOM=0 short-circuits
+# before the probe).
+echo "Test: select-tick --manual at-max-live (HEADROOM=0) → concurrency-cap"
+sel_tick_setup
+export SEL_LIVE_COUNT=8 SEL_TARGET_N=1 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-at-max-live: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-at-max-live: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "manual-at-max-live: no reseed" "0" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
-assert_eq "manual-overcap: pace-curve dispatch-target-workers NOT invoked (gate skipped)" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/target-workers.log" ] && echo 1 || echo 0)"
+assert_eq "manual-at-max-live: no target-reseed" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && echo 1 || echo 0)"
+assert_eq "manual-at-max-live: priority probe NOT consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# Case 8: exhausted. --exhausted floor → cap path. concurrency-cap, lock
+# released, NO reseed (a manual run is one-shot; the autonomous chain owns
+# reseeds).
+echo "Test: select-tick --manual exhausted → concurrency-cap, no reseed"
+sel_tick_setup
+export SEL_EXHAUSTED=exhausted SEL_TARGET_N=0 SEL_NPRIO_AVAIL=5 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-exhausted: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-exhausted: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "manual-exhausted: no reseed" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
+assert_eq "manual-exhausted: no target-reseed" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-target-reseed.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# Case 9: daemon-UNKNOWN. The busy-worker read fails → the whole manual block is
+# skipped (it is gated on that read succeeding) and GAP stays 1 (fail open). The
+# priority probe is NOT consulted.
+echo "Test: select-tick --manual daemon-UNKNOWN → issue 707 1 (fail open)"
+sel_tick_setup
+export SEL_LIVE_COUNT_FAIL=1 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-daemon-unknown: decision line (fail open gap 1)" "issue 707 1" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-daemon-unknown: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "manual-daemon-unknown: no concurrency-cap" "0" "$(printf '%s\n' "$out" | grep -cF 'concurrency-cap')"
+assert_eq "manual-daemon-unknown: priority probe NOT consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# Case 10: gap-clamped-to-headroom. LIVE=6, MAX=8 → HEADROOM=2; TARGET_N=10 →
+# GAP=4, N_PRIO=0 → SPAWN_N=min(2,max(0,4,1))=2. Exercises the final
+# `(( SPAWN_N > HEADROOM ))` clamp firing on the gap axis: GAP independently
+# exceeds HEADROOM, so HEADROOM is the binding constraint.
+echo "Test: select-tick --manual gap-clamped-to-headroom → issue 707 2"
+sel_tick_setup
+export SEL_LIVE_COUNT=6 SEL_TARGET_N=10 SEL_NPRIO_AVAIL=0 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-gap-clamped-to-headroom: decision line (headroom clamps gap)" "issue 707 2" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-gap-clamped-to-headroom: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# Regression: explicit-still-gap1. The explicit dispatch <N> path is UNCHANGED by
+# the manual SPAWN_N math — it still appends GAP=1. Even with LIVE/TARGET set so
+# the manual computation WOULD have produced a different gap, the explicit path
+# emits `explicit 909 1`.
+echo "Test: select-tick explicit 909 → explicit 909 1 (manual math never runs)"
+sel_tick_setup
+export SEL_LIVE_COUNT=5 SEL_TARGET_N=2 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick 909)
+assert_eq "explicit-still-gap1: decision line" "explicit 909 1" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "explicit-still-gap1: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
 # --- autonomous no-arg at cap, not exhausted, no priority item → concurrency-cap ---

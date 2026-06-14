@@ -7,8 +7,8 @@ import {
 } from "@firebase/rules-unit-testing";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { afterEach, beforeAll, beforeEach, describe, it } from "vitest";
-import { doc, getDoc, setDoc, setLogLevel } from "firebase/firestore";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { doc, getDoc, setDoc, setLogLevel, getDocs, collection, query, where } from "firebase/firestore";
 
 // Suppress Firestore client-side warnings about permission-denied (expected in tests)
 setLogLevel("error");
@@ -216,6 +216,100 @@ export function describeMediaCollection(appName: string): void {
           memberEmails: [],
         }),
       );
+    });
+  });
+}
+
+/**
+ * Shared describe block for `{collectionPath}` budget collections.
+ * Tests the member-only list-query rule contract: a member can list with a
+ * self-targeting `memberEmails array-contains` filter, while unfiltered,
+ * unauthenticated, and other-member-targeting list queries are denied.
+ */
+export function describeListQueries(
+  collectionPath: string,
+  seedDoc: Record<string, unknown>,
+): void {
+  describe(`${collectionPath} list queries`, () => {
+    let env: RulesTestEnvironment;
+
+    beforeAll(async () => {
+      env = await getTestEnv();
+    });
+
+    setupCleanup();
+
+    beforeEach(async () => {
+      await adminSetDoc(env, `${collectionPath}/existing1`, seedDoc);
+    });
+
+    it("allows member list query", async () => {
+      const ctx = authenticatedContext(env, "member@test.com");
+      const db = ctx.firestore();
+      const snap = await assertSucceeds(
+        getDocs(
+          query(
+            collection(db, collectionPath),
+            where("memberEmails", "array-contains", "member@test.com"),
+          ),
+        ),
+      );
+      expect(snap.empty).toBe(false);
+    });
+
+    it("denies unfiltered member list query", async () => {
+      const ctx = authenticatedContext(env, "member@test.com");
+      const db = ctx.firestore();
+      await assertFails(getDocs(collection(db, collectionPath)));
+    });
+
+    // A non-member cannot list another member's docs: filtering for an email
+    // they are not in is denied, because the matching docs carry a memberEmails
+    // the requester is absent from. (A self-targeted array-contains filter is
+    // always rule-compliant and returns an empty set, so it is not a denial
+    // case.)
+    it("denies authenticated non-member list query for another member's docs", async () => {
+      const ctx = authenticatedContext(env, "stranger@test.com");
+      const db = ctx.firestore();
+      await assertFails(
+        getDocs(
+          query(
+            collection(db, collectionPath),
+            where("memberEmails", "array-contains", "member@test.com"),
+          ),
+        ),
+      );
+    });
+
+    it("denies unauthenticated list query", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertFails(
+        getDocs(
+          query(
+            collection(db, collectionPath),
+            where("memberEmails", "array-contains", "member@test.com"),
+          ),
+        ),
+      );
+    });
+
+    // Documents the non-obvious converse of the denial above: a non-member's
+    // self-targeted filter is rule-compliant and succeeds, returning an empty
+    // set rather than being denied. This guards against re-introducing the
+    // false "self-targeted non-member filter is denied" assumption.
+    it("allows authenticated non-member self-targeted list query (returns empty)", async () => {
+      const ctx = authenticatedContext(env, "stranger@test.com");
+      const db = ctx.firestore();
+      const snap = await assertSucceeds(
+        getDocs(
+          query(
+            collection(db, collectionPath),
+            where("memberEmails", "array-contains", "stranger@test.com"),
+          ),
+        ),
+      );
+      expect(snap.empty).toBe(true);
     });
   });
 }
