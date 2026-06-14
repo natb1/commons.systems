@@ -71,6 +71,15 @@ export interface CreateBlogAppConfig {
 
 export interface BlogAppHandle {
   destroy(): void;
+  /**
+   * Defeat updateInfoPanel's `cachedPosts === lastRenderedPosts` early-return by
+   * clearing lastRenderedPosts, so the next Home render rebuilds the panel from
+   * scratch. A route that clobbers the info panel directly — e.g. landing's
+   * /about via mountAboutPanel — must call this in its afterRender; otherwise,
+   * with cachedPosts unchanged, the returning Home render would skip the rebuild
+   * and leave the about-panel content stale.
+   */
+  forceInfoPanelRefresh(): void;
 }
 
 export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
@@ -193,7 +202,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
     afterRender: (outlet, path) => {
       const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
       hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
-      // TODO(unit-3): config.onHomeAfterRender?.(slug) lands here (landing hero mount)
+      config.onHomeAfterRender?.(slug);
       updateOgMeta(config.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined, config.ogTitle, config.siteDefaults);
       updateCanonical(config.siteUrl, slug);
       updateInfoPanel();
@@ -222,8 +231,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   updateNav(parsePath().path);
   const router = createHistoryRouter(
     app,
-    // TODO(unit-3): spread config.extraRoutes → [homeRoute, ...(config.extraRoutes ?? []), adminRoute]
-    [homeRoute, adminRoute],
+    [homeRoute, ...(config.extraRoutes ?? []), adminRoute],
     {
       onNavigate: ({ path }) => {
         updateNav(path);
@@ -284,6 +292,9 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
       headerObserver.disconnect();
       document.removeEventListener("click", onDocumentClick);
       for (const teardown of teardowns) teardown();
+    },
+    forceInfoPanelRefresh(): void {
+      lastRenderedPosts = undefined;
     },
   };
 }
