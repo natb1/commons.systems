@@ -13254,7 +13254,7 @@ echo "=== dispatch-spawn-office-hours ==="
 # office-hours-<N> (not the worktree basename) and --cwd = worktree path via
 # dispatch-spawn-job, then — unlike the launcher, which `exec`s the spawn and is
 # done — resolves the spawned (or deduped) session id by office-hours-<N> and
-# prints it, so the caller can attach a human via `claude --resume`.
+# prints it, so the caller can attach a human via `claude attach`.
 #
 # It reuses the spawn-worker fake-`claude` harness (write_fake_spawn_worker_claude)
 # and the SPAWN_WORKER_* fixture globals: that fake's `--bg` handler registers
