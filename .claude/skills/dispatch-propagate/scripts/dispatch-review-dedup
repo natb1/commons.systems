@@ -79,6 +79,12 @@ jq '
     (map({ id: ., finding: $byid[.], idx: $idx[.] })
       | map(select(.finding != null))) as $members |
 
+    # Drop a group whose members are all absent from findings (mirrors the JS
+    # mirror: `if (!members.length) continue;`). An all-absent group then
+    # contributes nothing to the output array, so the script emits [] instead
+    # of a junk `null + {...}` finding.
+    select(($members | length) > 0) |
+
     # Earliest-input-index member (for output ordering).
     ($members | min_by(.idx) | .idx) as $min_idx |
 

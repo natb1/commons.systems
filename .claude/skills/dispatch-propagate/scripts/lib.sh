@@ -239,6 +239,42 @@ pr_list_open() {
   printf '%s\n' "$out"
 }
 
+# Write the open-PR JSON list to a temp file and echo its path. Lets callers
+# pass the (potentially large) list to child scripts via a tiny DISPATCH_PR_LIST_FILE
+# path env var instead of an inline DISPATCH_PR_LIST string, which can exceed the
+# kernel's per-arg MAX_ARG_STRLEN (128 KB) and fail the child exec with E2BIG.
+# Args: $1 = the open-PR JSON array string.
+# Output: the temp-file path on stdout.
+# Returns non-zero on mktemp/write failure.
+# CALLER OWNS CLEANUP: register `trap 'rm -f "$f"' EXIT` on the path this returns.
+pr_list_export_file() {
+  local json="$1" f
+  f=$(mktemp "${TMPDIR:-/tmp}/dispatch-pr-list.XXXXXX") || return 1
+  printf '%s' "$json" > "$f" || { rm -f "$f"; return 1; }
+  printf '%s' "$f"
+}
+
+# Read the open-PR JSON list a consumer script should use: the caller-supplied
+# file (DISPATCH_PR_LIST_FILE) when set, otherwise self-fetch via pr_list_open.
+# Centralizes the read pattern shared by dispatch-ci-ready and dispatch-phase.
+# Args: $1 = comma-separated --json field set, forwarded to pr_list_open on the
+#       self-fetch path.
+# Output: the open-PR JSON array on stdout.
+# Returns 2 (with a stderr error) when DISPATCH_PR_LIST_FILE is set but unreadable;
+# otherwise propagates pr_list_open's exit code on the self-fetch path.
+pr_list_import() {
+  local fields="$1"
+  if [[ -n "${DISPATCH_PR_LIST_FILE:-}" ]]; then
+    [[ -r "$DISPATCH_PR_LIST_FILE" ]] || {
+      echo "error: DISPATCH_PR_LIST_FILE not readable: $DISPATCH_PR_LIST_FILE" >&2
+      return 2
+    }
+    cat "$DISPATCH_PR_LIST_FILE"
+  else
+    pr_list_open "$fields"
+  fi
+}
+
 # Count the open blockers of <issue-num> via GitHub's blocked_by dependency
 # edges. Prints an integer; closed blockers do not gate work, so only open
 # blockers are counted.

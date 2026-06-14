@@ -13,25 +13,26 @@
 #
 # Behavior, in order:
 #   1. NOW = env override or `date +%s` (validated as an integer epoch).
-#   2. Continuation detection: the chain is already carried iff EITHER a
-#      pending `dispatch-reseed*` timer exists OR a live busy worker exists.
-#      A daemon UNKNOWN (busy-worker query fails) is treated as NO worker —
-#      we fail toward GUARANTEEING a continuation. A redundant reseed is
-#      harmless: dispatch's per-worktree dedup + the run-scoped concurrency
-#      gate absorb it. If a continuation exists → reset the consecutive-failure
-#      count to 0 and no-op.
+#   2. Continuation detection: the chain is already carried iff a pending
+#      `dispatch-reseed*` timer exists. A pending timer is a systemd-GUARANTEED
+#      continuation. A busy worker is NOT trusted as a continuation guarantee —
+#      liveness is ~50% stale and a worker can be killed or hang. If a timer
+#      exists → no-op (state file untouched).
 #   3. No continuation: load the consecutive-failure state. A failure older
 #      than RESET_WINDOW starts a fresh episode (count reset to 0). Then
 #      count += 1.
 #   4. Cap check: count > CAP → ESCALATE rather than retry. Find-or-create one
 #      open `dispatch:chain-stalled` latch issue (one at a time), naming the
 #      failed unit / exit status and the `dispatch` resume hint. No reseed.
-#   5. Otherwise arm a bounded-backoff reseed at now + min(BASE*2^(count-1),
-#      MAX), via systemd-run --on-calendar, with the `dispatch-reseed-<epoch>`
-#      unit name so the armed timer is itself recognized as a continuation by
-#      step 2 (and is idempotent by epoch). The reseed runs a NO-ARG
-#      dispatch-tick (re-evaluate the whole queue — more robust than re-keying
-#      the failed target).
+#   5. Otherwise arm a backstop reseed at now + BACKOFF via systemd-run
+#      --on-calendar, with the `dispatch-reseed-<epoch>` unit name so the armed
+#      timer is itself recognized as a continuation by step 2 (idempotent by
+#      epoch). BACKOFF = HEARTBEAT (flat) if a busy worker is present (defer so
+#      the real Stop-hook path wins the happy-path race), else
+#      min(BASE*2^(count-1), MAX) (bounded exponential). The count advances
+#      regardless of the busy reading. The reseed runs a NO-ARG dispatch-tick
+#      (re-evaluate the whole queue — more robust than re-keying the failed
+#      target).
 #
 # Its decision is driven by LIVE system state (pending timer + live workers),
 # NOT by which unit failed. It reads systemd's $MONITOR_UNIT /
@@ -67,6 +68,12 @@
 #
 #   DISPATCH_TICK_RECOVER_MAX_BACKOFF
 #     Backoff ceiling in seconds. Positive integer. Default: 3600.
+#
+#   DISPATCH_TICK_RECOVER_HEARTBEAT
+#     Deferred heartbeat-reseed window (seconds) used when a busy worker is
+#     present. A busy worker may carry the chain via its Stop hook; this
+#     flat window defers the backstop reseed so the real Stop-hook path wins
+#     the happy-path race. Positive integer. Default: 1800.
 #
 #   DISPATCH_TICK_RECOVER_SYSTEMCTL_CMD
 #     The `systemctl` binary (used for the pending-timer query). Default:
@@ -112,6 +119,7 @@ RESET_WINDOW="${DISPATCH_TICK_RECOVER_RESET_WINDOW:-3600}"
 CAP="${DISPATCH_TICK_RECOVER_CAP:-3}"
 BASE="${DISPATCH_TICK_RECOVER_BASE_BACKOFF:-300}"
 MAX="${DISPATCH_TICK_RECOVER_MAX_BACKOFF:-3600}"
+HEARTBEAT="${DISPATCH_TICK_RECOVER_HEARTBEAT:-1800}"
 for var in BASE MAX; do
   if ! [[ "${!var}" =~ ^[0-9]+$ ]]; then
     echo "dispatch-tick-recover: $var must be a non-negative integer, got '${!var}'; aborting" >&2
@@ -125,12 +133,24 @@ done
 # reaches the cap and escalation never fires — an unbounded retry loop. Both
 # are almost certainly misconfigurations; reject them rather than silently
 # defeat the cap.
-for var in CAP RESET_WINDOW; do
+for var in CAP RESET_WINDOW HEARTBEAT; do
   if ! [[ "${!var}" =~ ^[1-9][0-9]*$ ]]; then
     echo "dispatch-tick-recover: $var must be a positive integer (>= 1), got '${!var}'; aborting" >&2
     exit 2
   fi
 done
+# HEARTBEAT must be strictly less than RESET_WINDOW. In a phantom-busy stall,
+# each arming writes last_failure = NOW; the heartbeat fires ~HEARTBEAT seconds
+# later and recover re-fires with (NOW' - last_failure) ~= HEARTBEAT. If
+# HEARTBEAT >= RESET_WINDOW, that gap exceeds the aging window — the RESET_WINDOW
+# check resets COUNT to 0 every generation, so COUNT oscillates 1,1,1... and the
+# cap is never reached → escalation never fires. Default 1800 < 3600 is safe, but
+# the two are independently tunable, so reject the defeating config explicitly
+# (mirrors the RESET_WINDOW=0 rejection rationale above).
+if (( HEARTBEAT >= RESET_WINDOW )); then
+  echo "dispatch-tick-recover: HEARTBEAT ($HEARTBEAT) must be < RESET_WINDOW ($RESET_WINDOW); aborting" >&2
+  exit 2
+fi
 
 # Resolve the main worktree — same idiom as dispatch-spawn-tick. An explicit
 # override is authoritative and bypasses the git lookup (tests rely on this).
@@ -199,12 +219,15 @@ write_state() {
 
 # ---- Step 2: continuation detection -----------------------------------------
 #
-# The chain is already carried iff EITHER a pending dispatch-reseed* timer
-# exists OR a live busy worker exists. If so, reset the consecutive-failure
-# count and no-op — the failed unit was not the chain's only carrier.
+# The chain is already carried iff a pending `dispatch-reseed*` timer exists.
+# A pending timer is a systemd-GUARANTEED continuation — it fires even if the
+# scheduling agent dies. A busy worker is NOT a guaranteed continuation: liveness
+# is ~50% stale and a worker can be killed or hang. If a timer exists → no-op.
+# After any no-op, Step 5's heartbeat path arms a deferred backstop reseed so
+# a phantom busy carrier cannot strand the chain permanently.
 
 continuation_present() {
-  # (a) Pending dispatch-reseed* timer. `list-units --type=timer --all` with the
+  # Pending dispatch-reseed* timer. `list-units --type=timer --all` with the
   # glob restricts the listing; a row whose unit column matches
   # dispatch-reseed-*.timer means a reseed is armed (and an armed reseed unit is
   # exactly what step 5 produces, so this is self-consistent).
@@ -215,30 +238,13 @@ continuation_present() {
     fi
   fi
 
-  # (b) Live busy worker. claude_agents_count_busy_workers returns 0 with a
-  # numeric count on success; non-zero on UNKNOWN (daemon unreachable). On
-  # UNKNOWN we treat it as NO worker — fail toward guaranteeing a continuation
-  # (a redundant reseed is absorbed by dispatch's dedup + concurrency gate).
-  local busy
-  if busy=$(claude_agents_count_busy_workers); then
-    if [[ "$busy" =~ ^[0-9]+$ ]] && (( busy > 0 )); then
-      return 0
-    fi
-  fi
-
   return 1
 }
 
-# Read state before the continuation check so that write_state in the
-# continuation branch has the real last_failure value from the file.
-# Without this, STATE_LAST_FAILURE is its initial value (0), and a
-# continuation resets last_failure to 0 — causing the NEXT episode to always
-# look "old" (NOW - 0 > RESET_WINDOW), defeating the consecutive-failure cap
-# for patterns with brief continuations.
+# Read state now so Step 3 has the current COUNT and LAST_FAILURE values.
 read_state
 
 if continuation_present; then
-  write_state 0 "$STATE_LAST_FAILURE" || true
   echo "dispatch-tick-recover: continuation present; no-op" >&2
   exit 0
 fi
@@ -273,7 +279,7 @@ if (( COUNT > CAP )); then
     trap 'rm -f "$body_file"' EXIT
     {
       echo "The dispatch chain has had ${CAP} consecutive tick failures that each left no"
-      echo "continuation (no pending \`dispatch-reseed*\` timer, no live busy worker)."
+      echo "continuation (no pending \`dispatch-reseed*\` timer)."
       echo "Auto-retry is now stopped to avoid masking a persistent failure."
       echo
       echo "Most recent failing unit (from systemd OnFailure context):"
@@ -320,12 +326,21 @@ if (( COUNT > CAP )); then
   exit 0
 fi
 
-# ---- Step 5: arm a bounded-backoff reseed -----------------------------------
+# ---- Step 5: arm a backstop reseed ------------------------------------------
 #
-# backoff = min(BASE * 2^(count-1), MAX); reseed_at = NOW + backoff. The unit is
-# named dispatch-reseed-<reseed_at> so the armed timer is itself recognized as a
-# continuation by step 2 and is idempotent by epoch. Arm a NO-ARG dispatch-tick
-# (re-evaluate the whole queue — more robust than re-keying the failed target).
+# Window selection (busy-aware):
+#   - If a busy worker is present: BACKOFF = HEARTBEAT (flat deferred window).
+#     A busy worker may carry the chain via its Stop hook; defer the backstop
+#     reseed by a flat HEARTBEAT window so the real Stop-hook path wins the
+#     happy-path race. The count was already advanced in Step 3 and is persisted
+#     below, so the consecutive-failure cap advances regardless of the busy reading.
+#   - If no busy worker (or daemon UNKNOWN → treat as not-busy, failing toward a
+#     sooner continuation): BACKOFF = min(BASE * 2^(count-1), MAX).
+#
+# reseed_at = NOW + backoff. The unit is named dispatch-reseed-<reseed_at> so
+# the armed timer is itself recognized as a continuation by step 2 and is
+# idempotent by epoch. Arm a NO-ARG dispatch-tick (re-evaluate the whole queue —
+# more robust than re-keying the failed target).
 #
 # The systemd-run flag style mirrors dispatch-schedule-reseed's Step-6 call
 # exactly, plus --collect (so a failed reseed unit does not linger — Unit 3
@@ -336,11 +351,21 @@ fi
 # here: arming the recover handler on a recover-armed reseed is Unit 3's concern
 # on the launchers, and the recover unit must not chain to itself.
 
-BACKOFF=$(( BASE * (1 << (COUNT - 1)) ))
+if busy=$(claude_agents_count_busy_workers) && [[ "$busy" =~ ^[0-9]+$ ]] && (( busy > 0 )); then
+  # A busy worker may carry the chain via its Stop hook; defer the backstop reseed
+  # by a flat HEARTBEAT window so the real Stop-hook path wins the happy-path race.
+  BACKOFF="$HEARTBEAT"
+else
+  # No busy worker (or daemon UNKNOWN → treat as not-busy): the bounded exponential
+  # backoff is the sole continuation.
+  BACKOFF=$(( BASE * (1 << (COUNT - 1)) ))
+fi
 # A very high COUNT (only reachable with a large CAP) overflows the 64-bit
 # signed left-shift to a negative value, which the `> MAX` guard alone would
 # let through — yielding a past/negative RESEED_AT that fires the timer
 # immediately and defeats the backoff. Clamp non-positive and over-max alike.
+# For the HEARTBEAT path, HEARTBEAT is validated positive so this is a no-op,
+# but the clamp applies uniformly to both windows.
 if (( BACKOFF <= 0 || BACKOFF > MAX )); then
   BACKOFF="$MAX"
 fi
