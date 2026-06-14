@@ -122,7 +122,7 @@ fi
 # Fetch the open-PR list once; reuse it for every sibling call via the
 # DISPATCH_PR_LIST env contract (dispatch-ci-ready and dispatch-phase both honor it).
 PR_LIST_RC=0
-DISPATCH_PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable") || PR_LIST_RC=$?
+DISPATCH_PR_LIST=$(pr_list_open "number,headRefName,isDraft,headRefOid,labels,mergeable") || PR_LIST_RC=$?
 if [[ "$PR_LIST_RC" -ne 0 ]]; then
   # gh failure or truncation guard (>= DISPATCH_PR_LIST_LIMIT open PRs). Don't let
   # set -e abort silently with no directive — park the issue to office-hours so the
