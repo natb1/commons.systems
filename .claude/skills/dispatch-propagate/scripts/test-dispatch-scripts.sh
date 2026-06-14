@@ -19135,6 +19135,7 @@ FAKE
   # assert it ran. Invoked by dispatch-select-tick via its SCRIPT_DIR (= TMPDIR_TEST).
   cat > "$TMPDIR_TEST/dispatch-escalate-sync-broken" <<FAKE
 #!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$TMPDIR_TEST/logs/escalate-args.log"
 cat >> "$TMPDIR_TEST/logs/escalate-stdin.log"
 echo called >> "$TMPDIR_TEST/logs/escalate-sync-broken.log"
 exit 0
@@ -19433,7 +19434,26 @@ assert_eq "cap-escalate: reseed armed" "present" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo present || echo absent)"
 assert_eq "cap-escalate: escalate called" "present" \
   "$([ -f "$TMPDIR_TEST/logs/escalate-sync-broken.log" ] && echo present || echo absent)"
+assert_eq "cap-escalate: --reason merge-failed passed" "1" \
+  "$(grep -cF -- '--reason merge-failed' "$TMPDIR_TEST/logs/escalate-args.log")"
 assert_eq "cap-escalate: counter unchanged (no bump on terminal branch)" "3" \
+  "$(cat "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE")"
+sel_tick_teardown
+
+# --- #1546: failing fetch at attempt cap → escalate --reason fetch-failed ------
+echo "Test: select-tick failing fetch at cap → escalate, sync-broken, --reason fetch-failed"
+sel_tick_setup
+printf '3\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # already at the cap
+export FAKE_GIT_FETCH_FAIL=1   # cannot reach origin/main (fetch fails, no merge)
+# No sync-broken latch open yet → the cap branch escalates (find-or-create).
+out=$(run_sel_tick)
+assert_eq "cap-fetch-escalate: decision line" "sync-broken" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "cap-fetch-escalate: escalate called" "present" \
+  "$([ -f "$TMPDIR_TEST/logs/escalate-sync-broken.log" ] && echo present || echo absent)"
+assert_eq "cap-fetch-escalate: --reason fetch-failed passed" "1" \
+  "$(grep -cF -- '--reason fetch-failed' "$TMPDIR_TEST/logs/escalate-args.log")"
+assert_eq "cap-fetch-escalate: counter unchanged (no bump on terminal branch)" "3" \
   "$(cat "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE")"
 sel_tick_teardown
 
@@ -19983,6 +20003,162 @@ case "$err" in
 esac
 assert_eq "--manual + number → usage error, exit 2" "ok" "$status"
 sel_tick_teardown
+
+# ============================================================================
+# === #1546: direct dispatch-escalate-sync-broken body-content tests ===
+# ============================================================================
+# Invokes the REAL dispatch-escalate-sync-broken (by absolute path) with git and
+# gh PATH-shimmed. The git shim feeds fixed diagnostics; the gh shim captures the
+# composed --title and --body-file contents so the test can inspect the body the
+# script wrote. Exercises both the CREATE path (no open latch) and the EDIT path
+# (an existing latch number), and the --reason parametrization (#1546).
+
+ESB_SCRIPT="$SCRIPT_DIR/dispatch-escalate-sync-broken"
+ESB_TMPDIR=""
+ESB_CAPTURE=""
+
+esb_setup() {
+  ESB_TMPDIR=$(mktemp -d)
+  ESB_CAPTURE="$ESB_TMPDIR/capture"
+  mkdir -p "$ESB_TMPDIR/bin" "$ESB_CAPTURE"
+
+  # git shim: fixed diagnostics for the three queries the script runs.
+  cat > "$ESB_TMPDIR/bin/git" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  "rev-parse --show-toplevel")          echo "/fake/main/worktree" ;;
+  "status --porcelain")                 echo " M somefile" ;;
+  "log --oneline origin/main..HEAD")    echo "deadbee some local commit" ;;
+  *)                                    exit 0 ;;
+esac
+STUB
+  chmod +x "$ESB_TMPDIR/bin/git"
+
+  # gh shim: parses --body-file/--title out of "$@" regardless of create/edit,
+  # copies the body to capture/body.txt and the title to capture/title.txt. For
+  # `issue list` it returns capture/existing.txt (empty/absent → no open latch →
+  # CREATE path; nonempty → EDIT path). `issue create` echoes a URL so the
+  # script's ${create_out##*/} yields a bare number; `issue edit` exits 0.
+  cat > "$ESB_TMPDIR/bin/gh" <<STUB
+#!/usr/bin/env bash
+CAP="$ESB_CAPTURE"
+STUB
+  cat >> "$ESB_TMPDIR/bin/gh" <<'STUB'
+sub="$1 $2"
+# Pull --title <val> and --body-file <path> out of the argv.
+prev=""
+for a in "$@"; do
+  case "$prev" in
+    --title)     printf '%s' "$a" > "$CAP/title.txt" ;;
+    --body-file) cat "$a" > "$CAP/body.txt" ;;
+  esac
+  prev="$a"
+done
+case "$sub" in
+  "issue list")
+    # Return the open-latch number if seeded; an absent file means no open
+    # latch (CREATE path). Must exit 0 either way — the script reads this under
+    # `set -e`, so a falsy `[[ -f ]]` test (no file) must not propagate rc 1.
+    [[ -f "$CAP/existing.txt" ]] && cat "$CAP/existing.txt"
+    exit 0
+    ;;
+  "issue create")
+    echo "https://github.com/x/y/issues/123"
+    ;;
+  "issue edit")
+    : # title/body already captured above
+    ;;
+  "label create")
+    : # create-on-not-found path; not exercised here
+    ;;
+  *)
+    echo "gh stub (esb): unknown invocation: $*" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$ESB_TMPDIR/bin/gh"
+
+  export PATH="$ESB_TMPDIR/bin:$SAVED_PATH"
+  # Use plain mktemp inside the script (no CLAUDE_JOB_DIR tmp subtree needed).
+  unset CLAUDE_JOB_DIR
+}
+
+esb_teardown() {
+  export PATH="$SAVED_PATH"
+  rm -rf "$ESB_TMPDIR"
+  ESB_TMPDIR="" ; ESB_CAPTURE=""
+}
+
+# Reset just the capture dir between runs within one setup.
+esb_reset_capture() {
+  rm -rf "$ESB_CAPTURE"
+  mkdir -p "$ESB_CAPTURE"
+}
+
+# --- AC4 + AC3: fetch-failed body (CREATE path) ------------------------------
+echo "Test: dispatch-escalate-sync-broken --reason fetch-failed body content (#1546)"
+esb_setup
+# No existing.txt → list returns empty → CREATE path.
+ISSUE_NUM=$(printf '%s' "fatal: unable to access origin: Could not resolve host" \
+  | "$ESB_SCRIPT" --reason fetch-failed) || ISSUE_NUM="ERR"
+assert_eq "fetch-failed: issue number parsed from create URL" "123" "$ISSUE_NUM"
+BODY=$(cat "$ESB_CAPTURE/body.txt" 2>/dev/null || true)
+TITLE=$(cat "$ESB_CAPTURE/title.txt" 2>/dev/null || true)
+assert_eq "fetch-failed body: states no merge was attempted" "1" \
+  "$(grep -ciF 'no merge was attempted' <<<"$BODY" || true)"
+assert_eq "fetch-failed body: no 'diverge' token" "0" \
+  "$(grep -ic 'diverge' <<<"$BODY" || true)"
+assert_eq "fetch-failed body: no 'conflict' token" "0" \
+  "$(grep -ic 'conflict' <<<"$BODY" || true)"
+assert_eq "fetch-failed body: no merge-stderr section header" "0" \
+  "$(grep -cF 'git merge --ff-only origin/main (captured stderr)' <<<"$BODY" || true)"
+assert_eq "fetch-failed body: no git-log divergence section" "0" \
+  "$(grep -cF 'git log --oneline origin/main..HEAD' <<<"$BODY" || true)"
+assert_eq "fetch-failed body: has fetch-stderr section header" "1" \
+  "$(grep -cF '## git fetch origin main (captured stderr)' <<<"$BODY" || true)"
+assert_eq "fetch-failed title: 'cannot reach origin/main'" "1" \
+  "$(grep -cF 'cannot reach origin/main' <<<"$TITLE" || true)"
+esb_teardown
+
+# --- AC2: merge-failed body retains divergence language (CREATE path) ---------
+echo "Test: dispatch-escalate-sync-broken --reason merge-failed body content (#1546)"
+esb_setup
+ISSUE_NUM=$(printf '%s' "CONFLICT (content): Merge conflict in foo" \
+  | "$ESB_SCRIPT" --reason merge-failed) || ISSUE_NUM="ERR"
+assert_eq "merge-failed: issue number parsed from create URL" "123" "$ISSUE_NUM"
+BODY=$(cat "$ESB_CAPTURE/body.txt" 2>/dev/null || true)
+TITLE=$(cat "$ESB_CAPTURE/title.txt" 2>/dev/null || true)
+assert_eq "merge-failed body: has git-log divergence section" "1" \
+  "$(grep -cF 'git log --oneline origin/main..HEAD (local divergence)' <<<"$BODY" || true)"
+assert_eq "merge-failed body: has merge-stderr section header" "1" \
+  "$(grep -cF 'git merge --ff-only origin/main (captured stderr)' <<<"$BODY" || true)"
+assert_eq "merge-failed body: retains divergence language" "1" \
+  "$([ "$(grep -ic diverge <<<"$BODY")" -ge 1 ] && echo 1 || echo 0)"
+assert_eq "merge-failed title: 'cannot ff-merge origin/main'" "1" \
+  "$(grep -cF 'cannot ff-merge origin/main' <<<"$TITLE" || true)"
+esb_teardown
+
+# --- Edit-path: --title is passed on the edit path too (existing latch) -------
+echo "Test: dispatch-escalate-sync-broken edit path passes --title (#1546)"
+esb_setup
+printf '99\n' > "$ESB_CAPTURE/existing.txt"   # an open latch → EDIT path
+EDIT_NUM=$(printf '%s' "fatal: unable to access origin" \
+  | "$ESB_SCRIPT" --reason fetch-failed) || EDIT_NUM="ERR"
+assert_eq "edit-path: existing issue number echoed" "99" "$EDIT_NUM"
+TITLE=$(cat "$ESB_CAPTURE/title.txt" 2>/dev/null || true)
+assert_eq "edit-path title: fetch-failed 'cannot reach origin/main'" "1" \
+  "$(grep -cF 'cannot reach origin/main' <<<"$TITLE" || true)"
+esb_teardown
+
+# --- Invalid --reason → clear nonzero error ----------------------------------
+echo "Test: dispatch-escalate-sync-broken --reason bogus → nonzero, clear message (#1546)"
+esb_setup
+if "$ESB_SCRIPT" --reason bogus </dev/null 2>"$ESB_CAPTURE/err.txt"; then rc=0; else rc=$?; fi
+assert_eq "invalid --reason: nonzero exit" "1" "$([ "$rc" -ne 0 ] && echo 1 || echo 0)"
+assert_eq "invalid --reason: clear message mentions reason" "1" \
+  "$(grep -ic 'reason' "$ESB_CAPTURE/err.txt" || true)"
+esb_teardown
 
 # ============================================================================
 # dispatch-materialize-spawn tests (#919)
