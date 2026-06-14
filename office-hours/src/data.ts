@@ -5,8 +5,7 @@ import { logError } from "@commons-systems/errorutil/log";
 import seedReminders from "virtual:office-hours-seed-data";
 import seedQueueMetrics from "virtual:office-hours-queue-seed";
 import type { Reminder } from "./reminders.js";
-import type { QueueMetricsSnapshot } from "./queue-metrics.js";
-import { parseQueueMetrics } from "./queue-metrics.js";
+import { parseQueueMetrics, type QueueMetricsSnapshot } from "./queue-metrics.js";
 
 export function getDemoReminders(): Reminder[] {
   return seedReminders.map((s) => ({
@@ -57,8 +56,7 @@ export async function getOwnerQueueMetrics(
   user: User,
 ): Promise<QueueMetricsSnapshot | null> {
   if (!user.email) return null;
-  const path = nsCollectionPath(namespace, "metrics");
-  const snap = await getDoc(doc(db, path, "dispatch-queue"));
+  const snap = await getDoc(doc(db, nsCollectionPath(namespace, "metrics"), "dispatch-queue"));
   if (!snap.exists()) return null;
   return parseQueueMetrics(snap.data());
 }

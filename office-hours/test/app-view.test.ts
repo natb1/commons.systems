@@ -90,6 +90,27 @@ describe("renderApp — demo tier", () => {
 
     expect(container.querySelector(".error")).toBeNull();
   });
+
+  it("renders the queue heading", () => {
+    const container = document.createElement("div");
+    withThemeFg(() => renderApp(container, { tier: "demo" }, now));
+
+    const heading = container.querySelector(".queue-metrics-heading");
+    expect(heading).not.toBeNull();
+    expect(heading!.textContent).toBe("QUEUE");
+  });
+
+  it("renders 3 queue cards from the demo seed", () => {
+    const container = document.createElement("div");
+    withThemeFg(() => renderApp(container, { tier: "demo" }, now));
+
+    // The capacity panel also emits .capacity-card, so scope the count to the
+    // queue panel's unique value cells (depth, drain, runway).
+    const cards = container.querySelectorAll(
+      ".queue-depth-value, .queue-drain-value, .queue-runway-value",
+    );
+    expect(cards.length).toBe(3);
+  });
 });
 
 describe("renderApp — owner tier with data", () => {
@@ -122,6 +143,18 @@ describe("renderApp — owner tier with data", () => {
     withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture }, now));
 
     expect(container.querySelector(".error")).toBeNull();
+  });
+
+  it("renders 3 queue cards when queueMetrics is provided", () => {
+    const container = document.createElement("div");
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture }, now));
+
+    // The capacity panel also emits .capacity-card, so scope the count to the
+    // queue panel's unique value cells (depth, drain, runway).
+    const cards = container.querySelectorAll(
+      ".queue-depth-value, .queue-drain-value, .queue-runway-value",
+    );
+    expect(cards.length).toBe(3);
   });
 });
 
@@ -180,6 +213,17 @@ describe("renderApp — owner tier empty", () => {
     expect(workerEmpty).not.toBeUndefined();
   });
 
+  it('renders the queue band empty state "No queue metrics yet." when queueMetrics is null', () => {
+    const container = document.createElement("div");
+    withThemeFg(() =>
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
+    );
+
+    const empties = Array.from(container.querySelectorAll(".empty"));
+    const queueEmpty = empties.find((el) => el.textContent === "No queue metrics yet.");
+    expect(queueEmpty).not.toBeUndefined();
+  });
+
   it("does not render an .error element", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
@@ -213,6 +257,13 @@ describe("renderApp — error tier", () => {
     renderApp(container, { tier: "error" }, now);
 
     expect(container.querySelector(".capacity-heading")).toBeNull();
+  });
+
+  it("does not render the queue heading", () => {
+    const container = document.createElement("div");
+    renderApp(container, { tier: "error" }, now);
+
+    expect(container.querySelector(".queue-metrics-heading")).toBeNull();
   });
 });
 
