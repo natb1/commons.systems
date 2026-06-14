@@ -306,8 +306,9 @@ case "$args" in
       if [[ -f "$jit_fixture" ]]; then cat "$jit_fixture"; else echo "[]"; fi
     fi
     ;;
-  "issue list --label dispatch:office-hours --state open --json number,createdAt")
+  "issue list --label dispatch:office-hours --state open --json number,createdAt,labels")
     # office-hours-select-target: the office-hours queue (labeled open issues).
+    # The fetch now also carries `labels` (#1648) — the main-qa override reads it.
     if [[ -f "$STUB_DIR/oh-issue-list.json" ]]; then
       cat "$STUB_DIR/oh-issue-list.json"
     else
@@ -5392,6 +5393,24 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
 select_target_fake_claude   # orphan: no live sessions → sessionless, picked fresh
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "fresh disposition carries the worktree path" "office-hours 42 plan - /worktrees/42-x" "$result"
+teardown
+
+# OHST12. A fresh item carrying the `main-qa` label (#1648) — a needs-main QA
+# follow-up that is brand-new, no-PR, NO-WORKTREE — overrides phase=main-qa and
+# emits the MAIN worktree as the 5th field (not `-`), so the entry dispatcher's
+# `-` guard never trips and dispatch-spawn-office-hours accepts the cwd.
+echo "Test: fresh main-qa-labelled item → phase main-qa, main worktree as cwd"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"main-qa"}]}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+select_target_fake_claude   # no live sessions → sessionless, picked fresh
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "main-qa override: phase main-qa, main worktree 5th field" \
+  "office-hours 42 main-qa - $TMPDIR_TEST/worktrees/main" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # ============================================================================
