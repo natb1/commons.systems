@@ -221,11 +221,39 @@ for var in WEEKLY_USED FIVEH_USED; do
     echo "dispatch-schedule-reseed: $var has non-numeric value '${!var}'; treating as missing" >&2
     printf -v "$var" ""
   fi
+  # A used_percentage above 100 is physically impossible — reject to missing so
+  # the PRESENT guard drops the window (no CAND_*, no bad timer). 100 is a valid
+  # fully-used reading, so the bound is a strict `>`. awk (not bash `(( ))`)
+  # because *_USED is decimal-capable — `(( 100.5 > 100 ))` is a fatal
+  # arithmetic syntax error under set -e.
+  if [[ -n "${!var}" ]] && awk -v u="${!var}" 'BEGIN{ exit !(u + 0 > 100) }'; then
+    echo "dispatch-schedule-reseed: $var out of range (>100): '${!var}'; treating as missing" >&2
+    printf -v "$var" ""
+  fi
 done
 for var in WEEKLY_RESETS FIVEH_RESETS; do
   if [[ -n "${!var}" && ! "${!var}" =~ ^[0-9]+$ ]]; then
     echo "dispatch-schedule-reseed: $var has non-integer value '${!var}'; treating as missing" >&2
     printf -v "$var" ""
+  fi
+  # A resets_at beyond the window's physically-plausible horizon would arm a
+  # systemd-run reseed timer years out — a durable chain stall. Reject to
+  # missing so the PRESENT guard drops the window (no CAND_*, no bad timer).
+  # The bounds are hardcoded physical properties of the windows (not config
+  # knobs): a 7-day window cannot legitimately reset >8 days out, a 5-hour
+  # window cannot reset >6 hours out (each ~1 unit of margin). bash `(( ))` is
+  # safe here because *_RESETS are integer-validated just above (unlike
+  # target-workers, where the same fields are decimal and the bound needs awk);
+  # NOW is a guaranteed integer (the script exits 2 on a bad NOW above).
+  if [[ -n "${!var}" ]]; then
+    case "$var" in
+      WEEKLY_RESETS) horizon=$(( NOW + 691200 )) ;;  # 8 days
+      FIVEH_RESETS)  horizon=$(( NOW + 21600 ))  ;;  # 6 hours
+    esac
+    if (( ${!var} > horizon )); then
+      echo "dispatch-schedule-reseed: $var '${!var}' beyond plausible future horizon ($horizon); treating as missing" >&2
+      printf -v "$var" ""
+    fi
   fi
 done
 
