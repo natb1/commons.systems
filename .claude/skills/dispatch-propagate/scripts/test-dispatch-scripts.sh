@@ -23463,6 +23463,30 @@ assert_eq "writer W7 → diagnostic message contains DISPATCH_USAGE_SAMPLES_SECR
   "$([[ "$out" == *"DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE"* ]] && echo 1 || echo 0)"
 su_teardown
 
+# W8 — empty DISPATCH_USAGE_SAMPLES_SECRET_NAME → non-zero exit; writer prints
+# "DISPATCH_USAGE_SAMPLES_SECRET_NAME must be non-empty".
+su_setup
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com"
+export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
+export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
+export DISPATCH_USAGE_SAMPLES_SECRET_NAME=''
+if out=$(WRITER "$W1_PAYLOAD" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "writer W8 empty SECRET_NAME → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "writer W8 → diagnostic mentions must be non-empty" "1" "$([[ "$out" == *"DISPATCH_USAGE_SAMPLES_SECRET_NAME must be non-empty"* ]] && echo 1 || echo 0)"
+su_teardown
+
+# W9 — slash in DISPATCH_USAGE_SAMPLES_SECRET_NAME → non-zero exit; writer prints
+# "DISPATCH_USAGE_SAMPLES_SECRET_NAME must not contain a slash".
+su_setup
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com"
+export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
+export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
+export DISPATCH_USAGE_SAMPLES_SECRET_NAME='a/b'
+if out=$(WRITER "$W1_PAYLOAD" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "writer W9 slash SECRET_NAME → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "writer W9 → diagnostic mentions must not contain a slash" "1" "$([[ "$out" == *"DISPATCH_USAGE_SAMPLES_SECRET_NAME must not contain a slash"* ]] && echo 1 || echo 0)"
+su_teardown
+
 # --- SAMPLER cases (fakes only; no real daemon / firebase) ------------------
 
 # S1 — opt-in OFF: DISPATCH_USAGE_SAMPLES_ENABLED unset → exit 0 (no-op); writer
