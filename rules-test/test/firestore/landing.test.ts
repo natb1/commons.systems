@@ -45,6 +45,9 @@ describe("landing posts", () => {
     await adminSetDoc(env, `landing/${ENV}/posts/draft1`, {
       published: false,
       title: "Draft Post",
+      // Required: keeps draft1 in the orderBy('publishedAt') result set so the
+      // bare-list denial is unambiguous regardless of emulator evaluation model.
+      publishedAt: "2024-01-02",
     });
   });
 

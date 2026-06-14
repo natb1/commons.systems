@@ -70,14 +70,19 @@ alongside a topic label.
   signals: "dispatch", "phase skill", "issue workflow", "queue selection",
   "worktree resolution".
 
-- **`testing infrastructure`** — concerns CI workflows under
-  `.github/workflows/` (e.g. `pr-checks.yml`, `unit-tests.yml`), the unit or
-  acceptance test harness, Vitest or Playwright configuration, test fixtures or
-  seed data, or a `run-*.sh` test runner under
-  `.claude/skills/dispatch-propagate/scripts/` (e.g. `run-unit-tests.sh`,
-  `run-acceptance-tests.sh`, `run-lint.sh`, `run-typecheck.sh`). Keyword
-  signals: "CI", "unit test", "acceptance test", "Vitest", "Playwright",
-  "fixture", "seed data", "test runner".
+- **`testing infrastructure`** — concerns the *shared* test machinery no single
+  app owns: CI workflows under `.github/workflows/` (e.g. `pr-checks.yml`,
+  `unit-tests.yml`), the unit or acceptance test harness, Vitest or Playwright
+  configuration, cross-app fixtures or seed data, or a `run-*.sh` test runner
+  under `.claude/skills/dispatch-propagate/scripts/` (e.g. `run-unit-tests.sh`,
+  `run-acceptance-tests.sh`, `run-lint.sh`, `run-typecheck.sh`). Keyword signals:
+  "CI workflow", "test harness", "Vitest config", "Playwright config", "test
+  runner", "cross-app fixture".
+  Adding or expanding test *coverage* for a specific app or feature is **not**
+  this label — it takes the topic of the area under test (e.g. unit tests for
+  `dispatch-select-target` → `dispatch`; tests or seed data for the landing blog
+  → `landing`; budget-etl tests → `budget`). `testing infrastructure` applies
+  only when the change's primary subject is the shared machinery itself.
 
 - **`landing`** — concerns the landing app (`landing/`) — marketing site and
   blog. Ranks below `dispatch` and above `fellspiral` in
@@ -113,9 +118,11 @@ alongside a topic label.
 When an issue matches `security` plus another topic, apply `security` — it is
 the most urgent topic, so it wins the tie-break. This keeps the queue ranking
 reflecting the security dimension and lets the consumer (#985) rely on the
-label being applied. Otherwise, when an issue matches both `dispatch` and
-`testing infrastructure`, apply only `dispatch` — the narrower, named workflow
-wins over `testing infrastructure`, the broad category. Most issues match at
+label being applied. Otherwise, when an issue matches both an area topic (`dispatch`, `landing`,
+`fellspiral`, `budget`, `print`, `audio`) and `testing infrastructure` —
+typically a test that exercises one area — apply the area topic.
+`testing infrastructure` wins only when the change's primary subject is shared
+machinery no single app owns. Most issues match at
 most one topic outright; these tie-breaks resolve only the rare issue that
 genuinely spans more than one.
 
