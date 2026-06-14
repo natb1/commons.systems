@@ -214,3 +214,86 @@ func TestParseStatementDir_DiscoverError(t *testing.T) {
 		t.Errorf("error %q does not contain %q", err.Error(), "discovering files in")
 	}
 }
+
+func TestDedupStatementData(t *testing.T) {
+	cases := []struct {
+		name           string
+		input          []budget.StatementData
+		wantLen        int
+		wantErr        bool
+		wantErrSubstr  string
+	}{
+		{
+			name:    "empty slice",
+			input:   []budget.StatementData{},
+			wantLen: 0,
+		},
+		{
+			name: "single entry",
+			input: []budget.StatementData{
+				{StatementID: "STMT-1", Balance: 1000},
+			},
+			wantLen: 1,
+		},
+		{
+			name: "two entries same StatementID equal Balance",
+			input: []budget.StatementData{
+				{StatementID: "STMT-2", Balance: 5000},
+				{StatementID: "STMT-2", Balance: 5000},
+			},
+			wantLen: 1,
+		},
+		{
+			name: "two entries same StatementID different Balance",
+			input: []budget.StatementData{
+				{StatementID: "STMT-3", Balance: 1000, SourceFile: "bank/acct/2025-01/a.ofx"},
+				{StatementID: "STMT-3", Balance: 2000, SourceFile: "bank/acct/2025-01/b.ofx"},
+			},
+			wantErr:       true,
+			wantErrSubstr: "STMT-3",
+		},
+		{
+			name: "three entries same StatementID all equal Balance",
+			input: []budget.StatementData{
+				{StatementID: "STMT-4", Balance: 7500},
+				{StatementID: "STMT-4", Balance: 7500},
+				{StatementID: "STMT-4", Balance: 7500},
+			},
+			wantLen: 1,
+		},
+		{
+			name: "three entries same StatementID entry3 disagrees",
+			input: []budget.StatementData{
+				{StatementID: "STMT-5", Balance: 3000},
+				{StatementID: "STMT-5", Balance: 3000},
+				{StatementID: "STMT-5", Balance: 9999, SourceFile: "bank/acct/2025-02/c.ofx"},
+			},
+			wantErr:       true,
+			wantErrSubstr: "STMT-5",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := dedupStatementData(tc.input)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("dedupStatementData: got nil error, want error containing %q", tc.wantErrSubstr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErrSubstr) {
+					t.Errorf("error %q does not contain %q", err.Error(), tc.wantErrSubstr)
+				}
+				if out != nil {
+					t.Errorf("out: got %v, want nil on error", out)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("dedupStatementData: unexpected error: %v", err)
+			}
+			if len(out) != tc.wantLen {
+				t.Errorf("len(out): got %d, want %d", len(out), tc.wantLen)
+			}
+		})
+	}
+}
