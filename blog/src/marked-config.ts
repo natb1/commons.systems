@@ -36,6 +36,11 @@ function isExternalHref(href: string): boolean {
   return host !== "commons.systems" && !host.endsWith(".commons.systems");
 }
 
+// Only these href schemes/prefixes produce an anchor; everything else
+// (javascript:, data:, vbscript:, …) renders as plain text. Allowlist, not
+// denylist, so obfuscated schemes can't slip through.
+const SAFE_HREF = /^(https?:|mailto:|tel:|\/|#)/i;
+
 // Creates a Marked instance that strips raw HTML from markdown (defense-in-depth)
 // and opens post-body links in new tabs with rel="noopener noreferrer" to prevent
 // reverse tabnapping. The image renderer adds width/height, srcset/sizes, and
@@ -51,6 +56,9 @@ export function createMarked(): Marked {
     renderer: {
       html: () => "",
       link({ href, text, title }) {
+        if (!SAFE_HREF.test(href)) {
+          return escapeHtml(text);
+        }
         const safeHref = escapeHtml(href);
         const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
         const glyphHtml = isExternalHref(href)
