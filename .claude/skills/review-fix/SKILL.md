@@ -348,12 +348,15 @@ The Workflow prepares `result.deferred_filings`, each entry carrying `title`,
 `Closes #N`, or `"independent"`). For each entry, fork a subagent (`subagent_type:
 general-purpose`, `model: sonnet`). The subagent:
 
-1. Invokes `/file-issue`, which runs the full pipeline: duplicate detection,
-   8-category evaluation, decomposition gate, type/topic classification, issue
-   creation, `@me` assignment, and the `help wanted` label. `/file-issue` ends with
-   a `===FILE-ISSUE-RESULTS===` … `===FILE-ISSUE-RESULTS-END===` block; read every
-   `<disposition> <N>` record line between the sentinels and iterate steps 2–3 over
-   each. A single finding normally yields one record; a finding that legitimately
+1. Invokes `/file-issue` with a leading `--follow-up` token prepended to the
+   `$INPUT` it builds from the finding's `title` and `body` (the token must come
+   first so file-issue's leading-token strip recognizes it and classifies a non-bug
+   finding as `enhancement`). `/file-issue` runs the full pipeline: duplicate
+   detection, 8-category evaluation, decomposition gate, type/topic classification,
+   issue creation, `@me` assignment, and the `help wanted` label. `/file-issue` ends
+   with a `===FILE-ISSUE-RESULTS===` … `===FILE-ISSUE-RESULTS-END===` block; read
+   every `<disposition> <N>` record line between the sentinels and iterate steps 2–3
+   over each. A single finding normally yields one record; a finding that legitimately
    separates into multiple issues yields several — link them all.
 2. For each record, for a non-independent finding, record a `blocked_by` dependency
    **on the new issue `<N>`, targeting each blocker issue number** from
@@ -418,12 +421,15 @@ subagent:
    Record the follow-up as already-tracked, mapping its `identifier` to the
    existing issue `#<N>` for the Step 7 comment, and return that `<N>`. Otherwise
    proceed to the next step.
-2. Invokes `/file-issue` with the follow-up's `title` on the first line and its
-   `body` after. `/file-issue` owns duplicate detection, creation, `@me`
-   assignment, the `help wanted` label, and type + topic classification; it ends
-   with a `===FILE-ISSUE-RESULTS===` … `===FILE-ISSUE-RESULTS-END===` block. Read
-   the `<disposition> <N>` record(s) between the sentinels — a single machine-keyed
-   follow-up normally yields one record; iterate step 3 over each if more.
+2. Invokes `/file-issue` with a leading `--follow-up` token first, then the
+   follow-up's `title` on the next line and its `body` after (the `--follow-up`
+   token is a classification no-op for a security follow-up, which never carries
+   `enhancement`, but is passed for consistency). `/file-issue` owns duplicate
+   detection, creation, `@me` assignment, the `help wanted` label, and type + topic
+   classification; it ends with a `===FILE-ISSUE-RESULTS===` …
+   `===FILE-ISSUE-RESULTS-END===` block. Read the `<disposition> <N>` record(s)
+   between the sentinels — a single machine-keyed follow-up normally yields one
+   record; iterate step 3 over each if more.
 3. Applies the topic and type labels to each `<N>` (use
    `dangerouslyDisableSandbox: true` — `gh` needs network):
 
