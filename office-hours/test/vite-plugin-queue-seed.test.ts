@@ -39,6 +39,11 @@ describe("officeHoursQueueSeedPlugin", () => {
     expect(moduleCode).toContain("export default");
   });
 
+  it("does not bake the memberEmails auth field into the bundle", () => {
+    expect(moduleCode).toBeDefined();
+    expect(moduleCode).not.toContain("memberEmails");
+  });
+
   describe("generated snapshot", () => {
     let snapshot: {
       openHelpWanted: number;
@@ -49,7 +54,6 @@ describe("officeHoursQueueSeedPlugin", () => {
       windowDays: number;
       computedAt: Date;
       groupId: string;
-      memberEmails: string[];
     };
     let now: number;
 
@@ -88,8 +92,8 @@ describe("officeHoursQueueSeedPlugin", () => {
       expect(typeof snapshot.groupId).toBe("string");
     });
 
-    it("memberEmails is an array", () => {
-      expect(Array.isArray(snapshot.memberEmails)).toBe(true);
+    it("does not expose memberEmails (a denormalized auth field stripped from the public bundle)", () => {
+      expect((snapshot as Record<string, unknown>).memberEmails).toBeUndefined();
     });
 
     it("computedAt is a Date in the recent past", () => {
