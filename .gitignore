@@ -38,5 +38,6 @@ result
 /.gitmodules
 /.mcp.json
 /.claude/commands
+/.claude/scheduled_tasks.lock
 /.idea
 /.vscode

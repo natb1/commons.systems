@@ -66,14 +66,23 @@ setup() {
   printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"999-fixture","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_003","name":"Bash","input":{"command":".claude/skills/dispatch-propagate/scripts/dispatch-context-pack 999 --pr"}},{"type":"tool_use","id":"toolu_004","name":"Bash","input":{"command":"gh issue view 999 --json labels"}}],"usage":{"input_tokens":100,"cache_creation_input_tokens":200,"cache_read_input_tokens":400,"output_tokens":50}}}' \
     >> "$worker_jsonl"
 
-  # line 4: tool-error user line — normalizes to "Exit code N"
+  # line 4: assistant — zero-usage fixture line exercising cmd_prefix's env-var
+  # stripping (#1588). One Bash tool call whose command begins with an env-var
+  # assignment; cmd_prefix must strip it, keying the n-gram as "Bash:npm run".
+  # All-zero usage so every totals / price / baseline_context / session-count
+  # assertion is untouched; only the worker tool_calls order gains a trailing
+  # NPM token (A,B,A,B,NPM).
+  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"999-fixture","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_005","name":"Bash","input":{"command":"VITE_GITHUB_BRANCH=foo npm run build"}}],"usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+    >> "$worker_jsonl"
+
+  # line 5: tool-error user line — normalizes to "Exit code N"
   # The \n inside the content string is the two-character JSON escape sequence
   # (backslash + n), not a real newline. printf '%s\n' with single-quoted string
   # keeps the backslash literal in the file bytes.
   printf '%s\n' '{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"Exit code 1\nsome detail"}]}}' \
     >> "$worker_jsonl"
 
-  # line 5: tool-result user line for the toolu_001 Bash call — known-length
+  # line 6: tool-result user line for the toolu_001 Bash call — known-length
   # ASCII payload "PAYLOAD_0123456789" (18 bytes) attributed to Bash. The error
   # result above has NO tool_use_id → attributed to "unknown" (23 bytes).
   printf '%s\n' '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_001","content":"PAYLOAD_0123456789"}]}}' \
@@ -188,7 +197,7 @@ assert_eq 'tool_errors: "Exit code N" count' "1" \
 assert_eq 'tool_errors: "Exit code N" .count field' "1" \
   "$(jq '[.tool_errors[] | select(.signature=="Exit code N")][0].count' <<<"$OUT")"
 
-# tool_sequences: worker session calls A,B,A,B → bigram [A,B] count 2, n 2.
+# tool_sequences: worker session calls A,B,A,B,NPM → bigram [A,B] count 2, n 2.
 assert_eq 'tool_sequences [context-pack,gh issue] bigram count' "2" \
   "$(jq '[.tool_sequences.top[] | select(.sequence==["Bash:.claude/skills/dispatch-propagate/scripts/dispatch-context-pack","Bash:gh issue"])][0].count' <<<"$OUT")"
 assert_eq 'tool_sequences that bigram n==2' "2" \
@@ -197,6 +206,13 @@ assert_eq 'tool_sequences.truncated' "0" \
   "$(jq '.tool_sequences.truncated' <<<"$OUT")"
 assert_eq 'tool_sequences.kept == distinct' "true" \
   "$(jq '.tool_sequences.kept == .tool_sequences.distinct' <<<"$OUT")"
+# cmd_prefix strips a leading env-var assignment: the fixture command
+# "VITE_GITHUB_BRANCH=foo npm run build" must key as "Bash:npm run", never
+# "Bash:VITE_GITHUB_BRANCH=foo npm". (#1588)
+assert_eq 'tool_sequences env-var prefix stripped to "Bash:npm run"' "1" \
+  "$(jq '[.tool_sequences.top[] | select(.sequence | index("Bash:npm run"))] | length > 0 | if . then 1 else 0 end' <<<"$OUT")"
+assert_eq 'tool_sequences: no n-gram token keeps an env-var assignment' "0" \
+  "$(jq '[.tool_sequences.top[].sequence[] | select(test("="))] | length' <<<"$OUT")"
 
 # payload_bytes: Bash payload "PAYLOAD_0123456789" (18 bytes) + the no-id error
 # result "Exit code 1\nsome detail" parsed to 23 bytes (the \n becomes a real
