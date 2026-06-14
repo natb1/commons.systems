@@ -136,18 +136,28 @@ fi
 # fetched lazily here — only the fresh path needs it, so the resume path makes
 # no `gh pr list` call. The field set is dispatch-phase's superset;
 # dispatch-find-pr accepts it too (mirrors dispatch-select-target's
-# DISPATCH_PR_LIST).
+# DISPATCH_PR_LIST_FILE). The list is written to a temp file and passed by path,
+# sidestepping the E2BIG an inline JSON string hits past ~32 open PRs (#1646).
 if [[ -n "$FRESH_NUM" ]]; then
-  PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
+  PR_LIST=$(pr_list_open "number,headRefName,isDraft,headRefOid,labels,mergeable")
+  PR_LIST_FILE=$(pr_list_export_file "$PR_LIST")
+  trap 'rm -f "$PR_LIST_FILE"' EXIT
   # Readiness gate: dispatch-phase no longer emits `waiting`; check CI readiness
-  # first. A not-ready draft PR (exit non-zero) maps to phase=waiting, preserving
-  # the byte-identical output contract callers expect.
-  if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$FRESH_NUM" >/dev/null; then
+  # first. A not-ready draft PR (exit 1) maps to phase=waiting, preserving
+  # the byte-identical output contract callers expect. Exit >= 2 is an exec/IO
+  # error (e.g. unreadable DISPATCH_PR_LIST_FILE) — surface it, don't map to waiting.
+  ci_rc=0
+  DISPATCH_PR_LIST_FILE="$PR_LIST_FILE" "$SCRIPT_DIR/dispatch-ci-ready" "$FRESH_NUM" >/dev/null || ci_rc=$?
+  if (( ci_rc >= 2 )); then
+    echo "error: dispatch-ci-ready failed (exit $ci_rc) for $FRESH_NUM — environment error, not a CI verdict" >&2
+    exit "$ci_rc"
+  fi
+  if (( ci_rc == 1 )); then
     phase="waiting"
   else
-    phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$FRESH_NUM")
+    phase=$(DISPATCH_PR_LIST_FILE="$PR_LIST_FILE" "$SCRIPT_DIR/dispatch-phase" "$FRESH_NUM")
   fi
-  pr=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-find-pr" "$FRESH_NUM")
+  pr=$(DISPATCH_PR_LIST_FILE="$PR_LIST_FILE" "$SCRIPT_DIR/dispatch-find-pr" "$FRESH_NUM")
   # The path to this item's <N>-* worktree (newline-separated values per key;
   # take the first), or empty when no <N>-* worktree is registered.
   wt_path=$(printf '%s' "${WORKTREE_PATHS_BY_NUM[$FRESH_NUM]:-}" | head -n 1)

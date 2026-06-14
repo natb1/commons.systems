@@ -35,6 +35,7 @@ import {
   parseJitDueMarker,
   buildAppJwt,
   mintInstallationToken,
+  truncateForLog,
   type JitIssue,
 } from "../src/office-hours-sync";
 
@@ -732,5 +733,32 @@ describe("mintInstallationToken", () => {
         privateKey: testKeyPair.privateKey,
       }),
     ).rejects.toThrow(/missing token/);
+  });
+});
+
+describe("truncateForLog", () => {
+  it("passes an empty string through unchanged", () => {
+    expect(truncateForLog("")).toBe("");
+  });
+
+  it("passes a string of exactly max length through unchanged", () => {
+    const result = truncateForLog("a".repeat(200));
+    expect(result).toBe("a".repeat(200));
+    expect(result).not.toContain("…[truncated]");
+  });
+
+  it("truncates a string one character over max to max chars plus the suffix", () => {
+    expect(truncateForLog("a".repeat(201))).toBe("a".repeat(200) + "…[truncated]");
+  });
+
+  it("truncates a string significantly longer than max correctly", () => {
+    const result = truncateForLog("b".repeat(1000));
+    expect(result).toBe("b".repeat(200) + "…[truncated]");
+    expect(result.length).toBe(200 + 12);
+    expect(result.slice(0, 200)).toBe("b".repeat(200));
+  });
+
+  it("respects an explicit max override", () => {
+    expect(truncateForLog("x".repeat(50), 10)).toBe("x".repeat(10) + "…[truncated]");
   });
 });

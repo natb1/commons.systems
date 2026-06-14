@@ -1,11 +1,11 @@
-import { collection, getDocs, query, where, type Firestore } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, where, type Firestore } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { nsCollectionPath, type Namespace } from "@commons-systems/firestoreutil/namespace";
 import { logError } from "@commons-systems/errorutil/log";
 import seedReminders from "virtual:office-hours-seed-data";
 import seedQueueMetrics from "virtual:office-hours-queue-seed";
 import type { Reminder } from "./reminders.js";
-import type { QueueMetricsSnapshot } from "./queue-metrics.js";
+import { parseQueueMetrics, type QueueMetricsSnapshot } from "./queue-metrics.js";
 
 export function getDemoReminders(): Reminder[] {
   return seedReminders.map((s) => ({
@@ -27,7 +27,9 @@ export function getDemoQueueMetrics(): QueueMetricsSnapshot {
     windowDays: seedQueueMetrics.windowDays,
     computedAt: seedQueueMetrics.computedAt,
     groupId: seedQueueMetrics.groupId,
-    memberEmails: [...seedQueueMetrics.memberEmails],
+    // memberEmails is a denormalized auth field stripped from the public seed
+    // bundle (see vite-plugin-queue-seed.ts); the demo snapshot carries none.
+    memberEmails: [],
   };
 }
 
@@ -46,6 +48,17 @@ export async function getOwnerReminders(
     if (reminder) reminders.push(reminder);
   }
   return reminders;
+}
+
+export async function getOwnerQueueMetrics(
+  db: Firestore,
+  namespace: Namespace,
+  user: User,
+): Promise<QueueMetricsSnapshot | null> {
+  if (!user.email) return null;
+  const snap = await getDoc(doc(db, nsCollectionPath(namespace, "metrics"), "dispatch-queue"));
+  if (!snap.exists()) return null;
+  return parseQueueMetrics(snap.data());
 }
 
 export function toReminder(id: string, data: Record<string, unknown>): Reminder | null {
