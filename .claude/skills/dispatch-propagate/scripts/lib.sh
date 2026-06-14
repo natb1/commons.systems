@@ -968,6 +968,13 @@ ensure_recover_unit() {
     echo "WARNING: ensure_recover_unit: main worktree path contains a double-quote; refusing to write unit; OnFailure recovery unavailable" >&2
     return 1
   fi
+  # ExecStart= is double-quoted and systemd C-unescapes it, so a backslash in
+  # the path would be misread as an escape sequence and corrupt the executable
+  # token. The path never legitimately contains a backslash; reject it (#1212).
+  if [[ "$main_worktree" == *'\'* ]]; then
+    echo "WARNING: ensure_recover_unit: main worktree path contains a backslash; refusing to write unit; OnFailure recovery unavailable" >&2
+    return 1
+  fi
 
   local RECOVER_SCRIPT="$main_worktree/.claude/skills/dispatch-propagate/scripts/dispatch-tick-recover"
   local UNIT_DIR="${DISPATCH_RECOVER_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
@@ -1090,6 +1097,14 @@ ensure_daemon_service() {
   # contains a double-quote; reject it rather than emit a malformed unit.
   if [[ "$CLAUDE_CMD" == *'"'* ]]; then
     echo "WARNING: ensure_daemon_service: claude path contains a double-quote; refusing to write unit; durable daemon service unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted and systemd C-unescapes it, so a backslash in
+  # the path would be misread as an escape sequence and corrupt the executable
+  # token. The resolved binary path never legitimately contains a backslash;
+  # reject it (#1212).
+  if [[ "$CLAUDE_CMD" == *'\'* ]]; then
+    echo "WARNING: ensure_daemon_service: claude path contains a backslash; refusing to write unit; durable daemon service unavailable" >&2
     return 1
   fi
 
