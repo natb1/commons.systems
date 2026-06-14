@@ -147,7 +147,20 @@ core::upload_to_gcs() {
   if [ -n "$group_id" ]; then
     META_ARGS+=(-h "x-goog-meta-groupid:${group_id}")
     local joined
-    joined="$(IFS=,; printf '%s' "${emails_ref[*]}" | tr '[:upper:]' '[:lower:]')"
+    local -a trimmed_emails=()
+    local e
+    for e in "${emails_ref[@]}"; do
+      e="${e#"${e%%[^[:space:]]*}"}"   # strip leading whitespace
+      e="${e%"${e##*[^[:space:]]}"}"   # strip trailing whitespace
+      [ -z "$e" ] && continue          # drop all-whitespace / empty entries
+      trimmed_emails+=("$e")
+    done
+    # Write trimmed values back through the nameref so the caller's array (and
+    # the Firestore memberEmails field it builds from it) sees the trimmed
+    # emails too — not just this GCS metadata header. Case is preserved here;
+    # only the GCS header lowercases (below), matching the existing design.
+    emails_ref=("${trimmed_emails[@]}")
+    joined="$(IFS=,; printf '%s' "${trimmed_emails[*]}" | tr '[:upper:]' '[:lower:]')"
     META_ARGS+=(-h "x-goog-meta-member_emails:${joined}")
   fi
 
