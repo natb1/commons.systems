@@ -12635,7 +12635,7 @@ echo "Test: #1136 in-bound weekly reset (~3d out) still schedules (no over-rejec
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
 reset=$((1700000000 + 3 * 86400))
-sr_write_rl "rl.json" 95 "$reset" absent absent
+sr_write_rl "rl.json" 100 "$reset" absent absent
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
 assert_eq "#1136 in-bound weekly reset still schedules" \
   "scheduled dispatch-reseed-$reset at $reset" "$out"
@@ -12678,7 +12678,7 @@ echo "Test: #1136 5h resets far-future (>6h) → dropped → timer at weekly res
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
 weekly_reset=$((1700000000 + 432000))   # 5 days out, in-bound under 8-day horizon
-sr_write_rl "rl.json" 95 "$weekly_reset" 60 $((1700000000 + 25200))  # 5h reset 7h out → rejected
+sr_write_rl "rl.json" 100 "$weekly_reset" 60 $((1700000000 + 25200))  # 5h reset 7h out → rejected
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
 assert_eq "#1136 5h resets far-future → timer at weekly reset" \
   "scheduled dispatch-reseed-$weekly_reset at $weekly_reset" "$out"
