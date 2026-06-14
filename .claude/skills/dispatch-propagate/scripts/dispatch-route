@@ -38,9 +38,11 @@
 # held-lock fan-out loop (#1047 / part of #1044): the router does only the cheap
 # `git worktree add`, and the multi-minute, budget-irrelevant provisioning runs here.
 #
-# The open-PR list is fetched ONCE here and exported as DISPATCH_PR_LIST; both
-# dispatch-ci-ready and dispatch-phase honor that env contract and reuse the
-# single snapshot — no redundant gh pr list. The genuine post-selection CI race
+# The open-PR list is fetched ONCE here, written to a temp file, and exported as
+# DISPATCH_PR_LIST_FILE (a path); both dispatch-ci-ready and dispatch-phase honor
+# that env contract and reuse the single snapshot — no redundant gh pr list. The
+# file channel keeps the path tiny in the env, sidestepping the E2BIG that an
+# inline JSON string hits past ~32 open PRs (#1646). The genuine post-selection CI race
 # (a push restarting CI between router selection and worker session end) is caught
 # by dispatch-stop.sh's early not-ready gate, not here.
 #
@@ -120,9 +122,10 @@ elif [[ "$PROVISION_RC" -ne 0 ]]; then
 fi
 
 # Fetch the open-PR list once; reuse it for every sibling call via the
-# DISPATCH_PR_LIST env contract (dispatch-ci-ready and dispatch-phase both honor it).
+# DISPATCH_PR_LIST_FILE env contract (dispatch-ci-ready and dispatch-phase both
+# honor it — they read the list from the temp file the path points at).
 PR_LIST_RC=0
-DISPATCH_PR_LIST=$(pr_list_open "number,headRefName,isDraft,headRefOid,labels,mergeable") || PR_LIST_RC=$?
+PR_LIST=$(pr_list_open "number,headRefName,isDraft,headRefOid,labels,mergeable") || PR_LIST_RC=$?
 if [[ "$PR_LIST_RC" -ne 0 ]]; then
   # gh failure or truncation guard (>= DISPATCH_PR_LIST_LIMIT open PRs). Don't let
   # set -e abort silently with no directive — park the issue to office-hours so the
@@ -135,7 +138,9 @@ if [[ "$PR_LIST_RC" -ne 0 ]]; then
   echo "STOP pr-list-failed"
   exit 0
 fi
-export DISPATCH_PR_LIST
+PR_LIST_FILE=$(pr_list_export_file "$PR_LIST")
+trap 'rm -f "$PR_LIST_FILE"' EXIT
+export DISPATCH_PR_LIST_FILE="$PR_LIST_FILE"
 
 # Initial CI-ready gate. exit 0 (ready) → continue; exit 1 (waiting) → STOP waiting;
 # any other exit code is a dispatch-ci-ready internal failure — propagate it.

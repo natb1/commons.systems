@@ -13,11 +13,14 @@ two responsibilities: the autonomous part (select target, plan items, run
 machine-verifiable checks, post the PR-comment summary, apply `dispatch:qa-done`)
 and the user-input part (walk the user through judgment-call items; on the first
 bug, enter plan mode and fix it in-session). This skill runs **only the
-autonomous part**. The moment QA needs a human — a judgment-call walkthrough
-item, an unexpected permission prompt, or a bug that needs an in-session
-plan-mode fix — it escalates to the office-hours queue via the standard path
-(skip the `phase-completed` marker, write `office-hours-reason`; the Stop hook
-applies `dispatch:office-hours` to the issue and parks the session). The
+autonomous part**. The moment QA needs a human — a `needs-human` judgment-call walkthrough item,
+an unexpected permission prompt, or a bounded auto-fix-exhausted bug (cap
+reached / scope-deviation / planning-failed on an `opus-fixable` item) — it
+escalates to the office-hours queue via the standard path (skip the
+`phase-completed` marker, write `office-hours-reason`; the Stop hook applies
+`dispatch:office-hours` to the issue and parks the session). `opus-fixable`
+bugs are auto-fixed in the bounded Opus fix lane (Step 3.7); `needs-main` bugs
+are filed as `blocked_by` follow-up issues (Step 3.6) and do not escalate. The
 user-input residue runs later via `/office-hours`.
 
 The QA plan (Step 2) is authored by a **single bounded Opus triage subagent** that
