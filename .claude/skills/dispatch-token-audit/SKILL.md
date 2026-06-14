@@ -45,9 +45,6 @@ This skill parses recent Claude session transcripts and emits a ranked report of
    # Context and small-session lenses
    jq '.lenses' tmp/usage-audit.json
 
-   # Baseline/boot-context lens
-   jq '.lenses.baseline_context' tmp/usage-audit.json
-
    # Top 10 costliest individual sessions
    jq '.sessions | sort_by(-.price_proxy_usd) | .[0:10] | map({id,type,model,peak_context,price_proxy_usd})' tmp/usage-audit.json
    ```
