@@ -29,11 +29,14 @@
 # A gh/network failure in this fetch exits non-zero (it is no longer silently mapped to plan); transient blips self-heal via gh_retry.
 #
 # Environment:
-#   DISPATCH_PR_LIST — optional. A JSON array of open PRs supplied by the
-#     caller (dispatch-select-target passes it to avoid a redundant
-#     gh pr list per PR). When set and non-empty, it is used in place of a
-#     self-issued gh pr list. Must include the fields
-#     number,headRefName,isDraft,statusCheckRollup,labels,mergeable.
+#   DISPATCH_PR_LIST_FILE — optional. Path to a temp file holding a JSON array
+#     of open PRs supplied by the caller (dispatch-select-target passes it to
+#     avoid a redundant gh pr list per PR). The tiny path travels in the env
+#     var; the (potentially large) JSON stays in the file, sidestepping the
+#     E2BIG that an inline JSON string hits past ~32 open PRs (#1646). When set,
+#     the file is read in place of a self-issued gh pr list and must be
+#     readable (else exit 2). Must include the fields
+#     number,headRefName,isDraft,headRefOid,labels,mergeable.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -45,13 +48,9 @@ if [[ -z "$ARG" ]]; then
   exit 1
 fi
 
-# Use the caller-supplied open-PR list when DISPATCH_PR_LIST is set.
-# Otherwise fetch the list ourselves — standalone callers rely on this path.
-if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
-  PR_LIST="$DISPATCH_PR_LIST"
-else
-  PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
-fi
+# Read the caller-supplied open-PR list (DISPATCH_PR_LIST_FILE) or self-fetch.
+# An unreadable file makes pr_list_import return 2; `|| exit "$?"` propagates it.
+PR_LIST=$(pr_list_import "number,headRefName,isDraft,headRefOid,labels,mergeable") || exit "$?"
 
 # Find the matching PR.
 if [[ "$ARG" =~ ^[0-9]+$ ]]; then
@@ -109,9 +108,8 @@ fi
 MERGEABLE=$(printf '%s' "$PR" | jq -r '.mergeable // "UNKNOWN"')
 if [[ "$MERGEABLE" == "CONFLICTING" ]]; then echo "fix-conflicts"; exit 0; fi
 
-# Draft PR — classify CI via statusCheckRollup.
-ROLLUP=$(printf '%s' "$PR" | jq '.statusCheckRollup')
-VERDICT=$(dispatch_classify_rollup "$ROLLUP")
+# Draft PR — classify CI via a lazy REST check-runs fetch keyed on the head SHA.
+VERDICT=$(dispatch_ci_verdict_rest "$(printf '%s' "$PR" | jq -r '.headRefOid')")
 
 # A concluded failure is actionable: it resolves to fix-checks (a mixed rollup with
 # some failing and some pending also classifies as failing — failure wins).

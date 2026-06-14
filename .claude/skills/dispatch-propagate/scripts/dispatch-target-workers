@@ -124,8 +124,10 @@
 #   if hw <= 0: print 0; exit              # at/over pace → pause
 #
 #   # Stage 3 — workers N from the 5h ramp
-#   span = ceil5 - floor5
-#   h5   = ceil5 - used_5h
+#   r    = remaining / 18000                                     # windows left
+#   ceil5_eff = clamp(100*(terminal-used_weekly)/(r*wcap), ceil5, 100)  # dynamic catch-up ceiling
+#   span = ceil5_eff - floor5
+#   h5   = ceil5_eff - used_5h
 #   N = (h5 <= 0) ? 0 : (span <= 0) ? max_workers
 #                                   : clamp(round(max_workers * h5/span), 1, max_workers)
 #   print N
@@ -143,9 +145,21 @@
 # - Gate closed (hw <= 0, used_weekly at/over W) → 0 workers regardless of 5h
 #   usage. The weekly pace curve simply pauses spending.
 # - Gate open (hw > 0) → N is a pure function of used_5h: max_workers at/below
-#   floor5, ramping linearly to 0 at/above ceil5. The clamp floor keeps N >= 1
-#   for any used_5h strictly under ceil5, so there is no `0 >= 0` router
-#   deadlock during healthy under-pace operation.
+#   floor5, ramping linearly to 0 at/above ceil5_eff (the dynamic catch-up
+#   ceiling, which equals the static ceil5 mid-week and rises above it near
+#   end-of-week — see below). The clamp floor keeps N >= 1 for any used_5h
+#   strictly under ceil5_eff, so there is no `0 >= 0` router deadlock during
+#   healthy under-pace operation.
+# - The 5h ramp ceiling is dynamic: ceil5_eff rises above the static ceil5
+#   near end-of-week when the remaining windows r cannot close the weekly
+#   deficit D = terminal - used_weekly at the default per-window burn rate
+#   (required 5h usage u = 100*D/(r*wcap)). It is accelerator-only — the clamp
+#   lower bound is ceil5, so it never reduces N (over-pace slowdown stays the
+#   weekly gate's job). It is inert mid-week when usage is near pace (r large
+#   and D/r small → term < ceil5 → clamps to ceil5); when far behind pace it
+#   activates earlier, proportionally to the deficit. It saturates at 100 for a
+#   large deficit (required rate >
+#   wcap%/window), so it does not always catch up.
 #
 #   # Reopen crossing (--reopen-at mode)
 #   A pace-curve pause (the binary gate closing, hw<=0, from used_weekly >= W) is
@@ -297,16 +311,33 @@ fi
 [[ -n "${DISPATCH_TARGET_WORKERS_USED_5H:-}" ]] && FIVEH_USED="$DISPATCH_TARGET_WORKERS_USED_5H"
 [[ -n "${DISPATCH_TARGET_WORKERS_RESETS_AT_5H:-}" ]] && FIVEH_RESETS="$DISPATCH_TARGET_WORKERS_RESETS_AT_5H"
 
-# Sanitize `used_*` telemetry fail-closed before it reaches `awk -v`. awk
-# coerces a non-numeric value to 0, which would read as "no usage yet" and
-# spawn aggressively — a corrupt or tampered rate_limits.json (or a hostile env
-# override) would thus dodge the budget instead of backing off. Treat any
-# malformed value as missing so the PRESENT check below routes it to the
-# conservative missing-telemetry fallback, matching dispatch-schedule-reseed's
-# fail-closed posture on the same telemetry.
+# Sanitize `used_*` telemetry before it reaches `awk -v`. awk coerces a
+# non-numeric value to 0, which would read as "no usage yet"; treat any malformed
+# value as missing so the PRESENT check below routes it to that field's fallback.
+#
+# The two fields then have OPPOSITE fallback semantics, and that is deliberate:
+#   - WEEKLY_USED is the budget gate. Missing → the weekly anchor drops → Step 2
+#     fails closed to N=1 (count) / `none` (reopen). Losing the real budget guard
+#     must back off, matching dispatch-schedule-reseed's fail-closed posture.
+#   - FIVEH_USED is only the anti-burst ramp WITHIN the weekly budget. Missing →
+#     FIVEH_PRESENT=0 → FIVEH_USED_FOR_AWK=0 → full 5h headroom → N falls back to
+#     the WEEKLY-allowed count (fail open). This is safe: the weekly gate still
+#     bounds N, so a corrupt/absent 5h reading can only lose smoothing, never
+#     blow the budget. So 5h does NOT back off to zero on a bad value.
 for var in WEEKLY_USED FIVEH_USED; do
   if [[ -n "${!var}" && ! "${!var}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
     echo "dispatch-target-workers: $var has non-numeric value '${!var}'; treating as missing" >&2
+    printf -v "$var" ""
+  fi
+  # A used_percentage above 100 is physically impossible — reject it to missing
+  # so the PRESENT check routes it to this field's fallback (per the per-var
+  # semantics above: WEEKLY_USED fails closed to N=1; FIVEH_USED fails open to the
+  # weekly-bounded count) rather than acting on a poisoned value. 100 is a valid
+  # fully-used reading, so the bound is a strict `>`. awk (not bash `(( ))`)
+  # because the value may be a decimal — `(( 100.5 > 100 ))` is a fatal
+  # arithmetic syntax error under set -e.
+  if [[ -n "${!var}" ]] && awk -v u="${!var}" 'BEGIN{ exit !(u + 0 > 100) }'; then
+    echo "dispatch-target-workers: $var out of range (>100): '${!var}'; treating as missing" >&2
     printf -v "$var" ""
   fi
 done
@@ -321,6 +352,17 @@ if [[ ! "$NOW" =~ ^[0-9]+$ ]]; then
 fi
 if [[ -n "$WEEKLY_RESETS" && ! "$WEEKLY_RESETS" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
   echo "dispatch-target-workers: WEEKLY_RESETS has non-numeric value '$WEEKLY_RESETS'; treating as missing" >&2
+  WEEKLY_RESETS=""
+fi
+# A weekly reset more than 8 days out is physically impossible for a 7-day
+# window (8 days = ~1 day margin over the nominal 7) — a hardcoded property of
+# the window, not a config knob. Reject to missing → weekly anchor drops →
+# fallback 1. Guard on both being non-empty (NOW may have been reset above;
+# WEEKLY_RESETS may have been emptied by the numeric check). awk (not bash
+# `(( ))`) because WEEKLY_RESETS may be a decimal.
+if [[ -n "$NOW" && -n "$WEEKLY_RESETS" ]] \
+   && awk -v r="$WEEKLY_RESETS" -v now="$NOW" 'BEGIN{ exit !(r + 0 > now + 691200) }'; then
+  echo "dispatch-target-workers: WEEKLY_RESETS '$WEEKLY_RESETS' more than 8 days out from now ($NOW); treating as missing" >&2
   WEEKLY_RESETS=""
 fi
 
@@ -351,6 +393,17 @@ if [[ "$MODE" == "exhausted" ]]; then
   if [[ -z "$NOW" ]]; then
     echo ok
     exit 0
+  fi
+  # A 5h reset more than 6 hours out is physically impossible for a 5-hour
+  # window (6h = ~1h margin) — a hardcoded window property, not a config knob.
+  # Reject → that window cannot be "exhausted" (fail open, consistent with this
+  # mode's fail-open-on-invalid posture). This bound lives ONLY in exhausted
+  # mode — count/reopen never read the 5h reset. awk (not bash `(( ))`) because
+  # FIVEH_RESETS may be a decimal; NOW is guaranteed non-empty here.
+  if [[ -n "$FIVEH_RESETS" ]] \
+     && awk -v r="$FIVEH_RESETS" -v now="$NOW" 'BEGIN{ exit !(r + 0 > now + 21600) }'; then
+    echo "dispatch-target-workers: FIVEH_RESETS '$FIVEH_RESETS' more than 6 hours out from now ($NOW); treating as missing" >&2
+    FIVEH_RESETS=""
   fi
   awk -v now="$NOW" \
       -v used_weekly="$WEEKLY_USED" -v resets_weekly="$WEEKLY_RESETS" \
@@ -518,9 +571,19 @@ awk -v mode="$MODE" \
        if (hw <= 0) { print 0; exit }
 
        # ---- Stage 3: workers N from the 5h ramp ----
-       # max_workers at/below floor5, ramping linearly to 0 at/above ceil5.
-       span = (ceil5 + 0) - (floor5 + 0)
-       h5 = (ceil5 + 0) - (used_5h + 0)
+       # Dynamic catch-up ceiling: raise the 5h ramp ceiling above the static
+       # default when the remaining windows cannot close the weekly deficit
+       # D = terminal - used_weekly at the default per-window burn rate. A full 5h
+       # window = wcap% of the weekly limit, so a 5h ceiling u% burns u/wcap weekly-%
+       # per window; closing D over r = remaining/18000 windows needs u = 100*D/(r*wcap)
+       # of 5h usage. clamp lower bound = ceil5 (accelerator only, never a throttle),
+       # upper bound = 100. remaining > 0 here (Stage 1 exits on remaining <= 0), so
+       # r > 0 — no divide-by-zero.
+       # max_workers at/below floor5, ramping linearly to 0 at/above ceil5_eff.
+       r = remaining / 18000
+       ceil5_eff = clamp(100 * ((terminal + 0) - (used_weekly + 0)) / (r * (wcap + 0)), (ceil5 + 0), 100)
+       span = ceil5_eff - (floor5 + 0)
+       h5 = ceil5_eff - (used_5h + 0)
        if (h5 <= 0) {
          N = 0
        } else if (span <= 0) {

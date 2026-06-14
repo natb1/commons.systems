@@ -79,6 +79,10 @@ setup() {
   # SCRIPT_DIR, which resolves to TMPDIR_TEST for this copy — lib.sh is copied
   # below alongside the other scripts, so the source resolves.
   cp "$SCRIPT_DIR/dispatch-reconcile-ready" "$TMPDIR_TEST/dispatch-reconcile-ready"
+  # dispatch-sync-merge-queue sources lib.sh (for pr_list_open and
+  # dispatch_classify_rollup) via its SCRIPT_DIR, which resolves to TMPDIR_TEST
+  # for this copy — lib.sh is already copied below, so the source resolves.
+  cp "$SCRIPT_DIR/dispatch-sync-merge-queue" "$TMPDIR_TEST/dispatch-sync-merge-queue"
   # dispatch-select-target's JIT scan calls dispatch-config-load and
   # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
   # TMPDIR_TEST for the copied dispatch-select-target, so the two helpers must
@@ -117,7 +121,8 @@ setup() {
            "$TMPDIR_TEST/dispatch-resolve-worktree" \
            "$TMPDIR_TEST/dispatch-reconcile-ready" \
            "$TMPDIR_TEST/dispatch-config-load" \
-           "$TMPDIR_TEST/dispatch-project-status-read"
+           "$TMPDIR_TEST/dispatch-project-status-read" \
+           "$TMPDIR_TEST/dispatch-sync-merge-queue"
 
   # Default no-op stub for dispatch-provision-worktree. dispatch-route now invokes
   # it (after the worktree cross-check, before phase derivation). The real script
@@ -172,7 +177,60 @@ STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 # Reconstruct full args string for matching.
 args="$*"
 case "$args" in
-  "pr list --state open --limit 300 --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
+  # ---- #1480 dispatch-sync-merge-queue branches (FIRST — most specific) ------
+  # The mergeable-PR fetch. Field set pinned byte-for-byte to the script's
+  # pr_list_open call; --limit glob absorbs DISPATCH_PR_LIST_LIMIT (default 300).
+  "pr list --state open --limit "*" --json number,title,url,isDraft,statusCheckRollup,mergeable")
+    echo "pr list" >> "$STUB_DIR/gh-merge-pr-list.log"
+    if [[ -f "$STUB_DIR/merge-pr-list.json" ]]; then
+      cat "$STUB_DIR/merge-pr-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  label\ create\ merge-pr:*)
+    # Idempotent per-PR label create. Log and succeed.
+    echo "$args" >> "$STUB_DIR/gh-merge-label-create.log"
+    ;;
+  issue\ list\ --repo\ natb1/office-hours-nate\ --label\ merge-pr:*\ --state\ open\ --json\ number,title)
+    # Per-PR open-issue guard. MUST precede the bare enumerate branch below.
+    # Recover the PR number from the --label to key the fixture.
+    set -- $args
+    oh_lbl=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in --label) oh_lbl="$2"; shift 2 ;; *) shift ;; esac
+    done
+    oh_n="${oh_lbl#merge-pr:}"
+    if [[ -f "$STUB_DIR/oh-issue-merge-pr-${oh_n}.json" ]]; then
+      cat "$STUB_DIR/oh-issue-merge-pr-${oh_n}.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  "issue list --repo natb1/office-hours-nate --state open --limit "*" --json number,labels")
+    # Close-path enumerate (no --label). Serves the open-tracking-issue set.
+    if [[ -f "$STUB_DIR/oh-issue-enum.json" ]]; then
+      cat "$STUB_DIR/oh-issue-enum.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  issue\ create\ --repo\ natb1/office-hours-nate\ *)
+    # Create a tracking issue. MUST echo a URL so the script's ${URL##*/} yields
+    # the number. Log the full args (carries --title, the merge-pr:<n> label, and
+    # the oh-merge-pr marker) for the create assertion.
+    echo "$args" >> "$STUB_DIR/gh-merge-issue-create.log"
+    echo "https://github.com/natb1/office-hours-nate/issues/77"
+    ;;
+  issue\ edit\ *--repo\ natb1/office-hours-nate*)
+    # Title/marker refresh on drift. MUST precede the generic `issue edit *`.
+    echo "$args" >> "$STUB_DIR/gh-merge-issue-edit.log"
+    ;;
+  issue\ close\ *--repo\ natb1/office-hours-nate*)
+    # Close a tracking issue. MUST precede the generic `issue close *`.
+    echo "$args" >> "$STUB_DIR/gh-merge-issue-close.log"
+    ;;
+  "pr list --state open --limit 300 --json number,headRefName,isDraft,headRefOid,labels,mergeable")
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
       cat "$STUB_DIR/pr-list-full.json"
@@ -198,7 +256,7 @@ case "$args" in
     # boundary so pr_list_open fires the loud guard and returns non-zero.
     printf '[{"number":1,"headRefName":"1-a"},{"number":2,"headRefName":"2-b"},{"number":3,"headRefName":"3-c"},{"number":4,"headRefName":"4-d"},{"number":5,"headRefName":"5-e"}]\n'
     ;;
-  "pr list --state open --limit 300 --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences,mergeable")
+  "pr list --state open --limit 300 --json number,createdAt,headRefName,isDraft,headRefOid,labels,closingIssuesReferences,mergeable")
     # dispatch-select-target's union fetch now carries `mergeable` (#1241). The
     # field is forward-compatible (consumed by #1243); the current selection path
     # does not read it, and make_pr_union fixtures omit it (jq yields null).
@@ -209,21 +267,43 @@ case "$args" in
       echo "[]"
     fi
     ;;
-  "issue list --state open --limit 300 --json number,createdAt,labels")
-    if [[ -f "$STUB_DIR/issue-list.json" ]]; then
-      cat "$STUB_DIR/issue-list.json"
+  api\ *repos/*/issues\?*)
+    # gh_issue_list_rest (#1601): the four converted dispatch issue scans now hit
+    # the REST issues endpoint instead of `gh issue list`. The fake-gh receives
+    # the literal {owner}/{repo} placeholder for current-repo scans and an explicit
+    # owner/repo for cross-repo (jit) scans. Parse state= / labels= / the repo
+    # segment from the query and serve the SAME fixtures the old `gh issue list`
+    # cases served — in REST shape (snake_case, no pull_request key), which
+    # gh_issue_list_rest remaps to the camelCase {number,createdAt,closedAt,labels}.
+    rest_path=$(printf '%s' "$args" | grep -oE 'repos/[^ ]+')
+    rest_repo=$(printf '%s' "$rest_path" | sed -E 's#repos/(.+)/issues\?.*#\1#')
+    rest_query="${rest_path#*\?}"
+    rest_state=""; rest_label=""
+    for kv in ${rest_query//&/ }; do
+      case "$kv" in
+        state=*)  rest_state="${kv#state=}" ;;
+        labels=*) rest_label="${kv#labels=}" ;;
+      esac
+    done
+    # The helper encodes a space as %20; decode for fixture-key comparison.
+    rest_label="${rest_label//%20/ }"
+    if [[ "$rest_repo" == "{owner}/{repo}" ]]; then
+      # Current-repo scans: open-ISSUE_LIST (no label) and the main-broken latch.
+      if [[ -z "$rest_label" ]]; then
+        if [[ -f "$STUB_DIR/issue-list.json" ]]; then cat "$STUB_DIR/issue-list.json"; else echo "[]"; fi
+      elif [[ "$rest_label" == "dispatch:main-broken" ]]; then
+        # #1085 per-episode latch read. Default [] (gate fires); a fixture models
+        # an already-open latch issue (gate falls through).
+        if [[ -f "$STUB_DIR/main-broken-issue-list.json" ]]; then cat "$STUB_DIR/main-broken-issue-list.json"; else echo "[]"; fi
+      else
+        echo "[]"
+      fi
     else
-      echo "[]"
-    fi
-    ;;
-  "issue list --label dispatch:main-broken --state open --json number")
-    # main_broken_latch: the per-episode latch read (#1085). Default [] (no open
-    # latch issue → gate fires); a main-broken-issue-list.json fixture models an
-    # already-open latch issue (gate falls through).
-    if [[ -f "$STUB_DIR/main-broken-issue-list.json" ]]; then
-      cat "$STUB_DIR/main-broken-issue-list.json"
-    else
-      echo "[]"
+      # Cross-repo JIT scan. Fixtures keyed by sanitized label + state (same key the
+      # old `issue list --repo` case used); absent fixture → empty list.
+      jit_key=$(printf '%s' "$rest_label" | tr '/:' '__')
+      jit_fixture="$STUB_DIR/jit-issues-${rest_state}-${jit_key}.json"
+      if [[ -f "$jit_fixture" ]]; then cat "$jit_fixture"; else echo "[]"; fi
     fi
     ;;
   "issue list --label dispatch:office-hours --state open --json number,createdAt")
@@ -255,7 +335,7 @@ case "$args" in
     fi
     ;;
   issue\ view\ *\ --json\ title,body,comments,number,state)
-    # issue-blocking / issue-sub-issues call: gh issue view <num> --json ...
+    # issue-blocking call: gh issue view <num> --json ...
     num=$(echo "$args" | awk '{print $3}')
     if [[ -f "$STUB_DIR/issue-${num}.json" ]]; then
       cat "$STUB_DIR/issue-${num}.json"
@@ -411,6 +491,15 @@ case "$args" in
     # $STUB_DIR/issue-labels-<num>.json supplies the labels object; absence means
     # the issue carries no labels.
     num=$(echo "$args" | awk '{print $3}')
+    # #1594: a per-issue HARD-failure marker makes the stub emit a deterministic
+    # (non-transient) error and exit 1 UNCONDITIONALLY, so gh_retry does NOT
+    # retry — it forwards the real failure. Mirrors the gh-fail-sub_issues-<N> /
+    # gh-fail-blocked_by-<num> marker convention. Absent by default → every
+    # existing test is unaffected. Checked BEFORE the transient marker below.
+    if [[ -f "$STUB_DIR/gh-fail-issue-labels-${num}" ]]; then
+      echo "gh: API error on issues/${num} --json labels" >&2
+      exit 1
+    fi
     # #1314: a per-issue fail-count sentinel makes the stub emit a transient
     # (HTTP 503) error and decrement the count, so gh_retry retries. Absent by
     # default → every existing test is unaffected; exhausted → serve labels.
@@ -481,7 +570,7 @@ case "$args" in
         ;;
     esac
     ;;
-  "pr list --state open --limit 300 --json number,isDraft,labels,statusCheckRollup,mergeable")
+  "pr list --state open --limit 300 --json number,isDraft,labels,headRefOid,mergeable")
     # dispatch-reconcile-ready's one fetch. $STUB_DIR/reconcile-pr-list.json
     # supplies the per-test PR array; absence means no open PRs.
     echo "pr list" >> "$STUB_DIR/gh-reconcile-pr-list.log"
@@ -506,6 +595,14 @@ case "$args" in
     # main_broken_sha: resolve origin/main's HEAD SHA. Default: healthy main.
     if [[ -f "$STUB_DIR/main-commit.json" ]]; then cat "$STUB_DIR/main-commit.json"
     else echo '{"sha":"mainhead0"}'; fi
+    ;;
+  api\ --paginate\ repos/*/commits/*/check-runs)
+    # dispatch_ci_verdict_rest (#1601): per-PR check-runs by headRefOid sha. The
+    # make_pr* builders write $STUB_DIR/check-runs-<sha>.json; serve it if present,
+    # else an empty set. (The non-paginate case below keeps serving main-check-runs.)
+    sha=$(printf '%s' "$args" | sed -E 's#.*commits/([^/]+)/check-runs.*#\1#')
+    if [[ -f "$STUB_DIR/check-runs-${sha}.json" ]]; then cat "$STUB_DIR/check-runs-${sha}.json"
+    else echo '{"check_runs":[]}'; fi
     ;;
   api\ repos/*/commits/*/check-runs)
     # main_broken_sha: CodeQL check-runs for main's HEAD. Default: none.
@@ -560,6 +657,21 @@ case "$args" in
   issue\ close\ *)
     # dispatch-close-resolved (#1456): gh issue close <num> --reason completed --comment ...
     echo "$args" >> "$STUB_DIR/gh-issue-close.log"
+    ;;
+  issue\ view\ *\ --json\ *)
+    # Generic catch-all for `gh issue view <num> --json <FIELDS>` calls that do
+    # not match the specific arms above (e.g. issue-sub-issues default/explicit
+    # field sets). Logs the FIELDS token so tests can assert which fields were
+    # requested, then serves issue-<num>.json if present, else a minimal default
+    # carrying only number/state/stateReason (the hot-path lean set, #1593).
+    num=$(printf '%s' "$args" | awk '{print $3}')
+    fields="${args##* --json }"
+    echo "$fields" >> "$STUB_DIR/gh-issue-view-fields.log"
+    if [[ -f "$STUB_DIR/issue-${num}.json" ]]; then
+      cat "$STUB_DIR/issue-${num}.json"
+    else
+      printf '{"number":%s,"state":"OPEN","stateReason":null}\n' "$num"
+    fi
     ;;
   *)
     echo "gh stub: unknown invocation: $args" >&2
@@ -738,11 +850,34 @@ teardown() {
 }
 trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
 
+# Write the REST check-runs fixture for <sha> from an uppercase GraphQL-shape
+# rollup. The real `commits/<sha>/check-runs` endpoint returns status/conclusion
+# in LOWERCASE (`completed`, `success`, `in_progress`), whereas the *_ROLLUP test
+# constants carry the UPPERCASE statusCheckRollup enum shape. Downcase here so the
+# fixture matches the real REST shape — this is what genuinely exercises
+# dispatch_ci_verdict_rest's `ascii_upcase` conversion. Feeding it already-
+# uppercase data would let the conversion be deleted with the suite still green
+# (the exact verdict-fidelity gap #1601's migration introduced). A null
+# conclusion (pending check run) is preserved as null, matching REST.
+write_rest_check_runs() {
+  local sha="$1" rollup_json="$2"
+  local rest
+  rest=$(jq -c 'map({status: (.status | ascii_downcase),
+                     conclusion: (.conclusion | if . == null then null else ascii_downcase end)})' \
+    <<<"$rollup_json")
+  printf '%s' "{\"check_runs\": $rest}" > "$STUB_DIR/check-runs-${sha}.json"
+}
+
 # Helper to build a PR JSON entry for the full PR list (dispatch-phase).
+# Emits headRefOid (a per-PR synthetic sha) instead of statusCheckRollup, and
+# writes the matching REST check-runs fixture so dispatch_ci_verdict_rest's
+# `commits/<sha>/check-runs` fetch resolves to the same rollup (#1601).
 make_pr() {
   local num="$1" branch="$2" is_draft="$3" labels_json="$4" rollup_json="$5"
-  printf '{"number":%s,"headRefName":"%s","isDraft":%s,"labels":%s,"statusCheckRollup":%s}' \
-    "$num" "$branch" "$is_draft" "$labels_json" "$rollup_json"
+  local sha="sha${num}"
+  write_rest_check_runs "$sha" "$rollup_json"
+  printf '{"number":%s,"headRefName":"%s","isDraft":%s,"labels":%s,"headRefOid":"%s"}' \
+    "$num" "$branch" "$is_draft" "$labels_json" "$sha"
 }
 
 # Helper to build a PR JSON entry for the single union PR list that
@@ -752,8 +887,10 @@ make_pr() {
 # existing 6-arg call sites keep working unchanged.
 make_pr_union() {
   local num="$1" branch="$2" created="$3" is_draft="$4" labels_json="$5" rollup_json="$6" closing_json="${7:-[]}"
-  printf '{"number":%s,"createdAt":"%s","headRefName":"%s","isDraft":%s,"labels":%s,"statusCheckRollup":%s,"closingIssuesReferences":%s}' \
-    "$num" "$created" "$branch" "$is_draft" "$labels_json" "$rollup_json" "$closing_json"
+  local sha="sha${num}"
+  write_rest_check_runs "$sha" "$rollup_json"
+  printf '{"number":%s,"createdAt":"%s","headRefName":"%s","isDraft":%s,"labels":%s,"headRefOid":"%s","closingIssuesReferences":%s}' \
+    "$num" "$created" "$branch" "$is_draft" "$labels_json" "$sha" "$closing_json"
 }
 
 # Like make_pr_union, but carries an explicit `mergeable` field (8th arg). The
@@ -762,8 +899,10 @@ make_pr_union() {
 # no-op). Use this when a select-target test needs a CONFLICTING PR.
 make_pr_union_mergeable() {
   local num="$1" branch="$2" created="$3" is_draft="$4" labels_json="$5" rollup_json="$6" mergeable="$7" closing_json="${8:-[]}"
-  printf '{"number":%s,"createdAt":"%s","headRefName":"%s","isDraft":%s,"labels":%s,"statusCheckRollup":%s,"mergeable":"%s","closingIssuesReferences":%s}' \
-    "$num" "$created" "$branch" "$is_draft" "$labels_json" "$rollup_json" "$mergeable" "$closing_json"
+  local sha="sha${num}"
+  write_rest_check_runs "$sha" "$rollup_json"
+  printf '{"number":%s,"createdAt":"%s","headRefName":"%s","isDraft":%s,"labels":%s,"headRefOid":"%s","mergeable":"%s","closingIssuesReferences":%s}' \
+    "$num" "$created" "$branch" "$is_draft" "$labels_json" "$sha" "$mergeable" "$closing_json"
 }
 
 # Like make_pr, but carries an explicit `mergeable` field (the 6th arg). The
@@ -773,8 +912,20 @@ make_pr_union_mergeable() {
 # set mergeable to CONFLICTING / MERGEABLE / UNKNOWN explicitly.
 make_pr_mergeable() {
   local num="$1" branch="$2" is_draft="$3" labels_json="$4" rollup_json="$5" mergeable="$6"
-  printf '{"number":%s,"headRefName":"%s","isDraft":%s,"labels":%s,"statusCheckRollup":%s,"mergeable":"%s"}' \
-    "$num" "$branch" "$is_draft" "$labels_json" "$rollup_json" "$mergeable"
+  local sha="sha${num}"
+  write_rest_check_runs "$sha" "$rollup_json"
+  printf '{"number":%s,"headRefName":"%s","isDraft":%s,"labels":%s,"headRefOid":"%s","mergeable":"%s"}' \
+    "$num" "$branch" "$is_draft" "$labels_json" "$sha" "$mergeable"
+}
+
+# Write JSON to a temp file and echo its path, for passing the open-PR list to a
+# child script via DISPATCH_PR_LIST_FILE (replaces the old inline
+# DISPATCH_PR_LIST=<json> env channel, #1646).
+pr_list_tmpfile() {
+  local f
+  f=$(mktemp "${TMPDIR:-/tmp}/test-pr-list.XXXXXX")
+  printf '%s' "$1" > "$f"
+  printf '%s' "$f"
 }
 
 # Green rollup (two passing check runs).
@@ -789,6 +940,78 @@ MIXED_ROLLUP='[{"status":"COMPLETED","conclusion":"FAILURE"},{"status":"IN_PROGR
 EMPTY_ROLLUP='[]'
 # No labels.
 NO_LABELS='[]'
+
+# ============================================================================
+# dispatch_ci_verdict_rest verdict-fidelity tests (#1601)
+# ============================================================================
+# The REST check-runs endpoint returns status/conclusion in LOWERCASE
+# (`completed`, `success`, `timed_out`); dispatch_classify_rollup matches the
+# UPPERCASE statusCheckRollup enum. dispatch_ci_verdict_rest bridges the two by
+# `ascii_upcase`ing every entry before classifying. These tests feed the helper
+# the real lowercase REST shape directly (NOT the make_pr* uppercase fixtures)
+# and assert hardcoded verdicts, so the conversion is genuinely exercised:
+# delete the `ascii_upcase` from dispatch_ci_verdict_rest and the passing cases
+# below flip to `pending` (lowercase `success` no longer matches `SUCCESS`),
+# turning the suite RED. They also cover conclusions the selection fixtures
+# never use (neutral-only, skipped, timed_out, cancelled, action_required) and
+# the DISPATCH_CI_VERDICT_CACHE memoisation hit.
+echo "=== dispatch_ci_verdict_rest (verdict fidelity) ==="
+
+# Each case: write a lowercase REST check-runs fixture for a synthetic sha, then
+# call the real helper (sourced from the copied lib.sh) against the stub gh.
+verdict_rest_case() {
+  local label="$1" sha="$2" check_runs_json="$3" expected="$4"
+  printf '%s' "{\"check_runs\": $check_runs_json}" > "$STUB_DIR/check-runs-${sha}.json"
+  local actual
+  actual=$(source "$TMPDIR_TEST/lib.sh"; dispatch_ci_verdict_rest "$sha")
+  assert_eq "$label" "$expected" "$actual"
+}
+
+echo "Test: REST verdict fidelity across conclusions"
+setup
+verdict_rest_case "verdict: lowercase success → passing" \
+  "sha-success" '[{"status":"completed","conclusion":"success"}]' "passing"
+verdict_rest_case "verdict: neutral-only → passing" \
+  "sha-neutral" '[{"status":"completed","conclusion":"neutral"}]' "passing"
+verdict_rest_case "verdict: skipped-only → passing" \
+  "sha-skipped" '[{"status":"completed","conclusion":"skipped"}]' "passing"
+verdict_rest_case "verdict: success + neutral + skipped → passing" \
+  "sha-mixed-pass" '[{"status":"completed","conclusion":"success"},{"status":"completed","conclusion":"neutral"},{"status":"completed","conclusion":"skipped"}]' "passing"
+verdict_rest_case "verdict: timed_out → failing" \
+  "sha-timeout" '[{"status":"completed","conclusion":"timed_out"}]' "failing"
+verdict_rest_case "verdict: cancelled → failing" \
+  "sha-cancelled" '[{"status":"completed","conclusion":"cancelled"}]' "failing"
+verdict_rest_case "verdict: action_required → failing" \
+  "sha-action" '[{"status":"completed","conclusion":"action_required"}]' "failing"
+verdict_rest_case "verdict: failure → failing" \
+  "sha-failure" '[{"status":"completed","conclusion":"failure"}]' "failing"
+verdict_rest_case "verdict: in_progress (null conclusion) → pending" \
+  "sha-inprog" '[{"status":"in_progress","conclusion":null}]' "pending"
+verdict_rest_case "verdict: queued → pending" \
+  "sha-queued" '[{"status":"queued","conclusion":null}]' "pending"
+verdict_rest_case "verdict: failing + still-running → failing (failure wins)" \
+  "sha-mixed-fail" '[{"status":"completed","conclusion":"failure"},{"status":"in_progress","conclusion":null}]' "failing"
+verdict_rest_case "verdict: empty check-runs → pending" \
+  "sha-empty" '[]' "pending"
+teardown
+
+echo "Test: REST verdict cache hit serves stored verdict without re-fetch"
+setup
+# Prime the cache with a passing verdict, then overwrite the fixture with a
+# failing one. A second call must return the cached `passing` (no REST call),
+# proving the DISPATCH_CI_VERDICT_CACHE memoisation short-circuit.
+export DISPATCH_CI_VERDICT_CACHE="$TMPDIR_TEST/ci-verdict-cache"
+mkdir -p "$DISPATCH_CI_VERDICT_CACHE"
+printf '%s' '{"check_runs":[{"status":"completed","conclusion":"success"}]}' \
+  > "$STUB_DIR/check-runs-sha-cache.json"
+primed=$(source "$TMPDIR_TEST/lib.sh"; dispatch_ci_verdict_rest "sha-cache")
+assert_eq "verdict cache: first call → passing (and primes cache)" "passing" "$primed"
+printf '%s' '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/check-runs-sha-cache.json"
+cached=$(source "$TMPDIR_TEST/lib.sh"; dispatch_ci_verdict_rest "sha-cache")
+assert_eq "verdict cache: second call → cached passing despite changed fixture" "passing" "$cached"
+unset DISPATCH_CI_VERDICT_CACHE
+teardown
 
 # ============================================================================
 # dispatch-phase tests
@@ -984,15 +1207,16 @@ result=$("$TMPDIR_TEST/dispatch-phase" "6")
 assert_eq "issue 6 does not match branch 60-foo → plan" "plan" "$result"
 teardown
 
-# 13. DISPATCH_PR_LIST is used in place of a self-issued gh pr list.
-echo "Test: DISPATCH_PR_LIST overrides self-fetch"
+# 13. DISPATCH_PR_LIST_FILE is used in place of a self-issued gh pr list.
+echo "Test: DISPATCH_PR_LIST_FILE overrides self-fetch"
 setup
 # pr-list-full.json is empty: a self-fetch would yield implement. The fix-checks
-# PR lives only in the env var, so a fix-checks result proves the env var won.
+# PR lives only in the file channel, so a fix-checks result proves it won.
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 ENV_LIST='['"$(make_pr 42 "42-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-result=$(DISPATCH_PR_LIST="$ENV_LIST" "$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "DISPATCH_PR_LIST used over self-fetch → fix-checks" "fix-checks" "$result"
+PR_LIST_F=$(pr_list_tmpfile "$ENV_LIST")
+result=$(DISPATCH_PR_LIST_FILE="$PR_LIST_F" "$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "DISPATCH_PR_LIST_FILE used over self-fetch → fix-checks" "fix-checks" "$result"
 teardown
 
 # 14. Draft + mergeable=CONFLICTING → fix-conflicts (highest-priority outcome).
@@ -1150,18 +1374,19 @@ assert_eq "branch arg pending draft → not-ready (token)" "waiting" "$CI_READY_
 assert_eq "branch arg pending draft → not-ready (exit 1)" "1" "$CI_READY_RC"
 teardown
 
-# 9. DISPATCH_PR_LIST reuse: predicate reads env-provided list without gh.
-echo "Test: DISPATCH_PR_LIST overrides self-fetch"
+# 9. DISPATCH_PR_LIST_FILE reuse: predicate reads file-provided list without gh.
+echo "Test: DISPATCH_PR_LIST_FILE overrides self-fetch"
 setup
 # pr-list-full.json is empty: a self-fetch would yield ready (no PR). The
-# pending draft lives only in the env var, so a not-ready result proves the
-# env var won and no gh pr list was issued.
+# pending draft lives only in the file channel, so a not-ready result proves it
+# won and no gh pr list was issued.
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 ENV_LIST='['"$(make_pr 42 "42-waiting" "true" "$NO_LABELS" "$PENDING_ROLLUP")"']'
-CI_READY_OUT=$(DISPATCH_PR_LIST="$ENV_LIST" "$TMPDIR_TEST/dispatch-ci-ready" "42") && CI_READY_RC=0 || CI_READY_RC=$?
-assert_eq "DISPATCH_PR_LIST used over self-fetch → waiting (token)" "waiting" "$CI_READY_OUT"
-assert_eq "DISPATCH_PR_LIST used over self-fetch → not-ready (exit 1)" "1" "$CI_READY_RC"
-assert_eq "DISPATCH_PR_LIST reuse issues no gh pr list" "0" \
+PR_LIST_F=$(pr_list_tmpfile "$ENV_LIST")
+CI_READY_OUT=$(DISPATCH_PR_LIST_FILE="$PR_LIST_F" "$TMPDIR_TEST/dispatch-ci-ready" "42") && CI_READY_RC=0 || CI_READY_RC=$?
+assert_eq "DISPATCH_PR_LIST_FILE used over self-fetch → waiting (token)" "waiting" "$CI_READY_OUT"
+assert_eq "DISPATCH_PR_LIST_FILE used over self-fetch → not-ready (exit 1)" "1" "$CI_READY_RC"
+assert_eq "DISPATCH_PR_LIST_FILE reuse issues no gh pr list" "0" \
   "$([[ -f "$STUB_DIR/gh-pr-list-calls.log" ]] && wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ' || echo 0)"
 teardown
 
@@ -1175,6 +1400,31 @@ printf '[%s]\n' "$(make_pr_mergeable 10 "42-my-feature" "true" "$NO_LABELS" "$PE
 ci_ready_run "42"
 assert_eq "draft + CONFLICTING + pending → ready (token)" "ready" "$CI_READY_OUT"
 assert_eq "draft + CONFLICTING + pending → ready (exit 0)" "0" "$CI_READY_RC"
+teardown
+
+# #1646: a >128KB open-PR list passed via DISPATCH_PR_LIST_FILE returns the correct
+# verdict. The equivalent inline DISPATCH_PR_LIST env var would E2BIG the exec.
+echo "Test: ci-ready over >128KB DISPATCH_PR_LIST_FILE → correct verdict"
+setup
+PAD=$(printf 'x%.0s' {1..143360})
+LIST='['"$(make_pr 10 "42-feature" "true" "$NO_LABELS" "$PENDING_ROLLUP")"','"$(make_pr 20 "99-pad" "false" "[{\"name\":\"$PAD\"}]" "$GREEN_ROLLUP")"']'
+BIG_FILE=$(pr_list_tmpfile "$LIST")
+assert_eq "ci-ready file-channel fixture exceeds 128KB" "ok" "$([[ "$(wc -c < "$BIG_FILE")" -gt 131072 ]] && echo ok || echo too-small)"
+CI_OUT=$(DISPATCH_PR_LIST_FILE="$BIG_FILE" "$TMPDIR_TEST/dispatch-ci-ready" "42") && CI_RC=0 || CI_RC=$?
+assert_eq ">128KB file channel → correct verdict (waiting)" "waiting" "$CI_OUT"
+assert_eq ">128KB file channel → not-ready exit 1" "1" "$CI_RC"
+teardown
+
+# #1646: an unreadable DISPATCH_PR_LIST_FILE is an environment/IO error, surfaced
+# as exit 2 — distinct from the readiness exits 0 (ready) / 1 (not-ready).
+echo "Test: ci-ready with unreadable DISPATCH_PR_LIST_FILE → exit 2"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+MISSING="$TMPDIR_TEST/does-not-exist-pr-list.json"
+CI_ERR=$(DISPATCH_PR_LIST_FILE="$MISSING" "$TMPDIR_TEST/dispatch-ci-ready" "42" 2>&1 >/dev/null) && CI_RC=0 || CI_RC=$?
+assert_eq "unreadable DISPATCH_PR_LIST_FILE → exit 2 (env error, not a readiness verdict)" "2" "$CI_RC"
+case "$CI_ERR" in *"not readable"*) ok=yes ;; *) ok="no:$CI_ERR" ;; esac
+assert_eq "unreadable file → clear stderr error" "yes" "$ok"
 teardown
 
 # ============================================================================
@@ -1210,14 +1460,15 @@ result=$("$TMPDIR_TEST/dispatch-find-pr" "42")
 assert_eq "no PR → empty output" "" "$result"
 teardown
 
-# 4. DISPATCH_PR_LIST overrides self-fetch.
+# 4. DISPATCH_PR_LIST_FILE overrides self-fetch.
 # pr-list-full.json is empty: a self-fetch would yield empty. The PR lives only
-# in the env var, so a non-empty result proves the env var won.
-echo "Test: DISPATCH_PR_LIST overrides self-fetch"
+# in the file channel, so a non-empty result proves it won.
+echo "Test: DISPATCH_PR_LIST_FILE overrides self-fetch"
 setup
 printf '[]\n' > "$STUB_DIR/pr-list-full.json"
-result=$(DISPATCH_PR_LIST='[{"number":670,"headRefName":"669-x"}]' "$TMPDIR_TEST/dispatch-find-pr" "669")
-assert_eq "DISPATCH_PR_LIST used over self-fetch → PR number" "670" "$result"
+PR_LIST_F=$(pr_list_tmpfile '[{"number":670,"headRefName":"669-x"}]')
+result=$(DISPATCH_PR_LIST_FILE="$PR_LIST_F" "$TMPDIR_TEST/dispatch-find-pr" "669")
+assert_eq "DISPATCH_PR_LIST_FILE used over self-fetch → PR number" "670" "$result"
 teardown
 
 # 5. Issue-prefix disambiguation: issue 6 must not match branch "60-foo".
@@ -1274,25 +1525,26 @@ result=$("$TMPDIR_TEST/dispatch-find-pr" "822")
 assert_eq "genuine empty → empty" "" "$result"
 teardown
 
-# 10. DISPATCH_PR_LIST supplied without matching branch; cross-check resolves PR.
-# The retry (step 1) is skipped when DISPATCH_PR_LIST is set — the caller owns
+# 10. DISPATCH_PR_LIST_FILE supplied without matching branch; cross-check resolves PR.
+# The retry (step 1) is skipped when DISPATCH_PR_LIST_FILE is set — the caller owns
 # the list. The cross-check (step 2) still runs regardless, using a different gh
 # endpoint that the caller cannot pre-supply.
-echo "Test: DISPATCH_PR_LIST no match + cross-check OPEN reference → PR number"
+echo "Test: DISPATCH_PR_LIST_FILE no match + cross-check OPEN reference → PR number"
 setup
 printf '[{"number":850,"headRefName":"999-unrelated"}]\n' > "$STUB_DIR/pr-list-full.json"
 printf '{"closedByPullRequestsReferences":[{"number":851,"state":"OPEN"}]}\n' \
   > "$STUB_DIR/issue-closing-prs-822.json"
-result=$(DISPATCH_PR_LIST='[{"number":850,"headRefName":"999-unrelated"}]' \
+PR_LIST_F=$(pr_list_tmpfile '[{"number":850,"headRefName":"999-unrelated"}]')
+result=$(DISPATCH_PR_LIST_FILE="$PR_LIST_F" \
   "$TMPDIR_TEST/dispatch-find-pr" "822")
-assert_eq "DISPATCH_PR_LIST no prefix match; cross-check finds OPEN PR → PR number" "851" "$result"
+assert_eq "DISPATCH_PR_LIST_FILE no prefix match; cross-check finds OPEN PR → PR number" "851" "$result"
 # Verify no self-fetch: pr_list_open (number,headRefName) was not called.
 if [[ -f "$STUB_DIR/gh-find-pr-calls.log" ]]; then
   call_count=$(wc -l < "$STUB_DIR/gh-find-pr-calls.log")
 else
   call_count=0
 fi
-assert_eq "no self-fetch gh pr list calls when DISPATCH_PR_LIST set" "0" "$call_count"
+assert_eq "no self-fetch gh pr list calls when DISPATCH_PR_LIST_FILE set" "0" "$call_count"
 teardown
 
 # 11. #1312: No truncation past 30 PRs (proves the --limit 300 fix).
@@ -1360,7 +1612,7 @@ echo "=== dispatch-route ==="
 # one call and prints exactly one directive. The git stub serves the worktree
 # toplevel from worktree-toplevel.txt; the gh stub serves the full-field open-PR
 # list from pr-list-full.json and logs each such call to gh-pr-list-calls.log, so
-# a test can prove the single DISPATCH_PR_LIST fetch is reused, not re-issued.
+# a test can prove the single DISPATCH_PR_LIST_FILE fetch is reused, not re-issued.
 # dispatch-provision-worktree is stubbed in setup() to a no-op exit 0 by default;
 # tests 17-20 drive its conflict/failure branches via $STUB_DIR/provision-exit.
 route_run() {
@@ -1429,7 +1681,7 @@ assert_eq "draft + failing → INVOKE /fix-checks (exit 0)" "0" "$ROUTE_RC"
 teardown
 
 # 3. Draft + green + no label → INVOKE /qa-fix.
-# Also assert exactly one gh pr list was issued, proving DISPATCH_PR_LIST reuse
+# Also assert exactly one gh pr list was issued, proving DISPATCH_PR_LIST_FILE reuse
 # across both dispatch-ci-ready calls and dispatch-phase.
 echo "Test: draft + green + no label → INVOKE /qa-fix"
 setup
@@ -1704,12 +1956,17 @@ teardown
 # 24. No-PR unplanned issue that IS a spent epic → INVOKE /resolve-epic (#1456).
 # Same no-PR-unplanned fixtures as test #1 (no dispatch:planned → plan phase, no
 # statements config → not a parse-job), PLUS a sub-issues fixture whose children
-# are all CLOSED/COMPLETED. The plan arm runs dispatch-epic-resolved-candidate,
+# are all CLOSED/COMPLETED. Since #1594 the candidate also gates on a configured
+# epic label, so this test additionally writes epic.json AND labels the issue
+# "epic" — without both the candidate would exit 1 at the gate and the route would
+# fall through to /plan-issue. The plan arm runs dispatch-epic-resolved-candidate,
 # which exits 0, so the route forks to /resolve-epic instead of /plan-issue.
 echo "Test: no PR + spent epic → INVOKE /resolve-epic"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/55-epic" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-55.json"
 printf '[{"number":561},{"number":562}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"c","body":"","comments":[],"number":561,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-561.json"
@@ -1773,6 +2030,8 @@ echo "=== dispatch-epic-resolved-candidate ==="
 # 1. Two children, both CLOSED/COMPLETED → candidate (exit 0).
 echo "Test: candidate — 2 children all CLOSED/COMPLETED → exit 0"
 setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-61.json"
 printf '[{"number":611},{"number":612}]\n' > "$STUB_DIR/subissues-61.json"
 printf '{"title":"c","body":"","comments":[],"number":611,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-611.json"
@@ -1785,6 +2044,8 @@ teardown
 # 2. Case-insensitive: a lowercase closed/completed child still → candidate.
 echo "Test: candidate — lowercase closed/completed → exit 0"
 setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-62.json"
 printf '[{"number":621}]\n' > "$STUB_DIR/subissues-62.json"
 printf '{"title":"c","body":"","comments":[],"number":621,"state":"closed","stateReason":"completed"}\n' \
   > "$STUB_DIR/issue-621.json"
@@ -1795,6 +2056,8 @@ teardown
 # 3. No sub-issues → not a candidate (exit 1).
 echo "Test: not a candidate — zero sub-issues → exit 1"
 setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-63.json"
 printf '[]\n' > "$STUB_DIR/subissues-63.json"
 if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 63 >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "not a candidate: zero sub-issues → exit 1" "1" "$rc"
@@ -1803,6 +2066,8 @@ teardown
 # 4. An OPEN child alongside a closed-completed one → not a candidate (exit 1).
 echo "Test: not a candidate — an OPEN child → exit 1"
 setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-64.json"
 printf '[{"number":641},{"number":642}]\n' > "$STUB_DIR/subissues-64.json"
 printf '{"title":"c","body":"","comments":[],"number":641,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-641.json"
@@ -1815,6 +2080,8 @@ teardown
 # 5. A CLOSED child with stateReason NOT_PLANNED → not a candidate (exit 1).
 echo "Test: not a candidate — CLOSED/NOT_PLANNED child → exit 1"
 setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-65.json"
 printf '[{"number":651}]\n' > "$STUB_DIR/subissues-65.json"
 printf '{"title":"c","body":"","comments":[],"number":651,"state":"CLOSED","stateReason":"NOT_PLANNED"}\n' \
   > "$STUB_DIR/issue-651.json"
@@ -1825,6 +2092,8 @@ teardown
 # 6. A CLOSED child with NO stateReason key (null) → not a candidate (exit 1).
 echo "Test: not a candidate — CLOSED child with null stateReason → exit 1"
 setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-66.json"
 printf '[{"number":661}]\n' > "$STUB_DIR/subissues-66.json"
 printf '{"title":"c","body":"","comments":[],"number":661,"state":"CLOSED"}\n' \
   > "$STUB_DIR/issue-661.json"
@@ -1835,9 +2104,109 @@ teardown
 # 7. issue-sub-issues hard failure → exit 3 (distinct from "not a candidate").
 echo "Test: hard error — issue-sub-issues fails → exit 3"
 setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-67.json"
 touch "$STUB_DIR/gh-fail-sub_issues-67"
 if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 67 >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "hard error: issue-sub-issues fails → exit 3" "3" "$rc"
+teardown
+
+# --- Epic-label gate (#1594) ------------------------------------------------
+# The gate runs BEFORE the sub-issues check: an issue is a candidate only if it
+# carries a configured epic label. Unconfigured → never a candidate. A real
+# label-fetch failure → exit 3 (distinct from "not a candidate").
+
+# GATE-1. Epic configured, but the issue LACKS the configured label, even though
+# all children are CLOSED/COMPLETED (would be a candidate without the gate) → the
+# gate blocks it: exit 1.
+echo "Test: gate — epic configured but issue lacks the label → exit 1"
+setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"enhancement"}]}\n' > "$STUB_DIR/issue-labels-68.json"
+printf '[{"number":681}]\n' > "$STUB_DIR/subissues-68.json"
+printf '{"title":"c","body":"","comments":[],"number":681,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-681.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 68 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "gate: configured but unlabeled would-be candidate → exit 1" "1" "$rc"
+teardown
+
+# GATE-2. NO epic config at all → never a candidate (no-config safe default),
+# regardless of sub-issue state (all children CLOSED/COMPLETED here).
+echo "Test: gate — no epic config → exit 1 regardless of sub-issue state"
+setup
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-69.json"
+printf '[{"number":691}]\n' > "$STUB_DIR/subissues-69.json"
+printf '{"title":"c","body":"","comments":[],"number":691,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-691.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 69 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "gate: no epic config → exit 1 (no-config safe default)" "1" "$rc"
+teardown
+
+# GATE-3. Epic configured, but the label fetch HARD-fails (deterministic, not
+# transient — gh_retry forwards it) → exit 3, distinct from "not a candidate".
+echo "Test: gate — label fetch hard failure → exit 3"
+setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+touch "$STUB_DIR/gh-fail-issue-labels-70"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 70 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "gate: label fetch hard failure → exit 3" "3" "$rc"
+teardown
+
+# ============================================================================
+# issue-sub-issues field-forwarding tests (#1593)
+# ============================================================================
+echo ""
+echo "=== issue-sub-issues field forwarding ==="
+
+# These tests run the REAL issue-sub-issues script (not the fake that setup()
+# installs for dispatch-trace-leaf). After setup, the fake is overwritten with
+# the real script so any --json field set it requests hits the stub and is
+# logged to gh-issue-view-fields.log. This is the only way to assert which
+# fields the real script actually requests.
+
+# A. Default fields: one child → stub logs exactly "number,state,stateReason".
+echo "Test: issue-sub-issues — default fields → number,state,stateReason"
+setup
+cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
+chmod +x "$TMPDIR_TEST/issue-sub-issues"
+printf '[{"number":801}]\n' > "$STUB_DIR/subissues-80.json"
+"$TMPDIR_TEST/issue-sub-issues" 80 >/dev/null
+logged=$(cat "$STUB_DIR/gh-issue-view-fields.log" 2>/dev/null || true)
+assert_eq "default fields: logged fields" "number,state,stateReason" "$logged"
+teardown
+
+# B. Default fields: no body, no comments in the logged field set.
+echo "Test: issue-sub-issues — default fields contain no body or comments"
+setup
+cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
+chmod +x "$TMPDIR_TEST/issue-sub-issues"
+printf '[{"number":811}]\n' > "$STUB_DIR/subissues-81.json"
+"$TMPDIR_TEST/issue-sub-issues" 81 >/dev/null
+logged=$(cat "$STUB_DIR/gh-issue-view-fields.log" 2>/dev/null || true)
+assert_eq "default fields: no body in field set" "0" "$(printf '%s' "$logged" | grep -c 'body' || true)"
+assert_eq "default fields: no comments in field set" "0" "$(printf '%s' "$logged" | grep -c 'comments' || true)"
+teardown
+
+# C. Explicit fields arg: forwarded verbatim → stub logs exactly "number,state".
+echo "Test: issue-sub-issues — explicit fields arg forwarded verbatim"
+setup
+cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
+chmod +x "$TMPDIR_TEST/issue-sub-issues"
+printf '[{"number":821}]\n' > "$STUB_DIR/subissues-82.json"
+"$TMPDIR_TEST/issue-sub-issues" 82 "number,state" >/dev/null
+logged=$(cat "$STUB_DIR/gh-issue-view-fields.log" 2>/dev/null || true)
+assert_eq "explicit fields: logged fields" "number,state" "$logged"
+teardown
+
+# D. Two children: each child produces one log line → two lines total.
+echo "Test: issue-sub-issues — two children → two field log entries"
+setup
+cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
+chmod +x "$TMPDIR_TEST/issue-sub-issues"
+printf '[{"number":831},{"number":832}]\n' > "$STUB_DIR/subissues-83.json"
+"$TMPDIR_TEST/issue-sub-issues" 83 >/dev/null
+line_count=$(wc -l < "$STUB_DIR/gh-issue-view-fields.log" | tr -d ' ')
+assert_eq "two children: two log lines" "2" "$line_count"
 teardown
 
 # ============================================================================
@@ -2016,8 +2385,8 @@ teardown
 echo ""
 echo "=== dispatch-select-target ==="
 
-# dispatch-select-target fetches one union PR list and exports it via
-# DISPATCH_PR_LIST, so each per-PR dispatch-phase call reuses it. The harness
+# dispatch-select-target fetches one union PR list and shares it via
+# DISPATCH_PR_LIST_FILE, so each per-PR dispatch-phase call reuses it. The harness
 # only needs to seed that single list.
 
 setup_union_pr_list() {
@@ -2062,7 +2431,7 @@ FAKE
 # liveness parsing matches production exactly: each named worktree basename gets
 # a live session row (sessionId `s-<name>`). The fake branches on its first arg:
 # `agents` returns the JSON payload (the liveness query); any other invocation —
-# `--resume <id>` or `/office-hours` — prints `LAUNCH: $*` so a test can assert
+# `attach <id>` or `/office-hours` — prints `LAUNCH: $*` so a test can assert
 # which launch fired. Wires both OFFICE_HOURS_CLAUDE_CMD (the entry script's
 # launch target) and CLAUDE_AGENTS_CMD (the selector subprocess's liveness query)
 # at the same fake, so a single binary serves both the query and the launch.
@@ -2082,7 +2451,7 @@ if [[ "${1:-}" == "agents" ]]; then
   cat "$(cd "$(dirname "$0")/.." && pwd)/claude-payload.json"
   exit 0
 fi
-# A launch (`--resume <id>` or `/office-hours`): record which one fired.
+# A launch (`attach <id>` or `/office-hours`): record which one fired.
 echo "LAUNCH: $*"
 exit 0
 FAKE
@@ -2098,7 +2467,7 @@ FAKE
 # style) entry path. Serves `agents` from an oh-registry.json (starts empty); on
 # `--bg` records argv + $PWD and registers {"sessionId":"sess-<name>",...} under
 # --name (so dispatch-spawn-job's verify + dispatch-spawn-office-hours' resolve
-# both find it); prints `LAUNCH: $*` on anything else (the entry's --resume).
+# both find it); prints `LAUNCH: $*` on anything else (the entry's attach).
 office_hours_fresh_fake_claude() {
   printf '[]' > "$TMPDIR_TEST/oh-registry.json"
   cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
@@ -2138,7 +2507,7 @@ setup
 # PR 10 in fix-checks phase (no CI green), PR 20 in qa phase (CI green, no label).
 UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-qa-me" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":99,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":99,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 # No worktrees for these branches.
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -2224,7 +2593,7 @@ setup_union_pr_list "$UNION"
 # Issue #10 is parked (dispatch:office-hours); issue #20 is not. Neither carries
 # "help wanted", so neither competes in the issue queue — they exist here only as
 # the office-hours-label source the PR loop reads via ISSUE_LABELS_JSON.
-printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch:office-hours"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[]}]\n' \
+printf '[{"number":10,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch:office-hours"}]},{"number":20,"created_at":"2024-01-02T00:00:00Z","labels":[]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -2235,7 +2604,7 @@ teardown
 echo "Test: no eligible PR → help-wanted issue"
 setup
 echo '[]' > "$STUB_DIR/pr-list-union.json"
-printf '[{"number":55,"createdAt":"2024-03-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-03-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "no PR → help-wanted issue" "issue 55" "$result"
@@ -2266,7 +2635,7 @@ teardown
 echo "Test: --qa mode with no QA PR → empty"
 setup
 echo '[]' > "$STUB_DIR/pr-list-union.json"
-printf '[{"number":77,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":77,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
 assert_eq "--qa mode no QA PR → empty" "empty" "$result"
@@ -2277,7 +2646,7 @@ echo "Test: all PRs done → help-wanted issue"
 setup
 UNION='['"$(make_pr_union 10 "10-done-pr" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":33,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":33,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "done PRs skipped; help-wanted issue returned" "issue 33" "$result"
@@ -2341,7 +2710,7 @@ UNION+="$(make_pr_union 10 "10-verify" "2024-01-01T00:00:00Z" "true" "$NO_LABELS
 UNION+="$(make_pr_union 20 "20-qa" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"
 UNION+=']'
 setup_union_pr_list "$UNION"
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "fix-checks PR beats QA PR and issue (fix-checks > qa > issue)" "pr 10 10-verify fix-checks" "$result"
@@ -2352,7 +2721,7 @@ echo "Test: QA PR beats help-wanted issue"
 setup
 UNION='['"$(make_pr_union 20 "20-qa" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "QA PR beats help-wanted issue" "pr 20 20-qa qa" "$result"
@@ -2380,7 +2749,7 @@ setup
 # PR 10 in waiting phase (pending CI); no other PRs.
 UNION='['"$(make_pr_union 10 "10-waiting" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP")"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "waiting PR skipped; help-wanted issue returned" "issue 55" "$result"
@@ -2467,7 +2836,7 @@ setup
 # Seed a fix-checks PR + help-wanted issue — both must be ignored once the gate trips.
 UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
 printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
@@ -2499,7 +2868,7 @@ echo "Test: main red + open latch issue → falls through to normal selection"
 setup
 UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
 printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
@@ -2717,7 +3086,7 @@ echo "Test: issue with live-session worktree skipped; next-oldest issue chosen"
 setup
 setup_union_pr_list '[]'
 # Issue 55 is older, issue 66 is newer. Issue 55 has a 55-* worktree.
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD def456\nbranch refs/heads/55-some-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
@@ -2731,7 +3100,7 @@ teardown
 echo "Test: issue with orphan worktree is not skipped"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD def456\nbranch refs/heads/55-some-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
@@ -2749,7 +3118,7 @@ teardown
 echo "Test: issue with reserved worktree (no live session) skipped; next-oldest chosen"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD def456\nbranch refs/heads/55-some-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
@@ -2767,7 +3136,7 @@ teardown
 echo "Test: lone live-session-worktree'd issue → empty"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD def456\nbranch refs/heads/55-some-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude "55-some-feature"
@@ -2782,7 +3151,7 @@ UNION='['"$(make_pr_union 20 "20-qa" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" 
 setup_union_pr_list "$UNION"
 # The help-wanted issue would normally beat the QA PR, but a live session owns
 # its worktree.
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD def456\nbranch refs/heads/55-some-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude "55-some-feature"
@@ -2794,7 +3163,7 @@ teardown
 echo "Test: issue 6 not masked by worktree on branch 60-foo"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":6,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":6,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 # Worktree exists for 60-foo, not for 6-*.
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/60-foo\nHEAD def456\nbranch refs/heads/60-foo\n\n' \
   > "$STUB_DIR/worktree-list.txt"
@@ -2821,7 +3190,7 @@ UNION+=']'
 setup_union_pr_list "$UNION"
 # Issues 100/200 are the closing issues — they carry the topic label that the
 # PRs inherit. No "help wanted" label, so they are not themselves queue items.
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -2834,7 +3203,7 @@ echo "Test: testing-infrastructure issue beats issue with no topic label"
 setup
 setup_union_pr_list '[]'
 # Issue 400 (older) has no topic label; issue 300 (newer) is testing infrastructure.
-printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"testing infrastructure"}]}]\n' \
+printf '[{"number":400,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"testing infrastructure"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -2850,7 +3219,7 @@ setup
 # defaults to []). Issue 500 is a help-wanted bug.
 UNION='['"$(make_pr_union 10 "10-no-closing" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":500,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]}]\n' \
+printf '[{"number":500,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -2871,7 +3240,7 @@ UNION+=']'
 setup_union_pr_list "$UNION"
 # Issues 100/200 are the closing issues — they carry the topic label that the
 # PRs inherit. No "help wanted" label, so they are not themselves queue items.
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -2891,7 +3260,7 @@ UNION+="$(make_pr_union 10 "10-bug-priority-pr" "2024-01-02T00:00:00Z" "true" "$
 UNION+=']'
 setup_union_pr_list "$UNION"
 # Issue 100 carries both `bug` and `priority`; issue 200 carries only `bug`.
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -2911,7 +3280,7 @@ UNION+="$(make_pr_union 20 "20-bug-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS
 UNION+=']'
 setup_union_pr_list "$UNION"
 # Issue 100 carries both `dispatch` and `priority`; issue 200 carries only `bug`.
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch"},{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch"},{"name":"priority"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -2936,7 +3305,7 @@ UNION+=']'
 setup_union_pr_list "$UNION"
 # Each PR's closing issue carries bug + priority; issue 886 is a lower-priority
 # (no `priority`) bug help-wanted issue with no worktree.
-printf '%s\n' '[{"number":896,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":806,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":892,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":879,"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":886,"createdAt":"2026-05-02T00:00:00Z","labels":[{"name":"bug"},{"name":"help wanted"}]}]' \
+printf '%s\n' '[{"number":896,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":806,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":892,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":879,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":886,"created_at":"2026-05-02T00:00:00Z","labels":[{"name":"bug"},{"name":"help wanted"}]}]' \
   > "$STUB_DIR/issue-list.json"
 # Worktrees exist for all four PR branches; none for issue 886.
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/898-review\nHEAD a1\nbranch refs/heads/898-review\n\nworktree /worktrees/895-review\nHEAD a2\nbranch refs/heads/895-review\n\nworktree /worktrees/893-qa\nHEAD a3\nbranch refs/heads/893-qa\n\nworktree /worktrees/883-qa\nHEAD a4\nbranch refs/heads/883-qa\n\n' \
@@ -2960,7 +3329,7 @@ UNION+=']'
 setup_union_pr_list "$UNION"
 # Issue 100 carries `security`; issue 200 carries only `bug`. No "help wanted"
 # label, so they are not themselves queue items.
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"security"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"security"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -2979,7 +3348,7 @@ UNION+="$(make_pr_union 10 "10-security-priority-pr" "2024-01-02T00:00:00Z" "tru
 UNION+=']'
 setup_union_pr_list "$UNION"
 # Issue 100 carries both `security` and `priority`; issue 200 carries only `security`.
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"security"},{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"security"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"security"},{"name":"priority"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"security"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -2994,7 +3363,7 @@ setup
 setup_union_pr_list '[]'
 # Issue 400 (older) has no topic label (resolves to `other`); issue 300 (newer)
 # is security.
-printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+printf '[{"number":400,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3009,7 +3378,7 @@ setup
 setup_union_pr_list '[]'
 # Issue 400 (older) is bug; issue 300 (newer) is security. security is the first
 # topic category, so it wins regardless of age.
-printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+printf '[{"number":400,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":300,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3027,7 +3396,7 @@ UNION+="$(make_pr_union 20 "20-budget-pr" "2024-01-01T00:00:00Z" "true" "$NO_LAB
 UNION+="$(make_pr_union 10 "10-dispatch-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
 UNION+=']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"budget"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"budget"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3045,7 +3414,7 @@ UNION+="$(make_pr_union 20 "20-landing-pr" "2024-01-02T00:00:00Z" "true" "$NO_LA
 UNION+="$(make_pr_union 10 "10-dispatch-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
 UNION+=']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"landing"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"landing"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3063,7 +3432,7 @@ UNION+="$(make_pr_union 20 "20-fellspiral-pr" "2024-01-02T00:00:00Z" "true" "$NO
 UNION+="$(make_pr_union 10 "10-landing-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
 UNION+=']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"landing"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"fellspiral"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"landing"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"fellspiral"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3081,7 +3450,7 @@ UNION+="$(make_pr_union 20 "20-budget-pr" "2024-01-02T00:00:00Z" "true" "$NO_LAB
 UNION+="$(make_pr_union 10 "10-fellspiral-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
 UNION+=']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"fellspiral"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"budget"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"fellspiral"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"budget"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3095,7 +3464,7 @@ echo "Test: landing issue beats issue with no topic label"
 setup
 setup_union_pr_list '[]'
 # Issue 400 (newer) has no topic label (resolves to `other`); issue 300 (older) is landing.
-printf '[{"number":400,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"landing"}]}]\n' \
+printf '[{"number":400,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"landing"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3109,7 +3478,7 @@ echo "Test: fellspiral issue beats issue with no topic label"
 setup
 setup_union_pr_list '[]'
 # Issue 400 (newer) has no topic label (resolves to `other`); issue 300 (older) is fellspiral.
-printf '[{"number":400,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"fellspiral"}]}]\n' \
+printf '[{"number":400,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"fellspiral"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3123,7 +3492,7 @@ echo "Test: budget issue beats issue with no topic label"
 setup
 setup_union_pr_list '[]'
 # Issue 400 (older) has no topic label (resolves to `other`); issue 300 (newer) is budget.
-printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"budget"}]}]\n' \
+printf '[{"number":400,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"budget"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3141,7 +3510,7 @@ UNION+="$(make_pr_union 20 "20-print-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABE
 UNION+="$(make_pr_union 10 "10-budget-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
 UNION+=']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"budget"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"print"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"budget"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"print"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3159,7 +3528,7 @@ UNION+="$(make_pr_union 20 "20-audio-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABE
 UNION+="$(make_pr_union 10 "10-print-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
 UNION+=']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"print"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"audio"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"print"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"audio"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3173,7 +3542,7 @@ echo "Test: audio issue beats issue with no topic label"
 setup
 setup_union_pr_list '[]'
 # Issue 400 (older) has no topic label (resolves to `other`); issue 300 (newer) is audio.
-printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"}]}]\n' \
+printf '[{"number":400,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3188,11 +3557,139 @@ echo "Test: print issue beats issue with no topic label"
 setup
 setup_union_pr_list '[]'
 # Issue 400 (older) has no topic label (resolves to `other`); issue 300 (newer) is print.
-printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"print"}]}]\n' \
+printf '[{"number":400,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":300,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"print"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "print issue beats untopiced (other) issue" "issue 300" "$result"
+teardown
+
+# --- enhancement-axis deprioritization (#1473) --------------------------------
+# Within a priority tier, ALL non-enhancement issues (enh=0) drain before any
+# enhancement issue (enh=1). Enhancement applies to the ISSUE path only; PRs
+# are never enhancement-classified and always complete normally. The
+# enhancement bit nests BETWEEN priority and topic: pri ⊃ enh ⊃ topic ⊃ phase.
+
+# ENH1. Default-mode within-tier (criteria 1+2): a plain `audio` issue (enh=0,
+#       lower topic) beats a `bug`+`enhancement` issue (enh=1, higher topic).
+#       Proves non-enhancement outranks enhancement even across topic ranks.
+echo "Test: non-enhancement audio issue beats enhancement bug issue (enh axis outranks topic)"
+setup
+setup_union_pr_list '[]'
+# Issue 200 (older) is audio, enh=0. Issue 100 (newer) is bug+enhancement, enh=1.
+# audio is lower than bug in the topic ladder; enh=0 still beats enh=1.
+printf '[{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"}]},{"number":100,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"},{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "non-enh audio beats enh bug (enh axis outranks topic)" "issue 200" "$result"
+teardown
+
+# ENH2. Within the enhancement tier, topic ordering applies: a `security`
+#       enhancement issue beats an `audio` enhancement issue regardless of age.
+echo "Test: security+enhancement issue beats audio+enhancement issue (topic still ranks within enh tier)"
+setup
+setup_union_pr_list '[]'
+# Issue 200 (older) is audio+enhancement. Issue 100 (newer) is security+enhancement.
+# Both enh=1; security ranks above audio, so issue 100 wins.
+printf '[{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"},{"name":"enhancement"}]},{"number":100,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"},{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "security+enh beats audio+enh (topic ladder within enh tier)" "issue 100" "$result"
+teardown
+
+# ENH3. Criterion 3 — cross-axis: priority is the outermost axis. A
+#       `priority`+`enhancement`+`audio` issue (pri=1, enh=1, low topic) beats
+#       a plain `security` issue (pri=0, enh=0, high topic). Priority outermost
+#       means a priority enhancement still jumps the queue over all non-priority
+#       work regardless of enhancement or topic.
+echo "Test: priority+enhancement+audio beats non-priority non-enhancement security (priority is outermost)"
+setup
+setup_union_pr_list '[]'
+# Issue 100 (older): priority+enhancement+audio (pri=1, enh=1, topic=audio).
+# Issue 200 (newer): security (pri=0, enh=0, topic=security).
+# Despite enhancement and low topic, issue 100 wins because priority is outermost.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"enhancement"},{"name":"audio"}]},{"number":200,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "priority+enh+audio beats non-priority security (priority outermost)" "issue 100" "$result"
+teardown
+
+# ENH4. Regression guard — bug/security ordering within non-enh tier unchanged:
+#       a `security` issue still beats a `bug` issue (no enhancement labels).
+#       Guards against a regression where the new enhancement axis disrupts the
+#       existing topic ordering for non-enhancement items.
+echo "Test: security issue beats bug issue with no enhancement labels (regression guard)"
+setup
+setup_union_pr_list '[]'
+# Issue 400 (older) is bug, enh=0. Issue 300 (newer) is security, enh=0.
+# Both non-enhancement; security topic wins (mirrors 30i).
+printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "security beats bug within non-enh tier (no regression)" "issue 300" "$result"
+teardown
+
+# ENH5. --top N multi-line ordering: ALL non-enhancement issues drain before
+#       any enhancement issue, even across topics. Four issues:
+#         30 (security, enh=0), 20 (audio, enh=0),
+#         10 (security, enh=1), 40 (audio, enh=1)
+#       Expected order: 30 → 20 → 10 → 40
+#       The money assertion: enh=0 audio (issue 20) emits before enh=1 security
+#       (issue 10) — the across-topic drain proof.
+echo "Test: --top 4 drains all non-enhancement before any enhancement (across topics)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":30,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"}]},{"number":10,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"},{"name":"enhancement"}]},{"number":40,"createdAt":"2024-01-04T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"},{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 4)
+assert_eq "--top 4 non-enh drains before enh across topics" "$(printf 'issue 30\nissue 20\nissue 10\nissue 40')" "$result"
+# Specifically: non-enh audio (20) precedes enh security (10) — the key drain proof.
+enh_before=$(printf '%s\n' "$result" | grep -n '^issue 20$' | cut -d: -f1)
+enh_after=$(printf '%s\n' "$result" | grep -n '^issue 10$' | cut -d: -f1)
+assert_eq "--top 4: non-enh audio (20) appears before enh security (10)" "1" "$(( enh_before < enh_after ? 1 : 0 ))"
+teardown
+
+# ENH6. --priority-only: within the priority=1 tier, a non-enhancement priority
+#       issue is selected before an enhancement priority issue. Issue B is
+#       priority+audio (non-enh); issue A is priority+security+enhancement.
+#       Despite security ranking above audio in the topic ladder, the non-enh
+#       audio issue wins because enh nests inside priority (mirrors PT1's logic).
+echo "Test: --priority-only selects non-enhancement priority issue before enhancement priority issue"
+setup
+setup_union_pr_list '[]'
+# Issue 200 (older): priority+audio, enh=0. Issue 100 (newer): priority+security+enhancement, enh=1.
+# enh=0 wins over enh=1 even though audio < security in topic ranking.
+printf '[{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"audio"}]},{"number":100,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"},{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only: non-enh priority audio beats enh priority security" "issue 200" "$result"
+teardown
+
+# ENH7. --qa regression: a QA PR whose closing issue carries `enhancement` is
+#       selected normally and is NOT deprioritized behind a non-enhancement QA
+#       PR. PRs are never enhancement-classified, so the enhancement axis does
+#       not apply. The older PR wins on age regardless of enhancement label.
+echo "Test: --qa: QA PR closing an enhancement issue is not deprioritized (PRs unaffected by enh axis)"
+setup
+# PR 10 (older) closes issue 100 (enhancement). PR 20 (newer) closes issue 200 (no enhancement).
+# Both green draft QA PRs in the same topic (other). PR 10 should win on age.
+UNION='['
+UNION+="$(make_pr_union 10 "10-enh-qa" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":100}]')"','
+UNION+="$(make_pr_union 20 "20-plain-qa" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":200}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Issues 100/200 supply label data (no "help wanted" — not queue items themselves).
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"enhancement"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
+assert_eq "--qa: enh-closing PR 10 wins on age (PRs not enh-classified)" "pr 10 10-enh-qa" "$result"
 teardown
 
 # --- blocked-issue PR skip (issue #786) -------------------------------------
@@ -3311,7 +3808,7 @@ echo "Test: subtree-blocked help-wanted issue skipped → next issue chosen"
 setup
 setup_union_pr_list '[]'
 # Issue 55 (older) has open sub-issue 5500; issue 66 (newer) has no children.
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
@@ -3334,7 +3831,7 @@ echo "Test: all help-wanted issues subtree-blocked → QA PR selected"
 setup
 UNION='['"$(make_pr_union 20 "20-qa" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-5500.json"
@@ -3352,7 +3849,7 @@ teardown
 echo "Test: all help-wanted issues subtree-blocked, no QA PR → empty"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-5500.json"
@@ -3370,7 +3867,7 @@ teardown
 echo "Test: help-wanted issue resolves to its startable leaf"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-5500.json"
@@ -3389,7 +3886,7 @@ teardown
 echo "Test: help-wanted issue's parked leaf skipped → next leaf selected"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf '[{"number":5500},{"number":5501}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-5500.json"
@@ -3407,7 +3904,7 @@ teardown
 echo "Test: dispatch-trace-leaf exit 1 → dispatch-select-target hard-fails"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 # Replace the copied leaf-trace script with a stub that always exits 1.
 cat > "$TMPDIR_TEST/dispatch-trace-leaf" <<'STUB'
@@ -3435,7 +3932,7 @@ teardown
 echo "Test: excluded help-wanted issue skipped → next issue chosen"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 55)
@@ -3449,7 +3946,7 @@ teardown
 echo "Test: excluded first leaf → next startable leaf in subtree selected"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf '[{"number":5500},{"number":5501}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-5500.json"
@@ -3467,7 +3964,7 @@ teardown
 echo "Test: whole frontier excluded, no QA PR → empty"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-5500.json"
@@ -3506,7 +4003,7 @@ teardown
 echo "Test: --top 3 returns 3 distinct ranked lines in topic-category order"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+printf '[{"number":10,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":20,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":30,"created_at":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --top 3)
@@ -3518,7 +4015,7 @@ teardown
 echo "Test: --top 3 honors --exclude (excluded number absent)"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+printf '[{"number":10,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":20,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":30,"created_at":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --top 3 --exclude 30)
@@ -3531,7 +4028,7 @@ teardown
 echo "Test: --top 5 with 2 eligible returns 2 lines, no padding"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+printf '[{"number":20,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":30,"created_at":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --top 5)
@@ -3557,7 +4054,7 @@ teardown
 echo "Test: --top 3 enumerates multiple startable leaves of one root in one scan"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf '[{"number":5500},{"number":5501},{"number":5502}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' > "$STUB_DIR/issue-5500.json"
 printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' > "$STUB_DIR/issue-5501.json"
@@ -3573,7 +4070,7 @@ teardown
 echo "Test: --top 3 multi-leaf descent skips a live-session-owned leaf"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf '[{"number":5500},{"number":5501},{"number":5502}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' > "$STUB_DIR/issue-5500.json"
 printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' > "$STUB_DIR/issue-5501.json"
@@ -3593,7 +4090,7 @@ teardown
 echo "Test: --top 3 multi-leaf descent skips a reserved leaf"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf '[{"number":5500},{"number":5501},{"number":5502}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' > "$STUB_DIR/issue-5500.json"
 printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' > "$STUB_DIR/issue-5501.json"
@@ -3614,7 +4111,7 @@ teardown
 echo "Test: --top 3 multi-leaf descent skips an office-hours-parked leaf"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf '[{"number":5500},{"number":5501},{"number":5502}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' > "$STUB_DIR/issue-5500.json"
 printf '{"title":"Issue 5501","body":"","comments":[],"number":5501,"state":"OPEN"}\n' > "$STUB_DIR/issue-5501.json"
@@ -3645,7 +4142,7 @@ teardown
 echo "Test: --top 2 mixed-phase descent reaches the implement leaf past full-plan drops"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":6010,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6011,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6020,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6023,"createdAt":"2024-01-04T00:00:00Z","labels":[{"name":"dispatch:planned"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":6010,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6011,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6020,"created_at":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6023,"created_at":"2024-01-04T00:00:00Z","labels":[{"name":"dispatch:planned"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf '[{"number":6021},{"number":6022},{"number":6023}]\n' > "$STUB_DIR/subissues-6020.json"
 printf '{"title":"Issue 6021","body":"","comments":[],"number":6021,"state":"OPEN"}\n' > "$STUB_DIR/issue-6021.json"
 printf '{"title":"Issue 6022","body":"","comments":[],"number":6022,"state":"OPEN"}\n' > "$STUB_DIR/issue-6022.json"
@@ -3672,7 +4169,7 @@ teardown
 echo "Test: --top 1 freeze keeps byte-parity, implement leaf not reached past a full-plan drop"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":6110,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6120,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6122,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"dispatch:planned"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":6110,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6120,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6122,"created_at":"2024-01-03T00:00:00Z","labels":[{"name":"dispatch:planned"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf '[{"number":6121},{"number":6122}]\n' > "$STUB_DIR/subissues-6120.json"
 printf '{"title":"Issue 6121","body":"","comments":[],"number":6121,"state":"OPEN"}\n' > "$STUB_DIR/issue-6121.json"
 printf '{"title":"Issue 6122","body":"","comments":[],"number":6122,"state":"OPEN"}\n' > "$STUB_DIR/issue-6122.json"
@@ -3691,7 +4188,7 @@ echo "Test: --top 1 is byte-identical to the no-flag call"
 setup
 UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-qa-me" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":99,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":99,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 plain=$("$TMPDIR_TEST/dispatch-select-target")
 top1=$("$TMPDIR_TEST/dispatch-select-target" --top 1)
@@ -3734,7 +4231,7 @@ setup
 # Issue 66 is also help-wanted and not closed by any PR — it should be selected.
 UNION='['"$(make_pr_union 10 "10-ready-pr" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":55}]')"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3756,7 +4253,7 @@ setup
 # remaining candidate.
 UNION='['"$(make_pr_union 10 "10-draft-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":55}]')"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3777,7 +4274,7 @@ echo "Test: --priority-only — done-ready priority leaf (non-draft <N>- PR) exc
 setup
 UNION='['"$(make_pr_union 100 "100-foo" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
@@ -3788,7 +4285,7 @@ echo "Test: --priority-only — done-ready sub-issue LEAF (non-draft <leaf>- PR)
 setup
 UNION='['"$(make_pr_union 5500 "5500-foo" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
@@ -3802,7 +4299,7 @@ echo "Test: default mode — done-ready leaf skipped, next eligible issue select
 setup
 UNION='['"$(make_pr_union 100 "100-foo" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]},{"number":200,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]},{"number":200,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3821,7 +4318,7 @@ echo "Test: default mode — done-ready leaf skipped, sibling leaf in same root 
 setup
 UNION='['"$(make_pr_union 5500 "5500-foo" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf '[{"number":5500},{"number":5501}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
@@ -3850,7 +4347,7 @@ echo "Test: issue with pending draft PR skipped → next issue selected (#1106)"
 setup
 UNION='['"$(make_pr_union 10 "55-feature" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":55}]')"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3863,7 +4360,7 @@ teardown
 echo "Test: help-wanted issue with no PR still selected (#1106 regression)"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3878,7 +4375,7 @@ echo "Test: concluded green draft PR defers to PR queue as qa (#1106)"
 setup
 UNION='['"$(make_pr_union 10 "55-feature" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":55}]')"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3902,7 +4399,7 @@ setup
 setup_union_pr_list '[]'
 # 700: older, help wanted, no dispatch:planned → plan phase.
 # 800: newer, help wanted, dispatch:planned → implement phase.
-printf '[{"number":700,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":800,"createdAt":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"dispatch:planned"}]}]\n' \
+printf '[{"number":700,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":800,"created_at":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"dispatch:planned"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 # No worktrees — both issues are startable leaves.
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
@@ -3916,7 +4413,7 @@ teardown
 echo "Test: with no planned issue, oldest unplanned issue still wins (#1202)"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":700,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":800,"createdAt":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":700,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":800,"created_at":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -3942,7 +4439,7 @@ UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS
 UNION+="$(make_pr_union 20 "20-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
 UNION+=']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
@@ -3955,7 +4452,7 @@ echo "Test: --priority-only returns the priority issue, skips the non-priority i
 setup
 setup_union_pr_list '[]'
 # Issue 300 (older, no priority) and issue 400 (newer, priority); both help-wanted.
-printf '[{"number":300,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":400,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+printf '[{"number":300,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":400,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
@@ -3969,7 +4466,7 @@ setup
 # Seed a priority PR that would otherwise be selected; the gate must preempt it.
 UNION='['"$(make_pr_union 20 "20-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
@@ -3986,7 +4483,7 @@ echo "Test: --priority-only — only non-priority items → empty"
 setup
 UNION='['"$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]}]\n' \
+printf '[{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]},{"number":300,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
@@ -4014,14 +4511,14 @@ cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
     "project": "household", "dueAfterCreate": "48h" }
 ] }
 EOF
-printf '[{"number":77,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+printf '[{"number":77,"created_at":"2026-05-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-open-jit_email-review.json"
 printf '{"items":[{"id":"PVTI_077","content":{"url":"https://github.com/natb1/household/issues/77"},"status":"Todo"}]}\n' \
   > "$STUB_DIR/project-item-list.json"
 # A priority help-wanted issue waits in the queue; --priority-only must return it
 # rather than the suppressed JIT reminder.
 setup_union_pr_list '[]'
-printf '[{"number":400,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+printf '[{"number":400,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
@@ -4043,7 +4540,7 @@ echo "Test: --priority-only — CI-pending priority PR → waiting <N> (#1444)"
 setup
 UNION='['"$(make_pr_union 100 "100-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":100}]')"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
@@ -4058,7 +4555,7 @@ echo "Test: --priority-only — no priority item, CI-pending non-priority PR →
 setup
 UNION='['"$(make_pr_union 100 "100-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":100}]')"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
@@ -4072,7 +4569,7 @@ echo "Test: --priority-only — CI-pending priority PR also office-hours-parked 
 setup
 UNION='['"$(make_pr_union 100 "100-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":100}]')"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"},{"name":"dispatch:office-hours"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"},{"name":"dispatch:office-hours"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
@@ -4088,7 +4585,7 @@ echo "Test: --priority-only — CI-pending priority PR also blocked → empty (#
 setup
 UNION='['"$(make_pr_union 100 "100-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":100}]')"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf '[{"number":999,"state":"open"}]\n' > "$STUB_DIR/blockers-100.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
@@ -4107,7 +4604,7 @@ UNION+="$(make_pr_union 100 "100-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO
 UNION+="$(make_pr_union 200 "200-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"
 UNION+=']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
@@ -4122,7 +4619,7 @@ echo "Test: --priority-only — claimed CI-pending priority PR → empty (#1444)
 setup
 UNION='['"$(make_pr_union 100 "100-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":100}]')"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/100-priority-pr\nHEAD def456\nbranch refs/heads/100-priority-pr\n\n' \
   > "$STUB_DIR/worktree-list.txt"
@@ -4168,7 +4665,7 @@ teardown
 echo "Test: --priority-only --top 3 returns 3 priority lines in topic-category order"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]}]\n' \
+printf '[{"number":10,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]},{"number":20,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"bug"}]},{"number":30,"created_at":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3)
@@ -4180,7 +4677,7 @@ teardown
 echo "Test: --priority-only --top 5 with 2 priority issues → 2 lines, no padding"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]}]\n' \
+printf '[{"number":20,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"bug"}]},{"number":30,"created_at":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --top 5)
@@ -4194,7 +4691,7 @@ teardown
 echo "Test: --priority-only --top 3 with a non-priority issue → only the priority ones"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"bug"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]},{"number":40,"createdAt":"2024-01-04T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]}]\n' \
+printf '[{"number":20,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"bug"}]},{"number":30,"created_at":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]},{"number":40,"created_at":"2024-01-04T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3)
@@ -4211,7 +4708,7 @@ echo "Test: --priority-only --top 3 with CI-pending-only priority tier → empty
 setup
 UNION='['"$(make_pr_union 100 "100-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":100}]')"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3)
@@ -4222,7 +4719,7 @@ teardown
 echo "Test: --priority-only --top 3 does not error (rejection lifted)"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]}]\n' \
+printf '[{"number":30,"created_at":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 "$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3 >/dev/null 2>&1 && rc=0 || rc=$?
@@ -4256,7 +4753,7 @@ echo "Test: JIT scan — no jit.json → scan skipped, normal selection"
 setup
 # No jit.json written into $DISPATCH_CONFIG_DIR. Seed a normal issue queue.
 echo '[]' > "$STUB_DIR/pr-list-union.json"
-printf '[{"number":55,"createdAt":"2024-03-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-03-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "no jit.json → scan inert, normal selection" "issue 55" "$result"
@@ -4273,9 +4770,9 @@ cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
     "project": "household", "remindAfterClose": "12h", "dueAfterClose": "24h" }
 ] }
 EOF
-printf '[{"number":42,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+printf '[{"number":42,"created_at":"2026-05-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-open-jit_daily-chore.json"
-printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+printf '[{"closed_at":"2026-05-10T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-closed-jit_daily-chore.json"
 printf '{"items":[{"id":"PVTI_001","content":{"url":"https://github.com/natb1/household/issues/42"},"status":"Todo"}]}\n' \
   > "$STUB_DIR/project-item-list.json"
@@ -4299,7 +4796,7 @@ cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
     "project": "household", "remindAfterClose": "12h", "dueAfterClose": "24h" }
 ] }
 EOF
-printf '[{"number":42,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+printf '[{"number":42,"created_at":"2026-05-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-open-jit_daily-chore.json"
 # No closed-issue fixture → cold start.
 printf '{"items":[{"id":"PVTI_001","content":{"url":"https://github.com/natb1/household/issues/42"},"status":"Todo"}]}\n' \
@@ -4323,7 +4820,7 @@ cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
     "project": "household", "dueAfterCreate": "48h" }
 ] }
 EOF
-printf '[{"number":77,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+printf '[{"number":77,"created_at":"2026-05-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-open-jit_email-review.json"
 printf '{"items":[{"id":"PVTI_077","content":{"url":"https://github.com/natb1/household/issues/77"},"status":"Todo"}]}\n' \
   > "$STUB_DIR/project-item-list.json"
@@ -4346,14 +4843,14 @@ cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
     "project": "household", "remindAfterClose": "12h", "dueAfterClose": "24h" }
 ] }
 EOF
-printf '[{"number":42,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+printf '[{"number":42,"created_at":"2026-05-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-open-jit_daily-chore.json"
-printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+printf '[{"closed_at":"2026-05-10T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-closed-jit_daily-chore.json"
 printf '{"items":[{"id":"PVTI_001","content":{"url":"https://github.com/natb1/household/issues/42"},"status":"In Progress"}]}\n' \
   > "$STUB_DIR/project-item-list.json"
 echo '[]' > "$STUB_DIR/pr-list-union.json"
-printf '[{"number":55,"createdAt":"2024-03-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-03-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "In Progress jit excluded → falls through to issue queue" "issue 55" "$result"
@@ -4370,9 +4867,9 @@ cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
     "project": "household", "remindAfterClose": "12h", "dueAfterClose": "24h" }
 ] }
 EOF
-printf '[{"number":42,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+printf '[{"number":42,"created_at":"2026-05-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-open-jit_daily-chore.json"
-printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+printf '[{"closed_at":"2026-05-10T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-closed-jit_daily-chore.json"
 printf '{"items":[{"id":"PVTI_001","content":{"url":"https://github.com/natb1/household/issues/42"},"status":"Done"}]}\n' \
   > "$STUB_DIR/project-item-list.json"
@@ -4399,13 +4896,13 @@ cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
 EOF
 # jit-a: closed 2026-05-10 → due 2026-05-11. jit-b: closed 2026-05-05 → due
 # 2026-05-06 — earlier, so jit-b wins.
-printf '[{"number":10,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+printf '[{"number":10,"created_at":"2026-05-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-open-jit_jit-a.json"
-printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+printf '[{"closed_at":"2026-05-10T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-closed-jit_jit-a.json"
-printf '[{"number":20,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+printf '[{"number":20,"created_at":"2026-05-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-open-jit_jit-b.json"
-printf '[{"closedAt":"2026-05-05T00:00:00Z"}]\n' \
+printf '[{"closed_at":"2026-05-05T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-closed-jit_jit-b.json"
 printf '{"items":[{"id":"PVTI_010","content":{"url":"https://github.com/natb1/household/issues/10"},"status":"Todo"},{"id":"PVTI_020","content":{"url":"https://github.com/natb1/household/issues/20"},"status":"Todo"}]}\n' \
   > "$STUB_DIR/project-item-list.json"
@@ -4433,13 +4930,13 @@ cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
 ] }
 EOF
 # jit-a: closed 2026-05-01 → due 2026-05-02 — now the earlier one, jit-a wins.
-printf '[{"number":10,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+printf '[{"number":10,"created_at":"2026-05-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-open-jit_jit-a.json"
-printf '[{"closedAt":"2026-05-01T00:00:00Z"}]\n' \
+printf '[{"closed_at":"2026-05-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-closed-jit_jit-a.json"
-printf '[{"number":20,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+printf '[{"number":20,"created_at":"2026-05-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-open-jit_jit-b.json"
-printf '[{"closedAt":"2026-05-05T00:00:00Z"}]\n' \
+printf '[{"closed_at":"2026-05-05T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-closed-jit_jit-b.json"
 printf '{"items":[{"id":"PVTI_010","content":{"url":"https://github.com/natb1/household/issues/10"},"status":"Todo"},{"id":"PVTI_020","content":{"url":"https://github.com/natb1/household/issues/20"},"status":"Todo"}]}\n' \
   > "$STUB_DIR/project-item-list.json"
@@ -4463,9 +4960,9 @@ cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
     "project": "household", "remindAfterClose": "12h", "dueAfterClose": "24h" }
 ] }
 EOF
-printf '[{"number":42,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+printf '[{"number":42,"created_at":"2026-05-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-open-jit_daily-chore.json"
-printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+printf '[{"closed_at":"2026-05-10T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-closed-jit_daily-chore.json"
 printf '{"items":[{"id":"PVTI_001","content":{"url":"https://github.com/natb1/household/issues/42"},"status":"Todo"}]}\n' \
   > "$STUB_DIR/project-item-list.json"
@@ -4499,7 +4996,7 @@ cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
 EOF
 # No open-issue fixture → the gh stub returns [] → no candidate.
 echo '[]' > "$STUB_DIR/pr-list-union.json"
-printf '[{"number":55,"createdAt":"2024-03-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":55,"created_at":"2024-03-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "jit with no open issue → falls through to issue queue" "issue 55" "$result"
@@ -4523,13 +5020,13 @@ EOF
 # Both closed at the same instant: jit-x due = +12h, jit-y due = +11h, so
 # jit-y is earlier and wins. Octal-parsing "012h" as 10h would wrongly pick
 # jit-x.
-printf '[{"number":10,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+printf '[{"number":10,"created_at":"2026-05-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-open-jit_jit-x.json"
-printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+printf '[{"closed_at":"2026-05-10T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-closed-jit_jit-x.json"
-printf '[{"number":20,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+printf '[{"number":20,"created_at":"2026-05-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-open-jit_jit-y.json"
-printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+printf '[{"closed_at":"2026-05-10T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-closed-jit_jit-y.json"
 printf '{"items":[{"id":"PVTI_010","content":{"url":"https://github.com/natb1/household/issues/10"},"status":"Todo"},{"id":"PVTI_020","content":{"url":"https://github.com/natb1/household/issues/20"},"status":"Todo"}]}\n' \
   > "$STUB_DIR/project-item-list.json"
@@ -4555,9 +5052,9 @@ cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
 EOF
 # Open issue exists so the loop body runs; closed issue exists so max_closed is
 # non-empty and parse_duration is reached immediately (no cold-start branch).
-printf '[{"number":99,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+printf '[{"number":99,"created_at":"2026-05-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-open-jit_bad-duration.json"
-printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+printf '[{"closed_at":"2026-05-10T00:00:00Z"}]\n' \
   > "$STUB_DIR/jit-issues-closed-jit_bad-duration.json"
 echo '[]' > "$STUB_DIR/pr-list-union.json"
 echo '[]' > "$STUB_DIR/issue-list.json"
@@ -4578,7 +5075,7 @@ setup
 echo '[]' > "$STUB_DIR/pr-list-union.json"
 # Issue 55 is parked; issue 66 is the next eligible help-wanted issue.
 printf '%s\n' \
-  '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"dispatch:office-hours"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]' \
+  '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"dispatch:office-hours"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -4601,7 +5098,7 @@ UNION+="$(make_pr_union 20 "20-active" "2024-01-02T00:00:00Z" "true" "$NO_LABELS
 UNION+=']'
 setup_union_pr_list "$UNION"
 # Issue #10 is parked (the office-hours label lives on the issue, issue #909).
-printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch:office-hours"}]}]\n' \
+printf '[{"number":10,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch:office-hours"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 # Worktree exists on disk for 10-oh-parked (what the old adoption mechanism would
 # have targeted); no worktree for 20-active.
@@ -4625,7 +5122,7 @@ setup
 UNION='['"$(make_pr_union 100 "55-ready-pr" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":55}]')"']'
 setup_union_pr_list "$UNION"
 # Issue 55 is older (Jan 01), issue 66 is newer (Jan 02); both help-wanted.
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -4647,11 +5144,30 @@ setup
 # Draft (isDraft=true, pending rollup) PR 100 on the issue's own branch closes issue 55.
 UNION='['"$(make_pr_union 100 "55-draft-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":55}]')"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "pending draft PR on issue's branch → issue skipped this tick (empty)" "empty" "$result"
+teardown
+
+# #1646 regression guard (AC3, load-bearing): under the old inline DISPATCH_PR_LIST
+# env channel, an open-PR list past ~128 KB (MAX_ARG_STRLEN) E2BIG'd the child exec,
+# every candidate was silently excluded, and the tick manufactured a false `empty`.
+# The DISPATCH_PR_LIST_FILE temp-file channel makes list size irrelevant: a >128 KB
+# list must still select a candidate.
+echo "Test: >128KB open-PR list still selects a candidate (no false empty)"
+setup
+PAD=$(printf 'x%.0s' {1..143360})   # 140 KB of filler, > 131072 (128 KB)
+UNION='['"$(make_pr_union 10 "10-big-list" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-padding" "2024-01-02T00:00:00Z" "false" "[{\"name\":\"$PAD\"}]" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+fixture_bytes=$(wc -c < "$STUB_DIR/pr-list-union.json")
+assert_eq "AC3 fixture exceeds 128KB MAX_ARG_STRLEN" "ok" "$([[ "$fixture_bytes" -gt 131072 ]] && echo ok || echo "too-small:$fixture_bytes")"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "AC3: >128KB open-PR list still selects a candidate (no false empty)" "pr 10 10-big-list fix-checks" "$result"
 teardown
 
 # ============================================================================
@@ -4681,7 +5197,9 @@ teardown
 echo "Test: labeled item with green draft PR → qa, PR number"
 setup
 printf '[{"number":50,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
-printf '[{"number":7,"headRefName":"50-feat","isDraft":true,"statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"}],"labels":[]}]\n' \
+# PR #7's CI verdict derives from the REST check-runs of headRefOid (#1601).
+printf '%s' '{"check_runs":[{"status":"COMPLETED","conclusion":"SUCCESS"}]}' > "$STUB_DIR/check-runs-sha7.json"
+printf '[{"number":7,"headRefName":"50-feat","isDraft":true,"headRefOid":"sha7","labels":[]}]\n' \
   > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude
@@ -4690,8 +5208,8 @@ assert_eq "qa item selected with its PR number" "office-hours 50 qa 7 -" "$resul
 teardown
 
 # OHST3. The oldest labeled item whose <N>-* worktree has a live session is
-# RESUMED — resume wins over a sessionless newer sibling.
-echo "Test: oldest live-session item is resumed (resume wins over fresh sibling)"
+# ATTACHED — live wins over a sessionless newer sibling.
+echo "Test: oldest live-session item is attached (live wins over fresh sibling)"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
@@ -4700,12 +5218,12 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude "42-x"   # 42's worktree has a live session; 99 sessionless
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "live item resumed over sessionless sibling 99" "resume s-42-x" "$result"
+assert_eq "live item attached over sessionless sibling 99" "live s-42-x" "$result"
 teardown
 
-# OHST3b. Two labeled items both live → resume the oldest one's session
+# OHST3b. Two labeled items both live → attach the oldest one's session
 # (mirrors OH2 on the entry-point side).
-echo "Test: two live items → oldest resumed"
+echo "Test: two live items → oldest attached"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
@@ -4714,12 +5232,12 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude "42-x" "99-y"   # both worktrees live
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "oldest of two live items resumed" "resume s-42-x" "$result"
+assert_eq "oldest of two live items attached" "live s-42-x" "$result"
 teardown
 
-# OHST3c. Older sessionless item + newer live item → resume the live one
-# (mirrors OH5: resume wins regardless of age order).
-echo "Test: older sessionless + newer live → resume the live one"
+# OHST3c. Older sessionless item + newer live item → attach the live one
+# (mirrors OH5: live wins regardless of age order).
+echo "Test: older sessionless + newer live → attach the live one"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
@@ -4729,7 +5247,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude "99-y"   # only 99's worktree is live
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "live item resumed regardless of age order" "resume s-99-y" "$result"
+assert_eq "live item attached regardless of age order" "live s-99-y" "$result"
 teardown
 
 # OHST4. An empty office-hours queue with no parked router prints `empty`. The
@@ -4884,7 +5402,7 @@ echo "=== office-hours (entry point) ==="
 #
 # The single user entry point to the office-hours queue (#759). It is now a thin
 # dispatcher: it calls office-hours-select-target once and switches on the verb —
-# resume / parked-router (exec `claude --resume <sessionId>`), fresh-with-args
+# live / parked-router (exec `claude attach <sessionId>`), fresh-with-args
 # (exec `claude "/office-hours <N> <phase> <pr>"`), or empty (print a queue-empty
 # message and exit WITHOUT launching). These are therefore entry+selector
 # integration tests: setup copies the real selector into TMPDIR_TEST, the
@@ -4893,19 +5411,19 @@ echo "=== office-hours (entry point) ==="
 # case asserts which launch fired (or that none did). The fake's sessionId
 # convention is `s-<worktree-basename>`.
 
-# OH1. One labeled item whose <N>-* worktree has a live session → resume it.
-echo "Test: live-session labeled item → resume its session"
+# OH1. One labeled item whose <N>-* worktree has a live session → attach it.
+echo "Test: live-session labeled item → attach its session"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "42-x"   # 42's worktree has a live session
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "resumes the live session by its sessionId" "LAUNCH: --resume s-42-x" "$result"
+assert_eq "attaches the live session by its sessionId" "LAUNCH: attach s-42-x" "$result"
 teardown
 
-# OH2. Two labeled items both live → resume the oldest one's session.
-echo "Test: two live items → resume the oldest"
+# OH2. Two labeled items both live → attach the oldest one's session.
+echo "Test: two live items → attach the oldest"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
@@ -4913,7 +5431,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "42-x" "99-y"   # both worktrees live
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "resumes the oldest live item's session" "LAUNCH: --resume s-42-x" "$result"
+assert_eq "attaches the oldest live item's session" "LAUNCH: attach s-42-x" "$result"
 teardown
 
 # OH3. Labeled items but none with a live session → launch the fresh /office-hours
@@ -4921,7 +5439,7 @@ teardown
 # via dispatch-spawn-office-hours, then attach the human by resuming the spawned
 # session id. Fixes the originally-reported label leak (#1160): born in the
 # worktree, the session's branch is <N>-..., so the strip hook clears the label.
-echo "Test: labeled item, none live → spawn worker-style --bg then resume"
+echo "Test: labeled item, none live → spawn worker-style --bg then attach"
 setup
 mkdir -p "$TMPDIR_TEST/worktrees/42-x"
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
@@ -4929,8 +5447,8 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD
   "$TMPDIR_TEST/worktrees/42-x" > "$STUB_DIR/worktree-list.txt"
 office_hours_fresh_fake_claude
 result=$("$TMPDIR_TEST/office-hours")
-# Attaches the human by resuming the just-spawned session id.
-assert_eq "fresh path resumes the spawned session id" "LAUNCH: --resume sess-office-hours-42" "$result"
+# Attaches the human by attaching the just-spawned session id.
+assert_eq "fresh path attaches the spawned session id" "LAUNCH: attach sess-office-hours-42" "$result"
 # The spawn was a --bg job named office-hours-<N> running /office-hours.
 mapfile -t oh_argv < "$TMPDIR_TEST/oh-bg-argv"
 assert_eq "fresh: --bg" "--bg" "${oh_argv[0]:-}"
@@ -4945,16 +5463,16 @@ assert_eq "fresh: spawn cwd is the worktree" "$(realpath "$TMPDIR_TEST/worktrees
 teardown
 
 # OH3c. A labeled item whose worktree has a live session named office-hours-<N>
-# (the renamed office-hours session, #1311) → resume it directly. Before the
+# (the renamed office-hours session, #1311) → attach it directly. Before the
 # two-name fix the selector keyed only on the basename and missed it.
-echo "Test: live office-hours-<N> session → selector resumes it directly"
+echo "Test: live office-hours-<N> session → selector attaches it directly"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "office-hours-42"   # the live session is the office-hours-<N> one
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "resumes the live office-hours-<N> session by its sessionId" "LAUNCH: --resume s-office-hours-42" "$result"
+assert_eq "attaches the live office-hours-<N> session by its sessionId" "LAUNCH: attach s-office-hours-42" "$result"
 teardown
 
 # OH3b. Sessionless item with NO <N>-* worktree on disk (the worktree was swept) →
@@ -4984,9 +5502,9 @@ assert_eq "empty queue → queue-empty message, no launch" "office-hours: queue 
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
-# OH5. Mixed: an older sessionless item + a newer live-session item → resume the
-# live one (resume wins over fresh whenever any labeled item is live).
-echo "Test: older sessionless + newer live → resume the live one"
+# OH5. Mixed: an older sessionless item + a newer live-session item → attach the
+# live one (live wins over fresh whenever any labeled item is live).
+echo "Test: older sessionless + newer live → attach the live one"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
@@ -4995,7 +5513,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "99-y"   # only 99's worktree is live
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "resume wins over fresh whenever any labeled item is live" "LAUNCH: --resume s-99-y" "$result"
+assert_eq "live wins over fresh whenever any labeled item is live" "LAUNCH: attach s-99-y" "$result"
 teardown
 
 # OH6. UNKNOWN daemon (claude unqueryable). Under the single fail-safe convention
@@ -5029,9 +5547,9 @@ unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # OH7. The selector emits `parked-router <sessionId> <name>` (a target-less
-# parked dispatch router, #1010) → the entry script resumes that session. The
+# parked dispatch router, #1010) → the entry script attaches that session. The
 # entry script gains the parked-router handling the selector already had.
-echo "Test: parked-router directive → entry resumes the router session"
+echo "Test: parked-router directive → entry attaches the router session"
 setup
 echo '[]' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
@@ -5050,7 +5568,7 @@ exit 0
 FAKE
 chmod +x "$TMPDIR_TEST/bin/claude"
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "parked-router directive resumes the router session" "LAUNCH: --resume s-dispatch-abc123" "$result"
+assert_eq "parked-router directive attaches the router session" "LAUNCH: attach s-dispatch-abc123" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
@@ -6193,6 +6711,30 @@ setup
 echo '{"title":"!!!"}' > "$STUB_DIR/issue-title-42.json"
 if "$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "empty-slug title exits non-zero" "1" "$rc"
+teardown
+
+# 10a. No worktree + the issue has an open PR → create-existing <pr-head>. The
+#      create path checks dispatch-find-pr first (#943); a PR present means an
+#      existing branch, so the resolver hands the caller the PR head branch to
+#      materialize instead of a fresh <N>-<slug>. The local-vs-remote choice is
+#      a materialize-spawn concern, so the resolver emits the same line for both.
+echo "Test: no worktree + open PR → create-existing <pr-head>"
+setup
+printf '[{"number":100,"headRefName":"42-existing-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"42-existing-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "no worktree + open PR → create-existing <pr-head>" \
+  "create-existing 42-existing-pr-branch" "$result"
+teardown
+
+# 10b. No worktree + NO PR → create <N>-<slug> unchanged (#943 AC #5). The
+#      find-pr check falls through (find-pr returns empty), so the fresh-slug
+#      create logic is preserved for the genuine implement phase.
+echo "Test: no worktree + no PR → create <N>-<slug> (find-pr fall-through, AC #5)"
+setup
+echo '{"title":"Add a feature"}' > "$STUB_DIR/issue-title-42.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "no worktree + no PR → create <N>-<slug>" "create 42-add-a-feature" "$result"
 teardown
 
 # ----------------------------------------------------------------------------
@@ -9618,6 +10160,69 @@ stmt_key=$(printf '%s' "$out" | jq -r '.statements[0].key')
 assert_eq "absent snapshot key round-trips" "mybank" "$stmt_key"
 config_teardown
 
+# --- Test 7i: absent epic.json prints no-config and exits 0 ------------------
+
+echo "Test: absent epic.json prints no-config and exits 0"
+config_setup
+# no file written — config dir is empty
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" epic 2>/dev/null); rc=$?
+assert_eq "absent epic.json exits 0" "0" "$rc"
+assert_eq "absent epic.json prints no-config" "no-config" "$out"
+config_teardown
+
+# --- Test 7j: valid epic.json round-trips ------------------------------------
+
+echo "Test: valid epic.json prints normalized JSON"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/epic.json" <<'EOF'
+{
+  "labels": ["epic","tracking-epic"]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" epic 2>/dev/null); rc=$?
+assert_eq "valid epic.json exits 0" "0" "$rc"
+epic_label=$(printf '%s' "$out" | jq -r '.labels[0]')
+assert_eq "valid epic.json labels[0]" "epic" "$epic_label"
+config_teardown
+
+# --- Test 7k: epic.json where .labels is not an array exits 1 ----------------
+
+echo "Test: epic.json with labels as string exits 1 and stderr mentions labels"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/epic.json" <<'EOF'
+{
+  "labels": "epic"
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" epic 2>&1 1>/dev/null) || rc=$?
+assert_eq "labels non-array exits 1" "1" "$rc"
+if [[ "$err" == *"labels"* ]]; then
+  assert_eq "labels non-array stderr mentions labels" "yes" "yes"
+else
+  assert_eq "labels non-array stderr mentions labels" "yes" "no: $err"
+fi
+config_teardown
+
+# --- Test 7l: epic.json with a non-string element exits 1 --------------------
+
+echo "Test: epic.json with non-string label element exits 1 and stderr mentions labels"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/epic.json" <<'EOF'
+{
+  "labels": ["epic", 42]
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" epic 2>&1 1>/dev/null) || rc=$?
+assert_eq "labels non-string element exits 1" "1" "$rc"
+if [[ "$err" == *"labels"* ]]; then
+  assert_eq "labels non-string element stderr mentions labels" "yes" "yes"
+else
+  assert_eq "labels non-string element stderr mentions labels" "yes" "no: $err"
+fi
+config_teardown
+
 # --- Test 8: valid target-workers.json prints normalized JSON ---------------
 
 echo "Test: valid target-workers.json prints normalized JSON"
@@ -10768,6 +11373,71 @@ out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "just under pace (hw=1), used_5h=70 → ramp N=3" "3" "$out"
 tw_teardown
 
+# --- Test 16c: dynamic catch-up ceiling — saturated regime (headline) --------
+
+echo "Test: end-of-week deficit saturates ceil5_eff to 100 → ramp lifts N above 0"
+tw_setup
+# Headline behavior: near end-of-week the static ceil5=80 would gate N=0 at high
+# 5h usage, but the dynamic catch-up ceiling lifts the ramp so work continues.
+# Pin r exactly via the resets override (resets = NOW + remaining), like Test 15.
+#   remaining=18000 → r=1. used_weekly=88, used_5h=85.
+#   Stage 1: W = max(smooth, envelope=100-10*1=90) = 90. hw=90-88=2>0 → gate open.
+#   Stage 3: D = terminal-used_weekly = 100-88 = 12. D/r = 12 (>wcap=10) →
+#     100*D/(r*wcap) = 100*12/(1*10) = 120 → clamp(120,80,100) = ceil5_eff=100.
+#     span=100-50=50, h5=100-85=15 → N=int(8*15/50+0.5)=int(2.9)=2.
+#   (Static ceiling 80 → h5=80-85=-5 → N=0.)
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+export DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY=$((TW_NOW + 18000))
+write_rl "rl.json" 88 99999999 85 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "r=1, D/r=12 → ceil5_eff=100; used_5h=85 → N=2 (static 80 → 0)" "2" "$out"
+tw_teardown
+
+# --- Test 16d: dynamic catch-up ceiling — effective regime (8<D/r<=10) -------
+
+echo "Test: end-of-week deficit lifts ceil5_eff into the ramp → N=1 (static → 0)"
+tw_setup
+# Effective (non-saturated) regime: ceil5_eff lands strictly between ceil5 and
+# 100. Pin r exactly via the resets override.
+#   remaining=45000 → r=2.5. used_weekly=77, used_5h=90.
+#   Stage 1: smooth curve dominates (envelope=100-10*2.5=75 < smooth). At
+#     remaining=45000, x=(604800-45000)/604800≈0.9256 → W≈79.45. hw≈2.45>0 → open.
+#   Stage 3: D = 100-77 = 23. D/r = 9.2 → 100*23/(2.5*10) = 92 →
+#     clamp(92,80,100) = ceil5_eff=92. span=92-50=42, h5=92-90=2 →
+#     N=int(8*2/42+0.5)=int(0.881)=0... clamp(0,1,8)? No: int(8*2/42+0.5)=int(0.881)=0,
+#     but the round is 8*2/42=0.381, +0.5=0.881, int=0 → then clamp(0,1,8)=1.
+#   (Static ceiling 80 → h5=80-90=-10 → N=0.)
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+export DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY=$((TW_NOW + 45000))
+write_rl "rl.json" 77 99999999 90 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "r=2.5, D/r=9.2 → ceil5_eff=92; used_5h=90 → N=1 (static 80 → 0)" "1" "$out"
+tw_teardown
+
+# --- Test 16e: dynamic ceiling inert mid-week (accelerator-only invariant) ---
+
+echo "Test: mid-week ceil5_eff clamps to ceil5 → behavior identical to today"
+tw_setup
+# Accelerator-only invariant: mid-week the large remaining-window count r makes
+# the catch-up term tiny, so ceil5_eff clamps down to the static ceil5=80 and
+# Stage 3 behaves exactly as it did before this change. Use tw_resets_for_x 0.5
+# (remaining=302400 → r≈16.8), matching the mid-week probes elsewhere.
+#   used_weekly=11 → gate open (W(0.5)=31, hw=20>0).
+#   D = 100-11 = 89. D/r = 89/16.8 ≈ 5.3 → 100*D/(r*wcap) = 10*D/r ≈ 53 (<ceil5=80)
+#     → clamp(53,80,100) = ceil5_eff=80 (static).
+# Sub-assertion A: used_5h=70 → h5=80-70=10 → N=clamp(round(8*10/30),1,8)=3
+#   (byte-identical to Test 16b's mid-week ramp value).
+# Sub-assertion B: used_5h=85 → h5=80-85=-5 → N=0 (no end-of-week lift mid-week).
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 11 "$r" 70 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "mid-week ceil5_eff=80; used_5h=70 → N=3 (matches Test 16b)" "3" "$out"
+write_rl "rl.json" 11 "$r" 85 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "mid-week ceil5_eff=80; used_5h=85 → N=0 (no mid-week lift)" "0" "$out"
+tw_teardown
+
 # --- Test 17: non-numeric used_weekly sanitized fail-closed → 1 -------------
 
 echo "Test: non-numeric used_weekly is treated as missing → conservative fallback"
@@ -11117,6 +11787,106 @@ unset DISPATCH_TARGET_WORKERS_NOW \
       DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY
 result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --reopen-at 2>/dev/null)
 assert_eq "--reopen-at missing anchor → none" "none" "$result"
+tw_teardown
+
+# --- #1136: rate_limits.json telemetry range bounds -------------------------
+#
+# Out-of-range telemetry (used_percentage > 100, or a reset epoch beyond the
+# window's physically-plausible horizon) is rejected to missing so the existing
+# PRESENT guards route it to the established fail-safe, rather than acting on a
+# poisoned value. See issue #1136.
+
+# used_weekly=150 (>100) → rejected → weekly anchor drops → fallback N=1 (NOT 0).
+# This is the literal bug: an un-bounded used>100 yields negative headroom and
+# pins the target at 0; the bound restores the conservative spawn-1 fallback.
+echo "Test: #1136 used_weekly=150 (>100) → rejected → fallback N=1"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 150 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "#1136 used_weekly=150 → fallback 1 (not 0)" "1" "$out"
+TOTAL=$((TOTAL + 1))
+if grep -q "WEEKLY_USED out of range" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 used_weekly=150 stderr names WEEKLY_USED out of range"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 used_weekly=150 stderr should name WEEKLY_USED out of range"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+tw_teardown
+
+# used_weekly=100 is a valid fully-used reading and must be KEPT (strict `>`
+# bound). Consumed → the curve runs: at x=0.5, W=31, used=100 >> pace → gate
+# closed → N=0. A rejected value would instead drop the anchor → fallback N=1,
+# so N=0 discriminates "consumed" from "rejected".
+echo "Test: #1136 used_weekly=100 (boundary) → kept, curve runs → N=0"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 100 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "#1136 used_weekly=100 kept (curve runs) → N=0" "0" "$out"
+TOTAL=$((TOTAL + 1))
+if grep -q "out of range" "$TMPDIR_TEST/stderr"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 used_weekly=100 must NOT be rejected (strict >)"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+else
+  PASS=$((PASS + 1)); echo "  PASS: #1136 used_weekly=100 not rejected (strict >)"
+fi
+tw_teardown
+
+# used_5h=150 (>100) → rejected → 5h treated as 0 in the ramp → max 5h workers.
+# DOCUMENTED INTENDED fail-open: the issue chooses "do not act on the poisoned
+# value", and the weekly pace gate still bounds N. With the weekly gate open
+# (used_weekly under pace), N>=1.
+echo "Test: #1136 used_5h=150 (>100) → rejected → fail-open under open weekly gate → N>=1"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 0 "$r" 150 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 used_5h=150 rejected, weekly open → N=$out (>=1, intended fail-open)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 used_5h=150 expected N>=1, got $out"
+fi
+tw_teardown
+
+# weekly resets_at = NOW + 999999999 (far future, >8 days) → rejected → weekly
+# anchor drops → fallback N=1. A far-future weekly reset can no longer feed the
+# curve.
+echo "Test: #1136 weekly resets_at far-future (>8d) → rejected → fallback N=1"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+write_rl "rl.json" 30 $((TW_NOW + 999999999)) 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "#1136 weekly resets far-future → fallback 1" "1" "$out"
+TOTAL=$((TOTAL + 1))
+if grep -q "WEEKLY_RESETS" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 weekly resets far-future stderr names WEEKLY_RESETS"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 weekly resets far-future stderr should name WEEKLY_RESETS"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+tw_teardown
+
+# exhausted mode: 5h resets_at = NOW + 999999999 (far future, >6h) with
+# used_5h=99 (>=threshold) → 5h reset rejected → window cannot be exhausted → ok
+# (fail open). Weekly is benign (low usage, in-bound reset).
+echo "Test: #1136 --exhausted 5h resets far-future (>6h) → rejected → ok (fail open)"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+write_rl "exh.json" 30 $((TW_NOW + 302400)) 99 $((TW_NOW + 999999999))
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>"$TMPDIR_TEST/stderr")
+assert_eq "#1136 --exhausted 5h resets far-future → ok (fail open)" "ok" "$out"
+TOTAL=$((TOTAL + 1))
+if grep -q "FIVEH_RESETS" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 --exhausted 5h resets far-future stderr names FIVEH_RESETS"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 --exhausted 5h resets far-future stderr should name FIVEH_RESETS"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
 tw_teardown
 
 # ============================================================================
@@ -11863,6 +12633,111 @@ else
 fi
 sr_teardown
 
+# --- #1136: rate_limits.json telemetry range bounds -------------------------
+#
+# Far-future resets_at and used>100 are rejected to missing so the script no-ops
+# (the established missing-telemetry fail-safe) instead of arming a reseed timer
+# years out. This is the durable-stall fix. See issue #1136.
+
+# weekly cap hit but resets_at is ~31 years out (>8d) → rejected → weekly window
+# drops → (5h absent) → missing-telemetry no-op: NO systemd-run call.
+echo "Test: #1136 weekly resets far-future (>8d) → no reseed timer armed"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
+sr_write_rl "rl.json" 95 $((1700000000 + 999999999)) absent absent
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]] && grep -q "WEEKLY_RESETS" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 weekly resets far-future → empty systemd-log + WEEKLY_RESETS diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 weekly resets far-future → expected no timer + diagnostic"
+  echo "    systemd-log: $(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null)"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+sr_teardown
+
+# used_weekly=150 (>100) → rejected → weekly window drops → (5h absent) → no-op,
+# no weekly reseed timer.
+echo "Test: #1136 used_weekly=150 (>100) → window drops → no reseed timer"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
+sr_write_rl "rl.json" 150 $((1700000000 + 10000)) absent absent
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]] && grep -q "WEEKLY_USED out of range" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 used_weekly=150 → no timer + WEEKLY_USED diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 used_weekly=150 → expected no timer + diagnostic"
+  echo "    systemd-log: $(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null)"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+sr_teardown
+
+# In-bound control (guards against over-rejection): a realistically-large NOW
+# with a weekly reset ~3 days out (well within the 8-day bound) and a weekly cap
+# hit still schedules normally.
+echo "Test: #1136 in-bound weekly reset (~3d out) still schedules (no over-rejection)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
+reset=$((1700000000 + 3 * 86400))
+sr_write_rl "rl.json" 95 "$reset" absent absent
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+assert_eq "#1136 in-bound weekly reset still schedules" \
+  "scheduled dispatch-reseed-$reset at $reset" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@$reset"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 in-bound weekly reset armed --on-calendar=@$reset"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 in-bound weekly reset should arm timer at $reset"
+  echo "    log: $log"
+fi
+sr_teardown
+
+# used_5h=150 (>100) → rejected → 5h window drops. Weekly absent → both windows
+# missing → missing-telemetry no-op: NO systemd-run call. Without the FIVEH_USED
+# >100 bound the rejected value would survive (used_5h=150 >= target_5h=50 →
+# CAND_5H armed at the 5h reset), so empty systemd-log discriminates.
+echo "Test: #1136 used_5h=150 (>100) → window drops → no reseed timer"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
+sr_write_rl "rl.json" absent absent 150 $((1700000000 + 3600))
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]] && grep -q "FIVEH_USED out of range" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 used_5h=150 → no timer + FIVEH_USED diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 used_5h=150 → expected no timer + diagnostic"
+  echo "    systemd-log: $(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null)"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+sr_teardown
+
+# 5h cap hit but resets_at is 7h out (>6h horizon) → rejected → 5h window drops.
+# Weekly cap hit with an in-bound (5d) reset → timer must arm at the WEEKLY
+# reset. The 5h reset (NOW+25200) is earlier than the weekly reset (NOW+432000),
+# so without the FIVEH_RESETS horizon bound the rejected 5h value would survive
+# (CAND_5H armed) and step 4's earliest-reset pick would arm at the 5h epoch
+# instead — the weekly-not-5h assertion discriminates the regression.
+echo "Test: #1136 5h resets far-future (>6h) → dropped → timer at weekly reset"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
+weekly_reset=$((1700000000 + 432000))   # 5 days out, in-bound under 8-day horizon
+sr_write_rl "rl.json" 95 "$weekly_reset" 60 $((1700000000 + 25200))  # 5h reset 7h out → rejected
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+assert_eq "#1136 5h resets far-future → timer at weekly reset" \
+  "scheduled dispatch-reseed-$weekly_reset at $weekly_reset" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@$weekly_reset"* ]] && grep -q "FIVEH_RESETS" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 5h resets far-future → armed at weekly $weekly_reset + FIVEH_RESETS diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 5h resets far-future → expected timer at weekly $weekly_reset + diagnostic"
+  echo "    log: $log"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+sr_teardown
+
 # ============================================================================
 # dispatch-schedule-convergence-reseed tests
 # ============================================================================
@@ -12401,6 +13276,234 @@ else
   echo "    stderr: $err"
 fi
 tr_teardown
+
+# --- dispatch-qa-fix-attempt (#1553) ---
+# ============================================================================
+# dispatch-qa-fix-attempt tests
+# ============================================================================
+#
+# Exercises the qa-fix attempt counter bump: under-cap prints `fix` and bumps
+# the dispatch:qa-fix-attempt-<n> label; at-cap prints `escalate` with no label
+# writes; bad args / non-integer CUR / bad CAP exit 2; the create-on-"not found"
+# path falls back to `label create` + retry and still prints `fix`.
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   copy of dispatch-qa-fix-attempt
+#   $TMPDIR_TEST/bin/       fake-gh stub
+#   $TMPDIR_TEST/gh-edit-log   recorded fake-gh pr-edit / label-create argv
+
+echo ""
+echo "=== dispatch-qa-fix-attempt ==="
+
+qfa_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
+
+  cp "$SCRIPT_DIR/dispatch-qa-fix-attempt" \
+    "$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt"
+
+  # fake gh: `pr view` echoes the test-controlled current attempt count
+  # ($FAKE_CUR_ATTEMPT, default 0). `pr edit` / `label create` record their
+  # argv to a log and exit 0.
+  cat > "$TMPDIR_TEST/bin/fake-gh" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "pr" && "\$2" == "view" ]]; then
+  echo "\${FAKE_CUR_ATTEMPT:-0}"
+  exit 0
+fi
+echo "\$*" >> "$TMPDIR_TEST/gh-edit-log"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-gh"
+  export DISPATCH_QA_FIX_ATTEMPT_GH_CMD="$TMPDIR_TEST/bin/fake-gh"
+  export DISPATCH_QA_FIX_ATTEMPT_CAP=2
+}
+
+qfa_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_QA_FIX_ATTEMPT_GH_CMD
+  unset DISPATCH_QA_FIX_ATTEMPT_CAP
+  unset FAKE_CUR_ATTEMPT
+}
+
+# --- Test 1: no prior label (CUR=0), default cap 2 → fix, applies attempt-1 ---
+
+echo "Test: no prior label (CUR=0) → fix, applies attempt-1, no remove"
+qfa_setup
+export FAKE_CUR_ATTEMPT=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa CUR=0 exits 0" "0" "$rc"
+assert_eq "qfa CUR=0 stdout is fix" "fix" "$out"
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--add-label dispatch:qa-fix-attempt-1"* \
+   && "$edits" != *"--remove-label"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: CUR=0 applies attempt-1 with no remove"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CUR=0 applies attempt-1 with no remove"
+  echo "    edits: $edits"
+fi
+qfa_teardown
+
+# --- Test 2: CUR=1, default cap 2 → fix, removes attempt-1, applies attempt-2 -
+
+echo "Test: CUR=1 → fix, removes attempt-1 and applies attempt-2"
+qfa_setup
+export FAKE_CUR_ATTEMPT=1
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa CUR=1 exits 0" "0" "$rc"
+assert_eq "qfa CUR=1 stdout is fix" "fix" "$out"
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--remove-label dispatch:qa-fix-attempt-1"* \
+   && "$edits" == *"--add-label dispatch:qa-fix-attempt-2"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: CUR=1 removes attempt-1 and adds attempt-2"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CUR=1 removes attempt-1 and adds attempt-2"
+  echo "    edits: $edits"
+fi
+qfa_teardown
+
+# --- Test 3: CUR=2, default cap 2 (at cap) → escalate, no label writes --------
+
+echo "Test: CUR=2, cap=2 (at cap) → escalate, gh-edit-log empty"
+qfa_setup
+export FAKE_CUR_ATTEMPT=2
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa at-cap exits 0" "0" "$rc"
+assert_eq "qfa at-cap stdout is escalate" "escalate" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: at-cap writes no labels (gh-edit-log empty)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: at-cap writes no labels (gh-edit-log empty)"
+  echo "    edits: $(cat "$TMPDIR_TEST/gh-edit-log")"
+fi
+qfa_teardown
+
+# --- Test 4: DISPATCH_QA_FIX_ATTEMPT_CAP=1, CUR=1 (at cap via env) → escalate -
+
+echo "Test: CAP=1, CUR=1 (at cap via env override) → escalate, gh-edit-log empty"
+qfa_setup
+export DISPATCH_QA_FIX_ATTEMPT_CAP=1
+export FAKE_CUR_ATTEMPT=1
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa cap-env at-cap exits 0" "0" "$rc"
+assert_eq "qfa cap-env at-cap stdout is escalate" "escalate" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: CAP=1 CUR=1 writes no labels (gh-edit-log empty)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CAP=1 CUR=1 writes no labels (gh-edit-log empty)"
+  echo "    edits: $(cat "$TMPDIR_TEST/gh-edit-log")"
+fi
+qfa_teardown
+
+# --- Test 5a: non-integer CUR → exit 2, no label edits, stderr guard msg ------
+
+echo "Test: non-integer CUR → exit 2, gh-edit-log empty, stderr mentions integer guard"
+qfa_setup
+export FAKE_CUR_ATTEMPT=abc
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa non-integer CUR exits 2" "2" "$rc"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"not an integer"* && ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-integer CUR; stderr integer-guard message + no label edit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-integer CUR; stderr integer-guard message + no label edit"
+  echo "    stderr: $err"
+  echo "    gh-edit-log exists: $(test -s "$TMPDIR_TEST/gh-edit-log" && echo yes || echo no)"
+fi
+qfa_teardown
+
+# --- Test 5b: non-integer CAP → exit 2, no label edits, stderr guard msg ------
+
+echo "Test: non-integer CAP → exit 2, gh-edit-log empty, stderr mentions CAP error"
+qfa_setup
+export DISPATCH_QA_FIX_ATTEMPT_CAP=abc
+export FAKE_CUR_ATTEMPT=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa non-integer CAP exits 2" "2" "$rc"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"CAP must be a positive integer"* && ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-integer CAP; stderr CAP-guard message + no label edit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-integer CAP; stderr CAP-guard message + no label edit"
+  echo "    stderr: $err"
+fi
+qfa_teardown
+
+# --- Test 5c: flag-like arg → exit 2, no label edits -------------------------
+
+echo "Test: flag-like arg --repo → exit 2, no label edits"
+qfa_setup
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" --repo 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa flag-like arg exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: flag-like arg; no label edits"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: flag-like arg; no label edits"
+  echo "    edits: $(cat "$TMPDIR_TEST/gh-edit-log")"
+fi
+qfa_teardown
+
+# --- Test 6: create-on-"not found" path (CUR=0) → fix, label create logged ----
+# Replaces the default fake-gh with one whose `pr edit --add-label` simulates
+# a label-not-found failure, forcing the script's `label create` + retry path.
+# The retry `pr edit` also hits the `pr edit` branch and exits 1 (warn path
+# only); it is NOT recorded in gh-edit-log since the fake-gh `pr edit` branch
+# exits before the `echo >> log` fallthrough. The retry is instead asserted via
+# stderr: only the retry-after-create warning carries the `after create`
+# substring, so checking for it guards the retry step against accidental
+# deletion (a dropped retry would remove that warning).
+
+echo "Test: create-on-not-found path (CUR=0) → fix, gh-edit-log contains label create"
+qfa_setup
+export FAKE_CUR_ATTEMPT=0
+# Write a per-test fake-gh that simulates the not-found path.
+cat > "$TMPDIR_TEST/bin/fake-gh" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "pr" && "\$2" == "view" ]]; then
+  echo "\${FAKE_CUR_ATTEMPT:-0}"
+  exit 0
+fi
+if [[ "\$1" == "pr" && "\$2" == "edit" ]]; then
+  echo "Label 'dispatch:qa-fix-attempt-1' not found"
+  exit 1
+fi
+echo "\$*" >> "$TMPDIR_TEST/gh-edit-log"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/bin/fake-gh"
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa create-on-not-found exits 0" "0" "$rc"
+assert_eq "qfa create-on-not-found stdout is fix" "fix" "$out"
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+err=$(cat "$TMPDIR_TEST/stderr" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"label create dispatch:qa-fix-attempt-1"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: create-on-not-found logs label create dispatch:qa-fix-attempt-1"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: create-on-not-found logs label create dispatch:qa-fix-attempt-1"
+  echo "    edits: $edits"
+fi
+# Guard the retry pr edit after `label create` against accidental deletion. The
+# retry's stderr warning is the only one carrying `after create` (the initial
+# add-label failure routes to the label-create branch and emits no warning), so
+# its presence proves the retry ran. A dropped retry would remove this warning.
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"after create"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: create-on-not-found retries pr edit after label create (stderr 'after create')"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: create-on-not-found retries pr edit after label create (stderr 'after create')"
+  echo "    stderr: $err"
+fi
+qfa_teardown
 
 # ============================================================================
 # dispatch project-helper tests (item-add / status-read / status-write)
@@ -13085,6 +14188,12 @@ echo "=== dispatch-tick-recover ==="
 #
 # The test shell runs under `set -e`; dispatch-tick-recover always exits 0 on
 # these paths, but each invocation is still wrapped to capture the code.
+#
+# Continuation semantics: a pending dispatch-reseed* timer is the ONLY
+# continuation signal — a busy worker is NOT a continuation. A busy worker
+# instead drives Step 5's deferred backstop: a flat HEARTBEAT reseed is armed
+# at NOW + HEARTBEAT (default 1800) and the count advances normally so the cap
+# can be reached and escalation fires even under a persistent phantom-busy stall.
 
 tr_setup() {
   TMPDIR_TEST=$(mktemp -d)
@@ -13182,6 +14291,7 @@ tr_teardown() {
   unset DISPATCH_TICK_RECOVER_BASE_BACKOFF
   unset DISPATCH_TICK_RECOVER_MAX_BACKOFF
   unset DISPATCH_TICK_RECOVER_RESET_WINDOW
+  unset DISPATCH_TICK_RECOVER_HEARTBEAT
   unset DISPATCH_DAEMON_UNIT_DIR DISPATCH_DAEMON_SYSTEMCTL_CMD DISPATCH_DAEMON_CLAUDE_CMD
 }
 
@@ -13249,26 +14359,44 @@ else
 fi
 tr_teardown
 
-# --- Test 2: continuation present (busy worker) → no reseed, count reset -----
+# --- Test 2: busy worker is no longer a continuation → arms heartbeat reseed ---
+# A busy worker used to short-circuit recovery (old "continuation" semantics).
+# Under the new behavior it is NOT a continuation: the count advances and a
+# flat HEARTBEAT reseed is armed as a deferred backstop. With count 2→3 and
+# NOW - last_failure = 1000 < RESET_WINDOW → no aging reset → reseed_at =
+# NOW + HEARTBEAT = 1000000 + 1800 = 1001800.
 
-echo "Test: a live busy worker is a continuation → no reseed, count reset to 0"
+echo "Test: a busy worker is no longer a continuation → arms a heartbeat reseed, count advances"
 tr_setup
 tr_busy_worker
 tr_seed_state 2 999000
 if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "busy-worker: dispatch-tick-recover exits 0" "0" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
-assert_eq "busy-worker: no reseed armed (systemd-run log empty)" "" "$log"
-assert_eq "busy-worker: state count reset to 0" "0" "$(tr_state_count)"
-# Continuation no-op path: ensure_daemon_service must NOT have run (no arming).
-assert_eq "busy-worker: daemon service not touched (continuation no-op)" \
-  "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@1001800"* \
+   && "$log" == *"--unit=dispatch-reseed-1001800"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: busy-worker: heartbeat reseed armed at NOW + 1800"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: busy-worker: heartbeat reseed armed at NOW + 1800"
+  echo "    log: $log"
+fi
+assert_eq "busy-worker: state count advances to 3" "3" "$(tr_state_count)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'enable --now dispatch-claude-daemon.service' \
+     "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: busy-worker: ensure_daemon_service ran (arming path)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: busy-worker: ensure_daemon_service ran (arming path)"
+  echo "    daemon-systemctl-log: $(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || echo '(absent)')"
+fi
 tr_teardown
 
 # --- Test 3: continuation present (pending dispatch-reseed* timer) → no reseed -
 
 echo "Test: a pending dispatch-reseed* timer is a continuation → no reseed armed"
 tr_setup
+tr_seed_state 2 999000
 # A pending reseed timer row drives the continuation signal; 0 busy workers.
 printf 'dispatch-reseed-1234.timer  active  waiting  Dispatch reseed\n' \
   > "$TMPDIR_TEST/timer-units"
@@ -13279,6 +14407,8 @@ assert_eq "pending-timer: no reseed armed (systemd-run log empty)" "" "$log"
 # Continuation no-op path: ensure_daemon_service must NOT have run (no arming).
 assert_eq "pending-timer: daemon service not touched (continuation no-op)" \
   "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
+# The timer continuation branch must NOT reset the count (state left untouched).
+assert_eq "pending-timer: state count preserved (not reset)" "2" "$(tr_state_count)"
 tr_teardown
 
 # --- Test 4: cap reached → escalate, not retry -------------------------------
@@ -13413,6 +14543,68 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: overflow-clamp: backoff clamped to MAX, reseed at NOW + 3600 (killmode)"
   echo "    log: $log"
 fi
+tr_teardown
+
+# --- Test 10: phantom-busy stall escalates within the cap (criterion 3) -------
+# A persistent busy worker that never actually carries the chain (its Stop hook
+# never fires → timer-units stays empty). Each generation must advance the count
+# (the busy reading no longer short-circuits) so the cap is reached and
+# escalation fires — rather than the count resetting to 0 every generation and
+# the chain stalling forever.
+echo "Test: repeated phantom-busy generations advance the count to escalation"
+tr_setup
+tr_busy_worker                      # busy>0 every round; timer-units stays empty
+for i in 1 2 3 4; do
+  export DISPATCH_TICK_RECOVER_NOW=$(( 1000000 + i*600 ))   # delta 600 < RESET_WINDOW
+  "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null || true
+done
+unset DISPATCH_TICK_RECOVER_NOW
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
+# Rounds 1-3 each arm a heartbeat reseed at NOW_i + 1800: @1002400, @1003000,
+# @1003600 (the heartbeat window is flat — it does NOT grow). Round 4 (= CAP+1)
+# escalates and arms NO reseed, so systemd-log has exactly 3 lines.
+TOTAL=$((TOTAL + 1))
+nlines=$(grep -c 'on-calendar' "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+if [[ "$log" == *"--on-calendar=@1002400"* \
+   && "$log" == *"--on-calendar=@1003000"* \
+   && "$log" == *"--on-calendar=@1003600"* \
+   && "$nlines" == "3" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: phantom-busy: exactly 3 heartbeat reseeds (rounds 1-3)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: phantom-busy: exactly 3 heartbeat reseeds (rounds 1-3)"
+  echo "    log: $log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"--label dispatch:chain-stalled"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: phantom-busy: round 4 escalates (chain-stalled issue)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: phantom-busy: round 4 escalates (chain-stalled issue)"
+  echo "    gh-log: $ghlog"
+fi
+assert_eq "phantom-busy: state count advances to 4" "4" "$(tr_state_count)"
+tr_teardown
+
+# --- Test 11: HEARTBEAT=0 is rejected (non-positive) -------------------------
+echo "Test: DISPATCH_TICK_RECOVER_HEARTBEAT=0 is rejected (exit 2, no reseed)"
+tr_setup
+export DISPATCH_TICK_RECOVER_HEARTBEAT=0
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "heartbeat-zero: dispatch-tick-recover exits 2" "2" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "heartbeat-zero: no reseed armed (systemd-run log empty)" "" "$log"
+tr_teardown
+
+# --- Test 12: HEARTBEAT >= RESET_WINDOW is rejected (defeats the cap) ---------
+# If the deferred heartbeat window is >= the reset window, the count would age
+# back to a fresh episode every generation and the cap would never be reached.
+echo "Test: DISPATCH_TICK_RECOVER_HEARTBEAT >= RESET_WINDOW is rejected (exit 2, no reseed)"
+tr_setup
+export DISPATCH_TICK_RECOVER_HEARTBEAT=3600   # == RESET_WINDOW (3600 from tr_setup)
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "heartbeat-ge-reset: dispatch-tick-recover exits 2" "2" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "heartbeat-ge-reset: no reseed armed (systemd-run log empty)" "" "$log"
 tr_teardown
 
 # ============================================================================
@@ -13601,7 +14793,7 @@ echo "=== dispatch-spawn-office-hours ==="
 # office-hours-<N> (not the worktree basename) and --cwd = worktree path via
 # dispatch-spawn-job, then — unlike the launcher, which `exec`s the spawn and is
 # done — resolves the spawned (or deduped) session id by office-hours-<N> and
-# prints it, so the caller can attach a human via `claude --resume`.
+# prints it, so the caller can attach a human via `claude attach`.
 #
 # It reuses the spawn-worker fake-`claude` harness (write_fake_spawn_worker_claude)
 # and the SPAWN_WORKER_* fixture globals: that fake's `--bg` handler registers
@@ -13697,9 +14889,9 @@ else
 fi
 spawn_office_hours_teardown
 
-# --- Test 3: dedup hit — resolve the existing same-name session for resume ----
+# --- Test 3: dedup hit — resolve the existing same-name session for attach ----
 
-echo "Test: a live same-name session deduplicates the spawn; its id is resolved for resume"
+echo "Test: a live same-name session deduplicates the spawn; its id is resolved for attach"
 spawn_office_hours_setup
 # Prime the registry with a different sessionId whose name matches office-hours-<N>
 # (the name the spawn now uses). dispatch-spawn-job dedups (no --bg); the resolve
@@ -13710,7 +14902,7 @@ printf '%s' \
 write_fake_spawn_worker_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "dedup-oh: dispatch-spawn-office-hours exits 0" "0" "$rc"
-assert_eq "dedup-oh: stdout is the existing session id (resolved for resume)" "sess-other" "$out"
+assert_eq "dedup-oh: stdout is the existing session id (resolved for attach)" "sess-other" "$out"
 # No --bg invocation was recorded — nothing was spawned.
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
@@ -14747,6 +15939,52 @@ else
 fi
 jit_teardown
 
+# --- Test 3b-roadmap: roadmap jit (7d/14d) at the exact 7d boundary — skipped (inclusive) ---
+
+echo "Test: dispatch-jit-engine roadmap jit at the exact 7d boundary is skipped"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "roadmap",
+      "repo": "test-owner/test-repo",
+      "label": "jit:roadmap",
+      "title": "Roadmap review",
+      "body": "Recurring roadmap review.",
+      "project": "test-project",
+      "remindAfterClose": "7d",
+      "dueAfterClose": "14d",
+      "skill": "roadmap"
+    }
+  ]
+}
+EOF
+# Newest closed issue closed exactly 7d before "now" — the inclusive
+# boundary, still within the 7d window (strict `>` comparison in dispatch-jit-engine).
+closed_at=$(date -u -d "@$((JIT_NOW_EPOCH - 7*86400))" +%Y-%m-%dT%H:%M:%SZ)
+printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
+  > "$STUB_DIR/closed-issues.json"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
+assert_eq "roadmap exact-7d-boundary exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"roadmap: skipped (within remindAfterClose)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap exact-7d-boundary reports skipped (within remindAfterClose)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap exact-7d-boundary reports skipped (within remindAfterClose)"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap exact-7d-boundary made no issue create call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap exact-7d-boundary made no issue create call"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+jit_teardown
+
 # --- Test 4: cadence past window creates an issue ----------------------------
 
 echo "Test: dispatch-jit-engine cadence past remindAfterClose creates an issue"
@@ -14838,6 +16076,55 @@ if [[ "$create_log" == *"<!-- jit-due: 2026-01-05T00:00:00Z -->"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: roadmap past-window embedded jit-due marker in issue body"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window embedded jit-due marker in issue body"
+  echo "    gh-issue-create.log: $create_log"
+fi
+jit_teardown
+
+# --- Test 4b-roadmap: roadmap jit (7d/14d) one second past the 7d boundary — creates ---
+
+echo "Test: dispatch-jit-engine roadmap jit one second past the 7d boundary creates an issue"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "roadmap",
+      "repo": "test-owner/test-repo",
+      "label": "jit:roadmap",
+      "title": "Roadmap review",
+      "body": "Recurring roadmap review.",
+      "project": "test-project",
+      "remindAfterClose": "7d",
+      "dueAfterClose": "14d",
+      "skill": "roadmap"
+    }
+  ]
+}
+EOF
+# Newest closed issue closed 7d + 1s before "now" — one second past the
+# window → create.
+closed_at=$(date -u -d "@$((JIT_NOW_EPOCH - (7*86400 + 1)))" +%Y-%m-%dT%H:%M:%SZ)
+printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
+  > "$STUB_DIR/closed-issues.json"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
+assert_eq "roadmap 7d+1s-past-boundary exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+# closedAt = NOW − (7d+1s) = 2025-12-24T23:59:59Z, dueAfterClose = 14d →
+# DUE = closedAt + 14d = 2026-01-07T23:59:59Z.
+if [[ "$out" == *"roadmap: created #123 (due 2026-01-07T23:59:59Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap past-window reports created #123 (due 2026-01-07T23:59:59Z)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window reports created #123 (due 2026-01-07T23:59:59Z)"
+  echo "    actual: $out"
+fi
+create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$create_log" == *"<!-- jit-due: 2026-01-07T23:59:59Z -->"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap 7d+1s-past-boundary embedded jit-due marker in issue body"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap 7d+1s-past-boundary embedded jit-due marker in issue body"
   echo "    gh-issue-create.log: $create_log"
 fi
 jit_teardown
@@ -15315,9 +16602,10 @@ jit_teardown
 # own SCRIPT_DIR — which becomes $TMPDIR_TEST/scripts for the copy — so all
 # three scripts are co-located. The gh stub logs EVERY matched invocation to
 # gh-calls.log so a test can assert "zero gh calls" (the debounce case). The
-# `search issues` arm reads a stub/search-result.json fixture if present (lets a
-# test inject an open or closed hit), else "[]". "now" is pinned via
-# DISPATCH_STATEMENTS_NOW so the debounce math is deterministic.
+# `issue list` arm reads a stub/issue-list.json fixture if present (lets a
+# test seed the batched dedup map with pre-existing issues), else "[]".
+# Transient-failure injection is via stub/issue-list-fail-once. "now" is pinned
+# via DISPATCH_STATEMENTS_NOW so the debounce math is deterministic.
 
 # A fixed reference epoch — 2026-01-01T00:00:00Z.
 STMT_NOW_EPOCH=1767225600
@@ -15346,9 +16634,10 @@ statements_setup() {
   export DISPATCH_STATEMENTS_NOW="$STMT_NOW_EPOCH"
 
   # gh PATH stub. Every matched subcommand is appended to gh-calls.log so the
-  # debounce test can assert the log is absent (zero gh calls). `search issues`
-  # reads search-result.json if present, else "[]". `issue create` logs its full
-  # args (including --body) to gh-issue-create.log so the body can be asserted,
+  # debounce test can assert the log is absent (zero gh calls). `issue list`
+  # reads issue-list.json if present, else "[]"; supports transient-failure
+  # injection via issue-list-fail-once. `issue create` logs its full args
+  # (including --body) to gh-issue-create.log so the body can be asserted,
   # and echoes a deterministic issue URL. `project item-add` matches the gh
   # subcommand that dispatch-project-item-add invokes internally.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
@@ -15360,9 +16649,14 @@ case "$args" in
   "label create "*)
     # Idempotent label create — default success.
     ;;
-  *"search issues "*)
-    if [[ -f "$STUB_DIR/search-result.json" ]]; then
-      cat "$STUB_DIR/search-result.json"
+  *"issue list "*)
+    if [[ -f "$STUB_DIR/issue-list-fail-once" ]]; then
+      rm -f "$STUB_DIR/issue-list-fail-once"
+      echo "HTTP 503: Service Unavailable" >&2
+      exit 1
+    fi
+    if [[ -f "$STUB_DIR/issue-list.json" ]]; then
+      cat "$STUB_DIR/issue-list.json"
     else
       echo '[]'
     fi
@@ -15382,6 +16676,7 @@ case "$args" in
 esac
 STUB
   chmod +x "$TMPDIR_TEST/bin/gh"
+  export GH_RETRY_BASE_DELAY=0
   PATH="$TMPDIR_TEST/bin:$PATH"
 }
 
@@ -15393,6 +16688,8 @@ statements_teardown() {
   unset DISPATCH_CONFIG_DIR
   unset DISPATCH_STATEMENTS_STATE_DIR
   unset DISPATCH_STATEMENTS_NOW
+  unset GH_RETRY_BASE_DELAY
+  unset DISPATCH_STATEMENTS_ISSUE_LIST_LIMIT
 }
 
 # statements_write_projects — projects.json fixture with one project whose key
@@ -15482,13 +16779,13 @@ else
 fi
 calls=$(cat "$STUB_DIR/gh-calls.log")
 TOTAL=$((TOTAL + 1))
-if [[ "$calls" == *"search issues "* && "$calls" == *"issue create"* \
+if [[ "$calls" == *"issue list "* && "$calls" == *"issue create"* \
    && "$calls" == *"project item-add"* ]]; then
   PASS=$((PASS + 1))
-  echo "  PASS: new-file invoked search / issue create / project item-add"
+  echo "  PASS: new-file invoked issue list / issue create / project item-add"
 else
   FAIL=$((FAIL + 1))
-  echo "  FAIL: new-file invoked search / issue create / project item-add"
+  echo "  FAIL: new-file invoked issue list / issue create / project item-add"
   echo "    gh-calls.log: $calls"
 fi
 # Assert both labels are present in the issue create call.
@@ -15506,13 +16803,18 @@ fi
 statements_teardown
 
 # --- Test 3: open hit → skipped ----------------------------------------------
+# Dedup now comes from the batched gh issue list body parse: the fixture issue's
+# body carries the file's sha256 on a `- sha256: \`<hash>\`` line, which seeds
+# SEEN_HASHES[hash]=42, so the file is deduped locally without a per-file call.
 
 echo "Test: dispatch-statements-scan skips when an open issue carries the hash"
 statements_setup
 statements_write_projects
 statements_write_config
 printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
-echo '[{"number":42,"state":"open"}]' > "$STUB_DIR/search-result.json"
+h=$(sha256sum "$TMPDIR_TEST/statements-dir/acct.qfx" | awk '{print $1}')
+jq -n --arg h "$h" '[{number:42, body:("- File: `acct.qfx`\n- sha256: `" + $h + "`")}]' \
+  > "$STUB_DIR/issue-list.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
 assert_eq "open-hit exits 0" "0" "$rc"
@@ -15533,13 +16835,19 @@ fi
 statements_teardown
 
 # --- Test 4: closed hit → skipped (proves open-OR-closed dedup) --------------
+# Dedup comes from the batched gh issue list body parse (the script no longer
+# reads `state`). The fixture includes state:"closed" for documentation; only
+# `number` and `body` are functionally needed. The hash in the body seeds
+# SEEN_HASHES[hash]=43, so the file is deduped locally regardless of state.
 
 echo "Test: dispatch-statements-scan skips when a CLOSED issue carries the hash"
 statements_setup
 statements_write_projects
 statements_write_config
 printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
-echo '[{"number":43,"state":"closed"}]' > "$STUB_DIR/search-result.json"
+h=$(sha256sum "$TMPDIR_TEST/statements-dir/acct.qfx" | awk '{print $1}')
+jq -n --arg h "$h" '[{number:43, state:"closed", body:("- sha256: `" + $h + "`")}]' \
+  > "$STUB_DIR/issue-list.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
 assert_eq "closed-hit exits 0" "0" "$rc"
@@ -15684,31 +16992,31 @@ else
 fi
 statements_teardown
 
-# --- Test 9: malformed gh search issues output → hard error, no issue create --
+# --- Test 9: malformed gh issue list output → hard error, no issue create ----
 
-echo "Test: dispatch-statements-scan surfaces hard error on malformed search output, does not file"
+echo "Test: dispatch-statements-scan surfaces hard error on malformed gh issue list output, does not file"
 statements_setup
 statements_write_projects
 statements_write_config
 printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
-# Inject a TLS-error-like non-JSON message as the search result (gh exits 0).
+# Inject a TLS-error-like non-JSON message as the issue list result (gh exits 0).
 printf 'tls: failed to verify certificate: x509: certificate signed by unknown authority\n' \
-  > "$STUB_DIR/search-result.json"
+  > "$STUB_DIR/issue-list.json"
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>&1 >/dev/null) || rc=$?
-assert_eq "malformed-search exits 1" "1" "$rc"
+assert_eq "malformed-list exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ "$err" == *"bank: error"* && "$err" == *"non-JSON"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: malformed-search emits hard error to stderr"
+  PASS=$((PASS + 1)); echo "  PASS: malformed-list emits hard error to stderr"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: malformed-search emits hard error to stderr"
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed-list emits hard error to stderr"
   echo "    actual stderr: $err"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: malformed-search made no issue create call"
+  PASS=$((PASS + 1)); echo "  PASS: malformed-list made no issue create call"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: malformed-search made no issue create call"
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed-list made no issue create call"
   echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
 fi
 statements_teardown
@@ -15776,6 +17084,108 @@ if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: ctrl-char-name filed nothing"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: ctrl-char-name filed nothing"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+statements_teardown
+
+# --- Test 12: one list call regardless of file count -------------------------
+# Proves that the per-file Search-API fan-out is gone: with N=5 distinct new
+# files there is exactly ONE `gh issue list` invocation (per entry, not per
+# file) and exactly 5 `gh issue create` invocations.
+
+echo "Test: dispatch-statements-scan makes exactly one gh issue list call for N files"
+statements_setup
+statements_write_projects
+statements_write_config
+# Write 5 distinct files (different contents → different hashes).
+printf 'STATEMENT-CONTENTS-1\n' > "$TMPDIR_TEST/statements-dir/acct1.qfx"
+printf 'STATEMENT-CONTENTS-2\n' > "$TMPDIR_TEST/statements-dir/acct2.qfx"
+printf 'STATEMENT-CONTENTS-3\n' > "$TMPDIR_TEST/statements-dir/acct3.qfx"
+printf 'STATEMENT-CONTENTS-4\n' > "$TMPDIR_TEST/statements-dir/acct4.qfx"
+printf 'STATEMENT-CONTENTS-5\n' > "$TMPDIR_TEST/statements-dir/acct5.qfx"
+# No issue-list.json → stub returns [] → all 5 files are new and get filed.
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
+assert_eq "one-list-call exits 0" "0" "$rc"
+list_count=0
+[[ -f "$STUB_DIR/gh-calls.log" ]] \
+  && list_count=$(grep -c '^issue list ' "$STUB_DIR/gh-calls.log" || true)
+assert_eq "one-list-call made exactly one issue list call" "1" "$list_count"
+create_count=0
+[[ -f "$STUB_DIR/gh-calls.log" ]] \
+  && create_count=$(grep -c '^issue create ' "$STUB_DIR/gh-calls.log" || true)
+assert_eq "one-list-call made exactly five issue create calls" "5" "$create_count"
+statements_teardown
+
+# --- Test 13: transient-then-succeed on the list call -------------------------
+# Proves gh_retry retries the list and that the retried stdout parses correctly.
+# If the JSON from the retry were corrupted or not parsed, the file would be
+# FILED (hash not in SEEN_HASHES) rather than SKIPPED — so a SKIPPED assertion
+# proves both the retry and the parse.
+
+echo "Test: dispatch-statements-scan retries gh issue list on transient failure and parses the result"
+statements_setup
+statements_write_projects
+statements_write_config
+printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/retry.qfx"
+h=$(sha256sum "$TMPDIR_TEST/statements-dir/retry.qfx" | awk '{print $1}')
+jq -n --arg h "$h" '[{number:99, body:("- sha256: `" + $h + "`")}]' \
+  > "$STUB_DIR/issue-list.json"
+# First gh issue list attempt fails transiently; retry returns the fixture.
+touch "$STUB_DIR/issue-list-fail-once"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
+assert_eq "retry-list exits 0" "0" "$rc"
+list_count=0
+[[ -f "$STUB_DIR/gh-calls.log" ]] \
+  && list_count=$(grep -c '^issue list ' "$STUB_DIR/gh-calls.log" || true)
+assert_eq "retry-list made exactly 2 issue list calls (fail attempt + retry)" "2" "$list_count"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"bank: skipped (#99 for retry.qfx)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: retry-list skipped (#99 for retry.qfx) — retry parsed correctly"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: retry-list skipped (#99 for retry.qfx) — retry parsed correctly"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: retry-list made no issue create call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: retry-list made no issue create call"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+statements_teardown
+
+# --- Test 14: truncation guard -----------------------------------------------
+# When gh issue list returns exactly DISPATCH_STATEMENTS_ISSUE_LIST_LIMIT
+# results the dedup snapshot is likely truncated; the script hard-errors rather
+# than silently misfiling. Set the limit to 2 and supply a fixture of exactly 2
+# issues to trigger the guard.
+
+echo "Test: dispatch-statements-scan hard-errors when gh issue list returns exactly the limit"
+statements_setup
+statements_write_projects
+statements_write_config
+export DISPATCH_STATEMENTS_ISSUE_LIST_LIMIT=2
+printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
+# Fixture of exactly 2 issues — matches the limit of 2, triggering the guard.
+jq -n '[{number:1, body:"- sha256: `aabbcc`"}, {number:2, body:"- sha256: `ddeeff`"}]' \
+  > "$STUB_DIR/issue-list.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>&1 >/dev/null) || rc=$?
+assert_eq "truncation-guard exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"bank: error"* && "$err" == *"truncat"* && "$err" == *"limit"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: truncation-guard emits hard error mentioning truncat and limit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: truncation-guard emits hard error mentioning truncat and limit"
+  echo "    actual stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: truncation-guard made no issue create call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: truncation-guard made no issue create call"
   echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
 fi
 statements_teardown
@@ -16353,6 +17763,18 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-tick"
 
+  # Fake dispatch-spawn-sweep: log to sweep-calls.log so the Branch P and
+  # Branch R tests can assert the sweep reaper was launched. Mirrors the
+  # spawn-tick fake; without it the hook calls the real (absent) script and
+  # the silent `|| WARNING` fallback hides a regression. Intentionally does
+  # NOT write order.log — sweep ordering is not asserted.
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-sweep" <<'FAKE'
+#!/usr/bin/env bash
+echo "sweep" >> "$STUB_DIR/sweep-calls.log"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-sweep"
+
   # Fake dispatch-self-close: log to order.log + self-close-calls.log.
   cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-self-close" <<'FAKE'
 #!/usr/bin/env bash
@@ -16386,7 +17808,7 @@ case "$args" in
     fi
     ;;
   pr\ list\ *)
-    # The hook fetches the open-PR list once and shares it via DISPATCH_PR_LIST.
+    # The hook fetches the open-PR list once and shares it via DISPATCH_PR_LIST_FILE.
     # The ci-ready / phase fakes read $STUB_DIR files, not the list, so an empty
     # array is sufficient to model a successful fetch.
     echo "$args" >> "$STUB_DIR/gh-pr-list.log"
@@ -16760,6 +18182,129 @@ if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop marker-absent: self-close not invoked"
 fi
+stop_teardown
+
+# --- Test A (#1590): live idle-polling worker (trailing ScheduleWakeup) → NOT parked, NOT spawned ---
+# Branch A discriminator: when the stopping session's FINAL assistant turn contains a
+# ScheduleWakeup tool_use, the worker will resume on its own poll cadence — skip the
+# office-hours park AND the redundant tick spawn entirely.
+
+echo "Test: #1590 Branch A idle-waiting worker — trailing ScheduleWakeup → NOT parked, NOT spawned"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: non-wakeup turn earlier, FINAL assistant turn has ScheduleWakeup,
+# with a trailing tool_result line to confirm tail-1/last-turn logic.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"user","message":{"content":[{"type":"text","text":"poll"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"ok"}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"waiting"},{"type":"tool_use","name":"ScheduleWakeup","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"scheduled"}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#1590 idle-waiting worker: hook exits 0 (will resume)" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #1590 idle-waiting worker: NOT parked on office-hours (apply-office-hours NOT invoked)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1590 idle-waiting worker: NOT parked on office-hours (apply-office-hours NOT invoked)"
+  echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #1590 idle-waiting worker: NOT spawned (redundant tick suppressed)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1590 idle-waiting worker: NOT spawned (redundant tick suppressed)"
+  echo "    spawn-calls: $(cat "$STUB_DIR/spawn-calls.log")"
+fi
+stop_teardown
+
+# --- Test B (#1590): genuine mid-phase death (earlier wakeup, no trailing wakeup) → parked ---
+# Branch A discriminator: only the FINAL assistant turn matters (tail -1). An earlier
+# ScheduleWakeup followed by a later non-wakeup turn means the session died mid-phase;
+# the fail-safe park should fire byte-identically to the pre-Unit-1 behavior.
+
+echo "Test: #1590 Branch A mid-phase death — earlier ScheduleWakeup, final turn no wakeup → parked"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: earlier assistant turn with ScheduleWakeup, then a final turn without it.
+# This pins the tail-1 (last-turn-only) discriminator semantics.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"ScheduleWakeup","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"x"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{}}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#1590 mid-phase death: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #1590 mid-phase death: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1590 mid-phase death: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$apply_reason" | grep -q "phase exited before completion"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1590 mid-phase death: reason contains 'phase exited before completion'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1590 mid-phase death: reason contains 'phase exited before completion'"
+  echo "    reason: $apply_reason"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "#1590 mid-phase death: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
+# --- Test C (#1590): uncertainty — transcript path missing → fail-safe park ---
+# Branch A discriminator fail-safe: when transcript_path is provided but the file
+# does not exist, the discriminator returns 1 (uncertainty → park). Positive
+# evidence only; any doubt falls through to the office-hours park.
+
+echo "Test: #1590 Branch A discriminator fail-safe — missing transcript → parked"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Feed a payload pointing to a non-existent file — do NOT create it.
+FIXTURE="$TMPDIR_TEST/does-not-exist.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#1590 missing-transcript fail-safe: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #1590 missing-transcript fail-safe: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1590 missing-transcript fail-safe: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$apply_reason" | grep -q "phase exited before completion"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1590 missing-transcript fail-safe: reason contains 'phase exited before completion'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1590 missing-transcript fail-safe: reason contains 'phase exited before completion'"
+  echo "    reason: $apply_reason"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "#1590 missing-transcript fail-safe: spawn invoked exactly once" "1" "$spawn_calls"
 stop_teardown
 
 # --- Test 5a1: #1230 crash-before-label routing regression -------------------
@@ -17364,6 +18909,8 @@ spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "parse-job-done: spawn invoked exactly once" "1" "$spawn_calls"
 self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
 assert_eq "parse-job-done: self-close invoked exactly once" "1" "$self_close_calls"
+sweep_calls=$(wc -l < "$STUB_DIR/sweep-calls.log" 2>/dev/null || echo 0)
+assert_eq "parse-job-done: sweep invoked exactly once" "1" "$sweep_calls"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: parse-job-done: no office-hours apply"
@@ -17398,6 +18945,8 @@ spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "resolved-closed: spawn invoked exactly once" "1" "$spawn_calls"
 self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
 assert_eq "resolved-closed: self-close invoked exactly once" "1" "$self_close_calls"
+sweep_calls=$(wc -l < "$STUB_DIR/sweep-calls.log" 2>/dev/null || echo 0)
+assert_eq "resolved-closed: sweep invoked exactly once" "1" "$sweep_calls"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: resolved-closed: no office-hours apply"
@@ -19838,21 +21387,30 @@ STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
   issue\ list\ *dispatch:main-broken*)
+    # Step-1c main-broken latch: still on `gh issue list` (not converted, #1601 A5).
     if [[ -f "$STUB_DIR/main-broken-open.txt" ]]; then
       cat "$STUB_DIR/main-broken-open.txt"
     fi
     ;;
-  issue\ list\ *dispatch:sync-broken*)
-    # #1495: open dispatch:sync-broken latch query. Reads sync-broken-open.txt
-    # (one issue number per line; absent → no open latch).
-    if [[ -f "$STUB_DIR/sync-broken-open.txt" ]]; then
-      cat "$STUB_DIR/sync-broken-open.txt"
+  api\ *repos/*/issues\?*dispatch:sync-broken*)
+    # #1495 + #1601: open dispatch:sync-broken latch query, now via gh_issue_list_rest
+    # (REST). Serves sync-broken-open.json (REST-shape array; absent → []).
+    if [[ -f "$STUB_DIR/sync-broken-open.json" ]]; then
+      cat "$STUB_DIR/sync-broken-open.json"
+    else
+      echo "[]"
     fi
+    ;;
+  api\ --paginate\ repos/*/commits/*/check-runs)
+    # dispatch_ci_verdict_rest (#1601): per-PR check-runs by headRefOid sha.
+    sha=$(printf '%s' "$args" | sed -E 's#.*commits/([^/]+)/check-runs.*#\1#')
+    if [[ -f "$STUB_DIR/check-runs-${sha}.json" ]]; then cat "$STUB_DIR/check-runs-${sha}.json"
+    else echo '{"check_runs":[]}'; fi
     ;;
   issue\ close\ *)
     echo "$args" >> "$STUB_DIR/gh-issue-close.log"
     ;;
-  "pr list --state open --limit 300 --json number,isDraft,labels,statusCheckRollup,mergeable")
+  "pr list --state open --limit 300 --json number,isDraft,labels,headRefOid,mergeable")
     # dispatch-reconcile-ready's one fetch. $STUB_DIR/reconcile-pr-list.json
     # supplies the per-test PR array; absence means no open PRs.
     echo "pr list" >> "$STUB_DIR/gh-reconcile-pr-list.log"
@@ -20099,7 +21657,7 @@ sel_tick_teardown
 # --- #1495: latch already open + failing merge → sync-broken, NO escalate -----
 echo "Test: select-tick failing merge with open latch → sync-broken, no escalate/bump"
 sel_tick_setup
-printf '88\n' > "$STUB_DIR/sync-broken-open.txt"   # latch already open
+printf '[{"number":88}]\n' > "$STUB_DIR/sync-broken-open.json"   # latch already open
 export FAKE_GIT_MERGE_FAIL=1
 out=$(run_sel_tick)
 assert_eq "latched: decision line" "sync-broken" \
@@ -20114,7 +21672,7 @@ sel_tick_teardown
 # --- #1495: clean merge + open latch → counter reset, latch closed -----------
 echo "Test: select-tick clean merge with open latch → reset counter, close latch"
 sel_tick_setup
-printf '77\n' > "$STUB_DIR/sync-broken-open.txt"   # stale latch to close
+printf '[{"number":77}]\n' > "$STUB_DIR/sync-broken-open.json"   # stale latch to close
 printf '2\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # stale counter to reset
 # Merge succeeds (default, no FAKE_GIT_MERGE_FAIL) → fall through to select-target
 # (default `empty`).
@@ -20387,8 +21945,10 @@ echo "Test: select-tick concurrency-cap tick runs reconcile, emits ready: lines"
 sel_tick_setup
 export SEL_LIVE_COUNT=2 SEL_TARGET_N=1 SEL_EXHAUSTED=ok SEL_PRIORITY_ONLY=empty
 # Write a promotable PR fixture: draft + dispatch:reviewed + passing CI + MERGEABLE.
-printf '[{"number":42,"isDraft":true,"mergeable":"MERGEABLE","statusCheckRollup":%s,"labels":[{"name":"dispatch:reviewed"}]}]\n' \
-  "$GREEN_ROLLUP" > "$STUB_DIR/reconcile-pr-list.json"
+# CI verdict now derives from the REST check-runs of headRefOid (#1601).
+printf '%s' "{\"check_runs\": $GREEN_ROLLUP}" > "$STUB_DIR/check-runs-sha42.json"
+printf '[{"number":42,"isDraft":true,"mergeable":"MERGEABLE","headRefOid":"sha42","labels":[{"name":"dispatch:reviewed"}]}]\n' \
+  > "$STUB_DIR/reconcile-pr-list.json"
 out=$(run_sel_tick)
 assert_eq "cap-reconcile: decision line still concurrency-cap" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
@@ -21676,6 +23236,203 @@ assert_eq "finalize fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "finalize fail: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
+
+# --- create-existing, local branch → fetch + fast-forward + worktree add ------
+# AC #3 (#943): the PR head branch already exists locally (worktree was swept,
+# branch survived). materialize-spawn must fetch origin/$BRANCH, fast-forward the
+# local ref if it is a strict ancestor (UNIQUE=0), then
+# `git worktree add <path> <branch>` — NOT branch a fresh slug from origin/main.
+echo "Test: materialize-spawn create-existing local branch → fetch + fast-forward + worktree add"
+mat_setup
+export MAT_WT_DECISION="create-existing 42-existing-pr-branch"
+cat > "$TMPDIR_TEST/bin/git" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/git.log"
+case "\$*" in
+  "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/project/.bare" ;;
+  "show-ref --verify --quiet "*) exit 0 ;;
+  "rev-list --count "*) echo "0" ;;
+  "worktree add -b "*) mkdir -p "\$5" ;;
+  "worktree add --track -b "*) mkdir -p "\$6" ;;
+  "worktree add "*) mkdir -p "\$3" ;;
+  *) : ;;
+esac
+STUB
+chmod +x "$TMPDIR_TEST/bin/git"
+out=$(run_mat 42 queue) ; rc=$?
+assert_eq "create-existing local: exit 0" "0" "$rc"
+assert_eq "create-existing local: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+wt_add_local=$(grep -q "^worktree add $TMPDIR_TEST/project/worktrees/42-existing-pr-branch 42-existing-pr-branch\$" "$TMPDIR_TEST/logs/git.log" && echo yes || echo no)
+assert_eq "create-existing local: worktree add <path> <branch> (no -b)" "yes" "$wt_add_local"
+no_origin_main=$(grep -q "origin/main" "$TMPDIR_TEST/logs/git.log" && echo no || echo yes)
+assert_eq "create-existing local: did NOT branch a fresh slug from origin/main" "yes" "$no_origin_main"
+did_fetch=$(grep -q "^fetch --quiet origin 42-existing-pr-branch\$" "$TMPDIR_TEST/logs/git.log" && echo yes || echo no)
+assert_eq "create-existing local: fetched origin/BRANCH before checkout" "yes" "$did_fetch"
+did_ff=$(grep -q "^branch -f 42-existing-pr-branch origin/42-existing-pr-branch\$" "$TMPDIR_TEST/logs/git.log" && echo yes || echo no)
+assert_eq "create-existing local: fast-forwarded local ref to origin tip" "yes" "$did_ff"
+mat_teardown
+
+# --- create-existing, local branch diverged from origin → worktree-conflict ----
+# UNIQUE > 0: local branch carries commits not on origin (unpushed work). Must
+# emit worktree-conflict instead of overwriting, mirroring the enter-path
+# emit_enter_reconciled unique-commits conflict (#913).
+echo "Test: materialize-spawn create-existing local branch diverged → worktree-conflict"
+mat_setup
+export MAT_WT_DECISION="create-existing 42-existing-pr-branch"
+cat > "$TMPDIR_TEST/bin/git" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/git.log"
+case "\$*" in
+  "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/project/.bare" ;;
+  "show-ref --verify --quiet "*) exit 0 ;;
+  "rev-list --count "*) echo "1" ;;
+  "worktree add -b "*) mkdir -p "\$5" ;;
+  "worktree add --track -b "*) mkdir -p "\$6" ;;
+  "worktree add "*) mkdir -p "\$3" ;;
+  *) : ;;
+esac
+STUB
+chmod +x "$TMPDIR_TEST/bin/git"
+out=$(run_mat 42 queue) ; rc=$?
+assert_eq "create-existing local diverged: exit 0" "0" "$rc"
+assert_eq "create-existing local diverged: terminal token" "drain worktree-conflict" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "create-existing local diverged: path line emitted" "yes" \
+  "$(printf '%s\n' "$out" | grep -q "^path: " && echo yes || echo no)"
+no_wt_add=$(grep -q "^worktree add " "$TMPDIR_TEST/logs/git.log" && echo no || echo yes)
+assert_eq "create-existing local diverged: no worktree add (conflict, not materialized)" "yes" "$no_wt_add"
+mat_teardown
+
+# --- create-existing, remote-only branch → fetch then --track -b -------------
+# AC #4 (#943): the PR head branch exists only on origin (no local ref).
+# materialize-spawn must `git fetch origin <branch>` then
+# `git worktree add --track -b <branch> <path> origin/<branch>` — tracked, not
+# shadowed by a fresh origin/main branch.
+echo "Test: materialize-spawn create-existing remote-only → fetch + --track -b"
+mat_setup
+export MAT_WT_DECISION="create-existing 42-existing-pr-branch"
+cat > "$TMPDIR_TEST/bin/git" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/git.log"
+case "\$*" in
+  "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/project/.bare" ;;
+  "show-ref --verify --quiet "*) exit 1 ;;
+  "fetch --quiet origin "*) : ;;
+  "worktree add -b "*) mkdir -p "\$5" ;;
+  "worktree add --track -b "*) mkdir -p "\$6" ;;
+  "worktree add "*) mkdir -p "\$3" ;;
+  *) : ;;
+esac
+STUB
+chmod +x "$TMPDIR_TEST/bin/git"
+out=$(run_mat 42 queue) ; rc=$?
+assert_eq "create-existing remote: exit 0" "0" "$rc"
+assert_eq "create-existing remote: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+fetch_logged=$(grep -q "^fetch --quiet origin 42-existing-pr-branch\$" "$TMPDIR_TEST/logs/git.log" && echo yes || echo no)
+assert_eq "create-existing remote: fetched the PR head branch" "yes" "$fetch_logged"
+wt_add_remote=$(grep -q "^worktree add --track -b 42-existing-pr-branch $TMPDIR_TEST/project/worktrees/42-existing-pr-branch origin/42-existing-pr-branch\$" "$TMPDIR_TEST/logs/git.log" && echo yes || echo no)
+assert_eq "create-existing remote: worktree add --track -b <branch> <path> origin/<branch>" "yes" "$wt_add_remote"
+no_origin_main=$(grep -q "origin/main" "$TMPDIR_TEST/logs/git.log" && echo no || echo yes)
+assert_eq "create-existing remote: did NOT branch a fresh slug from origin/main" "yes" "$no_origin_main"
+mat_teardown
+
+# --- create-existing live-git: the materialized worktree carries the PR's -----
+# --- commits (AC #2), not a fresh origin/main branch -------------------------
+# The stub-based create-existing tests above prove the right git COMMAND is
+# issued, but the stub never runs real git, so they cannot prove AC #2's effect:
+# `git -C <path> rev-parse HEAD` equals the PR head tip AND
+# `git diff origin/main...HEAD` is non-empty. These two tests run the REAL
+# `dispatch-materialize-spawn` against a REAL git project (only git is un-stubbed;
+# every sub-script stays faked) so the create-existing arm's actual `git worktree
+# add` materializes a worktree we can inspect. This is the effect-level coverage
+# the resolver/command-shape tests cannot reach (#943).
+#
+# Topology mirrors the live `.bare` layout: a bare "upstream" origin, a local
+# bare `.bare` clone wired with the standard `+refs/heads/*:refs/remotes/origin/*`
+# refspec, and the script run from a linked "runner" worktree so
+# `resolve_project_root` (via `git rev-parse --git-common-dir`) resolves to the
+# test project, not the real repo this suite lives in.
+lmg_setup() {
+  mat_setup
+  # Use REAL git (keep the stub gh for the closed-check/title fetch). mat_setup
+  # put a logging-only git stub first on PATH; removing it lets git resolve from
+  # SAVED_PATH while $TMPDIR_TEST/bin/gh still shadows real gh.
+  rm -f "$TMPDIR_TEST/bin/git"
+  LMG_UP="$TMPDIR_TEST/upstream.git"
+  LMG_PROJ="$TMPDIR_TEST/project"
+  # mat_setup created project/.bare and project/worktrees as plain dirs; rebuild
+  # them as real repos.
+  rm -rf "$LMG_PROJ"
+  git init --bare -b main -q "$LMG_UP"
+  local seed="$TMPDIR_TEST/seed"
+  git clone -q "$LMG_UP" "$seed" 2>/dev/null
+  git -C "$seed" config user.email "test@test"
+  git -C "$seed" config user.name "Test"
+  printf 'seed content\n' > "$seed/seed.txt"
+  git -C "$seed" add seed.txt
+  git -C "$seed" commit -q -m "initial"
+  git -C "$seed" push -q origin main
+  LMG_MAIN_TIP=$(git -C "$seed" rev-parse main)
+  # PR-head branch = main + 1 commit, so diff origin/main...HEAD is non-empty.
+  git -C "$seed" checkout -q -b 42-existing-pr-branch
+  printf 'pr-only change\n' > "$seed/pr.txt"
+  git -C "$seed" add pr.txt
+  git -C "$seed" commit -q -m "pr commit"
+  LMG_PR_TIP=$(git -C "$seed" rev-parse HEAD)
+  git -C "$seed" push -q origin 42-existing-pr-branch
+  rm -rf "$seed"
+  # Local bare `.bare` with the standard remote refspec: gives refs/remotes/
+  # origin/* and the objects, but NO local refs/heads/* (so local-vs-remote is
+  # ours to control per case).
+  git init --bare -b main -q "$LMG_PROJ/.bare"
+  git -C "$LMG_PROJ/.bare" remote add origin "$LMG_UP"
+  git -C "$LMG_PROJ/.bare" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+  git -C "$LMG_PROJ/.bare" fetch -q origin
+  mkdir -p "$LMG_PROJ/worktrees"
+  # Linked runner worktree (detached at origin/main) = CWD for the script run.
+  git -C "$LMG_PROJ/.bare" worktree add -q --detach "$LMG_PROJ/worktrees/runner" origin/main
+  LMG_RUNNER="$LMG_PROJ/worktrees/runner"
+  export MAT_WT_DECISION="create-existing 42-existing-pr-branch"
+}
+lmg_teardown() { unset LMG_UP LMG_PROJ LMG_RUNNER LMG_MAIN_TIP LMG_PR_TIP; mat_teardown; }
+# Run the real materialize-spawn from inside the runner worktree so
+# resolve_project_root resolves to the test project.
+run_lmg() { ( cd "$LMG_RUNNER" && "$TMPDIR_TEST/dispatch-materialize-spawn" "$@" 2>/dev/null ); }
+
+# Live-git, local branch present (AC #2 + AC #3): worktree checks out the
+# existing local PR-head branch at its tip, carrying the PR's commit.
+echo "Test: materialize-spawn create-existing live-git local → worktree HEAD == PR head tip (AC #2)"
+lmg_setup
+# Local head present → the arm's show-ref succeeds → `worktree add <path> <branch>`.
+git -C "$LMG_PROJ/.bare" branch 42-existing-pr-branch origin/42-existing-pr-branch
+out=$(run_lmg 42 queue) ; rc=$?
+assert_eq "live local: exit 0" "0" "$rc"
+mat_wt="$LMG_PROJ/worktrees/42-existing-pr-branch"
+assert_eq "live local: worktree materialized" "1" "$([ -d "$mat_wt" ] && echo 1 || echo 0)"
+assert_eq "live local: HEAD == PR head tip (AC #2)" "$LMG_PR_TIP" \
+  "$(git -C "$mat_wt" rev-parse HEAD)"
+assert_eq "live local: HEAD != origin/main tip (not a fresh origin/main branch)" "yes" \
+  "$([ "$(git -C "$mat_wt" rev-parse HEAD)" != "$LMG_MAIN_TIP" ] && echo yes || echo no)"
+assert_eq "live local: diff origin/main...HEAD is non-empty (AC #2)" "yes" \
+  "$([ -n "$(git -C "$mat_wt" diff --name-only origin/main...HEAD)" ] && echo yes || echo no)"
+lmg_teardown
+
+# Live-git, remote-only branch (AC #2 + AC #4): no local head → fetch then
+# `--track -b`; worktree checks out the fetched PR-head tip, carrying its commit.
+echo "Test: materialize-spawn create-existing live-git remote-only → worktree HEAD == PR head tip (AC #2)"
+lmg_setup
+# No local refs/heads/42-* (we never create it) → the arm's show-ref fails →
+# fetch + `git worktree add --track -b`.
+out=$(run_lmg 42 queue) ; rc=$?
+assert_eq "live remote: exit 0" "0" "$rc"
+mat_wt="$LMG_PROJ/worktrees/42-existing-pr-branch"
+assert_eq "live remote: worktree materialized" "1" "$([ -d "$mat_wt" ] && echo 1 || echo 0)"
+assert_eq "live remote: HEAD == PR head tip (AC #2)" "$LMG_PR_TIP" \
+  "$(git -C "$mat_wt" rev-parse HEAD)"
+assert_eq "live remote: local branch now tracks origin (--track -b)" "origin/42-existing-pr-branch" \
+  "$(git -C "$mat_wt" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)"
+assert_eq "live remote: diff origin/main...HEAD is non-empty (AC #2)" "yes" \
+  "$([ -n "$(git -C "$mat_wt" diff --name-only origin/main...HEAD)" ] && echo yes || echo no)"
+lmg_teardown
 
 # --- explicit closed-check gh failure → exit 2 + lock released ---------------
 # The closed-target guard must not fail open on a gh error (silently dispatching
@@ -23174,6 +24931,85 @@ out=$(printf '%s' '[{"source":"sonarqube","classification":"out-of-scope","secur
 assert_eq "followup: unknown/missing source → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
 
 # ============================================================================
+# === dispatch-qa-needs-main-followup ===
+# ============================================================================
+
+echo "Test: dispatch-qa-needs-main-followup"
+
+# 1. Empty input → length 0
+out=$(printf '%s' '[]' | "$SCRIPT_DIR/dispatch-qa-needs-main-followup" 1552 99)
+assert_eq "qa-needs-main-followup: empty input → 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+
+# 2. One item with non-empty url_path → identifier uses url_path
+out=$(printf '%s' '[{
+  "id": "i1",
+  "title": "Budget page loads",
+  "kind": "main-gated-fail",
+  "url_path": "/budget",
+  "expected_outcome": "Page renders with current data",
+  "finding": "Returns 403 on staging"
+}]' | "$SCRIPT_DIR/dispatch-qa-needs-main-followup" 1552 99)
+assert_eq "qa-needs-main-followup: url_path item → length 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
+assert_eq "qa-needs-main-followup: url_path item → identifier" "qa-needs-main #1552: /budget" "$(printf '%s' "$out" | jq -r '.[0].identifier')"
+title2=$(printf '%s' "$out" | jq -r '.[0].title')
+case "$title2" in *"qa-needs-main #1552: /budget"*) hit=yes ;; *) hit=no ;; esac
+assert_eq "qa-needs-main-followup: url_path item → title contains identifier" "yes" "$hit"
+body2=$(printf '%s' "$out" | jq -r '.[0].body')
+case "$body2" in *"PR #99 for issue #1552"*) hit=yes ;; *) hit=no ;; esac
+assert_eq "qa-needs-main-followup: url_path item → body contains provenance" "yes" "$hit"
+case "$body2" in *"**URL path:** /budget"*) hit=yes ;; *) hit=no ;; esac
+assert_eq "qa-needs-main-followup: url_path item → body contains URL path line" "yes" "$hit"
+case "$body2" in *"**Expected outcome:**"*) hit=yes ;; *) hit=no ;; esac
+assert_eq "qa-needs-main-followup: url_path item → body contains expected outcome label" "yes" "$hit"
+case "$body2" in *"**Finding during QA:**"*) hit=yes ;; *) hit=no ;; esac
+assert_eq "qa-needs-main-followup: url_path item → body contains finding label" "yes" "$hit"
+
+# 3a. Item with empty url_path → identifier uses title slug
+out=$(printf '%s' '[{
+  "id": "i2",
+  "title": "Budget Page Loads OK!",
+  "kind": "main-gated-fail",
+  "url_path": "",
+  "expected_outcome": "Loads without error",
+  "finding": "Blank page on main"
+}]' | "$SCRIPT_DIR/dispatch-qa-needs-main-followup" 1552 99)
+assert_eq "qa-needs-main-followup: empty url_path → slug identifier" "qa-needs-main #1552: budget-page-loads-ok" "$(printf '%s' "$out" | jq -r '.[0].identifier')"
+
+# 3b. Item with url_path "current" → identifier uses title slug
+out=$(printf '%s' '[{
+  "id": "i3",
+  "title": "Auth Flow Works Correctly",
+  "kind": "fail",
+  "url_path": "current",
+  "expected_outcome": "User can log in",
+  "finding": "Redirect loop observed"
+}]' | "$SCRIPT_DIR/dispatch-qa-needs-main-followup" 1552 99)
+assert_eq "qa-needs-main-followup: url_path=current → slug identifier" "qa-needs-main #1552: auth-flow-works-correctly" "$(printf '%s' "$out" | jq -r '.[0].identifier')"
+body3=$(printf '%s' "$out" | jq -r '.[0].body')
+case "$body3" in *'**URL path:**'*) hit=yes ;; *) hit=no ;; esac
+assert_eq 'qa-needs-main-followup: url_path=current → no URL path line in body' 'no' "$hit"
+
+# 4. Determinism: same input twice → identical identifiers
+input4='[{
+  "id": "i4",
+  "title": "Dashboard renders",
+  "kind": "main-gated-fail",
+  "url_path": "/dashboard",
+  "expected_outcome": "Charts load",
+  "finding": "Empty chart area"
+}]'
+id1=$(printf '%s' "$input4" | "$SCRIPT_DIR/dispatch-qa-needs-main-followup" 1552 99 | jq -r '.[0].identifier')
+id2=$(printf '%s' "$input4" | "$SCRIPT_DIR/dispatch-qa-needs-main-followup" 1552 99 | jq -r '.[0].identifier')
+assert_eq "qa-needs-main-followup: determinism → identical identifiers" "$id1" "$id2"
+
+# 5. Two-item array → length 2
+out=$(printf '%s' '[
+  {"id":"i5","title":"A","kind":"main-gated-fail","url_path":"/a","expected_outcome":"ok","finding":"fail"},
+  {"id":"i6","title":"B","kind":"main-gated-fail","url_path":"/b","expected_outcome":"ok","finding":"fail"}
+]' | "$SCRIPT_DIR/dispatch-qa-needs-main-followup" 1552 99)
+assert_eq "qa-needs-main-followup: 2-item input → length 2" "2" "$(printf '%s' "$out" | jq -r 'length')"
+
+# ============================================================================
 # === dispatch-review-finders ===
 # ============================================================================
 
@@ -23260,6 +25096,7 @@ assert_eq "dedup: absent-id partition → present finding emitted" "a" "$(printf
 # ["review", null]. exit/length/id all still pass without the filter, so this
 # sources check is the only one that actually guards the absent-id fix.
 assert_eq "dedup: absent-id partition → sources unpolluted by null member" '["review"]' "$(printf '%s' "$out" | jq -c '.[0].sources')"
+assert_eq "dedup: absent-id partition → absent id zzz never emitted (id or sources)" "0" "$(printf '%s' "$out" | jq -r '[.[] | select(.id == "zzz" or ((.sources // []) | index("zzz")))] | length')"
 
 # empty findings → [], exit 0
 IN5='{"findings":[],"partition":[]}'
@@ -23280,6 +25117,18 @@ out=$(printf '%s' "$IN7" | "$SCRIPT_DIR/dispatch-review-dedup")
 assert_eq "dedup: partition-split → length 2" "2" "$(printf '%s' "$out" | jq -r 'length')"
 assert_eq "dedup: partition-split → output[0] Confidence preserved (high)" "high" "$(printf '%s' "$out" | jq -r '.[0].Confidence')"
 assert_eq "dedup: partition-split → output[1] Confidence preserved (low)" "low" "$(printf '%s' "$out" | jq -r '.[1].Confidence')"
+
+# all-absent partition group: every member absent from findings → group
+# collapses to nothing (not a junk finding), exit 0. Distinct from IN5
+# (empty partition): here the partition is NON-empty but references only
+# absent ids. Discriminating: WITHOUT the empty-group drop, this group
+# emits {"Confidence":null,...} and length is 1, so the [] / length-0
+# assertion is the one that guards the fix.
+IN8='{"findings":[],"partition":[["zzz","yyy"]]}'
+if out=$(printf '%s' "$IN8" | "$SCRIPT_DIR/dispatch-review-dedup"); then rc=0; else rc=$?; fi
+assert_eq "dedup: all-absent partition group → exit 0" "0" "$rc"
+assert_eq "dedup: all-absent partition group → length 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+assert_eq "dedup: all-absent partition group → []" "[]" "$(printf '%s' "$out" | jq -c '.')"
 
 # ============================================================================
 # === dispatch-review-verify-drop ===
@@ -25144,6 +26993,87 @@ fi
 rm -rf "$eru3_tmp"
 
 # ============================================================================
+# ensure_recover_unit: PATH backslash is stripped from Environment= (#1212)
+# ============================================================================
+echo ""
+echo "=== ensure_recover_unit strips backslash from Environment= PATH ==="
+eru4_tmp=$(mktemp -d)
+mkdir -p "$eru4_tmp/bin"
+mkdir -p "$eru4_tmp/main-worktree"
+cat > "$eru4_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$eru4_tmp/bin/systemctl"
+if (
+  export DISPATCH_RECOVER_UNIT_DIR="$eru4_tmp/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$eru4_tmp/bin/systemctl"
+  export PATH="/usr/bin:/mnt/c/win\\dows:$PATH"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_recover_unit "$eru4_tmp/main-worktree"
+); then
+  eru4_unit="$eru4_tmp/systemd-user/dispatch-tick-recover.service"
+  if eru4_env_line=$(grep '^Environment=' "$eru4_unit" 2>/dev/null); then
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eru4_env_line" != *'\'* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: Environment= PATH has no backslash (stripped)"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: Environment= PATH still contains a backslash: $eru4_env_line"
+    fi
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eru4_env_line" == 'Environment="PATH='* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: Environment= line is well-formed (PATH= prefix intact)"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: Environment= line is malformed: $eru4_env_line"
+    fi
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eru4_env_line" == *'/mnt/c/windows'* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: backslash removal merged the path segment to /mnt/c/windows"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: /mnt/c/windows not found in Environment= line: $eru4_env_line"
+    fi
+  else
+    TOTAL=$((TOTAL + 3)); FAIL=$((FAIL + 3))
+    echo "  FAIL: unit file missing or lacks Environment= line: $eru4_unit"
+  fi
+else
+  TOTAL=$((TOTAL + 3)); FAIL=$((FAIL + 3))
+  echo "  FAIL: ensure_recover_unit returned non-zero"
+fi
+rm -rf "$eru4_tmp"
+
+# ============================================================================
+# ensure_recover_unit: rejects a path containing a backslash (#1212)
+# ============================================================================
+echo ""
+echo "=== ensure_recover_unit rejects a path with a backslash ==="
+eru5_tmp=$(mktemp -d)
+mkdir -p "$eru5_tmp/bin"
+cat > "$eru5_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$eru5_tmp/bin/systemctl"
+TOTAL=$((TOTAL + 1))
+if (
+  export DISPATCH_RECOVER_UNIT_DIR="$eru5_tmp/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$eru5_tmp/bin/systemctl"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_recover_unit "$eru5_tmp/has\\a\\backslash"
+); then
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure_recover_unit should have returned non-zero for a path with a backslash"
+else
+  PASS=$((PASS + 1)); echo "  PASS: ensure_recover_unit returned non-zero for a path with a backslash"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$eru5_tmp/systemd-user/dispatch-tick-recover.service" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no unit file was written for a path with a backslash"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unit file was written despite path containing a backslash"
+fi
+rm -rf "$eru5_tmp"
+
+# ============================================================================
 # ensure_daemon_service: durable daemon service install + attach paths (#1197)
 # ============================================================================
 echo ""
@@ -25406,6 +27336,63 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: empty claude path returned zero"
 fi
 
+# --- 5. PATH backslash is stripped from daemon Environment= (#1212) ----------
+echo ""
+echo "=== ensure_daemon_service strips backslash from Environment= PATH ==="
+eds_path_strip_dir="$eds_tmp/path-strip-systemd-user"
+eds_path_strip_rc=0
+if (
+  export DISPATCH_DAEMON_UNIT_DIR="$eds_path_strip_dir"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
+  export STUB_LOG="$eds_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  export PATH="/usr/bin:/mnt/c/win\\dows:$PATH"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_daemon_service
+); then
+  eds_path_strip_unit="$eds_path_strip_dir/dispatch-claude-daemon.service"
+  if eds_path_env_line=$(grep '^Environment=' "$eds_path_strip_unit" 2>/dev/null); then
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eds_path_env_line" != *'\'* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: daemon Environment= PATH has no backslash (stripped)"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: daemon Environment= PATH still contains a backslash: $eds_path_env_line"
+    fi
+  else
+    TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+    echo "  FAIL: daemon unit missing or lacks Environment= line: $eds_path_strip_unit"
+  fi
+else
+  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+  echo "  FAIL: ensure_daemon_service returned non-zero (path-strip test)"
+fi
+
+# --- 6. ensure_daemon_service rejects a claude path with a backslash (#1212) -
+echo ""
+echo "=== ensure_daemon_service rejects a claude path with a backslash ==="
+eds_reject_rc=0
+(
+  export DISPATCH_DAEMON_UNIT_DIR="$eds_tmp/reject-systemd-user"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_tmp/bin/cla\\ude"
+  export STUB_LOG="$eds_log"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_daemon_service
+) 2>/dev/null || eds_reject_rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$eds_reject_rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: ensure_daemon_service returned non-zero for a claude path with a backslash"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure_daemon_service returned zero for a claude path with a backslash"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$eds_tmp/reject-systemd-user/dispatch-claude-daemon.service" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no daemon unit written for a claude path with a backslash"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: daemon unit was written despite claude path containing a backslash"
+fi
+
 rm -rf "$eds_tmp"
 
 # ============================================================================
@@ -25500,7 +27487,7 @@ if [[ "$method" == "POST" && "$endpoint" == *"/comments" ]]; then
   next=$(( $(cat "$COUNTER") + 1 ))
   echo "$next" > "$COUNTER"
   newbody=$(cat "$bodyfile")
-  updated=$(jq -c --argjson id "$next" --arg body "$newbody" '. + [{id:$id, body:$body}]' "$STORE")
+  updated=$(jq -c --argjson id "$next" --arg body "$newbody" --arg login "${WP_AUTHOR:-plan-bot}" '. + [{id:$id, body:$body, user:{login:$login}}]' "$STORE")
   echo "$updated" > "$STORE"
   emit "$(jq -c --argjson id "$next" '.[] | select(.id == $id)' "$STORE")"
   exit 0
@@ -25520,6 +27507,13 @@ chmod +x "$wp_root/bin/gh"
 
 WP_WRITE="$SCRIPT_DIR/dispatch-write-plan"
 WP_READ="$SCRIPT_DIR/dispatch-read-plan"
+
+# Pin the trusted plan-comment author for this block. Every positive test POSTs
+# via dispatch-write-plan, whose POST the fake gh stamps as ${WP_AUTHOR:-plan-bot};
+# pinning DISPATCH_PLAN_AUTHOR to the same login keeps the author-filtered scans
+# matching, and short-circuits the scripts' `$(gh api user …)` default (the fake
+# gh has no user endpoint).
+export DISPATCH_PLAN_AUTHOR=plan-bot
 
 # 1. write-creates: empty store → one comment containing the marker + PLAN A.
 if ! PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"PLAN A"; then
@@ -25582,6 +27576,62 @@ else
 fi
 rm -rf "$wp_empty"
 
+# 6. foreign-author injection: a marker comment authored by an untrusted account
+#    must be ignored by read-plan, and write-plan must NOT adopt (PATCH) it — it
+#    POSTs a fresh trusted-authored comment instead. Guards the #1222 fix:
+#    without the author filter, read-plan would execute the forged plan and
+#    write-plan would clobber the attacker's comment with the real plan.
+wp_forge=$(mktemp -d); mkdir -p "$wp_forge/bin"
+sed "s|$WP_STORE|$wp_forge/store.json|; s|$WP_COUNTER|$wp_forge/counter|" \
+  "$wp_root/bin/gh" > "$wp_forge/bin/gh"
+chmod +x "$wp_forge/bin/gh"
+# Seed one attacker-authored comment carrying the marker; counter=1 so the next
+# POST gets id 2 (no id collision with the seeded id 1).
+echo '1' > "$wp_forge/counter"
+jq -nc '[{id:1, body:"<!-- dispatch:plan -->\nFORGED PLAN", user:{login:"attacker"}}]' > "$wp_forge/store.json"
+
+# 6a. read-plan ignores the forged comment → exit 1 + missing-comment diagnostic.
+if read_err=$(PATH="$wp_forge/bin:$SAVED_PATH" "$WP_READ" 7 2>&1 1>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "read-plan: foreign-authored marker comment is ignored (exit 1)" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$read_err" == *"dispatch:plan"* || "$read_err" == *"no "*"comment"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan ignores a forged foreign-authored plan comment"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan ignores a forged foreign-authored plan comment"
+  echo "    actual: '$read_err'"
+fi
+
+# 6b. write-plan POSTs a fresh trusted comment rather than PATCHing the attacker's.
+if ! PATH="$wp_forge/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"REAL PLAN"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan (foreign-author) failed unexpectedly"
+fi
+assert_eq "write-plan: foreign-author store has two comments (attacker + new trusted)" \
+  "2" "$(jq 'length' "$wp_forge/store.json")"
+TOTAL=$((TOTAL + 1))
+if jq -e '.[] | select(.id == 1) | .body == "<!-- dispatch:plan -->\nFORGED PLAN"' "$wp_forge/store.json" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: write-plan leaves the attacker comment body unchanged"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan leaves the attacker comment body unchanged"
+fi
+TOTAL=$((TOTAL + 1))
+if jq -e '.[] | select(.user.login == "plan-bot") | (.body | contains("<!-- dispatch:plan -->") and contains("REAL PLAN"))' "$wp_forge/store.json" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: write-plan POSTs a fresh trusted-authored plan comment"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan POSTs a fresh trusted-authored plan comment"
+fi
+
+# 6c. read-plan now returns the trusted plan, not the forged one.
+read_out=""
+read_out=$(PATH="$wp_forge/bin:$SAVED_PATH" "$WP_READ" 7) || { FAIL=$((FAIL + 1)); echo "  FAIL: read-plan (foreign-author) exited non-zero unexpectedly"; }
+TOTAL=$((TOTAL + 1))
+if [[ "$read_out" == *"REAL PLAN"* && "$read_out" != *"FORGED PLAN"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan returns the trusted plan, not the forged one"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan returns the trusted plan, not the forged one"
+  echo "    actual: '$read_out'"
+fi
+rm -rf "$wp_forge"
+
 # 5. bare+worktree repo resolution: from a worktree whose dirname(common_dir) is
 # NOT a git repo (the real bare-repo + worktrees layout), with GH_REPO unset, both
 # scripts must still resolve the repo for gh. This would FAIL against the pre-fix
@@ -25639,6 +27689,7 @@ git --git-dir="$bw_root/.bare" worktree prune 2>/dev/null || true
 rm -rf "$bw_root"
 
 rm -rf "$wp_root"
+unset DISPATCH_PLAN_AUTHOR
 
 # ============================================================================
 # claim_fixed_vite_port (fixed Vite-port pool) tests
@@ -25784,14 +27835,17 @@ echo ""
 echo "=== dispatch-reconcile-ready ==="
 
 # Build a single-PR fixture array for the reconcile fetch. Shapes match the
-# `gh pr list --json number,isDraft,labels,statusCheckRollup,mergeable` output
-# the script consumes.
+# `gh pr list --json number,isDraft,labels,headRefOid,mergeable` output the
+# script consumes; the CI verdict now derives from the REST check-runs of
+# headRefOid (#1601), so also write the matching check-runs fixture.
 #   $1 = number, $2 = isDraft (true|false), $3 = mergeable
 #   (MERGEABLE|CONFLICTING|UNKNOWN), $4 = rollup JSON, $5 = labels JSON.
 make_reconcile_pr() {
   local num="$1" is_draft="$2" mergeable="$3" rollup_json="$4" labels_json="$5"
-  printf '[{"number":%s,"isDraft":%s,"mergeable":"%s","statusCheckRollup":%s,"labels":%s}]' \
-    "$num" "$is_draft" "$mergeable" "$rollup_json" "$labels_json"
+  local sha="sha${num}"
+  write_rest_check_runs "$sha" "$rollup_json"
+  printf '[{"number":%s,"isDraft":%s,"mergeable":"%s","headRefOid":"%s","labels":%s}]' \
+    "$num" "$is_draft" "$mergeable" "$sha" "$labels_json"
 }
 
 # Labels: a single dispatch:reviewed label, and the no-reviewed scope case.
@@ -25969,16 +28023,21 @@ teardown
 # promotable PR is skipped, and a reviewed already-correct PR is a no-op.
 echo "Test: multi-PR fetch reconciles each PR independently"
 setup
+# Each PR's CI verdict derives from the REST check-runs of its headRefOid (#1601);
+# all four are green here.
+for n in 20 21 22 23; do
+  printf '%s' "{\"check_runs\": $GREEN_ROLLUP}" > "$STUB_DIR/check-runs-sha${n}.json"
+done
 {
   printf '[\n'
-  printf '{"number":20,"isDraft":true,"mergeable":"MERGEABLE","statusCheckRollup":%s,"labels":%s},\n' \
-    "$GREEN_ROLLUP" "$REVIEWED_LABELS"
-  printf '{"number":21,"isDraft":false,"mergeable":"CONFLICTING","statusCheckRollup":%s,"labels":%s},\n' \
-    "$GREEN_ROLLUP" "$REVIEWED_LABELS"
-  printf '{"number":22,"isDraft":true,"mergeable":"MERGEABLE","statusCheckRollup":%s,"labels":%s},\n' \
-    "$GREEN_ROLLUP" "$NO_REVIEWED_LABELS"
-  printf '{"number":23,"isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":%s,"labels":%s}\n' \
-    "$GREEN_ROLLUP" "$REVIEWED_LABELS"
+  printf '{"number":20,"isDraft":true,"mergeable":"MERGEABLE","headRefOid":"sha20","labels":%s},\n' \
+    "$REVIEWED_LABELS"
+  printf '{"number":21,"isDraft":false,"mergeable":"CONFLICTING","headRefOid":"sha21","labels":%s},\n' \
+    "$REVIEWED_LABELS"
+  printf '{"number":22,"isDraft":true,"mergeable":"MERGEABLE","headRefOid":"sha22","labels":%s},\n' \
+    "$NO_REVIEWED_LABELS"
+  printf '{"number":23,"isDraft":false,"mergeable":"MERGEABLE","headRefOid":"sha23","labels":%s}\n' \
+    "$REVIEWED_LABELS"
   printf ']\n'
 } > "$STUB_DIR/reconcile-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
@@ -27535,7 +29594,7 @@ echo "=== #1452: snapshot / trace-cache memo / early-exit ==="
 echo "Test: #1452 B — snapshot consumed; no live claude call during selection"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 # Orphan 55-* worktree: on disk, no live session → forces the liveness query.
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/55-feature\nHEAD def456\nbranch refs/heads/55-feature\n\n' \
@@ -27557,7 +29616,7 @@ teardown
 echo "Test: #1452 B contrast — without snapshot, the live claude fake is invoked"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/55-feature\nHEAD def456\nbranch refs/heads/55-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
@@ -27593,7 +29652,7 @@ calls_after_capture=$([[ -f "$STUB_DIR/claude-agents-calls.log" ]] && wc -l < "$
 assert_eq "#1452 C — capture made exactly one claude agents call" "1" "$calls_after_capture"
 # Consumption half: a select-target scan with the snapshot set must add 0 calls.
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/55-feature\nHEAD def456\nbranch refs/heads/55-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
@@ -27617,7 +29676,7 @@ setup
 setup_union_pr_list '[]'
 # Roots 810 and 820 are both plain help-wanted (pri0, category other). Each is
 # blocked by the same open child 830. No worktrees → no liveness round-trips.
-printf '[{"number":810,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":820,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":810,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":820,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf '[{"number":830}]\n' > "$STUB_DIR/blockers-810.json"
 printf '[{"number":830}]\n' > "$STUB_DIR/blockers-820.json"
@@ -27641,7 +29700,7 @@ teardown
 echo "Test: #1452 D contrast — without cache, child looked up multiple times"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":810,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":820,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":810,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":820,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf '[{"number":830}]\n' > "$STUB_DIR/blockers-810.json"
 printf '[{"number":830}]\n' > "$STUB_DIR/blockers-820.json"
@@ -27684,7 +29743,7 @@ teardown
 echo "Test: #1452 F(a) — security root (newer) beats audio root (older)"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":910,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"}]},{"number":920,"createdAt":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+printf '[{"number":910,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"}]},{"number":920,"created_at":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -27696,7 +29755,7 @@ teardown
 echo "Test: #1452 F(a) — priority root beats earlier non-priority root"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":930,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":940,"createdAt":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+printf '[{"number":930,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":940,"created_at":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -27716,7 +29775,7 @@ setup
 setup_union_pr_list '[]'
 # 940 = priority help-wanted (pri1), its own emittable leaf. 950 = plain
 # help-wanted (pri0, other) — strictly lower rank. No worktrees, no closing PRs.
-printf '[{"number":940,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]},{"number":950,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":940,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]},{"number":950,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -27744,7 +29803,7 @@ echo "=== #1474: forward-derived claimed set ==="
 echo "Test: #1474 E1 — live office-hours-<N> marks issue <N> claimed (select-target)"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 # No worktrees at all — the claim is purely the live office-hours session.
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
@@ -27798,7 +29857,7 @@ teardown
 echo "Test: #1474 E2 — live <N>-slug session with no registered worktree marks <N> claimed"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 # EMPTY worktree list (only the main repo row). No <N>-* worktree exists at all.
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
@@ -27821,7 +29880,7 @@ teardown
 echo "Test: #1474 E3 — UNKNOWN daemon + no reservation → candidate NOT skipped (fail open)"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 # 55 has an on-disk worktree — the OLD worktree walk (with UNKNOWN folded to
 # occupied) would have skipped it. The default setup daemon is UNKNOWN and no
@@ -27843,7 +29902,7 @@ teardown
 echo "Test: #1474 E4 — snapshot-backed selection makes zero live claude agents calls"
 setup
 setup_union_pr_list '[]'
-printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 # Install the logging fake, then point the tick snapshot at a payload that claims
@@ -27857,6 +29916,185 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "#1474 E4 — snapshot claims 55 → 66 selected" "issue 66" "$result"
 calls=$([[ -f "$STUB_DIR/claude-agents-calls.log" ]] && wc -l < "$STUB_DIR/claude-agents-calls.log" | tr -d ' ' || echo 0)
 assert_eq "#1474 E4 — zero live claude agents calls during selection" "0" "$calls"
+teardown
+
+# #1490 — --debug-classify: inline ISSUE_SORTED jq classification agrees with
+# shell helpers (category_of_labels / has_priority_in_labels).
+# One issue per TOPIC_CATEGORIES entry + one "other" + one priority-flagged
+# dispatch issue. --debug-classify exits before PR selection, so no UNION
+# and no fake claude are required.
+echo "Test: #1490 -- --debug-classify: jq sort classification matches shell helpers"
+setup
+setup_union_pr_list '[]'
+# Numbers:
+#   101 security   (help wanted + security)
+#   102 bug        (help wanted + bug)
+#   103 testing    (help wanted + testing infrastructure)
+#   104 dispatch   (help wanted + dispatch)
+#   105 landing    (help wanted + landing)
+#   106 fellspiral (help wanted + fellspiral)
+#   107 budget     (help wanted + budget)
+#   108 print      (help wanted + print)
+#   109 audio      (help wanted + audio)
+#   110 other      (help wanted, no topic label)
+#   111 priority   (help wanted + dispatch + priority) — priority spot-check
+printf '[
+  {"number":101,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]},
+  {"number":102,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},
+  {"number":103,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"testing infrastructure"}]},
+  {"number":104,"createdAt":"2024-01-04T00:00:00Z","labels":[{"name":"help wanted"},{"name":"dispatch"}]},
+  {"number":105,"createdAt":"2024-01-05T00:00:00Z","labels":[{"name":"help wanted"},{"name":"landing"}]},
+  {"number":106,"createdAt":"2024-01-06T00:00:00Z","labels":[{"name":"help wanted"},{"name":"fellspiral"}]},
+  {"number":107,"createdAt":"2024-01-07T00:00:00Z","labels":[{"name":"help wanted"},{"name":"budget"}]},
+  {"number":108,"createdAt":"2024-01-08T00:00:00Z","labels":[{"name":"help wanted"},{"name":"print"}]},
+  {"number":109,"createdAt":"2024-01-09T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"}]},
+  {"number":110,"createdAt":"2024-01-10T00:00:00Z","labels":[{"name":"help wanted"}]},
+  {"number":111,"createdAt":"2024-01-11T00:00:00Z","labels":[{"name":"help wanted"},{"name":"dispatch"},{"name":"priority"}]}
+]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --debug-classify)
+# Spot-check values captured from the row loop (to avoid set -e aborting on a
+# failed grep; find by number inside the loop instead).
+spot_security_scat=""
+spot_security_hcat=""
+spot_priority_spri=""
+spot_priority_hpri=""
+spot_other_scat=""
+spot_other_hcat=""
+spot_other_spri=""
+spot_other_hpri=""
+spot_testing_scat=""
+spot_testing_hcat=""
+row_count=0
+while IFS=$'\t' read -r dc_num dc_spri dc_scat dc_hpri dc_hcat; do
+  [[ -z "$dc_num" ]] && continue
+  row_count=$((row_count + 1))
+  assert_eq "#1490 classify: issue $dc_num sorted_pri == helper_pri" "$dc_spri" "$dc_hpri"
+  assert_eq "#1490 classify: issue $dc_num sorted_cat == helper_cat" "$dc_scat" "$dc_hcat"
+  # Stash spot-check values while iterating (avoids grep that would abort on miss).
+  if [[ "$dc_num" == "101" ]]; then
+    spot_security_scat="$dc_scat"
+    spot_security_hcat="$dc_hcat"
+  fi
+  if [[ "$dc_num" == "111" ]]; then
+    spot_priority_spri="$dc_spri"
+    spot_priority_hpri="$dc_hpri"
+  fi
+  if [[ "$dc_num" == "110" ]]; then
+    spot_other_scat="$dc_scat"
+    spot_other_hcat="$dc_hcat"
+    spot_other_spri="$dc_spri"
+    spot_other_hpri="$dc_hpri"
+  fi
+  if [[ "$dc_num" == "103" ]]; then
+    spot_testing_scat="$dc_scat"
+    spot_testing_hcat="$dc_hcat"
+  fi
+done <<< "$result"
+# Confirm expected row count (all 11 issues survive: none carry dispatch:office-hours).
+assert_eq "#1490 classify: 11 rows emitted (all issues survive)" "11" "$row_count"
+# Spot-assert absolute values — guards against a both-sides-wrong regression.
+assert_eq "#1490 classify: security issue (101) sorted_cat is 'security'" "security" "$spot_security_scat"
+assert_eq "#1490 classify: security issue (101) helper_cat is 'security'" "security" "$spot_security_hcat"
+assert_eq "#1490 classify: priority issue (111) sorted_pri is 1" "1" "$spot_priority_spri"
+assert_eq "#1490 classify: priority issue (111) helper_pri is 1" "1" "$spot_priority_hpri"
+assert_eq "#1490 classify: other issue (110) sorted_cat is 'other'" "other" "$spot_other_scat"
+assert_eq "#1490 classify: other issue (110) helper_cat is 'other'" "other" "$spot_other_hcat"
+assert_eq "#1490 classify: other issue (110) sorted_pri is 0" "0" "$spot_other_spri"
+assert_eq "#1490 classify: other issue (110) helper_pri is 0" "0" "$spot_other_hpri"
+assert_eq "#1490 classify: testing issue (103) sorted_cat is 'testing infrastructure'" "testing infrastructure" "$spot_testing_scat"
+assert_eq "#1490 classify: testing issue (103) helper_cat is 'testing infrastructure'" "testing infrastructure" "$spot_testing_hcat"
+teardown
+
+# ============================================================================
+# dispatch-sync-merge-queue (#1480)
+# ============================================================================
+echo "=== dispatch-sync-merge-queue ==="
+
+# A check-run rollup entry classifies `passing` only when status==COMPLETED AND
+# conclusion in {SUCCESS,NEUTRAL,SKIPPED}; a bare {"conclusion":"SUCCESS"} (no
+# status) is `pending` and would be skipped. So the mergeable fixtures pin both.
+MERGE_PR_ONE='[{"number":42,"title":"Add widget","url":"https://github.com/natb1/commons.systems/pull/42","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"}]}]'
+
+# (a) mergeable PR with no tracking issue → create
+echo "Test: mergeable PR, no tracking issue → create"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "create: issue-create log present" "present" "$(log_state gh-merge-issue-create.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q -- '--title' "$STUB_DIR/gh-merge-issue-create.log" \
+   && grep -q 'merge-pr:42' "$STUB_DIR/gh-merge-issue-create.log" \
+   && grep -q 'oh-merge-pr' "$STUB_DIR/gh-merge-issue-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: create args carry --title, merge-pr:42 label, and oh-merge-pr marker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: create args carry --title, merge-pr:42 label, and oh-merge-pr marker"
+fi
+teardown
+
+# (b) existing tracking issue with matching title → idempotent (no create, no edit)
+echo "Test: existing tracking issue, matching title → no create, no edit"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":77,"title":"Add widget"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "idempotent: no create" "absent" "$(log_state gh-merge-issue-create.log)"
+assert_eq "idempotent: no edit" "absent" "$(log_state gh-merge-issue-edit.log)"
+teardown
+
+# (c) existing tracking issue with stale title → update (title + refreshed marker)
+echo "Test: existing tracking issue, stale title → update"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":77,"title":"Old stale title"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "update: issue-edit log present" "present" "$(log_state gh-merge-issue-edit.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'Add widget' "$STUB_DIR/gh-merge-issue-edit.log" \
+   && grep -q 'oh-merge-pr' "$STUB_DIR/gh-merge-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: edit args carry the new title and the refreshed oh-merge-pr marker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: edit args carry the new title and the refreshed oh-merge-pr marker"
+fi
+assert_eq "update: no spurious create" "absent" "$(log_state gh-merge-issue-create.log)"
+teardown
+
+# (d) PR no longer mergeable but tracking issue still open → close
+echo "Test: PR no longer mergeable, tracking issue open → close"
+setup
+printf '[]\n' > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":88,"labels":[{"name":"merge-pr:42"}]}]\n' > "$STUB_DIR/oh-issue-enum.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "close: issue-close log present" "present" "$(log_state gh-merge-issue-close.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issue close 88' "$STUB_DIR/gh-merge-issue-close.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: closed the tracking issue (#88) for the no-longer-mergeable PR"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: closed the tracking issue (#88) for the no-longer-mergeable PR"
+fi
+teardown
+
+# (e) pr_list_open fails (truncation guard) → bail before the close pass
+# Safety-critical: if the mergeable set cannot be computed, the script must exit
+# non-zero immediately and run NO close pass — otherwise a stale tracking issue
+# would be wrongly closed against an empty/unknown mergeable set. Force the
+# failure by pinning DISPATCH_PR_LIST_LIMIT to the fixture length (1): pr_list_open
+# sees len == limit, fires its loud truncation guard, and returns non-zero.
+echo "Test: pr_list_open fails (truncation) → bail, no close pass"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+# A stale tracking issue that WOULD be closed if the close pass ran against an
+# empty mergeable set — so its survival proves the bail short-circuited it.
+printf '[{"number":88,"labels":[{"name":"merge-pr:42"}]}]\n' > "$STUB_DIR/oh-issue-enum.json"
+# `set -e` is in effect and this invocation exits non-zero by design, so capture
+# the code with an if/else rather than letting it abort the suite.
+if DISPATCH_PR_LIST_LIMIT=1 "$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "bail: script exits non-zero when the mergeable set cannot be computed" "1" "$rc"
+assert_eq "bail: close pass did not run (no gh issue close)" "absent" "$(log_state gh-merge-issue-close.log)"
 teardown
 
 # ============================================================================
