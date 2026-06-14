@@ -60,8 +60,6 @@ set -uo pipefail
 
 # ---- Step 0: defaults & config ----------------------------------------------
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 GH_CMD="${DISPATCH_QA_FIX_ATTEMPT_GH_CMD:-gh}"
 
 # ---- Step 1: validate <pr_num> ----------------------------------------------
@@ -83,9 +81,17 @@ fi
 # to the dispatch:qa-fix-attempt- prefix. `max // 0` yields 0 when no counter
 # label is present yet.
 
+# Capture gh's exit status separately: a gh failure (PR not found, network
+# error) must surface as a clear "could not read PR labels" error rather than
+# leaving CUR empty and tripping the integer guard with a confusing message.
 CUR=$("$GH_CMD" pr view "$PR_NUM" --json labels \
   --jq '[.labels[].name | capture("^dispatch:qa-fix-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0' \
-  2>/dev/null || true)
+  2>/dev/null)
+gh_rc=$?
+if (( gh_rc != 0 )); then
+  echo "error: dispatch-qa-fix-attempt: could not read PR labels for PR #$PR_NUM (gh exited $gh_rc); aborting" >&2
+  exit 2
+fi
 
 # CUR feeds `(( CUR >= CAP ))` and `(( CUR > 0 ))` — bash arithmetic context
 # evaluates array-index command substitution, so any value entering `(( ))`
@@ -130,6 +136,7 @@ if ! add_out=$("$GH_CMD" pr edit "$PR_NUM" --add-label "dispatch:qa-fix-attempt-
     echo "dispatch-qa-fix-attempt: warning: could not apply dispatch:qa-fix-attempt-$NEXT to PR #$PR_NUM: $add_out" >&2
   else
     if ! create_out=$("$GH_CMD" label create "dispatch:qa-fix-attempt-$NEXT" \
+        --color F9D0C4 \
         --description "dispatch workflow: qa-fix attempt $NEXT of $CAP" 2>&1); then
       echo "dispatch-qa-fix-attempt: warning: could not create label dispatch:qa-fix-attempt-$NEXT: $create_out" >&2
     elif ! retry_out=$("$GH_CMD" pr edit "$PR_NUM" --add-label "dispatch:qa-fix-attempt-$NEXT" 2>&1); then

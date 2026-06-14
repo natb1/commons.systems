@@ -12741,8 +12741,12 @@ qfa_teardown
 # --- Test 6: create-on-"not found" path (CUR=0) → fix, label create logged ----
 # Replaces the default fake-gh with one whose `pr edit --add-label` simulates
 # a label-not-found failure, forcing the script's `label create` + retry path.
-# The retry `pr edit` hits the same "not found" branch again (warn-not-abort),
-# so rc=0 and stdout=`fix` but gh-edit-log records `label create ...`.
+# The retry `pr edit` also hits the `pr edit` branch and exits 1 (warn path
+# only); it is NOT recorded in gh-edit-log since the fake-gh `pr edit` branch
+# exits before the `echo >> log` fallthrough. The retry is instead asserted via
+# stderr: only the retry-after-create warning carries the `after create`
+# substring, so checking for it guards the retry step against accidental
+# deletion (a dropped retry would remove that warning).
 
 echo "Test: create-on-not-found path (CUR=0) → fix, gh-edit-log contains label create"
 qfa_setup
@@ -12766,12 +12770,24 @@ if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stde
 assert_eq "qfa create-on-not-found exits 0" "0" "$rc"
 assert_eq "qfa create-on-not-found stdout is fix" "fix" "$out"
 edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+err=$(cat "$TMPDIR_TEST/stderr" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$edits" == *"label create dispatch:qa-fix-attempt-1"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: create-on-not-found logs label create dispatch:qa-fix-attempt-1"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: create-on-not-found logs label create dispatch:qa-fix-attempt-1"
   echo "    edits: $edits"
+fi
+# Guard the retry pr edit after `label create` against accidental deletion. The
+# retry's stderr warning is the only one carrying `after create` (the initial
+# add-label failure routes to the label-create branch and emits no warning), so
+# its presence proves the retry ran. A dropped retry would remove this warning.
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"after create"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: create-on-not-found retries pr edit after label create (stderr 'after create')"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: create-on-not-found retries pr edit after label create (stderr 'after create')"
+  echo "    stderr: $err"
 fi
 qfa_teardown
 

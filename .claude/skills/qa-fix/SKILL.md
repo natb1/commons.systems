@@ -617,11 +617,17 @@ Otherwise run all steps in order.
 
    2. Otherwise (opus-fixable items present), choose exactly one path:
 
-      - **`result.fix_plan === null`** (planning did not run — `plan_fix` was
-        false because at the cap; a dead planning agent also yields `null`, so the
-        reason is "cap reached or planning did not run") → **escalate** all residue
-        to office-hours with a cap-reached reason. Take the **escalate finalize
-        path** below; apply **no** attempt label.
+      - **`result.fix_plan === null`** → **escalate** all residue to office-hours;
+        take the **escalate finalize path** below and apply **no** attempt label.
+        Distinguish the two failure modes that both yield `null` so operators see
+        the correct remediation:
+        - **`plan_fix` was false** (the attempt count `ATTEMPT_N >= CAP`, so
+          planning was deliberately not run) → use a **"cap reached"** reason. The
+          remediation is to wait for the cap to reset.
+        - **`plan_fix` was true but `fix_plan` is `null`** (the planning agent died
+          without returning a plan) → use a distinct **"planning agent did not
+          return a plan"** reason. The remediation is to re-trigger the planner, not
+          to wait for a cap reset.
 
       - **`result.deviation === true`** → **scope-deviation escape**: the planner
         refused to author a fix because the change exceeds QA-fix scope. Escalate
