@@ -918,6 +918,16 @@ make_pr_mergeable() {
     "$num" "$branch" "$is_draft" "$labels_json" "$sha" "$mergeable"
 }
 
+# Write JSON to a temp file and echo its path, for passing the open-PR list to a
+# child script via DISPATCH_PR_LIST_FILE (replaces the old inline
+# DISPATCH_PR_LIST=<json> env channel, #1646).
+pr_list_tmpfile() {
+  local f
+  f=$(mktemp "${TMPDIR:-/tmp}/test-pr-list.XXXXXX")
+  printf '%s' "$1" > "$f"
+  printf '%s' "$f"
+}
+
 # Green rollup (two passing check runs).
 GREEN_ROLLUP='[{"status":"COMPLETED","conclusion":"SUCCESS"},{"status":"COMPLETED","conclusion":"NEUTRAL"}]'
 # Failing rollup.
@@ -1197,15 +1207,16 @@ result=$("$TMPDIR_TEST/dispatch-phase" "6")
 assert_eq "issue 6 does not match branch 60-foo → plan" "plan" "$result"
 teardown
 
-# 13. DISPATCH_PR_LIST is used in place of a self-issued gh pr list.
-echo "Test: DISPATCH_PR_LIST overrides self-fetch"
+# 13. DISPATCH_PR_LIST_FILE is used in place of a self-issued gh pr list.
+echo "Test: DISPATCH_PR_LIST_FILE overrides self-fetch"
 setup
 # pr-list-full.json is empty: a self-fetch would yield implement. The fix-checks
-# PR lives only in the env var, so a fix-checks result proves the env var won.
+# PR lives only in the file channel, so a fix-checks result proves it won.
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 ENV_LIST='['"$(make_pr 42 "42-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-result=$(DISPATCH_PR_LIST="$ENV_LIST" "$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "DISPATCH_PR_LIST used over self-fetch → fix-checks" "fix-checks" "$result"
+PR_LIST_F=$(pr_list_tmpfile "$ENV_LIST")
+result=$(DISPATCH_PR_LIST_FILE="$PR_LIST_F" "$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "DISPATCH_PR_LIST_FILE used over self-fetch → fix-checks" "fix-checks" "$result"
 teardown
 
 # 14. Draft + mergeable=CONFLICTING → fix-conflicts (highest-priority outcome).
@@ -1363,18 +1374,19 @@ assert_eq "branch arg pending draft → not-ready (token)" "waiting" "$CI_READY_
 assert_eq "branch arg pending draft → not-ready (exit 1)" "1" "$CI_READY_RC"
 teardown
 
-# 9. DISPATCH_PR_LIST reuse: predicate reads env-provided list without gh.
-echo "Test: DISPATCH_PR_LIST overrides self-fetch"
+# 9. DISPATCH_PR_LIST_FILE reuse: predicate reads file-provided list without gh.
+echo "Test: DISPATCH_PR_LIST_FILE overrides self-fetch"
 setup
 # pr-list-full.json is empty: a self-fetch would yield ready (no PR). The
-# pending draft lives only in the env var, so a not-ready result proves the
-# env var won and no gh pr list was issued.
+# pending draft lives only in the file channel, so a not-ready result proves it
+# won and no gh pr list was issued.
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 ENV_LIST='['"$(make_pr 42 "42-waiting" "true" "$NO_LABELS" "$PENDING_ROLLUP")"']'
-CI_READY_OUT=$(DISPATCH_PR_LIST="$ENV_LIST" "$TMPDIR_TEST/dispatch-ci-ready" "42") && CI_READY_RC=0 || CI_READY_RC=$?
-assert_eq "DISPATCH_PR_LIST used over self-fetch → waiting (token)" "waiting" "$CI_READY_OUT"
-assert_eq "DISPATCH_PR_LIST used over self-fetch → not-ready (exit 1)" "1" "$CI_READY_RC"
-assert_eq "DISPATCH_PR_LIST reuse issues no gh pr list" "0" \
+PR_LIST_F=$(pr_list_tmpfile "$ENV_LIST")
+CI_READY_OUT=$(DISPATCH_PR_LIST_FILE="$PR_LIST_F" "$TMPDIR_TEST/dispatch-ci-ready" "42") && CI_READY_RC=0 || CI_READY_RC=$?
+assert_eq "DISPATCH_PR_LIST_FILE used over self-fetch → waiting (token)" "waiting" "$CI_READY_OUT"
+assert_eq "DISPATCH_PR_LIST_FILE used over self-fetch → not-ready (exit 1)" "1" "$CI_READY_RC"
+assert_eq "DISPATCH_PR_LIST_FILE reuse issues no gh pr list" "0" \
   "$([[ -f "$STUB_DIR/gh-pr-list-calls.log" ]] && wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ' || echo 0)"
 teardown
 
@@ -1388,6 +1400,31 @@ printf '[%s]\n' "$(make_pr_mergeable 10 "42-my-feature" "true" "$NO_LABELS" "$PE
 ci_ready_run "42"
 assert_eq "draft + CONFLICTING + pending → ready (token)" "ready" "$CI_READY_OUT"
 assert_eq "draft + CONFLICTING + pending → ready (exit 0)" "0" "$CI_READY_RC"
+teardown
+
+# #1646: a >128KB open-PR list passed via DISPATCH_PR_LIST_FILE returns the correct
+# verdict. The equivalent inline DISPATCH_PR_LIST env var would E2BIG the exec.
+echo "Test: ci-ready over >128KB DISPATCH_PR_LIST_FILE → correct verdict"
+setup
+PAD=$(printf 'x%.0s' {1..143360})
+LIST='['"$(make_pr 10 "42-feature" "true" "$NO_LABELS" "$PENDING_ROLLUP")"','"$(make_pr 20 "99-pad" "false" "[{\"name\":\"$PAD\"}]" "$GREEN_ROLLUP")"']'
+BIG_FILE=$(pr_list_tmpfile "$LIST")
+assert_eq "ci-ready file-channel fixture exceeds 128KB" "ok" "$([[ "$(wc -c < "$BIG_FILE")" -gt 131072 ]] && echo ok || echo too-small)"
+CI_OUT=$(DISPATCH_PR_LIST_FILE="$BIG_FILE" "$TMPDIR_TEST/dispatch-ci-ready" "42") && CI_RC=0 || CI_RC=$?
+assert_eq ">128KB file channel → correct verdict (waiting)" "waiting" "$CI_OUT"
+assert_eq ">128KB file channel → not-ready exit 1" "1" "$CI_RC"
+teardown
+
+# #1646: an unreadable DISPATCH_PR_LIST_FILE is an environment/IO error, surfaced
+# as exit 2 — distinct from the readiness exits 0 (ready) / 1 (not-ready).
+echo "Test: ci-ready with unreadable DISPATCH_PR_LIST_FILE → exit 2"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+MISSING="$TMPDIR_TEST/does-not-exist-pr-list.json"
+CI_ERR=$(DISPATCH_PR_LIST_FILE="$MISSING" "$TMPDIR_TEST/dispatch-ci-ready" "42" 2>&1 >/dev/null) && CI_RC=0 || CI_RC=$?
+assert_eq "unreadable DISPATCH_PR_LIST_FILE → exit 2 (env error, not a readiness verdict)" "2" "$CI_RC"
+case "$CI_ERR" in *"not readable"*) ok=yes ;; *) ok="no:$CI_ERR" ;; esac
+assert_eq "unreadable file → clear stderr error" "yes" "$ok"
 teardown
 
 # ============================================================================
@@ -1423,14 +1460,15 @@ result=$("$TMPDIR_TEST/dispatch-find-pr" "42")
 assert_eq "no PR → empty output" "" "$result"
 teardown
 
-# 4. DISPATCH_PR_LIST overrides self-fetch.
+# 4. DISPATCH_PR_LIST_FILE overrides self-fetch.
 # pr-list-full.json is empty: a self-fetch would yield empty. The PR lives only
-# in the env var, so a non-empty result proves the env var won.
-echo "Test: DISPATCH_PR_LIST overrides self-fetch"
+# in the file channel, so a non-empty result proves it won.
+echo "Test: DISPATCH_PR_LIST_FILE overrides self-fetch"
 setup
 printf '[]\n' > "$STUB_DIR/pr-list-full.json"
-result=$(DISPATCH_PR_LIST='[{"number":670,"headRefName":"669-x"}]' "$TMPDIR_TEST/dispatch-find-pr" "669")
-assert_eq "DISPATCH_PR_LIST used over self-fetch → PR number" "670" "$result"
+PR_LIST_F=$(pr_list_tmpfile '[{"number":670,"headRefName":"669-x"}]')
+result=$(DISPATCH_PR_LIST_FILE="$PR_LIST_F" "$TMPDIR_TEST/dispatch-find-pr" "669")
+assert_eq "DISPATCH_PR_LIST_FILE used over self-fetch → PR number" "670" "$result"
 teardown
 
 # 5. Issue-prefix disambiguation: issue 6 must not match branch "60-foo".
@@ -1487,25 +1525,26 @@ result=$("$TMPDIR_TEST/dispatch-find-pr" "822")
 assert_eq "genuine empty → empty" "" "$result"
 teardown
 
-# 10. DISPATCH_PR_LIST supplied without matching branch; cross-check resolves PR.
-# The retry (step 1) is skipped when DISPATCH_PR_LIST is set — the caller owns
+# 10. DISPATCH_PR_LIST_FILE supplied without matching branch; cross-check resolves PR.
+# The retry (step 1) is skipped when DISPATCH_PR_LIST_FILE is set — the caller owns
 # the list. The cross-check (step 2) still runs regardless, using a different gh
 # endpoint that the caller cannot pre-supply.
-echo "Test: DISPATCH_PR_LIST no match + cross-check OPEN reference → PR number"
+echo "Test: DISPATCH_PR_LIST_FILE no match + cross-check OPEN reference → PR number"
 setup
 printf '[{"number":850,"headRefName":"999-unrelated"}]\n' > "$STUB_DIR/pr-list-full.json"
 printf '{"closedByPullRequestsReferences":[{"number":851,"state":"OPEN"}]}\n' \
   > "$STUB_DIR/issue-closing-prs-822.json"
-result=$(DISPATCH_PR_LIST='[{"number":850,"headRefName":"999-unrelated"}]' \
+PR_LIST_F=$(pr_list_tmpfile '[{"number":850,"headRefName":"999-unrelated"}]')
+result=$(DISPATCH_PR_LIST_FILE="$PR_LIST_F" \
   "$TMPDIR_TEST/dispatch-find-pr" "822")
-assert_eq "DISPATCH_PR_LIST no prefix match; cross-check finds OPEN PR → PR number" "851" "$result"
+assert_eq "DISPATCH_PR_LIST_FILE no prefix match; cross-check finds OPEN PR → PR number" "851" "$result"
 # Verify no self-fetch: pr_list_open (number,headRefName) was not called.
 if [[ -f "$STUB_DIR/gh-find-pr-calls.log" ]]; then
   call_count=$(wc -l < "$STUB_DIR/gh-find-pr-calls.log")
 else
   call_count=0
 fi
-assert_eq "no self-fetch gh pr list calls when DISPATCH_PR_LIST set" "0" "$call_count"
+assert_eq "no self-fetch gh pr list calls when DISPATCH_PR_LIST_FILE set" "0" "$call_count"
 teardown
 
 # 11. #1312: No truncation past 30 PRs (proves the --limit 300 fix).
@@ -1573,7 +1612,7 @@ echo "=== dispatch-route ==="
 # one call and prints exactly one directive. The git stub serves the worktree
 # toplevel from worktree-toplevel.txt; the gh stub serves the full-field open-PR
 # list from pr-list-full.json and logs each such call to gh-pr-list-calls.log, so
-# a test can prove the single DISPATCH_PR_LIST fetch is reused, not re-issued.
+# a test can prove the single DISPATCH_PR_LIST_FILE fetch is reused, not re-issued.
 # dispatch-provision-worktree is stubbed in setup() to a no-op exit 0 by default;
 # tests 17-20 drive its conflict/failure branches via $STUB_DIR/provision-exit.
 route_run() {
@@ -1642,7 +1681,7 @@ assert_eq "draft + failing → INVOKE /fix-checks (exit 0)" "0" "$ROUTE_RC"
 teardown
 
 # 3. Draft + green + no label → INVOKE /qa-fix.
-# Also assert exactly one gh pr list was issued, proving DISPATCH_PR_LIST reuse
+# Also assert exactly one gh pr list was issued, proving DISPATCH_PR_LIST_FILE reuse
 # across both dispatch-ci-ready calls and dispatch-phase.
 echo "Test: draft + green + no label → INVOKE /qa-fix"
 setup
@@ -2346,8 +2385,8 @@ teardown
 echo ""
 echo "=== dispatch-select-target ==="
 
-# dispatch-select-target fetches one union PR list and exports it via
-# DISPATCH_PR_LIST, so each per-PR dispatch-phase call reuses it. The harness
+# dispatch-select-target fetches one union PR list and shares it via
+# DISPATCH_PR_LIST_FILE, so each per-PR dispatch-phase call reuses it. The harness
 # only needs to seed that single list.
 
 setup_union_pr_list() {
@@ -5110,6 +5149,25 @@ printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"hel
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "pending draft PR on issue's branch → issue skipped this tick (empty)" "empty" "$result"
+teardown
+
+# #1646 regression guard (AC3, load-bearing): under the old inline DISPATCH_PR_LIST
+# env channel, an open-PR list past ~128 KB (MAX_ARG_STRLEN) E2BIG'd the child exec,
+# every candidate was silently excluded, and the tick manufactured a false `empty`.
+# The DISPATCH_PR_LIST_FILE temp-file channel makes list size irrelevant: a >128 KB
+# list must still select a candidate.
+echo "Test: >128KB open-PR list still selects a candidate (no false empty)"
+setup
+PAD=$(printf 'x%.0s' {1..143360})   # 140 KB of filler, > 131072 (128 KB)
+UNION='['"$(make_pr_union 10 "10-big-list" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-padding" "2024-01-02T00:00:00Z" "false" "[{\"name\":\"$PAD\"}]" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+fixture_bytes=$(wc -c < "$STUB_DIR/pr-list-union.json")
+assert_eq "AC3 fixture exceeds 128KB MAX_ARG_STRLEN" "ok" "$([[ "$fixture_bytes" -gt 131072 ]] && echo ok || echo "too-small:$fixture_bytes")"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "AC3: >128KB open-PR list still selects a candidate (no false empty)" "pr 10 10-big-list fix-checks" "$result"
 teardown
 
 # ============================================================================
@@ -17750,7 +17808,7 @@ case "$args" in
     fi
     ;;
   pr\ list\ *)
-    # The hook fetches the open-PR list once and shares it via DISPATCH_PR_LIST.
+    # The hook fetches the open-PR list once and shares it via DISPATCH_PR_LIST_FILE.
     # The ci-ready / phase fakes read $STUB_DIR files, not the list, so an empty
     # array is sufficient to model a successful fetch.
     echo "$args" >> "$STUB_DIR/gh-pr-list.log"
