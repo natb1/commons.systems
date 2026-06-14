@@ -15849,6 +15849,10 @@ touch "$STUB_DIR/issue-list-fail-once"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
 assert_eq "retry-list exits 0" "0" "$rc"
+list_count=0
+[[ -f "$STUB_DIR/gh-calls.log" ]] \
+  && list_count=$(grep -c '^issue list ' "$STUB_DIR/gh-calls.log" || true)
+assert_eq "retry-list made exactly 2 issue list calls (fail attempt + retry)" "2" "$list_count"
 TOTAL=$((TOTAL + 1))
 if [[ "$out" == *"bank: skipped (#99 for retry.qfx)"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: retry-list skipped (#99 for retry.qfx) — retry parsed correctly"

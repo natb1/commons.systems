@@ -291,6 +291,7 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
   # byte-identical file is then deduped locally, with no per-file gh call.
   # ENTRY_HARD_ERROR is set before the pre-fetch so the pre-fetch can mark the
   # entry as hard-errored; the 4g stamp guard skips stamping when it is set.
+  unset SEEN_HASHES
   declare -A SEEN_HASHES=()
   ENTRY_HARD_ERROR=0
 
