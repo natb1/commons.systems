@@ -82,12 +82,12 @@ failed=0
 
 while IFS= read -r n; do
   [[ -z "$n" ]] && continue
-  if gh issue edit "$n" --remove-label enhancement 2>/dev/null; then
-    log "STRIPPED: #$n"
+  if out=$(gh issue edit "$n" --remove-label enhancement 2>&1); then
+    log "STRIPPED: #$n${out:+ — $out}"
     stripped=$((stripped + 1))
   else
-    log "ERROR: failed to remove enhancement label from #$n"
-    echo "WARNING: could not strip enhancement from #$n" >&2
+    log "ERROR: failed to remove enhancement label from #$n — $out"
+    echo "WARNING: could not strip enhancement from #$n — $out" >&2
     failed=$((failed + 1))
   fi
 done <<<"$issue_nums"
