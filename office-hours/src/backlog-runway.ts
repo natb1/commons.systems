@@ -10,11 +10,8 @@ export type BacklogRunwayFit =
 /**
  * Fits a linear regression of openHelpWanted vs time to estimate how many days
  * until the backlog empties. Returns a tagged-union describing the trend.
- *
- * The `_now` parameter is part of the caller contract (for future use / testability)
- * but is not referenced in the current implementation.
  */
-export function fitBacklogRunway(samples: IssueSample[], _now: Date): BacklogRunwayFit {
+export function fitBacklogRunway(samples: IssueSample[]): BacklogRunwayFit {
   if (samples.length === 0) return { state: "insufficient" };
 
   const sorted = [...samples].sort((a, b) => a.sampledAt.getTime() - b.sampledAt.getTime());

@@ -38,7 +38,7 @@ interface Point {
  * receives panel-grid-full from the registry), or an empty-state element when
  * there are no samples.
  */
-export function renderIssueHistoryChart(samples: IssueSample[], now: Date): HTMLElement {
+export function renderIssueHistoryChart(samples: IssueSample[]): HTMLElement {
   const container = document.createElement("div");
   container.className = "backlog-history";
 
@@ -87,7 +87,7 @@ export function renderIssueHistoryChart(samples: IssueSample[], now: Date): HTML
     }),
   ];
 
-  const fit = fitBacklogRunway(samples, now);
+  const fit = fitBacklogRunway(samples);
 
   let width: number;
   let xDomain: [Date, Date];

@@ -2,8 +2,6 @@ import { describe, it, expect } from "vitest";
 import { renderIssueHistoryChart } from "../src/issue-history-chart.js";
 import type { IssueSample } from "../src/issue-samples.js";
 
-const now = new Date("2026-06-14T00:00:00Z");
-
 function withFg(): HTMLElement {
   // happy-dom has no stylesheet, so missing CSS's --fg is absent — set it on
   // the container explicitly so getThemeFg reads it live.
@@ -41,7 +39,7 @@ const growingFixture: IssueSample[] = [
 describe("renderIssueHistoryChart", () => {
   it("layout present (draining fixture)", () => {
     const host = withFg();
-    const el = renderIssueHistoryChart(drainingFixture, now);
+    const el = renderIssueHistoryChart(drainingFixture);
     host.appendChild(el);
 
     expect(el.querySelector(".chart-layout")).not.toBeNull();
@@ -50,7 +48,7 @@ describe("renderIssueHistoryChart", () => {
   });
 
   it("empty-state: .empty paragraph, no svg, container still has backlog-history class", () => {
-    const el = renderIssueHistoryChart([], now);
+    const el = renderIssueHistoryChart([]);
 
     const empty = el.querySelector(".empty");
     expect(empty).not.toBeNull();
@@ -61,7 +59,7 @@ describe("renderIssueHistoryChart", () => {
 
   it("stacked areas: chart-body svg contains at least 2 path elements", () => {
     const host = withFg();
-    const el = renderIssueHistoryChart(drainingFixture, now);
+    const el = renderIssueHistoryChart(drainingFixture);
     host.appendChild(el);
 
     const paths = el.querySelectorAll(".chart-scroll-wrapper svg path");
@@ -70,7 +68,7 @@ describe("renderIssueHistoryChart", () => {
 
   it("draining: caption state is draining with correct text; legend projection entry is dashed", () => {
     const host = withFg();
-    const el = renderIssueHistoryChart(drainingFixture, now);
+    const el = renderIssueHistoryChart(drainingFixture);
     host.appendChild(el);
 
     const stateSpan = el.querySelector(".backlog-runway-state");
@@ -90,7 +88,7 @@ describe("renderIssueHistoryChart", () => {
 
   it("flat → stable: caption state is stable with correct text", () => {
     const host = withFg();
-    const el = renderIssueHistoryChart(flatFixture, now);
+    const el = renderIssueHistoryChart(flatFixture);
     host.appendChild(el);
 
     const stateSpan = el.querySelector(".backlog-runway-state");
@@ -101,7 +99,7 @@ describe("renderIssueHistoryChart", () => {
 
   it("growing → growing: caption state is growing, no NaN or Infinity in text", () => {
     const host = withFg();
-    const el = renderIssueHistoryChart(growingFixture, now);
+    const el = renderIssueHistoryChart(growingFixture);
     host.appendChild(el);
 
     const stateSpan = el.querySelector(".backlog-runway-state");

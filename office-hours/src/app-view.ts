@@ -81,7 +81,7 @@ const PANELS: readonly Panel[] = [
     availableIn: ["demo", "owner"],
     fullWidth: true,
     load: (c) => c.issueSamples,
-    render: (s, now) => renderIssueHistoryChart(s, now),
+    render: (s) => renderIssueHistoryChart(s),
   }),
   definePanel({
     id: "reminders",

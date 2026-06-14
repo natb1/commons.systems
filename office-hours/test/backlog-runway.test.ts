@@ -7,7 +7,6 @@ import {
 import type { IssueSample } from "../src/issue-samples.js";
 
 const GROUP = "group-test";
-const NOW = new Date("2026-01-15T00:00:00Z");
 
 function makeSample(sampledAt: Date, openHelpWanted: number): IssueSample {
   return { sampledAt, openHelpWanted, openOther: 5, groupId: GROUP };
@@ -43,7 +42,7 @@ const emptyFixture: IssueSample[] = [
 
 describe("fitBacklogRunway", () => {
   it("returns 'draining' when backlog is shrinking", () => {
-    const fit = fitBacklogRunway(drainingFixture, NOW);
+    const fit = fitBacklogRunway(drainingFixture);
     expect(fit.state).toBe("draining");
     if (fit.state !== "draining") return;
     expect(fit.daysUntilEmpty).toBeGreaterThan(0);
@@ -51,7 +50,7 @@ describe("fitBacklogRunway", () => {
   });
 
   it("draining: runwayVerdict text matches 'until the queue empties'", () => {
-    const fit = fitBacklogRunway(drainingFixture, NOW);
+    const fit = fitBacklogRunway(drainingFixture);
     expect(fit.state).toBe("draining");
     const verdict = runwayVerdict(fit);
     expect(verdict.state).toBe("draining");
@@ -59,13 +58,13 @@ describe("fitBacklogRunway", () => {
   });
 
   it("returns 'stable' for a flat backlog", () => {
-    const fit = fitBacklogRunway(flatFixture, NOW);
+    const fit = fitBacklogRunway(flatFixture);
     expect(fit.state).toBe("stable");
     expect(runwayVerdict(fit)).toEqual({ text: "queue stable", state: "stable" });
   });
 
   it("returns 'growing' when backlog is increasing", () => {
-    const fit = fitBacklogRunway(growingFixture, NOW);
+    const fit = fitBacklogRunway(growingFixture);
     expect(fit.state).toBe("growing");
     // growing state has no daysUntilEmpty field
     expect("daysUntilEmpty" in fit).toBe(false);
@@ -73,19 +72,19 @@ describe("fitBacklogRunway", () => {
   });
 
   it("returns 'empty' when latest sample has openHelpWanted === 0", () => {
-    const fit = fitBacklogRunway(emptyFixture, NOW);
+    const fit = fitBacklogRunway(emptyFixture);
     expect(fit.state).toBe("empty");
     expect(runwayVerdict(fit)).toEqual({ text: "queue empty", state: "empty" });
   });
 
   it("returns 'insufficient' for a single sample", () => {
-    const fit = fitBacklogRunway([makeSample(new Date("2026-01-01T00:00:00Z"), 10)], NOW);
+    const fit = fitBacklogRunway([makeSample(new Date("2026-01-01T00:00:00Z"), 10)]);
     expect(fit.state).toBe("insufficient");
     expect(runwayVerdict(fit)).toEqual({ text: "not enough data", state: "insufficient" });
   });
 
   it("returns 'insufficient' for an empty array", () => {
-    const fit = fitBacklogRunway([], NOW);
+    const fit = fitBacklogRunway([]);
     expect(fit.state).toBe("insufficient");
   });
 
@@ -95,7 +94,7 @@ describe("fitBacklogRunway", () => {
       makeSample(new Date("2026-01-02T00:00:00Z"), 50),
       makeSample(new Date("2026-01-03T00:00:00Z"), 5),
     ];
-    const fit = fitBacklogRunway(steepFixture, NOW);
+    const fit = fitBacklogRunway(steepFixture);
     if (fit.state === "draining") {
       expect(fit.daysUntilEmpty).toBeGreaterThanOrEqual(0);
     }
@@ -107,7 +106,7 @@ describe("fitBacklogRunway", () => {
     const c = makeSample(new Date("2026-01-04T00:00:00Z"), 12);
     const samples = [a, b, c];
 
-    fitBacklogRunway(samples, NOW);
+    fitBacklogRunway(samples);
 
     expect(samples[0]).toBe(a);
     expect(samples[1]).toBe(b);
