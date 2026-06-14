@@ -10,11 +10,17 @@ export function officeHoursQueueSeedPlugin(): Plugin {
   return {
     name: "office-hours-queue-seed",
     buildStart() {
+      // Strip memberEmails (a denormalized auth field holding real email
+      // addresses) before serializing — it must never be baked into the
+      // public JS bundle. The UI never reads it; Firestore rules gate access
+      // server-side. computedAtMinutesAgo is also omitted: it is converted to
+      // computedAt at build time below.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructure-omit memberEmails from the public bundle
+      const { memberEmails, computedAtMinutesAgo, ...rest } = seedQueueMetrics;
       moduleCode =
-        `const seed = ${JSON.stringify(seedQueueMetrics)};\n` +
+        `const seed = ${JSON.stringify(rest)};\n` +
         `const now = Date.now();\n` +
-        `const { computedAtMinutesAgo, ...rest } = seed;\n` +
-        `export default { ...rest, computedAt: new Date(now - computedAtMinutesAgo * 60000) };\n`;
+        `export default { ...seed, computedAt: new Date(now - ${computedAtMinutesAgo} * 60000) };\n`;
     },
     resolveId(id) {
       if (id === VIRTUAL_MODULE_ID) return RESOLVED_VIRTUAL_MODULE_ID;
