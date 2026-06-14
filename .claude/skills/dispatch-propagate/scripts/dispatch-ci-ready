@@ -9,8 +9,8 @@
 # draft PR's checks are still in progress (no verdict yet).
 #
 #   READY    — exit 0, prints `ready`:  no matching PR, OR a non-draft PR, OR a
-#              draft PR whose statusCheckRollup classifies as failing/passing.
-#   NOT-READY — exit 1, prints `waiting`: a draft PR whose rollup is pending.
+#              draft PR whose CI verdict classifies as failing/passing.
+#   NOT-READY — exit 1, prints `waiting`: a draft PR whose CI verdict is pending.
 #
 # Argument resolution:
 #   - All-digit arg: treated as an issue number. The matching PR is the one
@@ -22,7 +22,7 @@
 #     caller (dispatch-select-target passes it to avoid a redundant
 #     gh pr list per PR). When set and non-empty, it is used in place of a
 #     self-issued gh pr list. Must include the fields
-#     number,headRefName,isDraft,statusCheckRollup,labels,mergeable.
+#     number,headRefName,isDraft,headRefOid,labels,mergeable.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -39,7 +39,7 @@ fi
 if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
   PR_LIST="$DISPATCH_PR_LIST"
 else
-  PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
+  PR_LIST=$(pr_list_open "number,headRefName,isDraft,headRefOid,labels,mergeable")
 fi
 
 # Find the matching PR.
@@ -74,9 +74,9 @@ fi
 MERGEABLE=$(printf '%s' "$PR" | jq -r '.mergeable // "UNKNOWN"')
 if [[ "$MERGEABLE" == "CONFLICTING" ]]; then echo "ready"; exit 0; fi
 
-# Draft PR — readiness hinges on whether CI has reached a verdict.
-ROLLUP=$(printf '%s' "$PR" | jq '.statusCheckRollup')
-VERDICT=$(dispatch_classify_rollup "$ROLLUP")
+# Draft PR — readiness hinges on whether CI has reached a verdict. The verdict
+# comes from a lazy REST check-runs fetch keyed on the PR's head SHA.
+VERDICT=$(dispatch_ci_verdict_rest "$(printf '%s' "$PR" | jq -r '.headRefOid')")
 
 # A concluded verdict — failing or passing — is actionable, so ready.
 # Only an in-progress (pending) rollup is not yet ready.
