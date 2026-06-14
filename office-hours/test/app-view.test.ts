@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { renderApp } from "../src/app-view.js";
 import type { UsageSample } from "../src/usage-samples.js";
 import type { Reminder } from "../src/reminders.js";
+import type { IssueSample } from "../src/issue-samples.js";
 
 const now = new Date("2026-06-11T12:00:00Z");
 
@@ -331,8 +332,13 @@ describe("renderApp — panel-registry: all panels present per tier", () => {
     makeReminder("weekly-review", 30 * MINUTE),
     makeReminder("overdue-task", -4 * HOUR),
   ];
+  const issueSamples: IssueSample[] = [
+    { sampledAt: new Date("2026-06-07T00:00:00Z"), openHelpWanted: 18, openOther: 5, groupId: "g" },
+    { sampledAt: new Date("2026-06-08T00:00:00Z"), openHelpWanted: 12, openOther: 4, groupId: "g" },
+    { sampledAt: new Date("2026-06-09T00:00:00Z"), openHelpWanted: 6, openOther: 3, groupId: "g" },
+  ];
 
-  it("demo: all five panels are present", () => {
+  it("demo: all six panels are present", () => {
     const container = document.createElement("div");
     withThemeFg(() => renderApp(container, { tier: "demo" }, now));
     expect(container.querySelector(".capacity-heading")).not.toBeNull();
@@ -340,18 +346,20 @@ describe("renderApp — panel-registry: all panels present per tier", () => {
     expect(container.querySelector(".capacity-history")).not.toBeNull();
     expect(container.querySelector("#reminder-list")).not.toBeNull();
     expect(container.querySelector(".queue-metrics-heading")).not.toBeNull();
+    expect(container.querySelector(".backlog-history")).not.toBeNull();
   });
 
-  it("owner-with-data: all five panels are present", () => {
+  it("owner-with-data: all six panels are present", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now),
+      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples }, now),
     );
     expect(container.querySelector(".capacity-heading")).not.toBeNull();
     expect(container.querySelector(".capacity-pace")).not.toBeNull();
     expect(container.querySelector(".capacity-history")).not.toBeNull();
     expect(container.querySelector("#reminder-list")).not.toBeNull();
     expect(container.querySelector(".queue-metrics-heading")).not.toBeNull();
+    expect(container.querySelector(".backlog-history")).not.toBeNull();
   });
 });
 
@@ -398,6 +406,16 @@ describe("renderApp — panel-registry: history panel is full-width", () => {
     expect(history!.classList.contains("panel-grid-full")).toBe(true);
     // The history section IS the full-width element
     expect(container.querySelector(".panel-grid-full")).toBe(history);
+  });
+});
+
+describe("renderApp — panel-registry: backlog-history panel is full-width", () => {
+  it("demo: .backlog-history has the panel-grid-full class", () => {
+    const container = document.createElement("div");
+    withThemeFg(() => renderApp(container, { tier: "demo" }, now));
+    const backlog = container.querySelector(".backlog-history");
+    expect(backlog).not.toBeNull();
+    expect(backlog!.classList.contains("panel-grid-full")).toBe(true);
   });
 });
 
