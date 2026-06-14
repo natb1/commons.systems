@@ -27900,6 +27900,12 @@ spot_security_scat=""
 spot_security_hcat=""
 spot_priority_spri=""
 spot_priority_hpri=""
+spot_other_scat=""
+spot_other_hcat=""
+spot_other_spri=""
+spot_other_hpri=""
+spot_testing_scat=""
+spot_testing_hcat=""
 row_count=0
 while IFS=$'\t' read -r dc_num dc_spri dc_scat dc_hpri dc_hcat; do
   [[ -z "$dc_num" ]] && continue
@@ -27915,6 +27921,16 @@ while IFS=$'\t' read -r dc_num dc_spri dc_scat dc_hpri dc_hcat; do
     spot_priority_spri="$dc_spri"
     spot_priority_hpri="$dc_hpri"
   fi
+  if [[ "$dc_num" == "110" ]]; then
+    spot_other_scat="$dc_scat"
+    spot_other_hcat="$dc_hcat"
+    spot_other_spri="$dc_spri"
+    spot_other_hpri="$dc_hpri"
+  fi
+  if [[ "$dc_num" == "103" ]]; then
+    spot_testing_scat="$dc_scat"
+    spot_testing_hcat="$dc_hcat"
+  fi
 done <<< "$result"
 # Confirm expected row count (all 11 issues survive: none carry dispatch:office-hours).
 assert_eq "#1490 classify: 11 rows emitted (all issues survive)" "11" "$row_count"
@@ -27923,6 +27939,12 @@ assert_eq "#1490 classify: security issue (101) sorted_cat is 'security'" "secur
 assert_eq "#1490 classify: security issue (101) helper_cat is 'security'" "security" "$spot_security_hcat"
 assert_eq "#1490 classify: priority issue (111) sorted_pri is 1" "1" "$spot_priority_spri"
 assert_eq "#1490 classify: priority issue (111) helper_pri is 1" "1" "$spot_priority_hpri"
+assert_eq "#1490 classify: other issue (110) sorted_cat is 'other'" "other" "$spot_other_scat"
+assert_eq "#1490 classify: other issue (110) helper_cat is 'other'" "other" "$spot_other_hcat"
+assert_eq "#1490 classify: other issue (110) sorted_pri is 0" "0" "$spot_other_spri"
+assert_eq "#1490 classify: other issue (110) helper_pri is 0" "0" "$spot_other_hpri"
+assert_eq "#1490 classify: testing issue (103) sorted_cat is 'testing infrastructure'" "testing infrastructure" "$spot_testing_scat"
+assert_eq "#1490 classify: testing issue (103) helper_cat is 'testing infrastructure'" "testing infrastructure" "$spot_testing_hcat"
 teardown
 
 # ============================================================================
