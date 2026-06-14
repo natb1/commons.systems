@@ -732,6 +732,18 @@ describe("renderHome", () => {
       expect(primaryHtml).toContain("normalized-group");
     });
 
+    it("suppresses all non-primary members when two share a normalizedId in an orphan batch", () => {
+      const budgetIdToName = new Map<string, string>();
+      const batch = [
+        txn({ id: "txn-b", description: "Store B", amount: 50, normalizedId: "norm-1", normalizedPrimary: false, timestamp: mockTimestamp("2025-01-04") }),
+        txn({ id: "txn-c", description: "Store C", amount: 50, normalizedId: "norm-1", normalizedPrimary: false, timestamp: mockTimestamp("2025-01-03") }),
+      ];
+      const html = renderTransactionRows(batch, "household", true, budgetIdToName);
+      expect(html).not.toContain("Store B");
+      expect(html).not.toContain("Store C");
+      expect(html).not.toContain("normalized-group");
+    });
+
     it("renders the table (no data error) when a batch contains only a non-primary member", async () => {
       const html = await renderHome(localOptions({
         getTransactions: vi.fn().mockResolvedValue([
