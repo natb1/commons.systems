@@ -76,7 +76,13 @@ source "$SCRIPT_DIR/lib-claude-agents.sh"
 # `enter`-bound path (explicit, and queue-orphan recycle).
 emit_enter_reconciled() {
   local wt_path="$1" wt_branch="$2" pr pr_head unique
-  if ! pr=$("$SCRIPT_DIR/dispatch-find-pr" "$ISSUE"); then
+  # dispatch-find-pr runs under the dispatch lock here (#1612), so zero its 1s
+  # self-fetch retry sleep (DISPATCH_FIND_PR_RETRY_DELAY=0). The retry's only job
+  # is to ride out a transient gh flake; dispatch-find-pr's
+  # closedByPullRequestsReferences cross-check still runs as the second "no PR"
+  # authority, so the false-'no PR' race stays guarded while the mandatory
+  # wall-clock sleep no longer extends the lock window.
+  if ! pr=$(DISPATCH_FIND_PR_RETRY_DELAY=0 "$SCRIPT_DIR/dispatch-find-pr" "$ISSUE"); then
     echo "error: dispatch-find-pr failed for issue $ISSUE; cannot reconcile branch" >&2
     exit 1
   fi

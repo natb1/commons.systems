@@ -6038,6 +6038,33 @@ assert_eq "explicit + sessionless worktree → enter <path>" \
   "enter /worktrees/42-my-feature" "$result"
 teardown
 
+# 1b. #1612: the enter/reconcile path forces dispatch-find-pr's retry delay to 0.
+#     emit_enter_reconciled calls dispatch-find-pr under the dispatch lock, so its
+#     1s self-fetch retry sleep must be suppressed (DISPATCH_FIND_PR_RETRY_DELAY=0)
+#     even when the inherited environment sets a non-zero delay — otherwise the
+#     sleep extends the lock window on every reused-worktree resolution.
+echo "Test: #1612 enter path forces dispatch-find-pr retry delay 0 under the lock"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # orphan world: no live session → enter path
+# Probe find-pr: record the retry delay observed, then return empty (no PR →
+# enter unchanged). Overwrites the real copy setup installed.
+cat > "$TMPDIR_TEST/dispatch-find-pr" <<'PROBE'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")" && pwd)/stub"
+printf '%s\n' "${DISPATCH_FIND_PR_RETRY_DELAY:-unset}" > "$STUB_DIR/find-pr-delay-seen.txt"
+exit 0
+PROBE
+chmod +x "$TMPDIR_TEST/dispatch-find-pr"
+export DISPATCH_FIND_PR_RETRY_DELAY=99   # a non-zero inherited delay the call must override
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+export DISPATCH_FIND_PR_RETRY_DELAY=0    # restore harness default for later tests
+assert_eq "#1612 enter path → enter unchanged (probe returns no PR)" \
+  "enter /worktrees/42-my-feature" "$result"
+assert_eq "#1612 enter path forced find-pr retry delay to 0 (not the inherited 99)" \
+  "0" "$(cat "$STUB_DIR/find-pr-delay-seen.txt")"
+teardown
+
 # 2. explicit mode + a live-session-owned worktree → conflict <path> (#837). The
 #    recycle path no longer fires into a worktree whose previous worker is live.
 echo "Test: explicit + live-session <N>-* worktree → conflict"
@@ -20955,9 +20982,12 @@ FAKE
   export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake-claude"
 
   # Fake sub-scripts (defaults; per-test overrides via MAT_* env vars).
-  cat > "$TMPDIR_TEST/dispatch-find-pr" <<'FAKE'
+  # #1612: also record the retry delay each call observed, so a test can assert
+  # the under-lock explicit leaf-trace call forces DISPATCH_FIND_PR_RETRY_DELAY=0.
+  cat > "$TMPDIR_TEST/dispatch-find-pr" <<FAKE
 #!/usr/bin/env bash
-[[ -n "${MAT_PR:-}" ]] && echo "$MAT_PR"
+printf '%s\n' "\${DISPATCH_FIND_PR_RETRY_DELAY:-unset}" >> "$TMPDIR_TEST/logs/find-pr-delay.log"
+[[ -n "\${MAT_PR:-}" ]] && echo "\$MAT_PR"
 exit 0
 FAKE
   cat > "$TMPDIR_TEST/dispatch-trace-leaf" <<FAKE
@@ -21266,6 +21296,23 @@ mat_setup
 out=$(run_mat 839 explicit)
 assert_eq "explicit happy: terminal token" "propagate" \
   "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+
+# --- #1612: explicit leaf-trace forces dispatch-find-pr's retry delay to 0 ----
+# The explicit-mode leaf-trace guard calls dispatch-find-pr under the dispatch
+# lock. Its 1s self-fetch retry sleep must be suppressed
+# (DISPATCH_FIND_PR_RETRY_DELAY=0) so it never extends the lock window, even when
+# the inherited environment sets a non-zero delay. The closedByPullRequestsReferences
+# cross-check still runs, so the false-'no PR' race stays guarded.
+echo "Test: materialize-spawn explicit leaf-trace forces find-pr retry delay 0 (#1612)"
+mat_setup
+export DISPATCH_FIND_PR_RETRY_DELAY=99   # a non-zero inherited delay the call must override
+out=$(run_mat 839 explicit)
+unset DISPATCH_FIND_PR_RETRY_DELAY
+assert_eq "#1612 explicit: terminal token" "propagate" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "#1612 explicit: leaf-trace find-pr saw retry delay 0 (not the inherited 99)" "0" \
+  "$(head -n 1 "$TMPDIR_TEST/logs/find-pr-delay.log")"
 mat_teardown
 
 # --- explicit closed target → notify target-blocked --------------------------
