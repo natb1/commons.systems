@@ -1402,6 +1402,31 @@ assert_eq "draft + CONFLICTING + pending → ready (token)" "ready" "$CI_READY_O
 assert_eq "draft + CONFLICTING + pending → ready (exit 0)" "0" "$CI_READY_RC"
 teardown
 
+# #1646: a >128KB open-PR list passed via DISPATCH_PR_LIST_FILE returns the correct
+# verdict. The equivalent inline DISPATCH_PR_LIST env var would E2BIG the exec.
+echo "Test: ci-ready over >128KB DISPATCH_PR_LIST_FILE → correct verdict"
+setup
+PAD=$(printf 'x%.0s' {1..143360})
+LIST='['"$(make_pr 10 "42-feature" "true" "$NO_LABELS" "$PENDING_ROLLUP")"','"$(make_pr 20 "99-pad" "false" "[{\"name\":\"$PAD\"}]" "$GREEN_ROLLUP")"']'
+BIG_FILE=$(pr_list_tmpfile "$LIST")
+assert_eq "ci-ready file-channel fixture exceeds 128KB" "ok" "$([[ "$(wc -c < "$BIG_FILE")" -gt 131072 ]] && echo ok || echo too-small)"
+CI_OUT=$(DISPATCH_PR_LIST_FILE="$BIG_FILE" "$TMPDIR_TEST/dispatch-ci-ready" "42") && CI_RC=0 || CI_RC=$?
+assert_eq ">128KB file channel → correct verdict (waiting)" "waiting" "$CI_OUT"
+assert_eq ">128KB file channel → not-ready exit 1" "1" "$CI_RC"
+teardown
+
+# #1646: an unreadable DISPATCH_PR_LIST_FILE is an environment/IO error, surfaced
+# as exit 2 — distinct from the readiness exits 0 (ready) / 1 (not-ready).
+echo "Test: ci-ready with unreadable DISPATCH_PR_LIST_FILE → exit 2"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+MISSING="$TMPDIR_TEST/does-not-exist-pr-list.json"
+CI_ERR=$(DISPATCH_PR_LIST_FILE="$MISSING" "$TMPDIR_TEST/dispatch-ci-ready" "42" 2>&1 >/dev/null) && CI_RC=0 || CI_RC=$?
+assert_eq "unreadable DISPATCH_PR_LIST_FILE → exit 2 (env error, not a readiness verdict)" "2" "$CI_RC"
+case "$CI_ERR" in *"not readable"*) ok=yes ;; *) ok="no:$CI_ERR" ;; esac
+assert_eq "unreadable file → clear stderr error" "yes" "$ok"
+teardown
+
 # ============================================================================
 # dispatch-find-pr tests
 # ============================================================================
@@ -5124,6 +5149,25 @@ printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"hel
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "pending draft PR on issue's branch → issue skipped this tick (empty)" "empty" "$result"
+teardown
+
+# #1646 regression guard (AC3, load-bearing): under the old inline DISPATCH_PR_LIST
+# env channel, an open-PR list past ~128 KB (MAX_ARG_STRLEN) E2BIG'd the child exec,
+# every candidate was silently excluded, and the tick manufactured a false `empty`.
+# The DISPATCH_PR_LIST_FILE temp-file channel makes list size irrelevant: a >128 KB
+# list must still select a candidate.
+echo "Test: >128KB open-PR list still selects a candidate (no false empty)"
+setup
+PAD=$(printf 'x%.0s' {1..143360})   # 140 KB of filler, > 131072 (128 KB)
+UNION='['"$(make_pr_union 10 "10-big-list" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-padding" "2024-01-02T00:00:00Z" "false" "[{\"name\":\"$PAD\"}]" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+fixture_bytes=$(wc -c < "$STUB_DIR/pr-list-union.json")
+assert_eq "AC3 fixture exceeds 128KB MAX_ARG_STRLEN" "ok" "$([[ "$fixture_bytes" -gt 131072 ]] && echo ok || echo "too-small:$fixture_bytes")"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "AC3: >128KB open-PR list still selects a candidate (no false empty)" "pr 10 10-big-list fix-checks" "$result"
 teardown
 
 # ============================================================================
