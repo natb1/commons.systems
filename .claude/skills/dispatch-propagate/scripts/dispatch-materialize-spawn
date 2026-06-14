@@ -344,6 +344,36 @@ process_one_target() {
       fi
       write_identity_stub "$WORKTREE_PATH" "$n" 1>&2 || true
       ;;
+    create-existing)
+      BRANCH="$WT_REST"
+      PROJECT_ROOT=$(resolve_project_root) || {
+        echo "dispatch-materialize-spawn: resolve_project_root failed for #$n" >&2
+        return 2
+      }
+      WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
+      # The target has an open PR; check out its existing head branch (#943)
+      # rather than branching a fresh <N>-<slug> from origin/main. Local branch →
+      # check out as-is (preserves any unpushed commits — we check out the PR
+      # head branch directly, so unlike the enter-path reconcile (#913) there is
+      # no re-point and therefore no discard risk, so no divergence guard is
+      # needed here). Remote-only → fetch then track.
+      if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+        if ! git worktree add "$WORKTREE_PATH" "$BRANCH" 1>&2; then
+          echo "dispatch-materialize-spawn: git worktree add (local existing) failed for $BRANCH" >&2
+          return 2
+        fi
+      else
+        if ! git fetch --quiet origin "$BRANCH" 1>&2; then
+          echo "dispatch-materialize-spawn: git fetch origin $BRANCH failed" >&2
+          return 2
+        fi
+        if ! git worktree add --track -b "$BRANCH" "$WORKTREE_PATH" "origin/$BRANCH" 1>&2; then
+          echo "dispatch-materialize-spawn: git worktree add (remote-only) failed for $BRANCH" >&2
+          return 2
+        fi
+      fi
+      write_identity_stub "$WORKTREE_PATH" "$n" 1>&2 || true
+      ;;
     conflict)
       echo "path: $WT_REST"
       OUTCOME=worktree-conflict
