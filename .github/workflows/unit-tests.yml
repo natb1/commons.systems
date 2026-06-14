@@ -59,6 +59,9 @@ jobs:
         with:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ runner.os }}
+      - name: Install workspace dependencies
+        if: steps.changes.outputs.rules == 'true'
+        run: .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
       - name: Run rules-test suite
         id: run-rules-test
         if: steps.changes.outputs.rules == 'true'
