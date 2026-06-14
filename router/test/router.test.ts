@@ -677,7 +677,7 @@ describe("createHistoryRouter", () => {
       path: /^\/post\//,
       render: (path) => `<h2>Post: ${escapeHtml(path)}</h2>`,
     };
-    const html = route.render("/post/<img src=x>");
-    expect(html).toBe("<h2>Post: /post/&lt;img src=x&gt;</h2>");
+    const html = route.render("/post/<img src=x>&title=y");
+    expect(html).toBe("<h2>Post: /post/&lt;img src=x&gt;&amp;title=y</h2>");
   });
 });
