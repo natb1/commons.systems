@@ -9,10 +9,10 @@
 # issues oldest-first, makes ONE per-item liveness call against each item's
 # <N>-* worktree, and emits exactly one of four dispositions, in this priority:
 #
-#   resume <sessionId>
+#   live <sessionId>
 #     The oldest labeled item whose <N>-* worktree has a live Claude session.
-#     Resume wins over fresh: if any labeled item is live, its session is
-#     resumed in preference to picking up a sessionless sibling fresh.
+#     Live wins over fresh: if any labeled item is live, its session is
+#     attached in preference to picking up a sessionless sibling fresh.
 #   office-hours <issue> <phase> <pr-or-dash> <worktree-path>
 #     The oldest labeled item with NO live session — a sessionless item that
 #     /office-hours picks up fresh.
@@ -109,15 +109,15 @@ issue_live_session_id() {
   return 1
 }
 
-# Single oldest-first enumeration with one per-item liveness call. RESUME wins
-# over FRESH: a live item is resumed in preference to any sessionless sibling.
+# Single oldest-first enumeration with one per-item liveness call. LIVE wins
+# over FRESH: a live item is attached in preference to any sessionless sibling.
 SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[].number')
 FRESH_NUM=""
-RESUME_ID=""
+LIVE_ID=""
 while IFS= read -r issue_num; do
   [[ -z "$issue_num" ]] && continue
   if sid=$(issue_live_session_id "$issue_num"); then
-    RESUME_ID="$sid"
+    LIVE_ID="$sid"
     break
   else
     rc=$?
@@ -126,9 +126,9 @@ while IFS= read -r issue_num; do
   fi
 done <<< "$SORTED"
 
-# Priority 1: resume the oldest live item.
-if [[ -n "$RESUME_ID" ]]; then
-  printf 'resume %s\n' "$RESUME_ID"
+# Priority 1: emit the oldest live item.
+if [[ -n "$LIVE_ID" ]]; then
+  printf 'live %s\n' "$LIVE_ID"
   exit 0
 fi
 
