@@ -21259,6 +21259,105 @@ no_origin_main=$(grep -q "origin/main" "$TMPDIR_TEST/logs/git.log" && echo no ||
 assert_eq "create-existing remote: did NOT branch a fresh slug from origin/main" "yes" "$no_origin_main"
 mat_teardown
 
+# --- create-existing live-git: the materialized worktree carries the PR's -----
+# --- commits (AC #2), not a fresh origin/main branch -------------------------
+# The stub-based create-existing tests above prove the right git COMMAND is
+# issued, but the stub never runs real git, so they cannot prove AC #2's effect:
+# `git -C <path> rev-parse HEAD` equals the PR head tip AND
+# `git diff origin/main...HEAD` is non-empty. These two tests run the REAL
+# `dispatch-materialize-spawn` against a REAL git project (only git is un-stubbed;
+# every sub-script stays faked) so the create-existing arm's actual `git worktree
+# add` materializes a worktree we can inspect. This is the effect-level coverage
+# the resolver/command-shape tests cannot reach (#943).
+#
+# Topology mirrors the live `.bare` layout: a bare "upstream" origin, a local
+# bare `.bare` clone wired with the standard `+refs/heads/*:refs/remotes/origin/*`
+# refspec, and the script run from a linked "runner" worktree so
+# `resolve_project_root` (via `git rev-parse --git-common-dir`) resolves to the
+# test project, not the real repo this suite lives in.
+lmg_setup() {
+  mat_setup
+  # Use REAL git (keep the stub gh for the closed-check/title fetch). mat_setup
+  # put a logging-only git stub first on PATH; removing it lets git resolve from
+  # SAVED_PATH while $TMPDIR_TEST/bin/gh still shadows real gh.
+  rm -f "$TMPDIR_TEST/bin/git"
+  LMG_UP="$TMPDIR_TEST/upstream.git"
+  LMG_PROJ="$TMPDIR_TEST/project"
+  # mat_setup created project/.bare and project/worktrees as plain dirs; rebuild
+  # them as real repos.
+  rm -rf "$LMG_PROJ"
+  git init --bare -b main -q "$LMG_UP"
+  local seed="$TMPDIR_TEST/seed"
+  git clone -q "$LMG_UP" "$seed" 2>/dev/null
+  git -C "$seed" config user.email "test@test"
+  git -C "$seed" config user.name "Test"
+  printf 'seed content\n' > "$seed/seed.txt"
+  git -C "$seed" add seed.txt
+  git -C "$seed" commit -q -m "initial"
+  git -C "$seed" push -q origin main
+  LMG_MAIN_TIP=$(git -C "$seed" rev-parse main)
+  # PR-head branch = main + 1 commit, so diff origin/main...HEAD is non-empty.
+  git -C "$seed" checkout -q -b 42-existing-pr-branch
+  printf 'pr-only change\n' > "$seed/pr.txt"
+  git -C "$seed" add pr.txt
+  git -C "$seed" commit -q -m "pr commit"
+  LMG_PR_TIP=$(git -C "$seed" rev-parse HEAD)
+  git -C "$seed" push -q origin 42-existing-pr-branch
+  rm -rf "$seed"
+  # Local bare `.bare` with the standard remote refspec: gives refs/remotes/
+  # origin/* and the objects, but NO local refs/heads/* (so local-vs-remote is
+  # ours to control per case).
+  git init --bare -b main -q "$LMG_PROJ/.bare"
+  git -C "$LMG_PROJ/.bare" remote add origin "$LMG_UP"
+  git -C "$LMG_PROJ/.bare" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+  git -C "$LMG_PROJ/.bare" fetch -q origin
+  mkdir -p "$LMG_PROJ/worktrees"
+  # Linked runner worktree (detached at origin/main) = CWD for the script run.
+  git -C "$LMG_PROJ/.bare" worktree add -q --detach "$LMG_PROJ/worktrees/runner" origin/main
+  LMG_RUNNER="$LMG_PROJ/worktrees/runner"
+  export MAT_WT_DECISION="create-existing 42-existing-pr-branch"
+}
+lmg_teardown() { unset LMG_UP LMG_PROJ LMG_RUNNER LMG_MAIN_TIP LMG_PR_TIP; mat_teardown; }
+# Run the real materialize-spawn from inside the runner worktree so
+# resolve_project_root resolves to the test project.
+run_lmg() { ( cd "$LMG_RUNNER" && "$TMPDIR_TEST/dispatch-materialize-spawn" "$@" 2>/dev/null ); }
+
+# Live-git, local branch present (AC #2 + AC #3): worktree checks out the
+# existing local PR-head branch at its tip, carrying the PR's commit.
+echo "Test: materialize-spawn create-existing live-git local → worktree HEAD == PR head tip (AC #2)"
+lmg_setup
+# Local head present → the arm's show-ref succeeds → `worktree add <path> <branch>`.
+git -C "$LMG_PROJ/.bare" branch 42-existing-pr-branch origin/42-existing-pr-branch
+out=$(run_lmg 42 queue) ; rc=$?
+assert_eq "live local: exit 0" "0" "$rc"
+mat_wt="$LMG_PROJ/worktrees/42-existing-pr-branch"
+assert_eq "live local: worktree materialized" "1" "$([ -d "$mat_wt" ] && echo 1 || echo 0)"
+assert_eq "live local: HEAD == PR head tip (AC #2)" "$LMG_PR_TIP" \
+  "$(git -C "$mat_wt" rev-parse HEAD)"
+assert_eq "live local: HEAD != origin/main tip (not a fresh origin/main branch)" "yes" \
+  "$([ "$(git -C "$mat_wt" rev-parse HEAD)" != "$LMG_MAIN_TIP" ] && echo yes || echo no)"
+assert_eq "live local: diff origin/main...HEAD is non-empty (AC #2)" "yes" \
+  "$([ -n "$(git -C "$mat_wt" diff --name-only origin/main...HEAD)" ] && echo yes || echo no)"
+lmg_teardown
+
+# Live-git, remote-only branch (AC #2 + AC #4): no local head → fetch then
+# `--track -b`; worktree checks out the fetched PR-head tip, carrying its commit.
+echo "Test: materialize-spawn create-existing live-git remote-only → worktree HEAD == PR head tip (AC #2)"
+lmg_setup
+# No local refs/heads/42-* (we never create it) → the arm's show-ref fails →
+# fetch + `git worktree add --track -b`.
+out=$(run_lmg 42 queue) ; rc=$?
+assert_eq "live remote: exit 0" "0" "$rc"
+mat_wt="$LMG_PROJ/worktrees/42-existing-pr-branch"
+assert_eq "live remote: worktree materialized" "1" "$([ -d "$mat_wt" ] && echo 1 || echo 0)"
+assert_eq "live remote: HEAD == PR head tip (AC #2)" "$LMG_PR_TIP" \
+  "$(git -C "$mat_wt" rev-parse HEAD)"
+assert_eq "live remote: local branch now tracks origin (--track -b)" "origin/42-existing-pr-branch" \
+  "$(git -C "$mat_wt" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)"
+assert_eq "live remote: diff origin/main...HEAD is non-empty (AC #2)" "yes" \
+  "$([ -n "$(git -C "$mat_wt" diff --name-only origin/main...HEAD)" ] && echo yes || echo no)"
+lmg_teardown
+
 # --- explicit closed-check gh failure → exit 2 + lock released ---------------
 # The closed-target guard must not fail open on a gh error (silently dispatching
 # to a possibly-closed issue). A gh failure is a hard error: release + exit 2.
