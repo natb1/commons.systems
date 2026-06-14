@@ -16732,6 +16732,18 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-tick"
 
+  # Fake dispatch-spawn-sweep: log to sweep-calls.log so the Branch P and
+  # Branch R tests can assert the sweep reaper was launched. Mirrors the
+  # spawn-tick fake; without it the hook calls the real (absent) script and
+  # the silent `|| WARNING` fallback hides a regression. Intentionally does
+  # NOT write order.log — sweep ordering is not asserted.
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-sweep" <<'FAKE'
+#!/usr/bin/env bash
+echo "sweep" >> "$STUB_DIR/sweep-calls.log"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-sweep"
+
   # Fake dispatch-self-close: log to order.log + self-close-calls.log.
   cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-self-close" <<'FAKE'
 #!/usr/bin/env bash
@@ -17866,6 +17878,8 @@ spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "parse-job-done: spawn invoked exactly once" "1" "$spawn_calls"
 self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
 assert_eq "parse-job-done: self-close invoked exactly once" "1" "$self_close_calls"
+sweep_calls=$(wc -l < "$STUB_DIR/sweep-calls.log" 2>/dev/null || echo 0)
+assert_eq "parse-job-done: sweep invoked exactly once" "1" "$sweep_calls"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: parse-job-done: no office-hours apply"
@@ -17900,6 +17914,8 @@ spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "resolved-closed: spawn invoked exactly once" "1" "$spawn_calls"
 self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
 assert_eq "resolved-closed: self-close invoked exactly once" "1" "$self_close_calls"
+sweep_calls=$(wc -l < "$STUB_DIR/sweep-calls.log" 2>/dev/null || echo 0)
+assert_eq "resolved-closed: sweep invoked exactly once" "1" "$sweep_calls"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: resolved-closed: no office-hours apply"
@@ -25935,6 +25951,87 @@ fi
 rm -rf "$eru3_tmp"
 
 # ============================================================================
+# ensure_recover_unit: PATH backslash is stripped from Environment= (#1212)
+# ============================================================================
+echo ""
+echo "=== ensure_recover_unit strips backslash from Environment= PATH ==="
+eru4_tmp=$(mktemp -d)
+mkdir -p "$eru4_tmp/bin"
+mkdir -p "$eru4_tmp/main-worktree"
+cat > "$eru4_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$eru4_tmp/bin/systemctl"
+if (
+  export DISPATCH_RECOVER_UNIT_DIR="$eru4_tmp/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$eru4_tmp/bin/systemctl"
+  export PATH="/usr/bin:/mnt/c/win\\dows:$PATH"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_recover_unit "$eru4_tmp/main-worktree"
+); then
+  eru4_unit="$eru4_tmp/systemd-user/dispatch-tick-recover.service"
+  if eru4_env_line=$(grep '^Environment=' "$eru4_unit" 2>/dev/null); then
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eru4_env_line" != *'\'* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: Environment= PATH has no backslash (stripped)"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: Environment= PATH still contains a backslash: $eru4_env_line"
+    fi
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eru4_env_line" == 'Environment="PATH='* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: Environment= line is well-formed (PATH= prefix intact)"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: Environment= line is malformed: $eru4_env_line"
+    fi
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eru4_env_line" == *'/mnt/c/windows'* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: backslash removal merged the path segment to /mnt/c/windows"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: /mnt/c/windows not found in Environment= line: $eru4_env_line"
+    fi
+  else
+    TOTAL=$((TOTAL + 3)); FAIL=$((FAIL + 3))
+    echo "  FAIL: unit file missing or lacks Environment= line: $eru4_unit"
+  fi
+else
+  TOTAL=$((TOTAL + 3)); FAIL=$((FAIL + 3))
+  echo "  FAIL: ensure_recover_unit returned non-zero"
+fi
+rm -rf "$eru4_tmp"
+
+# ============================================================================
+# ensure_recover_unit: rejects a path containing a backslash (#1212)
+# ============================================================================
+echo ""
+echo "=== ensure_recover_unit rejects a path with a backslash ==="
+eru5_tmp=$(mktemp -d)
+mkdir -p "$eru5_tmp/bin"
+cat > "$eru5_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$eru5_tmp/bin/systemctl"
+TOTAL=$((TOTAL + 1))
+if (
+  export DISPATCH_RECOVER_UNIT_DIR="$eru5_tmp/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$eru5_tmp/bin/systemctl"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_recover_unit "$eru5_tmp/has\\a\\backslash"
+); then
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure_recover_unit should have returned non-zero for a path with a backslash"
+else
+  PASS=$((PASS + 1)); echo "  PASS: ensure_recover_unit returned non-zero for a path with a backslash"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$eru5_tmp/systemd-user/dispatch-tick-recover.service" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no unit file was written for a path with a backslash"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unit file was written despite path containing a backslash"
+fi
+rm -rf "$eru5_tmp"
+
+# ============================================================================
 # ensure_daemon_service: durable daemon service install + attach paths (#1197)
 # ============================================================================
 echo ""
@@ -26197,6 +26294,63 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: empty claude path returned zero"
 fi
 
+# --- 5. PATH backslash is stripped from daemon Environment= (#1212) ----------
+echo ""
+echo "=== ensure_daemon_service strips backslash from Environment= PATH ==="
+eds_path_strip_dir="$eds_tmp/path-strip-systemd-user"
+eds_path_strip_rc=0
+if (
+  export DISPATCH_DAEMON_UNIT_DIR="$eds_path_strip_dir"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
+  export STUB_LOG="$eds_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  export PATH="/usr/bin:/mnt/c/win\\dows:$PATH"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_daemon_service
+); then
+  eds_path_strip_unit="$eds_path_strip_dir/dispatch-claude-daemon.service"
+  if eds_path_env_line=$(grep '^Environment=' "$eds_path_strip_unit" 2>/dev/null); then
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eds_path_env_line" != *'\'* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: daemon Environment= PATH has no backslash (stripped)"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: daemon Environment= PATH still contains a backslash: $eds_path_env_line"
+    fi
+  else
+    TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+    echo "  FAIL: daemon unit missing or lacks Environment= line: $eds_path_strip_unit"
+  fi
+else
+  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+  echo "  FAIL: ensure_daemon_service returned non-zero (path-strip test)"
+fi
+
+# --- 6. ensure_daemon_service rejects a claude path with a backslash (#1212) -
+echo ""
+echo "=== ensure_daemon_service rejects a claude path with a backslash ==="
+eds_reject_rc=0
+(
+  export DISPATCH_DAEMON_UNIT_DIR="$eds_tmp/reject-systemd-user"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_tmp/bin/cla\\ude"
+  export STUB_LOG="$eds_log"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_daemon_service
+) 2>/dev/null || eds_reject_rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$eds_reject_rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: ensure_daemon_service returned non-zero for a claude path with a backslash"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure_daemon_service returned zero for a claude path with a backslash"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$eds_tmp/reject-systemd-user/dispatch-claude-daemon.service" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no daemon unit written for a claude path with a backslash"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: daemon unit was written despite claude path containing a backslash"
+fi
+
 rm -rf "$eds_tmp"
 
 # ============================================================================
@@ -26291,7 +26445,7 @@ if [[ "$method" == "POST" && "$endpoint" == *"/comments" ]]; then
   next=$(( $(cat "$COUNTER") + 1 ))
   echo "$next" > "$COUNTER"
   newbody=$(cat "$bodyfile")
-  updated=$(jq -c --argjson id "$next" --arg body "$newbody" '. + [{id:$id, body:$body}]' "$STORE")
+  updated=$(jq -c --argjson id "$next" --arg body "$newbody" --arg login "${WP_AUTHOR:-plan-bot}" '. + [{id:$id, body:$body, user:{login:$login}}]' "$STORE")
   echo "$updated" > "$STORE"
   emit "$(jq -c --argjson id "$next" '.[] | select(.id == $id)' "$STORE")"
   exit 0
@@ -26311,6 +26465,13 @@ chmod +x "$wp_root/bin/gh"
 
 WP_WRITE="$SCRIPT_DIR/dispatch-write-plan"
 WP_READ="$SCRIPT_DIR/dispatch-read-plan"
+
+# Pin the trusted plan-comment author for this block. Every positive test POSTs
+# via dispatch-write-plan, whose POST the fake gh stamps as ${WP_AUTHOR:-plan-bot};
+# pinning DISPATCH_PLAN_AUTHOR to the same login keeps the author-filtered scans
+# matching, and short-circuits the scripts' `$(gh api user …)` default (the fake
+# gh has no user endpoint).
+export DISPATCH_PLAN_AUTHOR=plan-bot
 
 # 1. write-creates: empty store → one comment containing the marker + PLAN A.
 if ! PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"PLAN A"; then
@@ -26373,6 +26534,62 @@ else
 fi
 rm -rf "$wp_empty"
 
+# 6. foreign-author injection: a marker comment authored by an untrusted account
+#    must be ignored by read-plan, and write-plan must NOT adopt (PATCH) it — it
+#    POSTs a fresh trusted-authored comment instead. Guards the #1222 fix:
+#    without the author filter, read-plan would execute the forged plan and
+#    write-plan would clobber the attacker's comment with the real plan.
+wp_forge=$(mktemp -d); mkdir -p "$wp_forge/bin"
+sed "s|$WP_STORE|$wp_forge/store.json|; s|$WP_COUNTER|$wp_forge/counter|" \
+  "$wp_root/bin/gh" > "$wp_forge/bin/gh"
+chmod +x "$wp_forge/bin/gh"
+# Seed one attacker-authored comment carrying the marker; counter=1 so the next
+# POST gets id 2 (no id collision with the seeded id 1).
+echo '1' > "$wp_forge/counter"
+jq -nc '[{id:1, body:"<!-- dispatch:plan -->\nFORGED PLAN", user:{login:"attacker"}}]' > "$wp_forge/store.json"
+
+# 6a. read-plan ignores the forged comment → exit 1 + missing-comment diagnostic.
+if read_err=$(PATH="$wp_forge/bin:$SAVED_PATH" "$WP_READ" 7 2>&1 1>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "read-plan: foreign-authored marker comment is ignored (exit 1)" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$read_err" == *"dispatch:plan"* || "$read_err" == *"no "*"comment"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan ignores a forged foreign-authored plan comment"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan ignores a forged foreign-authored plan comment"
+  echo "    actual: '$read_err'"
+fi
+
+# 6b. write-plan POSTs a fresh trusted comment rather than PATCHing the attacker's.
+if ! PATH="$wp_forge/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"REAL PLAN"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan (foreign-author) failed unexpectedly"
+fi
+assert_eq "write-plan: foreign-author store has two comments (attacker + new trusted)" \
+  "2" "$(jq 'length' "$wp_forge/store.json")"
+TOTAL=$((TOTAL + 1))
+if jq -e '.[] | select(.id == 1) | .body == "<!-- dispatch:plan -->\nFORGED PLAN"' "$wp_forge/store.json" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: write-plan leaves the attacker comment body unchanged"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan leaves the attacker comment body unchanged"
+fi
+TOTAL=$((TOTAL + 1))
+if jq -e '.[] | select(.user.login == "plan-bot") | (.body | contains("<!-- dispatch:plan -->") and contains("REAL PLAN"))' "$wp_forge/store.json" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: write-plan POSTs a fresh trusted-authored plan comment"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan POSTs a fresh trusted-authored plan comment"
+fi
+
+# 6c. read-plan now returns the trusted plan, not the forged one.
+read_out=""
+read_out=$(PATH="$wp_forge/bin:$SAVED_PATH" "$WP_READ" 7) || { FAIL=$((FAIL + 1)); echo "  FAIL: read-plan (foreign-author) exited non-zero unexpectedly"; }
+TOTAL=$((TOTAL + 1))
+if [[ "$read_out" == *"REAL PLAN"* && "$read_out" != *"FORGED PLAN"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan returns the trusted plan, not the forged one"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan returns the trusted plan, not the forged one"
+  echo "    actual: '$read_out'"
+fi
+rm -rf "$wp_forge"
+
 # 5. bare+worktree repo resolution: from a worktree whose dirname(common_dir) is
 # NOT a git repo (the real bare-repo + worktrees layout), with GH_REPO unset, both
 # scripts must still resolve the repo for gh. This would FAIL against the pre-fix
@@ -26430,6 +26647,7 @@ git --git-dir="$bw_root/.bare" worktree prune 2>/dev/null || true
 rm -rf "$bw_root"
 
 rm -rf "$wp_root"
+unset DISPATCH_PLAN_AUTHOR
 
 # ============================================================================
 # claim_fixed_vite_port (fixed Vite-port pool) tests
