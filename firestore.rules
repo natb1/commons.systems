@@ -521,6 +521,19 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Issue samples are the backlog-history time series, written by the Admin-SDK
+    // sampler. The `demo` env is world-readable for the public demo tier; every
+    // other env is owner-gated via the denormalized `memberEmails` field. Client
+    // writes are denied.
+    match /office-hours/{env}/issue-samples/{sampleId} {
+      allow get: if env == "demo"
+        || (request.auth != null
+            && request.auth.token.email in resource.data.memberEmails);
+      allow list: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow write: if false;
+    }
+
     // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
     // InsertFirestoreRules inserts new rule blocks immediately above this line.
     match /{document=**} {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dispatch-spawn-office-hours — spawn a fresh /office-hours background job for a
 # queue item, worker-style, and print the spawned (or deduped) session id so the
-# caller can attach a human via `claude --resume`.
+# caller can attach a human via `claude attach`.
 #
 # This is the office-hours fresh-launch counterpart of dispatch-launch-worker
 # (the router → phase-worker spawn path). Both are thin wrappers over
