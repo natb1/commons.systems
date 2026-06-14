@@ -244,6 +244,14 @@ describe("office-hours usage-samples", () => {
     );
   });
 
+  it("denies unfiltered owner list query on test-env usage-samples collection", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(collection(db, `office-hours/${ENV}/usage-samples`)),
+    );
+  });
+
   it("denies non-member list query on test-env collection", async () => {
     const ctx = authenticatedContext(env, "stranger@test.com");
     const db = ctx.firestore();
