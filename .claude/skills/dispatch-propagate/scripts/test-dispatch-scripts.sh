@@ -22579,7 +22579,7 @@ assert_eq "verify-drop: i1 non-Required kept without verify key" "false" "$(prin
 
 echo "Test: dispatch-qa-disposition"
 
-# All branches in one object (order: f1..f8) plus a separate passthrough check.
+# All branches in one object (order: f1..f6) plus a separate passthrough check.
 # f1: opus-fixable  → final_class=opus-fixable, verify=n/a
 # f2: needs-main    → final_class=needs-main,   verify=n/a
 # f3: needs-human, aesthetic:false, votes=[refuted,upheld] → opus-fixable, Refuted

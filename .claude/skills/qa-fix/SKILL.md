@@ -470,9 +470,12 @@ Otherwise run all steps in order.
    - When the walkthrough lane ran: the GIF filename (`tmp/qa-fix-walkthrough-<n>.gif`).
    - **Disposition triage (report-only)** — include this section only when the
      residue list was non-empty (i.e. Step 3.5 ran). For each residue item, list
-     its `class` from `result.dispositions`. For `needs-human` items, also include
-     the `verify` verdict and the skeptic rationale from the matching entry in
-     `result.verify_report` (matched by `id`). Add explicit prose: **"This section
+     its `class` from `result.dispositions`. For non-aesthetic `needs-human`
+     items (where `dispositions[item].aesthetic === false`), include the verify
+     verdict and rationale from the matching entry in `result.verify_report`
+     (matched by `id`). For aesthetic `needs-human` items, use
+     `dispositions[item].verify` (which will be `n/a`) directly — no
+     `verify_report` entry exists for them. Add explicit prose: **"This section
      is informational only. Every residue item still escalates to office-hours
      below, exactly as before. The disposition triage changes no terminal
      behavior."** If the residue list was empty (Step 3.5 was skipped), omit this

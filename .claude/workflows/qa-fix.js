@@ -234,7 +234,10 @@ if (candidates.length) {
   }
   const verifyResults = await parallel(
     verifyJobs.map((job) => () => {
-      const r = residueById.get(job.id) || {};
+      const r = residueById.get(job.id);
+      if (!r) {
+        throw new Error(`verify: no residue entry for candidate id "${job.id}"`);
+      }
       const prompt = [
         'You are an adversarial skeptic. Build the STRONGEST possible case that',
         'this "needs-human" label is WRONG — that Opus CAN resolve this item with',
