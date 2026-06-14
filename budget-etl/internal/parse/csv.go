@@ -108,15 +108,29 @@ func parseCSV(path string) (ParseResult, error) {
 			if n < 2 {
 				n = 2 // map zero-value guard: first collision starts at X-2; stored values are always >= 3, so n is never 0 or 1
 			}
-			for {
+			// Defensive termination guard. The per-ID counter keeps suffix
+			// assignment amortized O(rows): each base ID resumes its scan where
+			// the previous collision left off instead of restarting from 2. The
+			// scan is also implicitly bounded — every blocking X-n candidate must
+			// be an ID present in the finite file, so a free suffix always exists
+			// at or below n = len(records)-1. The explicit upper bound makes
+			// termination guaranteed in source against a future change that breaks
+			// that invariant; the error is not reachable on any input (you cannot
+			// pack more distinct X-n blockers into the file than it has rows).
+			found := false
+			for ; n <= len(records)-1; n++ {
 				candidate := fmt.Sprintf("%s-%d", base, n)
 				_, inUsed := used[candidate]
 				_, inOriginal := original[candidate]
-				n++ // advance before acceptance check so nextSuffix stores the slot after the one just taken
 				if !inUsed && !inOriginal {
 					txnID = candidate
+					n++ // advance so nextSuffix stores the slot after the one just taken
+					found = true
 					break
 				}
+			}
+			if !found {
+				return ParseResult{}, fmt.Errorf("%s: line %d: cannot find unique suffix for duplicate ID %q within %d candidates", path, i+2, base, len(records)-1)
 			}
 			nextSuffix[base] = n // record next slot to try; counter never rewinds
 		}
