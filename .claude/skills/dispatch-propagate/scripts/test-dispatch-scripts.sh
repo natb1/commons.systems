@@ -9618,6 +9618,69 @@ stmt_key=$(printf '%s' "$out" | jq -r '.statements[0].key')
 assert_eq "absent snapshot key round-trips" "mybank" "$stmt_key"
 config_teardown
 
+# --- Test 7i: absent epic.json prints no-config and exits 0 ------------------
+
+echo "Test: absent epic.json prints no-config and exits 0"
+config_setup
+# no file written — config dir is empty
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" epic 2>/dev/null); rc=$?
+assert_eq "absent epic.json exits 0" "0" "$rc"
+assert_eq "absent epic.json prints no-config" "no-config" "$out"
+config_teardown
+
+# --- Test 7j: valid epic.json round-trips ------------------------------------
+
+echo "Test: valid epic.json prints normalized JSON"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/epic.json" <<'EOF'
+{
+  "labels": ["epic","tracking-epic"]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" epic 2>/dev/null); rc=$?
+assert_eq "valid epic.json exits 0" "0" "$rc"
+epic_label=$(printf '%s' "$out" | jq -r '.labels[0]')
+assert_eq "valid epic.json labels[0]" "epic" "$epic_label"
+config_teardown
+
+# --- Test 7k: epic.json where .labels is not an array exits 1 ----------------
+
+echo "Test: epic.json with labels as string exits 1 and stderr mentions labels"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/epic.json" <<'EOF'
+{
+  "labels": "epic"
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" epic 2>&1 1>/dev/null) || rc=$?
+assert_eq "labels non-array exits 1" "1" "$rc"
+if [[ "$err" == *"labels"* ]]; then
+  assert_eq "labels non-array stderr mentions labels" "yes" "yes"
+else
+  assert_eq "labels non-array stderr mentions labels" "yes" "no: $err"
+fi
+config_teardown
+
+# --- Test 7l: epic.json with a non-string element exits 1 --------------------
+
+echo "Test: epic.json with non-string label element exits 1 and stderr mentions labels"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/epic.json" <<'EOF'
+{
+  "labels": ["epic", 42]
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" epic 2>&1 1>/dev/null) || rc=$?
+assert_eq "labels non-string element exits 1" "1" "$rc"
+if [[ "$err" == *"labels"* ]]; then
+  assert_eq "labels non-string element stderr mentions labels" "yes" "yes"
+else
+  assert_eq "labels non-string element stderr mentions labels" "yes" "no: $err"
+fi
+config_teardown
+
 # --- Test 8: valid target-workers.json prints normalized JSON ---------------
 
 echo "Test: valid target-workers.json prints normalized JSON"
