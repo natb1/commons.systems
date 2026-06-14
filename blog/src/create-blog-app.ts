@@ -42,7 +42,6 @@ export interface CreateBlogAppConfig {
   // per-app data
   fetchPostSource: string;
   siteUrl: string;
-  rssTitle: string;
   ogTitle: string;
   siteDefaults: SiteDefaults;
   navLinks: NavLink[];
