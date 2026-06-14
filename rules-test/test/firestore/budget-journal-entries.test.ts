@@ -48,6 +48,14 @@ describe("budget journal entries", () => {
       );
     });
 
+    it("allows second member to read", async () => {
+      const ctx = authenticatedContext(env, "other@test.com");
+      const db = ctx.firestore();
+      await assertSucceeds(
+        getDoc(doc(db, `budget/${ENV}/journal-entries/existing1`)),
+      );
+    });
+
     it("denies non-member read", async () => {
       const ctx = authenticatedContext(env, "stranger@test.com");
       const db = ctx.firestore();
@@ -68,6 +76,14 @@ describe("budget journal entries", () => {
   describe("create", () => {
     it("allows member to create valid doc", async () => {
       const ctx = authenticatedContext(env, "member@test.com");
+      const db = ctx.firestore();
+      await assertSucceeds(
+        setDoc(doc(db, `budget/${ENV}/journal-entries/new1`), baseDoc),
+      );
+    });
+
+    it("allows second member to create valid doc", async () => {
+      const ctx = authenticatedContext(env, "other@test.com");
       const db = ctx.firestore();
       await assertSucceeds(
         setDoc(doc(db, `budget/${ENV}/journal-entries/new1`), baseDoc),
@@ -116,6 +132,16 @@ describe("budget journal entries", () => {
       );
     });
 
+    it("allows second member to update mutable field", async () => {
+      const ctx = authenticatedContext(env, "other@test.com");
+      const db = ctx.firestore();
+      await assertSucceeds(
+        updateDoc(doc(db, `budget/${ENV}/journal-entries/existing1`), {
+          description: "updated",
+        }),
+      );
+    });
+
     it("denies changing groupId", async () => {
       const ctx = authenticatedContext(env, "member@test.com");
       const db = ctx.firestore();
@@ -150,6 +176,14 @@ describe("budget journal entries", () => {
   describe("delete", () => {
     it("allows member to delete", async () => {
       const ctx = authenticatedContext(env, "member@test.com");
+      const db = ctx.firestore();
+      await assertSucceeds(
+        deleteDoc(doc(db, `budget/${ENV}/journal-entries/existing1`)),
+      );
+    });
+
+    it("allows second member to delete", async () => {
+      const ctx = authenticatedContext(env, "other@test.com");
       const db = ctx.firestore();
       await assertSucceeds(
         deleteDoc(doc(db, `budget/${ENV}/journal-entries/existing1`)),
