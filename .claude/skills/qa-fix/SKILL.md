@@ -592,9 +592,17 @@ Otherwise run all steps in order.
          This makes the follow-up `blocked_by` the issue under QA: its manual
          post-merge verification waits until this PR's issue is done. Use the
          `ref-github-issues` dependencies API (invoke `ref-github-issues` for the
-         exact `gh api --input` syntax; do not restate it). The follow-up carries
-         `help wanted` + `@me` from the `/file-issue` pipeline and **no**
-         `dispatch:office-hours`.
+         exact `gh api --input` syntax; do not restate it). `/file-issue` applies
+         `help wanted` + `@me`; then call the post-process helper
+         (`dangerouslyDisableSandbox: true` — it calls `gh`):
+
+         ```bash
+         .claude/skills/dispatch-propagate/scripts/dispatch-qa-apply-main-qa-labels "<followup-N>"
+         ```
+
+         This removes `help wanted` and adds `main-qa` + `dispatch:office-hours`,
+         leaving `@me` — so the follow-up lands on the office-hours queue (human
+         review), not the autonomous dispatch queue.
 
       d. Returns `<followup-N>` mapped to its `identifier`.
 
@@ -824,7 +832,8 @@ Otherwise run all steps in order.
      - a failed pre-QA acceptance check (Step 3b, a bug needing a plan-mode fix).
 
    `needs-main`-class residue items are in **neither** part of the set — they were
-   filed as follow-ups in Step 3.6.
+   filed as follow-ups in Step 3.6, now carrying `main-qa` + `dispatch:office-hours`
+   so they route to office-hours human review rather than the autonomous queue.
 
    **Clean autonomous pass** — the escalation set (defined above) is **empty**.
    This now holds even for a run whose only residue items all classified
