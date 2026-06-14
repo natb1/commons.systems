@@ -26,11 +26,13 @@ list: `script-verifiable` (decided by a shell command, a vitest/curl/acceptance
 run, a file check, or one `javascript_tool` assertion — no browser walkthrough),
 `needs-browser` (needs the multi-step browser walkthrough loop), or
 `needs-human-judgment` (subjective UX, deferred to office-hours). This split is the
-genuine judgment of QA — it bounds how much of the run pays for a browser loop —
-so it is the **only** Opus spend in this skill. The qa-fix session itself stays on
-Sonnet: it parses the triage output and executes it across three lanes
-(shell-command, single-assertion, walkthrough), reserving the browser walkthrough
-for `needs-browser` items only.
+genuine judgment of QA — it bounds how much of the run pays for a browser loop.
+There are **two** Opus spends in this skill: (1) the Step 2 triage subagent, and
+(2) the Step 3.5 disposition Workflow's classify agent. The disposition skeptics
+(Step 3.5) run on Sonnet. The qa-fix session itself stays on Sonnet: it parses
+the triage output and executes it across three lanes (shell-command,
+single-assertion, walkthrough), reserving the browser walkthrough for
+`needs-browser` items only.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
 fork `/commit-merge-push` and run browser/shell checks inline.
@@ -145,7 +147,7 @@ Otherwise run all steps in order.
    that smoke tests can fail permission-denied until the standalone rules PR merges
    — and **false** otherwise. Carry `firestore_caveat` forward: Step 3 uses it to
    tag a permission-denied smoke FAIL as `main-gated-fail`, and it is passed into
-   the Workflow args (Step 3.5, added in a later edit).
+   the Workflow args (Step 3.5).
 
    If a browser component is detected, identify the **app dir** (`budget`,
    `fellspiral`, `landing`, or `print`) from the changed paths. If multiple app
@@ -171,8 +173,9 @@ Otherwise run all steps in order.
 
    b. **Launch exactly one triage subagent** — Agent tool, `subagent_type:
       general-purpose`, **`model: opus`** (the canonical bounded-Opus pattern from
-      `.claude/skills/fix-conflicts/SKILL.md` § 5). This is the **only** Opus call
-      in the skill; the qa-fix session itself stays Sonnet. The subagent reasons
+      `.claude/skills/fix-conflicts/SKILL.md` § 5). This is one of two Opus calls
+      in the skill (the other is the Step 3.5 disposition Workflow's classify agent);
+      the qa-fix session itself stays Sonnet. The subagent reasons
       over the pasted pack text and returns the plan — it does **not** run the pack,
       run any check, start a server, navigate a browser, or call any tool. "Bounded
       to triage" means reasons-only, no tools.
@@ -274,7 +277,7 @@ Otherwise run all steps in order.
    console errors, network failures, deferred `needs-human-judgment` items, summary
    counts) to a single `tmp/qa-fix-results-<n>.txt` (`<n>` is the Step-0-resolved
    issue number `<N>`). **In addition**, accumulate residue into an **in-memory
-   residue list (consumed by Step 3.5, added in a later edit)** — this list becomes
+   residue list (consumed by Step 3.5)** — this list becomes
    the Workflow `args`. Each residue entry is an object:
 
    ```
@@ -376,7 +379,7 @@ Otherwise run all steps in order.
             action `screenshot, save_to_disk: true` and record the returned saved
             path as the residue item's `screenshot_path`. Passing this path to a
             **separate** Agent/Workflow invocation (the disposition classifier,
-            Step 3.5, added in a later edit) is **UNVERIFIED**: if `save_to_disk`
+            Step 3.5) is **UNVERIFIED**: if `save_to_disk`
             does not return a Readable path, or the disposition subagent cannot Read
             it, set `screenshot_path=''` and rely on `page_text` only. The plan does
             **not** hinge on the screenshot path — `page_text` (captured via
@@ -395,6 +398,63 @@ Otherwise run all steps in order.
               "Per-item lane FAIL is record-and-continue" at the top of Step 3.
       10. Stop GIF recording: `gif_creator` with `action: "stop_recording"`. Export to `tmp/qa-fix-walkthrough-<n>.gif` (where `<n>` is the Step-0-resolved issue number `<N>`).
 
+3.5. **Invoke the disposition Workflow (report-only).**
+
+   Run this step only when the in-memory residue list from Step 3 is **non-empty**.
+   If the residue list is empty — every item PASSed or SKIPped and no
+   `needs-human-judgment` items were recorded — skip this step entirely and proceed
+   to Step 4 with no dispositions; the disposition section in Step 4 is omitted.
+
+   **Build `args`:**
+
+   ```
+   args = {
+     pr_num:             <PR_NUM>,            // from the idempotency preamble
+     issue_num:          <N>,                 // the issue number from Step 0
+     app_dir:            <app dir from Step 1, or null if no browser component>,
+     browser_available:  <bool>,              // true only when a browser component
+                                              // was detected in Step 1 AND the
+                                              // Chrome tools loaded successfully in
+                                              // Step 3c; false if "Chrome extension
+                                              // unavailable" was noted in Step 3c,
+                                              // or no browser component was detected
+     firestore_caveat:   <bool>,              // derived in Step 1
+     residue:            [ ...in-memory residue list... ]
+                                              // each entry: {id, title, kind,
+                                              //   url_path, expected_outcome,
+                                              //   finding, page_text,
+                                              //   screenshot_path}
+   }
+   ```
+
+   **Invoke the Workflow tool on `.claude/workflows/qa-fix.js`**, passing `args`.
+   This skill is a sanctioned caller of that Workflow — no `ultracode` keyword
+   needed. The Workflow runs in the background and returns one compact result:
+
+   ```
+   result = {
+     dispositions:  [ {id, title, kind, class, aesthetic, verify, rationale} ],
+     verify_report: [ {id, verdict, skeptic_votes, rationale} ],
+     deviation:     false
+   }
+   ```
+
+   - `dispositions[].class` is the final class: `opus-fixable` | `needs-main` |
+     `needs-human`. `verify` is `Upheld` | `Refuted` | `Unverified` | `n/a`.
+   - `verify_report` has one entry per non-aesthetic `needs-human` candidate that
+     went through the skeptic fan-out (`verdict`: `upheld` | `refuted` |
+     `unverified`).
+   - `result.deviation` is always `false` (this is a report-only Workflow). It is
+     **not** consumed — do not branch on it.
+
+   Consume `result.dispositions` and `result.verify_report` for the Step 4
+   PR-comment disposition section.
+
+   **Report-only:** the Workflow classifies and adversarially verifies residue
+   items but this skill does **not** act on the classes. No auto-fix, no change to
+   which items escalate to office-hours. The dispositions are purely informational
+   for the PR comment.
+
 4. **Post the PR-comment summary.**
 
    `PR_NUM` was resolved in the idempotency preamble — reuse it; do not
@@ -408,6 +468,15 @@ Otherwise run all steps in order.
      `/office-hours` walkthrough can pick them up.
    - List of bugs found (if any), each with the item title and the finding.
    - When the walkthrough lane ran: the GIF filename (`tmp/qa-fix-walkthrough-<n>.gif`).
+   - **Disposition triage (report-only)** — include this section only when the
+     residue list was non-empty (i.e. Step 3.5 ran). For each residue item, list
+     its `class` from `result.dispositions`. For `needs-human` items, also include
+     the `verify` verdict and the skeptic rationale from the matching entry in
+     `result.verify_report` (matched by `id`). Add explicit prose: **"This section
+     is informational only. Every residue item still escalates to office-hours
+     below, exactly as before. The disposition triage changes no terminal
+     behavior."** If the residue list was empty (Step 3.5 was skipped), omit this
+     section entirely.
 
    Post via (use `dangerouslyDisableSandbox: true` — the script invokes `gh`):
    ```bash
@@ -425,6 +494,11 @@ Otherwise run all steps in order.
    server was never started, skip cleanup.
 
 6. **Terminal disposition.**
+
+   This PR is report-only: the disposition triage records each residue item's
+   class in the Step 4 comment but changes no terminal behavior — every residue
+   item (FAIL, needs-human-judgment, main-gated fail) still escalates to
+   office-hours exactly as before.
 
    **Clean autonomous pass** — every `script-verifiable` and `needs-browser` item
    PASSed, zero `needs-human-judgment` items were recorded, and no bug was found:
