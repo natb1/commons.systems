@@ -562,14 +562,25 @@ CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
 # Same priority list as a JSON array, for category_of_labels' jq filter.
 TOPIC_CATEGORIES_JSON=$(printf '%s\n' "${TOPIC_CATEGORIES[@]}" | jq -Rcn '[inputs]')
 
+# Single source of the category/priority label expressions. Each def takes a
+# JSON array of {name:...} label objects as input and derives [.[].name]
+# itself, so callers pass the raw label array. category_of_labels /
+# has_priority_in_labels wrap these, and the ISSUE_SORTED filter below calls
+# the same defs — there is now exactly one copy of each expression.
+JQ_LABEL_DEFS='
+  def has_priority: [.[].name] | if index("priority") then 1 else 0 end;
+  def category_of($cats):
+    [.[].name] as $names
+    | first($cats[] | select(. as $c | $names | index($c))) // "other";
+'
+
 # Highest-priority topic category among a JSON array of {name:...} label
 # objects — the first TOPIC_CATEGORIES entry that appears as an exact label
 # name, else "other". Exact match, so the phase label "dispatch:reviewed" never
 # reads as topic "dispatch".
 category_of_labels() {
-  printf '%s' "$1" | jq -r --argjson cats "$TOPIC_CATEGORIES_JSON" '
-    [.[].name] as $names
-    | first($cats[] | select(. as $c | $names | index($c))) // "other"'
+  printf '%s' "$1" | jq -r --argjson cats "$TOPIC_CATEGORIES_JSON" \
+    "$JQ_LABEL_DEFS"' category_of($cats)'
 }
 
 # Union of a PR's closing issues' labels into a JSON array of {name:...} label
@@ -583,7 +594,7 @@ pr_combined_labels() {
 
 # 1 if the label set contains an exact "priority" label, else 0.
 has_priority_in_labels() {
-  printf '%s' "$1" | jq -r '[.[].name] | if index("priority") then 1 else 0 end'
+  printf '%s' "$1" | jq -r "$JQ_LABEL_DEFS"' has_priority'
 }
 
 # Top-N ranked PRs per (category, priority-bit, phase): key =
@@ -858,19 +869,19 @@ done < <(printf '%s' "$PR_LIST" | jq -r '
 # The roots are now emitted in (priority desc, category-rank asc, createdAt asc)
 # order — the SAME rank order the emission loops drain — so each (priority,
 # category) group's roots are contiguous, enabling the walk's global early-exit
-# (#1452). The category/priority/cat-rank expressions are the exact ones used by
-# category_of_labels / has_priority_in_labels / the CATEGORIES iteration order,
-# so bucket keys are unchanged. (1 - .pri) sorts priority=1 first; jq sort_by is
+# (#1452). pri/catname are computed by the shared JQ_LABEL_DEFS defs — the same
+# defs category_of_labels / has_priority_in_labels call — so the two sites cannot
+# drift; cat-rank is the CATEGORIES iteration order. Bucket keys are unchanged.
+# (1 - .pri) sorts priority=1 first; jq sort_by is
 # stable and createdAt is an ISO string sorting chronologically, so within a
 # (pri, cat-rank) group roots stay oldest-first — byte-identical to the old order
 # for that group. The TSV now carries the precomputed pri/cat-rank/cat columns.
-ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r --argjson cats "$TOPIC_CATEGORIES_JSON" '
+ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r --argjson cats "$TOPIC_CATEGORIES_JSON" "$JQ_LABEL_DEFS"'
   [ .[]
     | select((.labels // []) | any(.name == "help wanted"))
     | select((.labels // []) | any(.name == "dispatch:office-hours") | not)
-    | ([(.labels // [])[].name]) as $names
-    | ($names | if index("priority") then 1 else 0 end) as $pri
-    | (first($cats[] | select(. as $c | $names | index($c))) // "other") as $catname
+    | ((.labels // []) | has_priority) as $pri
+    | ((.labels // []) | category_of($cats)) as $catname
     | (($cats | index($catname)) // ($cats | length)) as $catrank
     | { number: .number, createdAt: .createdAt, pri: $pri, catrank: $catrank, catname: $catname }
   ]
