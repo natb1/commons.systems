@@ -24638,6 +24638,87 @@ fi
 rm -rf "$eru3_tmp"
 
 # ============================================================================
+# ensure_recover_unit: PATH backslash is stripped from Environment= (#1212)
+# ============================================================================
+echo ""
+echo "=== ensure_recover_unit strips backslash from Environment= PATH ==="
+eru4_tmp=$(mktemp -d)
+mkdir -p "$eru4_tmp/bin"
+mkdir -p "$eru4_tmp/main-worktree"
+cat > "$eru4_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$eru4_tmp/bin/systemctl"
+if (
+  export DISPATCH_RECOVER_UNIT_DIR="$eru4_tmp/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$eru4_tmp/bin/systemctl"
+  export PATH="/usr/bin:/mnt/c/win\\dows:$PATH"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_recover_unit "$eru4_tmp/main-worktree"
+); then
+  eru4_unit="$eru4_tmp/systemd-user/dispatch-tick-recover.service"
+  if eru4_env_line=$(grep '^Environment=' "$eru4_unit" 2>/dev/null); then
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eru4_env_line" != *'\'* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: Environment= PATH has no backslash (stripped)"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: Environment= PATH still contains a backslash: $eru4_env_line"
+    fi
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eru4_env_line" == 'Environment="PATH='* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: Environment= line is well-formed (PATH= prefix intact)"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: Environment= line is malformed: $eru4_env_line"
+    fi
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eru4_env_line" == *'/mnt/c/windows'* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: backslash removal merged the path segment to /mnt/c/windows"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: /mnt/c/windows not found in Environment= line: $eru4_env_line"
+    fi
+  else
+    TOTAL=$((TOTAL + 3)); FAIL=$((FAIL + 3))
+    echo "  FAIL: unit file missing or lacks Environment= line: $eru4_unit"
+  fi
+else
+  TOTAL=$((TOTAL + 3)); FAIL=$((FAIL + 3))
+  echo "  FAIL: ensure_recover_unit returned non-zero"
+fi
+rm -rf "$eru4_tmp"
+
+# ============================================================================
+# ensure_recover_unit: rejects a path containing a backslash (#1212)
+# ============================================================================
+echo ""
+echo "=== ensure_recover_unit rejects a path with a backslash ==="
+eru5_tmp=$(mktemp -d)
+mkdir -p "$eru5_tmp/bin"
+cat > "$eru5_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$eru5_tmp/bin/systemctl"
+TOTAL=$((TOTAL + 1))
+if (
+  export DISPATCH_RECOVER_UNIT_DIR="$eru5_tmp/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$eru5_tmp/bin/systemctl"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_recover_unit "$eru5_tmp/has\\a\\backslash"
+); then
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure_recover_unit should have returned non-zero for a path with a backslash"
+else
+  PASS=$((PASS + 1)); echo "  PASS: ensure_recover_unit returned non-zero for a path with a backslash"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$eru5_tmp/systemd-user/dispatch-tick-recover.service" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no unit file was written for a path with a backslash"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unit file was written despite path containing a backslash"
+fi
+rm -rf "$eru5_tmp"
+
+# ============================================================================
 # ensure_daemon_service: durable daemon service install + attach paths (#1197)
 # ============================================================================
 echo ""
@@ -24898,6 +24979,63 @@ if [[ "$eds_rc2" -ne 0 ]]; then
   PASS=$((PASS + 1)); echo "  PASS: empty claude path → non-zero return"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: empty claude path returned zero"
+fi
+
+# --- 5. PATH backslash is stripped from daemon Environment= (#1212) ----------
+echo ""
+echo "=== ensure_daemon_service strips backslash from Environment= PATH ==="
+eds_path_strip_dir="$eds_tmp/path-strip-systemd-user"
+eds_path_strip_rc=0
+if (
+  export DISPATCH_DAEMON_UNIT_DIR="$eds_path_strip_dir"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
+  export STUB_LOG="$eds_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  export PATH="/usr/bin:/mnt/c/win\\dows:$PATH"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_daemon_service
+); then
+  eds_path_strip_unit="$eds_path_strip_dir/dispatch-claude-daemon.service"
+  if eds_path_env_line=$(grep '^Environment=' "$eds_path_strip_unit" 2>/dev/null); then
+    TOTAL=$((TOTAL + 1))
+    if [[ "$eds_path_env_line" != *'\'* ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: daemon Environment= PATH has no backslash (stripped)"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: daemon Environment= PATH still contains a backslash: $eds_path_env_line"
+    fi
+  else
+    TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+    echo "  FAIL: daemon unit missing or lacks Environment= line: $eds_path_strip_unit"
+  fi
+else
+  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+  echo "  FAIL: ensure_daemon_service returned non-zero (path-strip test)"
+fi
+
+# --- 6. ensure_daemon_service rejects a claude path with a backslash (#1212) -
+echo ""
+echo "=== ensure_daemon_service rejects a claude path with a backslash ==="
+eds_reject_rc=0
+(
+  export DISPATCH_DAEMON_UNIT_DIR="$eds_tmp/reject-systemd-user"
+  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
+  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_tmp/bin/cla\\ude"
+  export STUB_LOG="$eds_log"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_daemon_service
+) 2>/dev/null || eds_reject_rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$eds_reject_rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: ensure_daemon_service returned non-zero for a claude path with a backslash"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure_daemon_service returned zero for a claude path with a backslash"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$eds_tmp/reject-systemd-user/dispatch-claude-daemon.service" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no daemon unit written for a claude path with a backslash"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: daemon unit was written despite claude path containing a backslash"
 fi
 
 rm -rf "$eds_tmp"
