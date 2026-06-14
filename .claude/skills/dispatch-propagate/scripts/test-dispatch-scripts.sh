@@ -11952,13 +11952,14 @@ log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-target-979-10300"* \
    && "$log" == *"--on-calendar=@10300"* \
+   && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
    && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"dispatch-tick 979"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: counter-bump systemd-run argv (unit + calendar + cwd + setenv + KillMode + dispatch-tick 979)"
+  PASS=$((PASS + 1)); echo "  PASS: counter-bump systemd-run argv (unit + calendar + OnFailure + cwd + setenv + KillMode + dispatch-tick 979)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: counter-bump systemd-run argv (unit + calendar + cwd + setenv + KillMode + dispatch-tick 979)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: counter-bump systemd-run argv (unit + calendar + OnFailure + cwd + setenv + KillMode + dispatch-tick 979)"
   echo "    log: $log"
 fi
 tr_teardown
