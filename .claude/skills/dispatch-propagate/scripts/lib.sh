@@ -885,6 +885,22 @@ ensure_recover_unit() {
     echo "WARNING: ensure_recover_unit: main worktree path contains a newline; refusing to write unit; OnFailure recovery unavailable" >&2
     return 1
   fi
+  # WorkingDirectory= does not unescape quotes, so a space in the bare path would
+  # split the value at the first space; reject it (same contract: warn + return 1).
+  if [[ "$main_worktree" == *' '* ]]; then
+    echo "WARNING: ensure_recover_unit: main worktree path contains a space; refusing to write unit; OnFailure recovery unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted ("$RECOVER_SCRIPT"); RECOVER_SCRIPT is derived
+  # from main_worktree below. An embedded double-quote in the path would
+  # prematurely close that quoted token, making systemd parse the executable and
+  # arguments wrong (bad-setting) and permanently break the unit. The path never
+  # legitimately contains a double-quote; reject it rather than emit a malformed
+  # unit (same contract: warn + return 1).
+  if [[ "$main_worktree" == *'"'* ]]; then
+    echo "WARNING: ensure_recover_unit: main worktree path contains a double-quote; refusing to write unit; OnFailure recovery unavailable" >&2
+    return 1
+  fi
 
   local RECOVER_SCRIPT="$main_worktree/.claude/skills/dispatch-propagate/scripts/dispatch-tick-recover"
   local UNIT_DIR="${DISPATCH_RECOVER_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
@@ -911,7 +927,8 @@ ensure_recover_unit() {
   # single token rather than split into an executable + spurious arguments.
   # WorkingDirectory= is the exception — it does NOT unescape quotes; a leading
   # `"` makes the path non-absolute and systemd rejects the unit (bad-setting),
-  # so it takes the bare path (safe here: the worktree path has no spaces).
+  # so it takes the bare path (the no-spaces invariant is enforced by the guard
+  # above, so the bare value is a single token).
   #
   # Deliberately NO OnFailure= on this unit — the recover handler must not chain
   # to itself, or a failing recovery would recurse.

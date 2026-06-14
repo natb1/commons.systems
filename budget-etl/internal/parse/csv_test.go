@@ -211,3 +211,48 @@ func TestParseCSV_DuplicateIDStress(t *testing.T) {
 
 	t.Logf("elapsed: %v for K=%d duplicate rows + N=%d pre-seeded rows", elapsed, K, N)
 }
+
+// TestParseCSV_AllDuplicateIDsPerformance guards against the O(M^2)
+// suffix-search regression fixed in #1375. With 50000 rows sharing the
+// same transaction ID, the unfixed code takes minutes; the fixed O(M)
+// code finishes in milliseconds. A 2-second wall-clock bound separates
+// them with wide margin and no CI flakiness.
+func TestParseCSV_AllDuplicateIDsPerformance(t *testing.T) {
+	const rows = 50000
+	var b strings.Builder
+	// metadata line: accountID, fromDate, toDate, openingBalance, closingBalance
+	b.WriteString("00000000001234567890,2025/06/11,2025/07/10,15000.00,12000.00\n")
+	for i := 0; i < rows; i++ {
+		b.WriteString("2025/06/16,1.00,\"Row\",,\"X\",\"DEBIT\"\n")
+	}
+
+	tmp := filepath.Join(t.TempDir(), "alldupes.csv")
+	if err := os.WriteFile(tmp, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	result, err := parseCSV(tmp)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("parseCSV: %v", err)
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("parseCSV took %v for %d all-duplicate rows; want < 2s (O(M^2) regression?)", elapsed, rows)
+	}
+	if len(result.Transactions) != rows {
+		t.Fatalf("expected %d transactions, got %d", rows, len(result.Transactions))
+	}
+
+	// Suffix correctness at boundaries.
+	if got := result.Transactions[0].TransactionID; got != "X" {
+		t.Errorf("txn[0].TransactionID = %q, want %q", got, "X")
+	}
+	if got := result.Transactions[1].TransactionID; got != "X-2" {
+		t.Errorf("txn[1].TransactionID = %q, want %q", got, "X-2")
+	}
+	if got := result.Transactions[rows-1].TransactionID; got != "X-50000" {
+		t.Errorf("txn[%d].TransactionID = %q, want %q", rows-1, got, "X-50000")
+	}
+}
