@@ -83,7 +83,7 @@ const PANELS: readonly Panel[] = [
     title: "Queue",
     availableIn: ["demo", "owner"],
     load: (c) => c.queueMetrics,
-    render: (m, now) => renderQueueMetricsPanel(m, now),
+    render: (m) => renderQueueMetricsPanel(m),
   }),
 ];
 

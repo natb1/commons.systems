@@ -3,12 +3,12 @@ import { type QueueMetricsSnapshot } from "./queue-metrics.js";
 /**
  * Renders the queue metrics panel: queue depth, net drain rate, and runway.
  *
- * The `now` parameter matches the panel-registry render signature (metrics, now)
- * and may be used for relative timestamps.
+ * Takes no `now`: the snapshot is rendered as-is, mirroring the `pace` and
+ * `history` panels whose render fns also omit `now`. The panel-registry render
+ * signature supplies `now` but a render fn is free to ignore it.
  */
 export function renderQueueMetricsPanel(
   metrics: QueueMetricsSnapshot | null,
-  _now: Date,
 ): HTMLElement {
   const section = document.createElement("section");
 
