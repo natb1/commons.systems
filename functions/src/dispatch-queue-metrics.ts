@@ -1,18 +1,24 @@
 // sampleDispatchQueueMetrics — scheduled Firebase Function that computes the
-// dispatch-queue runway metrics from GitHub issue search and writes them to the
-// `office-hours/{env}/metrics/dispatch-queue` Firestore snapshot document.
+// dispatch-queue runway metrics from GitHub issue search, writes them to the
+// `office-hours/{env}/metrics/dispatch-queue` Firestore snapshot document, and
+// appends one `office-hours/{env}/issue-samples/{autoId}` document per run
+// carrying the openHelpWanted / openOther split for the backlog-history time series.
 //
 // This is the sampler for the office-hours Queue view: the hosted app cannot run
 // `gh`, so the backlog / throughput / runway numbers are computed server-side on
 // a schedule (mirroring `syncOfficeHours` in office-hours-sync.ts) and persisted
 // to Firestore for the status band to render.
 //
-// All three counts are scoped to `label:"help wanted"` so inflow, outflow, and
-// backlog compose into a coherent runway:
-//   - open:    is:issue is:open label:"help wanted"                         -> openHelpWanted
-//   - closed:  is:issue is:closed reason:completed label:"help wanted"
-//              closed:>=<today-14d>                                          -> closedPerDay = count / 14
-//   - created: is:issue label:"help wanted" created:>=<today-14d>           -> createdPerDay = count / 14
+// Counts are aggregated (summed) across all repos listed in
+// DISPATCH_METRICS_QUEUE_REPO. Three counts are scoped to `label:"help wanted"`
+// so inflow, outflow, and backlog compose into a coherent runway; the fourth
+// partitions the remaining open issues:
+//   - open:      is:issue is:open label:"help wanted"                         -> openHelpWanted
+//   - openOther: is:issue is:open -label:"help wanted"                        -> openOther
+//   - closed:    is:issue is:closed reason:completed label:"help wanted"
+//                closed:>=<today-14d>                                          -> closedPerDay = count / 14
+//   - created:   is:issue label:"help wanted" created:>=<today-14d>           -> createdPerDay = count / 14
+// `openHelpWanted` and `openOther` together partition the total open count.
 // `reason:completed` excludes not-planned / duplicate closes.
 //
 // Authentication — reuses the syncOfficeHours GitHub App auth:
@@ -25,10 +31,12 @@
 //   The GitHub App is currently installed only on the office-hours group repo
 //   (`natb1/office-hours-nate`). To let this sampler search the dispatch queue,
 //   extend that SAME installation's repository access to additionally include
-//   `natb1/commons.systems` with read-only `Issues` permission. There is one
+//   each repo you want sampled, with read-only `Issues` permission. There is one
 //   installation per account, so this reuses the existing installation id — no
 //   new installation, no new private key. Then set the non-secret config var
-//   `DISPATCH_METRICS_QUEUE_REPO=natb1/commons.systems` (and `OFFICE_HOURS_GROUP_ID`).
+//   `DISPATCH_METRICS_QUEUE_REPO` to a comma-separated list of `owner/name` repos
+//   (e.g. `natb1/commons.systems` or `natb1/commons.systems,natb1/other-repo`);
+//   counts are summed across all listed repos. Also set `OFFICE_HOURS_GROUP_ID`.
 //   Until those vars are set the function deploys dormant: the config guard logs
 //   one line and returns without any GitHub call.
 //
