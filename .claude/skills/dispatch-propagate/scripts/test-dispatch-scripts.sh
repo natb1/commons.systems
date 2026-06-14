@@ -6195,6 +6195,30 @@ if "$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null; then rc=0; 
 assert_eq "empty-slug title exits non-zero" "1" "$rc"
 teardown
 
+# 10a. No worktree + the issue has an open PR → create-existing <pr-head>. The
+#      create path checks dispatch-find-pr first (#943); a PR present means an
+#      existing branch, so the resolver hands the caller the PR head branch to
+#      materialize instead of a fresh <N>-<slug>. The local-vs-remote choice is
+#      a materialize-spawn concern, so the resolver emits the same line for both.
+echo "Test: no worktree + open PR → create-existing <pr-head>"
+setup
+printf '[{"number":100,"headRefName":"42-existing-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
+echo '{"headRefName":"42-existing-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "no worktree + open PR → create-existing <pr-head>" \
+  "create-existing 42-existing-pr-branch" "$result"
+teardown
+
+# 10b. No worktree + NO PR → create <N>-<slug> unchanged (#943 AC #5). The
+#      find-pr check falls through (find-pr returns empty), so the fresh-slug
+#      create logic is preserved for the genuine implement phase.
+echo "Test: no worktree + no PR → create <N>-<slug> (find-pr fall-through, AC #5)"
+setup
+echo '{"title":"Add a feature"}' > "$STUB_DIR/issue-title-42.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "no worktree + no PR → create <N>-<slug>" "create 42-add-a-feature" "$result"
+teardown
+
 # ----------------------------------------------------------------------------
 # Branch reconciliation on the `enter` path (#913). PR existence is driven via
 # pr-list-full.json (dispatch-find-pr's prefix match on headRefName); the PR
@@ -21676,6 +21700,203 @@ assert_eq "finalize fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "finalize fail: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
+
+# --- create-existing, local branch → fetch + fast-forward + worktree add ------
+# AC #3 (#943): the PR head branch already exists locally (worktree was swept,
+# branch survived). materialize-spawn must fetch origin/$BRANCH, fast-forward the
+# local ref if it is a strict ancestor (UNIQUE=0), then
+# `git worktree add <path> <branch>` — NOT branch a fresh slug from origin/main.
+echo "Test: materialize-spawn create-existing local branch → fetch + fast-forward + worktree add"
+mat_setup
+export MAT_WT_DECISION="create-existing 42-existing-pr-branch"
+cat > "$TMPDIR_TEST/bin/git" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/git.log"
+case "\$*" in
+  "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/project/.bare" ;;
+  "show-ref --verify --quiet "*) exit 0 ;;
+  "rev-list --count "*) echo "0" ;;
+  "worktree add -b "*) mkdir -p "\$5" ;;
+  "worktree add --track -b "*) mkdir -p "\$6" ;;
+  "worktree add "*) mkdir -p "\$3" ;;
+  *) : ;;
+esac
+STUB
+chmod +x "$TMPDIR_TEST/bin/git"
+out=$(run_mat 42 queue) ; rc=$?
+assert_eq "create-existing local: exit 0" "0" "$rc"
+assert_eq "create-existing local: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+wt_add_local=$(grep -q "^worktree add $TMPDIR_TEST/project/worktrees/42-existing-pr-branch 42-existing-pr-branch\$" "$TMPDIR_TEST/logs/git.log" && echo yes || echo no)
+assert_eq "create-existing local: worktree add <path> <branch> (no -b)" "yes" "$wt_add_local"
+no_origin_main=$(grep -q "origin/main" "$TMPDIR_TEST/logs/git.log" && echo no || echo yes)
+assert_eq "create-existing local: did NOT branch a fresh slug from origin/main" "yes" "$no_origin_main"
+did_fetch=$(grep -q "^fetch --quiet origin 42-existing-pr-branch\$" "$TMPDIR_TEST/logs/git.log" && echo yes || echo no)
+assert_eq "create-existing local: fetched origin/BRANCH before checkout" "yes" "$did_fetch"
+did_ff=$(grep -q "^branch -f 42-existing-pr-branch origin/42-existing-pr-branch\$" "$TMPDIR_TEST/logs/git.log" && echo yes || echo no)
+assert_eq "create-existing local: fast-forwarded local ref to origin tip" "yes" "$did_ff"
+mat_teardown
+
+# --- create-existing, local branch diverged from origin → worktree-conflict ----
+# UNIQUE > 0: local branch carries commits not on origin (unpushed work). Must
+# emit worktree-conflict instead of overwriting, mirroring the enter-path
+# emit_enter_reconciled unique-commits conflict (#913).
+echo "Test: materialize-spawn create-existing local branch diverged → worktree-conflict"
+mat_setup
+export MAT_WT_DECISION="create-existing 42-existing-pr-branch"
+cat > "$TMPDIR_TEST/bin/git" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/git.log"
+case "\$*" in
+  "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/project/.bare" ;;
+  "show-ref --verify --quiet "*) exit 0 ;;
+  "rev-list --count "*) echo "1" ;;
+  "worktree add -b "*) mkdir -p "\$5" ;;
+  "worktree add --track -b "*) mkdir -p "\$6" ;;
+  "worktree add "*) mkdir -p "\$3" ;;
+  *) : ;;
+esac
+STUB
+chmod +x "$TMPDIR_TEST/bin/git"
+out=$(run_mat 42 queue) ; rc=$?
+assert_eq "create-existing local diverged: exit 0" "0" "$rc"
+assert_eq "create-existing local diverged: terminal token" "drain worktree-conflict" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "create-existing local diverged: path line emitted" "yes" \
+  "$(printf '%s\n' "$out" | grep -q "^path: " && echo yes || echo no)"
+no_wt_add=$(grep -q "^worktree add " "$TMPDIR_TEST/logs/git.log" && echo no || echo yes)
+assert_eq "create-existing local diverged: no worktree add (conflict, not materialized)" "yes" "$no_wt_add"
+mat_teardown
+
+# --- create-existing, remote-only branch → fetch then --track -b -------------
+# AC #4 (#943): the PR head branch exists only on origin (no local ref).
+# materialize-spawn must `git fetch origin <branch>` then
+# `git worktree add --track -b <branch> <path> origin/<branch>` — tracked, not
+# shadowed by a fresh origin/main branch.
+echo "Test: materialize-spawn create-existing remote-only → fetch + --track -b"
+mat_setup
+export MAT_WT_DECISION="create-existing 42-existing-pr-branch"
+cat > "$TMPDIR_TEST/bin/git" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/git.log"
+case "\$*" in
+  "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/project/.bare" ;;
+  "show-ref --verify --quiet "*) exit 1 ;;
+  "fetch --quiet origin "*) : ;;
+  "worktree add -b "*) mkdir -p "\$5" ;;
+  "worktree add --track -b "*) mkdir -p "\$6" ;;
+  "worktree add "*) mkdir -p "\$3" ;;
+  *) : ;;
+esac
+STUB
+chmod +x "$TMPDIR_TEST/bin/git"
+out=$(run_mat 42 queue) ; rc=$?
+assert_eq "create-existing remote: exit 0" "0" "$rc"
+assert_eq "create-existing remote: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+fetch_logged=$(grep -q "^fetch --quiet origin 42-existing-pr-branch\$" "$TMPDIR_TEST/logs/git.log" && echo yes || echo no)
+assert_eq "create-existing remote: fetched the PR head branch" "yes" "$fetch_logged"
+wt_add_remote=$(grep -q "^worktree add --track -b 42-existing-pr-branch $TMPDIR_TEST/project/worktrees/42-existing-pr-branch origin/42-existing-pr-branch\$" "$TMPDIR_TEST/logs/git.log" && echo yes || echo no)
+assert_eq "create-existing remote: worktree add --track -b <branch> <path> origin/<branch>" "yes" "$wt_add_remote"
+no_origin_main=$(grep -q "origin/main" "$TMPDIR_TEST/logs/git.log" && echo no || echo yes)
+assert_eq "create-existing remote: did NOT branch a fresh slug from origin/main" "yes" "$no_origin_main"
+mat_teardown
+
+# --- create-existing live-git: the materialized worktree carries the PR's -----
+# --- commits (AC #2), not a fresh origin/main branch -------------------------
+# The stub-based create-existing tests above prove the right git COMMAND is
+# issued, but the stub never runs real git, so they cannot prove AC #2's effect:
+# `git -C <path> rev-parse HEAD` equals the PR head tip AND
+# `git diff origin/main...HEAD` is non-empty. These two tests run the REAL
+# `dispatch-materialize-spawn` against a REAL git project (only git is un-stubbed;
+# every sub-script stays faked) so the create-existing arm's actual `git worktree
+# add` materializes a worktree we can inspect. This is the effect-level coverage
+# the resolver/command-shape tests cannot reach (#943).
+#
+# Topology mirrors the live `.bare` layout: a bare "upstream" origin, a local
+# bare `.bare` clone wired with the standard `+refs/heads/*:refs/remotes/origin/*`
+# refspec, and the script run from a linked "runner" worktree so
+# `resolve_project_root` (via `git rev-parse --git-common-dir`) resolves to the
+# test project, not the real repo this suite lives in.
+lmg_setup() {
+  mat_setup
+  # Use REAL git (keep the stub gh for the closed-check/title fetch). mat_setup
+  # put a logging-only git stub first on PATH; removing it lets git resolve from
+  # SAVED_PATH while $TMPDIR_TEST/bin/gh still shadows real gh.
+  rm -f "$TMPDIR_TEST/bin/git"
+  LMG_UP="$TMPDIR_TEST/upstream.git"
+  LMG_PROJ="$TMPDIR_TEST/project"
+  # mat_setup created project/.bare and project/worktrees as plain dirs; rebuild
+  # them as real repos.
+  rm -rf "$LMG_PROJ"
+  git init --bare -b main -q "$LMG_UP"
+  local seed="$TMPDIR_TEST/seed"
+  git clone -q "$LMG_UP" "$seed" 2>/dev/null
+  git -C "$seed" config user.email "test@test"
+  git -C "$seed" config user.name "Test"
+  printf 'seed content\n' > "$seed/seed.txt"
+  git -C "$seed" add seed.txt
+  git -C "$seed" commit -q -m "initial"
+  git -C "$seed" push -q origin main
+  LMG_MAIN_TIP=$(git -C "$seed" rev-parse main)
+  # PR-head branch = main + 1 commit, so diff origin/main...HEAD is non-empty.
+  git -C "$seed" checkout -q -b 42-existing-pr-branch
+  printf 'pr-only change\n' > "$seed/pr.txt"
+  git -C "$seed" add pr.txt
+  git -C "$seed" commit -q -m "pr commit"
+  LMG_PR_TIP=$(git -C "$seed" rev-parse HEAD)
+  git -C "$seed" push -q origin 42-existing-pr-branch
+  rm -rf "$seed"
+  # Local bare `.bare` with the standard remote refspec: gives refs/remotes/
+  # origin/* and the objects, but NO local refs/heads/* (so local-vs-remote is
+  # ours to control per case).
+  git init --bare -b main -q "$LMG_PROJ/.bare"
+  git -C "$LMG_PROJ/.bare" remote add origin "$LMG_UP"
+  git -C "$LMG_PROJ/.bare" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+  git -C "$LMG_PROJ/.bare" fetch -q origin
+  mkdir -p "$LMG_PROJ/worktrees"
+  # Linked runner worktree (detached at origin/main) = CWD for the script run.
+  git -C "$LMG_PROJ/.bare" worktree add -q --detach "$LMG_PROJ/worktrees/runner" origin/main
+  LMG_RUNNER="$LMG_PROJ/worktrees/runner"
+  export MAT_WT_DECISION="create-existing 42-existing-pr-branch"
+}
+lmg_teardown() { unset LMG_UP LMG_PROJ LMG_RUNNER LMG_MAIN_TIP LMG_PR_TIP; mat_teardown; }
+# Run the real materialize-spawn from inside the runner worktree so
+# resolve_project_root resolves to the test project.
+run_lmg() { ( cd "$LMG_RUNNER" && "$TMPDIR_TEST/dispatch-materialize-spawn" "$@" 2>/dev/null ); }
+
+# Live-git, local branch present (AC #2 + AC #3): worktree checks out the
+# existing local PR-head branch at its tip, carrying the PR's commit.
+echo "Test: materialize-spawn create-existing live-git local → worktree HEAD == PR head tip (AC #2)"
+lmg_setup
+# Local head present → the arm's show-ref succeeds → `worktree add <path> <branch>`.
+git -C "$LMG_PROJ/.bare" branch 42-existing-pr-branch origin/42-existing-pr-branch
+out=$(run_lmg 42 queue) ; rc=$?
+assert_eq "live local: exit 0" "0" "$rc"
+mat_wt="$LMG_PROJ/worktrees/42-existing-pr-branch"
+assert_eq "live local: worktree materialized" "1" "$([ -d "$mat_wt" ] && echo 1 || echo 0)"
+assert_eq "live local: HEAD == PR head tip (AC #2)" "$LMG_PR_TIP" \
+  "$(git -C "$mat_wt" rev-parse HEAD)"
+assert_eq "live local: HEAD != origin/main tip (not a fresh origin/main branch)" "yes" \
+  "$([ "$(git -C "$mat_wt" rev-parse HEAD)" != "$LMG_MAIN_TIP" ] && echo yes || echo no)"
+assert_eq "live local: diff origin/main...HEAD is non-empty (AC #2)" "yes" \
+  "$([ -n "$(git -C "$mat_wt" diff --name-only origin/main...HEAD)" ] && echo yes || echo no)"
+lmg_teardown
+
+# Live-git, remote-only branch (AC #2 + AC #4): no local head → fetch then
+# `--track -b`; worktree checks out the fetched PR-head tip, carrying its commit.
+echo "Test: materialize-spawn create-existing live-git remote-only → worktree HEAD == PR head tip (AC #2)"
+lmg_setup
+# No local refs/heads/42-* (we never create it) → the arm's show-ref fails →
+# fetch + `git worktree add --track -b`.
+out=$(run_lmg 42 queue) ; rc=$?
+assert_eq "live remote: exit 0" "0" "$rc"
+mat_wt="$LMG_PROJ/worktrees/42-existing-pr-branch"
+assert_eq "live remote: worktree materialized" "1" "$([ -d "$mat_wt" ] && echo 1 || echo 0)"
+assert_eq "live remote: HEAD == PR head tip (AC #2)" "$LMG_PR_TIP" \
+  "$(git -C "$mat_wt" rev-parse HEAD)"
+assert_eq "live remote: local branch now tracks origin (--track -b)" "origin/42-existing-pr-branch" \
+  "$(git -C "$mat_wt" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)"
+assert_eq "live remote: diff origin/main...HEAD is non-empty (AC #2)" "yes" \
+  "$([ -n "$(git -C "$mat_wt" diff --name-only origin/main...HEAD)" ] && echo yes || echo no)"
+lmg_teardown
 
 # --- explicit closed-check gh failure → exit 2 + lock released ---------------
 # The closed-target guard must not fail open on a gh error (silently dispatching

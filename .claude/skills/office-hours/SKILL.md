@@ -102,6 +102,9 @@ and office-hours sessions are named `office-hours-<N>` (which does not match its
      not picked up fresh. Report the conflict and **stop**.
    - `create <branch>` → no worktree exists yet. Materializing one is the
      dispatch router's job, not this skill's; report it and **stop**.
+   - `create-existing <branch>` → like `create`, but the target already has an
+     open PR so the branch exists; still no worktree on disk. Materializing one
+     is the dispatch router's job; report it and **stop**.
 
 1. **Branch on the item's phase.** `<phase>` (from Step 0) discriminates the
    three residue kinds:
