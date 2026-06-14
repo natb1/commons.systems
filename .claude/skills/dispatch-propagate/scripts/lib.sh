@@ -361,6 +361,57 @@ dispatch_lock_file() {
   printf '%s\n' "$project_root/tmp/dispatch.lock"
 }
 
+# Print the sync-repair attempt-counter file path to stdout. An explicit
+# DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE is authoritative and bypasses the git
+# lookup (tests rely on this). Otherwise the file lives at the shared
+# project-root tmp/ (not a per-worktree tmp/) so concurrent ticks in different
+# worktrees contend on the same counter — the same rationale as
+# dispatch_lock_file. Returns non-zero (no output) when the override is unset
+# AND resolve_project_root fails (not in a git repo); the caller supplies its
+# own error handling.
+#
+# A file beside dispatch.lock is the right primitive here: there is no PR to
+# hang a dispatch:<phase>-attempt-<n> label on, and the common path — a
+# transient dirty lockfile that heals in one repair — must stay issue-free.
+sync_repair_attempts_file() {
+  local project_root
+  if [[ -n "${DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE:-}" ]]; then
+    printf '%s\n' "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"
+    return 0
+  fi
+  project_root=$(resolve_project_root) || return 1
+  printf '%s\n' "$project_root/tmp/sync-repair-attempts"
+}
+
+# Print the integer stored in the sync-repair attempts file, or 0 if absent/empty/non-numeric.
+sync_repair_read_attempts() {
+  local file n=0
+  file=$(sync_repair_attempts_file) || { printf '0\n'; return 0; }
+  if [[ -f "$file" ]]; then
+    n=$(<"$file")
+  fi
+  if [[ "$n" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$n"
+  else
+    printf '0\n'
+  fi
+}
+
+# Write (current-attempts + 1) to the attempts file, creating it if absent.
+sync_repair_bump_attempts() {
+  local file n
+  file=$(sync_repair_attempts_file) || return 1
+  n=$(sync_repair_read_attempts)
+  printf '%s\n' "$((n + 1))" > "$file"
+}
+
+# Remove the attempts file so the counter resets to 0; a failed path resolution is a no-op.
+sync_repair_reset_attempts() {
+  local file
+  file=$(sync_repair_attempts_file) || return 0
+  rm -f "$file"
+}
+
 # headless_sentinel_path <holder-id> <lock-file> — print the PID-sentinel path
 # for a `headless:<token>` holder id to stdout. The sentinel lives alongside the
 # lock file (same directory) so a concurrent tick in any worktree resolves the
