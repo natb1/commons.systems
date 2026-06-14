@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+#
+# dispatch-auto-merge — tick-time reconciler that squash-merges every open PR
+# already at the dispatch "ready" state whose closing issues are all enhancement
+# and none bug/security (issue #1540).
+#
+# Runs in the tick at Step 1d, immediately after dispatch-reconcile-ready (which
+# reconciles the draft↔ready bit). dispatch-reconcile-ready is the readiness
+# AUTHORITY; this script mirrors its predicate and only merges PRs that are
+# already ready by that definition:
+#
+#   ready(PR)  ≡  isDraft == false  ∧  dispatch:reviewed  ∧  CI == passing
+#                ∧  mergeable == MERGEABLE
+#
+# On top of readiness, a PR must clear the closing-set gate to be auto-merged:
+#
+#   closing-set gate:
+#     - the PR's closing-issue set is NON-EMPTY, and
+#     - EVERY closing issue carries every type in $types  (PER-ISSUE, default
+#       ["enhancement"] — checked on each closing issue's own label array, NOT a
+#       union), and
+#     - NO closing issue carries any type in $excludeTypes (default
+#       ["bug","security"] — sound on the flattened union of all closing issues'
+#       labels).
+#
+#   Fail-closed: a closing issue ABSENT from the open-issue→labels map resolves
+#   to [] → has no enhancement → fails the per-issue `all` → the PR skips. The
+#   per-issue half (each closing issue's own labels) and the union exclude half
+#   are deliberately different shapes; do not collapse the type half to a union.
+#
+# Config gate (off by default): read from dispatch-config-load auto-merge.
+#   - no config file  → `no-config` → exit 0 with no output (current human-merge
+#                       behavior preserved).
+#   - file present but .enabled != true → exit 0 with no output.
+#   - .enabled == true → arm auto-merging; .types / .excludeTypes override the
+#                       defaults above.
+#
+# Merge: gh pr merge <n> --squash with explicit --subject (the PR title) and
+# --body (the PR body), so the non-TTY squash is deterministic and the
+# `Closes #N` lines in the PR body land in the squash commit message, driving
+# GitHub's issue auto-close. The repo's delete_branch_on_merge setting reaps the
+# remote ref, so --delete-branch is NOT passed.
+#
+# Stdout protocol: exactly `merged #<n>` per PR actually merged; NOTHING for a
+# skip (an ineligible PR is silently passed over).
+#
+# Caller gating: the caller (the tick) is responsible for NOT invoking this
+# script during a red-main episode — this script does not check main's health.
+#
+# Sandbox note: the CALLER wraps every invocation of this script with
+# dangerouslyDisableSandbox (per .claude/rules/sandbox.md) because `gh` needs
+# network access and gh's TLS validation is blocked by the sandbox. This script
+# therefore sets NOTHING sandbox-related; that is the caller's responsibility.
+#
+# NOT set -e: a per-PR hard error must not abort the merge loop. gh exit codes
+# are captured explicitly with `|| rc=$?`; a failing PR logs to stderr, sets
+# HARD_ERROR=1, and `continue`s (it self-heals on a later tick). The script exits
+# 1 at the end if any PR's merge failed.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"  # pr_list_open, dispatch_ci_verdict_rest, gh_retry, gh_issue_list_rest
+
+# ---- Step 1: config gate (no-op when off) -----------------------------------
+CFG=$("$SCRIPT_DIR/dispatch-config-load" auto-merge) || {
+  echo "dispatch-auto-merge: error: dispatch-config-load auto-merge failed" >&2
+  exit 1
+}
+[[ "$CFG" == "no-config" ]] && exit 0
+ENABLED=$(jq -r '.enabled' <<<"$CFG")
+[[ "$ENABLED" == "true" ]] || exit 0
+TYPES_JSON=$(jq -c '.types // ["enhancement"]' <<<"$CFG")
+EXCLUDE_JSON=$(jq -c '.excludeTypes // ["bug","security"]' <<<"$CFG")
+
+# ---- Step 2: one fresh fetch of every open PR -------------------------------
+# Never proceed on a partial fetch — a truncated snapshot could merge a PR whose
+# closing-issue picture is incomplete.
+PR_LIST_RC=0
+PR_LIST=$(pr_list_open "number,title,body,isDraft,labels,headRefOid,mergeable,closingIssuesReferences") || PR_LIST_RC=$?
+if [[ "$PR_LIST_RC" -ne 0 ]]; then
+  echo "dispatch-auto-merge: error: pr_list_open failed (rc=$PR_LIST_RC); cannot compute the mergeable set" >&2
+  exit 1
+fi
+
+# ---- Step 3: open-issue → labels map, once ----------------------------------
+# number → labels-array map, built once from the open-issue list, exactly as
+# dispatch-select-target builds ISSUE_LABELS_JSON. Each closing issue's labels
+# are resolved against this map below.
+ISSUE_LIST=$(gh_issue_list_rest --state open) || {
+  echo "dispatch-auto-merge: error: gh_issue_list_rest --state open failed" >&2
+  exit 1
+}
+ISSUE_LABELS_JSON=$(printf '%s' "$ISSUE_LIST" \
+  | jq -c 'reduce .[] as $i ({}; .[$i.number | tostring] = ($i.labels // []))')
+
+# ---- Step 4: per-PR eligibility + merge -------------------------------------
+HARD_ERROR=0
+
+while IFS= read -r pr; do
+  [[ -n "$pr" ]] || continue
+  N=$(jq -r '.number' <<<"$pr")
+  IS_DRAFT=$(jq -r '.isDraft' <<<"$pr")
+  MERGEABLE=$(jq -r '.mergeable' <<<"$pr")
+
+  # ---- Readiness predicate (mirror dispatch-reconcile-ready) ----------------
+  # isDraft==false carries the demote race: if dispatch-reconcile-ready demoted
+  # this PR earlier in the same tick, the fresh fetch sees isDraft==true and
+  # this skips. Cheap gates first; the network CI verdict is done LAST so skips
+  # short-circuit before it.
+  [[ "$IS_DRAFT" == "false" ]] || continue
+  [[ "$MERGEABLE" == "MERGEABLE" ]] || continue
+  HAS_REVIEWED=$(jq -r '[.labels[].name] | index("dispatch:reviewed") != null' <<<"$pr")
+  [[ "$HAS_REVIEWED" == "true" ]] || continue
+
+  # ---- Closing-set gate -----------------------------------------------------
+  # Non-empty closing set; EVERY closing issue carries every type in $types
+  # (PER-ISSUE — do NOT collapse to a union); NO closing issue carries any
+  # excludeType (sound on the flattened union). pr_combined_labels in
+  # dispatch-select-target is the union-half analogue but is script-local there
+  # (not in lib.sh), so the union logic is reproduced inline here.
+  #
+  # Fail-closed: a closing issue absent from $map resolves to [] → no
+  # enhancement → fails the per-issue `all` → the PR skips.
+  ELIGIBLE=$(jq -r \
+    --argjson map "$ISSUE_LABELS_JSON" \
+    --argjson types "$TYPES_JSON" \
+    --argjson exclude "$EXCLUDE_JSON" '
+    [.closingIssuesReferences[].number | tostring] as $nums
+    | ($nums | map($map[.] // [] | map(.name))) as $perissue
+    | (($perissue | length) > 0)
+      and ($perissue | all(. as $names | $types | all(. as $t | ($names | index($t)) != null)))
+      and (([$perissue[]] | add // []) | all(. as $l | ($exclude | index($l)) == null))
+    ' <<<"$pr")
+  [[ "$ELIGIBLE" == "true" ]] || continue
+
+  # ---- CI verdict (REST, memoized) — the only per-PR network read; done last -
+  VERDICT=$(dispatch_ci_verdict_rest "$(jq -r '.headRefOid' <<<"$pr")")
+  [[ "$VERDICT" == "passing" ]] || continue
+
+  # ---- Merge ----------------------------------------------------------------
+  # --subject/--body are explicit so the non-TTY squash is deterministic and the
+  # PR body's Closes #N lines stay in the squash commit body. .body // "" so a
+  # null body is not passed as the literal string "null". No --delete-branch:
+  # the repo's delete_branch_on_merge reaps the remote ref.
+  PR_TITLE=$(jq -r '.title' <<<"$pr")
+  PR_BODY=$(jq -r '.body // ""' <<<"$pr")
+  rc=0
+  out=$(gh_retry gh pr merge "$N" --squash --subject "$PR_TITLE" --body "$PR_BODY" 2>&1) || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    echo "dispatch-auto-merge: error: gh pr merge #$N failed: $out" >&2
+    HARD_ERROR=1
+    continue
+  fi
+  echo "merged #$N"
+done < <(jq -c '.[]' <<<"$PR_LIST")
+
+if [[ "$HARD_ERROR" -ne 0 ]]; then
+  exit 1
+fi
+exit 0
