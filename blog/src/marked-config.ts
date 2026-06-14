@@ -1,5 +1,5 @@
 import { Marked } from "marked";
-import type { Token, Tokens } from "marked";
+import type { Tokens } from "marked";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { PublishedPost } from "./post-types.ts";
 import { BLOG_IMAGES } from "./image-config.ts";
@@ -62,7 +62,7 @@ export function createMarked(): Marked {
           ? '<span class="external-link-icon" aria-hidden="true">&#x2197;</span>'
           : "";
         const targetRel = external ? ' target="_blank" rel="noopener noreferrer"' : "";
-        const label = this.parser.parseInline(tokens as Token[]);
+        const label = this.parser.parseInline(tokens);
         return `<a href="${safeHref}"${titleAttr}${targetRel}>${label}${glyphHtml}</a>`;
       },
       image({ href, text }) {
