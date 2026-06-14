@@ -18951,6 +18951,9 @@ sel_tick_setup() {
            "$TMPDIR_TEST/dispatch-reconcile-ready"
 
   export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
+  # #1495: sync-repair attempt-counter file override (consumed by lib.sh's
+  # sync_repair_* helpers, sourced by dispatch-select-tick's main-branch Step 1).
+  export DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE="$STUB_DIR/sync-repair-attempts"
   export CLAUDE_CODE_SESSION_ID="select-tick-session"
   # Fake `claude agents --json`: our own session is live → first acquisition
   # succeeds and a strict self-release works.
@@ -18963,6 +18966,9 @@ FAKE
   # Single-shot --wait so a busy test never blocks the suite.
   export DISPATCH_LOCK_WAIT_TIMEOUT=0
   export DISPATCH_LOCK_WAIT_INTERVAL=1
+  # #1495: the git stub logs each `merge --ff-only origin/main` here so the
+  # sync-repair defer test can assert the merge was NOT attempted (log absent).
+  export SEL_GIT_MERGE_LOG="$STUB_DIR/git-merge.log"
 
   # Default fake sub-scripts (overridable per test) — land in TMPDIR_TEST so the
   # orchestrator's SCRIPT_DIR resolution finds them.
@@ -19007,6 +19013,15 @@ FAKE
 echo "\$1" >> "$TMPDIR_TEST/logs/schedule-target-reseed.log"
 exit 0
 FAKE
+  # #1495: fake dispatch-escalate-sync-broken — records its invocation and
+  # captures its stdin (the merge stderr) so the at-cap escalation test can
+  # assert it ran. Invoked by dispatch-select-tick via its SCRIPT_DIR (= TMPDIR_TEST).
+  cat > "$TMPDIR_TEST/dispatch-escalate-sync-broken" <<FAKE
+#!/usr/bin/env bash
+cat >> "$TMPDIR_TEST/logs/escalate-stdin.log"
+echo called >> "$TMPDIR_TEST/logs/escalate-sync-broken.log"
+exit 0
+FAKE
   # Sourced helper: provides claude_agents_count_busy_workers (driven by
   # SEL_LIVE_COUNT*) and claude_agents_list_all (driven by SEL_AGENTS_*, used by
   # the reservation-ledger sweep the gate runs before counting). The heredoc is
@@ -19021,6 +19036,16 @@ claude_agents_list_all() {
   [[ -n "${SEL_AGENTS_TSV:-}" ]] && printf '%s\n' "${SEL_AGENTS_TSV}"
   return 0
 }
+claude_sessions_under() {
+  # #1495: default UNKNOWN (rc 1) preserves the pre-#1495 fall-through in
+  # existing main-branch tests. A test sets SEL_SESSIONS_UNDER_RC=0 and
+  # SEL_SESSIONS_UNDER_TSV (tab-separated sid<TAB>pid<TAB>status<TAB>name rows)
+  # to drive a definite session list.
+  local rc="${SEL_SESSIONS_UNDER_RC:-1}"
+  [[ "$rc" != 0 ]] && return "$rc"
+  [[ -n "${SEL_SESSIONS_UNDER_TSV:-}" ]] && printf '%s\n' "${SEL_SESSIONS_UNDER_TSV}"
+  return 0
+}
 FAKE
   # Default empty reservation ledger: the sweep no-ops, reservation_count is 0,
   # and the gap is unchanged from the pre-ledger gate (behavior-preserving).
@@ -19031,7 +19056,8 @@ FAKE
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/dispatch-target-workers" \
            "$TMPDIR_TEST/dispatch-schedule-reseed" \
-           "$TMPDIR_TEST/dispatch-schedule-target-reseed"
+           "$TMPDIR_TEST/dispatch-schedule-target-reseed" \
+           "$TMPDIR_TEST/dispatch-escalate-sync-broken"
 
   # PATH-shimmed git: branch defaults to main; fetch/merge succeed unless a
   # FAKE_GIT_*_FAIL env var is set.
@@ -19040,7 +19066,7 @@ FAKE
 case "$*" in
   "rev-parse --abbrev-ref HEAD") echo "${FAKE_GIT_BRANCH:-main}" ;;
   "fetch origin main") [[ -n "${FAKE_GIT_FETCH_FAIL:-}" ]] && exit 1 ; exit 0 ;;
-  "merge --ff-only origin/main") [[ -n "${FAKE_GIT_MERGE_FAIL:-}" ]] && exit 1 ; exit 0 ;;
+  "merge --ff-only origin/main") echo merge >> "${SEL_GIT_MERGE_LOG:-/dev/null}" ; [[ -n "${FAKE_GIT_MERGE_FAIL:-}" ]] && exit 1 ; exit 0 ;;
   *) exit 0 ;;
 esac
 STUB
@@ -19058,6 +19084,13 @@ case "$args" in
   issue\ list\ *dispatch:main-broken*)
     if [[ -f "$STUB_DIR/main-broken-open.txt" ]]; then
       cat "$STUB_DIR/main-broken-open.txt"
+    fi
+    ;;
+  issue\ list\ *dispatch:sync-broken*)
+    # #1495: open dispatch:sync-broken latch query. Reads sync-broken-open.txt
+    # (one issue number per line; absent → no open latch).
+    if [[ -f "$STUB_DIR/sync-broken-open.txt" ]]; then
+      cat "$STUB_DIR/sync-broken-open.txt"
     fi
     ;;
   issue\ close\ *)
@@ -19105,6 +19138,8 @@ sel_tick_teardown() {
     SEL_TARGET_N SEL_LIVE_COUNT SEL_LIVE_COUNT_FAIL \
     SEL_EXHAUSTED SEL_PRIORITY_ONLY \
     DISPATCH_RESERVATION_DIR SEL_AGENTS_TSV SEL_AGENTS_LIST_FAIL \
+    DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE SEL_GIT_MERGE_LOG \
+    SEL_SESSIONS_UNDER_RC SEL_SESSIONS_UNDER_TSV \
     DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT
 }
 
@@ -19218,6 +19253,102 @@ out=$(run_sel_tick)
 assert_eq "re-arm green+no-issue: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "re-arm green+no-issue: no close attempted" "absent" \
   "$([[ -e "$STUB_DIR/gh-issue-close.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- #1495: dirty main → sync-failed, reseed armed, counter bumped -----------
+echo "Test: select-tick failing merge under cap → sync-failed, counter bumped"
+sel_tick_setup
+export FAKE_GIT_MERGE_FAIL=1   # local main cannot ff-merge origin/main
+# Default sessions = UNKNOWN (fall through); no sync-broken latch; counter absent (=0).
+out=$(run_sel_tick)
+assert_eq "sync-failed: decision line" "sync-failed" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "sync-failed: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "sync-failed: reseed armed" "present" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo present || echo absent)"
+assert_eq "sync-failed: counter bumped to 1" "1" \
+  "$(cat "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE")"
+assert_eq "sync-failed: escalate NOT called" "absent" \
+  "$([ -f "$TMPDIR_TEST/logs/escalate-sync-broken.log" ] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- #1495: live sync-repair session → defer (sync-repair-pending), merge NOT run ---
+echo "Test: select-tick live sync-repair session → sync-repair-pending, merge deferred"
+sel_tick_setup
+export SEL_SESSIONS_UNDER_RC=0
+export SEL_SESSIONS_UNDER_TSV=$'sid1\t100\tbusy\tsync-repair'
+out=$(run_sel_tick)
+assert_eq "defer: decision line" "sync-repair-pending" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "defer: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "defer: reseed armed" "present" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo present || echo absent)"
+assert_eq "defer: merge NOT attempted" "absent" \
+  "$([ -f "$STUB_DIR/git-merge.log" ] && echo present || echo absent)"
+assert_eq "defer: counter untouched" "absent" \
+  "$([ -f "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE" ] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- #1495: stopped sync-repair session does NOT defer → falls through to merge ---
+echo "Test: select-tick stopped sync-repair session → no defer, failing merge → sync-failed"
+sel_tick_setup
+export SEL_SESSIONS_UNDER_RC=0
+export SEL_SESSIONS_UNDER_TSV=$'sid1\t100\tstopped\tsync-repair'
+export FAKE_GIT_MERGE_FAIL=1
+out=$(run_sel_tick)
+assert_eq "stopped-defer: decision line" "sync-failed" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "stopped-defer: merge attempted" "present" \
+  "$([ -f "$STUB_DIR/git-merge.log" ] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- #1495: failing merge at attempt cap → escalate + sync-broken, no bump ----
+echo "Test: select-tick failing merge at cap → escalate, sync-broken, counter unchanged"
+sel_tick_setup
+printf '3\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # already at the cap
+export FAKE_GIT_MERGE_FAIL=1
+# No sync-broken latch open yet → the cap branch escalates (find-or-create).
+out=$(run_sel_tick)
+assert_eq "cap-escalate: decision line" "sync-broken" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "cap-escalate: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "cap-escalate: reseed armed" "present" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo present || echo absent)"
+assert_eq "cap-escalate: escalate called" "present" \
+  "$([ -f "$TMPDIR_TEST/logs/escalate-sync-broken.log" ] && echo present || echo absent)"
+assert_eq "cap-escalate: counter unchanged (no bump on terminal branch)" "3" \
+  "$(cat "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE")"
+sel_tick_teardown
+
+# --- #1495: latch already open + failing merge → sync-broken, NO escalate -----
+echo "Test: select-tick failing merge with open latch → sync-broken, no escalate/bump"
+sel_tick_setup
+printf '88\n' > "$STUB_DIR/sync-broken-open.txt"   # latch already open
+export FAKE_GIT_MERGE_FAIL=1
+out=$(run_sel_tick)
+assert_eq "latched: decision line" "sync-broken" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "latched: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "latched: escalate NOT called" "absent" \
+  "$([ -f "$TMPDIR_TEST/logs/escalate-sync-broken.log" ] && echo present || echo absent)"
+assert_eq "latched: counter NOT bumped (latched branch returns first)" "absent" \
+  "$([ -f "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE" ] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- #1495: clean merge + open latch → counter reset, latch closed -----------
+echo "Test: select-tick clean merge with open latch → reset counter, close latch"
+sel_tick_setup
+printf '77\n' > "$STUB_DIR/sync-broken-open.txt"   # stale latch to close
+printf '2\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # stale counter to reset
+# Merge succeeds (default, no FAKE_GIT_MERGE_FAIL) → fall through to select-target
+# (default `empty`).
+out=$(run_sel_tick)
+assert_eq "recover: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "recover: latch closed" \
+  "issue close 77 --comment local main ff-merges clean again; closing the sync-broken latch" \
+  "$(cat "$STUB_DIR/gh-issue-close.log")"
+assert_eq "recover: counter reset" "absent" \
+  "$([ -f "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE" ] && echo present || echo absent)"
 sel_tick_teardown
 
 # --- jit-reminder → passthrough + lock RELEASED (spawned as a bg job) --------
@@ -21010,15 +21141,20 @@ assert_eq "busy: no spawn-job call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
 tick_teardown
 
-# --- empty / sync-failed / resolver-failed / concurrency-cap → exit 0, no materialize ---
-for d in empty sync-failed resolver-failed concurrency-cap; do
-  echo "Test: dispatch-tick $d → exit 0, no materialize"
+# --- empty / resolver-failed / concurrency-cap / sync-repair-pending / sync-broken ---
+# All pass-through dispositions: exit 0, no materialize, no spawn-job. #1495 adds
+# the two sync pass-throughs (sync-repair-pending, sync-broken); sync-failed moved
+# out of this loop because it now spawns the repair job (covered below).
+for d in empty resolver-failed concurrency-cap sync-repair-pending sync-broken; do
+  echo "Test: dispatch-tick $d → exit 0, no materialize/spawn"
   tick_setup
   export TICK_DECISION="$d"
   out=$(run_tick) && rc=0 || rc=$?
   assert_eq "$d: exit 0" "0" "$rc"
   assert_eq "$d: no materialize call" "0" \
     "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
+  assert_eq "$d: no spawn-job call" "0" \
+    "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
   tick_teardown
 done
 
@@ -21032,6 +21168,19 @@ assert_eq "main-broken: spawn-job argv" \
   "--name diagnose-main --cwd $TMPDIR_TEST /dispatch-diagnose-main abc1234" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 assert_eq "main-broken: no materialize call" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- #1495: sync-failed → spawn-job /commit-merge-push (sync-repair), exit 0 ---
+echo "Test: dispatch-tick sync-failed → spawn-job sync-repair /commit-merge-push"
+tick_setup
+export TICK_DECISION="sync-failed"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "sync-failed: exit 0" "0" "$rc"
+assert_eq "sync-failed: spawn-job argv" \
+  "--name sync-repair --cwd $TMPDIR_TEST /commit-merge-push" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
+assert_eq "sync-failed: no materialize call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
 tick_teardown
 
