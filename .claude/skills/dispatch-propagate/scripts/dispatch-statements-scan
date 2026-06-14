@@ -4,12 +4,21 @@
 #
 # Reads the local statements.json config (via dispatch-config-load) and, for
 # each statements entry, scans the configured directory for bank-statement
-# files. For each file it computes the file's sha256 and asks GitHub whether a
-# parse-job issue already carries that hash (open OR closed). If one exists the
-# file is skipped; otherwise a single parse-job issue is filed whose body names
-# only the filename and the sha256 — never the statement contents. The data
-# stays in the user's folder. No statements entry is hardcoded: the scan is
-# fully driven by config.
+# files. For each entry it issues ONE batched `gh issue list` against the core
+# API to fetch every parse-job issue under the label (open AND closed), then
+# seeds a local hash→issue map from their bodies and dedups every file in the
+# directory locally — no per-file Search-API call. For each file it computes the
+# file's sha256 and consults that map: if a parse-job issue already carries the
+# hash the file is skipped; otherwise a single parse-job issue is filed whose
+# body names only the filename and the sha256 — never the statement contents.
+# The bounded per-new-file `gh issue create` fan-out is wrapped in gh_retry
+# backoff. The data stays in the user's folder. No statements entry is
+# hardcoded: the scan is fully driven by config.
+#
+# Why batched: the prior design fired one rate-limited `gh search issues` query
+# per file against GitHub's Search API (~30 req/min). A cold scan over a large
+# statements folder exhausted that budget and aborted on a 429. The batched
+# `gh issue list` hits the core API (~5000 req/hr) once per entry instead.
 #
 # Idempotency is keyed on GitHub state (the content-hash dedup), NOT a side
 # file. The project-root state file is a per-machine debounce rate-limiter only.
@@ -23,13 +32,15 @@
 #      inert.
 #   3. Ensures the entry's label exists in its repo (idempotent).
 #   4. Enumerates the regular files directly in the directory (NON-RECURSIVE),
-#      filtered by extension (case-insensitive). For each file:
+#      filtered by extension (case-insensitive). Before the per-file loop it
+#      runs ONE `gh issue list` for all label issues (open and closed) and seeds
+#      a local hash→issue map from their bodies. For each file:
 #        a. Computes its sha256.
-#        b. Asks GitHub for an issue carrying that hash under the label (open or
-#           closed). If found, skips.
+#        b. Consults the seeded map (plus hashes filed earlier this run). If the
+#           hash is already covered by an existing or freshly filed issue, skips.
 #        c. Otherwise files one parse-job issue (filename + sha256 only), adds
 #           it to the entry's project, and records the hash so a byte-identical
-#           file later in the same run is deduped without a second search.
+#           file later in the same run is deduped locally.
 #   5. Records the last check time (debounce stamp).
 #
 # Usage:
@@ -63,6 +74,17 @@
 #                                  Default: <project-root>/tmp.
 #   DISPATCH_STATEMENTS_NOW        Override "now" as epoch seconds. Default:
 #                                  date +%s.
+#   DISPATCH_STATEMENTS_ISSUE_LIST_LIMIT  Override the per-entry gh issue list
+#                                  --limit (the batched existence-lookup cap).
+#                                  Default: 5000. A returned count equal to the
+#                                  limit is treated as a likely-truncated list
+#                                  and hard-errors the entry (dedup would be
+#                                  unsound). Tests set this low to reach the guard.
+#
+# Pagination over the list is a deliberate follow-up, not done here: the
+# truncation guard turns a silent dedup miss into a hard error but does not
+# paginate past the --limit. The hour-scale debounce keeps the per-entry issue
+# count well under the 5000 default, so the ceiling is unlikely to bite soon.
 #
 # Dependency: invokes the `gh` CLI directly. Per .claude/rules/sandbox.md the
 # caller (the /dispatch-propagate SKILL step) must wrap this script with
@@ -108,6 +130,13 @@ STATE_FILE="$STATE_DIR/dispatch-statements-state.json"
 
 # ---- Step 2: resolve "now" --------------------------------------------------
 NOW="${DISPATCH_STATEMENTS_NOW:-$(date +%s)}"
+
+# The per-entry `gh issue list --limit` for the batched existence lookup. A high
+# default since the dedup map must see EVERY existing label issue; overridable
+# (tests set it low to reach the truncation guard). NOTE: a returned count equal
+# to this limit hard-errors the entry rather than silently truncating the dedup
+# snapshot. Pagination past the limit is a deliberate follow-up (see header).
+ISSUE_LIST_LIMIT="${DISPATCH_STATEMENTS_ISSUE_LIST_LIMIT:-5000}"
 
 # ---- state-file helpers -----------------------------------------------------
 # The state file is a JSON object mapping <key> → last-check epoch (number).
@@ -256,12 +285,64 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
     mapfile -d '' -t MATCHED < <(printf '%s\0' "${MATCHED[@]}" | sort -z)
   fi
 
-  # ---- 4f: per-file dedup-and-file ------------------------------------------
-  # SEEN_HASHES maps a content hash seen this run → the issue number that covers
-  # it (either freshly filed or an existing GitHub hit). A byte-identical file
-  # later in the same run is then deduped without a second gh search.
+  # SEEN_HASHES maps a content hash known to be covered → the issue number that
+  # covers it (a pre-seeded existing GitHub issue, or one freshly filed this
+  # run). Declared fresh per entry so prior-entry state never leaks. A
+  # byte-identical file is then deduped locally, with no per-file gh call.
+  # ENTRY_HARD_ERROR is set before the pre-fetch so the pre-fetch can mark the
+  # entry as hard-errored; the 4g stamp guard skips stamping when it is set.
+  unset SEEN_HASHES
   declare -A SEEN_HASHES=()
   ENTRY_HARD_ERROR=0
+
+  # ---- 4e′: batched existence lookup (ONE gh issue list per entry) ----------
+  # Fetch every parse-job issue under the label (open AND closed) in a single
+  # core-API call, then seed SEEN_HASHES from their bodies. This replaces the
+  # per-file Search-API query that exhausted the ~30 req/min Search budget on a
+  # cold scan of a large folder. Only run when there is at least one file to
+  # dedup. gh_retry wraps the call for transient-failure backoff; its retry
+  # lines go to stderr, so capture stderr to a tmpfile (never 2>&1 into the
+  # stdout we parse).
+  if [[ "${#MATCHED[@]}" -gt 0 ]]; then
+    tmpfile=$(mktemp)
+    out=$(gh_retry gh issue list --repo "$REPO" --label "$LABEL" --state all \
+      --limit "$ISSUE_LIST_LIMIT" --json number,body 2>"$tmpfile")
+    rc=$?
+    err=$(cat "$tmpfile"); rm -f "$tmpfile"
+    if [[ "$rc" -ne 0 ]]; then
+      echo "$KEY: error (gh issue list failed: $err)" >&2
+      HARD_ERROR=1
+      ENTRY_HARD_ERROR=1
+      continue
+    fi
+    if ! printf '%s' "$out" | jq -e . >/dev/null 2>&1; then
+      echo "$KEY: error (gh issue list returned non-JSON: $out)" >&2
+      HARD_ERROR=1
+      ENTRY_HARD_ERROR=1
+      continue
+    fi
+    len=$(printf '%s' "$out" | jq 'length')
+    if [[ "$len" -eq "$ISSUE_LIST_LIMIT" ]]; then
+      echo "$KEY: error (gh issue list returned exactly $ISSUE_LIST_LIMIT issues (the --limit) — the existing-issue snapshot is likely truncated and dedup is unsound. Raise DISPATCH_STATEMENTS_ISSUE_LIST_LIMIT.)" >&2
+      HARD_ERROR=1
+      ENTRY_HARD_ERROR=1
+      continue
+    fi
+    # Seed SEEN_HASHES from each issue body. The body carries the hash on a
+    # `- sha256: \`<64-hex>\`` line; `scan` extracts the first 64-hex run. Use
+    # `(.body // "")` so an empty-bodied (null) issue yields "" — which `scan`
+    # tolerates — rather than throwing and aborting the seed mid-stream. An
+    # unparseable body is an advisory to stderr, NOT a hard error.
+    while IFS=$'\t' read -r num hash; do
+      if [[ -n "$hash" ]]; then
+        SEEN_HASHES[$hash]="$num"
+      else
+        echo "$KEY: warning (issue #$num under label '$LABEL' has no parseable sha256 in body; skipping seed)" >&2
+      fi
+    done < <(printf '%s' "$out" | jq -r '.[] | [(.number|tostring), ([(.body // "") | scan("[0-9a-f]{64}")] | .[0] // "")] | @tsv')
+  fi
+
+  # ---- 4f: per-file dedup-and-file ------------------------------------------
   for file in "${MATCHED[@]}"; do
     [[ -n "$file" ]] || continue
     base="$(basename "$file")"
@@ -285,34 +366,12 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
       continue
     fi
 
-    # In-run duplicate: a prior file this run had the same content.
+    # Dedup against the seeded map. SEEN_HASHES holds both pre-seeded existing
+    # GitHub issues (open or closed, from the 4e′ batched list) and hashes filed
+    # earlier this run — so this single check covers the existing-issue skip and
+    # the in-run byte-identical-file skip.
     if [[ -n "${SEEN_HASHES[$HASH]:-}" ]]; then
       echo "$KEY: skipped (#${SEEN_HASHES[$HASH]} for $base)"
-      continue
-    fi
-
-    # Query GitHub for an issue carrying this hash under the label. `gh search
-    # issues` searches open AND closed by default — satisfying the open-or-closed
-    # dedup requirement.
-    SEARCH_RC=0
-    SEARCH_JSON=$(gh search issues "$HASH" --repo "$REPO" --label "$LABEL" \
-      --limit 1 --json number,state 2>&1) || SEARCH_RC=$?
-    if [[ "$SEARCH_RC" -ne 0 ]]; then
-      echo "$KEY: error (gh search issues failed: $SEARCH_JSON)" >&2
-      HARD_ERROR=1
-      ENTRY_HARD_ERROR=1
-      break
-    fi
-    if ! printf '%s' "$SEARCH_JSON" | jq -e . >/dev/null 2>&1; then
-      echo "$KEY: error (gh search issues returned non-JSON: $SEARCH_JSON)" >&2
-      HARD_ERROR=1
-      ENTRY_HARD_ERROR=1
-      break
-    fi
-    HIT_NUM=$(printf '%s' "$SEARCH_JSON" | jq -r 'if length > 0 then .[0].number else empty end')
-    if [[ -n "$HIT_NUM" ]]; then
-      echo "$KEY: skipped (#$HIT_NUM for $base)"
-      SEEN_HASHES[$HASH]="$HIT_NUM"
       continue
     fi
 
@@ -324,11 +383,13 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
 - File: \`$base\`
 - sha256: \`$HASH\`"
 
-    CREATE_RC=0
-    CREATE_OUT=$(gh issue create --repo "$REPO" --title "$TITLE" --body "$BODY" \
-      --label "$LABEL" --label "help wanted" 2>&1) || CREATE_RC=$?
+    tmpfile=$(mktemp)
+    CREATE_OUT=$(gh_retry gh issue create --repo "$REPO" --title "$TITLE" --body "$BODY" \
+      --label "$LABEL" --label "help wanted" 2>"$tmpfile")
+    CREATE_RC=$?
+    CREATE_ERR=$(cat "$tmpfile"); rm -f "$tmpfile"
     if [[ "$CREATE_RC" -ne 0 ]]; then
-      echo "$KEY: error (gh issue create failed for $base: $CREATE_OUT)" >&2
+      echo "$KEY: error (gh issue create failed for $base: $CREATE_ERR)" >&2
       HARD_ERROR=1
       ENTRY_HARD_ERROR=1
       break
