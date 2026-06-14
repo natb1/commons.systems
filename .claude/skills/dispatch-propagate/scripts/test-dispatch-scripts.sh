@@ -14747,6 +14747,52 @@ else
 fi
 jit_teardown
 
+# --- Test 3b-roadmap: roadmap jit (7d/14d) at the exact 7d boundary — skipped (inclusive) ---
+
+echo "Test: dispatch-jit-engine roadmap jit at the exact 7d boundary is skipped"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "roadmap",
+      "repo": "test-owner/test-repo",
+      "label": "jit:roadmap",
+      "title": "Roadmap review",
+      "body": "Recurring roadmap review.",
+      "project": "test-project",
+      "remindAfterClose": "7d",
+      "dueAfterClose": "14d",
+      "skill": "roadmap"
+    }
+  ]
+}
+EOF
+# Newest closed issue closed exactly 7d before "now" — the inclusive
+# boundary, still within the 7d window (strict `>` at dispatch-jit-engine:291).
+closed_at=$(date -u -d "@$((JIT_NOW_EPOCH - 7*86400))" +%Y-%m-%dT%H:%M:%SZ)
+printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
+  > "$STUB_DIR/closed-issues.json"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
+assert_eq "roadmap within-window exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"roadmap: skipped (within remindAfterClose)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap within-window reports skipped (within remindAfterClose)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap within-window reports skipped (within remindAfterClose)"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap within-window made no issue create call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap within-window made no issue create call"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+jit_teardown
+
 # --- Test 4: cadence past window creates an issue ----------------------------
 
 echo "Test: dispatch-jit-engine cadence past remindAfterClose creates an issue"
@@ -14835,6 +14881,55 @@ fi
 create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-05T00:00:00Z -->"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap past-window embedded jit-due marker in issue body"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window embedded jit-due marker in issue body"
+  echo "    gh-issue-create.log: $create_log"
+fi
+jit_teardown
+
+# --- Test 4b-roadmap: roadmap jit (7d/14d) one second past the 7d boundary — creates ---
+
+echo "Test: dispatch-jit-engine roadmap jit one second past the 7d boundary creates an issue"
+jit_setup
+jit_write_projects
+cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "roadmap",
+      "repo": "test-owner/test-repo",
+      "label": "jit:roadmap",
+      "title": "Roadmap review",
+      "body": "Recurring roadmap review.",
+      "project": "test-project",
+      "remindAfterClose": "7d",
+      "dueAfterClose": "14d",
+      "skill": "roadmap"
+    }
+  ]
+}
+EOF
+# Newest closed issue closed 7d + 1s before "now" — one second past the
+# window → create.
+closed_at=$(date -u -d "@$((JIT_NOW_EPOCH - (7*86400 + 1)))" +%Y-%m-%dT%H:%M:%SZ)
+printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
+  > "$STUB_DIR/closed-issues.json"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
+assert_eq "roadmap past-window exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+# closedAt = NOW − (7d+1s) = 2025-12-24T23:59:59Z, dueAfterClose = 14d →
+# DUE = closedAt + 14d = 2026-01-07T23:59:59Z.
+if [[ "$out" == *"roadmap: created #123 (due 2026-01-07T23:59:59Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: roadmap past-window reports created #123 (due 2026-01-07T23:59:59Z)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window reports created #123 (due 2026-01-07T23:59:59Z)"
+  echo "    actual: $out"
+fi
+create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$create_log" == *"<!-- jit-due: 2026-01-07T23:59:59Z -->"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: roadmap past-window embedded jit-due marker in issue body"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window embedded jit-due marker in issue body"
