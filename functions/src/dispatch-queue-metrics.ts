@@ -152,25 +152,44 @@ export async function searchIssueCountLive(token: string, query: string): Promis
   return json.data.search.issueCount;
 }
 
-// Runs the three searches via the injected `searchIssueCount`, computes the
-// snapshot, and writes the field map to `${namespace}/metrics/dispatch-queue`.
-// The field map matches office-hours/src/queue-metrics.ts exactly.
+// Runs the four searches per repo via the injected `searchIssueCount` and
+// aggregates the counts across all configured repos, computes the snapshot, and
+// writes the field map to `${namespace}/metrics/dispatch-queue`. The snapshot
+// field map matches office-hours/src/queue-metrics.ts exactly. In the same run
+// it also appends one `issue-samples` document (the cross-repo openHelpWanted /
+// openOther split) to `${namespace}/issue-samples`.
 export async function sampleDispatchQueueCore(deps: {
   searchIssueCount: (query: string) => Promise<number>;
   firestore: Firestore;
   namespace: string;
-  queueRepo: string;
+  queueRepos: string[];
   groupId: string;
   memberEmails: string[];
   now: Date;
 }): Promise<void> {
-  const queries = buildQueueSearchQueries(deps.queueRepo, deps.now);
+  const perRepoQueries = deps.queueRepos.map((r) => buildQueueSearchQueries(r, deps.now));
 
-  const [openHelpWanted, closedCount, createdCount] = await Promise.all([
-    deps.searchIssueCount(queries.open),
-    deps.searchIssueCount(queries.closed),
-    deps.searchIssueCount(queries.created),
-  ]);
+  // Flatten every repo×query search into a single Promise.all so all repos run
+  // in parallel, then sum each of the four query counts across all repos.
+  const counts = await Promise.all(
+    perRepoQueries.flatMap((q) => [
+      deps.searchIssueCount(q.open),
+      deps.searchIssueCount(q.closed),
+      deps.searchIssueCount(q.created),
+      deps.searchIssueCount(q.openOther),
+    ]),
+  );
+
+  let openHelpWanted = 0;
+  let closedCount = 0;
+  let createdCount = 0;
+  let openOther = 0;
+  for (let i = 0; i < perRepoQueries.length; i++) {
+    openHelpWanted += counts[i * 4 + 0];
+    closedCount += counts[i * 4 + 1];
+    createdCount += counts[i * 4 + 2];
+    openOther += counts[i * 4 + 3];
+  }
 
   const { closedPerDay, createdPerDay, netDrainPerDay, runwayDays } = computeQueueMetrics({
     openHelpWanted,
@@ -188,6 +207,14 @@ export async function sampleDispatchQueueCore(deps: {
     runwayDays,
     windowDays: WINDOW_DAYS,
     computedAt: deps.now,
+    groupId: deps.groupId,
+    memberEmails: deps.memberEmails,
+  });
+
+  await deps.firestore.collection(`${deps.namespace}/issue-samples`).add({
+    sampledAt: deps.now,
+    openHelpWanted,
+    openOther,
     groupId: deps.groupId,
     memberEmails: deps.memberEmails,
   });
@@ -268,7 +295,7 @@ export const sampleDispatchQueueMetrics = onSchedule(
         searchIssueCount: (query) => searchIssueCountLive(token, query),
         firestore,
         namespace,
-        queueRepo,
+        queueRepos: [queueRepo],
         groupId,
         memberEmails,
         now: new Date(),
