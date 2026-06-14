@@ -15339,9 +15339,10 @@ jit_teardown
 # own SCRIPT_DIR — which becomes $TMPDIR_TEST/scripts for the copy — so all
 # three scripts are co-located. The gh stub logs EVERY matched invocation to
 # gh-calls.log so a test can assert "zero gh calls" (the debounce case). The
-# `search issues` arm reads a stub/search-result.json fixture if present (lets a
-# test inject an open or closed hit), else "[]". "now" is pinned via
-# DISPATCH_STATEMENTS_NOW so the debounce math is deterministic.
+# `issue list` arm reads a stub/issue-list.json fixture if present (lets a
+# test seed the batched dedup map with pre-existing issues), else "[]".
+# Transient-failure injection is via stub/issue-list-fail-once. "now" is pinned
+# via DISPATCH_STATEMENTS_NOW so the debounce math is deterministic.
 
 # A fixed reference epoch — 2026-01-01T00:00:00Z.
 STMT_NOW_EPOCH=1767225600
@@ -15370,9 +15371,10 @@ statements_setup() {
   export DISPATCH_STATEMENTS_NOW="$STMT_NOW_EPOCH"
 
   # gh PATH stub. Every matched subcommand is appended to gh-calls.log so the
-  # debounce test can assert the log is absent (zero gh calls). `search issues`
-  # reads search-result.json if present, else "[]". `issue create` logs its full
-  # args (including --body) to gh-issue-create.log so the body can be asserted,
+  # debounce test can assert the log is absent (zero gh calls). `issue list`
+  # reads issue-list.json if present, else "[]"; supports transient-failure
+  # injection via issue-list-fail-once. `issue create` logs its full args
+  # (including --body) to gh-issue-create.log so the body can be asserted,
   # and echoes a deterministic issue URL. `project item-add` matches the gh
   # subcommand that dispatch-project-item-add invokes internally.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
@@ -15384,9 +15386,14 @@ case "$args" in
   "label create "*)
     # Idempotent label create — default success.
     ;;
-  *"search issues "*)
-    if [[ -f "$STUB_DIR/search-result.json" ]]; then
-      cat "$STUB_DIR/search-result.json"
+  *"issue list "*)
+    if [[ -f "$STUB_DIR/issue-list-fail-once" ]]; then
+      rm -f "$STUB_DIR/issue-list-fail-once"
+      echo "HTTP 503: Service Unavailable" >&2
+      exit 1
+    fi
+    if [[ -f "$STUB_DIR/issue-list.json" ]]; then
+      cat "$STUB_DIR/issue-list.json"
     else
       echo '[]'
     fi
@@ -15406,6 +15413,7 @@ case "$args" in
 esac
 STUB
   chmod +x "$TMPDIR_TEST/bin/gh"
+  export GH_RETRY_BASE_DELAY=0
   PATH="$TMPDIR_TEST/bin:$PATH"
 }
 
@@ -15417,6 +15425,8 @@ statements_teardown() {
   unset DISPATCH_CONFIG_DIR
   unset DISPATCH_STATEMENTS_STATE_DIR
   unset DISPATCH_STATEMENTS_NOW
+  unset GH_RETRY_BASE_DELAY
+  unset DISPATCH_STATEMENTS_ISSUE_LIST_LIMIT
 }
 
 # statements_write_projects — projects.json fixture with one project whose key
@@ -15506,13 +15516,13 @@ else
 fi
 calls=$(cat "$STUB_DIR/gh-calls.log")
 TOTAL=$((TOTAL + 1))
-if [[ "$calls" == *"search issues "* && "$calls" == *"issue create"* \
+if [[ "$calls" == *"issue list "* && "$calls" == *"issue create"* \
    && "$calls" == *"project item-add"* ]]; then
   PASS=$((PASS + 1))
-  echo "  PASS: new-file invoked search / issue create / project item-add"
+  echo "  PASS: new-file invoked issue list / issue create / project item-add"
 else
   FAIL=$((FAIL + 1))
-  echo "  FAIL: new-file invoked search / issue create / project item-add"
+  echo "  FAIL: new-file invoked issue list / issue create / project item-add"
   echo "    gh-calls.log: $calls"
 fi
 # Assert both labels are present in the issue create call.
@@ -15530,13 +15540,18 @@ fi
 statements_teardown
 
 # --- Test 3: open hit → skipped ----------------------------------------------
+# Dedup now comes from the batched gh issue list body parse: the fixture issue's
+# body carries the file's sha256 on a `- sha256: \`<hash>\`` line, which seeds
+# SEEN_HASHES[hash]=42, so the file is deduped locally without a per-file call.
 
 echo "Test: dispatch-statements-scan skips when an open issue carries the hash"
 statements_setup
 statements_write_projects
 statements_write_config
 printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
-echo '[{"number":42,"state":"open"}]' > "$STUB_DIR/search-result.json"
+h=$(sha256sum "$TMPDIR_TEST/statements-dir/acct.qfx" | awk '{print $1}')
+jq -n --arg h "$h" '[{number:42, body:("- File: `acct.qfx`\n- sha256: `" + $h + "`")}]' \
+  > "$STUB_DIR/issue-list.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
 assert_eq "open-hit exits 0" "0" "$rc"
@@ -15557,13 +15572,19 @@ fi
 statements_teardown
 
 # --- Test 4: closed hit → skipped (proves open-OR-closed dedup) --------------
+# Dedup comes from the batched gh issue list body parse (the script no longer
+# reads `state`). The fixture includes state:"closed" for documentation; only
+# `number` and `body` are functionally needed. The hash in the body seeds
+# SEEN_HASHES[hash]=43, so the file is deduped locally regardless of state.
 
 echo "Test: dispatch-statements-scan skips when a CLOSED issue carries the hash"
 statements_setup
 statements_write_projects
 statements_write_config
 printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
-echo '[{"number":43,"state":"closed"}]' > "$STUB_DIR/search-result.json"
+h=$(sha256sum "$TMPDIR_TEST/statements-dir/acct.qfx" | awk '{print $1}')
+jq -n --arg h "$h" '[{number:43, state:"closed", body:("- sha256: `" + $h + "`")}]' \
+  > "$STUB_DIR/issue-list.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
 assert_eq "closed-hit exits 0" "0" "$rc"
@@ -15708,31 +15729,31 @@ else
 fi
 statements_teardown
 
-# --- Test 9: malformed gh search issues output → hard error, no issue create --
+# --- Test 9: malformed gh issue list output → hard error, no issue create ----
 
-echo "Test: dispatch-statements-scan surfaces hard error on malformed search output, does not file"
+echo "Test: dispatch-statements-scan surfaces hard error on malformed gh issue list output, does not file"
 statements_setup
 statements_write_projects
 statements_write_config
 printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
-# Inject a TLS-error-like non-JSON message as the search result (gh exits 0).
+# Inject a TLS-error-like non-JSON message as the issue list result (gh exits 0).
 printf 'tls: failed to verify certificate: x509: certificate signed by unknown authority\n' \
-  > "$STUB_DIR/search-result.json"
+  > "$STUB_DIR/issue-list.json"
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>&1 >/dev/null) || rc=$?
-assert_eq "malformed-search exits 1" "1" "$rc"
+assert_eq "malformed-list exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ "$err" == *"bank: error"* && "$err" == *"non-JSON"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: malformed-search emits hard error to stderr"
+  PASS=$((PASS + 1)); echo "  PASS: malformed-list emits hard error to stderr"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: malformed-search emits hard error to stderr"
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed-list emits hard error to stderr"
   echo "    actual stderr: $err"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: malformed-search made no issue create call"
+  PASS=$((PASS + 1)); echo "  PASS: malformed-list made no issue create call"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: malformed-search made no issue create call"
+  FAIL=$((FAIL + 1)); echo "  FAIL: malformed-list made no issue create call"
   echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
 fi
 statements_teardown
@@ -15800,6 +15821,108 @@ if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: ctrl-char-name filed nothing"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: ctrl-char-name filed nothing"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+statements_teardown
+
+# --- Test 12: one list call regardless of file count -------------------------
+# Proves that the per-file Search-API fan-out is gone: with N=5 distinct new
+# files there is exactly ONE `gh issue list` invocation (per entry, not per
+# file) and exactly 5 `gh issue create` invocations.
+
+echo "Test: dispatch-statements-scan makes exactly one gh issue list call for N files"
+statements_setup
+statements_write_projects
+statements_write_config
+# Write 5 distinct files (different contents → different hashes).
+printf 'STATEMENT-CONTENTS-1\n' > "$TMPDIR_TEST/statements-dir/acct1.qfx"
+printf 'STATEMENT-CONTENTS-2\n' > "$TMPDIR_TEST/statements-dir/acct2.qfx"
+printf 'STATEMENT-CONTENTS-3\n' > "$TMPDIR_TEST/statements-dir/acct3.qfx"
+printf 'STATEMENT-CONTENTS-4\n' > "$TMPDIR_TEST/statements-dir/acct4.qfx"
+printf 'STATEMENT-CONTENTS-5\n' > "$TMPDIR_TEST/statements-dir/acct5.qfx"
+# No issue-list.json → stub returns [] → all 5 files are new and get filed.
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
+assert_eq "one-list-call exits 0" "0" "$rc"
+list_count=0
+[[ -f "$STUB_DIR/gh-calls.log" ]] \
+  && list_count=$(grep -c '^issue list ' "$STUB_DIR/gh-calls.log" || true)
+assert_eq "one-list-call made exactly one issue list call" "1" "$list_count"
+create_count=0
+[[ -f "$STUB_DIR/gh-calls.log" ]] \
+  && create_count=$(grep -c '^issue create ' "$STUB_DIR/gh-calls.log" || true)
+assert_eq "one-list-call made exactly five issue create calls" "5" "$create_count"
+statements_teardown
+
+# --- Test 13: transient-then-succeed on the list call -------------------------
+# Proves gh_retry retries the list and that the retried stdout parses correctly.
+# If the JSON from the retry were corrupted or not parsed, the file would be
+# FILED (hash not in SEEN_HASHES) rather than SKIPPED — so a SKIPPED assertion
+# proves both the retry and the parse.
+
+echo "Test: dispatch-statements-scan retries gh issue list on transient failure and parses the result"
+statements_setup
+statements_write_projects
+statements_write_config
+printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/retry.qfx"
+h=$(sha256sum "$TMPDIR_TEST/statements-dir/retry.qfx" | awk '{print $1}')
+jq -n --arg h "$h" '[{number:99, body:("- sha256: `" + $h + "`")}]' \
+  > "$STUB_DIR/issue-list.json"
+# First gh issue list attempt fails transiently; retry returns the fixture.
+touch "$STUB_DIR/issue-list-fail-once"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
+assert_eq "retry-list exits 0" "0" "$rc"
+list_count=0
+[[ -f "$STUB_DIR/gh-calls.log" ]] \
+  && list_count=$(grep -c '^issue list ' "$STUB_DIR/gh-calls.log" || true)
+assert_eq "retry-list made exactly 2 issue list calls (fail attempt + retry)" "2" "$list_count"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"bank: skipped (#99 for retry.qfx)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: retry-list skipped (#99 for retry.qfx) — retry parsed correctly"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: retry-list skipped (#99 for retry.qfx) — retry parsed correctly"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: retry-list made no issue create call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: retry-list made no issue create call"
+  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+fi
+statements_teardown
+
+# --- Test 14: truncation guard -----------------------------------------------
+# When gh issue list returns exactly DISPATCH_STATEMENTS_ISSUE_LIST_LIMIT
+# results the dedup snapshot is likely truncated; the script hard-errors rather
+# than silently misfiling. Set the limit to 2 and supply a fixture of exactly 2
+# issues to trigger the guard.
+
+echo "Test: dispatch-statements-scan hard-errors when gh issue list returns exactly the limit"
+statements_setup
+statements_write_projects
+statements_write_config
+export DISPATCH_STATEMENTS_ISSUE_LIST_LIMIT=2
+printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
+# Fixture of exactly 2 issues — matches the limit of 2, triggering the guard.
+jq -n '[{number:1, body:"- sha256: `aabbcc`"}, {number:2, body:"- sha256: `ddeeff`"}]' \
+  > "$STUB_DIR/issue-list.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>&1 >/dev/null) || rc=$?
+assert_eq "truncation-guard exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"bank: error"* && "$err" == *"truncat"* && "$err" == *"limit"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: truncation-guard emits hard error mentioning truncat and limit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: truncation-guard emits hard error mentioning truncat and limit"
+  echo "    actual stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: truncation-guard made no issue create call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: truncation-guard made no issue create call"
   echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
 fi
 statements_teardown
