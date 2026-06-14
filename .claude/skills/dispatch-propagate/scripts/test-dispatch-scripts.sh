@@ -255,7 +255,7 @@ case "$args" in
     fi
     ;;
   issue\ view\ *\ --json\ title,body,comments,number,state)
-    # issue-blocking / issue-sub-issues call: gh issue view <num> --json ...
+    # issue-blocking call: gh issue view <num> --json ...
     num=$(echo "$args" | awk '{print $3}')
     if [[ -f "$STUB_DIR/issue-${num}.json" ]]; then
       cat "$STUB_DIR/issue-${num}.json"
@@ -560,6 +560,21 @@ case "$args" in
   issue\ close\ *)
     # dispatch-close-resolved (#1456): gh issue close <num> --reason completed --comment ...
     echo "$args" >> "$STUB_DIR/gh-issue-close.log"
+    ;;
+  issue\ view\ *\ --json\ *)
+    # Generic catch-all for `gh issue view <num> --json <FIELDS>` calls that do
+    # not match the specific arms above (e.g. issue-sub-issues default/explicit
+    # field sets). Logs the FIELDS token so tests can assert which fields were
+    # requested, then serves issue-<num>.json if present, else a minimal default
+    # carrying only number/state/stateReason (the hot-path lean set, #1593).
+    num=$(printf '%s' "$args" | awk '{print $3}')
+    fields="${args##* --json }"
+    echo "$fields" >> "$STUB_DIR/gh-issue-view-fields.log"
+    if [[ -f "$STUB_DIR/issue-${num}.json" ]]; then
+      cat "$STUB_DIR/issue-${num}.json"
+    else
+      printf '{"number":%s,"state":"OPEN","stateReason":null}\n' "$num"
+    fi
     ;;
   *)
     echo "gh stub: unknown invocation: $args" >&2
@@ -1838,6 +1853,63 @@ setup
 touch "$STUB_DIR/gh-fail-sub_issues-67"
 if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 67 >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "hard error: issue-sub-issues fails → exit 3" "3" "$rc"
+teardown
+
+# ============================================================================
+# issue-sub-issues field-forwarding tests (#1593)
+# ============================================================================
+echo ""
+echo "=== issue-sub-issues field forwarding ==="
+
+# These tests run the REAL issue-sub-issues script (not the fake that setup()
+# installs for dispatch-trace-leaf). After setup, the fake is overwritten with
+# the real script so any --json field set it requests hits the stub and is
+# logged to gh-issue-view-fields.log. This is the only way to assert which
+# fields the real script actually requests.
+
+# A. Default fields: one child → stub logs exactly "number,state,stateReason".
+echo "Test: issue-sub-issues — default fields → number,state,stateReason"
+setup
+cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
+chmod +x "$TMPDIR_TEST/issue-sub-issues"
+printf '[{"number":801}]\n' > "$STUB_DIR/subissues-80.json"
+"$TMPDIR_TEST/issue-sub-issues" 80 >/dev/null
+logged=$(cat "$STUB_DIR/gh-issue-view-fields.log" 2>/dev/null || true)
+assert_eq "default fields: logged fields" "number,state,stateReason" "$logged"
+teardown
+
+# B. Default fields: no body, no comments in the logged field set.
+echo "Test: issue-sub-issues — default fields contain no body or comments"
+setup
+cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
+chmod +x "$TMPDIR_TEST/issue-sub-issues"
+printf '[{"number":811}]\n' > "$STUB_DIR/subissues-81.json"
+"$TMPDIR_TEST/issue-sub-issues" 81 >/dev/null
+logged=$(cat "$STUB_DIR/gh-issue-view-fields.log" 2>/dev/null || true)
+assert_eq "default fields: no body in field set" "0" "$(printf '%s' "$logged" | grep -c 'body' || true)"
+assert_eq "default fields: no comments in field set" "0" "$(printf '%s' "$logged" | grep -c 'comments' || true)"
+teardown
+
+# C. Explicit fields arg: forwarded verbatim → stub logs exactly "number,state".
+echo "Test: issue-sub-issues — explicit fields arg forwarded verbatim"
+setup
+cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
+chmod +x "$TMPDIR_TEST/issue-sub-issues"
+printf '[{"number":821}]\n' > "$STUB_DIR/subissues-82.json"
+"$TMPDIR_TEST/issue-sub-issues" 82 "number,state" >/dev/null
+logged=$(cat "$STUB_DIR/gh-issue-view-fields.log" 2>/dev/null || true)
+assert_eq "explicit fields: logged fields" "number,state" "$logged"
+teardown
+
+# D. Two children: each child produces one log line → two lines total.
+echo "Test: issue-sub-issues — two children → two field log entries"
+setup
+cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
+chmod +x "$TMPDIR_TEST/issue-sub-issues"
+printf '[{"number":831},{"number":832}]\n' > "$STUB_DIR/subissues-83.json"
+"$TMPDIR_TEST/issue-sub-issues" 83 >/dev/null
+line_count=$(wc -l < "$STUB_DIR/gh-issue-view-fields.log" | tr -d ' ')
+assert_eq "two children: two log lines" "2" "$line_count"
 teardown
 
 # ============================================================================
