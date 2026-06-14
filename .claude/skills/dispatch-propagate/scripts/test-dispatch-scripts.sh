@@ -12835,6 +12835,10 @@ assert_eq "cap-latched: no issue create (latch already open)" \
   "0" "$([[ "$ghlog" != *"issue create"* ]] && echo 0 || echo 1)"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 assert_eq "cap-latched: no reseed armed (systemd-run log empty)" "" "$log"
+# Cap-escalation path exits before the arming step: ensure_daemon_service must
+# NOT have run (mirrors the continuation no-op negative assertions above).
+assert_eq "cap: daemon service not touched (cap-escalation path)" \
+  "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
 tr_teardown
 
 # --- Test 5: backoff grows with the consecutive-failure count ----------------
