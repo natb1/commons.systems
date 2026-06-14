@@ -7682,9 +7682,10 @@ lock_teardown
 # --- Test 24: live foreign holder with MISMATCHED marker → busy (#928) -------
 #
 # The marker exists but names a DIFFERENT (older, since-finalized) session, not
-# the recorded holder. A live mid-selection holder launched from a previously-
-# marked worktree must NOT have its lock reclaimed: marker_names_holder rejects
-# the content mismatch, so acquire stays busy.
+# the recorded holder. A live foreign holder is unconditionally BUSY as of #945:
+# the BUSY short-circuit fires before any marker is read, so the mismatched
+# marker content is never inspected. The test confirms the live holder is not
+# reclaimed regardless of what the marker contains.
 
 echo "Test: live foreign holder with mismatched marker → busy (#928)"
 lock_setup
@@ -7728,11 +7729,11 @@ lock_teardown
 
 # --- Test 25b: live foreign holder with FIFO marker → busy (no deadlock) -----
 #
-# marker_names_holder reads the marker's content; a non-regular file (here a
-# FIFO) at that path would block the read indefinitely while the flock is held,
-# deadlocking all routing. The regular-file guard must reject it and stay busy
-# rather than reclaim or hang. A `timeout` bounds the call so a regression
-# (reverting to a blocking read) surfaces as a hang, not a silent pass.
+# Because a live foreign holder is unconditionally BUSY as of #945, the marker
+# is never opened — a FIFO at that path cannot deadlock routing. This test is a
+# regression guard: if a future change reintroduced a marker read for live
+# holders, opening the FIFO would block indefinitely, the `timeout 10` below
+# would fire, and the test would fail as a hang rather than pass silently.
 
 echo "Test: live foreign holder with FIFO marker → busy (no deadlock)"
 lock_setup

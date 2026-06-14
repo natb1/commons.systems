@@ -244,22 +244,6 @@ resolve_holder_state() {
   return 0
 }
 
-# marker_names_holder <cwd> <sid> — 0 iff <cwd> is non-empty, carries the
-# tmp/dispatch-worktree marker, and the marker's first line equals <sid>.
-# Empty cwd, missing/empty marker, or a marker naming any other session → 1
-# (no reclaim): a stale empty marker (worktree-create.sh) or a marker naming
-# an older finalized session never reclaims a live mid-selection holder.
-marker_names_holder() {
-  local cwd="$1" sid="$2" marker content=""
-  [[ -n "$cwd" ]] || return 1
-  marker="$cwd/tmp/dispatch-worktree"
-  # Require a regular file: a FIFO or device node at this path would block the
-  # read below indefinitely while the flock is held, deadlocking all routing.
-  [[ -f "$marker" ]] || return 1
-  IFS= read -r content <"$marker" 2>/dev/null || true
-  [[ -n "$content" && "$content" == "$sid" ]]
-}
-
 # ---- Step 1: resolve the lock file ------------------------------------------
 # dispatch_lock_file (lib.sh) honors an explicit DISPATCH_LOCK_FILE (tests rely
 # on this) and otherwise resolves the shared project-root tmp/dispatch.lock (not
@@ -305,7 +289,7 @@ try_acquire() {            # 0 = acquired, 1 = contended; sets CONTENDED_SID
       printf 'FLOCK_TIMEOUT'
       exit 0
     fi
-    local recorded="" cwd="" live=0
+    local recorded="" live=0
     IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
     # Busy iff a different sessionId is recorded AND it is still a live
     # session per `claude agents --json`. A live holder always blocks — even
@@ -314,9 +298,9 @@ try_acquire() {            # 0 = acquired, 1 = contended; sets CONTENDED_SID
     # the holder released the lock. Otherwise — no record, a stale record
     # (sessionId not in the registry), our own session re-entering, or a dead
     # foreign holder — we claim. An opaque-failure from resolve_holder_state
-    # (return 0, empty cwd) stays BUSY (fail safe).
+    # (return 0, no holder cwd emitted) stays BUSY (fail safe).
     if [[ -n "$recorded" && "$recorded" != "$SESSION_ID" ]]; then
-      if cwd=$(resolve_holder_state "$recorded"); then
+      if resolve_holder_state "$recorded" >/dev/null; then
         live=1
       fi
       if (( live )); then
