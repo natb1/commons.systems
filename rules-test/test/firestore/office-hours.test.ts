@@ -315,6 +315,14 @@ describe("office-hours usage-samples", () => {
     );
   });
 
+  it("denies unfiltered owner list query on test-env usage-samples collection", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(collection(db, `office-hours/${ENV}/usage-samples`)),
+    );
+  });
+
   // A non-member cannot list another member's samples: filtering for an email
   // they are not in is denied, because the matching docs carry a memberEmails
   // the requester is absent from. (A self-targeted array-contains filter is
