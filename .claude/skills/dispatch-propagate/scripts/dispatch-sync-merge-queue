@@ -29,6 +29,14 @@ source "$SCRIPT_DIR/lib.sh"
 
 OFFICE_HOURS_NATE_REPO="natb1/office-hours-nate"
 
+# The close-path open-issue fetch cap. gh issue list defaults to 30, which would
+# silently truncate the open tracking-issue snapshot. A truncated snapshot makes
+# the close path miss stale tracking issues (their PR no longer mergeable) and
+# leave them open forever. 200 is a generous default; overridable for tests and
+# for repos that accumulate more open tracking issues. Mirrors the
+# DISPATCH_PR_LIST_LIMIT pattern in lib.sh / pr_list_open.
+DISPATCH_OH_ISSUE_LIMIT="${DISPATCH_OH_ISSUE_LIMIT:-200}"
+
 HARD_ERROR=0
 
 # ---- Compute the mergeable set ----------------------------------------------
@@ -71,9 +79,7 @@ for (( i=0; i<FILTERED_COUNT; i++ )); do
   # This PR is mergeable now — record its number for the close-path predicate.
   MERGEABLE_NUMS["$PR_NUM"]=1
 
-  n="$PR_NUM"
-  LABEL="merge-pr:$n"
-  TITLE="$PR_TITLE"
+  LABEL="merge-pr:$PR_NUM"
 
   # ---- Idempotent label create ----------------------------------------------
   LABEL_RC=0
@@ -101,7 +107,7 @@ for (( i=0; i<FILTERED_COUNT; i++ )); do
   # ---- Build the marker and body (needed by both branches) ------------------
   # Build the marker JSON with jq (NOT string interpolation) so a title with
   # quotes or other special characters stays valid one-line JSON.
-  MARKER_JSON=$(jq -c -n --arg repo "natb1/commons.systems" --argjson number "$n" \
+  MARKER_JSON=$(jq -c -n --arg repo "natb1/commons.systems" --argjson number "$PR_NUM" \
     --arg url "$PR_URL" --arg title "$PR_TITLE" \
     '{repo:$repo, number:$number, url:$url, title:$title}')
   MARKER="<!-- oh-merge-pr: $MARKER_JSON -->"
@@ -112,7 +118,7 @@ for (( i=0; i<FILTERED_COUNT; i++ )); do
     # ---- Absent → create ----------------------------------------------------
     CREATE_RC=0
     CREATE_OUT=$(gh_retry gh issue create --repo "$OFFICE_HOURS_NATE_REPO" \
-      --title "$TITLE" --body "$ISSUE_BODY" --label "$LABEL" 2>&1) || CREATE_RC=$?
+      --title "$PR_TITLE" --body "$ISSUE_BODY" --label "$LABEL" 2>&1) || CREATE_RC=$?
     if [[ "$CREATE_RC" -ne 0 ]]; then
       echo "$LABEL: error (gh issue create failed: $CREATE_OUT)" >&2
       HARD_ERROR=1
@@ -132,7 +138,7 @@ for (( i=0; i<FILTERED_COUNT; i++ )); do
     # ---- Present → update only on title drift -------------------------------
     EXISTING_NUM=$(printf '%s' "$OPEN_JSON" | jq -r '.[0].number')
     EXISTING_TITLE=$(printf '%s' "$OPEN_JSON" | jq -r '.[0].title')
-    if [[ "$EXISTING_TITLE" == "$TITLE" ]]; then
+    if [[ "$EXISTING_TITLE" == "$PR_TITLE" ]]; then
       # Title equality is the idempotency key — make zero mutating gh calls.
       echo "$LABEL: skipped (up to date)"
     else
@@ -140,7 +146,7 @@ for (( i=0; i<FILTERED_COUNT; i++ )); do
       # carries the title, so updating title alone would drift the marker.
       EDIT_RC=0
       EDIT_OUT=$(gh_retry gh issue edit "$EXISTING_NUM" \
-        --repo "$OFFICE_HOURS_NATE_REPO" --title "$TITLE" --body "$ISSUE_BODY" 2>&1) \
+        --repo "$OFFICE_HOURS_NATE_REPO" --title "$PR_TITLE" --body "$ISSUE_BODY" 2>&1) \
         || EDIT_RC=$?
       if [[ "$EDIT_RC" -ne 0 ]]; then
         echo "$LABEL: error (gh issue edit failed: $EDIT_OUT)" >&2
@@ -159,9 +165,15 @@ done
 # HARD_ERROR=1 and skip the close path rather than exiting early.
 CLOSE_LIST_RC=0
 CLOSE_JSON=$(gh issue list --repo "$OFFICE_HOURS_NATE_REPO" --state open \
-  --limit 200 --json number,labels 2>&1) || CLOSE_LIST_RC=$?
+  --limit "$DISPATCH_OH_ISSUE_LIMIT" --json number,labels 2>&1) || CLOSE_LIST_RC=$?
 if [[ "$CLOSE_LIST_RC" -ne 0 ]]; then
   echo "error: gh issue list (close path) failed: $CLOSE_JSON" >&2
+  HARD_ERROR=1
+elif [[ "$(printf '%s' "$CLOSE_JSON" | jq 'length')" -eq "$DISPATCH_OH_ISSUE_LIMIT" ]]; then
+  # The open-issue snapshot is exactly the limit, so it is likely truncated.
+  # Closing stale tracking issues from a truncated set would miss the excess,
+  # leaving them open forever. Bail loudly rather than silently under-closing.
+  echo "error: gh issue list (close path) returned exactly $DISPATCH_OH_ISSUE_LIMIT open issues (the --limit) — the open tracking-issue snapshot is likely truncated; stale issues would be missed. Raise DISPATCH_OH_ISSUE_LIMIT." >&2
   HARD_ERROR=1
 else
   # Emit "<issue-number> <pr-number>" for each open tracking issue carrying a

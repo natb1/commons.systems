@@ -28852,6 +28852,29 @@ else
 fi
 teardown
 
+# (e) pr_list_open fails (truncation guard) → bail before the close pass
+# Safety-critical: if the mergeable set cannot be computed, the script must exit
+# non-zero immediately and run NO close pass — otherwise a stale tracking issue
+# would be wrongly closed against an empty/unknown mergeable set. Force the
+# failure by pinning DISPATCH_PR_LIST_LIMIT to the fixture length (1): pr_list_open
+# sees len == limit, fires its loud truncation guard, and returns non-zero.
+echo "Test: pr_list_open fails (truncation) → bail, no close pass"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+# A stale tracking issue that WOULD be closed if the close pass ran against an
+# empty mergeable set — so its survival proves the bail short-circuited it.
+printf '[{"number":88,"labels":[{"name":"merge-pr:42"}]}]\n' > "$STUB_DIR/oh-issue-enum.json"
+# `set -e` is in effect and this invocation exits non-zero by design, so capture
+# the code with an if/else rather than letting it abort the suite.
+if DISPATCH_PR_LIST_LIMIT=1 "$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "bail: script exits non-zero when the mergeable set cannot be computed" "1" "$rc"
+assert_eq "bail: close pass did not run (no gh issue close)" "absent" "$(log_state gh-merge-issue-close.log)"
+teardown
+
 # ============================================================================
 # summary
 # ============================================================================
