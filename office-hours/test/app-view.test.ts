@@ -125,14 +125,14 @@ describe("renderApp — owner tier with data", () => {
 
   it("does not render a .demo-banner", () => {
     const container = document.createElement("div");
-    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture }, now));
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now));
 
     expect(container.querySelector(".demo-banner")).toBeNull();
   });
 
   it("renders a reminder list item for each reminder", () => {
     const container = document.createElement("div");
-    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture }, now));
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now));
 
     const items = container.querySelectorAll("li.reminder");
     expect(items.length).toBe(2);
@@ -140,14 +140,14 @@ describe("renderApp — owner tier with data", () => {
 
   it("does not render an .error element", () => {
     const container = document.createElement("div");
-    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture }, now));
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now));
 
     expect(container.querySelector(".error")).toBeNull();
   });
 
   it("renders 3 queue cards when queueMetrics is provided", () => {
     const container = document.createElement("div");
-    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture }, now));
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now));
 
     // The capacity panel also emits .capacity-card, so scope the count to the
     // queue panel's unique value cells (depth, drain, runway).
@@ -162,7 +162,7 @@ describe("renderApp — owner tier empty", () => {
   it("does not render a .demo-banner", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [] }, now),
     );
 
     expect(container.querySelector(".demo-banner")).toBeNull();
@@ -171,7 +171,7 @@ describe("renderApp — owner tier empty", () => {
   it('renders the reminder-list empty state "No reminders."', () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [] }, now),
     );
 
     const list = container.querySelector("#reminder-list");
@@ -187,7 +187,7 @@ describe("renderApp — owner tier empty", () => {
   it('renders the capacity empty state "No capacity data."', () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [] }, now),
     );
 
     const empties = Array.from(container.querySelectorAll(".empty"));
@@ -198,7 +198,7 @@ describe("renderApp — owner tier empty", () => {
   it("renders the history-band empty states", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [] }, now),
     );
 
     const empties = Array.from(container.querySelectorAll(".empty"));
@@ -216,7 +216,7 @@ describe("renderApp — owner tier empty", () => {
   it('renders the queue band empty state "No queue metrics yet." when queueMetrics is null', () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [] }, now),
     );
 
     const empties = Array.from(container.querySelectorAll(".empty"));
@@ -227,7 +227,7 @@ describe("renderApp — owner tier empty", () => {
   it("does not render an .error element", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [] }, now),
     );
 
     expect(container.querySelector(".error")).toBeNull();
@@ -310,7 +310,7 @@ describe("renderApp — panel-registry: grid container", () => {
   it("owner-with-data render: .panel-grid is present", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture }, now),
+      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now),
     );
     expect(container.querySelector(".panel-grid")).not.toBeNull();
   });
@@ -345,7 +345,7 @@ describe("renderApp — panel-registry: all panels present per tier", () => {
   it("owner-with-data: all five panels are present", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture }, now),
+      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now),
     );
     expect(container.querySelector(".capacity-heading")).not.toBeNull();
     expect(container.querySelector(".capacity-pace")).not.toBeNull();
@@ -380,7 +380,7 @@ describe("renderApp — panel-registry: title-doubling guard", () => {
   it("owner-with-data: each panel heading appears exactly once", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture }, now),
+      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now),
     );
     expect(container.querySelectorAll(".capacity-heading").length).toBe(1);
     expect(container.querySelectorAll(".capacity-pace-heading").length).toBe(1);
@@ -424,7 +424,7 @@ describe("renderApp — panel-registry: queue-metrics in both tiers", () => {
   it("owner with queueMetrics: queue-metrics heading and populated value element present", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture }, now),
+      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now),
     );
     const heading = container.querySelector(".queue-metrics-heading");
     expect(heading).not.toBeNull();
@@ -435,7 +435,7 @@ describe("renderApp — panel-registry: queue-metrics in both tiers", () => {
   it("owner with queueMetrics: null — heading present, empty placeholder with exact text", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: null }, now),
+      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: null, issueSamples: [] }, now),
     );
     const heading = container.querySelector(".queue-metrics-heading");
     expect(heading).not.toBeNull();

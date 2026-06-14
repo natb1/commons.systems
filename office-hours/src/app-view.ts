@@ -3,15 +3,18 @@ import { renderPacePositionPanel } from "./pace-position-panel.js";
 import { renderHistoryBand } from "./history-band.js";
 import { renderReminderList } from "./office-hours.js";
 import { renderQueueMetricsPanel } from "./queue-metrics-panel.js";
+import { renderIssueHistoryChart } from "./issue-history-chart.js";
 import { getDemoSamples } from "./usage-data.js";
 import { getDemoReminders, getDemoQueueMetrics } from "./data.js";
+import { getDemoIssueSamples } from "./issue-data.js";
 import type { UsageSample } from "./usage-samples.js";
 import type { Reminder } from "./reminders.js";
 import type { QueueMetricsSnapshot } from "./queue-metrics.js";
+import type { IssueSample } from "./issue-samples.js";
 
 export type ViewState =
   | { tier: "demo" }                                                  // unauthenticated → labeled demo
-  | { tier: "owner"; samples: UsageSample[]; reminders: Reminder[]; queueMetrics: QueueMetricsSnapshot | null }  // authenticated → real (possibly empty)
+  | { tier: "owner"; samples: UsageSample[]; reminders: Reminder[]; queueMetrics: QueueMetricsSnapshot | null; issueSamples: IssueSample[] }  // authenticated → real (possibly empty)
   | { tier: "error" };                                                // authenticated load failed
 
 type PanelTier = "demo" | "owner";
@@ -20,6 +23,7 @@ interface PanelContext {
   samples: UsageSample[];
   reminders: Reminder[];
   queueMetrics: QueueMetricsSnapshot | null;
+  issueSamples: IssueSample[];
   now: Date;
 }
 
@@ -72,6 +76,14 @@ const PANELS: readonly Panel[] = [
     render: (s) => renderHistoryBand(s),
   }),
   definePanel({
+    id: "backlog-history",
+    title: "Backlog",
+    availableIn: ["demo", "owner"],
+    fullWidth: true,
+    load: (c) => c.issueSamples,
+    render: (s, now) => renderIssueHistoryChart(s, now),
+  }),
+  definePanel({
     id: "reminders",
     title: "Reminders",
     availableIn: ["demo", "owner"],
@@ -96,12 +108,14 @@ function buildContext(
       samples: getDemoSamples(),
       reminders: getDemoReminders(),
       queueMetrics: getDemoQueueMetrics(),
+      issueSamples: getDemoIssueSamples(),
       now,
     };
   return {
     samples: state.samples,
     reminders: state.reminders,
     queueMetrics: state.queueMetrics,
+    issueSamples: state.issueSamples,
     now,
   };
 }
