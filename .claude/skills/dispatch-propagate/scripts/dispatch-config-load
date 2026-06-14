@@ -7,7 +7,7 @@
 # the normalized result to stdout.
 #
 # Usage:
-#   dispatch-config-load <projects|jit|statements|target-workers|budget-etl>
+#   dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic>
 #
 # Config files live in <project-root>/dispatch.config/. The project root is
 # resolved via resolve_project_root (lib.sh).
@@ -128,6 +128,19 @@
 #     ]
 #   }
 #
+# ---- Schema: epic.json ------------------------------------------------------
+#
+# Top-level object with a required "labels" array. Each element is a non-empty
+# string — the label name(s) that designate an issue as an epic.
+#
+#   labels    array (required) — list of label names that mark an issue as an
+#             epic (e.g. ["epic"]). Each element must be a non-empty string.
+#
+# Example (see epic.example.json):
+#   {
+#     "labels": ["epic"]
+#   }
+#
 # ---- Schema: target-workers.json -------------------------------------------
 #
 # Top-level object with optional tunables for `dispatch-target-workers`. Each
@@ -206,9 +219,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 CONFIG_TYPE="${1:-}"
 case "$CONFIG_TYPE" in
-  projects|jit|statements|target-workers|budget-etl) ;;
+  projects|jit|statements|target-workers|budget-etl|epic) ;;
   *)
-    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl>" >&2
+    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic>" >&2
     exit 2
     ;;
 esac
@@ -383,6 +396,26 @@ case "$CONFIG_TYPE" in
           (if ($item | has("extensions")) and ($item.extensions | type) != "array" then
             "statements[\($idx)]: extensions must be an array if present, got \($item.extensions | type)"
           else empty end)
+        end
+      end
+    ' "$CONFIG_FILE")
+    ;;
+  epic)
+    ERRORS=$(jq -r '
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      elif (.labels | type) != "array" then
+        "top-level .labels must be an array, got \(.labels | type)"
+      else
+        .labels | to_entries[] |
+        .value as $item |
+        (.key + 1) as $idx |
+        if ($item | type) != "string" then
+          "labels[\($idx)]: must be a string, got \($item | type)"
+        elif ($item | length) == 0 then
+          "labels[\($idx)]: must be a non-empty string"
+        else
+          empty
         end
       end
     ' "$CONFIG_FILE")
