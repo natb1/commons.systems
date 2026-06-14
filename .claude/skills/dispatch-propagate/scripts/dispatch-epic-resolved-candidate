@@ -5,11 +5,12 @@ source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 N=$(resolve_issue_number "${1:-}")
 
-# Fetch sub-issues (now includes stateReason). Propagate a hard error as
-# exit 3 so the caller can distinguish a real gh failure from "not a candidate"
-# (exit 1). Capture raw stream first so a non-zero subscript exit is caught by
-# the || branch before the jq pipeline can mask it.
-kids_stream=$("$SCRIPT_DIR/issue-sub-issues" "$N") || {
+# Fetch sub-issues with the lean explicit field set (number,state,stateReason).
+# Propagate a hard error as exit 3 so the caller can distinguish a real gh
+# failure from "not a candidate" (exit 1). Capture raw stream first so a
+# non-zero subscript exit is caught by the || branch before the jq pipeline
+# can mask it.
+kids_stream=$("$SCRIPT_DIR/issue-sub-issues" "$N" "number,state,stateReason") || {
   echo "dispatch-epic-resolved-candidate: issue-sub-issues failed for $N" >&2
   exit 3
 }
