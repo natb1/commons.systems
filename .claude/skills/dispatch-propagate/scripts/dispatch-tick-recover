@@ -329,7 +329,10 @@ fi
 #
 # The systemd-run flag style mirrors dispatch-schedule-reseed's Step-6 call
 # exactly, plus --collect (so a failed reseed unit does not linger — Unit 3
-# adds the same flag to dispatch-schedule-reseed). Deliberately NO OnFailure=
+# adds the same flag to dispatch-schedule-reseed) and
+# --property=KillMode=process (so the reseed tick does not reap the bg fleet —
+# daemon + workers — when its transient unit deactivates; same fleet-reaping fix
+# as #1196, now applied here for #1209). Deliberately NO OnFailure=
 # here: arming the recover handler on a recover-armed reseed is Unit 3's concern
 # on the launchers, and the recover unit must not chain to itself.
 
@@ -358,6 +361,7 @@ trap 'rm -f "$RUN_STDERR"' EXIT
 "$SYSTEMD_RUN_CMD" --user \
      --unit="$UNIT_NAME" \
      --collect \
+     --property=KillMode=process \
      --on-calendar="@$RESEED_AT" \
      --working-directory="$MAIN_WORKTREE" \
      --timer-property=Persistent=true \
