@@ -25,9 +25,9 @@ skill, no nesting). The exploration and design subagents are direct children of
 this session.
 
 Run `gh` commands and the scripts that invoke `gh` (`dispatch-context-pack`,
-`dispatch-drift-scan`, `dispatch-write-plan`, `dispatch-apply-planned`,
-`dispatch-mark-complete`) with `dangerouslyDisableSandbox: true` — see
-`.claude/rules/sandbox.md`.
+`dispatch-drift-scan`, `dispatch-read-plan`, `dispatch-write-plan`,
+`dispatch-apply-planned`, `dispatch-mark-complete`, `dispatch-plan-finalize`)
+with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 
 ## The running session has no plan mode
 
@@ -56,17 +56,50 @@ case "$BRANCH" in
 esac
 ```
 
-Then check whether the issue already carries `dispatch:planned` (use
-`dangerouslyDisableSandbox: true` — `gh` needs network):
+Then check whether a plan was already persisted, keying the skip on the **plan
+comment** — the durable record of the expensive planning work — not on the
+`dispatch:planned` label. Read the persisted plan, capturing its stdout (use
+`dangerouslyDisableSandbox: true` — `dispatch-read-plan` calls `gh`). The script
+exits non-zero with a clear diagnostic when no `<!-- dispatch:plan -->` comment
+exists; treat that non-zero exit as "no plan comment":
 
 ```bash
-gh issue view "$N" --json labels | jq -r '.labels[].name'
+EXISTING_PLAN=$(.claude/skills/dispatch-propagate/scripts/dispatch-read-plan "$N") \
+  && HAVE_PLAN=1 || HAVE_PLAN=0
 ```
 
-If `dispatch:planned` is already present, this is an interrupted prior run — the
-plan was already persisted and the label applied, which is this skill's terminal
-action. **Skip all steps and return**; re-entry is a true no-op. Otherwise run
-the steps in order.
+**Plan comment exists** (`HAVE_PLAN=1`) — a prior session already did the
+expensive planning (explore / design / persist), and that work is durable.
+**Skip Steps 1–6.** Re-finalize so the *current* session writes its own marker
+and the chain advances — pipe the already-read plan back through finalize so
+there is no second fetch (`dangerouslyDisableSandbox: true` — `dispatch-plan-finalize`
+calls `gh`):
+
+```bash
+printf '%s' "$EXISTING_PLAN" | \
+  .claude/skills/dispatch-propagate/scripts/dispatch-plan-finalize "$N"
+```
+
+Then **stop**. `dispatch-plan-finalize` runs three steps in order:
+`dispatch-write-plan` re-writes the identical comment (a harmless refresh, never
+a second comment), then `dispatch-mark-complete` writes **this** session's
+marker, then `dispatch-apply-planned` re-adds the label idempotently. With the
+marker now present, `dispatch-stop.sh` Branch B advances the chain to
+`implement`.
+
+**No plan comment** (`HAVE_PLAN=0`) — a genuine fresh run, or a crash before the
+plan was ever persisted. Run all the steps below in order.
+
+This mirrors the `/implement` pattern: skip the expensive work when its durable
+artifact already exists, but **always write the marker** for the running session
+(`/implement` skips its build when a PR already exists but still writes the
+marker, to cover a same-tick crash between PR-open and marker-write). The
+`dispatch:planned` label is **no longer** the idempotency signal — the persisted
+plan comment is the durable signal, and the marker is always (re)written for the
+running session. Recovery when a prior session crashed in the window routes
+through office-hours' plan-clarification path: it is office-hours-recoverable,
+**not** a fully autonomous self-heal, because the autonomous tick skips
+office-hours-labelled issues.
 
 ## Steps
 
@@ -260,24 +293,26 @@ auto-complete (Step 7) or marker-absent stop → office-hours.
 ### 7. Persist + complete
 
 Assemble the final plan markdown (the plan-comment output schema below) and write
-it to `tmp/plan-<N>.md`, then run, in order (all with
-`dangerouslyDisableSandbox: true` — each invokes `gh`):
+it to `tmp/plan-<N>.md` first, then run the single ordered finalize call (with
+`dangerouslyDisableSandbox: true` — it invokes `gh`):
 
 ```bash
-# 1. Persist the plan to the issue's find-or-update <!-- dispatch:plan --> comment.
-.claude/skills/dispatch-propagate/scripts/dispatch-write-plan "$N" < tmp/plan-<N>.md
-
-# 2. Apply the dispatch:planned phase-completion label (create-on-first-use).
-.claude/skills/dispatch-propagate/scripts/dispatch-apply-planned "$N"
-
-# 3. Write the phase-completed marker — no --pr (the plan phase has no PR).
-.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete --phase plan
+.claude/skills/dispatch-propagate/scripts/dispatch-plan-finalize "$N" < tmp/plan-<N>.md
 ```
 
-`dispatch-write-plan` is find-or-update — re-running replaces the plan comment,
-it never stacks a second one. `dispatch-mark-complete --phase plan` takes **no
-`--pr`** (the plan phase completes on a no-PR issue). `CLAUDE_JOB_DIR` unset = an
-interactive run; the marker script no-ops with a clear diagnostic.
+`dispatch-plan-finalize` runs three steps in a fixed order: it persists the plan
+via a find-or-update `<!-- dispatch:plan -->` comment (never stacks a second),
+then writes the phase-completed marker (no `--pr` — the plan phase has no PR),
+then applies the `dispatch:planned` label **last**. The whole call is
+find-or-update / idempotent, so it is safe to re-run.
+
+The marker-before-label ordering is load-bearing: the durable label's presence
+guarantees the per-session marker was written in the same session. A crash in the
+window between the marker and the label leaves the label **absent**, so
+`dispatch-phase` returns `plan` (not `implement`) and the issue is
+office-hours-recoverable via the plan-clarification residue — instead of
+dead-ending as `implement`. With `CLAUDE_JOB_DIR` unset (an interactive run) the
+marker write is a clear-diagnostic no-op.
 
 Then **stop**. The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads the marker,
 re-derives the phase (now `implement`, since `dispatch:planned` is present),

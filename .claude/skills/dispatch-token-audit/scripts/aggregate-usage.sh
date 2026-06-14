@@ -355,6 +355,20 @@ def add_to_bucket(bucket; u; turns):
         ( [ $small[] | (.init_input * RATE_INPUT + .init_cache_creation * RATE_CACHE_CREATION) / 1e6 ]
           | add // 0 )
     } ) as $small_lens
+| ( [ $rows[] | (.init_input + .init_cache_creation) ] ) as $boot_tokens
+| ( {
+      total_proxy_usd:
+        ( [ $rows[] | (.init_input * RATE_INPUT + .init_cache_creation * RATE_CACHE_CREATION) / 1e6 ]
+          | add // 0 ),
+      sessions: ($rows | length),
+      median_boot_tokens:
+        ( $boot_tokens
+          | sort
+          | if length==0 then 0
+            elif length%2==1 then .[length/2|floor]
+            else (.[length/2-1] + .[length/2]) / 2 end ),
+      peak_boot_tokens: ($boot_tokens | max // 0)
+    } ) as $baseline_lens
 
 | {
     window: $win,
@@ -373,7 +387,8 @@ def add_to_bucket(bucket; u; turns):
     tool_errors: $tool_errors,
     lenses: {
       context_over_120k: $ctx_lens,
-      small_sessions: $small_lens
+      small_sessions: $small_lens,
+      baseline_context: $baseline_lens
     },
     sessions: $sessions
   }
