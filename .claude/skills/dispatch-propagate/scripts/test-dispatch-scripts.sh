@@ -3267,6 +3267,134 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "print issue beats untopiced (other) issue" "issue 300" "$result"
 teardown
 
+# --- enhancement-axis deprioritization (#1473) --------------------------------
+# Within a priority tier, ALL non-enhancement issues (enh=0) drain before any
+# enhancement issue (enh=1). Enhancement applies to the ISSUE path only; PRs
+# are never enhancement-classified and always complete normally. The
+# enhancement bit nests BETWEEN priority and topic: pri ⊃ enh ⊃ topic ⊃ phase.
+
+# ENH1. Default-mode within-tier (criteria 1+2): a plain `audio` issue (enh=0,
+#       lower topic) beats a `bug`+`enhancement` issue (enh=1, higher topic).
+#       Proves non-enhancement outranks enhancement even across topic ranks.
+echo "Test: non-enhancement audio issue beats enhancement bug issue (enh axis outranks topic)"
+setup
+setup_union_pr_list '[]'
+# Issue 200 (older) is audio, enh=0. Issue 100 (newer) is bug+enhancement, enh=1.
+# audio is lower than bug in the topic ladder; enh=0 still beats enh=1.
+printf '[{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"}]},{"number":100,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"},{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "non-enh audio beats enh bug (enh axis outranks topic)" "issue 200" "$result"
+teardown
+
+# ENH2. Within the enhancement tier, topic ordering applies: a `security`
+#       enhancement issue beats an `audio` enhancement issue regardless of age.
+echo "Test: security+enhancement issue beats audio+enhancement issue (topic still ranks within enh tier)"
+setup
+setup_union_pr_list '[]'
+# Issue 200 (older) is audio+enhancement. Issue 100 (newer) is security+enhancement.
+# Both enh=1; security ranks above audio, so issue 100 wins.
+printf '[{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"},{"name":"enhancement"}]},{"number":100,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"},{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "security+enh beats audio+enh (topic ladder within enh tier)" "issue 100" "$result"
+teardown
+
+# ENH3. Criterion 3 — cross-axis: priority is the outermost axis. A
+#       `priority`+`enhancement`+`audio` issue (pri=1, enh=1, low topic) beats
+#       a plain `security` issue (pri=0, enh=0, high topic). Priority outermost
+#       means a priority enhancement still jumps the queue over all non-priority
+#       work regardless of enhancement or topic.
+echo "Test: priority+enhancement+audio beats non-priority non-enhancement security (priority is outermost)"
+setup
+setup_union_pr_list '[]'
+# Issue 100 (older): priority+enhancement+audio (pri=1, enh=1, topic=audio).
+# Issue 200 (newer): security (pri=0, enh=0, topic=security).
+# Despite enhancement and low topic, issue 100 wins because priority is outermost.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"enhancement"},{"name":"audio"}]},{"number":200,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "priority+enh+audio beats non-priority security (priority outermost)" "issue 100" "$result"
+teardown
+
+# ENH4. Regression guard — bug/security ordering within non-enh tier unchanged:
+#       a `security` issue still beats a `bug` issue (no enhancement labels).
+#       Guards against a regression where the new enhancement axis disrupts the
+#       existing topic ordering for non-enhancement items.
+echo "Test: security issue beats bug issue with no enhancement labels (regression guard)"
+setup
+setup_union_pr_list '[]'
+# Issue 400 (older) is bug, enh=0. Issue 300 (newer) is security, enh=0.
+# Both non-enhancement; security topic wins (mirrors 30i).
+printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "security beats bug within non-enh tier (no regression)" "issue 300" "$result"
+teardown
+
+# ENH5. --top N multi-line ordering: ALL non-enhancement issues drain before
+#       any enhancement issue, even across topics. Four issues:
+#         30 (security, enh=0), 20 (audio, enh=0),
+#         10 (security, enh=1), 40 (audio, enh=1)
+#       Expected order: 30 → 20 → 10 → 40
+#       The money assertion: enh=0 audio (issue 20) emits before enh=1 security
+#       (issue 10) — the across-topic drain proof.
+echo "Test: --top 4 drains all non-enhancement before any enhancement (across topics)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":30,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"}]},{"number":10,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"},{"name":"enhancement"}]},{"number":40,"createdAt":"2024-01-04T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"},{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 4)
+assert_eq "--top 4 non-enh drains before enh across topics" "$(printf 'issue 30\nissue 20\nissue 10\nissue 40')" "$result"
+# Specifically: non-enh audio (20) precedes enh security (10) — the key drain proof.
+enh_before=$(printf '%s\n' "$result" | grep -n '^issue 20$' | cut -d: -f1)
+enh_after=$(printf '%s\n' "$result" | grep -n '^issue 10$' | cut -d: -f1)
+assert_eq "--top 4: non-enh audio (20) appears before enh security (10)" "1" "$(( enh_before < enh_after ? 1 : 0 ))"
+teardown
+
+# ENH6. --priority-only: within the priority=1 tier, a non-enhancement priority
+#       issue is selected before an enhancement priority issue. Issue B is
+#       priority+audio (non-enh); issue A is priority+security+enhancement.
+#       Despite security ranking above audio in the topic ladder, the non-enh
+#       audio issue wins because enh nests inside priority (mirrors PT1's logic).
+echo "Test: --priority-only selects non-enhancement priority issue before enhancement priority issue"
+setup
+setup_union_pr_list '[]'
+# Issue 200 (older): priority+audio, enh=0. Issue 100 (newer): priority+security+enhancement, enh=1.
+# enh=0 wins over enh=1 even though audio < security in topic ranking.
+printf '[{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"audio"}]},{"number":100,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"},{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only: non-enh priority audio beats enh priority security" "issue 200" "$result"
+teardown
+
+# ENH7. --qa regression: a QA PR whose closing issue carries `enhancement` is
+#       selected normally and is NOT deprioritized behind a non-enhancement QA
+#       PR. PRs are never enhancement-classified, so the enhancement axis does
+#       not apply. The older PR wins on age regardless of enhancement label.
+echo "Test: --qa: QA PR closing an enhancement issue is not deprioritized (PRs unaffected by enh axis)"
+setup
+# PR 10 (older) closes issue 100 (enhancement). PR 20 (newer) closes issue 200 (no enhancement).
+# Both green draft QA PRs in the same topic (other). PR 10 should win on age.
+UNION='['
+UNION+="$(make_pr_union 10 "10-enh-qa" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":100}]')"','
+UNION+="$(make_pr_union 20 "20-plain-qa" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":200}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Issues 100/200 supply label data (no "help wanted" — not queue items themselves).
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"enhancement"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
+assert_eq "--qa: enh-closing PR 10 wins on age (PRs not enh-classified)" "pr 10 10-enh-qa" "$result"
+teardown
+
 # --- blocked-issue PR skip (issue #786) -------------------------------------
 # dispatch-select-target skips a PR from every PR-ladder tier when any issue it
 # closes is blocked_by an open issue; a closing issue blocked only by
@@ -11280,6 +11408,106 @@ result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --reopen-at 2>/dev/null)
 assert_eq "--reopen-at missing anchor → none" "none" "$result"
 tw_teardown
 
+# --- #1136: rate_limits.json telemetry range bounds -------------------------
+#
+# Out-of-range telemetry (used_percentage > 100, or a reset epoch beyond the
+# window's physically-plausible horizon) is rejected to missing so the existing
+# PRESENT guards route it to the established fail-safe, rather than acting on a
+# poisoned value. See issue #1136.
+
+# used_weekly=150 (>100) → rejected → weekly anchor drops → fallback N=1 (NOT 0).
+# This is the literal bug: an un-bounded used>100 yields negative headroom and
+# pins the target at 0; the bound restores the conservative spawn-1 fallback.
+echo "Test: #1136 used_weekly=150 (>100) → rejected → fallback N=1"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 150 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "#1136 used_weekly=150 → fallback 1 (not 0)" "1" "$out"
+TOTAL=$((TOTAL + 1))
+if grep -q "WEEKLY_USED out of range" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 used_weekly=150 stderr names WEEKLY_USED out of range"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 used_weekly=150 stderr should name WEEKLY_USED out of range"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+tw_teardown
+
+# used_weekly=100 is a valid fully-used reading and must be KEPT (strict `>`
+# bound). Consumed → the curve runs: at x=0.5, W=31, used=100 >> pace → gate
+# closed → N=0. A rejected value would instead drop the anchor → fallback N=1,
+# so N=0 discriminates "consumed" from "rejected".
+echo "Test: #1136 used_weekly=100 (boundary) → kept, curve runs → N=0"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 100 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "#1136 used_weekly=100 kept (curve runs) → N=0" "0" "$out"
+TOTAL=$((TOTAL + 1))
+if grep -q "out of range" "$TMPDIR_TEST/stderr"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 used_weekly=100 must NOT be rejected (strict >)"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+else
+  PASS=$((PASS + 1)); echo "  PASS: #1136 used_weekly=100 not rejected (strict >)"
+fi
+tw_teardown
+
+# used_5h=150 (>100) → rejected → 5h treated as 0 in the ramp → max 5h workers.
+# DOCUMENTED INTENDED fail-open: the issue chooses "do not act on the poisoned
+# value", and the weekly pace gate still bounds N. With the weekly gate open
+# (used_weekly under pace), N>=1.
+echo "Test: #1136 used_5h=150 (>100) → rejected → fail-open under open weekly gate → N>=1"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 0 "$r" 150 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 used_5h=150 rejected, weekly open → N=$out (>=1, intended fail-open)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 used_5h=150 expected N>=1, got $out"
+fi
+tw_teardown
+
+# weekly resets_at = NOW + 999999999 (far future, >8 days) → rejected → weekly
+# anchor drops → fallback N=1. A far-future weekly reset can no longer feed the
+# curve.
+echo "Test: #1136 weekly resets_at far-future (>8d) → rejected → fallback N=1"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+write_rl "rl.json" 30 $((TW_NOW + 999999999)) 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "#1136 weekly resets far-future → fallback 1" "1" "$out"
+TOTAL=$((TOTAL + 1))
+if grep -q "WEEKLY_RESETS" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 weekly resets far-future stderr names WEEKLY_RESETS"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 weekly resets far-future stderr should name WEEKLY_RESETS"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+tw_teardown
+
+# exhausted mode: 5h resets_at = NOW + 999999999 (far future, >6h) with
+# used_5h=99 (>=threshold) → 5h reset rejected → window cannot be exhausted → ok
+# (fail open). Weekly is benign (low usage, in-bound reset).
+echo "Test: #1136 --exhausted 5h resets far-future (>6h) → rejected → ok (fail open)"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+write_rl "exh.json" 30 $((TW_NOW + 302400)) 99 $((TW_NOW + 999999999))
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>"$TMPDIR_TEST/stderr")
+assert_eq "#1136 --exhausted 5h resets far-future → ok (fail open)" "ok" "$out"
+TOTAL=$((TOTAL + 1))
+if grep -q "FIVEH_RESETS" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 --exhausted 5h resets far-future stderr names FIVEH_RESETS"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 --exhausted 5h resets far-future stderr should name FIVEH_RESETS"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+tw_teardown
+
 # ============================================================================
 # dispatch-schedule-reseed tests
 # ============================================================================
@@ -12024,6 +12252,111 @@ else
 fi
 sr_teardown
 
+# --- #1136: rate_limits.json telemetry range bounds -------------------------
+#
+# Far-future resets_at and used>100 are rejected to missing so the script no-ops
+# (the established missing-telemetry fail-safe) instead of arming a reseed timer
+# years out. This is the durable-stall fix. See issue #1136.
+
+# weekly cap hit but resets_at is ~31 years out (>8d) → rejected → weekly window
+# drops → (5h absent) → missing-telemetry no-op: NO systemd-run call.
+echo "Test: #1136 weekly resets far-future (>8d) → no reseed timer armed"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
+sr_write_rl "rl.json" 95 $((1700000000 + 999999999)) absent absent
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]] && grep -q "WEEKLY_RESETS" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 weekly resets far-future → empty systemd-log + WEEKLY_RESETS diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 weekly resets far-future → expected no timer + diagnostic"
+  echo "    systemd-log: $(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null)"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+sr_teardown
+
+# used_weekly=150 (>100) → rejected → weekly window drops → (5h absent) → no-op,
+# no weekly reseed timer.
+echo "Test: #1136 used_weekly=150 (>100) → window drops → no reseed timer"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
+sr_write_rl "rl.json" 150 $((1700000000 + 10000)) absent absent
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]] && grep -q "WEEKLY_USED out of range" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 used_weekly=150 → no timer + WEEKLY_USED diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 used_weekly=150 → expected no timer + diagnostic"
+  echo "    systemd-log: $(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null)"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+sr_teardown
+
+# In-bound control (guards against over-rejection): a realistically-large NOW
+# with a weekly reset ~3 days out (well within the 8-day bound) and a weekly cap
+# hit still schedules normally.
+echo "Test: #1136 in-bound weekly reset (~3d out) still schedules (no over-rejection)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
+reset=$((1700000000 + 3 * 86400))
+sr_write_rl "rl.json" 95 "$reset" absent absent
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+assert_eq "#1136 in-bound weekly reset still schedules" \
+  "scheduled dispatch-reseed-$reset at $reset" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@$reset"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 in-bound weekly reset armed --on-calendar=@$reset"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 in-bound weekly reset should arm timer at $reset"
+  echo "    log: $log"
+fi
+sr_teardown
+
+# used_5h=150 (>100) → rejected → 5h window drops. Weekly absent → both windows
+# missing → missing-telemetry no-op: NO systemd-run call. Without the FIVEH_USED
+# >100 bound the rejected value would survive (used_5h=150 >= target_5h=50 →
+# CAND_5H armed at the 5h reset), so empty systemd-log discriminates.
+echo "Test: #1136 used_5h=150 (>100) → window drops → no reseed timer"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
+sr_write_rl "rl.json" absent absent 150 $((1700000000 + 3600))
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]] && grep -q "FIVEH_USED out of range" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 used_5h=150 → no timer + FIVEH_USED diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 used_5h=150 → expected no timer + diagnostic"
+  echo "    systemd-log: $(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null)"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+sr_teardown
+
+# 5h cap hit but resets_at is 7h out (>6h horizon) → rejected → 5h window drops.
+# Weekly cap hit with an in-bound (5d) reset → timer must arm at the WEEKLY
+# reset. The 5h reset (NOW+25200) is earlier than the weekly reset (NOW+432000),
+# so without the FIVEH_RESETS horizon bound the rejected 5h value would survive
+# (CAND_5H armed) and step 4's earliest-reset pick would arm at the 5h epoch
+# instead — the weekly-not-5h assertion discriminates the regression.
+echo "Test: #1136 5h resets far-future (>6h) → dropped → timer at weekly reset"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
+weekly_reset=$((1700000000 + 432000))   # 5 days out, in-bound under 8-day horizon
+sr_write_rl "rl.json" 95 "$weekly_reset" 60 $((1700000000 + 25200))  # 5h reset 7h out → rejected
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+assert_eq "#1136 5h resets far-future → timer at weekly reset" \
+  "scheduled dispatch-reseed-$weekly_reset at $weekly_reset" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@$weekly_reset"* ]] && grep -q "FIVEH_RESETS" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 5h resets far-future → armed at weekly $weekly_reset + FIVEH_RESETS diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 5h resets far-future → expected timer at weekly $weekly_reset + diagnostic"
+  echo "    log: $log"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+sr_teardown
+
 # ============================================================================
 # dispatch-schedule-convergence-reseed tests
 # ============================================================================
@@ -12562,6 +12895,234 @@ else
   echo "    stderr: $err"
 fi
 tr_teardown
+
+# --- dispatch-qa-fix-attempt (#1553) ---
+# ============================================================================
+# dispatch-qa-fix-attempt tests
+# ============================================================================
+#
+# Exercises the qa-fix attempt counter bump: under-cap prints `fix` and bumps
+# the dispatch:qa-fix-attempt-<n> label; at-cap prints `escalate` with no label
+# writes; bad args / non-integer CUR / bad CAP exit 2; the create-on-"not found"
+# path falls back to `label create` + retry and still prints `fix`.
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   copy of dispatch-qa-fix-attempt
+#   $TMPDIR_TEST/bin/       fake-gh stub
+#   $TMPDIR_TEST/gh-edit-log   recorded fake-gh pr-edit / label-create argv
+
+echo ""
+echo "=== dispatch-qa-fix-attempt ==="
+
+qfa_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
+
+  cp "$SCRIPT_DIR/dispatch-qa-fix-attempt" \
+    "$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt"
+
+  # fake gh: `pr view` echoes the test-controlled current attempt count
+  # ($FAKE_CUR_ATTEMPT, default 0). `pr edit` / `label create` record their
+  # argv to a log and exit 0.
+  cat > "$TMPDIR_TEST/bin/fake-gh" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "pr" && "\$2" == "view" ]]; then
+  echo "\${FAKE_CUR_ATTEMPT:-0}"
+  exit 0
+fi
+echo "\$*" >> "$TMPDIR_TEST/gh-edit-log"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-gh"
+  export DISPATCH_QA_FIX_ATTEMPT_GH_CMD="$TMPDIR_TEST/bin/fake-gh"
+  export DISPATCH_QA_FIX_ATTEMPT_CAP=2
+}
+
+qfa_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_QA_FIX_ATTEMPT_GH_CMD
+  unset DISPATCH_QA_FIX_ATTEMPT_CAP
+  unset FAKE_CUR_ATTEMPT
+}
+
+# --- Test 1: no prior label (CUR=0), default cap 2 → fix, applies attempt-1 ---
+
+echo "Test: no prior label (CUR=0) → fix, applies attempt-1, no remove"
+qfa_setup
+export FAKE_CUR_ATTEMPT=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa CUR=0 exits 0" "0" "$rc"
+assert_eq "qfa CUR=0 stdout is fix" "fix" "$out"
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--add-label dispatch:qa-fix-attempt-1"* \
+   && "$edits" != *"--remove-label"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: CUR=0 applies attempt-1 with no remove"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CUR=0 applies attempt-1 with no remove"
+  echo "    edits: $edits"
+fi
+qfa_teardown
+
+# --- Test 2: CUR=1, default cap 2 → fix, removes attempt-1, applies attempt-2 -
+
+echo "Test: CUR=1 → fix, removes attempt-1 and applies attempt-2"
+qfa_setup
+export FAKE_CUR_ATTEMPT=1
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa CUR=1 exits 0" "0" "$rc"
+assert_eq "qfa CUR=1 stdout is fix" "fix" "$out"
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--remove-label dispatch:qa-fix-attempt-1"* \
+   && "$edits" == *"--add-label dispatch:qa-fix-attempt-2"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: CUR=1 removes attempt-1 and adds attempt-2"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CUR=1 removes attempt-1 and adds attempt-2"
+  echo "    edits: $edits"
+fi
+qfa_teardown
+
+# --- Test 3: CUR=2, default cap 2 (at cap) → escalate, no label writes --------
+
+echo "Test: CUR=2, cap=2 (at cap) → escalate, gh-edit-log empty"
+qfa_setup
+export FAKE_CUR_ATTEMPT=2
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa at-cap exits 0" "0" "$rc"
+assert_eq "qfa at-cap stdout is escalate" "escalate" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: at-cap writes no labels (gh-edit-log empty)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: at-cap writes no labels (gh-edit-log empty)"
+  echo "    edits: $(cat "$TMPDIR_TEST/gh-edit-log")"
+fi
+qfa_teardown
+
+# --- Test 4: DISPATCH_QA_FIX_ATTEMPT_CAP=1, CUR=1 (at cap via env) → escalate -
+
+echo "Test: CAP=1, CUR=1 (at cap via env override) → escalate, gh-edit-log empty"
+qfa_setup
+export DISPATCH_QA_FIX_ATTEMPT_CAP=1
+export FAKE_CUR_ATTEMPT=1
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa cap-env at-cap exits 0" "0" "$rc"
+assert_eq "qfa cap-env at-cap stdout is escalate" "escalate" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: CAP=1 CUR=1 writes no labels (gh-edit-log empty)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CAP=1 CUR=1 writes no labels (gh-edit-log empty)"
+  echo "    edits: $(cat "$TMPDIR_TEST/gh-edit-log")"
+fi
+qfa_teardown
+
+# --- Test 5a: non-integer CUR → exit 2, no label edits, stderr guard msg ------
+
+echo "Test: non-integer CUR → exit 2, gh-edit-log empty, stderr mentions integer guard"
+qfa_setup
+export FAKE_CUR_ATTEMPT=abc
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa non-integer CUR exits 2" "2" "$rc"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"not an integer"* && ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-integer CUR; stderr integer-guard message + no label edit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-integer CUR; stderr integer-guard message + no label edit"
+  echo "    stderr: $err"
+  echo "    gh-edit-log exists: $(test -s "$TMPDIR_TEST/gh-edit-log" && echo yes || echo no)"
+fi
+qfa_teardown
+
+# --- Test 5b: non-integer CAP → exit 2, no label edits, stderr guard msg ------
+
+echo "Test: non-integer CAP → exit 2, gh-edit-log empty, stderr mentions CAP error"
+qfa_setup
+export DISPATCH_QA_FIX_ATTEMPT_CAP=abc
+export FAKE_CUR_ATTEMPT=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa non-integer CAP exits 2" "2" "$rc"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"CAP must be a positive integer"* && ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-integer CAP; stderr CAP-guard message + no label edit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-integer CAP; stderr CAP-guard message + no label edit"
+  echo "    stderr: $err"
+fi
+qfa_teardown
+
+# --- Test 5c: flag-like arg → exit 2, no label edits -------------------------
+
+echo "Test: flag-like arg --repo → exit 2, no label edits"
+qfa_setup
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" --repo 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa flag-like arg exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: flag-like arg; no label edits"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: flag-like arg; no label edits"
+  echo "    edits: $(cat "$TMPDIR_TEST/gh-edit-log")"
+fi
+qfa_teardown
+
+# --- Test 6: create-on-"not found" path (CUR=0) → fix, label create logged ----
+# Replaces the default fake-gh with one whose `pr edit --add-label` simulates
+# a label-not-found failure, forcing the script's `label create` + retry path.
+# The retry `pr edit` also hits the `pr edit` branch and exits 1 (warn path
+# only); it is NOT recorded in gh-edit-log since the fake-gh `pr edit` branch
+# exits before the `echo >> log` fallthrough. The retry is instead asserted via
+# stderr: only the retry-after-create warning carries the `after create`
+# substring, so checking for it guards the retry step against accidental
+# deletion (a dropped retry would remove that warning).
+
+echo "Test: create-on-not-found path (CUR=0) → fix, gh-edit-log contains label create"
+qfa_setup
+export FAKE_CUR_ATTEMPT=0
+# Write a per-test fake-gh that simulates the not-found path.
+cat > "$TMPDIR_TEST/bin/fake-gh" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "pr" && "\$2" == "view" ]]; then
+  echo "\${FAKE_CUR_ATTEMPT:-0}"
+  exit 0
+fi
+if [[ "\$1" == "pr" && "\$2" == "edit" ]]; then
+  echo "Label 'dispatch:qa-fix-attempt-1' not found"
+  exit 1
+fi
+echo "\$*" >> "$TMPDIR_TEST/gh-edit-log"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/bin/fake-gh"
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa create-on-not-found exits 0" "0" "$rc"
+assert_eq "qfa create-on-not-found stdout is fix" "fix" "$out"
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+err=$(cat "$TMPDIR_TEST/stderr" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"label create dispatch:qa-fix-attempt-1"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: create-on-not-found logs label create dispatch:qa-fix-attempt-1"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: create-on-not-found logs label create dispatch:qa-fix-attempt-1"
+  echo "    edits: $edits"
+fi
+# Guard the retry pr edit after `label create` against accidental deletion. The
+# retry's stderr warning is the only one carrying `after create` (the initial
+# add-label failure routes to the label-create branch and emits no warning), so
+# its presence proves the retry ran. A dropped retry would remove this warning.
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"after create"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: create-on-not-found retries pr edit after label create (stderr 'after create')"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: create-on-not-found retries pr edit after label create (stderr 'after create')"
+  echo "    stderr: $err"
+fi
+qfa_teardown
 
 # ============================================================================
 # dispatch project-helper tests (item-add / status-read / status-write)
