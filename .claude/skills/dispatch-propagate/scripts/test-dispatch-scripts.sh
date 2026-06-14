@@ -397,6 +397,17 @@ case "$args" in
     # $STUB_DIR/issue-labels-<num>.json supplies the labels object; absence means
     # the issue carries no labels.
     num=$(echo "$args" | awk '{print $3}')
+    # #1314: a per-issue fail-count sentinel makes the stub emit a transient
+    # (HTTP 503) error and decrement the count, so gh_retry retries. Absent by
+    # default → every existing test is unaffected; exhausted → serve labels.
+    if [[ -f "$STUB_DIR/issue-view-fail-${num}" ]]; then
+      remaining=$(cat "$STUB_DIR/issue-view-fail-${num}")
+      if [[ "$remaining" -gt 0 ]]; then
+        echo $((remaining - 1)) > "$STUB_DIR/issue-view-fail-${num}"
+        echo "HTTP 503: Service Unavailable" >&2
+        exit 1
+      fi
+    fi
     if [[ -f "$STUB_DIR/issue-labels-${num}.json" ]]; then
       cat "$STUB_DIR/issue-labels-${num}.json"
     else
@@ -781,6 +792,33 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf '{"labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/issue-labels-42.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "no PR + non-planned label → plan" "plan" "$result"
+teardown
+
+# 1d. No PR + persistently-transient gh failure → exit non-zero, NOT a silent
+# "plan" (the bug in #1314). Pin GH_RETRY_ATTEMPTS=4 explicitly (matching the
+# gh_retry unit tests) so a fail count of 5 exhausts every attempt regardless of
+# the lib.sh default. The fix exits 1.
+echo "Test: no PR + persistently-transient gh failure → exit 1, not plan"
+setup
+export GH_RETRY_ATTEMPTS=4
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo 5 > "$STUB_DIR/issue-view-fail-42"
+result=$("$TMPDIR_TEST/dispatch-phase" "42" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "transient-exhausted → exit 1" "1" "$rc"
+assert_eq "transient-exhausted → empty stdout (not plan)" "" "$result"
+unset GH_RETRY_ATTEMPTS
+teardown
+
+# 1e. No PR + transient-then-succeed gh → gh_retry retries within the 4-attempt
+# budget and the phase is derived correctly (implement), proving the retry fires
+# and self-heals instead of the old silent "plan" fallback.
+echo "Test: no PR + transient-then-succeed gh → retries, derives implement"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo 2 > "$STUB_DIR/issue-view-fail-42"
+printf '{"labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "transient-then-succeed → implement" "implement" "$result"
 teardown
 
 # 2. Draft + failing CI → fix-checks
@@ -3021,9 +3059,15 @@ printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help
 printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-5500.json"
-# Sub-issue 5500's worktree exists (owned by another session) → trace 55 exits 2.
+# Sub-issue 5500's worktree exists AND a live session owns it → 5500 is claimed,
+# so trace 55 finds no startable leaf and exits 2. Under #1474 selection derives
+# the claimed set forward from live sessions (live_session_claimed_nums), not a
+# backward worktree walk — so the block must be a genuine live claim, not a bare
+# on-disk worktree (a deregistered worktree no longer counts; daemon-UNKNOWN
+# fails OPEN). The live `5500-blocked` session supplies that claim.
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/5500-blocked\nHEAD def456\nbranch refs/heads/5500-blocked\n\n' \
   > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "5500-blocked"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "subtree-blocked issue 55 skipped → issue 66 chosen" "issue 66" "$result"
 teardown
@@ -3039,6 +3083,10 @@ printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPE
   > "$STUB_DIR/issue-5500.json"
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/5500-blocked\nHEAD def456\nbranch refs/heads/5500-blocked\n\n' \
   > "$STUB_DIR/worktree-list.txt"
+# A live session claims 5500 (#1474: forward-derived claimed set). Without it the
+# bare worktree would no longer block, so 55 would resolve to leaf 5500 and the
+# QA-PR fall-through this test exercises would never be reached.
+select_target_fake_claude "5500-blocked"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "subtree-blocked issue 55 → falls through to QA PR" "pr 20 20-qa qa" "$result"
 teardown
@@ -3053,6 +3101,9 @@ printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPE
   > "$STUB_DIR/issue-5500.json"
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/5500-blocked\nHEAD def456\nbranch refs/heads/5500-blocked\n\n' \
   > "$STUB_DIR/worktree-list.txt"
+# A live session claims 5500 (#1474: forward-derived claimed set) so the subtree
+# is genuinely blocked. A bare worktree alone no longer blocks under #1474.
+select_target_fake_claude "5500-blocked"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "subtree-blocked issue 55, no QA PR → empty" "empty" "$result"
 teardown
@@ -4702,12 +4753,16 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "600" "explicit")
 assert_eq "sub-issues chain 600→601 → leaf 601" "601" "$result"
 teardown
 
-# 8. Queue mode: child whose worktree exists and daemon is UNKNOWN (fail-safe → occupied)
-#    is skipped; sibling with no worktree is returned.
-#    The default CLAUDE_AGENTS_CMD points at a non-existent binary so the daemon
-#    is UNKNOWN, which worktree_has_live_session folds into occupied (fail-safe).
-#    Tests 12a/12b cover the true live-vs-orphan distinction.
-echo "Test: queue mode → skips child with worktree (daemon UNKNOWN → occupied), returns sibling"
+# 8. Queue mode: child whose worktree exists but is unclaimed (daemon UNKNOWN, no
+#    reservation marker) is descendable, NOT skipped. Under #1474 the queue-mode
+#    child skip derives from the forward claimed set (claimed_issue_nums), which
+#    FAILS OPEN on a daemon-UNKNOWN: the reserved-only set here is empty, so 701
+#    is unclaimed and the descent returns the lowest leaf 701, not the sibling.
+#    The old worktree-walk folded daemon-UNKNOWN into occupied and skipped 701;
+#    #1474 removed that fold. dispatch-resolve-worktree is the per-target
+#    fail-closed net that still guards a genuine race at launch. Tests 12a/12b
+#    cover the true live-vs-orphan distinction.
+echo "Test: queue mode → child with unclaimed worktree (daemon UNKNOWN) is descendable"
 setup
 # 700 has two open sub-issues: 701 (worktree on disk, daemon unreachable) and 702 (no worktree).
 printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
@@ -4715,11 +4770,11 @@ printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"
   > "$STUB_DIR/issue-701.json"
 printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-702.json"
-# 701's worktree exists; daemon is UNKNOWN (non-existent binary) → fail-safe → occupied.
+# 701's worktree exists; daemon is UNKNOWN (non-existent binary) → fail OPEN → unclaimed.
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
-assert_eq "queue: child 701 (daemon UNKNOWN → occupied) skipped → sibling 702" "702" "$result"
+assert_eq "queue: child 701 (daemon UNKNOWN, unclaimed) descendable → leaf 701" "701" "$result"
 teardown
 
 # 9. Explicit mode: conflicted child returned unchanged (no worktree filtering).
@@ -4737,26 +4792,25 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "explicit")
 assert_eq "explicit: lowest leaf 701 unchanged" "701" "$result"
 teardown
 
-# 10. Queue mode: every child has a worktree and daemon is UNKNOWN (fail-safe → occupied)
-#     → exit 2 with the worktree-conflicted stderr message.
-#     The default CLAUDE_AGENTS_CMD is a non-existent binary; UNKNOWN folds to occupied.
-#     Tests 12c cover the true all-live-owned scenario.
-echo "Test: queue mode → all children have worktrees (daemon UNKNOWN → occupied), exits non-zero"
+# 10. Queue mode: every child has an on-disk worktree but the daemon is UNKNOWN
+#     and no reservation markers exist → the claimed set FAILS OPEN (empty), so
+#     NO child is skipped and the descent returns the lowest startable leaf 701.
+#     Under #1474 a bare worktree no longer blocks descent; the old worktree-walk
+#     folded daemon-UNKNOWN into occupied and exited 2 here. Test 12c covers the
+#     true all-live-owned exit-2 scenario; dispatch-resolve-worktree remains the
+#     per-target fail-closed net at launch.
+echo "Test: queue mode → all children have unclaimed worktrees (daemon UNKNOWN) → lowest leaf"
 setup
 printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
 printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-701.json"
 printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-702.json"
-# Both children's worktrees exist; daemon is UNKNOWN → both treated as occupied.
+# Both children's worktrees exist; daemon is UNKNOWN, ledger empty → fail OPEN → unclaimed.
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\nworktree /worktrees/702-feature\nHEAD ghi789\nbranch refs/heads/702-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
-case "$err_out" in
-  *"worktree-conflicted"*"EXIT="[1-9]*) status="ok" ;;
-  *) status="bad: $err_out" ;;
-esac
-assert_eq "queue: all children occupied (daemon UNKNOWN) → non-zero with stderr message" "ok" "$status"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: all children unclaimed (daemon UNKNOWN) → lowest leaf 701" "701" "$result"
 teardown
 
 # 11. Missing mode → arity error on stderr, exit 1.
@@ -6746,7 +6800,8 @@ lock_teardown() {
   TMPDIR_TEST=""
   STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
-    DISPATCH_LOCK_WAIT_INTERVAL DISPATCH_LOCK_WAIT_TIMEOUT
+    DISPATCH_LOCK_WAIT_INTERVAL DISPATCH_LOCK_WAIT_TIMEOUT \
+    DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT
 }
 
 # Helper: install a fake `claude` whose `agents --json` invocation prints a
@@ -6893,6 +6948,136 @@ lock_fake_claude_sessions "sess-500"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
 assert_eq "re-entry exits 0" "0" "$rc"
 assert_eq "re-entry prints acquired" "acquired" "$out"
+lock_teardown
+
+# --- Test 5b: wedged daemon — probe times out → fail-safe LIVE → busy (#1315) -
+# A foreign holder is recorded; resolving its liveness queries the daemon. A
+# wedged daemon that hangs (and IGNORES SIGTERM) must not deadlock the acquirer:
+# the probe is `timeout -k 5 "$PROBE_TIMEOUT"`, so the SIGKILL backstop guarantees
+# return, the failed probe folds to fail-safe LIVE, and we stay busy. The fake
+# `trap '' TERM; sleep 30` proves the `-k` backstop (plain `timeout` would itself
+# block on a SIGTERM-ignoring child). The EXTERNAL `timeout` turns a regression
+# (no bound, or a missing `-k`) into a visible rc-124 failure instead of a hang.
+
+echo "Test: wedged daemon — probe times out, acquirer stays busy without deadlock"
+lock_setup
+printf '%s\n' "sess-wedged-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-wedged-mine"
+# Slow fake `claude` that ignores SIGTERM and sleeps far past the probe timeout.
+cat > "$TMPDIR_TEST/fake/claude" <<'FAKE'
+#!/usr/bin/env bash
+trap '' TERM
+sleep 30
+FAKE
+chmod +x "$TMPDIR_TEST/fake/claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake/claude"
+export DISPATCH_LOCK_PROBE_TIMEOUT=1
+# External bound: the probe's own SIGKILL fires at PROBE_TIMEOUT+5≈6s, so 12s
+# leaves ample margin on a healthy fix while still catching a real hang.
+out=$(timeout 12 "$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "wedged-daemon: returns within external budget (not rc 124)" "0" "$rc"
+assert_eq "wedged-daemon: prints busy" "busy" "$out"
+assert_eq "wedged-daemon: foreign holder untouched" "sess-wedged-foreign" \
+  "$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)"
+lock_teardown
+
+# --- Test 5c: in-section flock wait times out → busy, lock NOT clobbered (#1315)
+# When the in-section `flock -w "$FLOCK_TIMEOUT"` cannot be acquired in time, the
+# acquirer must report contended (busy) WITHOUT running the read-check-write —
+# falling through unlocked would race and could clobber a live holder. Setup is
+# discriminating: a held flock plus a STALE recorded holder (absent from the
+# registry). Correct (guarded) code → busy, lock unchanged. The fall-through bug
+# would instead reclaim the stale holder and WRITE our sid (acquired + clobbered),
+# which these assertions catch.
+
+echo "Test: in-section flock wait timeout → busy, lock file not clobbered"
+lock_setup
+printf '%s\n' "sess-flock-stale" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-flock-mine"
+# Registry knows only our session → the recorded holder is stale (would be
+# reclaimed if the buggy fall-through ever ran the unlocked read-check-write).
+lock_fake_claude_sessions "sess-flock-mine"
+# FLOCK must strictly exceed PROBE (the startup guard enforces this), so set
+# PROBE=1 and FLOCK=2 — the smallest valid pair that still makes `flock -w 2`
+# time out against the 3s holder below. (The probe never runs here: the flock
+# wait times out before the read-check-write.)
+export DISPATCH_LOCK_PROBE_TIMEOUT=1 DISPATCH_LOCK_FLOCK_TIMEOUT=2
+# Hold the advisory lock on the same file for longer than FLOCK_TIMEOUT so the
+# acquirer's `flock -w 2` genuinely times out.
+( exec 9>>"$DISPATCH_LOCK_FILE"; flock 9; sleep 3 ) &
+flock_holder=$!
+sleep 0.5   # let the holder grab the flock before the acquirer contends
+out=$(timeout 12 "$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+wait "$flock_holder" 2>/dev/null || true
+assert_eq "flock-timeout: returns within external budget" "0" "$rc"
+assert_eq "flock-timeout: prints busy" "busy" "$out"
+assert_eq "flock-timeout: lock file NOT clobbered" "sess-flock-stale" \
+  "$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)"
+lock_teardown
+
+# --- Test 5d: timeout-knob validation — misconfig → exit 2 (#1315) -----------
+# DISPATCH_LOCK_FLOCK_TIMEOUT must strictly exceed DISPATCH_LOCK_PROBE_TIMEOUT
+# (else a waiter abandons a holder that is legitimately mid-probe), and
+# PROBE_TIMEOUT must be a POSITIVE integer (GNU `timeout 0` DISABLES the bound
+# and silently re-opens the unbounded-probe hang). The acquire/wait path
+# validates both at startup and exits 2 with a clear error rather than letting a
+# misconfigured knob degrade to an always-busy or unbounded probe.
+
+echo "Test: FLOCK_TIMEOUT <= PROBE_TIMEOUT → exit 2 with clear error"
+lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-5d-mine"
+lock_fake_claude_sessions "sess-5d-mine"
+export DISPATCH_LOCK_PROBE_TIMEOUT=10 DISPATCH_LOCK_FLOCK_TIMEOUT=10
+err=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"DISPATCH_LOCK_FLOCK_TIMEOUT"*"must exceed"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "FLOCK<=PROBE → error + exit 2" "ok" "$status"
+lock_teardown
+
+echo "Test: PROBE_TIMEOUT=0 → exit 2 (timeout 0 would disable the bound)"
+lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-5d2-mine"
+lock_fake_claude_sessions "sess-5d2-mine"
+export DISPATCH_LOCK_PROBE_TIMEOUT=0
+err=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"DISPATCH_LOCK_PROBE_TIMEOUT"*"positive integer"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "PROBE=0 → error + exit 2" "ok" "$status"
+lock_teardown
+
+# --- Test 5e: shipped defaults (probe 10, flock 15) PASS the guard (#1315) ----
+# Regression guard for the threshold decision: the constraint is `FLOCK > PROBE`
+# (strict), NOT `FLOCK > PROBE + 5` — a guard that rejected its own shipped
+# defaults (15 vs 10+5=15) would be broken. Setting the defaults explicitly must
+# acquire cleanly, not exit 2.
+
+echo "Test: shipped default timeouts (10/15) pass the guard and acquire"
+lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-5e-mine"
+lock_fake_claude_sessions "sess-5e-mine"
+export DISPATCH_LOCK_PROBE_TIMEOUT=10 DISPATCH_LOCK_FLOCK_TIMEOUT=15
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "default timeouts: guard not tripped (exit 0)" "0" "$rc"
+assert_eq "default timeouts: prints acquired" "acquired" "$out"
+lock_teardown
+
+# --- Test 5f: --release is NOT subject to the timeout-knob guard (#1315) ------
+# The probe + in-section flock timeouts are consumed only by acquire/wait;
+# --release uses neither, so a misconfigured knob must NOT make --release fail.
+# Releasing our own recorded sessionId succeeds even with FLOCK <= PROBE set.
+
+echo "Test: --release unaffected by a misconfigured timeout knob"
+lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-5f-mine"
+printf '%s\n' "sess-5f-mine" > "$DISPATCH_LOCK_FILE"
+export DISPATCH_LOCK_PROBE_TIMEOUT=10 DISPATCH_LOCK_FLOCK_TIMEOUT=5
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
+assert_eq "release with bad knobs: exit 0" "0" "$rc"
+assert_eq "release with bad knobs: prints released" "released" "$out"
 lock_teardown
 
 # --- Test 6a: misconfiguration — non-git dir, no DISPATCH_LOCK_FILE ----------
@@ -7912,6 +8097,79 @@ if out=$(claude_agents_list_all); then rc=0; else rc=$?; fi
 assert_eq "list-all non-array: exits 1 (UNKNOWN)" "1" "$rc"
 ca_teardown
 
+# --- live_session_claimed_nums (#1474) ---------------------------------------
+# Selection's forward in-flight claimed half: maps each live-session NAME to its
+# claimed <N>. A phase-worker name `<N>-slug` and an `office-hours-<N>` name each
+# contribute <N>; routers (`dispatch-<short-id>`) and job sessions (diagnose-main,
+# jit names) match neither shape and are excluded. `[]` → empty + rc 0;
+# whitespace/empty raw output → rc 1 (UNKNOWN). Output is uniqued.
+
+# --- Test 30: live_session_claimed_nums — phase-worker <N>-slug → <N> ---------
+echo "Test: live_session_claimed_nums maps a <N>-slug phase worker to <N>"
+ca_setup
+write_fake_claude '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-add-thing"}]' 0
+if out=$(live_session_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "live-claimed phase-worker: exits 0" "0" "$rc"
+assert_eq "live-claimed phase-worker: <N>-slug → 42" "42" "$out"
+ca_teardown
+
+# --- Test 31: live_session_claimed_nums — office-hours-<N> → <N> --------------
+echo "Test: live_session_claimed_nums maps an office-hours-<N> session to <N>"
+ca_setup
+write_fake_claude '[{"sessionId":"s1","pid":1,"status":"busy","name":"office-hours-77"}]' 0
+if out=$(live_session_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "live-claimed office-hours: exits 0" "0" "$rc"
+assert_eq "live-claimed office-hours: office-hours-77 → 77" "77" "$out"
+ca_teardown
+
+# --- Test 32: live_session_claimed_nums — router/job names are excluded -------
+echo "Test: live_session_claimed_nums excludes router and job session names"
+ca_setup
+# A router (dispatch-<short-id>), a diagnose-main job, and a jit-style name —
+# none match `^[0-9]+-` or `^office-hours-[0-9]+$`, so none contribute a claim.
+write_fake_claude '[{"sessionId":"s1","pid":1,"status":"busy","name":"dispatch-ab12cd"},{"sessionId":"s2","pid":2,"status":"busy","name":"diagnose-main"},{"sessionId":"s3","pid":3,"status":"busy","name":"digest"}]' 0
+if out=$(live_session_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "live-claimed router/job: exits 0" "0" "$rc"
+assert_eq "live-claimed router/job: no claims emitted" "" "$out"
+ca_teardown
+
+# --- Test 33: live_session_claimed_nums — empty [] registry → rc 0, no output -
+echo "Test: live_session_claimed_nums returns 0 with empty output for an empty registry"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(live_session_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "live-claimed empty: exits 0 (definite zero, not UNKNOWN)" "0" "$rc"
+assert_eq "live-claimed empty: no claims emitted" "" "$out"
+ca_teardown
+
+# --- Test 34: live_session_claimed_nums — UNKNOWN on a missing/empty daemon ---
+echo "Test: live_session_claimed_nums returns rc 1 (UNKNOWN) on empty raw output"
+ca_setup
+# A fake that exits 0 but prints nothing → whitespace/empty raw output is UNKNOWN
+# (indistinguishable from a down daemon), so the helper returns 1.
+write_fake_claude '' 0
+if out=$(live_session_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "live-claimed empty-raw: exits 1 (UNKNOWN)" "1" "$rc"
+assert_eq "live-claimed empty-raw: prints nothing" "" "$out"
+# And a missing binary is UNKNOWN too.
+CLAUDE_AGENTS_CMD="$CA_DIR/no-such-claude"
+if out=$(live_session_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "live-claimed missing-claude: exits 1 (UNKNOWN)" "1" "$rc"
+ca_teardown
+
+# --- Test 35: live_session_claimed_nums — uniqueness across same-<N> sessions -
+echo "Test: live_session_claimed_nums emits each claimed <N> once across sibling sessions"
+ca_setup
+# Two live sessions on the same <N> (a phase worker and an office-hours session,
+# plus a second <N>-slug) → <N>=10 must appear exactly once; 20 once.
+write_fake_claude '[{"sessionId":"s1","pid":1,"status":"busy","name":"10-a"},{"sessionId":"s2","pid":2,"status":"busy","name":"10-b"},{"sessionId":"s3","pid":3,"status":"busy","name":"office-hours-10"},{"sessionId":"s4","pid":4,"status":"busy","name":"20-c"}]' 0
+if out=$(live_session_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "live-claimed unique: exits 0" "0" "$rc"
+# Sort the output so the assertion is independent of jq's unique() ordering.
+assert_eq "live-claimed unique: 10 and 20 each once" \
+  "$(printf '10\n20')" "$(printf '%s\n' "$out" | sort -n)"
+ca_teardown
+
 # ============================================================================
 # lib-reservation-ledger.sh tests
 # ============================================================================
@@ -8247,6 +8505,81 @@ assert_eq "rl-exists: empty arg → return 1" "1" "$rc"
 # Unsafe basename → return 1 (path-safety guard).
 if reservation_exists "../escape"; then rc=0; else rc=$?; fi
 assert_eq "rl-exists: unsafe basename → return 1" "1" "$rc"
+rl_teardown
+
+# --- Test 14: reserved_claimed_nums — marker basename <N>-slug → <N> ----------
+# The durable (reserved) half of selection's forward claimed set (#1474). Each
+# marker file is named by the reserved worktree basename; the claimed <N> is the
+# basename's numeric prefix. NEVER fails (no daemon dependency): an empty dir
+# emits nothing + rc 0; an absent dir emits nothing + rc 0.
+echo "Test: reserved_claimed_nums maps marker basenames to their numeric prefix"
+rl_setup
+reservation_write "44-add-thing" "44" "sess-a"
+reservation_write "44-other" "44" "sess-b"
+reservation_write "88-feature" "88" "sess-c"
+if out=$(reserved_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "rl-claimed: exits 0" "0" "$rc"
+# Two markers share <N>=44 → it appears once; sort for order-independence.
+assert_eq "rl-claimed: unique <N> from basenames (44, 88)" \
+  "$(printf '44\n88')" "$(printf '%s\n' "$out" | sort -n)"
+rl_teardown
+
+# --- Test 15: reserved_claimed_nums — empty ledger dir → empty, rc 0 ----------
+echo "Test: reserved_claimed_nums returns 0 with empty output for an empty ledger dir"
+rl_setup
+mkdir -p "$DISPATCH_RESERVATION_DIR"   # dir exists but holds no markers
+if out=$(reserved_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "rl-claimed-empty: exits 0" "0" "$rc"
+assert_eq "rl-claimed-empty: no claims emitted" "" "$out"
+rl_teardown
+
+# --- Test 16: reserved_claimed_nums — absent ledger dir → empty, rc 0 ---------
+echo "Test: reserved_claimed_nums returns 0 with empty output when the ledger dir is absent"
+rl_setup
+# rl_setup points DISPATCH_RESERVATION_DIR at a path that does not yet exist.
+if out=$(reserved_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "rl-claimed-absent: exits 0 (never fails)" "0" "$rc"
+assert_eq "rl-claimed-absent: no claims emitted" "" "$out"
+rl_teardown
+
+# --- Test 17: claimed_issue_nums — deduped union of live + reserved -----------
+# Selection's forward-derived claimed set: the deduped union of
+# live_session_claimed_nums and reserved_claimed_nums. A number present in BOTH
+# halves appears once.
+echo "Test: claimed_issue_nums emits the deduped union of live and reserved claims"
+rl_setup
+# Live sessions claim 10 and 20; reservation markers claim 20 (overlap) and 30.
+rl_write_fake_claude '[{"sessionId":"s1","pid":1,"status":"busy","name":"10-a"},{"sessionId":"s2","pid":2,"status":"busy","name":"20-b"}]'
+reservation_write "20-b" "20" "sess-x"
+reservation_write "30-c" "30" "sess-y"
+if out=$(claimed_issue_nums); then rc=0; else rc=$?; fi
+assert_eq "rl-union: exits 0" "0" "$rc"
+# claimed_issue_nums already sort -u's its output; 20 appears once.
+assert_eq "rl-union: deduped union {10,20,30}" "$(printf '10\n20\n30')" "$out"
+rl_teardown
+
+# --- Test 18: claimed_issue_nums — FAILS OPEN on live-UNKNOWN -----------------
+# When the daemon is unqueryable, live_session_claimed_nums returns 1 (UNKNOWN).
+# claimed_issue_nums must NOT abort; it degrades to the reserved-only set, warns
+# on stderr, and returns 0. (The per-target fail-closed net at launch is
+# dispatch-resolve-worktree.)
+echo "Test: claimed_issue_nums fails open to the reserved-only set on live-UNKNOWN"
+rl_setup
+# A missing claude binary → live_session_claimed_nums returns 1 (UNKNOWN) → the
+# union must degrade to the reserved-only set. Only the reservation marker
+# contributes.
+CLAUDE_AGENTS_CMD="$RL_DIR/no-such-claude"
+reservation_write "55-resv" "55" "sess-z"
+err=$(claimed_issue_nums 2>&1 1>/dev/null)
+out=$(claimed_issue_nums 2>/dev/null) && rc=0 || rc=$?
+assert_eq "rl-union-failopen: exits 0 (fail open, never aborts)" "0" "$rc"
+assert_eq "rl-union-failopen: reserved-only set {55}" "55" "$out"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'fail open'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-union-failopen: stderr diagnostic mentions fail open"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-union-failopen: stderr diagnostic mentions fail open"
+fi
 rl_teardown
 
 # ============================================================================
@@ -12270,10 +12603,11 @@ TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--on-calendar=@1000300"* \
    && "$log" == *"--unit=dispatch-reseed-1000300"* \
    && "$log" == *"--collect"* \
+   && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-tick"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: first-fail systemd-run argv (calendar + unit + collect + exec)"
+  PASS=$((PASS + 1)); echo "  PASS: first-fail systemd-run argv (calendar + unit + collect + killmode + exec)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: first-fail systemd-run argv (calendar + unit + collect + exec)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: first-fail systemd-run argv (calendar + unit + collect + killmode + exec)"
   echo "    log: $log"
 fi
 assert_eq "first-fail: state count == 1" "1" "$(tr_state_count)"
@@ -12353,10 +12687,11 @@ assert_eq "backoff: dispatch-tick-recover exits 0" "0" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--on-calendar=@1000600"* \
-   && "$log" == *"--unit=dispatch-reseed-1000600"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: backoff: reseed armed at NOW + 600 (calendar + unit)"
+   && "$log" == *"--unit=dispatch-reseed-1000600"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: backoff: reseed armed at NOW + 600 (calendar + unit + killmode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: backoff: reseed armed at NOW + 600 (calendar + unit)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: backoff: reseed armed at NOW + 600 (calendar + unit + killmode)"
   echo "    log: $log"
 fi
 assert_eq "backoff: state count == 2" "2" "$(tr_state_count)"
@@ -12375,10 +12710,11 @@ assert_eq "reset-window: dispatch-tick-recover exits 0" "0" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--on-calendar=@1000300"* \
-   && "$log" == *"--unit=dispatch-reseed-1000300"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: reset-window: fresh episode armed at NOW + 300"
+   && "$log" == *"--unit=dispatch-reseed-1000300"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: reset-window: fresh episode armed at NOW + 300 (killmode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: reset-window: fresh episode armed at NOW + 300"
+  FAIL=$((FAIL + 1)); echo "  FAIL: reset-window: fresh episode armed at NOW + 300 (killmode)"
   echo "    log: $log"
 fi
 assert_eq "reset-window: state count == 1 (fresh episode)" "1" "$(tr_state_count)"
@@ -12424,10 +12760,11 @@ assert_eq "overflow-clamp: dispatch-tick-recover exits 0" "0" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--on-calendar=@1003600"* \
-   && "$log" == *"--unit=dispatch-reseed-1003600"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: overflow-clamp: backoff clamped to MAX, reseed at NOW + 3600"
+   && "$log" == *"--unit=dispatch-reseed-1003600"* \
+   && "$log" == *"--property=KillMode=process"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: overflow-clamp: backoff clamped to MAX, reseed at NOW + 3600 (killmode)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: overflow-clamp: backoff clamped to MAX, reseed at NOW + 3600"
+  FAIL=$((FAIL + 1)); echo "  FAIL: overflow-clamp: backoff clamped to MAX, reseed at NOW + 3600 (killmode)"
   echo "    log: $log"
 fi
 tr_teardown
@@ -15228,6 +15565,40 @@ else
 fi
 ohs_teardown
 
+# --- Test: open non-newline stdin → hook returns fast (no 1s read stall) (#1519) ---
+echo "Test: strip hook open non-newline stdin → returns fast, still strips label"
+ohs_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+timeout 0.5 "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh" \
+  < <(printf '%s' '{"some":"payload"}'; sleep 1) \
+  >/dev/null 2>&1
+rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 124 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip open-stdin: hook completed before the 0.5s timeout (no 1s read stall)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: hook killed at 0.5s — read is still stalling"
+fi
+# Correctness: the payload is drain-only, so assert the strip still fired.
+pr_edit_log=$(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$pr_edit_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip open-stdin: 'gh pr edit 456 --remove-label' still invoked (drain did not break strip)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: 'gh pr edit 456 --remove-label' NOT invoked (drain broke strip)"
+  echo "    pr-edit-log: $pr_edit_log"
+fi
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip open-stdin: 'gh issue edit 123 --remove-label' still invoked (drain did not break strip)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: 'gh issue edit 123 --remove-label' NOT invoked (drain broke strip)"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+ohs_teardown
+
 # ============================================================================
 # dispatch-stop hook tests
 # ============================================================================
@@ -16109,6 +16480,42 @@ else
 fi
 stop_teardown
 
+# --- Test FC1c: fix-checks marker, same phase, no PR (non-fix-conflicts fix-*) → Branch D park
+# A fix-checks pass with no PR (empty PR_NUM) must NOT take the Branch C no-PR
+# self-close (which is fix-conflicts-specific). Instead it falls through to
+# Branch D (office-hours park). This test FAILS before the elif guard (bare else
+# would self-close) and PASSES after.
+echo "Test: stop hook + same phase + fix-checks (non-fix-conflicts fix-*) + no PR → Branch D park (no Branch C self-close)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+# OMIT find-pr-output → PR_NUM="" (no PR)
+echo "fix-checks" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=fix-checks" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "stop fix-checks-no-pr-fallthrough: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-checks-no-pr-fallthrough: dispatch-apply-office-hours invoked with issue 123 + non-empty reason (Branch D park)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-checks-no-pr-fallthrough: dispatch-apply-office-hours invoked with issue 123 + non-empty reason (Branch D park)"
+  echo "    apply-log: $apply_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop fix-checks-no-pr-fallthrough: spawn invoked exactly once" "1" "$spawn_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-checks-no-pr-fallthrough: self-close not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-checks-no-pr-fallthrough: self-close not invoked"
+fi
+stop_teardown
+
 # --- Test FC2: fix-conflicts marker, same phase, counter >= 3 → Branch D (fuse)
 # A conflict that recurs three times blows the fuse: at attempt 3 the #831
 # invariant falls through to Branch D, parking the issue on dispatch:office-hours
@@ -16265,6 +16672,32 @@ if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: parse-job-done: no label add or remove invoked"
 fi
+stop_teardown
+
+# --- Test: open non-newline stdin → hook returns fast (no 1s read stall) (#1519) ---
+echo "Test: stop hook open non-newline stdin → returns fast, normal disposition still fires"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "fix-checks" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=implement" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+timeout 0.5 "$TMPDIR_TEST/hooks/dispatch-stop.sh" \
+  < <(printf '%s' '{"some":"payload"}'; sleep 1) \
+  >/dev/null 2>&1
+rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 124 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop open-stdin: hook completed before the 0.5s timeout (no 1s read stall)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop open-stdin: hook killed at 0.5s — read is still stalling"
+fi
+# Correctness: the payload is drain-only and unused, so assert the normal
+# disposition still fired (Branch B advance: spawn invoked exactly once) —
+# NOT that the payload was parsed (it never is in this hook).
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "stop open-stdin: spawn invoked exactly once (disposition unaffected)" "1" "$spawn_calls"
 stop_teardown
 
 # ============================================================================
@@ -18518,6 +18951,9 @@ sel_tick_setup() {
            "$TMPDIR_TEST/dispatch-reconcile-ready"
 
   export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
+  # #1495: sync-repair attempt-counter file override (consumed by lib.sh's
+  # sync_repair_* helpers, sourced by dispatch-select-tick's main-branch Step 1).
+  export DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE="$STUB_DIR/sync-repair-attempts"
   export CLAUDE_CODE_SESSION_ID="select-tick-session"
   # Fake `claude agents --json`: our own session is live → first acquisition
   # succeeds and a strict self-release works.
@@ -18530,6 +18966,9 @@ FAKE
   # Single-shot --wait so a busy test never blocks the suite.
   export DISPATCH_LOCK_WAIT_TIMEOUT=0
   export DISPATCH_LOCK_WAIT_INTERVAL=1
+  # #1495: the git stub logs each `merge --ff-only origin/main` here so the
+  # sync-repair defer test can assert the merge was NOT attempted (log absent).
+  export SEL_GIT_MERGE_LOG="$STUB_DIR/git-merge.log"
 
   # Default fake sub-scripts (overridable per test) — land in TMPDIR_TEST so the
   # orchestrator's SCRIPT_DIR resolution finds them.
@@ -18574,6 +19013,15 @@ FAKE
 echo "\$1" >> "$TMPDIR_TEST/logs/schedule-target-reseed.log"
 exit 0
 FAKE
+  # #1495: fake dispatch-escalate-sync-broken — records its invocation and
+  # captures its stdin (the merge stderr) so the at-cap escalation test can
+  # assert it ran. Invoked by dispatch-select-tick via its SCRIPT_DIR (= TMPDIR_TEST).
+  cat > "$TMPDIR_TEST/dispatch-escalate-sync-broken" <<FAKE
+#!/usr/bin/env bash
+cat >> "$TMPDIR_TEST/logs/escalate-stdin.log"
+echo called >> "$TMPDIR_TEST/logs/escalate-sync-broken.log"
+exit 0
+FAKE
   # Sourced helper: provides claude_agents_count_busy_workers (driven by
   # SEL_LIVE_COUNT*) and claude_agents_list_all (driven by SEL_AGENTS_*, used by
   # the reservation-ledger sweep the gate runs before counting). The heredoc is
@@ -18588,6 +19036,16 @@ claude_agents_list_all() {
   [[ -n "${SEL_AGENTS_TSV:-}" ]] && printf '%s\n' "${SEL_AGENTS_TSV}"
   return 0
 }
+claude_sessions_under() {
+  # #1495: default UNKNOWN (rc 1) preserves the pre-#1495 fall-through in
+  # existing main-branch tests. A test sets SEL_SESSIONS_UNDER_RC=0 and
+  # SEL_SESSIONS_UNDER_TSV (tab-separated sid<TAB>pid<TAB>status<TAB>name rows)
+  # to drive a definite session list.
+  local rc="${SEL_SESSIONS_UNDER_RC:-1}"
+  [[ "$rc" != 0 ]] && return "$rc"
+  [[ -n "${SEL_SESSIONS_UNDER_TSV:-}" ]] && printf '%s\n' "${SEL_SESSIONS_UNDER_TSV}"
+  return 0
+}
 FAKE
   # Default empty reservation ledger: the sweep no-ops, reservation_count is 0,
   # and the gap is unchanged from the pre-ledger gate (behavior-preserving).
@@ -18598,7 +19056,8 @@ FAKE
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/dispatch-target-workers" \
            "$TMPDIR_TEST/dispatch-schedule-reseed" \
-           "$TMPDIR_TEST/dispatch-schedule-target-reseed"
+           "$TMPDIR_TEST/dispatch-schedule-target-reseed" \
+           "$TMPDIR_TEST/dispatch-escalate-sync-broken"
 
   # PATH-shimmed git: branch defaults to main; fetch/merge succeed unless a
   # FAKE_GIT_*_FAIL env var is set.
@@ -18607,7 +19066,7 @@ FAKE
 case "$*" in
   "rev-parse --abbrev-ref HEAD") echo "${FAKE_GIT_BRANCH:-main}" ;;
   "fetch origin main") [[ -n "${FAKE_GIT_FETCH_FAIL:-}" ]] && exit 1 ; exit 0 ;;
-  "merge --ff-only origin/main") [[ -n "${FAKE_GIT_MERGE_FAIL:-}" ]] && exit 1 ; exit 0 ;;
+  "merge --ff-only origin/main") echo merge >> "${SEL_GIT_MERGE_LOG:-/dev/null}" ; [[ -n "${FAKE_GIT_MERGE_FAIL:-}" ]] && exit 1 ; exit 0 ;;
   *) exit 0 ;;
 esac
 STUB
@@ -18625,6 +19084,13 @@ case "$args" in
   issue\ list\ *dispatch:main-broken*)
     if [[ -f "$STUB_DIR/main-broken-open.txt" ]]; then
       cat "$STUB_DIR/main-broken-open.txt"
+    fi
+    ;;
+  issue\ list\ *dispatch:sync-broken*)
+    # #1495: open dispatch:sync-broken latch query. Reads sync-broken-open.txt
+    # (one issue number per line; absent → no open latch).
+    if [[ -f "$STUB_DIR/sync-broken-open.txt" ]]; then
+      cat "$STUB_DIR/sync-broken-open.txt"
     fi
     ;;
   issue\ close\ *)
@@ -18671,7 +19137,10 @@ sel_tick_teardown() {
     FAKE_GIT_BRANCH FAKE_GIT_FETCH_FAIL FAKE_GIT_MERGE_FAIL \
     SEL_TARGET_N SEL_LIVE_COUNT SEL_LIVE_COUNT_FAIL \
     SEL_EXHAUSTED SEL_PRIORITY_ONLY \
-    DISPATCH_RESERVATION_DIR SEL_AGENTS_TSV SEL_AGENTS_LIST_FAIL
+    DISPATCH_RESERVATION_DIR SEL_AGENTS_TSV SEL_AGENTS_LIST_FAIL \
+    DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE SEL_GIT_MERGE_LOG \
+    SEL_SESSIONS_UNDER_RC SEL_SESSIONS_UNDER_TSV \
+    DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT
 }
 
 # Run the orchestrator, capturing full stdout; the decision is the last line.
@@ -18784,6 +19253,102 @@ out=$(run_sel_tick)
 assert_eq "re-arm green+no-issue: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "re-arm green+no-issue: no close attempted" "absent" \
   "$([[ -e "$STUB_DIR/gh-issue-close.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- #1495: dirty main → sync-failed, reseed armed, counter bumped -----------
+echo "Test: select-tick failing merge under cap → sync-failed, counter bumped"
+sel_tick_setup
+export FAKE_GIT_MERGE_FAIL=1   # local main cannot ff-merge origin/main
+# Default sessions = UNKNOWN (fall through); no sync-broken latch; counter absent (=0).
+out=$(run_sel_tick)
+assert_eq "sync-failed: decision line" "sync-failed" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "sync-failed: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "sync-failed: reseed armed" "present" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo present || echo absent)"
+assert_eq "sync-failed: counter bumped to 1" "1" \
+  "$(cat "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE")"
+assert_eq "sync-failed: escalate NOT called" "absent" \
+  "$([ -f "$TMPDIR_TEST/logs/escalate-sync-broken.log" ] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- #1495: live sync-repair session → defer (sync-repair-pending), merge NOT run ---
+echo "Test: select-tick live sync-repair session → sync-repair-pending, merge deferred"
+sel_tick_setup
+export SEL_SESSIONS_UNDER_RC=0
+export SEL_SESSIONS_UNDER_TSV=$'sid1\t100\tbusy\tsync-repair'
+out=$(run_sel_tick)
+assert_eq "defer: decision line" "sync-repair-pending" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "defer: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "defer: reseed armed" "present" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo present || echo absent)"
+assert_eq "defer: merge NOT attempted" "absent" \
+  "$([ -f "$STUB_DIR/git-merge.log" ] && echo present || echo absent)"
+assert_eq "defer: counter untouched" "absent" \
+  "$([ -f "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE" ] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- #1495: stopped sync-repair session does NOT defer → falls through to merge ---
+echo "Test: select-tick stopped sync-repair session → no defer, failing merge → sync-failed"
+sel_tick_setup
+export SEL_SESSIONS_UNDER_RC=0
+export SEL_SESSIONS_UNDER_TSV=$'sid1\t100\tstopped\tsync-repair'
+export FAKE_GIT_MERGE_FAIL=1
+out=$(run_sel_tick)
+assert_eq "stopped-defer: decision line" "sync-failed" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "stopped-defer: merge attempted" "present" \
+  "$([ -f "$STUB_DIR/git-merge.log" ] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- #1495: failing merge at attempt cap → escalate + sync-broken, no bump ----
+echo "Test: select-tick failing merge at cap → escalate, sync-broken, counter unchanged"
+sel_tick_setup
+printf '3\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # already at the cap
+export FAKE_GIT_MERGE_FAIL=1
+# No sync-broken latch open yet → the cap branch escalates (find-or-create).
+out=$(run_sel_tick)
+assert_eq "cap-escalate: decision line" "sync-broken" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "cap-escalate: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "cap-escalate: reseed armed" "present" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo present || echo absent)"
+assert_eq "cap-escalate: escalate called" "present" \
+  "$([ -f "$TMPDIR_TEST/logs/escalate-sync-broken.log" ] && echo present || echo absent)"
+assert_eq "cap-escalate: counter unchanged (no bump on terminal branch)" "3" \
+  "$(cat "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE")"
+sel_tick_teardown
+
+# --- #1495: latch already open + failing merge → sync-broken, NO escalate -----
+echo "Test: select-tick failing merge with open latch → sync-broken, no escalate/bump"
+sel_tick_setup
+printf '88\n' > "$STUB_DIR/sync-broken-open.txt"   # latch already open
+export FAKE_GIT_MERGE_FAIL=1
+out=$(run_sel_tick)
+assert_eq "latched: decision line" "sync-broken" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "latched: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "latched: escalate NOT called" "absent" \
+  "$([ -f "$TMPDIR_TEST/logs/escalate-sync-broken.log" ] && echo present || echo absent)"
+assert_eq "latched: counter NOT bumped (latched branch returns first)" "absent" \
+  "$([ -f "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE" ] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- #1495: clean merge + open latch → counter reset, latch closed -----------
+echo "Test: select-tick clean merge with open latch → reset counter, close latch"
+sel_tick_setup
+printf '77\n' > "$STUB_DIR/sync-broken-open.txt"   # stale latch to close
+printf '2\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # stale counter to reset
+# Merge succeeds (default, no FAKE_GIT_MERGE_FAIL) → fall through to select-target
+# (default `empty`).
+out=$(run_sel_tick)
+assert_eq "recover: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "recover: latch closed" \
+  "issue close 77 --comment local main ff-merges clean again; closing the sync-broken latch" \
+  "$(cat "$STUB_DIR/gh-issue-close.log")"
+assert_eq "recover: counter reset" "absent" \
+  "$([ -f "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE" ] && echo present || echo absent)"
 sel_tick_teardown
 
 # --- jit-reminder → passthrough + lock RELEASED (spawned as a bg job) --------
@@ -18914,6 +19479,58 @@ case "$err" in
   *) status="bad: $err" ;;
 esac
 assert_eq "extra args → usage error, exit 2" "ok" "$status"
+sel_tick_teardown
+
+# --- TARGET_N validation: non-numeric → release + exit 2 (#1315) -------------
+# dispatch-target-workers always prints a number in count mode (its own fallback
+# to 1), so a non-numeric TARGET_N here means a broken environment. The guard
+# must release the lock and exit 2 with a clear error rather than letting the
+# arithmetic gate throw "operand expected" and silently skip the cap.
+echo "Test: select-tick non-numeric TARGET_N → release + exit 2"
+sel_tick_setup
+export SEL_TARGET_N="not-a-number"
+err=$("$TMPDIR_TEST/dispatch-select-tick" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"dispatch-target-workers"*"non-numeric"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "non-numeric TARGET_N → error + exit 2" "ok" "$status"
+assert_eq "non-numeric TARGET_N: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- TARGET_N validation: empty stdout → release + exit 2 (#1315) ------------
+# A crashed dispatch-target-workers prints nothing; empty stdout also fails the
+# `^[0-9]+$` regex, so no separate exit-code check is needed. Override the stub
+# to emit nothing on the no-arg query (keeping --exhausted intact).
+echo "Test: select-tick empty TARGET_N → release + exit 2"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-target-workers" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--exhausted" ]]; then echo "${SEL_EXHAUSTED:-ok}"; exit 0; fi
+# no-arg: emit nothing (simulate a crashed dispatch-target-workers)
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-target-workers"
+err=$("$TMPDIR_TEST/dispatch-select-tick" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"dispatch-target-workers"*"non-numeric"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "empty TARGET_N → error + exit 2" "ok" "$status"
+assert_eq "empty TARGET_N: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- TARGET_N validation: 0 is valid, must NOT trip the guard (#1315) --------
+# The regex is `^[0-9]+$` (not `^[1-9]`) — TARGET_N=0 is a legitimate value (the
+# gate compares LIVE_COUNT >= 0). Regression guard for that decision: a 0 target
+# proceeds normally (at-cap concurrency-cap here), it does NOT exit 2.
+echo "Test: select-tick TARGET_N=0 passes the guard (no exit 2)"
+sel_tick_setup
+export SEL_LIVE_COUNT=0 SEL_TARGET_N=0 SEL_EXHAUSTED=ok SEL_PRIORITY_ONLY=empty
+out=$(run_sel_tick) ; rc=$?
+assert_eq "TARGET_N=0: exit 0 (guard not tripped)" "0" "$rc"
+assert_eq "TARGET_N=0: decision line" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
 sel_tick_teardown
 
 # --- gate at cap, not exhausted, no priority item → concurrency-cap ----------
@@ -20524,15 +21141,20 @@ assert_eq "busy: no spawn-job call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
 tick_teardown
 
-# --- empty / sync-failed / resolver-failed / concurrency-cap → exit 0, no materialize ---
-for d in empty sync-failed resolver-failed concurrency-cap; do
-  echo "Test: dispatch-tick $d → exit 0, no materialize"
+# --- empty / resolver-failed / concurrency-cap / sync-repair-pending / sync-broken ---
+# All pass-through dispositions: exit 0, no materialize, no spawn-job. #1495 adds
+# the two sync pass-throughs (sync-repair-pending, sync-broken); sync-failed moved
+# out of this loop because it now spawns the repair job (covered below).
+for d in empty resolver-failed concurrency-cap sync-repair-pending sync-broken; do
+  echo "Test: dispatch-tick $d → exit 0, no materialize/spawn"
   tick_setup
   export TICK_DECISION="$d"
   out=$(run_tick) && rc=0 || rc=$?
   assert_eq "$d: exit 0" "0" "$rc"
   assert_eq "$d: no materialize call" "0" \
     "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
+  assert_eq "$d: no spawn-job call" "0" \
+    "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
   tick_teardown
 done
 
@@ -20546,6 +21168,19 @@ assert_eq "main-broken: spawn-job argv" \
   "--name diagnose-main --cwd $TMPDIR_TEST /dispatch-diagnose-main abc1234" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 assert_eq "main-broken: no materialize call" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- #1495: sync-failed → spawn-job /commit-merge-push (sync-repair), exit 0 ---
+echo "Test: dispatch-tick sync-failed → spawn-job sync-repair /commit-merge-push"
+tick_setup
+export TICK_DECISION="sync-failed"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "sync-failed: exit 0" "0" "$rc"
+assert_eq "sync-failed: spawn-job argv" \
+  "--name sync-repair --cwd $TMPDIR_TEST /commit-merge-push" \
+  "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
+assert_eq "sync-failed: no materialize call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
 tick_teardown
 
@@ -21576,6 +22211,13 @@ if out=$(printf '%s' "$IN6" | "$SCRIPT_DIR/dispatch-review-dedup"); then rc=0; e
 assert_eq "dedup: missing Confidence → exit 0" "0" "$rc"
 assert_eq "dedup: missing Confidence → length 1" "1" "$(printf '%s' "$out" | jq -r 'length')"
 assert_eq "dedup: missing Confidence → Confidence null fallback" "null" "$(printf '%s' "$out" | jq -c '.[0].Confidence')"
+
+# same location, partition splits into separate sub-groups → length 2, each sub-group keeps its own Confidence (no cross-boundary max)
+IN7='{"findings":[{"id":"a","Location":"f.ts:1","Source":"security-review","OWASP":"A03:2021 Injection","STRIDE":"Tampering","Confidence":"high"},{"id":"b","Location":"f.ts:1","Source":"review","OWASP":"","STRIDE":"","Confidence":"low"}],"partition":[["a"],["b"]]}'
+out=$(printf '%s' "$IN7" | "$SCRIPT_DIR/dispatch-review-dedup")
+assert_eq "dedup: partition-split → length 2" "2" "$(printf '%s' "$out" | jq -r 'length')"
+assert_eq "dedup: partition-split → output[0] Confidence preserved (high)" "high" "$(printf '%s' "$out" | jq -r '.[0].Confidence')"
+assert_eq "dedup: partition-split → output[1] Confidence preserved (low)" "low" "$(printf '%s' "$out" | jq -r '.[1].Confidence')"
 
 # ============================================================================
 # === dispatch-review-verify-drop ===
@@ -23037,6 +23679,30 @@ assert_eq "writer W7 → diagnostic message contains DISPATCH_USAGE_SAMPLES_SECR
   "$([[ "$out" == *"DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE"* ]] && echo 1 || echo 0)"
 su_teardown
 
+# W8 — empty DISPATCH_USAGE_SAMPLES_SECRET_NAME → non-zero exit; writer prints
+# "DISPATCH_USAGE_SAMPLES_SECRET_NAME must be non-empty".
+su_setup
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com"
+export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
+export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
+export DISPATCH_USAGE_SAMPLES_SECRET_NAME=''
+if out=$(WRITER "$W1_PAYLOAD" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "writer W8 empty SECRET_NAME → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "writer W8 → diagnostic mentions must be non-empty" "1" "$([[ "$out" == *"DISPATCH_USAGE_SAMPLES_SECRET_NAME must be non-empty"* ]] && echo 1 || echo 0)"
+su_teardown
+
+# W9 — slash in DISPATCH_USAGE_SAMPLES_SECRET_NAME → non-zero exit; writer prints
+# "DISPATCH_USAGE_SAMPLES_SECRET_NAME must not contain a slash".
+su_setup
+export DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE="a@b.com"
+export DISPATCH_USAGE_SAMPLES_GROUP_ID="grp-1"
+export DISPATCH_USAGE_SAMPLES_NOW="$SU_NOW"
+export DISPATCH_USAGE_SAMPLES_SECRET_NAME='a/b'
+if out=$(WRITER "$W1_PAYLOAD" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "writer W9 slash SECRET_NAME → non-zero exit" "1" "$([[ "$rc" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "writer W9 → diagnostic mentions must not contain a slash" "1" "$([[ "$out" == *"DISPATCH_USAGE_SAMPLES_SECRET_NAME must not contain a slash"* ]] && echo 1 || echo 0)"
+su_teardown
+
 # --- SAMPLER cases (fakes only; no real daemon / firebase) ------------------
 
 # S1 — opt-in OFF: DISPATCH_USAGE_SAMPLES_ENABLED unset → exit 0 (no-op); writer
@@ -23294,6 +23960,68 @@ else
   echo "  FAIL: ensure_recover_unit returned non-zero"
 fi
 rm -rf "$eru_tmp"
+
+# ============================================================================
+# ensure_recover_unit: rejects a path containing a space (#1211)
+# ============================================================================
+echo ""
+echo "=== ensure_recover_unit rejects a path with a space ==="
+eru2_tmp=$(mktemp -d)
+mkdir -p "$eru2_tmp/bin"
+cat > "$eru2_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$eru2_tmp/bin/systemctl"
+TOTAL=$((TOTAL + 1))
+if (
+  export DISPATCH_RECOVER_UNIT_DIR="$eru2_tmp/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$eru2_tmp/bin/systemctl"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_recover_unit "$eru2_tmp/has a space"
+); then
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure_recover_unit should have returned non-zero for a path with a space"
+else
+  PASS=$((PASS + 1)); echo "  PASS: ensure_recover_unit returned non-zero for a path with a space"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$eru2_tmp/systemd-user/dispatch-tick-recover.service" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no unit file was written for a path with a space"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unit file was written despite path containing a space"
+fi
+rm -rf "$eru2_tmp"
+
+# ============================================================================
+# ensure_recover_unit: rejects a path containing a double-quote (#1211)
+# ============================================================================
+echo ""
+echo "=== ensure_recover_unit rejects a path with a double-quote ==="
+eru3_tmp=$(mktemp -d)
+mkdir -p "$eru3_tmp/bin"
+cat > "$eru3_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$eru3_tmp/bin/systemctl"
+TOTAL=$((TOTAL + 1))
+if (
+  export DISPATCH_RECOVER_UNIT_DIR="$eru3_tmp/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$eru3_tmp/bin/systemctl"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_recover_unit "$eru3_tmp/has\"a\"quote"
+); then
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure_recover_unit should have returned non-zero for a path with a double-quote"
+else
+  PASS=$((PASS + 1)); echo "  PASS: ensure_recover_unit returned non-zero for a path with a double-quote"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$eru3_tmp/systemd-user/dispatch-tick-recover.service" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no unit file was written for a path with a double-quote"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unit file was written despite path containing a double-quote"
+fi
+rm -rf "$eru3_tmp"
 
 # ============================================================================
 # ensure_daemon_service: durable daemon service install + attach paths (#1197)
@@ -25875,6 +26603,140 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "#1452 F(b) — priority leaf 940 selected" "issue 940" "$result"
 lo_c=$(grep -c "^950$" "$STUB_DIR/issue-blocking-calls.log" 2>/dev/null || true)
 assert_eq "#1452 F(b) — lower-rank root 950 never traced (early-exit)" "0" "$lo_c"
+teardown
+
+# ============================================================================
+# #1474: selection derives the claimed set FORWARD from live sessions +
+# reservations (claimed_issue_nums), dropping the backward worktree walk.
+# ============================================================================
+# dispatch-select-target and dispatch-trace-leaf no longer build a worktree map
+# and stat each candidate's <N>-* worktree; they build CLAIMED_NUMS once from
+# claimed_issue_nums and skip a candidate when num_is_claimed is true. The skip
+# now keys on the BRANCH-PREFIX <N> (PR loop) and the issue/leaf number, derived
+# from the per-tick live + reservation sets, not from any worktree's existence.
+echo "=== #1474: forward-derived claimed set ==="
+
+# E1. Behavior-equivalence edge — office-hours ownership (select-target, ISSUE).
+#     A live office-hours-<N> session marks <N> claimed, so the <N>-* issue
+#     candidate is skipped — even though office-hours sessions carry no <N>-slug
+#     name and no reservation marker. live_session_claimed_nums' second shape
+#     (^office-hours-[0-9]+$) supplies the claim. Issue 66 (unclaimed) is chosen.
+echo "Test: #1474 E1 — live office-hours-<N> marks issue <N> claimed (select-target)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+# No worktrees at all — the claim is purely the live office-hours session.
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "office-hours-55"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1474 E1 — office-hours-55 claims 55 → 66 chosen" "issue 66" "$result"
+teardown
+
+# E1b. Same edge for a PR candidate. A live office-hours-10 session marks the
+#      branch-prefix <N>=10 of PR 10's branch claimed, so PR 10 is skipped and PR
+#      20 is returned. No worktree for either branch — the claim is the live
+#      office-hours session alone.
+echo "Test: #1474 E1b — live office-hours-<N> marks a PR's branch-prefix <N> claimed"
+setup
+UNION='['"$(make_pr_union 10 "10-active-branch" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-other" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "office-hours-10"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1474 E1b — office-hours-10 claims 10 → PR 20 returned" "pr 20 20-other fix-checks" "$result"
+teardown
+
+# E1c. Same edge for a dispatch-trace-leaf queue child. A live office-hours-701
+#      session marks child 701 claimed, so the descent skips it and returns the
+#      sibling 702 — with NO worktree on disk for either child.
+echo "Test: #1474 E1c — live office-hours-<N> marks a trace-leaf queue child claimed"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "office-hours-701"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "#1474 E1c — office-hours-701 claims 701 → sibling 702" "702" "$result"
+teardown
+
+# E2. Behavior-equivalence edge #2 + acceptance criterion #4 — a live ^[0-9]+-
+#     session with NO worktree registered marks <N> claimed and the candidate is
+#     skipped. The worktree-list stub is EMPTY (only the main /repo row), so the
+#     old worktree walk would have found nothing to stat and would NOT have
+#     skipped 55. This single test proves two things at once:
+#       (a) the worktree walk is gone — selection's claim is independent of how
+#           many worktrees are registered, so its per-tick latency no longer
+#           scales with the worktree count; and
+#       (b) the deliberate new skip of a deregistered-worktree live session — a
+#           worker whose worktree was removed but whose session is still live now
+#           correctly marks its <N> claimed (the old walk missed it).
+echo "Test: #1474 E2 — live <N>-slug session with no registered worktree marks <N> claimed"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+# EMPTY worktree list (only the main repo row). No <N>-* worktree exists at all.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+# A live phase-worker named 55-feature whose worktree is NOT registered.
+select_target_fake_claude "55-feature"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1474 E2 — deregistered-worktree live 55 still claimed → 66 chosen" "issue 66" "$result"
+teardown
+
+# E3. UNKNOWN fail-open — a daemon-UNKNOWN snapshot with NO reservation for the
+#     candidate means the candidate is NOT skipped: it is SELECTED. This pins the
+#     chosen behavior: the forward claimed set fails OPEN (claimed_issue_nums
+#     degrades to the reserved-only set on live-UNKNOWN), trading a rare
+#     double-spawn race for never stranding the queue on a transient daemon
+#     outage. The per-target fail-CLOSED net is dispatch-resolve-worktree, which
+#     re-checks liveness at launch and aborts a genuine collision. Here the
+#     default setup CLAUDE_AGENTS_CMD is a missing binary (UNKNOWN) and the ledger
+#     is empty, so issue 55 (with an on-disk worktree to make the old walk skip
+#     it) is selected anyway.
+echo "Test: #1474 E3 — UNKNOWN daemon + no reservation → candidate NOT skipped (fail open)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+# 55 has an on-disk worktree — the OLD worktree walk (with UNKNOWN folded to
+# occupied) would have skipped it. The default setup daemon is UNKNOWN and no
+# reservation marker exists, so the new fail-open path leaves 55 unclaimed.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/55-feature\nHEAD def456\nbranch refs/heads/55-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No select_target_fake_claude call: the default UNKNOWN daemon stands.
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1474 E3 — UNKNOWN + no reservation → 55 selected (fail open)" "issue 55" "$result"
+teardown
+
+# E4. Snapshot-set zero-daemon-call — a selection run with DISPATCH_AGENTS_SNAPSHOT
+#     set makes ZERO live `claude agents` daemon calls: the claimed set derives
+#     entirely from the inherited per-tick snapshot. The select_target_fake_claude
+#     fake logs every live `agents` invocation to stub/claude-agents-calls.log;
+#     this asserts that log stays empty across the run. (Complements #1452 B,
+#     which proves the same for the worktree-liveness predicate; #1474 routes the
+#     whole claimed-set derivation through the same snapshot.)
+echo "Test: #1474 E4 — snapshot-backed selection makes zero live claude agents calls"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Install the logging fake, then point the tick snapshot at a payload that claims
+# 55 via a live office-hours session. The fake must NOT be invoked: every
+# claimed-set read comes from the snapshot file.
+select_target_fake_claude   # installs the logging fake (orphan [] payload, unused)
+snap="$TMPDIR_TEST/agents-snapshot.json"
+printf '[{"sessionId":"s1","pid":1,"status":"busy","name":"office-hours-55","cwd":""}]' > "$snap"
+export DISPATCH_AGENTS_SNAPSHOT="$snap"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1474 E4 — snapshot claims 55 → 66 selected" "issue 66" "$result"
+calls=$([[ -f "$STUB_DIR/claude-agents-calls.log" ]] && wc -l < "$STUB_DIR/claude-agents-calls.log" | tr -d ' ' || echo 0)
+assert_eq "#1474 E4 — zero live claude agents calls during selection" "0" "$calls"
 teardown
 
 # ============================================================================

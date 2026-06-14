@@ -1,8 +1,10 @@
 package parse
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -187,5 +189,111 @@ func TestParseCSV_DuplicateIDDenseCollision(t *testing.T) {
 	// The duplicate X row (row 4) must skip X-2 and X-3 (both taken) and become X-4.
 	if txns[3].TransactionID != "X-4" {
 		t.Errorf("txn 3: ID = %q, want %q", txns[3].TransactionID, "X-4")
+	}
+}
+
+// TestParseCSV_DuplicateIDStress is both an acceptance-criteria document and a
+// real regression guard for the O(K+N) suffix-assignment fix (issue #1374).
+//
+// Why K=N=10000 (not K=1000):
+// At K=1000 the old quadratic code (O(K²+KN)) is still sub-millisecond in
+// practice, so a 1-second bound would pass and the test would document but not
+// guard. At K=N=10000 the old code performs ~2e8 map lookups (several seconds,
+// reliably exceeding the 1 s bound), while the new O(K+N) code does ~4e4
+// operations (microseconds). This asymmetry makes the test a genuine regression
+// guard: accidentally reverting to the quadratic loop causes an immediate
+// failure. Do NOT "simplify" the implementation back to the inner restart loop.
+func TestParseCSV_DuplicateIDStress(t *testing.T) {
+	const K = 10000 // rows with duplicate base ID "X" — drives suffix search
+	const N = 10000 // rows with pre-seeded suffixed IDs "X-2" … "X-(N+1)"
+
+	// Build the CSV: metadata line, then N pre-seeded rows, then K duplicate rows.
+	// The N pre-seeded rows consume X-2 through X-(N+1) as original IDs.
+	// When the K duplicate rows arrive, the suffix counter must skip over all of
+	// them without restarting from 2 each time (the old quadratic behaviour).
+	var sb strings.Builder
+	sb.WriteString("00000000001234567890,2025/06/11,2025/07/10,15000.00,12000.00\n")
+	for i := 2; i <= N+1; i++ {
+		fmt.Fprintf(&sb, "2025/06/16,1.00,\"Seeded row %d\",,\"X-%d\",\"DEBIT\"\n", i, i)
+	}
+	for i := 0; i < K; i++ {
+		fmt.Fprintf(&sb, "2025/06/16,1.00,\"Duplicate row %d\",,\"X\",\"DEBIT\"\n", i)
+	}
+
+	tmp := filepath.Join(t.TempDir(), "stress.csv")
+	if err := os.WriteFile(tmp, []byte(sb.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	result, err := parseCSV(tmp)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("parseCSV: %v", err)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("parseCSV took %v (> 1s): suffix assignment is not O(K+N)", elapsed)
+	}
+
+	want := K + N
+	if len(result.Transactions) != want {
+		t.Fatalf("expected %d transactions, got %d", want, len(result.Transactions))
+	}
+
+	// All returned IDs must be distinct.
+	seen := make(map[string]struct{}, want)
+	for _, txn := range result.Transactions {
+		seen[txn.TransactionID] = struct{}{}
+	}
+	if len(seen) != want {
+		t.Errorf("expected %d distinct IDs, got %d (collisions present)", want, len(seen))
+	}
+
+	t.Logf("elapsed: %v for K=%d duplicate rows + N=%d pre-seeded rows", elapsed, K, N)
+}
+
+// TestParseCSV_AllDuplicateIDsPerformance guards against the O(M^2)
+// suffix-search regression fixed in #1375. With 50000 rows sharing the
+// same transaction ID, the unfixed code takes minutes; the fixed O(M)
+// code finishes in milliseconds. A 2-second wall-clock bound separates
+// them with wide margin and no CI flakiness.
+func TestParseCSV_AllDuplicateIDsPerformance(t *testing.T) {
+	const rows = 50000
+	var b strings.Builder
+	// metadata line: accountID, fromDate, toDate, openingBalance, closingBalance
+	b.WriteString("00000000001234567890,2025/06/11,2025/07/10,15000.00,12000.00\n")
+	for i := 0; i < rows; i++ {
+		b.WriteString("2025/06/16,1.00,\"Row\",,\"X\",\"DEBIT\"\n")
+	}
+
+	tmp := filepath.Join(t.TempDir(), "alldupes.csv")
+	if err := os.WriteFile(tmp, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	result, err := parseCSV(tmp)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("parseCSV: %v", err)
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("parseCSV took %v for %d all-duplicate rows; want < 2s (O(M^2) regression?)", elapsed, rows)
+	}
+	if len(result.Transactions) != rows {
+		t.Fatalf("expected %d transactions, got %d", rows, len(result.Transactions))
+	}
+
+	// Suffix correctness at boundaries.
+	if got := result.Transactions[0].TransactionID; got != "X" {
+		t.Errorf("txn[0].TransactionID = %q, want %q", got, "X")
+	}
+	if got := result.Transactions[1].TransactionID; got != "X-2" {
+		t.Errorf("txn[1].TransactionID = %q, want %q", got, "X-2")
+	}
+	if got := result.Transactions[rows-1].TransactionID; got != "X-50000" {
+		t.Errorf("txn[%d].TransactionID = %q, want %q", rows-1, got, "X-50000")
 	}
 }

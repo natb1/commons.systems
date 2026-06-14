@@ -52,14 +52,17 @@
 #          fix-* failure never reaches Branch C — the fix-* skill skips the marker
 #          for it, so it lands in Branch A (marker absent → park the issue on
 #          office-hours on the first run).
-#      (b) PR_NUM empty (no-PR provisioning backstop, e.g. a fix-conflicts pass
-#          that ran during the implement phase before any PR existed): the attempt
-#          counter lives on a PR label and does not exist yet. Always self-close
-#          and re-seed the chain — the marker being present means the fix-* skill
-#          completed a resolvable conflict. The implement phase that opens the PR
-#          runs on the next tick.
+#      (b) PR_NUM empty AND CURRENT_PHASE is fix-conflicts (the no-PR
+#          provisioning backstop): a fix-conflicts pass that ran during the
+#          implement phase before any PR existed. The attempt counter lives on a
+#          PR label and does not exist yet, so always self-close and re-seed the
+#          chain — the marker being present means fix-conflicts completed a
+#          resolvable conflict. The implement phase that opens the PR runs on the
+#          next tick. This backstop is fix-conflicts-specific: any other fix-*
+#          phase with an empty PR_NUM falls through to Branch D.
 #   D. marker present + same phase + NOT Branch C (i.e. PR-present and attempt
-#      counter >= 3, or a hypothetical same-phase non-fix-* case) — true
+#      counter >= 3, a same-phase fix-* phase other than fix-conflicts with empty
+#      PR_NUM, or a hypothetical same-phase non-fix-* case) — true
 #      non-advancement. Park the ISSUE on a human via dispatch-apply-office-hours
 #      (label + why-comment), spawn router, exit 0.
 #
@@ -96,9 +99,12 @@ if ! [[ "$JOB_NAME" =~ ^[0-9]+- ]]; then
   exit 0
 fi
 
-# Consume the payload (defensive — Stop may pass JSON on stdin). Unused.
+# Drain any buffered single-line JSON payload fast (defensive — Stop may
+# pass JSON on stdin, but this hook never reads a field from it). Short
+# timeout so an open, idle stdin (hook events never close stdin at EOF)
+# returns in ~0.1s rather than stalling a full second on the NUL delimiter.
 PAYLOAD=""
-if read -t 1 -d '' PAYLOAD; then :; fi
+if read -rt 0.1 PAYLOAD; then :; fi
 
 # Resolve issue number from the validated JOB_NAME (<N>-<slug>). Discriminator 2
 # guarantees JOB_NAME matches ^[0-9]+-, so the numeric prefix is non-empty.
@@ -281,12 +287,14 @@ case "$CURRENT_PHASE" in
         exit 0
       fi
       # counter at cap: fall through to Branch D (office-hours park)
-    else
-      # Branch C — no-PR provisioning backstop (e.g. a fix-conflicts pass that
-      # ran during the implement phase, before any PR existed). No attempt
-      # counter exists (it lives on a PR label), so always self-close and
-      # re-seed the chain rather than parking — the marker being present means
-      # the fix-* skill completed successfully.
+    elif [ "$CURRENT_PHASE" = 'fix-conflicts' ]; then
+      # Branch C — no-PR provisioning backstop, specific to fix-conflicts: a
+      # fix-conflicts pass that ran during the implement phase, before any PR
+      # existed. No attempt counter exists (it lives on a PR label), so always
+      # self-close and re-seed the chain rather than parking — the marker being
+      # present means fix-conflicts completed successfully. Any OTHER fix-* phase
+      # with an empty PR_NUM matches neither branch and deliberately falls
+      # through to Branch D (office-hours park).
       spawn_tick
       spawn_sweep
       self_close
