@@ -163,5 +163,13 @@ describe("budget journal entries", () => {
         deleteDoc(doc(db, `budget/${ENV}/journal-entries/existing1`)),
       );
     });
+
+    it("denies unauthenticated delete", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertFails(
+        deleteDoc(doc(db, `budget/${ENV}/journal-entries/existing1`)),
+      );
+    });
   });
 });
