@@ -23260,6 +23260,7 @@ assert_eq "dedup: absent-id partition → present finding emitted" "a" "$(printf
 # ["review", null]. exit/length/id all still pass without the filter, so this
 # sources check is the only one that actually guards the absent-id fix.
 assert_eq "dedup: absent-id partition → sources unpolluted by null member" '["review"]' "$(printf '%s' "$out" | jq -c '.[0].sources')"
+assert_eq "dedup: absent-id partition → absent id zzz never emitted (id or sources)" "0" "$(printf '%s' "$out" | jq -r '[.[] | select(.id == "zzz" or ((.sources // []) | index("zzz")))] | length')"
 
 # empty findings → [], exit 0
 IN5='{"findings":[],"partition":[]}'
