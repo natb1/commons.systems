@@ -5,11 +5,20 @@
 #
 # WHEN it runs:
 #   Invoked by `dispatch-select-tick` Step 1 (running in the `main` worktree, on
-#   branch `main`) after its `git merge --ff-only origin/main` repair attempt has
-#   failed repeatedly — the per-tick repair attempt-counter has hit its cap and
-#   local main still cannot ff-merge origin/main. That state means local main and
-#   origin/main have diverged with a conflict that `/commit-merge-push` could not
-#   resolve, so the dispatch chain's sync precondition is wedged: every tick that
+#   branch `main`) after its origin/main sync attempt has failed repeatedly — the
+#   per-tick repair attempt-counter has hit its cap and local main still cannot be
+#   brought up to date. The caller passes `--reason` to distinguish two wedge
+#   modes:
+#
+#     merge-failed  — `git fetch` succeeded but the subsequent
+#                     `git merge --ff-only origin/main` failed: local main and
+#                     origin/main have diverged with a conflict that
+#                     `/commit-merge-push` could not resolve.
+#     fetch-failed  — `git fetch origin main` itself failed: origin/main could
+#                     not be reached (network / GitHub reachability), so no merge
+#                     was attempted at all.
+#
+#   Either way the dispatch chain's sync precondition is wedged: every tick that
 #   needs an up-to-date local main is blocked.
 #
 #   This script does NOT attempt the repair itself. It files (or refreshes) a
@@ -22,9 +31,11 @@
 # dispatch-diagnose-main/SKILL.md (find-or-create + label create-on-not-found).
 #
 # Input:
-#   The captured stderr of the failing `git merge --ff-only origin/main` is read
-#   from STDIN. The caller invokes:
-#       "$SCRIPT_DIR/dispatch-escalate-sync-broken" <<<"$MERGE_STDERR"
+#   The captured stderr of the failing git command is read from STDIN. Its meaning
+#   depends on `--reason`: for `fetch-failed` it is the `git fetch origin main`
+#   stderr; for `merge-failed` it is the `git merge --ff-only origin/main` stderr.
+#   The caller passes `--reason` and pipes the matching stderr:
+#       "$SCRIPT_DIR/dispatch-escalate-sync-broken" --reason merge-failed <<<"$CAPTURED_STDERR"
 #
 # Output:
 #   On success, the created-or-edited issue number is echoed to stdout (bare).
@@ -48,32 +59,59 @@
 set -euo pipefail
 
 LABEL="dispatch:sync-broken"
-TITLE="dispatch: local main cannot ff-merge origin/main (sync latch)"
 
-# ---- Read the merge stderr from stdin ---------------------------------------
+# ---- Parse --reason ---------------------------------------------------------
 #
-# `MERGE_STDERR=$(cat)` consumes the caller's here-string without interpreting
-# escapes or returning a non-zero EOF status that `set -e` would trip on.
-MERGE_STDERR=$(cat)
+# `--reason fetch-failed|merge-failed` selects the wedge mode. Default to
+# `merge-failed` to preserve existing semantics for any untagged caller. An
+# unrecognized value is a clear error, not a silent fallback (per
+# .claude/rules/code-style.md).
+REASON="merge-failed"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --reason)
+      REASON="${2:-}"
+      shift 2
+      ;;
+    *)
+      echo "dispatch-escalate-sync-broken: unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
 
-# ---- Gather conflict diagnostics from the local repo ------------------------
+case "$REASON" in
+  fetch-failed|merge-failed) ;;
+  *)
+    echo "dispatch-escalate-sync-broken: --reason must be 'fetch-failed' or 'merge-failed', got: $REASON" >&2
+    exit 1
+    ;;
+esac
+
+# ---- Read the captured stderr from stdin ------------------------------------
+#
+# `CAPTURED_STDERR=$(cat)` consumes the caller's here-string without interpreting
+# escapes or returning a non-zero EOF status that `set -e` would trip on. Its
+# meaning depends on $REASON (fetch stderr vs merge stderr).
+CAPTURED_STDERR=$(cat)
+
+# ---- Gather diagnostics from the local repo ---------------------------------
 #
 # This script runs in the main worktree, so the local repo IS local main.
 # `--show-toplevel` derives the worktree path with no hardcoding.
 MAIN_WORKTREE=$(git rev-parse --show-toplevel)
 
-# `git status --porcelain` and `git log origin/main..HEAD` are expected to
-# succeed; a non-zero here signals a broken environment (per
-# .claude/rules/code-style.md, surface it rather than swallow it). They are
-# allowed to produce *empty* output without that being an error.
+# `git status --porcelain` is expected to succeed; a non-zero here signals a
+# broken environment (per .claude/rules/code-style.md, surface it rather than
+# swallow it). It is allowed to produce *empty* output without that being an
+# error.
 GIT_STATUS=$(git status --porcelain)
-GIT_DIVERGENCE=$(git log --oneline origin/main..HEAD)
 
 # ---- Compose the body file --------------------------------------------------
 #
 # The diagnostics may carry shell metacharacters (git/log output, the captured
-# merge stderr). They are written to the body file ONLY and passed with
-# --body-file — never interpolated into the `gh` command line.
+# stderr). They are written to the body file ONLY and passed with --body-file —
+# never interpolated into the `gh` command line.
 if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
   mkdir -p "$CLAUDE_JOB_DIR/tmp"
   BODY_FILE=$(mktemp "$CLAUDE_JOB_DIR/tmp/sync-broken-body.XXXXXX")
@@ -82,39 +120,79 @@ else
 fi
 trap 'rm -f "$BODY_FILE"' EXIT
 
-{
-  echo "Local \`main\` cannot fast-forward-merge \`origin/main\`. The dispatch"
-  echo "chain's sync precondition is wedged: local main and origin/main have"
-  echo "diverged with a conflict that automated repair (\`/commit-merge-push\`)"
-  echo "could not resolve, so local main is no longer ff-mergeable."
-  echo
-  echo "**A human must resolve or abort the merge on the \`main\` worktree**"
-  echo "(\`$MAIN_WORKTREE\`) — resolve the divergence and get local main back to a"
-  echo "state where it ff-merges \`origin/main\` cleanly."
-  echo
-  echo "While this issue is open, the dispatch tick spawns no further"
-  echo "\`sync-repair\` jobs (this issue is the latch that suppresses them)."
-  echo "Closing happens automatically: once local main ff-merges \`origin/main\`"
-  echo "clean again, the tick re-arms and closes this latch."
-  echo
-  echo "## git status --porcelain"
-  echo
-  echo '```'
-  echo "$GIT_STATUS"
-  echo '```'
-  echo
-  echo "## git log --oneline origin/main..HEAD (local divergence)"
-  echo
-  echo '```'
-  echo "$GIT_DIVERGENCE"
-  echo '```'
-  echo
-  echo "## git merge --ff-only origin/main (captured stderr)"
-  echo
-  echo '```'
-  echo "$MERGE_STDERR"
-  echo '```'
-} >"$BODY_FILE"
+if [[ "$REASON" == "merge-failed" ]]; then
+  TITLE="dispatch: local main cannot ff-merge origin/main (sync latch)"
+
+  # `git log origin/main..HEAD` is meaningful only here — on a fetch failure the
+  # origin/main ref is stale, so the divergence listing would be misleading.
+  GIT_DIVERGENCE=$(git log --oneline origin/main..HEAD)
+
+  {
+    echo "Local \`main\` cannot fast-forward-merge \`origin/main\`. The dispatch"
+    echo "chain's sync precondition is wedged: local main and origin/main have"
+    echo "diverged with a conflict that automated repair (\`/commit-merge-push\`)"
+    echo "could not resolve, so local main is no longer ff-mergeable."
+    echo
+    echo "**A human must resolve or abort the merge on the \`main\` worktree**"
+    echo "(\`$MAIN_WORKTREE\`) — resolve the divergence and get local main back to a"
+    echo "state where it ff-merges \`origin/main\` cleanly."
+    echo
+    echo "While this issue is open, the dispatch tick spawns no further"
+    echo "\`sync-repair\` jobs (this issue is the latch that suppresses them)."
+    echo "Closing happens automatically: once local main ff-merges \`origin/main\`"
+    echo "clean again, the tick re-arms and closes this latch."
+    echo
+    echo "## git status --porcelain"
+    echo
+    echo '```'
+    echo "$GIT_STATUS"
+    echo '```'
+    echo
+    echo "## git log --oneline origin/main..HEAD (local divergence)"
+    echo
+    echo '```'
+    echo "$GIT_DIVERGENCE"
+    echo '```'
+    echo
+    echo "## git merge --ff-only origin/main (captured stderr)"
+    echo
+    echo '```'
+    echo "$CAPTURED_STDERR"
+    echo '```'
+  } >"$BODY_FILE"
+else
+  # fetch-failed
+  TITLE="dispatch: cannot reach origin/main to sync local main (sync latch)"
+
+  {
+    echo "The dispatch tick could not reach \`origin/main\` — \`git fetch origin main\`"
+    echo "failed (network / GitHub reachability). No merge was attempted, so local"
+    echo "\`main\` and \`origin/main\` were never compared. The dispatch chain's sync"
+    echo "precondition is wedged: every tick that needs an up-to-date local main is"
+    echo "blocked until origin/main becomes reachable again."
+    echo
+    echo "**A human must restore GitHub reachability from the \`main\` worktree**"
+    echo "(\`$MAIN_WORKTREE\`) — once the tick can \`git fetch origin main\` again it"
+    echo "will ff-merge local main up to date on its own."
+    echo
+    echo "While this issue is open, the dispatch tick spawns no further"
+    echo "\`sync-repair\` jobs (this issue is the latch that suppresses them)."
+    echo "Closing happens automatically: once local main ff-merges \`origin/main\`"
+    echo "clean again, the tick re-arms and closes this latch."
+    echo
+    echo "## git status --porcelain"
+    echo
+    echo '```'
+    echo "$GIT_STATUS"
+    echo '```'
+    echo
+    echo "## git fetch origin main (captured stderr)"
+    echo
+    echo '```'
+    echo "$CAPTURED_STDERR"
+    echo '```'
+  } >"$BODY_FILE"
+fi
 
 # ---- Find-or-create the latch issue -----------------------------------------
 #
@@ -125,7 +203,7 @@ existing=$(gh issue list --label "$LABEL" --state open --json number -q '.[0].nu
 if [[ -n "$existing" ]]; then
   # The edit touches the body only (no --label flag), so it cannot fail with a
   # "label not found" error — no create-on-not-found retry needed here.
-  gh issue edit "$existing" --body-file "$BODY_FILE" >/dev/null
+  gh issue edit "$existing" --title "$TITLE" --body-file "$BODY_FILE" >/dev/null
   echo "$existing"
   exit 0
 fi
