@@ -41,7 +41,8 @@ import { defineSecret, defineString } from "firebase-functions/params";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import type { Firestore } from "firebase-admin/firestore";
-import { mintInstallationToken, truncateForLog } from "./office-hours-sync.js";
+import { mintInstallationToken } from "./office-hours-sync.js";
+import { truncateForLog } from "./log-utils.js";
 
 // Reuse the SAME param names as office-hours-sync.ts so firebase-functions
 // dedupes them across modules (params are keyed by name).
