@@ -140,6 +140,13 @@ Otherwise run all steps in order.
    prod-deploy). Treat such a permission-denied smoke failure as this known caveat,
    not as a product bug.
 
+   Derive a `firestore_caveat` boolean from this check: **true** when the caveat
+   applies — the diff touches `firestore.rules` or a Firestore query module such
+   that smoke tests can fail permission-denied until the standalone rules PR merges
+   — and **false** otherwise. Carry `firestore_caveat` forward: Step 3 uses it to
+   tag a permission-denied smoke FAIL as `main-gated-fail`, and it is passed into
+   the Workflow args (Step 3.5, added in a later edit).
+
    If a browser component is detected, identify the **app dir** (`budget`,
    `fellspiral`, `landing`, or `print`) from the changed paths. If multiple app
    dirs are touched, this is a judgment call needing a human — record it as a
@@ -246,21 +253,65 @@ Otherwise run all steps in order.
    - `needs-human-judgment` → **not walked in any lane**; record it as
      deferred-to-office-hours (a user-input blocker). Do not prompt the user.
 
-   **First-FAIL is terminal across all three lanes:** on the first FAIL in any
-   lane, that item is a bug — stop, finalize (Steps 4 and 5), and escalate per the
-   **Escalation** section. After escalating, the session **stops** — do not restart
-   the QA server or re-run anything. The retry-once → **SKIP** and 3-consecutive-SKIPs
-   → stop-early rules apply to the **walkthrough lane only** (Step 3c).
+   **Per-item lane FAIL is record-and-continue (all three lanes):** a FAIL in the
+   shell-command, single-assertion, or walkthrough lane is **recorded as residue**
+   (see "Residue collection" below) and the lanes **continue** running. Escalation
+   is **deferred to the terminal disposition (Step 6)**, which still fires on any
+   non-empty residue exactly as before — this changes *when* escalation happens,
+   not *whether* it does. Do **not** stop, finalize, or escalate on a single lane
+   FAIL. The retry-once → **SKIP** and 3-consecutive-SKIPs → stop-early rules still
+   apply to the **walkthrough lane only** (Step 3c).
 
-   Write per-item results from every lane (PASS/FAIL/SKIP, console errors, network
-   failures, deferred `needs-human-judgment` items, summary counts) to a single
-   `tmp/qa-fix-results-<n>.txt` (`<n>` is the Step-0-resolved issue number `<N>`).
+   **Cascade-bound:** a FAIL is **not** a SKIP, so it never trips the
+   consecutive-SKIP guard. FAIL cascades are bounded by the finite plan-item count
+   (every item runs at most once), and the SKIP guards still bound
+   interaction-failure cascades. So record-and-continue cannot loop unboundedly.
+
+   This record-and-continue applies to **per-item lane FAILs only** — **not** to
+   the Step 3b pre-QA acceptance check, which stays terminal (see Step 3b).
+
+   **Residue collection.** Write per-item results from every lane (PASS/FAIL/SKIP,
+   console errors, network failures, deferred `needs-human-judgment` items, summary
+   counts) to a single `tmp/qa-fix-results-<n>.txt` (`<n>` is the Step-0-resolved
+   issue number `<N>`). **In addition**, accumulate residue into an **in-memory
+   residue list (consumed by Step 3.5, added in a later edit)** — this list becomes
+   the Workflow `args`. Each residue entry is an object:
+
+   ```
+   { id, title, kind, url_path, expected_outcome, finding, page_text, screenshot_path }
+   ```
+
+   - `id` — a stable identifier for the item (the plan item's number/title).
+   - `kind` — one of exactly **three** values (below). SKIP results are **not**
+     residue; only these three kinds are recorded in the list.
+
+   The three residue kinds:
+
+   - **`fail`** — any lane FAIL. `finding` = the FAIL detail plus the
+     console/network errors already collected at 3c.9.b. For WALKED FAILs
+     (walkthrough lane) also capture `page_text` via `get_page_text` and a
+     best-effort `screenshot_path` (see "Screenshot capture" in 3c.9.b). For
+     shell-command and single-assertion FAILs, `page_text` may be empty.
+   - **`needs-human-judgment`** — every plan-triage deferred item (the
+     `needs-human-judgment` classification from Step 2; the
+     deferred-to-office-hours items noted above). `page_text=''` — it is classified
+     by its nature, not by a browser observation.
+   - **`main-gated-fail`** — a permission-denied smoke FAIL when the
+     `firestore_caveat` derived in Step 1 applies (see below). Tag the residue item
+     `kind:"main-gated-fail"` instead of `"fail"`.
+
+   By the end of Step 3, the in-memory residue list holds one such object per FAIL,
+   per `needs-human-judgment` deferral, and per main-gated permission-denied smoke
+   FAIL — and nothing else.
 
    a. **Shell-command lane.** For each `script-verifiable` item whose `Command` is a
       Bash/vitest/file check, run the `Command` directly via
       Bash and record **PASS** or **FAIL** from its result. No browser, no user
-      prompt. Run this lane **first** — a shell FAIL escalates without ever paying
-      for a browser session.
+      prompt. Run this lane **first** — shell items are the cheapest, so running
+      them first records their residue before any browser session is paid for. A
+      shell FAIL no longer short-circuits the run: it is recorded as residue and the
+      lanes continue (see "Per-item lane FAIL is record-and-continue" at the top of
+      Step 3).
 
    b. **Server-start gate.** Start the QA server **iff any item needs the browser
       at all** — i.e. there is **any** `needs-browser` item **or any
@@ -282,6 +333,12 @@ Otherwise run all steps in order.
            it, finalize the QA session (post the Step 4 summary including the bug,
            run cleanup Step 5), and escalate per the **Escalation** section.
          - **If the check passes** → continue to Step 3c.
+
+         This pre-QA acceptance check **stays terminal**: only **per-item lane
+         FAILs** are record-and-continue (Step 3, three lanes). A broken acceptance
+         suite makes the whole subsequent walkthrough noise, so on acceptance-check
+         failure finalize and escalate **without** running the per-item lanes (Step
+         3c) — the failure short-circuits the lanes.
 
    c. **Browser lanes (single-assertion + walkthrough).** These run against the
       Chrome extension and share the browser setup below; the per-item handling
@@ -308,19 +365,34 @@ Otherwise run all steps in order.
          in an async IIFE if it uses `await`). Record **PASS** or **FAIL** from the
          assertion result. This is **not** the iterative `computer`/`form_input`
          walkthrough loop — no per-item state setup, no retry/SKIP. A FAIL is
-         terminal (see the first-FAIL rule at the top of Step 3).
+         recorded as residue and the lane continues (see "Per-item lane FAIL is
+         record-and-continue" at the top of Step 3).
       9. **Walkthrough lane — for each `needs-browser` item:**
          a. **Set up state.** Navigate to the item's `URL path` (if not "current"). Execute the `Steps` using `computer`, `form_input`, `navigate`. Capture extra GIF frames before and after.
          b. **Check output.** Take a screenshot only on genuine state transitions — not on every iterative debug step. Read `get_page_text` to verify the `Expected outcome`. Check `read_console_messages` (filter for errors). Check `read_network_requests` for 4xx/5xx using the tool's filter parameter (e.g. filter to error status codes); request a count rather than full metadata when only request counts or specific requests matter — do not pull the full request dump.
+
+            **Screenshot capture on a walkthrough FAIL (verify-early-or-fall-back).**
+            On a FAIL in this lane, take a screenshot with the `computer` tool
+            action `screenshot, save_to_disk: true` and record the returned saved
+            path as the residue item's `screenshot_path`. Passing this path to a
+            **separate** Agent/Workflow invocation (the disposition classifier,
+            Step 3.5, added in a later edit) is **UNVERIFIED**: if `save_to_disk`
+            does not return a Readable path, or the disposition subagent cannot Read
+            it, set `screenshot_path=''` and rely on `page_text` only. The plan does
+            **not** hinge on the screenshot path — `page_text` (captured via
+            `get_page_text`) is the always-reliable baseline. This fallback is
+            sanctioned, not a deviation.
          c. **Record the result** — **PASS** or **FAIL**, directly from this
             skill's own checks. **No user prompt.**
             - On interaction failure: retry once, then record **SKIP** and continue.
             - 3 consecutive SKIPs → stop the walkthrough early.
             - Stay on the App URL domain — do not follow external links.
-            - **On the first FAIL** → a bug. Stop, finalize the QA session
-              (Steps 4 and 5), and escalate per the **Escalation** section.
-              After escalating, the session **stops** — do not restart the QA
-              server or re-run the walkthrough.
+            - **On a FAIL** → record it as residue (kind `fail`, capturing the
+              walkthrough-specific evidence — `page_text` via `get_page_text` and a
+              best-effort `screenshot_path` per 3c.9.b) and **continue** the
+              walkthrough. Do not stop or escalate here; escalation is deferred to
+              the terminal disposition (Step 6) on non-empty residue. See
+              "Per-item lane FAIL is record-and-continue" at the top of Step 3.
       10. Stop GIF recording: `gif_creator` with `action: "stop_recording"`. Export to `tmp/qa-fix-walkthrough-<n>.gif` (where `<n>` is the Step-0-resolved issue number `<N>`).
 
 4. **Post the PR-comment summary.**
