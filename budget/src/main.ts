@@ -590,6 +590,37 @@ async function initialize(): Promise<void> {
   if (handle) {
     const perm = await queryReadWritePermission(handle);
     if (perm === "granted") {
+      // One-time migration of pre-fix plaintext handles. Unit 1 stopped
+      // persisting handles for unencrypted files, but a handle persisted
+      // BEFORE that fix can still point at a plaintext .json. Auto-loading it
+      // here would run loadFromFile → storeParsedData, clearing every store and
+      // refilling from the stale on-disk file — silently clobbering this
+      // session's edits once. So peek the file's encryption before auto-loading:
+      // unlink a plaintext handle and show the cached IDB data instead (no
+      // storeParsedData ⇒ no clobber). Encrypted handles auto-load as before.
+      let file: File | null = null;
+      try {
+        file = await readFileFromHandle(handle);
+      } catch {
+        // Stale handle: let loadFromHandle run its unchanged clearFileHandle +
+        // re-link notice path rather than duplicating it here.
+        await loadFromHandle(handle);
+        return;
+      }
+      if (!isEncrypted(await file.arrayBuffer())) {
+        await clearFileHandle();
+        const meta = await getMeta();
+        if (meta) {
+          transition({ source: "local", groupName: meta.groupName });
+        } else {
+          transition({ source: "seed" });
+        }
+        // transition() clears any nav error, so surface the notice afterward.
+        showNavError(
+          "Unlinked an unencrypted file so it won't auto-load. Re-link or export as an encrypted .benc file.",
+        );
+        return;
+      }
       await loadFromHandle(handle);
       return;
     }
