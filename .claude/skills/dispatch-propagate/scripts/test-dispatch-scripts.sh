@@ -26634,6 +26634,35 @@ fi
 git --git-dir="$bw_root/.bare" worktree prune 2>/dev/null || true
 rm -rf "$bw_root"
 
+# 7. two-matching-plan-comments: when the store contains two comments both
+#    authored by plan-bot and both carrying the marker, read-plan must return
+#    the FIRST one without a SIGPIPE-induced exit-141 failure. Guards the #1643
+#    regression: the old `| head -n1` pipeline under `set -euo pipefail` sent
+#    SIGPIPE (exit 141) to the upstream jq process when more than one comment
+#    matched, causing a spurious non-zero exit with no diagnostic.
+wp_two=$(mktemp -d); mkdir -p "$wp_two/bin"
+sed "s|$WP_STORE|$wp_two/store.json|; s|$WP_COUNTER|$wp_two/counter|" \
+  "$wp_root/bin/gh" > "$wp_two/bin/gh"
+chmod +x "$wp_two/bin/gh"
+echo '0' > "$wp_two/counter"
+# Seed two marker comments both authored by plan-bot; write directly (write-plan
+# enforces the at-most-one invariant, so seeding two requires bypassing it).
+MARKER='<!-- dispatch:plan -->'
+jq -nc --arg m "$MARKER" \
+  '[{id:1, body:($m + "\nFIRST PLAN"), user:{login:"plan-bot"}},
+    {id:2, body:($m + "\nSECOND PLAN"), user:{login:"plan-bot"}}]' \
+  > "$wp_two/store.json"
+read_out=$(PATH="$wp_two/bin:$SAVED_PATH" "$WP_READ" 7) && rc=0 || rc=$?
+assert_eq "read-plan: two matching plan comments exit 0 (no SIGPIPE under pipefail, #1643)" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$read_out" == *"FIRST PLAN"* && "$read_out" == *"$MARKER"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan returns first matching comment with marker (two-comment store)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan returns first matching comment with marker (two-comment store)"
+  echo "    actual: '$read_out'"
+fi
+rm -rf "$wp_two"
+
 rm -rf "$wp_root"
 unset DISPATCH_PLAN_AUTHOR
 
