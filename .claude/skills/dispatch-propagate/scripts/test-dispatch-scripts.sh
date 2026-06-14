@@ -27690,10 +27690,13 @@ rm -rf "$bw_root"
 
 # 7. two-matching-plan-comments: when the store contains two comments both
 #    authored by plan-bot and both carrying the marker, read-plan must return
-#    the FIRST one without a SIGPIPE-induced exit-141 failure. Guards the #1643
-#    regression: the old `| head -n1` pipeline under `set -euo pipefail` sent
-#    SIGPIPE (exit 141) to the upstream jq process when more than one comment
-#    matched, causing a spurious non-zero exit with no diagnostic.
+#    the FIRST one without a SIGPIPE-induced exit-141 failure, and write-plan
+#    must PATCH that first comment (not POST a third) and also exit 0. Guards the
+#    #1643 regression: the old `| head -n1` pipeline under `set -euo pipefail`
+#    sent SIGPIPE (exit 141) to the upstream jq process when more than one
+#    comment matched, causing a spurious non-zero exit with no diagnostic.
+#    dispatch-write-plan received the identical `first()` fix at line 65, so a
+#    parallel write sub-case below guards write-plan's copy independently.
 wp_two=$(mktemp -d); mkdir -p "$wp_two/bin"
 sed "s|$WP_STORE|$wp_two/store.json|; s|$WP_COUNTER|$wp_two/counter|" \
   "$wp_root/bin/gh" > "$wp_two/bin/gh"
@@ -27714,6 +27717,23 @@ if [[ "$read_out" == *"FIRST PLAN"* && "$read_out" == *"$MARKER"* ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: read-plan returns first matching comment with marker (two-comment store)"
   echo "    actual: '$read_out'"
+fi
+
+# 7b. write-plan against the same two-matching-comment store: write-plan's own
+#     `first()` scan (line 65) must exit 0 (no SIGPIPE under pipefail) and PATCH
+#     the FIRST matching comment in place — store length stays 2 (no third POST)
+#     and comment id 1's body is updated. The read sub-case above does NOT cover
+#     write-plan's copy of the fix; this guards it independently (#1643).
+if PATH="$wp_two/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"UPDATED PLAN"; then wp_two_rc=0; else wp_two_rc=$?; fi
+assert_eq "write-plan: two matching plan comments exit 0 (no SIGPIPE under pipefail, #1643)" "0" "$wp_two_rc"
+assert_eq "write-plan: two matching plan comments → PATCH first, no third POST (store length 2)" \
+  "2" "$(jq 'length' "$wp_two/store.json")"
+TOTAL=$((TOTAL + 1))
+if jq -e --arg m "$MARKER" '.[] | select(.id == 1) | (.body | contains($m) and contains("UPDATED PLAN"))' "$wp_two/store.json" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: write-plan PATCHes the first matching comment (id 1 body updated)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan PATCHes the first matching comment (id 1 body updated)"
+  echo "    actual: '$(jq -c '.[] | select(.id == 1) | .body' "$wp_two/store.json")'"
 fi
 rm -rf "$wp_two"
 
