@@ -1811,7 +1811,7 @@ FAKE
 # liveness parsing matches production exactly: each named worktree basename gets
 # a live session row (sessionId `s-<name>`). The fake branches on its first arg:
 # `agents` returns the JSON payload (the liveness query); any other invocation —
-# `--resume <id>` or `/office-hours` — prints `LAUNCH: $*` so a test can assert
+# `attach <id>` or `/office-hours` — prints `LAUNCH: $*` so a test can assert
 # which launch fired. Wires both OFFICE_HOURS_CLAUDE_CMD (the entry script's
 # launch target) and CLAUDE_AGENTS_CMD (the selector subprocess's liveness query)
 # at the same fake, so a single binary serves both the query and the launch.
@@ -1831,7 +1831,7 @@ if [[ "${1:-}" == "agents" ]]; then
   cat "$(cd "$(dirname "$0")/.." && pwd)/claude-payload.json"
   exit 0
 fi
-# A launch (`--resume <id>` or `/office-hours`): record which one fired.
+# A launch (`attach <id>` or `/office-hours`): record which one fired.
 echo "LAUNCH: $*"
 exit 0
 FAKE
@@ -1847,7 +1847,7 @@ FAKE
 # style) entry path. Serves `agents` from an oh-registry.json (starts empty); on
 # `--bg` records argv + $PWD and registers {"sessionId":"sess-<name>",...} under
 # --name (so dispatch-spawn-job's verify + dispatch-spawn-office-hours' resolve
-# both find it); prints `LAUNCH: $*` on anything else (the entry's --resume).
+# both find it); prints `LAUNCH: $*` on anything else (the entry's attach).
 office_hours_fresh_fake_claude() {
   printf '[]' > "$TMPDIR_TEST/oh-registry.json"
   cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
@@ -4361,8 +4361,8 @@ assert_eq "qa item selected with its PR number" "office-hours 50 qa 7 -" "$resul
 teardown
 
 # OHST3. The oldest labeled item whose <N>-* worktree has a live session is
-# RESUMED — resume wins over a sessionless newer sibling.
-echo "Test: oldest live-session item is resumed (resume wins over fresh sibling)"
+# ATTACHED — live wins over a sessionless newer sibling.
+echo "Test: oldest live-session item is attached (live wins over fresh sibling)"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
@@ -4371,12 +4371,12 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude "42-x"   # 42's worktree has a live session; 99 sessionless
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "live item resumed over sessionless sibling 99" "resume s-42-x" "$result"
+assert_eq "live item resumed over sessionless sibling 99" "live s-42-x" "$result"
 teardown
 
-# OHST3b. Two labeled items both live → resume the oldest one's session
+# OHST3b. Two labeled items both live → attach the oldest one's session
 # (mirrors OH2 on the entry-point side).
-echo "Test: two live items → oldest resumed"
+echo "Test: two live items → oldest attached"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
@@ -4385,12 +4385,12 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude "42-x" "99-y"   # both worktrees live
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "oldest of two live items resumed" "resume s-42-x" "$result"
+assert_eq "oldest of two live items resumed" "live s-42-x" "$result"
 teardown
 
-# OHST3c. Older sessionless item + newer live item → resume the live one
-# (mirrors OH5: resume wins regardless of age order).
-echo "Test: older sessionless + newer live → resume the live one"
+# OHST3c. Older sessionless item + newer live item → attach the live one
+# (mirrors OH5: live wins regardless of age order).
+echo "Test: older sessionless + newer live → attach the live one"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
@@ -4400,7 +4400,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude "99-y"   # only 99's worktree is live
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "live item resumed regardless of age order" "resume s-99-y" "$result"
+assert_eq "live item resumed regardless of age order" "live s-99-y" "$result"
 teardown
 
 # OHST4. An empty office-hours queue with no parked router prints `empty`. The
@@ -4555,7 +4555,7 @@ echo "=== office-hours (entry point) ==="
 #
 # The single user entry point to the office-hours queue (#759). It is now a thin
 # dispatcher: it calls office-hours-select-target once and switches on the verb —
-# resume / parked-router (exec `claude --resume <sessionId>`), fresh-with-args
+# live / parked-router (exec `claude attach <sessionId>`), fresh-with-args
 # (exec `claude "/office-hours <N> <phase> <pr>"`), or empty (print a queue-empty
 # message and exit WITHOUT launching). These are therefore entry+selector
 # integration tests: setup copies the real selector into TMPDIR_TEST, the
@@ -4564,19 +4564,19 @@ echo "=== office-hours (entry point) ==="
 # case asserts which launch fired (or that none did). The fake's sessionId
 # convention is `s-<worktree-basename>`.
 
-# OH1. One labeled item whose <N>-* worktree has a live session → resume it.
-echo "Test: live-session labeled item → resume its session"
+# OH1. One labeled item whose <N>-* worktree has a live session → attach it.
+echo "Test: live-session labeled item → attach its session"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "42-x"   # 42's worktree has a live session
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "resumes the live session by its sessionId" "LAUNCH: --resume s-42-x" "$result"
+assert_eq "resumes the live session by its sessionId" "LAUNCH: attach s-42-x" "$result"
 teardown
 
-# OH2. Two labeled items both live → resume the oldest one's session.
-echo "Test: two live items → resume the oldest"
+# OH2. Two labeled items both live → attach the oldest one's session.
+echo "Test: two live items → attach the oldest"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
@@ -4584,7 +4584,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "42-x" "99-y"   # both worktrees live
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "resumes the oldest live item's session" "LAUNCH: --resume s-42-x" "$result"
+assert_eq "resumes the oldest live item's session" "LAUNCH: attach s-42-x" "$result"
 teardown
 
 # OH3. Labeled items but none with a live session → launch the fresh /office-hours
@@ -4592,7 +4592,7 @@ teardown
 # via dispatch-spawn-office-hours, then attach the human by resuming the spawned
 # session id. Fixes the originally-reported label leak (#1160): born in the
 # worktree, the session's branch is <N>-..., so the strip hook clears the label.
-echo "Test: labeled item, none live → spawn worker-style --bg then resume"
+echo "Test: labeled item, none live → spawn worker-style --bg then attach"
 setup
 mkdir -p "$TMPDIR_TEST/worktrees/42-x"
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
@@ -4600,8 +4600,8 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD
   "$TMPDIR_TEST/worktrees/42-x" > "$STUB_DIR/worktree-list.txt"
 office_hours_fresh_fake_claude
 result=$("$TMPDIR_TEST/office-hours")
-# Attaches the human by resuming the just-spawned session id.
-assert_eq "fresh path resumes the spawned session id" "LAUNCH: --resume sess-office-hours-42" "$result"
+# Attaches the human by attaching the just-spawned session id.
+assert_eq "fresh path attaches the spawned session id" "LAUNCH: attach sess-office-hours-42" "$result"
 # The spawn was a --bg job named office-hours-<N> running /office-hours.
 mapfile -t oh_argv < "$TMPDIR_TEST/oh-bg-argv"
 assert_eq "fresh: --bg" "--bg" "${oh_argv[0]:-}"
@@ -4616,16 +4616,16 @@ assert_eq "fresh: spawn cwd is the worktree" "$(realpath "$TMPDIR_TEST/worktrees
 teardown
 
 # OH3c. A labeled item whose worktree has a live session named office-hours-<N>
-# (the renamed office-hours session, #1311) → resume it directly. Before the
+# (the renamed office-hours session, #1311) → attach it directly. Before the
 # two-name fix the selector keyed only on the basename and missed it.
-echo "Test: live office-hours-<N> session → selector resumes it directly"
+echo "Test: live office-hours-<N> session → selector attaches it directly"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "office-hours-42"   # the live session is the office-hours-<N> one
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "resumes the live office-hours-<N> session by its sessionId" "LAUNCH: --resume s-office-hours-42" "$result"
+assert_eq "attaches the live office-hours-<N> session by its sessionId" "LAUNCH: attach s-office-hours-42" "$result"
 teardown
 
 # OH3b. Sessionless item with NO <N>-* worktree on disk (the worktree was swept) →
@@ -4655,9 +4655,9 @@ assert_eq "empty queue → queue-empty message, no launch" "office-hours: queue 
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
-# OH5. Mixed: an older sessionless item + a newer live-session item → resume the
-# live one (resume wins over fresh whenever any labeled item is live).
-echo "Test: older sessionless + newer live → resume the live one"
+# OH5. Mixed: an older sessionless item + a newer live-session item → attach the
+# live one (live wins over fresh whenever any labeled item is live).
+echo "Test: older sessionless + newer live → attach the live one"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
@@ -4666,7 +4666,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "99-y"   # only 99's worktree is live
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "resume wins over fresh whenever any labeled item is live" "LAUNCH: --resume s-99-y" "$result"
+assert_eq "live wins over fresh whenever any labeled item is live" "LAUNCH: attach s-99-y" "$result"
 teardown
 
 # OH6. UNKNOWN daemon (claude unqueryable). Under the single fail-safe convention
@@ -4700,9 +4700,9 @@ unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # OH7. The selector emits `parked-router <sessionId> <name>` (a target-less
-# parked dispatch router, #1010) → the entry script resumes that session. The
+# parked dispatch router, #1010) → the entry script attaches that session. The
 # entry script gains the parked-router handling the selector already had.
-echo "Test: parked-router directive → entry resumes the router session"
+echo "Test: parked-router directive → entry attaches the router session"
 setup
 echo '[]' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
@@ -4721,7 +4721,7 @@ exit 0
 FAKE
 chmod +x "$TMPDIR_TEST/bin/claude"
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "parked-router directive resumes the router session" "LAUNCH: --resume s-dispatch-abc123" "$result"
+assert_eq "parked-router directive attaches the router session" "LAUNCH: attach s-dispatch-abc123" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
