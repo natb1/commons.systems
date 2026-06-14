@@ -255,7 +255,7 @@ case "$args" in
     fi
     ;;
   issue\ view\ *\ --json\ title,body,comments,number,state)
-    # issue-blocking / issue-sub-issues call: gh issue view <num> --json ...
+    # issue-blocking call: gh issue view <num> --json ...
     num=$(echo "$args" | awk '{print $3}')
     if [[ -f "$STUB_DIR/issue-${num}.json" ]]; then
       cat "$STUB_DIR/issue-${num}.json"
