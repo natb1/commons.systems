@@ -99,9 +99,12 @@ if ! [[ "$JOB_NAME" =~ ^[0-9]+- ]]; then
   exit 0
 fi
 
-# Consume the payload (defensive — Stop may pass JSON on stdin). Unused.
+# Drain any buffered single-line JSON payload fast (defensive — Stop may
+# pass JSON on stdin, but this hook never reads a field from it). Short
+# timeout so an open, idle stdin (hook events never close stdin at EOF)
+# returns in ~0.1s rather than stalling a full second on the NUL delimiter.
 PAYLOAD=""
-if read -t 1 -d '' PAYLOAD; then :; fi
+if read -rt 0.1 PAYLOAD; then :; fi
 
 # Resolve issue number from the validated JOB_NAME (<N>-<slug>). Discriminator 2
 # guarantees JOB_NAME matches ^[0-9]+-, so the numeric prefix is non-empty.
