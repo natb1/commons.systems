@@ -913,6 +913,22 @@ print_remote_access_block() {
   echo ""
 }
 
+# Sanitize a captured PATH for interpolation into a systemd
+# Environment="PATH=..." line. Three distinct hazards, three reasons:
+#   - newline: a unit file is line-structured, so an embedded newline would
+#     land as a stray [Service] directive.
+#   - double-quote: the Environment= value is double-quoted, so an embedded
+#     quote would prematurely terminate it, leaving a bare token as a stray
+#     directive.
+#   - backslash: systemd applies C-style unescaping to Environment= (and
+#     ExecStart=) values, so a backslash is misread as an escape sequence and
+#     silently corrupts the PATH (#1212).
+# None of the three is ever a valid character in a PATH component, so
+# dropping them is safe.
+strip_unit_env_path() {
+  printf '%s' "${1//[$'\n'\"\\]/}"
+}
+
 # Install the static `dispatch-tick-recover.service` unit file so the tick and
 # reseed launchers can attach `OnFailure=dispatch-tick-recover.service`.
 # OnFailure= references a LOADABLE unit file, not a script — and dispatch
@@ -958,13 +974,9 @@ ensure_recover_unit() {
   local UNIT_PATH="$UNIT_DIR/dispatch-tick-recover.service"
   local SYSTEMCTL_CMD="${DISPATCH_RECOVER_SYSTEMCTL_CMD:-systemctl}"
 
-  # Strip any stray newline OR double-quote from the captured PATH for the same
-  # line-structure reason; a newline in PATH is a broken environment, and a
-  # double-quote would prematurely terminate the double-quoted Environment=
-  # value, leaving an attacker-controlled bare token as a stray [Service]
-  # directive. Neither is ever a valid character in a PATH component, so
-  # dropping them is safe (#1207).
-  local safe_path="${PATH//[$'\n'\"]/}"
+  # Sanitize PATH for the Environment= line (see strip_unit_env_path).
+  local safe_path
+  safe_path=$(strip_unit_env_path "$PATH")
 
   # Environment=PATH=... captures the launching caller's PATH at write time,
   # for the same reason dispatch-spawn-tick passes --setenv=PATH: the systemd
@@ -1081,13 +1093,9 @@ ensure_daemon_service() {
     return 1
   fi
 
-  # Strip any stray newline OR double-quote from the captured PATH for the same
-  # line-structure reason; a newline in PATH is a broken environment, and a
-  # double-quote would prematurely terminate the double-quoted Environment=
-  # value, leaving an attacker-controlled bare token as a stray [Service]
-  # directive. Neither is ever a valid character in a PATH component, so
-  # dropping them is safe (#1207).
-  local safe_path="${PATH//[$'\n'\"]/}"
+  # Sanitize PATH for the Environment= line (see strip_unit_env_path).
+  local safe_path
+  safe_path=$(strip_unit_env_path "$PATH")
 
   local UNIT_DIR="${DISPATCH_DAEMON_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
   local UNIT_PATH="$UNIT_DIR/dispatch-claude-daemon.service"
