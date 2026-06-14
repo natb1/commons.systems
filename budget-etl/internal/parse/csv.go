@@ -72,6 +72,7 @@ func parseCSV(path string) (ParseResult, error) {
 
 	var txns []Transaction
 	used := make(map[string]struct{})
+	nextSuffix := make(map[string]int)
 	for i, row := range records[1:] {
 		if len(row) < 6 {
 			return ParseResult{}, fmt.Errorf("%s: line %d: expected 6 fields, got %d", path, i+2, len(row))
@@ -102,15 +103,23 @@ func parseCSV(path string) (ParseResult, error) {
 		}
 
 		if _, taken := used[txnID]; taken {
-			for n := 2; ; n++ {
-				candidate := fmt.Sprintf("%s-%d", txnID, n)
+			origID := txnID
+			n := nextSuffix[origID]
+			// zero value means first duplicate for this ID; suffixes start at 2
+			if n < 2 {
+				n = 2
+			}
+			for {
+				candidate := fmt.Sprintf("%s-%d", origID, n)
 				_, inUsed := used[candidate]
 				_, inOriginal := original[candidate]
+				n++
 				if !inUsed && !inOriginal {
 					txnID = candidate
 					break
 				}
 			}
+			nextSuffix[origID] = n
 		}
 		used[txnID] = struct{}{}
 
