@@ -12196,6 +12196,17 @@ echo "\$*" >> "$TMPDIR_TEST/oh-log"
 STUB
   chmod +x "$TMPDIR_TEST/bin/fake-oh"
   export DISPATCH_TARGET_RESEED_OFFICE_HOURS_CMD="$TMPDIR_TEST/bin/fake-oh"
+
+  # #1570: dispatch-schedule-target-reseed now calls ensure_recover_unit (lib.sh)
+  # before scheduling. Point its unit dir into the tmp tree and its systemctl at
+  # a no-op stub so the call never writes outside the test sandbox.
+  cat > "$TMPDIR_TEST/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
 }
 
 tr_teardown() {
@@ -12211,6 +12222,7 @@ tr_teardown() {
   unset DISPATCH_TARGET_RESEED_OFFICE_HOURS_CMD
   unset FAKE_CUR_ATTEMPT
   unset FAKE_PR_NUM
+  unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
 }
 
 # --- Test 1: under-cap reseed (CUR=0 → 1) ------------------------------------
@@ -12226,13 +12238,14 @@ log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-target-979-10300"* \
    && "$log" == *"--on-calendar=@10300"* \
+   && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
    && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"dispatch-tick 979"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: under-cap systemd-run argv (unit + calendar + cwd + setenv + KillMode + dispatch-tick 979)"
+  PASS=$((PASS + 1)); echo "  PASS: under-cap systemd-run argv (unit + calendar + OnFailure + KillMode + cwd + setenv + dispatch-tick 979)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap systemd-run argv (unit + calendar + cwd + setenv + KillMode + dispatch-tick 979)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: under-cap systemd-run argv (unit + calendar + OnFailure + KillMode + cwd + setenv + dispatch-tick 979)"
   echo "    log: $log"
 fi
 edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
@@ -12268,13 +12281,14 @@ log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"--unit=dispatch-reseed-target-979-10300"* \
    && "$log" == *"--on-calendar=@10300"* \
+   && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
    && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
    && "$log" == *"--setenv=PATH="* \
    && "$log" == *"--property=KillMode=process"* \
    && "$log" == *"dispatch-tick 979"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: counter-bump systemd-run argv (unit + calendar + cwd + setenv + KillMode + dispatch-tick 979)"
+  PASS=$((PASS + 1)); echo "  PASS: counter-bump systemd-run argv (unit + calendar + OnFailure + cwd + setenv + KillMode + dispatch-tick 979)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: counter-bump systemd-run argv (unit + calendar + cwd + setenv + KillMode + dispatch-tick 979)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: counter-bump systemd-run argv (unit + calendar + OnFailure + cwd + setenv + KillMode + dispatch-tick 979)"
   echo "    log: $log"
 fi
 tr_teardown
@@ -20141,19 +20155,43 @@ assert_eq "explicit '#': decision line" "explicit 88 1" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 sel_tick_teardown
 
-# --- resolver failure (garbage arg) → release + resolver-failed --------------
-echo "Test: select-tick resolver failure → resolver-failed, lock released"
+# --- #1570: transient resolve-arg failure (exit 1) → propagate non-zero ------
+# A transient/infra resolve-arg failure (auth, network) must NOT look like a
+# clean resolver-failed tick: select-tick releases the lock and exits non-zero
+# (2) with no resolver-failed stdout line, so dispatch-tick fails the reseed
+# unit and its OnFailure recover net fires rather than silently dead-ending.
+echo "Test: select-tick transient resolve-arg (exit 1) → exit 2, no resolver-failed, lock released"
 sel_tick_setup
 cat > "$TMPDIR_TEST/dispatch-resolve-arg" <<'FAKE'
 #!/usr/bin/env bash
-echo "error: bad arg" >&2
+echo "error: gh transient failure" >&2
 exit 1
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-resolve-arg"
-out=$(run_sel_tick abc)
-assert_eq "resolver-failed: decision line" "resolver-failed" \
+if out=$(run_sel_tick abc); then rc=0; else rc=$?; fi
+assert_eq "transient resolve-arg: exit 2" "2" "$rc"
+assert_eq "transient resolve-arg: no resolver-failed stdout" "" \
+  "$(printf '%s' "$out")"
+assert_eq "transient resolve-arg: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- #1570: genuine non-resolution (exit 2/3/4) → resolver-failed, exit 0 -----
+# A bad/ambiguous number on the explicit human path (404 / PR with no or many
+# closing issues) keeps its correct resolver-failed → exit 0: there is no
+# autonomous chain to continue.
+echo "Test: select-tick genuine non-resolution (exit 2) → resolver-failed, exit 0, lock released"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-resolve-arg" <<'FAKE'
+#!/usr/bin/env bash
+echo "error: not found (404)" >&2
+exit 2
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-resolve-arg"
+out=$(run_sel_tick abc) ; rc=$?
+assert_eq "resolver-failed (exit 2): exit 0" "0" "$rc"
+assert_eq "resolver-failed (exit 2): decision line" "resolver-failed" \
   "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "resolver-failed: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "resolver-failed (exit 2): lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
 # --- sync failure on main → release + sync-failed ----------------------------

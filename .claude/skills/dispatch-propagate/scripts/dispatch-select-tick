@@ -26,7 +26,12 @@
 #                    attempt-cap is hit (or the latch is already open); a
 #                    dispatch:sync-broken issue is the latch. lock released;
 #                    reseed armed; nothing spawned.
-#   resolver-failed  explicit arg did not resolve to one issue; lock released.
+#   resolver-failed  explicit arg is a genuine non-resolution (dispatch-resolve-arg
+#                    exit 2/3/4: 404, PR with no/many closing issues); lock released.
+#                    Only these three genuine-failure codes emit this. A transient
+#                    resolve-arg failure (exit 1) — or ANY other unexpected non-zero
+#                    code (127 not-found, 124 timeout, 137/143 signal/OOM kill) —
+#                    does NOT emit this; it propagates as exit 2 (see Exit code below).
 #   concurrency-cap  effective-live count (busy workers + outstanding reservations) >= target,
 #                    AND no priority/main-broken item waits to bypass it (or the rate-limit
 #                    window is genuinely exhausted); #725 re-seed scheduled; lock released.
@@ -68,7 +73,8 @@
 # See .claude/rules/sandbox.md.
 #
 # Exit code: 0 on every decision line; 2 on an internal/usage error surfaced on
-# stderr (e.g. non-numeric TARGET_N from dispatch-target-workers).
+# stderr (e.g. non-numeric TARGET_N from dispatch-target-workers, or a
+# dispatch-resolve-arg exit-1 transient/infra failure on the explicit-arg path).
 #
 # NOT set -e: exits are handled explicitly (matching the sibling dispatch
 # scripts).
@@ -523,13 +529,37 @@ fi
 
 # --- Step 3: select the target -----------------------------------------------
 if [[ -n "$ARG" ]]; then
-  if TARGET=$("$SCRIPT_DIR/dispatch-resolve-arg" "$ARG"); then
+  TARGET=$("$SCRIPT_DIR/dispatch-resolve-arg" "$ARG")
+  RESOLVE_RC=$?
+  if (( RESOLVE_RC == 0 )); then
     echo "explicit $TARGET $GAP"
     exit 0
   fi
   release_lock
-  echo "resolver-failed"
-  exit 0
+  case "$RESOLVE_RC" in
+    2|3|4)
+      # Genuine non-resolution: 404 (2), PR with no closing issue (3), PR with
+      # many closing issues (4) — the target is genuinely gone or ambiguous.
+      # Bare exit 0 is correct even on the autonomous target-reseed timer path:
+      # the target cannot be resolved no matter how often we retry, so arming
+      # the OnFailure recovery net would loop the chain indefinitely. The
+      # OnFailure safety net is intentionally reserved for transient (exit 1)
+      # failures, where the target is known to be valid. (#1570)
+      echo "resolver-failed"
+      exit 0
+      ;;
+    *)
+      # Transient / infra resolve-arg failure. exit 1 is the explicit transient
+      # signal (auth, network, usage); any other unexpected non-zero code
+      # (127 command-not-found, 124 timeout, 137/143 signal/OOM kill, future
+      # codes) is treated the same — a crashed or missing resolver is an
+      # infrastructure failure, not a genuine non-resolution. Propagate non-zero
+      # so dispatch-tick exits non-zero and the reseed unit's OnFailure handler
+      # arms a chain continuation rather than silently dead-ending. (#1570)
+      echo "dispatch-select-tick: dispatch-resolve-arg transient/unexpected failure (exit $RESOLVE_RC) on arg '$ARG'; propagating non-zero" >&2
+      exit 2
+      ;;
+  esac
 fi
 
 SELECTED=$("$SCRIPT_DIR/dispatch-select-target") || true

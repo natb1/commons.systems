@@ -224,6 +224,14 @@ else
   MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
 fi
 
+# Install the OnFailure recovery unit (dispatch-tick-recover.service) before
+# scheduling the transient reseed timer. Best-effort: OnFailure= resolves
+# lazily at failure time, so a failure here is non-fatal — a missing target
+# only logs an error if the reseed unit ever fails. We still pass OnFailure=
+# unconditionally below so an abnormal reseed exit is guaranteed a chain
+# continuation (#1570).
+ensure_recover_unit "$MAIN_WORKTREE" || true
+
 # ---- Step 8: schedule the transient timer -----------------------------------
 #
 # The unit name embeds N and the epoch fire time — a repeated call with the same
@@ -271,6 +279,7 @@ trap 'rm -f "$RUN_STDERR"' EXIT
 "$SYSTEMD_RUN_CMD" --user \
      --unit="$UNIT_NAME" \
      --on-calendar="@$FIRE" \
+     --property=OnFailure=dispatch-tick-recover.service \
      --working-directory="$MAIN_WORKTREE" \
      --timer-property=Persistent=true \
      --property=KillMode=process \
