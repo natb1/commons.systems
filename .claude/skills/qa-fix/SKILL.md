@@ -259,9 +259,11 @@ Otherwise run all steps in order.
    **Per-item lane FAIL is record-and-continue (all three lanes):** a FAIL in the
    shell-command, single-assertion, or walkthrough lane is **recorded as residue**
    (see "Residue collection" below) and the lanes **continue** running. Escalation
-   is **deferred to the terminal disposition (Step 6)**, which still fires on any
-   non-empty residue exactly as before — this changes *when* escalation happens,
-   not *whether* it does. Do **not** stop, finalize, or escalate on a single lane
+   is **deferred to the terminal disposition (Step 6)**, which fires on a non-empty
+   residue **after dropping `needs-main`-class items** (those are filed as
+   `blocked_by` follow-ups in Step 3.6 — see Step 6's escalation-set definition).
+   For the `opus-fixable`/`needs-human` classes this changes *when* escalation
+   happens, not *whether* it does. Do **not** stop, finalize, or escalate on a single lane
    FAIL. The retry-once → **SKIP** and 3-consecutive-SKIPs → stop-early rules still
    apply to the **walkthrough lane only** (Step 3c).
 
@@ -450,10 +452,95 @@ Otherwise run all steps in order.
    Consume `result.dispositions` and `result.verify_report` for the Step 4
    PR-comment disposition section.
 
-   **Report-only:** the Workflow classifies and adversarially verifies residue
-   items but this skill does **not** act on the classes. No auto-fix, no change to
-   which items escalate to office-hours. The dispositions are purely informational
-   for the PR comment.
+   **The Workflow itself stays report-only:** it classifies and adversarially
+   verifies residue items and returns the dispositions, but acts on none of them —
+   no auto-fix, no escalation, no filing. All action lives in the **skill**, and
+   only for the `needs-main` class: Step 3.6 (below) files a `blocked_by` follow-up
+   per `needs-main` item and Step 6 drops `needs-main`-class items from the
+   escalation set. `opus-fixable` and `needs-human` items remain report-only — their
+   dispositions are informational for the PR comment and they still escalate to
+   office-hours under Step 6 exactly as before.
+
+3.6. **File needs-main follow-ups.**
+
+   Run this step only when Step 3.5 ran (the residue list was non-empty) **and**
+   `result.dispositions` contains any item with `class === "needs-main"`. Otherwise
+   skip it entirely. This step fires whenever a `needs-main` disposition exists —
+   independent of whether the run will ultimately park on some *other* class. A run
+   that carries both a `needs-main` item and an `opus-fixable`/`needs-human` item
+   files the needs-main follow-up here **and** still escalates in Step 6 for the
+   other item; "drop from escalation" (Step 6) stops a `needs-main` item from
+   triggering a park on its own account, never suppresses a park caused by another
+   class.
+
+   This mirrors `/review-fix` Step 5a/5b — the canonical "file a `blocked_by`
+   follow-up via `/file-issue` from a dispatch phase" recipe (subagent fan-out,
+   `dispatch-followup-exists` skip, `===FILE-ISSUE-RESULTS===` parsing,
+   `ref-github-issues` dependencies API). Procedure:
+
+   1. **Select and join.** Take the dispositions whose `class === "needs-main"`. The
+      dispositions array carries only `{id, title, kind, class, aesthetic, verify,
+      rationale}` — it does **not** carry `url_path` / `expected_outcome` /
+      `finding`. **Join each selected disposition back to the in-memory residue list
+      from Step 3 by `id`** to recover those fields. The result is one object per
+      needs-main item carrying `{id, title, kind, url_path, expected_outcome,
+      finding}` (the disposition contributes `id`/`title`/`kind`; the residue
+      contributes `url_path`/`expected_outcome`/`finding`).
+
+   2. **Compose the follow-ups** by piping the joined needs-main items through the
+      Unit-1 emitter (pure — no network/git/gh, runs sandboxed-fine, no
+      `dangerouslyDisableSandbox` needed for this call):
+
+      ```bash
+      .claude/skills/dispatch-propagate/scripts/dispatch-qa-needs-main-followup "$N" "$PR_NUM" \
+        < <(printf '%s' '<joined needs-main items as JSON array>')
+      ```
+
+      It emits a JSON array of `{identifier, title, body}`, one object per input
+      item (`[]` when the input is empty). The `identifier` is embedded verbatim in
+      `title` so `dispatch-followup-exists` can dedup it.
+
+   3. **File each follow-up.** For each emitted `{identifier, title, body}`, fork a
+      subagent (`subagent_type: general-purpose`, `model: sonnet`). These subagents
+      touch only GitHub and never the working tree, so fan them out in parallel
+      (multiple Agent calls in one message). Each subagent, with
+      `dangerouslyDisableSandbox: true` for the `gh` calls (`gh` needs network — see
+      `.claude/rules/sandbox.md`):
+
+      a. Runs the deterministic existence check on the follow-up's `identifier`:
+
+         ```bash
+         .claude/skills/dispatch-propagate/scripts/dispatch-followup-exists "<identifier>"
+         ```
+
+         If it prints an issue number, an open or closed tracking issue already
+         covers this identifier — **skip** `/file-issue` entirely: do not file, do
+         not re-label. Record the follow-up as already-tracked, mapping its
+         `identifier` to the existing issue `#<N>` for the Step 4 comment, and return
+         that `<N>`. Otherwise proceed.
+
+      b. Invokes `/file-issue` with the follow-up's `title` on the first line and its
+         `body` after. `/file-issue` owns duplicate detection, creation, `@me`
+         assignment, the `help wanted` label, and type + topic classification; it
+         ends with a `===FILE-ISSUE-RESULTS===` … `===FILE-ISSUE-RESULTS-END===`
+         block. Read every `<disposition> <N>` record line between the sentinels — a
+         single machine-keyed follow-up normally yields one record; iterate step c
+         over each if more.
+
+      c. For each created `<followup-N>`, records a `blocked_by` dependency **on
+         `<followup-N>`, targeting the issue under QA `$N`** (the current worktree's
+         issue, resolved in Step 0 — not the issue that implemented this skill).
+         This makes the follow-up `blocked_by` the issue under QA: its manual
+         post-merge verification waits until this PR's issue is done. Use the
+         `ref-github-issues` dependencies API (invoke `ref-github-issues` for the
+         exact `gh api --input` syntax; do not restate it). The follow-up carries
+         `help wanted` + `@me` from the `/file-issue` pipeline and **no**
+         `dispatch:office-hours`.
+
+      d. Returns `<followup-N>` mapped to its `identifier`.
+
+   4. **Capture** each filed-or-existing `<followup-N>` against its `identifier` for
+      the Step 4 filed-follow-ups sub-list.
 
 4. **Post the PR-comment summary.**
 
@@ -464,22 +551,31 @@ Otherwise run all steps in order.
    Step-0-resolved issue number `<N>`). Include:
    - Items executed (across all three lanes).
    - PASS / FAIL / SKIP counts.
-   - **Deferred to office-hours** — each `needs-human-judgment` item, listed so the
-     `/office-hours` walkthrough can pick them up.
+   - **Deferred to office-hours** — each `needs-human-judgment` item **whose
+     disposition class is not `needs-main`**, listed so the `/office-hours`
+     walkthrough can pick them up. A `needs-human-judgment` item the triage
+     classified `needs-main` is filed as a follow-up per Step 3.6 instead (see the
+     filed-follow-ups sub-list below) and is **not** deferred to office-hours.
    - List of bugs found (if any), each with the item title and the finding.
    - When the walkthrough lane ran: the GIF filename (`tmp/qa-fix-walkthrough-<n>.gif`).
-   - **Disposition triage (report-only)** — include this section only when the
+   - **Disposition triage** — include this section only when the
      residue list was non-empty (i.e. Step 3.5 ran). For each residue item, list
      its `class` from `result.dispositions`. For non-aesthetic `needs-human`
      items (where `dispositions[item].aesthetic === false`), include the verify
      verdict and rationale from the matching entry in `result.verify_report`
      (matched by `id`). For aesthetic `needs-human` items, use
      `dispositions[item].verify` (which will be `n/a`) directly — no
-     `verify_report` entry exists for them. Add explicit prose: **"This section
-     is informational only. Every residue item still escalates to office-hours
-     below, exactly as before. The disposition triage changes no terminal
-     behavior."** If the residue list was empty (Step 3.5 was skipped), omit this
-     section entirely.
+     `verify_report` entry exists for them. Add explicit prose: **"`needs-main`
+     items are filed as `blocked_by` follow-ups (Step 3.6) and dropped from the
+     escalation set, so they do not park this PR. `opus-fixable` and `needs-human`
+     items remain report-only here and still escalate to office-hours below,
+     exactly as before."** If the residue list was empty (Step 3.5 was skipped),
+     omit this section entirely.
+   - **Filed follow-ups** — include this sub-list only when Step 3.6 ran. For each
+     `needs-main` item, list its follow-up: `#<followup-N>` (newly filed), or
+     "already tracked by #<N>" (an existing tracking issue was found via
+     `dispatch-followup-exists`), using the `identifier`→`<N>` mappings Step 3.6
+     captured.
 
    Post via (use `dangerouslyDisableSandbox: true` — the script invokes `gh`):
    ```bash
@@ -498,15 +594,38 @@ Otherwise run all steps in order.
 
 6. **Terminal disposition.**
 
-   This PR is report-only: the disposition triage records each residue item's
-   class in the Step 4 comment but changes no terminal behavior — every residue
-   item (FAIL, needs-human-judgment, main-gated fail) still escalates to
-   office-hours exactly as before.
+   The disposition triage now routes `needs-main`-class residue out of the
+   terminal escalation: each `needs-main` item was filed as a `blocked_by`
+   follow-up in Step 3.6 and is **dropped** from the escalation set below.
+   `opus-fixable` and `needs-human` residue items still escalate to office-hours
+   exactly as before.
 
-   **Clean autonomous pass** — every `script-verifiable` and `needs-browser` item
-   PASSed, zero `needs-human-judgment` items were recorded, and no bug was found:
+   **Escalation set.** Define it as:
 
-   Apply the `dispatch:qa-done` label via `dispatch-complete-phase` (use
+   - every **residue item whose final disposition class is NOT `needs-main`** —
+     i.e. `opus-fixable` and `needs-human` items, which still escalate (the skill
+     does not yet act on those classes); **plus**
+   - the **non-residue terminal blockers** that already escalate, unchanged. These
+     stay terminal — only `needs-main`-class residue is dropped from the set:
+     - a malformed or empty triage plan (Step 3 plan validation),
+     - an `origin/main` merge conflict (Step 0.5),
+     - the Chrome extension unavailable so browser items could not run (Step 3c),
+     - a multi-app demo choice (Step 1),
+     - a failed pre-QA acceptance check (Step 3b, a bug needing a plan-mode fix).
+
+   `needs-main`-class residue items are in **neither** part of the set — they were
+   filed as follow-ups in Step 3.6.
+
+   **Clean autonomous pass** — the escalation set (defined above) is **empty**.
+   This now holds even for a run whose only residue items all classified
+   `needs-main`: those were filed as `blocked_by` follow-ups in Step 3.6 and
+   dropped, leaving the escalation set empty. (It also holds, as before, when every
+   `script-verifiable` and `needs-browser` item PASSed, zero `needs-human-judgment`
+   items were recorded, no bug was found, and none of the non-residue blockers
+   fired.)
+
+   On a clean pass apply the `dispatch:qa-done` label via `dispatch-complete-phase`
+   (use
    `dangerouslyDisableSandbox: true` — it invokes `gh`):
 
    ```bash
@@ -530,12 +649,16 @@ Otherwise run all steps in order.
 
    Then **stop**. The Stop hook reads the marker and advances the chain.
 
-   **User-input blocker** — the triage plan was malformed or empty (Step 3 plan
-   validation), OR any `needs-human-judgment` item was recorded, OR a
-   `script-verifiable` or `needs-browser` item FAILed, OR the pre-QA acceptance
-   check failed (a bug needing a plan-mode fix), OR the Chrome extension was
-   unavailable so browser items could not run (Step 3c), OR a multi-app demo choice
-   arose (Step 1), OR the `origin/main` merge conflicted (Step 0.5):
+   **User-input blocker** — the escalation set (defined above) is **non-empty**.
+   This fires when any member of the set is present: an `opus-fixable` or
+   `needs-human` residue item (a `script-verifiable`/`needs-browser` FAIL or a
+   `needs-human-judgment` item that did **not** classify `needs-main`), OR any
+   non-residue blocker — a malformed or empty triage plan (Step 3 plan
+   validation), the pre-QA acceptance check failed (a bug needing a plan-mode fix,
+   Step 3b), the Chrome extension unavailable so browser items could not run (Step
+   3c), a multi-app demo choice (Step 1), or the `origin/main` merge conflicted
+   (Step 0.5). A `needs-main`-class residue item is **not** a member — it was filed
+   as a follow-up in Step 3.6 and does not, on its own, trigger this blocker.
 
    Do **not** apply `dispatch:qa-done`. Escalate per the **Escalation** section
    below and **stop**.

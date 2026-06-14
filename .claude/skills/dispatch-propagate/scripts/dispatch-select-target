@@ -179,6 +179,7 @@ QA_MODE=false
 HEALTH_ONLY=false
 MAIN_BROKEN_SHA_ONLY=false
 PRIORITY_ONLY=false
+DEBUG_CLASSIFY=false
 TOP=1
 TOP_EXPLICIT=false
 declare -A EXCLUDED=()
@@ -189,6 +190,7 @@ while [[ $# -gt 0 ]]; do
     --health-only) HEALTH_ONLY=true; shift ;;
     --main-broken-sha) MAIN_BROKEN_SHA_ONLY=true; shift ;;
     --priority-only) PRIORITY_ONLY=true; shift ;;
+    --debug-classify) DEBUG_CLASSIFY=true; shift ;;
     --top)
       shift
       if [[ $# -eq 0 || ! "$1" =~ ^[1-9][0-9]*$ ]]; then
@@ -576,14 +578,29 @@ CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
 # Same priority list as a JSON array, for category_of_labels' jq filter.
 TOPIC_CATEGORIES_JSON=$(printf '%s\n' "${TOPIC_CATEGORIES[@]}" | jq -Rcn '[inputs]')
 
+# Single source of the category/priority/enhancement label expressions. Each
+# def takes a JSON array of {name:...} label objects as input and derives
+# [.[].name] itself, so callers pass the raw label array. category_of_labels /
+# has_priority_in_labels wrap these, and the ISSUE_SORTED filter below calls
+# the same defs — there is now exactly one copy of each expression.
+# has_enhancement is called only by ISSUE_SORTED (the enhancement axis is on the
+# issue-selection path only — PRs are never enhancement-classified), but lives
+# here so the `enhancement` label expression has a single source too.
+JQ_LABEL_DEFS='
+  def has_priority: [.[].name] | if index("priority") then 1 else 0 end;
+  def has_enhancement: [.[].name] | if index("enhancement") then 1 else 0 end;
+  def category_of($cats):
+    [.[].name] as $names
+    | first($cats[] | select(. as $c | $names | index($c))) // "other";
+'
+
 # Highest-priority topic category among a JSON array of {name:...} label
 # objects — the first TOPIC_CATEGORIES entry that appears as an exact label
 # name, else "other". Exact match, so the phase label "dispatch:reviewed" never
 # reads as topic "dispatch".
 category_of_labels() {
-  printf '%s' "$1" | jq -r --argjson cats "$TOPIC_CATEGORIES_JSON" '
-    [.[].name] as $names
-    | first($cats[] | select(. as $c | $names | index($c))) // "other"'
+  printf '%s' "$1" | jq -r --argjson cats "$TOPIC_CATEGORIES_JSON" \
+    "$JQ_LABEL_DEFS"' category_of($cats)'
 }
 
 # Union of a PR's closing issues' labels into a JSON array of {name:...} label
@@ -597,7 +614,7 @@ pr_combined_labels() {
 
 # 1 if the label set contains an exact "priority" label, else 0.
 has_priority_in_labels() {
-  printf '%s' "$1" | jq -r '[.[].name] | if index("priority") then 1 else 0 end'
+  printf '%s' "$1" | jq -r "$JQ_LABEL_DEFS"' has_priority'
 }
 
 # Top-N ranked PRs per (category, priority-bit, phase): key =
@@ -892,28 +909,46 @@ done < <(printf '%s' "$PR_LIST" | jq -r '
 # global early-exit (#1452). The enh bit (1 if the issue carries `enhancement`,
 # else 0) nests BETWEEN priority and topic-category: within a priority tier all
 # non-enhancement issues (enh=0) sort before any enhancement issue (enh=1), and
-# enhancement issues then order by the existing topic ladder. The
-# category/priority/cat-rank/enh expressions are the exact ones used by
-# category_of_labels / has_priority_in_labels / the inline `index(...)` idioms /
-# the CATEGORIES iteration order, so bucket keys are unchanged. (1 - .pri) sorts
+# enhancement issues then order by the existing topic ladder. pri/enh/catname are
+# computed by the shared JQ_LABEL_DEFS defs — the same defs category_of_labels /
+# has_priority_in_labels call — so the two sites cannot drift; cat-rank is the
+# CATEGORIES iteration order. Bucket keys are unchanged. (1 - .pri) sorts
 # priority=1 first; .enh sorts non-enhancement (0) first; jq sort_by is stable
 # and createdAt is an ISO string sorting chronologically, so within a
 # (pri, enh, cat-rank) group roots stay oldest-first — byte-identical to the old
 # order for that group. The TSV now carries the precomputed pri/enh/cat-rank/cat
 # columns.
-ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r --argjson cats "$TOPIC_CATEGORIES_JSON" '
+ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r --argjson cats "$TOPIC_CATEGORIES_JSON" "$JQ_LABEL_DEFS"'
   [ .[]
     | select((.labels // []) | any(.name == "help wanted"))
     | select((.labels // []) | any(.name == "dispatch:office-hours") | not)
-    | ([(.labels // [])[].name]) as $names
-    | ($names | if index("priority") then 1 else 0 end) as $pri
-    | ($names | if index("enhancement") then 1 else 0 end) as $enh
-    | (first($cats[] | select(. as $c | $names | index($c))) // "other") as $catname
+    | ((.labels // []) | has_priority) as $pri
+    | ((.labels // []) | has_enhancement) as $enh
+    | ((.labels // []) | category_of($cats)) as $catname
     | (($cats | index($catname)) // ($cats | length)) as $catrank
     | { number: .number, createdAt: .createdAt, pri: $pri, enh: $enh, catrank: $catrank, catname: $catname }
   ]
   | sort_by([ (1 - .pri), .enh, .catrank, .createdAt ])
   | .[] | [.number, .pri, .enh, .catrank, .catname] | @tsv')
+
+if [[ "$DEBUG_CLASSIFY" == "true" ]]; then
+  # Emit, for each surviving issue, the REAL inline ISSUE_SORTED jq classification
+  # (sorted_*) alongside the REAL shell-helper classification (helper_*), so the
+  # test can prove the two classification sources agree (#1490). The TSV now
+  # carries an enh column between pri and catrank; skip it here (DEBUG_CLASSIFY
+  # checks only pri/category agreement).
+  # number <tab> sorted_pri <tab> sorted_cat <tab> helper_pri <tab> helper_cat
+  while IFS=$'\t' read -r dbg_num dbg_pri _dbg_enh _dbg_catrank dbg_cat; do
+    [[ -z "$dbg_num" ]] && continue
+    dbg_labels=$(printf '%s' "$ISSUE_LIST" \
+      | jq -c --argjson n "$dbg_num" '(.[] | select(.number == $n) | .labels) // []')
+    h_pri=$(has_priority_in_labels "$dbg_labels")
+    h_cat=$(category_of_labels "$dbg_labels")
+    printf '%s\t%s\t%s\t%s\t%s\n' "$dbg_num" "$dbg_pri" "$dbg_cat" "$h_pri" "$h_cat"
+  done <<< "$ISSUE_SORTED"
+  exit 0
+fi
+
 walk_prev_group=""
 walk_prev_cat=""
 walk_prev_pri=""
