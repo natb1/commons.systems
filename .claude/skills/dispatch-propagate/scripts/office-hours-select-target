@@ -143,9 +143,16 @@ if [[ -n "$FRESH_NUM" ]]; then
   PR_LIST_FILE=$(pr_list_export_file "$PR_LIST")
   trap 'rm -f "$PR_LIST_FILE"' EXIT
   # Readiness gate: dispatch-phase no longer emits `waiting`; check CI readiness
-  # first. A not-ready draft PR (exit non-zero) maps to phase=waiting, preserving
-  # the byte-identical output contract callers expect.
-  if ! DISPATCH_PR_LIST_FILE="$PR_LIST_FILE" "$SCRIPT_DIR/dispatch-ci-ready" "$FRESH_NUM" >/dev/null; then
+  # first. A not-ready draft PR (exit 1) maps to phase=waiting, preserving
+  # the byte-identical output contract callers expect. Exit >= 2 is an exec/IO
+  # error (e.g. unreadable DISPATCH_PR_LIST_FILE) — surface it, don't map to waiting.
+  ci_rc=0
+  DISPATCH_PR_LIST_FILE="$PR_LIST_FILE" "$SCRIPT_DIR/dispatch-ci-ready" "$FRESH_NUM" >/dev/null || ci_rc=$?
+  if (( ci_rc >= 2 )); then
+    echo "error: dispatch-ci-ready failed (exit $ci_rc) for $FRESH_NUM — environment error, not a CI verdict" >&2
+    exit "$ci_rc"
+  fi
+  if (( ci_rc == 1 )); then
     phase="waiting"
   else
     phase=$(DISPATCH_PR_LIST_FILE="$PR_LIST_FILE" "$SCRIPT_DIR/dispatch-phase" "$FRESH_NUM")
