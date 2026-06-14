@@ -234,4 +234,36 @@ describe("file-sync", () => {
     fs.configureFileSync(HANDLE, PASSWORD, 1000);
     expect(fs.getLastSyncedModified()).toBe(1000);
   });
+
+  it("advanceSyncWatermark updates getLastSyncedModified without configureFileSync", async () => {
+    const fs = await loadFileSync();
+    fs.advanceSyncWatermark(4242);
+    expect(fs.getLastSyncedModified()).toBe(4242);
+  });
+
+  it("advanceSyncWatermark does not bump generation — in-flight write completes normally", async () => {
+    // Contrast with "abandons an in-flight write when the session is reset mid-write":
+    // advanceSyncWatermark must NOT bump generation, so a write already in flight
+    // when the watermark advances must still reach disk.
+    let resolveEncrypt!: (b: ArrayBuffer) => void;
+    encrypt.mockReturnValueOnce(
+      new Promise<ArrayBuffer>((res) => { resolveEncrypt = res; }),
+    );
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+
+    const flush = fs.flushWriteBack();
+    // Let doWrite run through the permission check + export and block on encrypt.
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Advance the watermark mid-flight — must not bump generation.
+    fs.advanceSyncWatermark(7777);
+
+    // The (now-delayed) encryption finishes — write should proceed, not bail.
+    resolveEncrypt(BYTES);
+    await flush;
+
+    // The generation guard (gen !== generation) must still pass, so the write was not abandoned.
+    expect(writeFileToHandle).toHaveBeenCalled();
+  });
 });
