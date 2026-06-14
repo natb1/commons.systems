@@ -16732,6 +16732,18 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-tick"
 
+  # Fake dispatch-spawn-sweep: log to sweep-calls.log so the Branch P and
+  # Branch R tests can assert the sweep reaper was launched. Mirrors the
+  # spawn-tick fake; without it the hook calls the real (absent) script and
+  # the silent `|| WARNING` fallback hides a regression. Intentionally does
+  # NOT write order.log — sweep ordering is not asserted.
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-sweep" <<'FAKE'
+#!/usr/bin/env bash
+echo "sweep" >> "$STUB_DIR/sweep-calls.log"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-sweep"
+
   # Fake dispatch-self-close: log to order.log + self-close-calls.log.
   cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-self-close" <<'FAKE'
 #!/usr/bin/env bash
@@ -17866,6 +17878,8 @@ spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "parse-job-done: spawn invoked exactly once" "1" "$spawn_calls"
 self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
 assert_eq "parse-job-done: self-close invoked exactly once" "1" "$self_close_calls"
+sweep_calls=$(wc -l < "$STUB_DIR/sweep-calls.log" 2>/dev/null || echo 0)
+assert_eq "parse-job-done: sweep invoked exactly once" "1" "$sweep_calls"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: parse-job-done: no office-hours apply"
@@ -17900,6 +17914,8 @@ spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "resolved-closed: spawn invoked exactly once" "1" "$spawn_calls"
 self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
 assert_eq "resolved-closed: self-close invoked exactly once" "1" "$self_close_calls"
+sweep_calls=$(wc -l < "$STUB_DIR/sweep-calls.log" 2>/dev/null || echo 0)
+assert_eq "resolved-closed: sweep invoked exactly once" "1" "$sweep_calls"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: resolved-closed: no office-hours apply"
