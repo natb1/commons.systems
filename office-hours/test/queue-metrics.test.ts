@@ -58,6 +58,12 @@ describe("serializeQueueMetrics / parseQueueMetrics", () => {
     expect(parsed).toBeNull();
   });
 
+  it("returns null for a negative runwayDays (violates the runwayDays >= 0 invariant)", () => {
+    const doc = { ...serializeQueueMetrics(base), runwayDays: -5 };
+    const parsed = parseQueueMetrics(doc);
+    expect(parsed).toBeNull();
+  });
+
   it("returns a valid snapshot when runwayDays field is absent (Firestore omits stored nulls)", () => {
     const serialized = serializeQueueMetrics({ ...base, runwayDays: null }) as Record<string, unknown>;
     delete serialized.runwayDays;
