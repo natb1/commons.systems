@@ -149,10 +149,12 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
         key; it must identify the same flake across re-runs.
      2. **File the flake issue.** Launch a subagent (`subagent_type:
         general-purpose`, `model: sonnet`) that invokes `/file-issue` via the
-        Skill tool. Build its `$INPUT` as a title hint on line 1 — a short
-        imperative summary that encodes the fingerprint, e.g.
-        `Flaky CI: <check> — <stable identifier>` — followed by a body containing
-        the fingerprint, the reproduce command, and the failure excerpt.
+        Skill tool. Build its `$INPUT` with a leading `--follow-up` token first,
+        then a title hint on the next line — a short imperative summary that encodes
+        the fingerprint, e.g. `Flaky CI: <check> — <stable identifier>` — followed
+        by a body containing the fingerprint, the reproduce command, and the failure
+        excerpt. (The `--follow-up` token is a classification no-op here — a flake
+        is a `bug`, which suppresses `enhancement` — but is passed for consistency.)
         `/file-issue` runs the full pipeline: duplicate detection, 8-category
         evaluation, decomposition gate, type/topic classification, creation (or
         match of an existing open issue), `@me` assignment, `help wanted`, type
