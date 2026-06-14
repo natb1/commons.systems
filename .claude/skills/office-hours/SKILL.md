@@ -230,10 +230,16 @@ and office-hours sessions are named `office-hours-<N>` (which does not match its
       tailnet operator runs the `ssh -L` command first, then opens the same
       URL.
 
-   b. **On a bug to fix** — reaching this handler exactly two ways: **(a)** a bug
+   b. **On a bug to fix** — reaching this handler three ways: **(a)** a bug
       the user discovers during the walkthrough (a reported FAIL of a
-      `needs-human` item), or **(b)** an auto-fix-exhausted `opus-fixable` bug
-      surfaced via the parked `office-hours-reason` (Step 3a). Finalize the QA
+      `needs-human` item), **(b)** an auto-fix-exhausted `opus-fixable` bug
+      surfaced via the parked `office-hours-reason` (Step 3a), or **(c)** a
+      non-auto-fix escalation: a bug surfaced in the parked
+      `office-hours-reason` that was escalated *before* the auto-fix lane (e.g.
+      a failed pre-QA acceptance check, a Chrome-extension-unavailable failure
+      that prevented browser tests, or a merge conflict requiring manual
+      resolution that also named a bug). The parked reason identifies which
+      case applies. Finalize the QA
       session (stop/export any GIF, run `run-qa-cleanup.sh`), then fix it
       in-session — the same plan-mode mechanics serve both:
 
