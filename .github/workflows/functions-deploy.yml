@@ -29,23 +29,27 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: .github/scripts/firebase-auth.sh
-      # syncOfficeHours's non-secret defineString params come from repository
-      # Variables, written into the dotenv firebase-tools reads at deploy time.
-      # Unset Variables yield empty values, which deploy the function dormant.
-      # The App private key and member emails are both secrets in Secret Manager;
-      # neither flows through this workflow.
+      # syncOfficeHours's and sampleDispatchQueueMetrics's non-secret defineString
+      # params come from repository Variables, written into the dotenv
+      # firebase-tools reads at deploy time. Unset Variables yield empty values,
+      # which deploy the functions dormant. The App private key and member emails
+      # are both secrets in Secret Manager; neither flows through this workflow.
       - name: Write office-hours function config
         env:
           OFFICE_HOURS_GITHUB_APP_ID: ${{ vars.OFFICE_HOURS_GITHUB_APP_ID }}
           OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID: ${{ vars.OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID }}
           OFFICE_HOURS_GROUP_REPO: ${{ vars.OFFICE_HOURS_GROUP_REPO }}
           OFFICE_HOURS_FIRESTORE_NAMESPACE: ${{ vars.OFFICE_HOURS_FIRESTORE_NAMESPACE || 'office-hours/prod' }}
+          OFFICE_HOURS_GROUP_ID: ${{ vars.OFFICE_HOURS_GROUP_ID }}
+          DISPATCH_METRICS_QUEUE_REPO: ${{ vars.DISPATCH_METRICS_QUEUE_REPO }}
         run: |
           cat > functions/.env.commons-systems <<EOF
           OFFICE_HOURS_GITHUB_APP_ID=${OFFICE_HOURS_GITHUB_APP_ID}
           OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID=${OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID}
           OFFICE_HOURS_GROUP_REPO=${OFFICE_HOURS_GROUP_REPO}
           OFFICE_HOURS_FIRESTORE_NAMESPACE=${OFFICE_HOURS_FIRESTORE_NAMESPACE}
+          OFFICE_HOURS_GROUP_ID=${OFFICE_HOURS_GROUP_ID}
+          DISPATCH_METRICS_QUEUE_REPO=${DISPATCH_METRICS_QUEUE_REPO}
           EOF
       - name: Deploy functions
         run: npx firebase-tools deploy --only functions --force --project "$FIREBASE_PROJECT_ID"
