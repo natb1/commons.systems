@@ -11,6 +11,7 @@ import (
 
 	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 	"github.com/natb1/commons.systems/budget-etl/internal/export"
+	"github.com/natb1/commons.systems/budget-etl/internal/journal"
 	"github.com/natb1/commons.systems/budget-etl/internal/parse"
 	"github.com/natb1/commons.systems/budget-etl/internal/password"
 	"github.com/natb1/commons.systems/budget-etl/internal/rules"
@@ -890,11 +891,12 @@ func TestRunMergeCrossStatementDuplicateJournalAggregatesAgree(t *testing.T) {
 		t.Fatalf("expected exactly 1 primary and 1 non-primary duplicate, got %d primary / %d duplicate", primaries, dups)
 	}
 
-	// Assertion 1: the journal credits the bank account (test_bank_1234) for the
-	// purchase exactly ONCE. Sum the credits minus debits on the bank account; the
-	// net credit equals one purchase amount, not two. (A spending line credits the
-	// imported bank account.)
-	const bankAccountID = "test_bank_1234"
+	// Assertion 1: the journal credits the bank account for the purchase exactly
+	// ONCE. Sum the credits minus debits on the bank account; the net credit
+	// equals one purchase amount, not two. (A spending line credits the imported
+	// bank account.) AccountID encodes the underscore in "test_bank" as %5F, so
+	// the account id is "test%5Fbank_1234".
+	bankAccountID := journal.AccountID("test_bank", "1234")
 	var journalNetCredit float64
 	for _, leg := range out.JournalLegs {
 		if leg.AccountID == bankAccountID {
