@@ -113,14 +113,15 @@ describe("link renderer", () => {
     expect(html).not.toContain("&#x2197;");
   });
 
-  it("preserves target=_blank and rel attributes on all links", async () => {
+  it("applies target=_blank and rel only to external links", async () => {
     const marked = createMarked();
     const externalHtml = await marked.parse("[ext](https://github.com/x)");
     const internalHtml = await marked.parse("[int](/post/x)");
     expect(externalHtml).toContain('target="_blank"');
     expect(externalHtml).toContain('rel="noopener noreferrer"');
-    expect(internalHtml).toContain('target="_blank"');
-    expect(internalHtml).toContain('rel="noopener noreferrer"');
+    expect(internalHtml).not.toContain('target="_blank"');
+    expect(internalHtml).not.toContain('rel="noopener noreferrer"');
+    expect(internalHtml).toContain('<a href="/post/x"');
   });
 });
 
