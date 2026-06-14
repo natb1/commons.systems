@@ -76,7 +76,7 @@ when none is present (the same `max // 0` capture idiom as
 Apply that capture to the already-fetched labels line — do **not** re-call the
 pack. Define `CAP=2`, env-overridable via `DISPATCH_QA_FIX_ATTEMPT_CAP` (matching
 `dispatch-qa-fix-attempt`'s default and override). `ATTEMPT_N` and `CAP` feed the
-Step 3.5 `plan_fix` pre-gate and the Step 3.6 auto-fix lane.
+Step 3.5 `plan_fix` pre-gate and the Step 3.7 auto-fix lane.
 
 **Note on the name:** the issue number is already bound to `N` in this skill (the
 branch prefix). The attempt count is a **distinct** value — keep it under the
@@ -279,13 +279,16 @@ Otherwise run all steps in order.
    **Per-item lane FAIL is record-and-continue (all three lanes):** a FAIL in the
    shell-command, single-assertion, or walkthrough lane is **recorded as residue**
    (see "Residue collection" below) and the lanes **continue** running. The
-   disposition of recorded residue is **deferred** past this lane: on a
-   **non-fixing pass** it escalates at the terminal disposition (Step 6) on any
-   non-empty residue exactly as before, while on a **fixing pass** an opus-fixable
-   FAIL is classified in Step 3.5 and *fixed* in Step 3.6 rather than escalated
-   (Step 6 is not reached). Either way, do **not** stop, finalize, or escalate on a
-   single lane FAIL here. The retry-once → **SKIP** and 3-consecutive-SKIPs →
-   stop-early rules still apply to the **walkthrough lane only** (Step 3c).
+   disposition of recorded residue is **deferred** past this lane. `needs-main`
+   items are filed as `blocked_by` follow-ups in Step 3.6 and dropped from the
+   terminal escalation set. The remaining residue is handled at the terminal
+   disposition: on a **non-fixing pass** any non-empty (non-`needs-main`) residue
+   escalates at Step 6 — but with `needs-main` items already dropped (filed as
+   follow-ups in Step 3.6); on a **fixing pass** an opus-fixable FAIL is classified
+   in Step 3.5 and *fixed* in Step 3.7 rather than escalated (Step 6 is not
+   reached). Either way, do **not** stop, finalize, or escalate on a single lane
+   FAIL here. The retry-once → **SKIP** and 3-consecutive-SKIPs → stop-early rules
+   still apply to the **walkthrough lane only** (Step 3c).
 
    **Cascade-bound:** a FAIL is **not** a SKIP, so it never trips the
    consecutive-SKIP guard. FAIL cascades are bounded by the finite plan-item count
@@ -497,13 +500,110 @@ Otherwise run all steps in order.
      cap), no opus-fixable disposition existed, **or** the planning agent died.
    - `result.deviation` is **LIVE**: `fix_plan.deviation` when the phase ran, else
      `false`. It signals a scope-deviation the planner refused to author a fix for
-     — Step 3.6 branches on it.
+     — Step 3.7 branches on it.
 
    Consume `result.dispositions` and `result.verify_report` for the Step 4
    PR-comment disposition section, and `result.fix_plan` / `result.deviation` for
-   the Step 3.6 auto-fix lane.
+   the Step 3.7 auto-fix lane.
 
-3.6. **Auto-fix lane.**
+   **The Workflow itself stays report-only:** it classifies and adversarially
+   verifies residue items and returns the dispositions, but acts on none of them —
+   no auto-fix, no escalation, no filing. All action lives in the **skill**, across
+   two classes: Step 3.6 (below) files a `blocked_by` follow-up per `needs-main`
+   item, and Step 3.7 runs the bounded Opus auto-fix lane on `opus-fixable` items.
+   Only the **`needs-human`** class remains report-only — its dispositions are
+   informational for the PR comment and it still escalates to office-hours under
+   Step 6 exactly as before.
+
+3.6. **File needs-main follow-ups.**
+
+   Run this step only when Step 3.5 ran (the residue list was non-empty) **and**
+   `result.dispositions` contains any item with `class === "needs-main"`. Otherwise
+   skip it entirely. This step fires whenever a `needs-main` disposition exists —
+   independent of whether the run will ultimately fix, park, or pass on some
+   *other* class. It runs **before** the Step 3.7 auto-fix lane, so a mixed fixing
+   pass files its needs-main follow-ups here and the Step 4 comment (posted from
+   inside Step 3.7's fix finalize path) can truthfully list them. A run that
+   carries both a `needs-main` item and an `opus-fixable`/`needs-human` item files
+   the needs-main follow-up here, and "drop from escalation" (Step 6) stops a
+   `needs-main` item from triggering a park on its own account, never suppresses a
+   park caused by another class.
+
+   This mirrors `/review-fix` Step 5a/5b — the canonical "file a `blocked_by`
+   follow-up via `/file-issue` from a dispatch phase" recipe (subagent fan-out,
+   `dispatch-followup-exists` skip, `===FILE-ISSUE-RESULTS===` parsing,
+   `ref-github-issues` dependencies API). Procedure:
+
+   1. **Select and join.** Take the dispositions whose `class === "needs-main"`. The
+      dispositions array carries only `{id, title, kind, class, aesthetic, verify,
+      rationale}` — it does **not** carry `url_path` / `expected_outcome` /
+      `finding`. **Join each selected disposition back to the in-memory residue list
+      from Step 3 by `id`** to recover those fields. The result is one object per
+      needs-main item carrying `{id, title, kind, url_path, expected_outcome,
+      finding}` (the disposition contributes `id`/`title`/`kind`; the residue
+      contributes `url_path`/`expected_outcome`/`finding`).
+
+   2. **Compose the follow-ups** by piping the joined needs-main items through the
+      Unit-1 emitter (pure — no network/git/gh, runs sandboxed-fine, no
+      `dangerouslyDisableSandbox` needed for this call):
+
+      ```bash
+      .claude/skills/dispatch-propagate/scripts/dispatch-qa-needs-main-followup "$N" "$PR_NUM" \
+        < <(printf '%s' '<joined needs-main items as JSON array>')
+      ```
+
+      It emits a JSON array of `{identifier, title, body}`, one object per input
+      item (`[]` when the input is empty). The `identifier` is embedded verbatim in
+      `title` so `dispatch-followup-exists` can dedup it.
+
+   3. **File each follow-up.** For each emitted `{identifier, title, body}`, fork a
+      subagent (`subagent_type: general-purpose`, `model: sonnet`). These subagents
+      touch only GitHub and never the working tree, so fan them out in parallel
+      (multiple Agent calls in one message). Each subagent, with
+      `dangerouslyDisableSandbox: true` for the `gh` calls (`gh` needs network — see
+      `.claude/rules/sandbox.md`):
+
+      a. Runs the deterministic existence check on the follow-up's `identifier`:
+
+         ```bash
+         .claude/skills/dispatch-propagate/scripts/dispatch-followup-exists "<identifier>"
+         ```
+
+         If it prints an issue number, an open or closed tracking issue already
+         covers this identifier — **skip** `/file-issue` entirely: do not file, do
+         not re-label. Record the follow-up as already-tracked, mapping its
+         `identifier` to the existing issue `#<N>` for the Step 4 comment, and return
+         that `<N>`. Otherwise proceed.
+
+      b. Invokes `/file-issue` with the follow-up's `title` on the first line and its
+         `body` after. `/file-issue` owns duplicate detection, creation, `@me`
+         assignment, the `help wanted` label, and type + topic classification; it
+         ends with a `===FILE-ISSUE-RESULTS===` … `===FILE-ISSUE-RESULTS-END===`
+         block. Read every `<disposition> <N>` record line between the sentinels — a
+         single machine-keyed follow-up normally yields one record; iterate step c
+         over each if more.
+
+      c. For each created `<followup-N>`, records a `blocked_by` dependency **on
+         `<followup-N>`, targeting the issue under QA `$N`** (the current worktree's
+         issue, resolved in Step 0 — not the issue that implemented this skill).
+         This makes the follow-up `blocked_by` the issue under QA: its manual
+         post-merge verification waits until this PR's issue is done. Use the
+         `ref-github-issues` dependencies API (invoke `ref-github-issues` for the
+         exact `gh api --input` syntax; do not restate it). The follow-up carries
+         `help wanted` + `@me` from the `/file-issue` pipeline and **no**
+         `dispatch:office-hours`.
+
+      d. Returns `<followup-N>` mapped to its `identifier`.
+
+   4. **Capture** each filed-or-existing `<followup-N>` against its `identifier` for
+      the Step 4 filed-follow-ups sub-list.
+
+   The needs-main filing is **idempotent** (guarded per-identifier by
+   `dispatch-followup-exists`), so it is safe to run on every pass — including a
+   re-QA tick after a Step 3.7 fix. A follow-up already filed on an earlier pass is
+   recorded as already-tracked, not re-filed.
+
+3.7. **Auto-fix lane.**
 
    This step runs only when Step 3.5 ran (the residue list was non-empty). It
    decides whether this pass **fixes** the opus-fixable residue (per-unit
@@ -586,11 +686,14 @@ Otherwise run all steps in order.
    - **Mixed case = fix-first, escalate NOTHING that pass.** The lane fires
      whenever `opusFixable` is non-empty **regardless** of co-present `needs-main`
      / `needs-human` items. A fixing pass fixes only the opus-fixable units and
-     **escalates nothing** — it fixes, writes the `qa` marker, and stops. The
-     deferred human/main items re-surface on the re-QA tick; once **no**
-     opus-fixable items remain, *that* later run escalates them via the normal
-     Step 6 path. Do **not** escalate co-present human/main items "while we're
-     here."
+     **escalates nothing** — it fixes, writes the `qa` marker, and stops. Co-present
+     `needs-main` items were already filed as `blocked_by` follow-ups in Step 3.6
+     (which ran before this lane) and are dropped from escalation; they are **not**
+     re-escalated. Co-present `needs-human` items re-surface on the re-QA tick;
+     once **no** opus-fixable items remain, *that* later run escalates the
+     `needs-human` items via the normal Step 6 path. Do **not** escalate co-present
+     human items "while we're here," and do **not** escalate `needs-main` items at
+     all — they were filed as follow-ups.
 
    - **Re-QA mechanism.** The fix commits (landed per-unit by `/implement-unit`'s
      `/commit-merge-push`) restart CI. qa-fix wrote a `qa` phase-completed marker
@@ -618,8 +721,11 @@ Otherwise run all steps in order.
    Step-0-resolved issue number `<N>`). Include:
    - Items executed (across all three lanes).
    - PASS / FAIL / SKIP counts.
-   - **Deferred to office-hours** — each `needs-human-judgment` item, listed so the
-     `/office-hours` walkthrough can pick them up.
+   - **Deferred to office-hours** — each `needs-human-judgment` item **whose
+     disposition class is not `needs-main`**, listed so the `/office-hours`
+     walkthrough can pick them up. A `needs-human-judgment` item the triage
+     classified `needs-main` is filed as a follow-up per Step 3.6 instead (see the
+     filed-follow-ups sub-list below) and is **not** deferred to office-hours.
    - List of bugs found (if any), each with the item title and the finding.
    - When the walkthrough lane ran: the GIF filename (`tmp/qa-fix-walkthrough-<n>.gif`).
    - **Disposition triage** — include this section only when the residue list was
@@ -631,17 +737,28 @@ Otherwise run all steps in order.
      be `n/a`) directly — no `verify_report` entry exists for them. If the residue
      list was empty (Step 3.5 was skipped), omit this section entirely.
 
-     The terminal-behavior prose is **conditional** on which Step-3.6 path this
-     pass took:
-     - **Fixing pass** (Step 3.6 took the fix finalize path): say which items were
+     Always state the `needs-main` handling: **"`needs-main` items are filed as
+     `blocked_by` follow-ups (Step 3.6) and dropped from the escalation set, so they
+     do not park this PR."**
+
+     The remaining terminal-behavior prose is **conditional** on which Step-3.7 path
+     this pass took:
+     - **Fixing pass** (Step 3.7 took the fix finalize path): say which items were
        fixed and which were deferred — e.g. **"Fixed this pass: \<opus-fixable
-       items>; deferred to re-QA: \<needs-human / needs-main items>."** The fixed
-       commits restart CI and the chain re-QAs once it passes; the deferred items
-       re-surface on a later pass.
+       items>; deferred to re-QA: \<needs-human items>; filed as follow-ups:
+       \<needs-main items>."** The fixed commits restart CI and the chain re-QAs once
+       it passes; the deferred `needs-human` items re-surface on a later pass, while
+       the `needs-main` items were already filed in Step 3.6.
      - **Non-fixing pass** (no opus-fixable items, so residue escalates; or the
-       Step-3.6 escalate finalize path fired) — keep the existing escalation
-       framing: every residue item escalates to office-hours below, exactly as
-       before.
+       Step-3.7 escalate finalize path fired) — keep the existing escalation
+       framing: every `opus-fixable`/`needs-human` residue item escalates to
+       office-hours below, exactly as before, while `needs-main` items were filed as
+       follow-ups (Step 3.6) and dropped from the escalation set.
+   - **Filed follow-ups** — include this sub-list only when Step 3.6 ran. For each
+     `needs-main` item, list its follow-up: `#<followup-N>` (newly filed), or
+     "already tracked by #<N>" (an existing tracking issue was found via
+     `dispatch-followup-exists`), using the `identifier`→`<N>` mappings Step 3.6
+     captured.
 
    Post via (use `dangerouslyDisableSandbox: true` — the script invokes `gh`):
    ```bash
@@ -662,27 +779,54 @@ Otherwise run all steps in order.
 
    Three outcomes, in **precedence order**:
 
-   1. **Auto-fix applied** (handled entirely in Step 3.6's fix finalize path) — the
+   1. **Auto-fix applied** (handled entirely in Step 3.7's fix finalize path) — the
       lane fixed the opus-fixable units, wrote the `qa` marker with **no**
-      `qa-done`, and deferred any co-present `needs-human` / `needs-main` items to
-      re-QA. This **outranks** escalate-residue: a fixing pass escalates nothing.
-      **Step 6 is not reached on a fixing pass** — Step 3.6 already STOPPED. The
-      re-QA mechanism and the known pre-existing TOCTOU race are documented in Step
-      3.6.
+      `qa-done`, and deferred any co-present `needs-human` items to re-QA (co-present
+      `needs-main` items were filed as `blocked_by` follow-ups in Step 3.6). This
+      **outranks** escalate-residue: a fixing pass escalates nothing. **Step 6 is
+      not reached on a fixing pass** — Step 3.7 already STOPPED. The re-QA mechanism
+      and the known pre-existing TOCTOU race are documented in Step 3.7.
 
    2. **Escalate residue** (reached only on a non-fixing pass — no opus-fixable
-      items to fix, so Step 3.6 fell through; *or* a cap/scope-deviation/
-      planning-failed escalate already finalized in Step 3.6 and STOPPED before
-      here) — the existing office-hours escalation path, unchanged (see the
-      **User-input blocker** branch below and the **Escalation** section).
+      items to fix, so Step 3.7 fell through; *or* a cap/scope-deviation/
+      planning-failed escalate already finalized in Step 3.7 and STOPPED before
+      here) — the existing office-hours escalation path, unchanged. The escalation
+      set **excludes** `needs-main`-class residue: each `needs-main` item was filed
+      as a `blocked_by` follow-up in Step 3.6 and is **dropped** from the set below;
+      `opus-fixable` and `needs-human` residue items still escalate exactly as
+      before (see the **User-input blocker** branch below and the **Escalation**
+      section).
 
-   3. **Clean pass** — no residue at all: `dispatch-complete-phase qa` +
-      `dispatch-mark-complete`, unchanged (see **Clean autonomous pass** below).
+   3. **Clean pass** — no residue at all (or only `needs-main` residue, all of which
+      was filed and dropped): `dispatch-complete-phase qa` + `dispatch-mark-complete`,
+      unchanged (see **Clean autonomous pass** below).
 
-   **Clean autonomous pass** — every `script-verifiable` and `needs-browser` item
-   PASSed, zero `needs-human-judgment` items were recorded, and no bug was found:
+   **Escalation set.** Define it as:
 
-   Apply the `dispatch:qa-done` label via `dispatch-complete-phase` (use
+   - every **residue item whose final disposition class is NOT `needs-main`** —
+     i.e. `opus-fixable` and `needs-human` items, which still escalate (the skill
+     does not yet act on those classes); **plus**
+   - the **non-residue terminal blockers** that already escalate, unchanged. These
+     stay terminal — only `needs-main`-class residue is dropped from the set:
+     - a malformed or empty triage plan (Step 3 plan validation),
+     - an `origin/main` merge conflict (Step 0.5),
+     - the Chrome extension unavailable so browser items could not run (Step 3c),
+     - a multi-app demo choice (Step 1),
+     - a failed pre-QA acceptance check (Step 3b, a bug needing a plan-mode fix).
+
+   `needs-main`-class residue items are in **neither** part of the set — they were
+   filed as follow-ups in Step 3.6.
+
+   **Clean autonomous pass** — the escalation set (defined above) is **empty**.
+   This now holds even for a run whose only residue items all classified
+   `needs-main`: those were filed as `blocked_by` follow-ups in Step 3.6 and
+   dropped, leaving the escalation set empty. (It also holds, as before, when every
+   `script-verifiable` and `needs-browser` item PASSed, zero `needs-human-judgment`
+   items were recorded, no bug was found, and none of the non-residue blockers
+   fired.)
+
+   On a clean pass apply the `dispatch:qa-done` label via `dispatch-complete-phase`
+   (use
    `dangerouslyDisableSandbox: true` — it invokes `gh`):
 
    ```bash
@@ -706,12 +850,16 @@ Otherwise run all steps in order.
 
    Then **stop**. The Stop hook reads the marker and advances the chain.
 
-   **User-input blocker** — the triage plan was malformed or empty (Step 3 plan
-   validation), OR any `needs-human-judgment` item was recorded, OR a
-   `script-verifiable` or `needs-browser` item FAILed, OR the pre-QA acceptance
-   check failed (a bug needing a plan-mode fix), OR the Chrome extension was
-   unavailable so browser items could not run (Step 3c), OR a multi-app demo choice
-   arose (Step 1), OR the `origin/main` merge conflicted (Step 0.5):
+   **User-input blocker** — the escalation set (defined above) is **non-empty**.
+   This fires when any member of the set is present: an `opus-fixable` or
+   `needs-human` residue item (a `script-verifiable`/`needs-browser` FAIL or a
+   `needs-human-judgment` item that did **not** classify `needs-main`), OR any
+   non-residue blocker — a malformed or empty triage plan (Step 3 plan
+   validation), the pre-QA acceptance check failed (a bug needing a plan-mode fix,
+   Step 3b), the Chrome extension unavailable so browser items could not run (Step
+   3c), a multi-app demo choice (Step 1), or the `origin/main` merge conflicted
+   (Step 0.5). A `needs-main`-class residue item is **not** a member — it was filed
+   as a follow-up in Step 3.6 and does not, on its own, trigger this blocker.
 
    Do **not** apply `dispatch:qa-done`. Escalate per the **Escalation** section
    below and **stop**.
@@ -750,7 +898,7 @@ The skill is idempotent: a re-invocation with `dispatch:qa-done` already on the
 PR skips Steps 0.5–6 and returns. The label is this skill's terminal action and
 is already applied, so re-entry is a true no-op.
 
-The auto-fix lane (Step 3.6) is bounded on re-invocation by two durable side
+The auto-fix lane (Step 3.7) is bounded on re-invocation by two durable side
 effects. Each `/implement-unit` lands a **durable commit** via
 `/commit-merge-push`, so a re-invocation mid-fix does not redo committed units —
 it re-QAs against the already-landed work. And the `dispatch-qa-fix-attempt` gate
