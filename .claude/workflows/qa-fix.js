@@ -75,6 +75,10 @@ const VERDICT_SCHEMA = {
 
 // --- inline kernel helper (thin mirror of the pure script) -------------------
 
+// True when at least one skeptic refuted. Single source of truth for the
+// refuted-detection rule, shared by applyQaDisposition and verify_report.
+const hasRefuted = (votes) => votes.includes('refuted');
+
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-qa-disposition
 // Apply the QA downgrade rule per classification item, preserving input order.
 // Each input item carries { id, class, aesthetic }; votesById[id] is the array
@@ -105,7 +109,7 @@ function applyQaDisposition(classifications, votesById) {
       // KEEP needs-human (INVERTED relative to applyVerifyDrop — see warning above).
       return { id: c.id, final_class: 'needs-human', verify: 'Unverified' };
     }
-    if (votes.filter((v) => v === 'refuted').length >= 1) {
+    if (hasRefuted(votes)) {
       // At least one skeptic refuted: downgrade to opus-fixable.
       return { id: c.id, final_class: 'opus-fixable', verify: 'Refuted' };
     }
@@ -311,7 +315,7 @@ const verify_report = candidates.map((c) => {
   let verdict;
   if (!votes.length) {
     verdict = 'unverified';
-  } else if (votes.includes('refuted')) {
+  } else if (hasRefuted(votes)) {
     verdict = 'refuted';
   } else {
     verdict = 'upheld';
