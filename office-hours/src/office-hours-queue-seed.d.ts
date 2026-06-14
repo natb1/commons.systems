@@ -8,7 +8,6 @@ declare module "virtual:office-hours-queue-seed" {
     readonly windowDays: number;
     readonly computedAt: Date;
     readonly groupId: string;
-    readonly memberEmails: readonly string[];
   };
   export default seedQueueMetrics;
 }
