@@ -22366,6 +22366,64 @@ assert_eq "verify-drop: r4 not in kept" "0" "$(printf '%s' "$out" | jq -r '.kept
 # i1 (non-Required) in kept with no verify key
 assert_eq "verify-drop: i1 non-Required kept without verify key" "false" "$(printf '%s' "$out" | jq -r '.kept[] | select(.id=="i1") | has("verify")')"
 
+# ============================================================================
+# === dispatch-qa-disposition ===
+# ============================================================================
+
+echo "Test: dispatch-qa-disposition"
+
+# All branches in one object (order: f1..f8) plus a separate passthrough check.
+# f1: opus-fixable  → final_class=opus-fixable, verify=n/a
+# f2: needs-main    → final_class=needs-main,   verify=n/a
+# f3: needs-human, aesthetic:false, votes=[refuted,upheld] → opus-fixable, Refuted
+# f4: needs-human, aesthetic:false, votes=[upheld,upheld]  → needs-human,  Upheld
+# f5: needs-human, aesthetic:false, NO entry in votes map  → needs-human,  Unverified (INVERTED EDGE)
+# f6: needs-human, aesthetic:true,  votes=[refuted,refuted]→ needs-human,  n/a (aesthetic bypasses)
+IN='{"items":[{"id":"f1","class":"opus-fixable","aesthetic":false},{"id":"f2","class":"needs-main","aesthetic":false},{"id":"f3","class":"needs-human","aesthetic":false},{"id":"f4","class":"needs-human","aesthetic":false},{"id":"f5","class":"needs-human","aesthetic":false},{"id":"f6","class":"needs-human","aesthetic":true}],"votes":{"f3":["refuted","upheld"],"f4":["upheld","upheld"],"f6":["refuted","refuted"]}}'
+out=$(printf '%s' "$IN" | "$SCRIPT_DIR/dispatch-qa-disposition")
+
+# Branch: opus-fixable passes through
+assert_eq "qa-disposition: opus-fixable → final_class" "opus-fixable" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f1") | .final_class')"
+assert_eq "qa-disposition: opus-fixable → verify=n/a" "n/a" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f1") | .verify')"
+
+# Branch: needs-main passes through
+assert_eq "qa-disposition: needs-main → final_class" "needs-main" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f2") | .final_class')"
+assert_eq "qa-disposition: needs-main → verify=n/a" "n/a" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f2") | .verify')"
+
+# Branch: needs-human, non-aesthetic, refuted vote → downgrade
+assert_eq "qa-disposition: needs-human refuted → final_class=opus-fixable" "opus-fixable" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .final_class')"
+assert_eq "qa-disposition: needs-human refuted → verify=Refuted" "Refuted" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .verify')"
+
+# Branch: needs-human, non-aesthetic, all-upheld → keep
+assert_eq "qa-disposition: needs-human upheld → final_class=needs-human" "needs-human" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f4") | .final_class')"
+assert_eq "qa-disposition: needs-human upheld → verify=Upheld" "Upheld" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f4") | .verify')"
+
+# Branch: needs-human, non-aesthetic, EMPTY votes (id absent from votes map) → KEEP (INVERTED EDGE)
+# Unlike dispatch-review-verify-drop where empty→dropped, here empty→KEEP (downgrading is the risky action)
+assert_eq "qa-disposition: needs-human empty-votes → final_class=needs-human (inverted edge)" "needs-human" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f5") | .final_class')"
+assert_eq "qa-disposition: needs-human empty-votes → verify=Unverified (inverted edge)" "Unverified" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f5") | .verify')"
+
+# Branch: needs-human, aesthetic:true, votes present (refuted) → KEEP, verify=n/a (aesthetic bypasses verification)
+assert_eq "qa-disposition: aesthetic needs-human with refuted votes → final_class=needs-human" "needs-human" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f6") | .final_class')"
+assert_eq "qa-disposition: aesthetic needs-human with refuted votes → verify=n/a" "n/a" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f6") | .verify')"
+
+# Passthrough: original class and aesthetic fields survive on output items
+assert_eq "qa-disposition: passthrough class field preserved" "needs-human" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .class')"
+assert_eq "qa-disposition: passthrough aesthetic field preserved" "false" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .aesthetic')"
+
+# Passthrough: arbitrary extra field (title) survives
+IN_TITLE='{"items":[{"id":"t1","class":"needs-human","aesthetic":false,"title":"Check me"}],"votes":{"t1":["upheld"]}}'
+out_title=$(printf '%s' "$IN_TITLE" | "$SCRIPT_DIR/dispatch-qa-disposition")
+assert_eq "qa-disposition: passthrough title field preserved" "Check me" "$(printf '%s' "$out_title" | jq -r '.dispositions[0].title')"
+
+# Output order: items must appear in input order (f1..f6)
+assert_eq "qa-disposition: output order preserved" "f1
+f2
+f3
+f4
+f5
+f6" "$(printf '%s' "$out" | jq -r '.dispositions[].id')"
+
 # dispatch-jit-skill tests
 # ============================================================================
 #

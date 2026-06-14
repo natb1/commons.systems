@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# Apply the QA downgrade rule: items classified "needs-human" may be downgraded
+# to "opus-fixable" only when at least one skeptic voted "refuted" AND the item
+# is NOT aesthetic.  All other items pass through unchanged.
+# Usage: printf '%s' '<json>' | dispatch-qa-disposition
+#
+# Reads a single JSON object on stdin:
+#   {
+#     "items": [ <item>, ... ],
+#     "votes": { "<id>": ["refuted"|"upheld", ...], ... }
+#   }
+#
+# Per-item input fields (at minimum):
+#   id        — string, unique per item
+#   class     — string; one of: opus-fixable | needs-main | needs-human
+#   aesthetic — boolean; true when the finding is aesthetic-only
+#   (plus arbitrary passthrough fields preserved unchanged)
+#
+# votes: map of item-id → array of skeptic verdicts ("refuted" or "upheld").
+#   A missing id in votes is treated as [] (no votes — both skeptics failed).
+#
+# Downgrade rule (applied in order; first matching branch wins):
+#
+#   class != "needs-human"
+#     → final_class = class, verify = "n/a"
+#       (opus-fixable and needs-main pass straight through; never annotated)
+#
+#   class == "needs-human" AND aesthetic == true
+#     → final_class = "needs-human", verify = "n/a"
+#       (aesthetic items are never downgradeable; verification is bypassed
+#       regardless of any votes present)
+#
+#   class == "needs-human" AND aesthetic == false:
+#     EMPTY votes (key absent OR []) → KEEP final_class = "needs-human", verify = "Unverified"
+#     ≥1 "refuted" vote             → DOWNGRADE final_class = "opus-fixable", verify = "Refuted"
+#     ≥1 vote, none "refuted"       → KEEP final_class = "needs-human", verify = "Upheld"
+#
+# INVERTED-POLARITY WARNING — DO NOT "HARMONIZE" WITH dispatch-review-verify-drop:
+#   In dispatch-review-verify-drop, empty votes DROP the finding (verify="Unverified",
+#   disposition="dropped") because failing to verify a Required bug means it is NOT
+#   auto-fixed — "drop under uncertainty" is the safe action there.
+#   HERE, downgrading needs-human → opus-fixable is the RISKY action; "verification
+#   could not run" must therefore KEEP the human classification (verify="Unverified").
+#   Future readers MUST NOT align the two scripts: the empty-votes edge intentionally
+#   diverges in these two contexts.
+#
+# Output (stdout): a single JSON object:
+#   {
+#     "dispositions": [ <item>, ... ]
+#   }
+# Each output item is the input item with two fields ADDED: final_class and verify.
+# Original fields (including class and aesthetic) are preserved unchanged.
+# Original relative order of items is preserved.
+#
+# No network access, no git, no gh, no model calls — pure stdin → stdout via jq.
+#
+# Consumer: .claude/workflows/qa-fix.js mirrors this downgrade logic in JS;
+# this script is the normative spec for that inline JS logic.
+set -euo pipefail
+
+jq '
+  .votes as $votes |
+
+  {
+    dispositions: [
+      .items[] |
+      . as $item |
+      (($votes[$item.id] // [])) as $item_votes |
+      ($item_votes | map(select(. == "refuted")) | length) as $refuted_count |
+
+      if $item.class != "needs-human" then
+        # opus-fixable and needs-main: pass through unchanged.
+        $item + {final_class: $item.class, verify: "n/a"}
+
+      elif $item.aesthetic == true then
+        # Aesthetic findings bypass verification entirely.
+        $item + {final_class: "needs-human", verify: "n/a"}
+
+      elif ($item_votes | length) == 0 then
+        # Both skeptics failed to vote: verification could not run.
+        # KEEP needs-human (inverted relative to dispatch-review-verify-drop).
+        $item + {final_class: "needs-human", verify: "Unverified"}
+
+      elif $refuted_count >= 1 then
+        # At least one skeptic refuted: downgrade to opus-fixable.
+        $item + {final_class: "opus-fixable", verify: "Refuted"}
+
+      else
+        # Votes present, none refuted: upheld as needs-human.
+        $item + {final_class: "needs-human", verify: "Upheld"}
+
+      end
+    ]
+  }
+' </dev/stdin
