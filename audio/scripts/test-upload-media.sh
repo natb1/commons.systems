@@ -122,6 +122,12 @@ else
     BODY='{"error":{"code":404,"message":"NOT_FOUND"}}'
     if [ -n "$RESP_FILE" ]; then echo "$BODY" > "$RESP_FILE"; else echo "$BODY"; fi
     echo "404"
+  elif [ -f "$STUB_DIR/curl-group-padded" ]; then
+    # Members carry leading/trailing whitespace and mixed case to exercise the
+    # GCS member_emails trim+lowercase path.
+    BODY='{"name":"projects/commons-systems/databases/(default)/documents/audio/prod/groups/test-group","fields":{"name":{"stringValue":"test-group"},"members":{"arrayValue":{"values":[{"stringValue":" alice@example.com "},{"stringValue":" BOB@EXAMPLE.COM "}]}}}}'
+    if [ -n "$RESP_FILE" ]; then echo "$BODY" > "$RESP_FILE"; else echo "$BODY"; fi
+    echo "200"
   else
     BODY='{"name":"projects/commons-systems/databases/(default)/documents/audio/prod/groups/test-group","fields":{"name":{"stringValue":"test-group"},"members":{"arrayValue":{"values":[{"stringValue":"alice@example.com"},{"stringValue":"bob@example.com"}]}}}}'
     if [ -n "$RESP_FILE" ]; then echo "$BODY" > "$RESP_FILE"; else echo "$BODY"; fi
@@ -324,6 +330,15 @@ else
   echo "  FAIL: Firestore year is null"
   echo "    expected at least 2 nullValue fields (trackNumber + year), found: $year_null_count"
 fi
+teardown
+
+echo "Test 13: --group with whitespace-padded members -> GCS member_emails trimmed and lowercased"
+setup
+touch "$TMPDIR_TEST/stub/curl-group-padded"
+output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-song.mp3" --group test-group 2>&1)
+headers=$(cat "$TMPDIR_TEST/stub/meta-headers.log")
+assert_contains "GCS member_emails trimmed and lowercased" "x-goog-meta-member_emails:alice@example.com,bob@example.com" "$headers"
+assert_not_contains "GCS member_emails has no spaces" "member_emails: " "$headers"
 teardown
 
 echo ""
