@@ -79,6 +79,10 @@ setup() {
   # SCRIPT_DIR, which resolves to TMPDIR_TEST for this copy — lib.sh is copied
   # below alongside the other scripts, so the source resolves.
   cp "$SCRIPT_DIR/dispatch-reconcile-ready" "$TMPDIR_TEST/dispatch-reconcile-ready"
+  # dispatch-sync-merge-queue sources lib.sh (for pr_list_open and
+  # dispatch_classify_rollup) via its SCRIPT_DIR, which resolves to TMPDIR_TEST
+  # for this copy — lib.sh is already copied below, so the source resolves.
+  cp "$SCRIPT_DIR/dispatch-sync-merge-queue" "$TMPDIR_TEST/dispatch-sync-merge-queue"
   # dispatch-select-target's JIT scan calls dispatch-config-load and
   # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
   # TMPDIR_TEST for the copied dispatch-select-target, so the two helpers must
@@ -117,7 +121,8 @@ setup() {
            "$TMPDIR_TEST/dispatch-resolve-worktree" \
            "$TMPDIR_TEST/dispatch-reconcile-ready" \
            "$TMPDIR_TEST/dispatch-config-load" \
-           "$TMPDIR_TEST/dispatch-project-status-read"
+           "$TMPDIR_TEST/dispatch-project-status-read" \
+           "$TMPDIR_TEST/dispatch-sync-merge-queue"
 
   # Default no-op stub for dispatch-provision-worktree. dispatch-route now invokes
   # it (after the worktree cross-check, before phase derivation). The real script
@@ -172,6 +177,59 @@ STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 # Reconstruct full args string for matching.
 args="$*"
 case "$args" in
+  # ---- #1480 dispatch-sync-merge-queue branches (FIRST — most specific) ------
+  # The mergeable-PR fetch. Field set pinned byte-for-byte to the script's
+  # pr_list_open call; --limit glob absorbs DISPATCH_PR_LIST_LIMIT (default 300).
+  "pr list --state open --limit "*" --json number,title,url,isDraft,statusCheckRollup,mergeable")
+    echo "pr list" >> "$STUB_DIR/gh-merge-pr-list.log"
+    if [[ -f "$STUB_DIR/merge-pr-list.json" ]]; then
+      cat "$STUB_DIR/merge-pr-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  label\ create\ merge-pr:*)
+    # Idempotent per-PR label create. Log and succeed.
+    echo "$args" >> "$STUB_DIR/gh-merge-label-create.log"
+    ;;
+  issue\ list\ --repo\ natb1/office-hours-nate\ --label\ merge-pr:*\ --state\ open\ --json\ number,title)
+    # Per-PR open-issue guard. MUST precede the bare enumerate branch below.
+    # Recover the PR number from the --label to key the fixture.
+    set -- $args
+    oh_lbl=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in --label) oh_lbl="$2"; shift 2 ;; *) shift ;; esac
+    done
+    oh_n="${oh_lbl#merge-pr:}"
+    if [[ -f "$STUB_DIR/oh-issue-merge-pr-${oh_n}.json" ]]; then
+      cat "$STUB_DIR/oh-issue-merge-pr-${oh_n}.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  "issue list --repo natb1/office-hours-nate --state open --limit "*" --json number,labels")
+    # Close-path enumerate (no --label). Serves the open-tracking-issue set.
+    if [[ -f "$STUB_DIR/oh-issue-enum.json" ]]; then
+      cat "$STUB_DIR/oh-issue-enum.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  issue\ create\ --repo\ natb1/office-hours-nate\ *)
+    # Create a tracking issue. MUST echo a URL so the script's ${URL##*/} yields
+    # the number. Log the full args (carries --title, the merge-pr:<n> label, and
+    # the oh-merge-pr marker) for the create assertion.
+    echo "$args" >> "$STUB_DIR/gh-merge-issue-create.log"
+    echo "https://github.com/natb1/office-hours-nate/issues/77"
+    ;;
+  issue\ edit\ *--repo\ natb1/office-hours-nate*)
+    # Title/marker refresh on drift. MUST precede the generic `issue edit *`.
+    echo "$args" >> "$STUB_DIR/gh-merge-issue-edit.log"
+    ;;
+  issue\ close\ *--repo\ natb1/office-hours-nate*)
+    # Close a tracking issue. MUST precede the generic `issue close *`.
+    echo "$args" >> "$STUB_DIR/gh-merge-issue-close.log"
+    ;;
   "pr list --state open --limit 300 --json number,headRefName,isDraft,headRefOid,labels,mergeable")
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
@@ -860,6 +918,16 @@ make_pr_mergeable() {
     "$num" "$branch" "$is_draft" "$labels_json" "$sha" "$mergeable"
 }
 
+# Write JSON to a temp file and echo its path, for passing the open-PR list to a
+# child script via DISPATCH_PR_LIST_FILE (replaces the old inline
+# DISPATCH_PR_LIST=<json> env channel, #1646).
+pr_list_tmpfile() {
+  local f
+  f=$(mktemp "${TMPDIR:-/tmp}/test-pr-list.XXXXXX")
+  printf '%s' "$1" > "$f"
+  printf '%s' "$f"
+}
+
 # Green rollup (two passing check runs).
 GREEN_ROLLUP='[{"status":"COMPLETED","conclusion":"SUCCESS"},{"status":"COMPLETED","conclusion":"NEUTRAL"}]'
 # Failing rollup.
@@ -1139,15 +1207,16 @@ result=$("$TMPDIR_TEST/dispatch-phase" "6")
 assert_eq "issue 6 does not match branch 60-foo → plan" "plan" "$result"
 teardown
 
-# 13. DISPATCH_PR_LIST is used in place of a self-issued gh pr list.
-echo "Test: DISPATCH_PR_LIST overrides self-fetch"
+# 13. DISPATCH_PR_LIST_FILE is used in place of a self-issued gh pr list.
+echo "Test: DISPATCH_PR_LIST_FILE overrides self-fetch"
 setup
 # pr-list-full.json is empty: a self-fetch would yield implement. The fix-checks
-# PR lives only in the env var, so a fix-checks result proves the env var won.
+# PR lives only in the file channel, so a fix-checks result proves it won.
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 ENV_LIST='['"$(make_pr 42 "42-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-result=$(DISPATCH_PR_LIST="$ENV_LIST" "$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "DISPATCH_PR_LIST used over self-fetch → fix-checks" "fix-checks" "$result"
+PR_LIST_F=$(pr_list_tmpfile "$ENV_LIST")
+result=$(DISPATCH_PR_LIST_FILE="$PR_LIST_F" "$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "DISPATCH_PR_LIST_FILE used over self-fetch → fix-checks" "fix-checks" "$result"
 teardown
 
 # 14. Draft + mergeable=CONFLICTING → fix-conflicts (highest-priority outcome).
@@ -1305,18 +1374,19 @@ assert_eq "branch arg pending draft → not-ready (token)" "waiting" "$CI_READY_
 assert_eq "branch arg pending draft → not-ready (exit 1)" "1" "$CI_READY_RC"
 teardown
 
-# 9. DISPATCH_PR_LIST reuse: predicate reads env-provided list without gh.
-echo "Test: DISPATCH_PR_LIST overrides self-fetch"
+# 9. DISPATCH_PR_LIST_FILE reuse: predicate reads file-provided list without gh.
+echo "Test: DISPATCH_PR_LIST_FILE overrides self-fetch"
 setup
 # pr-list-full.json is empty: a self-fetch would yield ready (no PR). The
-# pending draft lives only in the env var, so a not-ready result proves the
-# env var won and no gh pr list was issued.
+# pending draft lives only in the file channel, so a not-ready result proves it
+# won and no gh pr list was issued.
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 ENV_LIST='['"$(make_pr 42 "42-waiting" "true" "$NO_LABELS" "$PENDING_ROLLUP")"']'
-CI_READY_OUT=$(DISPATCH_PR_LIST="$ENV_LIST" "$TMPDIR_TEST/dispatch-ci-ready" "42") && CI_READY_RC=0 || CI_READY_RC=$?
-assert_eq "DISPATCH_PR_LIST used over self-fetch → waiting (token)" "waiting" "$CI_READY_OUT"
-assert_eq "DISPATCH_PR_LIST used over self-fetch → not-ready (exit 1)" "1" "$CI_READY_RC"
-assert_eq "DISPATCH_PR_LIST reuse issues no gh pr list" "0" \
+PR_LIST_F=$(pr_list_tmpfile "$ENV_LIST")
+CI_READY_OUT=$(DISPATCH_PR_LIST_FILE="$PR_LIST_F" "$TMPDIR_TEST/dispatch-ci-ready" "42") && CI_READY_RC=0 || CI_READY_RC=$?
+assert_eq "DISPATCH_PR_LIST_FILE used over self-fetch → waiting (token)" "waiting" "$CI_READY_OUT"
+assert_eq "DISPATCH_PR_LIST_FILE used over self-fetch → not-ready (exit 1)" "1" "$CI_READY_RC"
+assert_eq "DISPATCH_PR_LIST_FILE reuse issues no gh pr list" "0" \
   "$([[ -f "$STUB_DIR/gh-pr-list-calls.log" ]] && wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ' || echo 0)"
 teardown
 
@@ -1330,6 +1400,31 @@ printf '[%s]\n' "$(make_pr_mergeable 10 "42-my-feature" "true" "$NO_LABELS" "$PE
 ci_ready_run "42"
 assert_eq "draft + CONFLICTING + pending → ready (token)" "ready" "$CI_READY_OUT"
 assert_eq "draft + CONFLICTING + pending → ready (exit 0)" "0" "$CI_READY_RC"
+teardown
+
+# #1646: a >128KB open-PR list passed via DISPATCH_PR_LIST_FILE returns the correct
+# verdict. The equivalent inline DISPATCH_PR_LIST env var would E2BIG the exec.
+echo "Test: ci-ready over >128KB DISPATCH_PR_LIST_FILE → correct verdict"
+setup
+PAD=$(printf 'x%.0s' {1..143360})
+LIST='['"$(make_pr 10 "42-feature" "true" "$NO_LABELS" "$PENDING_ROLLUP")"','"$(make_pr 20 "99-pad" "false" "[{\"name\":\"$PAD\"}]" "$GREEN_ROLLUP")"']'
+BIG_FILE=$(pr_list_tmpfile "$LIST")
+assert_eq "ci-ready file-channel fixture exceeds 128KB" "ok" "$([[ "$(wc -c < "$BIG_FILE")" -gt 131072 ]] && echo ok || echo too-small)"
+CI_OUT=$(DISPATCH_PR_LIST_FILE="$BIG_FILE" "$TMPDIR_TEST/dispatch-ci-ready" "42") && CI_RC=0 || CI_RC=$?
+assert_eq ">128KB file channel → correct verdict (waiting)" "waiting" "$CI_OUT"
+assert_eq ">128KB file channel → not-ready exit 1" "1" "$CI_RC"
+teardown
+
+# #1646: an unreadable DISPATCH_PR_LIST_FILE is an environment/IO error, surfaced
+# as exit 2 — distinct from the readiness exits 0 (ready) / 1 (not-ready).
+echo "Test: ci-ready with unreadable DISPATCH_PR_LIST_FILE → exit 2"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+MISSING="$TMPDIR_TEST/does-not-exist-pr-list.json"
+CI_ERR=$(DISPATCH_PR_LIST_FILE="$MISSING" "$TMPDIR_TEST/dispatch-ci-ready" "42" 2>&1 >/dev/null) && CI_RC=0 || CI_RC=$?
+assert_eq "unreadable DISPATCH_PR_LIST_FILE → exit 2 (env error, not a readiness verdict)" "2" "$CI_RC"
+case "$CI_ERR" in *"not readable"*) ok=yes ;; *) ok="no:$CI_ERR" ;; esac
+assert_eq "unreadable file → clear stderr error" "yes" "$ok"
 teardown
 
 # ============================================================================
@@ -1365,14 +1460,15 @@ result=$("$TMPDIR_TEST/dispatch-find-pr" "42")
 assert_eq "no PR → empty output" "" "$result"
 teardown
 
-# 4. DISPATCH_PR_LIST overrides self-fetch.
+# 4. DISPATCH_PR_LIST_FILE overrides self-fetch.
 # pr-list-full.json is empty: a self-fetch would yield empty. The PR lives only
-# in the env var, so a non-empty result proves the env var won.
-echo "Test: DISPATCH_PR_LIST overrides self-fetch"
+# in the file channel, so a non-empty result proves it won.
+echo "Test: DISPATCH_PR_LIST_FILE overrides self-fetch"
 setup
 printf '[]\n' > "$STUB_DIR/pr-list-full.json"
-result=$(DISPATCH_PR_LIST='[{"number":670,"headRefName":"669-x"}]' "$TMPDIR_TEST/dispatch-find-pr" "669")
-assert_eq "DISPATCH_PR_LIST used over self-fetch → PR number" "670" "$result"
+PR_LIST_F=$(pr_list_tmpfile '[{"number":670,"headRefName":"669-x"}]')
+result=$(DISPATCH_PR_LIST_FILE="$PR_LIST_F" "$TMPDIR_TEST/dispatch-find-pr" "669")
+assert_eq "DISPATCH_PR_LIST_FILE used over self-fetch → PR number" "670" "$result"
 teardown
 
 # 5. Issue-prefix disambiguation: issue 6 must not match branch "60-foo".
@@ -1429,25 +1525,26 @@ result=$("$TMPDIR_TEST/dispatch-find-pr" "822")
 assert_eq "genuine empty → empty" "" "$result"
 teardown
 
-# 10. DISPATCH_PR_LIST supplied without matching branch; cross-check resolves PR.
-# The retry (step 1) is skipped when DISPATCH_PR_LIST is set — the caller owns
+# 10. DISPATCH_PR_LIST_FILE supplied without matching branch; cross-check resolves PR.
+# The retry (step 1) is skipped when DISPATCH_PR_LIST_FILE is set — the caller owns
 # the list. The cross-check (step 2) still runs regardless, using a different gh
 # endpoint that the caller cannot pre-supply.
-echo "Test: DISPATCH_PR_LIST no match + cross-check OPEN reference → PR number"
+echo "Test: DISPATCH_PR_LIST_FILE no match + cross-check OPEN reference → PR number"
 setup
 printf '[{"number":850,"headRefName":"999-unrelated"}]\n' > "$STUB_DIR/pr-list-full.json"
 printf '{"closedByPullRequestsReferences":[{"number":851,"state":"OPEN"}]}\n' \
   > "$STUB_DIR/issue-closing-prs-822.json"
-result=$(DISPATCH_PR_LIST='[{"number":850,"headRefName":"999-unrelated"}]' \
+PR_LIST_F=$(pr_list_tmpfile '[{"number":850,"headRefName":"999-unrelated"}]')
+result=$(DISPATCH_PR_LIST_FILE="$PR_LIST_F" \
   "$TMPDIR_TEST/dispatch-find-pr" "822")
-assert_eq "DISPATCH_PR_LIST no prefix match; cross-check finds OPEN PR → PR number" "851" "$result"
+assert_eq "DISPATCH_PR_LIST_FILE no prefix match; cross-check finds OPEN PR → PR number" "851" "$result"
 # Verify no self-fetch: pr_list_open (number,headRefName) was not called.
 if [[ -f "$STUB_DIR/gh-find-pr-calls.log" ]]; then
   call_count=$(wc -l < "$STUB_DIR/gh-find-pr-calls.log")
 else
   call_count=0
 fi
-assert_eq "no self-fetch gh pr list calls when DISPATCH_PR_LIST set" "0" "$call_count"
+assert_eq "no self-fetch gh pr list calls when DISPATCH_PR_LIST_FILE set" "0" "$call_count"
 teardown
 
 # 11. #1312: No truncation past 30 PRs (proves the --limit 300 fix).
@@ -1515,7 +1612,7 @@ echo "=== dispatch-route ==="
 # one call and prints exactly one directive. The git stub serves the worktree
 # toplevel from worktree-toplevel.txt; the gh stub serves the full-field open-PR
 # list from pr-list-full.json and logs each such call to gh-pr-list-calls.log, so
-# a test can prove the single DISPATCH_PR_LIST fetch is reused, not re-issued.
+# a test can prove the single DISPATCH_PR_LIST_FILE fetch is reused, not re-issued.
 # dispatch-provision-worktree is stubbed in setup() to a no-op exit 0 by default;
 # tests 17-20 drive its conflict/failure branches via $STUB_DIR/provision-exit.
 route_run() {
@@ -1584,7 +1681,7 @@ assert_eq "draft + failing → INVOKE /fix-checks (exit 0)" "0" "$ROUTE_RC"
 teardown
 
 # 3. Draft + green + no label → INVOKE /qa-fix.
-# Also assert exactly one gh pr list was issued, proving DISPATCH_PR_LIST reuse
+# Also assert exactly one gh pr list was issued, proving DISPATCH_PR_LIST_FILE reuse
 # across both dispatch-ci-ready calls and dispatch-phase.
 echo "Test: draft + green + no label → INVOKE /qa-fix"
 setup
@@ -2299,8 +2396,8 @@ teardown
 echo ""
 echo "=== dispatch-select-target ==="
 
-# dispatch-select-target fetches one union PR list and exports it via
-# DISPATCH_PR_LIST, so each per-PR dispatch-phase call reuses it. The harness
+# dispatch-select-target fetches one union PR list and shares it via
+# DISPATCH_PR_LIST_FILE, so each per-PR dispatch-phase call reuses it. The harness
 # only needs to seed that single list.
 
 setup_union_pr_list() {
@@ -5063,6 +5160,25 @@ printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"hel
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "pending draft PR on issue's branch → issue skipped this tick (empty)" "empty" "$result"
+teardown
+
+# #1646 regression guard (AC3, load-bearing): under the old inline DISPATCH_PR_LIST
+# env channel, an open-PR list past ~128 KB (MAX_ARG_STRLEN) E2BIG'd the child exec,
+# every candidate was silently excluded, and the tick manufactured a false `empty`.
+# The DISPATCH_PR_LIST_FILE temp-file channel makes list size irrelevant: a >128 KB
+# list must still select a candidate.
+echo "Test: >128KB open-PR list still selects a candidate (no false empty)"
+setup
+PAD=$(printf 'x%.0s' {1..143360})   # 140 KB of filler, > 131072 (128 KB)
+UNION='['"$(make_pr_union 10 "10-big-list" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-padding" "2024-01-02T00:00:00Z" "false" "[{\"name\":\"$PAD\"}]" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+fixture_bytes=$(wc -c < "$STUB_DIR/pr-list-union.json")
+assert_eq "AC3 fixture exceeds 128KB MAX_ARG_STRLEN" "ok" "$([[ "$fixture_bytes" -gt 131072 ]] && echo ok || echo "too-small:$fixture_bytes")"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "AC3: >128KB open-PR list still selects a candidate (no false empty)" "pr 10 10-big-list fix-checks" "$result"
 teardown
 
 # ============================================================================
@@ -14083,6 +14199,12 @@ echo "=== dispatch-tick-recover ==="
 #
 # The test shell runs under `set -e`; dispatch-tick-recover always exits 0 on
 # these paths, but each invocation is still wrapped to capture the code.
+#
+# Continuation semantics: a pending dispatch-reseed* timer is the ONLY
+# continuation signal — a busy worker is NOT a continuation. A busy worker
+# instead drives Step 5's deferred backstop: a flat HEARTBEAT reseed is armed
+# at NOW + HEARTBEAT (default 1800) and the count advances normally so the cap
+# can be reached and escalation fires even under a persistent phantom-busy stall.
 
 tr_setup() {
   TMPDIR_TEST=$(mktemp -d)
@@ -14180,6 +14302,7 @@ tr_teardown() {
   unset DISPATCH_TICK_RECOVER_BASE_BACKOFF
   unset DISPATCH_TICK_RECOVER_MAX_BACKOFF
   unset DISPATCH_TICK_RECOVER_RESET_WINDOW
+  unset DISPATCH_TICK_RECOVER_HEARTBEAT
   unset DISPATCH_DAEMON_UNIT_DIR DISPATCH_DAEMON_SYSTEMCTL_CMD DISPATCH_DAEMON_CLAUDE_CMD
 }
 
@@ -14247,26 +14370,44 @@ else
 fi
 tr_teardown
 
-# --- Test 2: continuation present (busy worker) → no reseed, count reset -----
+# --- Test 2: busy worker is no longer a continuation → arms heartbeat reseed ---
+# A busy worker used to short-circuit recovery (old "continuation" semantics).
+# Under the new behavior it is NOT a continuation: the count advances and a
+# flat HEARTBEAT reseed is armed as a deferred backstop. With count 2→3 and
+# NOW - last_failure = 1000 < RESET_WINDOW → no aging reset → reseed_at =
+# NOW + HEARTBEAT = 1000000 + 1800 = 1001800.
 
-echo "Test: a live busy worker is a continuation → no reseed, count reset to 0"
+echo "Test: a busy worker is no longer a continuation → arms a heartbeat reseed, count advances"
 tr_setup
 tr_busy_worker
 tr_seed_state 2 999000
 if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "busy-worker: dispatch-tick-recover exits 0" "0" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
-assert_eq "busy-worker: no reseed armed (systemd-run log empty)" "" "$log"
-assert_eq "busy-worker: state count reset to 0" "0" "$(tr_state_count)"
-# Continuation no-op path: ensure_daemon_service must NOT have run (no arming).
-assert_eq "busy-worker: daemon service not touched (continuation no-op)" \
-  "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@1001800"* \
+   && "$log" == *"--unit=dispatch-reseed-1001800"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: busy-worker: heartbeat reseed armed at NOW + 1800"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: busy-worker: heartbeat reseed armed at NOW + 1800"
+  echo "    log: $log"
+fi
+assert_eq "busy-worker: state count advances to 3" "3" "$(tr_state_count)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'enable --now dispatch-claude-daemon.service' \
+     "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: busy-worker: ensure_daemon_service ran (arming path)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: busy-worker: ensure_daemon_service ran (arming path)"
+  echo "    daemon-systemctl-log: $(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || echo '(absent)')"
+fi
 tr_teardown
 
 # --- Test 3: continuation present (pending dispatch-reseed* timer) → no reseed -
 
 echo "Test: a pending dispatch-reseed* timer is a continuation → no reseed armed"
 tr_setup
+tr_seed_state 2 999000
 # A pending reseed timer row drives the continuation signal; 0 busy workers.
 printf 'dispatch-reseed-1234.timer  active  waiting  Dispatch reseed\n' \
   > "$TMPDIR_TEST/timer-units"
@@ -14277,6 +14418,8 @@ assert_eq "pending-timer: no reseed armed (systemd-run log empty)" "" "$log"
 # Continuation no-op path: ensure_daemon_service must NOT have run (no arming).
 assert_eq "pending-timer: daemon service not touched (continuation no-op)" \
   "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
+# The timer continuation branch must NOT reset the count (state left untouched).
+assert_eq "pending-timer: state count preserved (not reset)" "2" "$(tr_state_count)"
 tr_teardown
 
 # --- Test 4: cap reached → escalate, not retry -------------------------------
@@ -14411,6 +14554,68 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: overflow-clamp: backoff clamped to MAX, reseed at NOW + 3600 (killmode)"
   echo "    log: $log"
 fi
+tr_teardown
+
+# --- Test 10: phantom-busy stall escalates within the cap (criterion 3) -------
+# A persistent busy worker that never actually carries the chain (its Stop hook
+# never fires → timer-units stays empty). Each generation must advance the count
+# (the busy reading no longer short-circuits) so the cap is reached and
+# escalation fires — rather than the count resetting to 0 every generation and
+# the chain stalling forever.
+echo "Test: repeated phantom-busy generations advance the count to escalation"
+tr_setup
+tr_busy_worker                      # busy>0 every round; timer-units stays empty
+for i in 1 2 3 4; do
+  export DISPATCH_TICK_RECOVER_NOW=$(( 1000000 + i*600 ))   # delta 600 < RESET_WINDOW
+  "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null || true
+done
+unset DISPATCH_TICK_RECOVER_NOW
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
+# Rounds 1-3 each arm a heartbeat reseed at NOW_i + 1800: @1002400, @1003000,
+# @1003600 (the heartbeat window is flat — it does NOT grow). Round 4 (= CAP+1)
+# escalates and arms NO reseed, so systemd-log has exactly 3 lines.
+TOTAL=$((TOTAL + 1))
+nlines=$(grep -c 'on-calendar' "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+if [[ "$log" == *"--on-calendar=@1002400"* \
+   && "$log" == *"--on-calendar=@1003000"* \
+   && "$log" == *"--on-calendar=@1003600"* \
+   && "$nlines" == "3" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: phantom-busy: exactly 3 heartbeat reseeds (rounds 1-3)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: phantom-busy: exactly 3 heartbeat reseeds (rounds 1-3)"
+  echo "    log: $log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"--label dispatch:chain-stalled"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: phantom-busy: round 4 escalates (chain-stalled issue)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: phantom-busy: round 4 escalates (chain-stalled issue)"
+  echo "    gh-log: $ghlog"
+fi
+assert_eq "phantom-busy: state count advances to 4" "4" "$(tr_state_count)"
+tr_teardown
+
+# --- Test 11: HEARTBEAT=0 is rejected (non-positive) -------------------------
+echo "Test: DISPATCH_TICK_RECOVER_HEARTBEAT=0 is rejected (exit 2, no reseed)"
+tr_setup
+export DISPATCH_TICK_RECOVER_HEARTBEAT=0
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "heartbeat-zero: dispatch-tick-recover exits 2" "2" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "heartbeat-zero: no reseed armed (systemd-run log empty)" "" "$log"
+tr_teardown
+
+# --- Test 12: HEARTBEAT >= RESET_WINDOW is rejected (defeats the cap) ---------
+# If the deferred heartbeat window is >= the reset window, the count would age
+# back to a fresh episode every generation and the cap would never be reached.
+echo "Test: DISPATCH_TICK_RECOVER_HEARTBEAT >= RESET_WINDOW is rejected (exit 2, no reseed)"
+tr_setup
+export DISPATCH_TICK_RECOVER_HEARTBEAT=3600   # == RESET_WINDOW (3600 from tr_setup)
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "heartbeat-ge-reset: dispatch-tick-recover exits 2" "2" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "heartbeat-ge-reset: no reseed armed (systemd-run log empty)" "" "$log"
 tr_teardown
 
 # ============================================================================
@@ -17614,7 +17819,7 @@ case "$args" in
     fi
     ;;
   pr\ list\ *)
-    # The hook fetches the open-PR list once and shares it via DISPATCH_PR_LIST.
+    # The hook fetches the open-PR list once and shares it via DISPATCH_PR_LIST_FILE.
     # The ci-ready / phase fakes read $STUB_DIR files, not the list, so an empty
     # array is sufficient to model a successful fetch.
     echo "$args" >> "$STUB_DIR/gh-pr-list.log"
@@ -24924,6 +25129,18 @@ assert_eq "dedup: partition-split → length 2" "2" "$(printf '%s' "$out" | jq -
 assert_eq "dedup: partition-split → output[0] Confidence preserved (high)" "high" "$(printf '%s' "$out" | jq -r '.[0].Confidence')"
 assert_eq "dedup: partition-split → output[1] Confidence preserved (low)" "low" "$(printf '%s' "$out" | jq -r '.[1].Confidence')"
 
+# all-absent partition group: every member absent from findings → group
+# collapses to nothing (not a junk finding), exit 0. Distinct from IN5
+# (empty partition): here the partition is NON-empty but references only
+# absent ids. Discriminating: WITHOUT the empty-group drop, this group
+# emits {"Confidence":null,...} and length is 1, so the [] / length-0
+# assertion is the one that guards the fix.
+IN8='{"findings":[],"partition":[["zzz","yyy"]]}'
+if out=$(printf '%s' "$IN8" | "$SCRIPT_DIR/dispatch-review-dedup"); then rc=0; else rc=$?; fi
+assert_eq "dedup: all-absent partition group → exit 0" "0" "$rc"
+assert_eq "dedup: all-absent partition group → length 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+assert_eq "dedup: all-absent partition group → []" "[]" "$(printf '%s' "$out" | jq -c '.')"
+
 # ============================================================================
 # === dispatch-review-verify-drop ===
 # ============================================================================
@@ -29798,6 +30015,97 @@ assert_eq "#1490 classify: other issue (110) sorted_pri is 0" "0" "$spot_other_s
 assert_eq "#1490 classify: other issue (110) helper_pri is 0" "0" "$spot_other_hpri"
 assert_eq "#1490 classify: testing issue (103) sorted_cat is 'testing infrastructure'" "testing infrastructure" "$spot_testing_scat"
 assert_eq "#1490 classify: testing issue (103) helper_cat is 'testing infrastructure'" "testing infrastructure" "$spot_testing_hcat"
+teardown
+
+# ============================================================================
+# dispatch-sync-merge-queue (#1480)
+# ============================================================================
+echo "=== dispatch-sync-merge-queue ==="
+
+# A check-run rollup entry classifies `passing` only when status==COMPLETED AND
+# conclusion in {SUCCESS,NEUTRAL,SKIPPED}; a bare {"conclusion":"SUCCESS"} (no
+# status) is `pending` and would be skipped. So the mergeable fixtures pin both.
+MERGE_PR_ONE='[{"number":42,"title":"Add widget","url":"https://github.com/natb1/commons.systems/pull/42","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"}]}]'
+
+# (a) mergeable PR with no tracking issue → create
+echo "Test: mergeable PR, no tracking issue → create"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "create: issue-create log present" "present" "$(log_state gh-merge-issue-create.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q -- '--title' "$STUB_DIR/gh-merge-issue-create.log" \
+   && grep -q 'merge-pr:42' "$STUB_DIR/gh-merge-issue-create.log" \
+   && grep -q 'oh-merge-pr' "$STUB_DIR/gh-merge-issue-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: create args carry --title, merge-pr:42 label, and oh-merge-pr marker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: create args carry --title, merge-pr:42 label, and oh-merge-pr marker"
+fi
+teardown
+
+# (b) existing tracking issue with matching title → idempotent (no create, no edit)
+echo "Test: existing tracking issue, matching title → no create, no edit"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":77,"title":"Add widget"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "idempotent: no create" "absent" "$(log_state gh-merge-issue-create.log)"
+assert_eq "idempotent: no edit" "absent" "$(log_state gh-merge-issue-edit.log)"
+teardown
+
+# (c) existing tracking issue with stale title → update (title + refreshed marker)
+echo "Test: existing tracking issue, stale title → update"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":77,"title":"Old stale title"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "update: issue-edit log present" "present" "$(log_state gh-merge-issue-edit.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'Add widget' "$STUB_DIR/gh-merge-issue-edit.log" \
+   && grep -q 'oh-merge-pr' "$STUB_DIR/gh-merge-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: edit args carry the new title and the refreshed oh-merge-pr marker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: edit args carry the new title and the refreshed oh-merge-pr marker"
+fi
+assert_eq "update: no spurious create" "absent" "$(log_state gh-merge-issue-create.log)"
+teardown
+
+# (d) PR no longer mergeable but tracking issue still open → close
+echo "Test: PR no longer mergeable, tracking issue open → close"
+setup
+printf '[]\n' > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":88,"labels":[{"name":"merge-pr:42"}]}]\n' > "$STUB_DIR/oh-issue-enum.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "close: issue-close log present" "present" "$(log_state gh-merge-issue-close.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issue close 88' "$STUB_DIR/gh-merge-issue-close.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: closed the tracking issue (#88) for the no-longer-mergeable PR"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: closed the tracking issue (#88) for the no-longer-mergeable PR"
+fi
+teardown
+
+# (e) pr_list_open fails (truncation guard) → bail before the close pass
+# Safety-critical: if the mergeable set cannot be computed, the script must exit
+# non-zero immediately and run NO close pass — otherwise a stale tracking issue
+# would be wrongly closed against an empty/unknown mergeable set. Force the
+# failure by pinning DISPATCH_PR_LIST_LIMIT to the fixture length (1): pr_list_open
+# sees len == limit, fires its loud truncation guard, and returns non-zero.
+echo "Test: pr_list_open fails (truncation) → bail, no close pass"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+# A stale tracking issue that WOULD be closed if the close pass ran against an
+# empty mergeable set — so its survival proves the bail short-circuited it.
+printf '[{"number":88,"labels":[{"name":"merge-pr:42"}]}]\n' > "$STUB_DIR/oh-issue-enum.json"
+# `set -e` is in effect and this invocation exits non-zero by design, so capture
+# the code with an if/else rather than letting it abort the suite.
+if DISPATCH_PR_LIST_LIMIT=1 "$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "bail: script exits non-zero when the mergeable set cannot be computed" "1" "$rc"
+assert_eq "bail: close pass did not run (no gh issue close)" "absent" "$(log_state gh-merge-issue-close.log)"
 teardown
 
 # ============================================================================
