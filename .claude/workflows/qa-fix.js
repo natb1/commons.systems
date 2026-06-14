@@ -1,42 +1,59 @@
 /*
- * qa-fix.js — the QA disposition-triage Workflow (issue #1551, sub-issue of
- * epic #1550). REPORT-ONLY.
+ * qa-fix.js — the QA disposition-triage + gated fix-planning Workflow (issue
+ * #1553, building on #1551, sub-issues of epic #1550).
  *
  * WHAT THIS IS
  * ------------
  * A self-contained, sandboxed Workflow-tool script structurally modeled on
- * .claude/workflows/review-fix.js, but it FIXES NOTHING. It does NOT apply code
- * changes, does NOT prepare any filings, and does NOT fan out Opus fixes. It
- * ONLY: classifies each QA residue item (opus-fixable / needs-main /
- * needs-human), adversarially verifies the non-aesthetic `needs-human` calls
- * with Sonnet skeptics, and returns the resulting dispositions. It changes no
- * escalation behavior — `deviation` is hard-coded `false`.
+ * .claude/workflows/review-fix.js. It ALWAYS classifies each QA residue item
+ * (opus-fixable / needs-main / needs-human), adversarially verifies the
+ * non-aesthetic `needs-human` calls with Sonnet skeptics, and returns the
+ * resulting dispositions.
+ *
+ * It is REPORT-ONLY when `plan_fix` is false (the #1551 callers): it emits no
+ * fix plan and `deviation` is `false`. WHEN `plan_fix` is true AND at least one
+ * opus-fixable disposition exists, it ALSO runs a read-only `fix-plan` phase that
+ * emits an ordered fix plan (a unit list) plus a LIVE `deviation` flag.
+ *
+ * It still FIXES NOTHING ITSELF: the planning agent is READ-ONLY — it reasons
+ * over the residue + diff + acceptance criteria and runs no tools and mutates
+ * nothing. The actual mutating `/implement-unit` loop that builds each planned
+ * unit runs in the qa-fix SKILL caller thread, NOT in this Workflow.
  *
  * args IN:
  *   { pr_num, issue_num, app_dir, browser_available:bool, firestore_caveat:bool,
  *     residue:[ { id, title, kind:"fail"|"needs-human-judgment"|"main-gated-fail",
- *       url_path, expected_outcome, finding, page_text, screenshot_path } ] }
+ *       url_path, expected_outcome, finding, page_text, screenshot_path } ],
+ *     plan_fix:bool,             // when true (+ opus-fixable items exist), run fix-plan
+ *     acceptance_criteria:string, // issue acceptance criteria the plan must satisfy
+ *     changed_files:string }      // the --diff file list + hunks scoping the plan
  *
- * return OUT (the ONLY thing this script returns):
+ * return OUT:
  *   { dispositions:[ { id, title, kind, class, aesthetic, verify, rationale } ],
  *     verify_report:[ { id, verdict, skeptic_votes, rationale } ],
- *     deviation:false }
+ *     fix_plan: { units, deviation, deviation_reason } | null,
+ *     deviation:boolean }
  *   - dispositions: one entry PER residue item, in input order. `class` is the
  *     FINAL class after any downgrade. `verify` is "Upheld"|"Refuted"|
  *     "Unverified"|"n/a".
  *   - verify_report: one entry per NON-AESTHETIC needs-human candidate that went
  *     through the skeptic fan-out. `verdict` is "refuted"|"upheld"|"unverified".
- *   - deviation: literal false (report-only never asserts auto-ready behavior).
+ *   - fix_plan: the ordered Opus fix plan ({ units, deviation, deviation_reason })
+ *     when the fix-plan phase ran; `null` when it did not (plan_fix false/absent,
+ *     no opus-fixable items, or the planning agent died).
+ *   - deviation: LIVE — `fix_plan.deviation` when the phase ran, else `false`.
  *
  * NORMATIVE SPEC for the inline downgrade kernel below is the pure bash/jq
  * script (the JS helper is kept thin so it cannot drift from its spec):
  *   - applyQaDisposition ← .claude/skills/dispatch-propagate/scripts/dispatch-qa-disposition
+ *   The applyQaDisposition kernel and its normative dispatch-qa-disposition
+ *   mirror are UNCHANGED by #1553.
  */
 
 export const meta = {
   name: 'qa-fix',
-  description: 'QA disposition triage (report-only, #1551): classify each QA residue item opus-fixable / needs-main / needs-human, adversarially verify the needs-human calls, return the classes. Changes no escalation behavior.',
-  phases: [{ title: 'classify' }, { title: 'verify' }],
+  description: 'QA disposition triage + gated fix-planning (#1553): classify each QA residue item opus-fixable / needs-main / needs-human and adversarially verify the needs-human calls; when plan_fix is set and opus-fixable items exist, emit an ordered Opus fix plan and a live deviation flag.',
+  phases: [{ title: 'classify' }, { title: 'verify' }, { title: 'fix-plan' }],
 };
 
 // --- schemas -----------------------------------------------------------------
@@ -70,6 +87,47 @@ const VERDICT_SCHEMA = {
   properties: {
     verdict: { enum: ['refuted', 'upheld'] },
     rationale: { type: 'string' },
+  },
+};
+
+// The PLAN shape (#1553): an ordered unit list mirroring office-hours' unit
+// breakdown + /implement-unit's param contract (model, scope, context,
+// commit_intent). This is NOT review-fix's FIX_SCHEMA — that is an edit-agent
+// OUTPUT shape; this is what the read-only planner emits for the caller's
+// /implement-unit loop to consume. `deviation_reason` is semantically
+// required-when-deviation; `units` is empty when deviation is true.
+const FIX_PLAN_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['deviation', 'deviation_reason', 'units'],
+  properties: {
+    deviation: { type: 'boolean' },
+    deviation_reason: { type: 'string' },
+    units: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'id',
+          'scope',
+          'model',
+          'dependencies',
+          'commit_intent',
+          'context',
+          'resolves_ids',
+        ],
+        properties: {
+          id: { type: 'string' },
+          scope: { type: 'string' },
+          model: { enum: ['opus', 'sonnet'] },
+          dependencies: { type: 'array', items: { type: 'string' } },
+          commit_intent: { type: 'string' },
+          context: { type: 'string' },
+          resolves_ids: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
   },
 };
 
@@ -324,8 +382,99 @@ const verify_report = candidates.map((c) => {
   };
 });
 
+// --- 4. FIX-PLAN (gated, one read-only Opus planner) -------------------------
+// Runs ONLY when the caller opted in (plan_fix) AND there is at least one
+// opus-fixable disposition to plan against. Otherwise fix_plan stays null and
+// `deviation` below falls back to false — preserving the #1551 report-only
+// contract for absent/false plan_fix callers.
+const opusFixable = dispositions.filter((d) => d.class === 'opus-fixable');
+
+let fix_plan = null;
+if (_a.plan_fix === true && opusFixable.length > 0) {
+  phase('fix-plan');
+  log(`fix-plan: planning ${opusFixable.length} opus-fixable item(s)`);
+
+  // Join each opus-fixable disposition with its residue detail so the planner
+  // sees the full finding/expected_outcome/page_text context.
+  const planItems = opusFixable.map((d) => {
+    const r = residueById.get(d.id);
+    return {
+      id: d.id,
+      title: d.title,
+      finding: r ? r.finding : '',
+      expected_outcome: r ? r.expected_outcome : '',
+      page_text: r ? r.page_text : '',
+    };
+  });
+
+  const fixPlanPrompt = [
+    'You are the QA auto-fix PLANNER. You emit an ordered list of implementation',
+    'units that will fix the opus-fixable QA findings below. You write NO code,',
+    'run NO tools, and mutate NOTHING — you only reason over the data provided',
+    'and produce a plan.',
+    '',
+    UNTRUSTED_GUARD,
+    '',
+    'YOUR JOB:',
+    '- Emit an ordered `units` array. Each unit is ONE logical change.',
+    '- For each unit choose `model` per the /implement-unit heuristic:',
+    '  - "sonnet" for well-specified, mechanical work (clear diff shape, rote',
+    '    wiring, boilerplate, explicit-case unit tests).',
+    '  - "opus" for judgment-heavy work (cross-cutting design, tricky ordering,',
+    '    unfamiliar subsystems, plans that leave decisions for implementation).',
+    '  - If unsure, pick "opus".',
+    '- `dependencies`: ids of other units this one depends on (ordering).',
+    '- `commit_intent`: the "why" for the commit message.',
+    '- `context`: the plan/issue context the implement subagent needs to do the',
+    '  work without re-deriving it.',
+    '- `resolves_ids`: which opus-fixable residue ids (below) this unit fixes.',
+    '',
+    'SCOPE-DEVIATION ESCAPE: if ANY needed fix would exceed the PR\'s scope —',
+    'change behavior the PR does not deliver, touch files outside the concern of',
+    'the changed-files diff below, or require a decision the issue does not',
+    'authorize — set "deviation": true with a one-line "deviation_reason" and',
+    'emit an EMPTY "units" array (emit no units).',
+    '',
+    'Otherwise set "deviation": false, "deviation_reason": "" (empty string), and',
+    'emit the ordered units.',
+    '',
+    'Return { "deviation", "deviation_reason", "units": [ { "id", "scope",',
+    '"model", "dependencies", "commit_intent", "context", "resolves_ids" }, ... ] }.',
+    '',
+    '<untrusted>',
+    'OPUS-FIXABLE FINDINGS:',
+    JSON.stringify(planItems, null, 2),
+    '',
+    'CHANGED FILES (PR diff file list + hunks — the scope boundary):',
+    String(_a.changed_files || ''),
+    '',
+    'ACCEPTANCE CRITERIA:',
+    String(_a.acceptance_criteria || ''),
+    '</untrusted>',
+  ].join('\n');
+
+  const planRes = await agent(fixPlanPrompt, {
+    model: 'opus',
+    agentType: 'general-purpose',
+    schema: FIX_PLAN_SCHEMA,
+    label: 'fix-plan',
+    phase: 'fix-plan',
+  });
+  // Agent death → planRes is null → fix_plan stays null → `deviation` below
+  // falls back to false. No extra branch needed; this assignment cannot throw.
+  fix_plan = planRes;
+  log(
+    fix_plan
+      ? `fix-plan: ${fix_plan.units ? fix_plan.units.length : 0} unit(s), deviation=${fix_plan.deviation}`
+      : 'fix-plan: planning agent returned null — fix_plan=null'
+  );
+} else {
+  log(`fix-plan: skipped (plan_fix=${_a.plan_fix}, opusFixable=${opusFixable.length})`);
+}
+
 return {
   dispositions,
   verify_report,
-  deviation: false,
+  fix_plan,
+  deviation: fix_plan ? fix_plan.deviation : false,
 };
