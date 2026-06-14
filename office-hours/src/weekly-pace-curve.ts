@@ -7,38 +7,37 @@
  * to a sample's `weeklyUsedPct`, so the usage-history chart can overlay it on
  * the actual weekly series.
  *
- * The smooth power curve maxed with a terminal "you-can-still-make-it" envelope.
- * Monotonic increasing in t (the sample time). `end` is constant in t, so it is
- * computed once at module scope.
+ * Anchored floor→shoulder→terminal max curve: W = max(floor, rise, terminal_seg),
+ * where rise tracks a power curve from floor to shoulder and terminal_seg is a
+ * linear ramp from WEEKLY_TERMINAL at r=0 to shoulder at r=TERMINAL_WINDOWS.
+ * Monotone increasing in x by construction.
  */
 
 /** Seconds in a weekly window. */
 export const WEEK_SECONDS = 604800;
 /** Seconds in a 5-hour window. */
 export const WINDOW_SECONDS = 18000;
-/** Five-hour windows per weekly window: round(604800 / 18000) = 34. */
-export const T = Math.round(WEEK_SECONDS / WINDOW_SECONDS);
+/** Five-hour windows per weekly window: 604800 / 18000 = 33.6 (exact, not rounded). */
+export const T = WEEK_SECONDS / WINDOW_SECONDS;
 
 // Fixed tunables (defaults baked into dispatch-target-workers; the
 // `target-workers` config schema in dispatch-config-load documents the same).
-/** target_weekly_usage_pct — smooth-curve terminal W(1). */
-export const TARGET_WEEKLY = 90;
-/** weekly_terminal_pct — envelope terminal. */
+/** weekly_terminal_pct — terminal W at the reset. */
 export const WEEKLY_TERMINAL = 100;
-/** weekly_increment_floor_pct — per-window floor. */
-export const FLOOR = 1;
+/** weekly_pace_floor_pct — early-week floor. */
+export const FLOOR = 50;
 /** weekly_increment_cap_pct — per-window hard ceiling. */
 export const CAP = 10;
 /** weekly_curve_power ("p") — convexity; >1 back-loads. */
 export const POWER = 1;
+/** weekly_terminal_windows — count of trailing 5-hour windows the terminal segment spans. */
+export const TERMINAL_WINDOWS = 2;
 
 /**
- * `end` solves the cumulative curve so W(1) == TARGET_WEEKLY, then clamps the
- * per-window increment ceiling at CAP. Constant in t. With the defaults:
- *   end = 1 + (1+1) * (90/34 - 1) = 1 + 2 * 1.6470588... = 4.2941176...
- *   min(4.2941..., 10) = 4.2941176...
+ * Derived shoulder anchor (= terminal − cap·windows = 80 with defaults);
+ * not a config knob.
  */
-export const END = Math.min(FLOOR + (POWER + 1) * (TARGET_WEEKLY / T - FLOOR), CAP);
+export const SHOULDER = WEEKLY_TERMINAL - CAP * TERMINAL_WINDOWS;
 
 function clamp(v: number, lo: number, hi: number): number {
   if (v < lo) return lo;
@@ -61,27 +60,21 @@ export function elapsedWeekFraction(sampledAt: Date, weeklyResetsAt: Date): numb
 
 /**
  * The pace curve W(x) as a pure function of the elapsed-week fraction
- * `x ∈ [0, 1]`. Both terms reduce to functions of `x` alone, so the curve is
- * identical every week and can be drawn once as a fixed backdrop.
- *
- * The smooth cumulative power curve, maxed with a terminal
- * "you-can-still-make-it" envelope. The envelope's remaining-seconds term is
- * reconstructed from `x` as `(1 - x) * WEEK_SECONDS`, then divided by
- * `WINDOW_SECONDS` — i.e. `(1 - x) * 33.6`, NOT `(1 - x) * T` (T is the rounded
- * 34) — to match the original `remaining / WINDOW_SECONDS` exactly.
+ * `x ∈ [0, 1]`. Mirrors the awk `W_of` anchored floor→shoulder→terminal curve:
+ *   r = (1 - x) * T  (remaining 5-hour windows)
+ *   s = clamp((T - r) / (T - TERMINAL_WINDOWS), 0, 1)
+ *   rise = FLOOR + (SHOULDER - FLOOR) * s^POWER
+ *   terminal_seg = WEEKLY_TERMINAL - CAP * r
+ *   W = max(FLOOR, rise, terminal_seg)
  */
 export function paceCurveAtFraction(x: number): number {
-  // Smooth cumulative power curve.
-  let W = T * (FLOOR * x + (END - FLOOR) * x ** (POWER + 1) / (POWER + 1));
-
-  // Terminal envelope: floor the cumulative curve from the end so spending at
-  // most CAP per remaining window still reaches WEEKLY_TERMINAL. Mid-week the
-  // remaining-windows term is large and the envelope is deeply negative, so the
-  // smooth curve dominates; the envelope only lifts the final ~1.7 windows.
-  const remaining = (1 - x) * WEEK_SECONDS;
-  const envelope = WEEKLY_TERMINAL - CAP * (remaining / WINDOW_SECONDS);
-  if (W < envelope) W = envelope;
-
+  const r = (1 - x) * T;
+  const s = clamp((T - r) / (T - TERMINAL_WINDOWS), 0, 1);
+  const rise = FLOOR + (SHOULDER - FLOOR) * s ** POWER;
+  const terminalSeg = WEEKLY_TERMINAL - CAP * r;
+  let W = FLOOR;
+  if (terminalSeg > W) W = terminalSeg;
+  if (rise > W) W = rise;
   return W;
 }
 
