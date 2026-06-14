@@ -21701,11 +21701,12 @@ assert_eq "finalize fail: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- create-existing, local branch → check out as-is (no -b, no origin/main) --
+# --- create-existing, local branch → fetch + fast-forward + worktree add ------
 # AC #3 (#943): the PR head branch already exists locally (worktree was swept,
-# branch survived). materialize-spawn must `git worktree add <path> <branch>` —
-# NOT branch a fresh slug from origin/main, which would fail "already exists".
-echo "Test: materialize-spawn create-existing local branch → worktree add <path> <branch>"
+# branch survived). materialize-spawn must fetch origin/$BRANCH, fast-forward the
+# local ref if it is a strict ancestor (UNIQUE=0), then
+# `git worktree add <path> <branch>` — NOT branch a fresh slug from origin/main.
+echo "Test: materialize-spawn create-existing local branch → fetch + fast-forward + worktree add"
 mat_setup
 export MAT_WT_DECISION="create-existing 42-existing-pr-branch"
 cat > "$TMPDIR_TEST/bin/git" <<STUB
@@ -21714,6 +21715,7 @@ echo "\$*" >> "$TMPDIR_TEST/logs/git.log"
 case "\$*" in
   "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/project/.bare" ;;
   "show-ref --verify --quiet "*) exit 0 ;;
+  "rev-list --count "*) echo "0" ;;
   "worktree add -b "*) mkdir -p "\$5" ;;
   "worktree add --track -b "*) mkdir -p "\$6" ;;
   "worktree add "*) mkdir -p "\$3" ;;
@@ -21728,8 +21730,40 @@ wt_add_local=$(grep -q "^worktree add $TMPDIR_TEST/project/worktrees/42-existing
 assert_eq "create-existing local: worktree add <path> <branch> (no -b)" "yes" "$wt_add_local"
 no_origin_main=$(grep -q "origin/main" "$TMPDIR_TEST/logs/git.log" && echo no || echo yes)
 assert_eq "create-existing local: did NOT branch a fresh slug from origin/main" "yes" "$no_origin_main"
-no_fetch=$(grep -q "^fetch " "$TMPDIR_TEST/logs/git.log" && echo no || echo yes)
-assert_eq "create-existing local: no fetch on the local path" "yes" "$no_fetch"
+did_fetch=$(grep -q "^fetch --quiet origin 42-existing-pr-branch\$" "$TMPDIR_TEST/logs/git.log" && echo yes || echo no)
+assert_eq "create-existing local: fetched origin/BRANCH before checkout" "yes" "$did_fetch"
+did_ff=$(grep -q "^branch -f 42-existing-pr-branch origin/42-existing-pr-branch\$" "$TMPDIR_TEST/logs/git.log" && echo yes || echo no)
+assert_eq "create-existing local: fast-forwarded local ref to origin tip" "yes" "$did_ff"
+mat_teardown
+
+# --- create-existing, local branch diverged from origin → worktree-conflict ----
+# UNIQUE > 0: local branch carries commits not on origin (unpushed work). Must
+# emit worktree-conflict instead of overwriting, mirroring the enter-path
+# emit_enter_reconciled unique-commits conflict (#913).
+echo "Test: materialize-spawn create-existing local branch diverged → worktree-conflict"
+mat_setup
+export MAT_WT_DECISION="create-existing 42-existing-pr-branch"
+cat > "$TMPDIR_TEST/bin/git" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/git.log"
+case "\$*" in
+  "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/project/.bare" ;;
+  "show-ref --verify --quiet "*) exit 0 ;;
+  "rev-list --count "*) echo "1" ;;
+  "worktree add -b "*) mkdir -p "\$5" ;;
+  "worktree add --track -b "*) mkdir -p "\$6" ;;
+  "worktree add "*) mkdir -p "\$3" ;;
+  *) : ;;
+esac
+STUB
+chmod +x "$TMPDIR_TEST/bin/git"
+out=$(run_mat 42 queue) ; rc=$?
+assert_eq "create-existing local diverged: exit 0" "0" "$rc"
+assert_eq "create-existing local diverged: terminal token" "drain worktree-conflict" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "create-existing local diverged: path line emitted" "yes" \
+  "$(printf '%s\n' "$out" | grep -q "^path: " && echo yes || echo no)"
+no_wt_add=$(grep -q "^worktree add " "$TMPDIR_TEST/logs/git.log" && echo no || echo yes)
+assert_eq "create-existing local diverged: no worktree add (conflict, not materialized)" "yes" "$no_wt_add"
 mat_teardown
 
 # --- create-existing, remote-only branch → fetch then --track -b -------------
