@@ -17,7 +17,15 @@
 #
 # Decision lines (the last stdout line is always exactly one of):
 #   busy             lock held by another tick; nothing acquired, nothing released.
-#   sync-failed      git fetch / merge --ff-only failed on `main`; lock released.
+#   sync-failed      git fetch / merge --ff-only failed on `main` and the repair
+#                    attempt-cap is not yet hit; lock released, reseed armed.
+#                    dispatch-tick reads this to spawn the deduped repair job.
+#   sync-repair-pending   a live sync-repair job is mutating the main worktree;
+#                    deferred. lock released; reseed armed.
+#   sync-broken      local main cannot ff-merge origin/main and the repair
+#                    attempt-cap is hit (or the latch is already open); a
+#                    dispatch:sync-broken issue is the latch. lock released;
+#                    reseed armed; nothing spawned.
 #   resolver-failed  explicit arg did not resolve to one issue; lock released.
 #   concurrency-cap  effective-live count (busy workers + outstanding reservations) >= target,
 #                    AND no priority/main-broken item waits to bypass it (or the rate-limit
@@ -49,7 +57,7 @@
 # at/over the worker budget. The only hard floor is genuine token exhaustion.
 #
 # Lock invariant (the three guards): HOLD on pr/issue/explicit; RELEASE on
-# empty/sync-failed/resolver-failed/concurrency-cap/main-broken/jit-reminder;
+# empty/sync-failed/sync-repair-pending/sync-broken/resolver-failed/concurrency-cap/main-broken/jit-reminder;
 # NEVER release on busy (nothing was acquired).
 #
 # Requires `dangerouslyDisableSandbox: true` — sub-scripts write tmp state, call
@@ -103,11 +111,108 @@ if [[ "$LOCK" != acquired ]]; then
 fi
 
 # --- Step 1: sync local main with origin/main (only on the main branch) -------
+# The `--ff-only` merge is the precondition for all selection AND the recovery
+# probe (#1495). On failure the tick auto-repairs: it arms a #725 reseed (so the
+# chain keeps ticking) and emits `sync-failed`, which dispatch-tick reads to
+# spawn a deduped /commit-merge-push bg job against the main worktree. A repair
+# that hits an unresolvable conflict must not loop forever: after a bounded
+# attempt cap it escalates to a find-or-create dispatch:sync-broken latch issue
+# and stops respawning. A successful ff-merge ALWAYS resets the counter and
+# closes any open latch, so a human who resolves the tree by hand auto-recovers.
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 if [[ "$BRANCH" == "main" ]]; then
-  # Redirect git's own chatter to stderr so stdout stays the decision channel.
-  if ! git fetch origin main 1>&2 || ! git merge --ff-only origin/main 1>&2; then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib.sh"            # sync_repair_* + resolve_project_root
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-claude-agents.sh"   # claude_sessions_under
+
+  # Resolve the main worktree the same way dispatch-tick does: an explicit
+  # DISPATCH_TICK_MAIN_WORKTREE override is authoritative and bypasses the git
+  # lookup (tests rely on this); otherwise it is <project-root>/worktrees/main.
+  if [[ -n "${DISPATCH_TICK_MAIN_WORKTREE:-}" ]]; then
+    MAIN_WORKTREE="$DISPATCH_TICK_MAIN_WORKTREE"
+  else
+    PROJECT_ROOT=$(resolve_project_root) \
+      || { echo "dispatch-select-tick: not in a git repo and DISPATCH_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
+    MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+  fi
+
+  # Decision A — defer while a live sync-repair session is mutating the main
+  # worktree, but fail OPEN on a daemon UNKNOWN (rc 1). claude_sessions_under
+  # returns rc 0 only on a definite list; a row whose name is `sync-repair` and
+  # whose status is not `stopped` means a repair is live: release, arm the
+  # reseed, and defer without bumping the counter or touching the tree. On rc 1
+  # (daemon down) we fall through to the merge — matching the concurrency gate's
+  # fail-open philosophy; the dispatch-spawn-job dedup itself fails closed on
+  # UNKNOWN, so no duplicate repair is spawned and git's index.lock contains the
+  # rare race.
+  if sessions=$(claude_sessions_under "$MAIN_WORKTREE"); then
+    if awk -F'\t' '$4=="sync-repair" && $3!="stopped"{f=1} END{exit !f}' <<<"$sessions"; then
+      release_lock
+      "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+      echo "sync-repair-pending"
+      exit 0
+    fi
+  fi
+
+  # Merge probe. Capture the merge stderr to a temp for escalation diagnostics
+  # while STILL replaying it to the journal (stderr) so nothing is swallowed.
+  # Git's own chatter stays on stderr (1>&2), keeping stdout the decision
+  # channel.
+  if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
+    mkdir -p "$CLAUDE_JOB_DIR/tmp"
+    SYNC_TMP=$(mktemp "$CLAUDE_JOB_DIR/tmp/sync-merge.XXXXXX")
+  else
+    SYNC_TMP=$(mktemp)
+  fi
+  if git fetch origin main 1>&2 && git merge --ff-only origin/main 2>"$SYNC_TMP" 1>&2; then
+    merge_ok=1
+  else
+    merge_ok=0
+  fi
+  cat "$SYNC_TMP" >&2          # let the diagnostics reach the journal
+  MERGE_STDERR=$(cat "$SYNC_TMP")
+  rm -f "$SYNC_TMP"
+
+  if [[ "$merge_ok" == 1 ]]; then
+    # SUCCESS — local main ff-merges clean. ALWAYS reset the attempt counter and
+    # close any open dispatch:sync-broken latch (Decision B: a clean probe means
+    # a human resolved the tree, so the chain auto-recovers). Then fall through
+    # to Step 1c — do NOT exit.
+    sync_repair_reset_attempts
+    OPEN_SB=$(gh issue list --label "dispatch:sync-broken" --state open \
+      --json number -q '.[].number')
+    for n in $OPEN_SB; do
+      gh issue close "$n" \
+        --comment "local main ff-merges clean again; closing the sync-broken latch" 1>&2 || true
+    done
+  else
+    # FAILURE — local main is dirty or diverged. The latch is checked only AFTER
+    # a failed merge (Decision B); the probe itself is never suppressed.
+    OPEN_SB=$(gh issue list --label "dispatch:sync-broken" --state open \
+      --json number -q '.[0].number')
+    if [[ -n "$OPEN_SB" ]]; then
+      # a. Already latched — a human owns the tree. Spawn nothing.
+      release_lock
+      "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+      echo "sync-broken"
+      exit 0
+    fi
+    N=$(sync_repair_read_attempts)
+    if [[ "$N" -ge 3 ]]; then
+      # b. Attempt cap hit — escalate to the find-or-create latch issue and stop
+      # respawning. The escalate script reads the captured merge stderr on stdin.
+      # This branch is terminal; it does NOT bump the counter.
+      "$SCRIPT_DIR/dispatch-escalate-sync-broken" <<<"$MERGE_STDERR" 1>&2 || true
+      release_lock
+      "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+      echo "sync-broken"
+      exit 0
+    fi
+    # c. Under the cap — bump the counter and let dispatch-tick spawn the repair.
+    sync_repair_bump_attempts
     release_lock
+    "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
     echo "sync-failed"
     exit 0
   fi
