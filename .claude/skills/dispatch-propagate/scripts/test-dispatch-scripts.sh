@@ -16762,6 +16762,129 @@ else
 fi
 stop_teardown
 
+# --- Test A (#1590): live idle-polling worker (trailing ScheduleWakeup) → NOT parked, NOT spawned ---
+# Branch A discriminator: when the stopping session's FINAL assistant turn contains a
+# ScheduleWakeup tool_use, the worker will resume on its own poll cadence — skip the
+# office-hours park AND the redundant tick spawn entirely.
+
+echo "Test: #1590 Branch A idle-waiting worker — trailing ScheduleWakeup → NOT parked, NOT spawned"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: non-wakeup turn earlier, FINAL assistant turn has ScheduleWakeup,
+# with a trailing tool_result line to confirm tail-1/last-turn logic.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"user","message":{"content":[{"type":"text","text":"poll"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"ok"}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"waiting"},{"type":"tool_use","name":"ScheduleWakeup","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"scheduled"}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#1590 idle-waiting worker: hook exits 0 (will resume)" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #1590 idle-waiting worker: NOT parked on office-hours (apply-office-hours NOT invoked)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1590 idle-waiting worker: NOT parked on office-hours (apply-office-hours NOT invoked)"
+  echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #1590 idle-waiting worker: NOT spawned (redundant tick suppressed)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1590 idle-waiting worker: NOT spawned (redundant tick suppressed)"
+  echo "    spawn-calls: $(cat "$STUB_DIR/spawn-calls.log")"
+fi
+stop_teardown
+
+# --- Test B (#1590): genuine mid-phase death (earlier wakeup, no trailing wakeup) → parked ---
+# Branch A discriminator: only the FINAL assistant turn matters (tail -1). An earlier
+# ScheduleWakeup followed by a later non-wakeup turn means the session died mid-phase;
+# the fail-safe park should fire byte-identically to the pre-Unit-1 behavior.
+
+echo "Test: #1590 Branch A mid-phase death — earlier ScheduleWakeup, final turn no wakeup → parked"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: earlier assistant turn with ScheduleWakeup, then a final turn without it.
+# This pins the tail-1 (last-turn-only) discriminator semantics.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"ScheduleWakeup","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"x"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{}}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#1590 mid-phase death: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #1590 mid-phase death: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1590 mid-phase death: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$apply_reason" | grep -q "phase exited before completion"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1590 mid-phase death: reason contains 'phase exited before completion'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1590 mid-phase death: reason contains 'phase exited before completion'"
+  echo "    reason: $apply_reason"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "#1590 mid-phase death: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
+# --- Test C (#1590): uncertainty — transcript path missing → fail-safe park ---
+# Branch A discriminator fail-safe: when transcript_path is provided but the file
+# does not exist, the discriminator returns 1 (uncertainty → park). Positive
+# evidence only; any doubt falls through to the office-hours park.
+
+echo "Test: #1590 Branch A discriminator fail-safe — missing transcript → parked"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Feed a payload pointing to a non-existent file — do NOT create it.
+FIXTURE="$TMPDIR_TEST/does-not-exist.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#1590 missing-transcript fail-safe: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #1590 missing-transcript fail-safe: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1590 missing-transcript fail-safe: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$apply_reason" | grep -q "phase exited before completion"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1590 missing-transcript fail-safe: reason contains 'phase exited before completion'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1590 missing-transcript fail-safe: reason contains 'phase exited before completion'"
+  echo "    reason: $apply_reason"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "#1590 missing-transcript fail-safe: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
 # --- Test 5a1: #1230 crash-before-label routing regression -------------------
 # #1230 hardened the plan phase so the per-session phase-completed marker is
 # written BEFORE the durable dispatch:planned label. This test models the
