@@ -45,10 +45,14 @@ export function renderQueueMetricsPanel(
   drainCard.className = "capacity-card";
   const drainLabel = document.createElement("span");
   drainLabel.className = "capacity-card-label";
-  drainLabel.textContent = "net drain";
+  // A negative net-drain means the queue is growing, not draining. Relabel the
+  // card to "net growth" and show the magnitude so the displayed sign stays
+  // consistent with the label's meaning (mirrors the runway card's "growing").
+  const isGrowing = metrics.netDrainPerDay < 0;
+  drainLabel.textContent = isGrowing ? "net growth" : "net drain";
   const drainValue = document.createElement("span");
   drainValue.className = "capacity-card-value queue-drain-value";
-  drainValue.textContent = `${metrics.netDrainPerDay.toFixed(1)}/day`;
+  drainValue.textContent = `${Math.abs(metrics.netDrainPerDay).toFixed(1)}/day`;
   drainCard.appendChild(drainLabel);
   drainCard.appendChild(drainValue);
 
