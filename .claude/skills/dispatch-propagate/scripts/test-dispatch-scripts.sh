@@ -23228,6 +23228,9 @@ out=$(printf '%s' '[{
   "finding": "Redirect loop observed"
 }]' | "$SCRIPT_DIR/dispatch-qa-needs-main-followup" 1552 99)
 assert_eq "qa-needs-main-followup: url_path=current → slug identifier" "qa-needs-main #1552: auth-flow-works-correctly" "$(printf '%s' "$out" | jq -r '.[0].identifier')"
+body3=$(printf '%s' "$out" | jq -r '.[0].body')
+case "$body3" in *'**URL path:**'*) hit=yes ;; *) hit=no ;; esac
+assert_eq 'qa-needs-main-followup: url_path=current → no URL path line in body' 'no' "$hit"
 
 # 4. Determinism: same input twice → identical identifiers
 input4='[{

@@ -17,7 +17,9 @@
 # Per-item input fields consumed:
 #   id               — stable plan-item identifier
 #   title            — human-readable item title
-#   kind             — residue kind (main-gated-fail, fail, needs-human-judgment)
+#   kind             — accepted in input but not reflected in emitter output;
+#                      available for future use (residue kind:
+#                      main-gated-fail, fail, needs-human-judgment)
 #   url_path         — URL path for the item (may be "", null, or "current")
 #   expected_outcome — what the item expects to be true post-merge
 #   finding          — what was actually observed during QA
@@ -59,7 +61,7 @@ jq --arg n "$n" --arg pr "$pr" '
           ("**Expected outcome:** " + .expected_outcome),
           ("**Finding during QA:** " + .finding)
         ]
-        + (if $path != "" then ["**URL path:** " + $path] else [] end)
+        + (if $path != "" and $path != "current" then ["**URL path:** " + $path] else [] end)
         + [
           "",
           ("Surfaced during QA of PR #" + $pr + " for issue #" + $n + "; this behavior is only verifiable against merged main / production.")
