@@ -10786,6 +10786,99 @@ result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --reopen-at 2>/dev/null)
 assert_eq "--reopen-at missing anchor → none" "none" "$result"
 tw_teardown
 
+# --- #1136: rate_limits.json telemetry range bounds -------------------------
+#
+# Out-of-range telemetry (used_percentage > 100, or a reset epoch beyond the
+# window's physically-plausible horizon) is rejected to missing so the existing
+# PRESENT guards route it to the established fail-safe, rather than acting on a
+# poisoned value. See issue #1136.
+
+# used_weekly=150 (>100) → rejected → weekly anchor drops → fallback N=1 (NOT 0).
+# This is the literal bug: an un-bounded used>100 yields negative headroom and
+# pins the target at 0; the bound restores the conservative spawn-1 fallback.
+echo "Test: #1136 used_weekly=150 (>100) → rejected → fallback N=1"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 150 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "#1136 used_weekly=150 → fallback 1 (not 0)" "1" "$out"
+TOTAL=$((TOTAL + 1))
+if grep -q "WEEKLY_USED out of range" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 used_weekly=150 stderr names WEEKLY_USED out of range"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 used_weekly=150 stderr should name WEEKLY_USED out of range"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+tw_teardown
+
+# used_weekly=100 is a valid fully-used reading and must be KEPT (strict `>`
+# bound). Consumed → the curve runs: at x=0.5, W=31, used=100 >> pace → gate
+# closed → N=0. A rejected value would instead drop the anchor → fallback N=1,
+# so N=0 discriminates "consumed" from "rejected".
+echo "Test: #1136 used_weekly=100 (boundary) → kept, curve runs → N=0"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 100 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "#1136 used_weekly=100 kept (curve runs) → N=0" "0" "$out"
+TOTAL=$((TOTAL + 1))
+if grep -q "out of range" "$TMPDIR_TEST/stderr"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 used_weekly=100 must NOT be rejected (strict >)"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+else
+  PASS=$((PASS + 1)); echo "  PASS: #1136 used_weekly=100 not rejected (strict >)"
+fi
+tw_teardown
+
+# used_5h=150 (>100) → rejected → 5h treated as 0 in the ramp → max 5h workers.
+# DOCUMENTED INTENDED fail-open: the issue chooses "do not act on the poisoned
+# value", and the weekly pace gate still bounds N. With the weekly gate open
+# (used_weekly under pace), N>=1.
+echo "Test: #1136 used_5h=150 (>100) → rejected → fail-open under open weekly gate → N>=1"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 0 "$r" 150 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if (( out >= 1 )); then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 used_5h=150 rejected, weekly open → N=$out (>=1, intended fail-open)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 used_5h=150 expected N>=1, got $out"
+fi
+tw_teardown
+
+# weekly resets_at = NOW + 999999999 (far future, >8 days) → rejected → weekly
+# anchor drops → fallback N=1. A far-future weekly reset can no longer feed the
+# curve.
+echo "Test: #1136 weekly resets_at far-future (>8d) → rejected → fallback N=1"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+write_rl "rl.json" 30 $((TW_NOW + 999999999)) 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "#1136 weekly resets far-future → fallback 1" "1" "$out"
+TOTAL=$((TOTAL + 1))
+if grep -q "WEEKLY_RESETS" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 weekly resets far-future stderr names WEEKLY_RESETS"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 weekly resets far-future stderr should name WEEKLY_RESETS"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+tw_teardown
+
+# exhausted mode: 5h resets_at = NOW + 999999999 (far future, >6h) with
+# used_5h=99 (>=threshold) → 5h reset rejected → window cannot be exhausted → ok
+# (fail open). Weekly is benign (low usage, in-bound reset).
+echo "Test: #1136 --exhausted 5h resets far-future (>6h) → rejected → ok (fail open)"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+write_rl "exh.json" 30 $((TW_NOW + 302400)) 99 $((TW_NOW + 999999999))
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>"$TMPDIR_TEST/stderr")
+assert_eq "#1136 --exhausted 5h resets far-future → ok (fail open)" "ok" "$out"
+tw_teardown
+
 # ============================================================================
 # dispatch-schedule-reseed tests
 # ============================================================================
@@ -11527,6 +11620,67 @@ if grep -q "unexpected result" "$TMPDIR_TEST/stderr"; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: reopen=<unexpected>; stderr diagnostic emitted"
   echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+sr_teardown
+
+# --- #1136: rate_limits.json telemetry range bounds -------------------------
+#
+# Far-future resets_at and used>100 are rejected to missing so the script no-ops
+# (the established missing-telemetry fail-safe) instead of arming a reseed timer
+# years out. This is the durable-stall fix. See issue #1136.
+
+# weekly cap hit but resets_at is ~31 years out (>8d) → rejected → weekly window
+# drops → (5h absent) → missing-telemetry no-op: NO systemd-run call.
+echo "Test: #1136 weekly resets far-future (>8d) → no reseed timer armed"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
+sr_write_rl "rl.json" 95 $((1700000000 + 999999999)) absent absent
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]] && grep -q "WEEKLY_RESETS" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 weekly resets far-future → empty systemd-log + WEEKLY_RESETS diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 weekly resets far-future → expected no timer + diagnostic"
+  echo "    systemd-log: $(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null)"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+sr_teardown
+
+# used_weekly=150 (>100) → rejected → weekly window drops → (5h absent) → no-op,
+# no weekly reseed timer.
+echo "Test: #1136 used_weekly=150 (>100) → window drops → no reseed timer"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
+sr_write_rl "rl.json" 150 $((1700000000 + 10000)) absent absent
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]] && grep -q "WEEKLY_USED out of range" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 used_weekly=150 → no timer + WEEKLY_USED diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 used_weekly=150 → expected no timer + diagnostic"
+  echo "    systemd-log: $(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null)"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+sr_teardown
+
+# In-bound control (guards against over-rejection): a realistically-large NOW
+# with a weekly reset ~3 days out (well within the 8-day bound) and a weekly cap
+# hit still schedules normally.
+echo "Test: #1136 in-bound weekly reset (~3d out) still schedules (no over-rejection)"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
+reset=$((1700000000 + 3 * 86400))
+sr_write_rl "rl.json" 95 "$reset" absent absent
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
+assert_eq "#1136 in-bound weekly reset still schedules" \
+  "scheduled dispatch-reseed-$reset at $reset" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@$reset"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 in-bound weekly reset armed --on-calendar=@$reset"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 in-bound weekly reset should arm timer at $reset"
+  echo "    log: $log"
 fi
 sr_teardown
 
