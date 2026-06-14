@@ -11,6 +11,7 @@
 #   claude_sessions_under              <worktree-path>
 #   claude_sessions_with_name          <name>
 #   claude_agents_list_all
+#   live_session_claimed_nums
 #   worktree_has_live_session          <worktree-path>
 #   claude_agents_count_busy_workers
 #   verify_agent_registered_under      <agent-name> <cwd>
@@ -301,6 +302,66 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     # `[]` → empty $lines → emit nothing (zero session lines), still return 0.
     if [[ -n "$lines" ]]; then
       printf '%s\n' "$lines"
+    fi
+    return 0
+  }
+
+  # live_session_claimed_nums — emit the UNIQUE issue numbers claimed by live
+  # sessions, one per line. The forward (in-flight) half of selection's claimed
+  # set: instead of walking every registered worktree backward, derive the
+  # claimed numbers straight from the live-session names in a single daemon
+  # query. A name matches one of two shapes and contributes its captured <N>:
+  #   `^[0-9]+-`            phase workers, spawned with --name=<N>-slug (same
+  #                         `^[0-9]+-` shape used by claude_agents_count_busy_workers,
+  #                         which excludes routers named `dispatch-<short-id>`).
+  #   `^office-hours-[0-9]+$` office-hours sessions, renamed to office-hours-<N>
+  #                         in #1311 (the `$` anchor rejects office-hours-12-extra).
+  # Routers (`dispatch-<short-id>`) and job sessions (diagnose-main, jit names)
+  # match NEITHER shape and are excluded. A null/absent `.name` is guarded in jq.
+  # Same UNKNOWN contract as the other machine-wide functions: a `[]` array is a
+  # definite "no live sessions" (return 0, empty output), NOT unknown — only
+  # whitespace/empty raw output is UNKNOWN.
+  #     return 0 — daemon queried successfully. Stdout carries the unique claimed
+  #               <N> values, one per line (empty for `[]` or no matches).
+  #     return 1 — UNKNOWN. Stdout is empty. Callers should fail open (see
+  #               claimed_issue_nums in lib-reservation-ledger.sh).
+  live_session_claimed_nums() {
+    # No --cwd flag and no name filter: the caller needs the machine-wide claimed
+    # set in one query. The raw array comes from the tick snapshot when set, else
+    # a live per-call query (see _claude_agents_raw). 2>/dev/null inside the
+    # helper drops daemon noise; only exit code and a well-formed JSON array on
+    # stdout are trusted.
+    local out
+    if ! out=$(_claude_agents_raw); then
+      return 1
+    fi
+
+    # A zero exit with empty (or whitespace-only) output is unknown too.
+    if [[ -z "${out//[[:space:]]/}" ]]; then
+      return 1
+    fi
+
+    # One jq pass validates the array shape and projects each live name to its
+    # claimed <N> (or `empty` for non-claim names), then `unique` dedups. Using
+    # test()-guarded sub() rather than capture() — capture() on a non-matching
+    # string errors and would abort the whole pass (a false UNKNOWN). Non-array
+    # input errors out and the result is UNKNOWN.
+    local nums
+    if ! nums=$(jq -r '
+      if type == "array"
+      then [ .[]
+        | select(.name | type == "string")
+        | .name
+        | if test("^[0-9]+-") then sub("-.*$"; "")
+          elif test("^office-hours-[0-9]+$") then sub("^office-hours-"; "")
+          else empty end ] | unique | .[]
+      else error("claude agents --json output is not a JSON array")
+      end' <<<"$out" 2>/dev/null); then
+      return 1
+    fi
+    # `[]` or no claim-name matches → empty $nums → emit nothing, still return 0.
+    if [[ -n "$nums" ]]; then
+      printf '%s\n' "$nums"
     fi
     return 0
   }
