@@ -117,7 +117,7 @@ describe("office-hours items", () => {
   it("allows owner list query on items collection", async () => {
     const ctx = authenticatedContext(env, "owner@test.com");
     const db = ctx.firestore();
-    await assertSucceeds(
+    const snap = await assertSucceeds(
       getDocs(
         query(
           collection(db, `office-hours/${ENV}/items`),
@@ -125,6 +125,7 @@ describe("office-hours items", () => {
         ),
       ),
     );
+    expect(snap.empty).toBe(false);
   });
 
   it("denies unfiltered owner list query on items collection", async () => {
