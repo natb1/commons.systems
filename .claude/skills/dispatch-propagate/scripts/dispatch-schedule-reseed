@@ -29,7 +29,7 @@
 # a parked item.
 #
 # Behavior, in order:
-#   1. Load tunables (target_weekly_usage_pct, five_hour_target_floor_pct)
+#   1. Load tunables (weekly_terminal_pct, five_hour_target_floor_pct)
 #      from dispatch-config-load target-workers — same defaults as
 #      dispatch-target-workers. The 5h cap-hit threshold uses
 #      five_hour_target_floor_pct (the floor of the pace controller's 5h band).
@@ -120,7 +120,10 @@ set -uo pipefail
 
 # ---- Step 0: defaults & config ----------------------------------------------
 
-TARGET_WEEKLY=90
+# Absolute weekly-exhaustion threshold, sourced from weekly_terminal_pct (default 100).
+# True weekly exhaustion only — pace-curve pauses below 100 are handled by
+# the --reopen-at pace path, not this threshold.
+TARGET_WEEKLY=100
 TARGET_5H=50
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -137,7 +140,7 @@ if CONFIG_OUT=$("$SCRIPT_DIR/dispatch-config-load" target-workers 2>/dev/null); 
 fi
 
 if [[ -n "$CONFIG_JSON" ]]; then
-  val=$(jq -r '.target_weekly_usage_pct // empty' <<<"$CONFIG_JSON")
+  val=$(jq -r '.weekly_terminal_pct // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && TARGET_WEEKLY="$val"
   val=$(jq -r '.five_hour_target_floor_pct // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && TARGET_5H="$val"

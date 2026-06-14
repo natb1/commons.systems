@@ -11282,9 +11282,9 @@ sr_write_rl() {
 echo "Test: weekly cap-hit schedules at the weekly resets_at"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-# used_weekly=95 >= target_weekly=90 → weekly cap hit.
+# used_weekly=100 >= 100 (weekly_terminal_pct) → weekly cap hit.
 # 5h cap clear (10 < 50). Expect schedule at the weekly resets_at.
-sr_write_rl "rl.json" 95 20000 10 15000
+sr_write_rl "rl.json" 100 20000 10 15000
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
 assert_eq "weekly cap-hit stdout names the unit" \
   "scheduled dispatch-reseed-20000 at 20000" "$out"
@@ -11310,7 +11310,7 @@ sr_teardown
 echo "Test: 5h cap-hit schedules at the 5h resets_at"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-# used_5h=60 >= target_5h=50 → 5h cap hit. Weekly clear (50 < 90).
+# used_5h=60 >= target_5h=50 → 5h cap hit. Weekly clear (50 < 100).
 sr_write_rl "rl.json" 50 20000 60 15000
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
 assert_eq "5h cap-hit stdout names the 5h reset unit" \
@@ -11333,7 +11333,7 @@ echo "Test: both caps hit → schedules at the earlier resets_at"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
 # Both caps hit; 5h reset (15000) is earlier than weekly reset (20000).
-sr_write_rl "rl.json" 95 20000 60 15000
+sr_write_rl "rl.json" 100 20000 60 15000
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
 assert_eq "both caps hit; picks earlier reset" \
   "scheduled dispatch-reseed-15000 at 15000" "$out"
@@ -11351,7 +11351,7 @@ sr_teardown
 echo "Test: neither cap hit + pace curve permits → no-op (no systemd-run call)"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-# 50 < 90 weekly, 20 < 50 5h → no absolute cap hit. Weekly present → budgeter
+# 50 < 100 weekly, 20 < 50 5h → no absolute cap hit. Weekly present → budgeter
 # consulted; used_weekly=50 well under pace → reopen='none' → no-op.
 sr_write_rl "rl.json" 50 20000 20 15000
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
@@ -11413,7 +11413,7 @@ sr_teardown
 echo "Test: five_hour absent + weekly cap-hit schedules at the weekly resets_at"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-sr_write_rl "rl.json" 95 20000 absent absent
+sr_write_rl "rl.json" 100 20000 absent absent
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
 assert_eq "five_hour absent; weekly cap-hit schedules at 20000" \
   "scheduled dispatch-reseed-20000 at 20000" "$out"
@@ -11424,7 +11424,8 @@ sr_teardown
 echo "Test: repeated call with the same resets_at is idempotent (single timer)"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-sr_write_rl "rl.json" 95 20000 10 15000
+# used_weekly=100 >= 100 (weekly_terminal_pct) → weekly cap hit.
+sr_write_rl "rl.json" 100 20000 10 15000
 # Replace the systemd-run stub with one that simulates the second call hitting
 # the already-exists collision: first call succeeds; second call exits 1 with
 # the "already exists" message on stderr.
@@ -11463,8 +11464,8 @@ sr_teardown
 echo "Test: reseed_at already passed → no-op (no systemd-run call)"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-# Weekly cap hit but resets_at=5000 < now=10000 → already passed.
-sr_write_rl "rl.json" 95 5000 10 15000
+# used_weekly=100 >= 100 (weekly_terminal_pct) → weekly cap hit; resets_at=5000 < now=10000 → already passed.
+sr_write_rl "rl.json" 100 5000 10 15000
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
 err=$(cat "$TMPDIR_TEST/stderr")
 assert_eq "already-passed reseed; stdout silent" "" "$out"
@@ -11503,7 +11504,8 @@ sr_teardown
 echo "Test: unexpected systemd-run failure → exit code passes through"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-sr_write_rl "rl.json" 95 20000 10 15000
+# used_weekly=100 >= 100 (weekly_terminal_pct) → weekly cap hit.
+sr_write_rl "rl.json" 100 20000 10 15000
 # Replace the stub with one that exits 42 with a non-already-exists message.
 cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
 #!/usr/bin/env bash
@@ -11631,7 +11633,7 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: tampered 5h resets_at stderr names the sanitizer"
   echo "    stderr: $err"
 fi
-# Weekly is still clear (50 < 90) and 5h block was dropped → silent no-op.
+# Weekly is still clear (50 < 100) and 5h block was dropped → silent no-op.
 assert_eq "tampered 5h resets_at; no schedule line" "" "$out"
 TOTAL=$((TOTAL + 1))
 if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
@@ -11646,7 +11648,7 @@ sr_teardown
 echo "Test: non-integer NOW override aborts with exit 2"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW='a[$(touch '"$TMPDIR_TEST/canary-now"')]'
-sr_write_rl "rl.json" 95 20000 10 15000
+sr_write_rl "rl.json" 100 20000 10 15000
 if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr"); then
   rc=0
 else
@@ -11707,7 +11709,7 @@ sr_teardown
 echo "Test: pace-curve pause schedules a crossing-time timer (stub future epoch)"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-# Both caps clear (14 < 90 weekly, 10 < 50 5h) so the absolute-cap path no-ops,
+# Both caps clear (14 < 100 weekly, 10 < 50 5h) so the absolute-cap path no-ops,
 # but weekly telemetry is present → the script consults the budgeter for the
 # pace-curve crossing. Stub it to a fixed future epoch.
 sr_write_rl "rl.json" 14 99999 10 88888
@@ -11889,6 +11891,46 @@ if grep -q "unexpected result" "$TMPDIR_TEST/stderr"; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: reopen=<unexpected>; stderr diagnostic emitted"
   echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+sr_teardown
+
+# --- Test 19: used_weekly=95 no longer hits the absolute weekly cap -----------
+#
+# Before this remap, TARGET_WEEKLY was 90 and used_weekly=95 would trigger the
+# absolute-cap path. After the remap, TARGET_WEEKLY is 100 (weekly_terminal_pct),
+# so used_weekly=95 sits between the old 90 and the new 100 — it must NOT hit
+# the absolute cap. The pace path consults the budgeter; with a tw-stub echoing
+# `none`, the script must no-op: stderr names 'no absolute cap hit' + 'reopen-at=none'
+# + 'no-op', stdout is silent, and no systemd-run is invoked.
+
+echo "Test: used_weekly=95 (< 100 weekly_terminal_pct) does not hit absolute cap → no-op"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# used_weekly=95 < 100 (weekly_terminal_pct) → NO absolute weekly cap hit.
+# used_5h=10 < 50 → no 5h cap hit. Pace path consulted; stub returns none → no-op.
+sr_write_rl "rl.json" 95 99999 10 88888
+cat > "$TMPDIR_TEST/tw-stub" <<'STUB'
+#!/usr/bin/env bash
+echo none
+STUB
+chmod +x "$TMPDIR_TEST/tw-stub"
+export DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD="$TMPDIR_TEST/tw-stub"
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "used_weekly=95 < 100; stdout silent" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"no absolute cap hit"* && "$err" == *"reopen-at='none'"* && "$err" == *"no-op"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: used_weekly=95 no absolute cap; stderr names no-absolute-cap + reopen-at=none + no-op"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: used_weekly=95 no absolute cap; stderr names no-absolute-cap + reopen-at=none + no-op"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: used_weekly=95 no absolute cap; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: used_weekly=95 no absolute cap; no systemd-run invocation"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
 fi
 sr_teardown
 
