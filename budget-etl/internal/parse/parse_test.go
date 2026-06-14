@@ -157,6 +157,35 @@ func TestDetectFormat(t *testing.T) {
 	}
 }
 
+// TestDetectFormat_BOMAndWhitespace verifies that a leading UTF-8 BOM or leading
+// whitespace no longer misroutes a valid OFX/SGML file to the CSV branch.
+func TestDetectFormat_BOMAndWhitespace(t *testing.T) {
+	t.Run("BOM-prefixed OFX routes to formatOFX", func(t *testing.T) {
+		got, err := detectFormat(filepath.Join("testdata", "bom.ofx"))
+		if err != nil {
+			t.Fatalf("detectFormat: %v", err)
+		}
+		if got != formatOFX {
+			t.Errorf("detectFormat(bom.ofx) = %d, want %d (formatOFX)", got, formatOFX)
+		}
+	})
+
+	t.Run("leading-whitespace SGML routes to formatSGML", func(t *testing.T) {
+		tmp := filepath.Join(t.TempDir(), "leading.qfx")
+		content := "\n  \nOFXHEADER:100\nDATA:OFXSGML\n<OFX></OFX>\n"
+		if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got, err := detectFormat(tmp)
+		if err != nil {
+			t.Fatalf("detectFormat: %v", err)
+		}
+		if got != formatSGML {
+			t.Errorf("detectFormat(leading-whitespace SGML) = %d, want %d (formatSGML)", got, formatSGML)
+		}
+	})
+}
+
 func TestParseFile_Dispatch(t *testing.T) {
 	tests := []struct {
 		name      string

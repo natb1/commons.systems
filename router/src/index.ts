@@ -1,6 +1,16 @@
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 
 export interface Route {
+  /**
+   * Path to match. A string matches by exact equality; a RegExp matches via
+   * `.test(path)`. The router resets the RegExp's `lastIndex` to 0 before each
+   * match, so a `g`- or `y`-flagged pattern is matched correctly regardless of
+   * call frequency. Those flags are unnecessary here — `lastIndex` is reset
+   * before every call — but they are safe. Note that `.test(path)` returns
+   * `true` if the pattern matches anywhere in the path, not just the whole
+   * string; users who want exact-boundary matching should anchor their
+   * patterns with `^` and `$`.
+   */
   readonly path: `/${string}` | RegExp;
   /**
    * Return HTML to replace the outlet contents, or `null` to preserve
@@ -25,10 +35,12 @@ export interface Router {
   showTerminalError(html: string): void;
 }
 
-function matchRoute(routes: [Route, ...Route[]], path: string): Route {
-  return routes.find((r) =>
-    typeof r.path === "string" ? r.path === path : r.path.test(path),
-  ) ?? routes[0];
+function matchRoute(routes: [Route, ...Route[]], path: string): Route | undefined {
+  return routes.find((r) => {
+    if (typeof r.path === "string") return r.path === path;
+    r.path.lastIndex = 0;
+    return r.path.test(path);
+  });
 }
 
 /**
@@ -54,7 +66,7 @@ function createNavigator(
     } catch (e) {
       if (!deferProgrammerError(e)) reportError(e);
     }
-    const route = matchRoute(routes, path);
+    const route = matchRoute(routes, path) ?? routes[0];
     try {
       const html = await route.render(path);
       if (id === navigationId) {
@@ -114,10 +126,15 @@ export function createHistoryRouter(
     if (e.button !== 0) return;
     const anchor = (e.target as Element).closest("a");
     if (!anchor) return;
-    if (anchor.getAttribute("target") === "_blank") return;
+    if (anchor.hasAttribute("download")) return;
+    if (anchor.getAttribute("target")) return;
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const href = anchor.getAttribute("href");
-    if (!href || !href.startsWith("/")) return;
+    if (!href || !href.startsWith("/") || href.startsWith("//")) return;
+    const url = new URL(href, location.origin);
+    if (url.origin !== location.origin) return;
+    const path = url.pathname.replace(/\/$/, "") || "/";
+    if (!matchRoute(routes, path)) return;
     e.preventDefault();
     history.pushState({}, "", href);
     void nav.navigate();

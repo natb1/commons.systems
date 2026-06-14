@@ -168,7 +168,7 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 	fmt.Println()
 	if !dryRun {
 		fmt.Println("Next steps:")
-		fmt.Printf("  cd %s && npm install\n", appName)
+		fmt.Println("  npm install   # from the repo root, links the new workspace")
 		fmt.Printf("  # Run unit tests:       .claude/skills/dispatch-propagate/scripts/run-unit-tests.sh --app %s\n", appName)
 		fmt.Printf("  # Run lint:             .claude/skills/dispatch-propagate/scripts/run-lint.sh --app %s\n", appName)
 		fmt.Printf("  # Run acceptance tests: .claude/skills/dispatch-propagate/scripts/run-acceptance-tests.sh %s\n", appName)
@@ -214,8 +214,13 @@ func InsertFirestoreRules(repoRoot, appName string) error {
 			"      allow read: if request.auth != null\n"+
 			"        && request.auth.token.email in resource.data.memberEmails;\n"+
 			"      allow write: if false;\n"+
+			"    }\n\n"+
+			"    // Error logs: write-only telemetry, create-only, env-pinned and schema-bounded.\n"+
+			"    match /%s/{env}/errors/{errorId} {\n"+
+			"      allow create: if isKnownErrorEnv(env) && isValidErrorLog();\n"+
+			"      allow read, update, delete: if false;\n"+
 			"    }\n\n",
-		appName, appName, appName)
+		appName, appName, appName, appName)
 
 	catchAll := "    " + firestoreRulesCatchAll
 	idx := strings.Index(content, catchAll)

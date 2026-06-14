@@ -9,15 +9,15 @@
 # issues oldest-first, makes ONE per-item liveness call against each item's
 # <N>-* worktree, and emits exactly one of four dispositions, in this priority:
 #
-#   resume <sessionId>
+#   live <sessionId>
 #     The oldest labeled item whose <N>-* worktree has a live Claude session.
-#     Resume wins over fresh: if any labeled item is live, its session is
-#     resumed in preference to picking up a sessionless sibling fresh.
+#     Live wins over fresh: if any labeled item is live, its session is
+#     attached in preference to picking up a sessionless sibling fresh.
 #   office-hours <issue> <phase> <pr-or-dash> <worktree-path>
 #     The oldest labeled item with NO live session — a sessionless item that
 #     /office-hours picks up fresh.
 #     <issue> — the selected issue number.
-#     <phase> — implement | qa | code-review | review | security | verify |
+#     <phase> — implement | qa | code-review | review | security | fix-checks |
 #               waiting | done. `waiting` comes from dispatch-ci-ready (draft PR
 #               with CI still pending); all other values come from dispatch-phase.
 #               /office-hours branches on this: implement → plan-approval
@@ -78,37 +78,46 @@ done < <(list_worktree_records)
 # Returns the sessionId of a live <num>-* worktree on stdout (rc 0), rc 1 if the
 # item is sessionless (no worktree, or every worktree queried clean), or rc 2 if
 # liveness is UNKNOWN for some worktree (daemon unqueryable) and none was live.
-# Single per-item liveness call; name-keyed via claude_sessions_with_name, the
-# same primitive worktree_has_live_session delegates to.
+# Two-name check per worktree (#1311): queries both the worktree basename (phase
+# worker) and office-hours-<N> (the renamed office-hours session). Mirrors
+# worktree_has_live_session's basename-then-office-hours ordering so a
+# basename-named session still resolves first.
 issue_live_session_id() {
-  local num="$1" p sessions sid saw_unknown=0
+  local num="$1" p base nm sessions sid saw_unknown=0
   local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
   [[ -z "$paths" ]] && return 1
   while IFS= read -r p; do
     [[ -z "$p" ]] && continue
-    if sessions=$(claude_sessions_with_name "$(basename "$p")"); then
-      if [[ -n "$sessions" ]]; then
-        sid=$(printf '%s\n' "$sessions" | head -n 1 | cut -f1)
-        printf '%s' "$sid"
-        return 0
+    base=$(basename "$p")
+    # Two-name liveness (#1311): a live session named after the worktree basename
+    # (phase worker) OR office-hours-<N> (the renamed office-hours session) occupies
+    # this worktree. Mirrors worktree_has_live_session's basename-then-office-hours
+    # ordering, so a basename-named session still resolves first.
+    for nm in "$base" "office-hours-$num"; do
+      if sessions=$(claude_sessions_with_name "$nm"); then
+        if [[ -n "$sessions" ]]; then
+          sid=$(printf '%s\n' "$sessions" | head -n 1 | cut -f1)
+          printf '%s' "$sid"
+          return 0
+        fi
+      else
+        saw_unknown=1
       fi
-    else
-      saw_unknown=1
-    fi
+    done
   done <<< "$paths"
   (( saw_unknown )) && return 2
   return 1
 }
 
-# Single oldest-first enumeration with one per-item liveness call. RESUME wins
-# over FRESH: a live item is resumed in preference to any sessionless sibling.
+# Single oldest-first enumeration with one per-item liveness call. LIVE wins
+# over FRESH: a live item is attached in preference to any sessionless sibling.
 SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[].number')
 FRESH_NUM=""
-RESUME_ID=""
+LIVE_ID=""
 while IFS= read -r issue_num; do
   [[ -z "$issue_num" ]] && continue
   if sid=$(issue_live_session_id "$issue_num"); then
-    RESUME_ID="$sid"
+    LIVE_ID="$sid"
     break
   else
     rc=$?
@@ -117,9 +126,9 @@ while IFS= read -r issue_num; do
   fi
 done <<< "$SORTED"
 
-# Priority 1: resume the oldest live item.
-if [[ -n "$RESUME_ID" ]]; then
-  printf 'resume %s\n' "$RESUME_ID"
+# Priority 1: emit the oldest live item.
+if [[ -n "$LIVE_ID" ]]; then
+  printf 'live %s\n' "$LIVE_ID"
   exit 0
 fi
 
@@ -127,18 +136,28 @@ fi
 # fetched lazily here — only the fresh path needs it, so the resume path makes
 # no `gh pr list` call. The field set is dispatch-phase's superset;
 # dispatch-find-pr accepts it too (mirrors dispatch-select-target's
-# DISPATCH_PR_LIST).
+# DISPATCH_PR_LIST_FILE). The list is written to a temp file and passed by path,
+# sidestepping the E2BIG an inline JSON string hits past ~32 open PRs (#1646).
 if [[ -n "$FRESH_NUM" ]]; then
-  PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+  PR_LIST=$(pr_list_open "number,headRefName,isDraft,headRefOid,labels,mergeable")
+  PR_LIST_FILE=$(pr_list_export_file "$PR_LIST")
+  trap 'rm -f "$PR_LIST_FILE"' EXIT
   # Readiness gate: dispatch-phase no longer emits `waiting`; check CI readiness
-  # first. A not-ready draft PR (exit non-zero) maps to phase=waiting, preserving
-  # the byte-identical output contract callers expect.
-  if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$FRESH_NUM" >/dev/null; then
+  # first. A not-ready draft PR (exit 1) maps to phase=waiting, preserving
+  # the byte-identical output contract callers expect. Exit >= 2 is an exec/IO
+  # error (e.g. unreadable DISPATCH_PR_LIST_FILE) — surface it, don't map to waiting.
+  ci_rc=0
+  DISPATCH_PR_LIST_FILE="$PR_LIST_FILE" "$SCRIPT_DIR/dispatch-ci-ready" "$FRESH_NUM" >/dev/null || ci_rc=$?
+  if (( ci_rc >= 2 )); then
+    echo "error: dispatch-ci-ready failed (exit $ci_rc) for $FRESH_NUM — environment error, not a CI verdict" >&2
+    exit "$ci_rc"
+  fi
+  if (( ci_rc == 1 )); then
     phase="waiting"
   else
-    phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$FRESH_NUM")
+    phase=$(DISPATCH_PR_LIST_FILE="$PR_LIST_FILE" "$SCRIPT_DIR/dispatch-phase" "$FRESH_NUM")
   fi
-  pr=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-find-pr" "$FRESH_NUM")
+  pr=$(DISPATCH_PR_LIST_FILE="$PR_LIST_FILE" "$SCRIPT_DIR/dispatch-find-pr" "$FRESH_NUM")
   # The path to this item's <N>-* worktree (newline-separated values per key;
   # take the first), or empty when no <N>-* worktree is registered.
   wt_path=$(printf '%s' "${WORKTREE_PATHS_BY_NUM[$FRESH_NUM]:-}" | head -n 1)

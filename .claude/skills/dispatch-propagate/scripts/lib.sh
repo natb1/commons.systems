@@ -28,6 +28,29 @@ resolve_issue_number() {
   echo "$num"
 }
 
+# ---- parse_duration <str> — duration string to whole seconds ----------------
+# Accepts <int><unit> where unit is one of s|m|h|d|w (second/minute/hour/day/
+# week). Prints the duration in seconds on stdout and returns 0. On unparseable
+# input prints nothing and returns 1 — the caller decides how to surface it.
+# 10# forces base-10 so a leading-zero spec like "08h"/"012h" is not read as
+# octal (bash arithmetic treats a leading-zero literal as octal otherwise).
+parse_duration() {
+  local spec="$1" num unit
+  if [[ ! "$spec" =~ ^([0-9]+)([smhdw])$ ]]; then
+    return 1
+  fi
+  num=$(( 10#${BASH_REMATCH[1]} ))
+  unit="${BASH_REMATCH[2]}"
+  case "$unit" in
+    s) printf '%s\n' "$num" ;;
+    m) printf '%s\n' "$(( num * 60 ))" ;;
+    h) printf '%s\n' "$(( num * 3600 ))" ;;
+    d) printf '%s\n' "$(( num * 86400 ))" ;;
+    w) printf '%s\n' "$(( num * 604800 ))" ;;
+  esac
+  return 0
+}
+
 # Classify a captured gh stderr blob as transient (retryable) or deterministic.
 # Args: $1 = the captured stderr text.
 # Returns 0 when the blob matches a known transient class (HTTP 5xx, gateway
@@ -108,6 +131,147 @@ gh_api_array() {
   }
   if [[ -n "$result" ]]; then
     printf '%s\n' "$result"
+  fi
+}
+
+# List issues (NOT pull requests) via the GitHub REST API rather than
+# `gh issue list` (which GraphQL-backs). Keeping the per-tick dispatch issue
+# scans on REST keeps them off the shared GraphQL rate-limit bucket, which the
+# per-tick scan was self-exhausting (#1601).
+#
+# Contract:
+#   gh_issue_list_rest --state <open|closed> [--repo <owner/repo>] [--label <name>] [--limit <n>]
+#
+# Flags:
+#   --state  (required) open|closed.
+#   --repo   (optional) owner/repo for a cross-repo scan; when absent the path
+#            uses the {owner}/{repo} placeholder gh auto-resolves for the
+#            current repo.
+#   --label  (optional) a single label name; URL-encoded minimally (space→%20;
+#            the colon in values like dispatch:main-broken is query-safe).
+#   --limit  (optional) per_page cap. When ABSENT we --paginate the full set
+#            (REST --paginate has no silent-truncation hazard, unlike gh pr/issue
+#            list's --limit default). When PRESENT we fetch a SINGLE page of that
+#            size (no --paginate).
+#
+# Output: one merged JSON array on stdout. REST /issues returns issues AND PRs;
+# only PR objects carry a `pull_request` key, so we filter those out to match
+# `gh issue list`. The remaining objects are remapped from REST snake_case to the
+# camelCase shape downstream jq expects ({number, createdAt, closedAt, labels}).
+# `labels` is already [{name,...}] in REST, so it passes through unchanged; a null
+# closedAt on open issues is harmless. Results are sorted created-descending so a
+# downstream `.[0]` is the most-recently-created issue.
+#
+# On gh failure: errors to stderr and returns 1 (clear-errors convention, no
+# fallback).
+gh_issue_list_rest() {
+  local state="" repo="" label="" limit=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --state) state="$2"; shift 2 ;;
+      --repo)  repo="$2";  shift 2 ;;
+      --label) label="$2"; shift 2 ;;
+      --limit) limit="$2"; shift 2 ;;
+      *) echo "error: gh_issue_list_rest: unknown flag '$1'" >&2; return 1 ;;
+    esac
+  done
+  if [[ -z "$state" ]]; then
+    echo "error: gh_issue_list_rest: --state is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues"
+  else
+    path="repos/{owner}/{repo}/issues"
+  fi
+
+  local per_page="100"
+  [[ -n "$limit" ]] && per_page="$limit"
+  local query="state=$state&per_page=$per_page&sort=created&direction=desc"
+  if [[ -n "$label" ]]; then
+    # Minimal URL-encode: space → %20 (colon is query-safe).
+    local enc_label="${label// /%20}"
+    query="$query&labels=$enc_label"
+  fi
+
+  local raw
+  if [[ -n "$limit" ]]; then
+    # Single page (no --paginate) — caller wants at most one page of per_page.
+    raw=$(gh_retry gh api "$path?$query") || {
+      echo "error: gh_issue_list_rest: gh api failed for $path?$query" >&2
+      return 1
+    }
+  else
+    # Full set — REST --paginate has no silent-truncation hazard.
+    raw=$(gh_retry gh api --paginate "$path?$query") || {
+      echo "error: gh_issue_list_rest: gh api failed for $path?$query" >&2
+      return 1
+    }
+  fi
+
+  printf '%s' "$raw" | jq -s 'add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels})'
+}
+
+# The explicit open-PR fetch cap. gh pr list defaults to 30, which silently
+# truncates the open-PR snapshot once a fan-out crosses 30 open PRs. 300 mirrors
+# dispatch-select-target's open-issue cap. Overridable for tests.
+DISPATCH_PR_LIST_LIMIT="${DISPATCH_PR_LIST_LIMIT:-300}"
+
+# Fetch all open PRs with an explicit --limit and a loud truncation guard.
+# Args: $1 = comma-separated --json field set (e.g. "number,headRefName").
+# Output: the gh pr list JSON array on stdout.
+# Returns non-zero on gh failure (propagated) OR on truncation — when the result
+# length equals the limit, meaning the snapshot is likely cut off. Errors to
+# stderr in the truncation case so the failure is never silent.
+pr_list_open() {
+  local fields="$1"
+  local out rc len
+  out=$(gh pr list --state open --limit "$DISPATCH_PR_LIST_LIMIT" --json "$fields")
+  rc=$?
+  [[ "$rc" -ne 0 ]] && return "$rc"
+  len=$(printf '%s' "$out" | jq 'length')
+  if [[ "$len" -eq "$DISPATCH_PR_LIST_LIMIT" ]]; then
+    echo "error: gh pr list returned exactly $DISPATCH_PR_LIST_LIMIT open PRs (the --limit) — the open-PR snapshot is likely truncated. Raise DISPATCH_PR_LIST_LIMIT." >&2
+    return 1
+  fi
+  printf '%s\n' "$out"
+}
+
+# Write the open-PR JSON list to a temp file and echo its path. Lets callers
+# pass the (potentially large) list to child scripts via a tiny DISPATCH_PR_LIST_FILE
+# path env var instead of an inline DISPATCH_PR_LIST string, which can exceed the
+# kernel's per-arg MAX_ARG_STRLEN (128 KB) and fail the child exec with E2BIG.
+# Args: $1 = the open-PR JSON array string.
+# Output: the temp-file path on stdout.
+# Returns non-zero on mktemp/write failure.
+# CALLER OWNS CLEANUP: register `trap 'rm -f "$f"' EXIT` on the path this returns.
+pr_list_export_file() {
+  local json="$1" f
+  f=$(mktemp "${TMPDIR:-/tmp}/dispatch-pr-list.XXXXXX") || return 1
+  printf '%s' "$json" > "$f" || { rm -f "$f"; return 1; }
+  printf '%s' "$f"
+}
+
+# Read the open-PR JSON list a consumer script should use: the caller-supplied
+# file (DISPATCH_PR_LIST_FILE) when set, otherwise self-fetch via pr_list_open.
+# Centralizes the read pattern shared by dispatch-ci-ready and dispatch-phase.
+# Args: $1 = comma-separated --json field set, forwarded to pr_list_open on the
+#       self-fetch path.
+# Output: the open-PR JSON array on stdout.
+# Returns 2 (with a stderr error) when DISPATCH_PR_LIST_FILE is set but unreadable;
+# otherwise propagates pr_list_open's exit code on the self-fetch path.
+pr_list_import() {
+  local fields="$1"
+  if [[ -n "${DISPATCH_PR_LIST_FILE:-}" ]]; then
+    [[ -r "$DISPATCH_PR_LIST_FILE" ]] || {
+      echo "error: DISPATCH_PR_LIST_FILE not readable: $DISPATCH_PR_LIST_FILE" >&2
+      return 2
+    }
+    cat "$DISPATCH_PR_LIST_FILE"
+  else
+    pr_list_open "$fields"
   fi
 }
 
@@ -213,6 +377,61 @@ dispatch_classify_rollup() {
   echo "passing"
 }
 
+# Compute a single PR/commit's CI verdict from a lazy REST check-runs fetch,
+# avoiding the per-tick statusCheckRollup GraphQL over-fetch (issue #1601).
+# Args: $1 = <sha> — the commit SHA whose check-runs to classify.
+# Output: prints exactly one of `failing` | `passing` | `pending` to stdout,
+#   matching dispatch_classify_rollup's contract (an empty/absent check-run set
+#   maps to `pending`).
+# This fetches `repos/{owner}/{repo}/commits/<sha>/check-runs` (one REST call,
+# paginated) and reuses dispatch_classify_rollup verbatim. REST reports
+# status/conclusion in lowercase (`completed`, `success`, `failure`) whereas the
+# classifier — written for the statusCheckRollup CheckRun shape — matches
+# UPPERCASE; each adapted entry is `ascii_upcase`d so the classifier applies
+# unchanged. Every adapted object carries a `conclusion` key so the classifier's
+# `has("conclusion")` check-run branch fires (never the status-context branch).
+# Memoisation: when DISPATCH_CI_VERDICT_CACHE names a non-empty directory, the
+# verdict is cached per-SHA at $DISPATCH_CI_VERDICT_CACHE/<sha> — a cache hit
+# returns the stored verdict and makes no REST call; a miss fetches, writes the
+# verdict, then prints it. The caller owns the directory's lifecycle (this
+# helper does not mkdir it). When the var is unset/empty, every call fetches.
+dispatch_ci_verdict_rest() {
+  local sha="$1"
+
+  # Memoisation hit: return the cached verdict without a REST call.
+  local cache_file=""
+  if [[ -n "${DISPATCH_CI_VERDICT_CACHE:-}" ]]; then
+    cache_file="$DISPATCH_CI_VERDICT_CACHE/$sha"
+    if [[ -f "$cache_file" ]]; then
+      cat "$cache_file"
+      return 0
+    fi
+  fi
+
+  # One paginated REST call. `gh api --paginate` emits one JSON object per page,
+  # so slurp (`jq -s`) and concatenate every page's `.check_runs` into a single
+  # array; `add` over an empty slurp is null, so coerce to `[]`. Then adapt each
+  # entry to the statusCheckRollup CheckRun shape and uppercase it.
+  local adapted
+  adapted=$(gh_retry gh api --paginate "repos/{owner}/{repo}/commits/$sha/check-runs" \
+    | jq -s 'map(.check_runs) | add // []
+             | map({status: (.status | ascii_upcase),
+                    conclusion: ((.conclusion // "") | ascii_upcase)})') || {
+    echo "error: dispatch_ci_verdict_rest: check-runs fetch failed for $sha" >&2
+    return 1
+  }
+
+  local verdict
+  verdict=$(dispatch_classify_rollup "$adapted")
+
+  # Memoisation miss: persist the verdict for subsequent ticks before printing.
+  if [[ -n "$cache_file" ]]; then
+    printf '%s\n' "$verdict" > "$cache_file"
+  fi
+
+  printf '%s\n' "$verdict"
+}
+
 # Detect what Firebase features the app uses.
 # Sets global variables: USES_FIRESTORE, USES_AUTH, USES_STORAGE, USES_FUNCTIONS
 # Args: $1 = path to app src/ directory, $2 = repo root, $3 = app name
@@ -311,6 +530,57 @@ dispatch_lock_file() {
   fi
   project_root=$(resolve_project_root) || return 1
   printf '%s\n' "$project_root/tmp/dispatch.lock"
+}
+
+# Print the sync-repair attempt-counter file path to stdout. An explicit
+# DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE is authoritative and bypasses the git
+# lookup (tests rely on this). Otherwise the file lives at the shared
+# project-root tmp/ (not a per-worktree tmp/) so concurrent ticks in different
+# worktrees contend on the same counter — the same rationale as
+# dispatch_lock_file. Returns non-zero (no output) when the override is unset
+# AND resolve_project_root fails (not in a git repo); the caller supplies its
+# own error handling.
+#
+# A file beside dispatch.lock is the right primitive here: there is no PR to
+# hang a dispatch:<phase>-attempt-<n> label on, and the common path — a
+# transient dirty lockfile that heals in one repair — must stay issue-free.
+sync_repair_attempts_file() {
+  local project_root
+  if [[ -n "${DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE:-}" ]]; then
+    printf '%s\n' "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"
+    return 0
+  fi
+  project_root=$(resolve_project_root) || return 1
+  printf '%s\n' "$project_root/tmp/sync-repair-attempts"
+}
+
+# Print the integer stored in the sync-repair attempts file, or 0 if absent/empty/non-numeric.
+sync_repair_read_attempts() {
+  local file n=0
+  file=$(sync_repair_attempts_file) || { printf '0\n'; return 0; }
+  if [[ -f "$file" ]]; then
+    n=$(<"$file")
+  fi
+  if [[ "$n" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$n"
+  else
+    printf '0\n'
+  fi
+}
+
+# Write (current-attempts + 1) to the attempts file, creating it if absent.
+sync_repair_bump_attempts() {
+  local file n
+  file=$(sync_repair_attempts_file) || return 1
+  n=$(sync_repair_read_attempts)
+  printf '%s\n' "$((n + 1))" > "$file"
+}
+
+# Remove the attempts file so the counter resets to 0; a failed path resolution is a no-op.
+sync_repair_reset_attempts() {
+  local file
+  file=$(sync_repair_attempts_file) || return 0
+  rm -f "$file"
 }
 
 # headless_sentinel_path <holder-id> <lock-file> — print the PID-sentinel path
@@ -751,6 +1021,38 @@ find_available_port() {
   find_available_ports 1
 }
 
+# Fixed pool of Vite dev-server ports for QA servers. The claude-in-chrome
+# extension gates navigation per origin (scheme+host+port), so pinning the Vite
+# port to a known 8-slot pool lets the operator approve those 8 origins in Chrome
+# once instead of re-approving a fresh random port every QA session. Emulator
+# ports stay ephemeral (find_available_ports) — the page's own JS reaches them,
+# never the extension, so they never trigger an approval prompt.
+#
+# File-scope globals (not local/readonly) so tests can override them.
+QA_VITE_PORT_POOL=(5170 5171 5172 5173 5174 5175 5176 5177)
+QA_VITE_PORT_LOCK_DIR="${TMPDIR:-/tmp}"
+
+# Sets VITE_PORT and holds an flock on fd 200 for the script's lifetime so
+# concurrent QA workers never select the same pool slot. Errors (does NOT fall
+# back to a random port — that would re-trigger the Chrome approval prompt)
+# when all 8 slots are held.
+claim_fixed_vite_port() {
+  local p lockfile
+  for p in "${QA_VITE_PORT_POOL[@]}"; do
+    lockfile="${QA_VITE_PORT_LOCK_DIR}/qa-vite-port-${p}.lock"
+    exec 200>"$lockfile" || continue
+    if flock -n 200; then
+      if node -e "const net=require('net');const s=net.createServer();s.once('error',()=>process.exit(1));s.listen(${p},'0.0.0.0',()=>s.close(()=>process.exit(0)));" 2>/dev/null; then
+        VITE_PORT="$p"; return 0      # fd 200 stays open in caller, holding the lock
+      fi
+      flock -u 200                    # foreign process owns the port; try next slot
+    fi
+    exec 200>&-
+  done
+  echo "ERROR: all ${#QA_VITE_PORT_POOL[@]} QA Vite ports (${QA_VITE_PORT_POOL[*]}) are in use" >&2
+  return 1
+}
+
 # Print the Remote access block for QA-server startup: the universal localhost
 # URL plus a copy-paste `ssh -L` command forwarding the Vite port and every
 # allocated emulator port to a remote client's localhost, so the served origin
@@ -782,6 +1084,22 @@ print_remote_access_block() {
   echo ""
 }
 
+# Sanitize a captured PATH for interpolation into a systemd
+# Environment="PATH=..." line. Three distinct hazards, three reasons:
+#   - newline: a unit file is line-structured, so an embedded newline would
+#     land as a stray [Service] directive.
+#   - double-quote: the Environment= value is double-quoted, so an embedded
+#     quote would prematurely terminate it, leaving a bare token as a stray
+#     directive.
+#   - backslash: systemd applies C-style unescaping to Environment= (and
+#     ExecStart=) values, so a backslash is misread as an escape sequence and
+#     silently corrupts the PATH (#1212).
+# None of the three is ever a valid character in a PATH component, so
+# dropping them is safe.
+strip_unit_env_path() {
+  printf '%s' "${1//[$'\n'\"\\]/}"
+}
+
 # Install the static `dispatch-tick-recover.service` unit file so the tick and
 # reseed launchers can attach `OnFailure=dispatch-tick-recover.service`.
 # OnFailure= references a LOADABLE unit file, not a script — and dispatch
@@ -805,16 +1123,38 @@ ensure_recover_unit() {
     echo "WARNING: ensure_recover_unit: main worktree path contains a newline; refusing to write unit; OnFailure recovery unavailable" >&2
     return 1
   fi
+  # WorkingDirectory= does not unescape quotes, so a space in the bare path would
+  # split the value at the first space; reject it (same contract: warn + return 1).
+  if [[ "$main_worktree" == *' '* ]]; then
+    echo "WARNING: ensure_recover_unit: main worktree path contains a space; refusing to write unit; OnFailure recovery unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted ("$RECOVER_SCRIPT"); RECOVER_SCRIPT is derived
+  # from main_worktree below. An embedded double-quote in the path would
+  # prematurely close that quoted token, making systemd parse the executable and
+  # arguments wrong (bad-setting) and permanently break the unit. The path never
+  # legitimately contains a double-quote; reject it rather than emit a malformed
+  # unit (same contract: warn + return 1).
+  if [[ "$main_worktree" == *'"'* ]]; then
+    echo "WARNING: ensure_recover_unit: main worktree path contains a double-quote; refusing to write unit; OnFailure recovery unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted and systemd C-unescapes it, so a backslash in
+  # the path would be misread as an escape sequence and corrupt the executable
+  # token. The path never legitimately contains a backslash; reject it (#1212).
+  if [[ "$main_worktree" == *'\'* ]]; then
+    echo "WARNING: ensure_recover_unit: main worktree path contains a backslash; refusing to write unit; OnFailure recovery unavailable" >&2
+    return 1
+  fi
 
   local RECOVER_SCRIPT="$main_worktree/.claude/skills/dispatch-propagate/scripts/dispatch-tick-recover"
   local UNIT_DIR="${DISPATCH_RECOVER_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
   local UNIT_PATH="$UNIT_DIR/dispatch-tick-recover.service"
   local SYSTEMCTL_CMD="${DISPATCH_RECOVER_SYSTEMCTL_CMD:-systemctl}"
 
-  # Strip any stray newline from the captured PATH for the same line-structure
-  # reason; a newline in PATH is a broken environment, not a value we should
-  # propagate into a unit directive.
-  local safe_path="${PATH//$'\n'/}"
+  # Sanitize PATH for the Environment= line (see strip_unit_env_path).
+  local safe_path
+  safe_path=$(strip_unit_env_path "$PATH")
 
   # Environment=PATH=... captures the launching caller's PATH at write time,
   # for the same reason dispatch-spawn-tick passes --setenv=PATH: the systemd
@@ -828,7 +1168,8 @@ ensure_recover_unit() {
   # single token rather than split into an executable + spurious arguments.
   # WorkingDirectory= is the exception — it does NOT unescape quotes; a leading
   # `"` makes the path non-absolute and systemd rejects the unit (bad-setting),
-  # so it takes the bare path (safe here: the worktree path has no spaces).
+  # so it takes the bare path (the no-spaces invariant is enforced by the guard
+  # above, so the bare value is a single token).
   #
   # Deliberately NO OnFailure= on this unit — the recover handler must not chain
   # to itself, or a failing recovery would recurse.
@@ -875,6 +1216,170 @@ EOF
 
   if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
     echo "WARNING: ensure_recover_unit: systemctl --user daemon-reload failed; OnFailure recovery may be stale" >&2
+    return 1
+  fi
+}
+
+# Install and activate the durable `dispatch-claude-daemon.service` unit that
+# hosts Claude Code's per-user bg supervisor daemon in a stable, non-transient
+# cgroup (#1197). Without it, the daemon is spawned on demand by the first
+# `claude` call inside a transient tick/reseed unit and is born in that unit's
+# ephemeral cgroup — so a finishing tick reaps the whole fleet (#1196). With a
+# durable service already holding the daemon lock (~/.claude/daemon.lock), every
+# tick/reseed/worker `claude` call attaches to the running daemon instead of
+# spawning its own, and the fleet lives permanently in this service's cgroup
+# regardless of any tick's KillMode.
+#
+# This supersedes the #1196 KillMode=process stop-gap as the load-bearing
+# mechanism; KillMode=process is kept as the degraded-path fallback for hosts
+# where systemd --user is unavailable and this service cannot be installed.
+#
+# Best-effort: a failure here must not abort the caller (a tick/reseed
+# launcher), so we warn to stderr and return non-zero — never `exit`. A missing
+# durable service just means the on-demand daemon falls back to #1196 behavior.
+# Takes no arguments: `claude daemon run` chdirs to $HOME itself, so the unit
+# sets no WorkingDirectory= and needs no worktree path (this also sidesteps the
+# WorkingDirectory quoting hazard of #1203/#1207).
+ensure_daemon_service() {
+  # Resolve the claude binary to bake an absolute ExecStart into the unit. The
+  # systemd user manager's minimal default PATH omits the nix store, so the unit
+  # cannot rely on PATH resolution at fire time; an absolute path makes it
+  # self-sufficient. An explicit override is authoritative (tests rely on it).
+  local CLAUDE_CMD="${DISPATCH_DAEMON_CLAUDE_CMD:-$(command -v claude || true)}"
+  if [[ -z "$CLAUDE_CMD" ]]; then
+    echo "WARNING: ensure_daemon_service: claude binary not found on PATH; durable daemon service unavailable" >&2
+    return 1
+  fi
+
+  # A systemd unit file is line-structured: each line is an independent
+  # directive. An embedded newline in CLAUDE_CMD would land as an
+  # attacker-controlled extra directive in the [Service] section. The resolved
+  # binary path never legitimately contains a newline; reject it rather than
+  # emit a malformed unit (best-effort: warn + return — never exit).
+  if [[ "$CLAUDE_CMD" == *$'\n'* ]]; then
+    echo "WARNING: ensure_daemon_service: claude path contains a newline; refusing to write unit; durable daemon service unavailable" >&2
+    return 1
+  fi
+
+  # ExecStart= is double-quoted ("$CLAUDE_CMD" daemon run); an embedded
+  # double-quote in the path would prematurely close that quoted token, making
+  # systemd parse the executable and arguments wrong (bad-setting) and
+  # permanently break the unit. The resolved binary path never legitimately
+  # contains a double-quote; reject it rather than emit a malformed unit.
+  if [[ "$CLAUDE_CMD" == *'"'* ]]; then
+    echo "WARNING: ensure_daemon_service: claude path contains a double-quote; refusing to write unit; durable daemon service unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted and systemd C-unescapes it, so a backslash in
+  # the path would be misread as an escape sequence and corrupt the executable
+  # token. The resolved binary path never legitimately contains a backslash;
+  # reject it (#1212).
+  if [[ "$CLAUDE_CMD" == *'\'* ]]; then
+    echo "WARNING: ensure_daemon_service: claude path contains a backslash; refusing to write unit; durable daemon service unavailable" >&2
+    return 1
+  fi
+
+  # Sanitize PATH for the Environment= line (see strip_unit_env_path).
+  local safe_path
+  safe_path=$(strip_unit_env_path "$PATH")
+
+  local UNIT_DIR="${DISPATCH_DAEMON_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
+  local UNIT_PATH="$UNIT_DIR/dispatch-claude-daemon.service"
+  local SYSTEMCTL_CMD="${DISPATCH_DAEMON_SYSTEMCTL_CMD:-systemctl}"
+
+  # Desired unit content, mirroring Claude Code's own (now-disabled) service
+  # template. Environment=PATH= captures the launching caller's full nix-store
+  # PATH at write time, for the same reason the recover unit does — so the
+  # daemon (and the workers it later hosts) can resolve git/jq/claude.
+  #
+  # ExecStart= and Environment= are double-quoted: systemd unescapes C-style
+  # quotes for these two directives, so a path containing spaces is parsed as a
+  # single token rather than split into an executable + spurious arguments.
+  #
+  # No --origin flag: `claude daemon run` defaults its origin to `foreground`,
+  # a long-lived foreground supervisor with no self-uninstall logic. We
+  # deliberately avoid `--origin service`, which carries the binary's
+  # self-uninstall-on-binary-takeover path — the exact fragility #1197 removes.
+  # WE own the lifecycle via systemd Restart=always.
+  #
+  # StartLimitIntervalSec/StartLimitBurst mirror Claude's own template and
+  # tolerate a brief restart burst during a migration window where a
+  # pre-existing transient daemon still holds the lock. No StandardOutput= — the
+  # daemon self-logs to ~/.claude/daemon.log.
+  local desired
+  desired=$(cat <<EOF
+[Unit]
+Description=Dispatch durable Claude background supervisor daemon
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Service]
+Type=simple
+Environment="PATH=$safe_path"
+ExecStart="$CLAUDE_CMD" daemon run
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=default.target
+EOF
+)
+
+  # Steady-state hot path — the attach-to-existing-daemon path: if the installed
+  # unit already matches byte-for-byte AND the service is active, do nothing.
+  # The durable daemon is already running, so the next tick's `claude` call
+  # attaches to it via the lock and we skip the write/reload/enable entirely.
+  # (Unlike the OnFailure-only recover unit, this service must actually be
+  # RUNNING, so we add an is-active check to the content compare.)
+  if [ -f "$UNIT_PATH" ] && [ "$(cat "$UNIT_PATH")" = "$desired" ] \
+     && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-claude-daemon.service; then
+    return 0
+  fi
+
+  if ! mkdir -p "$UNIT_DIR"; then
+    echo "WARNING: ensure_daemon_service: mkdir -p $UNIT_DIR failed; durable daemon service unavailable" >&2
+    return 1
+  fi
+
+  # Write atomically only when the content differs: temp file in the same dir,
+  # then mv into place.
+  if [ ! -f "$UNIT_PATH" ] || [ "$(cat "$UNIT_PATH")" != "$desired" ]; then
+    local tmp
+    tmp=$(mktemp "$UNIT_DIR/.dispatch-claude-daemon.service.XXXXXX") || {
+      echo "WARNING: ensure_daemon_service: could not create temp file in $UNIT_DIR; durable daemon service unavailable" >&2
+      return 1
+    }
+    if ! printf '%s\n' "$desired" > "$tmp"; then
+      echo "WARNING: ensure_daemon_service: failed to write $tmp; durable daemon service unavailable" >&2
+      rm -f "$tmp"
+      return 1
+    fi
+    if ! mv "$tmp" "$UNIT_PATH"; then
+      echo "WARNING: ensure_daemon_service: failed to install $UNIT_PATH; durable daemon service unavailable" >&2
+      rm -f "$tmp"
+      return 1
+    fi
+  fi
+
+  # daemon-reload unconditionally on this slow path. The hot path above already
+  # returned early when the unit matched byte-for-byte AND the service was
+  # active; reaching here means the unit was just written OR it exists on disk
+  # but the service is not active. A daemon-reload that failed on a prior call
+  # (after the mv succeeded) leaves the unit on disk but unknown to systemd, so
+  # the content compare skips the write block on every later call — running the
+  # reload outside that block ensures it is retried until systemd has loaded the
+  # unit, instead of falling straight through to a doomed `enable --now`.
+  if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
+    echo "WARNING: ensure_daemon_service: systemctl --user daemon-reload failed; durable daemon service unavailable" >&2
+    return 1
+  fi
+
+  # Install + activate idempotently: enable symlinks the unit under
+  # WantedBy=default.target (so it auto-starts on every user-session start) and
+  # --now starts it without restarting an already-running instance.
+  if ! "$SYSTEMCTL_CMD" --user enable --now dispatch-claude-daemon.service; then
+    echo "WARNING: ensure_daemon_service: systemctl --user enable --now dispatch-claude-daemon.service failed; durable daemon service unavailable" >&2
     return 1
   fi
 }

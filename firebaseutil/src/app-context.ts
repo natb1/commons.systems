@@ -193,8 +193,8 @@ export function createAppContext(
     let initialized = false;
     initAppCheck = async () => {
       if (initialized) return;
-      initialized = true;
       resolvedAppCheck = doInitAppCheck();
+      initialized = true;
     };
   } else {
     resolvedAppCheck = doInitAppCheck();

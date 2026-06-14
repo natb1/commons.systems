@@ -115,6 +115,15 @@ const idbStatements = [
   },
 ];
 
+const idbWeeklyAggregates = [
+  {
+    id: "wa-2025-w24",
+    weekStartMs: Date.parse("2025-06-09T00:00:00.000Z"),
+    creditTotal: 52.3,
+    unbudgetedTotal: 10.5,
+  },
+];
+
 const meta = {
   key: "upload" as const,
   groupName: "household",
@@ -149,6 +158,8 @@ function setupMocks() {
         return Promise.resolve([]);
       case "reconciliationEvents":
         return Promise.resolve([]);
+      case "weeklyAggregates":
+        return Promise.resolve(idbWeeklyAggregates);
       default:
         throw new Error(`Unmocked store name in test: "${storeName}"`);
     }
@@ -413,5 +424,107 @@ describe("exportToJson", () => {
     // Meta
     expect(data.meta.groupName).toBe("household");
     expect(data.meta.version).toBe(1);
+  });
+
+  it("round-trip preserves weeklyAggregates unchanged", async () => {
+    const json = await exportToJson();
+    const output = JSON.parse(json);
+
+    // Criterion 1a: weeklyAggregates is present and non-empty in exported JSON
+    expect(output.weeklyAggregates).toBeDefined();
+    expect(output.weeklyAggregates).toHaveLength(1);
+    // weekStart should be an ISO string
+    expect(typeof output.weeklyAggregates[0].weekStart).toBe("string");
+    expect(output.weeklyAggregates[0].weekStart).toBe("2025-06-09T00:00:00.000Z");
+
+    // Criterion 1b: round-trip restores IDB records deep-equal to the original fixture
+    const parsed = parseUploadedJson(json);
+    const data = toParsedData(parsed);
+
+    expect(data.weeklyAggregates).toHaveLength(1);
+    expect(data.weeklyAggregates[0]).toEqual(idbWeeklyAggregates[0]);
+  });
+
+  it("ETL-snapshot round-trip empties no store", async () => {
+    // Minimal well-formed IDB fixtures for ETL-emitted stores not already in setupMocks
+    const idbJournalEntriesFixture = [
+      {
+        id: "je-001",
+        timestampMs: Date.parse("2025-06-10T00:00:00.000Z"),
+        description: "Transfer",
+        note: null,
+        legCount: 2,
+      },
+    ];
+    const idbJournalLegsFixture = [
+      {
+        id: "jl-001",
+        entryId: "je-001",
+        accountId: "bankone_1234",
+        debit: 100,
+        credit: 0,
+        timestampMs: Date.parse("2025-06-10T00:00:00.000Z"),
+        cleared: false,
+        reconciledAtMs: null,
+        reconciledEventId: null,
+        statementItemId: null,
+      },
+    ];
+    const idbAccountsFixture = [
+      {
+        id: "bankone_1234",
+        institution: "bankone",
+        account: "1234",
+        accountType: "asset" as const,
+        openingBalance: null,
+        openingBalanceDateMs: null,
+      },
+    ];
+
+    // Override the mocks for this test to supply non-empty ETL stores
+    const original = mockGetAll.getMockImplementation()!;
+    mockGetAll.mockImplementation((storeName: string) => {
+      switch (storeName) {
+        case "journalEntries":
+          return Promise.resolve(idbJournalEntriesFixture);
+        case "journalLegs":
+          return Promise.resolve(idbJournalLegsFixture);
+        case "accounts":
+          return Promise.resolve(idbAccountsFixture);
+        default:
+          return original(storeName);
+      }
+    });
+
+    try {
+      const json = await exportToJson();
+      const parsed = parseUploadedJson(json);
+      const data = toParsedData(parsed);
+
+      // Static list of the ETL-emitted stores (from budget-etl/internal/export/export.go)
+      // that this test verifies round-trip without being emptied. This is a hardcoded
+      // list, not auto-detected: a new ETL store added to export.ts must also be added
+      // here to be covered. statementItems, reconciliationNotes, and reconciliationEvents
+      // are excluded because they are app-only (not ETL-emitted) and are never populated
+      // in setupMocks.
+      const etlStores: Array<{ name: string; result: unknown[] }> = [
+        { name: "transactions", result: data.transactions },
+        { name: "statements", result: data.statements },
+        { name: "budgets", result: data.budgets },
+        { name: "budgetPeriods", result: data.budgetPeriods },
+        { name: "rules", result: data.rules },
+        { name: "normalizationRules", result: data.normalizationRules },
+        { name: "weeklyAggregates", result: data.weeklyAggregates },
+        { name: "journalEntries", result: data.journalEntries },
+        { name: "journalLegs", result: data.journalLegs },
+        { name: "accounts", result: data.accounts },
+      ];
+
+      for (const { name, result } of etlStores) {
+        expect(result, `store "${name}" was emptied by the export/import round-trip`).not.toHaveLength(0);
+      }
+    } finally {
+      mockGetAll.mockImplementation(original);
+    }
   });
 });

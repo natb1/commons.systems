@@ -23,12 +23,10 @@ describe("storage print media", () => {
   beforeEach(async () => {
     await adminUploadStorage(env, `print/${ENV}/media/public-book.epub`, {
       publicdomain: "true",
-      member_0: "member@test.com",
     });
     await adminUploadStorage(env, `print/${ENV}/media/private-book.epub`, {
       publicdomain: "false",
-      member_0: "member@test.com",
-      member_1: "other@test.com",
+      member_emails: "member@test.com,other@test.com",
     });
   });
 
@@ -49,14 +47,14 @@ describe("storage print media", () => {
   });
 
   describe("private files - member access", () => {
-    it("allows member_0 to read", async () => {
+    it("allows first listed member to read", async () => {
       const ctx = authenticatedContext(env, "member@test.com");
       const storage = ctx.storage();
       const ref = storage.ref(`print/${ENV}/media/private-book.epub`);
       await assertSucceeds(ref.getDownloadURL());
     });
 
-    it("allows member_1 to read", async () => {
+    it("allows second listed member to read", async () => {
       const ctx = authenticatedContext(env, "other@test.com");
       const storage = ctx.storage();
       const ref = storage.ref(`print/${ENV}/media/private-book.epub`);
@@ -78,25 +76,73 @@ describe("storage print media", () => {
     });
   });
 
-  describe("member_2 access", () => {
+  describe(">3 members (cap removed)", () => {
     beforeEach(async () => {
       await adminUploadStorage(
         env,
-        `print/${ENV}/media/three-member.epub`,
+        `print/${ENV}/media/four-member.epub`,
         {
           publicdomain: "false",
-          member_0: "a@test.com",
-          member_1: "b@test.com",
-          member_2: "c@test.com",
+          member_emails: "a@test.com,b@test.com,c@test.com,d@test.com",
         },
       );
     });
 
-    it("allows member_2 to read", async () => {
-      const ctx = authenticatedContext(env, "c@test.com");
+    it("allows the 4th listed member to read", async () => {
+      const ctx = authenticatedContext(env, "d@test.com");
       const storage = ctx.storage();
-      const ref = storage.ref(`print/${ENV}/media/three-member.epub`);
+      const ref = storage.ref(`print/${ENV}/media/four-member.epub`);
       await assertSucceeds(ref.getDownloadURL());
+    });
+
+    it("denies a non-listed email", async () => {
+      const ctx = authenticatedContext(env, "e@test.com");
+      const storage = ctx.storage();
+      const ref = storage.ref(`print/${ENV}/media/four-member.epub`);
+      await assertFails(ref.getDownloadURL());
+    });
+  });
+
+  describe("legacy member_0/1/2 fallback", () => {
+    beforeEach(async () => {
+      await adminUploadStorage(
+        env,
+        `print/${ENV}/media/legacy.epub`,
+        {
+          publicdomain: "false",
+          member_0: "legacy0@test.com",
+          member_1: "legacy1@test.com",
+          member_2: "legacy2@test.com",
+        },
+      );
+    });
+
+    it("allows a listed legacy member to read", async () => {
+      const ctx = authenticatedContext(env, "legacy0@test.com");
+      const storage = ctx.storage();
+      const ref = storage.ref(`print/${ENV}/media/legacy.epub`);
+      await assertSucceeds(ref.getDownloadURL());
+    });
+
+    it("allows second listed legacy member to read", async () => {
+      const ctx = authenticatedContext(env, "legacy1@test.com");
+      const storage = ctx.storage();
+      const ref = storage.ref(`print/${ENV}/media/legacy.epub`);
+      await assertSucceeds(ref.getDownloadURL());
+    });
+
+    it("allows third listed legacy member to read", async () => {
+      const ctx = authenticatedContext(env, "legacy2@test.com");
+      const storage = ctx.storage();
+      const ref = storage.ref(`print/${ENV}/media/legacy.epub`);
+      await assertSucceeds(ref.getDownloadURL());
+    });
+
+    it("denies a non-listed email on a legacy object", async () => {
+      const ctx = authenticatedContext(env, "stranger@test.com");
+      const storage = ctx.storage();
+      const ref = storage.ref(`print/${ENV}/media/legacy.epub`);
+      await assertFails(ref.getDownloadURL());
     });
   });
 

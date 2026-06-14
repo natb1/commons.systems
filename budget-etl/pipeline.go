@@ -57,6 +57,42 @@ func parseStatementDir(dir string, disc parse.DiscoverOpts) (parsed []parsedFile
 	return parsed, totalTxns, skipped, nil
 }
 
+// dedupStatementData deduplicates a slice of StatementData by StatementID,
+// preserving first-seen order. When two entries share a StatementID but have
+// different Balance values, it returns an error naming both source files and
+// balances so the caller can surface a clear failure rather than emitting
+// conflicting records. Equal-balance duplicates are silently dropped.
+func dedupStatementData(stmts []budget.StatementData) ([]budget.StatementData, error) {
+	seen := make(map[string]budget.StatementData, len(stmts))
+	out := make([]budget.StatementData, 0, len(stmts))
+	for _, s := range stmts {
+		prior, dup := seen[s.StatementID]
+		if !dup {
+			seen[s.StatementID] = s
+			out = append(out, s)
+			continue
+		}
+		if s.Balance == prior.Balance {
+			continue
+		}
+		srcA := prior.SourceFile
+		if srcA == "" {
+			srcA = "<derived>"
+		}
+		srcB := s.SourceFile
+		if srcB == "" {
+			srcB = "<derived>"
+		}
+		return nil, fmt.Errorf(
+			"statement %q: balance disagreement between %s ($%.2f) and %s ($%.2f)",
+			s.StatementID,
+			srcA, budget.DollarAmount(prior.Balance),
+			srcB, budget.DollarAmount(s.Balance),
+		)
+	}
+	return out, nil
+}
+
 // buildTransactions iterates parsed files and deduplicates transactions by
 // transaction doc ID: overlapping statement files (same statementId) can
 // produce duplicate transactions with the same OFX FITID. The visit callback

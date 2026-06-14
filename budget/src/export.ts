@@ -24,9 +24,11 @@ import type { IdbRule } from "./entities/rule.js";
 import { ruleToRawJson } from "./entities/rule.js";
 import type { IdbNormalizationRule } from "./entities/normalization-rule.js";
 import { normalizationRuleToRawJson } from "./entities/normalization-rule.js";
+import type { IdbWeeklyAggregate } from "./entities/weekly-aggregate.js";
+import { weeklyAggregateToRawJson } from "./entities/weekly-aggregate.js";
 
 export async function exportToJson(): Promise<string> {
-  const [transactions, budgets, budgetPeriods, rules, normalizationRules, statements, statementItems, reconciliationNotes, accounts, journalEntries, journalLegs, reconciliationEvents, meta] = await Promise.all([
+  const [transactions, budgets, budgetPeriods, rules, normalizationRules, statements, statementItems, reconciliationNotes, accounts, journalEntries, journalLegs, reconciliationEvents, weeklyAggregates, meta] = await Promise.all([
     getAll<IdbTransaction>("transactions"),
     getAll<IdbBudget>("budgets"),
     getAll<IdbBudgetPeriod>("budgetPeriods"),
@@ -39,6 +41,7 @@ export async function exportToJson(): Promise<string> {
     getAll<IdbJournalEntry>("journalEntries"),
     getAll<IdbJournalLeg>("journalLegs"),
     getAll<IdbReconciliationEvent>("reconciliationEvents"),
+    getAll<IdbWeeklyAggregate>("weeklyAggregates"),
     getMeta(),
   ]);
 
@@ -62,6 +65,7 @@ export async function exportToJson(): Promise<string> {
     journalEntries: journalEntries.map(journalEntryToRawJson),
     journalLegs: journalLegs.map(journalLegToRawJson),
     reconciliationEvents: reconciliationEvents.map(reconciliationEventToRawJson),
+    weeklyAggregates: weeklyAggregates.map(weeklyAggregateToRawJson),
   };
 
   return JSON.stringify(output, null, 2) + "\n";

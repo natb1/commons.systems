@@ -206,6 +206,9 @@ func detectFormat(path string) (format, error) {
 		return 0, fmt.Errorf("reading %s: %w", path, err)
 	}
 	header := string(buf[:n])
+	// Strip a leading UTF-8 BOM (EF BB BF → U+FEFF) and trim leading whitespace
+	// so a BOM-prefixed or blank-line-led OFX/SGML file is not misrouted to CSV.
+	header = strings.TrimLeft(strings.TrimPrefix(header, "\ufeff"), " \t\r\n")
 
 	if strings.HasPrefix(header, "<?xml") || strings.HasPrefix(header, "<?XML") {
 		return formatOFX, nil

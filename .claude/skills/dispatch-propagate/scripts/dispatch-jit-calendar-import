@@ -113,27 +113,6 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
-# ---- parse_duration <str> — duration string to seconds ----------------------
-# Copied inline from dispatch-jit-engine. Accepts <int><unit> where unit is one
-# of s|m|h|d|w. Prints the duration in seconds on stdout and returns 0. On
-# unparseable input prints nothing and returns 1.
-parse_duration() {
-  local spec="$1" num unit
-  if [[ ! "$spec" =~ ^([0-9]+)([smhdw])$ ]]; then
-    return 1
-  fi
-  num="${BASH_REMATCH[1]}"
-  unit="${BASH_REMATCH[2]}"
-  case "$unit" in
-    s) printf '%s\n' "$(( num * 1 ))" ;;
-    m) printf '%s\n' "$(( num * 60 ))" ;;
-    h) printf '%s\n' "$(( num * 3600 ))" ;;
-    d) printf '%s\n' "$(( num * 86400 ))" ;;
-    w) printf '%s\n' "$(( num * 604800 ))" ;;
-  esac
-  return 0
-}
-
 # ---- Step 0: no-config gate -------------------------------------------------
 # Any of the three OAuth env vars unset → silent no-op.
 if [[ -z "${GOOGLE_CALENDAR_CLIENT_ID:-}" \

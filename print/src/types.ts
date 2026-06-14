@@ -1,6 +1,9 @@
 export const MEDIA_TYPES = ["epub", "pdf", "image-archive"] as const;
 export type MediaType = (typeof MEDIA_TYPES)[number];
 
+/** Where a library item comes from. `undefined` ⇒ cloud (the default path). */
+export type ItemOrigin = "cloud" | "local";
+
 export interface MediaItem {
   readonly id: string;
   readonly title: string;
@@ -13,4 +16,5 @@ export interface MediaItem {
   readonly groupId: string | null;
   readonly memberEmails: readonly string[];
   readonly addedAt: string;
+  readonly origin?: ItemOrigin;
 }

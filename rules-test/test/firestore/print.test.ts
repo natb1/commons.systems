@@ -63,6 +63,14 @@ describe("print reading-position", () => {
       );
     });
 
+    it("denies reading another user's non-existent position (no existence oracle)", async () => {
+      const ctx = env.authenticatedContext("other-user");
+      const db = ctx.firestore();
+      await assertFails(
+        getDoc(doc(db, `print/${ENV}/reading-position/${UID}_nonexistent`)),
+      );
+    });
+
     it("denies unauthenticated read", async () => {
       const ctx = unauthenticatedContext(env);
       const db = ctx.firestore();
@@ -82,7 +90,7 @@ describe("print reading-position", () => {
         setDoc(doc(db, `print/${ENV}/reading-position/${newDocId}`), {
           uid: UID,
           mediaId: newMediaId,
-          position: 0,
+          position: "0",
         }),
       );
     });
@@ -92,7 +100,44 @@ describe("print reading-position", () => {
       const db = ctx.firestore();
       await assertSucceeds(
         updateDoc(doc(db, `print/${ENV}/reading-position/${DOC_ID}`), {
-          position: 100,
+          position: "100",
+        }),
+      );
+    });
+
+    it("denies write with an extra field (hasOnly)", async () => {
+      const ctx = env.authenticatedContext(UID);
+      const db = ctx.firestore();
+      await assertFails(
+        setDoc(doc(db, `print/${ENV}/reading-position/${DOC_ID}`), {
+          uid: UID,
+          mediaId: MEDIA_ID,
+          position: "0",
+          extra: "x",
+        }),
+      );
+    });
+
+    it("denies write with a non-string position", async () => {
+      const ctx = env.authenticatedContext(UID);
+      const db = ctx.firestore();
+      await assertFails(
+        setDoc(doc(db, `print/${ENV}/reading-position/${DOC_ID}`), {
+          uid: UID,
+          mediaId: MEDIA_ID,
+          position: 5,
+        }),
+      );
+    });
+
+    it("denies write with a non-string mediaId", async () => {
+      const ctx = env.authenticatedContext(UID);
+      const db = ctx.firestore();
+      await assertFails(
+        setDoc(doc(db, `print/${ENV}/reading-position/${UID}_123`), {
+          uid: UID,
+          mediaId: 123,
+          position: "0",
         }),
       );
     });
@@ -104,7 +149,7 @@ describe("print reading-position", () => {
         setDoc(doc(db, `print/${ENV}/reading-position/${DOC_ID}`), {
           uid: "wrong-uid",
           mediaId: MEDIA_ID,
-          position: 0,
+          position: "0",
         }),
       );
     });
@@ -116,7 +161,7 @@ describe("print reading-position", () => {
         setDoc(doc(db, `print/${ENV}/reading-position/wrong_doc`), {
           uid: UID,
           mediaId: MEDIA_ID,
-          position: 0,
+          position: "0",
         }),
       );
     });
@@ -139,7 +184,7 @@ describe("print reading-position", () => {
         setDoc(doc(db, `print/${ENV}/reading-position/${DOC_ID}`), {
           uid: "other-user",
           mediaId: MEDIA_ID,
-          position: 0,
+          position: "0",
         }),
       );
     });

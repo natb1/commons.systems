@@ -1,7 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
-import { resolveAudioSource } from "./storage.js";
+import { removeFile, resolveAudioSource } from "./storage.js";
 import type { AudioItem } from "./types.js";
 
 export type PlayRequest = Pick<AudioItem, "id" | "title" | "artist" | "album" | "storagePath">;
@@ -28,6 +28,7 @@ export function initPlayer(
   const queue: PlayRequest[] = [];
   let currentIndex = -1;
   let currentObjectUrl: string | null = null;
+  let playGeneration = 0;
 
   function renderPlaylist(): void {
     if (queue.length === 0) {
@@ -62,11 +63,16 @@ export function initPlayer(
   function playTrack(index: number): void {
     const item = queue[index];
     if (!item) throw new Error(`playTrack: index ${index} out of range (queue length ${queue.length})`);
+    const generation = ++playGeneration;
     currentIndex = index;
     renderPlaylist();
     revokeCurrentObjectUrl();
     resolveAudioSource(item.storagePath)
       .then((url) => {
+        if (generation !== playGeneration) {
+          URL.revokeObjectURL(url);
+          return;
+        }
         currentObjectUrl = url;
         audioEl.src = url;
         audioEl.play().catch((err) => {
@@ -77,11 +83,13 @@ export function initPlayer(
       .catch((err) => {
         if (deferProgrammerError(err)) return;
         logError(err, { operation: "audio-source-resolve", storagePath: item.storagePath });
-        advanceOrStop(index);
+        if (generation !== playGeneration) return;
+        advanceOrStop(currentIndex);
       });
   }
 
   function stop(): void {
+    playGeneration++;
     currentIndex = -1;
     revokeCurrentObjectUrl();
     audioEl.pause();
@@ -95,7 +103,22 @@ export function initPlayer(
     advanceOrStop(currentIndex);
   }
 
+  function onError(): void {
+    if (currentIndex < 0) return;
+    const item = queue[currentIndex];
+    logError(audioEl.error ?? new Error("audio element error"), {
+      operation: "audio-element-error",
+      storagePath: item.storagePath,
+      code: audioEl.error?.code,
+    });
+    removeFile(item.storagePath).catch((err) =>
+      logError(err, { operation: "audio-cache-evict", storagePath: item.storagePath }),
+    );
+    advanceOrStop(currentIndex);
+  }
+
   audioEl.addEventListener("ended", onEnded);
+  audioEl.addEventListener("error", onError);
   renderPlaylist();
 
   return {
@@ -131,6 +154,7 @@ export function initPlayer(
 
     destroy(): void {
       audioEl.removeEventListener("ended", onEnded);
+      audioEl.removeEventListener("error", onError);
       queue.length = 0;
       stop();
     },

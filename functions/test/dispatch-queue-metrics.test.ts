@@ -1,0 +1,403 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { Firestore } from "firebase-admin/firestore";
+
+vi.mock("firebase-admin/app", () => ({
+  getApps: () => [{}],
+  initializeApp: vi.fn(),
+}));
+
+vi.mock("firebase-admin/firestore", () => {
+  const TimestampImpl = {
+    fromDate: (d: Date) => ({ toDate: () => d, _seconds: d.getTime() / 1000 }),
+  };
+  return {
+    getFirestore: vi.fn(),
+    Timestamp: TimestampImpl,
+    FieldValue: { serverTimestamp: () => "__server_timestamp__" },
+  };
+});
+
+vi.mock("firebase-functions/v2/scheduler", () => ({
+  onSchedule: vi.fn((_opts, _fn) => ({})),
+}));
+
+vi.mock("firebase-functions/params", () => ({
+  defineSecret: () => ({ value: () => "test-token" }),
+  defineString: (_name: string, opts?: { default?: string }) => ({
+    value: () => opts?.default ?? "test-value",
+  }),
+}));
+
+import {
+  buildQueueSearchQueries,
+  computeQueueMetrics,
+  searchIssueCountLive,
+  sampleDispatchQueueCore,
+} from "../src/dispatch-queue-metrics";
+
+interface InMemoryDocRef {
+  path: string;
+  set: (data: Record<string, unknown>) => Promise<void>;
+  delete: () => Promise<void>;
+}
+
+function createInMemoryFirestore() {
+  const docs = new Map<string, Record<string, unknown>>();
+  let autoIdSeq = 0;
+
+  const doc = (path: string): InMemoryDocRef => ({
+    path,
+    set: (data: Record<string, unknown>) => {
+      docs.set(path, data);
+      return Promise.resolve();
+    },
+    delete: () => {
+      docs.delete(path);
+      return Promise.resolve();
+    },
+  });
+
+  const collection = (path: string) => ({
+    get: async () => ({
+      docs: [...docs.entries()]
+        .filter(([key]) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes("/"))
+        .map(([key, data]) => ({
+          id: key.slice(path.length + 1),
+          ref: doc(key),
+          data: () => data,
+        })),
+    }),
+    doc: (id: string) => doc(`${path}/${id}`),
+    add: (data: Record<string, unknown>) => {
+      const id = `auto-${autoIdSeq++}`;
+      docs.set(`${path}/${id}`, data);
+      return Promise.resolve({ id });
+    },
+  });
+
+  return { doc, collection, _docs: docs };
+}
+
+describe("buildQueueSearchQueries", () => {
+  it("builds the three queries with a 14-day cutoff date for a fixed now", () => {
+    const now = new Date("2026-06-07T08:30:00Z");
+    const q = buildQueueSearchQueries("natb1/commons.systems", now);
+
+    // 2026-06-07 minus 14 days = 2026-05-24
+    expect(q.open).toBe('repo:natb1/commons.systems is:issue is:open label:"help wanted"');
+    expect(q.closed).toBe(
+      'repo:natb1/commons.systems is:issue is:closed reason:completed label:"help wanted" closed:>=2026-05-24',
+    );
+    expect(q.created).toBe(
+      'repo:natb1/commons.systems is:issue label:"help wanted" created:>=2026-05-24',
+    );
+    expect(q.openOther).toBe('repo:natb1/commons.systems is:issue is:open -label:"help wanted"');
+  });
+});
+
+describe("computeQueueMetrics", () => {
+  it("averages closed/created counts over the window", () => {
+    const m = computeQueueMetrics({
+      openHelpWanted: 28,
+      closedCount: 28,
+      createdCount: 14,
+      windowDays: 14,
+    });
+    expect(m.closedPerDay).toBe(2);
+    expect(m.createdPerDay).toBe(1);
+    expect(m.netDrainPerDay).toBe(1);
+  });
+
+  it("computes a finite runway when net drain is positive", () => {
+    const m = computeQueueMetrics({
+      openHelpWanted: 28,
+      closedCount: 28,
+      createdCount: 14,
+      windowDays: 14,
+    });
+    // 28 open / 1 per day = 28 days
+    expect(m.runwayDays).toBe(28);
+    expect(Number.isFinite(m.runwayDays as number)).toBe(true);
+  });
+
+  it("returns null runway when net drain is zero (queue flat)", () => {
+    const m = computeQueueMetrics({
+      openHelpWanted: 10,
+      closedCount: 14,
+      createdCount: 14,
+      windowDays: 14,
+    });
+    expect(m.netDrainPerDay).toBe(0);
+    expect(m.runwayDays).toBeNull();
+  });
+
+  it("returns null runway when net drain is negative (queue growing), never negative or infinite", () => {
+    const m = computeQueueMetrics({
+      openHelpWanted: 10,
+      closedCount: 7,
+      createdCount: 28,
+      windowDays: 14,
+    });
+    expect(m.netDrainPerDay).toBeLessThan(0);
+    expect(m.runwayDays).toBeNull();
+  });
+
+  it("never yields a negative or infinite runway across cases", () => {
+    const cases = [
+      { openHelpWanted: 0, closedCount: 0, createdCount: 0, windowDays: 14 },
+      { openHelpWanted: 50, closedCount: 0, createdCount: 0, windowDays: 14 },
+      { openHelpWanted: 50, closedCount: 100, createdCount: 0, windowDays: 14 },
+    ];
+    for (const c of cases) {
+      const { runwayDays } = computeQueueMetrics(c);
+      if (runwayDays !== null) {
+        expect(runwayDays).toBeGreaterThanOrEqual(0);
+        expect(Number.isFinite(runwayDays)).toBe(true);
+      }
+    }
+  });
+});
+
+describe("searchIssueCountLive", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts the search/issueCount GraphQL query and returns the count", async () => {
+    const fetchMock = vi.fn(async (_url: string, init: { body: string }) => {
+      const parsed = JSON.parse(init.body) as { query: string; variables: { query: string } };
+      expect(parsed.query).toContain("search(query: $query, type: ISSUE)");
+      expect(parsed.query).toContain("issueCount");
+      expect(parsed.variables.query).toBe("repo:x/y is:issue is:open");
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { search: { issueCount: 42 } } }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const count = await searchIssueCountLive("tok", "repo:x/y is:issue is:open");
+    expect(count).toBe(42);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.github.com/graphql",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("throws on a non-OK HTTP response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 503,
+        text: async () => "service unavailable",
+      })),
+    );
+    await expect(searchIssueCountLive("tok", "q")).rejects.toThrow(/503/);
+  });
+
+  it("throws when GraphQL returns errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ errors: [{ message: "bad query" }] }),
+      })),
+    );
+    await expect(searchIssueCountLive("tok", "q")).rejects.toThrow(/bad query/);
+  });
+});
+
+describe("sampleDispatchQueueCore", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("writes the snapshot field map to office-hours/prod/metrics/dispatch-queue", async () => {
+    const store = createInMemoryFirestore();
+    const now = new Date("2026-06-07T08:30:00Z");
+
+    // open=28, closed=28, created=14 -> closedPerDay=2, createdPerDay=1, net=1, runway=28
+    const counts: Record<string, number> = {};
+    const q = buildQueueSearchQueries("natb1/commons.systems", now);
+    counts[q.open] = 28;
+    counts[q.closed] = 28;
+    counts[q.created] = 14;
+    counts[q.openOther] = 0;
+
+    await sampleDispatchQueueCore({
+      searchIssueCount: async (query: string) => counts[query],
+      firestore: store as unknown as Firestore,
+      namespace: "office-hours/prod",
+      queueRepos: ["natb1/commons.systems"],
+      groupId: "group-1",
+      memberEmails: ["owner@example.com"],
+      now,
+    });
+
+    const written = store._docs.get("office-hours/prod/metrics/dispatch-queue") as Record<
+      string,
+      unknown
+    >;
+    expect(written).toBeDefined();
+    expect(written.openHelpWanted).toBe(28);
+    expect(written.closedPerDay).toBe(2);
+    expect(written.createdPerDay).toBe(1);
+    expect(written.netDrainPerDay).toBe(1);
+    expect(written.runwayDays).toBe(28);
+    expect(written.windowDays).toBe(14);
+    expect(written.computedAt).toBe(now);
+    expect(written.groupId).toBe("group-1");
+    expect(written.memberEmails).toEqual(["owner@example.com"]);
+  });
+
+  it("writes runwayDays null when the queue is flat or growing", async () => {
+    const store = createInMemoryFirestore();
+    const now = new Date("2026-06-07T08:30:00Z");
+
+    const counts: Record<string, number> = {};
+    const q = buildQueueSearchQueries("natb1/commons.systems", now);
+    counts[q.open] = 10;
+    counts[q.closed] = 7;
+    counts[q.created] = 28; // created outpaces closed -> queue growing
+    counts[q.openOther] = 0;
+
+    await sampleDispatchQueueCore({
+      searchIssueCount: async (query: string) => counts[query],
+      firestore: store as unknown as Firestore,
+      namespace: "office-hours/prod",
+      queueRepos: ["natb1/commons.systems"],
+      groupId: "group-1",
+      memberEmails: ["owner@example.com"],
+      now,
+    });
+
+    const written = store._docs.get("office-hours/prod/metrics/dispatch-queue") as Record<
+      string,
+      unknown
+    >;
+    expect(written.runwayDays).toBeNull();
+    expect(written.netDrainPerDay).toBeLessThan(0);
+  });
+
+  it("openOther partition (single repo): appends correct openHelpWanted and openOther to issue-samples", async () => {
+    const store = createInMemoryFirestore();
+    const now = new Date("2026-06-07T08:30:00Z");
+
+    const counts: Record<string, number> = {};
+    const q = buildQueueSearchQueries("natb1/commons.systems", now);
+    counts[q.open] = 12;
+    counts[q.openOther] = 30;
+    counts[q.closed] = 14;
+    counts[q.created] = 7;
+
+    await sampleDispatchQueueCore({
+      searchIssueCount: async (query: string) => counts[query],
+      firestore: store as unknown as Firestore,
+      namespace: "office-hours/prod",
+      queueRepos: ["natb1/commons.systems"],
+      groupId: "group-1",
+      memberEmails: ["owner@example.com"],
+      now,
+    });
+
+    const sample = store._docs.get("office-hours/prod/issue-samples/auto-0") as Record<
+      string,
+      unknown
+    >;
+    expect(sample).toBeDefined();
+    expect(sample.openHelpWanted).toBe(12);
+    expect(sample.openOther).toBe(30);
+    expect((sample.openHelpWanted as number) + (sample.openOther as number)).toBe(
+      counts[q.open] + counts[q.openOther],
+    );
+  });
+
+  it("multi-repo aggregation: sums openHelpWanted, openOther, and runway inputs across repos", async () => {
+    const store = createInMemoryFirestore();
+    const now = new Date("2026-06-07T08:30:00Z");
+
+    const repoA = "natb1/commons.systems";
+    const repoB = "natb1/other-repo";
+    const qA = buildQueueSearchQueries(repoA, now);
+    const qB = buildQueueSearchQueries(repoB, now);
+
+    const counts: Record<string, number> = {};
+    counts[qA.open] = 5;
+    counts[qA.openOther] = 10;
+    counts[qA.closed] = 14;
+    counts[qA.created] = 7;
+    counts[qB.open] = 3;
+    counts[qB.openOther] = 20;
+    counts[qB.closed] = 14;
+    counts[qB.created] = 7;
+
+    await sampleDispatchQueueCore({
+      searchIssueCount: async (query: string) => counts[query],
+      firestore: store as unknown as Firestore,
+      namespace: "office-hours/prod",
+      queueRepos: [repoA, repoB],
+      groupId: "group-1",
+      memberEmails: ["owner@example.com"],
+      now,
+    });
+
+    const snapshot = store._docs.get("office-hours/prod/metrics/dispatch-queue") as Record<
+      string,
+      unknown
+    >;
+    expect(snapshot.openHelpWanted).toBe(8); // 5 + 3
+    // closedPerDay = (14+14)/14 = 2; createdPerDay = (7+7)/14 = 1; net = 1; runway = 8/1 = 8
+    expect(snapshot.runwayDays).toBe(8);
+
+    const sample = store._docs.get("office-hours/prod/issue-samples/auto-0") as Record<
+      string,
+      unknown
+    >;
+    expect(sample).toBeDefined();
+    expect(sample.openHelpWanted).toBe(8); // 5 + 3
+    expect(sample.openOther).toBe(30); // 10 + 20
+  });
+
+  it("issue-samples append shape: exactly one doc with all five fields and correct values", async () => {
+    const store = createInMemoryFirestore();
+    const now = new Date("2026-06-07T08:30:00Z");
+
+    const counts: Record<string, number> = {};
+    const q = buildQueueSearchQueries("natb1/commons.systems", now);
+    counts[q.open] = 15;
+    counts[q.openOther] = 5;
+    counts[q.closed] = 14;
+    counts[q.created] = 7;
+
+    await sampleDispatchQueueCore({
+      searchIssueCount: async (query: string) => counts[query],
+      firestore: store as unknown as Firestore,
+      namespace: "office-hours/prod",
+      queueRepos: ["natb1/commons.systems"],
+      groupId: "my-group",
+      memberEmails: ["a@example.com", "b@example.com"],
+      now,
+    });
+
+    const prefix = "office-hours/prod/issue-samples";
+    const sampleKeys = [...store._docs.keys()].filter(
+      (k) => k.startsWith(`${prefix}/`) && !k.slice(prefix.length + 1).includes("/"),
+    );
+    expect(sampleKeys).toHaveLength(1);
+
+    const sample = store._docs.get(sampleKeys[0]) as Record<string, unknown>;
+    expect(sample).toBeDefined();
+    expect("sampledAt" in sample).toBe(true);
+    expect("openHelpWanted" in sample).toBe(true);
+    expect("openOther" in sample).toBe(true);
+    expect("groupId" in sample).toBe(true);
+    expect("memberEmails" in sample).toBe(true);
+
+    expect(sample.sampledAt).toBe(now);
+    expect(sample.groupId).toBe("my-group");
+    expect(sample.memberEmails).toEqual(["a@example.com", "b@example.com"]);
+  });
+});

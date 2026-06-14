@@ -1,4 +1,4 @@
-import { describe, it, beforeAll, beforeEach } from "vitest";
+import { describe, it, beforeAll, beforeEach, expect } from "vitest";
 import { assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
 import type { RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import {
@@ -112,6 +112,77 @@ describe("office-hours items", () => {
         memberEmails: ["owner@test.com"],
       }),
     );
+  });
+
+  it("allows owner list query on items collection", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    const snap = await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/items`),
+          where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+    expect(snap.empty).toBe(false);
+  });
+
+  it("denies unfiltered owner list query on items collection", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(collection(db, `office-hours/${ENV}/items`)),
+    );
+  });
+
+  // A non-member cannot list another member's items: filtering for an email
+  // they are not in is denied, because the matching docs carry a memberEmails
+  // the requester is absent from. (A self-targeted array-contains filter is
+  // always rule-compliant and returns an empty set, so it is not a denial
+  // case.)
+  it("denies authenticated non-member list query for another member's items", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/items`),
+          where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+  });
+
+  it("denies unauthenticated list query on items collection", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/items`),
+          where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+  });
+
+  // Documents the non-obvious converse of the denial above: a non-member's
+  // self-targeted filter is rule-compliant and succeeds, returning an empty
+  // set rather than being denied. This guards against re-introducing the
+  // false "self-targeted non-member filter is denied" assumption.
+  it("allows authenticated non-member self-targeted list query (returns empty)", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    const snap = await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/items`),
+          where("memberEmails", "array-contains", "stranger@test.com"),
+        ),
+      ),
+    );
+    expect(snap.empty).toBe(true);
   });
 });
 
@@ -244,10 +315,47 @@ describe("office-hours usage-samples", () => {
     );
   });
 
-  it("denies non-member list query on test-env collection", async () => {
+  it("denies unfiltered owner list query on test-env usage-samples collection", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(collection(db, `office-hours/${ENV}/usage-samples`)),
+    );
+  });
+
+  it("denies unfiltered stranger list query on test-env usage-samples collection", async () => {
     const ctx = authenticatedContext(env, "stranger@test.com");
     const db = ctx.firestore();
     await assertFails(
+      getDocs(collection(db, `office-hours/${ENV}/usage-samples`)),
+    );
+  });
+
+  // A non-member cannot list another member's samples: filtering for an email
+  // they are not in is denied, because the matching docs carry a memberEmails
+  // the requester is absent from. (A self-targeted array-contains filter is
+  // always rule-compliant and returns an empty set, so it is not a denial
+  // case.)
+  it("denies authenticated non-member list query for another member's samples", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/usage-samples`),
+          where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+  });
+
+  // "Rules are not filters": a list query is allowed when its where-clause
+  // provably satisfies the rule. A non-member filtering to their own membership
+  // is allowed and simply returns the empty subset they are entitled to.
+  it("allows non-member list query filtered to own (empty) membership", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertSucceeds(
       getDocs(
         query(
           collection(db, `office-hours/${ENV}/usage-samples`),
@@ -303,6 +411,227 @@ describe("office-hours usage-samples", () => {
     const db = ctx.firestore();
     await assertFails(
       deleteDoc(doc(db, `office-hours/demo/usage-samples/sample-demo`)),
+    );
+  });
+});
+
+describe("office-hours issue-samples", () => {
+  let env: RulesTestEnvironment;
+
+  beforeAll(async () => {
+    env = await getTestEnv();
+  });
+
+  setupCleanup();
+
+  const issueSampleDoc = {
+    memberEmails: ["owner@test.com"],
+    sampledAt: new Date("2026-06-07T12:00:00Z"),
+    openHelpWanted: 12,
+    openOther: 30,
+    groupId: "owner-group",
+  };
+
+  const demoIssueSampleDoc = {
+    memberEmails: ["demo@example.com"],
+    sampledAt: new Date("2026-06-07T11:00:00Z"),
+    openHelpWanted: 6,
+    openOther: 13,
+    groupId: "demo-group",
+  };
+
+  beforeEach(async () => {
+    await adminSetDoc(
+      env,
+      `office-hours/${ENV}/issue-samples/sample-owner`,
+      issueSampleDoc,
+    );
+    await adminSetDoc(
+      env,
+      `office-hours/demo/issue-samples/sample-demo`,
+      demoIssueSampleDoc,
+    );
+  });
+
+  it("allows owner to read test-env doc", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertSucceeds(
+      getDoc(doc(db, `office-hours/${ENV}/issue-samples/sample-owner`)),
+    );
+  });
+
+  it("denies non-owner read of test-env doc", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDoc(doc(db, `office-hours/${ENV}/issue-samples/sample-owner`)),
+    );
+  });
+
+  it("denies unauthenticated read of test-env doc", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertFails(
+      getDoc(doc(db, `office-hours/${ENV}/issue-samples/sample-owner`)),
+    );
+  });
+
+  it("allows unauthenticated read of demo-env doc", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertSucceeds(
+      getDoc(doc(db, `office-hours/demo/issue-samples/sample-demo`)),
+    );
+  });
+
+  it("denies owner setDoc on test-env doc", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      setDoc(doc(db, `office-hours/${ENV}/issue-samples/sample-owner`), {
+        memberEmails: ["owner@test.com"],
+      }),
+    );
+  });
+
+  it("denies owner updateDoc on test-env doc", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      updateDoc(doc(db, `office-hours/${ENV}/issue-samples/sample-owner`), {
+        openHelpWanted: 11,
+      }),
+    );
+  });
+
+  it("denies owner deleteDoc on test-env doc", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      deleteDoc(doc(db, `office-hours/${ENV}/issue-samples/sample-owner`)),
+    );
+  });
+
+  it("denies unauthenticated setDoc on demo-env doc", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertFails(
+      setDoc(doc(db, `office-hours/demo/issue-samples/sample-demo`), {
+        memberEmails: ["demo@example.com"],
+      }),
+    );
+  });
+
+  it("allows owner list query on test-env collection", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/issue-samples`),
+          where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+  });
+
+  it("denies unfiltered owner list query on test-env issue-samples collection", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(collection(db, `office-hours/${ENV}/issue-samples`)),
+    );
+  });
+
+  it("denies unfiltered stranger list query on test-env issue-samples collection", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(collection(db, `office-hours/${ENV}/issue-samples`)),
+    );
+  });
+
+  // A non-member cannot list another member's samples: filtering for an email
+  // they are not in is denied, because the matching docs carry a memberEmails
+  // the requester is absent from. (A self-targeted array-contains filter is
+  // always rule-compliant and returns an empty set, so it is not a denial
+  // case.)
+  it("denies authenticated non-member list query for another member's samples", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/issue-samples`),
+          where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+  });
+
+  // "Rules are not filters": a list query is allowed when its where-clause
+  // provably satisfies the rule. A non-member filtering to their own membership
+  // is allowed and simply returns the empty subset they are entitled to.
+  it("allows non-member list query filtered to own (empty) membership", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/issue-samples`),
+          where("memberEmails", "array-contains", "stranger@test.com"),
+        ),
+      ),
+    );
+  });
+
+  it("denies unauthenticated list query on test-env collection", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/issue-samples`),
+          where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+  });
+
+  it("denies unauthenticated list query on demo-env collection", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(collection(db, `office-hours/demo/issue-samples`)),
+    );
+  });
+
+  it("denies authenticated setDoc on demo-env doc", async () => {
+    const ctx = authenticatedContext(env, "demo@example.com");
+    const db = ctx.firestore();
+    await assertFails(
+      setDoc(doc(db, `office-hours/demo/issue-samples/sample-demo`), {
+        memberEmails: ["demo@example.com"],
+      }),
+    );
+  });
+
+  it("denies authenticated updateDoc on demo-env doc", async () => {
+    const ctx = authenticatedContext(env, "demo@example.com");
+    const db = ctx.firestore();
+    await assertFails(
+      updateDoc(doc(db, `office-hours/demo/issue-samples/sample-demo`), {
+        openHelpWanted: 5,
+      }),
+    );
+  });
+
+  it("denies authenticated deleteDoc on demo-env doc", async () => {
+    const ctx = authenticatedContext(env, "demo@example.com");
+    const db = ctx.firestore();
+    await assertFails(
+      deleteDoc(doc(db, `office-hours/demo/issue-samples/sample-demo`)),
     );
   });
 });
