@@ -10768,6 +10768,71 @@ out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "just under pace (hw=1), used_5h=70 → ramp N=3" "3" "$out"
 tw_teardown
 
+# --- Test 16c: dynamic catch-up ceiling — saturated regime (headline) --------
+
+echo "Test: end-of-week deficit saturates ceil5_eff to 100 → ramp lifts N above 0"
+tw_setup
+# Headline behavior: near end-of-week the static ceil5=80 would gate N=0 at high
+# 5h usage, but the dynamic catch-up ceiling lifts the ramp so work continues.
+# Pin r exactly via the resets override (resets = NOW + remaining), like Test 15.
+#   remaining=18000 → r=1. used_weekly=88, used_5h=85.
+#   Stage 1: W = max(smooth, envelope=100-10*1=90) = 90. hw=90-88=2>0 → gate open.
+#   Stage 3: D = terminal-used_weekly = 100-88 = 12. D/r = 12 (>wcap=10) →
+#     100*D/(r*wcap) = 100*12/(1*10) = 120 → clamp(120,80,100) = ceil5_eff=100.
+#     span=100-50=50, h5=100-85=15 → N=int(8*15/50+0.5)=int(2.9)=2.
+#   (Static ceiling 80 → h5=80-85=-5 → N=0.)
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+export DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY=$((TW_NOW + 18000))
+write_rl "rl.json" 88 99999999 85 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "r=1, D/r=12 → ceil5_eff=100; used_5h=85 → N=2 (static 80 → 0)" "2" "$out"
+tw_teardown
+
+# --- Test 16d: dynamic catch-up ceiling — effective regime (8<D/r<=10) -------
+
+echo "Test: end-of-week deficit lifts ceil5_eff into the ramp → N=1 (static → 0)"
+tw_setup
+# Effective (non-saturated) regime: ceil5_eff lands strictly between ceil5 and
+# 100. Pin r exactly via the resets override.
+#   remaining=45000 → r=2.5. used_weekly=77, used_5h=90.
+#   Stage 1: smooth curve dominates (envelope=100-10*2.5=75 < smooth). At
+#     remaining=45000, x=(604800-45000)/604800≈0.9256 → W≈79.45. hw≈2.45>0 → open.
+#   Stage 3: D = 100-77 = 23. D/r = 9.2 → 100*23/(2.5*10) = 92 →
+#     clamp(92,80,100) = ceil5_eff=92. span=92-50=42, h5=92-90=2 →
+#     N=int(8*2/42+0.5)=int(0.88)=0... clamp(0,1,8)? No: int(8*2/42+0.5)=int(0.881)=0,
+#     but the round is 8*2/42=0.381, +0.5=0.881, int=0 → then clamp(0,1,8)=1.
+#   (Static ceiling 80 → h5=80-90=-10 → N=0.)
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+export DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY=$((TW_NOW + 45000))
+write_rl "rl.json" 77 99999999 90 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "r=2.5, D/r=9.2 → ceil5_eff=92; used_5h=90 → N=1 (static 80 → 0)" "1" "$out"
+tw_teardown
+
+# --- Test 16e: dynamic ceiling inert mid-week (accelerator-only invariant) ---
+
+echo "Test: mid-week ceil5_eff clamps to ceil5 → behavior identical to today"
+tw_setup
+# Accelerator-only invariant: mid-week the large remaining-window count r makes
+# the catch-up term tiny, so ceil5_eff clamps down to the static ceil5=80 and
+# Stage 3 behaves exactly as it did before this change. Use tw_resets_for_x 0.5
+# (remaining=302400 → r≈16.8), matching the mid-week probes elsewhere.
+#   used_weekly=11 → gate open (W(0.5)=31, hw=20>0).
+#   D = 100-11 = 89. D/r = 89/16.8 ≈ 5.3 → 100*D/(r*wcap) = 10*D/r ≈ 53 (<ceil5=80)
+#     → clamp(53,80,100) = ceil5_eff=80 (static).
+# Sub-assertion A: used_5h=70 → h5=80-70=10 → N=clamp(round(8*10/30),1,8)=3
+#   (byte-identical to Test 16b's mid-week ramp value).
+# Sub-assertion B: used_5h=85 → h5=80-85=-5 → N=0 (no end-of-week lift mid-week).
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+write_rl "rl.json" 11 "$r" 70 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "mid-week ceil5_eff=80; used_5h=70 → N=3 (matches Test 16b)" "3" "$out"
+write_rl "rl.json" 11 "$r" 85 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "mid-week ceil5_eff=80; used_5h=85 → N=0 (no mid-week lift)" "0" "$out"
+tw_teardown
+
 # --- Test 17: non-numeric used_weekly sanitized fail-closed → 1 -------------
 
 echo "Test: non-numeric used_weekly is treated as missing → conservative fallback"
