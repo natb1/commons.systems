@@ -6046,9 +6046,10 @@ echo "=== dispatch-sweep ==="
 #   stub/                         per-test JSON + record files (calls, gh out)
 #
 # Shims:
-#   gh   — gh-pr-list-all.json drives `pr list --state all`; each entry carries
-#          {state, headRefName, number}. MERGED entries populate MERGED_BY_BRANCH;
-#          OPEN entries populate OPEN_BY_BRANCH. DRAFT is unused (isDraft not consumed).
+#   gh   — per-worktree PR query is `pr list --head <branch> --state all`, driven
+#          by pr-state-<branch>.json (each entry {state, number}); returns '[]'
+#          when no fixture exists. SWEEP_GH_PR_FAIL=<branch> forces that branch's
+#          --head query to fail. Issue-view is driven by issue-state-<N>.txt.
 #   git  — knows worktree list/remove/prune, branch -D, -C <p> status,
 #          -C <p> rev-list --count, -C <p> log -1 --format=%ct, and
 #          rev-parse --path-format=absolute --git-common-dir.
