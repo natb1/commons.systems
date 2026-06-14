@@ -5,6 +5,45 @@ source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 N=$(resolve_issue_number "${1:-}")
 
+# Epic-label gate (#1594). Treat an issue as an epic-resolved candidate ONLY if
+# it carries a configured epic label (loaded from the `epic` config type). The
+# all-children-closed shape alone is not enough — an ordinary tracking issue or a
+# manually-filed parent with all children closed must NOT route to /resolve-epic
+# (which can auto-close), with no author intent. An unconfigured `epic` config →
+# nothing is ever a candidate (safe default; no false positives → no spurious
+# auto-close). This gate runs BEFORE the sub-issues fetch so a non-epic issue
+# short-circuits cheaply (exit 1) without the extra gh round-trip.
+EPIC_CONFIG=$("$SCRIPT_DIR/dispatch-config-load" epic)
+if [[ "$EPIC_CONFIG" == "no-config" ]]; then
+  # No epic config — nothing is an epic. Not a candidate.
+  exit 1
+fi
+CONFIGURED_LABELS=$(printf '%s' "$EPIC_CONFIG" | jq -r '.labels[]')
+if [[ -z "$CONFIGURED_LABELS" ]]; then
+  # Config present but no labels — nothing is an epic. Not a candidate.
+  exit 1
+fi
+
+# Fetch the issue's labels. With pipefail on, a real gh_retry failure (network,
+# auth, etc.) makes the pipeline non-zero → exit 3 (hard error, distinct from
+# "not a candidate"). A genuinely-empty-labels success ({"labels":[]}) exits 0
+# with ISSUE_LABELS empty → falls through to the empty-intersection check → exit 1.
+ISSUE_LABELS=$(gh_retry gh issue view "$N" --json labels | jq -r '.labels[].name') || {
+  echo "dispatch-epic-resolved-candidate: gh issue view $N --json labels failed" >&2
+  exit 3
+}
+
+# Intersect the configured epic labels with the issue's labels (sorted-set
+# intersection via comm -12). An empty intersection — including the empty-labels
+# case above — means the issue carries no configured epic label → not a candidate.
+if [[ -z "$ISSUE_LABELS" ]] \
+  || ! comm -12 \
+       <(printf '%s\n' "$CONFIGURED_LABELS" | sort -u) \
+       <(printf '%s\n' "$ISSUE_LABELS" | sort -u) \
+       | grep -q .; then
+  exit 1
+fi
+
 # Fetch sub-issues with the lean explicit field set (number,state,stateReason).
 # Propagate a hard error as exit 3 so the caller can distinguish a real gh
 # failure from "not a candidate" (exit 1). Capture raw stream first so a
