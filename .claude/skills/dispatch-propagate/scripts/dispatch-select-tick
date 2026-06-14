@@ -66,7 +66,7 @@
 # See .claude/rules/sandbox.md.
 #
 # Exit code: 0 on every decision line; 2 on an internal/usage error surfaced on
-# stderr.
+# stderr (e.g. non-numeric TARGET_N from dispatch-target-workers).
 #
 # NOT set -e: exits are handled explicitly (matching the sibling dispatch
 # scripts).
@@ -310,6 +310,11 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-reservation-ledger.sh"
   TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")
+  if [[ ! "$TARGET_N" =~ ^[0-9]+$ ]]; then
+    release_lock
+    echo "dispatch-select-tick: dispatch-target-workers returned non-numeric target '$TARGET_N'" >&2
+    exit 2
+  fi
   # Reconcile the ledger before counting so the gate sees no stranded
   # reservations (sweep reclaim notes → stderr; best-effort).
   # reservation_sweep internally calls claude_agents_list_all, which reads
