@@ -3195,6 +3195,134 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "print issue beats untopiced (other) issue" "issue 300" "$result"
 teardown
 
+# --- enhancement-axis deprioritization (#1473) --------------------------------
+# Within a priority tier, ALL non-enhancement issues (enh=0) drain before any
+# enhancement issue (enh=1). Enhancement applies to the ISSUE path only; PRs
+# are never enhancement-classified and always complete normally. The
+# enhancement bit nests BETWEEN priority and topic: pri ⊃ enh ⊃ topic ⊃ phase.
+
+# ENH1. Default-mode within-tier (criteria 1+2): a plain `audio` issue (enh=0,
+#       lower topic) beats a `bug`+`enhancement` issue (enh=1, higher topic).
+#       Proves non-enhancement outranks enhancement even across topic ranks.
+echo "Test: non-enhancement audio issue beats enhancement bug issue (enh axis outranks topic)"
+setup
+setup_union_pr_list '[]'
+# Issue 200 (older) is audio, enh=0. Issue 100 (newer) is bug+enhancement, enh=1.
+# audio is lower than bug in the topic ladder; enh=0 still beats enh=1.
+printf '[{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"}]},{"number":100,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"},{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "non-enh audio beats enh bug (enh axis outranks topic)" "issue 200" "$result"
+teardown
+
+# ENH2. Within the enhancement tier, topic ordering applies: a `security`
+#       enhancement issue beats an `audio` enhancement issue regardless of age.
+echo "Test: security+enhancement issue beats audio+enhancement issue (topic still ranks within enh tier)"
+setup
+setup_union_pr_list '[]'
+# Issue 200 (older) is audio+enhancement. Issue 100 (newer) is security+enhancement.
+# Both enh=1; security ranks above audio, so issue 100 wins.
+printf '[{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"},{"name":"enhancement"}]},{"number":100,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"},{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "security+enh beats audio+enh (topic ladder within enh tier)" "issue 100" "$result"
+teardown
+
+# ENH3. Criterion 3 — cross-axis: priority is the outermost axis. A
+#       `priority`+`enhancement`+`audio` issue (pri=1, enh=1, low topic) beats
+#       a plain `security` issue (pri=0, enh=0, high topic). Priority outermost
+#       means a priority enhancement still jumps the queue over all non-priority
+#       work regardless of enhancement or topic.
+echo "Test: priority+enhancement+audio beats non-priority non-enhancement security (priority is outermost)"
+setup
+setup_union_pr_list '[]'
+# Issue 100 (older): priority+enhancement+audio (pri=1, enh=1, topic=audio).
+# Issue 200 (newer): security (pri=0, enh=0, topic=security).
+# Despite enhancement and low topic, issue 100 wins because priority is outermost.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"enhancement"},{"name":"audio"}]},{"number":200,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "priority+enh+audio beats non-priority security (priority outermost)" "issue 100" "$result"
+teardown
+
+# ENH4. Regression guard — bug/security ordering within non-enh tier unchanged:
+#       a `security` issue still beats a `bug` issue (no enhancement labels).
+#       Guards against a regression where the new enhancement axis disrupts the
+#       existing topic ordering for non-enhancement items.
+echo "Test: security issue beats bug issue with no enhancement labels (regression guard)"
+setup
+setup_union_pr_list '[]'
+# Issue 400 (older) is bug, enh=0. Issue 300 (newer) is security, enh=0.
+# Both non-enhancement; security topic wins (mirrors 30i).
+printf '[{"number":400,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]},{"number":300,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "security beats bug within non-enh tier (no regression)" "issue 300" "$result"
+teardown
+
+# ENH5. --top N multi-line ordering: ALL non-enhancement issues drain before
+#       any enhancement issue, even across topics. Four issues:
+#         30 (security, enh=0), 20 (audio, enh=0),
+#         10 (security, enh=1), 40 (audio, enh=1)
+#       Expected order: 30 → 20 → 10 → 40
+#       The money assertion: enh=0 audio (issue 20) emits before enh=1 security
+#       (issue 10) — the across-topic drain proof.
+echo "Test: --top 4 drains all non-enhancement before any enhancement (across topics)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":30,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"}]},{"number":10,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"},{"name":"enhancement"}]},{"number":40,"createdAt":"2024-01-04T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"},{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 4)
+assert_eq "--top 4 non-enh drains before enh across topics" "$(printf 'issue 30\nissue 20\nissue 10\nissue 40')" "$result"
+# Specifically: non-enh audio (20) precedes enh security (10) — the key drain proof.
+enh_before=$(printf '%s\n' "$result" | grep -n '^issue 20$' | cut -d: -f1)
+enh_after=$(printf '%s\n' "$result" | grep -n '^issue 10$' | cut -d: -f1)
+assert_eq "--top 4: non-enh audio (20) appears before enh security (10)" "1" "$(( enh_before < enh_after ? 1 : 0 ))"
+teardown
+
+# ENH6. --priority-only: within the priority=1 tier, a non-enhancement priority
+#       issue is selected before an enhancement priority issue. Issue B is
+#       priority+audio (non-enh); issue A is priority+security+enhancement.
+#       Despite security ranking above audio in the topic ladder, the non-enh
+#       audio issue wins because enh nests inside priority (mirrors PT1's logic).
+echo "Test: --priority-only selects non-enhancement priority issue before enhancement priority issue"
+setup
+setup_union_pr_list '[]'
+# Issue 200 (older): priority+audio, enh=0. Issue 100 (newer): priority+security+enhancement, enh=1.
+# enh=0 wins over enh=1 even though audio < security in topic ranking.
+printf '[{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"audio"}]},{"number":100,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"security"},{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only: non-enh priority audio beats enh priority security" "issue 200" "$result"
+teardown
+
+# ENH7. --qa regression: a QA PR whose closing issue carries `enhancement` is
+#       selected normally and is NOT deprioritized behind a non-enhancement QA
+#       PR. PRs are never enhancement-classified, so the enhancement axis does
+#       not apply. The older PR wins on age regardless of enhancement label.
+echo "Test: --qa: QA PR closing an enhancement issue is not deprioritized (PRs unaffected by enh axis)"
+setup
+# PR 10 (older) closes issue 100 (enhancement). PR 20 (newer) closes issue 200 (no enhancement).
+# Both green draft QA PRs in the same topic (other). PR 10 should win on age.
+UNION='['
+UNION+="$(make_pr_union 10 "10-enh-qa" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":100}]')"','
+UNION+="$(make_pr_union 20 "20-plain-qa" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":200}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Issues 100/200 supply label data (no "help wanted" — not queue items themselves).
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"enhancement"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
+assert_eq "--qa: enh-closing PR 10 wins on age (PRs not enh-classified)" "pr 10 10-enh-qa" "$result"
+teardown
+
 # --- blocked-issue PR skip (issue #786) -------------------------------------
 # dispatch-select-target skips a PR from every PR-ladder tier when any issue it
 # closes is blocked_by an open issue; a closing issue blocked only by
