@@ -550,7 +550,7 @@ case "$args" in
     # dispatch-close-resolved state read (#1456): gh issue view <num> --json state --jq .state.
     # The real --jq flag projects .state to a bare string; the fixture file
     # holds {"state":"..."}, so project it here. Absent fixture → OPEN.
-    num=$(echo "$args" | awk '{print $3}')
+    num=$(printf '%s' "$args" | awk '{print $3}')
     if [[ -f "$STUB_DIR/issue-state-${num}.json" ]]; then
       jq -r .state "$STUB_DIR/issue-state-${num}.json"
     else
@@ -1910,7 +1910,10 @@ echo '{"state":"OPEN"}' > "$STUB_DIR/issue-state-702.json"
 if "$TMPDIR_TEST/dispatch-close-resolved" 702 --reason "epic done" >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "close-resolved no-JOB_DIR: exit 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$TMPDIR_TEST/job/resolved-closed" ]]; then
+# Assert no resolved-closed sentinel exists ANYWHERE under the tmp tree: the
+# $TMPDIR_TEST/job/ dir is never created in this case, so a path-specific check
+# trivially passes. A scan catches a regression that writes to a fallback path.
+if ! find "$TMPDIR_TEST" -name 'resolved-closed' | grep -q .; then
   PASS=$((PASS + 1)); echo "  PASS: close-resolved no-JOB_DIR: no resolved-closed sentinel"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: close-resolved no-JOB_DIR: no resolved-closed sentinel"
