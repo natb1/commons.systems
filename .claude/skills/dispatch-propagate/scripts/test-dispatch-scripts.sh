@@ -11371,6 +11371,13 @@ export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 write_rl "exh.json" 30 $((TW_NOW + 302400)) 99 $((TW_NOW + 999999999))
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --exhausted 2>"$TMPDIR_TEST/stderr")
 assert_eq "#1136 --exhausted 5h resets far-future → ok (fail open)" "ok" "$out"
+TOTAL=$((TOTAL + 1))
+if grep -q "FIVEH_RESETS" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 --exhausted 5h resets far-future stderr names FIVEH_RESETS"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 --exhausted 5h resets far-future stderr should name FIVEH_RESETS"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
 tw_teardown
 
 # ============================================================================
@@ -12175,6 +12182,50 @@ if [[ "$log" == *"--on-calendar=@$reset"* ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: #1136 in-bound weekly reset should arm timer at $reset"
   echo "    log: $log"
+fi
+sr_teardown
+
+# used_5h=150 (>100) → rejected → 5h window drops. Weekly absent → both windows
+# missing → missing-telemetry no-op: NO systemd-run call. Without the FIVEH_USED
+# >100 bound the rejected value would survive (used_5h=150 >= target_5h=50 →
+# CAND_5H armed at the 5h reset), so empty systemd-log discriminates.
+echo "Test: #1136 used_5h=150 (>100) → window drops → no reseed timer"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
+sr_write_rl "rl.json" absent absent 150 $((1700000000 + 3600))
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]] && grep -q "FIVEH_USED out of range" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 used_5h=150 → no timer + FIVEH_USED diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 used_5h=150 → expected no timer + diagnostic"
+  echo "    systemd-log: $(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null)"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
+fi
+sr_teardown
+
+# 5h cap hit but resets_at is 7h out (>6h horizon) → rejected → 5h window drops.
+# Weekly cap hit with an in-bound (5d) reset → timer must arm at the WEEKLY
+# reset. The 5h reset (NOW+25200) is earlier than the weekly reset (NOW+432000),
+# so without the FIVEH_RESETS horizon bound the rejected 5h value would survive
+# (CAND_5H armed) and step 4's earliest-reset pick would arm at the 5h epoch
+# instead — the weekly-not-5h assertion discriminates the regression.
+echo "Test: #1136 5h resets far-future (>6h) → dropped → timer at weekly reset"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
+weekly_reset=$((1700000000 + 432000))   # 5 days out, in-bound under 8-day horizon
+sr_write_rl "rl.json" 95 "$weekly_reset" 60 $((1700000000 + 25200))  # 5h reset 7h out → rejected
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+assert_eq "#1136 5h resets far-future → timer at weekly reset" \
+  "scheduled dispatch-reseed-$weekly_reset at $weekly_reset" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@$weekly_reset"* ]] && grep -q "FIVEH_RESETS" "$TMPDIR_TEST/stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: #1136 5h resets far-future → armed at weekly $weekly_reset + FIVEH_RESETS diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #1136 5h resets far-future → expected timer at weekly $weekly_reset + diagnostic"
+  echo "    log: $log"
+  echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
 fi
 sr_teardown
 

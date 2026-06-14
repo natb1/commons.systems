@@ -311,23 +311,31 @@ fi
 [[ -n "${DISPATCH_TARGET_WORKERS_USED_5H:-}" ]] && FIVEH_USED="$DISPATCH_TARGET_WORKERS_USED_5H"
 [[ -n "${DISPATCH_TARGET_WORKERS_RESETS_AT_5H:-}" ]] && FIVEH_RESETS="$DISPATCH_TARGET_WORKERS_RESETS_AT_5H"
 
-# Sanitize `used_*` telemetry fail-closed before it reaches `awk -v`. awk
-# coerces a non-numeric value to 0, which would read as "no usage yet" and
-# spawn aggressively — a corrupt or tampered rate_limits.json (or a hostile env
-# override) would thus dodge the budget instead of backing off. Treat any
-# malformed value as missing so the PRESENT check below routes it to the
-# conservative missing-telemetry fallback, matching dispatch-schedule-reseed's
-# fail-closed posture on the same telemetry.
+# Sanitize `used_*` telemetry before it reaches `awk -v`. awk coerces a
+# non-numeric value to 0, which would read as "no usage yet"; treat any malformed
+# value as missing so the PRESENT check below routes it to that field's fallback.
+#
+# The two fields then have OPPOSITE fallback semantics, and that is deliberate:
+#   - WEEKLY_USED is the budget gate. Missing → the weekly anchor drops → Step 2
+#     fails closed to N=1 (count) / `none` (reopen). Losing the real budget guard
+#     must back off, matching dispatch-schedule-reseed's fail-closed posture.
+#   - FIVEH_USED is only the anti-burst ramp WITHIN the weekly budget. Missing →
+#     FIVEH_PRESENT=0 → FIVEH_USED_FOR_AWK=0 → full 5h headroom → N falls back to
+#     the WEEKLY-allowed count (fail open). This is safe: the weekly gate still
+#     bounds N, so a corrupt/absent 5h reading can only lose smoothing, never
+#     blow the budget. So 5h does NOT back off to zero on a bad value.
 for var in WEEKLY_USED FIVEH_USED; do
   if [[ -n "${!var}" && ! "${!var}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
     echo "dispatch-target-workers: $var has non-numeric value '${!var}'; treating as missing" >&2
     printf -v "$var" ""
   fi
   # A used_percentage above 100 is physically impossible — reject it to missing
-  # so the PRESENT check routes it to the fail-closed fallback rather than acting
-  # on a poisoned value. 100 is a valid fully-used reading, so the bound is a
-  # strict `>`. awk (not bash `(( ))`) because the value may be a decimal —
-  # `(( 100.5 > 100 ))` is a fatal arithmetic syntax error under set -e.
+  # so the PRESENT check routes it to this field's fallback (per the per-var
+  # semantics above: WEEKLY_USED fails closed to N=1; FIVEH_USED fails open to the
+  # weekly-bounded count) rather than acting on a poisoned value. 100 is a valid
+  # fully-used reading, so the bound is a strict `>`. awk (not bash `(( ))`)
+  # because the value may be a decimal — `(( 100.5 > 100 ))` is a fatal
+  # arithmetic syntax error under set -e.
   if [[ -n "${!var}" ]] && awk -v u="${!var}" 'BEGIN{ exit !(u + 0 > 100) }'; then
     echo "dispatch-target-workers: $var out of range (>100): '${!var}'; treating as missing" >&2
     printf -v "$var" ""
@@ -354,7 +362,7 @@ fi
 # `(( ))`) because WEEKLY_RESETS may be a decimal.
 if [[ -n "$NOW" && -n "$WEEKLY_RESETS" ]] \
    && awk -v r="$WEEKLY_RESETS" -v now="$NOW" 'BEGIN{ exit !(r + 0 > now + 691200) }'; then
-  echo "dispatch-target-workers: WEEKLY_RESETS '$WEEKLY_RESETS' more than 8 days past now ($NOW); treating as missing" >&2
+  echo "dispatch-target-workers: WEEKLY_RESETS '$WEEKLY_RESETS' more than 8 days out from now ($NOW); treating as missing" >&2
   WEEKLY_RESETS=""
 fi
 
@@ -394,7 +402,7 @@ if [[ "$MODE" == "exhausted" ]]; then
   # FIVEH_RESETS may be a decimal; NOW is guaranteed non-empty here.
   if [[ -n "$FIVEH_RESETS" ]] \
      && awk -v r="$FIVEH_RESETS" -v now="$NOW" 'BEGIN{ exit !(r + 0 > now + 21600) }'; then
-    echo "dispatch-target-workers: FIVEH_RESETS '$FIVEH_RESETS' more than 6 hours past now ($NOW); treating as missing" >&2
+    echo "dispatch-target-workers: FIVEH_RESETS '$FIVEH_RESETS' more than 6 hours out from now ($NOW); treating as missing" >&2
     FIVEH_RESETS=""
   fi
   awk -v now="$NOW" \
