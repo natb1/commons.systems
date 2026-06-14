@@ -242,14 +242,30 @@ export const sampleDispatchQueueMetrics = onSchedule(
       return;
     }
 
-    // queueRepo is interpolated into the GitHub search query. Require owner/name
-    // so a misconfigured value cannot build a malformed or unexpected query.
-    const slash = queueRepo.indexOf("/");
-    if (slash <= 0 || slash === queueRepo.length - 1 || queueRepo.indexOf("/", slash + 1) !== -1) {
+    // DISPATCH_METRICS_QUEUE_REPO is a comma-separated repo list. Parse it into
+    // trimmed, non-empty owner/name entries; each is interpolated into a GitHub
+    // search query, so require owner/name so a misconfigured value cannot build a
+    // malformed or unexpected query.
+    const queueRepos = queueRepo
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    if (queueRepos.length === 0) {
       console.error(
-        `sampleDispatchQueueMetrics: DISPATCH_METRICS_QUEUE_REPO "${queueRepo}" is not a valid owner/name; skipping run.`,
+        `sampleDispatchQueueMetrics: DISPATCH_METRICS_QUEUE_REPO "${queueRepo}" resolved to an empty repo list; skipping run.`,
       );
       return;
+    }
+
+    for (const r of queueRepos) {
+      const slash = r.indexOf("/");
+      if (slash <= 0 || slash === r.length - 1 || r.indexOf("/", slash + 1) !== -1) {
+        console.error(
+          `sampleDispatchQueueMetrics: DISPATCH_METRICS_QUEUE_REPO entry "${r}" is not a valid owner/name; skipping run.`,
+        );
+        return;
+      }
     }
 
     // installationId is interpolated into the token-exchange URL path; require a
@@ -295,14 +311,14 @@ export const sampleDispatchQueueMetrics = onSchedule(
         searchIssueCount: (query) => searchIssueCountLive(token, query),
         firestore,
         namespace,
-        queueRepos: [queueRepo],
+        queueRepos,
         groupId,
         memberEmails,
         now: new Date(),
       });
 
       console.log(
-        `sampleDispatchQueueMetrics: wrote ${namespace}/metrics/dispatch-queue for ${queueRepo}`,
+        `sampleDispatchQueueMetrics: wrote ${namespace}/metrics/dispatch-queue for ${queueRepos.join(",")}`,
       );
     } catch (err) {
       console.error(
