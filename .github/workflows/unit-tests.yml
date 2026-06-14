@@ -62,6 +62,14 @@ jobs:
       - name: Run rules-test suite
         if: steps.changes.outputs.rules == 'true'
         run: .claude/skills/dispatch-propagate/scripts/run-rules-test.sh
+      - name: Report rules-test outcome
+        if: always()
+        run: |
+          if [[ "${{ steps.changes.outputs.rules }}" == "true" ]]; then
+            echo "rules-test suite ran (rules-adjacent files changed)"
+          else
+            echo "rules-test suite skipped (no rules-adjacent files changed)"
+          fi
 
   lint:
     runs-on: ubuntu-latest
