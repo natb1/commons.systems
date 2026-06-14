@@ -47,11 +47,11 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "$SCRIPT_DIR/lib.sh"  # dispatch_classify_rollup
+source "$SCRIPT_DIR/lib.sh"  # dispatch_ci_verdict_rest
 
 # ---- Step 1: one fetch of every open PR -------------------------------------
 PR_LIST_RC=0
-PR_LIST=$(pr_list_open "number,isDraft,labels,statusCheckRollup,mergeable") || PR_LIST_RC=$?
+PR_LIST=$(pr_list_open "number,isDraft,labels,headRefOid,mergeable") || PR_LIST_RC=$?
 if [[ "$PR_LIST_RC" -ne 0 ]]; then
   echo "dispatch-reconcile-ready: error: gh pr list failed (rc=$PR_LIST_RC)" >&2
   exit 1
@@ -68,7 +68,6 @@ while IFS= read -r pr; do
   N=$(jq -r '.number' <<<"$pr")
   IS_DRAFT=$(jq -r '.isDraft' <<<"$pr")
   MERGEABLE=$(jq -r '.mergeable' <<<"$pr")
-  ROLLUP=$(jq -c '.statusCheckRollup' <<<"$pr")
 
   # ---- Scope gate: dispatch:reviewed only -----------------------------------
   HAS_REVIEWED=$(jq -r '[.labels[].name] | index("dispatch:reviewed") != null' <<<"$pr")
@@ -76,7 +75,7 @@ while IFS= read -r pr; do
     continue
   fi
 
-  VERDICT=$(dispatch_classify_rollup "$ROLLUP")
+  VERDICT=$(dispatch_ci_verdict_rest "$(jq -r '.headRefOid' <<<"$pr")")
 
   # ---- Promote: draft + passing + MERGEABLE ---------------------------------
   if [[ "$IS_DRAFT" == "true" && "$VERDICT" == "passing" && "$MERGEABLE" == "MERGEABLE" ]]; then
