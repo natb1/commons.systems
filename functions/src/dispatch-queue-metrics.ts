@@ -171,9 +171,11 @@ export async function sampleDispatchQueueCore(deps: {
 }): Promise<void> {
   const queries = buildQueueSearchQueries(deps.queueRepo, deps.now);
 
-  const openHelpWanted = await deps.searchIssueCount(queries.open);
-  const closedCount = await deps.searchIssueCount(queries.closed);
-  const createdCount = await deps.searchIssueCount(queries.created);
+  const [openHelpWanted, closedCount, createdCount] = await Promise.all([
+    deps.searchIssueCount(queries.open),
+    deps.searchIssueCount(queries.closed),
+    deps.searchIssueCount(queries.created),
+  ]);
 
   const { closedPerDay, createdPerDay, netDrainPerDay, runwayDays } = computeQueueMetrics({
     openHelpWanted,
