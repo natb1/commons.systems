@@ -172,6 +172,14 @@ describe("budget reconciliation events", () => {
         deleteDoc(doc(db, `budget/${ENV}/reconciliation-events/existing1`)),
       );
     });
+
+    it("denies unauthenticated delete", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertFails(
+        deleteDoc(doc(db, `budget/${ENV}/reconciliation-events/existing1`)),
+      );
+    });
   });
 
   describe("list queries", () => {
