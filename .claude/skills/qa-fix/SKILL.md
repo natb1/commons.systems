@@ -26,11 +26,13 @@ list: `script-verifiable` (decided by a shell command, a vitest/curl/acceptance
 run, a file check, or one `javascript_tool` assertion — no browser walkthrough),
 `needs-browser` (needs the multi-step browser walkthrough loop), or
 `needs-human-judgment` (subjective UX, deferred to office-hours). This split is the
-genuine judgment of QA — it bounds how much of the run pays for a browser loop —
-so it is the **only** Opus spend in this skill. The qa-fix session itself stays on
-Sonnet: it parses the triage output and executes it across three lanes
-(shell-command, single-assertion, walkthrough), reserving the browser walkthrough
-for `needs-browser` items only.
+genuine judgment of QA — it bounds how much of the run pays for a browser loop.
+There are **two** Opus spends in this skill: (1) the Step 2 triage subagent, and
+(2) the Step 3.5 disposition Workflow's classify agent. The disposition skeptics
+(Step 3.5) run on Sonnet. The qa-fix session itself stays on Sonnet: it parses
+the triage output and executes it across three lanes (shell-command,
+single-assertion, walkthrough), reserving the browser walkthrough for
+`needs-browser` items only.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
 fork `/commit-merge-push` and run browser/shell checks inline.
@@ -140,6 +142,13 @@ Otherwise run all steps in order.
    prod-deploy). Treat such a permission-denied smoke failure as this known caveat,
    not as a product bug.
 
+   Derive a `firestore_caveat` boolean from this check: **true** when the caveat
+   applies — the diff touches `firestore.rules` or a Firestore query module such
+   that smoke tests can fail permission-denied until the standalone rules PR merges
+   — and **false** otherwise. Carry `firestore_caveat` forward: Step 3 uses it to
+   tag a permission-denied smoke FAIL as `main-gated-fail`, and it is passed into
+   the Workflow args (Step 3.5).
+
    If a browser component is detected, identify the **app dir** (`budget`,
    `fellspiral`, `landing`, or `print`) from the changed paths. If multiple app
    dirs are touched, this is a judgment call needing a human — record it as a
@@ -164,8 +173,9 @@ Otherwise run all steps in order.
 
    b. **Launch exactly one triage subagent** — Agent tool, `subagent_type:
       general-purpose`, **`model: opus`** (the canonical bounded-Opus pattern from
-      `.claude/skills/fix-conflicts/SKILL.md` § 5). This is the **only** Opus call
-      in the skill; the qa-fix session itself stays Sonnet. The subagent reasons
+      `.claude/skills/fix-conflicts/SKILL.md` § 5). This is one of two Opus calls
+      in the skill (the other is the Step 3.5 disposition Workflow's classify agent);
+      the qa-fix session itself stays Sonnet. The subagent reasons
       over the pasted pack text and returns the plan — it does **not** run the pack,
       run any check, start a server, navigate a browser, or call any tool. "Bounded
       to triage" means reasons-only, no tools.
@@ -246,21 +256,65 @@ Otherwise run all steps in order.
    - `needs-human-judgment` → **not walked in any lane**; record it as
      deferred-to-office-hours (a user-input blocker). Do not prompt the user.
 
-   **First-FAIL is terminal across all three lanes:** on the first FAIL in any
-   lane, that item is a bug — stop, finalize (Steps 4 and 5), and escalate per the
-   **Escalation** section. After escalating, the session **stops** — do not restart
-   the QA server or re-run anything. The retry-once → **SKIP** and 3-consecutive-SKIPs
-   → stop-early rules apply to the **walkthrough lane only** (Step 3c).
+   **Per-item lane FAIL is record-and-continue (all three lanes):** a FAIL in the
+   shell-command, single-assertion, or walkthrough lane is **recorded as residue**
+   (see "Residue collection" below) and the lanes **continue** running. Escalation
+   is **deferred to the terminal disposition (Step 6)**, which still fires on any
+   non-empty residue exactly as before — this changes *when* escalation happens,
+   not *whether* it does. Do **not** stop, finalize, or escalate on a single lane
+   FAIL. The retry-once → **SKIP** and 3-consecutive-SKIPs → stop-early rules still
+   apply to the **walkthrough lane only** (Step 3c).
 
-   Write per-item results from every lane (PASS/FAIL/SKIP, console errors, network
-   failures, deferred `needs-human-judgment` items, summary counts) to a single
-   `tmp/qa-fix-results-<n>.txt` (`<n>` is the Step-0-resolved issue number `<N>`).
+   **Cascade-bound:** a FAIL is **not** a SKIP, so it never trips the
+   consecutive-SKIP guard. FAIL cascades are bounded by the finite plan-item count
+   (every item runs at most once), and the SKIP guards still bound
+   interaction-failure cascades. So record-and-continue cannot loop unboundedly.
+
+   This record-and-continue applies to **per-item lane FAILs only** — **not** to
+   the Step 3b pre-QA acceptance check, which stays terminal (see Step 3b).
+
+   **Residue collection.** Write per-item results from every lane (PASS/FAIL/SKIP,
+   console errors, network failures, deferred `needs-human-judgment` items, summary
+   counts) to a single `tmp/qa-fix-results-<n>.txt` (`<n>` is the Step-0-resolved
+   issue number `<N>`). **In addition**, accumulate residue into an **in-memory
+   residue list (consumed by Step 3.5)** — this list becomes
+   the Workflow `args`. Each residue entry is an object:
+
+   ```
+   { id, title, kind, url_path, expected_outcome, finding, page_text, screenshot_path }
+   ```
+
+   - `id` — a stable identifier for the item (the plan item's number/title).
+   - `kind` — one of exactly **three** values (below). SKIP results are **not**
+     residue; only these three kinds are recorded in the list.
+
+   The three residue kinds:
+
+   - **`fail`** — any lane FAIL. `finding` = the FAIL detail plus the
+     console/network errors already collected at 3c.9.b. For WALKED FAILs
+     (walkthrough lane) also capture `page_text` via `get_page_text` and a
+     best-effort `screenshot_path` (see "Screenshot capture" in 3c.9.b). For
+     shell-command and single-assertion FAILs, `page_text` may be empty.
+   - **`needs-human-judgment`** — every plan-triage deferred item (the
+     `needs-human-judgment` classification from Step 2; the
+     deferred-to-office-hours items noted above). `page_text=''` — it is classified
+     by its nature, not by a browser observation.
+   - **`main-gated-fail`** — a permission-denied smoke FAIL when the
+     `firestore_caveat` derived in Step 1 applies (see below). Tag the residue item
+     `kind:"main-gated-fail"` instead of `"fail"`.
+
+   By the end of Step 3, the in-memory residue list holds one such object per FAIL,
+   per `needs-human-judgment` deferral, and per main-gated permission-denied smoke
+   FAIL — and nothing else.
 
    a. **Shell-command lane.** For each `script-verifiable` item whose `Command` is a
       Bash/vitest/file check, run the `Command` directly via
       Bash and record **PASS** or **FAIL** from its result. No browser, no user
-      prompt. Run this lane **first** — a shell FAIL escalates without ever paying
-      for a browser session.
+      prompt. Run this lane **first** — shell items are the cheapest, so running
+      them first records their residue before any browser session is paid for. A
+      shell FAIL no longer short-circuits the run: it is recorded as residue and the
+      lanes continue (see "Per-item lane FAIL is record-and-continue" at the top of
+      Step 3).
 
    b. **Server-start gate.** Start the QA server **iff any item needs the browser
       at all** — i.e. there is **any** `needs-browser` item **or any
@@ -282,6 +336,12 @@ Otherwise run all steps in order.
            it, finalize the QA session (post the Step 4 summary including the bug,
            run cleanup Step 5), and escalate per the **Escalation** section.
          - **If the check passes** → continue to Step 3c.
+
+         This pre-QA acceptance check **stays terminal**: only **per-item lane
+         FAILs** are record-and-continue (Step 3, three lanes). A broken acceptance
+         suite makes the whole subsequent walkthrough noise, so on acceptance-check
+         failure finalize and escalate **without** running the per-item lanes (Step
+         3c) — the failure short-circuits the lanes.
 
    c. **Browser lanes (single-assertion + walkthrough).** These run against the
       Chrome extension and share the browser setup below; the per-item handling
@@ -308,20 +368,92 @@ Otherwise run all steps in order.
          in an async IIFE if it uses `await`). Record **PASS** or **FAIL** from the
          assertion result. This is **not** the iterative `computer`/`form_input`
          walkthrough loop — no per-item state setup, no retry/SKIP. A FAIL is
-         terminal (see the first-FAIL rule at the top of Step 3).
+         recorded as residue and the lane continues (see "Per-item lane FAIL is
+         record-and-continue" at the top of Step 3).
       9. **Walkthrough lane — for each `needs-browser` item:**
          a. **Set up state.** Navigate to the item's `URL path` (if not "current"). Execute the `Steps` using `computer`, `form_input`, `navigate`. Capture extra GIF frames before and after.
          b. **Check output.** Take a screenshot only on genuine state transitions — not on every iterative debug step. Read `get_page_text` to verify the `Expected outcome`. Check `read_console_messages` (filter for errors). Check `read_network_requests` for 4xx/5xx using the tool's filter parameter (e.g. filter to error status codes); request a count rather than full metadata when only request counts or specific requests matter — do not pull the full request dump.
+
+            **Screenshot capture on a walkthrough FAIL (verify-early-or-fall-back).**
+            On a FAIL in this lane, take a screenshot with the `computer` tool
+            action `screenshot, save_to_disk: true` and record the returned saved
+            path as the residue item's `screenshot_path`. Passing this path to a
+            **separate** Agent/Workflow invocation (the disposition classifier,
+            Step 3.5) is **UNVERIFIED**: if `save_to_disk`
+            does not return a Readable path, or the disposition subagent cannot Read
+            it, set `screenshot_path=''` and rely on `page_text` only. The plan does
+            **not** hinge on the screenshot path — `page_text` (captured via
+            `get_page_text`) is the always-reliable baseline. This fallback is
+            sanctioned, not a deviation.
          c. **Record the result** — **PASS** or **FAIL**, directly from this
             skill's own checks. **No user prompt.**
             - On interaction failure: retry once, then record **SKIP** and continue.
             - 3 consecutive SKIPs → stop the walkthrough early.
             - Stay on the App URL domain — do not follow external links.
-            - **On the first FAIL** → a bug. Stop, finalize the QA session
-              (Steps 4 and 5), and escalate per the **Escalation** section.
-              After escalating, the session **stops** — do not restart the QA
-              server or re-run the walkthrough.
+            - **On a FAIL** → record it as residue (kind `fail`, capturing the
+              walkthrough-specific evidence — `page_text` via `get_page_text` and a
+              best-effort `screenshot_path` per 3c.9.b) and **continue** the
+              walkthrough. Do not stop or escalate here; escalation is deferred to
+              the terminal disposition (Step 6) on non-empty residue. See
+              "Per-item lane FAIL is record-and-continue" at the top of Step 3.
       10. Stop GIF recording: `gif_creator` with `action: "stop_recording"`. Export to `tmp/qa-fix-walkthrough-<n>.gif` (where `<n>` is the Step-0-resolved issue number `<N>`).
+
+3.5. **Invoke the disposition Workflow (report-only).**
+
+   Run this step only when the in-memory residue list from Step 3 is **non-empty**.
+   If the residue list is empty — every item PASSed or SKIPped and no
+   `needs-human-judgment` items were recorded — skip this step entirely and proceed
+   to Step 4 with no dispositions; the disposition section in Step 4 is omitted.
+
+   **Build `args`:**
+
+   ```
+   args = {
+     pr_num:             <PR_NUM>,            // from the idempotency preamble
+     issue_num:          <N>,                 // the issue number from Step 0
+     app_dir:            <app dir from Step 1, or null if no browser component>,
+     browser_available:  <bool>,              // true only when a browser component
+                                              // was detected in Step 1 AND the
+                                              // Chrome tools loaded successfully in
+                                              // Step 3c; false if "Chrome extension
+                                              // unavailable" was noted in Step 3c,
+                                              // or no browser component was detected
+     firestore_caveat:   <bool>,              // derived in Step 1
+     residue:            [ ...in-memory residue list... ]
+                                              // each entry: {id, title, kind,
+                                              //   url_path, expected_outcome,
+                                              //   finding, page_text,
+                                              //   screenshot_path}
+   }
+   ```
+
+   **Invoke the Workflow tool on `.claude/workflows/qa-fix.js`**, passing `args`.
+   This skill is a sanctioned caller of that Workflow — no `ultracode` keyword
+   needed. The Workflow runs in the background and returns one compact result:
+
+   ```
+   result = {
+     dispositions:  [ {id, title, kind, class, aesthetic, verify, rationale} ],
+     verify_report: [ {id, verdict, skeptic_votes, rationale} ],
+     deviation:     false
+   }
+   ```
+
+   - `dispositions[].class` is the final class: `opus-fixable` | `needs-main` |
+     `needs-human`. `verify` is `Upheld` | `Refuted` | `Unverified` | `n/a`.
+   - `verify_report` has one entry per non-aesthetic `needs-human` candidate that
+     went through the skeptic fan-out (`verdict`: `upheld` | `refuted` |
+     `unverified`).
+   - `result.deviation` is always `false` (this is a report-only Workflow). It is
+     **not** consumed — do not branch on it.
+
+   Consume `result.dispositions` and `result.verify_report` for the Step 4
+   PR-comment disposition section.
+
+   **Report-only:** the Workflow classifies and adversarially verifies residue
+   items but this skill does **not** act on the classes. No auto-fix, no change to
+   which items escalate to office-hours. The dispositions are purely informational
+   for the PR comment.
 
 4. **Post the PR-comment summary.**
 
@@ -336,6 +468,18 @@ Otherwise run all steps in order.
      `/office-hours` walkthrough can pick them up.
    - List of bugs found (if any), each with the item title and the finding.
    - When the walkthrough lane ran: the GIF filename (`tmp/qa-fix-walkthrough-<n>.gif`).
+   - **Disposition triage (report-only)** — include this section only when the
+     residue list was non-empty (i.e. Step 3.5 ran). For each residue item, list
+     its `class` from `result.dispositions`. For non-aesthetic `needs-human`
+     items (where `dispositions[item].aesthetic === false`), include the verify
+     verdict and rationale from the matching entry in `result.verify_report`
+     (matched by `id`). For aesthetic `needs-human` items, use
+     `dispositions[item].verify` (which will be `n/a`) directly — no
+     `verify_report` entry exists for them. Add explicit prose: **"This section
+     is informational only. Every residue item still escalates to office-hours
+     below, exactly as before. The disposition triage changes no terminal
+     behavior."** If the residue list was empty (Step 3.5 was skipped), omit this
+     section entirely.
 
    Post via (use `dangerouslyDisableSandbox: true` — the script invokes `gh`):
    ```bash
@@ -353,6 +497,11 @@ Otherwise run all steps in order.
    server was never started, skip cleanup.
 
 6. **Terminal disposition.**
+
+   This PR is report-only: the disposition triage records each residue item's
+   class in the Step 4 comment but changes no terminal behavior — every residue
+   item (FAIL, needs-human-judgment, main-gated fail) still escalates to
+   office-hours exactly as before.
 
    **Clean autonomous pass** — every `script-verifiable` and `needs-browser` item
    PASSed, zero `needs-human-judgment` items were recorded, and no bug was found:

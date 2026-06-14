@@ -155,24 +155,29 @@ if [[ "$BRANCH" == "main" ]]; then
     fi
   fi
 
-  # Merge probe. Capture the merge stderr to a temp for escalation diagnostics
-  # while STILL replaying it to the journal (stderr) so nothing is swallowed.
-  # Git's own chatter stays on stderr (1>&2), keeping stdout the decision
-  # channel.
+  # Fetch and merge probe. Fetch and merge are run separately (#1546) so a fetch
+  # failure is distinguished from a merge divergence — both are captured to temps
+  # and replayed to the journal so nothing is swallowed.
   if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
     mkdir -p "$CLAUDE_JOB_DIR/tmp"
+    FETCH_TMP=$(mktemp "$CLAUDE_JOB_DIR/tmp/sync-fetch.XXXXXX")
     SYNC_TMP=$(mktemp "$CLAUDE_JOB_DIR/tmp/sync-merge.XXXXXX")
   else
+    FETCH_TMP=$(mktemp)
     SYNC_TMP=$(mktemp)
   fi
-  if git fetch origin main 1>&2 && git merge --ff-only origin/main 2>"$SYNC_TMP" 1>&2; then
-    merge_ok=1
-  else
-    merge_ok=0
+  fetch_ok=0; merge_ok=0
+  if git fetch origin main 2>"$FETCH_TMP" 1>&2; then
+    fetch_ok=1
+    if git merge --ff-only origin/main 2>"$SYNC_TMP" 1>&2; then
+      merge_ok=1
+    fi
   fi
-  cat "$SYNC_TMP" >&2          # let the diagnostics reach the journal
+  cat "$FETCH_TMP" >&2
+  cat "$SYNC_TMP" >&2
+  FETCH_STDERR=$(cat "$FETCH_TMP")
   MERGE_STDERR=$(cat "$SYNC_TMP")
-  rm -f "$SYNC_TMP"
+  rm -f "$FETCH_TMP" "$SYNC_TMP"
 
   if [[ "$merge_ok" == 1 ]]; then
     # SUCCESS — local main ff-merges clean. ALWAYS reset the attempt counter and
@@ -203,7 +208,11 @@ if [[ "$BRANCH" == "main" ]]; then
       # b. Attempt cap hit — escalate to the find-or-create latch issue and stop
       # respawning. The escalate script reads the captured merge stderr on stdin.
       # This branch is terminal; it does NOT bump the counter.
-      "$SCRIPT_DIR/dispatch-escalate-sync-broken" <<<"$MERGE_STDERR" 1>&2 || true
+      if [[ "$fetch_ok" == 0 ]]; then
+        "$SCRIPT_DIR/dispatch-escalate-sync-broken" --reason fetch-failed <<<"$FETCH_STDERR" 1>&2 || true
+      else
+        "$SCRIPT_DIR/dispatch-escalate-sync-broken" --reason merge-failed <<<"$MERGE_STDERR" 1>&2 || true
+      fi
       release_lock
       "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
       echo "sync-broken"
