@@ -328,13 +328,31 @@ async function loadFromHandle(handle: FileSystemFileHandle): Promise<void> {
   // and be retried on every subsequent startup — a permanent failing-load loop.
   try {
     const outcome = await loadFromFile(file);
-    // Arm encrypted write-back only when THIS load committed an encrypted file,
-    // using the password the load actually used. A plaintext file (password
-    // null) and a password-cancel (not committed) leave sync disarmed —
-    // loadFromFile has already dropped the prior binding — so we do not re-point
-    // a lingering prior-session password at this new handle.
+    // Gate handle persistence and write-back on the load outcome. Three cases:
+    //
+    // - Encrypted commit (password non-null): persist the handle, then arm
+    //   write-back with the password the load actually used. Order matters —
+    //   persist first so a future startup can auto-load, then arm sync.
+    // - Plaintext commit (password null): the data is shown for this session
+    //   (already in IndexedDB), but we must NOT auto-load it next session — that
+    //   would be a no-auth disclosure and a silent startup clobber. Drop any
+    //   pre-existing persisted handle so it never auto-loads, and surface a
+    //   transient notice. loadFromFile's transition() already ran clearNavError,
+    //   so showing the notice here (after the await) keeps it visible.
+    // - Not committed (password-cancel): leave the handle untouched. An
+    //   already-persisted handle reached via initialize/showReloadPrompt must
+    //   survive a cancel so the user can retry; do not persist a fresh one
+    //   either, since loadFromFile has already dropped the prior sync binding.
     if (outcome.committed && outcome.password !== null) {
+      await putFileHandle(handle);
       configureFileSync(handle, outcome.password, file.lastModified);
+    } else if (outcome.committed && outcome.password === null) {
+      await clearFileHandle();
+      showNavError(
+        "Unencrypted data loaded for this session only — it won't be saved " +
+          "back or auto-loaded. Export as an encrypted .benc file for secure " +
+          "auto-reload.",
+      );
     }
   } catch (error) {
     if (error instanceof UploadValidationError) {
@@ -372,7 +390,10 @@ async function pickAndLoad(): Promise<void> {
   try {
     const handle = await pickBencFile();
     if (!handle) return; // user canceled
-    await putFileHandle(handle);
+    // Handle persistence is deferred to loadFromHandle, which persists only on
+    // an encrypted commit (and clears on a plaintext commit) — a plaintext file
+    // is shown for the session but its handle is never persisted, so it does not
+    // silently auto-load next session.
     // Request readwrite up front so the handle can be written back to. Reads
     // work from a freshly-picked handle regardless; doWrite re-checks lazily,
     // so the result is not branched on here.
