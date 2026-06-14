@@ -23682,6 +23682,68 @@ fi
 rm -rf "$eru_tmp"
 
 # ============================================================================
+# ensure_recover_unit: rejects a path containing a space (#1211)
+# ============================================================================
+echo ""
+echo "=== ensure_recover_unit rejects a path with a space ==="
+eru2_tmp=$(mktemp -d)
+mkdir -p "$eru2_tmp/bin"
+cat > "$eru2_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$eru2_tmp/bin/systemctl"
+TOTAL=$((TOTAL + 1))
+if (
+  export DISPATCH_RECOVER_UNIT_DIR="$eru2_tmp/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$eru2_tmp/bin/systemctl"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_recover_unit "$eru2_tmp/has a space"
+); then
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure_recover_unit should have returned non-zero for a path with a space"
+else
+  PASS=$((PASS + 1)); echo "  PASS: ensure_recover_unit returned non-zero for a path with a space"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$eru2_tmp/systemd-user/dispatch-tick-recover.service" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no unit file was written for a path with a space"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unit file was written despite path containing a space"
+fi
+rm -rf "$eru2_tmp"
+
+# ============================================================================
+# ensure_recover_unit: rejects a path containing a double-quote (#1211)
+# ============================================================================
+echo ""
+echo "=== ensure_recover_unit rejects a path with a double-quote ==="
+eru3_tmp=$(mktemp -d)
+mkdir -p "$eru3_tmp/bin"
+cat > "$eru3_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$eru3_tmp/bin/systemctl"
+TOTAL=$((TOTAL + 1))
+if (
+  export DISPATCH_RECOVER_UNIT_DIR="$eru3_tmp/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$eru3_tmp/bin/systemctl"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_recover_unit "$eru3_tmp/has\"a\"quote"
+); then
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure_recover_unit should have returned non-zero for a path with a double-quote"
+else
+  PASS=$((PASS + 1)); echo "  PASS: ensure_recover_unit returned non-zero for a path with a double-quote"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$eru3_tmp/systemd-user/dispatch-tick-recover.service" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no unit file was written for a path with a double-quote"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unit file was written despite path containing a double-quote"
+fi
+rm -rf "$eru3_tmp"
+
+# ============================================================================
 # ensure_daemon_service: durable daemon service install + attach paths (#1197)
 # ============================================================================
 echo ""
