@@ -3059,9 +3059,15 @@ printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help
 printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-5500.json"
-# Sub-issue 5500's worktree exists (owned by another session) → trace 55 exits 2.
+# Sub-issue 5500's worktree exists AND a live session owns it → 5500 is claimed,
+# so trace 55 finds no startable leaf and exits 2. Under #1474 selection derives
+# the claimed set forward from live sessions (live_session_claimed_nums), not a
+# backward worktree walk — so the block must be a genuine live claim, not a bare
+# on-disk worktree (a deregistered worktree no longer counts; daemon-UNKNOWN
+# fails OPEN). The live `5500-blocked` session supplies that claim.
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/5500-blocked\nHEAD def456\nbranch refs/heads/5500-blocked\n\n' \
   > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "5500-blocked"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "subtree-blocked issue 55 skipped → issue 66 chosen" "issue 66" "$result"
 teardown
@@ -3077,6 +3083,10 @@ printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPE
   > "$STUB_DIR/issue-5500.json"
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/5500-blocked\nHEAD def456\nbranch refs/heads/5500-blocked\n\n' \
   > "$STUB_DIR/worktree-list.txt"
+# A live session claims 5500 (#1474: forward-derived claimed set). Without it the
+# bare worktree would no longer block, so 55 would resolve to leaf 5500 and the
+# QA-PR fall-through this test exercises would never be reached.
+select_target_fake_claude "5500-blocked"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "subtree-blocked issue 55 → falls through to QA PR" "pr 20 20-qa qa" "$result"
 teardown
@@ -3091,6 +3101,9 @@ printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPE
   > "$STUB_DIR/issue-5500.json"
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/5500-blocked\nHEAD def456\nbranch refs/heads/5500-blocked\n\n' \
   > "$STUB_DIR/worktree-list.txt"
+# A live session claims 5500 (#1474: forward-derived claimed set) so the subtree
+# is genuinely blocked. A bare worktree alone no longer blocks under #1474.
+select_target_fake_claude "5500-blocked"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "subtree-blocked issue 55, no QA PR → empty" "empty" "$result"
 teardown
@@ -4740,12 +4753,16 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "600" "explicit")
 assert_eq "sub-issues chain 600→601 → leaf 601" "601" "$result"
 teardown
 
-# 8. Queue mode: child whose worktree exists and daemon is UNKNOWN (fail-safe → occupied)
-#    is skipped; sibling with no worktree is returned.
-#    The default CLAUDE_AGENTS_CMD points at a non-existent binary so the daemon
-#    is UNKNOWN, which worktree_has_live_session folds into occupied (fail-safe).
-#    Tests 12a/12b cover the true live-vs-orphan distinction.
-echo "Test: queue mode → skips child with worktree (daemon UNKNOWN → occupied), returns sibling"
+# 8. Queue mode: child whose worktree exists but is unclaimed (daemon UNKNOWN, no
+#    reservation marker) is descendable, NOT skipped. Under #1474 the queue-mode
+#    child skip derives from the forward claimed set (claimed_issue_nums), which
+#    FAILS OPEN on a daemon-UNKNOWN: the reserved-only set here is empty, so 701
+#    is unclaimed and the descent returns the lowest leaf 701, not the sibling.
+#    The old worktree-walk folded daemon-UNKNOWN into occupied and skipped 701;
+#    #1474 removed that fold. dispatch-resolve-worktree is the per-target
+#    fail-closed net that still guards a genuine race at launch. Tests 12a/12b
+#    cover the true live-vs-orphan distinction.
+echo "Test: queue mode → child with unclaimed worktree (daemon UNKNOWN) is descendable"
 setup
 # 700 has two open sub-issues: 701 (worktree on disk, daemon unreachable) and 702 (no worktree).
 printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
@@ -4753,11 +4770,11 @@ printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"
   > "$STUB_DIR/issue-701.json"
 printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-702.json"
-# 701's worktree exists; daemon is UNKNOWN (non-existent binary) → fail-safe → occupied.
+# 701's worktree exists; daemon is UNKNOWN (non-existent binary) → fail OPEN → unclaimed.
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
-assert_eq "queue: child 701 (daemon UNKNOWN → occupied) skipped → sibling 702" "702" "$result"
+assert_eq "queue: child 701 (daemon UNKNOWN, unclaimed) descendable → leaf 701" "701" "$result"
 teardown
 
 # 9. Explicit mode: conflicted child returned unchanged (no worktree filtering).
@@ -4775,26 +4792,25 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "explicit")
 assert_eq "explicit: lowest leaf 701 unchanged" "701" "$result"
 teardown
 
-# 10. Queue mode: every child has a worktree and daemon is UNKNOWN (fail-safe → occupied)
-#     → exit 2 with the worktree-conflicted stderr message.
-#     The default CLAUDE_AGENTS_CMD is a non-existent binary; UNKNOWN folds to occupied.
-#     Tests 12c cover the true all-live-owned scenario.
-echo "Test: queue mode → all children have worktrees (daemon UNKNOWN → occupied), exits non-zero"
+# 10. Queue mode: every child has an on-disk worktree but the daemon is UNKNOWN
+#     and no reservation markers exist → the claimed set FAILS OPEN (empty), so
+#     NO child is skipped and the descent returns the lowest startable leaf 701.
+#     Under #1474 a bare worktree no longer blocks descent; the old worktree-walk
+#     folded daemon-UNKNOWN into occupied and exited 2 here. Test 12c covers the
+#     true all-live-owned exit-2 scenario; dispatch-resolve-worktree remains the
+#     per-target fail-closed net at launch.
+echo "Test: queue mode → all children have unclaimed worktrees (daemon UNKNOWN) → lowest leaf"
 setup
 printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
 printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-701.json"
 printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-702.json"
-# Both children's worktrees exist; daemon is UNKNOWN → both treated as occupied.
+# Both children's worktrees exist; daemon is UNKNOWN, ledger empty → fail OPEN → unclaimed.
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\nworktree /worktrees/702-feature\nHEAD ghi789\nbranch refs/heads/702-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
-case "$err_out" in
-  *"worktree-conflicted"*"EXIT="[1-9]*) status="ok" ;;
-  *) status="bad: $err_out" ;;
-esac
-assert_eq "queue: all children occupied (daemon UNKNOWN) → non-zero with stderr message" "ok" "$status"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: all children unclaimed (daemon UNKNOWN) → lowest leaf 701" "701" "$result"
 teardown
 
 # 11. Missing mode → arity error on stderr, exit 1.
@@ -8081,6 +8097,79 @@ if out=$(claude_agents_list_all); then rc=0; else rc=$?; fi
 assert_eq "list-all non-array: exits 1 (UNKNOWN)" "1" "$rc"
 ca_teardown
 
+# --- live_session_claimed_nums (#1474) ---------------------------------------
+# Selection's forward in-flight claimed half: maps each live-session NAME to its
+# claimed <N>. A phase-worker name `<N>-slug` and an `office-hours-<N>` name each
+# contribute <N>; routers (`dispatch-<short-id>`) and job sessions (diagnose-main,
+# jit names) match neither shape and are excluded. `[]` → empty + rc 0;
+# whitespace/empty raw output → rc 1 (UNKNOWN). Output is uniqued.
+
+# --- Test 30: live_session_claimed_nums — phase-worker <N>-slug → <N> ---------
+echo "Test: live_session_claimed_nums maps a <N>-slug phase worker to <N>"
+ca_setup
+write_fake_claude '[{"sessionId":"s1","pid":1,"status":"busy","name":"42-add-thing"}]' 0
+if out=$(live_session_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "live-claimed phase-worker: exits 0" "0" "$rc"
+assert_eq "live-claimed phase-worker: <N>-slug → 42" "42" "$out"
+ca_teardown
+
+# --- Test 31: live_session_claimed_nums — office-hours-<N> → <N> --------------
+echo "Test: live_session_claimed_nums maps an office-hours-<N> session to <N>"
+ca_setup
+write_fake_claude '[{"sessionId":"s1","pid":1,"status":"busy","name":"office-hours-77"}]' 0
+if out=$(live_session_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "live-claimed office-hours: exits 0" "0" "$rc"
+assert_eq "live-claimed office-hours: office-hours-77 → 77" "77" "$out"
+ca_teardown
+
+# --- Test 32: live_session_claimed_nums — router/job names are excluded -------
+echo "Test: live_session_claimed_nums excludes router and job session names"
+ca_setup
+# A router (dispatch-<short-id>), a diagnose-main job, and a jit-style name —
+# none match `^[0-9]+-` or `^office-hours-[0-9]+$`, so none contribute a claim.
+write_fake_claude '[{"sessionId":"s1","pid":1,"status":"busy","name":"dispatch-ab12cd"},{"sessionId":"s2","pid":2,"status":"busy","name":"diagnose-main"},{"sessionId":"s3","pid":3,"status":"busy","name":"digest"}]' 0
+if out=$(live_session_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "live-claimed router/job: exits 0" "0" "$rc"
+assert_eq "live-claimed router/job: no claims emitted" "" "$out"
+ca_teardown
+
+# --- Test 33: live_session_claimed_nums — empty [] registry → rc 0, no output -
+echo "Test: live_session_claimed_nums returns 0 with empty output for an empty registry"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(live_session_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "live-claimed empty: exits 0 (definite zero, not UNKNOWN)" "0" "$rc"
+assert_eq "live-claimed empty: no claims emitted" "" "$out"
+ca_teardown
+
+# --- Test 34: live_session_claimed_nums — UNKNOWN on a missing/empty daemon ---
+echo "Test: live_session_claimed_nums returns rc 1 (UNKNOWN) on empty raw output"
+ca_setup
+# A fake that exits 0 but prints nothing → whitespace/empty raw output is UNKNOWN
+# (indistinguishable from a down daemon), so the helper returns 1.
+write_fake_claude '' 0
+if out=$(live_session_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "live-claimed empty-raw: exits 1 (UNKNOWN)" "1" "$rc"
+assert_eq "live-claimed empty-raw: prints nothing" "" "$out"
+# And a missing binary is UNKNOWN too.
+CLAUDE_AGENTS_CMD="$CA_DIR/no-such-claude"
+if out=$(live_session_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "live-claimed missing-claude: exits 1 (UNKNOWN)" "1" "$rc"
+ca_teardown
+
+# --- Test 35: live_session_claimed_nums — uniqueness across same-<N> sessions -
+echo "Test: live_session_claimed_nums emits each claimed <N> once across sibling sessions"
+ca_setup
+# Two live sessions on the same <N> (a phase worker and an office-hours session,
+# plus a second <N>-slug) → <N>=10 must appear exactly once; 20 once.
+write_fake_claude '[{"sessionId":"s1","pid":1,"status":"busy","name":"10-a"},{"sessionId":"s2","pid":2,"status":"busy","name":"10-b"},{"sessionId":"s3","pid":3,"status":"busy","name":"office-hours-10"},{"sessionId":"s4","pid":4,"status":"busy","name":"20-c"}]' 0
+if out=$(live_session_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "live-claimed unique: exits 0" "0" "$rc"
+# Sort the output so the assertion is independent of jq's unique() ordering.
+assert_eq "live-claimed unique: 10 and 20 each once" \
+  "$(printf '10\n20')" "$(printf '%s\n' "$out" | sort -n)"
+ca_teardown
+
 # ============================================================================
 # lib-reservation-ledger.sh tests
 # ============================================================================
@@ -8416,6 +8505,81 @@ assert_eq "rl-exists: empty arg → return 1" "1" "$rc"
 # Unsafe basename → return 1 (path-safety guard).
 if reservation_exists "../escape"; then rc=0; else rc=$?; fi
 assert_eq "rl-exists: unsafe basename → return 1" "1" "$rc"
+rl_teardown
+
+# --- Test 14: reserved_claimed_nums — marker basename <N>-slug → <N> ----------
+# The durable (reserved) half of selection's forward claimed set (#1474). Each
+# marker file is named by the reserved worktree basename; the claimed <N> is the
+# basename's numeric prefix. NEVER fails (no daemon dependency): an empty dir
+# emits nothing + rc 0; an absent dir emits nothing + rc 0.
+echo "Test: reserved_claimed_nums maps marker basenames to their numeric prefix"
+rl_setup
+reservation_write "44-add-thing" "44" "sess-a"
+reservation_write "44-other" "44" "sess-b"
+reservation_write "88-feature" "88" "sess-c"
+if out=$(reserved_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "rl-claimed: exits 0" "0" "$rc"
+# Two markers share <N>=44 → it appears once; sort for order-independence.
+assert_eq "rl-claimed: unique <N> from basenames (44, 88)" \
+  "$(printf '44\n88')" "$(printf '%s\n' "$out" | sort -n)"
+rl_teardown
+
+# --- Test 15: reserved_claimed_nums — empty ledger dir → empty, rc 0 ----------
+echo "Test: reserved_claimed_nums returns 0 with empty output for an empty ledger dir"
+rl_setup
+mkdir -p "$DISPATCH_RESERVATION_DIR"   # dir exists but holds no markers
+if out=$(reserved_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "rl-claimed-empty: exits 0" "0" "$rc"
+assert_eq "rl-claimed-empty: no claims emitted" "" "$out"
+rl_teardown
+
+# --- Test 16: reserved_claimed_nums — absent ledger dir → empty, rc 0 ---------
+echo "Test: reserved_claimed_nums returns 0 with empty output when the ledger dir is absent"
+rl_setup
+# rl_setup points DISPATCH_RESERVATION_DIR at a path that does not yet exist.
+if out=$(reserved_claimed_nums); then rc=0; else rc=$?; fi
+assert_eq "rl-claimed-absent: exits 0 (never fails)" "0" "$rc"
+assert_eq "rl-claimed-absent: no claims emitted" "" "$out"
+rl_teardown
+
+# --- Test 17: claimed_issue_nums — deduped union of live + reserved -----------
+# Selection's forward-derived claimed set: the deduped union of
+# live_session_claimed_nums and reserved_claimed_nums. A number present in BOTH
+# halves appears once.
+echo "Test: claimed_issue_nums emits the deduped union of live and reserved claims"
+rl_setup
+# Live sessions claim 10 and 20; reservation markers claim 20 (overlap) and 30.
+rl_write_fake_claude '[{"sessionId":"s1","pid":1,"status":"busy","name":"10-a"},{"sessionId":"s2","pid":2,"status":"busy","name":"20-b"}]'
+reservation_write "20-b" "20" "sess-x"
+reservation_write "30-c" "30" "sess-y"
+if out=$(claimed_issue_nums); then rc=0; else rc=$?; fi
+assert_eq "rl-union: exits 0" "0" "$rc"
+# claimed_issue_nums already sort -u's its output; 20 appears once.
+assert_eq "rl-union: deduped union {10,20,30}" "$(printf '10\n20\n30')" "$out"
+rl_teardown
+
+# --- Test 18: claimed_issue_nums — FAILS OPEN on live-UNKNOWN -----------------
+# When the daemon is unqueryable, live_session_claimed_nums returns 1 (UNKNOWN).
+# claimed_issue_nums must NOT abort; it degrades to the reserved-only set, warns
+# on stderr, and returns 0. (The per-target fail-closed net at launch is
+# dispatch-resolve-worktree.)
+echo "Test: claimed_issue_nums fails open to the reserved-only set on live-UNKNOWN"
+rl_setup
+# A missing claude binary → live_session_claimed_nums returns 1 (UNKNOWN) → the
+# union must degrade to the reserved-only set. Only the reservation marker
+# contributes.
+CLAUDE_AGENTS_CMD="$RL_DIR/no-such-claude"
+reservation_write "55-resv" "55" "sess-z"
+err=$(claimed_issue_nums 2>&1 1>/dev/null)
+out=$(claimed_issue_nums 2>/dev/null) && rc=0 || rc=$?
+assert_eq "rl-union-failopen: exits 0 (fail open, never aborts)" "0" "$rc"
+assert_eq "rl-union-failopen: reserved-only set {55}" "55" "$out"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'fail open'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-union-failopen: stderr diagnostic mentions fail open"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-union-failopen: stderr diagnostic mentions fail open"
+fi
 rl_teardown
 
 # ============================================================================
@@ -26097,6 +26261,140 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "#1452 F(b) — priority leaf 940 selected" "issue 940" "$result"
 lo_c=$(grep -c "^950$" "$STUB_DIR/issue-blocking-calls.log" 2>/dev/null || true)
 assert_eq "#1452 F(b) — lower-rank root 950 never traced (early-exit)" "0" "$lo_c"
+teardown
+
+# ============================================================================
+# #1474: selection derives the claimed set FORWARD from live sessions +
+# reservations (claimed_issue_nums), dropping the backward worktree walk.
+# ============================================================================
+# dispatch-select-target and dispatch-trace-leaf no longer build a worktree map
+# and stat each candidate's <N>-* worktree; they build CLAIMED_NUMS once from
+# claimed_issue_nums and skip a candidate when num_is_claimed is true. The skip
+# now keys on the BRANCH-PREFIX <N> (PR loop) and the issue/leaf number, derived
+# from the per-tick live + reservation sets, not from any worktree's existence.
+echo "=== #1474: forward-derived claimed set ==="
+
+# E1. Behavior-equivalence edge — office-hours ownership (select-target, ISSUE).
+#     A live office-hours-<N> session marks <N> claimed, so the <N>-* issue
+#     candidate is skipped — even though office-hours sessions carry no <N>-slug
+#     name and no reservation marker. live_session_claimed_nums' second shape
+#     (^office-hours-[0-9]+$) supplies the claim. Issue 66 (unclaimed) is chosen.
+echo "Test: #1474 E1 — live office-hours-<N> marks issue <N> claimed (select-target)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+# No worktrees at all — the claim is purely the live office-hours session.
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "office-hours-55"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1474 E1 — office-hours-55 claims 55 → 66 chosen" "issue 66" "$result"
+teardown
+
+# E1b. Same edge for a PR candidate. A live office-hours-10 session marks the
+#      branch-prefix <N>=10 of PR 10's branch claimed, so PR 10 is skipped and PR
+#      20 is returned. No worktree for either branch — the claim is the live
+#      office-hours session alone.
+echo "Test: #1474 E1b — live office-hours-<N> marks a PR's branch-prefix <N> claimed"
+setup
+UNION='['"$(make_pr_union 10 "10-active-branch" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-other" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "office-hours-10"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1474 E1b — office-hours-10 claims 10 → PR 20 returned" "pr 20 20-other fix-checks" "$result"
+teardown
+
+# E1c. Same edge for a dispatch-trace-leaf queue child. A live office-hours-701
+#      session marks child 701 claimed, so the descent skips it and returns the
+#      sibling 702 — with NO worktree on disk for either child.
+echo "Test: #1474 E1c — live office-hours-<N> marks a trace-leaf queue child claimed"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude "office-hours-701"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "#1474 E1c — office-hours-701 claims 701 → sibling 702" "702" "$result"
+teardown
+
+# E2. Behavior-equivalence edge #2 + acceptance criterion #4 — a live ^[0-9]+-
+#     session with NO worktree registered marks <N> claimed and the candidate is
+#     skipped. The worktree-list stub is EMPTY (only the main /repo row), so the
+#     old worktree walk would have found nothing to stat and would NOT have
+#     skipped 55. This single test proves two things at once:
+#       (a) the worktree walk is gone — selection's claim is independent of how
+#           many worktrees are registered, so its per-tick latency no longer
+#           scales with the worktree count; and
+#       (b) the deliberate new skip of a deregistered-worktree live session — a
+#           worker whose worktree was removed but whose session is still live now
+#           correctly marks its <N> claimed (the old walk missed it).
+echo "Test: #1474 E2 — live <N>-slug session with no registered worktree marks <N> claimed"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+# EMPTY worktree list (only the main repo row). No <N>-* worktree exists at all.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+# A live phase-worker named 55-feature whose worktree is NOT registered.
+select_target_fake_claude "55-feature"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1474 E2 — deregistered-worktree live 55 still claimed → 66 chosen" "issue 66" "$result"
+teardown
+
+# E3. UNKNOWN fail-open — a daemon-UNKNOWN snapshot with NO reservation for the
+#     candidate means the candidate is NOT skipped: it is SELECTED. This pins the
+#     chosen behavior: the forward claimed set fails OPEN (claimed_issue_nums
+#     degrades to the reserved-only set on live-UNKNOWN), trading a rare
+#     double-spawn race for never stranding the queue on a transient daemon
+#     outage. The per-target fail-CLOSED net is dispatch-resolve-worktree, which
+#     re-checks liveness at launch and aborts a genuine collision. Here the
+#     default setup CLAUDE_AGENTS_CMD is a missing binary (UNKNOWN) and the ledger
+#     is empty, so issue 55 (with an on-disk worktree to make the old walk skip
+#     it) is selected anyway.
+echo "Test: #1474 E3 — UNKNOWN daemon + no reservation → candidate NOT skipped (fail open)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+# 55 has an on-disk worktree — the OLD worktree walk (with UNKNOWN folded to
+# occupied) would have skipped it. The default setup daemon is UNKNOWN and no
+# reservation marker exists, so the new fail-open path leaves 55 unclaimed.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/55-feature\nHEAD def456\nbranch refs/heads/55-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# No select_target_fake_claude call: the default UNKNOWN daemon stands.
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1474 E3 — UNKNOWN + no reservation → 55 selected (fail open)" "issue 55" "$result"
+teardown
+
+# E4. Snapshot-set zero-daemon-call — a selection run with DISPATCH_AGENTS_SNAPSHOT
+#     set makes ZERO live `claude agents` daemon calls: the claimed set derives
+#     entirely from the inherited per-tick snapshot. The select_target_fake_claude
+#     fake logs every live `agents` invocation to stub/claude-agents-calls.log;
+#     this asserts that log stays empty across the run. (Complements #1452 B,
+#     which proves the same for the worktree-liveness predicate; #1474 routes the
+#     whole claimed-set derivation through the same snapshot.)
+echo "Test: #1474 E4 — snapshot-backed selection makes zero live claude agents calls"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Install the logging fake, then point the tick snapshot at a payload that claims
+# 55 via a live office-hours session. The fake must NOT be invoked: every
+# claimed-set read comes from the snapshot file.
+select_target_fake_claude   # installs the logging fake (orphan [] payload, unused)
+snap="$TMPDIR_TEST/agents-snapshot.json"
+printf '[{"sessionId":"s1","pid":1,"status":"busy","name":"office-hours-55","cwd":""}]' > "$snap"
+export DISPATCH_AGENTS_SNAPSHOT="$snap"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "#1474 E4 — snapshot claims 55 → 66 selected" "issue 66" "$result"
+calls=$([[ -f "$STUB_DIR/claude-agents-calls.log" ]] && wc -l < "$STUB_DIR/claude-agents-calls.log" | tr -d ' ' || echo 0)
+assert_eq "#1474 E4 — zero live claude agents calls during selection" "0" "$calls"
 teardown
 
 # ============================================================================
