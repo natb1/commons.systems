@@ -54,7 +54,12 @@ interface InMemoryDocRef {
   delete: () => Promise<void>;
 }
 
-function createInMemoryFirestore() {
+function createInMemoryFirestore(
+  opts: {
+    failBulkWriterSetFor?: (ref: InMemoryDocRef) => boolean;
+    failBulkWriterDeleteFor?: (ref: InMemoryDocRef) => boolean;
+  } = {},
+) {
   const docs = new Map<string, Record<string, unknown>>();
 
   const doc = (path: string): InMemoryDocRef => ({
@@ -112,10 +117,20 @@ function createInMemoryFirestore() {
     const ops: Array<() => void> = [];
     return {
       set: (ref: InMemoryDocRef, data: Record<string, unknown>) => {
+        if (opts.failBulkWriterSetFor?.(ref)) {
+          return Promise.reject(
+            new Error("BulkWriter set failed: simulated per-op write failure"),
+          );
+        }
         ops.push(() => docs.set(ref.path, data));
         return Promise.resolve();
       },
       delete: (ref: InMemoryDocRef) => {
+        if (opts.failBulkWriterDeleteFor?.(ref)) {
+          return Promise.reject(
+            new Error("BulkWriter delete failed: simulated per-op delete failure"),
+          );
+        }
         ops.push(() => docs.delete(ref.path));
         return Promise.resolve();
       },
@@ -317,6 +332,59 @@ describe("syncOfficeHoursCore", () => {
     for (let i = 0; i < 5; i++) {
       expect(store2._docs.has(`office-hours/prod/items/fresh-${i}`)).toBe(true);
     }
+  });
+
+  it("throws when a BulkWriter set() op fails — Promise.all(writes) re-raises it", async () => {
+    // BulkWriter routes per-op failures to the individual set() promise, not to
+    // close(); the failing op below leaves close() resolving cleanly. Only the
+    // `await Promise.all(writes)` line in syncOfficeHoursCore re-raises it, so
+    // deleting that line causes this test to fail — syncOfficeHoursCore no
+    // longer throws, so .rejects.toThrow() fails — surfacing the regression.
+    const store = createInMemoryFirestore({
+      failBulkWriterSetFor: (ref) =>
+        ref.path === "office-hours/prod/items/daily-chore",
+    });
+    const issue = makeIssue({ number: 1, jitKey: "daily-chore" });
+
+    await expect(
+      syncOfficeHoursCore({
+        fetchOpenJitIssues: async () => [issue],
+        firestore: store as unknown as Firestore,
+        namespace: "office-hours/prod",
+        memberEmails: ["owner@example.com"],
+      }),
+    ).rejects.toThrow(/simulated per-op write failure/);
+
+    // The failed op must not have written its doc.
+    expect(store._docs.has("office-hours/prod/items/daily-chore")).toBe(false);
+  });
+
+  it("throws when a BulkWriter delete() op fails — Promise.all(writes) re-raises it", async () => {
+    // Mirrors the set()-failure guard for the delete path: a stale doc not in
+    // the open set is enqueued via writer.delete(), whose per-op failure is
+    // routed to its own promise (not close()). Only the `await Promise.all(writes)`
+    // line re-raises it, so deleting that line causes this test to fail —
+    // syncOfficeHoursCore no longer throws, so .rejects.toThrow() fails.
+    const store = createInMemoryFirestore({
+      failBulkWriterDeleteFor: (ref) =>
+        ref.path === "office-hours/prod/items/stale-key",
+    });
+    store._docs.set("office-hours/prod/items/stale-key", {
+      title: "Stale",
+      jitKey: "stale-key",
+    });
+
+    await expect(
+      syncOfficeHoursCore({
+        fetchOpenJitIssues: async () => [],
+        firestore: store as unknown as Firestore,
+        namespace: "office-hours/prod",
+        memberEmails: ["owner@example.com"],
+      }),
+    ).rejects.toThrow(/simulated per-op delete failure/);
+
+    // The failed op must not have deleted its doc.
+    expect(store._docs.has("office-hours/prod/items/stale-key")).toBe(true);
   });
 });
 

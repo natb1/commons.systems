@@ -140,7 +140,7 @@ case "$DIRECTIVE" in
       /review-fix) MODEL=$("$SCRIPT_DIR/dispatch-phase-model" review) ;;
       *)           MODEL="" ;;
     esac
-    args=(--no-verify --name "$wt_basename" --cwd "$WORKTREE_PATH")
+    args=(--no-verify --park-issue "$N" --name "$wt_basename" --cwd "$WORKTREE_PATH")
     [[ -n "$MODEL" ]] && args+=(--model "$MODEL")
     exec "$SCRIPT_DIR/dispatch-spawn-job" "${args[@]}" "$SKILL $N $WORKTREE_PATH"
     ;;

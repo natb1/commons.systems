@@ -1,7 +1,16 @@
 import { describe, it, beforeAll, beforeEach } from "vitest";
 import { assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
 import type { RulesTestEnvironment } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  collection,
+  query,
+  where,
+  orderBy,
+} from "firebase/firestore";
 import {
   getTestEnv,
   authenticatedContext,
@@ -67,6 +76,58 @@ describe("fellspiral posts", () => {
     const db = ctx.firestore();
     await assertFails(
       getDoc(doc(db, `fellspiral/${ENV}/posts/draft1`)),
+    );
+  });
+
+  it("allows unauthenticated published-filtered list query", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, `fellspiral/${ENV}/posts`),
+          where("published", "==", true),
+        ),
+      ),
+    );
+  });
+
+  it("denies unauthenticated bare list query", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, `fellspiral/${ENV}/posts`),
+          orderBy("publishedAt"),
+        ),
+      ),
+    );
+  });
+
+  it("denies non-admin bare list query", async () => {
+    const ctx = authenticatedContext(env, "nonadmin@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, `fellspiral/${ENV}/posts`),
+          orderBy("publishedAt"),
+        ),
+      ),
+    );
+  });
+
+  it("allows admin bare list query", async () => {
+    const ctx = authenticatedContext(env, "admin@test.com");
+    const db = ctx.firestore();
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, `fellspiral/${ENV}/posts`),
+          orderBy("publishedAt"),
+        ),
+      ),
     );
   });
 

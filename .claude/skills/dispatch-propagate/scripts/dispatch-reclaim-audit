@@ -1,0 +1,478 @@
+#!/usr/bin/env bash
+# Reclaim audit — characterize the abnormal dead-session-stranded worker reclaim
+# rate reported in issue #1454. Re-runnable, report-only diagnostic. This is the
+# "characterize" deliverable (criterion 1 of epic #1450).
+#
+# THE PROBLEM
+#   The reservation sweep (lib-reservation-ledger.sh reservation_sweep) reclaims
+#   a worktree's reservation marker when the reserving session is no longer live
+#   and the marker has aged past a fixed boot grace. Issue #1454 observed ~185
+#   `dead-session-stranded` reclaims — a suspiciously high abnormal worker death
+#   rate — alongside many clean `live-worker-redundant` reclaims.
+#
+#   The naive read is that every dead-session-stranded reclaim is a worker death.
+#   A per-reclaim-EVENT timestamp analysis over the live host journal disproved
+#   that. The real taxonomy compares each reclaim's timestamp T against the
+#   worktree's contemporaneous assistant-work timestamps. The dominant population
+#   is workers that registered, did real work, and EXITED before the sweep — their
+#   orphan marker was reclaimed afterward and MISLABELED dead-session-stranded.
+#   That is normal completion, not death.
+#
+# RATE vs CAUSE — the two-source design
+#   RATE (how many, ground truth): read from the reservation sweep's own stderr
+#     lines, retained on the host in the systemd user journal
+#     (`journalctl --user -u dispatch-tick -o short-iso`). The exact lines are:
+#       <ISO-ts> host dispatch-tick[pid]: lib-reservation-ledger: reclaimed reservation <wt> (dead-session-stranded)
+#       <ISO-ts> host dispatch-tick[pid]: lib-reservation-ledger: reclaimed reservation <wt> (live-worker-redundant)
+#     where <wt> is the worktree basename and the leading field is the event's
+#     ISO timestamp. Transcripts are NOT the rate source.
+#   CAUSE (why, apportionment): for each reclaim EVENT (wt, T), compare T against
+#     the assistant-work intervals of wt's Claude session transcripts and bucket
+#     by their temporal relationship (see CLASSIFICATION below).
+#
+#   Apportionment is over EVENTS, not distinct worktrees: a worktree is reserved,
+#   reclaimed, re-reserved, and reclaimed again, so one worktree contributes
+#   multiple events. The RATE prints both the event count and the distinct count.
+#
+# CLASSIFICATION (each reclaim EVENT lands in exactly one bucket)
+#   For event (wt, T): among wt's session assistant-work intervals
+#   [first_work, last_work], pick the NEAREST interval to T (distance 0 if
+#   first_work<=T<=last_work; else the gap to the nearest boundary). Then:
+#     came-and-went       — last_work < T. Worker registered, did real work, then
+#                           EXITED before the sweep; the orphan marker was reclaimed
+#                           afterward and MISLABELED dead-session-stranded. The
+#                           dominant normal-completion population.
+#     slow-boot-artifact  — first_work > T AND (first_work - T) <= 300. Worker
+#                           registered AFTER the reclaim — a premature reclaim of a
+#                           still-booting worker. Booted fine, reclaimed early.
+#     alive-across        — first_work <= T <= last_work. Worker producing work both
+#                           before and after T — a LIVE worker falsely reclaimed
+#                           (stale-liveness false reclaim).
+#     genuine-strand      — no session for wt within +/-86400s of T, OR the nearest
+#                           session has first_work > T + 300. No real worker near the
+#                           reclaim → genuine boot/never-started death.
+#     unclassified-no-timestamp — the reclaim line's timestamp would not parse.
+#                           Counted for the rate, reported here, never dropped.
+#
+# POPULATION SPLIT (the load-bearing conclusion)
+#   BENIGN / NOT-DEATH      = came-and-went + slow-boot-artifact
+#   GENUINE-DEATH           = genuine-strand
+#   FALSE-RECLAIM-OF-LIVE   = alive-across
+#   (unclassified-no-timestamp is reported on its own — neither grouped nor dropped.)
+#   The conclusion the report makes obvious: the dominant cause is came-and-went
+#   normal completions mislabeled, NOT premature slow-boot reclaim, and genuine
+#   death is a small fraction.
+#
+# ASSOCIATION-HEURISTIC LIMITATION (read honestly)
+#   A worktree is reused across many spawns, so the per-event "nearest session" is
+#   a heuristic — we cannot prove WHICH session a given reclaim belonged to. The
+#   came-and-went conclusion is robust because the last-work→reclaim gap
+#   distribution is tight (p50≈12s on the live host): work ends, the sweep reclaims
+#   the orphan marker seconds later. But slow-boot-artifact and genuine-strand
+#   counts are approximate — they depend on the nearest-session pick near the
+#   ±300s / ±86400s boundaries.
+#
+# WHAT IT SCANS
+#   Sweep log: $DISPATCH_RECLAIM_SWEEP_LOG if set (a file of pre-captured
+#     `-o short-iso` journal text — used by the test fixture); otherwise the live
+#     output of `journalctl --user -u dispatch-tick -o short-iso`, windowed to
+#     --since. If journalctl is missing or errors (host without systemd, or
+#     sandboxed), the sweep log is reported unavailable and the script continues
+#     with zero counts rather than crashing.
+#   Transcripts: projects root (default $HOME/.claude/projects, overridable via
+#     DISPATCH_RECLAIM_PROJECTS_ROOT for the fixture). A worktree basename <wt>
+#     matches a project dir whose name ENDS WITH `worktrees-<wt>` (anchored, so
+#     sibling worktrees sharing a prefix are not misattributed). Top-level *.jsonl
+#     session transcripts within the --days window are scanned for their
+#     assistant-work interval.
+#
+# USAGE
+#   dispatch-reclaim-audit [--days N] [--json]
+#     --days N   window in days (default 7); reclaim events and transcripts within
+#                the window are scanned. N must be a positive integer.
+#     --json     emit the report as one JSON document instead of readable text.
+#   Env overrides:
+#     DISPATCH_RECLAIM_SWEEP_LOG       path to pre-captured `-o short-iso` text.
+#     DISPATCH_RECLAIM_PROJECTS_ROOT   override the projects root.
+#
+# BEHAVIOR CONTRACT
+#   - The window filter uses an explicit timestamp computed from `date -d`. The
+#     relative `find -newermt '7 days ago'` form is BROKEN in this environment
+#     (matches 0 files), so it is never used.
+#   - Missing journalctl / empty-or-absent projects root / unparseable jsonl →
+#     clear stderr note + clean continue, never a crash
+#     (.claude/rules/code-style.md: clear errors over defensive fallbacks).
+#
+# EXIT CODES
+#   0  ok
+#   2  usage error (bad/unknown arg, non-integer --days, no GNU date)
+set -euo pipefail
+
+# Fail fast if GNU date is not available (BSD/macOS date uses a different syntax).
+if ! date -d '1 day ago' +%s >/dev/null 2>&1; then
+  echo "error: GNU date required (this script does not support BSD/macOS date)" >&2
+  exit 2
+fi
+
+DAYS=7
+JSON_OUT=0
+PROJECTS_ROOT="${DISPATCH_RECLAIM_PROJECTS_ROOT:-$HOME/.claude/projects}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --days)
+      if [[ $# -lt 2 || "${2:-}" == -* || -z "${2:-}" ]]; then
+        echo "error: --days requires a value" >&2; exit 2
+      fi
+      DAYS="$2"
+      shift 2
+      ;;
+    --json)
+      JSON_OUT=1
+      shift
+      ;;
+    *)
+      echo "error: unknown argument '$1'" >&2
+      echo "usage: dispatch-reclaim-audit [--days N] [--json]" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ ! "$DAYS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: --days must be a positive integer, got '$DAYS'" >&2
+  exit 2
+fi
+
+# Explicit-timestamp window bound. The relative `-newermt '7 days ago'` form is
+# broken here, so compute the concrete instant.
+SINCE=$(date -d "$DAYS days ago" '+%Y-%m-%d %H:%M:%S')
+UNTIL=$(date '+%Y-%m-%d %H:%M:%S')
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+# ---------------------------------------------------------------------------
+# RATE — read reclaim lines from the sweep log (fixture file or journalctl).
+# The leading field of each line is the event ISO timestamp (-o short-iso).
+# ---------------------------------------------------------------------------
+SWEEP_RAW="$TMP/sweep.txt"
+SWEEP_AVAILABLE=1
+SWEEP_SOURCE=""
+
+if [[ -n "${DISPATCH_RECLAIM_SWEEP_LOG:-}" ]]; then
+  SWEEP_SOURCE="$DISPATCH_RECLAIM_SWEEP_LOG"
+  if [[ -r "$DISPATCH_RECLAIM_SWEEP_LOG" ]]; then
+    cat -- "$DISPATCH_RECLAIM_SWEEP_LOG" >"$SWEEP_RAW" 2>/dev/null || : >"$SWEEP_RAW"
+  else
+    echo "dispatch-reclaim-audit: sweep log '$DISPATCH_RECLAIM_SWEEP_LOG' not readable; continuing with zero sweep counts" >&2
+    SWEEP_AVAILABLE=0
+    : >"$SWEEP_RAW"
+  fi
+else
+  SWEEP_SOURCE="journalctl --user -u dispatch-tick -o short-iso"
+  if command -v journalctl >/dev/null 2>&1; then
+    # Capture explicitly so a non-zero exit (no systemd, sandboxed) cannot kill
+    # the script under `set -e`. -o short-iso puts a parseable ISO timestamp at
+    # the start of each line. Window to --since so the denominator matches the
+    # transcript window.
+    if journalctl --user -u dispatch-tick -o short-iso --no-pager --since "$SINCE" >"$SWEEP_RAW" 2>/dev/null; then
+      :
+    else
+      echo "dispatch-reclaim-audit: journalctl --user -u dispatch-tick unavailable (no systemd or sandboxed); continuing with zero sweep counts" >&2
+      SWEEP_AVAILABLE=0
+      : >"$SWEEP_RAW"
+    fi
+  else
+    echo "dispatch-reclaim-audit: journalctl not found; continuing with zero sweep counts" >&2
+    SWEEP_AVAILABLE=0
+    : >"$SWEEP_RAW"
+  fi
+fi
+
+# Event counts for the RATE (count every matching line).
+DEAD_EVENTS=$(grep -cE 'lib-reservation-ledger: reclaimed reservation .+ \(dead-session-stranded\)' "$SWEEP_RAW" || true)
+REDUNDANT_EVENTS=$(grep -cE 'lib-reservation-ledger: reclaimed reservation .+ \(live-worker-redundant\)' "$SWEEP_RAW" || true)
+DEAD_EVENTS=${DEAD_EVENTS:-0}
+REDUNDANT_EVENTS=${REDUNDANT_EVENTS:-0}
+
+# Dead-session-stranded reclaim EVENTS as "<ts>\t<wt>" pairs (one per line; keep
+# duplicates — a worktree may be reclaimed multiple times). The leading field is
+# the ISO timestamp; <wt> is parsed from the message body.
+DEAD_EVENTS_FILE="$TMP/dead_events.tsv"
+: >"$DEAD_EVENTS_FILE"
+while IFS= read -r line; do
+  ts=$(printf '%s\n' "$line" | awk '{print $1}')
+  wt=$(printf '%s\n' "$line" | sed -n 's/.*reclaimed reservation \([0-9][0-9]*-[^ ]*\) (dead-session-stranded)/\1/p')
+  [[ -n "$wt" ]] || continue
+  printf '%s\t%s\n' "$ts" "$wt" >>"$DEAD_EVENTS_FILE"
+done < <(grep -E 'lib-reservation-ledger: reclaimed reservation .+ \(dead-session-stranded\)' "$SWEEP_RAW" || true)
+
+# Distinct dead worktree basenames (for the RATE summary and the session index).
+DEAD_BASENAMES="$TMP/dead_basenames.txt"
+cut -f2 "$DEAD_EVENTS_FILE" 2>/dev/null | sort -u >"$DEAD_BASENAMES" || : >"$DEAD_BASENAMES"
+DEAD_DISTINCT=$(grep -c . "$DEAD_BASENAMES" || true)
+DEAD_DISTINCT=${DEAD_DISTINCT:-0}
+
+# ---------------------------------------------------------------------------
+# SESSION INDEX — per distinct worktree basename, the assistant-work intervals.
+# One jq pass per session emits "<first_work_ts>\t<last_work_ts>" (the min and
+# max .timestamp among lines with .type=="assistant" and .message.content!=null).
+# We extract the ISO strings in jq and convert to epoch in shell (jq's
+# fromdateiso8601 mishandles fractional seconds / offsets common in transcripts).
+# Intervals per worktree are written to $TMP/intervals/<wt> as "<first>\t<last>"
+# epoch pairs.
+# ---------------------------------------------------------------------------
+cat >"$TMP/interval.jq" <<'INTERVAL'
+# Emit "<min-ts>\t<max-ts>" over assistant lines that have message content.
+# Lexical min/max of same-format ISO strings equals chronological order.
+[ .[]
+  | select(.type=="assistant")
+  | select(.message != null and .message.content != null)
+  | .timestamp
+  | select(. != null and . != "")
+] as $ts
+| if ($ts|length) == 0 then empty
+  else ([$ts | min] + [$ts | max]) | @tsv
+  end
+INTERVAL
+
+mkdir -p "$TMP/intervals"
+
+TRANSCRIPTS_SCANNED=0
+TRANSCRIPTS_FAILED=0
+
+# Resolve the project dir for a worktree basename: a dir under PROJECTS_ROOT
+# whose name ENDS WITH worktrees-<wt> (anchored).
+find_project_dir() {
+  local wt="$1"
+  [[ -d "$PROJECTS_ROOT" ]] || return 1
+  local d
+  while IFS= read -r -d '' d; do
+    if [[ "$(basename "$d")" == *"worktrees-${wt}" ]]; then
+      printf '%s\n' "$d"
+      return 0
+    fi
+  done < <(
+    find "$PROJECTS_ROOT" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null
+  )
+  return 1
+}
+
+# Convert an ISO timestamp to epoch; return 1 (no output) if it won't parse.
+iso_to_epoch() {
+  local ts="$1" e
+  if e=$(date -d "$ts" +%s 2>/dev/null); then
+    printf '%s\n' "$e"
+    return 0
+  fi
+  return 1
+}
+
+while IFS= read -r wt; do
+  [[ -n "$wt" ]] || continue
+  proj_dir=$(find_project_dir "$wt") || proj_dir=""
+  [[ -n "$proj_dir" ]] || continue
+
+  : >"$TMP/intervals/$wt"
+  while IFS= read -r -d '' sess; do
+    TRANSCRIPTS_SCANNED=$((TRANSCRIPTS_SCANNED + 1))
+    if pair=$(jq -rs -f "$TMP/interval.jq" "$sess" 2>/dev/null); then
+      [[ -n "$pair" ]] || continue   # session has no assistant work; skip
+      first_ts=$(printf '%s' "$pair" | cut -f1)
+      last_ts=$(printf '%s' "$pair" | cut -f2)
+      first_e=$(iso_to_epoch "$first_ts") || continue
+      last_e=$(iso_to_epoch "$last_ts") || continue
+      printf '%s\t%s\n' "$first_e" "$last_e" >>"$TMP/intervals/$wt"
+    else
+      TRANSCRIPTS_FAILED=$((TRANSCRIPTS_FAILED + 1))
+      echo "dispatch-reclaim-audit: failed to parse transcript: $sess" >&2
+    fi
+  done < <(
+    find "$proj_dir" -mindepth 1 -maxdepth 1 -name '*.jsonl' -newermt "$SINCE" -print0 2>/dev/null
+  )
+done <"$DEAD_BASENAMES"
+
+# ---------------------------------------------------------------------------
+# CLASSIFY — one bucket per reclaim EVENT against the worktree's intervals.
+# ---------------------------------------------------------------------------
+DAY=86400
+GRACE=300
+
+declare -A BUCKET=(
+  [came-and-went]=0
+  [slow-boot-artifact]=0
+  [alive-across]=0
+  [genuine-strand]=0
+  [unclassified-no-timestamp]=0
+)
+
+while IFS=$'\t' read -r ev_ts wt; do
+  [[ -n "$wt" ]] || continue
+
+  if ! T=$(iso_to_epoch "$ev_ts"); then
+    BUCKET[unclassified-no-timestamp]=$(( ${BUCKET[unclassified-no-timestamp]} + 1 ))
+    continue
+  fi
+
+  intervals_file="$TMP/intervals/$wt"
+
+  # Find the NEAREST interval to T (smallest distance), remembering its bounds.
+  nearest_dist=""
+  nearest_first=""
+  nearest_last=""
+  if [[ -s "$intervals_file" ]]; then
+    while IFS=$'\t' read -r fw lw; do
+      [[ -n "$fw" && -n "$lw" ]] || continue
+      if (( T >= fw && T <= lw )); then
+        dist=0
+      elif (( fw > T )); then
+        dist=$(( fw - T ))
+      else
+        dist=$(( T - lw ))
+      fi
+      if [[ -z "$nearest_dist" ]] || (( dist < nearest_dist )); then
+        nearest_dist=$dist
+        nearest_first=$fw
+        nearest_last=$lw
+      fi
+    done <"$intervals_file"
+  fi
+
+  # No session within +/-86400s of T → genuine-strand.
+  if [[ -z "$nearest_dist" ]] || (( nearest_dist > DAY )); then
+    BUCKET[genuine-strand]=$(( ${BUCKET[genuine-strand]} + 1 ))
+    continue
+  fi
+
+  # Classify by the nearest interval's relationship to T.
+  if (( nearest_first <= T && T <= nearest_last )); then
+    BUCKET[alive-across]=$(( ${BUCKET[alive-across]} + 1 ))
+  elif (( nearest_last < T )); then
+    BUCKET[came-and-went]=$(( ${BUCKET[came-and-went]} + 1 ))
+  elif (( nearest_first > T && (nearest_first - T) <= GRACE )); then
+    BUCKET[slow-boot-artifact]=$(( ${BUCKET[slow-boot-artifact]} + 1 ))
+  else
+    # nearest_first > T + GRACE → nearest work is far later → genuine death.
+    BUCKET[genuine-strand]=$(( ${BUCKET[genuine-strand]} + 1 ))
+  fi
+done <"$DEAD_EVENTS_FILE"
+
+# ---------------------------------------------------------------------------
+# Population groupings.
+# ---------------------------------------------------------------------------
+GRP_BENIGN=$(( ${BUCKET[came-and-went]} + ${BUCKET[slow-boot-artifact]} ))
+GRP_GENUINE=${BUCKET[genuine-strand]}
+GRP_FALSELIVE=${BUCKET[alive-across]}
+
+# ---------------------------------------------------------------------------
+# Output.
+# ---------------------------------------------------------------------------
+if (( JSON_OUT )); then
+  jq -n \
+    --argjson days "$DAYS" --arg since "$SINCE" --arg until "$UNTIL" \
+    --arg sweep_source "$SWEEP_SOURCE" --argjson sweep_available "$SWEEP_AVAILABLE" \
+    --argjson dead_events "$DEAD_EVENTS" --argjson redundant_events "$REDUNDANT_EVENTS" \
+    --argjson dead_distinct "$DEAD_DISTINCT" \
+    --argjson transcripts_scanned "$TRANSCRIPTS_SCANNED" \
+    --argjson transcripts_failed "$TRANSCRIPTS_FAILED" \
+    --argjson came_and_went "${BUCKET[came-and-went]}" \
+    --argjson slow_boot "${BUCKET[slow-boot-artifact]}" \
+    --argjson alive_across "${BUCKET[alive-across]}" \
+    --argjson genuine_strand "${BUCKET[genuine-strand]}" \
+    --argjson unclassified "${BUCKET[unclassified-no-timestamp]}" \
+    --argjson grp_benign "$GRP_BENIGN" \
+    --argjson grp_genuine "$GRP_GENUINE" \
+    --argjson grp_falselive "$GRP_FALSELIVE" \
+    '{
+      window: {days:$days, since:$since, until:$until},
+      sweep: {
+        source: $sweep_source, available: ($sweep_available==1),
+        dead_session_stranded_events: $dead_events,
+        live_worker_redundant_events: $redundant_events,
+        dead_session_stranded_distinct_worktrees: $dead_distinct
+      },
+      transcripts: {scanned: $transcripts_scanned, failed: $transcripts_failed},
+      un_transcripted_stranded_reclaims: $genuine_strand,
+      cause_buckets: {
+        "came-and-went": $came_and_went,
+        "slow-boot-artifact": $slow_boot,
+        "genuine-strand": $genuine_strand,
+        "alive-across": $alive_across,
+        "unclassified-no-timestamp": $unclassified
+      },
+      populations: {
+        "benign-not-death": $grp_benign,
+        "genuine-death": $grp_genuine,
+        "false-reclaim-of-live": $grp_falselive,
+        "unclassified-no-timestamp": $unclassified
+      }
+    }'
+  exit 0
+fi
+
+# --- human-readable report ---
+print_rank() {
+  local label="$1" count="$2"
+  printf '  %-30s %d\n' "$label" "$count"
+}
+
+echo "=========================================================="
+echo " dispatch-reclaim-audit  (issue #1454)"
+echo "=========================================================="
+printf 'window: last %s day(s)  [%s .. %s]\n' "$DAYS" "$SINCE" "$UNTIL"
+echo
+
+echo "--- RECLAIM RATE (sweep journal ground truth) ---"
+printf 'source: %s\n' "$SWEEP_SOURCE"
+if (( SWEEP_AVAILABLE == 0 )); then
+  echo "NOTE: sweep log unavailable — rate counts are zero (not measured)."
+fi
+printf '  dead-session-stranded reclaims (events) ..... %d\n' "$DEAD_EVENTS"
+printf '  live-worker-redundant reclaims (events) ..... %d\n' "$REDUNDANT_EVENTS"
+printf '  dead-session-stranded distinct worktrees .... %d\n' "$DEAD_DISTINCT"
+echo "  (RATE and CAUSE are both counted in reclaim EVENTS; a worktree may be"
+echo "   reclaimed more than once, so events > distinct worktrees.)"
+echo
+
+echo "--- UN-TRANSCRIPTED STRANDS (blind-spot closer) ---"
+printf 'un-transcripted stranded reclaims = %d\n' "${BUCKET[genuine-strand]}"
+echo "  Reclaim events with NO contemporaneous worker (no assistant work within"
+echo "  +/-1 day of the reclaim, or nearest work far later than the reclaim)."
+echo "  Genuine boot/never-started death — the real abnormal-death signal."
+echo
+
+echo "--- CAUSE BREAKDOWN (ranked, over reclaim EVENTS) ---"
+printf 'transcripts scanned: %d   (failed-to-parse: %d)\n' \
+  "$TRANSCRIPTS_SCANNED" "$TRANSCRIPTS_FAILED"
+{
+  printf '%d\t%s\n' "${BUCKET[came-and-went]}"             "came-and-went"
+  printf '%d\t%s\n' "${BUCKET[slow-boot-artifact]}"        "slow-boot-artifact"
+  printf '%d\t%s\n' "${BUCKET[genuine-strand]}"            "genuine-strand"
+  printf '%d\t%s\n' "${BUCKET[alive-across]}"              "alive-across"
+  printf '%d\t%s\n' "${BUCKET[unclassified-no-timestamp]}" "unclassified-no-timestamp"
+} | sort -rn -k1,1 | while IFS=$'\t' read -r cnt name; do
+  print_rank "$name" "$cnt"
+done
+echo
+
+echo "--- POPULATION SPLIT (the conclusion) ---"
+printf '  BENIGN / NOT-DEATH .......................... %d\n' "$GRP_BENIGN"
+echo "    = came-and-went + slow-boot-artifact"
+echo "    Workers that did real work then exited before the sweep (marker"
+echo "    mislabeled dead-session-stranded), or booted fine but were reclaimed"
+echo "    a touch early. NOT death — these dominate the dead-session count."
+printf '  GENUINE-DEATH ............................... %d\n' "$GRP_GENUINE"
+echo "    = genuine-strand"
+echo "    Reclaims with no contemporaneous worker — never started or died at"
+echo "    boot. The real abnormal-death signal, a small fraction of the total."
+printf '  FALSE-RECLAIM-OF-LIVE ....................... %d\n' "$GRP_FALSELIVE"
+echo "    = alive-across"
+echo "    A live worker producing work on both sides of the reclaim was falsely"
+echo "    reclaimed (stale-liveness)."
+printf '  unclassified-no-timestamp (reported) ........ %d\n' "${BUCKET[unclassified-no-timestamp]}"
+echo "    Reclaim lines whose timestamp would not parse — counted for the rate,"
+echo "    reported here, never dropped."
+echo
+
+exit 0

@@ -393,7 +393,8 @@ Otherwise run all steps in order.
 
    The "unexpected permission prompt" blocker needs no explicit handling — if one
    fires mid-run, `dispatch-input-block.sh` already applies `dispatch:office-hours`
-   to the issue and parks the session.
+   to the issue and passes the baton (spawns the next tick) while this session
+   stays blocked on the prompt.
 
 ## Escalation
 

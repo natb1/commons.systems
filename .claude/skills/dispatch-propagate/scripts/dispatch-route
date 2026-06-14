@@ -20,6 +20,8 @@
 #   STOP waiting                    dispatch-ci-ready reports not-ready (draft PR CI pending)
 #   STOP provision-failed           direnv/merge provisioning failed (non-conflict);
 #                                   an office-hours-reason is written here before printing it
+#   STOP pr-list-failed             pr_list_open failed (gh error or truncation guard);
+#                                   an office-hours-reason is written here before printing it
 #   STOP wrong-worktree             cross-check failed (diagnostic on stderr); exits non-zero
 #
 # Usage error (missing <N> or <worktree-path>) → stderr message, exit 2 (matches
@@ -48,6 +50,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 N="${1:-}"
 WORKTREE_PATH="${2:-}"
@@ -118,7 +121,20 @@ fi
 
 # Fetch the open-PR list once; reuse it for every sibling call via the
 # DISPATCH_PR_LIST env contract (dispatch-ci-ready and dispatch-phase both honor it).
-DISPATCH_PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable)
+PR_LIST_RC=0
+DISPATCH_PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable") || PR_LIST_RC=$?
+if [[ "$PR_LIST_RC" -ne 0 ]]; then
+  # gh failure or truncation guard (>= DISPATCH_PR_LIST_LIMIT open PRs). Don't let
+  # set -e abort silently with no directive — park the issue to office-hours so the
+  # worker's Stop hook escalates rather than leaving the chain in an inconsistent state.
+  if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+    printf '%s\n' "dispatch-route: pr_list_open failed for #${N} (exit ${PR_LIST_RC})" \
+      > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+    mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" "$CLAUDE_JOB_DIR/office-hours-reason"
+  fi
+  echo "STOP pr-list-failed"
+  exit 0
+fi
 export DISPATCH_PR_LIST
 
 # Initial CI-ready gate. exit 0 (ready) → continue; exit 1 (waiting) → STOP waiting;

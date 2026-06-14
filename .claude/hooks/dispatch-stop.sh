@@ -52,14 +52,17 @@
 #          fix-* failure never reaches Branch C — the fix-* skill skips the marker
 #          for it, so it lands in Branch A (marker absent → park the issue on
 #          office-hours on the first run).
-#      (b) PR_NUM empty (no-PR provisioning backstop, e.g. a fix-conflicts pass
-#          that ran during the implement phase before any PR existed): the attempt
-#          counter lives on a PR label and does not exist yet. Always self-close
-#          and re-seed the chain — the marker being present means the fix-* skill
-#          completed a resolvable conflict. The implement phase that opens the PR
-#          runs on the next tick.
+#      (b) PR_NUM empty AND CURRENT_PHASE is fix-conflicts (the no-PR
+#          provisioning backstop): a fix-conflicts pass that ran during the
+#          implement phase before any PR existed. The attempt counter lives on a
+#          PR label and does not exist yet, so always self-close and re-seed the
+#          chain — the marker being present means fix-conflicts completed a
+#          resolvable conflict. The implement phase that opens the PR runs on the
+#          next tick. This backstop is fix-conflicts-specific: any other fix-*
+#          phase with an empty PR_NUM falls through to Branch D.
 #   D. marker present + same phase + NOT Branch C (i.e. PR-present and attempt
-#      counter >= 3, or a hypothetical same-phase non-fix-* case) — true
+#      counter >= 3, a same-phase fix-* phase other than fix-conflicts with empty
+#      PR_NUM, or a hypothetical same-phase non-fix-* case) — true
 #      non-advancement. Park the ISSUE on a human via dispatch-apply-office-hours
 #      (label + why-comment), spawn router, exit 0.
 #
@@ -96,9 +99,12 @@ if ! [[ "$JOB_NAME" =~ ^[0-9]+- ]]; then
   exit 0
 fi
 
-# Consume the payload (defensive — Stop may pass JSON on stdin). Unused.
+# Drain any buffered single-line JSON payload fast (defensive — Stop may
+# pass JSON on stdin, but this hook never reads a field from it). Short
+# timeout so an open, idle stdin (hook events never close stdin at EOF)
+# returns in ~0.1s rather than stalling a full second on the NUL delimiter.
 PAYLOAD=""
-if read -t 1 -d '' PAYLOAD; then :; fi
+if read -rt 0.1 PAYLOAD; then :; fi
 
 # Resolve issue number from the validated JOB_NAME (<N>-<slug>). Discriminator 2
 # guarantees JOB_NAME matches ^[0-9]+-, so the numeric prefix is non-empty.
@@ -106,6 +112,27 @@ ISSUE_NUM="${JOB_NAME%%-*}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
+source "$SCRIPTS/lib.sh"
+
+# Release this worker's reservation marker (#1454). The marker is named by the
+# worktree basename, which equals JOB_NAME (the session --name). Clearing it the
+# instant the worker session ends means a normally-completed worker no longer
+# leaves an orphan marker for the next tick's reservation_sweep to reclaim and
+# MISLABEL `dead-session-stranded` — the dominant ~85% of those reclaims were
+# exactly this: completed workers whose marker outlived them between 8-min ticks.
+# The sweep stays a backstop for genuine strands (a worker that died before
+# reaching this hook never gets here, so its marker is still reclaimed). Clear
+# BEFORE spawn_tick so no tick this hook triggers re-finds the orphan.
+#
+# Race (narrow, degrades safely): if a concurrent tick already spawned the NEXT
+# phase for this same worktree (same basename → same marker name) before this
+# clear runs, this clear removes that fresh marker — degrading to the pre-#1454
+# sweep-backstop behavior (the next phase's boot gap is briefly uncounted in the
+# budget), never a lost worker. Best-effort: a clear failure must not abort Stop.
+(
+  . "$SCRIPTS/lib-reservation-ledger.sh" && reservation_clear "$JOB_NAME"
+) >/dev/null 2>&1 \
+  || echo "[dispatch-stop] WARNING: reservation_clear for '$JOB_NAME' failed (non-fatal)" >&2
 
 # Resolve the why-comment reason. The #826 enrichment hook may write a
 # context-specific reason to $CLAUDE_JOB_DIR/office-hours-reason; when present
@@ -143,6 +170,11 @@ spawn_tick() {
     || echo "[dispatch-stop] WARNING: dispatch-spawn-tick failed" >&2
 }
 
+spawn_sweep() {
+  "$SCRIPTS/dispatch-spawn-sweep" >/dev/null 2>&1 \
+    || echo "[dispatch-stop] WARNING: dispatch-spawn-sweep failed" >&2
+}
+
 self_close() {
   "$SCRIPTS/dispatch-self-close" >/dev/null 2>&1 \
     || echo "[dispatch-stop] WARNING: dispatch-self-close failed" >&2
@@ -158,6 +190,7 @@ self_close() {
 # here.) Checked BEFORE the PR-centric branches.
 if [ -f "$CLAUDE_JOB_DIR/parse-job-done" ]; then
   spawn_tick
+  spawn_sweep
   self_close
   exit 0
 fi
@@ -169,8 +202,7 @@ PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
 # phase derivation below via DISPATCH_PR_LIST, avoiding a redundant `gh pr list`
 # per predicate. On fetch failure DISPATCH_PR_LIST stays empty and each script
 # falls back to its own self-fetch.
-DISPATCH_PR_LIST=$(gh pr list --state open \
-  --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable 2>/dev/null) \
+DISPATCH_PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable" 2>/dev/null) \
   || DISPATCH_PR_LIST=""
 export DISPATCH_PR_LIST
 
@@ -207,6 +239,7 @@ if ! "$SCRIPTS/dispatch-ci-ready" "$ISSUE_NUM" >/dev/null 2>&1; then
   if [ -n "$MARKER_PHASE" ]; then
     # Marker present (see the block above): the phase completed and only CI
     # is still running — self-close so the session does not leak idle.
+    spawn_sweep
     self_close
   fi
   # No marker: a genuine mid-phase exit during a CI restart — hand back to
@@ -231,6 +264,7 @@ if [ -n "$CURRENT_PHASE" ] && [ "$MARKER_PHASE" != "$CURRENT_PHASE" ]; then
   # Branch B — phase advanced.
   strip_office_hours_label
   spawn_tick
+  spawn_sweep
   self_close
   exit 0
 fi
@@ -248,17 +282,21 @@ case "$CURRENT_PHASE" in
         # pending. Self-close so the session does not leak idle holding its
         # worktree; the next tick re-runs the fix-* phase or escalates at the cap.
         spawn_tick
+        spawn_sweep
         self_close
         exit 0
       fi
       # counter at cap: fall through to Branch D (office-hours park)
-    else
-      # Branch C — no-PR provisioning backstop (e.g. a fix-conflicts pass that
-      # ran during the implement phase, before any PR existed). No attempt
-      # counter exists (it lives on a PR label), so always self-close and
-      # re-seed the chain rather than parking — the marker being present means
-      # the fix-* skill completed successfully.
+    elif [ "$CURRENT_PHASE" = 'fix-conflicts' ]; then
+      # Branch C — no-PR provisioning backstop, specific to fix-conflicts: a
+      # fix-conflicts pass that ran during the implement phase, before any PR
+      # existed. No attempt counter exists (it lives on a PR label), so always
+      # self-close and re-seed the chain rather than parking — the marker being
+      # present means fix-conflicts completed successfully. Any OTHER fix-* phase
+      # with an empty PR_NUM matches neither branch and deliberately falls
+      # through to Branch D (office-hours park).
       spawn_tick
+      spawn_sweep
       self_close
       exit 0
     fi

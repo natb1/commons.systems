@@ -7,14 +7,16 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
-# The workflow checks out github.sha and passes DIFF_BASE=github.event.before, so
-# change detection diffs the merge's own before...sha range, deterministic
-# regardless of run order.
-# DEPLOY_ALL=1 deploys every app with a hosting target (for workflow_dispatch).
+# The workflow resolves DIFF_BASE from the last-prod-deploy marker (the last
+# successfully deployed commit), so change detection diffs from there. A dropped
+# intermediate run is recovered by the next successful run, which re-covers the
+# missed window.
+# DEPLOY_ALL=1 deploys every app with a hosting target; the workflow sets it for
+# workflow_dispatch and for the first-run bootstrap when no marker exists yet.
 if [ "${DEPLOY_ALL:-}" = "1" ]; then
   CHANGED_APPS=$("$SCRIPT_DIR/get-changed-apps.sh" --all)
 else
-  : "${DIFF_BASE:?DIFF_BASE required (set to github.event.before) for change detection}"
+  : "${DIFF_BASE:?DIFF_BASE required (set from the last-prod-deploy marker) for change detection}"
   CHANGED_APPS=$("$SCRIPT_DIR/get-changed-apps.sh" --base "$DIFF_BASE")
 fi
 
