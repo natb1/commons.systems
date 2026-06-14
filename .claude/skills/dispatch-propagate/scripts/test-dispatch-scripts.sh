@@ -3406,7 +3406,7 @@ assert_eq "--top 2 mixed-phase: implement leaf 6023 present exactly once" "1" "$
 teardown
 
 # T4f. TOP=1 byte-parity freeze (#1403, criterion #3). At TOP=1 the fix keeps the
-#      historical short-circuit: a root that hits a full bucket on a landed-append
+#      historical short-circuit: a root that hits a full bucket on an append
 #      attempt stops descending, so `--top 1` stays byte-identical to the pre-fix
 #      loop AND to the plain no-flag call. Prior root 6110 (its own plan leaf)
 #      fills the `plan` bucket to TOP=1. Root 6120 descends 6121 (plan → DROPS
