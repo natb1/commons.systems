@@ -281,6 +281,20 @@ if [[ -n "$RECONCILE_OUT" ]]; then
   done <<< "$RECONCILE_OUT"
 fi
 
+# --- Step 1d (cont.): auto-merge ready enhancement PRs (#1540) ---------------
+# Runs after dispatch-reconcile-ready (a PR demoted this tick is seen as draft
+# and skipped) and before Step 2d's sync-merge-queue. Suppressed while main is
+# broken (OPEN_MB non-empty, from Step 1c). Inert unless
+# dispatch.config/auto-merge.json enables it; absent config → no-op.
+if [[ -z "$OPEN_MB" ]]; then
+  MERGE_OUT=$("$SCRIPT_DIR/dispatch-auto-merge") || true
+  if [[ -n "$MERGE_OUT" ]]; then
+    while IFS= read -r merge_line; do
+      [[ -n "$merge_line" ]] && echo "merge: $merge_line"
+    done <<< "$MERGE_OUT"
+  fi
+fi
+
 # --- Step 1b: run-scoped concurrency gate (autonomous no-arg queue path only) -
 # Runs ONLY on the autonomous no-arg queue path. The explicit-target run (a
 # positional <number> was given) and the `--manual` run (the bare human-typed
