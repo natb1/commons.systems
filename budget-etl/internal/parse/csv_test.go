@@ -151,6 +151,47 @@ func TestParseCSV_DuplicateIDCollision(t *testing.T) {
 	}
 }
 
+// TestParseCSV_DuplicateIDDenseCollision verifies that the suffix scan correctly
+// skips a dense run of blocked candidates. Given IDs X, X-2, X-3, X in file
+// order (original set = {X, X-2, X-3}):
+//   - row 1 (X) → X
+//   - row 2 (X-2) → X-2
+//   - row 3 (X-3) → X-3
+//   - row 4 (duplicate X) → X-2 taken, X-3 taken, so advances to X-4
+func TestParseCSV_DuplicateIDDenseCollision(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "dense.csv")
+	content := "00000000001234567890,2025/06/11,2025/07/10,15000.00,12000.00\n" +
+		"2025/06/16,10.00,\"Row A\",,\"X\",\"DEBIT\"\n" +
+		"2025/06/16,20.00,\"Row B\",,\"X-2\",\"DEBIT\"\n" +
+		"2025/06/16,30.00,\"Row C\",,\"X-3\",\"DEBIT\"\n" +
+		"2025/06/16,40.00,\"Row D\",,\"X\",\"DEBIT\"\n"
+	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := parseCSV(tmp)
+	if err != nil {
+		t.Fatalf("parseCSV: %v", err)
+	}
+	txns := result.Transactions
+	if len(txns) != 4 {
+		t.Fatalf("expected 4 transactions, got %d", len(txns))
+	}
+
+	// All four IDs must be distinct.
+	seen := make(map[string]int)
+	for idx, txn := range txns {
+		seen[txn.TransactionID] = idx
+	}
+	if len(seen) != 4 {
+		t.Errorf("expected 4 distinct IDs, got %d: %v", len(seen), seen)
+	}
+
+	// The duplicate X row (row 4) must skip X-2 and X-3 (both taken) and become X-4.
+	if txns[3].TransactionID != "X-4" {
+		t.Errorf("txn 3: ID = %q, want %q", txns[3].TransactionID, "X-4")
+	}
+}
+
 // TestParseCSV_DuplicateIDStress is both an acceptance-criteria document and a
 // real regression guard for the O(K+N) suffix-assignment fix (issue #1374).
 //
