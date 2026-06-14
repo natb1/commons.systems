@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { renderApp } from "../src/app-view.js";
 import type { UsageSample } from "../src/usage-samples.js";
 import type { Reminder } from "../src/reminders.js";
+import type { QueueMetricsSnapshot } from "../src/queue-metrics.js";
 
 const now = new Date("2026-06-11T12:00:00Z");
 
@@ -28,6 +29,12 @@ const baseSample: UsageSample = {
 };
 
 const makeSample = (o: Partial<UsageSample> = {}): UsageSample => ({ ...baseSample, ...o });
+
+const makeQueueMetrics = (o: Partial<QueueMetricsSnapshot> = {}): QueueMetricsSnapshot => ({
+  openHelpWanted: 12, closedPerDay: 1.5, createdPerDay: 1.0, netDrainPerDay: 0.5,
+  runwayDays: 24, windowDays: 14, computedAt: new Date("2026-06-07T10:00:00Z"),
+  groupId: "g", memberEmails: ["x@y"], ...o,
+});
 
 const MINUTE = 60_000;
 const HOUR = 3_600_000;
@@ -78,6 +85,23 @@ describe("renderApp — demo tier", () => {
 
     expect(container.querySelector(".error")).toBeNull();
   });
+
+  it("renders the queue heading", () => {
+    const container = document.createElement("div");
+    withThemeFg(() => renderApp(container, { tier: "demo" }, now));
+
+    const heading = container.querySelector(".queue-heading");
+    expect(heading).not.toBeNull();
+    expect(heading!.textContent).toBe("QUEUE");
+  });
+
+  it("renders 3 queue cards from the demo seed", () => {
+    const container = document.createElement("div");
+    withThemeFg(() => renderApp(container, { tier: "demo" }, now));
+
+    const cards = container.querySelectorAll(".queue-card");
+    expect(cards.length).toBe(3);
+  });
 });
 
 describe("renderApp — owner tier with data", () => {
@@ -92,14 +116,14 @@ describe("renderApp — owner tier with data", () => {
 
   it("does not render a .demo-banner", () => {
     const container = document.createElement("div");
-    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders }, now));
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: makeQueueMetrics() }, now));
 
     expect(container.querySelector(".demo-banner")).toBeNull();
   });
 
   it("renders a reminder list item for each reminder", () => {
     const container = document.createElement("div");
-    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders }, now));
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: makeQueueMetrics() }, now));
 
     const items = container.querySelectorAll("li.reminder");
     expect(items.length).toBe(2);
@@ -107,9 +131,17 @@ describe("renderApp — owner tier with data", () => {
 
   it("does not render an .error element", () => {
     const container = document.createElement("div");
-    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders }, now));
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: makeQueueMetrics() }, now));
 
     expect(container.querySelector(".error")).toBeNull();
+  });
+
+  it("renders 3 queue cards when queueMetrics is provided", () => {
+    const container = document.createElement("div");
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: makeQueueMetrics() }, now));
+
+    const cards = container.querySelectorAll(".queue-card");
+    expect(cards.length).toBe(3);
   });
 });
 
@@ -117,7 +149,7 @@ describe("renderApp — owner tier empty", () => {
   it("does not render a .demo-banner", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
     );
 
     expect(container.querySelector(".demo-banner")).toBeNull();
@@ -126,7 +158,7 @@ describe("renderApp — owner tier empty", () => {
   it('renders the reminder-list empty state "No reminders."', () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
     );
 
     const list = container.querySelector("#reminder-list");
@@ -142,7 +174,7 @@ describe("renderApp — owner tier empty", () => {
   it('renders the capacity empty state "No capacity data."', () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
     );
 
     const empties = Array.from(container.querySelectorAll(".empty"));
@@ -153,7 +185,7 @@ describe("renderApp — owner tier empty", () => {
   it("renders the history-band empty states", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
     );
 
     const empties = Array.from(container.querySelectorAll(".empty"));
@@ -168,10 +200,21 @@ describe("renderApp — owner tier empty", () => {
     expect(workerEmpty).not.toBeUndefined();
   });
 
+  it('renders the queue band empty state "No queue data." when queueMetrics is null', () => {
+    const container = document.createElement("div");
+    withThemeFg(() =>
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
+    );
+
+    const empties = Array.from(container.querySelectorAll(".empty"));
+    const queueEmpty = empties.find((el) => el.textContent === "No queue data.");
+    expect(queueEmpty).not.toBeUndefined();
+  });
+
   it("does not render an .error element", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null }, now),
     );
 
     expect(container.querySelector(".error")).toBeNull();
@@ -201,6 +244,13 @@ describe("renderApp — error tier", () => {
     renderApp(container, { tier: "error" }, now);
 
     expect(container.querySelector(".capacity-heading")).toBeNull();
+  });
+
+  it("does not render the queue heading", () => {
+    const container = document.createElement("div");
+    renderApp(container, { tier: "error" }, now);
+
+    expect(container.querySelector(".queue-heading")).toBeNull();
   });
 });
 
