@@ -37,7 +37,7 @@ function isExternalHref(href: string): boolean {
 }
 
 // Creates a Marked instance that strips raw HTML from markdown (defense-in-depth)
-// and opens post-body links in new tabs with rel="noopener noreferrer" to prevent
+// and opens external post-body links in new tabs with rel="noopener noreferrer" to prevent
 // reverse tabnapping. The image renderer adds width/height, srcset/sizes, and
 // fetchpriority="high" on the first image per instance (likely LCP candidate).
 //
@@ -53,10 +53,12 @@ export function createMarked(): Marked {
       link({ href, text, title }) {
         const safeHref = escapeHtml(href);
         const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
-        const glyphHtml = isExternalHref(href)
+        const external = isExternalHref(href);
+        const glyphHtml = external
           ? '<span class="external-link-icon" aria-hidden="true">&#x2197;</span>'
           : "";
-        return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}${glyphHtml}</a>`;
+        const targetRel = external ? ' target="_blank" rel="noopener noreferrer"' : "";
+        return `<a href="${safeHref}"${titleAttr}${targetRel}>${text}${glyphHtml}</a>`;
       },
       image({ href, text }) {
         const safeHref = escapeHtml(href);
