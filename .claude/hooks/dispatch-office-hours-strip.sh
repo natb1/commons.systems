@@ -16,9 +16,11 @@
 set -uo pipefail
 trap 'echo "[dispatch-office-hours-strip] WARNING: unexpected error on line $LINENO" >&2; exit 0' ERR
 
-# Consume the payload (UserPromptSubmit delivers JSON on stdin; we do not read
-# any field, but consuming the stdin avoids upstream pipe deadlocks).
-if read -t 1 -d '' _PAYLOAD; then :; fi
+# Drain the payload fast (UserPromptSubmit delivers JSON on stdin; we read no
+# field from it, only drain to avoid an upstream pipe deadlock). Short timeout
+# so an open, idle stdin returns in ~0.1s rather than stalling a full second
+# on the NUL delimiter.
+if read -rt 0.1 _PAYLOAD; then :; fi
 
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || exit 0
 ISSUE_NUM=$(printf '%s\n' "$BRANCH" | grep -oE '^[0-9]+') || exit 0
