@@ -71,10 +71,13 @@
 #      jit:/calendar: passthrough lines AND the decision line) so journald and a
 #      live relay both see the narrative. The decision is its LAST stdout line.
 #   2. Route on the decision line (mirrors SKILL.md Table 1):
-#        busy / resolver-failed / empty / concurrency-cap /
+#        busy / resolver-failed / concurrency-cap /
 #        sync-repair-pending / sync-broken
 #                          → log a one-line note; exit 0. (select-tick already
 #                            released the lock / scheduled any reseed.)
+#        empty             → log a one-line note; exit 0. On the autonomous
+#                            path additionally invokes dispatch-tick-recover
+#                            (the #1445 continuation backstop, autonomous-only).
 #        NOTE: on the autonomous no-arg path, `concurrency-cap` is emitted by
 #        select-tick only after the priority/main-broken bypass runs (see above):
 #        at-cap + exhausted → concurrency-cap immediately;
@@ -420,7 +423,28 @@ case "${1:-}" in
     echo "dispatch-tick: another tick holds the lock (busy); nothing to do" >&2
     exit 0
     ;;
-  resolver-failed|empty|concurrency-cap|sync-repair-pending|sync-broken)
+  empty)
+    # #1557: an autonomous `empty` tick (work queued, but every reachable open
+    # leaf is claimed/parked/excluded while the fleet is below target) spawns
+    # no worker and arms no continuation on its own, so the chain dead-ends
+    # until an external kick. Route it through the same continuation-guarantor
+    # `drain` uses (#1445): it bounds retries via its consecutive-failure
+    # counter (catching reservation reclaims / clearing parks across a few
+    # ticks), escalates to dispatch:chain-stalled when persistently blocked on
+    # a human, and safely no-ops when a live busy worker already exists.
+    # Autonomous-only (mirror the #1453 convergence-reseed guard above): a
+    # `--manual` empty is a one-shot human probe (an explicit <N> never
+    # resolves to empty), so it must NOT be forced through the backstop, where
+    # with zero live workers it would arm a continuation and increment the
+    # failure counter — the mis-escalation criterion 3 forbids.
+    echo "dispatch-tick: select-tick disposition 'empty'; nothing spawned" >&2
+    if [[ -z "$MANUAL" && -z "$ARG" ]]; then
+      "$SCRIPT_DIR/dispatch-tick-recover" || \
+        echo "dispatch-tick: dispatch-tick-recover failed on 'empty' (continuation not guaranteed)" >&2
+    fi
+    exit 0
+    ;;
+  resolver-failed|concurrency-cap|sync-repair-pending|sync-broken)
     echo "dispatch-tick: select-tick disposition '$1'; nothing spawned" >&2
     exit 0
     ;;

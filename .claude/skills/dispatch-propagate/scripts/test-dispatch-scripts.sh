@@ -21258,11 +21258,13 @@ assert_eq "busy: no spawn-job call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
 tick_teardown
 
-# --- empty / resolver-failed / concurrency-cap / sync-repair-pending / sync-broken ---
-# All pass-through dispositions: exit 0, no materialize, no spawn-job. #1495 adds
+# --- resolver-failed / concurrency-cap / sync-repair-pending / sync-broken ---
+# Pass-through dispositions: exit 0, no materialize, no spawn-job. #1495 adds
 # the two sync pass-throughs (sync-repair-pending, sync-broken); sync-failed moved
-# out of this loop because it now spawns the repair job (covered below).
-for d in empty resolver-failed concurrency-cap sync-repair-pending sync-broken; do
+# out of this loop because it now spawns the repair job (covered below). `empty`
+# moved out because #1557 routes it through dispatch-tick-recover on the
+# autonomous path (covered by its own tests below).
+for d in resolver-failed concurrency-cap sync-repair-pending sync-broken; do
   echo "Test: dispatch-tick $d → exit 0, no materialize/spawn"
   tick_setup
   export TICK_DECISION="$d"
@@ -21447,6 +21449,26 @@ export TICK_DECISION="issue 707 1" TICK_TOKEN="drain"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "drain: exit 0" "0" "$rc"
 assert_eq "drain: recover invoked" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick autonomous empty → invokes recover, exit 0 (#1557)"
+tick_setup
+export TICK_DECISION="empty"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "empty: exit 0" "0" "$rc"
+assert_eq "empty: recover invoked" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
+assert_eq "empty: no materialize call" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick --manual empty → does NOT invoke recover (autonomous-only) (#1557)"
+tick_setup
+export TICK_DECISION="empty"
+out=$(run_tick --manual) && rc=0 || rc=$?
+assert_eq "empty-manual: exit 0" "0" "$rc"
+assert_eq "empty-manual: recover NOT invoked (MANUAL set)" "0" \
   "$([ -f "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
 tick_teardown
 
