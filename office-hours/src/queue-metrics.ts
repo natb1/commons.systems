@@ -80,7 +80,7 @@ export function parseQueueMetrics(data: Record<string, unknown>): QueueMetricsSn
   if (data.runwayDays === null || data.runwayDays === undefined) {
     runwayDays = null;
     runwayDaysValid = true;
-  } else if (typeof data.runwayDays === "number" && Number.isFinite(data.runwayDays)) {
+  } else if (typeof data.runwayDays === "number" && Number.isFinite(data.runwayDays) && data.runwayDays >= 0) {
     runwayDays = data.runwayDays;
     runwayDaysValid = true;
   } else {
