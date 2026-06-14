@@ -48,6 +48,13 @@ describe("renderQueueBand runway readout", () => {
     expect(state!.textContent).toBe("~1 day until the queue empties");
   });
 
+  it("singular: runwayDays exactly 1.0 renders ~1 day", () => {
+    const section = renderQueueBand(make({ runwayDays: 1.0 }));
+
+    const state = section.querySelector(".queue-runway-state");
+    expect(state!.textContent).toBe("~1 day until the queue empties");
+  });
+
   it("stable: null runway with zero net drain reads 'queue stable'", () => {
     const section = renderQueueBand(make({ runwayDays: null, netDrainPerDay: 0 }));
 
