@@ -79,6 +79,10 @@ setup() {
   # SCRIPT_DIR, which resolves to TMPDIR_TEST for this copy — lib.sh is copied
   # below alongside the other scripts, so the source resolves.
   cp "$SCRIPT_DIR/dispatch-reconcile-ready" "$TMPDIR_TEST/dispatch-reconcile-ready"
+  # dispatch-sync-merge-queue sources lib.sh (for pr_list_open and
+  # dispatch_classify_rollup) via its SCRIPT_DIR, which resolves to TMPDIR_TEST
+  # for this copy — lib.sh is already copied below, so the source resolves.
+  cp "$SCRIPT_DIR/dispatch-sync-merge-queue" "$TMPDIR_TEST/dispatch-sync-merge-queue"
   # dispatch-select-target's JIT scan calls dispatch-config-load and
   # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
   # TMPDIR_TEST for the copied dispatch-select-target, so the two helpers must
@@ -117,7 +121,8 @@ setup() {
            "$TMPDIR_TEST/dispatch-resolve-worktree" \
            "$TMPDIR_TEST/dispatch-reconcile-ready" \
            "$TMPDIR_TEST/dispatch-config-load" \
-           "$TMPDIR_TEST/dispatch-project-status-read"
+           "$TMPDIR_TEST/dispatch-project-status-read" \
+           "$TMPDIR_TEST/dispatch-sync-merge-queue"
 
   # Default no-op stub for dispatch-provision-worktree. dispatch-route now invokes
   # it (after the worktree cross-check, before phase derivation). The real script
@@ -172,6 +177,59 @@ STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 # Reconstruct full args string for matching.
 args="$*"
 case "$args" in
+  # ---- #1480 dispatch-sync-merge-queue branches (FIRST — most specific) ------
+  # The mergeable-PR fetch. Field set pinned byte-for-byte to the script's
+  # pr_list_open call; --limit glob absorbs DISPATCH_PR_LIST_LIMIT (default 300).
+  "pr list --state open --limit "*" --json number,title,url,isDraft,statusCheckRollup,mergeable")
+    echo "pr list" >> "$STUB_DIR/gh-merge-pr-list.log"
+    if [[ -f "$STUB_DIR/merge-pr-list.json" ]]; then
+      cat "$STUB_DIR/merge-pr-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  label\ create\ merge-pr:*)
+    # Idempotent per-PR label create. Log and succeed.
+    echo "$args" >> "$STUB_DIR/gh-merge-label-create.log"
+    ;;
+  issue\ list\ --repo\ natb1/office-hours-nate\ --label\ merge-pr:*\ --state\ open\ --json\ number,title)
+    # Per-PR open-issue guard. MUST precede the bare enumerate branch below.
+    # Recover the PR number from the --label to key the fixture.
+    set -- $args
+    oh_lbl=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in --label) oh_lbl="$2"; shift 2 ;; *) shift ;; esac
+    done
+    oh_n="${oh_lbl#merge-pr:}"
+    if [[ -f "$STUB_DIR/oh-issue-merge-pr-${oh_n}.json" ]]; then
+      cat "$STUB_DIR/oh-issue-merge-pr-${oh_n}.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  "issue list --repo natb1/office-hours-nate --state open --limit "*" --json number,labels")
+    # Close-path enumerate (no --label). Serves the open-tracking-issue set.
+    if [[ -f "$STUB_DIR/oh-issue-enum.json" ]]; then
+      cat "$STUB_DIR/oh-issue-enum.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  issue\ create\ --repo\ natb1/office-hours-nate\ *)
+    # Create a tracking issue. MUST echo a URL so the script's ${URL##*/} yields
+    # the number. Log the full args (carries --title, the merge-pr:<n> label, and
+    # the oh-merge-pr marker) for the create assertion.
+    echo "$args" >> "$STUB_DIR/gh-merge-issue-create.log"
+    echo "https://github.com/natb1/office-hours-nate/issues/77"
+    ;;
+  issue\ edit\ *--repo\ natb1/office-hours-nate*)
+    # Title/marker refresh on drift. MUST precede the generic `issue edit *`.
+    echo "$args" >> "$STUB_DIR/gh-merge-issue-edit.log"
+    ;;
+  issue\ close\ *--repo\ natb1/office-hours-nate*)
+    # Close a tracking issue. MUST precede the generic `issue close *`.
+    echo "$args" >> "$STUB_DIR/gh-merge-issue-close.log"
+    ;;
   "pr list --state open --limit 300 --json number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
@@ -27857,6 +27915,74 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "#1474 E4 — snapshot claims 55 → 66 selected" "issue 66" "$result"
 calls=$([[ -f "$STUB_DIR/claude-agents-calls.log" ]] && wc -l < "$STUB_DIR/claude-agents-calls.log" | tr -d ' ' || echo 0)
 assert_eq "#1474 E4 — zero live claude agents calls during selection" "0" "$calls"
+teardown
+
+# ============================================================================
+# dispatch-sync-merge-queue (#1480)
+# ============================================================================
+echo "=== dispatch-sync-merge-queue ==="
+
+# A check-run rollup entry classifies `passing` only when status==COMPLETED AND
+# conclusion in {SUCCESS,NEUTRAL,SKIPPED}; a bare {"conclusion":"SUCCESS"} (no
+# status) is `pending` and would be skipped. So the mergeable fixtures pin both.
+MERGE_PR_ONE='[{"number":42,"title":"Add widget","url":"https://github.com/natb1/commons.systems/pull/42","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"}]}]'
+
+# (a) mergeable PR with no tracking issue → create
+echo "Test: mergeable PR, no tracking issue → create"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "create: issue-create log present" "present" "$(log_state gh-merge-issue-create.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q -- '--title' "$STUB_DIR/gh-merge-issue-create.log" \
+   && grep -q 'merge-pr:42' "$STUB_DIR/gh-merge-issue-create.log" \
+   && grep -q 'oh-merge-pr' "$STUB_DIR/gh-merge-issue-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: create args carry --title, merge-pr:42 label, and oh-merge-pr marker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: create args carry --title, merge-pr:42 label, and oh-merge-pr marker"
+fi
+teardown
+
+# (b) existing tracking issue with matching title → idempotent (no create, no edit)
+echo "Test: existing tracking issue, matching title → no create, no edit"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":77,"title":"Add widget"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "idempotent: no create" "absent" "$(log_state gh-merge-issue-create.log)"
+assert_eq "idempotent: no edit" "absent" "$(log_state gh-merge-issue-edit.log)"
+teardown
+
+# (c) existing tracking issue with stale title → update (title + refreshed marker)
+echo "Test: existing tracking issue, stale title → update"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":77,"title":"Old stale title"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "update: issue-edit log present" "present" "$(log_state gh-merge-issue-edit.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'Add widget' "$STUB_DIR/gh-merge-issue-edit.log" \
+   && grep -q 'oh-merge-pr' "$STUB_DIR/gh-merge-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: edit args carry the new title and the refreshed oh-merge-pr marker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: edit args carry the new title and the refreshed oh-merge-pr marker"
+fi
+assert_eq "update: no spurious create" "absent" "$(log_state gh-merge-issue-create.log)"
+teardown
+
+# (d) PR no longer mergeable but tracking issue still open → close
+echo "Test: PR no longer mergeable, tracking issue open → close"
+setup
+printf '[]\n' > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":88,"labels":[{"name":"merge-pr:42"}]}]\n' > "$STUB_DIR/oh-issue-enum.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "close: issue-close log present" "present" "$(log_state gh-merge-issue-close.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issue close 88' "$STUB_DIR/gh-merge-issue-close.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: closed the tracking issue (#88) for the no-longer-mergeable PR"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: closed the tracking issue (#88) for the no-longer-mergeable PR"
+fi
 teardown
 
 # ============================================================================
