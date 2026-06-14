@@ -20306,6 +20306,18 @@ assert_eq "manual-daemon-unknown: priority probe NOT consulted" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
+# Case 10: gap-clamped-to-headroom. LIVE=6, MAX=8 → HEADROOM=2; TARGET_N=10 →
+# GAP=4, N_PRIO=0 → SPAWN_N=min(2,max(0,4,1))=2. Exercises the final
+# `(( SPAWN_N > HEADROOM ))` clamp firing on the gap axis: GAP independently
+# exceeds HEADROOM, so HEADROOM is the binding constraint.
+echo "Test: select-tick --manual gap-clamped-to-headroom → issue 707 2"
+sel_tick_setup
+export SEL_LIVE_COUNT=6 SEL_TARGET_N=10 SEL_NPRIO_AVAIL=0 SEL_DEFAULT_TARGET="issue 707"
+out=$(run_sel_tick --manual)
+assert_eq "manual-gap-clamped-to-headroom: decision line (headroom clamps gap)" "issue 707 2" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-gap-clamped-to-headroom: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
 # Regression: explicit-still-gap1. The explicit dispatch <N> path is UNCHANGED by
 # the manual SPAWN_N math — it still appends GAP=1. Even with LIVE/TARGET set so
 # the manual computation WOULD have produced a different gap, the explicit path

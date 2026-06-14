@@ -442,6 +442,11 @@ elif [[ -n "$MANUAL" ]]; then
     LIVE_COUNT=$(( BUSY + RESV ))
     TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")
     MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max)
+    if [[ ! "$TARGET_N" =~ ^[0-9]+$ ]] || [[ ! "$MAX_WORKERS" =~ ^[0-9]+$ ]]; then
+      release_lock
+      echo "dispatch-select-tick: dispatch-target-workers returned non-numeric value (target '$TARGET_N', max '$MAX_WORKERS')" >&2
+      exit 2
+    fi
     EXHAUSTED=$("$SCRIPT_DIR/dispatch-target-workers" --exhausted 2>/dev/null) || EXHAUSTED="ok"
     HEADROOM=$(( MAX_WORKERS - LIVE_COUNT ))
     (( HEADROOM < 0 )) && HEADROOM=0
