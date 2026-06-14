@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# dispatch-qa-fix-attempt — bump the qa-fix attempt counter on a PR and emit
+# a verdict telling the qa-fix skill whether to run a fix pass or escalate.
+#
+# The qa-fix skill runs Opus-based autonomous fixes after a QA failure. Each
+# run is bounded by an attempt counter — `dispatch:qa-fix-attempt-<n>` labels
+# on the PR — so a pathological loop does not run forever. This script reads
+# the current counter, checks it against the cap, and either bumps it (returning
+# `fix`) or signals that the cap is hit (returning `escalate`).
+#
+# Key difference from dispatch-schedule-target-reseed: at the cap this script
+# applies NO label and prints `escalate` — the qa-fix skill handles escalation
+# via the existing dispatch-mark-deviation path. (The reseed script parks the
+# issue itself via dispatch-apply-office-hours; here the caller owns that step.)
+# This script is also qa-scoped, not generalized across fix-checks/ci-wait.
+# Unlike the reseed script there is NO dispatch-find-pr indirection — the
+# caller passes the PR number directly, so this script has no FIND_PR_CMD,
+# no OFFICE_HOURS_CMD, no systemd-run, no timer scheduling, and no NOW/DELAY.
+#
+# CLI contract:
+#   dispatch-qa-fix-attempt <pr_num>
+#
+#   <pr_num> is the PR number directly (NOT an issue number). The caller
+#   resolves the PR before invoking this script.
+#
+# Behavior, in order:
+#   1. Validate <pr_num> is a positive integer. Reject empty / flag-like /
+#      non-numeric input → exit 2.
+#   2. Read the highest extant dispatch:qa-fix-attempt-<n> label on the PR →
+#      CUR (max // 0), via the jq capture idiom.
+#   3. Fail-closed integer guard on CUR → exit 2 on malformed output.
+#   4. Cap check: if CUR >= CAP, print `escalate`, apply/remove NO label,
+#      exit 0. The qa-fix skill escalates via dispatch-mark-deviation.
+#   5. Otherwise (under cap): NEXT=CUR+1. Remove the prior counter label (if
+#      CUR>0) and apply dispatch:qa-fix-attempt-<NEXT> via apply-first /
+#      create-on-"not found". Label failures warn on stderr but do NOT abort.
+#      Print `fix`, exit 0.
+#
+# Stdout protocol (exactly one line on the action paths):
+#   fix        counter was bumped; the qa-fix skill should run a fix pass.
+#   escalate   cap hit; the qa-fix skill should escalate via dispatch-mark-deviation.
+#
+# Exit codes:
+#   0  on a fix or escalate path.
+#   2  on a bad <pr_num>, a non-integer CUR, or a bad CAP env override.
+#
+# Environment overrides for testability:
+#
+#   DISPATCH_QA_FIX_ATTEMPT_GH_CMD
+#     Override the `gh` binary used for label reads/edits. Default: `gh`.
+#
+#   DISPATCH_QA_FIX_ATTEMPT_CAP
+#     Override the attempt cap (positive integer). Default: 2.
+#
+# Sandbox: label reads/edits use `gh` (macOS Security-framework TLS); this
+# script is not sandbox-safe and callers must invoke it with
+# `dangerouslyDisableSandbox: true`.
+
+set -uo pipefail
+
+# ---- Step 0: defaults & config ----------------------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+GH_CMD="${DISPATCH_QA_FIX_ATTEMPT_GH_CMD:-gh}"
+
+# ---- Step 1: validate <pr_num> ----------------------------------------------
+#
+# PR_NUM is interpolated into `gh pr view/edit "$PR_NUM"` calls below. A
+# non-numeric, flag-like value (e.g. --repo other/repo) would be parsed by gh
+# as an option rather than a PR number. Reject anything that is not a bare
+# positive integer.
+
+PR_NUM="${1:-}"
+if [[ -z "$PR_NUM" || ! "$PR_NUM" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: usage: dispatch-qa-fix-attempt <pr_num> (pr_num must be a positive integer)" >&2
+  exit 2
+fi
+
+# ---- Step 2: read the highest qa-fix-attempt counter ------------------------
+#
+# Same label-capture idiom as /fix-checks's fix-checks-attempt counter, adapted
+# to the dispatch:qa-fix-attempt- prefix. `max // 0` yields 0 when no counter
+# label is present yet.
+
+CUR=$("$GH_CMD" pr view "$PR_NUM" --json labels \
+  --jq '[.labels[].name | capture("^dispatch:qa-fix-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0' \
+  2>/dev/null || true)
+
+# CUR feeds `(( CUR >= CAP ))` and `(( CUR > 0 ))` — bash arithmetic context
+# evaluates array-index command substitution, so any value entering `(( ))`
+# must be a literal integer. A label-read flake or tampered label set could
+# yield a non-integer; fail closed.
+if [[ ! "$CUR" =~ ^[0-9]+$ ]]; then
+  echo "error: dispatch-qa-fix-attempt: qa-fix attempt counter is not an integer, got '$CUR'; aborting" >&2
+  exit 2
+fi
+
+# ---- Step 3: cap check ------------------------------------------------------
+
+CAP="${DISPATCH_QA_FIX_ATTEMPT_CAP:-2}"
+if [[ ! "$CAP" =~ ^[0-9]+$ ]] || (( CAP < 1 )); then
+  echo "error: dispatch-qa-fix-attempt: CAP must be a positive integer, got '$CAP'; aborting" >&2
+  exit 2
+fi
+
+if (( CUR >= CAP )); then
+  # Cap hit — apply NO label. The qa-fix skill escalates via the existing
+  # dispatch-mark-deviation path; this script just emits the verdict.
+  echo "escalate"
+  exit 0
+fi
+
+# ---- Step 4: bump the attempt counter ---------------------------------------
+#
+# Apply-first / create-on-"not found" — the label may not exist yet on a fresh
+# repo. A gh label failure warns on stderr but does NOT abort: the stdout
+# verdict is the load-bearing side effect; the bookkeeping label is best-effort.
+
+NEXT=$(( CUR + 1 ))
+
+if (( CUR > 0 )); then
+  if ! rm_out=$("$GH_CMD" pr edit "$PR_NUM" --remove-label "dispatch:qa-fix-attempt-$CUR" 2>&1); then
+    echo "dispatch-qa-fix-attempt: warning: could not remove dispatch:qa-fix-attempt-$CUR from PR #$PR_NUM: $rm_out" >&2
+  fi
+fi
+
+if ! add_out=$("$GH_CMD" pr edit "$PR_NUM" --add-label "dispatch:qa-fix-attempt-$NEXT" 2>&1); then
+  if [[ "$add_out" != *"not found"* ]]; then
+    echo "dispatch-qa-fix-attempt: warning: could not apply dispatch:qa-fix-attempt-$NEXT to PR #$PR_NUM: $add_out" >&2
+  else
+    if ! create_out=$("$GH_CMD" label create "dispatch:qa-fix-attempt-$NEXT" \
+        --description "dispatch workflow: qa-fix attempt $NEXT of $CAP" 2>&1); then
+      echo "dispatch-qa-fix-attempt: warning: could not create label dispatch:qa-fix-attempt-$NEXT: $create_out" >&2
+    elif ! retry_out=$("$GH_CMD" pr edit "$PR_NUM" --add-label "dispatch:qa-fix-attempt-$NEXT" 2>&1); then
+      echo "dispatch-qa-fix-attempt: warning: could not apply dispatch:qa-fix-attempt-$NEXT to PR #$PR_NUM after create: $retry_out" >&2
+    fi
+  fi
+fi
+
+echo "fix"
+exit 0
