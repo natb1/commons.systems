@@ -195,6 +195,26 @@ if [ -f "$CLAUDE_JOB_DIR/parse-job-done" ]; then
   exit 0
 fi
 
+# Branch R — resolved-epic clean completion (#1456): /resolve-epic closes a
+# spent parent epic (every sub-issue closed as completed, the epic's own ACs met
+# by the merged work) and writes a `resolved-closed` sentinel instead of a
+# phase-completed marker. Like a clean parse-job, a resolved epic produces NO PR
+# and needs NO phase advance: the skill already closed the issue. A normal
+# completion marker would not work here — the epic's derived phase is still
+# `plan` (no PR, and /resolve-epic does not apply dispatch:planned), so
+# MARKER_PHASE == CURRENT_PHASE == plan would hit Branch D and park on
+# office-hours. The sentinel path sidesteps phase comparison entirely: spawn the
+# next tick and self-close, exactly as Branch P does. (An escalation writes no
+# sentinel; the epic stays open and falls through to Branch A, which parks it on
+# office-hours — today's behavior, no branch needed here.) Checked BEFORE the
+# PR-centric branches, beside Branch P.
+if [ -f "$CLAUDE_JOB_DIR/resolved-closed" ]; then
+  spawn_tick
+  spawn_sweep
+  self_close
+  exit 0
+fi
+
 # Resolve PR (may be empty for implement-phase before the draft PR opens).
 PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
 
