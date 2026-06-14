@@ -142,6 +142,19 @@ def err_signature(c):
   | gsub("(/[A-Za-z0-9._-]+){3,}"; "PATH")  # long absolute paths -> PATH
   | .[0:120];                                # hard cap — opaque attacker-controlled data
 
+# Normalized command prefix for a Bash command string. Strips leading env-var
+# assignments, then keeps a path-like first token whole, otherwise the first two
+# whitespace tokens. Digit-normalize + cap come LAST so a separate numeric arg is
+# already dropped by prefix selection. Mirrors err_signature's opaque-data spirit.
+def cmd_prefix(c):
+  ( (c // "")
+    | sub("^([A-Za-z_][A-Za-z0-9_]*=[^ ]* +)+"; "")
+    | [splits("[ \t\n]+")] ) as $toks
+  | ( $toks[0] // "" ) as $t0
+  | ( if ($t0 | test("/")) then $t0 else ($toks[0:2] | join(" ")) end )
+  | gsub("[0-9]+"; "N")
+  | .[0:120];
+
 . as $msgs
 | (asst) as $a
 | (input_filename) as $path
@@ -207,6 +220,36 @@ def err_signature(c):
       | err_signature(.content)
     ] ) as $errors
 
+# Ordered per-session token list of tool calls, in document order. Bash calls
+# become "Bash:<cmd_prefix>"; other tools become their name.
+| ( [ $msgs[] | select(.type=="assistant")
+      | (.message.content // []) | if type=="array" then .[] else empty end
+      | select(type=="object" and .type=="tool_use")
+      | if .name=="Bash" then "Bash:" + cmd_prefix(.input.command // "") else .name end
+    ] ) as $tool_calls
+
+# Per-session tool_use_id -> tool name map (assistant tool_use blocks).
+| ( reduce ( $msgs[] | select(.type=="assistant")
+             | (.message.content // []) | if type=="array" then .[] else empty end
+             | select(type=="object" and .type=="tool_use") ) as $b
+      ({}; .[$b.id] = $b.name) ) as $tool_name_by_id
+
+# Tool-result payload bytes attributed to the originating tool name. The
+# tool_use_id is guarded with `// ""` before object lookup: a null key would
+# raise "Cannot index object with null" in jq 1.8.x, and an absent/empty key
+# falls through to "unknown".
+| ( reduce ( $msgs[] | select(.type=="user")
+             | (.message.content // []) | if type=="array" then .[] else empty end
+             | select(type=="object" and .type=="tool_result") ) as $r
+      ( {total:0, by_tool:{}};
+        ($r.tool_use_id // "") as $tid
+        | ($tool_name_by_id[$tid] // "unknown") as $tn
+        | ($r.content | tostring | utf8bytelength) as $b
+        | .total += $b
+        | .by_tool[$tn].bytes = ((.by_tool[$tn].bytes // 0) + $b)
+        | .by_tool[$tn].results = ((.by_tool[$tn].results // 0) + 1) )
+    ) as $payload
+
 | {
     type: $type,
     id: $id,
@@ -220,7 +263,9 @@ def err_signature(c):
     usage: sum_usage([ $rows[].u ]),
     by_skill: $by_skill,
     by_skill_model: $by_skill_model,
-    errors: $errors
+    errors: $errors,
+    tool_calls: $tool_calls,
+    payload: $payload
   }
 STAGE1
 
@@ -259,6 +304,11 @@ def add_to_bucket(bucket; u; turns):
       turns: ((bucket.turns // 0) + turns),
       price_proxy_usd: price($nu)
     };
+
+# Consecutive n-grams of a token list as arrays. range upper bound goes negative
+# for lists shorter than n, yielding nothing — no explicit length guard needed.
+def ngrams($L; $n):
+  [ range(0; ($L | length) - $n + 1) as $i | $L[$i:$i+$n] ];
 
 . as $rows
 
@@ -325,6 +375,56 @@ def add_to_bucket(bucket; u; turns):
     | sort_by(.signature) | sort_by(-.count)
   ) as $tool_errors
 
+# ---- tool_sequences (bigrams + trigrams within each session) ----
+# Per-session n-gram arrays, keyed by (sequence | tojson) — collision-free and
+# reversible since tokens may contain spaces. count = total occurrences across
+# sessions; sessions_affected = distinct sessions containing the n-gram. Same
+# accumulation idiom as tool_errors. n=2 and n=3 share one key space.
+| ( [ $rows[] | ( (.tool_calls // []) | (ngrams(.; 2) + ngrams(.; 3)) ) ] ) as $session_ngrams
+| ( reduce $session_ngrams[] as $grams ({};
+      ( [ $grams[] | tojson ] ) as $keys
+      | ( $keys | unique ) as $distinct
+      | reduce ($keys[]) as $k (.;
+          .[$k].count = ((.[$k].count // 0) + 1)
+        )
+      | reduce ($distinct[]) as $k (.;
+          .[$k].sessions_affected = ((.[$k].sessions_affected // 0) + 1)
+        )
+    )
+    | to_entries
+    | map( (.key | fromjson) as $seq
+           | { sequence: $seq, n: ($seq | length),
+               count: .value.count, sessions_affected: .value.sessions_affected,
+               _key: .key } )
+    | sort_by(._key) | sort_by(-.count)
+    | ( length ) as $m
+    | { top: ( .[0:25] | map(del(._key)) ),
+        distinct: $m,
+        kept: (if $m < 25 then $m else 25 end),
+        truncated: (if $m > 25 then $m - 25 else 0 end) }
+  ) as $tool_sequences
+
+# ---- payload_bytes (tool-result payload folded across sessions) ----
+# total: sum of session payload totals. by_tool: per-tool bytes+results,
+# sorted by descending bytes. worst_sessions: top-10 sessions by payload bytes.
+| ( reduce $rows[] as $r ({};
+      reduce (($r.payload.by_tool // {}) | to_entries[]) as $e (.;
+        .[$e.key].bytes = ((.[$e.key].bytes // 0) + ($e.value.bytes // 0))
+        | .[$e.key].results = ((.[$e.key].results // 0) + ($e.value.results // 0))
+      )
+    )
+    | to_entries
+    | map({ tool: .key, bytes: .value.bytes, results: .value.results })
+    | sort_by(-.bytes)
+  ) as $payload_by_tool
+| ( {
+      total: ([ $rows[] | (.payload.total // 0) ] | add // 0),
+      by_tool: $payload_by_tool,
+      worst_sessions:
+        ( [ $rows[] | { id, type, bytes: (.payload.total // 0) } ]
+          | sort_by(-.bytes) | .[0:10] )
+    } ) as $payload_bytes
+
 # ---- per-session summaries ----
 | ( [ $rows[] | {
         id: .id, file: .file, type: .type,
@@ -339,12 +439,20 @@ def add_to_bucket(bucket; u; turns):
 # ---- lenses ----
 | 120000 as $ctx_threshold
 | ( [ $sessions[] | select(.peak_context > $ctx_threshold) ] ) as $big
+| ( reduce $big[] as $s ({};
+      ( ($s.phases | to_entries) as $pe
+        | (if ($pe|length)==0 then "<none>"
+           else ($pe | sort_by([-(.value), .key]) | .[0].key) end) ) as $dom
+      | .[$dom].sessions = ((.[$dom].sessions // 0) + 1)
+      | .[$dom].price_proxy_usd = ((.[$dom].price_proxy_usd // 0) + $s.price_proxy_usd)
+    ) ) as $ctx_by_phase
 | ( {
       threshold: $ctx_threshold,
       sessions: ($big | length),
       price_proxy_usd: ([ $big[].price_proxy_usd ] | add // 0),
       examples: ( $big | sort_by(-.peak_context) | .[0:5]
-                  | map({ id, type, peak_context, price_proxy_usd }) )
+                  | map({ id, type, peak_context, price_proxy_usd }) ),
+      by_phase: $ctx_by_phase
     } ) as $ctx_lens
 | 20000 as $small_threshold
 | ( [ $rows[] | select(.peak_context < $small_threshold) ] ) as $small
@@ -385,6 +493,8 @@ def add_to_bucket(bucket; u; turns):
     by_model: $by_model,
     by_phase_model: $by_phase_model,
     tool_errors: $tool_errors,
+    tool_sequences: $tool_sequences,
+    payload_bytes: $payload_bytes,
     lenses: {
       context_over_120k: $ctx_lens,
       small_sessions: $small_lens,
@@ -430,6 +540,15 @@ WINDOW_JSON=$(jq -n \
 # Stage-2: fold stage-1 lines into the final document. `jq -s` over an empty file
 # yields [], which the program handles as the zero-files case.
 DOC=$(jq -s --argjson window "$WINDOW_JSON" -f "$TMP/stage2.jq" "$STAGE1_OUT")
+
+# No silent cap: if tool_sequences was truncated, report it to STDERR (never
+# stdout — stdout must stay a pure JSON document).
+TRUNC=$(jq '.tool_sequences.truncated' <<<"$DOC")
+if [[ "$TRUNC" -gt 0 ]]; then
+  KEPT=$(jq '.tool_sequences.kept' <<<"$DOC")
+  DISTINCT=$(jq '.tool_sequences.distinct' <<<"$DOC")
+  echo "aggregate-usage.sh: tool_sequences truncated: kept $KEPT of $DISTINCT distinct sequences" >&2
+fi
 
 if [[ -n "$JSON_OUT" ]]; then
   printf '%s\n' "$DOC" >"$JSON_OUT"
