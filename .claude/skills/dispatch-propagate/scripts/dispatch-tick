@@ -71,7 +71,8 @@
 #      jit:/calendar: passthrough lines AND the decision line) so journald and a
 #      live relay both see the narrative. The decision is its LAST stdout line.
 #   2. Route on the decision line (mirrors SKILL.md Table 1):
-#        busy / sync-failed / resolver-failed / empty / concurrency-cap
+#        busy / resolver-failed / empty / concurrency-cap /
+#        sync-repair-pending / sync-broken
 #                          → log a one-line note; exit 0. (select-tick already
 #                            released the lock / scheduled any reseed.)
 #        NOTE: on the autonomous no-arg path, `concurrency-cap` is emitted by
@@ -82,6 +83,9 @@
 #        decision instead, spawned as one gate-exempt worker (GAP=1).
 #        main-broken <sha> → spawn /dispatch-diagnose-main <sha> as a bg job via
 #                            dispatch-spawn-job (--name diagnose-main); exit 0.
+#        sync-failed       → spawn /commit-merge-push as a bg job via
+#                            dispatch-spawn-job (--name sync-repair) on the main
+#                            worktree to auto-repair the wedged local main; exit 0.
 #        jit-reminder ...  → spawn /dispatch-jit-reminder ... as a bg job via
 #                            dispatch-spawn-job (--name jit-reminder-<num>); exit 0.
 #        explicit <num> <gap>            → dispatch-materialize-spawn <num> explicit --gap <gap>
@@ -416,8 +420,14 @@ case "${1:-}" in
     echo "dispatch-tick: another tick holds the lock (busy); nothing to do" >&2
     exit 0
     ;;
-  sync-failed|resolver-failed|empty|concurrency-cap)
+  resolver-failed|empty|concurrency-cap|sync-repair-pending|sync-broken)
     echo "dispatch-tick: select-tick disposition '$1'; nothing spawned" >&2
+    exit 0
+    ;;
+  sync-failed)
+    "$SCRIPT_DIR/dispatch-spawn-job" --name sync-repair --cwd "$MAIN_WORKTREE" \
+      "/commit-merge-push" \
+      || echo "dispatch-tick: WARNING: dispatch-spawn-job (sync-repair) failed; repair job lost" >&2
     exit 0
     ;;
   main-broken)

@@ -72,6 +72,7 @@ func parseCSV(path string) (ParseResult, error) {
 
 	var txns []Transaction
 	used := make(map[string]struct{})
+	nextSuffix := make(map[string]int)
 	for i, row := range records[1:] {
 		if len(row) < 6 {
 			return ParseResult{}, fmt.Errorf("%s: line %d: expected 6 fields, got %d", path, i+2, len(row))
@@ -102,15 +103,22 @@ func parseCSV(path string) (ParseResult, error) {
 		}
 
 		if _, taken := used[txnID]; taken {
-			for n := 2; ; n++ {
-				candidate := fmt.Sprintf("%s-%d", txnID, n)
+			base := txnID
+			n := nextSuffix[base]
+			if n < 2 {
+				n = 2 // map zero-value guard: first collision starts at X-2; stored values are always >= 3, so n is never 0 or 1
+			}
+			for {
+				candidate := fmt.Sprintf("%s-%d", base, n)
 				_, inUsed := used[candidate]
 				_, inOriginal := original[candidate]
+				n++ // advance before acceptance check so nextSuffix stores the slot after the one just taken
 				if !inUsed && !inOriginal {
 					txnID = candidate
 					break
 				}
 			}
+			nextSuffix[base] = n // record next slot to try; counter never rewinds
 		}
 		used[txnID] = struct{}{}
 
