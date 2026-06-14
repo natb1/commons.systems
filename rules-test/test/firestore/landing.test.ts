@@ -45,6 +45,7 @@ describe("landing posts", () => {
     await adminSetDoc(env, `landing/${ENV}/posts/draft1`, {
       published: false,
       title: "Draft Post",
+      publishedAt: "2024-01-02",
     });
   });
 
