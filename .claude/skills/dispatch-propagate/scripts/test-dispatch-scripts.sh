@@ -24913,6 +24913,18 @@ assert_eq "dedup: partition-split → length 2" "2" "$(printf '%s' "$out" | jq -
 assert_eq "dedup: partition-split → output[0] Confidence preserved (high)" "high" "$(printf '%s' "$out" | jq -r '.[0].Confidence')"
 assert_eq "dedup: partition-split → output[1] Confidence preserved (low)" "low" "$(printf '%s' "$out" | jq -r '.[1].Confidence')"
 
+# all-absent partition group: every member absent from findings → group
+# collapses to nothing (not a junk finding), exit 0. Distinct from IN5
+# (empty partition): here the partition is NON-empty but references only
+# absent ids. Discriminating: WITHOUT the empty-group drop, this group
+# emits {"Confidence":null,...} and length is 1, so the [] / length-0
+# assertion is the one that guards the fix.
+IN8='{"findings":[],"partition":[["zzz","yyy"]]}'
+if out=$(printf '%s' "$IN8" | "$SCRIPT_DIR/dispatch-review-dedup"); then rc=0; else rc=$?; fi
+assert_eq "dedup: all-absent partition group → exit 0" "0" "$rc"
+assert_eq "dedup: all-absent partition group → length 0" "0" "$(printf '%s' "$out" | jq -r 'length')"
+assert_eq "dedup: all-absent partition group → []" "[]" "$(printf '%s' "$out" | jq -c '.')"
+
 # ============================================================================
 # === dispatch-review-verify-drop ===
 # ============================================================================
