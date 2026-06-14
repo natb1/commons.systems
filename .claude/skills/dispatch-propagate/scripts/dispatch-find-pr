@@ -24,11 +24,14 @@
 #      pr_list_open aborts before this cross-check runs — see below.)
 #
 # Environment:
-#   DISPATCH_PR_LIST           — optional. A JSON array of open PRs supplied
-#     by the caller (dispatch-select-target passes it to avoid a redundant
-#     gh pr list per script). When set and non-empty, it is used in place of
-#     a self-issued gh pr list. Must include at least number,headRefName; a
-#     superset list (e.g. the one dispatch-phase needs) is also accepted.
+#   DISPATCH_PR_LIST_FILE      — optional. Path to a temp file holding a JSON
+#     array of open PRs supplied by the caller (dispatch-select-target passes
+#     it to avoid a redundant gh pr list per script). The tiny path travels in
+#     the env var; the JSON stays in the file, sidestepping the E2BIG that an
+#     inline JSON string hits past ~32 open PRs (#1646). When set, the file is
+#     read in place of a self-issued gh pr list and must be readable (else
+#     exit 2). Must include at least number,headRefName; a superset list (e.g.
+#     the one dispatch-phase needs) is also accepted.
 #     The retry (step 1) is skipped when this is set — the caller owns the list.
 #     The cross-check (step 2) still runs regardless — it uses a different gh
 #     endpoint that the caller cannot pre-supply.
@@ -50,10 +53,14 @@ prefix_match() {
     'map(select(.headRefName | startswith($num))) | .[0].number // empty'
 }
 
-# Use the caller-supplied open-PR list when DISPATCH_PR_LIST is set.
+# Use the caller-supplied open-PR list file (DISPATCH_PR_LIST_FILE) when set.
 # Otherwise fetch the list ourselves — standalone callers rely on this path.
-if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
-  PR_LIST="$DISPATCH_PR_LIST"
+if [[ -n "${DISPATCH_PR_LIST_FILE:-}" ]]; then
+  [[ -r "$DISPATCH_PR_LIST_FILE" ]] || {
+    echo "error: DISPATCH_PR_LIST_FILE not readable: $DISPATCH_PR_LIST_FILE" >&2
+    exit 2
+  }
+  PR_LIST=$(cat "$DISPATCH_PR_LIST_FILE")
 else
   # pr_list_open returns non-zero on a gh failure OR when its truncation guard
   # fires (the snapshot hit --limit and is likely cut off). On either, abort
@@ -75,7 +82,7 @@ RESULT=$(prefix_match "$PR_LIST")
 if [[ -n "$RESULT" ]]; then echo "$RESULT"; exit 0; fi
 
 # Retry-on-empty (self-fetch path only).
-if [[ -z "${DISPATCH_PR_LIST:-}" ]]; then
+if [[ -z "${DISPATCH_PR_LIST_FILE:-}" ]]; then
   sleep "${DISPATCH_FIND_PR_RETRY_DELAY:-1}"
   PR_LIST=$(pr_list_open "number,headRefName")
   RESULT=$(prefix_match "$PR_LIST")
