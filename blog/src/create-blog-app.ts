@@ -54,7 +54,7 @@ export interface CreateBlogAppConfig {
     db: Firestore;
     namespace: Namespace;
     trackPageView: (path: string) => void;
-    initAppCheck: () => Promise<unknown>;
+    initAppCheck: (() => Promise<void>) | undefined;
     signIn: () => Promise<unknown> | void;
     signOut: () => Promise<unknown> | void;
     onAuthStateChanged: (cb: (user: User | null) => void) => PromiseLike<unknown>;
@@ -269,9 +269,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   });
 
   deferAppCheckInit(
-    async () => {
-      await config.firebase.initAppCheck();
-    },
+    config.firebase.initAppCheck,
     config.rehydrateOnAppCheck
       ? () => hydrateInfoPanel(infoPanel, config.blogRollEntries, config.strategies)
       : undefined,
