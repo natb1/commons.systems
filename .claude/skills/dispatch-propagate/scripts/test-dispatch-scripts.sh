@@ -3377,6 +3377,62 @@ assert_eq "--top 3 descent skips parked leaf 5501 → 5500,5502" "$(printf 'issu
 assert_eq "--top 3 descent: parked leaf 5501 absent" "0" "$(printf '%s\n' "$result" | grep -c '^issue 5501$')"
 teardown
 
+# T4e. Mixed-phase root descent is not short-circuited by full-bucket drops
+#      (#1403). `root_recorded` counts only leaves actually INSERTED, so a root
+#      whose first leaves drop into an already-full bucket still descends to its
+#      other-phase leaf. Prior roots 6010, 6011 (no sub-issues → each its own
+#      plan leaf) fill the `plan` bucket to TOP=2. Root 6020 then descends three
+#      sub-issues in order: 6021, 6022 (both plan → both DROP into the full plan
+#      bucket) then 6023 (dispatch:planned → implement). With the fix the two
+#      plan drops do not advance `root_recorded`, so descent reaches 6023, which
+#      lands in the empty `implement` bucket; emission ranks implement above plan,
+#      so `--top 2` yields `issue 6023` then the oldest plan entry `issue 6010`.
+#      The pre-fix code increments `root_recorded` on every append (drops
+#      included): the two plan drops inflate it to TOP=2, the loop breaks before
+#      reaching 6023, and the output is `issue 6010\nissue 6011` — 6023 never
+#      appears. This test is RED against the pre-fix script and GREEN after it.
+echo "Test: --top 2 mixed-phase descent reaches the implement leaf past full-plan drops"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":6010,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6011,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6020,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6023,"createdAt":"2024-01-04T00:00:00Z","labels":[{"name":"dispatch:planned"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":6021},{"number":6022},{"number":6023}]\n' > "$STUB_DIR/subissues-6020.json"
+printf '{"title":"Issue 6021","body":"","comments":[],"number":6021,"state":"OPEN"}\n' > "$STUB_DIR/issue-6021.json"
+printf '{"title":"Issue 6022","body":"","comments":[],"number":6022,"state":"OPEN"}\n' > "$STUB_DIR/issue-6022.json"
+printf '{"title":"Issue 6023","body":"","comments":[],"number":6023,"state":"OPEN"}\n' > "$STUB_DIR/issue-6023.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 2)
+assert_eq "--top 2 mixed-phase: implement leaf 6023 reached past full-plan drops" "$(printf 'issue 6023\nissue 6010')" "$result"
+assert_eq "--top 2 mixed-phase: implement leaf 6023 present exactly once" "1" "$(printf '%s\n' "$result" | grep -c '^issue 6023$')"
+teardown
+
+# T4f. TOP=1 byte-parity freeze (#1403, criterion #3). At TOP=1 the fix keeps the
+#      historical short-circuit: a root that hits a full bucket on an append
+#      attempt stops descending, so `--top 1` stays byte-identical to the pre-fix
+#      loop AND to the plain no-flag call. Prior root 6110 (its own plan leaf)
+#      fills the `plan` bucket to TOP=1. Root 6120 descends 6121 (plan → DROPS
+#      into the full plan bucket) then 6122 (dispatch:planned → implement). The
+#      `(( TOP == 1 )) && break` freeze breaks on the first dropped plan leaf, so
+#      6122 is never reached and the output is `issue 6110`. This is the lock on
+#      the freeze: a naive fix that gated the counter on insert WITHOUT the
+#      TOP==1 break would descend to 6122 and emit `issue 6122` (implement
+#      outranks plan), changing the single TOP=1 winner. RED against that naive
+#      variant; GREEN with the freeze (and against the pre-fix code, which it must
+#      match byte-for-byte).
+echo "Test: --top 1 freeze keeps byte-parity, implement leaf not reached past a full-plan drop"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":6110,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6120,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":6122,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"dispatch:planned"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":6121},{"number":6122}]\n' > "$STUB_DIR/subissues-6120.json"
+printf '{"title":"Issue 6121","body":"","comments":[],"number":6121,"state":"OPEN"}\n' > "$STUB_DIR/issue-6121.json"
+printf '{"title":"Issue 6122","body":"","comments":[],"number":6122,"state":"OPEN"}\n' > "$STUB_DIR/issue-6122.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+plain=$("$TMPDIR_TEST/dispatch-select-target")
+top1=$("$TMPDIR_TEST/dispatch-select-target" --top 1)
+assert_eq "--top 1 freeze: plan winner 6110 (implement leaf not reached)" "issue 6110" "$top1"
+assert_eq "--top 1 freeze: byte-parity with no-flag call" "$plain" "$top1"
+assert_eq "--top 1 freeze: implement leaf 6122 absent" "0" "$(printf '%s\n' "$top1" | grep -c '^issue 6122$')"
+teardown
+
 # T5. --top 1 byte-parity: on a representative fixture, `--top 1` output is
 #     byte-identical to the plain (no-flag) call. Guards that the default path is
 #     unchanged for every existing caller.
@@ -19344,6 +19400,7 @@ FAKE
   # assert it ran. Invoked by dispatch-select-tick via its SCRIPT_DIR (= TMPDIR_TEST).
   cat > "$TMPDIR_TEST/dispatch-escalate-sync-broken" <<FAKE
 #!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$TMPDIR_TEST/logs/escalate-args.log"
 cat >> "$TMPDIR_TEST/logs/escalate-stdin.log"
 echo called >> "$TMPDIR_TEST/logs/escalate-sync-broken.log"
 exit 0
@@ -19642,7 +19699,26 @@ assert_eq "cap-escalate: reseed armed" "present" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo present || echo absent)"
 assert_eq "cap-escalate: escalate called" "present" \
   "$([ -f "$TMPDIR_TEST/logs/escalate-sync-broken.log" ] && echo present || echo absent)"
+assert_eq "cap-escalate: --reason merge-failed passed" "1" \
+  "$(grep -cF -- '--reason merge-failed' "$TMPDIR_TEST/logs/escalate-args.log")"
 assert_eq "cap-escalate: counter unchanged (no bump on terminal branch)" "3" \
+  "$(cat "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE")"
+sel_tick_teardown
+
+# --- #1546: failing fetch at attempt cap → escalate --reason fetch-failed ------
+echo "Test: select-tick failing fetch at cap → escalate, sync-broken, --reason fetch-failed"
+sel_tick_setup
+printf '3\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # already at the cap
+export FAKE_GIT_FETCH_FAIL=1   # cannot reach origin/main (fetch fails, no merge)
+# No sync-broken latch open yet → the cap branch escalates (find-or-create).
+out=$(run_sel_tick)
+assert_eq "cap-fetch-escalate: decision line" "sync-broken" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "cap-fetch-escalate: escalate called" "present" \
+  "$([ -f "$TMPDIR_TEST/logs/escalate-sync-broken.log" ] && echo present || echo absent)"
+assert_eq "cap-fetch-escalate: --reason fetch-failed passed" "1" \
+  "$(grep -cF -- '--reason fetch-failed' "$TMPDIR_TEST/logs/escalate-args.log")"
+assert_eq "cap-fetch-escalate: counter unchanged (no bump on terminal branch)" "3" \
   "$(cat "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE")"
 sel_tick_teardown
 
@@ -20192,6 +20268,162 @@ case "$err" in
 esac
 assert_eq "--manual + number → usage error, exit 2" "ok" "$status"
 sel_tick_teardown
+
+# ============================================================================
+# === #1546: direct dispatch-escalate-sync-broken body-content tests ===
+# ============================================================================
+# Invokes the REAL dispatch-escalate-sync-broken (by absolute path) with git and
+# gh PATH-shimmed. The git shim feeds fixed diagnostics; the gh shim captures the
+# composed --title and --body-file contents so the test can inspect the body the
+# script wrote. Exercises both the CREATE path (no open latch) and the EDIT path
+# (an existing latch number), and the --reason parametrization (#1546).
+
+ESB_SCRIPT="$SCRIPT_DIR/dispatch-escalate-sync-broken"
+ESB_TMPDIR=""
+ESB_CAPTURE=""
+
+esb_setup() {
+  ESB_TMPDIR=$(mktemp -d)
+  ESB_CAPTURE="$ESB_TMPDIR/capture"
+  mkdir -p "$ESB_TMPDIR/bin" "$ESB_CAPTURE"
+
+  # git shim: fixed diagnostics for the three queries the script runs.
+  cat > "$ESB_TMPDIR/bin/git" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  "rev-parse --show-toplevel")          echo "/fake/main/worktree" ;;
+  "status --porcelain")                 echo " M somefile" ;;
+  "log --oneline origin/main..HEAD")    echo "deadbee some local commit" ;;
+  *)                                    exit 0 ;;
+esac
+STUB
+  chmod +x "$ESB_TMPDIR/bin/git"
+
+  # gh shim: parses --body-file/--title out of "$@" regardless of create/edit,
+  # copies the body to capture/body.txt and the title to capture/title.txt. For
+  # `issue list` it returns capture/existing.txt (empty/absent → no open latch →
+  # CREATE path; nonempty → EDIT path). `issue create` echoes a URL so the
+  # script's ${create_out##*/} yields a bare number; `issue edit` exits 0.
+  cat > "$ESB_TMPDIR/bin/gh" <<STUB
+#!/usr/bin/env bash
+CAP="$ESB_CAPTURE"
+STUB
+  cat >> "$ESB_TMPDIR/bin/gh" <<'STUB'
+sub="$1 $2"
+# Pull --title <val> and --body-file <path> out of the argv.
+prev=""
+for a in "$@"; do
+  case "$prev" in
+    --title)     printf '%s' "$a" > "$CAP/title.txt" ;;
+    --body-file) cat "$a" > "$CAP/body.txt" ;;
+  esac
+  prev="$a"
+done
+case "$sub" in
+  "issue list")
+    # Return the open-latch number if seeded; an absent file means no open
+    # latch (CREATE path). Must exit 0 either way — the script reads this under
+    # `set -e`, so a falsy `[[ -f ]]` test (no file) must not propagate rc 1.
+    [[ -f "$CAP/existing.txt" ]] && cat "$CAP/existing.txt"
+    exit 0
+    ;;
+  "issue create")
+    echo "https://github.com/x/y/issues/123"
+    ;;
+  "issue edit")
+    : # title/body already captured above
+    ;;
+  "label create")
+    : # create-on-not-found path; not exercised here
+    ;;
+  *)
+    echo "gh stub (esb): unknown invocation: $*" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$ESB_TMPDIR/bin/gh"
+
+  export PATH="$ESB_TMPDIR/bin:$SAVED_PATH"
+  # Use plain mktemp inside the script (no CLAUDE_JOB_DIR tmp subtree needed).
+  unset CLAUDE_JOB_DIR
+}
+
+esb_teardown() {
+  export PATH="$SAVED_PATH"
+  rm -rf "$ESB_TMPDIR"
+  ESB_TMPDIR="" ; ESB_CAPTURE=""
+}
+
+# Reset just the capture dir between runs within one setup.
+esb_reset_capture() {
+  rm -rf "$ESB_CAPTURE"
+  mkdir -p "$ESB_CAPTURE"
+}
+
+# --- AC4 + AC3: fetch-failed body (CREATE path) ------------------------------
+echo "Test: dispatch-escalate-sync-broken --reason fetch-failed body content (#1546)"
+esb_setup
+# No existing.txt → list returns empty → CREATE path.
+ISSUE_NUM=$(printf '%s' "fatal: unable to access origin: Could not resolve host" \
+  | "$ESB_SCRIPT" --reason fetch-failed) || ISSUE_NUM="ERR"
+assert_eq "fetch-failed: issue number parsed from create URL" "123" "$ISSUE_NUM"
+BODY=$(cat "$ESB_CAPTURE/body.txt" 2>/dev/null || true)
+TITLE=$(cat "$ESB_CAPTURE/title.txt" 2>/dev/null || true)
+assert_eq "fetch-failed body: states no merge was attempted" "1" \
+  "$(grep -ciF 'no merge was attempted' <<<"$BODY" || true)"
+assert_eq "fetch-failed body: no 'diverge' token" "0" \
+  "$(grep -ic 'diverge' <<<"$BODY" || true)"
+assert_eq "fetch-failed body: no 'conflict' token" "0" \
+  "$(grep -ic 'conflict' <<<"$BODY" || true)"
+assert_eq "fetch-failed body: no merge-stderr section header" "0" \
+  "$(grep -cF 'git merge --ff-only origin/main (captured stderr)' <<<"$BODY" || true)"
+assert_eq "fetch-failed body: no git-log divergence section" "0" \
+  "$(grep -cF 'git log --oneline origin/main..HEAD' <<<"$BODY" || true)"
+assert_eq "fetch-failed body: has fetch-stderr section header" "1" \
+  "$(grep -cF '## git fetch origin main (captured stderr)' <<<"$BODY" || true)"
+assert_eq "fetch-failed title: 'cannot reach origin/main'" "1" \
+  "$(grep -cF 'cannot reach origin/main' <<<"$TITLE" || true)"
+esb_teardown
+
+# --- AC2: merge-failed body retains divergence language (CREATE path) ---------
+echo "Test: dispatch-escalate-sync-broken --reason merge-failed body content (#1546)"
+esb_setup
+ISSUE_NUM=$(printf '%s' "CONFLICT (content): Merge conflict in foo" \
+  | "$ESB_SCRIPT" --reason merge-failed) || ISSUE_NUM="ERR"
+assert_eq "merge-failed: issue number parsed from create URL" "123" "$ISSUE_NUM"
+BODY=$(cat "$ESB_CAPTURE/body.txt" 2>/dev/null || true)
+TITLE=$(cat "$ESB_CAPTURE/title.txt" 2>/dev/null || true)
+assert_eq "merge-failed body: has git-log divergence section" "1" \
+  "$(grep -cF 'git log --oneline origin/main..HEAD (local divergence)' <<<"$BODY" || true)"
+assert_eq "merge-failed body: has merge-stderr section header" "1" \
+  "$(grep -cF 'git merge --ff-only origin/main (captured stderr)' <<<"$BODY" || true)"
+assert_eq "merge-failed body: retains divergence language" "1" \
+  "$([ "$(grep -ic diverge <<<"$BODY")" -ge 1 ] && echo 1 || echo 0)"
+assert_eq "merge-failed title: 'cannot ff-merge origin/main'" "1" \
+  "$(grep -cF 'cannot ff-merge origin/main' <<<"$TITLE" || true)"
+esb_teardown
+
+# --- Edit-path: --title is passed on the edit path too (existing latch) -------
+echo "Test: dispatch-escalate-sync-broken edit path passes --title (#1546)"
+esb_setup
+printf '99\n' > "$ESB_CAPTURE/existing.txt"   # an open latch → EDIT path
+EDIT_NUM=$(printf '%s' "fatal: unable to access origin" \
+  | "$ESB_SCRIPT" --reason fetch-failed) || EDIT_NUM="ERR"
+assert_eq "edit-path: existing issue number echoed" "99" "$EDIT_NUM"
+TITLE=$(cat "$ESB_CAPTURE/title.txt" 2>/dev/null || true)
+assert_eq "edit-path title: fetch-failed 'cannot reach origin/main'" "1" \
+  "$(grep -cF 'cannot reach origin/main' <<<"$TITLE" || true)"
+esb_teardown
+
+# --- Invalid --reason → clear nonzero error ----------------------------------
+echo "Test: dispatch-escalate-sync-broken --reason bogus → nonzero, clear message (#1546)"
+esb_setup
+if "$ESB_SCRIPT" --reason bogus </dev/null 2>"$ESB_CAPTURE/err.txt"; then rc=0; else rc=$?; fi
+assert_eq "invalid --reason: nonzero exit" "1" "$([ "$rc" -ne 0 ] && echo 1 || echo 0)"
+assert_eq "invalid --reason: clear message mentions reason" "1" \
+  "$(grep -ic 'reason' "$ESB_CAPTURE/err.txt" || true)"
+esb_teardown
 
 # ============================================================================
 # dispatch-materialize-spawn tests (#919)
@@ -22660,6 +22892,64 @@ assert_eq "verify-drop: r4 not in kept" "0" "$(printf '%s' "$out" | jq -r '.kept
 
 # i1 (non-Required) in kept with no verify key
 assert_eq "verify-drop: i1 non-Required kept without verify key" "false" "$(printf '%s' "$out" | jq -r '.kept[] | select(.id=="i1") | has("verify")')"
+
+# ============================================================================
+# === dispatch-qa-disposition ===
+# ============================================================================
+
+echo "Test: dispatch-qa-disposition"
+
+# All branches in one object (order: f1..f6) plus a separate passthrough check.
+# f1: opus-fixable  → final_class=opus-fixable, verify=n/a
+# f2: needs-main    → final_class=needs-main,   verify=n/a
+# f3: needs-human, aesthetic:false, votes=[refuted,upheld] → opus-fixable, Refuted
+# f4: needs-human, aesthetic:false, votes=[upheld,upheld]  → needs-human,  Upheld
+# f5: needs-human, aesthetic:false, NO entry in votes map  → needs-human,  Unverified (INVERTED EDGE)
+# f6: needs-human, aesthetic:true,  votes=[refuted,refuted]→ needs-human,  n/a (aesthetic bypasses)
+IN='{"items":[{"id":"f1","class":"opus-fixable","aesthetic":false},{"id":"f2","class":"needs-main","aesthetic":false},{"id":"f3","class":"needs-human","aesthetic":false},{"id":"f4","class":"needs-human","aesthetic":false},{"id":"f5","class":"needs-human","aesthetic":false},{"id":"f6","class":"needs-human","aesthetic":true}],"votes":{"f3":["refuted","upheld"],"f4":["upheld","upheld"],"f6":["refuted","refuted"]}}'
+out=$(printf '%s' "$IN" | "$SCRIPT_DIR/dispatch-qa-disposition")
+
+# Branch: opus-fixable passes through
+assert_eq "qa-disposition: opus-fixable → final_class" "opus-fixable" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f1") | .final_class')"
+assert_eq "qa-disposition: opus-fixable → verify=n/a" "n/a" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f1") | .verify')"
+
+# Branch: needs-main passes through
+assert_eq "qa-disposition: needs-main → final_class" "needs-main" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f2") | .final_class')"
+assert_eq "qa-disposition: needs-main → verify=n/a" "n/a" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f2") | .verify')"
+
+# Branch: needs-human, non-aesthetic, refuted vote → downgrade
+assert_eq "qa-disposition: needs-human refuted → final_class=opus-fixable" "opus-fixable" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .final_class')"
+assert_eq "qa-disposition: needs-human refuted → verify=Refuted" "Refuted" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .verify')"
+
+# Branch: needs-human, non-aesthetic, all-upheld → keep
+assert_eq "qa-disposition: needs-human upheld → final_class=needs-human" "needs-human" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f4") | .final_class')"
+assert_eq "qa-disposition: needs-human upheld → verify=Upheld" "Upheld" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f4") | .verify')"
+
+# Branch: needs-human, non-aesthetic, EMPTY votes (id absent from votes map) → KEEP (INVERTED EDGE)
+# Unlike dispatch-review-verify-drop where empty→dropped, here empty→KEEP (downgrading is the risky action)
+assert_eq "qa-disposition: needs-human empty-votes → final_class=needs-human (inverted edge)" "needs-human" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f5") | .final_class')"
+assert_eq "qa-disposition: needs-human empty-votes → verify=Unverified (inverted edge)" "Unverified" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f5") | .verify')"
+
+# Branch: needs-human, aesthetic:true, votes present (refuted) → KEEP, verify=n/a (aesthetic bypasses verification)
+assert_eq "qa-disposition: aesthetic needs-human with refuted votes → final_class=needs-human" "needs-human" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f6") | .final_class')"
+assert_eq "qa-disposition: aesthetic needs-human with refuted votes → verify=n/a" "n/a" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f6") | .verify')"
+
+# Passthrough: original class and aesthetic fields survive on output items
+assert_eq "qa-disposition: passthrough class field preserved" "needs-human" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .class')"
+assert_eq "qa-disposition: passthrough aesthetic field preserved" "false" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .aesthetic')"
+
+# Passthrough: arbitrary extra field (title) survives
+IN_TITLE='{"items":[{"id":"t1","class":"needs-human","aesthetic":false,"title":"Check me"}],"votes":{"t1":["upheld"]}}'
+out_title=$(printf '%s' "$IN_TITLE" | "$SCRIPT_DIR/dispatch-qa-disposition")
+assert_eq "qa-disposition: passthrough title field preserved" "Check me" "$(printf '%s' "$out_title" | jq -r '.dispositions[0].title')"
+
+# Output order: items must appear in input order (f1..f6)
+assert_eq "qa-disposition: output order preserved" "f1
+f2
+f3
+f4
+f5
+f6" "$(printf '%s' "$out" | jq -r '.dispositions[].id')"
 
 # dispatch-jit-skill tests
 # ============================================================================
