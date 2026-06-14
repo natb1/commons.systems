@@ -99,6 +99,42 @@
       .capacity-worker-state.paused {
         color: var(--danger, #ff6b6b);
       }
+      .queue-heading {
+        font-size: 1rem;
+        letter-spacing: 0.05em;
+        color: var(--muted-fg, #9aa0a6);
+        margin-bottom: 0.75rem;
+      }
+      .queue-cards {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+      .queue-card {
+        border: 1px solid var(--graphical-fg, rgba(255, 255, 255, 0.15));
+        padding: 0.75rem 1rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+      .queue-card-label {
+        color: var(--muted-fg, #9aa0a6);
+        font-size: 0.8rem;
+      }
+      .queue-card-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+      }
+      .queue-runway {
+        margin: 0;
+      }
+      .queue-runway-state {
+        color: var(--muted-fg, #9aa0a6);
+      }
+      .queue-runway-state.growing {
+        color: var(--danger, #ff6b6b);
+      }
       /* Plot tip text: force dark so it remains readable on every chart. */
       svg [aria-label="tip"] text { fill: #222; }
       .chart-layout {
