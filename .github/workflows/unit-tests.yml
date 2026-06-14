@@ -60,8 +60,26 @@ jobs:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ runner.os }}
       - name: Run rules-test suite
+        id: run-rules-test
         if: steps.changes.outputs.rules == 'true'
         run: .claude/skills/dispatch-propagate/scripts/run-rules-test.sh
+      - name: Report rules-test outcome
+        if: always()
+        run: |
+          case "${{ steps.run-rules-test.outcome }}" in
+            success)
+              echo "rules-test suite ran and passed (rules-adjacent files changed)"
+              ;;
+            failure)
+              echo "rules-test suite ran and failed (rules-adjacent files changed)"
+              ;;
+            skipped)
+              echo "rules-test suite skipped (no rules-adjacent files changed, or a prior step failed before the suite could run)"
+              ;;
+            *)
+              echo "rules-test suite outcome unknown: '${{ steps.run-rules-test.outcome }}'"
+              ;;
+          esac
 
   lint:
     runs-on: ubuntu-latest
