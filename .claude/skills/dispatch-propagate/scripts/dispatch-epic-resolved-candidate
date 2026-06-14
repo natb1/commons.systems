@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+N=$(resolve_issue_number "${1:-}")
+
+# Fetch sub-issues (now includes stateReason). Propagate a hard error as
+# exit 3 so the caller can distinguish a real gh failure from "not a candidate"
+# (exit 1). Capture raw stream first so a non-zero subscript exit is caught by
+# the || branch before the jq pipeline can mask it.
+kids_stream=$("$SCRIPT_DIR/issue-sub-issues" "$N") || {
+  echo "dispatch-epic-resolved-candidate: issue-sub-issues failed for $N" >&2
+  exit 3
+}
+
+# Slurp the per-child JSON objects (one per line from issue-sub-issues) into an
+# array. Use printf '%s' to avoid zsh echo interpreting \t/\n in captured JSON.
+kids_json=$(printf '%s' "$kids_stream" | jq -s '.')
+
+total=$(jq 'length' <<<"$kids_json")
+
+# Zero sub-issues — not a spent epic.
+if [[ "$total" -eq 0 ]]; then
+  exit 1
+fi
+
+# Count children that are closed-as-completed (case-insensitive). .stateReason
+# may be null; the // "" guard prevents ascii_upcase erroring on null.
+good=$(jq '[.[] | select(
+  ((.state // "") | ascii_upcase) == "CLOSED" and
+  ((.stateReason // "") | ascii_upcase) == "COMPLETED"
+)] | length' <<<"$kids_json")
+
+if [[ "$good" -eq "$total" ]]; then
+  exit 0
+fi
+
+exit 1
