@@ -65,6 +65,7 @@ export interface QueueSearchQueries {
   open: string;
   closed: string;
   created: string;
+  openOther: string;
 }
 
 // Builds the three GitHub issue-search query strings. `now` is injected so tests
@@ -76,6 +77,7 @@ export function buildQueueSearchQueries(queueRepo: string, now: Date): QueueSear
     open: `repo:${queueRepo} is:issue is:open label:"help wanted"`,
     closed: `repo:${queueRepo} is:issue is:closed reason:completed label:"help wanted" closed:>=${cutoff}`,
     created: `repo:${queueRepo} is:issue label:"help wanted" created:>=${cutoff}`,
+    openOther: `repo:${queueRepo} is:issue is:open -label:"help wanted"`,
   };
 }
 
