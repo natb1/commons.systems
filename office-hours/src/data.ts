@@ -27,7 +27,9 @@ export function getDemoQueueMetrics(): QueueMetricsSnapshot {
     windowDays: seedQueueMetrics.windowDays,
     computedAt: seedQueueMetrics.computedAt,
     groupId: seedQueueMetrics.groupId,
-    memberEmails: [...seedQueueMetrics.memberEmails],
+    // memberEmails is a denormalized auth field stripped from the public seed
+    // bundle (see vite-plugin-queue-seed.ts); the demo snapshot carries none.
+    memberEmails: [],
   };
 }
 

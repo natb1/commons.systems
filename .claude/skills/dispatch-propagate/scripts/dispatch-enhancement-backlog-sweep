@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# ============================================================
+# ONE-TIME BACKLOG SWEEP — issue #1473 rollout ONLY
+# ============================================================
+# Strips the legacy "enhancement" label from every open issue.
+#
+# WHY THIS EXISTS:
+#   PR #1472 makes "enhancement" a meaningful deferral marker: phase skills
+#   now apply it to genuine follow-up issues filed via /file-issue --follow-up.
+#   Before #1472, ALL open enhancement-labeled issues inherited the label
+#   from GitHub's default label set or from ad-hoc tagging — none are
+#   dispatch-managed deferral markers.
+#
+# #1472 MERGED 2026-06-14 04:00 UTC.  As of that moment the window started
+# closing: every new enhancement issue a phase skill files is a real deferral.
+# This sweep cannot distinguish a legacy label from a legitimate deferral
+# marker — it strips them all.  Run it ONCE, PROMPTLY, before any phase skill
+# files its first --follow-up enhancement issue.
+#
+# DO NOT RUN THIS AFTER THE WINDOW HAS CLOSED.  If any phase skill has already
+# filed a --follow-up issue with the enhancement label, running this sweep will
+# destroy that deferral marker and the router will mis-route those issues.
+#
+# NOT a re-runnable utility.  Run once at rollout and delete or archive it.
+# ============================================================
+#
+# Usage:
+#   dispatch-enhancement-backlog-sweep
+#
+# Exit codes:
+#   0  sweep completed (individual item failures do not change the exit code).
+#   2  invalid invocation.
+#
+# NOT set -e: per-item failures must not abort the sweep — every issue must
+# get an attempt.
+set -uo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=./lib.sh
+source "$SCRIPT_DIR/lib.sh"
+
+PROJECT_ROOT=$(resolve_project_root) \
+  || { echo "ERROR: not in a git repo" >&2; exit 2; }
+
+LOG_FILE="${DISPATCH_ENHANCEMENT_SWEEP_LOG_FILE:-$PROJECT_ROOT/tmp/dispatch-enhancement-backlog-sweep.log}"
+mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+
+log() {
+  local ts
+  ts=$(date -u +%FT%TZ)
+  printf '%s [dispatch-enhancement-backlog-sweep] %s\n' "$ts" "$*" >>"$LOG_FILE" 2>/dev/null || true
+}
+
+# Reject any argument — this script has only one mode.
+if [[ $# -gt 0 ]]; then
+  echo "ERROR: unknown argument(s): $*" >&2
+  echo "usage: dispatch-enhancement-backlog-sweep" >&2
+  exit 2
+fi
+
+log "START: querying open enhancement-labeled issues"
+
+# Fetch all open issues with the enhancement label.
+# Use --jq to extract numbers on the gh side, avoiding the echo-into-jq trap.
+# --limit 300 covers the full open backlog (97 verified at time of writing).
+if ! issue_nums=$(gh issue list \
+      --label enhancement \
+      --state open \
+      --limit 300 \
+      --json number \
+      --jq '.[].number'); then
+  log "ERROR: gh issue list failed — aborting"
+  echo "ERROR: gh issue list --label enhancement failed" >&2
+  exit 1
+fi
+
+total=$(printf '%s\n' "$issue_nums" | grep -c '[0-9]' || true)
+log "FOUND: $total open enhancement-labeled issues to sweep"
+
+stripped=0
+failed=0
+
+while IFS= read -r n; do
+  [[ -z "$n" ]] && continue
+  if out=$(gh issue edit "$n" --remove-label enhancement 2>&1); then
+    log "STRIPPED: #$n${out:+ — $out}"
+    stripped=$((stripped + 1))
+  else
+    log "ERROR: failed to remove enhancement label from #$n — $out"
+    echo "WARNING: could not strip enhancement from #$n — $out" >&2
+    failed=$((failed + 1))
+  fi
+done <<<"$issue_nums"
+
+log "DONE: stripped=$stripped failed=$failed total=$total"
+echo "dispatch-enhancement-backlog-sweep: done. stripped=$stripped failed=$failed total=$total" >&2
+echo "Log: $LOG_FILE" >&2
+
+exit 0
