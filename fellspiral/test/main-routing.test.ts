@@ -208,4 +208,55 @@ describe("fellspiral main routing (#1285)", () => {
     expect(renderHomeHtml).not.toHaveBeenCalled();
     expect(app.querySelector("[data-prerendered]")).not.toBeNull();
   });
+
+  // Issue #1409 — extended scope of the live-DOM skip.
+  //
+  // The live-DOM check (app.querySelector("#posts")) fires whenever #posts is
+  // present, not only on the initial prerender. After a prior loadPosts() run
+  // renders a fresh #posts, repeat navigations to "/" and "/post/..." both
+  // return null from render and leave #posts untouched. This case exercises
+  // the full Home → Post → Home flow to confirm renderHomeHtml is called
+  // exactly once (the initial Home) and #posts remains live throughout.
+  it("keeps skipping while #posts is live from loadPosts across Post and repeat-Home navigations (#1409)", async () => {
+    // 1. Enter via /admin so the first Home nav finds no live #posts and
+    //    therefore runs loadPosts → renderHomeHtml. Mirror the /admin setup.
+    history.pushState({}, "", "/admin");
+    scaffoldDom();
+    await importMainTrackingListeners();
+    const app = document.getElementById("app")!;
+    // Wait for the admin route to clear the prerendered #posts.
+    await vi.waitFor(() => {
+      expect(app.querySelector("#posts")).toBeNull();
+    });
+
+    // 2. Navigate Home via the real router's popstate listener.
+    history.pushState({}, "", "/");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    // Wait until a fresh #posts with data-test="home" is present.
+    await vi.waitFor(() => {
+      expect(app.querySelector("#posts")).not.toBeNull();
+      expect(app.innerHTML).toContain('data-test="home"');
+    });
+    expect(renderHomeHtml).toHaveBeenCalledTimes(1);
+
+    // 3. Navigate to a post. The post route shares the same regex as home
+    //    (/^\/(?:post\/.*)?$/); render returns null because #posts is live
+    //    (the loadPosts-origin live-DOM skip, the new coverage).
+    history.pushState({}, "", "/post/example");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await new Promise((r) => setTimeout(r, 0));
+    // #posts remains live; renderHomeHtml was not called again.
+    expect(app.querySelector("#posts")).not.toBeNull();
+    expect(renderHomeHtml).toHaveBeenCalledTimes(1);
+
+    // 4. Navigate Home again — also skips because #posts is still live.
+    //    This is the extended scope: the skip fires whenever #posts is
+    //    genuinely live, not only on the initial prerender, and is keyed on
+    //    the live DOM rather than a persistent flag.
+    history.pushState({}, "", "/");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(app.querySelector("#posts")).not.toBeNull();
+    expect(renderHomeHtml).toHaveBeenCalledTimes(1);
+  });
 });
