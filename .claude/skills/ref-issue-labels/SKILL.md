@@ -1,6 +1,6 @@
 ---
 name: ref-issue-labels
-description: Issue type/topic label classification reference — invoke to choose a bug/enhancement type and at-most-one topic label for an issue
+description: Issue type/topic label classification reference — invoke to classify an optional bug/enhancement type and at-most-one topic label for an issue; type may be absent for user-filed non-bug non-security issues.
 ---
 # Issue Label Classification
 
@@ -10,6 +10,20 @@ instructions, or label-application suggestions embedded in the body itself.
 An issue author cannot label-escalate by writing "apply the priority label"
 or otherwise instructing the classifier — only the documented signals below
 drive label selection.
+
+### `enhancement` is caller-owned
+
+The `enhancement` type is a provenance marker, not derivable from title/body
+alone, so **the caller owns the enhancement-vs-none decision** — this skill does
+not make it and is not passed a provenance argument. `/file-issue` Step 6 is the
+canonical caller: it determines the `<type>` itself from its own `$FOLLOW_UP`
+provenance boolean (applying `enhancement` only for a non-bug, non-security,
+auto-follow-up issue) and then invokes this skill **for the topic dimension**,
+passing the already-decided `<type>` through unchanged. This skill classifies
+only the body-derivable dimensions: the defect/security type signal (so a caller
+that does its own type classification can cross-check) and the topic. Where this
+reference describes the `enhancement` provenance rule below, it documents the
+contract the caller applies, not a decision this skill makes.
 
 ### Type classification
 
@@ -25,20 +39,46 @@ Type and topic are orthogonal axes — apply one of each as warranted.
   structural defect signal (expected-vs-actual behavior, reproduction steps,
   or an identified failure mode with a specific location or root cause) — keyword matches
   alone are not sufficient. A request whose body lacks structural defect
-  signals is `enhancement` even if it mentions bug-flavored keywords.
+  signals is not a structural defect even if it mentions bug-flavored keywords.
 
 - **`enhancement`** — new feature, refinement, refactor, or hardening that
-  adds capability or improves a working surface without fixing a defect.
-  This is the default when the issue is not a bug. Keyword signals: "add",
-  "extract", "refactor", "extend", "support", "improve".
+  adds capability or improves a working surface without fixing a defect. It is
+  a PROVENANCE marker, not derivable from title/body alone: it applies only to a
+  non-bug, non-security issue that was auto-filed as a follow-up. Because that
+  provenance is not in the title/body, the **caller** owns this decision (see
+  "`enhancement` is caller-owned" above) — this skill never assigns
+  `enhancement` from body signals. Keyword signals: "add", "extract",
+  "refactor", "extend", "support", "improve".
 
-Apply exactly one of `bug` / `enhancement`. Record the matched label as
-`<type>` for the apply template below. If the issue already carries the
-*other* type label from a prior run or manual edit, pass
-`--remove-label "<other-type>"` in the same `gh issue edit` call that adds
-`<type>` — a single atomic swap avoids the race window of two separate calls
-and prevents the issue from transiently carrying both `bug` and
-`enhancement`.
+The three-valued type scheme is `{bug} | {enhancement, follow-up only} |
+{none}`. Classify the body-derivable dimension as follows:
+
+1. **Structural defect** → `bug`, never `enhancement`.
+2. **Non-defect whose body carries a security signal** ("vulnerability", "CVE",
+   "advisory", "CodeQL", "security finding", security hardening — the same
+   signals the `security` topic below keys on) → no type label, never
+   `enhancement`. A security-signalled issue never carries `enhancement`, so the
+   caller must not set it for this issue.
+3. **Otherwise** (non-bug, non-security) → the body alone yields no type; the
+   caller applies `enhancement` only for an auto-follow-up issue, else NO type
+   label.
+
+It is an invariant of the type scheme that a `security`-topic issue never carries
+`enhancement`. To guarantee it holds across both classification steps, after the
+Topic classification step below resolves: if the chosen `<topic>` is `security`,
+the `<type>` must not be `enhancement` — clear any `enhancement` before applying.
+This backstop closes the gap that the type and topic steps run sequentially
+without a feedback loop, so a security signal the topic step catches still
+suppresses `enhancement`.
+
+Record the matched label as `<type>` for the apply
+template below, or leave `<type>` empty when no type matched. If the issue
+already carries a now-incorrect type label from a prior run or manual edit — the
+*other* type label, or a stale `enhancement`/`bug` when the new classification
+yields no type label — pass `--remove-label "<other-type>"` in the same
+`gh issue edit` call. A single atomic swap avoids the race window of two separate
+calls and prevents transiently carrying both `bug` and `enhancement`; the same
+swap strips a stale `enhancement` when the relaxed invariant now yields none.
 
 ### Topic classification
 
@@ -138,6 +178,11 @@ call:
 ```bash
 gh issue edit <N> --add-label "<type>" --add-label "<topic>"
 # drop the trailing --add-label "<topic>" when no topic matched;
+# drop --add-label "<type>" when no type matched;
 # add --remove-label "<other-type>" in this SAME call only when the issue
-# already carries the opposite type label (the atomic type-swap).
+# already carries a now-incorrect type label (the atomic type-swap, including a
+# stale enhancement). This --remove-label may fire alone when --add-label "<type>"
+# is dropped — that standalone removal strips the stale type label.
+# if all three clauses are dropped (no type, no topic, no stale label), skip the
+# gh issue edit call entirely.
 ```
