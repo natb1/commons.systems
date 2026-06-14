@@ -265,8 +265,7 @@ main_broken_latch() {
   local sha open
   sha=$(main_broken_sha)
   [[ -z "$sha" ]] && return 0           # green → no gate
-  open=$(gh issue list --label "dispatch:main-broken" --state open \
-    --json number | jq 'length')
+  open=$(gh_issue_list_rest --state open --label "dispatch:main-broken" | jq 'length')
   [[ "$open" -gt 0 ]] && return 0       # already latched → fall through
   echo "$sha"
 }
@@ -304,7 +303,7 @@ jit_scan() {
     due_after_create=$(printf '%s' "$jit_obj" | jq -r '.dueAfterCreate // ""')
 
     local open_json open_num open_created
-    open_json=$(gh issue list --repo "$repo" --label "$label" --state open --json number,createdAt)
+    open_json=$(gh_issue_list_rest --repo "$repo" --state open --label "$label")
     open_num=$(printf '%s' "$open_json" | jq -r '.[0].number // empty')
     [[ -z "$open_num" ]] && continue
     open_created=$(printf '%s' "$open_json" | jq -r '.[0].createdAt')
@@ -314,7 +313,7 @@ jit_scan() {
       local closed_json max_closed offset anchor
       # --limit 100 is safe: recurring JITs are single-instance, so the 100
       # most-recently-created closed issues contain the most-recently-closed one.
-      closed_json=$(gh issue list --repo "$repo" --label "$label" --state closed --limit 100 --json closedAt)
+      closed_json=$(gh_issue_list_rest --repo "$repo" --state closed --label "$label" --limit 100)
       max_closed=$(printf '%s' "$closed_json" | jq -r 'map(.closedAt) | max // empty')
       if ! offset=$(parse_duration "$due_after_close"); then
         echo "error: invalid duration '$due_after_close' (expected <integer><s|m|h|d|w>)" >&2
@@ -456,7 +455,10 @@ num_is_claimed() { [[ -n "${CLAIMED_NUMS[$1]:-}" ]]; }
 # (passed as DISPATCH_PR_LIST) instead of re-running gh pr list.
 # closingIssuesReferences drives topic-category resolution: a PR inherits the
 # highest-priority topic among the labels of every issue it closes.
-PR_LIST=$(pr_list_open "number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences,mergeable")
+# headRefOid (not statusCheckRollup) carries the head SHA: the per-candidate
+# ci-ready/phase calls derive the CI verdict via REST keyed on that SHA, keeping
+# the per-tick scan off the GraphQL rate-limit bucket (#1601).
+PR_LIST=$(pr_list_open "number,createdAt,headRefName,isDraft,headRefOid,labels,closingIssuesReferences,mergeable")
 # The office-hours skip is ISSUE-anchored (issue #909): dispatch:office-hours
 # lives on the issue, not the PR, so it is not filtered here on PR labels.
 # Instead the main PR loop below resolves each candidate PR's issue from its
@@ -469,9 +471,9 @@ PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r '
 # Fetch every open issue once, carrying labels. This single list serves two
 # roles: filtered client-side to "help wanted" it is the issue queue; indexed
 # number → labels it is the map that resolves each PR's topic category from its
-# closing issues. --limit 300 covers the full open-issue set (gh's default of
-# 30 would silently truncate a ~30-item queue).
-ISSUE_LIST=$(gh issue list --state open --limit 300 --json number,createdAt,labels)
+# closing issues. REST --paginate fetches the full open-issue set (no --limit
+# truncation), keeping the scan off the GraphQL bucket (#1601).
+ISSUE_LIST=$(gh_issue_list_rest --state open)
 
 # number → labels-array map as a JSON object, built once from the open-issue
 # list above. pr_combined_labels indexes it to resolve each PR's closing

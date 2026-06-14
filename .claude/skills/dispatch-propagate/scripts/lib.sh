@@ -134,6 +134,86 @@ gh_api_array() {
   fi
 }
 
+# List issues (NOT pull requests) via the GitHub REST API rather than
+# `gh issue list` (which GraphQL-backs). Keeping the per-tick dispatch issue
+# scans on REST keeps them off the shared GraphQL rate-limit bucket, which the
+# per-tick scan was self-exhausting (#1601).
+#
+# Contract:
+#   gh_issue_list_rest --state <open|closed> [--repo <owner/repo>] [--label <name>] [--limit <n>]
+#
+# Flags:
+#   --state  (required) open|closed.
+#   --repo   (optional) owner/repo for a cross-repo scan; when absent the path
+#            uses the {owner}/{repo} placeholder gh auto-resolves for the
+#            current repo.
+#   --label  (optional) a single label name; URL-encoded minimally (space→%20;
+#            the colon in values like dispatch:main-broken is query-safe).
+#   --limit  (optional) per_page cap. When ABSENT we --paginate the full set
+#            (REST --paginate has no silent-truncation hazard, unlike gh pr/issue
+#            list's --limit default). When PRESENT we fetch a SINGLE page of that
+#            size (no --paginate).
+#
+# Output: one merged JSON array on stdout. REST /issues returns issues AND PRs;
+# only PR objects carry a `pull_request` key, so we filter those out to match
+# `gh issue list`. The remaining objects are remapped from REST snake_case to the
+# camelCase shape downstream jq expects ({number, createdAt, closedAt, labels}).
+# `labels` is already [{name,...}] in REST, so it passes through unchanged; a null
+# closedAt on open issues is harmless. Results are sorted created-descending so a
+# downstream `.[0]` is the most-recently-created issue.
+#
+# On gh failure: errors to stderr and returns 1 (clear-errors convention, no
+# fallback).
+gh_issue_list_rest() {
+  local state="" repo="" label="" limit=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --state) state="$2"; shift 2 ;;
+      --repo)  repo="$2";  shift 2 ;;
+      --label) label="$2"; shift 2 ;;
+      --limit) limit="$2"; shift 2 ;;
+      *) echo "error: gh_issue_list_rest: unknown flag '$1'" >&2; return 1 ;;
+    esac
+  done
+  if [[ -z "$state" ]]; then
+    echo "error: gh_issue_list_rest: --state is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues"
+  else
+    path="repos/{owner}/{repo}/issues"
+  fi
+
+  local per_page="100"
+  [[ -n "$limit" ]] && per_page="$limit"
+  local query="state=$state&per_page=$per_page&sort=created&direction=desc"
+  if [[ -n "$label" ]]; then
+    # Minimal URL-encode: space → %20 (colon is query-safe).
+    local enc_label="${label// /%20}"
+    query="$query&labels=$enc_label"
+  fi
+
+  local raw
+  if [[ -n "$limit" ]]; then
+    # Single page (no --paginate) — caller wants at most one page of per_page.
+    raw=$(gh_retry gh api "$path?$query") || {
+      echo "error: gh_issue_list_rest: gh api failed for $path?$query" >&2
+      return 1
+    }
+  else
+    # Full set — REST --paginate has no silent-truncation hazard.
+    raw=$(gh_retry gh api --paginate "$path?$query") || {
+      echo "error: gh_issue_list_rest: gh api failed for $path?$query" >&2
+      return 1
+    }
+  fi
+
+  printf '%s' "$raw" | jq -s 'add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels})'
+}
+
 # The explicit open-PR fetch cap. gh pr list defaults to 30, which silently
 # truncates the open-PR snapshot once a fan-out crosses 30 open PRs. 300 mirrors
 # dispatch-select-target's open-issue cap. Overridable for tests.
