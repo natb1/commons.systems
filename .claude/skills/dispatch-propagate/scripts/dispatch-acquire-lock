@@ -162,20 +162,16 @@ PROBE_TIMEOUT="${DISPATCH_LOCK_PROBE_TIMEOUT:-10}"
 FLOCK_TIMEOUT="${DISPATCH_LOCK_FLOCK_TIMEOUT:-15}"
 
 # resolve_holder_state <sessionId> — query the daemon's live-session registry
-# for <sessionId> and report both liveness and cwd. Covers the same failure
-# modes that lib-claude-agents.sh::claude_sessions_under treats as UNKNOWN
-# (binary missing, non-zero exit, whitespace-only output, non-array JSON, jq
-# failure), but inverts the return convention: this function returns 0 (LIVE
-# — keep the lock) instead of 1 (unknown — caller folds to occupied). The
-# helper's question is "is anything running under this path?"; ours is "is
-# THIS sessionId still alive, and where?", and the global registry has no
-# --cwd filter. A zero-exit, valid `[]` is a definite "no live sessions
-# anywhere" and returns 1 (reclaim); only opaque failures fail safe to LIVE.
+# for <sessionId> and report its liveness via the return code. Covers the same
+# failure modes that lib-claude-agents.sh::claude_sessions_under treats as
+# UNKNOWN (binary missing, non-zero exit, whitespace-only output, non-array
+# JSON, jq failure), but inverts the return convention: this function returns 0
+# (LIVE — keep the lock) instead of 1 (unknown — caller folds to occupied). The
+# helper's question is "is anything running under this path?"; ours is "is THIS
+# sessionId still alive?". A zero-exit, valid `[]` is a definite "no live
+# sessions anywhere" and returns 1 (reclaim); only opaque failures fail safe to
+# LIVE.
 #
-# Stdout: the holder's cwd on a single line if the registry exposed it.
-#         Empty if either the holder is not live OR the daemon query was
-#         opaque (failed/non-array/parse error). Callers treat an empty cwd
-#         on a "live" return as "marker check cannot proceed → stay strict."
 # Return: 0 = live (or opaque failure → fail-safe live)
 #         1 = definitely not live (reclaim)
 #
@@ -196,15 +192,14 @@ FLOCK_TIMEOUT="${DISPATCH_LOCK_FLOCK_TIMEOUT:-15}"
 # The redirections stay on the `timeout` simple command, which execs `claude`
 # with fd 9 already closed and stderr already silenced.
 resolve_holder_state() {
-  local sid="$1" out rows match
+  local sid="$1" out ids id
   # Headless holders (the systemd-launched dispatch-tick's synthetic
   # `headless:<token>` id) never appear in the `claude agents --json` registry —
   # it tracks model sessions, not bash processes. Resolve their liveness through
   # the PID sentinel the tick writes alongside the lock file (#1068): live iff
   # the sentinel exists AND its recorded PID is still alive. A SIGKILL leaves a
   # stale sentinel whose PID is gone, so it resolves DEAD and the lock self-heals.
-  # No cwd is emitted (matches the live-with-empty-cwd convention — marker check
-  # stays strict), and the daemon is never queried for these ids.
+  # The daemon is never queried for these ids.
   if [[ "$sid" == headless:* ]]; then
     local sentinel pid=""
     sentinel=$(headless_sentinel_path "$sid" "$LOCK_FILE")
@@ -220,28 +215,23 @@ resolve_holder_state() {
   if [[ -z "${out//[[:space:]]/}" ]]; then
     return 0
   fi
-  # One TSV row per session: <sessionId>\t<cwd>. `// ""` keeps both fields as
-  # strings even when absent, so the tab-split below always has two slots.
-  if ! rows=$(jq -r '
+  # One sessionId per line. `// ""` keeps the field a string even when absent.
+  if ! ids=$(jq -r '
     if type == "array"
-    then .[] | "\(.sessionId // "")\t\(.cwd // "")"
+    then .[] | .sessionId // ""
     else error("not a JSON array")
     end' <<<"$out" 2>/dev/null); then
     return 0
   fi
-  # Exact-match $1 against sid via awk: a true field equality (not a literal-
-  # substring match), so a sessionId that prefixes or suffixes another row's
-  # sessionId cannot cross-match. Also avoids `grep -F | head -n1`, whose
-  # pipefail+SIGPIPE interaction can collapse a contended-but-live match into
-  # a non-zero exit and trigger a wrong reclaim.
-  match=$(printf '%s\n' "$rows" | awk -F'\t' -v sid="$sid" '$1 == sid {print; exit}')
-  if [[ -z "$match" ]]; then
-    # Definitely not live: registry parsed cleanly and our sid isn't in it.
-    return 1
-  fi
-  # Strip the leading "<sid>\t" prefix to leave the cwd on stdout.
-  printf '%s\n' "${match#*$'\t'}"
-  return 0
+  # Exact line-equality match against sid: a sessionId that prefixes or suffixes
+  # another row's sessionId cannot cross-match. Iterating in the shell (rather
+  # than `grep -F | head -n1`) avoids the pipefail+SIGPIPE interaction that can
+  # collapse a contended-but-live match into a non-zero exit and a wrong reclaim.
+  while IFS= read -r id; do
+    [[ "$id" == "$sid" ]] && return 0
+  done <<<"$ids"
+  # Definitely not live: registry parsed cleanly and our sid isn't in it.
+  return 1
 }
 
 # ---- Step 1: resolve the lock file ------------------------------------------
@@ -298,9 +288,9 @@ try_acquire() {            # 0 = acquired, 1 = contended; sets CONTENDED_SID
     # the holder released the lock. Otherwise — no record, a stale record
     # (sessionId not in the registry), our own session re-entering, or a dead
     # foreign holder — we claim. An opaque-failure from resolve_holder_state
-    # (return 0, no holder cwd emitted) stays BUSY (fail safe).
+    # (return 0) stays BUSY (fail safe).
     if [[ -n "$recorded" && "$recorded" != "$SESSION_ID" ]]; then
-      if resolve_holder_state "$recorded" >/dev/null; then
+      if resolve_holder_state "$recorded"; then
         live=1
       fi
       if (( live )); then

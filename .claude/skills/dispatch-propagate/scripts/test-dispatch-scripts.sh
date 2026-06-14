@@ -7763,8 +7763,11 @@ lock_teardown
 # --- Test 25: live foreign holder with EMPTY marker → busy (#928) ------------
 #
 # An empty marker is the shape stamped by .claude/hooks/worktree-create.sh's
-# `touch` on every worktree creation. It names no session, so it must never
-# reclaim a live holder co-located in that worktree.
+# `touch` on every worktree creation. As of #945 a live foreign holder is
+# unconditionally BUSY: the BUSY short-circuit fires before any marker is read,
+# so the empty marker's content is never inspected. This is now a regression
+# guard, not a behavioral test of an empty-marker special case — the empty
+# content no longer drives the decision; the live-holder short-circuit does.
 
 echo "Test: live foreign holder with empty (touch) marker → busy (#928)"
 lock_setup
