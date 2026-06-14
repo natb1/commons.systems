@@ -1,18 +1,24 @@
 // sampleDispatchQueueMetrics — scheduled Firebase Function that computes the
-// dispatch-queue runway metrics from GitHub issue search and writes them to the
-// `office-hours/{env}/metrics/dispatch-queue` Firestore snapshot document.
+// dispatch-queue runway metrics from GitHub issue search, writes them to the
+// `office-hours/{env}/metrics/dispatch-queue` Firestore snapshot document, and
+// appends one `office-hours/{env}/issue-samples/{autoId}` document per run
+// carrying the openHelpWanted / openOther split for the backlog-history time series.
 //
 // This is the sampler for the office-hours Queue view: the hosted app cannot run
 // `gh`, so the backlog / throughput / runway numbers are computed server-side on
 // a schedule (mirroring `syncOfficeHours` in office-hours-sync.ts) and persisted
 // to Firestore for the status band to render.
 //
-// All three counts are scoped to `label:"help wanted"` so inflow, outflow, and
-// backlog compose into a coherent runway:
-//   - open:    is:issue is:open label:"help wanted"                         -> openHelpWanted
-//   - closed:  is:issue is:closed reason:completed label:"help wanted"
-//              closed:>=<today-14d>                                          -> closedPerDay = count / 14
-//   - created: is:issue label:"help wanted" created:>=<today-14d>           -> createdPerDay = count / 14
+// Counts are aggregated (summed) across all repos listed in
+// DISPATCH_METRICS_QUEUE_REPO. Three counts are scoped to `label:"help wanted"`
+// so inflow, outflow, and backlog compose into a coherent runway; the fourth
+// partitions the remaining open issues:
+//   - open:      is:issue is:open label:"help wanted"                         -> openHelpWanted
+//   - openOther: is:issue is:open -label:"help wanted"                        -> openOther
+//   - closed:    is:issue is:closed reason:completed label:"help wanted"
+//                closed:>=<today-14d>                                          -> closedPerDay = count / 14
+//   - created:   is:issue label:"help wanted" created:>=<today-14d>           -> createdPerDay = count / 14
+// `openHelpWanted` and `openOther` together partition the total open count.
 // `reason:completed` excludes not-planned / duplicate closes.
 //
 // Authentication — reuses the syncOfficeHours GitHub App auth:
@@ -25,10 +31,12 @@
 //   The GitHub App is currently installed only on the office-hours group repo
 //   (`natb1/office-hours-nate`). To let this sampler search the dispatch queue,
 //   extend that SAME installation's repository access to additionally include
-//   `natb1/commons.systems` with read-only `Issues` permission. There is one
+//   each repo you want sampled, with read-only `Issues` permission. There is one
 //   installation per account, so this reuses the existing installation id — no
 //   new installation, no new private key. Then set the non-secret config var
-//   `DISPATCH_METRICS_QUEUE_REPO=natb1/commons.systems` (and `OFFICE_HOURS_GROUP_ID`).
+//   `DISPATCH_METRICS_QUEUE_REPO` to a comma-separated list of `owner/name` repos
+//   (e.g. `natb1/commons.systems` or `natb1/commons.systems,natb1/other-repo`);
+//   counts are summed across all listed repos. Also set `OFFICE_HOURS_GROUP_ID`.
 //   Until those vars are set the function deploys dormant: the config guard logs
 //   one line and returns without any GitHub call.
 //
@@ -65,6 +73,7 @@ export interface QueueSearchQueries {
   open: string;
   closed: string;
   created: string;
+  openOther: string;
 }
 
 // Builds the three GitHub issue-search query strings. `now` is injected so tests
@@ -76,6 +85,7 @@ export function buildQueueSearchQueries(queueRepo: string, now: Date): QueueSear
     open: `repo:${queueRepo} is:issue is:open label:"help wanted"`,
     closed: `repo:${queueRepo} is:issue is:closed reason:completed label:"help wanted" closed:>=${cutoff}`,
     created: `repo:${queueRepo} is:issue label:"help wanted" created:>=${cutoff}`,
+    openOther: `repo:${queueRepo} is:issue is:open -label:"help wanted"`,
   };
 }
 
@@ -150,25 +160,44 @@ export async function searchIssueCountLive(token: string, query: string): Promis
   return json.data.search.issueCount;
 }
 
-// Runs the three searches via the injected `searchIssueCount`, computes the
-// snapshot, and writes the field map to `${namespace}/metrics/dispatch-queue`.
-// The field map matches office-hours/src/queue-metrics.ts exactly.
+// Runs the four searches per repo via the injected `searchIssueCount` and
+// aggregates the counts across all configured repos, computes the snapshot, and
+// writes the field map to `${namespace}/metrics/dispatch-queue`. The snapshot
+// field map matches office-hours/src/queue-metrics.ts exactly. In the same run
+// it also appends one `issue-samples` document (the cross-repo openHelpWanted /
+// openOther split) to `${namespace}/issue-samples`.
 export async function sampleDispatchQueueCore(deps: {
   searchIssueCount: (query: string) => Promise<number>;
   firestore: Firestore;
   namespace: string;
-  queueRepo: string;
+  queueRepos: string[];
   groupId: string;
   memberEmails: string[];
   now: Date;
 }): Promise<void> {
-  const queries = buildQueueSearchQueries(deps.queueRepo, deps.now);
+  const perRepoQueries = deps.queueRepos.map((r) => buildQueueSearchQueries(r, deps.now));
 
-  const [openHelpWanted, closedCount, createdCount] = await Promise.all([
-    deps.searchIssueCount(queries.open),
-    deps.searchIssueCount(queries.closed),
-    deps.searchIssueCount(queries.created),
-  ]);
+  // Flatten every repo×query search into a single Promise.all so all repos run
+  // in parallel, then sum each of the four query counts across all repos.
+  const counts = await Promise.all(
+    perRepoQueries.flatMap((q) => [
+      deps.searchIssueCount(q.open),
+      deps.searchIssueCount(q.closed),
+      deps.searchIssueCount(q.created),
+      deps.searchIssueCount(q.openOther),
+    ]),
+  );
+
+  let openHelpWanted = 0;
+  let closedCount = 0;
+  let createdCount = 0;
+  let openOther = 0;
+  for (let i = 0; i < perRepoQueries.length; i++) {
+    openHelpWanted += counts[i * 4 + 0];
+    closedCount += counts[i * 4 + 1];
+    createdCount += counts[i * 4 + 2];
+    openOther += counts[i * 4 + 3];
+  }
 
   const { closedPerDay, createdPerDay, netDrainPerDay, runwayDays } = computeQueueMetrics({
     openHelpWanted,
@@ -186,6 +215,14 @@ export async function sampleDispatchQueueCore(deps: {
     runwayDays,
     windowDays: WINDOW_DAYS,
     computedAt: deps.now,
+    groupId: deps.groupId,
+    memberEmails: deps.memberEmails,
+  });
+
+  await deps.firestore.collection(`${deps.namespace}/issue-samples`).add({
+    sampledAt: deps.now,
+    openHelpWanted,
+    openOther,
     groupId: deps.groupId,
     memberEmails: deps.memberEmails,
   });
@@ -213,14 +250,30 @@ export const sampleDispatchQueueMetrics = onSchedule(
       return;
     }
 
-    // queueRepo is interpolated into the GitHub search query. Require owner/name
-    // so a misconfigured value cannot build a malformed or unexpected query.
-    const slash = queueRepo.indexOf("/");
-    if (slash <= 0 || slash === queueRepo.length - 1 || queueRepo.indexOf("/", slash + 1) !== -1) {
+    // DISPATCH_METRICS_QUEUE_REPO is a comma-separated repo list. Parse it into
+    // trimmed, non-empty owner/name entries; each is interpolated into a GitHub
+    // search query, so require owner/name so a misconfigured value cannot build a
+    // malformed or unexpected query.
+    const queueRepos = queueRepo
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    if (queueRepos.length === 0) {
       console.error(
-        `sampleDispatchQueueMetrics: DISPATCH_METRICS_QUEUE_REPO "${queueRepo}" is not a valid owner/name; skipping run.`,
+        `sampleDispatchQueueMetrics: DISPATCH_METRICS_QUEUE_REPO "${queueRepo}" resolved to an empty repo list; skipping run.`,
       );
       return;
+    }
+
+    for (const r of queueRepos) {
+      const slash = r.indexOf("/");
+      if (slash <= 0 || slash === r.length - 1 || r.indexOf("/", slash + 1) !== -1) {
+        console.error(
+          `sampleDispatchQueueMetrics: DISPATCH_METRICS_QUEUE_REPO entry "${r}" is not a valid owner/name; skipping run.`,
+        );
+        return;
+      }
     }
 
     // installationId is interpolated into the token-exchange URL path; require a
@@ -266,14 +319,14 @@ export const sampleDispatchQueueMetrics = onSchedule(
         searchIssueCount: (query) => searchIssueCountLive(token, query),
         firestore,
         namespace,
-        queueRepo,
+        queueRepos,
         groupId,
         memberEmails,
         now: new Date(),
       });
 
       console.log(
-        `sampleDispatchQueueMetrics: wrote ${namespace}/metrics/dispatch-queue for ${queueRepo}`,
+        `sampleDispatchQueueMetrics: wrote ${namespace}/metrics/dispatch-queue for ${queueRepos.join(",")}`,
       );
     } catch (err) {
       console.error(
