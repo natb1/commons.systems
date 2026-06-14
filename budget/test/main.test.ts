@@ -46,6 +46,7 @@ const mockFlushWriteBack = vi.fn();
 const mockResetFileSync = vi.fn();
 const mockGetSyncHandle = vi.fn();
 const mockGetLastSyncedModified = vi.fn();
+const mockSetWriteBackStatusListener = vi.fn();
 
 const mockIsEncrypted = vi.fn();
 const mockDecrypt = vi.fn();
@@ -88,6 +89,7 @@ vi.mock("../src/file-sync.js", () => ({
   resetFileSync: mockResetFileSync,
   getSyncHandle: mockGetSyncHandle,
   getLastSyncedModified: mockGetLastSyncedModified,
+  setWriteBackStatusListener: mockSetWriteBackStatusListener,
 }));
 
 vi.mock("../src/crypto.js", () => ({
@@ -149,6 +151,7 @@ function resetAndMockAll(): void {
     resetFileSync: mockResetFileSync,
     getSyncHandle: mockGetSyncHandle,
     getLastSyncedModified: mockGetLastSyncedModified,
+    setWriteBackStatusListener: mockSetWriteBackStatusListener,
   }));
   vi.mock("../src/crypto.js", () => ({
     isEncrypted: mockIsEncrypted,
@@ -184,6 +187,7 @@ describe("main module", () => {
     mockResetFileSync.mockReset();
     mockGetSyncHandle.mockReset().mockReturnValue(null);
     mockGetLastSyncedModified.mockReset().mockReturnValue(null);
+    mockSetWriteBackStatusListener.mockReset();
     // Default: plaintext files (no BENC header) — preserves the existing
     // upload/auto-load tests that pass a bare `{}` file.
     mockIsEncrypted.mockReset().mockReturnValue(false);
@@ -912,5 +916,36 @@ describe("main module", () => {
     const postSwitchCalls = mockConfigureFileSync.mock.calls;
     const armedHandleA = postSwitchCalls.some(([h]) => h === handleA);
     expect(armedHandleA).toBe(false);
+  });
+
+  it("write-back status listener shows and clears the nav warning, with clobber guard", async () => {
+    const FILE_SYNC_WARNING = "Changes could not be saved to disk — file permission may have been revoked.";
+
+    mockGetMeta.mockResolvedValue(undefined);
+    resetAndMockAll();
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(mockSetWriteBackStatusListener).toHaveBeenCalled();
+    const cb = mockSetWriteBackStatusListener.mock.calls[0][0] as (ok: boolean) => void;
+
+    const errorEl = document.querySelector(".nav-error") as HTMLElement;
+
+    // ok=false: warning is shown
+    cb(false);
+    expect(errorEl.hidden).toBe(false);
+    expect(errorEl.textContent).toContain(FILE_SYNC_WARNING);
+
+    // ok=true: warning is cleared
+    cb(true);
+    expect(errorEl.hidden).toBe(true);
+
+    // Clobber guard: an unrelated nav error must not be cleared by ok=true
+    errorEl.textContent = "Some unrelated error";
+    errorEl.hidden = false;
+    cb(true);
+    expect(errorEl.hidden).toBe(false);
+    expect(errorEl.textContent).toBe("Some unrelated error");
   });
 });
