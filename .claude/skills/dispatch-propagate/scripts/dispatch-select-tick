@@ -26,7 +26,10 @@
 #                    attempt-cap is hit (or the latch is already open); a
 #                    dispatch:sync-broken issue is the latch. lock released;
 #                    reseed armed; nothing spawned.
-#   resolver-failed  explicit arg did not resolve to one issue; lock released.
+#   resolver-failed  explicit arg is a genuine non-resolution (dispatch-resolve-arg
+#                    exit 2/3/4: 404, PR with no/many closing issues); lock released.
+#                    A transient resolve-arg failure (exit 1) does NOT emit this —
+#                    it propagates as exit 2 (see Exit code below).
 #   concurrency-cap  effective-live count (busy workers + outstanding reservations) >= target,
 #                    AND no priority/main-broken item waits to bypass it (or the rate-limit
 #                    window is genuinely exhausted); #725 re-seed scheduled; lock released.
@@ -66,7 +69,8 @@
 # See .claude/rules/sandbox.md.
 #
 # Exit code: 0 on every decision line; 2 on an internal/usage error surfaced on
-# stderr (e.g. non-numeric TARGET_N from dispatch-target-workers).
+# stderr (e.g. non-numeric TARGET_N from dispatch-target-workers, or a
+# dispatch-resolve-arg exit-1 transient/infra failure on the explicit-arg path).
 #
 # NOT set -e: exits are handled explicitly (matching the sibling dispatch
 # scripts).
@@ -438,11 +442,22 @@ fi
 
 # --- Step 3: select the target -----------------------------------------------
 if [[ -n "$ARG" ]]; then
-  if TARGET=$("$SCRIPT_DIR/dispatch-resolve-arg" "$ARG"); then
+  TARGET=$("$SCRIPT_DIR/dispatch-resolve-arg" "$ARG")
+  RESOLVE_RC=$?
+  if (( RESOLVE_RC == 0 )); then
     echo "explicit $TARGET $GAP"
     exit 0
   fi
   release_lock
+  if (( RESOLVE_RC == 1 )); then
+    # Transient / infra resolve-arg failure (auth, network, usage). Propagate
+    # non-zero so dispatch-tick exits non-zero and the reseed unit's OnFailure
+    # handler arms a chain continuation rather than silently dead-ending. (#1570)
+    echo "dispatch-select-tick: dispatch-resolve-arg transient failure (exit 1) on arg '$ARG'; propagating non-zero" >&2
+    exit 2
+  fi
+  # Genuine non-resolution (exit 2/3/4): a bad/ambiguous number on the explicit
+  # human path — bare exit 0 is correct, there is no autonomous chain. (#1570)
   echo "resolver-failed"
   exit 0
 fi
