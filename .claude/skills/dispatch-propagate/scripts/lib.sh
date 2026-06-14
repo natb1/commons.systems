@@ -261,6 +261,61 @@ dispatch_classify_rollup() {
   echo "passing"
 }
 
+# Compute a single PR/commit's CI verdict from a lazy REST check-runs fetch,
+# avoiding the per-tick statusCheckRollup GraphQL over-fetch (issue #1601).
+# Args: $1 = <sha> — the commit SHA whose check-runs to classify.
+# Output: prints exactly one of `failing` | `passing` | `pending` to stdout,
+#   matching dispatch_classify_rollup's contract (an empty/absent check-run set
+#   maps to `pending`).
+# This fetches `repos/{owner}/{repo}/commits/<sha>/check-runs` (one REST call,
+# paginated) and reuses dispatch_classify_rollup verbatim. REST reports
+# status/conclusion in lowercase (`completed`, `success`, `failure`) whereas the
+# classifier — written for the statusCheckRollup CheckRun shape — matches
+# UPPERCASE; each adapted entry is `ascii_upcase`d so the classifier applies
+# unchanged. Every adapted object carries a `conclusion` key so the classifier's
+# `has("conclusion")` check-run branch fires (never the status-context branch).
+# Memoisation: when DISPATCH_CI_VERDICT_CACHE names a non-empty directory, the
+# verdict is cached per-SHA at $DISPATCH_CI_VERDICT_CACHE/<sha> — a cache hit
+# returns the stored verdict and makes no REST call; a miss fetches, writes the
+# verdict, then prints it. The caller owns the directory's lifecycle (this
+# helper does not mkdir it). When the var is unset/empty, every call fetches.
+dispatch_ci_verdict_rest() {
+  local sha="$1"
+
+  # Memoisation hit: return the cached verdict without a REST call.
+  local cache_file=""
+  if [[ -n "${DISPATCH_CI_VERDICT_CACHE:-}" ]]; then
+    cache_file="$DISPATCH_CI_VERDICT_CACHE/$sha"
+    if [[ -f "$cache_file" ]]; then
+      cat "$cache_file"
+      return 0
+    fi
+  fi
+
+  # One paginated REST call. `gh api --paginate` emits one JSON object per page,
+  # so slurp (`jq -s`) and concatenate every page's `.check_runs` into a single
+  # array; `add` over an empty slurp is null, so coerce to `[]`. Then adapt each
+  # entry to the statusCheckRollup CheckRun shape and uppercase it.
+  local adapted
+  adapted=$(gh_retry gh api --paginate "repos/{owner}/{repo}/commits/$sha/check-runs" \
+    | jq -s 'map(.check_runs) | add // []
+             | map({status: (.status | ascii_upcase),
+                    conclusion: ((.conclusion // "") | ascii_upcase)})') || {
+    echo "error: dispatch_ci_verdict_rest: check-runs fetch failed for $sha" >&2
+    return 1
+  }
+
+  local verdict
+  verdict=$(dispatch_classify_rollup "$adapted")
+
+  # Memoisation miss: persist the verdict for subsequent ticks before printing.
+  if [[ -n "$cache_file" ]]; then
+    printf '%s\n' "$verdict" > "$cache_file"
+  fi
+
+  printf '%s\n' "$verdict"
+}
+
 # Detect what Firebase features the app uses.
 # Sets global variables: USES_FIRESTORE, USES_AUTH, USES_STORAGE, USES_FUNCTIONS
 # Args: $1 = path to app src/ directory, $2 = repo root, $3 = app name
