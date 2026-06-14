@@ -160,6 +160,9 @@ OUT=$(bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7)
 #   output = 500 + 50 + 5 + 1 = 556
 #   price = (1111*15 + 2222*18.75 + 134444*1.5 + 556*75) / 1e6
 EXPECTED_PRICE=$(jq -n '(1111*15 + 2222*18.75 + 134444*1.5 + 556*75)/1e6')
+# baseline_context boot-proxy sums init (input,cache_creation) over ALL four
+# sessions; agent-bbb has init input=0/cc=0 so its term is 0 (kept for clarity).
+EXPECTED_BASELINE_PROXY=$(jq -n '(1000*15 + 2000*18.75)/1e6 + (10*15 + 20*18.75)/1e6 + (0*15 + 0*18.75)/1e6 + (1*15 + 2*18.75)/1e6')
 
 echo ""
 echo "--- assertions ---"
@@ -220,6 +223,21 @@ assert_eq "context_over_120k.sessions" "1" \
   "$(jq '.lenses.context_over_120k.sessions' <<<"$OUT")"
 assert_eq 'context_over_120k.by_phase["review-fix"].sessions' "1" \
   "$(jq '.lenses.context_over_120k.by_phase["review-fix"].sessions' <<<"$OUT")"
+
+# --- baseline_context lens ---
+# baseline_context counts ALL sessions (rows). Our PR's agent-bbb is a 4th
+# in-window transcript, so sessions==4. Its first assistant msg has init
+# input=0/cc=0 → boot=0, so it does not change peak_boot_tokens (still 3000)
+# nor total_proxy_usd. Boot-token list across the four sessions sorts to
+# [0, 3, 30, 3000]; the even-length median is (3+30)/2 = 16.5.
+assert_eq "lenses.baseline_context.sessions" "4" \
+  "$(jq '.lenses.baseline_context.sessions' <<<"$OUT")"
+assert_eq "lenses.baseline_context.peak_boot_tokens" "3000" \
+  "$(jq '.lenses.baseline_context.peak_boot_tokens' <<<"$OUT")"
+assert_eq "lenses.baseline_context.median_boot_tokens" "16.5" \
+  "$(jq '.lenses.baseline_context.median_boot_tokens' <<<"$OUT")"
+assert_eq "lenses.baseline_context.total_proxy_usd" "$EXPECTED_BASELINE_PROXY" \
+  "$(jq '.lenses.baseline_context.total_proxy_usd' <<<"$OUT")"
 
 report_results
 exit $FAIL

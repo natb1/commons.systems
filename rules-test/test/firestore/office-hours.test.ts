@@ -315,6 +315,14 @@ describe("office-hours usage-samples", () => {
     );
   });
 
+  it("denies unfiltered owner list query on test-env usage-samples collection", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(collection(db, `office-hours/${ENV}/usage-samples`)),
+    );
+  });
+
   // A non-member cannot list another member's samples: filtering for an email
   // they are not in is denied, because the matching docs carry a memberEmails
   // the requester is absent from. (A self-targeted array-contains filter is
@@ -328,6 +336,22 @@ describe("office-hours usage-samples", () => {
         query(
           collection(db, `office-hours/${ENV}/usage-samples`),
           where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+  });
+
+  // "Rules are not filters": a list query is allowed when its where-clause
+  // provably satisfies the rule. A non-member filtering to their own membership
+  // is allowed and simply returns the empty subset they are entitled to.
+  it("allows non-member list query filtered to own (empty) membership", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/usage-samples`),
+          where("memberEmails", "array-contains", "stranger@test.com"),
         ),
       ),
     );
