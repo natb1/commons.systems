@@ -56,9 +56,14 @@ export async function getOwnerQueueMetrics(
   user: User,
 ): Promise<QueueMetricsSnapshot | null> {
   if (!user.email) return null;
-  const snap = await getDoc(doc(db, nsCollectionPath(namespace, "metrics"), "dispatch-queue"));
-  if (!snap.exists()) return null;
-  return parseQueueMetrics(snap.data());
+  try {
+    const snap = await getDoc(doc(db, nsCollectionPath(namespace, "metrics"), "dispatch-queue"));
+    if (!snap.exists()) return null;
+    return parseQueueMetrics(snap.data());
+  } catch (err) {
+    if ((err as { code?: string }).code === "permission-denied") return null;
+    throw err;
+  }
 }
 
 export function toReminder(id: string, data: Record<string, unknown>): Reminder | null {
