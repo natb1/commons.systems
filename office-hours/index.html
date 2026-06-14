@@ -135,6 +135,18 @@
         border-radius: 1px;
         flex-shrink: 0;
       }
+      .panel-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+        gap: 1.5rem;
+      }
+      /* gap replaces the per-panel margin-top spacing that double-spaces under a grid */
+      .panel-grid > * {
+        margin-top: 0;
+      }
+      .panel-grid-full {
+        grid-column: 1 / -1;
+      }
       .capacity-history {
         display: block;
         margin-top: 1.5rem;
