@@ -1,6 +1,6 @@
 ---
 name: office-hours
-description: Office-hours queue worker — selects one sessionless dispatch:office-hours item and runs its user-input residue: the plan-clarification residue resuming /plan-issue for a parked plan item, the interactive QA walkthrough and first-bug plan-mode fix for a qa item, or an accept/reject deviation review for a completed-but-deviating item
+description: Office-hours queue worker — selects one sessionless dispatch:office-hours item and runs its user-input residue: the plan-clarification residue resuming /plan-issue for a parked plan item, the needs-human QA walkthrough and in-session plan-mode fix for a human-discovered or auto-fix-exhausted bug, or an accept/reject deviation review for a completed-but-deviating item
 ---
 
 # Office Hours
@@ -10,8 +10,7 @@ The office-hours counterpart of `dispatch` — the user-facing entry into the
 two ways:
 
 1. **Mid-phase input block** — a dispatch phase reached a user-input point
-   (a QA judgment-call walkthrough item or
-   first-found bug, an unexpected permission prompt). The input-block hook
+   (an unexpected permission prompt). The input-block hook
    (`dispatch-input-block.sh`) is a passive reactor: when the worker
    hits `ExitPlanMode`/`AskUserQuestion`/a permission prompt/elicitation, it applies
    `dispatch:office-hours` to the issue and passes the baton — the session stays
@@ -24,10 +23,10 @@ two ways:
    (`dispatch-stop.sh`) applied `dispatch:office-hours` to the issue.
 
 This skill runs the **user-input residue** that the autonomous dispatch queue
-could not: it walks judgment-call items, approves plans, fixes first-found bugs
-in plan mode, or reviews a surfaced deviation. It is the human half of work whose
-autonomous half ran as a dispatch-queue phase skill (`/plan-issue`,
-`/qa-fix`, …).
+could not: it walks `needs-human` judgment-call items, approves plans, fixes bugs
+in plan mode (human-discovered or auto-fix-exhausted), or reviews a surfaced
+deviation. It is the human half of work whose autonomous half ran as a
+dispatch-queue phase skill (`/plan-issue`, `/qa-fix`, …).
 
 ## Label clearing is automatic
 
