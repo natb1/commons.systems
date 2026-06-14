@@ -411,6 +411,15 @@ case "$args" in
     # $STUB_DIR/issue-labels-<num>.json supplies the labels object; absence means
     # the issue carries no labels.
     num=$(echo "$args" | awk '{print $3}')
+    # #1594: a per-issue HARD-failure marker makes the stub emit a deterministic
+    # (non-transient) error and exit 1 UNCONDITIONALLY, so gh_retry does NOT
+    # retry — it forwards the real failure. Mirrors the gh-fail-sub_issues-<N> /
+    # gh-fail-blocked_by-<num> marker convention. Absent by default → every
+    # existing test is unaffected. Checked BEFORE the transient marker below.
+    if [[ -f "$STUB_DIR/gh-fail-issue-labels-${num}" ]]; then
+      echo "gh: API error on issues/${num} --json labels" >&2
+      exit 1
+    fi
     # #1314: a per-issue fail-count sentinel makes the stub emit a transient
     # (HTTP 503) error and decrement the count, so gh_retry retries. Absent by
     # default → every existing test is unaffected; exhausted → serve labels.
@@ -1704,12 +1713,17 @@ teardown
 # 24. No-PR unplanned issue that IS a spent epic → INVOKE /resolve-epic (#1456).
 # Same no-PR-unplanned fixtures as test #1 (no dispatch:planned → plan phase, no
 # statements config → not a parse-job), PLUS a sub-issues fixture whose children
-# are all CLOSED/COMPLETED. The plan arm runs dispatch-epic-resolved-candidate,
+# are all CLOSED/COMPLETED. Since #1594 the candidate also gates on a configured
+# epic label, so this test additionally writes epic.json AND labels the issue
+# "epic" — without both the candidate would exit 1 at the gate and the route would
+# fall through to /plan-issue. The plan arm runs dispatch-epic-resolved-candidate,
 # which exits 0, so the route forks to /resolve-epic instead of /plan-issue.
 echo "Test: no PR + spent epic → INVOKE /resolve-epic"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/55-epic" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-55.json"
 printf '[{"number":561},{"number":562}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"c","body":"","comments":[],"number":561,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-561.json"
@@ -1773,6 +1787,8 @@ echo "=== dispatch-epic-resolved-candidate ==="
 # 1. Two children, both CLOSED/COMPLETED → candidate (exit 0).
 echo "Test: candidate — 2 children all CLOSED/COMPLETED → exit 0"
 setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-61.json"
 printf '[{"number":611},{"number":612}]\n' > "$STUB_DIR/subissues-61.json"
 printf '{"title":"c","body":"","comments":[],"number":611,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-611.json"
@@ -1785,6 +1801,8 @@ teardown
 # 2. Case-insensitive: a lowercase closed/completed child still → candidate.
 echo "Test: candidate — lowercase closed/completed → exit 0"
 setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-62.json"
 printf '[{"number":621}]\n' > "$STUB_DIR/subissues-62.json"
 printf '{"title":"c","body":"","comments":[],"number":621,"state":"closed","stateReason":"completed"}\n' \
   > "$STUB_DIR/issue-621.json"
@@ -1795,6 +1813,8 @@ teardown
 # 3. No sub-issues → not a candidate (exit 1).
 echo "Test: not a candidate — zero sub-issues → exit 1"
 setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-63.json"
 printf '[]\n' > "$STUB_DIR/subissues-63.json"
 if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 63 >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "not a candidate: zero sub-issues → exit 1" "1" "$rc"
@@ -1803,6 +1823,8 @@ teardown
 # 4. An OPEN child alongside a closed-completed one → not a candidate (exit 1).
 echo "Test: not a candidate — an OPEN child → exit 1"
 setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-64.json"
 printf '[{"number":641},{"number":642}]\n' > "$STUB_DIR/subissues-64.json"
 printf '{"title":"c","body":"","comments":[],"number":641,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-641.json"
@@ -1815,6 +1837,8 @@ teardown
 # 5. A CLOSED child with stateReason NOT_PLANNED → not a candidate (exit 1).
 echo "Test: not a candidate — CLOSED/NOT_PLANNED child → exit 1"
 setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-65.json"
 printf '[{"number":651}]\n' > "$STUB_DIR/subissues-65.json"
 printf '{"title":"c","body":"","comments":[],"number":651,"state":"CLOSED","stateReason":"NOT_PLANNED"}\n' \
   > "$STUB_DIR/issue-651.json"
@@ -1825,6 +1849,8 @@ teardown
 # 6. A CLOSED child with NO stateReason key (null) → not a candidate (exit 1).
 echo "Test: not a candidate — CLOSED child with null stateReason → exit 1"
 setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-66.json"
 printf '[{"number":661}]\n' > "$STUB_DIR/subissues-66.json"
 printf '{"title":"c","body":"","comments":[],"number":661,"state":"CLOSED"}\n' \
   > "$STUB_DIR/issue-661.json"
@@ -1835,9 +1861,52 @@ teardown
 # 7. issue-sub-issues hard failure → exit 3 (distinct from "not a candidate").
 echo "Test: hard error — issue-sub-issues fails → exit 3"
 setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-67.json"
 touch "$STUB_DIR/gh-fail-sub_issues-67"
 if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 67 >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "hard error: issue-sub-issues fails → exit 3" "3" "$rc"
+teardown
+
+# --- Epic-label gate (#1594) ------------------------------------------------
+# The gate runs BEFORE the sub-issues check: an issue is a candidate only if it
+# carries a configured epic label. Unconfigured → never a candidate. A real
+# label-fetch failure → exit 3 (distinct from "not a candidate").
+
+# GATE-1. Epic configured, but the issue LACKS the configured label, even though
+# all children are CLOSED/COMPLETED (would be a candidate without the gate) → the
+# gate blocks it: exit 1.
+echo "Test: gate — epic configured but issue lacks the label → exit 1"
+setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"labels":[{"name":"enhancement"}]}\n' > "$STUB_DIR/issue-labels-68.json"
+printf '[{"number":681}]\n' > "$STUB_DIR/subissues-68.json"
+printf '{"title":"c","body":"","comments":[],"number":681,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-681.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 68 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "gate: configured but unlabeled would-be candidate → exit 1" "1" "$rc"
+teardown
+
+# GATE-2. NO epic config at all → never a candidate (no-config safe default),
+# regardless of sub-issue state (all children CLOSED/COMPLETED here).
+echo "Test: gate — no epic config → exit 1 regardless of sub-issue state"
+setup
+printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-69.json"
+printf '[{"number":691}]\n' > "$STUB_DIR/subissues-69.json"
+printf '{"title":"c","body":"","comments":[],"number":691,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-691.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 69 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "gate: no epic config → exit 1 (no-config safe default)" "1" "$rc"
+teardown
+
+# GATE-3. Epic configured, but the label fetch HARD-fails (deterministic, not
+# transient — gh_retry forwards it) → exit 3, distinct from "not a candidate".
+echo "Test: gate — label fetch hard failure → exit 3"
+setup
+printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+touch "$STUB_DIR/gh-fail-issue-labels-70"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 70 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "gate: label fetch hard failure → exit 3" "3" "$rc"
 teardown
 
 # ============================================================================
