@@ -52,6 +52,12 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-find-pr" "$TMPDIR_TEST/dispatch-find-pr"
   cp "$SCRIPT_DIR/dispatch-route" "$TMPDIR_TEST/dispatch-route"
   cp "$SCRIPT_DIR/dispatch-resolve-arg" "$TMPDIR_TEST/dispatch-resolve-arg"
+  # dispatch-route resolves the resolved-epic candidate predicate via
+  # "$SCRIPT_DIR/dispatch-epic-resolved-candidate" (#1456); SCRIPT_DIR resolves
+  # to TMPDIR_TEST for the copied dispatch-route, so the candidate (and its own
+  # close helper, exercised directly) must sit alongside it.
+  cp "$SCRIPT_DIR/dispatch-epic-resolved-candidate" "$TMPDIR_TEST/dispatch-epic-resolved-candidate"
+  cp "$SCRIPT_DIR/dispatch-close-resolved" "$TMPDIR_TEST/dispatch-close-resolved"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
   cp "$SCRIPT_DIR/office-hours" "$TMPDIR_TEST/office-hours"
@@ -95,6 +101,8 @@ setup() {
            "$TMPDIR_TEST/dispatch-ci-ready" \
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-route" \
+           "$TMPDIR_TEST/dispatch-epic-resolved-candidate" \
+           "$TMPDIR_TEST/dispatch-close-resolved" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/office-hours-select-target" \
@@ -537,6 +545,21 @@ case "$args" in
     else
       echo '{"items":[],"totalCount":0}'
     fi
+    ;;
+  issue\ view\ *\ --json\ state\ --jq\ .state)
+    # dispatch-close-resolved state read (#1456): gh issue view <num> --json state --jq .state.
+    # The real --jq flag projects .state to a bare string; the fixture file
+    # holds {"state":"..."}, so project it here. Absent fixture → OPEN.
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/issue-state-${num}.json" ]]; then
+      jq -r .state "$STUB_DIR/issue-state-${num}.json"
+    else
+      echo "OPEN"
+    fi
+    ;;
+  issue\ close\ *)
+    # dispatch-close-resolved (#1456): gh issue close <num> --reason completed --comment ...
+    echo "$args" >> "$STUB_DIR/gh-issue-close.log"
     ;;
   *)
     echo "gh stub: unknown invocation: $args" >&2
@@ -1676,6 +1699,231 @@ route_run 42 /wt/42-my-feature
 assert_eq "no PR + no statements config → INVOKE /plan-issue (directive)" \
   "INVOKE /plan-issue" "$ROUTE_OUT"
 assert_eq "no PR + no statements config → INVOKE /plan-issue (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 24. No-PR unplanned issue that IS a spent epic → INVOKE /resolve-epic (#1456).
+# Same no-PR-unplanned fixtures as test #1 (no dispatch:planned → plan phase, no
+# statements config → not a parse-job), PLUS a sub-issues fixture whose children
+# are all CLOSED/COMPLETED. The plan arm runs dispatch-epic-resolved-candidate,
+# which exits 0, so the route forks to /resolve-epic instead of /plan-issue.
+echo "Test: no PR + spent epic → INVOKE /resolve-epic"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/55-epic" > "$STUB_DIR/worktree-toplevel.txt"
+printf '[{"number":561},{"number":562}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"c","body":"","comments":[],"number":561,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-561.json"
+printf '{"title":"c","body":"","comments":[],"number":562,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-562.json"
+route_run 55 /wt/55-epic
+assert_eq "no PR + spent epic → INVOKE /resolve-epic (directive)" \
+  "INVOKE /resolve-epic" "$ROUTE_OUT"
+assert_eq "no PR + spent epic → INVOKE /resolve-epic (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 25. No-PR unplanned issue that is NOT a spent epic → INVOKE /plan-issue (#1456).
+# Replicate test #1 exactly (no subissues fixture). The candidate predicate exits
+# 1 (zero sub-issues → not a candidate), so the route falls through to the
+# unchanged default of INVOKE /plan-issue with the candidate wired in.
+echo "Test: no PR + not a spent epic → INVOKE /plan-issue"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/56-foo" > "$STUB_DIR/worktree-toplevel.txt"
+route_run 56 /wt/56-foo
+assert_eq "no PR + not a spent epic → INVOKE /plan-issue (directive)" \
+  "INVOKE /plan-issue" "$ROUTE_OUT"
+assert_eq "no PR + not a spent epic → INVOKE /plan-issue (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 26. Parse-job check short-circuits the candidate (#1456). Replicate test #21's
+# statements-config setup so the parse-job arm fires, AND write an all-closed-
+# completed sub-issues fixture. The parse-job check precedes the candidate, so the
+# route routes to /budget-parse-job and never consults the candidate predicate.
+echo "Test: no PR + statements label + spent-epic shape → INVOKE /budget-parse-job (parse-job wins)"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/57-stmt" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"statements":[{"key":"acme","dir":"/s","repo":"o/r","label":"statements:acme","project":"p"}]}\n' \
+  > "$DISPATCH_CONFIG_DIR/statements.json"
+printf '{"labels":[{"name":"statements:acme"}]}\n' > "$STUB_DIR/issue-labels-57.json"
+printf '[{"number":571}]\n' > "$STUB_DIR/subissues-57.json"
+printf '{"title":"c","body":"","comments":[],"number":571,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-571.json"
+route_run 57 /wt/57-stmt
+assert_eq "parse-job wins over candidate → INVOKE /budget-parse-job (directive)" \
+  "INVOKE /budget-parse-job" "$ROUTE_OUT"
+assert_eq "parse-job wins over candidate → INVOKE /budget-parse-job (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# ============================================================================
+# dispatch-epic-resolved-candidate tests
+# ============================================================================
+echo ""
+echo "=== dispatch-epic-resolved-candidate ==="
+
+# Mechanical predicate (#1456): exit 0 = epic candidate (≥1 sub-issue, ALL closed
+# as completed), exit 1 = clean "not a candidate", exit 3 = hard error
+# (issue-sub-issues / gh failure). State + stateReason match case-insensitively.
+# The fake issue-sub-issues reads subissues-<N>.json for child numbers, then cat's
+# each issue-<child>.json VERBATIM (a child with no issue-<child>.json fixture
+# defaults to state OPEN, no stateReason). So a child's stateReason lives in its
+# own issue-<child>.json fixture. Capture the exit code with the if/else idiom
+# (the suite runs set -e, so a bare non-zero call would abort).
+
+# 1. Two children, both CLOSED/COMPLETED → candidate (exit 0).
+echo "Test: candidate — 2 children all CLOSED/COMPLETED → exit 0"
+setup
+printf '[{"number":611},{"number":612}]\n' > "$STUB_DIR/subissues-61.json"
+printf '{"title":"c","body":"","comments":[],"number":611,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-611.json"
+printf '{"title":"c","body":"","comments":[],"number":612,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-612.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 61 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "candidate: all CLOSED/COMPLETED → exit 0" "0" "$rc"
+teardown
+
+# 2. Case-insensitive: a lowercase closed/completed child still → candidate.
+echo "Test: candidate — lowercase closed/completed → exit 0"
+setup
+printf '[{"number":621}]\n' > "$STUB_DIR/subissues-62.json"
+printf '{"title":"c","body":"","comments":[],"number":621,"state":"closed","stateReason":"completed"}\n' \
+  > "$STUB_DIR/issue-621.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 62 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "candidate: lowercase closed/completed → exit 0" "0" "$rc"
+teardown
+
+# 3. No sub-issues → not a candidate (exit 1).
+echo "Test: not a candidate — zero sub-issues → exit 1"
+setup
+printf '[]\n' > "$STUB_DIR/subissues-63.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 63 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "not a candidate: zero sub-issues → exit 1" "1" "$rc"
+teardown
+
+# 4. An OPEN child alongside a closed-completed one → not a candidate (exit 1).
+echo "Test: not a candidate — an OPEN child → exit 1"
+setup
+printf '[{"number":641},{"number":642}]\n' > "$STUB_DIR/subissues-64.json"
+printf '{"title":"c","body":"","comments":[],"number":641,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-641.json"
+printf '{"title":"c","body":"","comments":[],"number":642,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-642.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 64 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "not a candidate: an OPEN child → exit 1" "1" "$rc"
+teardown
+
+# 5. A CLOSED child with stateReason NOT_PLANNED → not a candidate (exit 1).
+echo "Test: not a candidate — CLOSED/NOT_PLANNED child → exit 1"
+setup
+printf '[{"number":651}]\n' > "$STUB_DIR/subissues-65.json"
+printf '{"title":"c","body":"","comments":[],"number":651,"state":"CLOSED","stateReason":"NOT_PLANNED"}\n' \
+  > "$STUB_DIR/issue-651.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 65 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "not a candidate: CLOSED/NOT_PLANNED child → exit 1" "1" "$rc"
+teardown
+
+# 6. A CLOSED child with NO stateReason key (null) → not a candidate (exit 1).
+echo "Test: not a candidate — CLOSED child with null stateReason → exit 1"
+setup
+printf '[{"number":661}]\n' > "$STUB_DIR/subissues-66.json"
+printf '{"title":"c","body":"","comments":[],"number":661,"state":"CLOSED"}\n' \
+  > "$STUB_DIR/issue-661.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 66 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "not a candidate: CLOSED child with null stateReason → exit 1" "1" "$rc"
+teardown
+
+# 7. issue-sub-issues hard failure → exit 3 (distinct from "not a candidate").
+echo "Test: hard error — issue-sub-issues fails → exit 3"
+setup
+touch "$STUB_DIR/gh-fail-sub_issues-67"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 67 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "hard error: issue-sub-issues fails → exit 3" "3" "$rc"
+teardown
+
+# ============================================================================
+# dispatch-close-resolved tests
+# ============================================================================
+echo ""
+echo "=== dispatch-close-resolved ==="
+
+# dispatch-close-resolved <N> --reason "<text>" (#1456): reads state via
+# `gh issue view <N> --json state --jq .state`; if not closed, runs
+# `gh issue close <N> --reason completed --comment "$REASON"`; if already CLOSED,
+# skips the close (idempotent, no dup comment). ALWAYS writes the resolved-closed
+# sentinel under $CLAUDE_JOB_DIR (atomic), UNLESS CLAUDE_JOB_DIR is unset/not-a-dir
+# (then a no-op exit 0). Arg violations → exit 2 before any gh call.
+# CRITICAL: any case that exports CLAUDE_JOB_DIR must unset it before the next
+# case — the main teardown() does NOT unset it, so a leak would corrupt every
+# downstream suite. Case (c) also unsets defensively at the start.
+
+# (a) OPEN issue + JOB_DIR set → closes the issue and writes the sentinel.
+echo "Test: close-resolved — OPEN issue + JOB_DIR → close + sentinel"
+setup
+echo '{"state":"OPEN"}' > "$STUB_DIR/issue-state-700.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/job"
+mkdir -p "$CLAUDE_JOB_DIR"
+"$TMPDIR_TEST/dispatch-close-resolved" 700 --reason "epic done"
+TOTAL=$((TOTAL + 1))
+if [[ -f "$STUB_DIR/gh-issue-close.log" ]] \
+   && grep -q "issue close 700 --reason completed" "$STUB_DIR/gh-issue-close.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: close-resolved OPEN: gh issue close invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: close-resolved OPEN: gh issue close invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ -f "$CLAUDE_JOB_DIR/resolved-closed" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: close-resolved OPEN: resolved-closed sentinel written"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: close-resolved OPEN: resolved-closed sentinel written"
+fi
+unset CLAUDE_JOB_DIR
+teardown
+
+# (b) already-CLOSED issue + JOB_DIR set → skips the close (no dup comment) but
+# still writes the sentinel (re-entry idempotency).
+echo "Test: close-resolved — already-CLOSED issue + JOB_DIR → no re-close, sentinel still written"
+setup
+echo '{"state":"CLOSED"}' > "$STUB_DIR/issue-state-701.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/job"
+mkdir -p "$CLAUDE_JOB_DIR"
+"$TMPDIR_TEST/dispatch-close-resolved" 701 --reason "epic done"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-issue-close.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: close-resolved CLOSED: gh issue close NOT invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: close-resolved CLOSED: gh issue close NOT invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ -f "$CLAUDE_JOB_DIR/resolved-closed" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: close-resolved CLOSED: resolved-closed sentinel still written"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: close-resolved CLOSED: resolved-closed sentinel still written"
+fi
+unset CLAUDE_JOB_DIR
+teardown
+
+# (c) JOB_DIR unset + OPEN issue → still closes, no-ops the sentinel write, exit 0.
+echo "Test: close-resolved — JOB_DIR unset + OPEN issue → no sentinel, exit 0"
+setup
+unset CLAUDE_JOB_DIR
+echo '{"state":"OPEN"}' > "$STUB_DIR/issue-state-702.json"
+if "$TMPDIR_TEST/dispatch-close-resolved" 702 --reason "epic done" >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "close-resolved no-JOB_DIR: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$TMPDIR_TEST/job/resolved-closed" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: close-resolved no-JOB_DIR: no resolved-closed sentinel"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: close-resolved no-JOB_DIR: no resolved-closed sentinel"
+fi
+teardown
+
+# (d) Arg validation: no args → exit 2; issue number only (missing --reason) → exit 2.
+echo "Test: close-resolved — arg validation → exit 2"
+setup
+if "$TMPDIR_TEST/dispatch-close-resolved" >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "close-resolved: no args → exit 2" "2" "$rc"
+if "$TMPDIR_TEST/dispatch-close-resolved" 703 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "close-resolved: missing --reason → exit 2" "2" "$rc"
 teardown
 
 # ============================================================================
@@ -16916,6 +17164,40 @@ if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
   PASS=$((PASS + 1)); echo "  PASS: parse-job-done: no label add or remove invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: parse-job-done: no label add or remove invoked"
+fi
+stop_teardown
+
+# --- Test R1: resolved-closed sentinel → spawn + self-close, no label work (#1456)
+# A /resolve-epic session is named <N>-epic like a worker but writes a
+# `resolved-closed` sentinel (no phase-completed marker) once it has auto-closed a
+# verifiably-complete epic. Branch R (checked right after Branch P) spawns the next
+# tick and self-closes; the handler already closed the epic, so there is NO PR and
+# NO office-hours apply or label edit — exactly like Branch P.
+echo "Test: stop hook + resolved-closed sentinel → spawn + self-close, no label work"
+stop_setup
+echo "700-epic" > "$STUB_DIR/current-branch.txt"
+echo '{"name":"700-epic"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+printf 'resolved 700 epic\n' > "$TMPDIR_TEST/jobs/abcd1234/resolved-closed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "resolved-closed: hook exits 0" "0" "$rc"
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "resolved-closed: spawn invoked exactly once" "1" "$spawn_calls"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "resolved-closed: self-close invoked exactly once" "1" "$self_close_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: resolved-closed: no office-hours apply"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: resolved-closed: no office-hours apply"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: resolved-closed: no label add or remove invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: resolved-closed: no label add or remove invoked"
 fi
 stop_teardown
 
