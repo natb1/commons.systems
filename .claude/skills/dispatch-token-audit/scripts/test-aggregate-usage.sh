@@ -138,6 +138,7 @@ OUT=$(bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7)
 #   output = 500 + 50 + 5 + 1 = 556
 #   price = (1111*15 + 2222*18.75 + 4444*1.5 + 556*75) / 1e6
 EXPECTED_PRICE=$(jq -n '(1111*15 + 2222*18.75 + 4444*1.5 + 556*75)/1e6')
+EXPECTED_BASELINE_PROXY=$(jq -n '(1000*15 + 2000*18.75)/1e6 + (10*15 + 20*18.75)/1e6 + (1*15 + 2*18.75)/1e6')
 
 echo ""
 echo "--- assertions ---"
@@ -162,6 +163,16 @@ assert_eq 'tool_errors: "Exit code N" count' "1" \
   "$(jq '[.tool_errors[] | select(.signature=="Exit code N")] | length' <<<"$OUT")"
 assert_eq 'tool_errors: "Exit code N" .count field' "1" \
   "$(jq '[.tool_errors[] | select(.signature=="Exit code N")][0].count' <<<"$OUT")"
+
+# --- baseline_context lens ---
+assert_eq "lenses.baseline_context.sessions" "3" \
+  "$(jq '.lenses.baseline_context.sessions' <<<"$OUT")"
+assert_eq "lenses.baseline_context.peak_boot_tokens" "3000" \
+  "$(jq '.lenses.baseline_context.peak_boot_tokens' <<<"$OUT")"
+assert_eq "lenses.baseline_context.median_boot_tokens" "30" \
+  "$(jq '.lenses.baseline_context.median_boot_tokens' <<<"$OUT")"
+assert_eq "lenses.baseline_context.total_proxy_usd" "$EXPECTED_BASELINE_PROXY" \
+  "$(jq '.lenses.baseline_context.total_proxy_usd' <<<"$OUT")"
 
 report_results
 exit $FAIL
