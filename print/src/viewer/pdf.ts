@@ -2,7 +2,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import { TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils.js";
-import type { ContentRenderer, OutlineEntry } from "./types.js";
+import type { ContentRenderer, OutlineEntry, SearchResult } from "./types.js";
 import { parsePositionPage } from "./types.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -108,6 +108,10 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
   let renderTask: RenderTask | null = null;
   let renderGen = 0;
   let destroyed = false;
+  // Lazily-populated cache of page plain-text strings. Keyed by 1-based page
+  // number. Populated on first search pass and reused across debounced
+  // keystrokes. Unit 4 clears this in destroy().
+  const pageTextCache = new Map<number, string>();
   interface SpreadPage { renderTask: RenderTask; textLayer: TextLayer | null; }
   const spreadPages: SpreadPage[] = [];
   const outlinePageMap = new WeakMap<OutlineEntry, number>();
@@ -398,6 +402,45 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     },
     get positionLabel() {
       return `Page ${_currentPage} / ${_pageCount}`;
+    },
+
+    // No per-call generation/cancellation guard needed here: search.ts already
+    // discards stale results via `trimmed !== currentQuery` after each await.
+    async search(query: string): Promise<SearchResult[]> {
+      const trimmed = query.trim();
+      if (!trimmed) return [];
+
+      const results: SearchResult[] = [];
+
+      // Cap total results at 200 to avoid an unbounded list when the query is
+      // very short and matches thousands of positions across a long document.
+      const MAX_RESULTS = 200;
+
+      for (let i = 1; i <= _pageCount; i++) {
+        // Lazily populate the page-text cache. Re-fetching text for every
+        // debounced keystroke would be wasteful; cache across search calls.
+        let pageText = pageTextCache.get(i);
+        if (pageText === undefined) {
+          const page = await pdfDoc!.getPage(i);
+          if (destroyed) return results;
+          const tc = await page.getTextContent();
+          if (destroyed) return results;
+          pageText = buildPageText(tc.items as { str?: string }[]);
+          pageTextCache.set(i, pageText);
+        }
+
+        const matches = findMatches(pageText, trimmed);
+        for (const { offset, length } of matches) {
+          const location = encodeLocation(i, offset, length);
+          const label = "Page " + i;
+          const { snippet, matchStart, matchLength } = buildSnippet(pageText, offset, length);
+          results.push({ location, label, snippet, matchStart, matchLength });
+          if (results.length >= MAX_RESULTS) break;
+        }
+        if (results.length >= MAX_RESULTS) break;
+      }
+
+      return results;
     },
 
     async getOutline(): Promise<OutlineEntry[]> {
