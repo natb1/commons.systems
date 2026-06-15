@@ -87,11 +87,18 @@
 #
 # Config (read via dispatch-config-load target-workers; all optional):
 #
-#   target_weekly_usage_pct        default 90   smooth-curve terminal
-#   weekly_terminal_pct            default 100  envelope terminal W(1)
-#   weekly_increment_floor_pct     default 1    per-window floor
-#   weekly_increment_cap_pct       default 10   per-window hard ceiling
-#   weekly_curve_power             default 1    convexity; >1 back-loads
+#   weekly_pace_floor_pct          default 50   early-week floor; W holds here
+#                                               until the terminal windows
+#   weekly_terminal_pct            default 100  terminal W at week end (r=0 anchor)
+#   weekly_terminal_windows        default 2    count of trailing 5-hour windows
+#                                               the linear terminal segment spans
+#                                               (>= 1); derived shoulder =
+#                                               weekly_terminal_pct -
+#                                               weekly_increment_cap_pct ·
+#                                               weekly_terminal_windows
+#   weekly_increment_cap_pct       default 10   terminal-segment slope (% per
+#                                               remaining window)
+#   weekly_curve_power             default 1    convexity of the rise; >1 back-loads
 #   five_hour_target_floor_pct     default 50   used_5h % at/below which workers
 #                                               are max
 #   five_hour_target_ceiling_pct   default 80   used_5h % at/above which workers
@@ -111,13 +118,13 @@
 #
 #   # Stage 1 — weekly pace curve W (weekly %)
 #   remaining = resets_at_weekly - now;   if remaining <= 0: print 0; exit
-#   x   = clamp((WEEK_SECONDS - remaining) / WEEK_SECONDS, 0, 1)  # elapsed frac
-#   T   = round(WEEK_SECONDS / 18000)                            # ~34 windows
-#   end = floor + (p+1)*(target_weekly/T - floor)                # smooth W(1)=target_weekly
-#   end = min(end, cap)                                          # hard ceiling
-#   W   = T*( floor*x + (end-floor)*x^(p+1)/(p+1) )              # cumulative now
-#   r   = remaining / 18000                                      # windows left
-#   W   = max(W, weekly_terminal - cap*r)                        # terminal envelope
+#   r        = remaining / 18000                                 # windows left
+#   T        = WEEK_SECONDS / 18000                              # = 33.6 windows
+#   shoulder = terminal - cap*Nterm                              # derived (= 80)
+#   s        = clamp((T - r) / (T - Nterm), 0, 1)                # rise progress [0,1]
+#   rise     = floor + (shoulder - floor)*s^p                    # power floor→shoulder
+#   terminal_seg = terminal - cap*r                              # linear final windows
+#   W        = max(floor, terminal_seg, rise)                    # monotone by construction
 #
 #   # Stage 2 — binary weekly gate
 #   hw = W - used_weekly
@@ -132,16 +139,16 @@
 #                                   : clamp(round(max_workers * h5/span), 1, max_workers)
 #   print N
 #
-# - The weekly increment d(x)=floor+(end-floor)*x^p rises from the floor toward
-#   (but clamped at) the cap; the smooth power term tops out at target_weekly
-#   and, with wcap clamping the per-window increment, would otherwise hold W
-#   below target_weekly and idle the final stretch of the week. The terminal
-#   envelope floors W from the end — spending at most cap per remaining window
-#   still reaches weekly_terminal — so W reaches weekly_terminal at week end
-#   (W(1)=weekly_terminal) and the envelope lifts W in the final ~1.7 windows
-#   (term = 80 at r=2 [smooth 81.5 wins], 90 at r=1, 100 at r=0 with defaults;
-#   envelope takes over at r≈1.7). Mid-week r is large, the term is negative,
-#   and the smooth curve is unchanged.
+# - Early in the week W holds at floor (50%). As the final Nterm
+#   (weekly_terminal_windows, default 2) five-hour windows approach, the rise
+#   term climbs via a power curve (exponent p) from floor to the derived
+#   shoulder (= terminal - cap*Nterm = 80% at defaults). Over those final Nterm
+#   windows the linear terminal_seg (slope cap per window) governs, reaching
+#   terminal (100%) at week end (80 at r=2, 90 at r=1, 100 at r=0 with
+#   defaults). W is monotone non-decreasing by construction — a max of a
+#   constant floor, a non-decreasing power rise, and a positively-sloped linear
+#   segment — so it can never overshoot mid-week. The old #930 non-monotonicity
+#   pathology is now unrepresentable rather than validator-rejected.
 # - Gate closed (hw <= 0, used_weekly at/over W) → 0 workers regardless of 5h
 #   usage. The weekly pace curve simply pauses spending.
 # - Gate open (hw > 0) → N is a pure function of used_5h: max_workers at/below
@@ -209,9 +216,9 @@ esac
 
 # ---- Step 0: defaults & config ----------------------------------------------
 
-TARGET_WEEKLY=90
+WEEKLY_PACE_FLOOR=50
 WEEKLY_TERMINAL=100
-WEEKLY_INCREMENT_FLOOR=1
+WEEKLY_TERMINAL_WINDOWS=2
 WEEKLY_INCREMENT_CAP=10
 WEEKLY_CURVE_POWER=1
 FIVEH_TARGET_FLOOR=50
@@ -235,12 +242,12 @@ if CONFIG_OUT=$("$SCRIPT_DIR/dispatch-config-load" target-workers 2>/dev/null); 
 fi
 
 if [[ -n "$CONFIG_JSON" ]]; then
-  val=$(jq -r '.target_weekly_usage_pct // empty' <<<"$CONFIG_JSON")
-  [[ -n "$val" ]] && TARGET_WEEKLY="$val"
+  val=$(jq -r '.weekly_pace_floor_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && WEEKLY_PACE_FLOOR="$val"
   val=$(jq -r '.weekly_terminal_pct // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && WEEKLY_TERMINAL="$val"
-  val=$(jq -r '.weekly_increment_floor_pct // empty' <<<"$CONFIG_JSON")
-  [[ -n "$val" ]] && WEEKLY_INCREMENT_FLOOR="$val"
+  val=$(jq -r '.weekly_terminal_windows // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && WEEKLY_TERMINAL_WINDOWS="$val"
   val=$(jq -r '.weekly_increment_cap_pct // empty' <<<"$CONFIG_JSON")
   [[ -n "$val" ]] && WEEKLY_INCREMENT_CAP="$val"
   val=$(jq -r '.weekly_curve_power // empty' <<<"$CONFIG_JSON")
@@ -471,9 +478,9 @@ awk -v mode="$MODE" \
     -v resets_weekly="$WEEKLY_RESETS" \
     -v used_weekly="$WEEKLY_USED" \
     -v used_5h="$FIVEH_USED_FOR_AWK" \
-    -v target_weekly="$TARGET_WEEKLY" \
+    -v floor="$WEEKLY_PACE_FLOOR" \
     -v terminal="$WEEKLY_TERMINAL" \
-    -v wfloor="$WEEKLY_INCREMENT_FLOOR" \
+    -v Nterm="$WEEKLY_TERMINAL_WINDOWS" \
     -v wcap="$WEEKLY_INCREMENT_CAP" \
     -v p="$WEEKLY_CURVE_POWER" \
     -v floor5="$FIVEH_TARGET_FLOOR" \
@@ -485,47 +492,36 @@ awk -v mode="$MODE" \
        if (v > hi) return hi
        return v
      }
-     # Stage 1 cumulative weekly pace curve evaluated at a candidate epoch t:
-     # the smooth power curve maxed with the terminal "you-can-still-make-it"
-     # envelope. Monotonic increasing in t. WEEK_SECONDS, T, and end are BEGIN
-     # globals (awk functions see globals); only the t-dependent terms vary.
-     function W_of(t,    remaining, x, W, rem_windows, envelope) {
+     # Stage 1 cumulative weekly pace curve evaluated at a candidate epoch t,
+     # expressed in remaining five-hour windows r. An explicitly-anchored
+     # floor->shoulder->terminal max curve: it holds a constant `floor` early in
+     # the week, rises (power `p`) to the derived `shoulder` as the terminal
+     # windows approach, then follows a linear terminal segment (slope `wcap` per
+     # window) up to `terminal` at week end. Computed as the max of those three
+     # pieces, so it is monotone non-decreasing in t by construction. T, floor,
+     # shoulder, wcap, p, and Nterm are BEGIN globals (awk functions see globals);
+     # only the t-dependent terms vary.
+     function W_of(t,    remaining, r, s, rise, terminal_seg, W) {
        remaining = (resets_weekly + 0) - (t + 0)
-
-       x = clamp((WEEK_SECONDS - remaining) / WEEK_SECONDS, 0, 1)
-
-       W = T * ((wfloor + 0) * x \
-                + (end - (wfloor + 0)) * (x ^ ((p + 0) + 1)) / ((p + 0) + 1))
-
-       # Terminal envelope: floor the cumulative curve from the end so spending
-       # at most wcap per remaining window still reaches terminal. Mid-week
-       # `rem_windows` is large and the term is deeply negative, so the smooth
-       # curve dominates unchanged; it only lifts the final ~1.7 windows
-       # (envelope takes over at r≈1.7; term = 80 at r=2 [smooth 81.5 wins],
-       # 90 at r=1, 100 at r=0 with defaults).
-       rem_windows = remaining / 18000
-       envelope = (terminal + 0) - (wcap + 0) * rem_windows
-       if (W < envelope) W = envelope
+       r = remaining / 18000
+       s = clamp((T - r) / (T - (Nterm + 0)), 0, 1)   # clamp to [0,1] — load-bearing
+       rise = (floor + 0) + (shoulder - (floor + 0)) * (s ^ (p + 0))
+       terminal_seg = (terminal + 0) - (wcap + 0) * r
+       W = (floor + 0)
+       if (terminal_seg > W) W = terminal_seg
+       if (rise > W) W = rise
        return W
      }
      BEGIN {
        WEEK_SECONDS = 604800
-       T = int(WEEK_SECONDS / 18000 + 0.5)              # = 34 five-hour windows
+       T = WEEK_SECONDS / 18000                         # = 33.6 five-hour windows
 
-       # Solve `end` so the cumulative curve W(1) == target_weekly, then clamp
-       # the per-window increment ceiling at wcap. Constant in t.
-       end = (wfloor + 0) + ((p + 0) + 1) * ((target_weekly + 0) / T - (wfloor + 0))
-       if (end > (wcap + 0)) end = (wcap + 0)
-       # Only the upper bound is clamped here. The lower bound (end >= 0, i.e.
-       # curve monotonicity — W rising to target_weekly only at x=1, never
-       # overshooting mid-week) is guaranteed UPSTREAM by the dispatch-config-load
-       # monotonicity constraint (#930): it rejects any config where
-       # target_weekly_usage_pct < T*wfloor*p/(p+1), which is exactly the
-       # condition under which `end` would go negative. Tunables reach this
-       # algorithm only through that validated config (no env-var bypass), so a
-       # defensive `end < 0` clamp here would be dead code masking an
-       # already-rejected config — omitted per the code-style rule (prefer clear
-       # errors over defensive fallbacks).
+       shoulder = (terminal + 0) - (wcap + 0) * (Nterm + 0)
+       # The curve is monotone non-decreasing in t by construction — a max of
+       # monotone pieces: a constant `floor`, a non-decreasing power rise (since
+       # shoulder >= floor and s^p is non-decreasing for p > 0), and a linear
+       # terminal segment with positive slope wcap. So no `end`-solve and no
+       # monotonicity validator (the old #930 path) is needed here.
 
        # ---- Reopen mode: earliest epoch the target next becomes >= 1 ----
        if (mode == "reopen") {
