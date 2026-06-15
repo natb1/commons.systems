@@ -35,9 +35,9 @@ import {
   parseJitDueMarker,
   buildAppJwt,
   mintInstallationToken,
-  truncateForLog,
   type JitIssue,
 } from "../src/office-hours-sync";
+import { truncateForLog } from "../src/log-utils";
 
 const testKeyPair = generateKeyPairSync("rsa", {
   modulusLength: 2048,

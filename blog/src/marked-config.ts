@@ -1,4 +1,5 @@
 import { Marked } from "marked";
+import type { Tokens } from "marked";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { PublishedPost } from "./post-types.ts";
 import { BLOG_IMAGES } from "./image-config.ts";
@@ -50,16 +51,20 @@ const SAFE_HREF = /^(https?:|mailto:|tel:|\.{0,2}\/|#)/i;
 // reverse tabnapping. The image renderer adds width/height, srcset/sizes, and
 // fetchpriority="high" on the first image per instance (likely LCP candidate).
 //
-// Server-side HTML sanitizer (isomorphic-dompurify) is unnecessary: `html: () => ""`
-// strips all raw HTML at build time, and images validate against IMAGE_DIMENSIONS
-// (unknown paths throw). The client additionally runs DOMPurify (see pages/home.ts).
+// Server-side HTML sanitizer (isomorphic-dompurify) is unnecessary: link labels are
+// rendered via this.parser.parseInline, so raw HTML inside labels routes through
+// `html: () => ""` like all other raw HTML, and images validate against
+// IMAGE_DIMENSIONS (unknown paths throw). The client additionally runs DOMPurify
+// (see pages/home.ts). Unsafe URL protocols (e.g. javascript: hrefs) are rejected by
+// the SAFE_HREF allowlist guard at the top of link(): non-allowlisted schemes render
+// as escaped label text rather than an anchor.
 export function createMarked(): Marked {
   let imageIndex = 0;
 
   return new Marked({
     renderer: {
       html: () => "",
-      link({ href, text, title }) {
+      link({ href, title, text, tokens }: Tokens.Link) {
         if (!SAFE_HREF.test(href)) {
           return escapeHtml(text);
         }
@@ -70,7 +75,8 @@ export function createMarked(): Marked {
           ? '<span class="external-link-icon" aria-hidden="true">&#x2197;</span>'
           : "";
         const targetRel = external ? ' target="_blank" rel="noopener noreferrer"' : "";
-        return `<a href="${safeHref}"${titleAttr}${targetRel}>${text}${glyphHtml}</a>`;
+        const label = this.parser.parseInline(tokens);
+        return `<a href="${safeHref}"${titleAttr}${targetRel}>${label}${glyphHtml}</a>`;
       },
       image({ href, text }) {
         const safeHref = escapeHtml(href);

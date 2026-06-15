@@ -235,6 +235,20 @@ describe("link renderer", () => {
     expect(html).not.toContain("<a");
     expect(html).toContain("x");
   });
+
+  it("strips raw HTML from link labels (XSS in SSR path)", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[<img src=x onerror=alert(1)>](https://e.com)");
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("onerror");
+    expect(html).toContain('<a href="https://e.com"');
+  });
+
+  it("renders inline formatting inside link labels", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[*emphasis*](https://e.com)");
+    expect(html).toContain("<em>emphasis</em>");
+  });
 });
 
 describe("IMAGE_DIMENSIONS", () => {

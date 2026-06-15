@@ -355,11 +355,13 @@ WEEK_SECONDS = 604800
 
 # Stage 1 — weekly pace curve W (weekly %)
 remaining = resets_at_weekly - now;   if remaining <= 0: print 0; exit
-x   = clamp((WEEK_SECONDS - remaining) / WEEK_SECONDS, 0, 1)  # elapsed fraction
-T   = round(WEEK_SECONDS / 18000)                             # = 34 five-hour windows
-end = floor + (p+1)*(target_weekly/T - floor)                # solve so W(1)=target_weekly
-end = min(end, cap)                                          # per-window hard ceiling
-W   = T*( floor*x + (end-floor)*x^(p+1)/(p+1) )              # cumulative target now
+r        = remaining / WINDOW_SECONDS                  # remaining 5-hour windows
+T        = WEEK_SECONDS / WINDOW_SECONDS               # = 33.6 (x = (T-r)/T = elapsed fraction)
+shoulder = terminal - cap * Nterm                      # derived (= 80 with defaults)
+s        = clamp((T - r) / (T - Nterm), 0, 1)
+rise     = floor + (shoulder - floor) * s^p
+terminal_seg = terminal - cap * r
+W        = max(floor, terminal_seg, rise)              # monotone by construction
 
 # Stage 2 — binary weekly gate
 hw = W - used_weekly
@@ -373,13 +375,16 @@ N = (h5 <= 0) ? 0 : (span <= 0) ? max_workers
 print N
 ```
 
-- The weekly increment `d(x) = floor + (end-floor)*x^p` rises from the floor
-  toward (but clamped at) the cap; `W` reaches `target_weekly` at `x=1`
-  (week end) and stays below it for every `x<1`. The exception is when
-  `weekly_increment_cap_pct` clamps the per-window increment: the cap holds the
-  terminal `W(1)` below `target_weekly` (a deliberate hard ceiling), so at the
-  defaults `W(1)=90` only because the solved increment `end≈4.3` stays under
-  the `cap=10`.
+- Early in the week `W` holds at `floor` (50%). As the final `Nterm`
+  (`weekly_terminal_windows`, default 2) 5-hour windows approach, the `rise`
+  term climbs via a power curve (exponent `p`) from `floor` to the derived
+  `shoulder` (= `terminal − cap·Nterm` = 80% at defaults). Over those final
+  `Nterm` windows the linear `terminal_seg` (slope `cap` per window) governs,
+  reaching `terminal` (100%) at week end. `W` is monotone non-decreasing by
+  construction — a max of a constant floor, a non-decreasing power rise, and a
+  positively-sloped linear segment — so it can never overshoot mid-week. The
+  old #930 non-monotonicity pathology is now unrepresentable rather than
+  validator-rejected.
 - Gate closed (`hw <= 0`, at or over pace) → N=0 regardless of `used_5h`.
 - Gate open (`hw > 0`) → N is a pure function of `used_5h`: max workers at/below
   `floor5`, 0 at/above `ceil5`. The clamp keeps N≥1 for any `used_5h` strictly
@@ -389,63 +394,60 @@ print N
 
 | elapsed `x` | W (weekly %) | target_N |
 |---:|---:|---:|
-| 0.25 | 12 | 8 |
-| 0.50 | 31 | 8 |
-| 0.75 | 57 | 8 |
-| 0.90 | 76 | 8 |
-| ~1.0 | 90 | 8 |
+| 0.00 | 50 | 8 |
+| 0.25 | 57.97 | 8 |
+| 0.50 | 65.95 | 8 |
+| 0.75 | 73.92 | 8 |
+| 0.90 | 78.71 | 8 |
+| ~1.0 | ~100 | 8 |
 
 At these defaults, `used_5h=0` and `hw > 0` at every row, so the gate is open
 and `h5 = ceil5 - 0 = 80 > 0`, giving `N=max_workers=8` across the board.
 
-**Table B — binary gate + 5h ramp at mid-week** (defaults; `x=0.5`, `W=31`):
+**Table B — binary gate + 5h ramp at mid-week** (defaults; `x=0.5`, `W=65.95`):
 
 | used_weekly (%) | hw (=W−used_weekly) | gate | used_5h (%) | target_N |
 |---:|---:|:---:|---:|---:|
-| 20 | 11 | open | 50 | 8 |
-| 20 | 11 | open | 55 | 7 |
-| 20 | 11 | open | 60 | 5 |
-| 20 | 11 | open | 65 | 4 |
-| 20 | 11 | open | 70 | 3 |
-| 20 | 11 | open | 75 | 1 |
-| 20 | 11 | open | 80 | 0 |
-| 31 |  0 | closed | 0 | 0 (at pace) |
-| 40 | −9 | closed | 0 | 0 (over pace) |
+| 20 | 45.95 | open | 50 | 8 |
+| 20 | 45.95 | open | 55 | 7 |
+| 20 | 45.95 | open | 60 | 5 |
+| 20 | 45.95 | open | 65 | 4 |
+| 20 | 45.95 | open | 70 | 3 |
+| 20 | 45.95 | open | 75 | 1 |
+| 20 | 45.95 | open | 80 | 0 |
+| 66 | −0.05 | closed | 0 | 0 (at/over pace) |
+| 70 | −4.05 | closed | 0 | 0 (over pace) |
 
 Tunables (each optional in `dispatch.config/target-workers.json`; defaults
 baked into the script):
 
 | Field | Default | Meaning |
 |---|---:|---|
-| `target_weekly_usage_pct` | 90 | curve terminal W(1), unless `weekly_increment_cap_pct` clamps it lower |
-| `weekly_increment_floor_pct` | 1 | per-window floor |
-| `weekly_increment_cap_pct` | 10 | per-window hard ceiling |
-| `weekly_curve_power` (`p`) | 1 | convexity; >1 back-loads spend later in the week |
+| `weekly_pace_floor_pct` | 50 | early-week floor; `W` holds here until the terminal windows |
+| `weekly_terminal_pct` | 100 | terminal `W` at week end (the `r=0` anchor) |
+| `weekly_terminal_windows` (`Nterm`) | 2 | count of trailing 5-hour windows the linear terminal segment spans; derived shoulder = `weekly_terminal_pct − weekly_increment_cap_pct · weekly_terminal_windows` |
+| `weekly_increment_cap_pct` | 10 | terminal-segment slope (% per remaining window); together with `weekly_terminal_windows`, sets the derived shoulder |
+| `weekly_curve_power` (`p`) | 1 | convexity of the rise segment; >1 back-loads spend later in the week (W stays nearer the floor longer, then climbs faster to the shoulder) |
 | `five_hour_target_floor_pct` (`floor5`) | 50 | `used_5h` % at which workers reach max (gate open) |
 | `five_hour_target_ceiling_pct` (`ceil5`) | 80 | `used_5h` % at which workers reach zero (gate open) |
 | `max_concurrent_workers` | 8 | max worker count |
 | `exhaustion_threshold_pct` | 98 | used_% (either window) at/near 100, with resets_at in the future, treated as genuine token exhaustion — a hard stop even for priority/main-broken work |
 
 Recalibration: raise `weekly_curve_power` to back-load spend later in the
-week (a higher `p` makes the curve concave up, so `W` grows slowly early and
-accelerates toward the end). `weekly_increment_cap_pct` hard-caps any single
-5h window's share regardless of curve shape — raise it only if early spending
-is acceptable. Raise `max_concurrent_workers` for more parallelism when under
+week — a higher `p` keeps `W` nearer the floor longer, then climbs faster to
+the shoulder. Raise `max_concurrent_workers` for more parallelism when under
 pace. Adjust `five_hour_target_floor_pct` and `five_hour_target_ceiling_pct`
 to shift where the 5h ramp starts and ends.
 
-Keep `weekly_increment_floor_pct <= target_weekly_usage_pct / T` (with `T=34`
-five-hour windows, i.e. `target_weekly_usage_pct >= 34 * floor`). Below that the
-solved increment `end` falls under `floor`, inverting `d(x)` into a *decreasing*
-per-window allocation — the curve still terminates correctly at
-`target_weekly_usage_pct`, but it front-loads spend instead of pacing it. So if
-you lower `target_weekly_usage_pct` substantially, lower
-`weekly_increment_floor_pct` to match. Likewise keep
-`weekly_increment_cap_pct >= weekly_increment_floor_pct`: an inverted floor/cap
-clamps the terminal `W(1)` below `target_weekly_usage_pct`. The config validator
-only cross-checks floor vs. cap when both appear in the same config file, so a
-floor raised against the baked-in cap default passes validation but still
-clamps.
+The only admissibility constraint is `weekly_pace_floor_pct <=
+weekly_terminal_pct − weekly_increment_cap_pct · weekly_terminal_windows`
+(i.e. floor ≤ derived shoulder) and `weekly_terminal_windows >= 1`. The config
+validator rejects a violation at load (anchor-ordering check). Because the curve
+is monotone by construction, there is no front-loading or non-monotonicity
+failure mode to guard against. To raise the early-week floor, raise
+`weekly_pace_floor_pct` (keeping it ≤ the derived shoulder); to widen the
+terminal sprint, raise `weekly_terminal_windows`; to steepen the terminal slope,
+raise `weekly_increment_cap_pct` (which also lowers the shoulder).
 
 Keep `exhaustion_threshold_pct` above `five_hour_target_ceiling_pct` (default 98
 > 80) so the 5h ramp's zero-point and the exhaustion floor stay distinct: the
