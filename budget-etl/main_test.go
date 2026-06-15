@@ -291,6 +291,17 @@ func TestApplyTransactionRulesRejectsCategoryFilterOnCategorization(t *testing.T
 			},
 			wantErr: false,
 		},
+		{
+			name: "categorization with MatchCategory errors even when target transaction is absent",
+			rule: export.Rule{
+				ID:            "r5",
+				Type:          "categorization",
+				Target:        "Food:Coffee",
+				MatchCategory: "Food",
+				TransactionID: "doc-absent",
+			},
+			wantErr: true,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
