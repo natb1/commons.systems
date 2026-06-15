@@ -597,6 +597,11 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     async goToResult(result: SearchResult): Promise<void> {
       const decoded = decodeLocation(result.location);
       if (!decoded) return;
+      // Drain stale highlightRestores entries — they reference now-detached
+      // nodes from the previous result's text layer — before arming the new
+      // highlight, mirroring goToPage/next/prev. Without this the array grows
+      // unboundedly across result clicks, leaking detached DOM node references.
+      unwrapHighlights();
       _currentPage = decoded.page;
       // Arm the highlight before rendering; renderPage applies it as its final
       // gen-guarded step. Call the internal renderPage directly (like

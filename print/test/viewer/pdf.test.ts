@@ -479,4 +479,26 @@ describe("clearSearch()", () => {
 
     expect(container.querySelector(".search-highlight.active")).toBeNull();
   });
+
+  it("goToResult() drains the previous result's highlight before arming the next", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the");
+    const r1 = results.find((r) => r.label === "Page 1")!;
+    const r2 = results.find((r) => r.label === "Page 2")!;
+
+    await renderer.goToResult!(r1);
+    // Capture the text-layer div that holds the first result's highlight span.
+    const div1 = container.querySelector(".search-highlight")!.parentElement!;
+    expect(div1.querySelector(".search-highlight")).not.toBeNull();
+
+    // Arming the second result must drain the first entry (unwrapHighlights),
+    // restoring div1 instead of leaking it in highlightRestores.
+    await renderer.goToResult!(r2);
+    expect(div1.querySelector(".search-highlight")).toBeNull();
+
+    // Exactly one highlight is live in the DOM (the current result).
+    expect(container.querySelectorAll(".search-highlight.active").length).toBe(1);
+  });
 });
