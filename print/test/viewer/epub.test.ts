@@ -43,6 +43,10 @@ const mockBook = {
   renderTo: vi.fn().mockReturnValue(mockRendition),
   spine: mockSpine,
   destroy: vi.fn(),
+  locations: {
+    generate: vi.fn().mockResolvedValue([]),
+    cfiFromPercentage: vi.fn().mockReturnValue("epubcfi(/6/4!/4/2)"),
+  },
 };
 
 vi.mock("epubjs", () => ({
@@ -63,6 +67,8 @@ describe("createEpubRenderer", () => {
     mockRendition.prev.mockResolvedValue(undefined);
     mockSpine.length = 5;
     mockSpine.get.mockImplementation((index: number) => ({ href: `chapter-${index}.xhtml` }));
+    mockBook.locations.generate.mockResolvedValue([]);
+    mockBook.locations.cfiFromPercentage.mockReturnValue("epubcfi(/6/4!/4/2)");
     container = document.createElement("div");
     if (typeof globalThis.reportError !== "function") {
       globalThis.reportError = () => {};
@@ -202,6 +208,61 @@ describe("createEpubRenderer", () => {
       await renderer.goToPage(99);
 
       expect(mockRendition.display).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("goToFraction", () => {
+    it("generates locations, maps the fraction to a CFI, and displays it", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      mockRendition.once.mockImplementation((_event: string, cb: () => void) => { cb(); });
+      mockRendition.display.mockClear();
+
+      await renderer.goToFraction!(0.5);
+
+      expect(mockBook.locations.generate).toHaveBeenCalledTimes(1);
+      expect(mockBook.locations.cfiFromPercentage).toHaveBeenCalledWith(0.5);
+      expect(mockRendition.display).toHaveBeenCalledWith("epubcfi(/6/4!/4/2)");
+    });
+
+    it("generates locations lazily and memoizes across calls", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      mockRendition.once.mockImplementation((_event: string, cb: () => void) => { cb(); });
+
+      // Not generated at init time.
+      expect(mockBook.locations.generate).not.toHaveBeenCalled();
+
+      await renderer.goToFraction!(0.25);
+      expect(mockBook.locations.generate).toHaveBeenCalledTimes(1);
+
+      // Second call reuses the memoized locations index.
+      await renderer.goToFraction!(0.75);
+      expect(mockBook.locations.generate).toHaveBeenCalledTimes(1);
+    });
+
+    it("clamps fractions above 1 down to 1", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      mockRendition.once.mockImplementation((_event: string, cb: () => void) => { cb(); });
+
+      await renderer.goToFraction!(1.5);
+
+      expect(mockBook.locations.cfiFromPercentage).toHaveBeenCalledWith(1);
+    });
+
+    it("clamps fractions below 0 up to 0", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      mockRendition.once.mockImplementation((_event: string, cb: () => void) => { cb(); });
+
+      await renderer.goToFraction!(-0.2);
+
+      expect(mockBook.locations.cfiFromPercentage).toHaveBeenCalledWith(0);
     });
   });
 
