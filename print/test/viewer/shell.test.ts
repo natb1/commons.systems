@@ -344,6 +344,25 @@ describe("initViewer", () => {
     expect(saveReadingPosition).toHaveBeenCalledWith("uid1", "m1", "2");
   });
 
+  it("cleanup flushes pending save timer (unauthenticated)", async () => {
+    vi.mocked(getReadingPosition).mockResolvedValue(null);
+    const renderer = makeMockRenderer();
+
+    const cleanup = initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    nextBtn.click();
+    await flushInit();
+
+    // Flush synchronously before the 500ms timer fires
+    cleanup();
+
+    // localStorage should have been written with the pending position
+    // without advancing timers — the flush is synchronous
+    expect(localStorage.getItem("reading-position:m1")).toBe("2");
+  });
+
   it("cleanup calls renderer.destroy", async () => {
     const renderer = makeMockRenderer();
 
