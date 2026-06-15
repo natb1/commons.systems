@@ -8,12 +8,16 @@ import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { GroupId } from "@commons-systems/authutil/groups";
 import {
   optionalString,
+  parseISOTimestamp,
   requireEnum,
   requireMs,
   requireSeedEnum,
   requireSeedString,
   requireString,
   requireTimestamp,
+  requireUploadEnum,
+  requireUploadId,
+  requireUploadString,
 } from "./_helpers.js";
 import type { ReconciliationNoteSeedData } from "../../seeds/firestore.js";
 import {
@@ -22,8 +26,6 @@ import {
   type ReconciliationClassification,
   type ReconciliationEntityType,
 } from "../schema/enums.js";
-
-// No upload/Raw shape — upload pipeline doesn't ingest these yet.
 
 // ── Domain interface ──────────────────────────────────────────────────────────
 
@@ -48,6 +50,18 @@ export interface IdbReconciliationNote {
   classification: ReconciliationClassification;
   note: string;
   updatedAtMs: number;
+  updatedBy: string;
+}
+
+// ── Raw upload interface ──────────────────────────────────────────────────────
+
+export interface RawReconciliationNote {
+  id: string;
+  entityType: ReconciliationEntityType;
+  entityId: string;
+  classification: ReconciliationClassification;
+  note: string;
+  updatedAt: string;
   updatedBy: string;
 }
 
@@ -98,9 +112,40 @@ export function idbToReconciliationNote(row: IdbReconciliationNote): Reconciliat
   };
 }
 
+// ── Raw upload → ReconciliationNote ──────────────────────────────────────────
+
+export function parseRawReconciliationNote(raw: RawReconciliationNote, i: number): ReconciliationNote {
+  return {
+    id: requireUploadId(raw.id, "reconciliationNote", i),
+    entityType: requireUploadEnum(raw.entityType, RECONCILIATION_ENTITY_TYPES, `reconciliationNote[${i}].entityType`),
+    entityId: requireUploadString(raw.entityId, "reconciliationNote", i, "entityId"),
+    classification: requireUploadEnum(raw.classification, RECONCILIATION_CLASSIFICATIONS, `reconciliationNote[${i}].classification`),
+    // Mirror the Firestore/IDB tolerance for an empty note (parseFirestoreReconciliationNote
+    // stores non-string note as ""), so an exported "" note round-trips back through import.
+    note: typeof raw.note === "string" ? raw.note : "",
+    updatedAt: parseISOTimestamp(raw.updatedAt, `reconciliationNote[${i}].updatedAt`),
+    updatedBy: requireUploadString(raw.updatedBy, "reconciliationNote", i, "updatedBy"),
+    groupId: null as GroupId | null,
+  };
+}
+
+// ── ReconciliationNote → IdbReconciliationNote ────────────────────────────────
+
+export function reconciliationNoteToIdbRecord(n: ReconciliationNote): IdbReconciliationNote {
+  return {
+    id: n.id,
+    entityType: n.entityType,
+    entityId: n.entityId,
+    classification: n.classification,
+    note: n.note,
+    updatedAtMs: n.updatedAt.toMillis(),
+    updatedBy: n.updatedBy,
+  };
+}
+
 // ── IdbReconciliationNote → export JSON ───────────────────────────────────────
 
-export function reconciliationNoteToRawJson(n: IdbReconciliationNote): object {
+export function reconciliationNoteToRawJson(n: IdbReconciliationNote): RawReconciliationNote {
   return {
     id: n.id,
     entityType: n.entityType,
