@@ -565,9 +565,21 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
         // debounced keystroke would be wasteful; cache across search calls.
         let pageText = pageTextCache.get(i);
         if (pageText === undefined) {
-          const page = await doc.getPage(i);
-          if (destroyed) return results;
-          const tc = await page.getTextContent();
+          let tc;
+          try {
+            const page = await doc.getPage(i);
+            if (destroyed) return results;
+            tc = await page.getTextContent();
+          } catch (err) {
+            // A concurrent destroy() tears down the pdfjs worker, which rejects
+            // pending getPage()/getTextContent() calls with an
+            // UnknownErrorException. Degrade silently — same intent as the
+            // `destroyed` short-circuits — instead of surfacing "Search failed".
+            if (destroyed || (err as { name?: string })?.name === "UnknownErrorException") {
+              return results;
+            }
+            throw err;
+          }
           if (destroyed) return results;
           pageText = buildPageText(tc.items as { str?: string }[]);
           pageTextCache.set(i, pageText);

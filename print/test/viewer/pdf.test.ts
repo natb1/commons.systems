@@ -397,11 +397,14 @@ describe("search()", () => {
     const spy = vi
       .spyOn(pdfjs, "getDocument")
       .mockReturnValue({ promise: Promise.resolve(racingDoc) } as never);
-    renderer = createPdfRenderer();
-    await renderer.init(container, "fake://source.pdf");
-    // Must resolve to a partial/empty result, never reject.
-    await expect(renderer.search!("the")).resolves.toBeInstanceOf(Array);
-    spy.mockRestore();
+    try {
+      renderer = createPdfRenderer();
+      await renderer.init(container, "fake://source.pdf");
+      // Must resolve to a partial/empty result, never reject.
+      await expect(renderer.search!("the")).resolves.toBeInstanceOf(Array);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
