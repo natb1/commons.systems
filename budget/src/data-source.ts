@@ -35,7 +35,7 @@ import { idbToAccount, accountDocId } from "./entities/account.js";
 import { idbToJournalEntry } from "./entities/journal-entry.js";
 import { idbToJournalLeg } from "./entities/journal-leg.js";
 import { idbToReconciliationEvent } from "./entities/reconciliation-event.js";
-import { idbToBudget } from "./entities/budget.js";
+import { idbToBudget, validateBudgetOverrideOrdering } from "./entities/budget.js";
 import { idbToBudgetPeriod } from "./entities/budget-period.js";
 import { idbToRule } from "./entities/rule.js";
 import { idbToNormalizationRule } from "./entities/normalization-rule.js";
@@ -417,6 +417,7 @@ export class IdbDataSource implements DataSource {
   }
 
   async updateBudgetOverrides(id: BudgetId, overrides: BudgetOverride[]): Promise<void> {
+    validateBudgetOverrideOrdering(overrides);
     const row = await get<IdbBudget>("budgets", id);
     if (!row) throw new Error(`Budget ${id} not found`);
     await put("budgets", {
