@@ -229,6 +229,16 @@ case "$args" in
   issue\ close\ *--repo\ natb1/office-hours-nate*)
     # Close a tracking issue. MUST precede the generic `issue close *`.
     echo "$args" >> "$STUB_DIR/gh-merge-issue-close.log"
+    # #1651: a per-issue HARD-failure marker makes the stub emit a deterministic
+    # non-zero close for that tracking-issue number, exercising the dup-close
+    # error path (HARD_ERROR=1 → exit 1). Recover the issue number from `issue
+    # close <N> ...`. Absent by default → every close succeeds.
+    set -- $args
+    close_n="$3"
+    if [[ -f "$STUB_DIR/gh-fail-merge-close-${close_n}" ]]; then
+      echo "gh: stubbed close failure for #${close_n}" >&2
+      exit 1
+    fi
     ;;
   "pr list --state open --limit 300 --json number,headRefName,isDraft,headRefOid,labels,mergeable")
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
@@ -30222,7 +30232,10 @@ echo "Test: OPEN_COUNT>1 → close duplicates, keep .[0]"
 setup
 printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
 printf '[{"number":77,"title":"Add widget"},{"number":78,"title":"Add widget"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
-"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+# A clean dup-close must exit 0; capture the code so a stray HARD_ERROR (e.g. a
+# stub mismatch driving an unintended failure path) is detected, not swallowed.
+if "$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1; then dup_rc=0; else dup_rc=$?; fi
+assert_eq "dup-close: script exits 0" "0" "$dup_rc"
 assert_eq "dup-close: issue-close log present" "present" "$(log_state gh-merge-issue-close.log)"
 TOTAL=$((TOTAL + 1))
 if grep -q 'issue close 78' "$STUB_DIR/gh-merge-issue-close.log" \
@@ -30233,6 +30246,44 @@ else
 fi
 assert_eq "dup-close: no spurious create" "absent" "$(log_state gh-merge-issue-create.log)"
 assert_eq "dup-close: no edit (.[0] title matches)" "absent" "$(log_state gh-merge-issue-edit.log)"
+teardown
+
+# (g) OPEN_COUNT>1 AND the canonical .[0] also carries a stale title → close every
+# duplicate AND edit .[0] in the same tick (both the new while-read block and the
+# existing edit branch run). #1651.
+echo "Test: OPEN_COUNT>1 + stale .[0] title → close duplicates AND edit .[0]"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":77,"title":"Old stale title"},{"number":78,"title":"Old stale title"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
+if "$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1; then dupedit_rc=0; else dupedit_rc=$?; fi
+assert_eq "dup+edit: script exits 0" "0" "$dupedit_rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issue close 78' "$STUB_DIR/gh-merge-issue-close.log" \
+   && ! grep -q 'issue close 77' "$STUB_DIR/gh-merge-issue-close.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: closed duplicate #78, kept canonical #77"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: closed duplicate #78, kept canonical #77"
+fi
+assert_eq "dup+edit: issue-edit log present" "present" "$(log_state gh-merge-issue-edit.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'Add widget' "$STUB_DIR/gh-merge-issue-edit.log" \
+   && grep -q 'oh-merge-pr' "$STUB_DIR/gh-merge-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: edited #77 with the new title and refreshed oh-merge-pr marker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: edited #77 with the new title and refreshed oh-merge-pr marker"
+fi
+assert_eq "dup+edit: no spurious create" "absent" "$(log_state gh-merge-issue-create.log)"
+teardown
+
+# (h) OPEN_COUNT>1 but a duplicate's `gh issue close` HARD-fails → HARD_ERROR=1
+# drives a non-zero exit. The stub fails the close for #78 via a fail marker.
+echo "Test: OPEN_COUNT>1 + duplicate close fails → exit 1"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":77,"title":"Add widget"},{"number":78,"title":"Add widget"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
+touch "$STUB_DIR/gh-fail-merge-close-78"
+if "$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1; then dupfail_rc=0; else dupfail_rc=$?; fi
+assert_eq "dup-fail: script exits 1 when a duplicate close fails" "1" "$dupfail_rc"
 teardown
 
 # ============================================================================
