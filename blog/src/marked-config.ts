@@ -57,7 +57,9 @@ const SAFE_HREF = /^(https?:|mailto:|tel:|\.{0,2}\/|#)/i;
 // IMAGE_DIMENSIONS (unknown paths throw). The client additionally runs DOMPurify
 // (see pages/home.ts). Unsafe URL protocols (e.g. javascript: hrefs) are rejected by
 // the SAFE_HREF allowlist guard at the top of link(): non-allowlisted schemes render
-// as escaped label text rather than an anchor.
+// as escaped label text rather than an anchor. renderPostContents() additionally
+// pre-validates every post link via assertSafeHrefs(), so a non-allowlisted href in a
+// published post fails the build loudly instead of silently degrading to label text.
 export function createMarked(): Marked {
   let imageIndex = 0;
 
@@ -111,6 +113,25 @@ export interface PostContent {
   title: string | null;
 }
 
+// Walk a post's markdown tokens and throw on any link whose href fails the
+// SAFE_HREF allowlist. The link renderer silently degrades such hrefs to escaped
+// label text (dropping the link and any inline formatting), so without this guard
+// an author who writes e.g. [**read more**](foo/bar) would publish the literal
+// markdown "**read more**" with no build-time signal. Surfacing the failure here —
+// on the real build path (vite plugin / prerender), not the unit-tested renderer —
+// turns that silent downgrade into a loud, actionable build error.
+function assertSafeHrefs(body: string, filename: string, marked: Marked): void {
+  marked.walkTokens(marked.lexer(body), token => {
+    if (token.type === "link" && !SAFE_HREF.test(token.href)) {
+      throw new Error(
+        `Post "${filename}" has a link with a non-allowlisted href "${token.href}". ` +
+          `Allowed: http(s):, mailto:, tel:, leading-slash/./../ relative paths, or #anchors. ` +
+          `See SAFE_HREF in marked-config.ts.`,
+      );
+    }
+  });
+}
+
 /** Parse markdown files into rendered HTML content. */
 export async function renderPostContents(
   posts: PublishedPost[],
@@ -122,6 +143,7 @@ export async function renderPostContents(
     const markdown = readFile(post.filename);
     const h1 = extractH1(markdown);
     const body = h1 ? h1.body : markdown;
+    assertSafeHrefs(body, post.filename, marked);
     const html = await marked.parse(body);
     results[post.id] = { html, title: h1 ? h1.title : null };
   }
