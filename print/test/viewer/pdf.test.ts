@@ -464,6 +464,33 @@ describe("clearSearch()", () => {
     expect(restored).toBeDefined();
   });
 
+  it("re-rendering a page with the highlight still armed restores the detached div (idempotent applyHighlight)", async () => {
+    vi.useFakeTimers();
+    try {
+      const renderer = createPdfRenderer();
+      await renderer.init(container, "fake://source.pdf");
+      const results = await renderer.search!("the");
+      const page1Result = results.find((r) => r.label === "Page 1");
+      await renderer.goToResult!(page1Result!);
+
+      const firstSpan = container.querySelector(".search-highlight");
+      expect(firstSpan).not.toBeNull();
+      const firstDiv = firstSpan!.parentElement!; // the textDiv from render 1
+      expect(firstDiv.querySelector(".search-highlight")).not.toBeNull();
+
+      // Debounced resize re-render with pendingHighlight still armed.
+      resizeObserverCallbacks[resizeObserverCallbacks.length - 1]();
+      await vi.advanceTimersByTimeAsync(200);
+      await Promise.resolve();
+
+      // firstDiv is now detached; without the fix it stays wrapped.
+      expect(firstDiv.querySelector(".search-highlight")).toBeNull();
+      expect(firstDiv.textContent).toBe("the cat sat");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("clearSearch() disarms pendingHighlight so re-render does not reapply", async () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
