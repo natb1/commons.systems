@@ -46,6 +46,8 @@ const mockFlushWriteBack = vi.fn();
 const mockResetFileSync = vi.fn();
 const mockGetSyncHandle = vi.fn();
 const mockGetLastSyncedModified = vi.fn();
+const mockSetWriteBackStatusListener = vi.fn();
+const mockAdvanceSyncWatermark = vi.fn();
 
 const mockIsEncrypted = vi.fn();
 const mockDecrypt = vi.fn();
@@ -88,6 +90,8 @@ vi.mock("../src/file-sync.js", () => ({
   resetFileSync: mockResetFileSync,
   getSyncHandle: mockGetSyncHandle,
   getLastSyncedModified: mockGetLastSyncedModified,
+  setWriteBackStatusListener: mockSetWriteBackStatusListener,
+  advanceSyncWatermark: mockAdvanceSyncWatermark,
 }));
 
 vi.mock("../src/crypto.js", () => ({
@@ -149,6 +153,8 @@ function resetAndMockAll(): void {
     resetFileSync: mockResetFileSync,
     getSyncHandle: mockGetSyncHandle,
     getLastSyncedModified: mockGetLastSyncedModified,
+    setWriteBackStatusListener: mockSetWriteBackStatusListener,
+    advanceSyncWatermark: mockAdvanceSyncWatermark,
   }));
   vi.mock("../src/crypto.js", () => ({
     isEncrypted: mockIsEncrypted,
@@ -158,6 +164,30 @@ function resetAndMockAll(): void {
   vi.mock("../src/active-data-source.js", () => ({
     setActiveDataSource: vi.fn(),
   }));
+}
+
+// Capture the window "focus" listener that the *next* `import("../src/main")`
+// registers, and return a function that fires only that listener. jsdom shares
+// one window across the whole test file and main.ts never removes its focus
+// listener, so every prior test's module instance stays subscribed; a real
+// `window.dispatchEvent(new Event("focus"))` would run all of them against the
+// current shared mocks and pollute exact-count / not-called assertions. Spying on
+// addEventListener isolates a test to its own module's reload. Call this BEFORE
+// the per-test `await import("../src/main")`; vi.restoreAllMocks() in beforeEach
+// removes the spy for the next test.
+function captureModuleFocusHandler(): () => void {
+  const handlers: Array<(e: Event) => void> = [];
+  const realAdd = window.addEventListener.bind(window);
+  vi.spyOn(window, "addEventListener").mockImplementation(
+    ((type: string, listener: EventListenerOrEventListenerObject, opts?: boolean | AddEventListenerOptions) => {
+      if (type === "focus") handlers.push(listener as (e: Event) => void);
+      return realAdd(type as keyof WindowEventMap, listener as EventListener, opts);
+    }) as typeof window.addEventListener,
+  );
+  return () => {
+    expect(handlers).toHaveLength(1);
+    handlers[0](new Event("focus"));
+  };
 }
 
 // Set up DOM elements before dynamic import
@@ -184,6 +214,8 @@ describe("main module", () => {
     mockResetFileSync.mockReset();
     mockGetSyncHandle.mockReset().mockReturnValue(null);
     mockGetLastSyncedModified.mockReset().mockReturnValue(null);
+    mockSetWriteBackStatusListener.mockReset();
+    mockAdvanceSyncWatermark.mockReset();
     // Default: plaintext files (no BENC header) — preserves the existing
     // upload/auto-load tests that pass a bare `{}` file.
     mockIsEncrypted.mockReset().mockReturnValue(false);
@@ -788,6 +820,147 @@ describe("main module", () => {
     expect(mockClearFileHandle).not.toHaveBeenCalled();
   });
 
+  it("rejects a plaintext external file when session is encrypted and advances the watermark", async () => {
+    // Set up a prior committed encrypted load so importPassword is non-null (mirrors AC2 harness).
+    const handleA = { name: "a.benc" } as unknown as FileSystemFileHandle;
+    mockGetFileHandle.mockResolvedValue(handleA);
+    mockQueryReadWritePermission.mockResolvedValue("granted");
+    mockReadFileFromHandle.mockResolvedValue(new File(["enc-a"], "a.benc"));
+    mockIsEncrypted.mockReturnValue(true);
+    mockDecrypt.mockResolvedValue("{}");
+    mockIsFsaSupported.mockReturnValue(true);
+
+    resetAndMockAll();
+
+    // Capture THIS module's focus listener so we can fire it in isolation. Every
+    // `import("../src/main")` registers a new window "focus" listener on the shared
+    // jsdom window and they are never removed, so a real dispatchEvent("focus")
+    // would also run every prior test's accumulated reload against the current
+    // shared mocks — polluting exact-count / not-called assertions. The spy is
+    // installed after the per-test import, so it captures only this module's handler.
+    const fireFocus = captureModuleFocusHandler();
+
+    const { parseUploadedJson, toParsedData } = await import("../src/upload.js");
+    (parseUploadedJson as ReturnType<typeof vi.fn>).mockReturnValue({ groupName: "household" });
+    (toParsedData as ReturnType<typeof vi.fn>).mockReturnValue({ meta: { groupName: "household" } });
+    mockStoreParsedData.mockResolvedValue(undefined);
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Submit password "pw-A" to complete the initial encrypted load and arm the session.
+    const inputA = document.querySelector(".password-input") as HTMLInputElement;
+    expect(inputA).not.toBeNull();
+    inputA.value = "pw-A";
+    (inputA.closest("form") as HTMLFormElement).requestSubmit();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Confirm the session is armed (importPassword is non-null from here on).
+    expect(mockConfigureFileSync).toHaveBeenCalledWith(handleA, "pw-A", expect.any(Number));
+
+    // The external file was swapped for a NEWER *plaintext* file. The encrypted
+    // session must reject it (mode-downgrade) rather than silently load plaintext.
+    mockGetSyncHandle.mockReturnValue(handleA);
+    mockGetLastSyncedModified.mockReturnValue(1000);
+    mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "budget.benc", { lastModified: 9000 }));
+    mockIsEncrypted.mockReturnValue(false);
+    mockStoreParsedData.mockClear();
+    mockClearFileHandle.mockClear();
+
+    fireFocus();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // The plaintext file must be rejected: storeParsedData not called, handle kept.
+    expect(mockStoreParsedData).not.toHaveBeenCalled();
+    expect(mockClearFileHandle).not.toHaveBeenCalled();
+    // The watermark must be advanced past this bad version to break the focus loop.
+    expect(mockAdvanceSyncWatermark).toHaveBeenCalledWith(9000);
+  });
+
+  it("advances the watermark after a wrong-password reload to break the focus retry loop", async () => {
+    // Set up a prior committed encrypted load so importPassword is non-null.
+    const handleA = { name: "a.benc" } as unknown as FileSystemFileHandle;
+    mockGetFileHandle.mockResolvedValue(handleA);
+    mockQueryReadWritePermission.mockResolvedValue("granted");
+    mockReadFileFromHandle.mockResolvedValue(new File(["enc-a"], "a.benc"));
+    mockIsEncrypted.mockReturnValue(true);
+    mockDecrypt.mockResolvedValue("{}");
+    mockIsFsaSupported.mockReturnValue(true);
+
+    resetAndMockAll();
+
+    // Fire only this module's focus listener (see the mode-mismatch test above for
+    // why dispatchEvent would pollute the decrypt count across accumulated modules).
+    const fireFocus = captureModuleFocusHandler();
+
+    const { parseUploadedJson, toParsedData } = await import("../src/upload.js");
+    (parseUploadedJson as ReturnType<typeof vi.fn>).mockReturnValue({ groupName: "household" });
+    (toParsedData as ReturnType<typeof vi.fn>).mockReturnValue({ meta: { groupName: "household" } });
+    mockStoreParsedData.mockResolvedValue(undefined);
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Submit password "pw-A" to arm the session.
+    const inputA = document.querySelector(".password-input") as HTMLInputElement;
+    expect(inputA).not.toBeNull();
+    inputA.value = "pw-A";
+    (inputA.closest("form") as HTMLFormElement).requestSubmit();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(mockConfigureFileSync).toHaveBeenCalledWith(handleA, "pw-A", expect.any(Number));
+
+    const { UploadValidationError } = await import("../src/upload.js");
+
+    // The on-disk file is re-encrypted under a *different* password: decrypt throws
+    // UploadValidationError. Make the watermark-advance mock actually move the guard
+    // so the second focus can observe a watermark that now covers the bad version.
+    mockGetSyncHandle.mockReturnValue(handleA);
+    mockGetLastSyncedModified.mockReturnValue(1000);
+    mockReadFileFromHandle.mockResolvedValue(new File(["enc"], "budget.benc", { lastModified: 9000 }));
+    mockIsEncrypted.mockReturnValue(true);
+    mockAdvanceSyncWatermark.mockImplementation((ms: number) => {
+      mockGetLastSyncedModified.mockReturnValue(ms);
+    });
+    mockDecrypt.mockReset();
+    mockDecrypt.mockRejectedValue(new UploadValidationError("Wrong password or corrupted file."));
+    mockDecrypt.mockClear();
+
+    // First focus: the reload reads the newer file (9000 > 1000), decrypts, fails,
+    // and the catch advances the watermark to 9000. Settle fully before the second.
+    fireFocus();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Second focus: the watermark now equals the file's lastModified (9000 <= 9000),
+    // so the reload short-circuits before decrypt is attempted again — the loop is
+    // broken. (A single focus does not prove this; the second dispatch is the point.)
+    fireFocus();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Decrypt was attempted exactly once: the second focus did not re-derive.
+    expect(mockDecrypt).toHaveBeenCalledTimes(1);
+    // The watermark was advanced past the bad version.
+    expect(mockAdvanceSyncWatermark).toHaveBeenCalledWith(9000);
+  });
+
   // AC1 — any committed load disarms the prior file-sync session.
   // A committed plaintext load (non-FSA upload) calls resetFileSync and does NOT
   // call configureFileSync (no handle to re-arm with).
@@ -1078,5 +1251,36 @@ describe("main module", () => {
 
     // A cancelled (uncommitted) load must not persist the handle.
     expect(mockPutFileHandle).not.toHaveBeenCalled();
+  });
+
+  it("write-back status listener shows and clears the nav warning, with clobber guard", async () => {
+    const FILE_SYNC_WARNING = "Changes could not be saved to disk — an error occurred.";
+
+    mockGetMeta.mockResolvedValue(undefined);
+    resetAndMockAll();
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(mockSetWriteBackStatusListener).toHaveBeenCalled();
+    const cb = mockSetWriteBackStatusListener.mock.calls[0][0] as (ok: boolean) => void;
+
+    const errorEl = document.querySelector(".nav-error") as HTMLElement;
+
+    // ok=false: warning is shown
+    cb(false);
+    expect(errorEl.hidden).toBe(false);
+    expect(errorEl.textContent).toContain(FILE_SYNC_WARNING);
+
+    // ok=true: warning is cleared
+    cb(true);
+    expect(errorEl.hidden).toBe(true);
+
+    // Clobber guard: an unrelated nav error must not be cleared by ok=true
+    errorEl.textContent = "Some unrelated error";
+    errorEl.hidden = false;
+    cb(true);
+    expect(errorEl.hidden).toBe(false);
+    expect(errorEl.textContent).toBe("Some unrelated error");
   });
 });
