@@ -349,9 +349,10 @@ async function loadFromHandle(handle: FileSystemFileHandle): Promise<void> {
     } else if (outcome.committed && outcome.password === null) {
       await clearFileHandle();
       showNavError(
-        "Unencrypted data loaded for this session only — it won't be saved " +
-          "back or auto-loaded. Export as an encrypted .benc file for secure " +
-          "auto-reload.",
+        "Unencrypted data has been stored locally in this browser. It won't " +
+          "be written back to the file or auto-loaded next session, but it " +
+          "remains in browser storage until you clear it. Export as an " +
+          "encrypted .benc file to protect it.",
       );
     }
   } catch (error) {
