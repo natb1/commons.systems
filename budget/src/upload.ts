@@ -33,6 +33,11 @@ import type { RawJournalLeg } from "./entities/journal-leg.js";
 import { parseRawJournalLeg, journalLegToIdbRecord } from "./entities/journal-leg.js";
 import type { RawReconciliationEvent } from "./entities/reconciliation-event.js";
 import { parseRawReconciliationEvent, reconciliationEventToIdbRecord } from "./entities/reconciliation-event.js";
+import type { RawStatementItem } from "./entities/statement-item.js";
+import { parseRawStatementItem, statementItemToIdbRecord } from "./entities/statement-item.js";
+import type { RawReconciliationNote } from "./entities/reconciliation-note.js";
+import { parseRawReconciliationNote, reconciliationNoteToIdbRecord } from "./entities/reconciliation-note.js";
+import type { CollectionDomainData } from "./collection-registry.js";
 // Re-export so existing import sites keep working.
 export { UploadValidationError };
 
@@ -47,6 +52,8 @@ interface RawOutput {
   rules: RawRule[];
   normalizationRules: RawNormalizationRule[];
   statements: RawStatement[];
+  statementItems?: RawStatementItem[];
+  reconciliationNotes?: RawReconciliationNote[];
   accounts?: RawAccount[];
   journalEntries?: RawJournalEntry[];
   journalLegs?: RawJournalLeg[];
@@ -54,22 +61,11 @@ interface RawOutput {
   weeklyAggregates?: RawWeeklyAggregate[];
 }
 
-export interface ParsedUpload {
-  transactions: Transaction[];
-  statements: Statement[];
-  budgets: Budget[];
-  budgetPeriods: BudgetPeriod[];
-  rules: Rule[];
-  normalizationRules: NormalizationRule[];
-  accounts: Account[];
-  journalEntries: JournalEntry[];
-  journalLegs: JournalLeg[];
-  reconciliationEvents: ReconciliationEvent[];
-  weeklyAggregates: WeeklyAggregate[];
+export type ParsedUpload = CollectionDomainData & {
   groupName: string;
   version: number;
   exportedAt: string;
-}
+};
 
 export function parseUploadedJson(text: string): ParsedUpload {
   let raw: RawOutput;
@@ -108,6 +104,8 @@ export function parseUploadedJson(text: string): ParsedUpload {
   const rules: Rule[] = (raw.rules ?? []).map((r: RawRule, i: number) => parseRawRule(r, i));
   const normalizationRules: NormalizationRule[] = (raw.normalizationRules ?? []).map((r: RawNormalizationRule, i: number) => parseRawNormalizationRule(r, i));
   const statements: Statement[] = (raw.statements ?? []).map((s: RawStatement, i: number) => parseRawStatement(s, i));
+  const statementItems = (raw.statementItems ?? []).map((s: RawStatementItem, i: number) => parseRawStatementItem(s, i));
+  const reconciliationNotes = (raw.reconciliationNotes ?? []).map((n: RawReconciliationNote, i: number) => parseRawReconciliationNote(n, i));
   const accounts: Account[] = (raw.accounts ?? []).map((a: RawAccount, i: number) => parseRawAccount(a, i));
   const journalEntries: JournalEntry[] = (raw.journalEntries ?? []).map((e: RawJournalEntry, i: number) => parseRawJournalEntry(e, i));
   const journalLegs: JournalLeg[] = (raw.journalLegs ?? []).map((l: RawJournalLeg, i: number) => parseRawJournalLeg(l, i));
@@ -121,6 +119,8 @@ export function parseUploadedJson(text: string): ParsedUpload {
     budgetPeriods,
     rules,
     normalizationRules,
+    statementItems,
+    reconciliationNotes,
     accounts,
     journalEntries,
     journalLegs,
@@ -141,8 +141,8 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
     rules: parsed.rules.map(ruleToIdbRecord),
     normalizationRules: parsed.normalizationRules.map(normalizationRuleToIdbRecord),
     statements: parsed.statements.map(statementToIdbRecord),
-    statementItems: [],
-    reconciliationNotes: [],
+    statementItems: parsed.statementItems.map(statementItemToIdbRecord),
+    reconciliationNotes: parsed.reconciliationNotes.map(reconciliationNoteToIdbRecord),
     accounts: parsed.accounts.map(accountToIdbRecord),
     journalEntries: parsed.journalEntries.map(journalEntryToIdbRecord),
     journalLegs: parsed.journalLegs.map(journalLegToIdbRecord),

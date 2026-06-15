@@ -239,6 +239,88 @@ func TestConvertExportRulesRejectsCategoryFilterOnCategorization(t *testing.T) {
 	}
 }
 
+func TestApplyTransactionRulesRejectsCategoryFilterOnCategorization(t *testing.T) {
+	ts := time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name    string
+		rule    export.Rule
+		wantErr bool
+	}{
+		{
+			name: "categorization with MatchCategory errors",
+			rule: export.Rule{
+				ID:            "r1",
+				Type:          "categorization",
+				Target:        "Food:Coffee",
+				MatchCategory: "Food",
+				TransactionID: "doc-1",
+			},
+			wantErr: true,
+		},
+		{
+			name: "categorization with ExcludeCategory errors",
+			rule: export.Rule{
+				ID:              "r2",
+				Type:            "categorization",
+				Target:          "Food:Coffee",
+				ExcludeCategory: "Dining",
+				TransactionID:   "doc-1",
+			},
+			wantErr: true,
+		},
+		{
+			name: "categorization with Category errors",
+			rule: export.Rule{
+				ID:            "r3",
+				Type:          "categorization",
+				Target:        "Food:Coffee",
+				Category:      "Food",
+				TransactionID: "doc-1",
+			},
+			wantErr: true,
+		},
+		{
+			name: "budget_assignment with category fields succeeds",
+			rule: export.Rule{
+				ID:              "r4",
+				Type:            "budget_assignment",
+				Target:          "budget-food",
+				MatchCategory:   "Food",
+				ExcludeCategory: "Dining",
+				Category:        "Food",
+				TransactionID:   "doc-1",
+			},
+			wantErr: false,
+		},
+		{
+			name: "categorization with MatchCategory errors even when target transaction is absent",
+			rule: export.Rule{
+				ID:            "r5",
+				Type:          "categorization",
+				Target:        "Food:Coffee",
+				MatchCategory: "Food",
+				TransactionID: "doc-absent",
+			},
+			wantErr: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			txns := []budget.TransactionData{
+				{Description: "Test Item", Amount: 500, Timestamp: ts, TransactionID: "t1"},
+			}
+			docIDs := []string{"doc-1"}
+			err := applyTransactionRules(txns, docIDs, []export.Rule{tc.rule})
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestApplyTransactionRules(t *testing.T) {
 	ts := time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)
 
