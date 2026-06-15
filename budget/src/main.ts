@@ -33,7 +33,7 @@ import {
   readFileFromHandle,
 } from "./local-file.js";
 import { SeedDataSource, IdbDataSource, FileSyncingDataSource, type DataSource } from "./data-source.js";
-import { configureFileSync, flushWriteBack, resetFileSync, getSyncHandle, getLastSyncedModified } from "./file-sync.js";
+import { configureFileSync, flushWriteBack, resetFileSync, getSyncHandle, getLastSyncedModified, setWriteBackStatusListener, advanceSyncWatermark } from "./file-sync.js";
 import { setActiveDataSource } from "./active-data-source.js";
 import { exportToJson } from "./export.js";
 import { isEncrypted, decrypt, encrypt } from "./crypto.js";
@@ -85,6 +85,8 @@ const errorEl = document.createElement("p");
 errorEl.className = "nav-error";
 errorEl.hidden = true;
 authContainer.appendChild(errorEl);
+
+const FILE_SYNC_WARNING = "Changes could not be saved to disk — an error occurred.";
 
 function showNavError(message: string): void {
   errorEl.textContent = message;
@@ -260,8 +262,19 @@ type LoadOutcome = { committed: true; password: string | null } | { committed: f
 // state. Throws on any failure; callers wrap it in error handling.
 // Pass `cachedPassword` to skip the password dialog when the session password
 // is already known (e.g. on an external-change reload).
-async function loadFromFile(file: File, cachedPassword?: string): Promise<LoadOutcome> {
+async function loadFromFile(file: File, cachedPassword?: string, requireEncrypted = false): Promise<LoadOutcome> {
   const buffer = await file.arrayBuffer();
+  // Reject a plaintext-downgrade replacement on the encrypted-session reload
+  // path: if the linked file was swapped for an unencrypted one, decrypting it
+  // would silently succeed as plaintext and write the now-unencrypted dataset
+  // back to disk. Throwing here (before storeParsedData/resetFileSync) leaves
+  // the prior armed encrypted session intact, just like the decrypt/parse
+  // failure paths below.
+  if (requireEncrypted && !isEncrypted(buffer)) {
+    throw new UploadValidationError(
+      "The linked file was replaced with an unencrypted file and was not loaded.",
+    );
+  }
   let text: string;
   let pw: string | null = null;
   if (isEncrypted(buffer)) {
@@ -447,6 +460,13 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") void flushWriteBack();
 });
 
+// Surface write-back failures: show a persistent nav warning while writes fail,
+// clear it once a write succeeds again. Registered once at the top level.
+setWriteBackStatusListener((ok) => {
+  if (!ok) showNavError(FILE_SYNC_WARNING);
+  else if (errorEl.textContent === FILE_SYNC_WARNING) clearNavError();
+});
+
 // External-change reload: when the window regains focus, re-read the on-disk
 // file's lastModified. If it is newer than the watermark the app stamped at its
 // last load or write-back, an external writer changed the file (another device's
@@ -481,12 +501,17 @@ async function reloadIfExternallyChanged(): Promise<void> {
   reloadInFlight = (async () => {
     clearNavError();
     try {
-      const outcome = await loadFromFile(file, cachedPw);
-      // Re-arm and stamp the watermark for a genuine committed encrypted reload,
-      // using the password the reload used. A wrong cached password makes
-      // `decrypt` throw (caught below) rather than committing, so we never
-      // re-arm on a bad password — and loadFromFile has already disarmed the
-      // prior session before swapping in the reloaded dataset.
+      // On this path `importPassword !== null` is always true (sync is armed
+      // only for encrypted sessions), so this requires the external file to be
+      // encrypted and rejects a plaintext downgrade.
+      const outcome = await loadFromFile(file, cachedPw, importPassword !== null);
+      // Re-arm and stamp the watermark only for a genuine committed encrypted
+      // reload, using the password the reload used. A wrong cached password (or
+      // a plaintext mode mismatch) makes `loadFromFile` THROW — it does not
+      // return early — so resetFileSync never runs and the prior session is NOT
+      // disarmed on the failure path; the handle and in-memory session stay
+      // intact. The catch advances the watermark to break the otherwise-infinite
+      // focus-retry loop.
       if (outcome.committed && outcome.password !== null) {
         configureFileSync(handle, outcome.password, file.lastModified);
       }
@@ -495,6 +520,20 @@ async function reloadIfExternallyChanged(): Promise<void> {
       // external write should not permanently unlink the FSA handle. The handle
       // is valid; only this particular file version is bad.
       if (deferProgrammerError(error)) return;
+      if (error instanceof UploadValidationError) {
+        // A wrong cached password, a plaintext mode mismatch, or invalid content
+        // is a deterministic failure of THIS file version — re-decrypting it on
+        // every focus would loop forever (each focus re-runs a 600k-iteration
+        // PBKDF2). Advance the watermark past this version so the focus watcher
+        // stops re-triggering on it; a genuinely-newer correct write later still
+        // reloads. The handle and in-memory session stay intact.
+        advanceSyncWatermark(file.lastModified);
+        showNavError(error.message);
+        return;
+      }
+      // A transient failure (e.g. an IndexedDB storeParsedData error, or crypto's
+      // generic "crypto worker unavailable") must NOT advance the watermark, so it
+      // stays retryable on the next focus.
       logError(error, { operation: "external-change-reload" });
       showNavError("Could not reload the linked file.");
     }

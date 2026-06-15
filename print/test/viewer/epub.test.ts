@@ -35,6 +35,7 @@ const mockRendition = {
   display: vi.fn().mockResolvedValue(undefined),
   next: vi.fn().mockResolvedValue(undefined),
   prev: vi.fn().mockResolvedValue(undefined),
+  currentLocation: vi.fn(),
   destroy: vi.fn(),
   hooks: { content: { register: vi.fn() } },
   annotations: { highlight: vi.fn(), remove: vi.fn() },
@@ -93,6 +94,7 @@ describe("createEpubRenderer", () => {
     mockRendition.display.mockResolvedValue(undefined);
     mockRendition.next.mockResolvedValue(undefined);
     mockRendition.prev.mockResolvedValue(undefined);
+    mockRendition.currentLocation.mockReset();
     mockSpine.length = 5;
     mockSpine.get.mockImplementation((index: number) => ({ href: `chapter-${index}.xhtml` }));
     // vi.clearAllMocks() only clears call history, not mockReturnValue/
@@ -243,6 +245,56 @@ describe("createEpubRenderer", () => {
 
       await renderer.goToPage(0);
       await renderer.goToPage(99);
+
+      expect(mockRendition.display).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("goToPosition", () => {
+    it("displays the given CFI and syncs position from currentLocation", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      mockRendition.display.mockClear();
+
+      // epub.js does not reliably emit 'relocated' for display(cfi), so the
+      // fix reads rendition.currentLocation() after display() resolves. The
+      // returned CFI is intentionally different from the display argument so
+      // the assertion proves the state came from currentLocation(), not from
+      // the argument we passed in. once() is a no-op here (relocated never
+      // fires) — currentLocation() is the sole source of the updated state.
+      mockRendition.once.mockImplementation(() => {});
+      const resolvedCfi = "epubcfi(/6/8!/4/10/3)";
+      mockRendition.currentLocation.mockReturnValue(
+        makeLocation(3, 2, 7, false, false, resolvedCfi),
+      );
+
+      const requestedCfi = "epubcfi(/6/14!/4/2/2)";
+      await renderer.goToPosition(requestedCfi);
+
+      expect(mockRendition.display).toHaveBeenCalledWith(requestedCfi);
+      expect(renderer.position).toBe(resolvedCfi);
+    });
+
+    it("handles a currentLocation that returns a Promise", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      mockRendition.once.mockImplementation(() => {});
+      const resolvedCfi = "epubcfi(/6/12!/4/6/1)";
+      mockRendition.currentLocation.mockReturnValue(
+        Promise.resolve(makeLocation(2, 1, 4, false, false, resolvedCfi)),
+      );
+
+      await renderer.goToPosition("epubcfi(/6/14!/4/2/2)");
+
+      expect(renderer.position).toBe(resolvedCfi);
+    });
+
+    it("does nothing when rendition is not initialized", async () => {
+      const renderer = createEpubRenderer();
+
+      await renderer.goToPosition("epubcfi(/6/14!/4/2/2)");
 
       expect(mockRendition.display).not.toHaveBeenCalled();
     });

@@ -451,9 +451,13 @@ detect_features() {
     USES_FIRESTORE=true
   fi
 
-  # Detect Auth: direct firebase SDK import or authutil wrapper packages
+  # Detect Auth: direct firebase SDK import, authutil wrapper packages, or the
+  # createAppContext `enableAuth: true` opt-in. The opt-in marker matters when an
+  # app routes all auth through a shared bootstrap (e.g. blog's createBlogApp), so
+  # its own src/ no longer imports firebase/auth directly but firebase.ts still
+  # configures auth via enableAuth.
   USES_AUTH=false
-  if grep -rq -e '"firebase/auth"' -e 'authutil/app-auth' -e 'authutil/firebase-auth' "$app_src_dir" 2>/dev/null; then
+  if grep -rq -e '"firebase/auth"' -e 'authutil/app-auth' -e 'authutil/firebase-auth' -e 'enableAuth: *true' "$app_src_dir" 2>/dev/null; then
     USES_AUTH=true
   fi
 
