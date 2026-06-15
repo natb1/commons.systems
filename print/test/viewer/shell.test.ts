@@ -345,7 +345,6 @@ describe("initViewer", () => {
   });
 
   it("cleanup flushes pending save timer (unauthenticated)", async () => {
-    vi.mocked(getReadingPosition).mockResolvedValue(null);
     const renderer = makeMockRenderer();
 
     const cleanup = initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
