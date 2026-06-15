@@ -23,7 +23,7 @@ import {
   saveReadingPosition,
 } from "../../src/reading-position";
 import type { MediaItem } from "../../src/types";
-import type { ContentRenderer } from "../../src/viewer/types";
+import type { ContentRenderer, SearchResult } from "../../src/viewer/types";
 import { makeMockRenderer } from "./mock-renderer";
 
 function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
@@ -834,6 +834,110 @@ describe("initViewer spread mode", () => {
 
     // 1.2^2 = 1.44
     expect(canvasWrap.style.transform).toBe(`scale(${1.2 ** 2})`);
+  });
+
+  // Criterion 3: user-initiated navigation in spread mode clears any stale
+  // search highlight before re-rendering, so it never reappears on a spread
+  // that contains the previously highlighted page.
+  it("spread mode: clicking next clears the search highlight", async () => {
+    const renderer = makeMockSpreadRenderer({ clearSearch: vi.fn() });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
+    spreadBtn.click();
+    await flushInit();
+
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    nextBtn.click();
+    await flushInit();
+
+    expect(renderer.clearSearch).toHaveBeenCalled();
+  });
+
+  it("spread mode: clicking prev clears the search highlight", async () => {
+    const renderer = makeMockSpreadRenderer({ clearSearch: vi.fn() });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
+    spreadBtn.click();
+    await flushInit();
+
+    // Advance off spread 0 first; jsdom won't dispatch click on a disabled
+    // prev button, which would make the assertion a silent no-op.
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    nextBtn.click();
+    await flushInit();
+
+    vi.mocked(renderer.clearSearch!).mockClear();
+
+    const prevBtn = outlet.querySelector(".viewer-prev") as HTMLButtonElement;
+    expect(prevBtn.disabled).toBe(false);
+    prevBtn.click();
+    await flushInit();
+
+    expect(renderer.clearSearch).toHaveBeenCalled();
+  });
+
+  it("spread mode: submitting 'go to page' clears the search highlight", async () => {
+    const renderer = makeMockSpreadRenderer({ clearSearch: vi.fn() });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
+    spreadBtn.click();
+    await flushInit();
+
+    const input = outlet.querySelector(".viewer-goto-input") as HTMLInputElement;
+    input.value = "5";
+    const ev = new KeyboardEvent("keydown", { key: "Enter", bubbles: true });
+    Object.defineProperty(ev, "target", { value: input });
+    input.dispatchEvent(ev);
+    await flushInit();
+
+    expect(renderer.clearSearch).toHaveBeenCalled();
+  });
+
+  // Criterion 1 guard: navigating via a clicked search result (the onNavigate
+  // path) must NOT clear the highlight — the clicked result must stay
+  // highlighted on the spread it lands on.
+  it("spread mode: search-result navigation does NOT clear the highlight", async () => {
+    const result: SearchResult = {
+      location: "4",
+      label: "Page 4",
+      snippet: "the matched text here",
+      matchStart: 4,
+      matchLength: 7,
+    };
+    const renderer = makeMockSpreadRenderer({
+      search: vi.fn().mockResolvedValue([result]),
+      goToResult: vi.fn().mockImplementation(async () => { await renderer.goToPage(4); }),
+      clearSearch: vi.fn(),
+    });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
+    spreadBtn.click();
+    await flushInit();
+
+    // Run the search (dispatch "search" event to bypass the 300ms debounce).
+    const searchInput = outlet.querySelector(".viewer-search-input") as HTMLInputElement;
+    searchInput.value = "matched";
+    searchInput.dispatchEvent(new Event("search", { bubbles: true }));
+    await flushInit();
+
+    // Click the rendered result, exercising goToResult -> onNavigate.
+    const resultLi = outlet.querySelector(".viewer-search-result") as HTMLElement;
+    expect(resultLi).not.toBeNull();
+    resultLi.click();
+    await flushInit();
+
+    // Positive control: the result navigation actually fired.
+    expect(renderer.goToResult).toHaveBeenCalledWith(result);
+    // Guard: the onNavigate path preserved the highlight (no clearSearch).
+    expect(renderer.clearSearch).not.toHaveBeenCalled();
   });
 });
 
