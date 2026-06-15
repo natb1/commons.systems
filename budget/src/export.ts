@@ -1,5 +1,6 @@
 /** Serializes IndexedDB stores back to the upload JSON format. Inverse of the upload pipeline (parseUploadedJson + toParsedData in upload.ts). */
 import { getAll, getMeta } from "./idb.js";
+import type { CollectionRawData } from "./collection-registry.js";
 import type { IdbTransaction } from "./entities/transaction.js";
 import { transactionToRawJson } from "./entities/transaction.js";
 import type { IdbStatement } from "./entities/statement.js";
@@ -47,7 +48,12 @@ export async function exportToJson(): Promise<string> {
 
   if (!meta) throw new Error("No local data to export. Upload a file first.");
 
-  const output = {
+  const output: CollectionRawData & {
+    version: number;
+    exportedAt: string;
+    groupId: string;
+    groupName: string;
+  } = {
     version: meta.version,
     exportedAt: new Date().toISOString(),
     // groupId is not stored locally; empty string for format compatibility
