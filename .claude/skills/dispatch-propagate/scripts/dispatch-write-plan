@@ -62,8 +62,7 @@ printf '%s\n%s\n' "$MARKER" "$CONTENT" > "$tmp"
 
 CID=$(gh api --paginate "repos/{owner}/{repo}/issues/$N/comments" \
   | jq -r --arg m "$MARKER" --arg author "$PLAN_AUTHOR" \
-      '.[] | select((.body | contains($m)) and (.user.login == $author)) | .id' \
-  | head -n1)
+      'first(.[] | select((.body | contains($m)) and (.user.login == $author)) | .id)')
 
 if [[ -n "$CID" ]]; then
   gh api --method PATCH "repos/{owner}/{repo}/issues/comments/$CID" \
