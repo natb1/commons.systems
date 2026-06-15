@@ -81,6 +81,7 @@ vi.mock("pdfjs-dist", () => {
     version: "4.10.38",
     getDocument: (_source: unknown) => ({ promise: Promise.resolve(fakeDoc) }),
     TextLayer: MockTextLayer,
+    __fakeDoc: fakeDoc,
   };
 });
 
@@ -478,5 +479,40 @@ describe("clearSearch()", () => {
     await renderer.goToPage(1);
 
     expect(container.querySelector(".search-highlight.active")).toBeNull();
+  });
+
+  it("goToOutlineEntry() drains stale highlight and disarms pendingHighlight", async () => {
+    // Outline entry resolves to page 1 — the SAME page as the search result.
+    // A different page would make the resize assertion pass even on unfixed code,
+    // since applyHighlight is gated on pendingHighlight.page === pageNum.
+    // Same-page is the only configuration where the discriminating assertion is observable.
+    const pdfjs = (await import("pdfjs-dist")) as unknown as { __fakeDoc: { getOutline: () => Promise<unknown> } };
+    pdfjs.__fakeDoc.getOutline = () =>
+      Promise.resolve([{ title: "Chapter 1", dest: [{ num: 1, gen: 0 }], items: [] }]);
+
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the");
+    const page1Result = results.find((r) => r.label === "Page 1");
+    await renderer.goToResult!(page1Result!);
+    expect(container.querySelector(".search-highlight.active")).not.toBeNull();
+
+    const outline = await renderer.getOutline!();
+    await renderer.goToOutlineEntry!(outline[0]);
+    // Discriminating assertion: on unfixed code, the armed pendingHighlight would
+    // be re-applied during goToOutlineEntry's own renderPage call (same page 1),
+    // leaving a .search-highlight span in the DOM.
+    expect(container.querySelector(".search-highlight")).toBeNull();
+
+    vi.useFakeTimers();
+    resizeObserverCallbacks.forEach((cb) => cb());
+    vi.advanceTimersByTime(150);
+    await Promise.resolve();
+    expect(container.querySelector(".search-highlight")).toBeNull();
+    vi.useRealTimers();
+
+    // Restore getOutline so this mutation does not affect subsequent tests.
+    pdfjs.__fakeDoc.getOutline = () => Promise.resolve(null);
   });
 });
