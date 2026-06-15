@@ -424,6 +424,9 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
 
     const tl = await renderTextLayer(result.page, result.cssViewport, tlDiv);
     spreadPages.push({ renderTask: result.task, textLayer: tl });
+    if (pendingHighlight && pendingHighlight.page === pageNum && tl) {
+      applyHighlight(tl, pendingHighlight);
+    }
   }
 
   return {
