@@ -59,8 +59,7 @@ fi
 # PLAN_AUTHOR_ID is validated ^[0-9]+$ above, so passing it via --argjson is safe.
 CID=$(gh api --paginate "repos/{owner}/{repo}/issues/$N/comments" \
   | jq -r --arg m "$MARKER" --argjson author_id "$PLAN_AUTHOR_ID" \
-      '.[] | select((.body | contains($m)) and (.user.id == $author_id)) | .id' \
-  | head -n1)
+      'first(.[] | select((.body | contains($m)) and (.user.id == $author_id)) | .id)')
 if [[ -z "$CID" ]]; then
   echo "dispatch-read-plan: no <!-- dispatch:plan --> comment found on issue #$N" >&2
   exit 1
