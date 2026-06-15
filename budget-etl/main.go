@@ -336,6 +336,188 @@ func appendPetBudgetIfNeeded(budgets []export.Budget, virtualTxns []budget.Trans
 	return append(budgets, *pet)
 }
 
+// virtualStmtPrefix returns the statement-ID prefix for a virtual account's
+// generated statements. Both the generator and the input-JSON drop-filter use
+// this so the two cannot drift. With the legacy synchrony/virtual values it
+// reproduces "synchrony-virtual-".
+func virtualStmtPrefix(targetInstitution, targetAccount string) string {
+	return targetInstitution + "-" + targetAccount + "-"
+}
+
+// virtualTxnResult holds generated virtual transactions and statements, plus a
+// per-budget index of the generated transactions for the budget upsert.
+type virtualTxnResult struct {
+	transactions []budget.TransactionData
+	docIDs       []string
+	statements   []export.Statement
+	// txnsByBudgetID maps a rule's BudgetID to the virtual transactions it
+	// generated, so the budget upsert can compute each budget's allowance.
+	txnsByBudgetID map[string][]budget.TransactionData
+}
+
+// generateVirtualTransactions creates virtual spending transactions and zero-balance
+// statements for each matching source transaction, driven by VirtualTransactionRule
+// configuration instead of hardcoded per-account logic.
+//
+// Each rule is evaluated independently. The dedup key (date, amount) is scoped per
+// rule so that two rules can independently match the same (date, amount) pair.
+// Virtual source transactions are skipped to prevent misconfigured rules from feeding
+// their own output back as input.
+func generateVirtualTransactions(
+	allTxns []budget.TransactionData,
+	txnDocIDs []string,
+	vrules []export.VirtualTransactionRule,
+) virtualTxnResult {
+	result := virtualTxnResult{
+		txnsByBudgetID: make(map[string][]budget.TransactionData),
+	}
+
+	type dateAmount struct {
+		date   string
+		amount int64
+	}
+
+	for _, rule := range vrules {
+		seen := make(map[dateAmount]bool)
+		periods := make(map[string]bool)
+
+		for i, txn := range allTxns {
+			// Skip virtual source rows to prevent misconfigured rule feedback loops
+			if txn.Virtual {
+				continue
+			}
+			// Apply source filters; empty filter field = match-any
+			if rule.Institution != "" && txn.Institution != rule.Institution {
+				continue
+			}
+			if rule.Account != "" && txn.Account != rule.Account {
+				continue
+			}
+			if rule.Category != "" && txn.Category != rule.Category {
+				continue
+			}
+			if rule.DescriptionContains != "" &&
+				!strings.Contains(strings.ToUpper(txn.Description), strings.ToUpper(rule.DescriptionContains)) {
+				continue
+			}
+
+			// Dedup by (date, amount) per rule
+			key := dateAmount{date: txn.Timestamp.Format("2006-01-02"), amount: txn.Amount}
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+
+			period := txn.Timestamp.Format("2006-01")
+			stmtID := virtualStmtPrefix(rule.TargetInstitution, rule.TargetAccount) + period
+			virtualDocID := "virtual-" + txnDocIDs[i]
+
+			vtxn := budget.TransactionData{
+				Institution:   rule.TargetInstitution,
+				Account:       rule.TargetAccount,
+				Description:   txn.Description,
+				Amount:        txn.Amount,
+				Timestamp:     txn.Timestamp,
+				StatementID:   stmtID,
+				TransactionID: virtualDocID,
+				Category:      rule.TargetCategory,
+				Budget:        rule.TargetBudget,
+				Virtual:       true,
+			}
+
+			result.transactions = append(result.transactions, vtxn)
+			result.docIDs = append(result.docIDs, virtualDocID)
+
+			if rule.BudgetID != "" {
+				result.txnsByBudgetID[rule.BudgetID] = append(result.txnsByBudgetID[rule.BudgetID], vtxn)
+			}
+
+			periods[period] = true
+		}
+
+		// Emit one zero-balance virtual statement per unique period for this rule
+		for period := range periods {
+			stmtID := virtualStmtPrefix(rule.TargetInstitution, rule.TargetAccount) + period
+			result.statements = append(result.statements, export.Statement{
+				ID:          budget.StatementDocID(stmtID),
+				StatementID: stmtID,
+				Institution: rule.TargetInstitution,
+				Account:     rule.TargetAccount,
+				Balance:     0,
+				Period:      period,
+				Virtual:     true,
+			})
+		}
+	}
+
+	return result
+}
+
+// computeMonthlyAllowance returns the monthly-average allowance for a set of
+// virtual transactions, using the same math as the legacy computePetBudget so
+// allowance values are identical.
+func computeMonthlyAllowance(txns []budget.TransactionData) float64 {
+	var total float64
+	var earliest, latest time.Time
+	for _, txn := range txns {
+		total += budget.DollarAmount(txn.Amount)
+		if earliest.IsZero() || txn.Timestamp.Before(earliest) {
+			earliest = txn.Timestamp
+		}
+		if latest.IsZero() || txn.Timestamp.After(latest) {
+			latest = txn.Timestamp
+		}
+	}
+	months := latest.Sub(earliest).Hours() / (24 * 30.44)
+	if months < 1 {
+		months = 1
+	}
+	monthlyAvg := total / months
+	return math.Round(monthlyAvg*100) / 100
+}
+
+// upsertVirtualBudgets seeds or updates a budget for each virtual rule that
+// generated transactions. Matching by BudgetID: if a budget with that ID is
+// already present, its Allowance/Name/AllowancePeriod/Rollover are overwritten
+// (the frozen-allowance fix — a seeded allowance now tracks changing inputs);
+// if absent, the budget is appended. Rules with no matched transactions are
+// skipped, so an empty budget is never created.
+func upsertVirtualBudgets(
+	budgets []export.Budget,
+	vrules []export.VirtualTransactionRule,
+	txnsByBudgetID map[string][]budget.TransactionData,
+) []export.Budget {
+	idx := make(map[string]int, len(budgets))
+	for i, b := range budgets {
+		idx[b.ID] = i
+	}
+
+	for _, rule := range vrules {
+		if rule.BudgetID == "" {
+			continue
+		}
+		txns := txnsByBudgetID[rule.BudgetID]
+		if len(txns) == 0 {
+			continue
+		}
+		b := export.Budget{
+			ID:              rule.BudgetID,
+			Name:            rule.BudgetName,
+			Allowance:       computeMonthlyAllowance(txns),
+			AllowancePeriod: rule.AllowancePeriod,
+			Rollover:        rule.Rollover,
+		}
+		if i, ok := idx[rule.BudgetID]; ok {
+			budgets[i] = b
+		} else {
+			budgets = append(budgets, b)
+			idx[rule.BudgetID] = len(budgets) - 1
+		}
+	}
+
+	return budgets
+}
+
 // runInputJSON reads an existing JSON export, recomputes categorization,
 // budget assignment, and normalization from rules, computes budget periods,
 // and writes the updated result. Category and budget from the input file are
