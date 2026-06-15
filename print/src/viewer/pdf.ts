@@ -94,6 +94,48 @@ export function decodeLocation(
   return { page, offset, length };
 }
 
+/**
+ * Map a [offset, offset+length) range — expressed in the coordinate space of
+ * `textContentItemsStr.join("")` — onto per-item (per-div) local segments.
+ *
+ * LOAD-BEARING: the concatenation uses an EMPTY join, matching buildPageText's
+ * empty-separator rule. The cumulative character offset summed across
+ * `textContentItemsStr` is the same coordinate space as the offset stored in a
+ * SearchResult.location. Adding any separator here would shift every segment.
+ *
+ * Returns one segment per item that overlaps the range, in item order. Each
+ * segment's localStart/localEnd are offsets within that item's own string.
+ * Empty-string items contribute zero width and are skipped. Walking stops once
+ * the cumulative offset passes the end of the range.
+ */
+export function offsetToDivRanges(
+  textContentItemsStr: readonly string[],
+  offset: number,
+  length: number,
+): { divIndex: number; localStart: number; localEnd: number }[] {
+  const segments: { divIndex: number; localStart: number; localEnd: number }[] = [];
+  const rangeStart = offset;
+  const rangeEnd = offset + length;
+  let cumulative = 0;
+  for (let k = 0; k < textContentItemsStr.length; k++) {
+    const itemStart = cumulative;
+    const itemEnd = cumulative + textContentItemsStr[k].length;
+    cumulative = itemEnd;
+    // Intersect [itemStart, itemEnd) with [rangeStart, rangeEnd).
+    const interStart = Math.max(itemStart, rangeStart);
+    const interEnd = Math.min(itemEnd, rangeEnd);
+    if (interStart < interEnd) {
+      segments.push({
+        divIndex: k,
+        localStart: interStart - itemStart,
+        localEnd: interEnd - itemStart,
+      });
+    }
+    if (cumulative >= rangeEnd) break;
+  }
+  return segments;
+}
+
 export function createPdfRenderer(onError?: (err: unknown) => void): ContentRenderer {
   let pdfDoc: PDFDocumentProxy | null = null;
   let _currentPage = 0;
@@ -112,6 +154,14 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
   // number. Populated on first search pass and reused across debounced
   // keystrokes. Unit 4 clears this in destroy().
   const pageTextCache = new Map<number, string>();
+  // A pending search-result highlight to apply once its page finishes
+  // rendering. Left set across renders so the debounced ResizeObserver
+  // re-render (renderPage(_currentPage)) re-applies it after a resize. Cleared
+  // by the public manual-nav methods so a stale highlight never reappears.
+  let pendingHighlight: { page: number; offset: number; length: number } | null = null;
+  // Records the original text content of every div mutated by applyHighlight so
+  // unwrapHighlights can restore the text layer to its pristine state.
+  const highlightRestores: { div: HTMLElement; originalText: string }[] = [];
   interface SpreadPage { renderTask: RenderTask; textLayer: TextLayer | null; }
   const spreadPages: SpreadPage[] = [];
   const outlinePageMap = new WeakMap<OutlineEntry, number>();
@@ -248,6 +298,48 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     return tl;
   }
 
+  /**
+   * Wrap the text covered by `h` in <span class="search-highlight active">
+   * elements inside the rendered text layer, then scroll the first highlight
+   * into view. The text layer's textContentItemsStr/textDivs are index-aligned;
+   * offsetToDivRanges maps the stored offset/length onto per-div local segments
+   * using the same empty-join coordinate space as buildPageText.
+   *
+   * Children are rebuilt with createTextNode/createElement (never innerHTML) so
+   * the text layer's transparent-text CSS keeps applying.
+   */
+  function applyHighlight(tl: TextLayer, h: { offset: number; length: number }): void {
+    const itemsStr = tl.textContentItemsStr;
+    const divs = tl.textDivs;
+    const segments = offsetToDivRanges(itemsStr, h.offset, h.length);
+    let firstSpan: HTMLSpanElement | null = null;
+    for (const seg of segments) {
+      const div = divs[seg.divIndex];
+      if (!div) continue;
+      const original = div.textContent ?? "";
+      highlightRestores.push({ div, originalText: original });
+      const beforeNode = document.createTextNode(original.slice(0, seg.localStart));
+      const span = document.createElement("span");
+      span.className = "search-highlight active";
+      span.appendChild(document.createTextNode(original.slice(seg.localStart, seg.localEnd)));
+      const afterNode = document.createTextNode(original.slice(seg.localEnd));
+      div.replaceChildren(beforeNode, span, afterNode);
+      if (!firstSpan) firstSpan = span;
+    }
+    if (firstSpan) firstSpan.scrollIntoView({ block: "nearest" });
+  }
+
+  /**
+   * Restore every div mutated by applyHighlight to its original text content,
+   * then empty the restore log. (Unit 4 wires this into clearSearch/destroy.)
+   */
+  function unwrapHighlights(): void {
+    for (const { div, originalText } of highlightRestores) {
+      div.textContent = originalText;
+    }
+    highlightRestores.length = 0;
+  }
+
   async function renderPage(pageNum: number): Promise<void> {
     if (!pdfDoc || !canvas || !container) return;
 
@@ -301,6 +393,12 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
         return;
       }
       activeTextLayer = tl;
+      // Reaching here means this render won the gen race (checked just above,
+      // no await since). Apply a pending search highlight for this page. Kept
+      // set (not cleared) so a ResizeObserver re-render re-applies it.
+      if (pendingHighlight && pendingHighlight.page === pageNum && activeTextLayer) {
+        applyHighlight(activeTextLayer, pendingHighlight);
+      }
     }
   }
 
@@ -365,12 +463,18 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     },
 
     async goToPage(page: number): Promise<void> {
+      // Manual navigation discards any active search highlight so a stale
+      // highlight never reappears on the new page.
+      pendingHighlight = null;
+      unwrapHighlights();
       if (page < 1 || page > _pageCount) return;
       _currentPage = page;
       await renderPage(page);
     },
 
     async next(): Promise<void> {
+      pendingHighlight = null;
+      unwrapHighlights();
       if (_currentPage < _pageCount) {
         _currentPage++;
         await renderPage(_currentPage);
@@ -378,6 +482,8 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     },
 
     async prev(): Promise<void> {
+      pendingHighlight = null;
+      unwrapHighlights();
       if (_currentPage > 1) {
         _currentPage--;
         await renderPage(_currentPage);
@@ -455,6 +561,17 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       if (page === undefined) return;
       _currentPage = page;
       await renderPage(page);
+    },
+
+    async goToResult(result: SearchResult): Promise<void> {
+      const decoded = decodeLocation(result.location);
+      if (!decoded) return;
+      _currentPage = decoded.page;
+      // Arm the highlight before rendering; renderPage applies it as its final
+      // gen-guarded step. Call the internal renderPage directly (like
+      // goToOutlineEntry) — the public goToPage would clear pendingHighlight.
+      pendingHighlight = { page: decoded.page, offset: decoded.offset, length: decoded.length };
+      await renderPage(decoded.page);
     },
 
     destroy(): void {
