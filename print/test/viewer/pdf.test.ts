@@ -367,6 +367,20 @@ describe("search()", () => {
     const decoded = decodeLocation(page2!.location);
     expect(decoded).toEqual({ page: 2, offset: 0, length: 3 });
   });
+
+  it("returns [] without throwing when called before init() resolves", async () => {
+    const renderer = createPdfRenderer();
+
+    await expect(renderer.search!("the")).resolves.toEqual([]);
+  });
+
+  it("returns [] without throwing after destroy()", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+    renderer.destroy();
+
+    await expect(renderer.search!("the")).resolves.toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------
