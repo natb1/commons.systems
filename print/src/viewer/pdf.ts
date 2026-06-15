@@ -2,7 +2,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import { TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils.js";
-import type { ContentRenderer, OutlineEntry } from "./types.js";
+import type { ContentRenderer, OutlineEntry, SearchResult } from "./types.js";
 import { parsePositionPage } from "./types.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -63,6 +63,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
   interface SpreadPage { renderTask: RenderTask; textLayer: TextLayer | null; }
   const spreadPages: SpreadPage[] = [];
   const outlinePageMap = new WeakMap<OutlineEntry, number>();
+  const pageTextCache = new Map<number, string>();
 
   type PdfOutlineItem = {
     title: string;
@@ -104,6 +105,30 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     task: RenderTask;
     cssViewport: PageViewport;
     page: PDFPageProxy;
+  }
+
+  /**
+   * Return the full extracted text for a single PDF page (1-based).
+   * Results are cached in pageTextCache so repeated calls are cheap.
+   * Items lacking a `.str` property (TextMarkedContent) are skipped;
+   * items where `item.hasEOL` is true get a newline separator, others a space.
+   * Mirrors the structural access used in renderTextLayer (no TextItem import).
+   */
+  async function getPageText(pageNum: number): Promise<string> {
+    const cached = pageTextCache.get(pageNum);
+    if (cached !== undefined) return cached;
+    if (!pdfDoc || destroyed) return "";
+    const page = await pdfDoc.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    let text = "";
+    for (const item of textContent.items) {
+      if (typeof (item as { str?: string }).str !== "string") continue;
+      const str = (item as { str: string; hasEOL: boolean }).str;
+      const sep = (item as { hasEOL: boolean }).hasEOL ? "\n" : " ";
+      text += str + sep;
+    }
+    pageTextCache.set(pageNum, text);
+    return text;
   }
 
   function createPageWrapper(): { wrapper: HTMLDivElement; canvas: HTMLCanvasElement; textLayerDiv: HTMLDivElement } {
@@ -366,6 +391,38 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       await renderPage(page);
     },
 
+    async search(query: string): Promise<SearchResult[]> {
+      if (!pdfDoc || !query) return [];
+      const results: SearchResult[] = [];
+      for (let p = 1; p <= _pageCount; p++) {
+        // Lazy extraction: text is pulled (and cached) on demand here, never in
+        // init(), so opening a document does not pay the full-text cost up front.
+        const text = await getPageText(p);
+        for (const idx of _findMatches(text, query)) {
+          const { snippet, matchStart, matchLength } = _buildSnippet(text, idx, query.length);
+          // One result per occurrence: same page location/label, distinct offsets.
+          results.push({ location: String(p), label: `Page ${p}`, snippet, matchStart, matchLength });
+        }
+      }
+      return results;
+    },
+
+    async goToResult(result: SearchResult): Promise<void> {
+      const page = parseInt(result.location, 10);
+      if (!Number.isFinite(page) || page < 1 || page > _pageCount) return;
+      _currentPage = page;
+      // Await renderPage so the caller's onNavigate() observes the updated
+      // _currentPage/positionLabel only after the page has actually rendered.
+      await renderPage(page);
+    },
+
+    clearSearch(): void {
+      // No transient per-search state to drop. pageTextCache is intentionally
+      // retained: page text is immutable for the document's lifetime and
+      // extraction is the expensive part, so clearing it would only force
+      // re-extraction on the next query. Cleared in destroy() instead.
+    },
+
     destroy(): void {
       destroyed = true;
       if (resizeTimer) {
@@ -389,6 +446,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
         pdfDoc.destroy();
         pdfDoc = null;
       }
+      pageTextCache.clear();
       if (pageWrapper) {
         pageWrapper.remove();
         pageWrapper = null;
