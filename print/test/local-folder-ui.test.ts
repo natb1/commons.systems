@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Importing local-folder-ui.ts transitively imports library.ts and
-// pages/home.ts, both of which touch print/src/firebase.ts (initializeApp at
-// module load). Mock the firebase-touching modules so the module under test
-// imports cleanly with no real firebase init.
+// Importing local-folder-ui.ts transitively imports library.ts, which touches
+// print/src/firebase.ts (initializeApp at module load). Mock the
+// firebase-touching modules so the module under test imports cleanly with no
+// real firebase init.
 vi.mock("../src/firebase.js", () => ({ storage: {}, STORAGE_NAMESPACE: "media" }));
 vi.mock("../src/media-cache.js", () => ({ blobCache: {} }));
 vi.mock("../src/firestore.js", () => ({
