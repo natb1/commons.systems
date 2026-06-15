@@ -94,6 +94,12 @@ describe("fileToLocalItem", () => {
     expect(fileToLocalItem(file, "README", "books")).toBeNull();
   });
 
+  it("returns null for a pure-extension name like .pdf", () => {
+    const file = new File(["bytes"], ".pdf", { lastModified: 1000 });
+    expect(fileToLocalItem(file, ".pdf", "books")).toBeNull();
+    expect(fileToLocalItem(file, ".epub", "books")).toBeNull();
+  });
+
   it("produces non-colliding ids for the same filename in differently-named folders", () => {
     const file = new File(["bytes"], "Notes.pdf", { lastModified: 1000 });
     const itemA = fileToLocalItem(file, "Notes.pdf", "folderA");

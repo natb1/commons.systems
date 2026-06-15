@@ -50,7 +50,7 @@ export const LOCAL_EXT: Record<string, MediaType> = {
 
 /**
  * Map a top-level local file to a `MediaItem`, or `null` for an unsupported
- * extension. The metadata is inert (real extraction lands in a later unit);
+ * or title-less filename. The metadata is inert (real extraction lands in a later unit);
  * `storagePath` is never used to resolve a local item — the directory handle is.
  *
  * `folderId` is the chosen folder's `FileSystemDirectoryHandle.name`. It scopes
@@ -59,7 +59,7 @@ export const LOCAL_EXT: Record<string, MediaType> = {
  */
 export function fileToLocalItem(file: File, name: string, folderId: string): MediaItem | null {
   const idx = name.lastIndexOf(".");
-  if (idx < 0) return null;
+  if (idx <= 0) return null; // no dot, or a pure-extension name like ".pdf" with no title
 
   const ext = name.slice(idx).toLowerCase();
   const mediaType = LOCAL_EXT[ext];
