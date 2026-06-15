@@ -478,6 +478,8 @@ export function initViewer(
     searchCleanup = initSearch(viewer, renderer, () => {
       if (controller.enabled) {
         controller.goToPage(renderer.currentPage).catch(handleRenderError);
+      } else {
+        renderer.renderResult?.().catch(handleRenderError);
       }
       updateNav();
     });
