@@ -91,4 +91,25 @@ describe("initLocalFolder", () => {
 
     expect(onSourceBound).toHaveBeenCalledTimes(1);
   });
+
+  it("invokes onSourceBound after the grant-click binds the source (prompt/grant path)", async () => {
+    mockStore.queryPermission.mockResolvedValue("prompt");
+    mockStore.requestPermission.mockResolvedValue("granted");
+
+    const section = document.createElement("span");
+    const container = document.createElement("div");
+    const onSourceBound = vi.fn();
+
+    await initLocalFolder(section, container, onSourceBound);
+
+    // The grant path defers the callback until after the user clicks the button.
+    expect(onSourceBound).not.toHaveBeenCalled();
+
+    const button = section.querySelector<HTMLButtonElement>("#local-folder-grant");
+    expect(button).not.toBeNull();
+    button!.click();
+
+    // The click handler is async; wait for it to resolve before asserting.
+    await vi.waitFor(() => expect(onSourceBound).toHaveBeenCalledTimes(1));
+  });
 });
