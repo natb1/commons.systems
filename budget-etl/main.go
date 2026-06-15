@@ -221,6 +221,31 @@ func virtualStmtPrefix(targetInstitution, targetAccount string) string {
 	return targetInstitution + "-" + targetAccount + "-"
 }
 
+// seedLegacyVirtualTransactionRules seeds the legacy Synchrony->pet rule when
+// vrules is nil (absent in JSON from a pre-refactor snapshot). An explicit empty
+// slice is left alone. MIGRATION: deletable once all snapshots carry
+// virtualTransactionRules.
+func seedLegacyVirtualTransactionRules(vrules []export.VirtualTransactionRule) []export.VirtualTransactionRule {
+	if vrules != nil {
+		return vrules
+	}
+	log.Printf("MIGRATION: snapshot has no virtualTransactionRules; seeding legacy Synchrony->pet rule")
+	return []export.VirtualTransactionRule{{
+		Institution:         "pnc",
+		Account:             "5111",
+		Category:            "Transfer:CardPayment",
+		DescriptionContains: "SYNCHRONY",
+		TargetInstitution:   "synchrony",
+		TargetAccount:       "virtual",
+		TargetCategory:      "Pet:Veterinarian",
+		TargetBudget:        "pet",
+		BudgetID:            "pet",
+		BudgetName:          "Pet",
+		AllowancePeriod:     "monthly",
+		Rollover:            "none",
+	}}
+}
+
 // isGeneratedVirtualStmt reports whether stmtID belongs to a statement that
 // generateVirtualTransactions re-derives this run — i.e. its ID carries the
 // virtualStmtPrefix of some rule's target account. Such statements are dropped
@@ -425,29 +450,7 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	log.Printf("read %d transactions, %d rules, %d normalization rules, %d budgets from %s",
 		len(inp.Transactions), len(inp.Rules), len(inp.NormalizationRules), len(inp.Budgets), input.path)
 
-	// MIGRATION: deletable once all snapshots carry virtualTransactionRules.
-	// A nil slice means a pre-refactor snapshot; seed the legacy Synchrony->pet
-	// rule so behavior is preserved. An explicit empty slice ([]) is left alone
-	// (generation intentionally disabled). The seeded slice is written back into
-	// Output below, so the seed fires at most once per snapshot.
-	vrules := inp.VirtualTransactionRules
-	if vrules == nil {
-		vrules = []export.VirtualTransactionRule{{
-			Institution:         "pnc",
-			Account:             "5111",
-			Category:            "Transfer:CardPayment",
-			DescriptionContains: "SYNCHRONY",
-			TargetInstitution:   "synchrony",
-			TargetAccount:       "virtual",
-			TargetCategory:      "Pet:Veterinarian",
-			TargetBudget:        "pet",
-			BudgetID:            "pet",
-			BudgetName:          "Pet",
-			AllowancePeriod:     "monthly",
-			Rollover:            "none",
-		}}
-		log.Printf("MIGRATION: snapshot has no virtualTransactionRules; seeding legacy Synchrony->pet rule")
-	}
+	vrules := seedLegacyVirtualTransactionRules(inp.VirtualTransactionRules)
 
 	// Split rules into transaction-specific and general
 	txnRules, generalExportRules := splitRules(inp.Rules)
@@ -1150,29 +1153,7 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 		return fmt.Errorf("unsupported input version %d (expected 1)", inp.Version)
 	}
 
-	// MIGRATION: deletable once all snapshots carry virtualTransactionRules.
-	// A nil slice means a pre-refactor snapshot; seed the legacy Synchrony->pet
-	// rule so behavior is preserved. An explicit empty slice ([]) is left alone
-	// (generation intentionally disabled). The seeded slice is written back into
-	// Output below, so the seed fires at most once per snapshot.
-	vrules := inp.VirtualTransactionRules
-	if vrules == nil {
-		vrules = []export.VirtualTransactionRule{{
-			Institution:         "pnc",
-			Account:             "5111",
-			Category:            "Transfer:CardPayment",
-			DescriptionContains: "SYNCHRONY",
-			TargetInstitution:   "synchrony",
-			TargetAccount:       "virtual",
-			TargetCategory:      "Pet:Veterinarian",
-			TargetBudget:        "pet",
-			BudgetID:            "pet",
-			BudgetName:          "Pet",
-			AllowancePeriod:     "monthly",
-			Rollover:            "none",
-		}}
-		log.Printf("MIGRATION: snapshot has no virtualTransactionRules; seeding legacy Synchrony->pet rule")
-	}
+	vrules := seedLegacyVirtualTransactionRules(inp.VirtualTransactionRules)
 
 	// Resolve group name: flag overrides input file
 	if groupName == "" {
