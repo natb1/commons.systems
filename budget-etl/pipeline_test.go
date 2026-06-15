@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -217,12 +218,18 @@ func TestParseStatementDir_DiscoverError(t *testing.T) {
 
 func TestDedupStatementData(t *testing.T) {
 	cases := []struct {
-		name          string
-		input         []budget.StatementData
-		wantLen       int
-		wantOut       []budget.StatementData // when non-nil, asserts out equals this exactly
-		wantErr       bool
-		wantErrSubstr string
+		name  string
+		input []budget.StatementData
+		// wantLen is the expected output length. It is consulted only when
+		// wantOut is nil; when wantOut is set the length is derived from it.
+		wantLen int
+		// wantOut, when non-nil, asserts out equals this exactly (per-entry,
+		// via reflect.DeepEqual so *time.Time fields compare by value).
+		wantOut []budget.StatementData
+		wantErr bool
+		// wantErrSubstrs must each appear in the error message. Required to be
+		// non-empty whenever wantErr is true.
+		wantErrSubstrs []string
 	}{
 		{
 			name:    "empty slice",
@@ -230,22 +237,40 @@ func TestDedupStatementData(t *testing.T) {
 			wantLen: 0,
 		},
 		{
+			name:    "nil slice",
+			input:   nil,
+			wantLen: 0,
+		},
+		{
 			name: "single entry",
 			input: []budget.StatementData{
 				{StatementID: "STMT-1", Balance: 1000},
 			},
-			wantLen: 1,
 			wantOut: []budget.StatementData{
 				{StatementID: "STMT-1", Balance: 1000},
 			},
 		},
 		{
-			name: "two entries same StatementID equal Balance",
+			name: "two entries same StatementID equal Balance keeps first-seen",
 			input: []budget.StatementData{
-				{StatementID: "STMT-2", Balance: 5000},
-				{StatementID: "STMT-2", Balance: 5000},
+				{StatementID: "STMT-2", Balance: 5000, SourceFile: "bank/acct/2025-01/first.ofx"},
+				{StatementID: "STMT-2", Balance: 5000, SourceFile: "bank/acct/2025-01/second.ofx"},
 			},
-			wantLen: 1,
+			wantOut: []budget.StatementData{
+				{StatementID: "STMT-2", Balance: 5000, SourceFile: "bank/acct/2025-01/first.ofx"},
+			},
+		},
+		{
+			name: "multiple distinct StatementIDs preserve first-seen order",
+			input: []budget.StatementData{
+				{StatementID: "STMT-A", Balance: 1000, SourceFile: "bank/acct/2025-01/a1.ofx"},
+				{StatementID: "STMT-B", Balance: 2000, SourceFile: "bank/acct/2025-01/b.ofx"},
+				{StatementID: "STMT-A", Balance: 1000, SourceFile: "bank/acct/2025-01/a2.ofx"},
+			},
+			wantOut: []budget.StatementData{
+				{StatementID: "STMT-A", Balance: 1000, SourceFile: "bank/acct/2025-01/a1.ofx"},
+				{StatementID: "STMT-B", Balance: 2000, SourceFile: "bank/acct/2025-01/b.ofx"},
+			},
 		},
 		{
 			name: "two entries same StatementID different Balance",
@@ -253,17 +278,25 @@ func TestDedupStatementData(t *testing.T) {
 				{StatementID: "STMT-3", Balance: 1000, SourceFile: "bank/acct/2025-01/a.ofx"},
 				{StatementID: "STMT-3", Balance: 2000, SourceFile: "bank/acct/2025-01/b.ofx"},
 			},
-			wantErr:       true,
-			wantErrSubstr: "STMT-3",
+			wantErr: true,
+			wantErrSubstrs: []string{
+				"STMT-3",
+				"bank/acct/2025-01/a.ofx",
+				"bank/acct/2025-01/b.ofx",
+				"10.00",
+				"20.00",
+			},
 		},
 		{
-			name: "three entries same StatementID all equal Balance",
+			name: "three entries same StatementID all equal Balance keeps first-seen",
 			input: []budget.StatementData{
-				{StatementID: "STMT-4", Balance: 7500},
-				{StatementID: "STMT-4", Balance: 7500},
-				{StatementID: "STMT-4", Balance: 7500},
+				{StatementID: "STMT-4", Balance: 7500, SourceFile: "bank/acct/2025-01/x.ofx"},
+				{StatementID: "STMT-4", Balance: 7500, SourceFile: "bank/acct/2025-01/y.ofx"},
+				{StatementID: "STMT-4", Balance: 7500, SourceFile: "bank/acct/2025-01/z.ofx"},
 			},
-			wantLen: 1,
+			wantOut: []budget.StatementData{
+				{StatementID: "STMT-4", Balance: 7500, SourceFile: "bank/acct/2025-01/x.ofx"},
+			},
 		},
 		{
 			name: "three entries same StatementID entry3 disagrees",
@@ -272,8 +305,14 @@ func TestDedupStatementData(t *testing.T) {
 				{StatementID: "STMT-5", Balance: 3000},
 				{StatementID: "STMT-5", Balance: 9999, SourceFile: "bank/acct/2025-02/c.ofx"},
 			},
-			wantErr:       true,
-			wantErrSubstr: "STMT-5",
+			wantErr: true,
+			wantErrSubstrs: []string{
+				"STMT-5",
+				"<derived>",
+				"bank/acct/2025-02/c.ofx",
+				"30.00",
+				"99.99",
+			},
 		},
 	}
 
@@ -281,11 +320,16 @@ func TestDedupStatementData(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			out, err := dedupStatementData(tc.input)
 			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("dedupStatementData: got nil error, want error containing %q", tc.wantErrSubstr)
+				if len(tc.wantErrSubstrs) == 0 {
+					t.Fatal("wantErr is true but wantErrSubstrs is empty — set non-empty substrings to verify the error message")
 				}
-				if !strings.Contains(err.Error(), tc.wantErrSubstr) {
-					t.Errorf("error %q does not contain %q", err.Error(), tc.wantErrSubstr)
+				if err == nil {
+					t.Fatalf("dedupStatementData: got nil error, want error containing %q", tc.wantErrSubstrs)
+				}
+				for _, sub := range tc.wantErrSubstrs {
+					if !strings.Contains(err.Error(), sub) {
+						t.Errorf("error %q does not contain %q", err.Error(), sub)
+					}
 				}
 				if out != nil {
 					t.Errorf("out: got %v, want nil on error", out)
@@ -295,18 +339,17 @@ func TestDedupStatementData(t *testing.T) {
 			if err != nil {
 				t.Fatalf("dedupStatementData: unexpected error: %v", err)
 			}
-			if len(out) != tc.wantLen {
-				t.Errorf("len(out): got %d, want %d", len(out), tc.wantLen)
-			}
 			if tc.wantOut != nil {
 				if len(out) != len(tc.wantOut) {
 					t.Fatalf("out: got %d entries, want %d", len(out), len(tc.wantOut))
 				}
 				for i := range tc.wantOut {
-					if out[i] != tc.wantOut[i] {
+					if !reflect.DeepEqual(out[i], tc.wantOut[i]) {
 						t.Errorf("out[%d]: got %+v, want %+v", i, out[i], tc.wantOut[i])
 					}
 				}
+			} else if len(out) != tc.wantLen {
+				t.Errorf("len(out): got %d, want %d", len(out), tc.wantLen)
 			}
 		})
 	}
