@@ -344,6 +344,20 @@ func virtualStmtPrefix(targetInstitution, targetAccount string) string {
 	return targetInstitution + "-" + targetAccount + "-"
 }
 
+// isGeneratedVirtualStmt reports whether stmtID belongs to a statement that
+// generateVirtualTransactions re-derives this run — i.e. its ID carries the
+// virtualStmtPrefix of some rule's target account. Such statements are dropped
+// from the input set and re-emitted fresh. Other virtual statements (e.g.
+// derived monthly anchors) are NOT re-derivable here and must be retained.
+func isGeneratedVirtualStmt(stmtID string, vrules []export.VirtualTransactionRule) bool {
+	for _, r := range vrules {
+		if strings.HasPrefix(stmtID, virtualStmtPrefix(r.TargetInstitution, r.TargetAccount)) {
+			return true
+		}
+	}
+	return false
+}
+
 // virtualTxnResult holds generated virtual transactions and statements, plus a
 // per-budget index of the generated transactions for the budget upsert.
 type virtualTxnResult struct {
@@ -535,6 +549,30 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	log.Printf("read %d transactions, %d rules, %d normalization rules, %d budgets from %s",
 		len(inp.Transactions), len(inp.Rules), len(inp.NormalizationRules), len(inp.Budgets), input.path)
 
+	// MIGRATION: deletable once all snapshots carry virtualTransactionRules.
+	// A nil slice means a pre-refactor snapshot; seed the legacy Synchrony->pet
+	// rule so behavior is preserved. An explicit empty slice ([]) is left alone
+	// (generation intentionally disabled). The seeded slice is written back into
+	// Output below, so the seed fires at most once per snapshot.
+	vrules := inp.VirtualTransactionRules
+	if vrules == nil {
+		vrules = []export.VirtualTransactionRule{{
+			Institution:         "pnc",
+			Account:             "5111",
+			Category:            "Transfer:CardPayment",
+			DescriptionContains: "SYNCHRONY",
+			TargetInstitution:   "synchrony",
+			TargetAccount:       "virtual",
+			TargetCategory:      "Pet:Veterinarian",
+			TargetBudget:        "pet",
+			BudgetID:            "pet",
+			BudgetName:          "Pet",
+			AllowancePeriod:     "monthly",
+			Rollover:            "none",
+		}}
+		log.Printf("MIGRATION: snapshot has no virtualTransactionRules; seeding legacy Synchrony->pet rule")
+	}
+
 	// Split rules into transaction-specific and general
 	txnRules, generalExportRules := splitRules(inp.Rules)
 
@@ -592,8 +630,8 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	// Apply general budget assignment (skips transactions assigned by transaction-specific rules)
 	rules.ApplyBudgetAssignment(allTxns, ruleSet)
 
-	// Generate virtual Synchrony spending transactions and statements
-	vsr := generateVirtualSynchrony(allTxns, txnDocIDs)
+	// Generate virtual spending transactions and statements from the rules
+	vsr := generateVirtualTransactions(allTxns, txnDocIDs, vrules)
 	allTxns = append(allTxns, vsr.transactions...)
 	txnDocIDs = append(txnDocIDs, vsr.docIDs...)
 
@@ -617,7 +655,7 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	weeklyAggregates := computeExportWeeklyAggregatesFromFull(fullTxns)
 
 	// Compute lastTransactionDate on statements from all transactions.
-	// Filter out Synchrony virtual statements from prior runs — those are
+	// Filter out generated virtual statements from prior runs — those are
 	// re-generated below from transaction data (vsr.statements). Other virtual
 	// statements (e.g. derived monthly anchors) are NOT re-derivable here, since
 	// runInputJSON has no access to the original parsed statement files, so they
@@ -625,7 +663,7 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	maxDates := maxTransactionDates(allTxns)
 	var updatedStmts []export.Statement
 	for _, s := range inp.Statements {
-		if s.Virtual && strings.HasPrefix(s.StatementID, "synchrony-virtual-") {
+		if s.Virtual && isGeneratedVirtualStmt(s.StatementID, vrules) {
 			continue
 		}
 		updated := s
@@ -639,8 +677,8 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	// Append virtual Synchrony statements
 	updatedStmts = append(updatedStmts, vsr.statements...)
 
-	// Append pet budget if virtual Synchrony transactions exist
-	budgets := appendPetBudgetIfNeeded(inp.Budgets, vsr.transactions)
+	// Upsert a budget per virtual rule from the generated transactions
+	budgets := upsertVirtualBudgets(inp.Budgets, vrules, vsr.txnsByBudgetID)
 
 	result := journal.Build(allTxns, txnDocIDs, normMap, journal.DefaultPairWindow)
 	for i := range exportTxns {
@@ -651,20 +689,21 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	}
 
 	return writeOutputAndLog(output, export.Output{
-		Version:            inp.Version,
-		ExportedAt:         export.FormatTimestamp(time.Now()),
-		GroupID:            inp.GroupID,
-		GroupName:          inp.GroupName,
-		Transactions:       exportTxns,
-		Statements:         updatedStmts,
-		Budgets:            budgets,
-		BudgetPeriods:      budgetPeriods,
-		Rules:              inp.Rules,
-		NormalizationRules: inp.NormalizationRules,
-		WeeklyAggregates:   weeklyAggregates,
-		JournalEntries:     result.Entries,
-		JournalLegs:        result.Legs,
-		Accounts:           result.Accounts,
+		Version:                 inp.Version,
+		ExportedAt:              export.FormatTimestamp(time.Now()),
+		GroupID:                 inp.GroupID,
+		GroupName:               inp.GroupName,
+		Transactions:            exportTxns,
+		Statements:              updatedStmts,
+		Budgets:                 budgets,
+		BudgetPeriods:           budgetPeriods,
+		Rules:                   inp.Rules,
+		NormalizationRules:      inp.NormalizationRules,
+		VirtualTransactionRules: vrules,
+		WeeklyAggregates:        weeklyAggregates,
+		JournalEntries:          result.Entries,
+		JournalLegs:             result.Legs,
+		Accounts:                result.Accounts,
 	})
 }
 
@@ -1224,6 +1263,30 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 		return fmt.Errorf("unsupported input version %d (expected 1)", inp.Version)
 	}
 
+	// MIGRATION: deletable once all snapshots carry virtualTransactionRules.
+	// A nil slice means a pre-refactor snapshot; seed the legacy Synchrony->pet
+	// rule so behavior is preserved. An explicit empty slice ([]) is left alone
+	// (generation intentionally disabled). The seeded slice is written back into
+	// Output below, so the seed fires at most once per snapshot.
+	vrules := inp.VirtualTransactionRules
+	if vrules == nil {
+		vrules = []export.VirtualTransactionRule{{
+			Institution:         "pnc",
+			Account:             "5111",
+			Category:            "Transfer:CardPayment",
+			DescriptionContains: "SYNCHRONY",
+			TargetInstitution:   "synchrony",
+			TargetAccount:       "virtual",
+			TargetCategory:      "Pet:Veterinarian",
+			TargetBudget:        "pet",
+			BudgetID:            "pet",
+			BudgetName:          "Pet",
+			AllowancePeriod:     "monthly",
+			Rollover:            "none",
+		}}
+		log.Printf("MIGRATION: snapshot has no virtualTransactionRules; seeding legacy Synchrony->pet rule")
+	}
+
 	// Resolve group name: flag overrides input file
 	if groupName == "" {
 		groupName = inp.GroupName
@@ -1336,8 +1399,8 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 	}
 	rules.ApplyBudgetAssignment(allTxns, ruleSet)
 
-	// Generate virtual Synchrony spending transactions and statements
-	vsr := generateVirtualSynchrony(allTxns, allDocIDs)
+	// Generate virtual spending transactions and statements from the rules
+	vsr := generateVirtualTransactions(allTxns, allDocIDs, vrules)
 	allTxns = append(allTxns, vsr.transactions...)
 	allDocIDs = append(allDocIDs, vsr.docIDs...)
 
@@ -1360,8 +1423,8 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 	// Append virtual Synchrony statements
 	exportStmts = append(exportStmts, vsr.statements...)
 
-	// Append pet budget if virtual Synchrony transactions exist
-	budgets := appendPetBudgetIfNeeded(inp.Budgets, vsr.transactions)
+	// Upsert a budget per virtual rule from the generated transactions
+	budgets := upsertVirtualBudgets(inp.Budgets, vrules, vsr.txnsByBudgetID)
 
 	result := journal.Build(allTxns, allDocIDs, normMap, journal.DefaultPairWindow)
 	for i := range exportTxns {
@@ -1372,20 +1435,21 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 	}
 
 	return writeOutputAndLog(output, export.Output{
-		Version:            inp.Version,
-		ExportedAt:         export.FormatTimestamp(time.Now()),
-		GroupID:            inp.GroupID,
-		GroupName:          groupName,
-		Transactions:       exportTxns,
-		Statements:         exportStmts,
-		Budgets:            budgets,
-		BudgetPeriods:      budgetPeriods,
-		Rules:              inp.Rules,
-		NormalizationRules: inp.NormalizationRules,
-		WeeklyAggregates:   weeklyAggregates,
-		JournalEntries:     result.Entries,
-		JournalLegs:        result.Legs,
-		Accounts:           result.Accounts,
+		Version:                 inp.Version,
+		ExportedAt:              export.FormatTimestamp(time.Now()),
+		GroupID:                 inp.GroupID,
+		GroupName:               groupName,
+		Transactions:            exportTxns,
+		Statements:              exportStmts,
+		Budgets:                 budgets,
+		BudgetPeriods:           budgetPeriods,
+		Rules:                   inp.Rules,
+		NormalizationRules:      inp.NormalizationRules,
+		VirtualTransactionRules: vrules,
+		WeeklyAggregates:        weeklyAggregates,
+		JournalEntries:          result.Entries,
+		JournalLegs:             result.Legs,
+		Accounts:                result.Accounts,
 	})
 }
 

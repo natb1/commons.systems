@@ -116,7 +116,7 @@ type Output struct {
 	BudgetPeriods           []BudgetPeriod           `json:"budgetPeriods"`
 	Rules                   []Rule                   `json:"rules"`
 	NormalizationRules      []NormalizationRule      `json:"normalizationRules"`
-	VirtualTransactionRules []VirtualTransactionRule `json:"virtualTransactionRules,omitempty"`
+	VirtualTransactionRules []VirtualTransactionRule `json:"virtualTransactionRules"`
 	WeeklyAggregates        []WeeklyAggregate        `json:"weeklyAggregates"`
 	JournalEntries          []JournalEntry           `json:"journalEntries"`
 	JournalLegs             []JournalLeg             `json:"journalLegs"`
