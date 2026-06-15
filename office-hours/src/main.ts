@@ -8,6 +8,7 @@ import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck"
 import { renderApp } from "./app-view.js";
 import { getOwnerReminders, getOwnerQueueMetrics } from "./data.js";
 import { getOwnerSamples } from "./usage-data.js";
+import { getOwnerIssueSamples } from "./issue-data.js";
 import {
   db,
   NAMESPACE,
@@ -40,15 +41,16 @@ async function refresh(): Promise<void> {
     return;
   }
   try {
-    const [samples, reminders, queueMetrics] = await Promise.all([
+    const [samples, reminders, queueMetrics, issueSamples] = await Promise.all([
       getOwnerSamples(db, NAMESPACE, refreshUser),
       getOwnerReminders(db, NAMESPACE, refreshUser),
       getOwnerQueueMetrics(db, NAMESPACE, refreshUser),
+      getOwnerIssueSamples(db, NAMESPACE, refreshUser),
     ]);
     // Auth may have changed while the Firestore calls were in flight — skip the
     // render so the in-flight result does not clobber the already-updated view.
     if (currentUser !== refreshUser) return;
-    renderApp(app!, { tier: "owner", samples, reminders, queueMetrics }, new Date());
+    renderApp(app!, { tier: "owner", samples, reminders, queueMetrics, issueSamples }, new Date());
   } catch (error) {
     // Auth may have changed while the Firestore calls were in flight — skip the
     // render so the in-flight error does not clobber the already-updated view.
