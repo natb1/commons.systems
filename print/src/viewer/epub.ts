@@ -44,7 +44,10 @@ export function createEpubRenderer(
   function ensureLocations(): Promise<void> {
     if (!book) return Promise.resolve();
     if (!locationsReady) {
-      locationsReady = book.locations.generate(GENERATE_CHARS).then(() => {});
+      locationsReady = book.locations.generate(GENERATE_CHARS).then(() => {}).catch((err) => {
+        locationsReady = null;
+        return Promise.reject(err);
+      });
     }
     return locationsReady;
   }

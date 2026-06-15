@@ -255,6 +255,13 @@ body.viewer-active {
   border-radius: 3px;
   padding: 0.25rem 0.5rem;
   font: inherit;
+  color: inherit;
+  -moz-appearance: textfield;
+}
+
+.viewer-goto-input::-webkit-inner-spin-button,
+.viewer-goto-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
 }
 
 .zoom-hidden,

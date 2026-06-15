@@ -247,6 +247,7 @@ export function initViewer(
   let outlineCleanup: (() => void) | null = null;
   let spreadToggleCleanup: (() => void) | null = null;
   let gotoMode: "page" | "percent" | null = null;
+  let gotoInFlight = false;
 
   const controller = new SpreadController({
     renderer,
@@ -316,23 +317,32 @@ export function initViewer(
   }
 
   async function submitGoto(): Promise<void> {
-    if (gotoMode === "percent") {
-      const pct = parseFloat(gotoInput.value);
-      if (Number.isNaN(pct)) return;
-      const frac = Math.max(0, Math.min(100, pct)) / 100;
-      gotoInput.disabled = true;
-      gotoInput.placeholder = "Calculating…";
-      try {
-        await renderer.goToFraction!(frac);
-      } finally {
-        gotoInput.disabled = false;
-        gotoInput.placeholder = "%";
+    if (gotoInFlight) return;
+    gotoInFlight = true;
+    try {
+      if (gotoMode === "percent") {
+        const pct = parseFloat(gotoInput.value);
+        if (Number.isNaN(pct)) return;
+        const frac = Math.max(0, Math.min(100, pct)) / 100;
+        const savedValue = gotoInput.value;
+        gotoInput.value = "";
+        gotoInput.disabled = true;
+        gotoInput.placeholder = "Calculating…";
+        try {
+          await renderer.goToFraction!(frac);
+        } finally {
+          gotoInput.value = savedValue;
+          gotoInput.disabled = false;
+          gotoInput.placeholder = "%";
+        }
+        updateNav();
+      } else if (gotoMode === "page") {
+        const page = clampGoToPage(gotoInput.value, renderer.pageCount);
+        if (page === null) return;
+        await goToPageNum(page);
       }
-      updateNav();
-    } else if (gotoMode === "page") {
-      const page = clampGoToPage(gotoInput.value, renderer.pageCount);
-      if (page === null) return;
-      await goToPageNum(page);
+    } finally {
+      gotoInFlight = false;
     }
   }
 
