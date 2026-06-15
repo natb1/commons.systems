@@ -864,5 +864,41 @@ describe("createEpubRenderer", () => {
 
       expect(renderer.position).toBe("epubcfi(/6/4!/4/10)");
     });
+
+    it("aborts an in-flight search before navigating", async () => {
+      mockRendition.once.mockImplementation((_event: string, cb: () => void) => { cb(); });
+
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      // Control when the first section's load resolves so the search stays in flight.
+      let resolveFirstLoad!: () => void;
+      const firstLoadPromise = new Promise<undefined>((res) => {
+        resolveFirstLoad = () => res(undefined);
+      });
+      mockSpine.get.mockImplementation((index: number) => {
+        const sec = makeMockSection(index, [{ cfi: `epubcfi(/6/${index * 2 + 2}!/4/1)`, excerpt: "a quick test" }]);
+        if (index === 0) sec.load.mockReturnValue(firstLoadPromise);
+        return sec;
+      });
+
+      // Start a search but don't await it; it is paused on the first section's load.
+      const searchPromise = renderer.search!("quick");
+
+      // Navigating to a result must abort the in-flight search (bumps the generation)
+      // so no concurrent section.load() can consume the relocated listener.
+      await renderer.goToResult!({
+        location: "epubcfi(/6/4!/4/10)",
+        label: "Ch. 1",
+        snippet: "x",
+        matchStart: 0,
+        matchLength: 1,
+      });
+
+      // Let the stranded search resume; it must observe the bumped generation and bail.
+      resolveFirstLoad();
+      const results = await searchPromise;
+      expect(results).toEqual([]);
+    });
   });
 });

@@ -232,6 +232,11 @@ export function createEpubRenderer(
 
     async goToResult(result: SearchResult): Promise<void> {
       if (!rendition) return;
+      // Abort any in-flight search() before navigating. A concurrent search's
+      // section.load() emits "relocated" events that would otherwise consume the
+      // once("relocated") listener below before rendition.display() fires its own,
+      // stranding waitForRelocated() until its 5s timeout.
+      ++searchGeneration;
       const relocated = waitForRelocated();
       await rendition.display(result.location);
       await relocated;
