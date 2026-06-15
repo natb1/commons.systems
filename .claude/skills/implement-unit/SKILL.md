@@ -87,7 +87,7 @@ The caller supplies:
    unit added new untracked files, append them the same way via
    `git ls-files --others --exclude-standard` (also bare, NUL-safe paths) — both
    feed the same quoted `args` array. Exit 0 → unit landed; proceed to Step 4
-   (Return).
+   (hand back to the caller).
 
    **2b. On a non-zero exit, fall back to the fork** — this is the **canonical
    commit-merge-push fork recipe**: issue an Agent tool call with
@@ -127,4 +127,4 @@ The caller supplies:
    - **Push rejection** (non-fast-forward, server hook) → surface to the user. Do
      **not** force-push.
 
-4. **Return** once the unit is committed, merged, and pushed.
+4. **Hand back to the caller** — this unit is committed, merged, and pushed. Do not end the turn; do not emit a closing summary. Issue the caller's next step as a tool call immediately.
