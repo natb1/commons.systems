@@ -475,7 +475,12 @@ export function initViewer(
       }
     }
     initGoto();
-    searchCleanup = initSearch(viewer, renderer, () => updateNav());
+    searchCleanup = initSearch(viewer, renderer, () => {
+      if (controller.enabled) {
+        controller.goToPage(renderer.currentPage).catch(handleRenderError);
+      }
+      updateNav();
+    });
     outlineCleanup = initOutline(viewer, renderer, () => updateNav());
     const bookmarksStore = uid && !firestoreReadFailed
       ? {
