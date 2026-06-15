@@ -126,6 +126,18 @@ body.viewer-active {
   background: transparent;
 }
 
+/* Search highlight spans injected into the text layer by the PDF search feature.
+   color is intentionally not set here so it inherits transparent from the parent
+   .textLayer span — this avoids double-rendering glyphs over the canvas. */
+.textLayer .search-highlight {
+  background-color: rgba(255, 230, 0, 0.4);
+  border-radius: 2px;
+}
+
+.textLayer .search-highlight.active {
+  background-color: rgba(255, 150, 0, 0.55);
+}
+
 /* When zoomed, switch from centered fit-to-view to scrollable overflow layout */
 .viewer-canvas-wrap.zoomed {
   width: max-content;

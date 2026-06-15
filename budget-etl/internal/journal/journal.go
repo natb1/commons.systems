@@ -48,10 +48,26 @@ type Result struct {
 	EntryIDByDocID map[string]string // docID -> journalEntryId
 }
 
-// accountID composes the account document id from institution and account,
-// matching the seed/app convention "{institution}_{account}".
+// encodeIDComponent percent-encodes the two characters that would otherwise
+// collide in an underscore-joined id: '%' is escaped first (to avoid
+// double-encoding), then '_'.
+func encodeIDComponent(s string) string {
+	s = strings.ReplaceAll(s, "%", "%25")
+	s = strings.ReplaceAll(s, "_", "%5F")
+	return s
+}
+
+// AccountID composes the account document id from institution and account,
+// joining the two percent-encoded components with "_". Each component has '%'
+// escaped to "%25" and '_' escaped to "%5F", so the join character is the only
+// unencoded underscore and the mapping is injective.
+func AccountID(institution, account string) string {
+	return encodeIDComponent(institution) + "_" + encodeIDComponent(account)
+}
+
+// accountID is a thin wrapper around AccountID kept for internal use.
 func accountID(institution, account string) string {
-	return institution + "_" + account
+	return AccountID(institution, account)
 }
 
 // isTransfer reports whether a category marks the line as a transfer.
