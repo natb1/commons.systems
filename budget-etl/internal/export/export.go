@@ -351,20 +351,15 @@ func ReadFile(path, password string) (Output, error) {
 //
 // Referential integrity: every JournalLeg must reference an Account that exists
 // in Accounts (via AccountID) and a JournalEntry that exists in JournalEntries
-// (via EntryID). A leg naming a phantom account or entry is rejected.
+// (via EntryID). A leg naming a phantom account or entry is rejected. Likewise a
+// Transaction with a non-nil JournalEntryID must reference an existing
+// JournalEntry, or it is rejected.
 func (o Output) Validate() error {
-	for i, l := range o.JournalLegs {
-		if err := l.Validate(); err != nil {
-			return fmt.Errorf("journalLegs[%d]: %w", i, err)
-		}
-	}
+	accountIDs := make(map[string]bool, len(o.Accounts))
 	for i, a := range o.Accounts {
 		if err := a.Validate(); err != nil {
 			return fmt.Errorf("accounts[%d]: %w", i, err)
 		}
-	}
-	accountIDs := make(map[string]bool, len(o.Accounts))
-	for _, a := range o.Accounts {
 		accountIDs[a.ID] = true
 	}
 	entryIDs := make(map[string]bool, len(o.JournalEntries))
@@ -372,11 +367,19 @@ func (o Output) Validate() error {
 		entryIDs[e.ID] = true
 	}
 	for i, l := range o.JournalLegs {
+		if err := l.Validate(); err != nil {
+			return fmt.Errorf("journalLegs[%d]: %w", i, err)
+		}
 		if !accountIDs[l.AccountID] {
 			return fmt.Errorf("journalLegs[%d]: accountId %q does not reference any account in accounts", i, l.AccountID)
 		}
 		if !entryIDs[l.EntryID] {
 			return fmt.Errorf("journalLegs[%d]: entryId %q does not reference any journal entry in journalEntries", i, l.EntryID)
+		}
+	}
+	for i, t := range o.Transactions {
+		if t.JournalEntryID != nil && !entryIDs[*t.JournalEntryID] {
+			return fmt.Errorf("transactions[%d]: journalEntryId %q does not reference any journal entry in journalEntries", i, *t.JournalEntryID)
 		}
 	}
 	return nil
