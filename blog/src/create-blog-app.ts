@@ -104,8 +104,6 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
 
   navEl.links = config.navLinks;
   navEl.showHomeLink = config.showHomeLink;
-  navEl.addEventListener("sign-in", () => config.firebase.signIn());
-  navEl.addEventListener("sign-out", () => void config.firebase.signOut());
 
   const toggle = document.getElementById("panel-toggle");
   if (!toggle) throw new Error("#panel-toggle element not found");
@@ -114,6 +112,15 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   // Teardown list: destroy() unwinds everything in one place. Declared before
   // the router/auth wiring below so those can register their teardowns.
   const teardowns: Array<() => void> = [];
+
+  // Named nav handlers so destroy() can remove them; otherwise, reusing the same
+  // #nav element across createBlogApp calls (e.g. in tests) accumulates listeners.
+  const onSignIn = (): void => void config.firebase.signIn();
+  const onSignOut = (): void => void config.firebase.signOut();
+  navEl.addEventListener("sign-in", onSignIn);
+  navEl.addEventListener("sign-out", onSignOut);
+  teardowns.push(() => navEl.removeEventListener("sign-in", onSignIn));
+  teardowns.push(() => navEl.removeEventListener("sign-out", onSignOut));
 
   let currentUser: User | null = null;
   let cachedPosts: PostMeta[] = [];
