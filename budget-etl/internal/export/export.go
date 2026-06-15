@@ -16,7 +16,9 @@ import (
 )
 
 // BENC encrypted file format (shared with budget/src/crypto-core.ts):
-//   [magic 4B "BENC"][salt 16B][IV 12B][AES-256-GCM ciphertext + 16B auth tag]
+//
+//	[magic 4B "BENC"][salt 16B][IV 12B][AES-256-GCM ciphertext + 16B auth tag]
+//
 // Key derivation: PBKDF2-HMAC-SHA256, 600k iterations, 256-bit key.
 const (
 	saltLen          = 16
@@ -104,20 +106,21 @@ func decryptJSON(data []byte, password string) ([]byte, error) {
 
 // Output is the top-level JSON structure written by budget-etl --output.
 type Output struct {
-	Version            int                 `json:"version"`
-	ExportedAt         string              `json:"exportedAt"`
-	GroupID            string              `json:"groupId"`
-	GroupName          string              `json:"groupName"`
-	Transactions       []Transaction       `json:"transactions"`
-	Statements         []Statement         `json:"statements"`
-	Budgets            []Budget            `json:"budgets"`
-	BudgetPeriods      []BudgetPeriod      `json:"budgetPeriods"`
-	Rules              []Rule              `json:"rules"`
-	NormalizationRules []NormalizationRule `json:"normalizationRules"`
-	WeeklyAggregates   []WeeklyAggregate   `json:"weeklyAggregates"`
-	JournalEntries     []JournalEntry      `json:"journalEntries"`
-	JournalLegs        []JournalLeg        `json:"journalLegs"`
-	Accounts           []Account           `json:"accounts"`
+	Version                 int                      `json:"version"`
+	ExportedAt              string                   `json:"exportedAt"`
+	GroupID                 string                   `json:"groupId"`
+	GroupName               string                   `json:"groupName"`
+	Transactions            []Transaction            `json:"transactions"`
+	Statements              []Statement              `json:"statements"`
+	Budgets                 []Budget                 `json:"budgets"`
+	BudgetPeriods           []BudgetPeriod           `json:"budgetPeriods"`
+	Rules                   []Rule                   `json:"rules"`
+	NormalizationRules      []NormalizationRule      `json:"normalizationRules"`
+	VirtualTransactionRules []VirtualTransactionRule `json:"virtualTransactionRules"`
+	WeeklyAggregates        []WeeklyAggregate        `json:"weeklyAggregates"`
+	JournalEntries          []JournalEntry           `json:"journalEntries"`
+	JournalLegs             []JournalLeg             `json:"journalLegs"`
+	Accounts                []Account                `json:"accounts"`
 }
 
 // WeeklyAggregate is a pre-computed weekly credit and unbudgeted spending total.
@@ -248,7 +251,7 @@ func (l JournalLeg) Validate() error {
 type Budget struct {
 	ID              string  `json:"id"`
 	Name            string  `json:"name"`
-	Allowance float64 `json:"allowance"`
+	Allowance       float64 `json:"allowance"`
 	AllowancePeriod string  `json:"allowancePeriod,omitempty"`
 	Rollover        string  `json:"rollover"`
 }
@@ -291,6 +294,28 @@ type NormalizationRule struct {
 	Institution          string `json:"institution"`
 	Account              string `json:"account"`
 	Priority             int    `json:"priority"`
+}
+
+// VirtualTransactionRule drives data-driven virtual-transaction generation.
+// The source-filter fields select matching real transactions; the Target*
+// fields define the generated virtual transaction; the budget-seeding fields
+// seed or upsert a budget entry.
+type VirtualTransactionRule struct {
+	// Source filter
+	Institution         string `json:"institution"`
+	Account             string `json:"account"`
+	Category            string `json:"category"`
+	DescriptionContains string `json:"descriptionContains"`
+	// Output
+	TargetInstitution string `json:"targetInstitution"`
+	TargetAccount     string `json:"targetAccount"`
+	TargetCategory    string `json:"targetCategory"`
+	TargetBudget      string `json:"targetBudget"`
+	// Budget-seeding
+	BudgetID        string `json:"budgetId"`
+	BudgetName      string `json:"budgetName"`
+	AllowancePeriod string `json:"allowancePeriod"`
+	Rollover        string `json:"rollover"`
 }
 
 // FormatTimestamp formats a time.Time as ISO 8601 (RFC 3339) in UTC.
