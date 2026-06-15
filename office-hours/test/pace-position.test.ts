@@ -118,16 +118,16 @@ describe("segmentByWeek", () => {
 
 describe("aheadBehindDelta", () => {
   it("returns a positive delta when weeklyUsedPct exceeds W(x)", () => {
-    // At x ≈ 0.5, W ≈ 31. Setting weeklyUsedPct = 50 means delta ≈ +19.
+    // At x ≈ 0.5, W ≈ 65.95. Setting weeklyUsedPct = 80 means delta ≈ +14.
     const sampledAt = atBefore(RESET_B, WEEK_SECONDS * 0.5);
-    const sample = make({ sampledAt, weeklyResetsAt: RESET_B, weeklyUsedPct: 50 });
+    const sample = make({ sampledAt, weeklyResetsAt: RESET_B, weeklyUsedPct: 80 });
 
     const delta = aheadBehindDelta(sample);
     expect(delta).toBeGreaterThan(0);
   });
 
   it("returns a negative delta when weeklyUsedPct is below W(x)", () => {
-    // At x ≈ 0.5, W ≈ 31. Setting weeklyUsedPct = 10 means delta ≈ −21.
+    // At x ≈ 0.5, W ≈ 65.95. Setting weeklyUsedPct = 10 means delta ≈ −55.95.
     const sampledAt = atBefore(RESET_B, WEEK_SECONDS * 0.5);
     const sample = make({ sampledAt, weeklyResetsAt: RESET_B, weeklyUsedPct: 10 });
 
