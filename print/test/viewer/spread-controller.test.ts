@@ -103,6 +103,25 @@ describe("SpreadController", () => {
     });
   });
 
+  it("goToPage sets the spread index and renders that spread's pages", async () => {
+    const { controller, renderer } = makeController({
+      renderPageInto: vi.fn().mockResolvedValue(undefined),
+    });
+    controller.enter(1);
+
+    const renderPageInto = vi.mocked(renderer.renderPageInto!);
+    renderPageInto.mockClear();
+
+    // Page 5 is in spread index 2 (spread {4,5}) for a 10-page doc.
+    await controller.goToPage(5);
+
+    expect(controller.position).toBe("4");
+    const calls = renderPageInto.mock.calls;
+    const lastCalls = calls.slice(-2);
+    expect(lastCalls[0]![0]).toBe(4);
+    expect(lastCalls[1]![0]).toBe(5);
+  });
+
   it("zoomOut early-returns at zoom 0 and floors at 0", () => {
     const { controller, canvasWrap } = makeController({ renderPageInto: vi.fn() });
     controller.enter(1);
