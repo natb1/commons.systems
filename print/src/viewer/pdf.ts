@@ -199,7 +199,11 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     if (!result) return;
     if (gen !== renderGen) {
       result.task.cancel();
-      renderTask = null;
+      // Only clear the slot if it still holds our task; a superseding render
+      // may have already published its own in-flight task via onTaskStart, and
+      // nulling that would let a later render/destroy skip the cancel and start
+      // a second page.render on the shared canvas.
+      if (renderTask === result.task) renderTask = null;
       return;
     }
 
