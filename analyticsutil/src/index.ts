@@ -2,9 +2,11 @@ import {
   initializeAnalytics,
   logEvent,
   setUserProperties,
+  type Analytics,
 } from "firebase/analytics";
 import type { FirebaseApp } from "firebase/app";
 import { classifyError } from "@commons-systems/errorutil/classify";
+import { onLCP, onCLS, onINP, onFCP, onTTFB, type Metric } from "web-vitals";
 
 const STORAGE_KEY = "analytics_traffic_type";
 const PARAM_KEY = "_ct";
@@ -43,6 +45,35 @@ function applyTrafficTag(): TrafficType {
   return localStorage.getItem(STORAGE_KEY) === "internal"
     ? "internal"
     : "organic";
+}
+
+function reportWebVitals(analytics: Analytics): void {
+  function report(metric: Metric): void {
+    const metricValue = Math.round(
+      metric.name === "CLS" ? metric.value * 1000 : metric.value,
+    );
+    try {
+      logEvent(analytics, "web_vitals", {
+        metric_name: metric.name,
+        metric_value: metricValue,
+        metric_rating: metric.rating,
+        metric_id: metric.id,
+      });
+    } catch (error) {
+      if (classifyError(error) === "programmer") throw error;
+      reportError(
+        new Error(
+          `Failed to log web-vital (metric: ${metric.name}): ${error instanceof Error ? error.message : error}`,
+        ),
+      );
+    }
+  }
+
+  onLCP(report);
+  onCLS(report);
+  onINP(report);
+  onFCP(report);
+  onTTFB(report);
 }
 
 export function initAnalyticsSafe(app: FirebaseApp): (path: string) => void {
@@ -86,6 +117,8 @@ export function initAnalytics(app: FirebaseApp): (path: string) => void {
   });
 
   setUserProperties(analytics, { traffic_type: trafficType });
+
+  reportWebVitals(analytics);
 
   return (path: string) => {
     try {

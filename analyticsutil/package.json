@@ -11,6 +11,9 @@
     "test:watch": "vitest",
     "lint": "eslint src/"
   },
+  "dependencies": {
+    "web-vitals": "^4"
+  },
   "peerDependencies": {
     "@commons-systems/errorutil": "*",
     "firebase": "^12.9.0"
