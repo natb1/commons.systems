@@ -27558,7 +27558,7 @@ if [[ "$method" == "POST" && "$endpoint" == *"/comments" ]]; then
   next=$(( $(cat "$COUNTER") + 1 ))
   echo "$next" > "$COUNTER"
   newbody=$(cat "$bodyfile")
-  updated=$(jq -c --argjson id "$next" --arg body "$newbody" --arg login "${WP_AUTHOR:-plan-bot}" '. + [{id:$id, body:$body, user:{login:$login}}]' "$STORE")
+  updated=$(jq -c --argjson id "$next" --arg body "$newbody" --argjson author_id "${WP_AUTHOR_ID:-9001}" --arg login "${WP_AUTHOR:-plan-bot}" '. + [{id:$id, body:$body, user:{id:$author_id, login:$login}}]' "$STORE")
   echo "$updated" > "$STORE"
   emit "$(jq -c --argjson id "$next" '.[] | select(.id == $id)' "$STORE")"
   exit 0
@@ -27579,12 +27579,12 @@ chmod +x "$wp_root/bin/gh"
 WP_WRITE="$SCRIPT_DIR/dispatch-write-plan"
 WP_READ="$SCRIPT_DIR/dispatch-read-plan"
 
-# Pin the trusted plan-comment author for this block. Every positive test POSTs
-# via dispatch-write-plan, whose POST the fake gh stamps as ${WP_AUTHOR:-plan-bot};
-# pinning DISPATCH_PLAN_AUTHOR to the same login keeps the author-filtered scans
+# Pin the trusted plan-comment author id for this block. Every positive test POSTs
+# via dispatch-write-plan, whose POST the fake gh stamps with id ${WP_AUTHOR_ID:-9001};
+# pinning DISPATCH_PLAN_AUTHOR_ID to the same id keeps the author-filtered scans
 # matching, and short-circuits the scripts' `$(gh api user …)` default (the fake
 # gh has no user endpoint).
-export DISPATCH_PLAN_AUTHOR=plan-bot
+export DISPATCH_PLAN_AUTHOR_ID=9001
 
 # 1. write-creates: empty store → one comment containing the marker + PLAN A.
 if ! PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"PLAN A"; then
@@ -27647,19 +27647,22 @@ else
 fi
 rm -rf "$wp_empty"
 
-# 6. foreign-author injection: a marker comment authored by an untrusted account
-#    must be ignored by read-plan, and write-plan must NOT adopt (PATCH) it — it
-#    POSTs a fresh trusted-authored comment instead. Guards the #1222 fix:
-#    without the author filter, read-plan would execute the forged plan and
-#    write-plan would clobber the attacker's comment with the real plan.
+# 6. reclaimed-login injection: a marker comment that reuses the trusted login but
+#    carries a DIFFERENT numeric id (the renamed-and-reclaimed-login attack) must be
+#    ignored by read-plan, and write-plan must NOT adopt (PATCH) it — it POSTs a
+#    fresh trusted-authored comment instead. Guards the #1644 id-gate over the #1222
+#    login-gate: a login-only filter would accept this forgery; the .user.id filter
+#    rejects it. Without any author filter, read-plan would execute the forged plan
+#    and write-plan would clobber the attacker's comment with the real plan.
 wp_forge=$(mktemp -d); mkdir -p "$wp_forge/bin"
 sed "s|$WP_STORE|$wp_forge/store.json|; s|$WP_COUNTER|$wp_forge/counter|" \
   "$wp_root/bin/gh" > "$wp_forge/bin/gh"
 chmod +x "$wp_forge/bin/gh"
-# Seed one attacker-authored comment carrying the marker; counter=1 so the next
-# POST gets id 2 (no id collision with the seeded id 1).
+# Seed one attacker comment carrying the marker, reusing the trusted login but with
+# a different numeric id (6666 ≠ trusted 9001) — the reclaimed-login forgery; counter=1
+# so the next POST gets id 2 (no id collision with the seeded comment id 1).
 echo '1' > "$wp_forge/counter"
-jq -nc '[{id:1, body:"<!-- dispatch:plan -->\nFORGED PLAN", user:{login:"attacker"}}]' > "$wp_forge/store.json"
+jq -nc '[{id:1, body:"<!-- dispatch:plan -->\nFORGED PLAN", user:{id:6666, login:"plan-bot"}}]' > "$wp_forge/store.json"
 
 # 6a. read-plan ignores the forged comment → exit 1 + missing-comment diagnostic.
 if read_err=$(PATH="$wp_forge/bin:$SAVED_PATH" "$WP_READ" 7 2>&1 1>/dev/null); then rc=0; else rc=$?; fi
@@ -27685,7 +27688,7 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: write-plan leaves the attacker comment body unchanged"
 fi
 TOTAL=$((TOTAL + 1))
-if jq -e '.[] | select(.user.login == "plan-bot") | (.body | contains("<!-- dispatch:plan -->") and contains("REAL PLAN"))' "$wp_forge/store.json" >/dev/null; then
+if jq -e '.[] | select(.user.id == 9001) | (.body | contains("<!-- dispatch:plan -->") and contains("REAL PLAN"))' "$wp_forge/store.json" >/dev/null; then
   PASS=$((PASS + 1)); echo "  PASS: write-plan POSTs a fresh trusted-authored plan comment"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: write-plan POSTs a fresh trusted-authored plan comment"
@@ -27777,8 +27780,8 @@ echo '0' > "$wp_two/counter"
 # enforces the at-most-one invariant, so seeding two requires bypassing it).
 MARKER='<!-- dispatch:plan -->'
 jq -nc --arg m "$MARKER" \
-  '[{id:1, body:($m + "\nFIRST PLAN"), user:{login:"plan-bot"}},
-    {id:2, body:($m + "\nSECOND PLAN"), user:{login:"plan-bot"}}]' \
+  '[{id:1, body:($m + "\nFIRST PLAN"), user:{id:9001, login:"plan-bot"}},
+    {id:2, body:($m + "\nSECOND PLAN"), user:{id:9001, login:"plan-bot"}}]' \
   > "$wp_two/store.json"
 read_out=$(PATH="$wp_two/bin:$SAVED_PATH" "$WP_READ" 7) && rc=0 || rc=$?
 assert_eq "read-plan: two matching plan comments exit 0 (no SIGPIPE under pipefail, #1643)" "0" "$rc"
@@ -27809,7 +27812,7 @@ fi
 rm -rf "$wp_two"
 
 rm -rf "$wp_root"
-unset DISPATCH_PLAN_AUTHOR
+unset DISPATCH_PLAN_AUTHOR_ID
 
 # ============================================================================
 # claim_fixed_vite_port (fixed Vite-port pool) tests
