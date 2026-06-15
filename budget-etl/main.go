@@ -213,129 +213,6 @@ func runOutputJSON(allTxns []budget.TransactionData, allStmts []budget.Statement
 	return nil
 }
 
-// virtualSynchronyResult holds generated virtual Synchrony spending transactions and statements.
-type virtualSynchronyResult struct {
-	transactions []budget.TransactionData
-	docIDs       []string
-	statements   []export.Statement
-}
-
-// generateVirtualSynchrony creates virtual spending transactions on synchrony/virtual
-// for each PNC->Synchrony card payment, plus virtual zero-balance statements per period.
-// Deduplicates by (date, amount) so that normalized transaction pairs don't produce
-// duplicate virtual transactions.
-//
-// Filter criteria: institution=pnc, account=5111, category=Transfer:CardPayment,
-// description contains "SYNCHRONY" (case-insensitive).
-// Output: category=Pet:Veterinarian, budget=pet.
-// These values match the current PNC/Synchrony account setup; update if account details change.
-func generateVirtualSynchrony(
-	allTxns []budget.TransactionData,
-	txnDocIDs []string,
-) virtualSynchronyResult {
-	type dateAmount struct {
-		date   string
-		amount int64
-	}
-	seen := make(map[dateAmount]bool)
-	var result virtualSynchronyResult
-	periods := make(map[string]bool)
-	for i, txn := range allTxns {
-		if txn.Institution != "pnc" || txn.Account != "5111" {
-			continue
-		}
-		if txn.Category != "Transfer:CardPayment" {
-			continue
-		}
-		if !strings.Contains(strings.ToUpper(txn.Description), "SYNCHRONY") {
-			continue
-		}
-		key := dateAmount{date: txn.Timestamp.Format("2006-01-02"), amount: txn.Amount}
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		period := txn.Timestamp.Format("2006-01")
-		stmtID := "synchrony-virtual-" + period
-		result.transactions = append(result.transactions, budget.TransactionData{
-			Institution:   "synchrony",
-			Account:       "virtual",
-			Description:   txn.Description,
-			Amount:        txn.Amount,
-			Timestamp:     txn.Timestamp,
-			StatementID:   stmtID,
-			TransactionID: "virtual-" + txnDocIDs[i],
-			Category:      "Pet:Veterinarian",
-			Budget:        "pet",
-			Virtual:       true,
-		})
-		result.docIDs = append(result.docIDs, "virtual-"+txnDocIDs[i])
-		periods[period] = true
-	}
-	// Generate virtual statements per unique period
-	for period := range periods {
-		stmtID := "synchrony-virtual-" + period
-		result.statements = append(result.statements, export.Statement{
-			ID:          budget.StatementDocID(stmtID),
-			StatementID: stmtID,
-			Institution: "synchrony",
-			Account:     "virtual",
-			Balance:     0,
-			Period:      period,
-			Virtual:     true,
-		})
-	}
-	return result
-}
-
-// computePetBudget computes a pet budget from virtual Synchrony transactions.
-// Returns nil if no virtual transactions exist.
-// Note: the returned Allowance field holds the monthly average because
-// AllowancePeriod is "monthly".
-func computePetBudget(virtualTxns []budget.TransactionData) *export.Budget {
-	if len(virtualTxns) == 0 {
-		return nil
-	}
-	var total float64
-	var earliest, latest time.Time
-	for _, txn := range virtualTxns {
-		total += budget.DollarAmount(txn.Amount)
-		if earliest.IsZero() || txn.Timestamp.Before(earliest) {
-			earliest = txn.Timestamp
-		}
-		if latest.IsZero() || txn.Timestamp.After(latest) {
-			latest = txn.Timestamp
-		}
-	}
-	months := latest.Sub(earliest).Hours() / (24 * 30.44) // approximate months
-	if months < 1 {
-		months = 1
-	}
-	monthlyAvg := total / months
-	return &export.Budget{
-		ID:              "pet",
-		Name:            "Pet",
-		Allowance:       math.Round(monthlyAvg*100) / 100,
-		AllowancePeriod: "monthly",
-		Rollover:        "none",
-	}
-}
-
-// appendPetBudgetIfNeeded adds a pet budget to the list if virtual Synchrony
-// transactions exist and the budget is not already present.
-func appendPetBudgetIfNeeded(budgets []export.Budget, virtualTxns []budget.TransactionData) []export.Budget {
-	for _, b := range budgets {
-		if b.ID == "pet" {
-			return budgets
-		}
-	}
-	pet := computePetBudget(virtualTxns)
-	if pet == nil {
-		return budgets
-	}
-	return append(budgets, *pet)
-}
-
 // virtualStmtPrefix returns the statement-ID prefix for a virtual account's
 // generated statements. Both the generator and the input-JSON drop-filter use
 // this so the two cannot drift. With the legacy synchrony/virtual values it
@@ -468,8 +345,7 @@ func generateVirtualTransactions(
 }
 
 // computeMonthlyAllowance returns the monthly-average allowance for a set of
-// virtual transactions, using the same math as the legacy computePetBudget so
-// allowance values are identical.
+// virtual transactions: total spending divided by elapsed months (minimum one).
 func computeMonthlyAllowance(txns []budget.TransactionData) float64 {
 	var total float64
 	var earliest, latest time.Time

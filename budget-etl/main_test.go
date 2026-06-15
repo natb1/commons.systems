@@ -930,99 +930,6 @@ func TestRunMergeCrossStatementDuplicateJournalAggregatesAgree(t *testing.T) {
 	}
 }
 
-func TestGenerateVirtualSynchrony(t *testing.T) {
-	allTxns := []budget.TransactionData{
-		{
-			Institution:   "pnc",
-			Account:       "5111",
-			Description:   "Online Payment To SYNCHRONY BANK",
-			Amount:        50000,
-			Timestamp:     time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
-			StatementID:   "pnc-5111-2025-02",
-			TransactionID: "txn-sync-1",
-			Category:      "Transfer:CardPayment",
-		},
-		{
-			Institution:   "pnc",
-			Account:       "5111",
-			Description:   "Online Payment To SYNCHRONY BANK",
-			Amount:        60000,
-			Timestamp:     time.Date(2025, 3, 15, 0, 0, 0, 0, time.UTC),
-			StatementID:   "pnc-5111-2025-03",
-			TransactionID: "txn-sync-2",
-			Category:      "Transfer:CardPayment",
-		},
-	}
-	docIDs := []string{"doc-sync-1", "doc-sync-2"}
-
-	vsr := generateVirtualSynchrony(allTxns, docIDs)
-
-	if len(vsr.transactions) != 2 {
-		t.Fatalf("expected 2 virtual transactions, got %d", len(vsr.transactions))
-	}
-
-	for _, vt := range vsr.transactions {
-		if vt.Institution != "synchrony" || vt.Account != "virtual" {
-			t.Errorf("institution/account: got %s/%s, want synchrony/virtual", vt.Institution, vt.Account)
-		}
-		if vt.Category != "Pet:Veterinarian" {
-			t.Errorf("category: got %q, want %q", vt.Category, "Pet:Veterinarian")
-		}
-		if vt.Budget != "pet" {
-			t.Errorf("budget: got %q, want %q", vt.Budget, "pet")
-		}
-		if !vt.Virtual {
-			t.Error("virtual: got false, want true")
-		}
-	}
-
-	// Should have statements for 2 unique periods
-	if len(vsr.statements) != 2 {
-		t.Fatalf("expected 2 virtual statements, got %d", len(vsr.statements))
-	}
-	for _, s := range vsr.statements {
-		if s.Balance != 0 {
-			t.Errorf("statement balance: got %f, want 0", s.Balance)
-		}
-		if !s.Virtual {
-			t.Error("statement virtual: got false, want true")
-		}
-	}
-}
-
-func TestComputePetBudget(t *testing.T) {
-	txns := []budget.TransactionData{
-		{Amount: 50000, Timestamp: time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)},
-		{Amount: 60000, Timestamp: time.Date(2025, 3, 15, 0, 0, 0, 0, time.UTC)},
-		{Amount: 70000, Timestamp: time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)},
-	}
-
-	b := computePetBudget(txns)
-	if b == nil {
-		t.Fatal("expected non-nil budget")
-	}
-	if b.ID != "pet" {
-		t.Errorf("id: got %q, want %q", b.ID, "pet")
-	}
-	if b.AllowancePeriod != "monthly" {
-		t.Errorf("allowancePeriod: got %q, want %q", b.AllowancePeriod, "monthly")
-	}
-	if b.Rollover != "none" {
-		t.Errorf("rollover: got %q, want %q", b.Rollover, "none")
-	}
-	// Total: $500 + $600 + $700 = $1800 over ~5 months ≈ $360/month
-	if b.Allowance < 200 || b.Allowance > 500 {
-		t.Errorf("monthlyAvg out of expected range: got %.2f", b.Allowance)
-	}
-}
-
-func TestComputePetBudgetEmpty(t *testing.T) {
-	b := computePetBudget(nil)
-	if b != nil {
-		t.Errorf("expected nil budget for empty transactions, got %+v", b)
-	}
-}
-
 func TestDeriveMonthlyStatements(t *testing.T) {
 	t.Run("multi-month QFX generates intermediate statements", func(t *testing.T) {
 		// Simulate AMEX-like scenario: balance -4312.99 at 2026-03-22,
@@ -1978,7 +1885,7 @@ func TestUpsertBudgetUpdatesExisting(t *testing.T) {
 		if b.Allowance == 999.99 {
 			t.Error("Allowance still 999.99 — frozen-allowance bug not fixed")
 		}
-		// Recomputed allowance should match computePetBudget range [200,500]
+		// Recomputed allowance: total $1800 over ~5 months ≈ $360/month
 		if b.Allowance < 200 || b.Allowance > 500 {
 			t.Errorf("Allowance out of expected range [200,500]: got %.2f", b.Allowance)
 		}
