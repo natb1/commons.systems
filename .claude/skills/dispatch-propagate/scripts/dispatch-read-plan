@@ -55,8 +55,7 @@ fi
 # forged-plan injection from an untrusted external user on a public repo.
 CID=$(gh api --paginate "repos/{owner}/{repo}/issues/$N/comments" \
   | jq -r --arg m "$MARKER" --arg author "$PLAN_AUTHOR" \
-      '.[] | select((.body | contains($m)) and (.user.login == $author)) | .id' \
-  | head -n1)
+      'first(.[] | select((.body | contains($m)) and (.user.login == $author)) | .id)')
 if [[ -z "$CID" ]]; then
   echo "dispatch-read-plan: no <!-- dispatch:plan --> comment found on issue #$N" >&2
   exit 1
