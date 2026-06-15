@@ -7,6 +7,45 @@ import { parsePositionPage } from "./types.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
+/**
+ * Return the start index of every non-overlapping case-insensitive occurrence
+ * of `query` in `pageText`. Returns [] for an empty query or empty pageText.
+ * Uses indexOf with a moving cursor rather than a regex to avoid escaping user input.
+ */
+export function _findMatches(pageText: string, query: string): number[] {
+  if (!query || !pageText) return [];
+  const haystack = pageText.toLowerCase();
+  const needle = query.toLowerCase();
+  const matches: number[] = [];
+  let cursor = 0;
+  while (cursor <= haystack.length - needle.length) {
+    const idx = haystack.indexOf(needle, cursor);
+    if (idx === -1) break;
+    matches.push(idx);
+    cursor = idx + needle.length;
+  }
+  return matches;
+}
+
+/**
+ * Build a text snippet window around a single match for display in search results.
+ * The window extends `context` characters before and after the match; no ellipses
+ * are added so matchStart/matchLength satisfy the SearchResult invariant trivially.
+ */
+export function _buildSnippet(
+  pageText: string,
+  matchIndex: number,
+  queryLength: number,
+  context = 40,
+): { snippet: string; matchStart: number; matchLength: number } {
+  const windowStart = Math.max(0, matchIndex - context);
+  const windowEnd = Math.min(pageText.length, matchIndex + queryLength + context);
+  const snippet = pageText.slice(windowStart, windowEnd);
+  const matchStart = matchIndex - windowStart;
+  const matchLength = queryLength;
+  return { snippet, matchStart, matchLength };
+}
+
 export function createPdfRenderer(onError?: (err: unknown) => void): ContentRenderer {
   let pdfDoc: PDFDocumentProxy | null = null;
   let _currentPage = 0;
