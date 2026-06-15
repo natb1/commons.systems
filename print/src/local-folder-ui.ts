@@ -18,6 +18,7 @@ import {
   listLocal,
 } from "./library.js";
 import { renderLocalMediaItems } from "./pages/home.js";
+import { setLocalDirectory } from "./sidecar.js";
 
 const store = createFsaHandleStore({ app: "print" });
 const PURPOSE = "library-folder";
@@ -53,11 +54,12 @@ export async function initLocalFolder(
 
   const handle = await store.get(PURPOSE);
   const permission = handle
-    ? await store.queryPermission(handle, "read")
+    ? await store.queryPermission(handle, "readwrite")
     : "denied";
   const state = decideFolderUiState(handle, permission);
 
-  async function bindAndRender(dir: FileSystemDirectoryHandle): Promise<void> {
+  async function bindAndRender(dir: FileSystemDirectoryHandle, isWritable: boolean): Promise<void> {
+    setLocalDirectory(dir, isWritable);
     createLocalSource(dir);
     await renderLocalIntoList(mediaListContainer);
     if (focusCleanup) focusCleanup();
@@ -76,9 +78,9 @@ export async function initLocalFolder(
 
   async function openFolder(): Promise<void> {
     try {
-      const dir = await window.showDirectoryPicker!({ mode: "read" });
+      const dir = await window.showDirectoryPicker!({ mode: "readwrite" });
       await store.put(PURPOSE, dir);
-      await bindAndRender(dir);
+      await bindAndRender(dir, true);
     } catch (e) {
       if ((e as DOMException)?.name === "AbortError") return;
       throw e;
@@ -102,10 +104,10 @@ export async function initLocalFolder(
       .querySelector<HTMLButtonElement>("#local-folder-grant")!
       .addEventListener("click", () => {
         void (async () => {
-          const res = await store.requestPermission(handle!, "read");
+          const res = await store.requestPermission(handle!, "readwrite");
           if (res === "granted") {
             section.innerHTML = "";
-            await bindAndRender(handle as FileSystemDirectoryHandle);
+            await bindAndRender(handle as FileSystemDirectoryHandle, true);
           }
         })().catch((err) =>
           logError(err, { operation: "local-folder-grant" }),
@@ -114,7 +116,7 @@ export async function initLocalFolder(
   } else {
     // "list" — permission already granted, bind and render.
     section.innerHTML = "";
-    await bindAndRender(handle as FileSystemDirectoryHandle);
+    await bindAndRender(handle as FileSystemDirectoryHandle, true);
   }
 
   return () => {
