@@ -51,11 +51,25 @@ vi.mock("../../src/library.js", () => ({
   whenLocalFolderReady: (...args: unknown[]) => mockWhenLocalFolderReady(...args),
 }));
 
+const sidecarStore = { kind: "sidecar" };
+const firestoreStore = { kind: "firestore" };
+const mockMakeSidecarPositionStore = vi.fn(() => sidecarStore);
+const mockMakeFirestorePositionStore = vi.fn(() => firestoreStore);
+
+vi.mock("../../src/sidecar.js", () => ({
+  makeSidecarPositionStore: (...args: unknown[]) => mockMakeSidecarPositionStore(...args),
+}));
+
+vi.mock("../../src/reading-position.js", () => ({
+  makeFirestorePositionStore: (...args: unknown[]) => mockMakeFirestorePositionStore(...args),
+}));
+
 import {
   renderView,
   afterRenderView,
   cleanupView,
-  readingPositionUid,
+  pickPositionStore,
+  makeLocalStoragePositionStore,
 } from "../../src/pages/view";
 import type { MediaItem } from "../../src/types";
 import { getMediaDownloadUrl } from "../../src/storage";
@@ -84,15 +98,64 @@ const mockUser = { uid: "user-123", displayName: "Test" } as {
   displayName: string;
 };
 
-describe("readingPositionUid", () => {
-  it("forces null uid for local items (localStorage path, never Firestore)", () => {
-    expect(readingPositionUid(true, "user-123")).toBeNull();
-    expect(readingPositionUid(true, null)).toBeNull();
+describe("pickPositionStore", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it("uses the signed-in uid for cloud items", () => {
-    expect(readingPositionUid(false, "user-123")).toBe("user-123");
-    expect(readingPositionUid(false, null)).toBeNull();
+  it("local item, signed in: returns the sidecar store, NEVER Firestore", () => {
+    // The local-never-Firestore invariant: routing keys on isLocal, not auth.
+    const item = makeMediaItem({ id: "local:book.pdf", storagePath: "book.pdf" });
+
+    const store = pickPositionStore(item, true, "user-123");
+
+    expect(store).toBe(sidecarStore);
+    expect(mockMakeSidecarPositionStore).toHaveBeenCalledWith("book.pdf");
+    expect(mockMakeFirestorePositionStore).not.toHaveBeenCalled();
+  });
+
+  it("local item, anonymous: returns the sidecar store keyed on the bare filename", () => {
+    const item = makeMediaItem({ id: "local:book.pdf", storagePath: "book.pdf" });
+
+    const store = pickPositionStore(item, true, null);
+
+    expect(store).toBe(sidecarStore);
+    expect(mockMakeSidecarPositionStore).toHaveBeenCalledWith("book.pdf");
+  });
+
+  it("cloud item, signed in: returns the Firestore store keyed on uid + mediaId", () => {
+    const item = makeMediaItem({ id: "item-1" });
+
+    const store = pickPositionStore(item, false, "user-123");
+
+    expect(store).toBe(firestoreStore);
+    expect(mockMakeFirestorePositionStore).toHaveBeenCalledWith("user-123", "item-1");
+  });
+
+  it("cloud item, anonymous: returns a localStorage-backed store", async () => {
+    const item = makeMediaItem({ id: "item-1" });
+
+    const store = pickPositionStore(item, false, null);
+
+    expect(mockMakeFirestorePositionStore).not.toHaveBeenCalled();
+    // localStorage store reproduces the prior inline key.
+    await store.save("9");
+    expect(localStorage.getItem("reading-position:item-1")).toBe("9");
+  });
+});
+
+describe("makeLocalStoragePositionStore", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("round-trips a position under the reading-position:<mediaId> key", async () => {
+    const store = makeLocalStoragePositionStore("m1");
+
+    expect(await store.load()).toBeNull();
+    await store.save("12");
+    expect(localStorage.getItem("reading-position:m1")).toBe("12");
+    expect(await store.load()).toBe("12");
   });
 });
 
@@ -121,9 +184,10 @@ describe("local-folder view path", () => {
     expect(html).toContain('id="view-not-found"');
   });
 
-  it("renders the viewer shell and forces uid=null for a found local item", async () => {
+  it("renders the viewer shell and uses the sidecar store for a found local item", async () => {
     const item = makeMediaItem({
       id: "local:book.pdf",
+      storagePath: "book.pdf",
       mediaType: "pdf",
       origin: "local",
     });
@@ -137,12 +201,15 @@ describe("local-folder view path", () => {
     const outlet = document.createElement("div");
     afterRenderView(outlet, mockUser);
 
+    // Signed-in user viewing a LOCAL item still routes to the sidecar — never Firestore.
+    expect(mockMakeSidecarPositionStore).toHaveBeenCalledWith("book.pdf");
+    expect(mockMakeFirestorePositionStore).not.toHaveBeenCalled();
     expect(initViewer).toHaveBeenCalledWith(
       outlet,
       expect.any(Function),
       expect.any(Function),
       "local:book.pdf",
-      null,
+      sidecarStore,
     );
   });
 
@@ -350,12 +417,13 @@ describe("renderView", () => {
       const outlet = document.createElement("div");
       afterRenderView(outlet, mockUser);
 
+      expect(mockMakeFirestorePositionStore).toHaveBeenCalledWith("user-123", "item-1");
       expect(initViewer).toHaveBeenCalledWith(
         outlet,
         expect.any(Function),
         expect.any(Function),
         "item-1",
-        "user-123",
+        firestoreStore,
       );
 
       const factory = (initViewer as ReturnType<typeof vi.fn>).mock.calls[0][1] as (onError: (err: unknown) => void) => unknown;

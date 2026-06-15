@@ -7,19 +7,26 @@ vi.mock("../../src/auth.js", () => ({
   onAuthStateChanged: vi.fn(),
 }));
 
-vi.mock("../../src/reading-position.js", () => ({
-  getReadingPosition: vi.fn().mockResolvedValue(null),
-  saveReadingPosition: vi.fn().mockResolvedValue(undefined),
-}));
-
 import { renderViewerShell, initViewer } from "../../src/viewer/shell";
-import {
-  getReadingPosition,
-  saveReadingPosition,
-} from "../../src/reading-position";
+import type { PositionStore } from "../../src/sidecar";
 import type { MediaItem } from "../../src/types";
 import type { ContentRenderer } from "../../src/viewer/types";
 import { makeMockRenderer } from "./mock-renderer";
+
+/**
+ * A mock PositionStore for exercising initViewer's persistence contract. shell.ts
+ * no longer knows about Firestore/localStorage — it talks only to this interface.
+ */
+function fakeStore(
+  initial: string | null = null,
+  overrides: Partial<PositionStore> = {},
+): PositionStore & { load: ReturnType<typeof vi.fn>; save: ReturnType<typeof vi.fn> } {
+  return {
+    load: vi.fn().mockResolvedValue(initial),
+    save: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  } as PositionStore & { load: ReturnType<typeof vi.fn>; save: ReturnType<typeof vi.fn> };
+}
 
 function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
   return {
@@ -208,7 +215,7 @@ describe("initViewer", () => {
 
   async function flushInit(): Promise<void> {
     // 20 is a conservative ceiling — 6-8 ticks would suffice for the current chain
-    // (getReadingPosition -> renderer.init -> updateNav), but extra margin avoids
+    // (store.load -> renderer.init -> updateNav), but extra margin avoids
     // intermittent failures if another await is added to the init path.
     for (let i = 0; i < 20; i++) {
       await Promise.resolve();
@@ -218,7 +225,7 @@ describe("initViewer", () => {
   it("disables prev and enables next based on canGoPrev/canGoNext", async () => {
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     const prevBtn = outlet.querySelector(".viewer-prev") as HTMLButtonElement;
@@ -227,13 +234,14 @@ describe("initViewer", () => {
     expect(nextBtn.disabled).toBe(false);
   });
 
-  it("authenticated: loads position from Firestore and passes to renderer.init", async () => {
-    vi.mocked(getReadingPosition).mockResolvedValue("5");
+  it("loads position from the store and passes to renderer.init", async () => {
+    const store = fakeStore("5");
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", store);
     await flushInit();
 
+    expect(store.load).toHaveBeenCalled();
     expect(renderer.init).toHaveBeenCalledWith(
       expect.any(HTMLElement),
       "https://example.com/doc.pdf",
@@ -241,24 +249,10 @@ describe("initViewer", () => {
     );
   });
 
-  it("unauthenticated: loads from localStorage and passes to renderer.init", async () => {
-    localStorage.setItem("reading-position:m1", "3");
+  it("no saved position: init called with undefined", async () => {
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
-    await flushInit();
-
-    expect(renderer.init).toHaveBeenCalledWith(
-      expect.any(HTMLElement),
-      "https://example.com/doc.pdf",
-      "3",
-    );
-  });
-
-  it("unauthenticated: no saved position, init called with undefined", async () => {
-    const renderer = makeMockRenderer();
-
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(null));
     await flushInit();
 
     expect(renderer.init).toHaveBeenCalledWith(
@@ -268,10 +262,11 @@ describe("initViewer", () => {
     );
   });
 
-  it("scheduleSave writes Firestore for authenticated user after navigation", async () => {
+  it("scheduleSave writes to the store after navigation", async () => {
+    const store = fakeStore();
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", store);
     await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
@@ -280,27 +275,14 @@ describe("initViewer", () => {
     await vi.runAllTimersAsync();
 
     // After next(), currentPage=2, position="2", which differs from lastSavedPosition="1"
-    expect(saveReadingPosition).toHaveBeenCalledWith("uid1", "m1", "2");
-  });
-
-  it("scheduleSave writes localStorage for unauthenticated user", async () => {
-    const renderer = makeMockRenderer();
-
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
-    await flushInit();
-
-    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
-    nextBtn.click();
-    await flushInit();
-    await vi.runAllTimersAsync();
-
-    expect(localStorage.getItem("reading-position:m1")).toBe("2");
+    expect(store.save).toHaveBeenCalledWith("2");
   });
 
   it("scheduleSave deduplicates — same position not saved twice", async () => {
+    const store = fakeStore();
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", store);
     await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
@@ -311,25 +293,25 @@ describe("initViewer", () => {
     // Timer fires again without navigation — position unchanged
     await vi.runAllTimersAsync();
 
-    // saveReadingPosition was called once for page 2; no second call for same position
-    expect(saveReadingPosition).toHaveBeenCalledTimes(1);
+    // store.save was called once for page 2; no second call for same position
+    expect(store.save).toHaveBeenCalledTimes(1);
   });
 
-  it("still initializes renderer when getReadingPosition rejects", async () => {
-    vi.mocked(getReadingPosition).mockRejectedValue(new Error("Firestore down"));
+  it("still initializes renderer when store.load rejects", async () => {
+    const store = fakeStore(null, { load: vi.fn().mockRejectedValue(new Error("backend down")) });
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", store);
     await flushInit();
 
     expect(renderer.init).toHaveBeenCalled();
   });
 
   it("cleanup flushes pending save timer", async () => {
-    vi.mocked(getReadingPosition).mockResolvedValue(null);
+    const store = fakeStore(null);
     const renderer = makeMockRenderer();
 
-    const cleanup = initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
+    const cleanup = initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", store);
     await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
@@ -339,15 +321,15 @@ describe("initViewer", () => {
     // Flush synchronously before the 500ms timer fires
     cleanup();
 
-    // saveReadingPosition should have been called with the pending position
+    // store.save should have been called with the pending position
     // without advancing timers — the flush is synchronous
-    expect(saveReadingPosition).toHaveBeenCalledWith("uid1", "m1", "2");
+    expect(store.save).toHaveBeenCalledWith("2");
   });
 
   it("cleanup calls renderer.destroy", async () => {
     const renderer = makeMockRenderer();
 
-    const cleanup = initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    const cleanup = initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     cleanup();
@@ -359,7 +341,7 @@ describe("initViewer", () => {
     const renderer = makeMockRenderer();
     vi.mocked(renderer.init).mockRejectedValue(new Error("init error"));
 
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     const pos = outlet.querySelector(".viewer-position") as HTMLElement;
@@ -367,11 +349,11 @@ describe("initViewer", () => {
     expect(globalThis.reportError).toHaveBeenCalled();
   });
 
-  it("Firestore save failure calls reportError and does not throw", async () => {
-    vi.mocked(saveReadingPosition).mockRejectedValue(new Error("Firestore write error"));
+  it("store.save failure calls reportError and does not throw", async () => {
+    const store = fakeStore(null, { save: vi.fn().mockRejectedValue(new Error("write error")) });
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", store);
     await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
@@ -391,7 +373,7 @@ describe("initViewer", () => {
       (onError) => { capturedOnError = onError; return renderer; },
       () => Promise.resolve("https://example.com/doc.pdf"),
       "m1",
-      null,
+      fakeStore(),
     );
     await flushInit();
 
@@ -417,7 +399,7 @@ describe("initViewer", () => {
       clearSearch: vi.fn(),
     });
 
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     // Focus the search input
@@ -440,11 +422,13 @@ describe("initViewer", () => {
     expect(renderer.prev).not.toHaveBeenCalled();
   });
 
-  it("Firestore read failure falls back to localStorage for saves", async () => {
-    vi.mocked(getReadingPosition).mockRejectedValue(new Error("Firestore read error"));
+  it("store read failure suppresses the first save (no blind clobber)", async () => {
+    // With a single store there is no other backend to redirect to: a failed
+    // read can only SUPPRESS the save, protecting the unknown backend state.
+    const store = fakeStore(null, { load: vi.fn().mockRejectedValue(new Error("read error")) });
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", store);
     await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
@@ -452,10 +436,8 @@ describe("initViewer", () => {
     await flushInit();
     await vi.runAllTimersAsync();
 
-    // Should NOT write to Firestore (would overwrite unknown saved state)
-    expect(saveReadingPosition).not.toHaveBeenCalled();
-    // Falls back to localStorage
-    expect(localStorage.getItem("reading-position:m1")).toBe("2");
+    // Should NOT write — the read failed, so the saved state is unknown.
+    expect(store.save).not.toHaveBeenCalled();
   });
 });
 
@@ -495,7 +477,7 @@ describe("initViewer spread mode", () => {
   it("spread toggle button shown for renderers with renderPageInto, hidden otherwise", async () => {
     // With renderPageInto: button should not have spread-hidden
     const spreadRenderer = makeMockSpreadRenderer();
-    initViewer(outlet, () => spreadRenderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => spreadRenderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLElement;
@@ -505,7 +487,7 @@ describe("initViewer spread mode", () => {
     const outlet2 = document.createElement("div");
     outlet2.innerHTML = renderViewerShell(makeMediaItem());
     const plainRenderer = makeMockRenderer();
-    initViewer(outlet2, () => plainRenderer, () => Promise.resolve("https://example.com/doc.pdf"), "m2", null);
+    initViewer(outlet2, () => plainRenderer, () => Promise.resolve("https://example.com/doc.pdf"), "m2", fakeStore());
     await flushInit();
 
     const spreadBtn2 = outlet2.querySelector(".viewer-spread-toggle") as HTMLElement;
@@ -514,7 +496,7 @@ describe("initViewer spread mode", () => {
 
   it("spread navigation advances by spread and calls renderPageInto with correct pages", async () => {
     const renderer = makeMockSpreadRenderer();
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     // Enter spread mode
@@ -538,7 +520,7 @@ describe("initViewer spread mode", () => {
 
   it("spread position label shows 'Pages X\u2013Y / Z' format", async () => {
     const renderer = makeMockSpreadRenderer();
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     // Enter spread mode
@@ -560,7 +542,7 @@ describe("initViewer spread mode", () => {
 
   it("spread preference persisted to localStorage", async () => {
     const renderer = makeMockSpreadRenderer();
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     // Enter spread mode
@@ -579,7 +561,7 @@ describe("initViewer spread mode", () => {
 
   it("mode switching syncs position — toggle spread on at page 3 maps to correct spread index", async () => {
     const renderer = makeMockSpreadRenderer();
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     // Navigate to page 3 in single mode
@@ -607,7 +589,7 @@ describe("initViewer spread mode", () => {
       resetZoom: vi.fn(),
       isZoomed: false,
     });
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     // Enter spread mode
@@ -675,7 +657,7 @@ describe("initViewer fullscreen and tap zones", () => {
 
   it("calls requestFullscreen when panel is collapsed", async () => {
     const renderer = makeMockRenderer();
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     const toggleBtn = outlet.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
@@ -686,7 +668,7 @@ describe("initViewer fullscreen and tap zones", () => {
 
   it("calls exitFullscreen when panel is expanded from collapsed state", async () => {
     const renderer = makeMockRenderer();
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     const toggleBtn = outlet.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
@@ -709,7 +691,7 @@ describe("initViewer fullscreen and tap zones", () => {
 
   it("syncs panel to expanded when user exits fullscreen externally", async () => {
     const renderer = makeMockRenderer();
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     const toggleBtn = outlet.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
@@ -733,7 +715,7 @@ describe("initViewer fullscreen and tap zones", () => {
 
   it("creates tap zones when panel is collapsed", async () => {
     const renderer = makeMockRenderer();
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     const toggleBtn = outlet.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
@@ -747,7 +729,7 @@ describe("initViewer fullscreen and tap zones", () => {
 
   it("removes tap zones when panel is expanded", async () => {
     const renderer = makeMockRenderer();
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     const toggleBtn = outlet.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
@@ -765,7 +747,7 @@ describe("initViewer fullscreen and tap zones", () => {
 
   it("removes tap zones when user exits fullscreen externally", async () => {
     const renderer = makeMockRenderer();
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     const toggleBtn = outlet.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
@@ -788,7 +770,7 @@ describe("initViewer fullscreen and tap zones", () => {
 
   it("tap zone click on next advances the page", async () => {
     const renderer = makeMockRenderer();
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     const toggleBtn = outlet.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
@@ -803,7 +785,7 @@ describe("initViewer fullscreen and tap zones", () => {
 
   it("tap zone click on prev goes to previous page", async () => {
     const renderer = makeMockRenderer();
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore());
     await flushInit();
 
     // Navigate forward first so prev is possible
