@@ -39,8 +39,8 @@ export function findMatches(
   while (from < haystack.length) {
     const offset = haystack.indexOf(needle, from);
     if (offset === -1) break;
-    results.push({ offset, length: query.length });
-    from = offset + query.length;
+    results.push({ offset, length: needle.length });
+    from = offset + needle.length;
   }
   return results;
 }

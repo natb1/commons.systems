@@ -149,6 +149,16 @@ describe("findMatches", () => {
     const matches = findMatches("aaa", "aa");
     expect(matches).toEqual([{ offset: 0, length: 2 }]);
   });
+
+  it("uses needle (lowercased) length, not query length, for expanding-case queries", () => {
+    // "İ" (U+0130) lowercases to "i" + U+0307 (combining dot above): length 1 → 2.
+    const query = "İ";
+    const needle = query.toLowerCase(); // "i̇", length 2
+    const pageText = "a" + needle + "b";
+    const matches = findMatches(pageText, query);
+    // Match spans needle.length (2) at offset 1, not query.length (1).
+    expect(matches).toEqual([{ offset: 1, length: 2 }]);
+  });
 });
 
 describe("buildSnippet", () => {
@@ -253,6 +263,12 @@ describe("offsetToDivRanges", () => {
   it("range entirely within second item", () => {
     const result = offsetToDivRanges(["abc", "defgh"], 3, 3);
     expect(result).toEqual([{ divIndex: 1, localStart: 0, localEnd: 3 }]);
+  });
+
+  it("maps a corrected expanding-case match onto its item", () => {
+    const ci = "İ".toLowerCase(); // "i̇", length 2 — built, not a fragile literal
+    const result = offsetToDivRanges(["a", ci, "b"], 1, 2);
+    expect(result).toEqual([{ divIndex: 1, localStart: 0, localEnd: 2 }]);
   });
 });
 
