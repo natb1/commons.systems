@@ -260,10 +260,27 @@ body.viewer-active {
   padding: 0.25rem 0.5rem;
 }
 
+.viewer-goto-input {
+  width: 3.5rem;
+  background: none;
+  border: 1px solid var(--muted-fg, #888);
+  border-radius: 3px;
+  padding: 0.25rem 0.5rem;
+  font: inherit;
+  color: inherit;
+  -moz-appearance: textfield;
+}
+
+.viewer-goto-input::-webkit-inner-spin-button,
+.viewer-goto-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}
+
 .zoom-hidden,
 .spread-hidden,
 .search-hidden,
-.outline-hidden {
+.outline-hidden,
+.goto-hidden {
   display: none;
 }
 

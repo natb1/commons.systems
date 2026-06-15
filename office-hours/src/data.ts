@@ -2,6 +2,7 @@ import { collection, doc, getDoc, getDocs, query, where, type Firestore } from "
 import type { User } from "firebase/auth";
 import { nsCollectionPath, type Namespace } from "@commons-systems/firestoreutil/namespace";
 import { logError } from "@commons-systems/errorutil/log";
+import { classifyError } from "@commons-systems/errorutil/classify";
 import seedReminders from "virtual:office-hours-seed-data";
 import seedQueueMetrics from "virtual:office-hours-queue-seed";
 import type { Reminder } from "./reminders.js";
@@ -56,7 +57,13 @@ export async function getOwnerQueueMetrics(
   user: User,
 ): Promise<QueueMetricsSnapshot | null> {
   if (!user.email) return null;
-  const snap = await getDoc(doc(db, nsCollectionPath(namespace, "metrics"), "dispatch-queue"));
+  let snap;
+  try {
+    snap = await getDoc(doc(db, nsCollectionPath(namespace, "metrics"), "dispatch-queue"));
+  } catch (err) {
+    if (classifyError(err) === "permission-denied") return null;
+    throw err;
+  }
   if (!snap.exists()) return null;
   return parseQueueMetrics(snap.data());
 }
