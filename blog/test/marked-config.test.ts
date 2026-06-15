@@ -191,6 +191,20 @@ describe("link renderer", () => {
     expect(html).toContain('href="#anchor"');
   });
 
+  it("produces an anchor for same-dir (./) relative links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[post](./sibling)");
+    expect(html).toContain('<a ');
+    expect(html).toContain('href="./sibling"');
+  });
+
+  it("produces an anchor for parent-dir (../) relative links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[post](../parent/x)");
+    expect(html).toContain('<a ');
+    expect(html).toContain('href="../parent/x"');
+  });
+
   it("produces an anchor for mailto: links", async () => {
     const marked = createMarked();
     const html = await marked.parse("[email](mailto:user@example.com)");

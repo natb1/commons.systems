@@ -38,8 +38,12 @@ function isExternalHref(href: string): boolean {
 
 // Only these href schemes/prefixes produce an anchor; everything else
 // (javascript:, data:, vbscript:, …) renders as plain text. Allowlist, not
-// denylist, so obfuscated schemes can't slip through.
-const SAFE_HREF = /^(https?:|mailto:|tel:|\/|#)/i;
+// denylist, so obfuscated schemes can't slip through. A reference beginning
+// with "." or "/" cannot encode a scheme (RFC 3986 schemes start with a
+// letter), so root-relative (/), same-dir (./), and parent-dir (../) paths are
+// safe. Bare relative paths (foo/bar) stay rejected: the blog's internal-link
+// convention is leading-slash.
+const SAFE_HREF = /^(https?:|mailto:|tel:|\.{0,2}\/|#)/i;
 
 // Creates a Marked instance that strips raw HTML from markdown (defense-in-depth)
 // and opens external post-body links in new tabs with rel="noopener noreferrer" to prevent
