@@ -919,7 +919,7 @@ describe("main module", () => {
   });
 
   it("write-back status listener shows and clears the nav warning, with clobber guard", async () => {
-    const FILE_SYNC_WARNING = "Changes could not be saved to disk — file permission may have been revoked.";
+    const FILE_SYNC_WARNING = "Changes could not be saved to disk — an error occurred.";
 
     mockGetMeta.mockResolvedValue(undefined);
     resetAndMockAll();

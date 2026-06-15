@@ -148,17 +148,25 @@ async function doWrite(h: FileSystemFileHandle, pw: string, gen: number): Promis
     // with a now-stale snapshot.
     if (gen !== generation) return "abandoned";
     await writeFileToHandle(h, bytes);
-    // Stamp the watermark from the file as just written so the focus watcher does
-    // not mistake our own write-back for an external change. Skip if the session was
-    // re-armed/reset mid-write (gen changed) — that path set its own watermark.
-    if (gen === generation) {
-      lastSyncedModified = (await readFileFromHandle(h)).lastModified;
-    }
-    return "ok";
   } catch (e) {
     logError(e, { operation: "file-sync" });
     return "failed";
   }
+  // The write itself succeeded and is safe on disk — return "ok" regardless of
+  // whether the post-write watermark readback works. Stamp the watermark from the
+  // file as just written so the focus watcher does not mistake our own write-back
+  // for an external change. Skip if the session was re-armed/reset mid-write (gen
+  // changed) — that path set its own watermark.
+  if (gen === generation) {
+    try {
+      lastSyncedModified = (await readFileFromHandle(h)).lastModified;
+    } catch (e) {
+      // A readback failure must not masquerade as a write failure. Log it and
+      // leave lastSyncedModified unchanged; the next successful write will stamp it.
+      logError(e, { operation: "file-sync" });
+    }
+  }
+  return "ok";
 }
 
 /** Active FSA handle for this session, or null in seed / non-FSA upload mode. */

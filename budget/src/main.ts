@@ -86,7 +86,7 @@ errorEl.className = "nav-error";
 errorEl.hidden = true;
 authContainer.appendChild(errorEl);
 
-const FILE_SYNC_WARNING = "Changes could not be saved to disk — file permission may have been revoked.";
+const FILE_SYNC_WARNING = "Changes could not be saved to disk — an error occurred.";
 
 function showNavError(message: string): void {
   errorEl.textContent = message;
