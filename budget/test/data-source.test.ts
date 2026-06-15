@@ -37,7 +37,8 @@ import { Timestamp } from "firebase/firestore";
 import { storeParsedData, closeDb } from "../src/idb";
 import { IdbDataSource, SeedDataSource, FileSyncingDataSource } from "../src/data-source";
 import type { DataSource } from "../src/data-source";
-import type { TransactionId, BudgetPeriodId, RuleId } from "../src/firestore";
+import type { TransactionId, BudgetId, BudgetPeriodId, RuleId } from "../src/firestore";
+import type { BudgetOverride } from "../src/entities/budget";
 import { makeParsedData } from "./helpers";
 
 beforeEach(async () => {
@@ -121,6 +122,20 @@ describe("IdbDataSource", () => {
     ).rejects.toThrow(RangeError);
     const txns = await ds.getTransactions();
     expect(txns[0].reimbursement).toBe(0); // unchanged — never persisted
+  });
+
+  it("updateBudgetOverrides rejects out-of-order overrides and does not persist", async () => {
+    await storeParsedData(makeParsedData());
+    const ds = new IdbDataSource();
+    const outOfOrder: BudgetOverride[] = [
+      { date: Timestamp.fromMillis(2000), balance: 100 },
+      { date: Timestamp.fromMillis(1000), balance: 200 }, // earlier date — invalid
+    ];
+    await expect(
+      ds.updateBudgetOverrides("groceries" as BudgetId, outOfOrder),
+    ).rejects.toThrow(RangeError);
+    const budgets = await ds.getBudgets();
+    expect(budgets[0].overrides).toEqual([]); // unchanged — never persisted
   });
 
   it("getTransactions throws for a pre-existing out-of-range reimbursement record", async () => {

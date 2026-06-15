@@ -517,12 +517,20 @@ func buildRule(r rules.Rule, minAmountDollars, maxAmountDollars *float64) (rules
 	return r, nil
 }
 
+// validateCategoryFilterFields rejects category-filter fields on categorization rules.
+func validateCategoryFilterFields(r export.Rule) error {
+	if r.Type == "categorization" && (r.MatchCategory != "" || r.ExcludeCategory != "" || r.Category != "") {
+		return fmt.Errorf("rule %s: category-filter fields (matchCategory/excludeCategory/category) are only valid on budget_assignment rules, not categorization rules", r.ID)
+	}
+	return nil
+}
+
 // convertExportRules converts export.Rule to rules.Rule for the rules engine.
 func convertExportRules(exportRules []export.Rule) ([]rules.Rule, error) {
 	ruleSet := make([]rules.Rule, len(exportRules))
 	for i, r := range exportRules {
-		if r.Type == "categorization" && (r.MatchCategory != "" || r.ExcludeCategory != "" || r.Category != "") {
-			return nil, fmt.Errorf("rule %s: category-filter fields (matchCategory/excludeCategory/category) are only valid on budget_assignment rules, not categorization rules", r.ID)
+		if err := validateCategoryFilterFields(r); err != nil {
+			return nil, err
 		}
 		built, err := buildRule(rules.Rule{
 			ID:              r.ID,
@@ -557,6 +565,9 @@ func applyTransactionRules(txns []budget.TransactionData, txnDocIDs []string, tx
 		idIndex[id] = i
 	}
 	for _, r := range txnRules {
+		if err := validateCategoryFilterFields(r); err != nil {
+			return err
+		}
 		idx, ok := idIndex[r.TransactionID]
 		if !ok {
 			continue
