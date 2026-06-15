@@ -387,6 +387,7 @@ describe("clearSearch()", () => {
   let scrollSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     resizeObserverCallbacks = [];
     vi.clearAllMocks();
 
@@ -423,6 +424,7 @@ describe("clearSearch()", () => {
     getContextSpy.mockRestore();
     scrollSpy.mockRestore();
     vi.mocked(globalThis.reportError).mockRestore();
+    vi.useRealTimers();
   });
 
   it("clearSearch() is callable and idempotent before any goToResult (no active highlight)", async () => {
@@ -540,7 +542,7 @@ describe("clearSearch()", () => {
     // ResizeObserver re-render (renderPage(_currentPage)) runs while
     // pendingHighlight is still armed.
     resizeObserverCallbacks.forEach((cb) => cb());
-    await new Promise((r) => setTimeout(r, 220));
+    await vi.advanceTimersByTimeAsync(220);
 
     // The re-render detaches firstDiv; applyHighlight's unwrapHighlights()
     // restores it so it is no longer highlighted.
