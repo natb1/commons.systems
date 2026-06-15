@@ -1,5 +1,5 @@
 import ePub, { type Book, type Rendition, type Location, type NavItem } from "epubjs";
-import type { ContentRenderer, OutlineEntry } from "./types.js";
+import type { ContentRenderer, OutlineEntry, SearchResult } from "./types.js";
 
 export function createEpubRenderer(
   onError?: (err: unknown) => void,
@@ -16,6 +16,8 @@ export function createEpubRenderer(
   let _currentCfi = "";
   let destroyed = false;
   let locationsReady: Promise<void> | null = null;
+  let searchGeneration = 0;
+  const MAX_RESULTS = 100;
   const GENERATE_CHARS = 1024;
   const outlineHrefMap = new WeakMap<OutlineEntry, string>();
 
@@ -176,6 +178,56 @@ export function createEpubRenderer(
     },
     get positionLabel() {
       return `Ch. ${_chapterIndex + 1}/${_chapterCount} — p. ${_subPage}/${_subPageTotal}`;
+    },
+
+    async search(query: string): Promise<SearchResult[]> {
+      if (!book || destroyed || query.trim() === "") return [];
+      const gen = ++searchGeneration;
+
+      await book.loaded.navigation;
+      if (gen !== searchGeneration || destroyed) return [];
+
+      // spine.length exists at runtime but is missing from the epubjs type declarations.
+      const length = (book.spine as unknown as { length: number }).length;
+      const results: SearchResult[] = [];
+      const lowerQuery = query.toLowerCase();
+
+      for (let i = 0; i < length; i++) {
+        const section = book.spine.get(i);
+        if (!section) continue;
+
+        // section.load() returns a Promise at runtime; the .d.ts mistypes it as Document.
+        await (section.load(book.load.bind(book)) as unknown as Promise<unknown>);
+        try {
+          // section.find() returns Array<{cfi, excerpt}> at runtime; the .d.ts mistypes it as Array<Element>.
+          const matches = section.find(query) as unknown as Array<{ cfi: string; excerpt: string }>;
+          const navItem = book.navigation.get(section.href);
+          const label = navItem?.label ?? `Ch. ${i + 1}`;
+          for (const match of matches) {
+            if (results.length >= MAX_RESULTS) break;
+            const matchStart = match.excerpt.toLowerCase().indexOf(lowerQuery);
+            if (matchStart === -1) continue;
+            results.push({
+              location: match.cfi,
+              label,
+              snippet: match.excerpt,
+              matchStart,
+              matchLength: query.length,
+            });
+          }
+        } finally {
+          section.unload();
+        }
+
+        if (results.length >= MAX_RESULTS) break;
+        if (gen !== searchGeneration || destroyed) break;
+      }
+
+      return results;
+    },
+
+    clearSearch(): void {
+      ++searchGeneration;
     },
 
     async getOutline(): Promise<OutlineEntry[]> {
