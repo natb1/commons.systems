@@ -69,8 +69,14 @@ CFG=$("$SCRIPT_DIR/dispatch-config-load" auto-merge) || {
 [[ "$CFG" == "no-config" ]] && exit 0
 ENABLED=$(jq -r '.enabled' <<<"$CFG")
 [[ "$ENABLED" == "true" ]] || exit 0
-TYPES_JSON=$(jq -c '.types // ["enhancement"]' <<<"$CFG")
-EXCLUDE_JSON=$(jq -c '.excludeTypes // ["bug","security"]' <<<"$CFG")
+# dispatch-config-load rejects an explicit empty `types`/`excludeTypes` array, so
+# a loaded config can only carry a non-empty array or omit the field. The
+# `length == 0` arm here is a defense-in-depth guard against a config that
+# reaches this script unvalidated: `.types // [...]` substitutes the default only
+# on null, so a bare `[]` would otherwise pass through and vacuously satisfy the
+# per-issue type guard, silently dropping the type gate.
+TYPES_JSON=$(jq -c 'if (.types // [] | length) == 0 then ["enhancement"] else .types end' <<<"$CFG")
+EXCLUDE_JSON=$(jq -c 'if (.excludeTypes // [] | length) == 0 then ["bug","security"] else .excludeTypes end' <<<"$CFG")
 
 # ---- Step 2: one fresh fetch of every open PR -------------------------------
 # Never proceed on a partial fetch — a truncated snapshot could merge a PR whose

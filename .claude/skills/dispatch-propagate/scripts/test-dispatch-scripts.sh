@@ -610,6 +610,17 @@ case "$args" in
   pr\ merge\ *)
     # dispatch-auto-merge: gh pr merge <N> --squash --subject ... --body ...
     echo "$args" >> "$STUB_DIR/gh-pr-merge.log"
+    # Optional failure injection: if $STUB_DIR/pr-merge-fail-on holds a PR
+    # number matching this merge's <N>, emit a non-transient error to stderr
+    # and exit non-zero so gh_retry returns immediately (no retry backoff) and
+    # dispatch-auto-merge takes its HARD_ERROR path for that PR.
+    if [[ -f "$STUB_DIR/pr-merge-fail-on" ]]; then
+      merge_num=$(printf '%s' "$args" | awk '{print $3}')
+      if [[ "$merge_num" == "$(cat "$STUB_DIR/pr-merge-fail-on")" ]]; then
+        echo "merge of the base branch into #$merge_num was rejected" >&2
+        exit 1
+      fi
+    fi
     ;;
   "api repos/{owner}/{repo}/commits/main")
     # main_broken_sha: resolve origin/main's HEAD SHA. Default: healthy main.
@@ -30459,7 +30470,45 @@ else
 fi
 teardown
 
-# --- 19. executable-bit guard ------------------------------------------------
+# --- 19. merge failure → HARD_ERROR, continue, exit 1 ------------------------
+# Two eligible PRs in one fetch: #50 (closing #100) and #51 (closing #101), both
+# enhancement/green/mergeable/reviewed. The gh stub is rigged so `pr merge 50`
+# exits non-zero. The script must: log #50's failure to stderr, set HARD_ERROR,
+# `continue` to attempt #51 (which merges), and exit 1 after the loop. This
+# exercises the `|| rc=$?` capture, the `continue`, and the final
+# `if [[ "$HARD_ERROR" -ne 0 ]]; then exit 1; fi` block.
+echo "Test: one PR's merge fails → exit 1, remaining PRs still attempted"
+setup
+write_auto_merge_config_enabled
+{
+  printf '['
+  make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]'
+  printf ','
+  make_auto_merge_pr 51 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":101}]'
+  printf ']'
+} > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]},{"number":101,"labels":[{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf '50' > "$STUB_DIR/pr-merge-fail-on"
+am_err=$("$TMPDIR_TEST/dispatch-auto-merge" 2>"$STUB_DIR/am-stderr" >"$STUB_DIR/am-stdout"; echo "$?")
+am_out=$(cat "$STUB_DIR/am-stdout")
+am_stderr=$(cat "$STUB_DIR/am-stderr")
+assert_eq "merge-fail: exit 1" "1" "$am_err"
+# (a) The successfully-merged PR after the failed one still emits its line.
+assert_eq "merge-fail: stdout carries 'merged #51'" "present" \
+  "$(printf '%s' "$am_out" | grep -q 'merged #51' && echo present || echo absent)"
+# (b) The failed PR is NOT reported as merged.
+assert_eq "merge-fail: stdout omits 'merged #50'" "absent" \
+  "$(printf '%s' "$am_out" | grep -q 'merged #50' && echo present || echo absent)"
+# (c) The failed PR number surfaces on stderr.
+assert_eq "merge-fail: stderr names #50" "present" \
+  "$(printf '%s' "$am_stderr" | grep -q '#50' && echo present || echo absent)"
+# (d) The merge of the PR after the failed one was actually attempted.
+assert_eq "merge-fail: pr merge 51 attempted" "present" \
+  "$(grep -q 'pr merge 51' "$STUB_DIR/gh-pr-merge.log" && echo present || echo absent)"
+teardown
+
+# --- 20. executable-bit guard ------------------------------------------------
 echo "Test: dispatch-auto-merge is executable"
 assert_eq "dispatch-auto-merge is executable" "yes" \
   "$([[ -x "$SCRIPT_DIR/dispatch-auto-merge" ]] && echo yes || echo no)"

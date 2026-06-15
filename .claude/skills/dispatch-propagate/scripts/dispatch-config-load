@@ -451,7 +451,17 @@ case "$CONFIG_TYPE" in
           "enabled must be a boolean, got \($cfg.enabled | type)"
         else empty end),
         # types and excludeTypes: optional arrays of non-empty strings (validated
-        # only when present; dispatch-auto-merge applies defaults when absent).
+        # only when present; dispatch-auto-merge applies defaults when absent via
+        # `.types // [...]`, which only substitutes on null — an explicit array
+        # passes through unchanged).
+        #
+        # Asymmetry on the empty array: `types: []` is REJECTED because the
+        # per-issue gate `$types | all(...)` is vacuously true on an empty array,
+        # so it would auto-merge every eligible PR — the inverse of the intended
+        # "restrict to nothing". `excludeTypes: []` is ALLOWED: an empty exclude
+        # set vacuously passes the veto, meaning "no type veto", which preserves
+        # intent and is the only way to express it (an absent excludeTypes
+        # defaults to ["bug","security"]).
         (["types","excludeTypes"] |
          .[] |
          . as $field |
@@ -459,6 +469,8 @@ case "$CONFIG_TYPE" in
            empty
          elif ($cfg[$field] | type) != "array" then
            "\($field) must be an array if present, got \($cfg[$field] | type)"
+         elif ($field == "types" and ($cfg[$field] | length) == 0) then
+           "types must be a non-empty array if present (an empty array is vacuously true via `all` and auto-merges every eligible PR)"
          else
            ($cfg[$field] | to_entries[] |
             .value as $el |
