@@ -97,12 +97,12 @@ export function createEpubRenderer(
   }
 
   // epub.js next()/prev() resolve before the relocated event fires.
-  // Callers await this to get updated position state. The 5s timeout
+  // Callers await this to get updated position state. The 30s timeout
   // prevents a permanent hang if epub.js fails to emit the event.
   function waitForRelocated(): Promise<void> {
     return new Promise<void>((resolve) => {
       if (!rendition) { resolve(); return; }
-      const timer = setTimeout(() => { reportError(new Error("waitForRelocated: timed out after 5s")); resolve(); }, 5000);
+      const timer = setTimeout(() => { reportError(new Error("waitForRelocated: timed out after 30s")); resolve(); }, 30000);
       rendition.once("relocated", () => { clearTimeout(timer); resolve(); });
     });
   }

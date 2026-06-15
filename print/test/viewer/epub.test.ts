@@ -427,7 +427,7 @@ describe("createEpubRenderer", () => {
       mockRendition.once.mockImplementation(() => {});
 
       const nextPromise = renderer.next();
-      vi.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(30000);
       await nextPromise;
 
       expect(mockRendition.next).toHaveBeenCalled();
