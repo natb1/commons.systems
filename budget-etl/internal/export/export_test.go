@@ -1115,6 +1115,10 @@ func TestWriteFileValidatesOutput(t *testing.T) {
 		out := minimalOutput("household")
 		out.JournalLegs = []JournalLeg{validLeg}
 		out.Accounts = []Account{validAcct}
+		out.JournalEntries = []JournalEntry{{
+			ID: "je-001", Timestamp: "2025-06-10T00:00:00Z",
+			Description: "test entry", LegCount: 1,
+		}}
 
 		path := filepath.Join(t.TempDir(), "budget.json")
 		if err := WriteFile(path, out, ""); err != nil {
@@ -1159,6 +1163,62 @@ func TestWriteFileValidatesOutput(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "accounts[0]") {
 			t.Errorf("error should name the offending account index, got %v", err)
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("file should not exist after validation failure, stat err = %v", err)
+		}
+	})
+
+	t.Run("phantom account id writes no file", func(t *testing.T) {
+		out := minimalOutput("household")
+		out.JournalLegs = []JournalLeg{{
+			ID: "jl-001", EntryID: "je-001", AccountID: "acct-phantom",
+			Debit: 10, Credit: 0, Timestamp: "2025-06-10T00:00:00Z",
+		}}
+		out.Accounts = []Account{validAcct}
+		out.JournalEntries = []JournalEntry{{
+			ID: "je-001", Timestamp: "2025-06-10T00:00:00Z",
+			Description: "test entry", LegCount: 1,
+		}}
+
+		path := filepath.Join(t.TempDir(), "budget.json")
+		err := WriteFile(path, out, "")
+		if err == nil {
+			t.Fatal("WriteFile: expected error for phantom account id")
+		}
+		if !strings.Contains(err.Error(), "journalLegs[0]") {
+			t.Errorf("error should name the offending leg index, got %v", err)
+		}
+		if !strings.Contains(err.Error(), "accountId") {
+			t.Errorf("error should mention accountId, got %v", err)
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("file should not exist after validation failure, stat err = %v", err)
+		}
+	})
+
+	t.Run("phantom entry id writes no file", func(t *testing.T) {
+		out := minimalOutput("household")
+		out.JournalLegs = []JournalLeg{{
+			ID: "jl-001", EntryID: "je-phantom", AccountID: "acct-1",
+			Debit: 10, Credit: 0, Timestamp: "2025-06-10T00:00:00Z",
+		}}
+		out.Accounts = []Account{validAcct}
+		out.JournalEntries = []JournalEntry{{
+			ID: "je-001", Timestamp: "2025-06-10T00:00:00Z",
+			Description: "test entry", LegCount: 1,
+		}}
+
+		path := filepath.Join(t.TempDir(), "budget.json")
+		err := WriteFile(path, out, "")
+		if err == nil {
+			t.Fatal("WriteFile: expected error for phantom entry id")
+		}
+		if !strings.Contains(err.Error(), "journalLegs[0]") {
+			t.Errorf("error should name the offending leg index, got %v", err)
+		}
+		if !strings.Contains(err.Error(), "entryId") {
+			t.Errorf("error should mention entryId, got %v", err)
 		}
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Errorf("file should not exist after validation failure, stat err = %v", err)
