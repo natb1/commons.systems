@@ -136,8 +136,8 @@ export function idbToStatementItem(row: IdbStatementItem): StatementItem {
 export function parseRawStatementItem(raw: RawStatementItem, i: number): StatementItem {
   return {
     id: requireUploadId(raw.id, "statementItem", i),
-    statementItemId: requireUploadId(raw.statementItemId, "statementItem.statementItemId", i) as StatementItemId,
-    statementId: requireUploadId(raw.statementId, "statementItem.statementId", i) as StatementId,
+    statementItemId: requireUploadId(raw.statementItemId, "statementItem", i, "statementItemId") as StatementItemId,
+    statementId: requireUploadId(raw.statementId, "statementItem", i, "statementId") as StatementId,
     institution: requireUploadString(raw.institution, "statementItem", i, "institution"),
     account: requireUploadString(raw.account, "statementItem", i, "account"),
     period: requireUploadString(raw.period, "statementItem", i, "period"),

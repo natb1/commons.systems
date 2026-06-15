@@ -118,9 +118,11 @@ export function parseRawReconciliationNote(raw: RawReconciliationNote, i: number
   return {
     id: requireUploadId(raw.id, "reconciliationNote", i),
     entityType: requireUploadEnum(raw.entityType, RECONCILIATION_ENTITY_TYPES, `reconciliationNote[${i}].entityType`),
-    entityId: requireUploadId(raw.entityId, "reconciliationNote.entityId", i),
+    entityId: requireUploadString(raw.entityId, "reconciliationNote", i, "entityId"),
     classification: requireUploadEnum(raw.classification, RECONCILIATION_CLASSIFICATIONS, `reconciliationNote[${i}].classification`),
-    note: requireUploadString(raw.note, "reconciliationNote", i, "note"),
+    // Mirror the Firestore/IDB tolerance for an empty note (parseFirestoreReconciliationNote
+    // stores non-string note as ""), so an exported "" note round-trips back through import.
+    note: typeof raw.note === "string" ? raw.note : "",
     updatedAt: parseISOTimestamp(raw.updatedAt, `reconciliationNote[${i}].updatedAt`),
     updatedBy: requireUploadString(raw.updatedBy, "reconciliationNote", i, "updatedBy"),
     groupId: null as GroupId | null,
