@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Importing local-folder-ui.ts transitively imports library.ts and
 // pages/home.ts, both of which touch print/src/firebase.ts (initializeApp at
@@ -47,6 +47,7 @@ vi.mock("../src/library.js", async () => {
 });
 
 import { decideFolderUiState, initLocalFolder } from "../src/local-folder-ui.js";
+import { listLocal } from "../src/library.js";
 
 describe("decideFolderUiState", () => {
   it("returns 'open' when no handle is persisted (null)", () => {
@@ -111,5 +112,75 @@ describe("initLocalFolder", () => {
 
     // The click handler is async; wait for it to resolve before asserting.
     await vi.waitFor(() => expect(onSourceBound).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("initLocalFolder — focus-rescan debounce", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockStore.isSupported.mockReturnValue(true);
+    mockStore.get.mockResolvedValue(mockHandle);
+    mockStore.queryPermission.mockResolvedValue("granted");
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("debounces a burst of focus events into one rescan", async () => {
+    const section = document.createElement("span");
+    const container = document.createElement("div");
+
+    await initLocalFolder(section, container);
+
+    // Clear the initial bind render so we count only focus-triggered rescans.
+    vi.mocked(listLocal).mockClear();
+
+    // Dispatch several rapid focus events.
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("focus"));
+
+    // Advance past the debounce — the burst should produce exactly one rescan.
+    await vi.advanceTimersByTimeAsync(400);
+
+    expect(listLocal).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not rescan before the debounce elapses", async () => {
+    const section = document.createElement("span");
+    const container = document.createElement("div");
+
+    await initLocalFolder(section, container);
+
+    vi.mocked(listLocal).mockClear();
+
+    window.dispatchEvent(new Event("focus"));
+
+    // Advance less than the debounce window — no rescan should have fired.
+    await vi.advanceTimersByTimeAsync(399);
+
+    expect(listLocal).not.toHaveBeenCalled();
+  });
+
+  it("cleanup clears a pending timer so no stale rescan fires after teardown", async () => {
+    const section = document.createElement("span");
+    const container = document.createElement("div");
+
+    const cleanup = await initLocalFolder(section, container);
+
+    vi.mocked(listLocal).mockClear();
+
+    // Schedule a pending rescan.
+    window.dispatchEvent(new Event("focus"));
+
+    // Tear down before the timer fires.
+    cleanup?.();
+
+    // Advancing past the debounce must NOT fire a rescan.
+    await vi.advanceTimersByTimeAsync(400);
+
+    expect(listLocal).not.toHaveBeenCalled();
   });
 });
