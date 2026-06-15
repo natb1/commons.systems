@@ -7,6 +7,93 @@ import { parsePositionPage } from "./types.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
+// ---------------------------------------------------------------------------
+// Pure search helpers — no DOM, no pdf.js calls. Exported for unit tests.
+// ---------------------------------------------------------------------------
+
+/**
+ * Reconstruct a page's plain text from a pdf.js getTextContent() items array.
+ *
+ * LOAD-BEARING: the empty-separator join is intentional and must not be
+ * changed. Later units map highlight offsets back to text-layer spans using
+ * these exact byte offsets. Any separator (space, newline, etc.) would shift
+ * every offset and break highlight placement.
+ */
+export function buildPageText(items: ReadonlyArray<{ str?: string }>): string {
+  return items.map((i) => ("str" in i ? i.str : "")).join("");
+}
+
+/**
+ * Find all non-overlapping occurrences of `query` in `pageText` (case-insensitive).
+ * Returns an array of { offset, length } pairs. Advances past each match to
+ * avoid overlap. `query` is guaranteed non-empty by the caller.
+ */
+export function findMatches(
+  pageText: string,
+  query: string,
+): { offset: number; length: number }[] {
+  const haystack = pageText.toLowerCase();
+  const needle = query.toLowerCase();
+  const results: { offset: number; length: number }[] = [];
+  let from = 0;
+  while (from < haystack.length) {
+    const offset = haystack.indexOf(needle, from);
+    if (offset === -1) break;
+    results.push({ offset, length: query.length });
+    from = offset + query.length;
+  }
+  return results;
+}
+
+/**
+ * Build a text snippet around a match at [offset, offset+length) in pageText.
+ * Adds an ellipsis character (…) when the window is clipped at either end,
+ * and adjusts matchStart so it correctly points into the returned snippet.
+ * Preserves the SearchResult invariant: matchStart + matchLength <= snippet.length.
+ */
+export function buildSnippet(
+  pageText: string,
+  offset: number,
+  length: number,
+): { snippet: string; matchStart: number; matchLength: number } {
+  const windowStart = Math.max(0, offset - 35);
+  const windowEnd = Math.min(pageText.length, offset + length + 35);
+  let snippet = pageText.slice(windowStart, windowEnd);
+  let matchStart = offset - windowStart;
+  if (windowStart > 0) {
+    snippet = "…" + snippet;
+    matchStart += 1;
+  }
+  if (windowEnd < pageText.length) {
+    snippet = snippet + "…";
+  }
+  return { snippet, matchStart, matchLength: length };
+}
+
+/**
+ * Encode a match location as an opaque string token for use in SearchResult.location.
+ * Format: "page:offset:length" (all base-10 integers).
+ */
+export function encodeLocation(page: number, offset: number, length: number): string {
+  return `${page}:${offset}:${length}`;
+}
+
+/**
+ * Decode a location token produced by encodeLocation.
+ * Returns null when the token is malformed (wrong number of parts or any part is NaN).
+ */
+export function decodeLocation(
+  location: string,
+): { page: number; offset: number; length: number } | null {
+  const parts = location.split(":");
+  if (parts.length !== 3) return null;
+  const page = parseInt(parts[0], 10);
+  const offset = parseInt(parts[1], 10);
+  const length = parseInt(parts[2], 10);
+  if (Number.isNaN(page) || Number.isNaN(offset) || Number.isNaN(length)) return null;
+  return { page, offset, length };
+}
+
 export function createPdfRenderer(onError?: (err: unknown) => void): ContentRenderer {
   let pdfDoc: PDFDocumentProxy | null = null;
   let _currentPage = 0;
