@@ -186,10 +186,10 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
     };
     switch (item.mediaType) {
       case "pdf":
-        cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), resolveLocal, item.id, store);
+        cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), resolveLocal, item.id, store, null);
         break;
       case "epub":
-        cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), resolveLocal, item.id, store);
+        cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), resolveLocal, item.id, store, null);
         break;
       default:
         reportError(new Error(`Unsupported local mediaType in viewer: ${item.mediaType}`));
@@ -201,13 +201,13 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
 
   switch (item.mediaType) {
     case "pdf":
-      cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), () => resolveFileSource(url, spath), item.id, store);
+      cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), () => resolveFileSource(url, spath), item.id, store, user?.uid ?? null);
       break;
     case "epub":
-      cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), () => resolveFileSource(url, spath), item.id, store);
+      cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), () => resolveFileSource(url, spath), item.id, store, user?.uid ?? null);
       break;
     case "image-archive":
-      cleanupFn = initViewer(outlet, (onError) => createImageArchiveRenderer(onError, spath), () => Promise.resolve(url), item.id, store);
+      cleanupFn = initViewer(outlet, (onError) => createImageArchiveRenderer(onError, spath), () => Promise.resolve(url), item.id, store, user?.uid ?? null);
       break;
     default: {
       const _exhaustive: never = item.mediaType;

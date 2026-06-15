@@ -210,6 +210,7 @@ describe("local-folder view path", () => {
       expect.any(Function),
       "local:book.pdf",
       sidecarStore,
+      null,
     );
   });
 
@@ -424,6 +425,7 @@ describe("renderView", () => {
         expect.any(Function),
         "item-1",
         firestoreStore,
+        "user-123",
       );
 
       const factory = (initViewer as ReturnType<typeof vi.fn>).mock.calls[0][1] as (onError: (err: unknown) => void) => unknown;
