@@ -243,14 +243,17 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     const result = await renderPageToCanvas(pageNum, c, targetRect, wrapper, () => gen !== spreadGen);
     if (!result) return;
     if (gen !== spreadGen) {
-      result.task.cancel();
+      // The canvas render already completed; only the orphaned wrapper needs cleanup.
+      wrapper.remove();
       return;
     }
 
     const tl = await renderTextLayer(result.page, result.cssViewport, tlDiv);
     if (gen !== spreadGen) {
-      result.task.cancel();
+      // The canvas render already completed; cancel only the in-flight text layer
+      // and remove the orphaned wrapper.
       tl?.cancel();
+      wrapper.remove();
       return;
     }
     spreadPages.push({ renderTask: result.task, textLayer: tl });
