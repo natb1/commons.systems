@@ -327,9 +327,10 @@ describe("initViewer", () => {
   });
 
   it("cleanup flushes pending save timer (unauthenticated)", async () => {
+    const store = fakeStore(null);
     const renderer = makeMockRenderer();
 
-    const cleanup = initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    const cleanup = initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", store);
     await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
@@ -339,9 +340,9 @@ describe("initViewer", () => {
     // Flush synchronously before the 500ms timer fires
     cleanup();
 
-    // localStorage should have been written with the pending position
+    // store.save should have been called with the pending position
     // without advancing timers — the flush is synchronous
-    expect(localStorage.getItem("reading-position:m1")).toBe("2");
+    expect(store.save).toHaveBeenCalledWith("2");
   });
 
   it("cleanup calls renderer.destroy", async () => {

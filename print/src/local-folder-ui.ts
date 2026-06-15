@@ -21,7 +21,7 @@ import {
 import { extractMetadata } from "./local-metadata.js";
 import { renderLocalMediaItems } from "./pages/home.js";
 import {
-  cacheMetadata,
+  cacheMetadataBatch,
   ensureLoaded,
   getMetadata,
   setLocalDirectory,
@@ -166,17 +166,39 @@ export async function renderLocalIntoList(container: HTMLElement): Promise<void>
  * cache-first. Keys the sidecar on `item.storagePath` (the BARE FILENAME, never
  * the `local:<folderId>/<name>` id). Items with a cached entry are overlaid with
  * zero IO and zero writes; items with NO entry (`getMetadata` returns undefined)
- * are read via `resolveLocalBlob`, extracted, and cached once.
+ * are read via `resolveLocalBlob`, extracted, and accumulated for a single
+ * batched cache write.
  *
- * Write suppression on focus-rescan: the only thing that writes the sidecar here
- * is `cacheMetadata`, and it is called solely for items whose cache entry is
- * `undefined`. A focus event with no new files therefore finds every item
- * already cached (even files with no title cache a present `{}` entry, which is
- * defined), so nothing is extracted and nothing is written.
+ * Single batched write: each newly-extracted entry is collected and persisted in
+ * ONE `cacheMetadataBatch` call after `Promise.all` resolves, rather than N
+ * sequential full-file index.json rewrites (one per new file). At N new files
+ * this is 1 disk write instead of N.
+ *
+ * Write suppression on focus-rescan: an entry is accumulated only for items whose
+ * cache entry was `undefined` and whose bytes extracted successfully (even an
+ * empty extract contributes a present `{}` entry, which is defined). A focus
+ * event with no new files therefore finds every item already cached, so the
+ * batch is empty and `cacheMetadataBatch` writes nothing.
  */
 async function enrichLocalItems(items: MediaItem[]): Promise<MediaItem[]> {
   await ensureLoaded();
-  return Promise.all(items.map((item) => enrichLocalItem(item)));
+  const results = await Promise.all(items.map((item) => enrichLocalItem(item)));
+  const newEntries = Object.fromEntries(
+    results
+      .filter((r) => r.entry !== null)
+      .map((r) => r.entry as [string, { title?: string; pageCount?: number }]),
+  );
+  await cacheMetadataBatch(newEntries);
+  return results.map((r) => r.item);
+}
+
+/** Result of enriching one item: the overlaid item plus an optional new cache
+ * entry (`[storagePath, meta]`) to be persisted in the render pass's batched
+ * write. `entry` is null when nothing new was extracted (cached hit, unreadable
+ * file, or extract error) so it contributes nothing to the batch. */
+interface EnrichResult {
+  item: MediaItem;
+  entry: [string, { title?: string; pageCount?: number }] | null;
 }
 
 function overlay(
@@ -192,10 +214,10 @@ function overlay(
   };
 }
 
-async function enrichLocalItem(item: MediaItem): Promise<MediaItem> {
+async function enrichLocalItem(item: MediaItem): Promise<EnrichResult> {
   const cached = await getMetadata(item.storagePath);
-  // Present entry (even `{}`) means already extracted — overlay, zero writes.
-  if (cached !== undefined) return overlay(item, cached);
+  // Present entry (even `{}`) means already extracted — overlay, no new entry.
+  if (cached !== undefined) return { item: overlay(item, cached), entry: null };
 
   // No entry yet: read bytes and extract, tolerating a bad file.
   try {
@@ -203,13 +225,13 @@ async function enrichLocalItem(item: MediaItem): Promise<MediaItem> {
     if (buf === null) {
       // Could not read this file — do NOT cache `{}` (that would permanently
       // suppress retry). Fall back to the existing item; a later focus retries.
-      return item;
+      return { item, entry: null };
     }
     const meta = await extractMetadata(buf, item.mediaType);
-    await cacheMetadata(item.storagePath, meta);
-    return overlay(item, meta);
+    // Contribute this entry to the render pass's single batched write.
+    return { item: overlay(item, meta), entry: [item.storagePath, meta] };
   } catch (err) {
     logError(err, { operation: "local-folder-enrich", id: item.id });
-    return item;
+    return { item, entry: null };
   }
 }

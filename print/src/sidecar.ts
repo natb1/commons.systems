@@ -41,11 +41,46 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Coerce a raw `metadata` value into the typed cache, keeping only entries whose
+ * value is a plain object and whose leaf fields have the expected types
+ * (`title` a string, `pageCount` a number). Wrong-typed leaves are dropped so a
+ * malformed on-disk entry can never surface as a non-string title or
+ * non-number pageCount downstream.
+ */
+function coerceMetadata(raw: unknown): SidecarData["metadata"] {
+  if (!isPlainObject(raw)) return {};
+  const out: SidecarData["metadata"] = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!isPlainObject(value)) continue;
+    const entry: { title?: string; pageCount?: number } = {};
+    if (typeof value.title === "string") entry.title = value.title;
+    if (typeof value.pageCount === "number") entry.pageCount = value.pageCount;
+    out[key] = entry;
+  }
+  return out;
+}
+
+/**
+ * Coerce a raw `positions` value into the typed map, keeping only entries whose
+ * value is a string. A non-string position (e.g. a number or nested object)
+ * would otherwise flow through `load()` into the renderer's `initialPosition`
+ * and break navigation, so it is dropped here at the system edge.
+ */
+function coercePositions(raw: unknown): SidecarData["positions"] {
+  if (!isPlainObject(raw)) return {};
+  return Object.fromEntries(
+    Object.entries(raw).filter(([, v]) => typeof v === "string"),
+  ) as SidecarData["positions"];
+}
+
+/**
  * Parse sidecar text into a model. Tolerant of untrusted/partial on-disk
  * contents (input validation at the system edge, not a banned fallback):
  * - JSON parse failure or a non-object top level → log + fresh empty model.
  * - A missing/wrong-typed `metadata` or `positions` field is coerced to `{}`
  *   independently, so malformed metadata does not discard good positions.
+ * - Within each field, wrong-typed leaves are dropped: positions keeps only
+ *   string values; metadata keeps only string `title` / number `pageCount`.
  * - `version` is forced to 1.
  * Never throws.
  */
@@ -63,12 +98,8 @@ export function parseSidecar(text: string): SidecarData {
   }
   return {
     version: 1,
-    metadata: isPlainObject(parsed.metadata)
-      ? (parsed.metadata as SidecarData["metadata"])
-      : {},
-    positions: isPlainObject(parsed.positions)
-      ? (parsed.positions as SidecarData["positions"])
-      : {},
+    metadata: coerceMetadata(parsed.metadata),
+    positions: coercePositions(parsed.positions),
   };
 }
 
@@ -246,6 +277,21 @@ export async function cacheMetadata(
   meta: { title?: string; pageCount?: number },
 ): Promise<void> {
   return enqueueWrite({ metadata: { [filename]: meta } });
+}
+
+/**
+ * Merge many metadata entries into the model in a SINGLE serialized write. This
+ * is the batch form of `cacheMetadata`: the list-enrichment path accumulates
+ * every newly-extracted entry for a render pass and persists them in one
+ * index.json rewrite, instead of N sequential full-file rewrites (one per new
+ * file). An empty `entries` is a no-op — it neither touches the chain nor writes
+ * the file, preserving focus-rescan write suppression when nothing is new.
+ */
+export async function cacheMetadataBatch(
+  entries: Record<string, { title?: string; pageCount?: number }>,
+): Promise<void> {
+  if (Object.keys(entries).length === 0) return;
+  return enqueueWrite({ metadata: entries });
 }
 
 // ---------------------------------------------------------------------------

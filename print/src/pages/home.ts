@@ -49,7 +49,7 @@ export function renderLocalMediaItems(items: MediaItem[]): string {
           <span class="media-title"><a href="/view/${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a></span>
           ${mediaTypeBadge(item.mediaType)}
           <span class="media-badge media-badge-local">local</span>
-          ${item.pageCount !== undefined ? `<span class="media-pagecount">${item.pageCount} pages</span>` : ""}
+          ${item.pageCount !== undefined ? `<span class="media-pagecount">${escapeHtml(String(item.pageCount))} pages</span>` : ""}
         </div>
       </li>`;
     })
