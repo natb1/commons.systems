@@ -308,8 +308,15 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
    *
    * Children are rebuilt with createTextNode/createElement (never innerHTML) so
    * the text layer's transparent-text CSS keeps applying.
+   *
+   * First restores any divs mutated by a prior call (unwrapHighlights), so the
+   * divs read here are always pristine and the highlightRestores log never
+   * accumulates stale entries for detached divs from a previous render. This
+   * makes applyHighlight safe to call repeatedly for the same page — covering
+   * both the single-page render path and the spread render path uniformly.
    */
   function applyHighlight(tl: TextLayer, h: { offset: number; length: number }): void {
+    unwrapHighlights();
     const itemsStr = tl.textContentItemsStr;
     const divs = tl.textDivs;
     const segments = offsetToDivRanges(itemsStr, h.offset, h.length);
