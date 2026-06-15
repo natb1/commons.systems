@@ -1177,7 +1177,7 @@ describe("main module", () => {
     // The session-only notice is surfaced.
     const errorEl = document.querySelector(".nav-error") as HTMLElement;
     expect(errorEl.hidden).toBe(false);
-    expect(errorEl.textContent).toContain("this session only");
+    expect(errorEl.textContent).toContain("auto-loaded next session");
   });
 
   // initialize() with a granted PLAINTEXT handle: unlink it and show the cached
