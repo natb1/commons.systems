@@ -217,11 +217,12 @@ func TestParseStatementDir_DiscoverError(t *testing.T) {
 
 func TestDedupStatementData(t *testing.T) {
 	cases := []struct {
-		name           string
-		input          []budget.StatementData
-		wantLen        int
-		wantErr        bool
-		wantErrSubstr  string
+		name          string
+		input         []budget.StatementData
+		wantLen       int
+		wantOut       []budget.StatementData // when non-nil, asserts out equals this exactly
+		wantErr       bool
+		wantErrSubstr string
 	}{
 		{
 			name:    "empty slice",
@@ -234,6 +235,9 @@ func TestDedupStatementData(t *testing.T) {
 				{StatementID: "STMT-1", Balance: 1000},
 			},
 			wantLen: 1,
+			wantOut: []budget.StatementData{
+				{StatementID: "STMT-1", Balance: 1000},
+			},
 		},
 		{
 			name: "two entries same StatementID equal Balance",
@@ -293,6 +297,16 @@ func TestDedupStatementData(t *testing.T) {
 			}
 			if len(out) != tc.wantLen {
 				t.Errorf("len(out): got %d, want %d", len(out), tc.wantLen)
+			}
+			if tc.wantOut != nil {
+				if len(out) != len(tc.wantOut) {
+					t.Fatalf("out: got %d entries, want %d", len(out), len(tc.wantOut))
+				}
+				for i := range tc.wantOut {
+					if out[i] != tc.wantOut[i] {
+						t.Errorf("out[%d]: got %+v, want %+v", i, out[i], tc.wantOut[i])
+					}
+				}
 			}
 		})
 	}
