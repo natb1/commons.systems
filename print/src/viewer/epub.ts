@@ -296,7 +296,7 @@ export function createEpubRenderer(
       await book.loaded.navigation;
 
       const spineItems = (book.spine as unknown as { spineItems: EpubSection[] }).spineItems;
-      const loader = (book.load as unknown as { bind(thisArg: Book): unknown }).bind(book);
+      const loader = (book.load as (this: Book, req: unknown) => Promise<unknown>).bind(book);
 
       const results: SearchResult[] = [];
       for (let i = 0; i < spineItems.length; i++) {
@@ -356,6 +356,7 @@ export function createEpubRenderer(
       // rendition.destroy() tears down annotations, so just reset tracking.
       _searchCfis = [];
       _activeCfi = null;
+      _searchEpoch = 0;
       if (rendition) {
         rendition.destroy();
         rendition = null;
