@@ -24,6 +24,15 @@ vi.mock("../src/idb", () => ({
 import { exportToJson } from "../src/export";
 import { getAll, getMeta } from "../src/idb";
 import { parseUploadedJson, toParsedData } from "../src/upload";
+import { collectionRegistry } from "../src/collection-registry.js";
+import type { DataStoreName } from "../src/collection-registry.js";
+import type { ParsedData } from "../src/idb";
+
+// Compile-time guard: ParsedData's keys must be exactly the registry stores plus
+// "meta". Registry drift surfaces as a tsc error here, not a runtime surprise.
+type AssertEqual<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+const _parsedDataKeysExhaustive: AssertEqual<keyof ParsedData, DataStoreName | "meta"> = true;
+void _parsedDataKeysExhaustive;
 
 const mockGetAll = vi.mocked(getAll);
 const mockGetMeta = vi.mocked(getMeta);
@@ -445,8 +454,22 @@ describe("exportToJson", () => {
     expect(data.weeklyAggregates[0]).toEqual(idbWeeklyAggregates[0]);
   });
 
-  it("ETL-snapshot round-trip empties no store", async () => {
-    // Minimal well-formed IDB fixtures for ETL-emitted stores not already in setupMocks
+  it("round-trip empties no registry store", async () => {
+    // A non-empty, minimally-valid IDB fixture for EVERY registry collection.
+    // Reuses the module-level fixtures where they exist and adds minimal valid
+    // ones for the rest. Typing the map as Record<DataStoreName, unknown[]>
+    // makes a MISSING registry key a tsc error; the sort-equality guard below
+    // makes a future-ADDED registry key a runtime failure.
+    const idbAccountsFixture = [
+      {
+        id: "bankone_1234",
+        institution: "bankone",
+        account: "1234",
+        accountType: "asset" as const,
+        openingBalance: null,
+        openingBalanceDateMs: null,
+      },
+    ];
     const idbJournalEntriesFixture = [
       {
         id: "je-001",
@@ -470,58 +493,83 @@ describe("exportToJson", () => {
         statementItemId: null,
       },
     ];
-    const idbAccountsFixture = [
+    const idbStatementItemsFixture = [
       {
-        id: "bankone_1234",
+        id: "si-001",
+        statementItemId: "si-001",
+        statementId: "stmt-1",
         institution: "bankone",
         account: "1234",
-        accountType: "asset" as const,
-        openingBalance: null,
-        openingBalanceDateMs: null,
+        period: "2025-06",
+        amount: -52.3,
+        timestampMs: Date.parse("2025-06-10T00:00:00.000Z"),
+        description: "KROGER",
+        fitid: "fit-001",
+      },
+    ];
+    const idbReconciliationNotesFixture = [
+      {
+        id: "transaction_txn-001",
+        entityType: "transaction" as const,
+        entityId: "txn-001",
+        classification: "timing" as const,
+        note: "pending clear",
+        updatedAtMs: Date.parse("2025-06-11T00:00:00.000Z"),
+        updatedBy: "nathan@natb1.com",
+      },
+    ];
+    const idbReconciliationEventsFixture = [
+      {
+        id: "bankone_1234_2025-06-10",
+        institution: "bankone",
+        account: "1234",
+        reconciledThroughDateMs: Date.parse("2025-06-10T00:00:00.000Z"),
+        bankBalance: 1234.56,
+        clearedBalance: 1234.56,
+        adjustment: 0,
+        reconciledBy: "nathan@natb1.com",
+        reconciledAtMs: Date.parse("2025-06-11T00:00:00.000Z"),
+        legIds: ["jl-001"],
+        adjustmentEntryId: null,
       },
     ];
 
-    // Override the mocks for this test to supply non-empty ETL stores
+    const idbFixtures: Record<DataStoreName, unknown[]> = {
+      transactions: idbTransactions,
+      budgets: idbBudgets,
+      budgetPeriods: idbBudgetPeriods,
+      rules: idbRules,
+      normalizationRules: idbNormalizationRules,
+      statements: idbStatements,
+      statementItems: idbStatementItemsFixture,
+      reconciliationNotes: idbReconciliationNotesFixture,
+      accounts: idbAccountsFixture,
+      journalEntries: idbJournalEntriesFixture,
+      journalLegs: idbJournalLegsFixture,
+      reconciliationEvents: idbReconciliationEventsFixture,
+      weeklyAggregates: idbWeeklyAggregates,
+    };
+
+    // Exhaustiveness guard: a future registry entry added without a fixture FAILS here.
+    expect(Object.keys(idbFixtures).sort()).toEqual(Object.keys(collectionRegistry).sort());
+
     const original = mockGetAll.getMockImplementation()!;
-    mockGetAll.mockImplementation((storeName: string) => {
-      switch (storeName) {
-        case "journalEntries":
-          return Promise.resolve(idbJournalEntriesFixture);
-        case "journalLegs":
-          return Promise.resolve(idbJournalLegsFixture);
-        case "accounts":
-          return Promise.resolve(idbAccountsFixture);
-        default:
-          return original(storeName);
-      }
-    });
+    mockGetAll.mockImplementation((storeName: string) =>
+      storeName in idbFixtures
+        ? Promise.resolve(idbFixtures[storeName as DataStoreName])
+        : original(storeName),
+    );
 
     try {
       const json = await exportToJson();
       const parsed = parseUploadedJson(json);
       const data = toParsedData(parsed);
 
-      // Static list of the ETL-emitted stores (from budget-etl/internal/export/export.go)
-      // that this test verifies round-trip without being emptied. This is a hardcoded
-      // list, not auto-detected: a new ETL store added to export.ts must also be added
-      // here to be covered. statementItems, reconciliationNotes, and reconciliationEvents
-      // are excluded because they are app-only (not ETL-emitted) and are never populated
-      // in setupMocks.
-      const etlStores: Array<{ name: string; result: unknown[] }> = [
-        { name: "transactions", result: data.transactions },
-        { name: "statements", result: data.statements },
-        { name: "budgets", result: data.budgets },
-        { name: "budgetPeriods", result: data.budgetPeriods },
-        { name: "rules", result: data.rules },
-        { name: "normalizationRules", result: data.normalizationRules },
-        { name: "weeklyAggregates", result: data.weeklyAggregates },
-        { name: "journalEntries", result: data.journalEntries },
-        { name: "journalLegs", result: data.journalLegs },
-        { name: "accounts", result: data.accounts },
-      ];
-
-      for (const { name, result } of etlStores) {
-        expect(result, `store "${name}" was emptied by the export/import round-trip`).not.toHaveLength(0);
+      // Every registry store must survive the round-trip non-empty — derived from
+      // the registry, not a hardcoded list. This proves statementItems,
+      // reconciliationNotes, and reconciliationEvents (the #1268 fix) round-trip.
+      for (const name of Object.keys(collectionRegistry) as DataStoreName[]) {
+        expect(data[name], `store "${name}" emptied by round-trip`).not.toHaveLength(0);
       }
     } finally {
       mockGetAll.mockImplementation(original);
