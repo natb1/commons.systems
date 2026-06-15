@@ -211,6 +211,28 @@
 #     "snapshotDir": "/mnt/g/My Drive/budget/snapshots",
 #     "current": "/mnt/g/My Drive/budget/budget.enc.json"
 #   }
+#
+# ---- Schema: auto-merge.json -----------------------------------------------
+#
+# Top-level object gating the dispatch-auto-merge reconciler. Read by
+# dispatch-auto-merge; absent file → no-config → the reconciler is inert and the
+# current human-merge behavior is preserved.
+#
+#   enabled       boolean (required) — master switch. false (or no file) keeps
+#                 the feature off; only true arms auto-merging.
+#   types         array of non-empty strings (optional) — every closing issue of
+#                 a PR must carry each of these labels for the PR to be eligible.
+#                 Default (when absent): ["enhancement"].
+#   excludeTypes  array of non-empty strings (optional) — no closing issue of a
+#                 PR may carry any of these labels. Default: ["bug","security"].
+#
+# Example (see auto-merge.example.json):
+#   {
+#     "enabled": false,
+#     "types": ["enhancement"],
+#     "excludeTypes": ["bug", "security"]
+#   }
+#
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -219,9 +241,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 CONFIG_TYPE="${1:-}"
 case "$CONFIG_TYPE" in
-  projects|jit|statements|target-workers|budget-etl|epic) ;;
+  projects|jit|statements|target-workers|budget-etl|epic|auto-merge) ;;
   *)
-    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic>" >&2
+    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge>" >&2
     exit 2
     ;;
 esac
@@ -417,6 +439,52 @@ case "$CONFIG_TYPE" in
         else
           empty
         end
+      end
+    ' "$CONFIG_FILE")
+    ;;
+  auto-merge)
+    ERRORS=$(jq -r '
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      else
+        . as $cfg |
+        # enabled: required boolean
+        (if ($cfg | has("enabled")) | not then
+          "missing required field enabled"
+        elif ($cfg.enabled | type) != "boolean" then
+          "enabled must be a boolean, got \($cfg.enabled | type)"
+        else empty end),
+        # types and excludeTypes: optional arrays of non-empty strings (validated
+        # only when present; dispatch-auto-merge applies defaults when absent via
+        # `.types // [...]`, which only substitutes on null — an explicit array
+        # passes through unchanged).
+        #
+        # Asymmetry on the empty array: `types: []` is REJECTED because the
+        # per-issue gate `$types | all(...)` is vacuously true on an empty array,
+        # so it would auto-merge every eligible PR — the inverse of the intended
+        # "restrict to nothing". `excludeTypes: []` is ALLOWED: an empty exclude
+        # set vacuously passes the veto, meaning "no type veto", which preserves
+        # intent and is the only way to express it (an absent excludeTypes
+        # defaults to ["bug","security"]).
+        (["types","excludeTypes"] |
+         .[] |
+         . as $field |
+         if ($cfg | has($field)) | not then
+           empty
+         elif ($cfg[$field] | type) != "array" then
+           "\($field) must be an array if present, got \($cfg[$field] | type)"
+         elif ($field == "types" and ($cfg[$field] | length) == 0) then
+           "types must be a non-empty array if present (an empty array is vacuously true via `all` and auto-merges every eligible PR)"
+         else
+           ($cfg[$field] | to_entries[] |
+            .value as $el |
+            (.key) as $i |
+            if ($el | type) != "string" then
+              "\($field)[\($i)]: must be a string, got \($el | type)"
+            elif ($el | length) == 0 then
+              "\($field)[\($i)]: must be a non-empty string"
+            else empty end)
+         end)
       end
     ' "$CONFIG_FILE")
     ;;
