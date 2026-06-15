@@ -187,11 +187,16 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   const homeRoute: Route = {
     path: /^\/(?:post\/.*)?$/,
     render: () => {
-      // Skip teardown only while the prerendered home DOM is still live — a
-      // render-time live-DOM check, not a one-shot flag, so a non-home entry
-      // route (e.g. /admin) that already replaced #posts does not leave stale
-      // markup on a later Home navigation (#1285).
-      if (app.querySelector("#posts")) {
+      // Preserve the live prerendered home DOM only while signed out: the
+      // prerendered #posts shows the published (build-time) posts, matching what
+      // loadPosts() produces for an anonymous viewer, so skipping the rebuild
+      // avoids needless teardown/CLS. It is a render-time live-DOM check, not a
+      // one-shot flag, so a non-home entry route (e.g. /admin) that already
+      // replaced #posts does not leave stale markup on a later Home navigation
+      // (#1285). After sign-in we MUST run loadPosts() even though #posts is
+      // live, so the admin's draft posts replace the published-only prerendered
+      // markup (landing/e2e/admin.spec.ts draft tests).
+      if (currentUser === null && app.querySelector("#posts")) {
         cachedPosts = config.buildTimeMetadata;
         lastSkippedCount = 0;
         return null;

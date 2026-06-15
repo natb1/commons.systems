@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createBlogApp } from "../src/create-blog-app.ts";
 import type { CreateBlogAppConfig } from "../src/create-blog-app.ts";
+import { getPosts } from "../src/firestore.ts";
 
 // Issue #1285 — shared SPA bootstrap routing regression and info-panel AC tests.
 //
@@ -349,5 +350,73 @@ describe("createBlogApp routing and panel behavior", () => {
     // updateInfoPanel ran AND useScrollIndicator is true → initScrollIndicator called.
     expect(hydrateInfoPanel).toHaveBeenCalled();
     expect(initScrollIndicator).toHaveBeenCalled();
+  });
+
+  // Case 6 — sign-in on home bypasses prerendered-DOM guard so admin drafts load.
+  it("reloads posts on home after sign-in so admin drafts replace prerendered published markup", async () => {
+    history.pushState({}, "", "/");
+    scaffoldDom();
+
+    // Configure getPosts to return a recognizable draft post for the signed-in user.
+    const draftPost = { id: "draft-post", title: "Draft Post Title", published: false };
+    (getPosts as ReturnType<typeof vi.fn>).mockResolvedValue({
+      posts: [draftPost],
+      skippedCount: 0,
+    });
+    // renderHomeHtml spy already returns '<div id="posts" data-test="home">HOME</div>';
+    // use a distinguishable value to confirm it ran after sign-in.
+    renderHomeHtml.mockReturnValue('<div id="posts" data-test="home">DRAFT HOME</div>');
+
+    // Capture the auth callback instead of dropping it.
+    let authCallback: ((user: { uid: string } | null) => void) | undefined;
+    const config = makeConfig({
+      firebase: {
+        db: { type: "mock-firestore" } as never,
+        namespace: "test/env" as never,
+        trackPageView: vi.fn(),
+        initAppCheck: vi.fn(() => Promise.resolve()),
+        signIn: vi.fn(() => Promise.resolve()),
+        signOut: vi.fn(() => Promise.resolve()),
+        onAuthStateChanged: vi.fn((cb) => {
+          authCallback = cb;
+          return Promise.resolve();
+        }),
+      },
+    });
+
+    handle = createBlogApp(config);
+    const app = document.getElementById("app")!;
+
+    // Wait for initial route to settle with prerendered #posts intact (signed out).
+    await vi.waitFor(() => {
+      expect(app.querySelector("#posts")).not.toBeNull();
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Signed out: prerendered DOM preserved, loadPosts/renderHomeHtml not called.
+    const callsBeforeSignIn = renderHomeHtml.mock.calls.length;
+    expect(callsBeforeSignIn).toBe(0);
+
+    // Sign in — fire the captured auth callback with a user object.
+    const signedInUser = { uid: "admin-uid" };
+    authCallback!(signedInUser as never);
+
+    // After sign-in, refreshAfterAuthChange calls router.navigate(), which must
+    // call loadPosts() even though #posts is still live, because currentUser !== null.
+    await vi.waitFor(() => {
+      expect(renderHomeHtml.mock.calls.length).toBeGreaterThan(callsBeforeSignIn);
+    });
+
+    // getPosts was called with the signed-in user — draft posts were fetched.
+    expect(getPosts).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      signedInUser,
+    );
+
+    // The home DOM was rebuilt (not the prerendered markup, but the post-sign-in render).
+    await vi.waitFor(() => {
+      expect(app.querySelector("#posts")).not.toBeNull();
+    });
   });
 });
