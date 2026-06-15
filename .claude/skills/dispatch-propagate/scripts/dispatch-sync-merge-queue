@@ -136,6 +136,26 @@ for (( i=0; i<FILTERED_COUNT; i++ )); do
     echo "$LABEL: created #$ISSUE_NUM"
   else
     # ---- Present → update only on title drift -------------------------------
+    if [[ "$OPEN_COUNT" -gt 1 ]]; then
+      # Two concurrent ticks can each create a tracking issue for the same
+      # mergeable PR (OPEN_COUNT>1). Reconcile after the fact: keep .[0] as the
+      # canonical issue and close every duplicate. The bottom close path cannot
+      # reap these — the PR is still mergeable, so its MERGEABLE_NUMS guard skips
+      # it (see #1651).
+      echo "$LABEL: warning ($OPEN_COUNT open tracking issues; closing $((OPEN_COUNT - 1)) duplicate(s))" >&2
+      while read -r DUP_NUM; do
+        [[ -z "$DUP_NUM" ]] && continue
+        DUP_RC=0
+        DUP_OUT=$(gh_retry gh issue close "$DUP_NUM" \
+          --repo "$OFFICE_HOURS_NATE_REPO" 2>&1) || DUP_RC=$?
+        if [[ "$DUP_RC" -ne 0 ]]; then
+          echo "$LABEL: error (gh issue close duplicate #$DUP_NUM failed: $DUP_OUT)" >&2
+          HARD_ERROR=1
+          continue
+        fi
+        echo "$LABEL: closed duplicate #$DUP_NUM"
+      done < <(printf '%s' "$OPEN_JSON" | jq -r '.[1:][].number')
+    fi
     EXISTING_NUM=$(printf '%s' "$OPEN_JSON" | jq -r '.[0].number')
     EXISTING_TITLE=$(printf '%s' "$OPEN_JSON" | jq -r '.[0].title')
     if [[ "$EXISTING_TITLE" == "$PR_TITLE" ]]; then

@@ -83,6 +83,11 @@ setup() {
   # dispatch_classify_rollup) via its SCRIPT_DIR, which resolves to TMPDIR_TEST
   # for this copy — lib.sh is already copied below, so the source resolves.
   cp "$SCRIPT_DIR/dispatch-sync-merge-queue" "$TMPDIR_TEST/dispatch-sync-merge-queue"
+  # dispatch-auto-merge sources lib.sh (pr_list_open, dispatch_ci_verdict_rest,
+  # gh_retry, gh_issue_list_rest) and calls dispatch-config-load via its
+  # SCRIPT_DIR (= TMPDIR_TEST for this copy) — both already copied below/above,
+  # so both resolve.
+  cp "$SCRIPT_DIR/dispatch-auto-merge" "$TMPDIR_TEST/dispatch-auto-merge"
   # dispatch-select-target's JIT scan calls dispatch-config-load and
   # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
   # TMPDIR_TEST for the copied dispatch-select-target, so the two helpers must
@@ -122,7 +127,8 @@ setup() {
            "$TMPDIR_TEST/dispatch-reconcile-ready" \
            "$TMPDIR_TEST/dispatch-config-load" \
            "$TMPDIR_TEST/dispatch-project-status-read" \
-           "$TMPDIR_TEST/dispatch-sync-merge-queue"
+           "$TMPDIR_TEST/dispatch-sync-merge-queue" \
+           "$TMPDIR_TEST/dispatch-auto-merge"
 
   # Default no-op stub for dispatch-provision-worktree. dispatch-route now invokes
   # it (after the worktree cross-check, before phase derivation). The real script
@@ -581,6 +587,16 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  "pr list --state open --limit "*" --json number,title,body,isDraft,labels,headRefOid,mergeable,closingIssuesReferences")
+    # dispatch-auto-merge's one fetch. auto-merge-pr-list.json supplies the
+    # per-test PR array; absence means no open PRs.
+    echo "pr list" >> "$STUB_DIR/gh-auto-merge-pr-list.log"
+    if [[ -f "$STUB_DIR/auto-merge-pr-list.json" ]]; then
+      cat "$STUB_DIR/auto-merge-pr-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
   pr\ ready\ --undo\ *)
     # dispatch-reconcile-ready demote. Match --undo BEFORE the bare `pr ready`
     # case below so a demote does not fall through to the promote log.
@@ -591,6 +607,21 @@ case "$args" in
     # dispatch-reconcile-ready promote (bare `gh pr ready <N>`).
     num=$(printf '%s' "$args" | awk '{print $NF}')
     echo "$num" >> "$STUB_DIR/gh-pr-ready.log"
+    ;;
+  pr\ merge\ *)
+    # dispatch-auto-merge: gh pr merge <N> --squash --subject ... --body ...
+    echo "$args" >> "$STUB_DIR/gh-pr-merge.log"
+    # Optional failure injection: if $STUB_DIR/pr-merge-fail-on holds a PR
+    # number matching this merge's <N>, emit a non-transient error to stderr
+    # and exit non-zero so gh_retry returns immediately (no retry backoff) and
+    # dispatch-auto-merge takes its HARD_ERROR path for that PR.
+    if [[ -f "$STUB_DIR/pr-merge-fail-on" ]]; then
+      merge_num=$(printf '%s' "$args" | awk '{print $3}')
+      if [[ "$merge_num" == "$(cat "$STUB_DIR/pr-merge-fail-on")" ]]; then
+        echo "merge of the base branch into #$merge_num was rejected" >&2
+        exit 1
+      fi
+    fi
     ;;
   "api repos/{owner}/{repo}/commits/main")
     # main_broken_sha: resolve origin/main's HEAD SHA. Default: healthy main.
@@ -10248,20 +10279,22 @@ echo "Test: valid target-workers.json prints normalized JSON"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
 {
-  "target_weekly_usage_pct": 85,
+  "weekly_pace_floor_pct": 60,
   "weekly_increment_cap_pct": 8,
+  "weekly_terminal_windows": 2,
   "five_hour_target_floor_pct": 55,
   "weekly_curve_power": 2
 }
 EOF
+# shoulder = 100 - 8*2 = 84 >= 60, admissible
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
 assert_eq "valid target-workers.json exits 0" "0" "$rc"
-tw_target=$(printf '%s' "$out" | jq -r '.target_weekly_usage_pct')
-assert_eq "valid target-workers.json target_weekly_usage_pct" "85" "$tw_target"
+tw_floor=$(printf '%s' "$out" | jq -r '.weekly_pace_floor_pct')
+assert_eq "valid target-workers.json weekly_pace_floor_pct" "60" "$tw_floor"
 tw_cap=$(printf '%s' "$out" | jq -r '.weekly_increment_cap_pct')
 assert_eq "valid target-workers.json weekly_increment_cap_pct" "8" "$tw_cap"
-tw_floor5=$(printf '%s' "$out" | jq -r '.five_hour_target_floor_pct')
-assert_eq "valid target-workers.json five_hour_target_floor_pct" "55" "$tw_floor5"
+tw_windows=$(printf '%s' "$out" | jq -r '.weekly_terminal_windows')
+assert_eq "valid target-workers.json weekly_terminal_windows" "2" "$tw_windows"
 tw_power=$(printf '%s' "$out" | jq -r '.weekly_curve_power')
 assert_eq "valid target-workers.json weekly_curve_power" "2" "$tw_power"
 config_teardown
@@ -10280,13 +10313,13 @@ config_teardown
 echo "Test: target-workers.json with non-number field exits 1 and stderr names it"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"target_weekly_usage_pct": "ninety"}
+{"weekly_pace_floor_pct": "fifty"}
 EOF
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
 assert_eq "non-number tunable exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"target_weekly_usage_pct"* && "$err" == *"number"* ]]; then
+if [[ "$err" == *"weekly_pace_floor_pct"* && "$err" == *"number"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: non-number tunable stderr names the field and type"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: non-number tunable stderr names the field and type"
@@ -10406,50 +10439,31 @@ out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); r
 assert_eq "max_concurrent_workers 200 exits 0 (no upper bound)" "0" "$rc"
 config_teardown
 
-# --- Test 13c: weekly_increment_floor_pct > cap rejected (cross-field) -------
+# --- Test 13c: anchor-ordering rejection (floor > derived shoulder) ----------
 
-echo "Test: weekly_increment_floor_pct > weekly_increment_cap_pct exits 1"
+echo "Test: weekly_pace_floor_pct: 85 exits 1 (shoulder defaults to 80 < 85)"
 config_setup
-cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"weekly_increment_floor_pct": 20, "weekly_increment_cap_pct": 5}
-EOF
+echo '{"weekly_pace_floor_pct": 85}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
-assert_eq "floor > cap exits 1" "1" "$rc"
+assert_eq "floor 85 > shoulder 80 exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"weekly_increment_floor_pct"* && "$err" == *"<= weekly_increment_cap_pct"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: floor > cap stderr names the ordering rule"
+if [[ "$err" == *"weekly_pace_floor_pct"* && "$err" == *"shoulder"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: floor > shoulder stderr names field and shoulder"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: floor > cap stderr names the ordering rule"
+  FAIL=$((FAIL + 1)); echo "  FAIL: floor > shoulder stderr names field and shoulder"
   echo "    stderr: $err"
 fi
 config_teardown
 
-# --- Test 13d: floor == cap accepted; large floor alone now rejected (#930) ---
+# --- Test 13d: anchor-ordering boundary accept (floor == shoulder) -----------
 
-echo "Test: weekly_increment_floor_pct == cap accepted; large floor alone rejected (monotonicity)"
+echo "Test: weekly_pace_floor_pct: 80 exits 0 (floor == shoulder 80, boundary accepted)"
 config_setup
-cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"weekly_increment_floor_pct": 5, "weekly_increment_cap_pct": 5}
-EOF
+echo '{"weekly_pace_floor_pct": 80}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+# shoulder = 100 - 10*2 = 80; floor 80 is NOT > shoulder 80, so accepted
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
-assert_eq "floor == cap exits 0" "0" "$rc"
-# #930 added a curve-monotonicity constraint that applies algorithm defaults for
-# absent fields. floor=50 alone gives min = 34*50*1/2 = 850 > 90 (default
-# target_weekly_usage_pct), so the config is now rejected even without a cap
-# field present. This changed the pre-#930 behaviour where floor alone with a
-# defaulted cap was silently accepted.
-echo '{"weekly_increment_floor_pct": 50}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
-rc=0
-err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
-assert_eq "large floor alone (cap absent) exits 1" "1" "$rc"
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"monotonicity"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: large floor alone stderr contains monotonicity"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: large floor alone stderr contains monotonicity"
-  echo "    stderr: $err"
-fi
+assert_eq "floor == shoulder exits 0" "0" "$rc"
 config_teardown
 
 # --- Test 13e: five_hour_target_floor_pct > ceiling rejected (cross-field) ---
@@ -10554,83 +10568,125 @@ else
 fi
 config_teardown
 
-# --- Test 13k: target_weekly_usage_pct: 10 rejected (10 < 17, default floor/power) ---
+# --- Test 13k: weekly_terminal_windows: 0.5 rejected (fractional, must be >= 1) ---
 
-echo "Test: target_weekly_usage_pct: 10 exits 1, stderr names target_weekly_usage_pct and monotonicity"
+echo "Test: weekly_terminal_windows: 0.5 exits 1 and stderr names field and >= 1"
 config_setup
-echo '{"target_weekly_usage_pct": 10}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+echo '{"weekly_terminal_windows": 0.5}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
-assert_eq "target_weekly_usage_pct 10 exits 1" "1" "$rc"
+assert_eq "weekly_terminal_windows 0.5 exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"target_weekly_usage_pct"* && "$err" == *"monotonicity"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: target_weekly_usage_pct 10 stderr names field and monotonicity"
+if [[ "$err" == *"weekly_terminal_windows"* && "$err" == *">= 1"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_terminal_windows 0.5 stderr names field and >= 1"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: target_weekly_usage_pct 10 stderr names field and monotonicity"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_terminal_windows 0.5 stderr names field and >= 1"
   echo "    stderr: $err"
 fi
 config_teardown
 
-# --- Test 13l: target_weekly_usage_pct: 17 accepted (boundary; 17 < 17 is false) ---
+# --- Test 13l: weekly_terminal_windows: 0 rejected (must be > 0) ------------
 
-echo "Test: target_weekly_usage_pct: 17 exits 0 (boundary, min = 34*1*1/2 = 17, inclusive-accept)"
+echo "Test: weekly_terminal_windows: 0 exits 1 and stderr says must be > 0"
 config_setup
-echo '{"target_weekly_usage_pct": 17}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
-out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
-assert_eq "target_weekly_usage_pct 17 exits 0" "0" "$rc"
-config_teardown
-
-# --- Test 13m: target_weekly_usage_pct: 16 rejected (16 < 17) ----------------
-
-echo "Test: target_weekly_usage_pct: 16 exits 1, stderr contains monotonicity"
-config_setup
-echo '{"target_weekly_usage_pct": 16}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+echo '{"weekly_terminal_windows": 0}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
-assert_eq "target_weekly_usage_pct 16 exits 1" "1" "$rc"
+assert_eq "weekly_terminal_windows 0 exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"monotonicity"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: target_weekly_usage_pct 16 stderr contains monotonicity"
+if [[ "$err" == *"weekly_terminal_windows"* && "$err" == *"must be > 0"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_terminal_windows 0 stderr says must be > 0"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: target_weekly_usage_pct 16 stderr contains monotonicity"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_terminal_windows 0 stderr says must be > 0"
   echo "    stderr: $err"
 fi
 config_teardown
 
-# --- Test 13n: weekly_curve_power shifts the threshold -----------------------
-# With power=3: min = 34*1*3/(3+1) = 25.5; so target=20 is rejected.
-# With default power=1: min = 34*1*1/(1+1) = 17; so target=20 is accepted.
+# --- Test 13m: weekly_pace_floor_pct round-trip (value preserved) ------------
 
-echo "Test: power=3 raises threshold (target=20 rejected); default power=1 accepts target=20"
+echo "Test: weekly_pace_floor_pct: 40 exits 0 and round-trips"
 config_setup
-cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"target_weekly_usage_pct": 20, "weekly_curve_power": 3}
-EOF
-rc=0
-err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
-assert_eq "target=20 power=3 exits 1" "1" "$rc"
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"monotonicity"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: target=20 power=3 stderr contains monotonicity"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: target=20 power=3 stderr contains monotonicity"
-  echo "    stderr: $err"
-fi
-echo '{"target_weekly_usage_pct": 20}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+echo '{"weekly_pace_floor_pct": 40}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+# shoulder = 100 - 10*2 = 80 >= 40, admissible
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
-assert_eq "target=20 default power=1 exits 0" "0" "$rc"
+assert_eq "weekly_pace_floor_pct 40 exits 0" "0" "$rc"
+tw_floor=$(printf '%s' "$out" | jq -r '.weekly_pace_floor_pct')
+assert_eq "weekly_pace_floor_pct 40 preserved" "40" "$tw_floor"
 config_teardown
 
-# --- Test 13o: valid combined floor and target accepted ----------------------
-# floor=5, target=90: min = 34*5*1/2 = 85 <= 90, so accepted.
+# --- Test 13n: weekly_pace_floor_pct: 0 rejected (must be > 0) --------------
 
-echo "Test: target_weekly_usage_pct=90 weekly_increment_floor_pct=5 exits 0 (min=85 <= 90)"
+echo "Test: weekly_pace_floor_pct: 0 exits 1 and stderr says must be > 0"
 config_setup
-cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"target_weekly_usage_pct": 90, "weekly_increment_floor_pct": 5}
-EOF
+echo '{"weekly_pace_floor_pct": 0}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "weekly_pace_floor_pct 0 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"weekly_pace_floor_pct"* && "$err" == *"must be > 0"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_pace_floor_pct 0 stderr says must be > 0"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_pace_floor_pct 0 stderr says must be > 0"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 13o: weekly_pace_floor_pct: 150 rejected (must be <= 100) ----------
+
+echo "Test: weekly_pace_floor_pct: 150 exits 1 and stderr says must be <= 100"
+config_setup
+echo '{"weekly_pace_floor_pct": 150}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "weekly_pace_floor_pct 150 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"weekly_pace_floor_pct"* && "$err" == *"<= 100"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_pace_floor_pct 150 stderr says <= 100"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_pace_floor_pct 150 stderr says <= 100"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 13p: weekly_terminal_windows round-trip (value preserved) ----------
+
+echo "Test: weekly_terminal_windows: 3 exits 0 and round-trips"
+config_setup
+echo '{"weekly_terminal_windows": 3}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+# shoulder = 100 - 10*3 = 70 >= default floor 50, admissible
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
-assert_eq "target=90 floor=5 exits 0" "0" "$rc"
+assert_eq "weekly_terminal_windows 3 exits 0" "0" "$rc"
+tw_windows=$(printf '%s' "$out" | jq -r '.weekly_terminal_windows')
+assert_eq "weekly_terminal_windows 3 preserved" "3" "$tw_windows"
+config_teardown
+
+# --- Test 13q: weekly_terminal_windows: 5 accepted (no pct upper bound) -----
+# shoulder = 100 - 10*5 = 50 == default floor 50; floor NOT > shoulder, accepted.
+
+echo "Test: weekly_terminal_windows: 5 exits 0 (no <= 100 upper-bound restriction)"
+config_setup
+echo '{"weekly_terminal_windows": 5}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "weekly_terminal_windows 5 exits 0 (no upper bound)" "0" "$rc"
+tw_windows=$(printf '%s' "$out" | jq -r '.weekly_terminal_windows')
+assert_eq "weekly_terminal_windows 5 preserved" "5" "$tw_windows"
+config_teardown
+
+# --- Test 13r: weekly_terminal_windows non-number rejected -------------------
+
+echo "Test: weekly_terminal_windows: \"two\" exits 1 and stderr names field and number"
+config_setup
+echo '{"weekly_terminal_windows": "two"}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "weekly_terminal_windows string exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"weekly_terminal_windows"* && "$err" == *"number"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly_terminal_windows string stderr names field and number"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly_terminal_windows string stderr names field and number"
+  echo "    stderr: $err"
+fi
 config_teardown
 
 # ============================================================================
@@ -10958,22 +11014,35 @@ ingest_teardown
 #
 # All telemetry inputs are env-overridable; tests rely on the overrides rather
 # than fixture files when shape matters more than the file path. The script
-# defaults are baked in (target_weekly=90, weekly_increment_floor=1,
-# weekly_increment_cap=10, weekly_curve_power=1,
-# five_hour_target_floor=50, five_hour_target_ceiling=80,
+# defaults are baked in (weekly_pace_floor=50, weekly_terminal=100,
+# weekly_terminal_windows=2, weekly_increment_cap=10, weekly_curve_power=1,
+# T=33.6 exact, five_hour_target_floor=50, five_hour_target_ceiling=80,
 # max_workers=8); tests that vary tunables write a
 # target-workers.json into the config dir.
 #
-# The pace curve needs the elapsed fraction x of the weekly window. With
+# The curve is an explicitly-anchored floor→shoulder→terminal max curve,
+# evaluated in r = remaining_seconds / 18000 (remaining 5-hour windows):
+#   shoulder     = terminal − cap·Nterm                 (= 100 − 10·2 = 80)
+#   s            = clamp((T − r) / (T − Nterm), 0, 1)    (= clamp((33.6−r)/31.6,0,1))
+#   rise         = floor + (shoulder − floor)·s^p        (= 50 + 30·s^p)
+#   terminal_seg = terminal − cap·r                       (= 100 − 10·r)
+#   W(r)         = max(floor, terminal_seg, rise)
+# A config that violates anchor-ordering (floor > shoulder) is REJECTED by
+# dispatch-config-load, so any config written here keeps floor ≤ terminal−cap·Nterm.
+#
+# The curve needs the elapsed fraction x of the weekly window. With
 # WEEK_SECONDS=604800, x = (WEEK_SECONDS - (resets_at_weekly - now)) /
-# WEEK_SECONDS. Tests place x precisely by fixing NOW and choosing resets_at so
-# remaining = resets_at - NOW lands at the desired fraction of WEEK_SECONDS:
+# WEEK_SECONDS, and r = (1−x)·33.6. Tests place x precisely by fixing NOW and
+# choosing resets_at so remaining = resets_at - NOW lands at the desired
+# fraction of WEEK_SECONDS:
 #   x=0.5  → remaining=302400 → resets_at = NOW + 302400
 #   x=0.25 → remaining=453600 → resets_at = NOW + 453600
 #   x=1.0  → remaining≈0      → resets_at = NOW + 1 (still > now so not the
 #                               "window already reset" path)
-# Verified canonical curve at defaults (target_weekly=90, T=34, p=1, end=4.294):
-#   W(0.25)=12, W(0.5)=31, W(0.75)=57, W(0.9)=75.96, W(1.0)=90.
+# Anchor windows place r directly: resets_at = NOW + r·18000.
+# Verified canonical curve at defaults (floor=50, terminal=100, cap=10, Nterm=2, p=1):
+#   W(0)=50, W(0.25)=57.97, W(0.5)=65.95, W(0.75)=73.92, W(0.9)=78.71;
+#   r=2→80, r=1→90, r≈0→100.
 echo ""
 echo "=== dispatch-target-workers ==="
 
@@ -11047,17 +11116,13 @@ write_rl() {
 
 echo "Test: weekly curve reaches terminal only at week end (W < terminal mid-week)"
 tw_setup
-# Mid-week (envelope-inactive x), the cumulative curve W is well below the
-# week-end terminal, so used_weekly just below the terminal is far ahead of
-# pace → gate closed → N=0. Only at week end does W reach the terminal and let
-# that used_weekly come under pace. Probe with used_weekly = 89 at several x.
-# (The terminal envelope lifts W to weekly_terminal=100 in the final windows;
-# this test deliberately picks envelope-INACTIVE mid-week x so it isolates the
-# smooth curve's "below terminal until the end" shape — the envelope's
-# week-end lift is covered by the dedicated envelope test below.)
-#   x=0.5  → W=31    → used_weekly=89 is far ahead of pace → gate closed → N=0
-#   x=0.75 → W=57    → used_weekly=89 still ahead of pace  → gate closed → N=0
-#   x=1.0  → env→100 → used_weekly=89 → hw=11>0 → gate open → N>=1 (under pace)
+# Mid-week the anchored curve W is well below the week-end terminal, so
+# used_weekly just below the terminal is far ahead of pace → gate closed → N=0.
+# Only at week end does the terminal segment lift W to ~terminal and let that
+# used_weekly come under pace. Probe with used_weekly = 89 at several x.
+#   x=0.5  → W=65.95 → used_weekly=89 is far ahead of pace → gate closed → N=0
+#   x=0.75 → W=73.92 → used_weekly=89 still ahead of pace  → gate closed → N=0
+#   x=1.0  → terminal_seg→100 → used_weekly=89 → hw≈11>0 → gate open → N>=1
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 for spec in "0.5:0" "0.75:0" "1.0:ge1"; do
   x="${spec%%:*}"; want="${spec##*:}"
@@ -11079,85 +11144,78 @@ tw_teardown
 
 # --- Test 2: W matches the canonical curve at x=0.5 -------------------------
 
-echo "Test: weekly curve value W(0.5)=31 closes the gate at the boundary"
+echo "Test: weekly curve value W(0.5)=65.95 closes the gate at the boundary"
 tw_setup
-# x=0.5 → W=31. used_weekly=31 → hw=0 → gate closed → N=0 (exactly at pace).
-# used_weekly=30 → hw=1 → gate open → N>=1 (just under pace).
+# x=0.5 → W=65.95. used_weekly=66 (>65.95) → hw<0 → gate closed → N=0.
+# used_weekly=65 (<65.95) → hw>0 → gate open → N>=1 (just under pace).
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
-write_rl "rl.json" 31 "$r" 0 99999999
+write_rl "rl.json" 66 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "W(0.5)=31; used_weekly=31 at pace → N=0" "0" "$out"
-write_rl "rl.json" 30 "$r" 0 99999999
+assert_eq "W(0.5)=65.95; used_weekly=66 at/over pace → N=0" "0" "$out"
+write_rl "rl.json" 65 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 TOTAL=$((TOTAL + 1))
 if (( out >= 1 )); then
-  PASS=$((PASS + 1)); echo "  PASS: used_weekly=30 just under pace → N=$out (>=1)"
+  PASS=$((PASS + 1)); echo "  PASS: used_weekly=65 just under pace → N=$out (>=1)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: used_weekly=30 expected N>=1, got $out"
+  FAIL=$((FAIL + 1)); echo "  FAIL: used_weekly=65 expected N>=1, got $out"
 fi
 tw_teardown
 
-# --- Test 3: increment cap clamp lowers the smooth curve --------------------
+# --- Test 3: increment cap sets the terminal slope and shoulder -------------
 
-echo "Test: weekly_increment_cap_pct clamp holds the smooth curve below target"
+echo "Test: weekly_increment_cap_pct sets the terminal slope and shoulder"
 tw_setup
-# With cap=3: end = clamp(1+2*(90/34-1), .., 3) = 3, so the smooth term reaches
-# only W(1) = 34*(1*1 + (3-1)*1/2) = 34*2 = 68 < target_weekly=90 at week end,
-# and W(0.5) = 34*(0.5 + 2*0.25/2) = 34*(0.5+0.25) = 25.5 mid-week. To isolate
-# the smooth term from the terminal envelope, set weekly_terminal_pct=1 so the
-# envelope (env = 1 - 3*r) stays deeply negative mid-week and never lifts W.
-# At x=0.5: used_weekly=26 (> 25.5) is ahead of the clamped pace → gate closed → N=0;
-# used_weekly=25 (< 25.5) is under pace → N>=1. This proves the cap hard-ceils
-# the smooth curve below target. (The default terminal=100 envelope would
-# otherwise dominate this low-cap curve everywhere — the dedicated envelope
-# test below covers that week-end lift.)
+# cap no longer clamps a smooth curve — it sets the terminal-segment slope AND
+# the shoulder (shoulder = terminal − cap·Nterm). With cap=5 (admissible:
+# shoulder = 100 − 5·2 = 90 ≥ floor 50), at r=2 the rise reaches the shoulder
+# (s=1 → rise=90) and terminal_seg = 100 − 5·2 = 90, so W=90 at r=2 (vs the
+# default cap=10 → W=80 at r=2). Place r=2 via resets_at = NOW + 2·18000.
+# used_weekly=89 (<90) → under pace → N>=1; used_weekly=91 (>90) → ahead → N=0.
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"weekly_increment_cap_pct": 3, "weekly_terminal_pct": 1}
+{"weekly_increment_cap_pct": 5}
 EOF
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
-r=$(tw_resets_for_x 0.5)
-write_rl "rl.json" 26 "$r" 0 99999999
-out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "cap=3 → W(0.5)=25.5; used_weekly=26 ahead → N=0" "0" "$out"
-write_rl "rl.json" 25 "$r" 0 99999999
+r=$((TW_NOW + 2 * 18000))
+write_rl "rl.json" 89 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 TOTAL=$((TOTAL + 1))
 if (( out >= 1 )); then
-  PASS=$((PASS + 1)); echo "  PASS: cap=3 W(0.5)=25.5; used_weekly=25 under pace → N=$out (>=1)"
+  PASS=$((PASS + 1)); echo "  PASS: cap=5 r=2 W=90; used_weekly=89 under pace → N=$out (>=1)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: cap=3 used_weekly=25 expected N>=1, got $out"
+  FAIL=$((FAIL + 1)); echo "  FAIL: cap=5 used_weekly=89 expected N>=1, got $out"
 fi
+write_rl "rl.json" 91 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "cap=5 r=2 W=90; used_weekly=91 ahead → N=0" "0" "$out"
 tw_teardown
 
-# --- Test 4: increment floor sets the early-week minimum --------------------
+# --- Test 4: weekly_pace_floor sets the early-week floor --------------------
 
-echo "Test: weekly_increment_floor_pct sets the curve's early-week minimum"
+echo "Test: weekly_pace_floor_pct sets the curve's early-week floor"
 tw_setup
-# Raising the floor lifts the early-week curve. With floor=5, cap=5: end =
-# clamp(1+2*(90/34-5)? no — end = floor + 2*(90/34 - floor) = 5 + 2*(2.647-5)
-# = 5 - 4.706 = 0.294, then clamped to <=cap=5 (stays 0.294). The increment
-# d(x) = floor + (end-floor)*x = 5 - 4.706*x stays near 5 early-week, so W
-# rises fast at first. W(0.25) = 34*(5*0.25 + (0.294-5)*0.0625/2) =
-# 34*(1.25 - 0.1471) = 34*1.1029 = 37.5. used_weekly=37 (< 37.5) under pace →
-# N>=1; used_weekly=38 (> 37.5) ahead → N=0. (Default floor=1 gives W(0.25)=12,
-# so the higher floor lifts early W from 12 to 37.5.)
+# The floor is the curve's value early in the week: at x=0 (r=33.6), s=0 →
+# rise=floor and terminal_seg is deeply negative, so W=floor. With
+# weekly_pace_floor_pct=60 (admissible: 60 ≤ shoulder 80), W(0)=60 (vs the
+# default floor 50). Place x=0 via resets_at = NOW + 604800.
+# used_weekly=59 (<60) → under pace → N>=1; used_weekly=61 (>60) → ahead → N=0.
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
-{"weekly_increment_floor_pct": 5, "weekly_increment_cap_pct": 5}
+{"weekly_pace_floor_pct": 60}
 EOF
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
-r=$(tw_resets_for_x 0.25)
-write_rl "rl.json" 37 "$r" 0 99999999
+r=$((TW_NOW + 604800))
+write_rl "rl.json" 59 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 TOTAL=$((TOTAL + 1))
 if (( out >= 1 )); then
-  PASS=$((PASS + 1)); echo "  PASS: floor=5 W(0.25)=37.5; used_weekly=37 under pace → N=$out"
+  PASS=$((PASS + 1)); echo "  PASS: floor=60 W(0)=60; used_weekly=59 under pace → N=$out"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: floor=5 used_weekly=37 expected N>=1, got $out"
+  FAIL=$((FAIL + 1)); echo "  FAIL: floor=60 used_weekly=59 expected N>=1, got $out"
 fi
-write_rl "rl.json" 38 "$r" 0 99999999
+write_rl "rl.json" 61 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "floor=5 W(0.25)=37.5; used_weekly=38 ahead → N=0" "0" "$out"
+assert_eq "floor=60 W(0)=60; used_weekly=61 ahead → N=0" "0" "$out"
 tw_teardown
 
 # --- Test 5: remaining <= 0 (window already reset) prints 0 -----------------
@@ -11179,20 +11237,20 @@ tw_teardown
 
 echo "Test: binary gate closed (at/over pace) yields N=0 regardless of 5h usage"
 tw_setup
-# x=0.5 → W=31. used_weekly=40 (>31) → hw<0 → gate closed → N=0, regardless of
-# the 5-hour ramp. The over-pace pause overrides 5h headroom — this is the
-# intentional weekly-pace throttle.
+# x=0.5 → W=65.95. used_weekly=70 (>65.95) → hw<0 → gate closed → N=0,
+# regardless of the 5-hour ramp. The over-pace pause overrides 5h headroom —
+# this is the intentional weekly-pace throttle.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 # Full 5h headroom (used_5h=0) — gate still closed.
-write_rl "rl.json" 40 "$r" 0 99999999
+write_rl "rl.json" 70 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "over pace (used_weekly=40 > W=31), used_5h=0 → gate closed → N=0" "0" "$out"
+assert_eq "over pace (used_weekly=70 > W=65.95), used_5h=0 → gate closed → N=0" "0" "$out"
 # Low non-zero 5h usage (used_5h=10, deep in the max-workers band) — gate still
 # closed, so the open-gate ramp value is irrelevant.
-write_rl "rl.json" 40 "$r" 10 99999999
+write_rl "rl.json" 70 "$r" 10 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "over pace (used_weekly=40 > W=31), used_5h=10 → gate closed → N=0" "0" "$out"
+assert_eq "over pace (used_weekly=70 > W=65.95), used_5h=10 → gate closed → N=0" "0" "$out"
 tw_teardown
 
 # --- Test 7: binary gate is magnitude-independent over weekly headroom hw ----
@@ -11200,23 +11258,23 @@ tw_teardown
 echo "Test: open gate gives the same N for any positive hw; at-pace gives 0"
 tw_setup
 # The weekly gate is binary: any hw>0 opens it and the 5-hour ramp alone decides
-# N — the headroom magnitude does NOT scale N. x=0.5 → W=31, defaults floor5=50,
-# ceil5=80, span=30. Hold used_5h=65 → h5=80-65=15 → N=round(8*15/30)=4 whenever
-# the gate is open.
-#   used_weekly=11 → hw=20 (open) → N=4
-#   used_weekly=21 → hw=10 (open) → N=4   (same N — magnitude-independent)
-#   used_weekly=31 → hw=0  (at pace) → gate closed → N=0
+# N — the headroom magnitude does NOT scale N. x=0.5 → W=65.95, defaults
+# floor5=50, ceil5=80, span=30. Hold used_5h=65 → h5=80-65=15 →
+# N=round(8*15/30)=4 whenever the gate is open.
+#   used_weekly=11 → hw=54.95 (open) → N=4
+#   used_weekly=21 → hw=44.95 (open) → N=4   (same N — magnitude-independent)
+#   used_weekly=66 → hw<0     (at/over pace) → gate closed → N=0
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 11 "$r" 65 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "gate open hw=20, used_5h=65 → N=4" "4" "$out"
+assert_eq "gate open hw=54.95, used_5h=65 → N=4" "4" "$out"
 write_rl "rl.json" 21 "$r" 65 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "gate open hw=10, used_5h=65 → N=4 (magnitude-independent)" "4" "$out"
-write_rl "rl.json" 31 "$r" 65 99999999
+assert_eq "gate open hw=44.95, used_5h=65 → N=4 (magnitude-independent)" "4" "$out"
+write_rl "rl.json" 66 "$r" 65 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "at pace hw=0, used_5h=65 → gate closed → N=0" "0" "$out"
+assert_eq "at/over pace, used_5h=65 → gate closed → N=0" "0" "$out"
 tw_teardown
 
 # --- Test 8 (AC): linear 5h ramp under pace; floor(1)/ceiling(max) endpoints --
@@ -11225,7 +11283,7 @@ echo "Test: under pace, N is a linear ramp on used_5h over [floor5,ceil5]"
 tw_setup
 # Under pace (gate open) the 5-hour ramp alone decides N. Defaults floor5=50,
 # ceil5=80, span=30, max_workers=8; h5 = ceil5 - used_5h;
-# N = clamp(round(8*h5/30),1,8). x=0.5, used_weekly=11 → hw=20>0 → gate open.
+# N = clamp(round(8*h5/30),1,8). x=0.5, used_weekly=11 → hw=54.95>0 → gate open.
 # Canonical curve:
 #   used_5h=50 → h5=30 → N=8     (at floor → max)
 #   used_5h=55 → h5=25 → N=round(6.67)=7
@@ -11289,8 +11347,8 @@ tw_teardown
 
 echo "Test: missing-five-hour treats used_5h=0 → ramp gives max workers"
 tw_setup
-# seven_day only at x=0.5 (W=31): used_weekly=11 → hw=20>0 → gate open. 5h block
-# absent → used_5h treated as 0 → 0 <= floor5=50 → ramp gives max workers = 8.
+# seven_day only at x=0.5 (W=65.95): used_weekly=11 → hw=54.95>0 → gate open. 5h
+# block absent → used_5h treated as 0 → 0 <= floor5=50 → ramp gives max workers = 8.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 11 "$r" absent absent
@@ -11305,7 +11363,7 @@ tw_setup
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
 {"max_concurrent_workers": 16}
 EOF
-# x=0.5, used_weekly=11 → hw=20>0 → gate open. used_5h=0 <= floor5=50 → ramp
+# x=0.5, used_weekly=11 → hw=54.95>0 → gate open. used_5h=0 <= floor5=50 → ramp
 # gives max workers = 16.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
@@ -11319,7 +11377,7 @@ tw_teardown
 echo "Test: config five_hour_target_floor_pct narrows the ramp span"
 tw_setup
 # Raising floor5 from 50 to 60 narrows the span (ceil5 - floor5 = 80-60 = 20),
-# steepening the ramp. x=0.5, used_weekly=11 → hw=20>0 → gate open. used_5h=72 →
+# steepening the ramp. x=0.5, used_weekly=11 → hw=54.95>0 → gate open. used_5h=72 →
 # h5 = 80-72 = 8 → N=clamp(round(8*8/20),1,8)=round(3.2)=3 (vs default span=30 →
 # round(8*8/30)=round(2.13)=2).
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
@@ -11339,7 +11397,7 @@ tw_setup
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 # File says used_5h=99 (over ceil5 → N=0); env override replaces with used_5h=0.
-# used_weekly=11 → hw=20>0 → gate open. used_5h=0 <= floor5 → ramp → N=8.
+# used_weekly=11 → hw=54.95>0 → gate open. used_5h=0 <= floor5 → ramp → N=8.
 write_rl "rl.json" 11 "$r" 99 99999999
 export DISPATCH_TARGET_WORKERS_USED_5H=0
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
@@ -11351,12 +11409,12 @@ tw_teardown
 echo "Test: per-field env override of resets_at_weekly drives the curve"
 tw_setup
 # File supplies used_weekly; env override supplies resets_at_weekly to place
-# x=0.5. used_weekly=31 = W(0.5) → hw=0 → at pace → gate closed → N=0.
+# x=0.5. used_weekly=66 > W(0.5)=65.95 → hw<0 → at/over pace → gate closed → N=0.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
-write_rl "rl.json" 31 99999999 0 99999999
+write_rl "rl.json" 66 99999999 0 99999999
 export DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY=$(tw_resets_for_x 0.5)
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "env resets override x=0.5; used_weekly=31 at pace → N=0" "0" "$out"
+assert_eq "env resets override x=0.5; used_weekly=66 at/over pace → N=0" "0" "$out"
 tw_teardown
 
 # --- Test 16: rejected config field → defaults used -------------------------
@@ -11368,8 +11426,8 @@ cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
 EOF
 # five_hour_target_ceiling_pct=0 is rejected by dispatch-config-load (must be
 # > 0). dispatch-target-workers silently ignores a failed config-load and uses
-# the baked-in defaults (floor5=50, ceil5=80). x=0.5, used_weekly=11 → hw=20>0 →
-# gate open. used_5h=0 <= floor5 → ramp → N=8.
+# the baked-in defaults (floor5=50, ceil5=80). x=0.5, used_weekly=11 →
+# hw=54.95>0 → gate open. used_5h=0 <= floor5 → ramp → N=8.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 11 "$r" 0 99999999
@@ -11381,15 +11439,15 @@ tw_teardown
 
 echo "Test: gate barely open (hw≈1) + high 5h usage → ramp value, not 0"
 tw_setup
-# x=0.5 → W=31. used_weekly=30 → hw=1 (>0) → gate just barely open. With the gate
-# open the 5-hour ramp alone sets N: used_5h=70 → h5=80-70=10 →
+# x=0.5 → W=65.95. used_weekly=65 → hw=0.95 (>0) → gate just barely open. With
+# the gate open the 5-hour ramp alone sets N: used_5h=70 → h5=80-70=10 →
 # N=clamp(round(8*10/30),1,8)=round(2.67)=3. The thin weekly headroom does NOT
 # pull N down — this is the key behavior change from the old coupled model.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
-write_rl "rl.json" 30 "$r" 70 99999999
+write_rl "rl.json" 65 "$r" 70 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "just under pace (hw=1), used_5h=70 → ramp N=3" "3" "$out"
+assert_eq "just under pace (hw=0.95), used_5h=70 → ramp N=3" "3" "$out"
 tw_teardown
 
 # --- Test 16c: dynamic catch-up ceiling — saturated regime (headline) --------
@@ -11514,27 +11572,27 @@ tw_teardown
 
 echo "Test: weekly_curve_power=2 back-loads spend (lower W early-week)"
 tw_setup
-# With p=2: end = 1 + 3*(90/34 - 1) = 1 + 3*1.647 = 5.941 (< cap 10).
-# W(x) = 34*(1*x + (5.941-1)*x^3/3). At x=0.5:
-#   W = 34*(0.5 + 4.941*0.125/3) = 34*(0.5 + 0.2059) = 34*0.7059 = 24.0.
-# Lower than the p=1 W(0.5)=31 — back-loaded. used_weekly=23 (<24) under pace →
-# N>=1; used_weekly=25 (>24) ahead → N=0.
+# With p=2 the rise term is back-loaded: rise = 50 + 30·s^2. At x=0.5,
+# r=16.8 → s=(33.6−16.8)/31.6=0.5316, s^2=0.2826 → rise=50+30·0.2826=58.48, and
+# terminal_seg=100−10·16.8=−68, floor=50, so W=58.48 (lower than the p=1
+# W(0.5)=65.95 — back-loaded). used_weekly=57 (<58.48) under pace → N>=1;
+# used_weekly=60 (>58.48) ahead → N=0.
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
 {"weekly_curve_power": 2}
 EOF
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
-write_rl "rl.json" 23 "$r" 0 99999999
+write_rl "rl.json" 57 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 TOTAL=$((TOTAL + 1))
 if (( out >= 1 )); then
-  PASS=$((PASS + 1)); echo "  PASS: p=2 W(0.5)=24; used_weekly=23 under pace → N=$out"
+  PASS=$((PASS + 1)); echo "  PASS: p=2 W(0.5)=58.48; used_weekly=57 under pace → N=$out"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: p=2 used_weekly=23 expected N>=1, got $out"
+  FAIL=$((FAIL + 1)); echo "  FAIL: p=2 used_weekly=57 expected N>=1, got $out"
 fi
-write_rl "rl.json" 25 "$r" 0 99999999
+write_rl "rl.json" 60 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "p=2 W(0.5)=24; used_weekly=25 ahead → N=0" "0" "$out"
+assert_eq "p=2 W(0.5)=58.48; used_weekly=60 ahead → N=0" "0" "$out"
 tw_teardown
 
 # --- Test 21: end-to-end AC smoke — early-week no stall ---------------------
@@ -11542,8 +11600,8 @@ tw_teardown
 echo "Test: early-week AC smoke used_weekly=20, used_5h=2 → N>=1 (no stall)"
 tw_setup
 # Issue AC: at x≈0.5 (mid-week) with used_weekly=20, used_5h=2, the chain must
-# not stall. x=0.5 → W=31, hw=11>0 → gate open. used_5h=2 <= floor5=50 → ramp
-# gives max workers = 8 (>=1).
+# not stall. x=0.5 → W=65.95, hw=45.95>0 → gate open. used_5h=2 <= floor5=50 →
+# ramp gives max workers = 8 (>=1).
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 write_rl "rl.json" 20 "$r" 2 99999999
@@ -11556,75 +11614,75 @@ else
 fi
 tw_teardown
 
-# --- Test 22: terminal envelope floors W in the final windows ---------------
+# --- Test 22: terminal segment floors W in the final windows ----------------
 
-echo "Test: terminal envelope pins W to weekly_terminal across the final windows"
+echo "Test: terminal segment pins W toward weekly_terminal across the final windows"
 tw_setup
-# The terminal "you-can-still-make-it" envelope floors W from the end:
-#   W = max(smooth_curve, weekly_terminal - cap*remaining_windows)
+# The terminal segment floors W from the end of the week:
+#   terminal_seg = weekly_terminal - cap*remaining_windows
 # with defaults (terminal=100, cap=10) it evaluates to 80 at r=2, 90 at r=1,
-# 100 at r=0 (r = remaining_seconds / 18000). Place x by remaining-window count
+# 100 at r=0 (r = remaining_seconds / 18000). At r=2 the rise also reaches the
+# shoulder (s=1 → rise=80), so W=80 exactly. Place r by remaining-window count
 # (resets_at = NOW + r*18000) and hold used_5h=0 so 5h headroom is full and
-# N>=1 whenever the gate is open. The r=1 and r=0 lower probes are DISCRIMINATING: the
-# pre-envelope smooth curve (W=85.7 at r=1, W=90 at r=0) would have gated N=0.
+# N>=1 whenever the gate is open.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 
-# r=2: smooth W=81.51 wins (>=80). used_weekly=80 under pace → N>=1;
-# used_weekly=82 ahead → N=0. Asserts W>=80 at r=2.
-write_rl "env.json" 80 $((TW_NOW + 2 * 18000)) 0 99999999
+# r=2: W = max(floor 50, terminal_seg 80, rise 80) = 80 exactly.
+# used_weekly=79 (<80) under pace → N>=1; used_weekly=81 (>80) ahead → N=0.
+write_rl "env.json" 79 $((TW_NOW + 2 * 18000)) 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 TOTAL=$((TOTAL + 1))
 if (( out >= 1 )); then
-  PASS=$((PASS + 1)); echo "  PASS: r=2 W=81.5; used_weekly=80 under pace → N=$out (>=1)"
+  PASS=$((PASS + 1)); echo "  PASS: r=2 W=80; used_weekly=79 under pace → N=$out (>=1)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: r=2 used_weekly=80 expected N>=1, got $out"
+  FAIL=$((FAIL + 1)); echo "  FAIL: r=2 used_weekly=79 expected N>=1, got $out"
 fi
-write_rl "env.json" 82 $((TW_NOW + 2 * 18000)) 0 99999999
+write_rl "env.json" 81 $((TW_NOW + 2 * 18000)) 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "r=2 W=81.5; used_weekly=82 ahead → N=0" "0" "$out"
+assert_eq "r=2 W=80; used_weekly=81 ahead → N=0" "0" "$out"
 
-# r=1: envelope lifts W to 90 (smooth=85.7). used_weekly=88 under pace → N>=1
-# (DISCRIMINATING: pre-envelope W=85.7 would give N=0); used_weekly=90 at the
-# envelope target → N=0. Together pin W=90 at r=1.
+# r=1: terminal_seg = 100 - 10*1 = 90 governs (rise=80). used_weekly=88 (<90)
+# under pace → N>=1; used_weekly=90 at the terminal_seg → N=0. Pin W=90 at r=1.
 write_rl "env.json" 88 $((TW_NOW + 1 * 18000)) 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 TOTAL=$((TOTAL + 1))
 if (( out >= 1 )); then
-  PASS=$((PASS + 1)); echo "  PASS: r=1 envelope W=90; used_weekly=88 under pace → N=$out (>=1)"
+  PASS=$((PASS + 1)); echo "  PASS: r=1 terminal_seg W=90; used_weekly=88 under pace → N=$out (>=1)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: r=1 used_weekly=88 expected N>=1 (envelope W=90), got $out"
+  FAIL=$((FAIL + 1)); echo "  FAIL: r=1 used_weekly=88 expected N>=1 (W=90), got $out"
 fi
 write_rl "env.json" 90 $((TW_NOW + 1 * 18000)) 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "r=1 envelope W=90; used_weekly=90 at target → N=0" "0" "$out"
+assert_eq "r=1 terminal_seg W=90; used_weekly=90 at target → N=0" "0" "$out"
 
-# r=0: envelope lifts W to ~100 (smooth=90). used_weekly=95 under pace → N>=1
-# (DISCRIMINATING: pre-envelope W=90 would give N=0); used_weekly=100 at the
-# envelope target → N=0. Together pin W~=100 at r=0. Use tw_resets_for_x 1.0
-# (remaining=1s) so Stage 1 does NOT take the remaining<=0 early-exit.
+# r=0: terminal_seg = 100 - 10*0 ≈ 100 governs (rise=80). used_weekly=95 (<100)
+# under pace → N>=1; used_weekly=100 at the terminal_seg → N=0. Pin W~=100 at
+# r=0. Use tw_resets_for_x 1.0 (remaining=1s) so Stage 1 does NOT take the
+# remaining<=0 early-exit.
 r=$(tw_resets_for_x 1.0)
 write_rl "env.json" 95 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 TOTAL=$((TOTAL + 1))
 if (( out >= 1 )); then
-  PASS=$((PASS + 1)); echo "  PASS: r=0 envelope W~=100; used_weekly=95 under pace → N=$out (>=1)"
+  PASS=$((PASS + 1)); echo "  PASS: r=0 terminal_seg W~=100; used_weekly=95 under pace → N=$out (>=1)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: r=0 used_weekly=95 expected N>=1 (envelope W~=100), got $out"
+  FAIL=$((FAIL + 1)); echo "  FAIL: r=0 used_weekly=95 expected N>=1 (W~=100), got $out"
 fi
 write_rl "env.json" 100 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "r=0 envelope W~=100; used_weekly=100 at target → N=0" "0" "$out"
+assert_eq "r=0 terminal_seg W~=100; used_weekly=100 at target → N=0" "0" "$out"
 tw_teardown
 
 # --- Test 22b: non-default weekly_terminal_pct flows through end-to-end ------
 
-echo "Test: non-default weekly_terminal_pct=95 caps the envelope target at 95"
+echo "Test: non-default weekly_terminal_pct=95 caps the terminal target at 95"
 tw_setup
-# The envelope target is the configurable weekly_terminal_pct, not a baked-in
-# 100. With weekly_terminal_pct=95 (cap=10), at r=0 the envelope = 95 - 10*0 =
-# 95 and the smooth curve W(1)=90, so W=95. used_weekly=93 under pace → N>=1;
-# used_weekly=97 ahead of the 95 target → N=0. The used_weekly=97 probe is
-# DISCRIMINATING: the default terminal=100 would lift W to 100, putting
+# The terminal target is the configurable weekly_terminal_pct, not a baked-in
+# 100. With weekly_terminal_pct=95 (cap=10, Nterm=2): shoulder = 95 - 10*2 = 75
+# (admissible, ≥ floor 50). At r=0 the terminal_seg = 95 - 10*0 ≈ 95 governs and
+# the rise plateaus at the shoulder 75, so W=95. used_weekly=93 (<95) under pace
+# → N>=1; used_weekly=97 ahead of the 95 target → N=0. The used_weekly=97 probe
+# is DISCRIMINATING: the default terminal=100 would lift W to 100, putting
 # used_weekly=97 under pace (N>=1) — so N=0 confirms the knob value is honored.
 cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
 {"weekly_terminal_pct": 95}
@@ -11644,26 +11702,27 @@ out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 assert_eq "terminal=95 r=0 W=95; used_weekly=97 ahead of 95 target → N=0" "0" "$out"
 tw_teardown
 
-# --- Test 23: mid-week tick unchanged from the smooth curve -----------------
+# --- Test 23: mid-week tick follows the rise segment ------------------------
 
-echo "Test: mid-week tick is byte-identical to the pre-envelope smooth curve"
+echo "Test: mid-week tick follows the rise segment of the anchored curve"
 tw_setup
-# At x=0.5 the remaining is 302400s → r=16.8 → envelope = 100 - 10*16.8 = -68,
-# deeply negative, so the envelope is inactive and the smooth curve dominates
-# unchanged. The gating boundary must match the canonical W(0.5)=31 (Test 2):
-# used_weekly=31 → hw=0 → N=0 (at pace); used_weekly=30 → hw=1 → N>=1.
+# At x=0.5 the remaining is 302400s → r=16.8 → terminal_seg = 100 - 10*16.8 =
+# -68 and floor=50, so the rise segment governs: rise = 50 + 30*s^1 with
+# s=(33.6-16.8)/31.6=0.5316 → rise=65.95 = W(0.5). The gating boundary matches
+# the canonical W(0.5)=65.95 (Test 2): used_weekly=66 → hw<0 → N=0 (at/over
+# pace); used_weekly=65 → hw>0 → N>=1.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
-write_rl "midweek.json" 31 "$r" 0 99999999
+write_rl "midweek.json" 66 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
-assert_eq "mid-week W(0.5)=31 unchanged; used_weekly=31 at pace → N=0" "0" "$out"
-write_rl "midweek.json" 30 "$r" 0 99999999
+assert_eq "mid-week rise W(0.5)=65.95; used_weekly=66 at/over pace → N=0" "0" "$out"
+write_rl "midweek.json" 65 "$r" 0 99999999
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
 TOTAL=$((TOTAL + 1))
 if (( out >= 1 )); then
-  PASS=$((PASS + 1)); echo "  PASS: mid-week W(0.5)=31 unchanged; used_weekly=30 under pace → N=$out (>=1)"
+  PASS=$((PASS + 1)); echo "  PASS: mid-week rise W(0.5)=65.95; used_weekly=65 under pace → N=$out (>=1)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: mid-week used_weekly=30 expected N>=1, got $out"
+  FAIL=$((FAIL + 1)); echo "  FAIL: mid-week used_weekly=65 expected N>=1, got $out"
 fi
 tw_teardown
 
@@ -11756,12 +11815,12 @@ tw_teardown
 
 echo "Test: --reopen-at pace pause → numeric crossing strictly inside the window"
 tw_setup
-# x=0.5 → W=31. used_weekly=35 > 31 → pace pause (gate closed, target 0) while still far
-# below the absolute weekly cap (35 < 90). The reopen epoch is where W rises to
-# meet used_weekly=35, which is later than NOW but before the weekly reset.
+# x=0.5 → W=65.95. used_weekly=70 > 65.95 → pace pause (gate closed, target 0)
+# while still below the week-end terminal (70 < 100). The reopen epoch is where
+# the rising curve W meets used_weekly=70, later than NOW but before the reset.
 export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
-write_rl "reopen.json" 35 "$r" 0 99999999
+write_rl "reopen.json" 70 "$r" 0 99999999
 result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --reopen-at 2>/dev/null)
 TOTAL=$((TOTAL + 1))
 if [[ "$result" =~ ^[0-9]+$ ]] && (( result > TW_NOW )) && (( result < r )); then
@@ -12043,9 +12102,9 @@ sr_write_rl() {
 echo "Test: weekly cap-hit schedules at the weekly resets_at"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-# used_weekly=95 >= target_weekly=90 → weekly cap hit.
+# used_weekly=100 >= 100 (weekly_terminal_pct) → weekly cap hit.
 # 5h cap clear (10 < 50). Expect schedule at the weekly resets_at.
-sr_write_rl "rl.json" 95 20000 10 15000
+sr_write_rl "rl.json" 100 20000 10 15000
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
 assert_eq "weekly cap-hit stdout names the unit" \
   "scheduled dispatch-reseed-20000 at 20000" "$out"
@@ -12071,7 +12130,7 @@ sr_teardown
 echo "Test: 5h cap-hit schedules at the 5h resets_at"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-# used_5h=60 >= target_5h=50 → 5h cap hit. Weekly clear (50 < 90).
+# used_5h=60 >= target_5h=50 → 5h cap hit. Weekly clear (50 < 100).
 sr_write_rl "rl.json" 50 20000 60 15000
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
 assert_eq "5h cap-hit stdout names the 5h reset unit" \
@@ -12094,7 +12153,7 @@ echo "Test: both caps hit → schedules at the earlier resets_at"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
 # Both caps hit; 5h reset (15000) is earlier than weekly reset (20000).
-sr_write_rl "rl.json" 95 20000 60 15000
+sr_write_rl "rl.json" 100 20000 60 15000
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
 assert_eq "both caps hit; picks earlier reset" \
   "scheduled dispatch-reseed-15000 at 15000" "$out"
@@ -12112,7 +12171,7 @@ sr_teardown
 echo "Test: neither cap hit + pace curve permits → no-op (no systemd-run call)"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-# 50 < 90 weekly, 20 < 50 5h → no absolute cap hit. Weekly present → budgeter
+# 50 < 100 weekly, 20 < 50 5h → no absolute cap hit. Weekly present → budgeter
 # consulted; used_weekly=50 well under pace → reopen='none' → no-op.
 sr_write_rl "rl.json" 50 20000 20 15000
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
@@ -12174,7 +12233,7 @@ sr_teardown
 echo "Test: five_hour absent + weekly cap-hit schedules at the weekly resets_at"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-sr_write_rl "rl.json" 95 20000 absent absent
+sr_write_rl "rl.json" 100 20000 absent absent
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
 assert_eq "five_hour absent; weekly cap-hit schedules at 20000" \
   "scheduled dispatch-reseed-20000 at 20000" "$out"
@@ -12185,7 +12244,8 @@ sr_teardown
 echo "Test: repeated call with the same resets_at is idempotent (single timer)"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-sr_write_rl "rl.json" 95 20000 10 15000
+# used_weekly=100 >= 100 (weekly_terminal_pct) → weekly cap hit.
+sr_write_rl "rl.json" 100 20000 10 15000
 # Replace the systemd-run stub with one that simulates the second call hitting
 # the already-exists collision: first call succeeds; second call exits 1 with
 # the "already exists" message on stderr.
@@ -12224,8 +12284,8 @@ sr_teardown
 echo "Test: reseed_at already passed → no-op (no systemd-run call)"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-# Weekly cap hit but resets_at=5000 < now=10000 → already passed.
-sr_write_rl "rl.json" 95 5000 10 15000
+# used_weekly=100 >= 100 (weekly_terminal_pct) → weekly cap hit; resets_at=5000 < now=10000 → already passed.
+sr_write_rl "rl.json" 100 5000 10 15000
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
 err=$(cat "$TMPDIR_TEST/stderr")
 assert_eq "already-passed reseed; stdout silent" "" "$out"
@@ -12264,7 +12324,8 @@ sr_teardown
 echo "Test: unexpected systemd-run failure → exit code passes through"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-sr_write_rl "rl.json" 95 20000 10 15000
+# used_weekly=100 >= 100 (weekly_terminal_pct) → weekly cap hit.
+sr_write_rl "rl.json" 100 20000 10 15000
 # Replace the stub with one that exits 42 with a non-already-exists message.
 cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
 #!/usr/bin/env bash
@@ -12392,7 +12453,7 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: tampered 5h resets_at stderr names the sanitizer"
   echo "    stderr: $err"
 fi
-# Weekly is still clear (50 < 90) and 5h block was dropped → silent no-op.
+# Weekly is still clear (50 < 100) and 5h block was dropped → silent no-op.
 assert_eq "tampered 5h resets_at; no schedule line" "" "$out"
 TOTAL=$((TOTAL + 1))
 if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
@@ -12407,7 +12468,7 @@ sr_teardown
 echo "Test: non-integer NOW override aborts with exit 2"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW='a[$(touch '"$TMPDIR_TEST/canary-now"')]'
-sr_write_rl "rl.json" 95 20000 10 15000
+sr_write_rl "rl.json" 100 20000 10 15000
 if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr"); then
   rc=0
 else
@@ -12468,7 +12529,7 @@ sr_teardown
 echo "Test: pace-curve pause schedules a crossing-time timer (stub future epoch)"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=10000
-# Both caps clear (14 < 90 weekly, 10 < 50 5h) so the absolute-cap path no-ops,
+# Both caps clear (14 < 100 weekly, 10 < 50 5h) so the absolute-cap path no-ops,
 # but weekly telemetry is present → the script consults the budgeter for the
 # pace-curve crossing. Stub it to a fixed future epoch.
 sr_write_rl "rl.json" 14 99999 10 88888
@@ -12597,9 +12658,10 @@ sr_teardown
 echo "Test: end-to-end pace pause with the real budgeter arms a crossing timer"
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=1000000
-# Weekly resets at 1302400 → remaining 302400 → x=0.5 → W=31. used_weekly=35 > 31
-# → real pace pause; 35 < 90 and 10 < 50 → no absolute cap. 5h resets at 1310000.
-sr_write_rl "rl.json" 35 1302400 10 1310000
+# Weekly resets at 1302400 → remaining 302400 → x=0.5 → W=65.95. used_weekly=70 >
+# 65.95 → real pace pause; 70 < 100 (terminal) so the absolute weekly cap is not
+# hit → the pace-crossing path runs, not the at-reset reseed. 5h resets at 1310000.
+sr_write_rl "rl.json" 70 1302400 10 1310000
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
 E=$(printf '%s' "$out" | sed -n 's/^scheduled dispatch-reseed-\([0-9]*\) at .*/\1/p')
 TOTAL=$((TOTAL + 1))
@@ -12652,6 +12714,46 @@ else
 fi
 sr_teardown
 
+# --- Test 19: used_weekly=95 no longer hits the absolute weekly cap -----------
+#
+# Before this remap, TARGET_WEEKLY was 90 and used_weekly=95 would trigger the
+# absolute-cap path. After the remap, TARGET_WEEKLY is 100 (weekly_terminal_pct),
+# so used_weekly=95 sits between the old 90 and the new 100 — it must NOT hit
+# the absolute cap. The pace path consults the budgeter; with a tw-stub echoing
+# `none`, the script must no-op: stderr names 'no absolute cap hit' + 'reopen-at=none'
+# + 'no-op', stdout is silent, and no systemd-run is invoked.
+
+echo "Test: used_weekly=95 (< 100 weekly_terminal_pct) does not hit absolute cap → no-op"
+sr_setup
+export DISPATCH_SCHEDULE_RESEED_NOW=10000
+# used_weekly=95 < 100 (weekly_terminal_pct) → NO absolute weekly cap hit.
+# used_5h=10 < 50 → no 5h cap hit. Pace path consulted; stub returns none → no-op.
+sr_write_rl "rl.json" 95 99999 10 88888
+cat > "$TMPDIR_TEST/tw-stub" <<'STUB'
+#!/usr/bin/env bash
+echo none
+STUB
+chmod +x "$TMPDIR_TEST/tw-stub"
+export DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD="$TMPDIR_TEST/tw-stub"
+out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "used_weekly=95 < 100; stdout silent" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"no absolute cap hit"* && "$err" == *"reopen-at='none'"* && "$err" == *"no-op"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: used_weekly=95 no absolute cap; stderr names no-absolute-cap + reopen-at=none + no-op"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: used_weekly=95 no absolute cap; stderr names no-absolute-cap + reopen-at=none + no-op"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: used_weekly=95 no absolute cap; no systemd-run invocation"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: used_weekly=95 no absolute cap; no systemd-run invocation"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+sr_teardown
+
 # --- #1136: rate_limits.json telemetry range bounds -------------------------
 #
 # Far-future resets_at and used>100 are rejected to missing so the script no-ops
@@ -12699,7 +12801,7 @@ echo "Test: #1136 in-bound weekly reset (~3d out) still schedules (no over-rejec
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
 reset=$((1700000000 + 3 * 86400))
-sr_write_rl "rl.json" 95 "$reset" absent absent
+sr_write_rl "rl.json" 100 "$reset" absent absent
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>/dev/null)
 assert_eq "#1136 in-bound weekly reset still schedules" \
   "scheduled dispatch-reseed-$reset at $reset" "$out"
@@ -12742,7 +12844,7 @@ echo "Test: #1136 5h resets far-future (>6h) → dropped → timer at weekly res
 sr_setup
 export DISPATCH_SCHEDULE_RESEED_NOW=1700000000
 weekly_reset=$((1700000000 + 432000))   # 5 days out, in-bound under 8-day horizon
-sr_write_rl "rl.json" 95 "$weekly_reset" 60 $((1700000000 + 25200))  # 5h reset 7h out → rejected
+sr_write_rl "rl.json" 100 "$weekly_reset" 60 $((1700000000 + 25200))  # 5h reset 7h out → rejected
 out=$("$TMPDIR_TEST/scripts/dispatch-schedule-reseed" 2>"$TMPDIR_TEST/stderr")
 assert_eq "#1136 5h resets far-future → timer at weekly reset" \
   "scheduled dispatch-reseed-$weekly_reset at $weekly_reset" "$out"
@@ -21346,6 +21448,18 @@ cat >> "$TMPDIR_TEST/logs/escalate-stdin.log"
 echo called >> "$TMPDIR_TEST/logs/escalate-sync-broken.log"
 exit 0
 FAKE
+  # #1540: fake dispatch-auto-merge invoked by Step 1d (cont.) when main is not
+  # broken. Logs its invocation and emits a configurable merge line so a wiring
+  # test can assert the tick prefixes it with `merge: `. The real merge logic has
+  # its own unit tests above; here we only verify the tick wiring.
+  cat > "$TMPDIR_TEST/dispatch-auto-merge" <<'FAKE'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/stub" && pwd)"
+echo called >> "$STUB_DIR/auto-merge-calls.log"
+[[ -n "${SEL_AUTO_MERGE_OUT:-}" ]] && printf '%s\n' "$SEL_AUTO_MERGE_OUT"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/dispatch-auto-merge"
   # Sourced helper: provides claude_agents_count_busy_workers (driven by
   # SEL_LIVE_COUNT*) and claude_agents_list_all (driven by SEL_AGENTS_*, used by
   # the reservation-ledger sweep the gate runs before counting). The heredoc is
@@ -21474,7 +21588,8 @@ sel_tick_teardown() {
     DISPATCH_RESERVATION_DIR SEL_AGENTS_TSV SEL_AGENTS_LIST_FAIL \
     DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE SEL_GIT_MERGE_LOG \
     SEL_SESSIONS_UNDER_RC SEL_SESSIONS_UNDER_TSV \
-    DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT
+    DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT \
+    SEL_AUTO_MERGE_OUT
 }
 
 # Run the orchestrator, capturing full stdout; the decision is the last line.
@@ -21587,6 +21702,53 @@ out=$(run_sel_tick)
 assert_eq "re-arm green+no-issue: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "re-arm green+no-issue: no close attempted" "absent" \
   "$([[ -e "$STUB_DIR/gh-issue-close.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Step 1d (cont.): auto-merge wiring, main healthy → invoked (#1540) -------
+# main is healthy (no main-broken-open.txt → OPEN_MB empty), so Step 1d (cont.)
+# runs dispatch-auto-merge and prefixes each of its `merged #N` lines with
+# `merge: `. The fake emits SEL_AUTO_MERGE_OUT.
+echo "Test: select-tick auto-merge wiring (main healthy) → merge: line, auto-merge invoked"
+sel_tick_setup
+export SEL_AUTO_MERGE_OUT="merged #42"
+out=$(run_sel_tick)
+TOTAL=$((TOTAL + 1))
+if grep -q '^merge: merged #42$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: tick emits 'merge: merged #42'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tick emits 'merge: merged #42'"
+  echo "    actual stdout: '$out'"
+fi
+assert_eq "auto-merge wiring: dispatch-auto-merge invoked" "present" \
+  "$([[ -f "$STUB_DIR/auto-merge-calls.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Step 1d (cont.): auto-merge suppressed while main is broken (#1540) ------
+# An open main-broken latch (OPEN_MB non-empty) suppresses Step 1d (cont.):
+# dispatch-auto-merge is NOT invoked and no `merge:` line is emitted, even though
+# the fake would emit one if called. The select-target fake returns a sha for
+# --main-broken-sha so the latch persists (main is still red), mirroring the
+# red+open re-arm test above.
+echo "Test: select-tick auto-merge suppressed while main is broken"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--main-broken-sha" ]]; then echo redsha1; exit 0; fi
+echo empty
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+printf '99\n' > "$STUB_DIR/main-broken-open.txt"
+export SEL_AUTO_MERGE_OUT="merged #42"
+out=$(run_sel_tick)
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'merge:' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: no 'merge:' line while main is broken"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no 'merge:' line while main is broken"
+  echo "    actual stdout: '$out'"
+fi
+assert_eq "auto-merge suppressed: dispatch-auto-merge NOT invoked" "absent" \
+  "$([[ -f "$STUB_DIR/auto-merge-calls.log" ]] && echo present || echo absent)"
 sel_tick_teardown
 
 # --- #1495: dirty main → sync-failed, reseed armed, counter bumped -----------
@@ -27506,7 +27668,7 @@ if [[ "$method" == "POST" && "$endpoint" == *"/comments" ]]; then
   next=$(( $(cat "$COUNTER") + 1 ))
   echo "$next" > "$COUNTER"
   newbody=$(cat "$bodyfile")
-  updated=$(jq -c --argjson id "$next" --arg body "$newbody" --arg login "${WP_AUTHOR:-plan-bot}" '. + [{id:$id, body:$body, user:{login:$login}}]' "$STORE")
+  updated=$(jq -c --argjson id "$next" --arg body "$newbody" --argjson author_id "${WP_AUTHOR_ID:-9001}" --arg login "${WP_AUTHOR:-plan-bot}" '. + [{id:$id, body:$body, user:{id:$author_id, login:$login}}]' "$STORE")
   echo "$updated" > "$STORE"
   emit "$(jq -c --argjson id "$next" '.[] | select(.id == $id)' "$STORE")"
   exit 0
@@ -27527,12 +27689,12 @@ chmod +x "$wp_root/bin/gh"
 WP_WRITE="$SCRIPT_DIR/dispatch-write-plan"
 WP_READ="$SCRIPT_DIR/dispatch-read-plan"
 
-# Pin the trusted plan-comment author for this block. Every positive test POSTs
-# via dispatch-write-plan, whose POST the fake gh stamps as ${WP_AUTHOR:-plan-bot};
-# pinning DISPATCH_PLAN_AUTHOR to the same login keeps the author-filtered scans
+# Pin the trusted plan-comment author id for this block. Every positive test POSTs
+# via dispatch-write-plan, whose POST the fake gh stamps with id ${WP_AUTHOR_ID:-9001};
+# pinning DISPATCH_PLAN_AUTHOR_ID to the same id keeps the author-filtered scans
 # matching, and short-circuits the scripts' `$(gh api user …)` default (the fake
 # gh has no user endpoint).
-export DISPATCH_PLAN_AUTHOR=plan-bot
+export DISPATCH_PLAN_AUTHOR_ID=9001
 
 # 1. write-creates: empty store → one comment containing the marker + PLAN A.
 if ! PATH="$wp_root/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"PLAN A"; then
@@ -27595,19 +27757,22 @@ else
 fi
 rm -rf "$wp_empty"
 
-# 6. foreign-author injection: a marker comment authored by an untrusted account
-#    must be ignored by read-plan, and write-plan must NOT adopt (PATCH) it — it
-#    POSTs a fresh trusted-authored comment instead. Guards the #1222 fix:
-#    without the author filter, read-plan would execute the forged plan and
-#    write-plan would clobber the attacker's comment with the real plan.
+# 6. reclaimed-login injection: a marker comment that reuses the trusted login but
+#    carries a DIFFERENT numeric id (the renamed-and-reclaimed-login attack) must be
+#    ignored by read-plan, and write-plan must NOT adopt (PATCH) it — it POSTs a
+#    fresh trusted-authored comment instead. Guards the #1644 id-gate over the #1222
+#    login-gate: a login-only filter would accept this forgery; the .user.id filter
+#    rejects it. Without any author filter, read-plan would execute the forged plan
+#    and write-plan would clobber the attacker's comment with the real plan.
 wp_forge=$(mktemp -d); mkdir -p "$wp_forge/bin"
 sed "s|$WP_STORE|$wp_forge/store.json|; s|$WP_COUNTER|$wp_forge/counter|" \
   "$wp_root/bin/gh" > "$wp_forge/bin/gh"
 chmod +x "$wp_forge/bin/gh"
-# Seed one attacker-authored comment carrying the marker; counter=1 so the next
-# POST gets id 2 (no id collision with the seeded id 1).
+# Seed one attacker comment carrying the marker, reusing the trusted login but with
+# a different numeric id (6666 ≠ trusted 9001) — the reclaimed-login forgery; counter=1
+# so the next POST gets id 2 (no id collision with the seeded comment id 1).
 echo '1' > "$wp_forge/counter"
-jq -nc '[{id:1, body:"<!-- dispatch:plan -->\nFORGED PLAN", user:{login:"attacker"}}]' > "$wp_forge/store.json"
+jq -nc '[{id:1, body:"<!-- dispatch:plan -->\nFORGED PLAN", user:{id:6666, login:"plan-bot"}}]' > "$wp_forge/store.json"
 
 # 6a. read-plan ignores the forged comment → exit 1 + missing-comment diagnostic.
 if read_err=$(PATH="$wp_forge/bin:$SAVED_PATH" "$WP_READ" 7 2>&1 1>/dev/null); then rc=0; else rc=$?; fi
@@ -27633,7 +27798,7 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: write-plan leaves the attacker comment body unchanged"
 fi
 TOTAL=$((TOTAL + 1))
-if jq -e '.[] | select(.user.login == "plan-bot") | (.body | contains("<!-- dispatch:plan -->") and contains("REAL PLAN"))' "$wp_forge/store.json" >/dev/null; then
+if jq -e '.[] | select(.user.id == 9001) | (.body | contains("<!-- dispatch:plan -->") and contains("REAL PLAN"))' "$wp_forge/store.json" >/dev/null; then
   PASS=$((PASS + 1)); echo "  PASS: write-plan POSTs a fresh trusted-authored plan comment"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: write-plan POSTs a fresh trusted-authored plan comment"
@@ -27707,8 +27872,57 @@ fi
 git --git-dir="$bw_root/.bare" worktree prune 2>/dev/null || true
 rm -rf "$bw_root"
 
+# 7. two-matching-plan-comments: when the store contains two comments both
+#    authored by plan-bot and both carrying the marker, read-plan must return
+#    the FIRST one without a SIGPIPE-induced exit-141 failure, and write-plan
+#    must PATCH that first comment (not POST a third) and also exit 0. Guards the
+#    #1643 regression: the old `| head -n1` pipeline under `set -euo pipefail`
+#    sent SIGPIPE (exit 141) to the upstream jq process when more than one
+#    comment matched, causing a spurious non-zero exit with no diagnostic.
+#    dispatch-write-plan received the identical `first()` fix at line 65, so a
+#    parallel write sub-case below guards write-plan's copy independently.
+wp_two=$(mktemp -d); mkdir -p "$wp_two/bin"
+sed "s|$WP_STORE|$wp_two/store.json|; s|$WP_COUNTER|$wp_two/counter|" \
+  "$wp_root/bin/gh" > "$wp_two/bin/gh"
+chmod +x "$wp_two/bin/gh"
+echo '0' > "$wp_two/counter"
+# Seed two marker comments both authored by plan-bot; write directly (write-plan
+# enforces the at-most-one invariant, so seeding two requires bypassing it).
+MARKER='<!-- dispatch:plan -->'
+jq -nc --arg m "$MARKER" \
+  '[{id:1, body:($m + "\nFIRST PLAN"), user:{id:9001, login:"plan-bot"}},
+    {id:2, body:($m + "\nSECOND PLAN"), user:{id:9001, login:"plan-bot"}}]' \
+  > "$wp_two/store.json"
+read_out=$(PATH="$wp_two/bin:$SAVED_PATH" "$WP_READ" 7) && rc=0 || rc=$?
+assert_eq "read-plan: two matching plan comments exit 0 (no SIGPIPE under pipefail, #1643)" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$read_out" == *"FIRST PLAN"* && "$read_out" == *"$MARKER"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan returns first matching comment with marker (two-comment store)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan returns first matching comment with marker (two-comment store)"
+  echo "    actual: '$read_out'"
+fi
+
+# 7b. write-plan against the same two-matching-comment store: write-plan's own
+#     `first()` scan (line 65) must exit 0 (no SIGPIPE under pipefail) and PATCH
+#     the FIRST matching comment in place — store length stays 2 (no third POST)
+#     and comment id 1's body is updated. The read sub-case above does NOT cover
+#     write-plan's copy of the fix; this guards it independently (#1643).
+if PATH="$wp_two/bin:$SAVED_PATH" "$WP_WRITE" 7 <<<"UPDATED PLAN"; then wp_two_rc=0; else wp_two_rc=$?; fi
+assert_eq "write-plan: two matching plan comments exit 0 (no SIGPIPE under pipefail, #1643)" "0" "$wp_two_rc"
+assert_eq "write-plan: two matching plan comments → PATCH first, no third POST (store length 2)" \
+  "2" "$(jq 'length' "$wp_two/store.json")"
+TOTAL=$((TOTAL + 1))
+if jq -e --arg m "$MARKER" '.[] | select(.id == 1) | (.body | contains($m) and contains("UPDATED PLAN"))' "$wp_two/store.json" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: write-plan PATCHes the first matching comment (id 1 body updated)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan PATCHes the first matching comment (id 1 body updated)"
+  echo "    actual: '$(jq -c '.[] | select(.id == 1) | .body' "$wp_two/store.json")'"
+fi
+rm -rf "$wp_two"
+
 rm -rf "$wp_root"
-unset DISPATCH_PLAN_AUTHOR
+unset DISPATCH_PLAN_AUTHOR_ID
 
 # ============================================================================
 # claim_fixed_vite_port (fixed Vite-port pool) tests
@@ -30115,6 +30329,349 @@ fi
 assert_eq "bail: script exits non-zero when the mergeable set cannot be computed" "1" "$rc"
 assert_eq "bail: close pass did not run (no gh issue close)" "absent" "$(log_state gh-merge-issue-close.log)"
 teardown
+
+# (f) OPEN_COUNT>1 (concurrent-tick duplicate) → close every issue beyond .[0]
+echo "Test: OPEN_COUNT>1 → close duplicates, keep .[0]"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":77,"title":"Add widget"},{"number":78,"title":"Add widget"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "dup-close: issue-close log present" "present" "$(log_state gh-merge-issue-close.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issue close 78' "$STUB_DIR/gh-merge-issue-close.log" \
+   && ! grep -q 'issue close 77' "$STUB_DIR/gh-merge-issue-close.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: closed duplicate #78, kept canonical #77"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: closed duplicate #78, kept canonical #77"
+fi
+assert_eq "dup-close: no spurious create" "absent" "$(log_state gh-merge-issue-create.log)"
+assert_eq "dup-close: no edit (.[0] title matches)" "absent" "$(log_state gh-merge-issue-edit.log)"
+teardown
+
+# ============================================================================
+# dispatch-auto-merge (#1540)
+# ============================================================================
+echo "=== dispatch-auto-merge (#1540) ==="
+
+# Build one auto-merge PR fixture object (the script's field set) + its REST
+# check-runs fixture. Wrap one or more in [ ... ] for auto-merge-pr-list.json.
+#  $1=num $2=isDraft(true|false) $3=mergeable $4=rollup_json $5=labels_json $6=closing_json
+make_auto_merge_pr() {
+  local num="$1" is_draft="$2" mergeable="$3" rollup_json="$4" labels_json="$5" closing_json="$6"
+  local sha="sha${num}"
+  write_rest_check_runs "$sha" "$rollup_json"
+  printf '{"number":%s,"title":"PR %s","body":"Closes #%s","isDraft":%s,"labels":%s,"headRefOid":"%s","mergeable":"%s","closingIssuesReferences":%s}' \
+    "$num" "$num" "$num" "$is_draft" "$labels_json" "$sha" "$mergeable" "$closing_json"
+}
+# Enable the feature for a test (writes the config the script reads).
+write_auto_merge_config_enabled() {
+  printf '{"enabled":true,"types":["enhancement"],"excludeTypes":["bug","security"]}' \
+    > "$TMPDIR_TEST/config/auto-merge.json"
+}
+AM_REVIEWED='[{"name":"dispatch:reviewed"}]'
+AM_NO_REVIEWED='[{"name":"dispatch:planned"}]'
+
+# --- 1. merge (happy path) ---------------------------------------------------
+echo "Test: eligible PR → squash-merged"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "merge: stdout is 'merged #50'" "merged #50" "$out"
+assert_eq "merge: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q -- '--squash' "$STUB_DIR/gh-pr-merge.log" \
+   && grep -q -- '--subject' "$STUB_DIR/gh-pr-merge.log" \
+   && grep -q -- '--body' "$STUB_DIR/gh-pr-merge.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: merge args carry --squash, --subject, and --body"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: merge args carry --squash, --subject, and --body"
+  echo "    actual gh-pr-merge.log: '$(cat "$STUB_DIR/gh-pr-merge.log")'"
+fi
+teardown
+
+# --- 2. draft → skip ---------------------------------------------------------
+echo "Test: draft PR → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 true MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "draft: no stdout" "" "$out"
+assert_eq "draft: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 3. demote-race skip -----------------------------------------------------
+# Models a PR that dispatch-reconcile-ready demoted to draft earlier in the same
+# tick: this script's fresh fetch sees isDraft==true and skips. Mechanically the
+# same as case 2, but kept as its own case to document the race the predicate
+# ordering guards against.
+echo "Test: demote-race (fresh fetch sees draft) → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 true MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "demote-race: no stdout" "" "$out"
+assert_eq "demote-race: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 4. missing dispatch:reviewed → skip -------------------------------------
+echo "Test: no dispatch:reviewed → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_NO_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "no-reviewed: no stdout" "" "$out"
+assert_eq "no-reviewed: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 5. CI verdict failing → skip --------------------------------------------
+echo "Test: CI failing → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$FAILING_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "failing: no stdout" "" "$out"
+assert_eq "failing: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 6. CI verdict pending → skip --------------------------------------------
+echo "Test: CI pending → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$PENDING_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "pending: no stdout" "" "$out"
+assert_eq "pending: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 7. mergeable CONFLICTING → skip -----------------------------------------
+echo "Test: mergeable CONFLICTING → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false CONFLICTING "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "conflicting: no stdout" "" "$out"
+assert_eq "conflicting: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 8. mergeable UNKNOWN → skip ---------------------------------------------
+echo "Test: mergeable UNKNOWN → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false UNKNOWN "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "unknown: no stdout" "" "$out"
+assert_eq "unknown: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 9. zero closing issues → skip -------------------------------------------
+echo "Test: empty closing set → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "no-closing: no stdout" "" "$out"
+assert_eq "no-closing: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 10. closing issue lacking enhancement → skip ----------------------------
+echo "Test: closing issue lacks enhancement → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"documentation"}]}]\n' > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "lacks-enh: no stdout" "" "$out"
+assert_eq "lacks-enh: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 11. closing issue carrying bug → skip -----------------------------------
+echo "Test: closing issue carries bug → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"},{"name":"bug"}]}]\n' > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "bug: no stdout" "" "$out"
+assert_eq "bug: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 12. closing issue carrying security → skip ------------------------------
+echo "Test: closing issue carries security → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"},{"name":"security"}]}]\n' > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "security: no stdout" "" "$out"
+assert_eq "security: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 13. per-issue enhancement discriminator → skip --------------------------
+# PR closes BOTH #100 (enhancement) and #101 (documentation). The type gate is
+# PER-ISSUE: #101 lacks enhancement → the PR is skipped. A union
+# "contains-enhancement" check would wrongly merge here (#100 carries it).
+echo "Test: multi-closing, one issue lacks enhancement → skip (per-issue, not union)"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100},{"number":101}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]},{"number":101,"labels":[{"name":"documentation"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "per-issue: no stdout" "" "$out"
+assert_eq "per-issue: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 14. exclude on a non-first closing issue → skip -------------------------
+# PR closes #100 (enhancement) and #101 (enhancement + bug). The bug is on the
+# SECOND closing issue → the union exclude scan must cover ALL closing issues,
+# not just [0]. So the PR is skipped.
+echo "Test: multi-closing, bug on the second issue → skip (exclude scans all)"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100},{"number":101}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]},{"number":101,"labels":[{"name":"enhancement"},{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "exclude-2nd: no stdout" "" "$out"
+assert_eq "exclude-2nd: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 15. multi-issue all-enhancement → merge ---------------------------------
+# Positive multi-issue control for the per-issue `all`: both closing issues carry
+# enhancement, none excluded → merge.
+echo "Test: multi-closing, both enhancement → merge"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100},{"number":101}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]},{"number":101,"labels":[{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "multi-enh: stdout is 'merged #50'" "merged #50" "$out"
+assert_eq "multi-enh: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 16. config enabled:false → no-op (no fetch) -----------------------------
+echo "Test: config enabled:false → no-op, no fetch"
+setup
+printf '{"enabled":false,"types":["enhancement"],"excludeTypes":["bug","security"]}' \
+  > "$TMPDIR_TEST/config/auto-merge.json"
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "disabled: no stdout" "" "$out"
+assert_eq "disabled: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+assert_eq "disabled: no PR fetch" "absent" "$(log_state gh-auto-merge-pr-list.log)"
+teardown
+
+# --- 17. absent config → no-op (no fetch) ------------------------------------
+echo "Test: absent config → no-op, no fetch"
+setup
+# Deliberately do NOT write config/auto-merge.json.
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "no-config: no stdout" "" "$out"
+assert_eq "no-config: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+assert_eq "no-config: no PR fetch" "absent" "$(log_state gh-auto-merge-pr-list.log)"
+teardown
+
+# --- 18. multi-PR independence -----------------------------------------------
+# Two PRs in one fetch: #50 eligible (enhancement, green, mergeable, reviewed,
+# closing #100), #51 ineligible only because its closing issue #101 carries bug.
+# #50 merges; #51 is skipped. Each PR is reconciled independently.
+echo "Test: multi-PR fetch merges only the eligible PR"
+setup
+write_auto_merge_config_enabled
+{
+  printf '['
+  make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]'
+  printf ','
+  make_auto_merge_pr 51 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":101}]'
+  printf ']'
+} > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]},{"number":101,"labels":[{"name":"enhancement"},{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "multi-PR: stdout is 'merged #50' only" "merged #50" "$out"
+TOTAL=$((TOTAL + 1))
+if grep -q 'pr merge 50' "$STUB_DIR/gh-pr-merge.log" \
+   && ! grep -q 'pr merge 51' "$STUB_DIR/gh-pr-merge.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: multi-PR: merge log carries pr merge 50 but NOT pr merge 51"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: multi-PR: merge log carries pr merge 50 but NOT pr merge 51"
+  echo "    actual gh-pr-merge.log: '$(cat "$STUB_DIR/gh-pr-merge.log" 2>/dev/null)'"
+fi
+teardown
+
+# --- 19. merge failure → HARD_ERROR, continue, exit 1 ------------------------
+# Two eligible PRs in one fetch: #50 (closing #100) and #51 (closing #101), both
+# enhancement/green/mergeable/reviewed. The gh stub is rigged so `pr merge 50`
+# exits non-zero. The script must: log #50's failure to stderr, set HARD_ERROR,
+# `continue` to attempt #51 (which merges), and exit 1 after the loop. This
+# exercises the `|| rc=$?` capture, the `continue`, and the final
+# `if [[ "$HARD_ERROR" -ne 0 ]]; then exit 1; fi` block.
+echo "Test: one PR's merge fails → exit 1, remaining PRs still attempted"
+setup
+write_auto_merge_config_enabled
+{
+  printf '['
+  make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]'
+  printf ','
+  make_auto_merge_pr 51 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":101}]'
+  printf ']'
+} > "$STUB_DIR/auto-merge-pr-list.json"
+printf '[{"number":100,"labels":[{"name":"enhancement"}]},{"number":101,"labels":[{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf '50' > "$STUB_DIR/pr-merge-fail-on"
+am_err=$("$TMPDIR_TEST/dispatch-auto-merge" 2>"$STUB_DIR/am-stderr" >"$STUB_DIR/am-stdout"; echo "$?")
+am_out=$(cat "$STUB_DIR/am-stdout")
+am_stderr=$(cat "$STUB_DIR/am-stderr")
+assert_eq "merge-fail: exit 1" "1" "$am_err"
+# (a) The successfully-merged PR after the failed one still emits its line.
+assert_eq "merge-fail: stdout carries 'merged #51'" "present" \
+  "$(printf '%s' "$am_out" | grep -q 'merged #51' && echo present || echo absent)"
+# (b) The failed PR is NOT reported as merged.
+assert_eq "merge-fail: stdout omits 'merged #50'" "absent" \
+  "$(printf '%s' "$am_out" | grep -q 'merged #50' && echo present || echo absent)"
+# (c) The failed PR number surfaces on stderr.
+assert_eq "merge-fail: stderr names #50" "present" \
+  "$(printf '%s' "$am_stderr" | grep -q '#50' && echo present || echo absent)"
+# (d) The merge of the PR after the failed one was actually attempted.
+assert_eq "merge-fail: pr merge 51 attempted" "present" \
+  "$(grep -q 'pr merge 51' "$STUB_DIR/gh-pr-merge.log" && echo present || echo absent)"
+teardown
+
+# --- 20. executable-bit guard ------------------------------------------------
+echo "Test: dispatch-auto-merge is executable"
+assert_eq "dispatch-auto-merge is executable" "yes" \
+  "$([[ -x "$SCRIPT_DIR/dispatch-auto-merge" ]] && echo yes || echo no)"
 
 # ============================================================================
 # summary

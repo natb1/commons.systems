@@ -80,7 +80,7 @@ export function parseQueueMetrics(data: Record<string, unknown>): QueueMetricsSn
   if (data.runwayDays === null || data.runwayDays === undefined) {
     runwayDays = null;
     runwayDaysValid = true;
-  } else if (typeof data.runwayDays === "number" && Number.isFinite(data.runwayDays)) {
+  } else if (typeof data.runwayDays === "number" && Number.isFinite(data.runwayDays) && data.runwayDays >= 0) {
     runwayDays = data.runwayDays;
     runwayDaysValid = true;
   } else {
@@ -100,6 +100,18 @@ export function parseQueueMetrics(data: Record<string, unknown>): QueueMetricsSn
     !runwayDaysValid
   ) {
     logError(new Error("office-hours queue metrics missing or invalid required fields"), {
+      operation: "queue-metrics-validation",
+    });
+    return null;
+  }
+
+  // Cross-field invariant — mirrors computeQueueMetrics in
+  // functions/src/dispatch-queue-metrics.ts: runwayDays is non-null exactly when
+  // the queue is draining (netDrainPerDay > 0). A snapshot violating this is
+  // corrupt (e.g. netDrainPerDay > 0 with runwayDays null) — reject it at the
+  // boundary rather than letting runwayReadout render a misleading verdict.
+  if ((netDrainPerDay > 0) !== (runwayDays !== null)) {
+    logError(new Error("office-hours queue metrics violate the runwayDays/netDrainPerDay invariant"), {
       operation: "queue-metrics-validation",
     });
     return null;

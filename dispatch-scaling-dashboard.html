@@ -101,7 +101,7 @@
 <body>
 <header>
   <h1>Dispatch worker scaling</h1>
-  <span class="sub">the <code>W → F → N</code> pace pipeline in <code>dispatch-target-workers</code>, with the #965 terminal-sprint envelope · live snapshot pre-loaded</span>
+  <span class="sub">the <code>W → F → N</code> pace pipeline in <code>dispatch-target-workers</code>, with the anchored floor→shoulder→terminal weekly pace curve · live snapshot pre-loaded</span>
 </header>
 
 <div class="wrap">
@@ -111,8 +111,8 @@
       <h3>Where we are now</h3>
       <div class="ctrl">
         <label>5-hour windows left in week <span class="v" id="v_windows"></span></label>
-        <input type="range" id="windows" min="0" max="34" step="0.1">
-        <div class="hint">Time axis. Week has T≈34 windows. Maps to elapsed fraction x.</div>
+        <input type="range" id="windows" min="0" max="33.6" step="0.1">
+        <div class="hint">Time axis. Week has T=33.6 windows. Maps to elapsed fraction x.</div>
       </div>
       <div class="ctrl">
         <label>used_weekly (% of 7-day limit) <span class="v" id="v_uw"></span></label>
@@ -129,24 +129,24 @@
     <div class="group">
       <h3>Stage 1 — weekly curve</h3>
       <div class="ctrl">
-        <label>target_weekly_usage_pct <span class="v" id="v_tw"></span></label>
-        <input type="range" id="tw" min="10" max="100" step="1">
-        <div class="hint">smooth-curve terminal W(1)</div>
-      </div>
-      <div class="ctrl">
-        <label>weekly_terminal_pct (envelope W(1)) <span class="v" id="v_term"></span></label>
+        <label>weekly_terminal_pct (W at week close) <span class="v" id="v_term"></span></label>
         <input type="range" id="term" min="50" max="100" step="1">
-        <div class="hint">terminal-sprint envelope target at week end (#965)</div>
+        <div class="hint">terminal target W reaches at the weekly reset (r→0)</div>
       </div>
       <div class="ctrl">
-        <label>weekly_increment_floor_pct <span class="v" id="v_wf"></span></label>
-        <input type="range" id="wf" min="0" max="10" step="0.25">
-        <div class="hint">minimum spend per window</div>
+        <label>weekly_pace_floor_pct <span class="v" id="v_pf"></span></label>
+        <input type="range" id="pf" min="0" max="100" step="1">
+        <div class="hint">early-week floor (held until the terminal windows)</div>
+      </div>
+      <div class="ctrl">
+        <label>weekly_terminal_windows <span class="v" id="v_nt"></span></label>
+        <input type="range" id="nt" min="1" max="10" step="1">
+        <div class="hint">count of trailing 5-hour windows the terminal segment spans (shoulder = terminal − cap·windows)</div>
       </div>
       <div class="ctrl">
         <label>weekly_increment_cap_pct <span class="v" id="v_wc"></span></label>
         <input type="range" id="wc" min="1" max="30" step="0.5">
-        <div class="hint">per-window hard ceiling (clamps end)</div>
+        <div class="hint">terminal slope: % per remaining window (also sets shoulder)</div>
       </div>
       <div class="ctrl">
         <label>weekly_curve_power (p) <span class="v" id="v_p"></span></label>
@@ -204,12 +204,12 @@
       <!-- weekly curve chart -->
       <div class="card">
         <h2>Stage 1 — weekly pace curve W(x)</h2>
-        <p class="desc">Cumulative weekly budget you're <em>allowed</em> to have spent by now. The router throttles whenever actual <b>used_weekly</b> runs above this curve — even far below the weekly cap. The smooth term tops out at <code>target_weekly</code> and would idle the final stretch; the <b>terminal-sprint envelope</b> floors W from the end so it reaches <code>weekly_terminal</code> (100% by default) at week close, lifting the last ~1.7 windows. X-axis is 5-hour windows elapsed (0 → 34).</p>
+        <p class="desc">Cumulative weekly budget you're <em>allowed</em> to have spent by now. The router throttles whenever actual <b>used_weekly</b> runs above this curve — even far below the weekly cap. The curve holds a constant <code>weekly_pace_floor</code> early in the week, then <b>rises</b> (power <code>p</code>) to the derived <code>shoulder</code> as the final <code>weekly_terminal_windows</code> approach, then climbs the linear <b>terminal segment</b> (slope = <code>cap</code> per remaining window) to <code>weekly_terminal</code> (100% by default) at week close. Monotone by construction. X-axis is 5-hour windows elapsed (0 → 33.6).</p>
         <svg id="curve" viewBox="0 0 720 320" preserveAspectRatio="none"></svg>
         <div class="legend">
-          <span><i class="swatch" style="background:var(--curve)"></i> effective W = max(smooth, envelope)</span>
-          <span><i class="swatch" style="background:var(--curve);opacity:.35"></i> smooth term</span>
-          <span><i class="swatch" style="background:var(--good)"></i> terminal-sprint envelope</span>
+          <span><i class="swatch" style="background:var(--curve)"></i> effective W = max(floor, rise, terminal)</span>
+          <span><i class="swatch" style="background:var(--curve);opacity:.35"></i> rise (floor→shoulder)</span>
+          <span><i class="swatch" style="background:var(--good)"></i> terminal segment (slope = cap/window)</span>
           <span><i class="swatch" style="background:var(--used)"></i> used_weekly (actual)</span>
           <span><i class="swatch" style="background:var(--warn)"></i> now (current window)</span>
           <span><i class="swatch box" style="background:var(--used)"></i> over-pace → paused</span>
@@ -236,7 +236,7 @@
       </div>
     </div>
     <footer>
-      Re-implements <code>.claude/skills/dispatch-propagate/scripts/dispatch-target-workers</code> exactly, including the terminal-sprint envelope <code>W = max(smooth, terminal − wcap·rem_windows)</code> (WEEK_SECONDS=604800, T=round(604800/18000)=34). Verified against the script: live snapshot → N=0, sprint (r=1 window, used_weekly=70) → N=8.
+      Re-implements <code>.claude/skills/dispatch-propagate/scripts/dispatch-target-workers</code> exactly, including the anchored pace curve <code>W = max(floor, terminal − cap·r, rise)</code> (WEEK_SECONDS=604800, T=604800/18000=33.6 exact, not rounded). Verified against the script: live snapshot → N=8, sprint (r=1 window, used_weekly=70) → N=8.
       Telemetry source: <code>~/.local/share/productivity-tui/rate_limits.json</code>. All math runs in-browser; nothing is sent anywhere.
     </footer>
   </main>
@@ -253,15 +253,15 @@ const LIVE = {
 };
 const WEEK_SECONDS = 604800;
 const WINDOW_SECONDS = 18000;            // 5 hours
-const T = Math.round(WEEK_SECONDS / WINDOW_SECONDS);  // = 34
+const T = WEEK_SECONDS / WINDOW_SECONDS;  // = 33.6 (exact, not rounded)
 
 const DEFAULTS = {
   windows: +(((LIVE.weekly_resets - LIVE.now) / WINDOW_SECONDS).toFixed(1)),
   uw: LIVE.weekly_used, u5: LIVE.fiveh_used,
-  tw: 90, term: 100, wf: 1, wc: 10, p: 1, hwt: 20, f5: 50, c5: 80, h5t: 15, mw: 8,
+  term: 100, pf: 50, nt: 2, wc: 10, p: 1, hwt: 20, f5: 50, c5: 80, h5t: 15, mw: 8,
 };
 
-const ids = ['windows','uw','u5','tw','term','wf','wc','p','hwt','f5','c5','h5t','mw'];
+const ids = ['windows','uw','u5','term','pf','nt','wc','p','hwt','f5','c5','h5t','mw'];
 const el = {}; ids.forEach(i => el[i] = document.getElementById(i));
 
 function setDefaults() { ids.forEach(i => el[i].value = DEFAULTS[i]); }
@@ -272,20 +272,17 @@ function clamp(v, lo, hi){ return v < lo ? lo : v > hi ? hi : v; }
 function compute(s) {
   // time: windows-left -> remaining seconds -> elapsed fraction x
   const remaining = s.windows * WINDOW_SECONDS;
-  if (remaining <= 0) return { x:1, W:0, hw:0, F:0, h5:0, N:0, end:0, paused:true, reason:'weekly window expired' };
+  if (remaining <= 0) return { x:1, W:0, hw:0, F:0, h5:0, N:0, paused:true, reason:'weekly window expired' };
   const x = clamp((WEEK_SECONDS - remaining) / WEEK_SECONDS, 0, 1);
 
-  // Stage 1: weekly pace curve (smooth term)
-  let end = s.wf + (s.p + 1) * (s.tw / T - s.wf);
-  if (end > s.wc) end = s.wc;
-  const smooth = T * (s.wf * x + (end - s.wf) * Math.pow(x, s.p + 1) / (s.p + 1));
-
-  // Stage 1b: terminal-sprint envelope — floor W from the end so spending at
-  // most wcap per remaining window still reaches `term` at week close (#965).
-  const remWindows = remaining / WINDOW_SECONDS;
-  const envelope = s.term - s.wc * remWindows;
-  const W = Math.max(smooth, envelope);
-  const envActive = envelope > smooth;
+  // Stage 1: anchored floor→shoulder→terminal pace curve, in remaining windows r.
+  const r = remaining / WINDOW_SECONDS;
+  const shoulder = s.term - s.wc * s.nt;
+  const sFrac = clamp((T - r) / (T - s.nt), 0, 1);
+  const rise = s.pf + (shoulder - s.pf) * Math.pow(sFrac, s.p);
+  const terminalSeg = s.term - s.wc * r;
+  const W = Math.max(s.pf, terminalSeg, rise);
+  const riseActive = rise >= terminalSeg && rise >= s.pf;   // for the formula display
 
   // Stage 2: 5h target F
   const hw = W - s.uw;
@@ -297,25 +294,25 @@ function compute(s) {
   let N = 0;
   if (h5 > 0) N = clamp(Math.round(s.mw * h5 / s.h5t), 1, s.mw);
 
-  return { x, W, smooth, envelope, envActive, hw, F, h5, N: Math.round(N), end, paused: N === 0,
+  return { x, W, rise, terminalSeg, shoulder, sFrac, riseActive, hw, F, h5, N: Math.round(N), paused: N === 0,
            reason: hw <= 0 ? 'used_weekly ≥ W — ahead of pace' : (h5 <= 0 ? 'used_5h ≥ F — 5h target reached' : '') };
 }
 
-// smooth term only (no envelope)
-function smoothW(s, x) {
-  let end = s.wf + (s.p + 1) * (s.tw / T - s.wf);
-  if (end > s.wc) end = s.wc;
-  return T * (s.wf * x + (end - s.wf) * Math.pow(x, s.p + 1) / (s.p + 1));
+// rise component: floor → shoulder via power p
+function riseW(s, x) {
+  const r = (1 - x) * T;
+  const shoulder = s.term - s.wc * s.nt;
+  const sFrac = clamp((T - r) / (T - s.nt), 0, 1);
+  return s.pf + (shoulder - s.pf) * Math.pow(sFrac, s.p);
 }
-
-// envelope floor at elapsed fraction x: remaining windows = (1-x)*T
-function envelopeW(s, x) {
-  return s.term - s.wc * (1 - x) * T;
+// terminal segment: terminal − cap·r
+function terminalSegW(s, x) {
+  const r = (1 - x) * T;
+  return s.term - s.wc * r;
 }
-
-// effective curve = max(smooth, envelope), matching the script
+// effective curve = max(floor, terminalSeg, rise), matching the script
 function curveW(s, x) {
-  return Math.max(smoothW(s, x), envelopeW(s, x));
+  return Math.max(s.pf, terminalSegW(s, x), riseW(s, x));
 }
 
 // ---- rendering ----------------------------------------------------------------
@@ -348,14 +345,14 @@ function drawCurve(s, r) {
   const Ymax = 100;
   const Y = v => mt + (1 - clamp(v,0,Ymax)/Ymax) * ph;
 
-  let path = '', smoothPath = '', envPath = '';
+  let path = '', risePath = '', terminalPath = '';
   for (let i=0;i<=120;i++){
     const x = i/120;                 // elapsed fraction
     const w = x * T;                 // windows elapsed
     path     += (i===0?'M':'L') + X(w).toFixed(1) + ',' + Y(curveW(s, x)).toFixed(1) + ' ';
-    smoothPath += (i===0?'M':'L') + X(w).toFixed(1) + ',' + Y(smoothW(s, x)).toFixed(1) + ' ';
-    const ev = envelopeW(s, x);
-    if (ev >= 0) envPath += (envPath===''?'M':'L') + X(w).toFixed(1) + ',' + Y(ev).toFixed(1) + ' ';
+    risePath += (i===0?'M':'L') + X(w).toFixed(1) + ',' + Y(riseW(s, x)).toFixed(1) + ' ';
+    const ev = terminalSegW(s, x);
+    if (ev >= 0) terminalPath += (terminalPath===''?'M':'L') + X(w).toFixed(1) + ',' + Y(ev).toFixed(1) + ' ';
   }
   // current position
   const elapsedWindows = (1 - r.x) >= 0 ? r.x * T : T;
@@ -382,8 +379,8 @@ function drawCurve(s, r) {
     ${grid}
     ${xticks}
     <text x="${ml+pw/2}" y="${H+4}" fill="var(--muted)" font-size="10" text-anchor="middle" opacity="0">windows</text>
-    <path d="${envPath}" fill="none" stroke="var(--good)" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.8"/>
-    <path d="${smoothPath}" fill="none" stroke="var(--curve)" stroke-width="1.25" opacity="0.35"/>
+    <path d="${terminalPath}" fill="none" stroke="var(--good)" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.8"/>
+    <path d="${risePath}" fill="none" stroke="var(--curve)" stroke-width="1.25" opacity="0.35"/>
     <path d="${path}" fill="none" stroke="var(--curve)" stroke-width="2.5"/>
     <line x1="${ml}" y1="${usedY}" x2="${W-mr}" y2="${usedY}" stroke="var(--used)" stroke-width="2" stroke-dasharray="${overPace?'0':'5 4'}"/>
     <line x1="${curX}" y1="${mt}" x2="${curX}" y2="${H-mb}" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="3 3"/>
@@ -419,9 +416,9 @@ function render() {
   el.windows && (document.getElementById('v_windows').textContent = fmt(s.windows));
   document.getElementById('v_uw').textContent = fmt(s.uw)+'%';
   document.getElementById('v_u5').textContent = fmt(s.u5)+'%';
-  document.getElementById('v_tw').textContent = fmt(s.tw,0)+'%';
   document.getElementById('v_term').textContent = fmt(s.term,0)+'%';
-  document.getElementById('v_wf').textContent = fmt(s.wf,2);
+  document.getElementById('v_pf').textContent = fmt(s.pf,0)+'%';
+  document.getElementById('v_nt').textContent = fmt(s.nt,0);
   document.getElementById('v_wc').textContent = fmt(s.wc,1);
   document.getElementById('v_p').textContent = fmt(s.p,2);
   document.getElementById('v_hwt').textContent = fmt(s.hwt,0);
@@ -474,12 +471,13 @@ function render() {
     `</div>`;
 
   document.getElementById('pipe').innerHTML =
-    `<b>T</b> = round(604800/18000) = <b>${T}</b> windows/week<br>` +
+    `<b>T</b> = 604800/18000 = <b>${fmt(T,1)}</b> windows/week (exact)<br>` +
     `<b>x</b> = clamp((604800 − ${fmt(s.windows*WINDOW_SECONDS,0)}) / 604800) = <b>${fmt(r.x,4)}</b> elapsed<br>` +
-    `<b>end</b> = min(wcap, floor + (p+1)(target/T − floor)) = <b>${fmt(r.end,3)}</b><br>` +
-    `<b>smooth</b> = T·(floor·x + (end−floor)·x^(p+1)/(p+1)) = <b>${fmt(r.smooth,2)}%</b><br>` +
-    `<b>envelope</b> = terminal − wcap·rem_windows = ${fmt(s.term,0)} − ${fmt(s.wc,1)}·${fmt(s.windows,1)} = <b>${fmt(r.envelope,2)}%</b><br>` +
-    `<b>W</b> = max(smooth, envelope) = <b>${fmt(r.W,2)}%</b> ${r.envActive?'← envelope active (terminal sprint)':'(smooth dominates)'}<br>` +
+    `<b>r</b> = ${fmt(s.windows,2)} windows left · <b>shoulder</b> = term − cap·windows = ${fmt(s.term,0)} − ${fmt(s.wc,1)}·${fmt(s.nt,0)} = <b>${fmt(r.shoulder,1)}</b><br>` +
+    `<b>s</b> = clamp((T−r)/(T−windows),0,1) = <b>${fmt(r.sFrac,4)}</b><br>` +
+    `<b>rise</b> = floor + (shoulder−floor)·s^p = <b>${fmt(r.rise,2)}%</b><br>` +
+    `<b>terminal</b> = term − cap·r = <b>${fmt(r.terminalSeg,2)}%</b><br>` +
+    `<b>W</b> = max(floor, terminal, rise) = <b>${fmt(r.W,2)}%</b> ${r.riseActive?'← rise governs':'← terminal segment governs'}<br>` +
     `<b>hw</b> = W − used_weekly = ${fmt(r.W,2)} − ${fmt(s.uw,1)} = <b>${fmt(r.hw,2)}</b> ${r.hw<=0?'≤ 0 → F=0 (ahead of pace)':''}<br>` +
     `<b>F</b> = ${r.hw<=0?'0':'floor5 + (ceil5−floor5)·clamp(hw/Hw)'} = <b>${fmt(r.F,2)}%</b><br>` +
     `<b>h5</b> = F − used_5h = ${fmt(r.F,2)} − ${fmt(s.u5,1)} = <b>${fmt(r.h5,2)}</b><br>` +

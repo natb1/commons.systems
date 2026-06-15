@@ -2,7 +2,7 @@
  * Single source of truth for the Account entity.
  * All per-entity representations (domain, IDB, raw/upload, seed declaration, seed data)
  * are defined or imported here; adaptor functions live alongside them.
- * Document id = `{institution}_{account}`.
+ * Document id = percent-escape `%`→`%25` then `_`→`%5F` in each component, join with `_`.
  */
 import { Timestamp } from "firebase/firestore";
 import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
@@ -28,7 +28,7 @@ import type { AccountSeedData } from "../../seeds/firestore.js";
 
 // ── Domain interface ──────────────────────────────────────────────────────────
 
-/** A financial account (checking, credit card, savings, etc.). Document id = `{institution}_{account}`. */
+/** A financial account (checking, credit card, savings, etc.). Document id = percent-escaped components joined with `_`. */
 export interface Account {
   readonly id: string;
   readonly institution: string;
@@ -41,9 +41,20 @@ export interface Account {
 
 // ── Document id ───────────────────────────────────────────────────────────────
 
-/** The Firestore document id for an account: `{institution}_{account}`. */
+/**
+ * The Firestore document id for an account.
+ *
+ * Each component is percent-escaped: `%` → `%25` first, then `_` → `%5F`.
+ * The two escaped components are then joined with a literal `_`.
+ *
+ * This matches the Go `journal.AccountID` encoder byte-for-byte, ensuring
+ * the etl↔app join is injective even when a component contains `_` or `%`.
+ * Backwards-compatible: no existing component contains `_` or `%`, so all
+ * existing ids are unchanged.
+ */
 export function accountDocId(institution: string, account: string): string {
-  return `${institution}_${account}`;
+  const esc = (s: string) => s.replace(/%/g, "%25").replace(/_/g, "%5F");
+  return `${esc(institution)}_${esc(account)}`;
 }
 
 // ── IDB storage interface ─────────────────────────────────────────────────────
