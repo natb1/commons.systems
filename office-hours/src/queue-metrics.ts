@@ -105,6 +105,18 @@ export function parseQueueMetrics(data: Record<string, unknown>): QueueMetricsSn
     return null;
   }
 
+  // Cross-field invariant — mirrors computeQueueMetrics in
+  // functions/src/dispatch-queue-metrics.ts: runwayDays is non-null exactly when
+  // the queue is draining (netDrainPerDay > 0). A snapshot violating this is
+  // corrupt (e.g. netDrainPerDay > 0 with runwayDays null) — reject it at the
+  // boundary rather than letting runwayReadout render a misleading verdict.
+  if ((netDrainPerDay > 0) !== (runwayDays !== null)) {
+    logError(new Error("office-hours queue metrics violate the runwayDays/netDrainPerDay invariant"), {
+      operation: "queue-metrics-validation",
+    });
+    return null;
+  }
+
   return {
     openHelpWanted,
     closedPerDay,
