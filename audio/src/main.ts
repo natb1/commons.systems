@@ -9,6 +9,8 @@ import type { AppNavElement } from "@commons-systems/components/nav";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "./auth.js";
 import { trackPageView } from "./firebase.js";
+import { clearCache } from "./audio-cache.js";
+import { logError } from "@commons-systems/errorutil/log";
 import { initPanelToggle } from "@commons-systems/components/panel-toggle";
 import { initPlayer } from "./player.js";
 
@@ -60,8 +62,16 @@ const router = createHistoryRouter(
   },
 );
 
-onAuthStateChanged((user) => {
+onAuthStateChanged(async (user) => {
+  const wasSignedIn = currentUser !== null;
   currentUser = user;
-  navEl.user = user;
+  navEl.user = user; // nav UI updates immediately, before the await
+  if (wasSignedIn && user === null) {
+    try {
+      await clearCache();
+    } catch (err) {
+      logError(err, { operation: "signout-clear-cache" });
+    }
+  }
   router.navigate();
 });

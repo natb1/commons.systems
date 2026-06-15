@@ -8,26 +8,29 @@
 # enumeration or liveness checking of its own.
 #
 # Dispositions and the action each triggers:
-#   resume <sessionId>            → exec `claude --resume <sessionId>`: the user
-#                                   supplies the pending input to a still-live
-#                                   blocked session. No skill is loaded.
-#   parked-router <sessionId> ... → exec `claude --resume <sessionId>`: re-engage
+#   live <sessionId>              → exec `claude attach <sessionId>`: the user
+#                                   joins a still-live blocked session to supply
+#                                   its pending input. No skill is loaded.
+#   parked-router <sessionId> ... → exec `claude attach <sessionId>`: re-engage
 #                                   a target-less parked dispatch router (#1010),
 #                                   the artifact dispatch-self-close's continuation
 #                                   invariant keeps alive. No skill is loaded.
 #   office-hours <N> <phase> <pr> <worktree-path>
 #                                 → launch the fresh /office-hours session
-#                                   worker-style: a `--bg` job named after the
-#                                   item's <N>-* worktree, with cwd = that
+#                                   worker-style: a `--bg` job named
+#                                   office-hours-<N>, with cwd = that
 #                                   worktree (5th field), via
 #                                   dispatch-spawn-office-hours; then exec
-#                                   `claude --resume <sessionId>` to attach the
+#                                   `claude attach <sessionId>` to attach the
 #                                   human. Born in the worktree, the session's
 #                                   branch is <N>-..., so the strip hook clears
 #                                   the dispatch:office-hours label and the
-#                                   session registers under the worktree
-#                                   basename, holding the per-worktree
-#                                   concurrency lock. When no <N>-* worktree
+#                                   session holds the per-worktree concurrency
+#                                   lock via the occupancy guard's
+#                                   office-hours-name check in
+#                                   worktree_has_live_session, which recognizes
+#                                   the office-hours-<N> session as occupying the
+#                                   <N>-slug worktree. When no <N>-* worktree
 #                                   resolves (5th field `-`), exit non-zero with
 #                                   a diagnostic and launch nothing.
 #   empty                         → print a queue-empty message and exit WITHOUT
@@ -54,17 +57,19 @@ CLAUDE_CMD="${OFFICE_HOURS_CLAUDE_CMD:-claude}"
 directive=$("$SCRIPT_DIR/office-hours-select-target")
 read -r verb a b c d <<< "$directive"
 case "$verb" in
-  resume|parked-router)
+  live|parked-router)
     # a = the live worker / parked-router sessionId.
-    exec "$CLAUDE_CMD" --resume "$a"
+    exec "$CLAUDE_CMD" attach "$a"
     ;;
   office-hours)
     # a b c d = <N> <phase> <pr-or-dash> <worktree-path>. Launch a fresh
-    # /office-hours session worker-style — a --bg job named after the <N>-*
-    # worktree, rooted in it — then attach the human via --resume. Rooting it in
-    # the worktree clears the dispatch:office-hours label (the strip hook
-    # resolves <N> from the cwd branch) and registers the session under the
-    # worktree basename, so it holds the per-worktree concurrency lock.
+    # /office-hours session worker-style — a --bg job named office-hours-<N>,
+    # rooted in the <N>-* worktree — then attach the human via attach. Rooting
+    # it in the worktree clears the dispatch:office-hours label (the strip hook
+    # resolves <N> from the cwd branch). The per-worktree concurrency lock is
+    # held via the occupancy guard's office-hours-name check (see
+    # worktree_has_live_session), which recognizes the office-hours-<N> session
+    # as occupying the <N>-slug worktree.
     if [[ -z "$d" || "$d" == "-" ]]; then
       echo "office-hours: no <N>-* worktree resolved for #$a — cannot launch a fresh session (the worktree may have been swept). Re-create the worktree or re-run /ready." >&2
       exit 1
@@ -77,7 +82,7 @@ case "$verb" in
       echo "office-hours: failed to launch a fresh /office-hours session for #$a in $d" >&2
       exit 1
     fi
-    exec "$CLAUDE_CMD" --resume "$sid"
+    exec "$CLAUDE_CMD" attach "$sid"
     ;;
   empty)
     echo "office-hours: queue is empty — nothing to resume or start."

@@ -2,19 +2,33 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     match /print/{env}/media/{fileName} {
-      allow read: if resource.metadata["publicdomain"] == "true"
+      allow read: if resource.metadata['publicdomain'] == 'true'
         || (request.auth != null && (
-            resource.metadata["member_0"] == request.auth.token.email
-         || resource.metadata["member_1"] == request.auth.token.email
-         || resource.metadata["member_2"] == request.auth.token.email));
+             // Unbounded membership: metadata mirrors the Firestore media doc's
+             // memberEmails array (comma-joined). No member cap.
+             ('member_emails' in resource.metadata
+               && request.auth.token.email in resource.metadata['member_emails'].split(','))
+             // Transitional fallback for objects uploaded under the legacy
+             // member_0/1/2 scheme (pre-#1301). Removable after a metadata migration.
+             || ('member_0' in resource.metadata && resource.metadata['member_0'] == request.auth.token.email)
+             || ('member_1' in resource.metadata && resource.metadata['member_1'] == request.auth.token.email)
+             || ('member_2' in resource.metadata && resource.metadata['member_2'] == request.auth.token.email)
+           ));
       allow write: if false;
     }
     match /audio/{env}/media/{fileName} {
-      allow read: if resource.metadata["publicdomain"] == "true"
+      allow read: if resource.metadata['publicdomain'] == 'true'
         || (request.auth != null && (
-            resource.metadata["member_0"] == request.auth.token.email
-         || resource.metadata["member_1"] == request.auth.token.email
-         || resource.metadata["member_2"] == request.auth.token.email));
+             // Unbounded membership: metadata mirrors the Firestore media doc's
+             // memberEmails array (comma-joined). No member cap.
+             ('member_emails' in resource.metadata
+               && request.auth.token.email in resource.metadata['member_emails'].split(','))
+             // Transitional fallback for objects uploaded under the legacy
+             // member_0/1/2 scheme (pre-#1301). Removable after a metadata migration.
+             || ('member_0' in resource.metadata && resource.metadata['member_0'] == request.auth.token.email)
+             || ('member_1' in resource.metadata && resource.metadata['member_1'] == request.auth.token.email)
+             || ('member_2' in resource.metadata && resource.metadata['member_2'] == request.auth.token.email)
+           ));
       allow write: if false;
     }
     match /{allPaths=**} {

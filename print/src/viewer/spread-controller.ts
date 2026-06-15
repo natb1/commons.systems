@@ -24,6 +24,7 @@ export class SpreadController {
   private spreadEnabled = false;
   private spreads: Spread[] = [];
   private spreadIndex = 0;
+  private renderGen = 0;
   private spreadZoomLevel = 0;
   private spreadResizeObserver: ResizeObserver | null = null;
   private spreadResizeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -96,6 +97,8 @@ export class SpreadController {
   }
 
   leave(): number {
+    // Bump the generation counter to cancel any in-flight render() calls.
+    this.renderGen++;
     const spread = this.spreads.length > 0 ? this.spreads[this.spreadIndex]! : null;
     const currentPage = spread !== null
       && this.preSpreadPage >= spread.left
@@ -130,6 +133,12 @@ export class SpreadController {
 
   async render(): Promise<void> {
     if (!this.renderer.renderPageInto || this.spreads.length === 0) return;
+    // Each render claims a generation token. A later render() call bumps the
+    // counter, marking any in-flight render stale; the stale render bails after
+    // its next await instead of clearing the slot and re-appending into it —
+    // which would stack a second child under rapid spread navigation. Mirrors
+    // pdf.ts's renderGen discipline and is renderer-agnostic.
+    const gen = ++this.renderGen;
     const spread = this.spreads[this.spreadIndex]!;
     const isSolo = spread.right === null;
 
@@ -141,8 +150,10 @@ export class SpreadController {
     this.canvasWrap.classList.toggle("solo", isSolo);
 
     await this.renderer.renderPageInto(spread.left, leftEl);
+    if (gen !== this.renderGen) return;
     if (spread.right !== null) {
       await this.renderer.renderPageInto(spread.right, rightEl);
+      if (gen !== this.renderGen) return;
     }
   }
 

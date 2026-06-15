@@ -85,12 +85,15 @@ describe("updateOgMeta", () => {
     expect(allTwitterMeta()).toHaveLength(0);
   });
 
-  it("removes all OG tags when post has no previewDescription", () => {
-    updateOgMeta(SITE_URL, basePost);
-    const postWithoutDescription = { ...basePost, previewDescription: undefined };
-    updateOgMeta(SITE_URL, postWithoutDescription);
-    expect(allOgMeta()).toHaveLength(0);
-    expect(allTwitterMeta()).toHaveLength(0);
+  it("preserves post title/og:url/og:type when post has no previewDescription", () => {
+    updateOgMeta(SITE_URL, { ...basePost, previewDescription: undefined }, "Fellspiral");
+    expect(getOgContent("og:title")).toBe("Test Post");
+    expect(getOgContent("og:url")).toBe("https://example.com/post/test-post");
+    expect(getOgContent("og:type")).toBe("article");
+    expect(getNameContent("twitter:title")).toBe("Test Post");
+    expect(document.title).toBe("Fellspiral - Test Post");
+    expect(getOgContent("og:description")).toBeNull();
+    expect(getNameContent("description")).toBeNull();
   });
 
   it("removes og:image when navigating from post with image to post without", () => {
@@ -100,6 +103,17 @@ describe("updateOgMeta", () => {
     updateOgMeta(SITE_URL, postWithoutImage);
     expect(getOgContent("og:image")).toBeNull();
     expect(getOgContent("og:title")).toBe("Test Post");
+  });
+
+  it("removes description tags when navigating from post with description to post without", () => {
+    updateOgMeta(SITE_URL, basePost);
+    expect(getOgContent("og:description")).toBe("A test description");
+    updateOgMeta(SITE_URL, { ...basePost, previewDescription: undefined });
+    expect(getOgContent("og:description")).toBeNull();
+    expect(getNameContent("description")).toBeNull();
+    expect(getNameContent("twitter:description")).toBeNull();
+    expect(getOgContent("og:title")).toBe("Test Post");
+    expect(getOgContent("og:url")).toBe("https://example.com/post/test-post");
   });
 
   it("updates existing meta tags rather than creating duplicates on repeated calls", () => {

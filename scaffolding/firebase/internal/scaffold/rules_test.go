@@ -55,6 +55,9 @@ func TestInsertFirestoreRules(t *testing.T) {
 		if !strings.Contains(got, "match /myapp/{env}/notes/{noteId}") {
 			t.Error("expected notes rule block")
 		}
+		if !strings.Contains(got, "match /myapp/{env}/errors/{errorId}") {
+			t.Error("expected errors rule block")
+		}
 
 		catchAllIdx := strings.Index(got, "// SCAFFOLD MARKER:")
 		appIdx := strings.Index(got, "match /myapp/")

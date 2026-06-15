@@ -21,6 +21,10 @@ type StatementData struct {
 	// statement file this data was parsed from; empty for ETL-synthesized
 	// statements (e.g. derived balance anchors).
 	SourceFile string
+	// Virtual marks an ETL-synthesized statement (e.g. a derived monthly balance
+	// anchor) so it can be distinguished from a real parsed statement. Real
+	// statements leave this false.
+	Virtual bool
 }
 
 // StatementDocID generates a deterministic document ID from a statement ID

@@ -29,7 +29,7 @@ URL formats:
 Commit messages, PR bodies, and issue bodies keep the bare `#N` form and append
 no `References:` list. GitHub auto-links `#N` in those contexts, and `Closes #N`
 drives GitHub's auto-close behavior — see
-`.claude/skills/plan-implement/SKILL.md`.
+`.claude/skills/implement/SKILL.md`.
 
 ### Closing keywords are reserved for the current PR's own issues
 

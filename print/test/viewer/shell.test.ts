@@ -325,7 +325,8 @@ describe("initViewer", () => {
     expect(renderer.init).toHaveBeenCalled();
   });
 
-  it("cleanup cancels pending save timer", async () => {
+  it("cleanup flushes pending save timer", async () => {
+    vi.mocked(getReadingPosition).mockResolvedValue(null);
     const renderer = makeMockRenderer();
 
     const cleanup = initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
@@ -335,11 +336,12 @@ describe("initViewer", () => {
     nextBtn.click();
     await flushInit();
 
-    // Cancel before timer fires
+    // Flush synchronously before the 500ms timer fires
     cleanup();
-    await vi.runAllTimersAsync();
 
-    expect(saveReadingPosition).not.toHaveBeenCalled();
+    // saveReadingPosition should have been called with the pending position
+    // without advancing timers — the flush is synchronous
+    expect(saveReadingPosition).toHaveBeenCalledWith("uid1", "m1", "2");
   });
 
   it("cleanup calls renderer.destroy", async () => {

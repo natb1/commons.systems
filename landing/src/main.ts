@@ -80,6 +80,7 @@ const updateInfoPanel = (): void => {
 }
 
 navEl.links = NAV_LINKS;
+navEl.showHomeLink = false;
 navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => void signOut());
 
@@ -113,7 +114,7 @@ async function loadPosts(): Promise<string> {
       deferProgrammerError(error);
       msg = fallbackMsg;
     } else {
-      reportError(new Error(`Failed to load posts: ${error instanceof Error ? error.message : error}`));
+      logError(error, { operation: "load-posts" });
       msg = kind === "permission-denied" ? "Permission denied loading posts." : fallbackMsg;
     }
     return `

@@ -11,7 +11,7 @@
 # run silently drains. Instead of draining, this script schedules a transient
 # systemd.user timer that, after a short delay, re-runs the headless
 # `dispatch-tick <N>` — re-seeding the chain on <N> so it returns to the target
-# when its CI completes (a CI *failure* resolves to `verify`, an actionable
+# when its CI completes (a CI *failure* resolves to `fix-checks`, an actionable
 # phase, so the wait terminates on its own once CI concludes).
 #
 # The wait is bounded by an attempt counter — `dispatch:ci-wait-attempt-<n>`
@@ -25,7 +25,7 @@
 #      this script (the caller only invokes it for a ci-waiting target, which by
 #      definition has a draft PR) → stderr diagnostic + exit 2.
 #   3. Read the highest extant dispatch:ci-wait-attempt-<n> label on the PR →
-#      CUR (max // 0), via the verify-pr jq capture idiom.
+#      CUR (max // 0), via the fix-checks jq capture idiom.
 #   4. Cap check: if CUR >= CAP, park the ISSUE on dispatch:office-hours via
 #      dispatch-apply-office-hours, print `escalated`, schedule NO timer, exit 0.
 #   5. Otherwise (under cap): NEXT=CUR+1. Remove the prior counter label (if
@@ -129,7 +129,7 @@ fi
 
 # ---- Step 3: read the highest ci-wait-attempt counter -----------------------
 #
-# Same label-capture idiom as /verify-pr's verify-attempt counter, adapted to
+# Same label-capture idiom as /fix-checks's fix-checks-attempt counter, adapted to
 # the dispatch:ci-wait-attempt- prefix. `max // 0` yields 0 when no counter
 # label is present yet.
 
@@ -224,6 +224,14 @@ else
   MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
 fi
 
+# Install the OnFailure recovery unit (dispatch-tick-recover.service) before
+# scheduling the transient reseed timer. Best-effort: OnFailure= resolves
+# lazily at failure time, so a failure here is non-fatal — a missing target
+# only logs an error if the reseed unit ever fails. We still pass OnFailure=
+# unconditionally below so an abnormal reseed exit is guaranteed a chain
+# continuation (#1570).
+ensure_recover_unit "$MAIN_WORKTREE" || true
+
 # ---- Step 8: schedule the transient timer -----------------------------------
 #
 # The unit name embeds N and the epoch fire time — a repeated call with the same
@@ -246,6 +254,19 @@ fi
 # /usr/bin/env can't resolve bash (exit 127) and the tick can't find
 # claude/git/jq. The caller (a /dispatch tick) always carries the full
 # nix-store PATH, so capturing it at schedule time makes the unit self-sufficient.
+#
+# --property=KillMode=process (#1196): Claude Code's per-user bg supervisor
+# daemon and its --bg-spare / --bg-pty-host worker children can be born inside
+# this transient unit's cgroup — the first `claude` call during the tick the
+# timer fires spawns them. systemd's default KillMode=control-group SIGTERMs the
+# entire cgroup when the tick finishes, reaping the daemon and every worker. The
+# bg hosts are spawned detached (setsid) to outlive their launcher, but setsid
+# only changes the session/process-group, not the cgroup, so cgroup-kill ignores
+# it. KillMode=process confines the kill to the dispatch-tick process itself, so
+# the detached bg hosts survive as init orphans across reseed cycles. (Unlike the
+# dispatch-schedule-reseed sibling, this script does not install a durable daemon
+# service, so the daemon can live in this transient cgroup and KillMode=process
+# is load-bearing here, not a degraded-path fallback.)
 
 UNIT_NAME="dispatch-reseed-target-${N}-${FIRE}"
 
@@ -258,8 +279,10 @@ trap 'rm -f "$RUN_STDERR"' EXIT
 "$SYSTEMD_RUN_CMD" --user \
      --unit="$UNIT_NAME" \
      --on-calendar="@$FIRE" \
+     --property=OnFailure=dispatch-tick-recover.service \
      --working-directory="$MAIN_WORKTREE" \
      --timer-property=Persistent=true \
+     --property=KillMode=process \
      --setenv=PATH="$PATH" \
      "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-tick" "$N" \
      2>"$RUN_STDERR"

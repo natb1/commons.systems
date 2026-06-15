@@ -107,6 +107,11 @@ func parseCents(s string) (int64, error) {
 		if len(frac) > 2 {
 			return 0, fmt.Errorf("more than 2 decimal places in %q", s)
 		}
+		for _, b := range []byte(frac) {
+			if b < '0' || b > '9' {
+				return 0, fmt.Errorf("non-digit fraction in %q", s)
+			}
+		}
 		c, err := strconv.ParseInt(frac, 10, 64)
 		if err != nil {
 			return 0, err

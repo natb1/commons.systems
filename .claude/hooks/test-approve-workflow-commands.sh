@@ -64,7 +64,7 @@ assert_approves \
 assert_approves \
   "absolute path script invocation" \
   "Bash" \
-  "/Users/n8/natb1/commons.systems/worktrees/322-test/.claude/skills/dispatch-propagate/scripts/sync-issue-context 322"
+  "/Users/n8/natb1/commons.systems/worktrees/322-test/.claude/skills/dispatch-propagate/scripts/issue-primary 322"
 
 assert_approves \
   "quoted CLAUDE_PROJECT_DIR prefix" \
@@ -99,12 +99,12 @@ assert_approves \
 assert_approves \
   "pipe workflow script to allowed command (head)" \
   "Bash" \
-  ".claude/skills/dispatch-propagate/scripts/sync-issue-context 350 2>&1 | head -200"
+  ".claude/skills/dispatch-propagate/scripts/issue-primary 350 2>&1 | head -200"
 
 assert_approves \
   "pipe workflow script to allowed command (tail)" \
   "Bash" \
-  ".claude/skills/dispatch-propagate/scripts/sync-issue-context 350 | tail -5"
+  ".claude/skills/dispatch-propagate/scripts/issue-primary 350 | tail -5"
 
 assert_approves \
   "bare 2>&1 with no pipe" \
@@ -129,7 +129,7 @@ assert_approves \
 assert_approves \
   "semicolon then pipe" \
   "Bash" \
-  ".claude/skills/dispatch-propagate/scripts/issue-primary 350; .claude/skills/dispatch-propagate/scripts/sync-issue-context 350 | head -20"
+  ".claude/skills/dispatch-propagate/scripts/issue-primary 350; .claude/skills/dispatch-propagate/scripts/issue-primary 350 | head -20"
 
 assert_approves \
   "&& between two allowed workflow scripts" \

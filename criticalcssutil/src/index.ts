@@ -5,14 +5,16 @@ import Critters from "critters";
 
 /**
  * Inline critical CSS into all HTML files under `distDir` using Critters.
- * Defers full stylesheets via media="print" with onload swap.
- * Fixes noscript fallback to use a plain blocking link.
+ * Critical CSS is inlined into <head>; the full stylesheet is moved to the
+ * end of <body> as a plain blocking <link>, so deferral needs no inline event
+ * handler. This keeps the output compatible with a script-src CSP that omits
+ * 'unsafe-inline'.
  * Returns the number of HTML files processed.
  */
 export async function inlineCriticalCss(distDir: string): Promise<number> {
   const critters = new Critters({
     path: distDir,
-    preload: "media",
+    preload: "body",
     inlineFonts: true,
   });
 
@@ -35,12 +37,6 @@ export async function inlineCriticalCss(distDir: string): Promise<number> {
         cause: err,
       });
     }
-    // Critters copies the deferred link (media="print" onload=...) into <noscript>,
-    // but no-JS users need a plain blocking <link> to get any styles at all.
-    inlined = inlined.replace(
-      /<noscript><link ([^>]*)media="print"([^>]*)onload="[^"]*"([^>]*)><\/noscript>/g,
-      "<noscript><link $1$2$3></noscript>",
-    );
     await writeFile(file, inlined);
   }
 
