@@ -20,6 +20,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   let renderTask: RenderTask | null = null;
   let renderGen = 0;
+  let spreadGen = 0;
   let destroyed = false;
   interface SpreadPage { renderTask: RenderTask; textLayer: TextLayer | null; }
   const spreadPages: SpreadPage[] = [];
@@ -214,6 +215,10 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
   }
 
   function cancelSpreadRenderTasks(): void {
+    // Bump the spread generation up-front so any renderPageInto suspended in an
+    // await sees the change and bails before pushing into the spreadPages array
+    // we're about to clear — keeping a superseded render off the cleared list.
+    spreadGen++;
     for (const sp of spreadPages) {
       sp.renderTask.cancel();
       if (sp.textLayer) sp.textLayer.cancel();
@@ -227,13 +232,23 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     const targetRect = target.getBoundingClientRect();
     if (targetRect.width === 0 || targetRect.height === 0) return;
 
+    const gen = spreadGen;
     const { wrapper, canvas: c, textLayerDiv: tlDiv } = createPageWrapper();
     target.appendChild(wrapper);
 
-    const result = await renderPageToCanvas(pageNum, c, targetRect, wrapper);
+    const result = await renderPageToCanvas(pageNum, c, targetRect, wrapper, () => gen !== spreadGen);
     if (!result) return;
+    if (gen !== spreadGen) {
+      result.task.cancel();
+      return;
+    }
 
     const tl = await renderTextLayer(result.page, result.cssViewport, tlDiv);
+    if (gen !== spreadGen) {
+      result.task.cancel();
+      tl?.cancel();
+      return;
+    }
     spreadPages.push({ renderTask: result.task, textLayer: tl });
   }
 
