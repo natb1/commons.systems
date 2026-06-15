@@ -1336,6 +1336,145 @@ func TestRunInputJSONPreservesDerivedAnchors(t *testing.T) {
 	}
 }
 
+// TestRunInputJSONSeedsVirtualRulesOnNil exercises the seed-on-nil migration
+// sentinel end-to-end through runInputJSON, using a synthetic plaintext snapshot
+// — no real encrypted snapshot or GPG credential required. It verifies the three
+// distinguishable states of VirtualTransactionRules:
+//   - absent (nil): seeds the legacy Synchrony->pet rule once, applies it
+//     (generating virtual transactions + the pet budget), and writes the seeded
+//     rule back into the output.
+//   - populated (the seeded output fed back in): the seed does not re-fire, the
+//     rule count stays stable, and virtual generation is identical.
+//   - explicit empty ([]): generation stays disabled and nothing is seeded.
+func TestRunInputJSONSeedsVirtualRulesOnNil(t *testing.T) {
+	// baseInput is a pre-refactor snapshot: PNC/5111 card payments to SYNCHRONY
+	// that the legacy rule targets, plus a categorization rule that sets the
+	// Transfer:CardPayment category the rule's source filter matches on.
+	baseInput := func() export.Output {
+		return export.Output{
+			Version:   1,
+			GroupName: "test-group",
+			Transactions: []export.Transaction{
+				{
+					ID:          budget.TransactionDocID("pnc-5111-2025-02", "TXN-1"),
+					Institution: "pnc",
+					Account:     "5111",
+					Description: "Online Payment To SYNCHRONY BANK",
+					Amount:      500.00,
+					Timestamp:   "2025-02-15T00:00:00Z",
+					StatementID: "pnc-5111-2025-02",
+				},
+				{
+					ID:          budget.TransactionDocID("pnc-5111-2025-03", "TXN-2"),
+					Institution: "pnc",
+					Account:     "5111",
+					Description: "Online Payment To SYNCHRONY BANK",
+					Amount:      600.00,
+					Timestamp:   "2025-03-15T00:00:00Z",
+					StatementID: "pnc-5111-2025-03",
+				},
+			},
+			Rules: []export.Rule{
+				{ID: "cat-sync", Type: "categorization", Pattern: "SYNCHRONY", Target: "Transfer:CardPayment", Priority: 10},
+			},
+			NormalizationRules: []export.NormalizationRule{},
+		}
+	}
+
+	runOnce := func(t *testing.T, in export.Output) export.Output {
+		t.Helper()
+		tmp := t.TempDir()
+		inputPath := filepath.Join(tmp, "input.json")
+		outputPath := filepath.Join(tmp, "output.json")
+		if err := export.WriteFile(inputPath, in, ""); err != nil {
+			t.Fatalf("writing input JSON: %v", err)
+		}
+		if err := runInputJSON(fileOpts{path: inputPath}, fileOpts{path: outputPath}); err != nil {
+			t.Fatalf("runInputJSON: %v", err)
+		}
+		data, err := os.ReadFile(outputPath)
+		if err != nil {
+			t.Fatalf("reading output: %v", err)
+		}
+		var out export.Output
+		if err := json.Unmarshal(data, &out); err != nil {
+			t.Fatalf("parsing output: %v", err)
+		}
+		return out
+	}
+
+	countSynchronyStmts := func(out export.Output) int {
+		n := 0
+		for _, s := range out.Statements {
+			if s.Virtual && strings.HasPrefix(s.StatementID, "synchrony-virtual-") {
+				n++
+			}
+		}
+		return n
+	}
+	hasPetBudget := func(out export.Output) bool {
+		for _, b := range out.Budgets {
+			if b.ID == "pet" {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Seeded by the first run, then asserted not to re-fire by the second.
+	var seeded export.Output
+
+	t.Run("seeds legacy rule when nil", func(t *testing.T) {
+		in := baseInput() // VirtualTransactionRules omitted -> marshals to null -> nil
+		seeded = runOnce(t, in)
+
+		if len(seeded.VirtualTransactionRules) != 1 {
+			t.Fatalf("expected exactly 1 seeded rule, got %d", len(seeded.VirtualTransactionRules))
+		}
+		r := seeded.VirtualTransactionRules[0]
+		if r.Institution != "pnc" || r.Account != "5111" || r.BudgetID != "pet" {
+			t.Errorf("seeded rule not the legacy Synchrony->pet rule: %+v", r)
+		}
+		// The seeded rule must actually be applied, not merely persisted.
+		if got := countSynchronyStmts(seeded); got != 2 {
+			t.Errorf("expected 2 virtual synchrony statements, got %d", got)
+		}
+		if !hasPetBudget(seeded) {
+			t.Error("expected a pet budget to be seeded from the virtual transactions")
+		}
+	})
+
+	t.Run("does not re-seed when already populated", func(t *testing.T) {
+		if len(seeded.VirtualTransactionRules) != 1 {
+			t.Skip("prior sub-test did not seed; nothing to round-trip")
+		}
+		// Feed the seeded output back in: VirtualTransactionRules is now non-nil,
+		// so the seed branch must not fire again.
+		out := runOnce(t, seeded)
+		if len(out.VirtualTransactionRules) != 1 {
+			t.Errorf("seed re-fired or rules dropped on round-trip: got %d rules, want 1", len(out.VirtualTransactionRules))
+		}
+		if got := countSynchronyStmts(out); got != 2 {
+			t.Errorf("virtual generation not stable on round-trip: got %d statements, want 2", got)
+		}
+	})
+
+	t.Run("explicit empty slice disables generation", func(t *testing.T) {
+		in := baseInput()
+		in.VirtualTransactionRules = []export.VirtualTransactionRule{} // explicit [] -> non-nil, no seed
+		out := runOnce(t, in)
+		if len(out.VirtualTransactionRules) != 0 {
+			t.Errorf("explicit empty slice was overwritten by seed: got %d rules, want 0", len(out.VirtualTransactionRules))
+		}
+		if got := countSynchronyStmts(out); got != 0 {
+			t.Errorf("generation ran despite disabled rules: got %d synchrony statements, want 0", got)
+		}
+		if hasPetBudget(out) {
+			t.Error("pet budget created despite generation being disabled")
+		}
+	})
+}
+
 // TestMain lets TestRemovedFlagsRejected re-exec this test binary as the real
 // budget-etl CLI: when BUDGET_ETL_TEST_RUN_MAIN=1 is set, it runs main()
 // instead of the test suite. main() parses flags via flag.CommandLine, and an
