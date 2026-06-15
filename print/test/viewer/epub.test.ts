@@ -22,6 +22,17 @@ function makeLocation(
   };
 }
 
+// Factory for mock spine sections. Each section has load/find/unload methods plus href.
+// Individual tests can override find for specific indices by re-calling mockSpine.get.mockImplementation.
+function makeMockSection(index: number, findResults: Array<{ cfi: string; excerpt: string }> = []) {
+  return {
+    href: `chapter-${index}.xhtml`,
+    load: vi.fn().mockResolvedValue(undefined),
+    find: vi.fn().mockReturnValue(findResults),
+    unload: vi.fn(),
+  };
+}
+
 const mockRendition = {
   on: vi.fn(),
   once: vi.fn(),
@@ -34,15 +45,23 @@ const mockRendition = {
 
 const mockSpine = {
   length: 5,
-  get: vi.fn().mockImplementation((index: number) => ({ href: `chapter-${index}.xhtml` })),
+  get: vi.fn().mockImplementation((index: number) => makeMockSection(index)),
 };
 
 const mockBook = {
   ready: Promise.resolve(),
-  loaded: { spine: Promise.resolve() },
+  loaded: { spine: Promise.resolve(), navigation: Promise.resolve() },
   renderTo: vi.fn().mockReturnValue(mockRendition),
   spine: mockSpine,
   destroy: vi.fn(),
+  load: vi.fn(),
+  navigation: {
+    get: vi.fn().mockImplementation((href: string) => {
+      // Return a NavItem label for chapter-0.xhtml; undefined for others
+      if (href === "chapter-0.xhtml") return { label: "Custom Chapter" };
+      return undefined;
+    }),
+  },
   locations: {
     generate: vi.fn().mockResolvedValue([]),
     cfiFromPercentage: vi.fn().mockReturnValue("epubcfi(/6/4!/4/2)"),
@@ -66,7 +85,13 @@ describe("createEpubRenderer", () => {
     mockRendition.next.mockResolvedValue(undefined);
     mockRendition.prev.mockResolvedValue(undefined);
     mockSpine.length = 5;
-    mockSpine.get.mockImplementation((index: number) => ({ href: `chapter-${index}.xhtml` }));
+    mockSpine.get.mockImplementation((index: number) => makeMockSection(index));
+    mockBook.load.mockReset();
+    mockBook.loaded.navigation = Promise.resolve();
+    mockBook.navigation.get.mockImplementation((href: string) => {
+      if (href === "chapter-0.xhtml") return { label: "Custom Chapter" };
+      return undefined;
+    });
     mockBook.locations.generate.mockResolvedValue([]);
     mockBook.locations.cfiFromPercentage.mockReturnValue("epubcfi(/6/4!/4/2)");
     container = document.createElement("div");
@@ -564,6 +589,280 @@ describe("createEpubRenderer", () => {
       );
       expect(displayErrorCall).toBeDefined();
       expect(typeof displayErrorCall![1]).toBe("function");
+    });
+  });
+
+  describe("search", () => {
+    it("returns results spanning multiple spine sections", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      // Sections 0 and 2 return matches; others return none
+      mockSpine.get.mockImplementation((index: number) => {
+        if (index === 0) {
+          return makeMockSection(index, [{ cfi: "epubcfi(/6/2!/4/1)", excerpt: "the quick fox" }]);
+        }
+        if (index === 2) {
+          return makeMockSection(index, [{ cfi: "epubcfi(/6/6!/4/1)", excerpt: "a quick search" }]);
+        }
+        return makeMockSection(index, []);
+      });
+
+      const results = await renderer.search!("quick");
+
+      const locations = results.map((r) => r.location);
+      expect(locations).toContain("epubcfi(/6/2!/4/1)");
+      expect(locations).toContain("epubcfi(/6/6!/4/1)");
+      expect(results.length).toBe(2);
+    });
+
+    it("every result satisfies the SearchResult invariant", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      mockSpine.get.mockImplementation((index: number) => {
+        return makeMockSection(index, [
+          { cfi: `epubcfi(/6/${index * 2 + 2}!/4/1)`, excerpt: "the quick brown fox" },
+        ]);
+      });
+
+      const results = await renderer.search!("quick");
+
+      expect(results.length).toBeGreaterThan(0);
+      for (const r of results) {
+        expect(r.matchStart).toBeGreaterThanOrEqual(0);
+        expect(r.matchLength).toBeGreaterThan(0);
+        expect(r.matchStart + r.matchLength).toBeLessThanOrEqual(r.snippet.length);
+      }
+    });
+
+    it("matchStart equals indexOf(query) in the excerpt", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      // Only section 0 returns a match; excerpt has "quick" at position 4
+      mockSpine.get.mockImplementation((index: number) => {
+        if (index === 0) {
+          return makeMockSection(index, [{ cfi: "epubcfi(/6/2!/4/1)", excerpt: "the quick fox" }]);
+        }
+        return makeMockSection(index, []);
+      });
+
+      const results = await renderer.search!("quick");
+
+      expect(results.length).toBe(1);
+      expect(results[0].matchStart).toBe(4);
+      expect(results[0].matchLength).toBe(5);
+      expect(results[0].snippet).toBe("the quick fox");
+    });
+
+    it("skips find hits whose excerpt does not contain the query", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      // Section 0: one hit whose excerpt lacks the query, one valid hit
+      mockSpine.get.mockImplementation((index: number) => {
+        if (index === 0) {
+          return makeMockSection(index, [
+            { cfi: "epubcfi(/6/2!/4/1)", excerpt: "irrelevant text here" }, // no "quick"
+            { cfi: "epubcfi(/6/2!/4/2)", excerpt: "a quick result" },        // contains "quick"
+          ]);
+        }
+        return makeMockSection(index, []);
+      });
+
+      const results = await renderer.search!("quick");
+
+      // Only the second hit should be included
+      expect(results.length).toBe(1);
+      expect(results[0].location).toBe("epubcfi(/6/2!/4/2)");
+    });
+
+    it("caps results at MAX_RESULTS (100)", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      // Section 0 returns 150 matches, all containing the query
+      const manyMatches = Array.from({ length: 150 }, (_, i) => ({
+        cfi: `epubcfi(/6/2!/4/${i + 1})`,
+        excerpt: "the quick fox",
+      }));
+      mockSpine.get.mockImplementation((index: number) => {
+        if (index === 0) return makeMockSection(index, manyMatches);
+        return makeMockSection(index, []);
+      });
+
+      const results = await renderer.search!("quick");
+
+      expect(results.length).toBe(100);
+    });
+
+    it("returns [] for empty query and never calls section.load", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      const sections: ReturnType<typeof makeMockSection>[] = [];
+      mockSpine.get.mockImplementation((index: number) => {
+        const sec = makeMockSection(index, []);
+        sections[index] = sec;
+        return sec;
+      });
+
+      const results = await renderer.search!("");
+
+      expect(results).toEqual([]);
+      // load should never have been called on any section
+      for (const sec of sections) {
+        expect(sec.load).not.toHaveBeenCalled();
+      }
+    });
+
+    it("returns [] for whitespace-only query and never calls section.load", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      const sections: ReturnType<typeof makeMockSection>[] = [];
+      mockSpine.get.mockImplementation((index: number) => {
+        const sec = makeMockSection(index, []);
+        sections[index] = sec;
+        return sec;
+      });
+
+      const results = await renderer.search!("   ");
+
+      expect(results).toEqual([]);
+      for (const sec of sections) {
+        expect(sec.load).not.toHaveBeenCalled();
+      }
+    });
+
+    it("calls load, find, and unload on each section, with no unload leak", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      const sections: ReturnType<typeof makeMockSection>[] = [];
+      mockSpine.get.mockImplementation((index: number) => {
+        const sec = makeMockSection(index, [{ cfi: `epubcfi(/6/${index * 2 + 2}!/4/1)`, excerpt: "a quick test" }]);
+        sections[index] = sec;
+        return sec;
+      });
+
+      await renderer.search!("quick");
+
+      let totalLoads = 0;
+      let totalUnloads = 0;
+      for (const sec of sections) {
+        expect(sec.load).toHaveBeenCalledTimes(1);
+        expect(sec.find).toHaveBeenCalledTimes(1);
+        expect(sec.unload).toHaveBeenCalledTimes(1);
+        totalLoads += sec.load.mock.calls.length;
+        totalUnloads += sec.unload.mock.calls.length;
+      }
+      expect(totalLoads).toBe(totalUnloads);
+    });
+
+    it("clearSearch aborts an in-flight search", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      // Control when the first section's load resolves
+      let resolveFirstLoad!: () => void;
+      const firstLoadPromise = new Promise<undefined>((res) => {
+        resolveFirstLoad = () => res(undefined);
+      });
+
+      mockSpine.get.mockImplementation((index: number) => {
+        const sec = makeMockSection(index, [{ cfi: `epubcfi(/6/${index * 2 + 2}!/4/1)`, excerpt: "a quick test" }]);
+        if (index === 0) {
+          sec.load.mockReturnValue(firstLoadPromise);
+        }
+        return sec;
+      });
+
+      // Start search but don't await it yet
+      const searchPromise = renderer.search!("quick");
+
+      // Abort by calling clearSearch before the first load resolves
+      renderer.clearSearch!();
+
+      // Now let the first load resolve
+      resolveFirstLoad();
+
+      // The search should return [] due to cancellation
+      const results = await searchPromise;
+      expect(results).toEqual([]);
+    });
+
+    it("uses TOC label for sections with navigation entry, Ch. N fallback otherwise", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      // chapter-0.xhtml -> "Custom Chapter" (from mockBook.navigation.get)
+      // chapter-1.xhtml -> undefined -> "Ch. 2" fallback
+      mockSpine.get.mockImplementation((index: number) => {
+        if (index === 0) {
+          return makeMockSection(index, [{ cfi: "epubcfi(/6/2!/4/1)", excerpt: "a quick match" }]);
+        }
+        if (index === 1) {
+          return makeMockSection(index, [{ cfi: "epubcfi(/6/4!/4/1)", excerpt: "another quick match" }]);
+        }
+        return makeMockSection(index, []);
+      });
+
+      const results = await renderer.search!("quick");
+
+      expect(results.length).toBe(2);
+      const ch0Result = results.find((r) => r.location === "epubcfi(/6/2!/4/1)");
+      const ch1Result = results.find((r) => r.location === "epubcfi(/6/4!/4/1)");
+      expect(ch0Result?.label).toBe("Custom Chapter");
+      expect(ch1Result?.label).toBe("Ch. 2");
+    });
+  });
+
+  describe("goToResult", () => {
+    it("calls rendition.display with the result location", async () => {
+      mockRendition.once.mockImplementation((_event: string, cb: () => void) => { cb(); });
+
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      mockRendition.display.mockClear();
+
+      await renderer.goToResult!({
+        location: "epubcfi(/6/4!/4/10)",
+        label: "Ch. 1",
+        snippet: "x",
+        matchStart: 0,
+        matchLength: 1,
+      });
+
+      expect(mockRendition.display).toHaveBeenCalledWith("epubcfi(/6/4!/4/10)");
+    });
+
+    it("updates position after goToResult via the relocated event", async () => {
+      let relocatedCb: RelocatedCallback | null = null;
+      mockRendition.on.mockImplementation((event: string, cb: RelocatedCallback) => {
+        if (event === "relocated") relocatedCb = cb;
+      });
+
+      mockRendition.once.mockImplementation((_event: string, cb: () => void) => {
+        // Fire the relocated callback with a known CFI before resolving
+        if (relocatedCb) relocatedCb(makeLocation(0, 1, 5, false, false, "epubcfi(/6/4!/4/10)"));
+        cb();
+      });
+
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      await renderer.goToResult!({
+        location: "epubcfi(/6/4!/4/10)",
+        label: "Ch. 1",
+        snippet: "x",
+        matchStart: 0,
+        matchLength: 1,
+      });
+
+      expect(renderer.position).toBe("epubcfi(/6/4!/4/10)");
     });
   });
 });
