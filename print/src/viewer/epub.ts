@@ -15,6 +15,8 @@ export function createEpubRenderer(
   let _atEnd = false;
   let _currentCfi = "";
   let destroyed = false;
+  let locationsReady: Promise<void> | null = null;
+  const GENERATE_CHARS = 1024;
   const outlineHrefMap = new WeakMap<OutlineEntry, string>();
 
   function mapNavItems(items: NavItem[]): OutlineEntry[] {
@@ -35,6 +37,19 @@ export function createEpubRenderer(
       const timer = setTimeout(() => { reportError(new Error("waitForRelocated: timed out after 5s")); resolve(); }, 5000);
       rendition.once("relocated", () => { clearTimeout(timer); resolve(); });
     });
+  }
+
+  // epub.js percent-based navigation requires a generated locations index,
+  // which is expensive. Generate it lazily on first use and memoize the promise.
+  function ensureLocations(): Promise<void> {
+    if (!book) return Promise.resolve();
+    if (!locationsReady) {
+      locationsReady = book.locations.generate(GENERATE_CHARS).then(() => {}).catch((err) => {
+        locationsReady = null;
+        return Promise.reject(err);
+      });
+    }
+    return locationsReady;
   }
 
   return {
@@ -121,6 +136,39 @@ export function createEpubRenderer(
       const spineItem = book.spine.get(page - 1);
       if (!spineItem) return;
       await rendition.display(spineItem.href);
+    },
+
+    async goToPosition(position: string): Promise<void> {
+      if (!rendition) return;
+      await rendition.display(position);
+      // epub.js does not reliably emit 'relocated' for display(cfi), so the
+      // persistent relocated handler may never update the position state.
+      // Read the current location directly after display() resolves.
+      // currentLocation() may return a Location or a Promise<Location>
+      // depending on epub.js version/load state — normalize with Promise.resolve.
+      // At runtime it returns a Location ({ start, atStart, atEnd }) — the same
+      // shape as the relocated event — but the epubjs types declare a flat
+      // DisplayedLocation, so cast (mirroring the spine.length cast above).
+      const loc = (await Promise.resolve(rendition.currentLocation())) as unknown as Location;
+      if (loc?.start) {
+        _chapterIndex = loc.start.index;
+        _subPage = loc.start.displayed.page;
+        _subPageTotal = loc.start.displayed.total;
+        _atStart = loc.atStart;
+        _atEnd = loc.atEnd;
+        _currentCfi = loc.start.cfi;
+      }
+    },
+
+    async goToFraction(fraction: number): Promise<void> {
+      if (!rendition || !book) return;
+      await ensureLocations();
+      if (destroyed) return;
+      const clamped = Math.max(0, Math.min(1, fraction));
+      const cfi = book.locations.cfiFromPercentage(clamped);
+      const relocated = waitForRelocated();
+      await rendition.display(cfi);
+      await relocated;
     },
 
     async next(): Promise<void> {

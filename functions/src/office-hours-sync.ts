@@ -35,6 +35,7 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, Timestamp, FieldValue } from "firebase-admin/firestore";
 import type { Firestore } from "firebase-admin/firestore";
 import { createSign } from "node:crypto";
+import { truncateForLog } from "./log-utils.js";
 
 const GH_APP_PRIVATE_KEY = defineSecret("OFFICE_HOURS_GITHUB_APP_PRIVATE_KEY");
 const GH_APP_ID = defineString("OFFICE_HOURS_GITHUB_APP_ID");
@@ -82,13 +83,6 @@ const JIT_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 export function isValidJitKey(key: string): boolean {
   return JIT_KEY_RE.test(key);
-}
-
-// Truncates a third-party HTTP response body before it enters an Error message
-// (and thus the function logs). Bounds the blast radius of a verbose or
-// reflected GitHub error response without dropping the leading diagnostic text.
-export function truncateForLog(text: string, max = 200): string {
-  return text.length > max ? `${text.slice(0, max)}…[truncated]` : text;
 }
 
 export async function syncOfficeHoursCore(deps: {
