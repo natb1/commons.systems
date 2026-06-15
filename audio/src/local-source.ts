@@ -14,6 +14,7 @@
  */
 import { createFsaHandleStore } from "@commons-systems/local-first/fsa-handle-store";
 import { createLocalFolderMediaSource } from "@commons-systems/mediautil/local-folder";
+import type { LocalDirectoryHandleLike } from "@commons-systems/mediautil/local-folder";
 import { logError } from "@commons-systems/errorutil/log";
 import { AUDIO_FORMATS } from "./types.js";
 import type { AudioFormat, LibraryItem } from "./types.js";
@@ -53,21 +54,18 @@ function mimeFromName(name: string): string {
   return MIME_TYPES[fmt];
 }
 
-function accept(name: string): boolean {
-  return formatFromName(name) !== undefined;
-}
-
 function titleFromName(name: string): string {
   const dot = name.lastIndexOf(".");
   return dot < 0 ? name : name.slice(0, dot);
 }
 
-function toItem(entry: { name: string; lastModified: number }): LibraryItem {
-  const fmt = formatFromName(entry.name);
-  if (!fmt) throw new Error(`accept() admitted a non-audio file: ${entry.name}`);
+/** Map a top-level file to a library record, or null to skip a non-audio file. */
+function toItem(file: File, name: string): LibraryItem | null {
+  const fmt = formatFromName(name);
+  if (!fmt) return null;
   return {
-    id: "local:" + entry.name,
-    title: titleFromName(entry.name),
+    id: "local:" + name,
+    title: titleFromName(name),
     artist: "Unknown artist",
     album: "Unknown album",
     trackNumber: null,
@@ -80,18 +78,16 @@ function toItem(entry: { name: string; lastModified: number }): LibraryItem {
     storagePath: "",
     groupId: null,
     memberEmails: [],
-    addedAt: new Date(entry.lastModified).toISOString(),
+    addedAt: new Date(file.lastModified).toISOString(),
     origin: "local",
-    localName: entry.name,
+    localName: name,
   };
 }
 
 function buildSource(directoryHandle: FileSystemDirectoryHandle) {
   return createLocalFolderMediaSource<LibraryItem>({
-    directoryHandle,
-    accept,
+    directory: directoryHandle as unknown as LocalDirectoryHandleLike,
     toItem,
-    fileName: (i) => i.localName!,
   });
 }
 
@@ -193,14 +189,17 @@ export async function listLocalTracks(): Promise<LibraryItem[]> {
 
 /**
  * Resolve a local track's bytes to a blob URL for playback. Throws if no folder
- * is connected; a `MediaItemMissingError` from a vanished file propagates so the
- * player can handle it.
+ * is connected; a vanished file surfaces as a thrown error from the shared source
+ * (a fresh source rescans the folder on a cache miss), which the player catches
+ * to skip the track.
  */
 export async function resolveLocalAudioSource(localName: string): Promise<string> {
   if (!currentHandle) {
     throw new Error("resolveLocalAudioSource called with no connected local folder");
   }
   const type = mimeFromName(localName);
-  const buf = await buildSource(currentHandle).resolveToBlob({ localName } as LibraryItem);
+  const buf = await buildSource(currentHandle).resolveToBlob({
+    id: "local:" + localName,
+  } as LibraryItem);
   return URL.createObjectURL(new Blob([buf], { type }));
 }

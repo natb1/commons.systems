@@ -54,6 +54,20 @@
 #   daemon-ownership design is tracked in #1197; this is the minimal correct
 #   stop-gap.
 #
+# Durable daemon ownership (#1197 — supersedes the #1196 stop-gap):
+#   Before launching, ensure_daemon_service (lib.sh) idempotently installs and
+#   activates the durable dispatch-claude-daemon.service, a long-lived
+#   systemd --user service (Type=simple, Restart=always, ExecStart=<claude>
+#   daemon run) that hosts the bg supervisor daemon in a stable, non-transient
+#   cgroup. With it running, the first `claude` call in this tick attaches to
+#   that daemon via its lock instead of spawning one in this transient unit's
+#   cgroup — so the fleet no longer lives in tick cgroups and KillMode is
+#   irrelevant to its survival. KillMode=process (above) therefore becomes the
+#   degraded-path FALLBACK (for hosts where systemd --user is unavailable and
+#   the durable service cannot be installed), not the load-bearing mechanism.
+#   Best-effort: a failure to install the service is non-fatal — the on-demand
+#   daemon then survives a finishing tick via KillMode=process.
+#
 # Unlike dispatch-schedule-reseed (which schedules an --on-calendar TIMER), this
 # script runs the unit IMMEDIATELY: a transient .service, no --on-calendar /
 # --timer-property. The transient unit is itself the detachment — systemd runs
@@ -140,6 +154,13 @@ fi
 # error if the tick ever fails. We still pass OnFailure= unconditionally below
 # so an abnormal tick exit is guaranteed a chain continuation (#1150).
 ensure_recover_unit "$MAIN_WORKTREE" || true
+
+# Install + activate the durable dispatch-claude-daemon.service (#1197) before
+# launching the transient tick, so the tick's first `claude` call attaches to a
+# daemon already running in a stable cgroup rather than spawning one in this
+# transient unit's cgroup. Best-effort: a failure here is non-fatal — the
+# on-demand daemon then falls back to surviving via KillMode=process (#1196).
+ensure_daemon_service || true
 
 SYSTEMD_RUN_CMD="${DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD:-systemd-run}"
 TICK_PATH="$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-tick"

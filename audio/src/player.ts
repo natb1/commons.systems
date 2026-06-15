@@ -1,7 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
-import { resolveAudioSource } from "./storage.js";
+import { removeFile, resolveAudioSource } from "./storage.js";
 import { resolveLocalAudioSource } from "./local-source.js";
 import type { AudioOrigin } from "./types.js";
 
@@ -37,6 +37,7 @@ export function initPlayer(
   const queue: PlayRequest[] = [];
   let currentIndex = -1;
   let currentObjectUrl: string | null = null;
+  let playGeneration = 0;
 
   function renderPlaylist(): void {
     if (queue.length === 0) {
@@ -71,6 +72,7 @@ export function initPlayer(
   function playTrack(index: number): void {
     const item = queue[index];
     if (!item) throw new Error(`playTrack: index ${index} out of range (queue length ${queue.length})`);
+    const generation = ++playGeneration;
     currentIndex = index;
     renderPlaylist();
     revokeCurrentObjectUrl();
@@ -80,6 +82,10 @@ export function initPlayer(
         : resolveAudioSource(item.storagePath!);
     resolve
       .then((url) => {
+        if (generation !== playGeneration) {
+          URL.revokeObjectURL(url);
+          return;
+        }
         currentObjectUrl = url;
         audioEl.src = url;
         audioEl.play().catch((err) => {
@@ -90,11 +96,13 @@ export function initPlayer(
       .catch((err) => {
         if (deferProgrammerError(err)) return;
         logError(err, { operation: "audio-source-resolve", id: item.id });
-        advanceOrStop(index);
+        if (generation !== playGeneration) return;
+        advanceOrStop(currentIndex);
       });
   }
 
   function stop(): void {
+    playGeneration++;
     currentIndex = -1;
     revokeCurrentObjectUrl();
     audioEl.pause();
@@ -108,7 +116,27 @@ export function initPlayer(
     advanceOrStop(currentIndex);
   }
 
+  function onError(): void {
+    if (currentIndex < 0) return;
+    const item = queue[currentIndex];
+    logError(audioEl.error ?? new Error("audio element error"), {
+      operation: "audio-element-error",
+      id: item.id,
+      code: audioEl.error?.code,
+    });
+    // Only cloud tracks live in the storage cache; a local file has no cache
+    // entry to evict (it streams from disk on each play).
+    if (item.storagePath) {
+      const storagePath = item.storagePath;
+      removeFile(storagePath).catch((err) =>
+        logError(err, { operation: "audio-cache-evict", storagePath }),
+      );
+    }
+    advanceOrStop(currentIndex);
+  }
+
   audioEl.addEventListener("ended", onEnded);
+  audioEl.addEventListener("error", onError);
   renderPlaylist();
 
   return {
@@ -144,6 +172,7 @@ export function initPlayer(
 
     destroy(): void {
       audioEl.removeEventListener("ended", onEnded);
+      audioEl.removeEventListener("error", onError);
       queue.length = 0;
       stop();
     },

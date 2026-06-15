@@ -23,7 +23,7 @@ vi.mock("../../src/balance.js", async (importOriginal) => {
   };
 });
 
-import { renderHome } from "../../src/pages/home";
+import { renderHome, renderTransactionRows } from "../../src/pages/home";
 import type { Transaction, BudgetPeriod } from "../../src/firestore";
 import { computeAllBudgetBalances } from "../../src/balance";
 
@@ -709,6 +709,75 @@ describe("renderHome", () => {
       }));
       expect(html).toContain('class="expand-row txn-row"');
       expect(html).not.toContain("normalized-group");
+    });
+
+    it("tolerates a normalized group whose primary is outside the current batch", () => {
+      const budgetIdToName = new Map<string, string>();
+      // Older scroll batch: only the non-primary member of the group is present;
+      // its primary fell into an adjacent 12-week batch.
+      const orphanBatch = [
+        txn({ id: "txn-b", description: "Store B", amount: 50, normalizedId: "norm-1", normalizedPrimary: false, timestamp: mockTimestamp("2025-01-04") }),
+      ];
+      const orphanHtml = renderTransactionRows(orphanBatch, "household", true, budgetIdToName);
+      // The orphan duplicate is suppressed — no group row, and it is not shown as a
+      // standalone transaction either.
+      expect(orphanHtml).not.toContain("normalized-group");
+      expect(orphanHtml).not.toContain("Store B");
+
+      // The adjacent batch that holds the primary still renders the group normally.
+      const primaryBatch = [
+        txn({ id: "txn-a", description: "Store A", amount: 50, normalizedId: "norm-1", normalizedPrimary: true, timestamp: mockTimestamp("2025-01-11") }),
+      ];
+      const primaryHtml = renderTransactionRows(primaryBatch, "household", true, budgetIdToName);
+      expect(primaryHtml).toContain("normalized-group");
+    });
+
+    it("suppresses every non-primary member via the !primary guard when two share a normalizedId in a primary-less orphan batch", () => {
+      // Neither member is the primary, so the pre-pass group has no primary and the
+      // !primary early-return drops both rows. This exercises the !primary suppression
+      // path for a multi-member orphan batch — not the seenGroups guard, which is
+      // covered separately below.
+      const budgetIdToName = new Map<string, string>();
+      const batch = [
+        txn({ id: "txn-b", description: "Store B", amount: 50, normalizedId: "norm-1", normalizedPrimary: false, timestamp: mockTimestamp("2025-01-04") }),
+        txn({ id: "txn-c", description: "Store C", amount: 50, normalizedId: "norm-1", normalizedPrimary: false, timestamp: mockTimestamp("2025-01-03") }),
+      ];
+      const html = renderTransactionRows(batch, "household", true, budgetIdToName);
+      expect(html).not.toContain("Store B");
+      expect(html).not.toContain("Store C");
+      expect(html).not.toContain("normalized-group");
+      // Positive pin: the whole batch collapses to empty output, so a broken
+      // implementation that emits unexpected non-empty HTML (an error row, a stray
+      // transaction) still fails even though it avoids the strings above.
+      expect(html.trim()).toBe("");
+    });
+
+    it("renders a normalized group exactly once when a second non-primary member shares its normalizedId (seenGroups de-dup)", () => {
+      // A primary member is followed by a second non-primary member of the same
+      // group, both inside one batch. The pre-pass group HAS a primary, so the
+      // !primary guard never fires — the only thing stopping the second member from
+      // calling renderNormalizedGroup a second time is the seenGroups guard. If
+      // seenGroups.add were removed or reordered after the !primary check, the second
+      // iteration would render a duplicate group row, so the count assertion below
+      // fails. This is the genuine regression guard for the seenGroups de-dup path.
+      const budgetIdToName = new Map<string, string>();
+      const batch = [
+        txn({ id: "txn-a", description: "Store A", amount: 50, normalizedId: "norm-1", normalizedPrimary: true, timestamp: mockTimestamp("2025-01-11") }),
+        txn({ id: "txn-b", description: "Store B", amount: 50, normalizedId: "norm-1", normalizedPrimary: false, timestamp: mockTimestamp("2025-01-04") }),
+      ];
+      const html = renderTransactionRows(batch, "household", true, budgetIdToName);
+      const groupRowCount = html.split("normalized-group").length - 1;
+      expect(groupRowCount).toBe(1);
+    });
+
+    it("renders the table (no data error) when a batch contains only a non-primary member", async () => {
+      const html = await renderHome(localOptions({
+        getTransactions: vi.fn().mockResolvedValue([
+          txn({ id: "txn-b", description: "Store B", amount: 50, normalizedId: "norm-1", normalizedPrimary: false, timestamp: mockTimestamp("2025-01-04") }),
+        ]),
+      }));
+      expect(html).toContain('id="transactions-table"');
+      expect(html).not.toContain("transactions-error");
     });
   });
 

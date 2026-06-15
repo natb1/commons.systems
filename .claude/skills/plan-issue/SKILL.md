@@ -24,9 +24,10 @@ fan out the built-in `Explore` and `Plan` subagents directly (no orchestrator
 skill, no nesting). The exploration and design subagents are direct children of
 this session.
 
-Run `gh` commands and the scripts that invoke `gh` (`dispatch-write-plan`,
-`dispatch-apply-planned`, `dispatch-mark-complete`) with
-`dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
+Run `gh` commands and the scripts that invoke `gh` (`dispatch-context-pack`,
+`dispatch-drift-scan`, `dispatch-read-plan`, `dispatch-write-plan`,
+`dispatch-apply-planned`, `dispatch-mark-complete`, `dispatch-plan-finalize`)
+with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 
 ## The running session has no plan mode
 
@@ -55,31 +56,138 @@ case "$BRANCH" in
 esac
 ```
 
-Then check whether the issue already carries `dispatch:planned` (use
-`dangerouslyDisableSandbox: true` — `gh` needs network):
+Then check whether a plan was already persisted, keying the skip on the **plan
+comment** — the durable record of the expensive planning work — not on the
+`dispatch:planned` label. Read the persisted plan, capturing its stdout (use
+`dangerouslyDisableSandbox: true` — `dispatch-read-plan` calls `gh`). The script
+exits non-zero with a clear diagnostic when no `<!-- dispatch:plan -->` comment
+exists; treat that non-zero exit as "no plan comment":
 
 ```bash
-gh issue view "$N" --json labels | jq -r '.labels[].name'
+EXISTING_PLAN=$(.claude/skills/dispatch-propagate/scripts/dispatch-read-plan "$N") \
+  && HAVE_PLAN=1 || HAVE_PLAN=0
 ```
 
-If `dispatch:planned` is already present, this is an interrupted prior run — the
-plan was already persisted and the label applied, which is this skill's terminal
-action. **Skip all steps and return**; re-entry is a true no-op. Otherwise run
-the steps in order.
+**Plan comment exists** (`HAVE_PLAN=1`) — a prior session already did the
+expensive planning (explore / design / persist), and that work is durable.
+**Skip Steps 1–6.** Re-finalize so the *current* session writes its own marker
+and the chain advances — pipe the already-read plan back through finalize so
+there is no second fetch (`dangerouslyDisableSandbox: true` — `dispatch-plan-finalize`
+calls `gh`):
+
+```bash
+printf '%s' "$EXISTING_PLAN" | \
+  .claude/skills/dispatch-propagate/scripts/dispatch-plan-finalize "$N"
+```
+
+Then **stop**. `dispatch-plan-finalize` runs three steps in order:
+`dispatch-write-plan` re-writes the identical comment (a harmless refresh, never
+a second comment), then `dispatch-mark-complete` writes **this** session's
+marker, then `dispatch-apply-planned` re-adds the label idempotently. With the
+marker now present, `dispatch-stop.sh` Branch B advances the chain to
+`implement`.
+
+**No plan comment** (`HAVE_PLAN=0`) — a genuine fresh run, or a crash before the
+plan was ever persisted. Run all the steps below in order.
+
+This mirrors the `/implement` pattern: skip the expensive work when its durable
+artifact already exists, but **always write the marker** for the running session
+(`/implement` skips its build when a PR already exists but still writes the
+marker, to cover a same-tick crash between PR-open and marker-write). The
+`dispatch:planned` label is **no longer** the idempotency signal — the persisted
+plan comment is the durable signal, and the marker is always (re)written for the
+running session. Recovery when a prior session crashed in the window routes
+through office-hours' plan-clarification path: it is office-hours-recoverable,
+**not** a fully autonomous self-heal, because the autonomous tick skips
+office-hours-labelled issues.
 
 ## Steps
 
-### 1. Trivial-task skip
+### 1. Pre-Planning relevance review — main thread
+
+This is the **opening step** of `/plan-issue`. Before planning a no-PR, unplanned
+target, run a creation-date-anchored drift analysis. It is the planning-time
+counterpart of the creation-time relevance check; the two are deliberately
+separate — the creation-time check is `$BASELINE_BRANCH`-anchored, this step is
+pre-planning and `createdAt`-anchored.
+
+Run the opening live-context call (`dangerouslyDisableSandbox: true` — it calls
+`gh`):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --issue --relations --pr
+```
+
+This is one call to the pack — plan-issue's preamble becomes this pack call plus
+the `dispatch-drift-scan` call below, so "single context-pack call" means one call
+*to the pack*, not one call total.
+
+Read the `=== PR ===` section for the belt-and-suspenders no-PR check — the router
+already confirmed no PR before emitting `INVOKE /plan-issue`. If the section prints
+`PR #<num>`, this is an already-in-flight target that should not be re-planned:
+**stop without a marker**. The Stop hook applies `dispatch:office-hours` and parks
+it, since the router should not have routed a PR-bearing issue to the plan phase. If
+the section prints `PR: none`, proceed. **CRITICAL**: detect the no-PR case by the
+`PR: none` line, NOT by exit code — the pack exits 0 in both cases.
+
+The `=== ISSUE #N ===` and `=== RELATIONS #N ===` sections supply the live issue
+body (title/state/body/comments) and relations (blockers / sub-issues / parent /
+siblings as titles + state + URL only, never full bodies) — the convention-drift and
+merged-PR-overlap judgments below read from these sections.
+
+If the pack reported `PR: none`, gather the deterministic drift evidence in one call
+(`dangerouslyDisableSandbox: true` — it calls `gh`):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-drift-scan "$N"
+```
+
+`dispatch-drift-scan` emits, in one invocation, the three mechanical drift
+inputs anchored on the issue's `createdAt`: commits to the paths the issue body
+names since creation, PRs merged in the window, and the validity of the issue's
+named references (paths existence-checked, names grepped — anything renamed,
+moved, or removed is flagged `[ABSENT]`/`[NOT FOUND]`). It mines those
+references from the single-backtick spans in the issue body; read its header for
+what the heuristic does and does not cover. When the merged-PR query hits its
+100-result limit the script prints a `WINDOW-TOO-WIDE` marker recommending
+`/file-issue` instead of a partial scan — treat that as the too-wide-window signal in
+the verdict below.
+
+Two judgments stay with this session, after reading the script's evidence:
+
+1. **Convention drift** — re-read `CLAUDE.md` and any `.claude/rules/*.md` whose
+   domain the issue touches. Flag approaches the issue assumes that no longer
+   match current conventions (e.g. a deprecated pattern, a renamed package, a
+   changed config shape). The script does not mine conventions; this read is
+   yours.
+2. **Merged-PR overlap** — for any merged PR the script lists whose title
+   plausibly relates to the issue's domain, optionally fetch its changed files
+   to judge whether the overlap is incidental or substantive.
+
+#### Three-way verdict
+
+- **`proceed`** — drift absent or cosmetic; continue to the trivial-task skip and
+  the exploration/design steps below (Step 2 onward).
+- **`adjust`** — issue still wanted but references, conventions, or scope have
+  shifted; invoke `/new-requirement` with the drift findings as the revised
+  understanding, then continue planning (the later steps below).
+- **`stop`** — codebase has moved past the need; report what changed and
+  recommend closing the issue or re-running `/file-issue`, then **stop with no
+  marker**. The Stop hook applies `dispatch:office-hours` to the issue because no
+  completion marker was written. Do **not** apply `dispatch:planned` and do
+  **not** persist a plan.
+
+### 2. Trivial-task skip
 
 If the issue is a typo fix, a single-line change, or a simple rename, **skip the
-exploration and design subagents** (Steps 2–3) and plan it directly: write the
-unit breakdown yourself, then jump to Step 5 (the gate is almost always
-unnecessary for a trivial task) and Step 6 (persist + complete). The plan-comment
+exploration and design subagents** (Steps 3–4) and plan it directly: write the
+unit breakdown yourself, then jump to Step 6 (the gate is almost always
+unnecessary for a trivial task) and Step 7 (persist + complete). The plan-comment
 output schema still applies — a one-unit plan with the preface is fine.
 
-Otherwise continue to Step 2.
+Otherwise continue to Step 3.
 
-### 2. Explore — built-in `Explore` subagent, direct fan-out
+### 3. Explore — built-in `Explore` subagent, direct fan-out
 
 Launch up to **3** built-in `Explore` agents **in parallel** (a single message
 with multiple Agent tool calls, `subagent_type: Explore`), using the **minimum
@@ -96,10 +204,10 @@ components, a third investigates testing patterns). Follow the appendix's
 *Exploration* block.
 
 Collect from the agents: the relevant filenames, the code-path traces, and the
-reuse candidates with their file paths. This is the exploration context Step 3
+reuse candidates with their file paths. This is the exploration context Step 4
 hands to the design agents.
 
-### 3. Design — built-in `Plan` subagent, direct fan-out
+### 4. Design — built-in `Plan` subagent, direct fan-out
 
 Launch **1–3** built-in `Plan` agents (`subagent_type: Plan`). Use **1** for most
 issues; use multiple only for large or architectural work, each with a **distinct
@@ -111,7 +219,7 @@ warranted).
 
 In each `Plan` agent's prompt, provide:
 
-1. The **Step-2 exploration context** — the filenames and code-path traces the
+1. The **Step-3 exploration context** — the filenames and code-path traces the
    `Explore` agents surfaced. The `Plan` agents skip `CLAUDE.md`/git too, so this
    context must be inline.
 2. The **issue scope and acceptance criteria**.
@@ -131,17 +239,17 @@ In each `Plan` agent's prompt, provide:
    the shape this skill persists.
 
 When you launch multiple `Plan` agents, **synthesize** their proposals into a
-single recommended approach in Step 4 — the persisted plan carries the
+single recommended approach in Step 5 — the persisted plan carries the
 recommended approach only, not all alternatives.
 
-### 4. Self-review — main thread
+### 5. Self-review — main thread
 
 Read the **critical files** the `Explore`/`Plan` subagents flagged before
 finalizing, to deepen your own understanding and confirm the plan is executable
 and aligned with the issue's acceptance criteria (the appendix's *Review* block).
 Resolve any disagreement between multiple `Plan` proposals here.
 
-### 5. Clarification / deviation gate — main thread
+### 6. Clarification / deviation gate — main thread
 
 When EITHER:
 
@@ -166,40 +274,45 @@ it up. The resumed session (`/office-hours`) re-runs `/plan-issue` once the user
 has resolved the ambiguity.
 
 Note: do **not** call `AskUserQuestion` as the escalation mechanism. The
-`dispatch-input-block.sh` hook that would intercept it only fires for
-`dispatch-*`-named background sessions; worker sessions (named after their
-worktree basename) are excluded and the call would block the session indefinitely.
+`dispatch-input-block.sh` hook *would* intercept it — this skill runs in an
+`<N>-slug` worker the hook fires for — and park the issue with
+`dispatch:office-hours`, but only with a generic "blocked on user input" reason.
+Prefer `dispatch-mark-deviation` (the mechanism above), which carries the
+specific clarification question into the office-hours why-comment so the user
+knows exactly what decision is needed.
 
-Otherwise proceed autonomously to Step 6. **Never call `ExitPlanMode`** — that is
+Otherwise proceed autonomously to Step 7. **Never call `ExitPlanMode`** — that is
 the user-approval gate this design removes. This skill's terminus is either
-auto-complete (Step 6) or marker-absent stop → office-hours.
+auto-complete (Step 7) or marker-absent stop → office-hours.
 
 > **Important:** Escalate ONLY on genuine ambiguity or a major scope deviation —
 > not as a routine end-of-planning checkpoint. An unambiguous issue is planned
-> with no user interaction. The relevance / drift re-evaluation is owned by
-> `dispatch-route` and the worker's Step 2; do **not** repeat it here.
+> with no user interaction. The relevance / drift re-evaluation is **already
+> performed in Step 1 of this skill**; do **not** repeat it in this gate.
 
-### 6. Persist + complete
+### 7. Persist + complete
 
 Assemble the final plan markdown (the plan-comment output schema below) and write
-it to `tmp/plan-<N>.md`, then run, in order (all with
-`dangerouslyDisableSandbox: true` — each invokes `gh`):
+it to `tmp/plan-<N>.md` first, then run the single ordered finalize call (with
+`dangerouslyDisableSandbox: true` — it invokes `gh`):
 
 ```bash
-# 1. Persist the plan to the issue's find-or-update <!-- dispatch:plan --> comment.
-.claude/skills/dispatch-propagate/scripts/dispatch-write-plan "$N" < tmp/plan-<N>.md
-
-# 2. Apply the dispatch:planned phase-completion label (create-on-first-use).
-.claude/skills/dispatch-propagate/scripts/dispatch-apply-planned "$N"
-
-# 3. Write the phase-completed marker — no --pr (the plan phase has no PR).
-.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete --phase plan
+.claude/skills/dispatch-propagate/scripts/dispatch-plan-finalize "$N" < tmp/plan-<N>.md
 ```
 
-`dispatch-write-plan` is find-or-update — re-running replaces the plan comment,
-it never stacks a second one. `dispatch-mark-complete --phase plan` takes **no
-`--pr`** (the plan phase completes on a no-PR issue). `CLAUDE_JOB_DIR` unset = an
-interactive run; the marker script no-ops with a clear diagnostic.
+`dispatch-plan-finalize` runs three steps in a fixed order: it persists the plan
+via a find-or-update `<!-- dispatch:plan -->` comment (never stacks a second),
+then writes the phase-completed marker (no `--pr` — the plan phase has no PR),
+then applies the `dispatch:planned` label **last**. The whole call is
+find-or-update / idempotent, so it is safe to re-run.
+
+The marker-before-label ordering is load-bearing: the durable label's presence
+guarantees the per-session marker was written in the same session. A crash in the
+window between the marker and the label leaves the label **absent**, so
+`dispatch-phase` returns `plan` (not `implement`) and the issue is
+office-hours-recoverable via the plan-clarification residue — instead of
+dead-ending as `implement`. With `CLAUDE_JOB_DIR` unset (an interactive run) the
+marker write is a clear-diagnostic no-op.
 
 Then **stop**. The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads the marker,
 re-derives the phase (now `implement`, since `dispatch:planned` is present),
@@ -283,13 +396,13 @@ assemble the plan.
 ## Appendix: adopted plan-mode instructions (verbatim)
 
 This session does **not** have plan mode active, so it cannot receive these as
-injected tool instructions. They are reproduced verbatim and govern Steps 2–6,
+injected tool instructions. They are reproduced verbatim and govern Steps 3–7,
 with two substitutions:
 
 - (i) "the user's request" / "the user provided specific file paths" → the
   **issue scope / acceptance criteria** (there is no live user supplying paths).
 - (ii) "Use `AskUserQuestion` to clarify any remaining questions" is the
-  **escalation trigger** (Step 5: ambiguity or major scope deviation →
+  **escalation trigger** (Step 6: ambiguity or major scope deviation →
   office-hours), **not** a routine default.
 
 ### Exploration (built-in `Explore`)

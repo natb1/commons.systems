@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { parsePath, createHistoryRouter, type Route, type Router } from "../src/index";
 
+const escapeHtml = (s: string): string =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 describe("parsePath", () => {
   it("returns pathname and empty params with no query string", () => {
     const result = parsePath();
@@ -174,7 +177,7 @@ describe("createHistoryRouter", () => {
   it("matches RegExp path", async () => {
     const regexpRoutes: [Route, ...Route[]] = [
       { path: "/", render: () => "<h2>Home</h2>" },
-      { path: /^\/post\//, render: (path) => `<h2>Post: ${path}</h2>` },
+      { path: /^\/post\//, render: (path) => `<h2>Post: ${escapeHtml(path)}</h2>` },
     ];
     history.pushState({}, "", "/post/hello-world");
     router = createHistoryRouter(outlet, regexpRoutes);
@@ -260,7 +263,7 @@ describe("createHistoryRouter", () => {
 
   it("passes path to render function", async () => {
     const pathRoutes: [Route, ...Route[]] = [
-      { path: /^\//, render: (path) => `<h2>Path: ${path}</h2>` },
+      { path: /^\//, render: (path) => `<h2>Path: ${escapeHtml(path)}</h2>` },
     ];
     history.pushState({}, "", "/some/path");
     router = createHistoryRouter(outlet, pathRoutes);
@@ -479,5 +482,202 @@ describe("createHistoryRouter", () => {
     window.dispatchEvent(new PopStateEvent("popstate"));
     await new Promise((r) => setTimeout(r, 10));
     expect(outlet.innerHTML).toBe("<p>Fatal error</p>");
+  });
+
+  it("does not intercept anchor with download attribute", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/about");
+    anchor.setAttribute("download", "");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("does not intercept anchor with target=_self", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/about");
+    anchor.setAttribute("target", "_self");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("does not intercept protocol-relative href and does not throw", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "//external.com/path");
+    document.body.appendChild(anchor);
+
+    try {
+      expect(() => anchor.click()).not.toThrow();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("does not intercept backslash-prefixed href that resolves cross-origin", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    // "/\evil.com/about" — passes startsWith("/") && !startsWith("//")
+    // string guards but the WHATWG URL parser normalizes the backslash to a
+    // slash, resolving cross-origin to //evil.com/about.
+    anchor.setAttribute("href", "/" + "\\" + "evil.com/about");
+    document.body.appendChild(anchor);
+
+    try {
+      expect(() => anchor.click()).not.toThrow();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("does not intercept unknown same-origin path with no matching route", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/feed.xml");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("intercepts same-origin anchor to a real route (positive control)", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/about");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      expect(pushStateSpy).toHaveBeenCalledWith({}, "", "/about");
+      await vi.waitFor(() => {
+        expect(outlet.innerHTML).toBe("<h2>About</h2>");
+      });
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("matches g-flagged RegExp route correctly under the onClick+navigate double call", async () => {
+    const gRoutes: [Route, ...Route[]] = [
+      { path: "/", render: () => "<h2>Home</h2>" },
+      { path: /^\/post\//g, render: (path) => `<h2>Post: ${escapeHtml(path)}</h2>` },
+    ];
+    router = createHistoryRouter(outlet, gRoutes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/post/a");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await vi.waitFor(() => {
+        expect(outlet.innerHTML).toBe("<h2>Post: /post/a</h2>");
+      });
+      expect(location.pathname).toBe("/post/a");
+    } finally {
+      document.body.removeChild(anchor);
+    }
+  });
+
+  it("matches y-flagged RegExp route correctly under the onClick+navigate double call", async () => {
+    const yRoutes: [Route, ...Route[]] = [
+      { path: "/", render: () => "<h2>Home</h2>" },
+      { path: /^\/post\//y, render: (path) => `<h2>Post: ${escapeHtml(path)}</h2>` },
+    ];
+    router = createHistoryRouter(outlet, yRoutes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/post/a");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await vi.waitFor(() => {
+        expect(outlet.innerHTML).toBe("<h2>Post: /post/a</h2>");
+      });
+      expect(location.pathname).toBe("/post/a");
+    } finally {
+      document.body.removeChild(anchor);
+    }
+  });
+
+  it("escapes HTML metacharacters in the interpolated path", () => {
+    const route: Route = {
+      path: /^\/post\//,
+      render: (path) => `<h2>Post: ${escapeHtml(path)}</h2>`,
+    };
+    const html = route.render("/post/<img src=x>&title=y");
+    expect(html).toBe("<h2>Post: /post/&lt;img src=x&gt;&amp;title=y</h2>");
   });
 });

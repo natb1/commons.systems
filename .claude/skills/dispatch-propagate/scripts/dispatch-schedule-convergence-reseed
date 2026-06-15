@@ -1,0 +1,252 @@
+#!/usr/bin/env bash
+# dispatch-schedule-convergence-reseed — arm a short-delay convergence reseed
+# when an autonomous dispatch tick ends below the worker target.
+#
+# The autonomous fleet refills workers only at tick boundaries: a tick computes
+# a spawn budget GAP = TARGET_N − LIVE_COUNT once, fills up to GAP slots, then
+# waits for the next worker-completion event to tick again. effective_live
+# (busy workers + reservations) is never actively driven back UP to TARGET_N, so
+# two dynamics can leave the fleet below target with nothing armed to recover:
+#
+#   1. Partial fill — the selector returns fewer ready targets than GAP, so the
+#      tick spawns fewer than GAP workers and ends below target.
+#   2. Drain during a tick — workers complete mid-tick, their Stop-hook ticks
+#      collide / dedup, and when the in-flight tick finishes below target there
+#      is no pending tick to refill.
+#
+# This script is the convergence safety net: called at the END of an autonomous
+# tick that spawned workers but ended below target, it re-counts effective-live
+# workers and, if the fleet is still below target and not gated, arms a
+# short-delay transient systemd.user timer that re-runs the headless NO-ARG
+# `dispatch-tick` (re-evaluate the whole queue). The fleet thus converges back
+# to TARGET_N event-driven, without a periodic heartbeat.
+#
+# It is the convergence analog of dispatch-schedule-target-reseed (single-target,
+# CI-keyed) and dispatch-schedule-reseed (pace/cap-reset), but NO-ARG (whole-queue
+# re-evaluation) and on a short FIXED delay.
+#
+# Behavior, in order:
+#   1. Source lib.sh + lib-claude-agents.sh + lib-reservation-ledger.sh.
+#   2. TARGET_N = dispatch-target-workers (default count mode).
+#   3. Recount effective-live workers:
+#        BUSY = claude_agents_count_busy_workers (daemon UNKNOWN → 0, fail toward
+#               arming — mirrors dispatch-tick-recover's no-continuation posture).
+#        RESV = reservation_count.
+#        LIVE = BUSY + RESV.
+#   4. Suppression gates (in order):
+#        LIVE >= TARGET_N → `converged`, exit 0. This also covers the pace-gate-
+#          closed case for free: a pace pause makes dispatch-target-workers return
+#          0, so LIVE >= 0 always holds → no-op. Checking this BEFORE --exhausted
+#          means a TARGET=0 pace pause never even queries exhaustion.
+#        --exhausted == exhausted → `exhausted`, exit 0 (genuine token exhaustion;
+#          a reseed would spawn nothing).
+#   5. Otherwise arm the timer at FIRE = NOW + DELAY. Unit dispatch-converge-<FIRE>,
+#      ExecStart the NO-ARG dispatch-tick in the main worktree. The @<FIRE> epoch
+#      suffix gives idempotency: a same-second re-arm collides on the unit name and
+#      systemd refuses to recreate — treated as a no-op (exit 0).
+#
+# Stdout protocol (exactly one line):
+#   scheduled <unit> at <FIRE>   timer was armed.
+#   converged                    at/above target (incl. pace-gate-closed) no-op.
+#   exhausted                    token-exhaustion no-op.
+#
+# Exit codes:
+#   0  on every action / no-op path (arm, converged, exhausted, idempotent
+#      already-exists collision).
+#   2  on a bad env-integer override.
+#   non-zero — `systemd-run` failed for a reason other than the already-exists
+#              collision; the exit code is passed through.
+#
+# Environment overrides for testability:
+#
+#   DISPATCH_CONVERGE_RESEED_NOW
+#     Override the current epoch seconds. Default: date +%s.
+#
+#   DISPATCH_CONVERGE_RESEED_DELAY
+#     Override the reseed delay in seconds. Default: 120.
+#
+#   DISPATCH_CONVERGE_RESEED_SYSTEMD_RUN_CMD
+#     Override the `systemd-run` binary. Default: `systemd-run`.
+#
+#   DISPATCH_CONVERGE_RESEED_MAIN_WORKTREE
+#     Override the main worktree path. When set, the script does NOT require a
+#     git repo. Default: <project-root>/worktrees/main, where project-root is
+#     the parent of git --git-common-dir. Mirrors dispatch-schedule-reseed.
+#
+#   DISPATCH_CONVERGE_RESEED_TARGET_WORKERS_CMD
+#     Override the dispatch-target-workers binary (consulted for both the default
+#     target and the --exhausted query). Default: $SCRIPT_DIR/dispatch-target-workers.
+#
+#   CLAUDE_AGENTS_CMD
+#     Inherited from lib-claude-agents.sh: replaces the `claude` invocation in
+#     claude_agents_count_busy_workers. Default: `claude`.
+#
+#   DISPATCH_RESERVATION_DIR
+#     Inherited from lib-reservation-ledger.sh: override the ledger directory.
+#
+# Sandbox: `systemd-run --user` talks to the user's systemd over D-Bus, and the
+# recount reads `claude agents --json` over a Unix socket; this script is not
+# sandbox-safe and callers must invoke it with `dangerouslyDisableSandbox: true`.
+# See `.claude/rules/sandbox.md`.
+#
+# NOT set -e: exits are handled explicitly (matching the sibling reseed scripts).
+set -uo pipefail
+
+# ---- Step 0: defaults & config ----------------------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
+# shellcheck source=lib-claude-agents.sh
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+# shellcheck source=lib-reservation-ledger.sh
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+
+TARGET_WORKERS_CMD="${DISPATCH_CONVERGE_RESEED_TARGET_WORKERS_CMD:-$SCRIPT_DIR/dispatch-target-workers}"
+SYSTEMD_RUN_CMD="${DISPATCH_CONVERGE_RESEED_SYSTEMD_RUN_CMD:-systemd-run}"
+
+# ---- Step 1: target -----------------------------------------------------------
+#
+# dispatch-target-workers always emits a non-negative integer in count mode
+# (falling back to 1 on missing telemetry). A pace pause returns 0 — handled by
+# the LIVE >= TARGET_N gate below.
+
+TARGET_N=$("$TARGET_WORKERS_CMD") || TARGET_N=""
+# TARGET_N feeds `(( LIVE >= TARGET_N ))` — bash arithmetic context evaluates
+# array-index command substitution, so it must be a literal integer. The
+# budgeter emits one; a non-integer is a budgeter malfunction — fail closed.
+if [[ ! "$TARGET_N" =~ ^[0-9]+$ ]]; then
+  echo "error: dispatch-schedule-convergence-reseed: dispatch-target-workers returned non-integer target '$TARGET_N'; aborting" >&2
+  exit 2
+fi
+
+# ---- Step 2: recount effective-live workers ---------------------------------
+#
+# BUSY: claude_agents_count_busy_workers returns 0 with a numeric count on
+# success; non-zero on UNKNOWN (daemon unreachable). On UNKNOWN treat as 0 —
+# fail TOWARD arming, mirroring dispatch-tick-recover's no-continuation posture
+# (a redundant reseed is absorbed by dispatch's dedup + the concurrency gate).
+BUSY=$(claude_agents_count_busy_workers) || BUSY=0
+if [[ ! "$BUSY" =~ ^[0-9]+$ ]]; then
+  # A success-with-garbage is not expected (the helper validates its own jq
+  # output), but a non-integer must never reach `(( ))`. Treat as 0 (fail toward
+  # arming, consistent with the UNKNOWN posture above).
+  BUSY=0
+fi
+
+RESV=$(reservation_count)
+if [[ ! "$RESV" =~ ^[0-9]+$ ]]; then
+  echo "error: dispatch-schedule-convergence-reseed: reservation_count returned non-integer '$RESV'; aborting" >&2
+  exit 2
+fi
+
+LIVE=$(( BUSY + RESV ))
+
+# ---- Step 3: suppression gates ----------------------------------------------
+#
+# Order is load-bearing: the at/above-target check runs BEFORE the exhausted
+# query, so a TARGET=0 pace pause (LIVE >= 0 always) reports `converged` without
+# ever consulting --exhausted.
+
+if (( LIVE >= TARGET_N )); then
+  echo "converged"
+  exit 0
+fi
+
+# Genuine token exhaustion — a reseed would spawn nothing. Fail OPEN: a failing
+# --exhausted query must not suppress arming (mirrors dispatch-select-tick:224).
+EXHAUSTED=$("$TARGET_WORKERS_CMD" --exhausted 2>/dev/null) || EXHAUSTED="ok"
+if [[ "$EXHAUSTED" == "exhausted" ]]; then
+  echo "exhausted"
+  exit 0
+fi
+
+# ---- Step 4: compute the fire time ------------------------------------------
+#
+# NOW and DELAY both reach `(( NOW + DELAY ))`; the defaults (date +%s, 120) are
+# always safe — the env-override path is the surface that requires validation.
+
+NOW="${DISPATCH_CONVERGE_RESEED_NOW:-$(date +%s)}"
+if [[ ! "$NOW" =~ ^[0-9]+$ ]]; then
+  echo "error: dispatch-schedule-convergence-reseed: NOW must be an integer epoch, got '$NOW'; aborting" >&2
+  exit 2
+fi
+
+DELAY="${DISPATCH_CONVERGE_RESEED_DELAY:-120}"
+if [[ ! "$DELAY" =~ ^[0-9]+$ ]]; then
+  echo "error: dispatch-schedule-convergence-reseed: DELAY must be an integer, got '$DELAY'; aborting" >&2
+  exit 2
+fi
+
+FIRE=$(( NOW + DELAY ))
+
+# ---- Step 5: resolve the main worktree --------------------------------------
+#
+# Same idiom as dispatch-schedule-reseed. The spawned reseed runs from the main
+# worktree.
+
+if [[ -n "${DISPATCH_CONVERGE_RESEED_MAIN_WORKTREE:-}" ]]; then
+  MAIN_WORKTREE="$DISPATCH_CONVERGE_RESEED_MAIN_WORKTREE"
+else
+  PROJECT_ROOT=$(resolve_project_root) \
+    || { echo "dispatch-schedule-convergence-reseed: not in a git repo and DISPATCH_CONVERGE_RESEED_MAIN_WORKTREE is unset" >&2; exit 2; }
+  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+fi
+
+# Install the OnFailure recovery unit + durable daemon service before scheduling
+# the transient reseed timer. Both best-effort (warn + return, never exit) —
+# copied verbatim from dispatch-schedule-reseed's Step 5.
+ensure_recover_unit "$MAIN_WORKTREE" || true
+ensure_daemon_service || true
+
+# ---- Step 6: schedule the transient timer -----------------------------------
+#
+# The unit name embeds the epoch fire time — a repeated call with the same FIRE
+# collides, and systemd refuses to recreate the unit. That gives idempotency
+# without coordinating across callers.
+#
+# Carries the SAME unit properties as the sibling reseed launchers: --collect (GC
+# the unit after it finishes OR fails), OnFailure=dispatch-tick-recover.service
+# (guarantee a chain continuation if the reseed tick fails), KillMode=process
+# (confine the kill to dispatch-tick so detached bg hosts survive),
+# Persistent=true (cover a WSL-down window crossing fire time), and
+# --setenv=PATH="$PATH" (propagate the nix-store PATH into the transient unit).
+# ExecStart is the headless dispatch-tick with NO argument — re-evaluate the
+# whole queue, not a single target.
+
+UNIT_NAME="dispatch-converge-${FIRE}"
+
+RUN_STDERR=$(mktemp)
+trap 'rm -f "$RUN_STDERR"' EXIT
+# Capture the exit code directly — after `if cmd; then ... fi`, `$?` is the exit
+# status of the `if` construct, NOT the exit code of `cmd`. Run outside an `if`
+# and capture `$?` immediately so the pass-through-on-failure contract holds.
+"$SYSTEMD_RUN_CMD" --user \
+     --unit="$UNIT_NAME" \
+     --on-calendar="@$FIRE" \
+     --collect \
+     --property=OnFailure=dispatch-tick-recover.service \
+     --property=KillMode=process \
+     --working-directory="$MAIN_WORKTREE" \
+     --timer-property=Persistent=true \
+     --setenv=PATH="$PATH" \
+     "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-tick" \
+     2>"$RUN_STDERR"
+RC=$?
+if (( RC == 0 )); then
+  echo "scheduled $UNIT_NAME at $FIRE"
+  exit 0
+fi
+
+err=$(cat "$RUN_STDERR")
+# systemd's already-exists message varies slightly across versions. Match on the
+# substring rather than the full phrase.
+if [[ "$err" == *"already exists"* ]]; then
+  echo "dispatch-schedule-convergence-reseed: $UNIT_NAME already scheduled; no-op" >&2
+  echo "scheduled $UNIT_NAME at $FIRE"
+  exit 0
+fi
+
+# Some other failure — surface stderr and pass the exit code through.
+echo "$err" >&2
+exit "$RC"

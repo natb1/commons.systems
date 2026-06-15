@@ -18,6 +18,9 @@ const cache = createLruBlobCache({
   },
 });
 
+/** The underlying LRU blob cache, exposed for `MediaSource` derived-cache use. */
+export const blobCache = cache;
+
 export const closeDb = cache.closeDb;
 export const clearCache = cache.clearCache;
 

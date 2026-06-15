@@ -20,6 +20,8 @@
     "@commons-systems/firebaseutil": "*",
     "@commons-systems/firestoreutil": "*",
     "@commons-systems/htmlutil": "*",
+    "@commons-systems/local-first": "*",
+    "@commons-systems/mediautil": "*",
     "@commons-systems/router": "*",
     "@commons-systems/style": "*",
     "epubjs": "^0.3.93",

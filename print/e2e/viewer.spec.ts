@@ -483,15 +483,18 @@ test.describe("viewer", () => {
     // Block all Firebase Storage requests
     await page.route("**/*.googleapis.com/**", (route) => route.abort());
 
-    // Second visit: should load from cache
+    // Second visit: should load from cache. The page-2 position persisted on
+    // teardown (issue #1283 — the pending debounced save is now flushed), so the
+    // viewer restores directly to page 2, served from cache with Firebase Storage
+    // blocked.
     await page.goto("/view/test-image-archive");
-    await expect(page.locator(".viewer-position")).toContainText("1 / 5", {
+    await expect(page.locator(".viewer-position")).toContainText("2 / 5", {
       timeout: 15000,
     });
 
-    // Navigate to page 2 to verify lazy-loaded pages also cached
-    await page.locator(".viewer-next").click();
-    await expect(page.locator(".viewer-position")).toContainText("2 / 5");
+    // Navigate back to page 1 to verify it is also served from cache.
+    await page.locator(".viewer-prev").click();
+    await expect(page.locator(".viewer-position")).toContainText("1 / 5");
   });
 
   test("spread toggle visible for PDF and image-archive, hidden for EPUB @testonly", async ({
@@ -630,14 +633,31 @@ test.describe("viewer", () => {
     await page.goto("/view/plato-republic");
     await expect(page.locator(".textLayer span").first()).toBeAttached({ timeout: 15000 });
 
-    // Capture text content on page 1
+    // Capture text content on page 1 — poll until the text layer populates
+    // (PDF.js fills span text asynchronously after node attachment).
+    await expect
+      .poll(
+        async () => ((await page.locator(".textLayer").textContent()) ?? "").trim().length,
+        { timeout: 15000 },
+      )
+      .toBeGreaterThan(0);
     const page1Text = await page.locator(".textLayer").textContent();
 
     // Navigate to page 2
     await page.locator(".viewer-next").click();
     await expect(page.locator(".viewer-position")).toContainText("2 / 3");
 
-    // Text layer content should differ on page 2
+    // Text layer content should differ on page 2 — poll until the page-2 text
+    // layer has populated with content distinct from page 1.
+    await expect
+      .poll(
+        async () => {
+          const t = ((await page.locator(".textLayer").textContent()) ?? "").trim();
+          return t.length > 0 && t !== (page1Text ?? "").trim();
+        },
+        { timeout: 15000 },
+      )
+      .toBe(true);
     const page2Text = await page.locator(".textLayer").textContent();
     expect(page2Text).not.toBe(page1Text);
   });

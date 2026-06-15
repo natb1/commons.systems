@@ -111,16 +111,39 @@ describe("link renderer", () => {
     const html = await marked.parse("[email](mailto:user@example.com)");
     expect(html).not.toContain("external-link-icon");
     expect(html).not.toContain("&#x2197;");
+    expect(html).not.toContain('target="_blank"');
+    expect(html).not.toContain('rel="noopener noreferrer"');
   });
 
-  it("preserves target=_blank and rel attributes on all links", async () => {
+  it("applies target=_blank and rel only to external links", async () => {
     const marked = createMarked();
     const externalHtml = await marked.parse("[ext](https://github.com/x)");
     const internalHtml = await marked.parse("[int](/post/x)");
+    const apexHtml = await marked.parse("[home](https://commons.systems/x)");
+    const subdomainHtml = await marked.parse("[budget](https://budget.commons.systems)");
     expect(externalHtml).toContain('target="_blank"');
     expect(externalHtml).toContain('rel="noopener noreferrer"');
-    expect(internalHtml).toContain('target="_blank"');
-    expect(internalHtml).toContain('rel="noopener noreferrer"');
+    expect(internalHtml).not.toContain('target="_blank"');
+    expect(internalHtml).not.toContain('rel="noopener noreferrer"');
+    expect(internalHtml).toContain('<a href="/post/x"');
+    expect(apexHtml).not.toContain('target="_blank"');
+    expect(apexHtml).not.toContain('rel="noopener noreferrer"');
+    expect(subdomainHtml).not.toContain('target="_blank"');
+    expect(subdomainHtml).not.toContain('rel="noopener noreferrer"');
+  });
+
+  it("strips raw HTML from link labels (XSS in SSR path)", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[<img src=x onerror=alert(1)>](https://e.com)");
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("onerror");
+    expect(html).toContain('<a href="https://e.com"');
+  });
+
+  it("renders inline formatting inside link labels", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[*emphasis*](https://e.com)");
+    expect(html).toContain("<em>emphasis</em>");
   });
 });
 

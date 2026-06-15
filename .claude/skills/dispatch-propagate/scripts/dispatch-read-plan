@@ -8,6 +8,11 @@
 # implement phase reads the plan from here in a fresh context. Exits non-zero
 # with a clear diagnostic when no plan comment exists.
 #
+# The comment must be authored by the trusted dispatch identity — the account
+# the running gh token authenticates as, overridable via DISPATCH_PLAN_AUTHOR.
+# A marker comment authored by any other account is ignored, closing the
+# forged-plan injection vector on public repos.
+#
 # The repo is resolved explicitly (GH_REPO from the common dir's remote.origin.url)
 # so gh addresses the right repository from any caller cwd. A missing arg or a
 # non-numeric issue-num is a clear error, not a fallback (exit 2).
@@ -38,11 +43,19 @@ repo="${url%.git}"; repo="${repo#*github.com[:/]}"
 export GH_REPO="$repo"
 
 MARKER='<!-- dispatch:plan -->'
+PLAN_AUTHOR="${DISPATCH_PLAN_AUTHOR:-$(gh api user --jq '.login')}"
+if [[ -z "$PLAN_AUTHOR" ]]; then
+  echo "dispatch-read-plan: could not resolve expected plan-comment author (gh api user)" >&2
+  exit 1
+fi
 
 # Fetch the comment id first, then fetch that single comment's body. Do NOT pipe
 # --jq .body through head — a multi-line body would truncate to its first line.
+# Filter to comments authored by the trusted dispatch identity to prevent a
+# forged-plan injection from an untrusted external user on a public repo.
 CID=$(gh api --paginate "repos/{owner}/{repo}/issues/$N/comments" \
-  --jq '.[] | select(.body | contains("'"$MARKER"'")) | .id' | head -n1)
+  | jq -r --arg m "$MARKER" --arg author "$PLAN_AUTHOR" \
+      'first(.[] | select((.body | contains($m)) and (.user.login == $author)) | .id)')
 if [[ -z "$CID" ]]; then
   echo "dispatch-read-plan: no <!-- dispatch:plan --> comment found on issue #$N" >&2
   exit 1

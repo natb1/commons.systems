@@ -241,7 +241,12 @@ export function renderTransactionRows(
       const members = normalizedGroups.get(txn.normalizedId)!;
       const primary = members.find(t => t.normalizedPrimary);
       if (!primary) {
-        throw new DataIntegrityError(`Normalized group ${txn.normalizedId} has no primary transaction`);
+        // The group's single primary is in another scroll batch; that batch renders
+        // the canonical group row. Non-primary duplicates are hidden everywhere else
+        // (chart, balance, income), so suppress these orphan members here rather than
+        // throwing a fatal DataIntegrityError that kills the table / disconnects
+        // infinite scroll (#1266).
+        return [];
       }
       return renderNormalizedGroup({ primary, members, groupName, editable, budgetIdToName, balance: getBalance(primary.id) });
     })

@@ -11,10 +11,6 @@
       url = "github:sadjow/claude-code-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    wezterm-windows-zip = {
-      url = "https://github.com/wez/wezterm/releases/download/nightly/WezTerm-windows-nightly.zip";
-      flake = false;
-    };
   };
 
   outputs = inputs@{ nixpkgs, home-manager, claude-code-nix, ... }:

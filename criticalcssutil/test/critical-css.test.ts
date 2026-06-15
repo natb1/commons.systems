@@ -43,16 +43,19 @@ describe("inlineCriticalCss", () => {
     // Inlined style tag in head
     expect(output).toContain("<style>");
 
-    // Deferred full stylesheet via media="print" with onload swap
-    expect(output).toMatch(/link[^>]*media="print"/);
-    expect(output).toMatch(/link[^>]*onload="/);
+    // CSP-safe deferral: no inline event handler and no media="print" toggle.
+    expect(output).not.toMatch(/onload=/);
+    expect(output).not.toMatch(/media="print"/);
 
-    // Noscript fallback link must NOT have media="print" or onload
-    const noscriptMatch = output.match(/<noscript>([\s\S]*?)<\/noscript>/);
-    expect(noscriptMatch).not.toBeNull();
-    const noscriptContent = noscriptMatch![1];
-    expect(noscriptContent).not.toContain('media="print"');
-    expect(noscriptContent).not.toContain("onload=");
+    // The full stylesheet remains a plain blocking <link>...
+    expect(output).toMatch(
+      /<link[^>]*rel="stylesheet"[^>]*href="style\.css"[^>]*>/,
+    );
+
+    // ...moved into the <body>, not left in the <head>.
+    const [head, body] = output.split("</head>");
+    expect(body).toMatch(/<link[^>]*rel="stylesheet"[^>]*href="style\.css"[^>]*>/);
+    expect(head).not.toMatch(/<link[^>]*rel="stylesheet"[^>]*href="style\.css"[^>]*>/);
   });
 
   it("processes multiple HTML files", async () => {

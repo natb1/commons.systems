@@ -3,9 +3,9 @@
 #
 # This lock is the dispatch ROUTER's selection lock — held only across the
 # router's selection step (origin/main sync, JIT engine, dispatch-select-
-# target, leaf trace, worktree resolution). The worker (`/dispatch-worker`)
-# holds no selection lock; its phase skill runs lock-free and concurrent
-# workers advance their own issues' phases without contention. See
+# target, leaf trace, worktree resolution). Phase-skill workers hold no
+# selection lock; they run lock-free and concurrent workers advance their own
+# issues' phases without contention. See
 # `.claude/skills/dispatch-propagate/SKILL.md` Step 0 (Acquire / Releasing / Per-
 # worktree invariant) for the full scoping story. The lock is shared with the
 # manual `/dispatch` shim, so a manual run cannot select the same target as
@@ -14,7 +14,7 @@
 # The lock serializes two routers racing on the same target selection — two
 # concurrent routers can pick the same `help wanted` issue or the same PR if
 # selection isn't serialized. It does not (and should not) cover phase
-# execution: per-worktree dedup at `dispatch-spawn-worker` is what serializes
+# execution: per-worktree dedup at `dispatch-spawn-job` is what serializes
 # per-issue work.
 #
 # An fd-based `flock` cannot serialize /dispatch-propagate: the skill runs as many
@@ -98,13 +98,29 @@
 #                               Default: 300.
 #   DISPATCH_LOCK_WAIT_INTERVAL --wait: poll gap in seconds (fractional
 #                               allowed). Default: 5.
+#   DISPATCH_LOCK_PROBE_TIMEOUT Max seconds the `claude agents --json` liveness
+#                               probe may run before it is treated as a wedged
+#                               daemon (timeout-bounded, with a SIGKILL
+#                               backstop). A healthy probe is sub-second.
+#                               Must be a POSITIVE integer — 0 disables GNU
+#                               `timeout`'s bound and re-opens the unbounded-probe
+#                               hang, so it is rejected (exit 2). Default: 10.
+#   DISPATCH_LOCK_FLOCK_TIMEOUT Max seconds to wait for the in-section flock
+#                               before abandoning the attempt as contended.
+#                               MUST strictly exceed DISPATCH_LOCK_PROBE_TIMEOUT:
+#                               the probe is the only slow op inside the critical
+#                               section, so a waiter must not abandon a holder
+#                               that is legitimately mid-probe. Enforced at
+#                               startup (exit 2 on violation). Default: 15.
 #
 # Stdout protocol (exactly one word):
 #   acquired  this dispatch tick holds the lock — proceed with the tick.
 #   busy      another dispatch tick holds the lock — stop cleanly, no side effects.
-#             Under --wait this means the wait timeout elapsed; a one-line
-#             diagnostic (elapsed time + holding sessionId) is written to
-#             stderr.
+#             Also covers the case where the in-section flock wait timed out (a
+#             wedged holder pinned the critical section): the attempt resolves to
+#             contended rather than deadlocking. Under --wait, busy means the
+#             wait timeout elapsed; a one-line diagnostic (elapsed time + holding
+#             sessionId, or "(flock wait timeout)") is written to stderr.
 #   released  --release: our own recorded sessionId was cleared from the lock
 #             file.
 #   noop      --release: nothing to release — the lock was unheld or held by
@@ -115,8 +131,10 @@
 #      disambiguates).
 #   2  the script cannot operate — not in a git repo and DISPATCH_LOCK_FILE is
 #      unset, CLAUDE_CODE_SESSION_ID is unset, an unknown/extra command-line
-#      argument, or an unexpected internal sentinel from a flock subshell (a
-#      should-never-happen guard).
+#      argument, a misconfigured timeout knob (DISPATCH_LOCK_PROBE_TIMEOUT not a
+#      positive integer, or DISPATCH_LOCK_FLOCK_TIMEOUT not strictly greater than
+#      it; acquire/wait only), or an unexpected internal sentinel from a flock
+#      subshell (a should-never-happen guard).
 #
 # NOT set -e: exits are handled explicitly (matching the sibling dispatch-sweep).
 set -uo pipefail
@@ -140,24 +158,30 @@ fi
 
 WAIT_TIMEOUT="${DISPATCH_LOCK_WAIT_TIMEOUT:-300}"
 WAIT_INTERVAL="${DISPATCH_LOCK_WAIT_INTERVAL:-5}"
+PROBE_TIMEOUT="${DISPATCH_LOCK_PROBE_TIMEOUT:-10}"
+FLOCK_TIMEOUT="${DISPATCH_LOCK_FLOCK_TIMEOUT:-15}"
 
 # resolve_holder_state <sessionId> — query the daemon's live-session registry
-# for <sessionId> and report both liveness and cwd. Covers the same failure
-# modes that lib-claude-agents.sh::claude_sessions_under treats as UNKNOWN
-# (binary missing, non-zero exit, whitespace-only output, non-array JSON, jq
-# failure), but inverts the return convention: this function returns 0 (LIVE
-# — keep the lock) instead of 1 (unknown — caller folds to occupied). The
-# helper's question is "is anything running under this path?"; ours is "is
-# THIS sessionId still alive, and where?", and the global registry has no
-# --cwd filter. A zero-exit, valid `[]` is a definite "no live sessions
-# anywhere" and returns 1 (reclaim); only opaque failures fail safe to LIVE.
+# for <sessionId> and report its liveness via the return code. Covers the same
+# failure modes that lib-claude-agents.sh::claude_sessions_under treats as
+# UNKNOWN (binary missing, non-zero exit, whitespace-only output, non-array
+# JSON, jq failure), but inverts the return convention: this function returns 0
+# (LIVE — keep the lock) instead of 1 (unknown — caller folds to occupied). The
+# helper's question is "is anything running under this path?"; ours is "is THIS
+# sessionId still alive?". A zero-exit, valid `[]` is a definite "no live
+# sessions anywhere" and returns 1 (reclaim); only opaque failures fail safe to
+# LIVE.
 #
-# Stdout: the holder's cwd on a single line if the registry exposed it.
-#         Empty if either the holder is not live OR the daemon query was
-#         opaque (failed/non-array/parse error). Callers treat an empty cwd
-#         on a "live" return as "marker check cannot proceed → stay strict."
 # Return: 0 = live (or opaque failure → fail-safe live)
 #         1 = definitely not live (reclaim)
+#
+# The daemon probe is `timeout`-bounded (DISPATCH_LOCK_PROBE_TIMEOUT, with a
+# `-k 5` SIGKILL backstop): a wedged daemon that never returns must not block
+# the probe — and so the in-section flock — indefinitely. The KILL backstop is
+# required because plain `timeout` only sends SIGTERM and then waits for the
+# child, so a client that ignores SIGTERM would make `timeout` itself hang,
+# reproducing the deadlock. A timed-out probe exits non-zero, which the
+# `if ! out=$(...)` below folds to fail-safe LIVE → the caller stays BUSY.
 #
 # The `9>&-` redirection closes fd 9 (the flock fd, opened by the caller's
 # subshell) in the `claude` child. flock is on the open file description and
@@ -165,16 +189,17 @@ WAIT_INTERVAL="${DISPATCH_LOCK_WAIT_INTERVAL:-5}"
 # any background helper `claude` ever spawns would inherit fd 9 and hold the
 # flock past our subshell's exit. Today `claude agents --json` is a query-and-
 # exit client, but the cost of defending against a future fork is one redir.
+# The redirections stay on the `timeout` simple command, which execs `claude`
+# with fd 9 already closed and stderr already silenced.
 resolve_holder_state() {
-  local sid="$1" out rows match
+  local sid="$1" out ids id
   # Headless holders (the systemd-launched dispatch-tick's synthetic
   # `headless:<token>` id) never appear in the `claude agents --json` registry —
   # it tracks model sessions, not bash processes. Resolve their liveness through
   # the PID sentinel the tick writes alongside the lock file (#1068): live iff
   # the sentinel exists AND its recorded PID is still alive. A SIGKILL leaves a
   # stale sentinel whose PID is gone, so it resolves DEAD and the lock self-heals.
-  # No cwd is emitted (matches the live-with-empty-cwd convention — marker check
-  # stays strict), and the daemon is never queried for these ids.
+  # The daemon is never queried for these ids.
   if [[ "$sid" == headless:* ]]; then
     local sentinel pid=""
     sentinel=$(headless_sentinel_path "$sid" "$LOCK_FILE")
@@ -184,50 +209,29 @@ resolve_holder_state() {
     kill -0 "$pid" 2>/dev/null || return 1
     return 0
   fi
-  if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json 2>/dev/null 9>&-); then
+  if ! out=$(timeout -k 5 "$PROBE_TIMEOUT" "${CLAUDE_AGENTS_CMD:-claude}" agents --json 2>/dev/null 9>&-); then
     return 0
   fi
   if [[ -z "${out//[[:space:]]/}" ]]; then
     return 0
   fi
-  # One TSV row per session: <sessionId>\t<cwd>. `// ""` keeps both fields as
-  # strings even when absent, so the tab-split below always has two slots.
-  if ! rows=$(jq -r '
+  # One sessionId per line. `// ""` keeps the field a string even when absent.
+  if ! ids=$(jq -r '
     if type == "array"
-    then .[] | "\(.sessionId // "")\t\(.cwd // "")"
+    then .[] | .sessionId // ""
     else error("not a JSON array")
     end' <<<"$out" 2>/dev/null); then
     return 0
   fi
-  # Exact-match $1 against sid via awk: a true field equality (not a literal-
-  # substring match), so a sessionId that prefixes or suffixes another row's
-  # sessionId cannot cross-match. Also avoids `grep -F | head -n1`, whose
-  # pipefail+SIGPIPE interaction can collapse a contended-but-live match into
-  # a non-zero exit and trigger a wrong reclaim.
-  match=$(printf '%s\n' "$rows" | awk -F'\t' -v sid="$sid" '$1 == sid {print; exit}')
-  if [[ -z "$match" ]]; then
-    # Definitely not live: registry parsed cleanly and our sid isn't in it.
-    return 1
-  fi
-  # Strip the leading "<sid>\t" prefix to leave the cwd on stdout.
-  printf '%s\n' "${match#*$'\t'}"
-  return 0
-}
-
-# marker_names_holder <cwd> <sid> — 0 iff <cwd> is non-empty, carries the
-# tmp/dispatch-worktree marker, and the marker's first line equals <sid>.
-# Empty cwd, missing/empty marker, or a marker naming any other session → 1
-# (no reclaim): a stale empty marker (worktree-create.sh) or a marker naming
-# an older finalized session never reclaims a live mid-selection holder.
-marker_names_holder() {
-  local cwd="$1" sid="$2" marker content=""
-  [[ -n "$cwd" ]] || return 1
-  marker="$cwd/tmp/dispatch-worktree"
-  # Require a regular file: a FIFO or device node at this path would block the
-  # read below indefinitely while the flock is held, deadlocking all routing.
-  [[ -f "$marker" ]] || return 1
-  IFS= read -r content <"$marker" 2>/dev/null || true
-  [[ -n "$content" && "$content" == "$sid" ]]
+  # Exact line-equality match against sid: a sessionId that prefixes or suffixes
+  # another row's sessionId cannot cross-match. Iterating in the shell (rather
+  # than `grep -F | head -n1`) avoids the pipefail+SIGPIPE interaction that can
+  # collapse a contended-but-live match into a non-zero exit and a wrong reclaim.
+  while IFS= read -r id; do
+    [[ "$id" == "$sid" ]] && return 0
+  done <<<"$ids"
+  # Definitely not live: registry parsed cleanly and our sid isn't in it.
+  return 1
 }
 
 # ---- Step 1: resolve the lock file ------------------------------------------
@@ -265,8 +269,17 @@ try_acquire() {            # 0 = acquired, 1 = contended; sets CONTENDED_SID
   local result
   result=$(
     exec 9>>"$LOCK_FILE"
-    flock 9                # blocking — a short mutex over the read-check-write
-    local recorded="" cwd="" live=0
+    # Bounded mutex over the read-check-write. The only slow op inside the
+    # critical section is the timeout-bounded daemon probe, so a wait that
+    # exceeds FLOCK_TIMEOUT (> PROBE_TIMEOUT + margin) means the holder is
+    # wedged, not legitimately mid-probe. On timeout we leave the subshell
+    # WITHOUT running the read-check-write (which would be a racy unlocked
+    # read + clobbering write); the parent maps the sentinel to contended.
+    if ! flock -w "$FLOCK_TIMEOUT" 9; then
+      printf 'FLOCK_TIMEOUT'
+      exit 0
+    fi
+    local recorded="" live=0
     IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
     # Busy iff a different sessionId is recorded AND it is still a live
     # session per `claude agents --json`. A live holder always blocks — even
@@ -275,9 +288,9 @@ try_acquire() {            # 0 = acquired, 1 = contended; sets CONTENDED_SID
     # the holder released the lock. Otherwise — no record, a stale record
     # (sessionId not in the registry), our own session re-entering, or a dead
     # foreign holder — we claim. An opaque-failure from resolve_holder_state
-    # (return 0, empty cwd) stays BUSY (fail safe).
+    # (return 0) stays BUSY (fail safe).
     if [[ -n "$recorded" && "$recorded" != "$SESSION_ID" ]]; then
-      if cwd=$(resolve_holder_state "$recorded"); then
+      if resolve_holder_state "$recorded"; then
         live=1
       fi
       if (( live )); then
@@ -297,10 +310,47 @@ try_acquire() {            # 0 = acquired, 1 = contended; sets CONTENDED_SID
   case "$result" in
     OK)       return 0 ;;
     'BUSY '*) CONTENDED_SID="${result#BUSY }"; return 1 ;;
+    # The in-section flock wait timed out: a wedged holder is pinning the
+    # critical section. Treat as contended (never reclaim — we did NOT read
+    # the lock, so the holder is unknown) and surface a diagnostic string
+    # rather than a real sid, since populating one would require a racy
+    # unlocked read.
+    FLOCK_TIMEOUT) CONTENDED_SID="(flock wait timeout)"; return 1 ;;
     *) echo "dispatch-acquire-lock: try_acquire — unexpected subshell output '$result'" >&2
        exit 2 ;;
   esac
 }
+
+# ---- validate the timeout knobs ---------------------------------------------
+# Only try_acquire (acquire/wait modes) consumes the probe + in-section flock
+# timeouts; --release uses neither, so leave it unvalidated and unchanged.
+# A misconfigured knob is a broken environment — fail clear (exit 2), do not
+# fall back (matches the clear-error-over-fallback rule; same convention as the
+# git-repo and CLAUDE_CODE_SESSION_ID guards above).
+if [[ "$MODE" != "release" ]]; then
+  # PROBE_TIMEOUT must be a POSITIVE integer. `^[0-9]+$` alone is not enough:
+  # GNU `timeout 0 <cmd>` DISABLES the bound and runs the probe unbounded,
+  # silently re-opening the very wedged-daemon hang this script fixes (#1315).
+  if [[ ! "$PROBE_TIMEOUT" =~ ^[0-9]+$ || "$PROBE_TIMEOUT" -lt 1 ]]; then
+    echo "dispatch-acquire-lock: DISPATCH_LOCK_PROBE_TIMEOUT must be a positive integer (got '$PROBE_TIMEOUT'); 0 disables GNU timeout's bound and re-opens the unbounded-probe hang" >&2
+    exit 2
+  fi
+  if [[ ! "$FLOCK_TIMEOUT" =~ ^[0-9]+$ ]]; then
+    echo "dispatch-acquire-lock: DISPATCH_LOCK_FLOCK_TIMEOUT must be a non-negative integer (got '$FLOCK_TIMEOUT')" >&2
+    exit 2
+  fi
+  # FLOCK_TIMEOUT must STRICTLY exceed PROBE_TIMEOUT. The probe is the only slow
+  # op inside the critical section, so a waiter that gives up at or before the
+  # probe's normal ceiling would abandon a holder that is legitimately mid-probe
+  # and report a false busy. (The `-k 5` SIGKILL grace pushes a SIGTERM-ignoring
+  # probe to PROBE_TIMEOUT+5, but in that pathological case the holder genuinely
+  # IS wedged, so abandoning-to-busy is the fail-safe outcome — hence `>`, not
+  # `> PROBE_TIMEOUT + 5`, which the shipped 15/10 defaults would also fail.)
+  if [[ "$FLOCK_TIMEOUT" -le "$PROBE_TIMEOUT" ]]; then
+    echo "dispatch-acquire-lock: DISPATCH_LOCK_FLOCK_TIMEOUT ($FLOCK_TIMEOUT) must exceed DISPATCH_LOCK_PROBE_TIMEOUT ($PROBE_TIMEOUT); otherwise a waiter abandons a holder that is legitimately mid-probe" >&2
+    exit 2
+  fi
+fi
 
 # ---- dispatch the mode ------------------------------------------------------
 case "$MODE" in

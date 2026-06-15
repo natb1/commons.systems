@@ -1,6 +1,7 @@
 import type { Plugin } from "vite";
 import { classifyError } from "@commons-systems/errorutil";
 import type { LatestPost } from "./types.ts";
+import { isParseableDate } from "../date.ts";
 
 export interface FeedConfig {
   id: string;
@@ -94,7 +95,8 @@ export function parseAtomFeedXml(xml: string): LatestPost | null {
 
   if (!title || !url) return null;
   if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
-  return { title, url, publishedAt: published };
+  const publishedAt = published && isParseableDate(published) ? published : undefined;
+  return { title, url, publishedAt };
 }
 
 export function parseRssFeedXml(xml: string): LatestPost | null {
@@ -108,5 +110,6 @@ export function parseRssFeedXml(xml: string): LatestPost | null {
 
   if (!title || !url) return null;
   if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
-  return { title, url, publishedAt: pubDate };
+  const publishedAt = pubDate && isParseableDate(pubDate) ? pubDate : undefined;
+  return { title, url, publishedAt };
 }

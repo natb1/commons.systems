@@ -7,7 +7,7 @@
 #
 # This is a LOCAL merge only — it NEVER pushes. The merge commit is carried to
 # origin later by each phase skill's own push points: `/commit-merge-push` for
-# fix phases, and `/verify-pr`'s all-green-after-merge push. Keeping the merge
+# fix phases, and `/fix-checks`'s all-green-after-merge push. Keeping the merge
 # local here preserves the uniform "never push a bare merge commit" contract.
 #
 # Exit-code contract:

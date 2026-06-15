@@ -114,8 +114,8 @@ test.describe("transactions", () => {
     const countBefore = await visibleRows.count();
     expect(countBefore).toBeGreaterThan(0);
     await page.locator("#sankey-unbudgeted").check();
+    await expect.poll(async () => visibleRows.count()).toBeLessThan(countBefore);
     const countAfter = await visibleRows.count();
-    expect(countAfter).toBeLessThan(countBefore);
     expect(countAfter).toBeGreaterThan(0);
   });
 
@@ -287,9 +287,11 @@ test.describe("transactions", () => {
     const filterInput = page.locator("#sankey-category-filter");
     await expect(filterInput).not.toHaveValue("");
     const filterValue = await filterInput.inputValue();
+    // count() is a one-shot snapshot with no auto-wait; poll until the
+    // click-triggered category-filter re-render settles before reading the count.
+    await expect.poll(async () => visibleRows.count()).toBeLessThan(countBefore);
     const countAfter = await visibleRows.count();
     expect(countAfter).toBeGreaterThan(0);
-    expect(countAfter).toBeLessThanOrEqual(countBefore);
     for (let i = 0; i < countAfter; i++) {
       const category = await visibleRows.nth(i).getAttribute("data-category");
       expect(category).toMatch(new RegExp(`^${filterValue}`));

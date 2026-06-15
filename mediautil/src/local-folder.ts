@@ -1,94 +1,103 @@
 /**
- * `LocalFolderMediaSource` implements `MediaSource<T>` over an on-disk folder
- * the user picked via the File System Access API: it lists and resolves audio
- * files in place, with no upload. This is the local-first sibling of the
- * Firebase cloud source (`createFirebaseMediaSource`) — apps union the two so
- * the library shows local and cloud items on equal footing.
+ * `LocalFolderMediaSource` implements `MediaSource<T>` over a user-chosen
+ * on-disk directory via the File System Access API. Files are read in place
+ * with no upload; the source is intended to be unioned with `FirebaseMediaSource`
+ * so the library shows local and cloud items together.
  *
- * Files can move or disappear between a scan and a read (the user owns the
- * folder); such races are handled gracefully rather than as hard errors —
- * vanished entries are skipped during `list`, and a missing file at resolve
- * time surfaces as a typed `MediaItemMissingError`.
+ * The implementation is testable with any structural fake that satisfies
+ * `LocalDirectoryHandleLike` — no direct FSA globals are imported here.
  */
 import type { MediaSource } from "./source.js";
 
-/** A file that has gone missing since the last scan (moved or removed). */
-export class MediaItemMissingError extends Error {
-  readonly fileName: string;
-
-  constructor(fileName: string) {
-    super(`Local media file is missing: ${fileName}`);
-    this.name = "MediaItemMissingError";
-    this.fileName = fileName;
-  }
+export interface LocalFileHandleLike {
+  readonly kind: "file";
+  readonly name: string;
+  getFile(): Promise<File>;
 }
 
-/** The minimal per-file facts a scan exposes to `toItem`. */
-export interface LocalFolderEntry {
-  name: string;
-  lastModified: number;
+export interface LocalDirEntryLike {
+  readonly kind: "file" | "directory";
+  readonly name: string;
 }
 
-export interface LocalFolderMediaSourceConfig<
-  T extends { id: string; addedAt: string },
-> {
-  /** The user-picked directory handle (from `showDirectoryPicker`). */
-  directoryHandle: FileSystemDirectoryHandle;
-  /** Whether a file name belongs in the library (e.g. an audio extension). */
-  accept(name: string): boolean;
-  /** Map a scanned entry to the app's metadata record. */
-  toItem(entry: LocalFolderEntry): T;
-  /** Recover the directory-relative name for an item, for byte resolution. */
-  fileName(item: T): string;
+export interface LocalDirectoryHandleLike {
+  values(): AsyncIterableIterator<LocalDirEntryLike>;
 }
 
-export function createLocalFolderMediaSource<
-  T extends { id: string; addedAt: string },
->(config: LocalFolderMediaSourceConfig<T>): MediaSource<T> {
-  const { directoryHandle, accept, toItem, fileName } = config;
+export interface LocalFolderMediaSourceConfig<T extends { id: string; addedAt: string }> {
+  directory: LocalDirectoryHandleLike;
+  /** Map a top-level file to a record, or null to skip (unsupported ext). */
+  toItem: (file: File, name: string) => T | null;
+}
 
-  async function list(): Promise<T[]> {
-    const items: T[] = [];
-    for await (const entry of directoryHandle.values()) {
+export function createLocalFolderMediaSource<T extends { id: string; addedAt: string }>(
+  config: LocalFolderMediaSourceConfig<T>,
+): MediaSource<T> {
+  const index = new Map<string, LocalFileHandleLike>();
+  const items = new Map<string, T>();
+
+  async function scan(): Promise<T[]> {
+    index.clear();
+    items.clear();
+    const results: T[] = [];
+
+    for await (const entry of config.directory.values()) {
       if (entry.kind !== "file") continue;
-      if (!accept(entry.name)) continue;
-      // `values()` is typed as yielding the base `FileSystemHandle`; the
-      // `kind === "file"` check above guarantees a file handle, which exposes
-      // `getFile()`.
-      const fileHandle = entry as FileSystemFileHandle;
+
+      const fileHandle = entry as unknown as LocalFileHandleLike;
+
+      let file: File;
       try {
-        const file = await fileHandle.getFile();
-        items.push(toItem({ name: entry.name, lastModified: file.lastModified }));
+        file = await fileHandle.getFile();
       } catch {
-        // The file vanished between enumeration and read (moved/removed
-        // mid-scan). Skip it rather than failing the whole listing.
+        continue;
       }
+
+      const item = config.toItem(file, entry.name);
+      if (item === null) continue;
+
+      results.push(item);
+      index.set(item.id, fileHandle);
+      items.set(item.id, item);
     }
-    // Newest first, matching the cloud source's contract.
-    items.sort((a, b) => (a.addedAt < b.addedAt ? 1 : a.addedAt > b.addedAt ? -1 : 0));
-    return items;
+
+    results.sort((a, b) => {
+      if (a.addedAt > b.addedAt) return -1;
+      if (a.addedAt < b.addedAt) return 1;
+      return 0;
+    });
+
+    return results;
   }
 
   return {
-    list,
+    async list() {
+      return scan();
+    },
 
     async metadata(id) {
-      const items = await list();
-      return items.find((i) => i.id === id) ?? null;
+      let item = items.get(id);
+      if (!item) {
+        await scan();
+        item = items.get(id);
+      }
+      return item ?? null;
     },
 
     async resolveToBlob(item) {
-      const name = fileName(item);
-      try {
-        const handle = await directoryHandle.getFileHandle(name);
-        const file = await handle.getFile();
-        return await file.arrayBuffer();
-      } catch (err) {
-        if (err instanceof Error && err.name === "NotFoundError") {
-          throw new MediaItemMissingError(name);
-        }
-        throw err;
+      let handle = index.get(item.id);
+      if (!handle) {
+        await scan();
+        handle = index.get(item.id);
       }
+      if (!handle) {
+        throw new Error("Local file no longer present");
+      }
+      // A cached handle whose getFile() fails is a real error (permission
+      // revoked, IO failure) — propagate it rather than masking it as
+      // "no longer present", which is reserved for a genuinely absent entry.
+      const file = await handle.getFile();
+      return file.arrayBuffer();
     },
   };
 }

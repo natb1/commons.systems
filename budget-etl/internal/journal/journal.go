@@ -6,9 +6,10 @@
 // imported bank account and a balancing counter leg on a placeholder account
 // (Uncategorized Expense / Uncategorized Income, or Unresolved Transfers for
 // Transfer:* lines). After per-line emission, the batch is scanned for transfer
-// pairs — opposite-sign amounts on different accounts within a time window —
-// and each matched pair is merged into a single entry that debits the
-// destination account and credits the source account, dropping the placeholders.
+// pairs — opposite-sign amounts on different accounts within a time window,
+// where at least one leg is categorized Transfer:* — and each matched pair is
+// merged into a single entry that debits the destination account and credits
+// the source account, dropping the placeholders.
 package journal
 
 import (
@@ -78,7 +79,19 @@ type tentative struct {
 // calling budget.TransactionDocID(txn.StatementID, txn.TransactionID). This is
 // required when transactions are reconstructed from an existing budget.json, where
 // TransactionID already holds the hashed document ID rather than the original FITID.
-func Build(txns []budget.TransactionData, docIDs []string, window time.Duration) Result {
+//
+// normMap, if non-nil, carries the normalization decisions for the batch keyed by
+// doc ID. A transaction that is a non-primary normalized duplicate (its
+// budget.NormalizationUpdate has NormalizedID != "" && !NormalizedPrimary) gets no
+// entry or legs of its own; instead its doc ID is mapped, in EntryIDByDocID, to the
+// primary's journal entry, so the bank account is credited only once for the real
+// transaction. A nil normMap means no normalization filtering (back-compat).
+func Build(txns []budget.TransactionData, docIDs []string, normMap map[string]budget.NormalizationUpdate, window time.Duration) Result {
+	// skippedDup records each non-primary normalized duplicate skipped in the import loop below, so
+	// its doc ID can be linked to the primary's entry after EntryIDByDocID is built.
+	type skippedDup struct{ dupDocID, primaryDocID string }
+	var skippedDups []skippedDup
+
 	tents := make([]*tentative, 0, len(txns))
 	for i := range txns {
 		txn := txns[i]
@@ -87,6 +100,15 @@ func Build(txns []budget.TransactionData, docIDs []string, window time.Duration)
 			docID = docIDs[i]
 		} else {
 			docID = budget.TransactionDocID(txn.StatementID, txn.TransactionID)
+		}
+		// Skip non-primary normalized duplicates: they share a real transaction
+		// with their primary, so they must not get their own entry/legs and must
+		// not be eligible for transfer-pair detection below.
+		if normMap != nil {
+			if nu, ok := normMap[docID]; ok && nu.NormalizedID != "" && !nu.NormalizedPrimary {
+				skippedDups = append(skippedDups, skippedDup{dupDocID: docID, primaryDocID: nu.NormalizedID})
+				continue
+			}
 		}
 		t := &tentative{
 			docID:      docID,
@@ -177,6 +199,16 @@ func Build(txns []budget.TransactionData, docIDs []string, window time.Duration)
 		entryIDByDocID[t.docID] = entryID
 	}
 
+	// Link each skipped non-primary duplicate to its primary's entry, so an
+	// export transaction for the duplicate resolves to the same real entry. Only
+	// link when the primary's entry exists in this batch; if it is absent, leave
+	// the duplicate unmapped rather than fabricate an entry.
+	for _, d := range skippedDups {
+		if eid, ok := entryIDByDocID[d.primaryDocID]; ok {
+			entryIDByDocID[d.dupDocID] = eid
+		}
+	}
+
 	accounts := buildAccounts(tents, referencedAccounts)
 
 	sort.Slice(entries, func(i, j int) bool { return entries[i].ID < entries[j].ID })
@@ -232,10 +264,11 @@ type pair struct {
 
 // detectPairs finds transfer pairs via greedy nearest-time matching. A
 // candidate pair has different (institution, account), opposite-sign amounts
-// equal within a one-cent tolerance, and |Δtimestamp| <= window. Candidates are
-// consumed in ascending timestamp-delta order, skipping lines already taken, so
-// two pairs in one window match to their nearest partner. Marks matched
-// tentatives as paired and returns the chosen pairs.
+// equal within a one-cent tolerance, at least one leg categorized Transfer:*,
+// and |Δtimestamp| <= window. Candidates are consumed in ascending
+// timestamp-delta order, skipping lines already taken, so two pairs in one
+// window match to their nearest partner. Marks matched tentatives as paired and
+// returns the chosen pairs.
 func detectPairs(tents []*tentative, window time.Duration) []pair {
 	type candidate struct {
 		i, j  int
@@ -255,6 +288,11 @@ func detectPairs(tents []*tentative, window time.Duration) []pair {
 			}
 			// Equal magnitude within tolerance.
 			if absInt64(a.txn.Amount+b.txn.Amount) > centTolerance {
+				continue
+			}
+			// At least one leg must be categorized Transfer:* to merge — otherwise two
+			// unrelated equal-and-opposite amounts would be falsely merged.
+			if !a.isTransfer && !b.isTransfer {
 				continue
 			}
 			delta := a.txn.Timestamp.Sub(b.txn.Timestamp)

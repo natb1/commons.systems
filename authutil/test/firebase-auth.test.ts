@@ -136,9 +136,9 @@ describe("createFirebaseAuth", () => {
     expect(toast?.textContent).toContain("Network error");
   });
 
-  it("dismisses popup-closed-by-user without showing toast", async () => {
-    const popupError = Object.assign(new Error("popup closed"), {
-      code: "auth/popup-closed-by-user",
+  it("dismisses user-cancelled without showing toast", async () => {
+    const cancelError = Object.assign(new Error("user cancelled"), {
+      code: "auth/user-cancelled",
     });
     let rejectFn!: (error: unknown) => void;
     mockGetRedirectResult.mockReturnValue(
@@ -149,7 +149,7 @@ describe("createFirebaseAuth", () => {
     const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
 
     createFirebaseAuth(mockApp);
-    rejectFn(popupError);
+    rejectFn(cancelError);
     await new Promise((r) => setTimeout(r, 0));
 
     expect(debugSpy).toHaveBeenCalledWith("Auth redirect cancelled by user");

@@ -72,3 +72,31 @@
   font-size: 0.85rem;
   margin: 0.25rem 0 0;
 }
+
+/* Local-folder items + controls */
+.media-item-local .media-title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.media-item-local .media-title a:hover {
+  text-decoration: underline;
+}
+
+.media-badge-local {
+  border-style: dashed;
+}
+
+.local-folder-button {
+  cursor: pointer;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--muted-fg, #888);
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+}
+
+.local-folder-button:hover {
+  border-color: var(--fg, #ddd);
+}

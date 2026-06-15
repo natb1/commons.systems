@@ -1,6 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { MediaItem } from "../types.js";
 import type { ContentRenderer } from "./types.js";
+import { clampGoToPage } from "./types.js";
 import { SpreadController } from "./spread-controller.js";
 import {
   getReadingPosition,
@@ -29,6 +30,7 @@ export function renderViewerShell(item: MediaItem): string {
         <div class="viewer-nav">
           <button class="viewer-prev" disabled aria-label="Previous page">&larr;</button>
           <span class="viewer-position">Loading...</span>
+          <input class="viewer-goto-input goto-hidden" type="number" inputmode="numeric" />
           <button class="viewer-next" disabled aria-label="Next page">&rarr;</button>
           <button class="viewer-zoom-in zoom-hidden" aria-label="Zoom in">+</button>
           <button class="viewer-zoom-out zoom-hidden" aria-label="Zoom out">&minus;</button>
@@ -88,6 +90,7 @@ export function initViewer(
   const prevBtn = viewer.querySelector(".viewer-prev") as HTMLButtonElement;
   const nextBtn = viewer.querySelector(".viewer-next") as HTMLButtonElement;
   const position = viewer.querySelector(".viewer-position") as HTMLElement;
+  const gotoInput = viewer.querySelector(".viewer-goto-input") as HTMLInputElement;
   const toggleBtn = viewer.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
   const panel = viewer.querySelector(".viewer-panel") as HTMLElement;
   const zoomInBtn = viewer.querySelector(".viewer-zoom-in") as HTMLButtonElement;
@@ -170,21 +173,33 @@ export function initViewer(
 
   // Persist position after each navigation — debounced (500ms), deduplicated (skips matching position).
   // Skips Firestore writes if the initial read failed.
+  function persistPosition() {
+    const pos = getSpreadPosition();
+    if (!pos || pos === lastSavedPosition) return;
+    lastSavedPosition = pos;
+    if (uid && !firestoreReadFailed) {
+      saveReadingPosition(uid, mediaId, pos).catch((err) => {
+        reportError(new Error("Failed to save reading position", { cause: err }));
+      });
+    } else {
+      saveLocalPosition(mediaId, pos);
+    }
+  }
+
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveTimer = null;
-      const pos = getSpreadPosition();
-      if (!pos || pos === lastSavedPosition) return;
-      lastSavedPosition = pos;
-      if (uid && !firestoreReadFailed) {
-        saveReadingPosition(uid, mediaId, pos).catch((err) => {
-          reportError(new Error("Failed to save reading position", { cause: err }));
-        });
-      } else {
-        saveLocalPosition(mediaId, pos);
-      }
+      persistPosition();
     }, 500);
+  }
+
+  function flushSave() {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      persistPosition();
+    }
   }
 
   // Zoom controls — update enabled/disabled state
@@ -231,6 +246,8 @@ export function initViewer(
   let searchCleanup: (() => void) | null = null;
   let outlineCleanup: (() => void) | null = null;
   let spreadToggleCleanup: (() => void) | null = null;
+  let gotoMode: "page" | "percent" | null = null;
+  let gotoInFlight = false;
 
   const controller = new SpreadController({
     renderer,
@@ -254,6 +271,14 @@ export function initViewer(
       position.textContent = renderer.positionLabel;
       prevBtn.disabled = !renderer.canGoPrev;
       nextBtn.disabled = !renderer.canGoNext;
+    }
+    if (gotoMode === "page") {
+      gotoInput.max = String(renderer.pageCount);
+      if (document.activeElement !== gotoInput) {
+        gotoInput.value = controller.enabled
+          ? controller.position
+          : String(renderer.currentPage);
+      }
     }
     updateZoomState();
     scheduleSave();
@@ -282,6 +307,72 @@ export function initViewer(
     updateNav();
   }
 
+  async function goToPageNum(page: number): Promise<void> {
+    if (controller.enabled) {
+      await controller.goToPage(page);
+    } else {
+      await renderer.goToPage(page);
+    }
+    updateNav();
+  }
+
+  async function submitGoto(): Promise<void> {
+    if (gotoInFlight) return;
+    gotoInFlight = true;
+    try {
+      if (gotoMode === "percent") {
+        const pct = parseFloat(gotoInput.value);
+        if (Number.isNaN(pct)) return;
+        const frac = Math.max(0, Math.min(100, pct)) / 100;
+        const savedValue = gotoInput.value;
+        gotoInput.value = "";
+        gotoInput.disabled = true;
+        gotoInput.placeholder = "Calculating…";
+        try {
+          await renderer.goToFraction!(frac);
+        } finally {
+          gotoInput.value = savedValue;
+          gotoInput.disabled = false;
+          gotoInput.placeholder = "%";
+        }
+        updateNav();
+      } else if (gotoMode === "page") {
+        const page = clampGoToPage(gotoInput.value, renderer.pageCount);
+        if (page === null) return;
+        await goToPageNum(page);
+      }
+    } finally {
+      gotoInFlight = false;
+    }
+  }
+
+  function initGoto(): void {
+    if (renderer.goToFraction) {
+      gotoInput.min = "0";
+      gotoInput.max = "100";
+      gotoInput.step = "1";
+      gotoInput.setAttribute("aria-label", "Go to location percent");
+      gotoInput.placeholder = "%";
+      gotoInput.classList.remove("goto-hidden");
+      gotoMode = "percent";
+    } else if (renderer.pageCount > 1) {
+      gotoInput.min = "1";
+      gotoInput.max = String(renderer.pageCount);
+      gotoInput.step = "1";
+      gotoInput.setAttribute("aria-label", "Go to page");
+      gotoInput.placeholder = "#";
+      gotoInput.classList.remove("goto-hidden");
+      gotoMode = "page";
+    }
+  }
+
+  function handleGotoKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      submitGoto().catch(handleNavError);
+    }
+  }
+  gotoInput.addEventListener("keydown", handleGotoKeydown);
+
   prevBtn.addEventListener("click", () => {
     goPrev().catch(handleNavError);
   });
@@ -291,7 +382,7 @@ export function initViewer(
 
   // Keyboard navigation
   function handleKeydown(e: KeyboardEvent) {
-    if ((e.target as HTMLElement)?.closest(".viewer-search-input")) return;
+    if ((e.target as HTMLElement)?.closest(".viewer-search-input, .viewer-goto-input")) return;
     if (e.key === "ArrowLeft") goPrev().catch(handleNavError);
     else if (e.key === "ArrowRight") goNext().catch(handleNavError);
   }
@@ -349,6 +440,7 @@ export function initViewer(
         await controller.render();
       }
     }
+    initGoto();
     searchCleanup = initSearch(viewer, renderer, () => updateNav());
     outlineCleanup = initOutline(viewer, renderer, () => updateNav());
     updateNav();
@@ -358,7 +450,7 @@ export function initViewer(
   });
 
   return () => {
-    if (saveTimer) clearTimeout(saveTimer);
+    flushSave();
     document.body.classList.remove("viewer-active");
     orientationQuery.removeEventListener("change", updateOrientation);
     toggleBtn.removeEventListener("click", handleToggle);
@@ -369,6 +461,7 @@ export function initViewer(
       document.exitFullscreen().catch(() => {});
     }
     document.removeEventListener("keydown", handleKeydown);
+    gotoInput.removeEventListener("keydown", handleGotoKeydown);
     zoomInBtn.removeEventListener("click", handleZoomIn);
     zoomOutBtn.removeEventListener("click", handleZoomOut);
     zoomResetBtn.removeEventListener("click", handleZoomReset);

@@ -15,6 +15,7 @@
     "@commons-systems/errorutil": "file:../errorutil",
     "@commons-systems/firebaseutil": "file:../firebaseutil",
     "@commons-systems/firestoreutil": "file:../firestoreutil",
+    "@observablehq/plot": "^0.6.17",
     "firebase": "^12.9.0",
     "missing.css": "^1.1.3"
   },

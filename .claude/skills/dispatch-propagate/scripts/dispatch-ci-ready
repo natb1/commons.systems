@@ -9,8 +9,8 @@
 # draft PR's checks are still in progress (no verdict yet).
 #
 #   READY    — exit 0, prints `ready`:  no matching PR, OR a non-draft PR, OR a
-#              draft PR whose statusCheckRollup classifies as failing/passing.
-#   NOT-READY — exit 1, prints `waiting`: a draft PR whose rollup is pending.
+#              draft PR whose CI verdict classifies as failing/passing.
+#   NOT-READY — exit 1, prints `waiting`: a draft PR whose CI verdict is pending.
 #
 # Argument resolution:
 #   - All-digit arg: treated as an issue number. The matching PR is the one
@@ -18,11 +18,14 @@
 #   - Otherwise: treated as a branch name. Matched exactly.
 #
 # Environment:
-#   DISPATCH_PR_LIST — optional. A JSON array of open PRs supplied by the
-#     caller (dispatch-select-target passes it to avoid a redundant
-#     gh pr list per PR). When set and non-empty, it is used in place of a
-#     self-issued gh pr list. Must include the fields
-#     number,headRefName,isDraft,statusCheckRollup,labels.
+#   DISPATCH_PR_LIST_FILE — optional. Path to a temp file holding a JSON array
+#     of open PRs supplied by the caller (dispatch-select-target passes it to
+#     avoid a redundant gh pr list per PR). The tiny path travels in the env
+#     var; the (potentially large) JSON stays in the file, sidestepping the
+#     E2BIG that an inline JSON string hits past ~32 open PRs (#1646). When set,
+#     the file is read in place of a self-issued gh pr list and must be
+#     readable (else exit 2). Must include the fields
+#     number,headRefName,isDraft,headRefOid,labels,mergeable.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -34,13 +37,11 @@ if [[ -z "$ARG" ]]; then
   exit 2
 fi
 
-# Use the caller-supplied open-PR list when DISPATCH_PR_LIST is set.
-# Otherwise fetch the list ourselves — standalone callers rely on this path.
-if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
-  PR_LIST="$DISPATCH_PR_LIST"
-else
-  PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
-fi
+# Read the caller-supplied open-PR list (DISPATCH_PR_LIST_FILE) or self-fetch.
+# An unreadable file makes pr_list_import return 2; `|| exit "$?"` propagates it.
+# ci-ready's exit 2 is otherwise usage-only, so preserving 2 here is the error
+# distinction: 2 = environment/IO error, distinct from readiness exits 0/1.
+PR_LIST=$(pr_list_import "number,headRefName,isDraft,headRefOid,labels,mergeable") || exit "$?"
 
 # Find the matching PR.
 if [[ "$ARG" =~ ^[0-9]+$ ]]; then
@@ -68,9 +69,15 @@ if [[ "$IS_DRAFT" == "false" ]]; then
   exit 0
 fi
 
-# Draft PR — readiness hinges on whether CI has reached a verdict.
-ROLLUP=$(printf '%s' "$PR" | jq '.statusCheckRollup')
-VERDICT=$(dispatch_classify_rollup "$ROLLUP")
+# A CONFLICTING draft is ready even with CI pending: the fix-conflicts phase
+# runs regardless of CI state. UNKNOWN falls through (GitHub recomputes it
+# asynchronously; the next tick resolves it — self-healing).
+MERGEABLE=$(printf '%s' "$PR" | jq -r '.mergeable // "UNKNOWN"')
+if [[ "$MERGEABLE" == "CONFLICTING" ]]; then echo "ready"; exit 0; fi
+
+# Draft PR — readiness hinges on whether CI has reached a verdict. The verdict
+# comes from a lazy REST check-runs fetch keyed on the PR's head SHA.
+VERDICT=$(dispatch_ci_verdict_rest "$(printf '%s' "$PR" | jq -r '.headRefOid')")
 
 # A concluded verdict — failing or passing — is actionable, so ready.
 # Only an in-progress (pending) rollup is not yet ready.

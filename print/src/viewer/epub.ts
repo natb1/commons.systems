@@ -15,6 +15,8 @@ export function createEpubRenderer(
   let _atEnd = false;
   let _currentCfi = "";
   let destroyed = false;
+  let locationsReady: Promise<void> | null = null;
+  const GENERATE_CHARS = 1024;
   const outlineHrefMap = new WeakMap<OutlineEntry, string>();
 
   function mapNavItems(items: NavItem[]): OutlineEntry[] {
@@ -35,6 +37,19 @@ export function createEpubRenderer(
       const timer = setTimeout(() => { reportError(new Error("waitForRelocated: timed out after 5s")); resolve(); }, 5000);
       rendition.once("relocated", () => { clearTimeout(timer); resolve(); });
     });
+  }
+
+  // epub.js percent-based navigation requires a generated locations index,
+  // which is expensive. Generate it lazily on first use and memoize the promise.
+  function ensureLocations(): Promise<void> {
+    if (!book) return Promise.resolve();
+    if (!locationsReady) {
+      locationsReady = book.locations.generate(GENERATE_CHARS).then(() => {}).catch((err) => {
+        locationsReady = null;
+        return Promise.reject(err);
+      });
+    }
+    return locationsReady;
   }
 
   return {
@@ -64,6 +79,8 @@ export function createEpubRenderer(
       // epub.js creates blob: URLs for EPUB stylesheets without setting a MIME type.
       // Browsers ignore stylesheets served without text/css, so we fetch each blob,
       // read its CSS text, and replace the <link> with an inline <style> element.
+      // These blob URLs are epub.js-owned and cached/reused across chapters, so the
+      // hook must not revoke them — epub.js revokes them itself in book.destroy().
       rendition.hooks.content.register(async (contents: { document: Document }) => {
         try {
           const doc = contents.document;
@@ -78,11 +95,10 @@ export function createEpubRenderer(
               const href = link.getAttribute("href")!;
               const response = await fetch(href);
               if (!response.ok) throw new Error(`Failed to fetch EPUB blob stylesheet: ${response.status} ${response.statusText}`);
-              return { link, href, cssText: await response.text() };
+              return { link, cssText: await response.text() };
             }),
           );
-          for (const { link, href, cssText } of results) {
-            URL.revokeObjectURL(href);
+          for (const { link, cssText } of results) {
             const style = doc.createElement("style");
             style.textContent = cssText;
             if (!link.parentNode) throw new Error("EPUB stylesheet link has no parent node");
@@ -120,6 +136,17 @@ export function createEpubRenderer(
       const spineItem = book.spine.get(page - 1);
       if (!spineItem) return;
       await rendition.display(spineItem.href);
+    },
+
+    async goToFraction(fraction: number): Promise<void> {
+      if (!rendition || !book) return;
+      await ensureLocations();
+      if (destroyed) return;
+      const clamped = Math.max(0, Math.min(1, fraction));
+      const cfi = book.locations.cfiFromPercentage(clamped);
+      const relocated = waitForRelocated();
+      await rendition.display(cfi);
+      await relocated;
     },
 
     async next(): Promise<void> {

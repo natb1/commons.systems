@@ -17,9 +17,19 @@
 //   parser/serializer, rules, and demo seed; this file is the writer only.
 //
 // CONFIG (environment variables)
-//   DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS  comma-separated owner emails. Split on
-//     ",", trim, drop empties (same as office-hours-sync.ts). Required; an empty
-//     resolved list fails closed (the owner would be locked out of the doc).
+//   Member emails are NOT read from the environment. In real mode they come from
+//     the OFFICE_HOURS_MEMBER_EMAILS Firebase/GCP Secret Manager secret — the same
+//     canonical secret the office-hours-sync Cloud Function reads (reused from
+//     #1257, #1377). The PII therefore lives only in Secret Manager, never in the
+//     repo, a shell var, or a local file.
+//   DISPATCH_USAGE_SAMPLES_SECRET_NAME    optional, non-PII override for the secret
+//     id; default "OFFICE_HOURS_MEMBER_EMAILS". Must be non-empty and contain no
+//     "/" (it is interpolated into the secret resource path).
+//   DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE  --dry-run ONLY test seam: the raw
+//     comma-separated payload the secret would return. Consulted only in
+//     --dry-run; real mode always reads Secret Manager and never consults it
+//     (analogous to the DISPATCH_USAGE_SAMPLES_NOW time seam). Carries dummy
+//     emails in tests; it is NOT a production source of PII.
 //   DISPATCH_USAGE_SAMPLES_GROUP_ID       owning group id. Required; non-empty
 //     and must contain no "/" (a slash would escape the collection path).
 //   DISPATCH_USAGE_SAMPLES_NAMESPACE      default "office-hours/prod". Validated
@@ -32,10 +42,13 @@
 //     to Math.floor(Date.now()/1000). Test-determinism seam; a positive integer.
 //
 // AUTH — Application Default Credentials (ADC)
-//   Real-mode writes authenticate via ADC: either GOOGLE_APPLICATION_CREDENTIALS
+//   Real-mode runs authenticate via ADC: either GOOGLE_APPLICATION_CREDENTIALS
 //   pointing at a service-account key, or `gcloud auth application-default
-//   login`. This file does NOT configure credentials — it relies on the ambient
-//   ADC of the author's machine where the sampler runs.
+//   login`. The SAME ADC authenticates BOTH the Secret Manager read (the member-
+//   email list) and the firebase-admin Firestore write. This file does NOT
+//   configure credentials — it relies on the ambient ADC of the author's machine
+//   where the sampler runs. The service account needs
+//   roles/secretmanager.secretAccessor on the OFFICE_HOURS_MEMBER_EMAILS secret.
 //
 // FAIL-SAFE CONTRACT (per .claude/rules/code-style.md; mirrors the "log and
 // skip" posture of office-hours-sync.ts and dispatch-refresh-rate-limits)
@@ -46,12 +59,16 @@
 //
 // MODES
 //   --dry-run  (first CLI arg): read stdin, run ALL config + payload validation,
+//     take the member-email list from DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE,
 //     assemble the doc with Timestamps rendered as ISO strings, print it as
-//     pretty JSON to stdout, exit 0. firebase-admin is NEVER imported, so the
-//     bash unit tests (test-dispatch-scripts.sh) stay dependency-free.
-//   real mode (no --dry-run): dynamically import firebase-admin, assemble the
-//     doc with firebase-admin Timestamps, `.add()` it to the collection, print
-//     the new doc id to stdout, exit 0.
+//     pretty JSON to stdout, exit 0. Neither firebase-admin nor
+//     @google-cloud/secret-manager is imported, so the bash unit tests
+//     (test-dispatch-scripts.sh) stay dependency-free.
+//   real mode (no --dry-run): dynamically import @google-cloud/secret-manager and
+//     fetch the member-email list from the OFFICE_HOURS_MEMBER_EMAILS secret
+//     (fail-fast, before any firebase-admin init), then dynamically import
+//     firebase-admin, assemble the doc with firebase-admin Timestamps, `.add()`
+//     it to the collection, print the new doc id to stdout, exit 0.
 //   The field set and the epoch-second inputs are IDENTICAL between modes; only
 //   the Timestamp representation differs (ISO string vs admin Timestamp).
 //
@@ -83,19 +100,34 @@ function isFiniteNumber(v) {
   return typeof v === "number" && Number.isFinite(v);
 }
 
-// Parse + validate config from the environment. Returns a config object or
-// calls fail() (which exits).
-function loadConfig(env) {
-  const memberEmailsStr = env.DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS;
-  if (typeof memberEmailsStr !== "string") {
-    fail("DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS is required");
-  }
-  const memberEmails = memberEmailsStr
+// Default Secret Manager secret id for the member-email PII list. Reuses the
+// canonical secret the office-hours-sync Cloud Function reads (#1257, #1377);
+// do not create a second secret.
+const DEFAULT_SECRET_NAME = "OFFICE_HOURS_MEMBER_EMAILS";
+
+// Parse a comma-separated member-email payload into a trimmed, non-empty list.
+// Identical semantics to office-hours-sync.ts: split on ",", trim, drop empties.
+// An empty resolved list fails closed (the owner would be locked out of the doc).
+function resolveMemberEmails(rawCsv) {
+  const memberEmails = rawCsv
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
   if (memberEmails.length === 0) {
-    fail("DISPATCH_USAGE_SAMPLES_MEMBER_EMAILS resolved to an empty list");
+    fail("member-email list resolved to an empty list");
+  }
+  return memberEmails;
+}
+
+// Parse + validate config from the environment. Returns a config object or
+// calls fail() (which exits).
+function loadConfig(env) {
+  const secretName = env.DISPATCH_USAGE_SAMPLES_SECRET_NAME ?? DEFAULT_SECRET_NAME;
+  if (secretName.length === 0) {
+    fail("DISPATCH_USAGE_SAMPLES_SECRET_NAME must be non-empty");
+  }
+  if (secretName.includes("/")) {
+    fail("DISPATCH_USAGE_SAMPLES_SECRET_NAME must not contain a slash");
   }
 
   const groupId = env.DISPATCH_USAGE_SAMPLES_GROUP_ID;
@@ -124,6 +156,9 @@ function loadConfig(env) {
   if (typeof projectId !== "string" || projectId.length === 0) {
     fail("DISPATCH_USAGE_SAMPLES_PROJECT_ID must be non-empty");
   }
+  if (projectId.includes("/")) {
+    fail("DISPATCH_USAGE_SAMPLES_PROJECT_ID must not contain a slash");
+  }
 
   let nowEpochSeconds;
   const nowStr = env.DISPATCH_USAGE_SAMPLES_NOW;
@@ -136,7 +171,7 @@ function loadConfig(env) {
     nowEpochSeconds = Number(nowStr);
   }
 
-  return { memberEmails, groupId, namespace, ttlDays, projectId, nowEpochSeconds };
+  return { secretName, groupId, namespace, ttlDays, projectId, nowEpochSeconds };
 }
 
 // Parse + validate the stdin payload. Returns a payload object or calls fail().
@@ -209,6 +244,15 @@ async function main() {
   const payload = loadPayload(raw);
 
   if (dryRun) {
+    // Dry-run member-email source — a test seam carrying the raw payload the
+    // secret would return. Consulted ONLY here; never in real mode. Keeps the
+    // bash unit suite (no @google-cloud/secret-manager installed) dependency-free.
+    const rawSecret = process.env.DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE;
+    if (rawSecret === undefined) {
+      fail("--dry-run requires DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE");
+    }
+    config.memberEmails = resolveMemberEmails(rawSecret);
+
     // ISO-string factory — keeps firebase-admin out of the dependency graph so
     // the bash unit tests run without it. JSON.stringify renders Timestamps as
     // ISO strings and null resets as JSON null.
@@ -218,7 +262,21 @@ async function main() {
     process.exit(0);
   }
 
-  // Real mode — import firebase-admin only on this path.
+  // Real mode — resolve the member-email list from Secret Manager FIRST, before
+  // any firebase-admin init, so a secret/credential failure fails fast through
+  // main().catch -> fail() (one diagnostic, exit 1, no document, no creds echoed).
+  const { SecretManagerServiceClient } = await import("@google-cloud/secret-manager");
+  const secretClient = new SecretManagerServiceClient();
+  const [version] = await secretClient.accessSecretVersion({
+    name: `projects/${config.projectId}/secrets/${config.secretName}/versions/latest`,
+  });
+  if (!version?.payload?.data) {
+    fail(`secret ${config.secretName} returned an empty or missing payload`);
+  }
+  const rawSecret = version.payload.data.toString("utf8");
+  config.memberEmails = resolveMemberEmails(rawSecret);
+
+  // Import firebase-admin only on this path.
   const { getApps, initializeApp } = await import("firebase-admin/app");
   const { getFirestore, Timestamp } = await import("firebase-admin/firestore");
 

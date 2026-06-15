@@ -1,4 +1,5 @@
 import { Marked } from "marked";
+import type { Tokens } from "marked";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { PublishedPost } from "./post-types.ts";
 import { BLOG_IMAGES } from "./image-config.ts";
@@ -37,26 +38,32 @@ function isExternalHref(href: string): boolean {
 }
 
 // Creates a Marked instance that strips raw HTML from markdown (defense-in-depth)
-// and opens post-body links in new tabs with rel="noopener noreferrer" to prevent
+// and opens external post-body links in new tabs with rel="noopener noreferrer" to prevent
 // reverse tabnapping. The image renderer adds width/height, srcset/sizes, and
 // fetchpriority="high" on the first image per instance (likely LCP candidate).
 //
-// Server-side HTML sanitizer (isomorphic-dompurify) is unnecessary: `html: () => ""`
-// strips all raw HTML at build time, and images validate against IMAGE_DIMENSIONS
-// (unknown paths throw). The client additionally runs DOMPurify (see pages/home.ts).
+// Server-side HTML sanitizer (isomorphic-dompurify) is unnecessary: link labels are
+// rendered via this.parser.parseInline, so raw HTML inside labels routes through
+// `html: () => ""` like all other raw HTML, and images validate against
+// IMAGE_DIMENSIONS (unknown paths throw). The client additionally runs DOMPurify
+// (see pages/home.ts). Note: unsafe URL protocols (e.g. javascript: hrefs) are NOT
+// neutralized by escapeHtml(href) and remain out of scope — tracked in #1192.
 export function createMarked(): Marked {
   let imageIndex = 0;
 
   return new Marked({
     renderer: {
       html: () => "",
-      link({ href, text, title }) {
+      link({ href, title, tokens }: Tokens.Link) {
         const safeHref = escapeHtml(href);
         const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
-        const glyphHtml = isExternalHref(href)
+        const external = isExternalHref(href);
+        const glyphHtml = external
           ? '<span class="external-link-icon" aria-hidden="true">&#x2197;</span>'
           : "";
-        return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}${glyphHtml}</a>`;
+        const targetRel = external ? ' target="_blank" rel="noopener noreferrer"' : "";
+        const label = this.parser.parseInline(tokens);
+        return `<a href="${safeHref}"${titleAttr}${targetRel}>${label}${glyphHtml}</a>`;
       },
       image({ href, text }) {
         const safeHref = escapeHtml(href);

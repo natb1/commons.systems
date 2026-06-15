@@ -451,7 +451,7 @@ export function hydrateBudgetChart(container: HTMLElement): void {
 
 function collectOverridesForBudget(container: HTMLElement, budgetId: string): BudgetOverride[] | null {
   const rows = container.querySelectorAll<HTMLElement>(`.override-row[data-budget-id="${budgetId}"]`);
-  const overrides: BudgetOverride[] = [];
+  const overrides = new Map<number, BudgetOverride>();
   for (const row of rows) {
     const dateInput = row.querySelector<HTMLInputElement>(".edit-override-date");
     const balanceInput = row.querySelector<HTMLInputElement>(".edit-override-balance");
@@ -466,10 +466,9 @@ function collectOverridesForBudget(container: HTMLElement, budgetId: string): Bu
       showInputError(balanceInput, "Balance must be a finite number");
       return null;
     }
-    overrides.push({ date: Timestamp.fromMillis(dateMs), balance });
+    overrides.set(dateMs, { date: Timestamp.fromMillis(dateMs), balance });
   }
-  overrides.sort((a, b) => a.date.toMillis() - b.date.toMillis());
-  return overrides;
+  return [...overrides.values()].sort((a, b) => a.date.toMillis() - b.date.toMillis());
 }
 
 export function hydrateOverridesTable(container: HTMLElement): void {

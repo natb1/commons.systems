@@ -126,20 +126,17 @@ async function loadPosts(): Promise<string> {
 
 updateNav(parsePath().path);
 
-// Same pre-render skip pattern as isFirstPanelRender above — return null on
-// the first navigation so the router keeps the existing DOM instead of
-// tearing it down and rebuilding identical markup.
-const hasPrerenderedHome = app.querySelector("#posts") !== null;
-let isFirstHomeRender = hasPrerenderedHome;
-
 const router = createHistoryRouter(
   app,
   [
     {
       path: /^\/(?:post\/.*)?$/,
       render: () => {
-        if (isFirstHomeRender) {
-          isFirstHomeRender = false;
+        // Skip teardown only while the prerendered home DOM is still live —
+        // checked at render time, not via a one-shot flag, so a non-home entry
+        // route (e.g. /admin) that has already replaced #posts does not leave
+        // stale markup on a later Home navigation (#1285).
+        if (app.querySelector("#posts")) {
           // Populate cachedPosts synchronously since the null return skips
           // loadPosts, and afterRender needs them for hydration.
           cachedPosts = buildTimeMetadata;

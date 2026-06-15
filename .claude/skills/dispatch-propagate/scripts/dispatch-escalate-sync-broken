@@ -1,0 +1,246 @@
+#!/usr/bin/env bash
+# dispatch-escalate-sync-broken — find-or-create the dispatch:sync-broken latch
+# issue when the dispatch tick cannot fast-forward-merge origin/main into local
+# main.
+#
+# WHEN it runs:
+#   Invoked by `dispatch-select-tick` Step 1 (running in the `main` worktree, on
+#   branch `main`) after its origin/main sync attempt has failed repeatedly — the
+#   per-tick repair attempt-counter has hit its cap and local main still cannot be
+#   brought up to date. The caller passes `--reason` to distinguish two wedge
+#   modes:
+#
+#     merge-failed  — `git fetch` succeeded but the subsequent
+#                     `git merge --ff-only origin/main` failed: local main and
+#                     origin/main have diverged with a conflict that
+#                     `/commit-merge-push` could not resolve.
+#     fetch-failed  — `git fetch origin main` itself failed: origin/main could
+#                     not be reached (network / GitHub reachability), so no merge
+#                     was attempted at all.
+#
+#   Either way the dispatch chain's sync precondition is wedged: every tick that
+#   needs an up-to-date local main is blocked.
+#
+#   This script does NOT attempt the repair itself. It files (or refreshes) a
+#   single human-readable GitHub latch issue labeled `dispatch:sync-broken`. While
+#   that issue is open the tick spawns no further `sync-repair` jobs (the latch
+#   suppresses repeated, futile repair spawns). Closing is automatic: once local
+#   main ff-merges origin/main cleanly again, the tick re-arms/closes the latch.
+#
+# Modeled on the dispatch:main-broken find-or-create pattern in
+# dispatch-diagnose-main/SKILL.md (find-or-create + label create-on-not-found).
+#
+# Input:
+#   The captured stderr of the failing git command is read from STDIN. Its meaning
+#   depends on `--reason`: for `fetch-failed` it is the `git fetch origin main`
+#   stderr; for `merge-failed` it is the `git merge --ff-only origin/main` stderr.
+#   The caller passes `--reason` and pipes the matching stderr:
+#       "$SCRIPT_DIR/dispatch-escalate-sync-broken" --reason merge-failed <<<"$CAPTURED_STDERR"
+#
+# Output:
+#   On success, the created-or-edited issue number is echoed to stdout (bare).
+#   All diagnostics go to stderr.
+#
+# No `dispatch:office-hours` label is applied — mirror dispatch:main-broken. A
+# "go fix your local main tree" task fits none of the office-hours worker's
+# input-residues (it is neither a plan-clarification, a QA walkthrough, nor a
+# deviation review), so it is a human-readable latch surfaced via the dispatch
+# queue, NOT routed to the automated office-hours worker.
+#
+# Sandbox: every `gh` call here uses the network and the macOS Security framework
+# for TLS certificate validation, both of which the sandbox blocks (see
+# `.claude/rules/sandbox.md`). The caller MUST invoke this script with
+# `dangerouslyDisableSandbox: true`.
+#
+# Exit codes:
+#   0   issue created or refreshed; issue number on stdout.
+#   1   a gh/git operation failed unexpectedly (surfaced on stderr).
+
+set -euo pipefail
+
+LABEL="dispatch:sync-broken"
+
+# ---- Parse --reason ---------------------------------------------------------
+#
+# `--reason fetch-failed|merge-failed` selects the wedge mode. Default to
+# `merge-failed` to preserve existing semantics for any untagged caller. An
+# unrecognized value is a clear error, not a silent fallback (per
+# .claude/rules/code-style.md).
+REASON="merge-failed"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --reason)
+      REASON="${2:-}"
+      shift 2
+      ;;
+    *)
+      echo "dispatch-escalate-sync-broken: unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+case "$REASON" in
+  fetch-failed|merge-failed) ;;
+  *)
+    echo "dispatch-escalate-sync-broken: --reason must be 'fetch-failed' or 'merge-failed', got: $REASON" >&2
+    exit 1
+    ;;
+esac
+
+# ---- Read the captured stderr from stdin ------------------------------------
+#
+# `CAPTURED_STDERR=$(cat)` consumes the caller's here-string without interpreting
+# escapes or returning a non-zero EOF status that `set -e` would trip on. Its
+# meaning depends on $REASON (fetch stderr vs merge stderr).
+CAPTURED_STDERR=$(cat)
+
+# ---- Gather diagnostics from the local repo ---------------------------------
+#
+# This script runs in the main worktree, so the local repo IS local main.
+# `--show-toplevel` derives the worktree path with no hardcoding.
+MAIN_WORKTREE=$(git rev-parse --show-toplevel)
+
+# `git status --porcelain` is expected to succeed; a non-zero here signals a
+# broken environment (per .claude/rules/code-style.md, surface it rather than
+# swallow it). It is allowed to produce *empty* output without that being an
+# error.
+GIT_STATUS=$(git status --porcelain)
+
+# ---- Compose the body file --------------------------------------------------
+#
+# The diagnostics may carry shell metacharacters (git/log output, the captured
+# stderr). They are written to the body file ONLY and passed with --body-file —
+# never interpolated into the `gh` command line.
+if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
+  mkdir -p "$CLAUDE_JOB_DIR/tmp"
+  BODY_FILE=$(mktemp "$CLAUDE_JOB_DIR/tmp/sync-broken-body.XXXXXX")
+else
+  BODY_FILE=$(mktemp)
+fi
+trap 'rm -f "$BODY_FILE"' EXIT
+
+if [[ "$REASON" == "merge-failed" ]]; then
+  TITLE="dispatch: local main cannot ff-merge origin/main (sync latch)"
+
+  # `git log origin/main..HEAD` is meaningful only here — on a fetch failure the
+  # origin/main ref is stale, so the divergence listing would be misleading.
+  GIT_DIVERGENCE=$(git log --oneline origin/main..HEAD)
+
+  {
+    echo "Local \`main\` cannot fast-forward-merge \`origin/main\`. The dispatch"
+    echo "chain's sync precondition is wedged: local main and origin/main have"
+    echo "diverged with a conflict that automated repair (\`/commit-merge-push\`)"
+    echo "could not resolve, so local main is no longer ff-mergeable."
+    echo
+    echo "**A human must resolve or abort the merge on the \`main\` worktree**"
+    echo "(\`$MAIN_WORKTREE\`) — resolve the divergence and get local main back to a"
+    echo "state where it ff-merges \`origin/main\` cleanly."
+    echo
+    echo "While this issue is open, the dispatch tick spawns no further"
+    echo "\`sync-repair\` jobs (this issue is the latch that suppresses them)."
+    echo "Closing happens automatically: once local main ff-merges \`origin/main\`"
+    echo "clean again, the tick re-arms and closes this latch."
+    echo
+    echo "## git status --porcelain"
+    echo
+    echo '```'
+    echo "$GIT_STATUS"
+    echo '```'
+    echo
+    echo "## git log --oneline origin/main..HEAD (local divergence)"
+    echo
+    echo '```'
+    echo "$GIT_DIVERGENCE"
+    echo '```'
+    echo
+    echo "## git merge --ff-only origin/main (captured stderr)"
+    echo
+    echo '```'
+    echo "$CAPTURED_STDERR"
+    echo '```'
+  } >"$BODY_FILE"
+else
+  # fetch-failed
+  TITLE="dispatch: cannot reach origin/main to sync local main (sync latch)"
+
+  {
+    echo "The dispatch tick could not reach \`origin/main\` — \`git fetch origin main\`"
+    echo "failed (network / GitHub reachability). No merge was attempted, so local"
+    echo "\`main\` and \`origin/main\` were never compared. The dispatch chain's sync"
+    echo "precondition is wedged: every tick that needs an up-to-date local main is"
+    echo "blocked until origin/main becomes reachable again."
+    echo
+    echo "**A human must restore GitHub reachability from the \`main\` worktree**"
+    echo "(\`$MAIN_WORKTREE\`) — once the tick can \`git fetch origin main\` again it"
+    echo "will ff-merge local main up to date on its own."
+    echo
+    echo "While this issue is open, the dispatch tick spawns no further"
+    echo "\`sync-repair\` jobs (this issue is the latch that suppresses them)."
+    echo "Closing happens automatically: once local main ff-merges \`origin/main\`"
+    echo "clean again, the tick re-arms and closes this latch."
+    echo
+    echo "## git status --porcelain"
+    echo
+    echo '```'
+    echo "$GIT_STATUS"
+    echo '```'
+    echo
+    echo "## git fetch origin main (captured stderr)"
+    echo
+    echo '```'
+    echo "$CAPTURED_STDERR"
+    echo '```'
+  } >"$BODY_FILE"
+fi
+
+# ---- Find-or-create the latch issue -----------------------------------------
+#
+# One open dispatch:sync-broken issue at a time. A re-run edits the existing
+# issue's body (refreshing the diagnostics) rather than duplicating.
+existing=$(gh issue list --label "$LABEL" --state open --json number -q '.[0].number')
+
+if [[ -n "$existing" ]]; then
+  # The edit touches the body only (no --label flag), so it cannot fail with a
+  # "label not found" error — no create-on-not-found retry needed here.
+  gh issue edit "$existing" --title "$TITLE" --body-file "$BODY_FILE" >/dev/null
+  echo "$existing"
+  exit 0
+fi
+
+# Create path. `bug` + `priority` sort the fix to the top of the dispatch ladder;
+# `dispatch:sync-broken` is the latch label. The label may not exist yet —
+# apply-first / create-on-not-found: if the create fails because the label is
+# "not found", create it once and retry.
+create() {
+  gh issue create \
+    --title "$TITLE" \
+    --body-file "$BODY_FILE" \
+    --label "$LABEL" \
+    --label bug \
+    --label priority
+}
+
+if ! create_out=$(create 2>&1); then
+  if [[ "$create_out" != *"not found"* ]]; then
+    # A real failure (e.g. gh unreachable) — surface it, don't swallow it.
+    echo "$create_out" >&2
+    exit 1
+  fi
+  # The dispatch:sync-broken label does not exist yet. Create it once and retry.
+  # --color is intentionally omitted: the dispatch-label color hex is
+  # single-sourced in dispatch-complete-phase and must not be duplicated here
+  # (mirrors dispatch-diagnose-main/SKILL.md).
+  gh label create "$LABEL" \
+    --description "dispatch workflow: local main cannot ff-merge origin/main (sync latch)"
+  if ! create_out=$(create 2>&1); then
+    # The retry failed too (e.g. gh rate-limited the create right after the
+    # label was made) — surface it, don't swallow it.
+    echo "$create_out" >&2
+    exit 1
+  fi
+fi
+
+# `gh issue create` prints the new issue's URL on stdout, not a bare number —
+# the number is the trailing path segment.
+echo "${create_out##*/}"
