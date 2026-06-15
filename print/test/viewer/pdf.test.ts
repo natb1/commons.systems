@@ -367,6 +367,42 @@ describe("search()", () => {
     const decoded = decodeLocation(page2!.location);
     expect(decoded).toEqual({ page: 2, offset: 0, length: 3 });
   });
+
+  it("returns [] without throwing when destroy() ran before search()", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+    renderer.destroy(); // sets destroyed = true and pdfDoc = null
+    // Old code: `await pdfDoc!.getPage(1)` dereferences null → TypeError.
+    await expect(renderer.search!("the")).resolves.toEqual([]);
+  });
+
+  it("resolves (does not reject) when destroy() fires during the page loop", async () => {
+    const pdfjs = await import("pdfjs-dist");
+    let renderer: ReturnType<typeof createPdfRenderer>;
+    const racingDoc = {
+      numPages: 3,
+      destroy() {},
+      getPage: (i: number) => {
+        if (i === 2) renderer.destroy(); // teardown races mid-loop
+        return Promise.resolve({
+          getTextContent: () => Promise.resolve({ items: [{ str: "the cat" }] }),
+          getViewport: () => ({ width: 100, height: 100 }),
+          render: () => ({ promise: Promise.resolve(), cancel() {} }),
+        });
+      },
+      getOutline: () => Promise.resolve(null),
+      getDestination: () => Promise.resolve(null),
+      getPageIndex: () => Promise.resolve(0),
+    };
+    const spy = vi
+      .spyOn(pdfjs, "getDocument")
+      .mockReturnValue({ promise: Promise.resolve(racingDoc) } as never);
+    renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+    // Must resolve to a partial/empty result, never reject.
+    await expect(renderer.search!("the")).resolves.toBeInstanceOf(Array);
+    spy.mockRestore();
+  });
 });
 
 // ---------------------------------------------------------------------------

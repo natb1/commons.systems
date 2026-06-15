@@ -553,12 +553,19 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       // very short and matches thousands of positions across a long document.
       const MAX_RESULTS = 200;
 
+      // Capture pdfDoc into a local so a concurrent destroy() — which nulls
+      // pdfDoc — cannot turn a non-null assertion into a TypeError. Matches the
+      // guard pattern in getOutline()/renderPage(). The destroyed flag still
+      // short-circuits after each await below.
+      const doc = pdfDoc;
+      if (!doc || destroyed) return results;
+
       for (let i = 1; i <= _pageCount; i++) {
         // Lazily populate the page-text cache. Re-fetching text for every
         // debounced keystroke would be wasteful; cache across search calls.
         let pageText = pageTextCache.get(i);
         if (pageText === undefined) {
-          const page = await pdfDoc!.getPage(i);
+          const page = await doc.getPage(i);
           if (destroyed) return results;
           const tc = await page.getTextContent();
           if (destroyed) return results;
