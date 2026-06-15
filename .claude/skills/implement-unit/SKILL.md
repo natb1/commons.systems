@@ -127,4 +127,4 @@ The caller supplies:
    - **Push rejection** (non-fast-forward, server hook) → surface to the user. Do
      **not** force-push.
 
-4. **Hand back to the caller** — this unit is committed, merged, and pushed. Do not end the turn; do not emit a closing summary. Issue the caller's next step as a tool call immediately.
+4. **Hand back to the caller** — this unit is committed, merged, and pushed. Do not end the turn; do not emit a closing summary. The next message is the next tool call.

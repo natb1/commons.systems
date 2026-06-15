@@ -67,7 +67,7 @@ not implement, so this is a same-tick crash-recovery edge.)
 
 **Single named exit.** Take exactly one terminal action to end the turn: the
 final action is a call to `dispatch-mark-complete` (no deviation) or
-`dispatch-mark-deviation` (deviation). These are the single named exit.
+`dispatch-mark-deviation` (deviation). This is the single named exit.
 
 - Any OTHER most-recent tool call — a unit finishing in Step 2, the draft PR
   opening in Step 3 — means the orchestrator is mid-loop, not done.

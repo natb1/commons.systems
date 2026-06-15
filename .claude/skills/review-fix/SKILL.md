@@ -262,8 +262,9 @@ findings — only this compact summary.
 
 ### 3. Commit the Workflow's working-tree edits via one commit-merge-push
 
-The Workflow returning (Step 2), and `/commit-merge-push` (Step 3) and
-`/file-issue` (Step 5) returning, are mid-tail — not the end of the turn. Continue
+The Workflow returning (Step 2), `/commit-merge-push` (Step 3), `/file-issue`
+(Step 5), and `dispatch-complete-phase` applying `dispatch:reviewed` (Step 7)
+returning, are mid-tail — not the end of the turn. Continue
 through Steps 3–7; the pass ends only after `dispatch:reviewed` is applied and the
 Step 7 marker is written (this skill's terminal action — see the preamble and Step
 7). Do not emit a closing summary; the next message is the next tool call.
@@ -352,7 +353,8 @@ Skip a path when its bucket is empty.
 The Workflow prepares `result.deferred_filings`, each entry carrying `title`,
 `body`, and `blocker_issue_nums` (the implementing issue numbers from
 `Closes #N`, or `"independent"`). For each entry, fork a subagent (`subagent_type:
-general-purpose`, `model: sonnet`). The subagent:
+general-purpose`, `model: sonnet`). When these subagents return, this is mid-tail
+— continue to Step 6 without a closing summary. The subagent:
 
 1. Invokes `/file-issue` with a leading `--follow-up` token prepended to the
    `$INPUT` it builds from the finding's `title` and `body` (the token must come
@@ -411,8 +413,9 @@ the same alert or package is never re-filed across repeated runs or multiple PRs
 - `required` and `false-positive` findings are never filed.
 
 For each emitted follow-up, fork a subagent (`subagent_type: general-purpose`,
-`model: sonnet`); run them in parallel (multiple Agent calls in one message). Each
-subagent:
+`model: sonnet`); run them in parallel (multiple Agent calls in one message). When
+these subagents return, this is mid-tail — continue to Step 6 without a closing
+summary. Each subagent:
 
 1. Runs the deterministic existence check (use `dangerouslyDisableSandbox: true`
    — `gh` needs network, see `.claude/rules/sandbox.md`), passing the follow-up's
