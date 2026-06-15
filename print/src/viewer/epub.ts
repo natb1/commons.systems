@@ -230,6 +230,13 @@ export function createEpubRenderer(
       ++searchGeneration;
     },
 
+    async goToResult(result: SearchResult): Promise<void> {
+      if (!rendition) return;
+      const relocated = waitForRelocated();
+      await rendition.display(result.location);
+      await relocated;
+    },
+
     async getOutline(): Promise<OutlineEntry[]> {
       if (!book) return [];
       await book.loaded.navigation;
