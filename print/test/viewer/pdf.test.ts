@@ -443,9 +443,11 @@ describe("clearSearch()", () => {
     const page1Result = results.find((r) => r.label === "Page 1");
     expect(page1Result).toBeDefined();
 
+    // goToResult is ARM-ONLY — no highlight appears until renderResult() runs.
     await renderer.goToResult!(page1Result!);
+    await renderer.renderResult!();
 
-    // After goToResult, a .search-highlight.active span should exist in the container
+    // After renderResult, a .search-highlight.active span should exist in the container
     const highlight = container.querySelector(".search-highlight.active");
     expect(highlight).not.toBeNull();
     expect(highlight!.textContent).toBe("the");
@@ -471,6 +473,8 @@ describe("clearSearch()", () => {
     const results = await renderer.search!("the");
     const page1Result = results.find((r) => r.label === "Page 1");
     await renderer.goToResult!(page1Result!);
+    // Apply the highlight so clearSearch has something real to clear.
+    await renderer.renderResult!();
 
     renderer.clearSearch!();
 
@@ -478,5 +482,24 @@ describe("clearSearch()", () => {
     await renderer.goToPage(1);
 
     expect(container.querySelector(".search-highlight.active")).toBeNull();
+  });
+
+  it("goToResult alone (arm-only) produces no highlight span; renderResult() applies it", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the");
+    const page1Result = results.find((r) => r.label === "Page 1");
+    expect(page1Result).toBeDefined();
+
+    // ARM step only — no render triggered, so no highlight span in the DOM.
+    await renderer.goToResult!(page1Result!);
+    expect(container.querySelector(".search-highlight")).toBeNull();
+
+    // RENDER step — highlight should now appear with the matched text.
+    await renderer.renderResult!();
+    const highlight = container.querySelector(".search-highlight.active");
+    expect(highlight).not.toBeNull();
+    expect(highlight!.textContent).toBe("the");
   });
 });
