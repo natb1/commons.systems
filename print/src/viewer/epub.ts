@@ -138,6 +138,28 @@ export function createEpubRenderer(
       await rendition.display(spineItem.href);
     },
 
+    async goToPosition(position: string): Promise<void> {
+      if (!rendition) return;
+      await rendition.display(position);
+      // epub.js does not reliably emit 'relocated' for display(cfi), so the
+      // persistent relocated handler may never update the position state.
+      // Read the current location directly after display() resolves.
+      // currentLocation() may return a Location or a Promise<Location>
+      // depending on epub.js version/load state — normalize with Promise.resolve.
+      // At runtime it returns a Location ({ start, atStart, atEnd }) — the same
+      // shape as the relocated event — but the epubjs types declare a flat
+      // DisplayedLocation, so cast (mirroring the spine.length cast above).
+      const loc = (await Promise.resolve(rendition.currentLocation())) as unknown as Location;
+      if (loc?.start) {
+        _chapterIndex = loc.start.index;
+        _subPage = loc.start.displayed.page;
+        _subPageTotal = loc.start.displayed.total;
+        _atStart = loc.atStart;
+        _atEnd = loc.atEnd;
+        _currentCfi = loc.start.cfi;
+      }
+    },
+
     async goToFraction(fraction: number): Promise<void> {
       if (!rendition || !book) return;
       await ensureLocations();

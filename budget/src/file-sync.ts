@@ -58,6 +58,17 @@ export function resetFileSync(): void {
   generation++;
 }
 
+/**
+ * Advance-only watermark bump. Moves `lastSyncedModified` past a rejected
+ * external file version so the focus watcher stops re-triggering on it.
+ * Does NOT re-arm sync and does NOT bump `generation` — a failed reload
+ * leaves the in-memory dataset unchanged, so any in-flight debounced write
+ * is still authoritative and must not be abandoned.
+ */
+export function advanceSyncWatermark(modifiedMs: number): void {
+  lastSyncedModified = modifiedMs;
+}
+
 /** Debounced trigger; no-op when unconfigured (seed / non-FSA upload). */
 export function scheduleWriteBack(): void {
   if (!handle || password === null) return;
