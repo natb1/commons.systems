@@ -8,6 +8,7 @@ const manifestPath = join(publicDir, "manifest.webmanifest");
 const indexPath = join(testDir, "..", "index.html");
 
 const manifest = JSON.parse(readFileSync(manifestPath, "utf-8")) as {
+  id: string;
   name: string;
   short_name: string;
   start_url: string;
@@ -24,6 +25,10 @@ describe("web app manifest", () => {
     expect(manifest.name.length).toBeGreaterThan(0);
     expect(typeof manifest.short_name).toBe("string");
     expect(manifest.short_name.length).toBeGreaterThan(0);
+  });
+
+  it("id is /", () => {
+    expect(manifest.id).toBe("/");
   });
 
   it("start_url is /", () => {
@@ -45,10 +50,20 @@ describe("web app manifest", () => {
     expect(icon?.type).toBe("image/png");
   });
 
-  it("icons includes a 512x512 png entry", () => {
-    const icon = manifest.icons.find((i) => i.sizes === "512x512");
-    expect(icon).toBeDefined();
-    expect(icon?.type).toBe("image/png");
+  it("icons includes a 512x512 png entry with purpose any (Chrome installability)", () => {
+    const anyIcon = manifest.icons.find(
+      (i) => i.sizes === "512x512" && i.purpose === "any",
+    );
+    expect(anyIcon).toBeDefined();
+    expect(anyIcon?.type).toBe("image/png");
+  });
+
+  it("icons includes a 512x512 png entry with purpose maskable", () => {
+    const maskableIcon = manifest.icons.find(
+      (i) => i.sizes === "512x512" && i.purpose === "maskable",
+    );
+    expect(maskableIcon).toBeDefined();
+    expect(maskableIcon?.type).toBe("image/png");
   });
 
   it("icons includes at least one maskable entry", () => {
