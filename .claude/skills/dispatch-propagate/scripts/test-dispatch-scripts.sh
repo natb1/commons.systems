@@ -30220,6 +30220,24 @@ assert_eq "bail: script exits non-zero when the mergeable set cannot be computed
 assert_eq "bail: close pass did not run (no gh issue close)" "absent" "$(log_state gh-merge-issue-close.log)"
 teardown
 
+# (f) OPEN_COUNT>1 (concurrent-tick duplicate) → close every issue beyond .[0]
+echo "Test: OPEN_COUNT>1 → close duplicates, keep .[0]"
+setup
+printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
+printf '[{"number":77,"title":"Add widget"},{"number":78,"title":"Add widget"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
+"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
+assert_eq "dup-close: issue-close log present" "present" "$(log_state gh-merge-issue-close.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issue close 78' "$STUB_DIR/gh-merge-issue-close.log" \
+   && ! grep -q 'issue close 77' "$STUB_DIR/gh-merge-issue-close.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: closed duplicate #78, kept canonical #77"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: closed duplicate #78, kept canonical #77"
+fi
+assert_eq "dup-close: no spurious create" "absent" "$(log_state gh-merge-issue-create.log)"
+assert_eq "dup-close: no edit (.[0] title matches)" "absent" "$(log_state gh-merge-issue-edit.log)"
+teardown
+
 # ============================================================================
 # summary
 # ============================================================================
