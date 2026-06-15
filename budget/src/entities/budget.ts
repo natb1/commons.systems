@@ -148,6 +148,18 @@ function requireRawOverrides(rawOverrides: RawBudgetOverride[], budgetIndex: num
   return parsed;
 }
 
+// ── Write-boundary validation ─────────────────────────────────────────────────
+
+export function validateBudgetOverrideOrdering(
+  overrides: readonly BudgetOverride[],
+): void {
+  for (let i = 1; i < overrides.length; i++) {
+    if (overrides[i].date.toMillis() <= overrides[i - 1].date.toMillis()) {
+      throw new RangeError("Overrides must be sorted by date ascending");
+    }
+  }
+}
+
 // ── Firestore → Budget ────────────────────────────────────────────────────────
 
 export function parseFirestoreBudget(docSnap: QueryDocumentSnapshot<DocumentData, DocumentData>): Budget {
