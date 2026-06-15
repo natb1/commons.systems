@@ -53,6 +53,17 @@ export function renderIssueHistoryChart(samples: IssueSample[]): HTMLElement {
   // Sort a copy ascending by sample time — input order is not guaranteed.
   const sorted = [...samples].sort((a, b) => a.sampledAt.getTime() - b.sampledAt.getTime());
 
+  // A single sample, or multiple samples sharing one timestamp, yields a
+  // zero-width time domain that Plot renders as a degenerate single-x chart.
+  // Treat it as the empty state — fitBacklogRunway returns 'insufficient' here.
+  if (sorted.length < 2 || sorted[0].sampledAt.getTime() === sorted[sorted.length - 1].sampledAt.getTime()) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "No backlog history to chart.";
+    container.appendChild(empty);
+    return container;
+  }
+
   const points: Point[] = sorted.map((s) => ({
     x: s.sampledAt,
     openHelpWanted: s.openHelpWanted,

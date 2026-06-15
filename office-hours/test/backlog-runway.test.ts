@@ -95,9 +95,9 @@ describe("fitBacklogRunway", () => {
       makeSample(new Date("2026-01-03T00:00:00Z"), 5),
     ];
     const fit = fitBacklogRunway(steepFixture);
-    if (fit.state === "draining") {
-      expect(fit.daysUntilEmpty).toBeGreaterThanOrEqual(0);
-    }
+    expect(fit.state).toBe("draining");
+    if (fit.state !== "draining") return;
+    expect(fit.daysUntilEmpty).toBeGreaterThanOrEqual(0);
   });
 
   it("does not mutate the input array order", () => {

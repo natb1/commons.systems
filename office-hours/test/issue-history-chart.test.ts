@@ -57,6 +57,25 @@ describe("renderIssueHistoryChart", () => {
     expect(el.classList.contains("backlog-history")).toBe(true);
   });
 
+  it("single sample (openHelpWanted > 0): empty-state, no degenerate chart", () => {
+    // A lone sample yields a zero-width time domain — the degenerate xDomain
+    // edge case. The guard must short-circuit to the empty state rather than
+    // constructing a [d, d] domain through the stacked-area path.
+    const host = withFg();
+    const single: IssueSample[] = [
+      { sampledAt: new Date("2026-06-07T00:00:00Z"), openHelpWanted: 7, openOther: 2, groupId: "g" },
+    ];
+    const el = renderIssueHistoryChart(single);
+    host.appendChild(el);
+
+    const empty = el.querySelector(".empty");
+    expect(empty).not.toBeNull();
+    expect(empty!.textContent).toBe("No backlog history to chart.");
+    expect(el.querySelector("svg")).toBeNull();
+    expect(el.querySelector(".chart-layout")).toBeNull();
+    expect(el.classList.contains("backlog-history")).toBe(true);
+  });
+
   it("stacked areas: chart-body svg contains at least 2 path elements", () => {
     const host = withFg();
     const el = renderIssueHistoryChart(drainingFixture);
