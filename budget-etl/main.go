@@ -482,7 +482,7 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 		if err != nil {
 			return fmt.Errorf("transaction %s: invalid timestamp %q: %w", t.ID, t.Timestamp, err)
 		}
-		acctID := t.Institution + "_" + t.Account
+		acctID := journal.AccountID(t.Institution, t.Account)
 		allTxns = append(allTxns, budget.TransactionData{
 			Institution:   t.Institution,
 			Account:       t.Account,
@@ -1229,7 +1229,7 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 		if err != nil {
 			return fmt.Errorf("transaction %s: invalid timestamp %q: %w", t.ID, t.Timestamp, err)
 		}
-		acctID := t.Institution + "_" + t.Account
+		acctID := journal.AccountID(t.Institution, t.Account)
 		allTxns = append(allTxns, budget.TransactionData{
 			Institution:   t.Institution,
 			Account:       t.Account,
