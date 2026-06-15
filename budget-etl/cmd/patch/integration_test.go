@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"os"
 	"testing"
@@ -102,9 +103,19 @@ func ruleIDPresent(rs []export.Rule, id string) bool {
 // convertExportRules. It is duplicated here because that helper is
 // package-private to the parent budget-etl/main.go and cmd/patch can't
 // import it.
+//
+// DIVERGENCE RISK: this is a hand-maintained copy. When main.go's
+// convertExportRules changes (e.g. the validateCategoryFilterFields check
+// added below), this helper must be updated in lockstep or the integration
+// test will silently accept inputs the real binary rejects.
 func convertExportRulesForTest(exportRules []export.Rule) ([]rules.Rule, error) {
 	out := make([]rules.Rule, len(exportRules))
 	for i, r := range exportRules {
+		// Mirror convertExportRules' validateCategoryFilterFields call:
+		// category-filter fields are only valid on budget_assignment rules.
+		if r.Type == "categorization" && (r.MatchCategory != "" || r.ExcludeCategory != "" || r.Category != "") {
+			return nil, fmt.Errorf("rule %s: category-filter fields (matchCategory/excludeCategory/category) are only valid on budget_assignment rules, not categorization rules", r.ID)
+		}
 		out[i] = rules.Rule{
 			ID:              r.ID,
 			Type:            r.Type,

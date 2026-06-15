@@ -25,25 +25,12 @@ import type { IdbNormalizationRule } from "./entities/normalization-rule.js";
 export type { IdbNormalizationRule };
 import type { IdbWeeklyAggregate } from "./entities/weekly-aggregate.js";
 export type { IdbWeeklyAggregate };
+import { collectionRegistry } from "./collection-registry.js";
+import type { CollectionIdbData, DataStoreName } from "./collection-registry.js";
 
-const STORE_NAMES = [
-  "transactions",
-  "budgets",
-  "budgetPeriods",
-  "rules",
-  "normalizationRules",
-  "statements",
-  "statementItems",
-  "reconciliationNotes",
-  "accounts",
-  "journalEntries",
-  "journalLegs",
-  "reconciliationEvents",
-  "weeklyAggregates",
-  "meta",
-] as const;
+const STORE_NAMES = [...(Object.keys(collectionRegistry) as DataStoreName[]), "meta"] as const;
 
-export type StoreName = (typeof STORE_NAMES)[number];
+export type StoreName = DataStoreName | "meta";
 
 const { openDb, closeDb: closeDbConn } = createDbConnection({
   name: "budget",
@@ -85,22 +72,7 @@ export async function clearFileHandle(): Promise<void> {
   await deleteRecord("meta", "fileHandle");
 }
 
-export interface ParsedData {
-  transactions: IdbTransaction[];
-  budgets: IdbBudget[];
-  budgetPeriods: IdbBudgetPeriod[];
-  rules: IdbRule[];
-  normalizationRules: IdbNormalizationRule[];
-  statements: IdbStatement[];
-  statementItems: IdbStatementItem[];
-  reconciliationNotes: IdbReconciliationNote[];
-  accounts: IdbAccount[];
-  journalEntries: IdbJournalEntry[];
-  journalLegs: IdbJournalLeg[];
-  reconciliationEvents: IdbReconciliationEvent[];
-  weeklyAggregates: IdbWeeklyAggregate[];
-  meta: UploadMeta;
-}
+export type ParsedData = CollectionIdbData & { meta: UploadMeta };
 
 export async function storeParsedData(data: ParsedData): Promise<void> {
   const db = await openDb();
@@ -137,19 +109,10 @@ export async function storeParsedData(data: ParsedData): Promise<void> {
   await Promise.all(clearPromises);
 
   // Write all records
-  for (const record of data.transactions) stores.transactions.put(record);
-  for (const record of data.budgets) stores.budgets.put(record);
-  for (const record of data.budgetPeriods) stores.budgetPeriods.put(record);
-  for (const record of data.rules) stores.rules.put(record);
-  for (const record of data.normalizationRules) stores.normalizationRules.put(record);
-  for (const record of data.statements) stores.statements.put(record);
-  for (const record of data.statementItems) stores.statementItems.put(record);
-  for (const record of data.reconciliationNotes) stores.reconciliationNotes.put(record);
-  for (const record of data.accounts) stores.accounts.put(record);
-  for (const record of data.journalEntries) stores.journalEntries.put(record);
-  for (const record of data.journalLegs) stores.journalLegs.put(record);
-  for (const record of data.reconciliationEvents) stores.reconciliationEvents.put(record);
-  for (const record of data.weeklyAggregates) stores.weeklyAggregates.put(record);
+  const dataStoreNames = Object.keys(collectionRegistry) as DataStoreName[];
+  for (const name of dataStoreNames) {
+    for (const record of data[name]) stores[name].put(record);
+  }
   stores.meta.put(data.meta);
 
   await new Promise<void>((resolve, reject) => {
