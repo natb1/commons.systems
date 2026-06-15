@@ -1628,6 +1628,438 @@ func TestPlaintextFlagRejectsEnvPassword(t *testing.T) {
 	}
 }
 
+// TestVirtualStmtPrefix verifies that virtualStmtPrefix produces the expected
+// institution-account prefix string.
+func TestVirtualStmtPrefix(t *testing.T) {
+	if got := virtualStmtPrefix("synchrony", "virtual"); got != "synchrony-virtual-" {
+		t.Errorf("virtualStmtPrefix(%q,%q) = %q, want %q", "synchrony", "virtual", got, "synchrony-virtual-")
+	}
+	if got := virtualStmtPrefix("amazonstore", "virtual"); got != "amazonstore-virtual-" {
+		t.Errorf("virtualStmtPrefix(%q,%q) = %q, want %q", "amazonstore", "virtual", got, "amazonstore-virtual-")
+	}
+}
+
+// TestGenerateVirtualTransactions verifies the data-driven
+// generateVirtualTransactions function across multiple rule configurations.
+func TestGenerateVirtualTransactions(t *testing.T) {
+	synchronyRule := export.VirtualTransactionRule{
+		Institution:         "pnc",
+		Account:             "5111",
+		Category:            "Transfer:CardPayment",
+		DescriptionContains: "SYNCHRONY",
+		TargetInstitution:   "synchrony",
+		TargetAccount:       "virtual",
+		TargetCategory:      "Pet:Veterinarian",
+		TargetBudget:        "pet",
+		BudgetID:            "pet",
+		BudgetName:          "Pet",
+		AllowancePeriod:     "monthly",
+		Rollover:            "none",
+	}
+
+	t.Run("legacy synchrony parity", func(t *testing.T) {
+		allTxns := []budget.TransactionData{
+			{
+				Institution:   "pnc",
+				Account:       "5111",
+				Description:   "Online Payment To SYNCHRONY BANK",
+				Amount:        50000,
+				Timestamp:     time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
+				StatementID:   "pnc-5111-2025-02",
+				TransactionID: "txn-sync-1",
+				Category:      "Transfer:CardPayment",
+			},
+			{
+				Institution:   "pnc",
+				Account:       "5111",
+				Description:   "Online Payment To SYNCHRONY BANK",
+				Amount:        60000,
+				Timestamp:     time.Date(2025, 3, 15, 0, 0, 0, 0, time.UTC),
+				StatementID:   "pnc-5111-2025-03",
+				TransactionID: "txn-sync-2",
+				Category:      "Transfer:CardPayment",
+			},
+		}
+		docIDs := []string{"doc-sync-1", "doc-sync-2"}
+
+		res := generateVirtualTransactions(allTxns, docIDs, []export.VirtualTransactionRule{synchronyRule})
+
+		if len(res.transactions) != 2 {
+			t.Fatalf("expected 2 virtual transactions, got %d", len(res.transactions))
+		}
+
+		for _, vt := range res.transactions {
+			if vt.Institution != "synchrony" {
+				t.Errorf("Institution: got %q, want %q", vt.Institution, "synchrony")
+			}
+			if vt.Account != "virtual" {
+				t.Errorf("Account: got %q, want %q", vt.Account, "virtual")
+			}
+			if vt.Category != "Pet:Veterinarian" {
+				t.Errorf("Category: got %q, want %q", vt.Category, "Pet:Veterinarian")
+			}
+			if vt.Budget != "pet" {
+				t.Errorf("Budget: got %q, want %q", vt.Budget, "pet")
+			}
+			if !vt.Virtual {
+				t.Error("Virtual: got false, want true")
+			}
+		}
+
+		// Verify exact StatementIDs on virtual transactions
+		stmtIDs := make(map[string]bool)
+		for _, vt := range res.transactions {
+			stmtIDs[vt.StatementID] = true
+		}
+		if !stmtIDs["synchrony-virtual-2025-02"] {
+			t.Error("expected StatementID synchrony-virtual-2025-02")
+		}
+		if !stmtIDs["synchrony-virtual-2025-03"] {
+			t.Error("expected StatementID synchrony-virtual-2025-03")
+		}
+
+		// Verify TransactionIDs are "virtual-" + source docID
+		txnIDSet := make(map[string]bool)
+		for _, vt := range res.transactions {
+			txnIDSet[vt.TransactionID] = true
+		}
+		if !txnIDSet["virtual-doc-sync-1"] {
+			t.Error("expected TransactionID virtual-doc-sync-1")
+		}
+		if !txnIDSet["virtual-doc-sync-2"] {
+			t.Error("expected TransactionID virtual-doc-sync-2")
+		}
+
+		// Verify 2 statements with correct fields
+		if len(res.statements) != 2 {
+			t.Fatalf("expected 2 virtual statements, got %d", len(res.statements))
+		}
+		periods := make(map[string]bool)
+		for _, s := range res.statements {
+			if s.Balance != 0 {
+				t.Errorf("statement Balance: got %f, want 0", s.Balance)
+			}
+			if !s.Virtual {
+				t.Error("statement Virtual: got false, want true")
+			}
+			if s.Institution != "synchrony" {
+				t.Errorf("statement Institution: got %q, want %q", s.Institution, "synchrony")
+			}
+			if s.Account != "virtual" {
+				t.Errorf("statement Account: got %q, want %q", s.Account, "virtual")
+			}
+			periods[s.Period] = true
+		}
+		if !periods["2025-02"] || !periods["2025-03"] {
+			t.Errorf("statement periods: got %v, want {2025-02, 2025-03}", periods)
+		}
+
+		// Verify txnsByBudgetID["pet"] has 2 entries
+		if len(res.txnsByBudgetID["pet"]) != 2 {
+			t.Errorf("txnsByBudgetID[pet]: got %d entries, want 2", len(res.txnsByBudgetID["pet"]))
+		}
+	})
+
+	t.Run("distinct rule with non-matching txn excluded", func(t *testing.T) {
+		amazonRule := export.VirtualTransactionRule{
+			Institution:         "chase",
+			Account:             "7777",
+			Category:            "Transfer:CardPayment",
+			DescriptionContains: "AMAZON",
+			TargetInstitution:   "amazonstore",
+			TargetAccount:       "virtual",
+			TargetCategory:      "Shopping:Online",
+			TargetBudget:        "shopping",
+			BudgetID:            "shopping",
+			BudgetName:          "Shopping",
+			AllowancePeriod:     "monthly",
+			Rollover:            "none",
+		}
+
+		allTxns := []budget.TransactionData{
+			// Matching: chase/7777/Transfer:CardPayment with AMAZON in description
+			{
+				Institution:   "chase",
+				Account:       "7777",
+				Description:   "Payment To AMAZON MARKETPLACE",
+				Amount:        10000,
+				Timestamp:     time.Date(2025, 4, 10, 0, 0, 0, 0, time.UTC),
+				StatementID:   "chase-7777-2025-04",
+				TransactionID: "txn-amz-1",
+				Category:      "Transfer:CardPayment",
+			},
+			// Non-matching: wrong institution
+			{
+				Institution:   "pnc",
+				Account:       "7777",
+				Description:   "Payment To AMAZON MARKETPLACE",
+				Amount:        20000,
+				Timestamp:     time.Date(2025, 4, 12, 0, 0, 0, 0, time.UTC),
+				StatementID:   "pnc-7777-2025-04",
+				TransactionID: "txn-amz-wrong-inst",
+				Category:      "Transfer:CardPayment",
+			},
+		}
+		docIDs := []string{"doc-amz-1", "doc-amz-wrong-inst"}
+
+		res := generateVirtualTransactions(allTxns, docIDs, []export.VirtualTransactionRule{amazonRule})
+
+		if len(res.transactions) != 1 {
+			t.Fatalf("expected 1 virtual transaction, got %d", len(res.transactions))
+		}
+
+		vt := res.transactions[0]
+		if vt.Institution != "amazonstore" {
+			t.Errorf("Institution: got %q, want %q", vt.Institution, "amazonstore")
+		}
+		if vt.Account != "virtual" {
+			t.Errorf("Account: got %q, want %q", vt.Account, "virtual")
+		}
+		if vt.Category != "Shopping:Online" {
+			t.Errorf("Category: got %q, want %q", vt.Category, "Shopping:Online")
+		}
+		if vt.Budget != "shopping" {
+			t.Errorf("Budget: got %q, want %q", vt.Budget, "shopping")
+		}
+		if !vt.Virtual {
+			t.Error("Virtual: got false, want true")
+		}
+		if !strings.HasPrefix(vt.StatementID, "amazonstore-virtual-") {
+			t.Errorf("StatementID %q does not have prefix %q", vt.StatementID, "amazonstore-virtual-")
+		}
+		if vt.TransactionID != "virtual-doc-amz-1" {
+			t.Errorf("TransactionID: got %q, want %q", vt.TransactionID, "virtual-doc-amz-1")
+		}
+
+		// 1 statement for the single matched period
+		if len(res.statements) != 1 {
+			t.Fatalf("expected 1 statement, got %d", len(res.statements))
+		}
+		if res.statements[0].Period != "2025-04" {
+			t.Errorf("statement Period: got %q, want %q", res.statements[0].Period, "2025-04")
+		}
+
+		// txnsByBudgetID["shopping"] has 1 entry
+		if len(res.txnsByBudgetID["shopping"]) != 1 {
+			t.Errorf("txnsByBudgetID[shopping]: got %d, want 1", len(res.txnsByBudgetID["shopping"]))
+		}
+	})
+
+	t.Run("per-rule dedup by date and amount", func(t *testing.T) {
+		// Two txns with same date and amount under the synchrony rule -> only 1 virtual txn
+		allTxns := []budget.TransactionData{
+			{
+				Institution:   "pnc",
+				Account:       "5111",
+				Description:   "Online Payment To SYNCHRONY BANK",
+				Amount:        50000,
+				Timestamp:     time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
+				StatementID:   "pnc-5111-2025-02",
+				TransactionID: "txn-dup-a",
+				Category:      "Transfer:CardPayment",
+			},
+			{
+				Institution:   "pnc",
+				Account:       "5111",
+				Description:   "Online Payment To SYNCHRONY BANK",
+				Amount:        50000,
+				Timestamp:     time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
+				StatementID:   "pnc-5111-2025-02",
+				TransactionID: "txn-dup-b",
+				Category:      "Transfer:CardPayment",
+			},
+		}
+		docIDs := []string{"doc-dup-a", "doc-dup-b"}
+
+		res := generateVirtualTransactions(allTxns, docIDs, []export.VirtualTransactionRule{synchronyRule})
+
+		if len(res.transactions) != 1 {
+			t.Errorf("expected 1 transaction after per-rule dedup, got %d", len(res.transactions))
+		}
+	})
+
+	t.Run("skip virtual source rows", func(t *testing.T) {
+		// A virtual source txn that would otherwise match must be skipped
+		allTxns := []budget.TransactionData{
+			{
+				Institution:   "pnc",
+				Account:       "5111",
+				Description:   "Online Payment To SYNCHRONY BANK",
+				Amount:        50000,
+				Timestamp:     time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
+				StatementID:   "pnc-5111-2025-02",
+				TransactionID: "txn-virtual-src",
+				Category:      "Transfer:CardPayment",
+				Virtual:       true, // must be skipped
+			},
+		}
+		docIDs := []string{"doc-virtual-src"}
+
+		res := generateVirtualTransactions(allTxns, docIDs, []export.VirtualTransactionRule{synchronyRule})
+
+		if len(res.transactions) != 0 {
+			t.Errorf("expected 0 transactions (virtual source skipped), got %d", len(res.transactions))
+		}
+		if len(res.statements) != 0 {
+			t.Errorf("expected 0 statements (virtual source skipped), got %d", len(res.statements))
+		}
+	})
+
+	t.Run("empty filter field matches any", func(t *testing.T) {
+		// Rule with no Institution/Account/Category/DescriptionContains matches everything non-virtual
+		broadRule := export.VirtualTransactionRule{
+			TargetInstitution: "virtual-bank",
+			TargetAccount:     "catch-all",
+			TargetCategory:    "Misc",
+			TargetBudget:      "misc",
+			BudgetID:          "misc",
+		}
+		allTxns := []budget.TransactionData{
+			{
+				Institution:   "any-inst",
+				Account:       "any-acct",
+				Description:   "Some Transaction",
+				Amount:        1000,
+				Timestamp:     time.Date(2025, 1, 5, 0, 0, 0, 0, time.UTC),
+				StatementID:   "any-inst-any-acct-2025-01",
+				TransactionID: "txn-broad",
+				Category:      "SomeCategory",
+			},
+		}
+		docIDs := []string{"doc-broad"}
+
+		res := generateVirtualTransactions(allTxns, docIDs, []export.VirtualTransactionRule{broadRule})
+
+		if len(res.transactions) != 1 {
+			t.Errorf("expected 1 transaction for broad match-any rule, got %d", len(res.transactions))
+		}
+		if len(res.transactions) > 0 && res.transactions[0].Institution != "virtual-bank" {
+			t.Errorf("Institution: got %q, want %q", res.transactions[0].Institution, "virtual-bank")
+		}
+	})
+}
+
+// TestUpsertBudgetUpdatesExisting covers three behaviors of upsertVirtualBudgets:
+// overwrite of a stale allowance (the frozen-allowance bug fix), insertion when
+// absent, and skip when no transactions matched the rule.
+func TestUpsertBudgetUpdatesExisting(t *testing.T) {
+	petRule := export.VirtualTransactionRule{
+		BudgetID:        "pet",
+		BudgetName:      "Pet",
+		AllowancePeriod: "monthly",
+		Rollover:        "none",
+	}
+
+	petTxns := []budget.TransactionData{
+		{Amount: 50000, Timestamp: time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)},
+		{Amount: 60000, Timestamp: time.Date(2025, 3, 15, 0, 0, 0, 0, time.UTC)},
+		{Amount: 70000, Timestamp: time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)},
+	}
+
+	t.Run("overwrites stale allowance when budget already exists", func(t *testing.T) {
+		// Start with a stale allowance — this is the frozen-allowance bug scenario
+		budgets := []export.Budget{
+			{ID: "pet", Name: "Pet", Allowance: 999.99, AllowancePeriod: "monthly", Rollover: "none"},
+		}
+		txnsByBudgetID := map[string][]budget.TransactionData{
+			"pet": petTxns,
+		}
+
+		result := upsertVirtualBudgets(budgets, []export.VirtualTransactionRule{petRule}, txnsByBudgetID)
+
+		if len(result) != 1 {
+			t.Fatalf("expected 1 budget, got %d", len(result))
+		}
+		b := result[0]
+		if b.ID != "pet" {
+			t.Errorf("ID: got %q, want %q", b.ID, "pet")
+		}
+		// The stale allowance must be overwritten (the bug fix)
+		if b.Allowance == 999.99 {
+			t.Error("Allowance still 999.99 — frozen-allowance bug not fixed")
+		}
+		// Recomputed allowance should match computePetBudget range [200,500]
+		if b.Allowance < 200 || b.Allowance > 500 {
+			t.Errorf("Allowance out of expected range [200,500]: got %.2f", b.Allowance)
+		}
+		if b.Name != "Pet" {
+			t.Errorf("Name: got %q, want %q", b.Name, "Pet")
+		}
+		if b.AllowancePeriod != "monthly" {
+			t.Errorf("AllowancePeriod: got %q, want %q", b.AllowancePeriod, "monthly")
+		}
+		if b.Rollover != "none" {
+			t.Errorf("Rollover: got %q, want %q", b.Rollover, "none")
+		}
+	})
+
+	t.Run("inserts budget when not already present", func(t *testing.T) {
+		// Start with an unrelated budget — pet is absent
+		budgets := []export.Budget{
+			{ID: "other", Name: "Other", Allowance: 100.00, AllowancePeriod: "monthly", Rollover: "none"},
+		}
+		txnsByBudgetID := map[string][]budget.TransactionData{
+			"pet": petTxns,
+		}
+
+		result := upsertVirtualBudgets(budgets, []export.VirtualTransactionRule{petRule}, txnsByBudgetID)
+
+		if len(result) != 2 {
+			t.Fatalf("expected 2 budgets after insert, got %d", len(result))
+		}
+		// Find the pet budget
+		var petBudget *export.Budget
+		for i := range result {
+			if result[i].ID == "pet" {
+				petBudget = &result[i]
+				break
+			}
+		}
+		if petBudget == nil {
+			t.Fatal("pet budget not found after insert")
+		}
+		if petBudget.Allowance < 200 || petBudget.Allowance > 500 {
+			t.Errorf("inserted pet Allowance out of expected range [200,500]: got %.2f", petBudget.Allowance)
+		}
+	})
+
+	t.Run("skips rule with no matched transactions", func(t *testing.T) {
+		budgets := []export.Budget{
+			{ID: "other", Name: "Other", Allowance: 100.00, AllowancePeriod: "monthly", Rollover: "none"},
+		}
+		// txnsByBudgetID has no entry for "pet"
+		txnsByBudgetID := map[string][]budget.TransactionData{}
+
+		result := upsertVirtualBudgets(budgets, []export.VirtualTransactionRule{petRule}, txnsByBudgetID)
+
+		if len(result) != 1 {
+			t.Fatalf("expected 1 budget (no insert for empty txns), got %d", len(result))
+		}
+		if result[0].ID != "other" {
+			t.Errorf("expected only 'other' budget, got %q", result[0].ID)
+		}
+	})
+
+	t.Run("skips rule with BudgetID empty", func(t *testing.T) {
+		ruleNoBudgetID := export.VirtualTransactionRule{
+			BudgetID:        "",
+			BudgetName:      "NoBudget",
+			AllowancePeriod: "monthly",
+			Rollover:        "none",
+		}
+		budgets := []export.Budget{}
+		txnsByBudgetID := map[string][]budget.TransactionData{
+			"": petTxns, // even if keyed by empty string, BudgetID=="" must skip
+		}
+
+		result := upsertVirtualBudgets(budgets, []export.VirtualTransactionRule{ruleNoBudgetID}, txnsByBudgetID)
+
+		if len(result) != 0 {
+			t.Errorf("expected 0 budgets for rule with empty BudgetID, got %d", len(result))
+		}
+	})
+}
+
 // subprocessEnvNoPassword returns the current environment with any password env
 // var removed and the run-main marker appended. Re-exec subprocess tests use it
 // to drive main() hermetically without a password set, regardless of the
