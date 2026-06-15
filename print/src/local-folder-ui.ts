@@ -16,9 +16,17 @@ import { logError } from "@commons-systems/errorutil/log";
 import {
   createLocalSource,
   listLocal,
+  resolveLocalBlob,
 } from "./library.js";
+import { extractMetadata } from "./local-metadata.js";
 import { renderLocalMediaItems } from "./pages/home.js";
-import { setLocalDirectory } from "./sidecar.js";
+import {
+  cacheMetadata,
+  ensureLoaded,
+  getMetadata,
+  setLocalDirectory,
+} from "./sidecar.js";
+import type { MediaItem } from "./types.js";
 
 const store = createFsaHandleStore({ app: "print" });
 const PURPOSE = "library-folder";
@@ -144,8 +152,64 @@ export async function renderLocalIntoList(container: HTMLElement): Promise<void>
     ul.id = "media-list";
     empty.replaceWith(ul);
   }
+  // Enrich AFTER the early-return guard: a focus event on a list-less route
+  // (e.g. the viewer) must not read bytes or write the sidecar.
+  const enriched = await enrichLocalItems(items);
   for (const li of Array.from(ul.querySelectorAll(".media-item-local"))) {
     li.remove();
   }
-  ul.insertAdjacentHTML("afterbegin", renderLocalMediaItems(items));
+  ul.insertAdjacentHTML("afterbegin", renderLocalMediaItems(enriched));
+}
+
+/**
+ * Overlay real metadata (title + pageCount) onto each local `MediaItem`,
+ * cache-first. Keys the sidecar on `item.storagePath` (the BARE FILENAME, never
+ * the `local:<folderId>/<name>` id). Items with a cached entry are overlaid with
+ * zero IO and zero writes; items with NO entry (`getMetadata` returns undefined)
+ * are read via `resolveLocalBlob`, extracted, and cached once.
+ *
+ * Write suppression on focus-rescan: the only thing that writes the sidecar here
+ * is `cacheMetadata`, and it is called solely for items whose cache entry is
+ * `undefined`. A focus event with no new files therefore finds every item
+ * already cached (even files with no title cache a present `{}` entry, which is
+ * defined), so nothing is extracted and nothing is written.
+ */
+async function enrichLocalItems(items: MediaItem[]): Promise<MediaItem[]> {
+  await ensureLoaded();
+  return Promise.all(items.map((item) => enrichLocalItem(item)));
+}
+
+function overlay(
+  item: MediaItem,
+  meta: { title?: string; pageCount?: number },
+): MediaItem {
+  // Never mutate — MediaItem fields are readonly. Only overlay a field when the
+  // metadata value is present, so an empty extract keeps the filename-stem title.
+  return {
+    ...item,
+    title: meta.title ?? item.title,
+    pageCount: meta.pageCount ?? item.pageCount,
+  };
+}
+
+async function enrichLocalItem(item: MediaItem): Promise<MediaItem> {
+  const cached = await getMetadata(item.storagePath);
+  // Present entry (even `{}`) means already extracted — overlay, zero writes.
+  if (cached !== undefined) return overlay(item, cached);
+
+  // No entry yet: read bytes and extract, tolerating a bad file.
+  try {
+    const buf = await resolveLocalBlob(item);
+    if (buf === null) {
+      // Could not read this file — do NOT cache `{}` (that would permanently
+      // suppress retry). Fall back to the existing item; a later focus retries.
+      return item;
+    }
+    const meta = await extractMetadata(buf, item.mediaType);
+    await cacheMetadata(item.storagePath, meta);
+    return overlay(item, meta);
+  } catch (err) {
+    logError(err, { operation: "local-folder-enrich", id: item.id });
+    return item;
+  }
 }
