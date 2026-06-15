@@ -1,5 +1,28 @@
 import ePub, { type Book, type Rendition, type Location, type NavItem } from "epubjs";
-import type { ContentRenderer, OutlineEntry } from "./types.js";
+import type { ContentRenderer, OutlineEntry, SearchResult } from "./types.js";
+
+// epubjs ships incomplete type declarations. These narrow shapes describe the
+// runtime members we use that are missing from the .d.ts, following the
+// existing `as unknown as { length: number }` precedent in init().
+
+/** A spine section, with the find/load/unload members missing from epubjs types. */
+interface EpubSection {
+  href: string;
+  find(query: string): { cfi: string; excerpt: string }[];
+  load(request: unknown): Promise<unknown>;
+  unload(): void;
+}
+
+/** rendition.annotations, missing from epubjs types. */
+interface EpubAnnotations {
+  highlight(cfiRange: string, data?: object, cb?: () => void, className?: string, styles?: object): unknown;
+  remove(cfiRange: string, type: string): void;
+}
+
+// SVG highlight fills (annotations color comes from styles, not CSS). Base
+// matches the panel <mark> color (viewer.css:380); active is visually distinct.
+const BASE_STYLES = { fill: "#fde68a" };
+const ACTIVE_STYLES = { fill: "#f59e0b", "fill-opacity": "0.5" };
 
 export function createEpubRenderer(
   onError?: (err: unknown) => void,
@@ -16,6 +39,51 @@ export function createEpubRenderer(
   let _currentCfi = "";
   let destroyed = false;
   const outlineHrefMap = new WeakMap<OutlineEntry, string>();
+
+  // Full-document search state.
+  let _searchCfis: string[] = []; // all base-highlighted match cfis
+  let _activeCfi: string | null = null; // currently-navigated match
+  let _searchEpoch = 0; // monotonic guard against overlapping search() calls
+
+  // Resolve a section's TOC label, falling back to a 1-based spine index.
+  // Caller must `await book.loaded.navigation` once before invoking.
+  function labelForSection(section: EpubSection, index: number): string {
+    const nav = (book!.navigation as unknown as { get(target: string): NavItem | undefined });
+    return nav.get(section.href)?.label ?? `Ch. ${index + 1}`;
+  }
+
+  // Build a SearchResult from an epubjs find match, enforcing the SearchResult
+  // invariant (matchStart >= 0, matchLength > 0, matchStart + matchLength <= snippet.length).
+  // Returns null when no valid match can be formed (caller skips it).
+  function buildResult(
+    match: { cfi: string; excerpt: string },
+    query: string,
+    label: string,
+  ): SearchResult | null {
+    const snippet = match.excerpt.replace(/\s+/g, " ").trim();
+    let matchStart = snippet.toLowerCase().indexOf(query.toLowerCase());
+    if (matchStart === -1) matchStart = 0;
+    const matchLength = Math.min(query.length, snippet.length - matchStart);
+    if (matchLength <= 0) return null;
+    return { location: match.cfi, label, snippet, matchStart, matchLength };
+  }
+
+  // Remove all search highlights. Defined as a closure (not just an object
+  // method) so search() can call it without relying on a bound `this` — the
+  // UI calls renderer.search detached (search.ts captures it in a const).
+  function clearSearchHighlights(): void {
+    if (rendition) {
+      const annotations = (rendition.annotations as unknown as EpubAnnotations);
+      for (const cfi of _searchCfis) {
+        annotations.remove(cfi, "highlight");
+      }
+      if (_activeCfi && !_searchCfis.includes(_activeCfi)) {
+        annotations.remove(_activeCfi, "highlight");
+      }
+    }
+    _searchCfis = [];
+    _activeCfi = null;
+  }
 
   function mapNavItems(items: NavItem[]): OutlineEntry[] {
     return items.map((item) => {
@@ -169,8 +237,77 @@ export function createEpubRenderer(
       await relocated;
     },
 
+    async search(query: string): Promise<SearchResult[]> {
+      const trimmed = query.trim();
+      if (!book || !trimmed) {
+        clearSearchHighlights();
+        return [];
+      }
+
+      const epoch = ++_searchEpoch;
+      await book.loaded.navigation;
+
+      const spineItems = (book.spine as unknown as { spineItems: EpubSection[] }).spineItems;
+      const loader = (book.load as unknown as { bind(thisArg: Book): unknown }).bind(book);
+
+      const results: SearchResult[] = [];
+      for (let i = 0; i < spineItems.length; i++) {
+        const section = spineItems[i]!;
+        try {
+          await section.load(loader);
+          const label = labelForSection(section, i);
+          for (const match of section.find(trimmed)) {
+            const result = buildResult(match, trimmed, label);
+            if (result) results.push(result);
+          }
+        } finally {
+          section.unload();
+        }
+      }
+
+      // A newer search started while we awaited; touch no highlight state and
+      // let the UI's stale-result guard discard these.
+      if (epoch !== _searchEpoch) return results;
+
+      // Single synchronous highlight burst after iteration.
+      clearSearchHighlights();
+      const annotations = (rendition!.annotations as unknown as EpubAnnotations);
+      for (const result of results) {
+        annotations.highlight(result.location, {}, undefined, "viewer-search-hl", BASE_STYLES);
+        _searchCfis.push(result.location);
+      }
+      return results;
+    },
+
+    async goToResult(result: SearchResult): Promise<void> {
+      if (!rendition) return;
+      const annotations = (rendition.annotations as unknown as EpubAnnotations);
+
+      // Demote the previously active match back to base style.
+      if (_activeCfi) {
+        annotations.remove(_activeCfi, "highlight");
+        annotations.highlight(_activeCfi, {}, undefined, "viewer-search-hl", BASE_STYLES);
+      }
+
+      const relocated = waitForRelocated();
+      await rendition.display(result.location);
+      await relocated;
+
+      // Promote the new match to the distinct active style.
+      annotations.remove(result.location, "highlight");
+      annotations.highlight(result.location, {}, undefined, "viewer-search-active", ACTIVE_STYLES);
+      _activeCfi = result.location;
+    },
+
+    clearSearch(): void {
+      clearSearchHighlights();
+    },
+
     destroy(): void {
       destroyed = true;
+      // rendition.destroy() tears down annotations, so just reset tracking.
+      _searchCfis = [];
+      _activeCfi = null;
       if (rendition) {
         rendition.destroy();
         rendition = null;
