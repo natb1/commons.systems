@@ -661,7 +661,10 @@ Otherwise run all steps in order.
       `unit.scope`, `unit.context`, `unit.commit_intent` into its parameters
       (`id` / `dependencies` / `resolves_ids` are for your ordering and the Step 4
       comment, not passed through). The draft PR already exists — open **NO** new
-      PR.
+      PR. A unit completing in this `/implement-unit` loop is mid-loop, not the end
+      of the turn — continue to the next unit, then Steps 4 and 5 and the marker;
+      do not emit a closing summary. The terminal rule is the **CRITICAL
+      invariants** block below (the fix path HARD-STOPS the skill).
    2. Run **Step 4** (post the PR-comment summary; its disposition section uses the
       **fixing-pass** prose — see Step 4).
    3. Run **Step 5** (cleanup — it self-guards and no-ops if the QA server never

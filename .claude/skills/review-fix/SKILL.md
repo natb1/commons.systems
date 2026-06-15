@@ -262,6 +262,12 @@ findings — only this compact summary.
 
 ### 3. Commit the Workflow's working-tree edits via one commit-merge-push
 
+The Workflow returning (Step 2), and `/commit-merge-push` (Step 3) and
+`/file-issue` (Step 5) returning, are mid-tail — not the end of the turn. Continue
+through Steps 3–7; the pass ends only after `dispatch:reviewed` is applied and the
+Step 7 marker is written (this skill's terminal action — see the preamble and Step
+7). Do not emit a closing summary; the next message is the next tool call.
+
 Call the script first (use `dangerouslyDisableSandbox: true` — git writes +
 `git push` over HTTPS; see `.claude/rules/sandbox.md`). Compute the changed files:
 
