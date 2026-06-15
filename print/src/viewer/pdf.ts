@@ -574,6 +574,16 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       await renderPage(decoded.page);
     },
 
+    // Called by search.ts when the user clears the query WITHOUT navigating
+    // (~lines 89, 103). A query clear triggers no re-render, so the highlight
+    // spans left by the last applyHighlight call would persist in the DOM.
+    // We must actively restore the divs here; we cannot rely on the next
+    // renderTextLayer's replaceChildren to clean them up.
+    clearSearch(): void {
+      unwrapHighlights();
+      pendingHighlight = null;
+    },
+
     destroy(): void {
       destroyed = true;
       if (resizeTimer) {
@@ -604,6 +614,11 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       canvas = null;
       textLayerDiv = null;
       container = null;
+      // Tear down search state: restore any highlight-mutated divs, disarm the
+      // pending highlight, and release the page-text cache.
+      unwrapHighlights();
+      pendingHighlight = null;
+      pageTextCache.clear();
     },
   };
 }
