@@ -419,4 +419,59 @@ describe("createBlogApp routing and panel behavior", () => {
       expect(app.querySelector("#posts")).not.toBeNull();
     });
   });
+
+  // Case 7 — #1409: the live-DOM skip fires whenever #posts is live, not only
+  // on the initial prerender. After a loadPosts() run renders a fresh #posts,
+  // repeat navigations to "/" and "/post/..." both return null from render and
+  // leave #posts untouched. Ported from the retired fellspiral per-app test
+  // (#1667) — the behavior now lives in createBlogApp's home route.
+  it("keeps skipping while #posts is live from loadPosts across Post and repeat-Home navigations (#1409)", async () => {
+    // 1. Enter via /admin so the first Home nav finds no live #posts and runs
+    //    loadPosts → renderHomeHtml. Mirror the #1285 /admin setup (no prerender).
+    history.pushState({}, "", "/admin");
+    document.body.innerHTML = `
+      <div id="nav"></div>
+      <div class="page">
+        <header></header>
+        <div id="app"><div id="posts" data-prerendered="true">PRERENDERED HOME</div></div>
+        <aside id="info-panel"></aside>
+        <button id="panel-toggle"></button>
+      </div>
+    `;
+
+    handle = createBlogApp(makeConfig());
+    const app = document.getElementById("app")!;
+
+    // Admin route renders — the prerendered #posts is replaced by admin markup.
+    await vi.waitFor(() => {
+      expect(app.querySelector("#posts")).toBeNull();
+    });
+
+    // 2. Navigate Home via the real router's popstate listener. With no live
+    //    #posts, the home render runs loadPosts → renderHomeHtml exactly once.
+    history.pushState({}, "", "/");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await vi.waitFor(() => {
+      expect(app.querySelector("#posts")).not.toBeNull();
+      expect(app.innerHTML).toContain('data-test="home"');
+    });
+    expect(renderHomeHtml).toHaveBeenCalledTimes(1);
+
+    // 3. Navigate to a post. The post route shares the home regex
+    //    (/^\/(?:post\/.*)?$/); render returns null because #posts is live
+    //    (the loadPosts-origin live-DOM skip — the new coverage).
+    history.pushState({}, "", "/post/example");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(app.querySelector("#posts")).not.toBeNull();
+    expect(renderHomeHtml).toHaveBeenCalledTimes(1);
+
+    // 4. Navigate Home again — also skips because #posts is still live. The
+    //    skip is keyed on the live DOM, not a one-shot flag.
+    history.pushState({}, "", "/");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(app.querySelector("#posts")).not.toBeNull();
+    expect(renderHomeHtml).toHaveBeenCalledTimes(1);
+  });
 });
