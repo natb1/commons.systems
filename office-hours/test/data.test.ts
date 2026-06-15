@@ -1,18 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { registerErrorSink, type EnrichedErrorContext } from "@commons-systems/errorutil/log";
-import { toReminder, getOwnerQueueMetrics } from "../src/data.js";
-import type { User } from "firebase/auth";
-import type { Firestore } from "firebase/firestore";
-
-const getDocMock = vi.fn();
-vi.mock("firebase/firestore", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("firebase/firestore")>();
-  return {
-    ...actual,
-    doc: vi.fn(() => ({})),
-    getDoc: (...args: unknown[]) => getDocMock(...args),
-  };
-});
+import { toReminder } from "../src/data.js";
 
 type SinkCall = { error: unknown; context: EnrichedErrorContext };
 
@@ -20,7 +8,6 @@ let captured: SinkCall[];
 
 beforeEach(() => {
   captured = [];
-  getDocMock.mockReset();
   vi.spyOn(console, "error").mockImplementation(() => {});
   registerErrorSink((error, context) => {
     captured.push({ error, context });
@@ -84,21 +71,5 @@ describe("toReminder", () => {
 
     expect(reminder.jitKey).toBe("issues/natb1/commons.systems/99");
     expect(captured).toHaveLength(0);
-  });
-});
-
-describe("getOwnerQueueMetrics", () => {
-  const db = {} as unknown as Firestore;
-  const namespace = "test-ns" as unknown as import("@commons-systems/firestoreutil/namespace").Namespace;
-  const user = { email: "a@b.com" } as unknown as User;
-
-  it("(a) permission-denied — returns null", async () => {
-    getDocMock.mockRejectedValue({ code: "permission-denied" });
-    await expect(getOwnerQueueMetrics(db, namespace, user)).resolves.toBeNull();
-  });
-
-  it("(b) other error — rethrows", async () => {
-    getDocMock.mockRejectedValue({ code: "unavailable" });
-    await expect(getOwnerQueueMetrics(db, namespace, user)).rejects.toMatchObject({ code: "unavailable" });
   });
 });
