@@ -443,7 +443,8 @@ describe("createBlogApp routing and panel behavior", () => {
 
     handle = createBlogApp(config);
 
-    // Flush the microtask queue so .then(captureUnsub) stores authUnsub.
+    // setTimeout(r, 0) is a macrotask; all pending Promise .then() callbacks
+    // (including .then(captureUnsub)) run before it, so authUnsub is stored.
     await new Promise((r) => setTimeout(r, 0));
 
     handle.destroy();
