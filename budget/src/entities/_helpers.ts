@@ -129,9 +129,12 @@ export function requireStringArray(value: unknown, field: string): string[] {
 
 // ── Upload-side validators (throw UploadValidationError) ──────────────────────
 
-export function requireUploadId(value: unknown, entity: string, index: number): string {
+export function requireUploadId(
+  value: unknown, entity: string, index: number, field?: string,
+): string {
   if (typeof value !== "string" || value === "") {
-    throw new UploadValidationError(`${entity}[${index}] is missing a valid id`);
+    const suffix = field ? `.${field}` : "";
+    throw new UploadValidationError(`${entity}[${index}]${suffix} is missing a valid id`);
   }
   return value;
 }

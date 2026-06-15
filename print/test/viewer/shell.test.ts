@@ -12,6 +12,11 @@ vi.mock("../../src/reading-position.js", () => ({
   saveReadingPosition: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../../src/bookmarks.js", () => ({
+  getBookmarks: vi.fn().mockResolvedValue([]),
+  saveBookmarks: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { renderViewerShell, initViewer } from "../../src/viewer/shell";
 import {
   getReadingPosition,
@@ -157,6 +162,24 @@ describe("renderViewerShell", () => {
     const html = renderViewerShell(makeMediaItem());
 
     expect(html).toContain('class="viewer-outline outline-hidden"');
+  });
+
+  it("contains the bookmark toggle button", () => {
+    const html = renderViewerShell(makeMediaItem());
+
+    expect(html).toContain('class="viewer-bookmark-toggle"');
+  });
+
+  it("contains the bookmarks section, hidden by default", () => {
+    const html = renderViewerShell(makeMediaItem());
+
+    expect(html).toContain('class="viewer-bookmarks bookmarks-hidden"');
+  });
+
+  it("renders the bookmarks section above the outline section", () => {
+    const html = renderViewerShell(makeMediaItem());
+
+    expect(html.indexOf("viewer-bookmarks")).toBeLessThan(html.indexOf("viewer-outline"));
   });
 
   it("renders .viewer-md-actions with both buttons when markdownPath is non-null", () => {
@@ -344,6 +367,24 @@ describe("initViewer", () => {
     expect(saveReadingPosition).toHaveBeenCalledWith("uid1", "m1", "2");
   });
 
+  it("cleanup flushes pending save timer (unauthenticated)", async () => {
+    const renderer = makeMockRenderer();
+
+    const cleanup = initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    nextBtn.click();
+    await flushInit();
+
+    // Flush synchronously before the 500ms timer fires
+    cleanup();
+
+    // localStorage should have been written with the pending position
+    // without advancing timers — the flush is synchronous
+    expect(localStorage.getItem("reading-position:m1")).toBe("2");
+  });
+
   it("cleanup calls renderer.destroy", async () => {
     const renderer = makeMockRenderer();
 
@@ -456,6 +497,168 @@ describe("initViewer", () => {
     expect(saveReadingPosition).not.toHaveBeenCalled();
     // Falls back to localStorage
     expect(localStorage.getItem("reading-position:m1")).toBe("2");
+  });
+});
+
+describe("initViewer go-to input", () => {
+  let outlet: HTMLElement;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    outlet = document.createElement("div");
+    outlet.innerHTML = renderViewerShell(makeMediaItem());
+    localStorage.clear();
+    if (typeof globalThis.reportError !== "function") {
+      globalThis.reportError = () => {};
+    }
+    vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.mocked(globalThis.reportError).mockRestore();
+  });
+
+  async function flushInit(): Promise<void> {
+    for (let i = 0; i < 20; i++) {
+      await Promise.resolve();
+    }
+  }
+
+  function pressEnter(input: HTMLInputElement): void {
+    const ev = new KeyboardEvent("keydown", { key: "Enter", bubbles: true });
+    Object.defineProperty(ev, "target", { value: input });
+    input.dispatchEvent(ev);
+  }
+
+  it("page mode: input visible with 'Go to page' aria-label", async () => {
+    const renderer = makeMockRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const input = outlet.querySelector(".viewer-goto-input") as HTMLInputElement;
+    expect(input.classList.contains("goto-hidden")).toBe(false);
+    expect(input.getAttribute("aria-label")).toBe("Go to page");
+  });
+
+  it("page mode: typing a valid page + Enter navigates and updates position", async () => {
+    const renderer = makeMockRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const input = outlet.querySelector(".viewer-goto-input") as HTMLInputElement;
+    input.value = "5";
+    pressEnter(input);
+    await flushInit();
+
+    expect(renderer.goToPage).toHaveBeenCalledWith(5);
+    const pos = outlet.querySelector(".viewer-position") as HTMLElement;
+    expect(pos.textContent).toBe("Page 5 / 10");
+  });
+
+  it("page mode: out-of-range page clamps to pageCount", async () => {
+    const renderer = makeMockRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const input = outlet.querySelector(".viewer-goto-input") as HTMLInputElement;
+    input.value = "99";
+    pressEnter(input);
+    await flushInit();
+
+    expect(renderer.goToPage).toHaveBeenCalledWith(10);
+  });
+
+  it("page mode: non-numeric input does not navigate", async () => {
+    const renderer = makeMockRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const input = outlet.querySelector(".viewer-goto-input") as HTMLInputElement;
+    input.value = "abc";
+    pressEnter(input);
+    await flushInit();
+
+    expect(renderer.goToPage).not.toHaveBeenCalled();
+  });
+
+  it("page mode: updateNav syncs input value to current page after next()", async () => {
+    const renderer = makeMockRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    nextBtn.click();
+    await flushInit();
+
+    const input = outlet.querySelector(".viewer-goto-input") as HTMLInputElement;
+    expect(input.value).toBe("2");
+  });
+
+  it("percent mode: input visible with 'Go to location percent' aria-label", async () => {
+    const renderer = makeMockRenderer({
+      goToFraction: vi.fn().mockResolvedValue(undefined),
+    });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.epub"), "m1", null);
+    await flushInit();
+
+    const input = outlet.querySelector(".viewer-goto-input") as HTMLInputElement;
+    expect(input.classList.contains("goto-hidden")).toBe(false);
+    expect(input.getAttribute("aria-label")).toBe("Go to location percent");
+  });
+
+  it("percent mode: typing a percent + Enter calls goToFraction with the fraction", async () => {
+    const renderer = makeMockRenderer({
+      goToFraction: vi.fn().mockResolvedValue(undefined),
+    });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.epub"), "m1", null);
+    await flushInit();
+
+    const input = outlet.querySelector(".viewer-goto-input") as HTMLInputElement;
+    input.value = "50";
+    pressEnter(input);
+    await flushInit();
+
+    expect(renderer.goToFraction).toHaveBeenCalledWith(0.5);
+  });
+
+  it("percent mode: input disabled with 'Calculating…' while pending, re-enabled after resolve", async () => {
+    let resolveFraction!: () => void;
+    const pending = new Promise<void>((resolve) => { resolveFraction = resolve; });
+    const renderer = makeMockRenderer({
+      goToFraction: vi.fn().mockReturnValue(pending),
+    });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.epub"), "m1", null);
+    await flushInit();
+
+    const input = outlet.querySelector(".viewer-goto-input") as HTMLInputElement;
+    input.value = "50";
+    pressEnter(input);
+    await flushInit();
+
+    // Generation pending: input disabled, Calculating indicator shown.
+    expect(input.disabled).toBe(true);
+    expect(input.placeholder).toBe("Calculating…");
+
+    resolveFraction();
+    await flushInit();
+
+    // After resolve: re-enabled, placeholder restored.
+    expect(input.disabled).toBe(false);
+    expect(input.placeholder).toBe("%");
+  });
+
+  it("hidden: pageCount <= 1 and no goToFraction keeps input hidden", async () => {
+    const renderer = makeMockRenderer({
+      get pageCount() { return 1; },
+      get canGoNext() { return false; },
+    });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const input = outlet.querySelector(".viewer-goto-input") as HTMLInputElement;
+    expect(input.classList.contains("goto-hidden")).toBe(true);
   });
 });
 
