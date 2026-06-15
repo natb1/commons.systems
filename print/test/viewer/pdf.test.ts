@@ -367,6 +367,13 @@ describe("search()", () => {
     const decoded = decodeLocation(page2!.location);
     expect(decoded).toEqual({ page: 2, offset: 0, length: 3 });
   });
+
+  it("returns [] after destroy() (null pdfDoc, stale _pageCount) without throwing", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+    renderer.destroy();
+    await expect(renderer.search!("the")).resolves.toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------
