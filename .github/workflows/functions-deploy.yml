@@ -51,7 +51,7 @@ jobs:
           DISPATCH_METRICS_QUEUE_REPO=${DISPATCH_METRICS_QUEUE_REPO}
           EOF
       - name: Deploy functions
-        run: npx firebase-tools deploy --only functions --force --project "$FIREBASE_PROJECT_ID"
+        run: npx firebase-tools deploy --only functions --force --project default
       - name: Cleanup credentials
         if: always()
         run: .github/scripts/firebase-auth-cleanup.sh
