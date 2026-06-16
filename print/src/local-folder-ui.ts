@@ -10,6 +10,7 @@
  * local items on each render. Non-Chromium browsers (no FSA) get nothing here
  * and stay on the cloud-only path.
  */
+import { escapeHtml } from "@commons-systems/htmlutil";
 import { createFsaHandleStore } from "@commons-systems/local-first/fsa-handle-store";
 import { logError } from "@commons-systems/errorutil/log";
 
@@ -19,7 +20,7 @@ import {
   resolveLocalBlob,
 } from "./library.js";
 import { extractMetadata } from "./local-metadata.js";
-import { renderLocalMediaItems } from "./pages/home.js";
+import { mediaTypeBadge } from "./media-render.js";
 import {
   cacheMetadataBatch,
   ensureLoaded,
@@ -133,6 +134,26 @@ export async function initLocalFolder(
       focusCleanup = null;
     }
   };
+}
+
+/**
+ * Render local-folder items as `<li>` rows for prepending into the shared media
+ * list. Local items get a "local" badge and a view link, but no download /
+ * markdown actions — their bytes live on the user's disk, not in cloud storage.
+ */
+function renderLocalMediaItems(items: MediaItem[]): string {
+  return items
+    .map((item) => {
+      return `<li class="media-item media-item-local" data-id="${escapeHtml(item.id)}">
+        <div class="media-info">
+          <span class="media-title"><a href="/view/${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a></span>
+          ${mediaTypeBadge(item.mediaType)}
+          <span class="media-badge media-badge-local">local</span>
+          ${item.pageCount !== undefined ? `<span class="media-pagecount">${escapeHtml(String(item.pageCount))} pages</span>` : ""}
+        </div>
+      </li>`;
+    })
+    .join("\n");
 }
 
 /**
