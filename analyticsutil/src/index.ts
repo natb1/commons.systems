@@ -6,6 +6,7 @@ import {
 } from "firebase/analytics";
 import type { FirebaseApp } from "firebase/app";
 import { classifyError } from "@commons-systems/errorutil/classify";
+import { logError } from "@commons-systems/errorutil/log";
 import { onLCP, onCLS, onINP, onFCP, onTTFB, type Metric } from "web-vitals";
 
 const STORAGE_KEY = "analytics_traffic_type";
@@ -88,10 +89,11 @@ function reportWebVitals(analytics: Analytics): void {
       });
     } catch (error) {
       if (classifyError(error) === "programmer") throw error;
-      reportError(
+      logError(
         new Error(
           `Failed to log web-vital (metric: ${metric.name}): ${error instanceof Error ? error.message : error}`,
         ),
+        { operation: "analytics-web-vitals" },
       );
     }
   }
@@ -108,10 +110,11 @@ export function initAnalyticsSafe(app: FirebaseApp): (path: string) => void {
     return initAnalytics(app);
   } catch (error) {
     if (classifyError(error) === "programmer") throw error;
-    reportError(
+    logError(
       new Error(
         `Failed to initialize analytics (appId: ${app.options.appId}, measurementId: ${app.options.measurementId}): ${error instanceof Error ? error.message : error}`,
       ),
+      { operation: "analytics-init" },
     );
     return () => {};
   }
@@ -131,10 +134,11 @@ export function initAnalytics(app: FirebaseApp): (path: string) => void {
     trafficType = applyTrafficTag();
   } catch (error) {
     if (classifyError(error) === "programmer") throw error;
-    reportError(
+    logError(
       new Error(
         `Failed to apply traffic tag: ${error instanceof Error ? error.message : error}`,
       ),
+      { operation: "analytics-traffic-tag" },
     );
   }
 
@@ -152,10 +156,11 @@ export function initAnalytics(app: FirebaseApp): (path: string) => void {
       logEvent(analytics, "page_view", { page_path: path });
     } catch (error) {
       if (classifyError(error) === "programmer") throw error;
-      reportError(
+      logError(
         new Error(
           `Failed to log page view (path: ${path}): ${error instanceof Error ? error.message : error}`,
         ),
+        { operation: "analytics-page-view" },
       );
     }
   };
