@@ -88,6 +88,10 @@ setup() {
   # SCRIPT_DIR (= TMPDIR_TEST for this copy) — both already copied below/above,
   # so both resolve.
   cp "$SCRIPT_DIR/dispatch-auto-merge" "$TMPDIR_TEST/dispatch-auto-merge"
+  # dispatch-retriage-orphaned-followups (#1812) sources lib.sh (gh_issue_list_rest,
+  # gh_retry) and calls dispatch-apply-office-hours via its SCRIPT_DIR (= TMPDIR_TEST
+  # for this copy) — both already copied here, so both resolve.
+  cp "$SCRIPT_DIR/dispatch-retriage-orphaned-followups" "$TMPDIR_TEST/dispatch-retriage-orphaned-followups"
   # dispatch-select-target's JIT scan calls dispatch-config-load and
   # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
   # TMPDIR_TEST for the copied dispatch-select-target, so the two helpers must
@@ -128,7 +132,8 @@ setup() {
            "$TMPDIR_TEST/dispatch-config-load" \
            "$TMPDIR_TEST/dispatch-project-status-read" \
            "$TMPDIR_TEST/dispatch-sync-merge-queue" \
-           "$TMPDIR_TEST/dispatch-auto-merge"
+           "$TMPDIR_TEST/dispatch-auto-merge" \
+           "$TMPDIR_TEST/dispatch-retriage-orphaned-followups"
 
   # Default no-op stub for dispatch-provision-worktree. dispatch-route now invokes
   # it (after the worktree cross-check, before phase derivation). The real script
@@ -486,6 +491,17 @@ case "$args" in
       cat "$STUB_DIR/pr-headref-${num}.json"
     else
       echo '{"headRefName":""}'
+    fi
+    ;;
+  pr\ view\ *\ --json\ state,mergedAt,labels)
+    # dispatch-retriage-orphaned-followups (#1812): gh pr view <N> --json
+    # state,mergedAt,labels. $STUB_DIR/retriage-pr-<N>.json supplies the per-PR
+    # state object; absence defaults to an OPEN PR (no action taken).
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/retriage-pr-${num}.json" ]]; then
+      cat "$STUB_DIR/retriage-pr-${num}.json"
+    else
+      echo '{"state":"OPEN","mergedAt":null,"labels":[]}'
     fi
     ;;
   label\ create\ *)
@@ -30503,6 +30519,88 @@ else
 fi
 assert_eq "dup-close: no spurious create" "absent" "$(log_state gh-merge-issue-create.log)"
 assert_eq "dup-close: no edit (.[0] title matches)" "absent" "$(log_state gh-merge-issue-edit.log)"
+teardown
+
+# ============================================================================
+# dispatch-retriage-orphaned-followups (#1812)
+# ============================================================================
+echo "=== dispatch-retriage-orphaned-followups (#1812) ==="
+
+# The open-issue scan is served from issue-list.json (REST shape: {number,labels})
+# via the shared `api *repos/*/issues?*` branch; gh_issue_list_rest remaps it.
+# Per-PR state comes from retriage-pr-<N>.json (gh pr view --json state,mergedAt,labels).
+# The office-hours park flows through the REAL copied dispatch-apply-office-hours,
+# which logs to gh-issue-edit.log / gh-issue-comment.log; the per-PR processed
+# marker hits the generic `pr edit *` branch, logged to gh-pr-edit.log.
+
+# (a) closed-unmerged source PR + open source-pr:-marked follow-up → park + mark
+echo "Test: closed-unmerged source PR → park follow-up on office-hours + mark PR"
+setup
+printf '[{"number":101,"labels":[{"name":"source-pr:1704"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"CLOSED","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "a: office-hours applied to the follow-up issue" \
+  "issue edit 101 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+assert_eq "a: why-comment posted to the follow-up issue" "present" "$(log_state gh-issue-comment.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issue comment 101 ' "$STUB_DIR/gh-issue-comment.log" \
+   && grep -q 'closed unmerged' "$STUB_DIR/gh-issue-comment.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: a: why-comment names issue 101 and the closed-unmerged reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: a: why-comment names issue 101 and the closed-unmerged reason"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'pr edit 1704 --add-label dispatch:orphans-retriaged' "$STUB_DIR/gh-pr-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: a: source PR #1704 marked dispatch:orphans-retriaged"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: a: source PR #1704 marked dispatch:orphans-retriaged"
+fi
+assert_eq "a: one retriaged stdout line" \
+  "retriaged #101 (source PR #1704 closed unmerged)" "$out"
+teardown
+
+# (b) MERGED source PR (mergedAt non-null) → no action (AC3)
+echo "Test: merged source PR → no action"
+setup
+printf '[{"number":102,"labels":[{"name":"source-pr:1688"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"MERGED","mergedAt":"2026-01-01T00:00:00Z","labels":[]}\n' > "$STUB_DIR/retriage-pr-1688.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "b: no office-hours edit on a merged source PR" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "b: no PR marker on a merged source PR" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "b: no stdout on a merged source PR" "" "$out"
+teardown
+
+# (c) OPEN source PR → no action
+echo "Test: still-open source PR → no action"
+setup
+printf '[{"number":103,"labels":[{"name":"source-pr:1900"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"OPEN","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1900.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "c: no office-hours edit on an open source PR" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "c: no PR marker on an open source PR" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "c: no stdout on an open source PR" "" "$out"
+teardown
+
+# (d) closed-unmerged PR ALREADY carrying dispatch:orphans-retriaged → idempotent no-op
+echo "Test: source PR already marked dispatch:orphans-retriaged → no action"
+setup
+printf '[{"number":104,"labels":[{"name":"source-pr:1704"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"CLOSED","mergedAt":null,"labels":[{"name":"dispatch:orphans-retriaged"}]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "d: no re-park when PR already marked" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "d: no re-mark when PR already marked" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "d: no stdout when PR already marked" "" "$out"
+teardown
+
+# (e) no open issue carries a source-pr: label → clean no-op, exit 0
+echo "Test: no source-pr:-marked open issues → clean no-op, exit 0"
+setup
+printf '[{"number":105,"labels":[{"name":"bug"}]}]\n' > "$STUB_DIR/issue-list.json"
+if out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "e: exits 0 with no labeled issues" "0" "$rc"
+assert_eq "e: no office-hours edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "e: no PR marker" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "e: no stdout" "" "$out"
 teardown
 
 # ============================================================================
