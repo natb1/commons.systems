@@ -35,8 +35,9 @@ export function createLocalFolderMediaSource<T extends { id: string; addedAt: st
 ): MediaSource<T> {
   const index = new Map<string, LocalFileHandleLike>();
   const items = new Map<string, T>();
+  let pendingScan: Promise<T[]> | null = null;
 
-  async function scan(): Promise<T[]> {
+  async function doScan(): Promise<T[]> {
     index.clear();
     items.clear();
     const results: T[] = [];
@@ -68,6 +69,15 @@ export function createLocalFolderMediaSource<T extends { id: string; addedAt: st
     });
 
     return results;
+  }
+
+  function scan(): Promise<T[]> {
+    if (!pendingScan) {
+      pendingScan = doScan().finally(() => {
+        pendingScan = null;
+      });
+    }
+    return pendingScan;
   }
 
   return {

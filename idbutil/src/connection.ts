@@ -91,6 +91,11 @@ export function createDbConnection(config: DbConnectionConfig): {
         const db = await pending;
         db.close();
       } catch (err) {
+        // Sanctioned bare reportError: idbutil is zero-dep and a sibling of
+        // errorutil (not below it), so it cannot call logError directly. The
+        // global handler installed by createAppContext (installGlobalErrorHandlers)
+        // catches this dispatched error event and records it to Firestore under
+        // operation "uncaught".
         reportError(new Error("closeDb: failed to close database connection", { cause: err }));
       }
     }
