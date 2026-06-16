@@ -25,7 +25,7 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: .github/scripts/firebase-auth.sh
       - name: Deploy Storage rules
-        run: npx firebase-tools deploy --only storage:rules --project default
+        run: ./node_modules/.bin/firebase deploy --only storage:rules --project default
       - name: Cleanup credentials
         if: always()
         run: .github/scripts/firebase-auth-cleanup.sh
