@@ -23,10 +23,9 @@ jobs:
       - name: Authenticate with Firebase
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: .github/scripts/firebase-auth.sh
       - name: Deploy Storage rules
-        run: npx firebase-tools deploy --only storage:rules --project "$FIREBASE_PROJECT_ID"
+        run: npx firebase-tools deploy --only storage:rules --project default
       - name: Cleanup credentials
         if: always()
         run: .github/scripts/firebase-auth-cleanup.sh
