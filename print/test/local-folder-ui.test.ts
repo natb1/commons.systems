@@ -11,10 +11,6 @@ vi.mock("../src/firestore.js", () => ({
   getAllAccessibleMedia: () => Promise.resolve([]),
   getMediaItem: () => Promise.resolve(null),
 }));
-vi.mock("../src/storage.js", () => ({
-  getMediaDownloadUrl: () => Promise.resolve(""),
-}));
-
 // Stub the FSA handle store so initLocalFolder takes the granted ("list")
 // auto-bind path without any real IndexedDB / picker. The fake handle is
 // granted on query, so bindAndRender runs without a user click. Built via
