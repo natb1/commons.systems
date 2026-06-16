@@ -102,11 +102,20 @@ describe("file-sync", () => {
     requestReadWritePermission.mockResolvedValue("denied");
     const fs = await loadFileSync();
     fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    const listener = vi.fn();
+    fs.setWriteBackStatusListener(listener);
     await fs.flushWriteBack();
     expect(requestReadWritePermission).toHaveBeenCalledWith(HANDLE);
     expect(logError).toHaveBeenCalled();
     expect(exportToJson).not.toHaveBeenCalled();
     expect(writeFileToHandle).not.toHaveBeenCalled();
+    // Listener must have been called with false on the permission failure.
+    expect(listener).toHaveBeenCalledWith(false);
+    // dirty was re-set, so a retry write fires once permission is restored.
+    queryReadWritePermission.mockResolvedValue("granted");
+    fs.scheduleWriteBack();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(writeFileToHandle).toHaveBeenCalledTimes(1);
   });
 
   it("resetFileSync cancels a pending write and disarms subsequent schedules", async () => {
@@ -186,6 +195,50 @@ describe("file-sync", () => {
     expect(writeFileToHandle).toHaveBeenCalledTimes(2);
   });
 
+  it("writeFileToHandle rejection → listener false, dirty re-set, no busy-loop", async () => {
+    writeFileToHandle.mockRejectedValue(new Error("disk full"));
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    const listener = vi.fn();
+    fs.setWriteBackStatusListener(listener);
+    fs.scheduleWriteBack();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(listener).toHaveBeenCalledWith(false);
+    expect(logError).toHaveBeenCalled();
+    // Only one write attempt — the failure must not spin or self-rearm.
+    const callsAfterFail = writeFileToHandle.mock.calls.length;
+    expect(callsAfterFail).toBe(1);
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS * 5);
+    expect(writeFileToHandle).toHaveBeenCalledTimes(callsAfterFail);
+  });
+
+  it("failure then success → listener gets true on the retry write", async () => {
+    writeFileToHandle.mockRejectedValueOnce(new Error("transient"));
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    const listener = vi.fn();
+    fs.setWriteBackStatusListener(listener);
+    // First write fails.
+    fs.scheduleWriteBack();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(listener).toHaveBeenCalledWith(false);
+    // Retry write succeeds (beforeEach default mockResolvedValue takes over).
+    fs.scheduleWriteBack();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(listener).toHaveBeenCalledWith(true);
+  });
+
+  it("plain success path → listener gets true", async () => {
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    const listener = vi.fn();
+    fs.setWriteBackStatusListener(listener);
+    fs.scheduleWriteBack();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(writeFileToHandle).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(true);
+  });
+
   it("abandons an in-flight write when the session is reset mid-write", async () => {
     // Clear-data while a write is encrypting must not clobber the on-disk file
     // with a post-clear (empty) snapshot. The generation guard makes doWrite bail
@@ -211,6 +264,33 @@ describe("file-sync", () => {
     expect(writeFileToHandle).not.toHaveBeenCalled();
   });
 
+  it("generation-mismatch abandon → listener NOT called, dirty NOT re-set", async () => {
+    let resolveEncrypt!: (b: ArrayBuffer) => void;
+    encrypt.mockReturnValueOnce(
+      new Promise<ArrayBuffer>((res) => { resolveEncrypt = res; }),
+    );
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    const listener = vi.fn();
+    fs.setWriteBackStatusListener(listener);
+
+    const flush = fs.flushWriteBack();
+    // Let doWrite run through the permission check + export and block on encrypt.
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Reset session while the write is mid-flight.
+    fs.resetFileSync();
+
+    // The (now-stale) encryption finishes.
+    resolveEncrypt(BYTES);
+    await flush;
+
+    // The write was abandoned — writeFileToHandle must not have been called.
+    expect(writeFileToHandle).not.toHaveBeenCalled();
+    // The listener must NOT be called on abandon.
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it("stamps the watermark from the post-write file after a flush", async () => {
     const fs = await loadFileSync();
     fs.configureFileSync(HANDLE, PASSWORD, 1000);
@@ -233,5 +313,37 @@ describe("file-sync", () => {
     const fs = await loadFileSync();
     fs.configureFileSync(HANDLE, PASSWORD, 1000);
     expect(fs.getLastSyncedModified()).toBe(1000);
+  });
+
+  it("advanceSyncWatermark updates getLastSyncedModified without configureFileSync", async () => {
+    const fs = await loadFileSync();
+    fs.advanceSyncWatermark(4242);
+    expect(fs.getLastSyncedModified()).toBe(4242);
+  });
+
+  it("advanceSyncWatermark does not bump generation — in-flight write completes normally", async () => {
+    // Contrast with "abandons an in-flight write when the session is reset mid-write":
+    // advanceSyncWatermark must NOT bump generation, so a write already in flight
+    // when the watermark advances must still reach disk.
+    let resolveEncrypt!: (b: ArrayBuffer) => void;
+    encrypt.mockReturnValueOnce(
+      new Promise<ArrayBuffer>((res) => { resolveEncrypt = res; }),
+    );
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+
+    const flush = fs.flushWriteBack();
+    // Let doWrite run through the permission check + export and block on encrypt.
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Advance the watermark mid-flight — must not bump generation.
+    fs.advanceSyncWatermark(7777);
+
+    // The (now-delayed) encryption finishes — write should proceed, not bail.
+    resolveEncrypt(BYTES);
+    await flush;
+
+    // The generation guard (gen !== generation) must still pass, so the write was not abandoned.
+    expect(writeFileToHandle).toHaveBeenCalled();
   });
 });

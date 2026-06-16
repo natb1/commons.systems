@@ -69,4 +69,7 @@
   virtualisation.docker.enable = true;
 
   environment.variables.EDITOR = "nvim";
+
+  # Eastern time. America/New_York tracks EST/EDT automatically.
+  time.timeZone = "America/New_York";
 }

@@ -1,0 +1,228 @@
+#!/usr/bin/env bash
+#
+# dispatch-sync-merge-queue — tick-time reconciler that keeps the
+# natb1/office-hours-nate tracking issues in sync with the currently-mergeable
+# natb1/commons.systems PR set (issue #1480).
+#
+# For every open PR that is mergeable now (not a draft, GitHub `mergeable ==
+# "MERGEABLE"`, and every CI check concluded passing), find-or-create a tracking
+# issue in natb1/office-hours-nate labeled `merge-pr:<number>`. Each tracking
+# issue carries a single-line `<!-- oh-merge-pr: {...} -->` marker (valid JSON)
+# that the office-hours-sync Function consumes (#1481). When a PR drops out of
+# the mergeable set, close its tracking issue.
+#
+# Per-PR label: `merge-pr:<number>` (computed per PR; there is no umbrella label).
+#
+# Sandbox note: the CALLER wraps every invocation of this script with
+# dangerouslyDisableSandbox (per .claude/rules/sandbox.md) because `gh` needs
+# network access and gh's TLS validation is blocked by the sandbox. This script
+# therefore sets NOTHING sandbox-related — individual `gh` calls are NOT wrapped
+# in anything sandbox-related here; that is the caller's responsibility.
+#
+# NOT set -e: a per-item failure must not abort the reconcile loop. Exit codes
+# from gh are captured explicitly with `|| rc=$?`; a per-item failure sets
+# HARD_ERROR=1 and `continue`s. The script exits 1 at the end if any item failed.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+OFFICE_HOURS_NATE_REPO="natb1/office-hours-nate"
+
+# The close-path open-issue fetch cap. gh issue list defaults to 30, which would
+# silently truncate the open tracking-issue snapshot. A truncated snapshot makes
+# the close path miss stale tracking issues (their PR no longer mergeable) and
+# leave them open forever. 200 is a generous default; overridable for tests and
+# for repos that accumulate more open tracking issues. Mirrors the
+# DISPATCH_PR_LIST_LIMIT pattern in lib.sh / pr_list_open.
+DISPATCH_OH_ISSUE_LIMIT="${DISPATCH_OH_ISSUE_LIMIT:-200}"
+
+HARD_ERROR=0
+
+# ---- Compute the mergeable set ----------------------------------------------
+# The --json field set is pinned byte-for-byte — it is a contract with the test
+# stub. Do not reorder or add fields.
+MERGE_PR_JSON=$(pr_list_open "number,title,url,isDraft,statusCheckRollup,mergeable")
+PR_LIST_RC=$?
+if [[ "$PR_LIST_RC" -ne 0 ]]; then
+  # pr_list_open already errored loudly (truncation or gh failure). We cannot
+  # compute the mergeable set, so we must NOT run the close path with an unknown
+  # set — that could wrongly close every tracking issue. Bail out immediately.
+  echo "error: pr_list_open failed (rc=$PR_LIST_RC); cannot compute mergeable set" >&2
+  exit 1
+fi
+
+# First-pass filter in jq: keep only non-draft, GitHub-MERGEABLE PRs. CI
+# classification is applied per-PR below via dispatch_classify_rollup (the plan
+# requires reusing the lib function, not vectorizing in jq).
+FILTERED_JSON=$(printf '%s' "$MERGE_PR_JSON" | jq -c \
+  '[.[] | select(.isDraft == false and .mergeable == "MERGEABLE")]')
+
+# Collect the numbers of PRs that survive the passing-CI classification, and an
+# iterable list of {number,title,url} for the find-or-create loop.
+declare -A MERGEABLE_NUMS=()
+
+FILTERED_COUNT=$(printf '%s' "$FILTERED_JSON" | jq 'length')
+
+for (( i=0; i<FILTERED_COUNT; i++ )); do
+  PR_OBJ=$(printf '%s' "$FILTERED_JSON" | jq -c ".[$i]")
+  PR_NUM=$(printf '%s' "$PR_OBJ" | jq -r '.number')
+  PR_TITLE=$(printf '%s' "$PR_OBJ" | jq -r '.title')
+  PR_URL=$(printf '%s' "$PR_OBJ" | jq -r '.url')
+  ROLLUP=$(printf '%s' "$PR_OBJ" | jq -c '.statusCheckRollup')
+
+  VERDICT=$(dispatch_classify_rollup "$ROLLUP")
+  if [[ "$VERDICT" != "passing" ]]; then
+    continue
+  fi
+
+  # This PR is mergeable now — record its number for the close-path predicate.
+  MERGEABLE_NUMS["$PR_NUM"]=1
+
+  LABEL="merge-pr:$PR_NUM"
+
+  # ---- Idempotent label create ----------------------------------------------
+  LABEL_RC=0
+  LABEL_OUT=$(gh_retry gh label create "$LABEL" --repo "$OFFICE_HOURS_NATE_REPO" \
+    --color "ededed" --description "Mergeable PR tracking issue" 2>&1) || LABEL_RC=$?
+  if [[ "$LABEL_RC" -ne 0 ]]; then
+    if [[ "$LABEL_OUT" != *"already exists"* ]]; then
+      echo "$LABEL: error (gh label create failed: $LABEL_OUT)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+  fi
+
+  # ---- Open-issue guard -----------------------------------------------------
+  OPEN_RC=0
+  OPEN_JSON=$(gh issue list --repo "$OFFICE_HOURS_NATE_REPO" --label "$LABEL" \
+    --state open --json number,title 2>&1) || OPEN_RC=$?
+  if [[ "$OPEN_RC" -ne 0 ]]; then
+    echo "$LABEL: error (gh issue list --state open failed: $OPEN_JSON)" >&2
+    HARD_ERROR=1
+    continue
+  fi
+  OPEN_COUNT=$(printf '%s' "$OPEN_JSON" | jq 'length')
+
+  # ---- Build the marker and body (needed by both branches) ------------------
+  # Build the marker JSON with jq (NOT string interpolation) so a title with
+  # quotes or other special characters stays valid one-line JSON.
+  MARKER_JSON=$(jq -c -n --arg repo "natb1/commons.systems" --argjson number "$PR_NUM" \
+    --arg url "$PR_URL" --arg title "$PR_TITLE" \
+    '{repo:$repo, number:$number, url:$url, title:$title}')
+  MARKER="<!-- oh-merge-pr: $MARKER_JSON -->"
+  BODY_TEXT="Mergeable PR: $PR_TITLE"$'\n'"$PR_URL"
+  ISSUE_BODY="${BODY_TEXT}"$'\n\n'"$MARKER"
+
+  if [[ "$OPEN_COUNT" -eq 0 ]]; then
+    # ---- Absent → create ----------------------------------------------------
+    CREATE_RC=0
+    CREATE_OUT=$(gh_retry gh issue create --repo "$OFFICE_HOURS_NATE_REPO" \
+      --title "$PR_TITLE" --body "$ISSUE_BODY" --label "$LABEL" 2>&1) || CREATE_RC=$?
+    if [[ "$CREATE_RC" -ne 0 ]]; then
+      echo "$LABEL: error (gh issue create failed: $CREATE_OUT)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    # gh issue create prints the new issue URL on stdout; the trailing path
+    # segment is the issue number.
+    ISSUE_URL=$(printf '%s' "$CREATE_OUT" | tail -n1)
+    ISSUE_NUM="${ISSUE_URL##*/}"
+    if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
+      echo "$LABEL: error (could not parse issue number from '$CREATE_OUT')" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    echo "$LABEL: created #$ISSUE_NUM"
+  else
+    # ---- Present → update only on title drift -------------------------------
+    if [[ "$OPEN_COUNT" -gt 1 ]]; then
+      # Two concurrent ticks can each create a tracking issue for the same
+      # mergeable PR (OPEN_COUNT>1). Reconcile after the fact: keep .[0] as the
+      # canonical issue and close every duplicate. The bottom close path cannot
+      # reap these — the PR is still mergeable, so its MERGEABLE_NUMS guard skips
+      # it (see #1651).
+      echo "$LABEL: warning ($OPEN_COUNT open tracking issues; closing $((OPEN_COUNT - 1)) duplicate(s))" >&2
+      while read -r DUP_NUM; do
+        [[ -z "$DUP_NUM" ]] && continue
+        DUP_RC=0
+        DUP_OUT=$(gh_retry gh issue close "$DUP_NUM" \
+          --repo "$OFFICE_HOURS_NATE_REPO" 2>&1) || DUP_RC=$?
+        if [[ "$DUP_RC" -ne 0 ]]; then
+          echo "$LABEL: error (gh issue close duplicate #$DUP_NUM failed: $DUP_OUT)" >&2
+          HARD_ERROR=1
+          continue
+        fi
+        echo "$LABEL: closed duplicate #$DUP_NUM"
+      done < <(printf '%s' "$OPEN_JSON" | jq -r '.[1:][].number')
+    fi
+    EXISTING_NUM=$(printf '%s' "$OPEN_JSON" | jq -r '.[0].number')
+    EXISTING_TITLE=$(printf '%s' "$OPEN_JSON" | jq -r '.[0].title')
+    if [[ "$EXISTING_TITLE" == "$PR_TITLE" ]]; then
+      # Title equality is the idempotency key — make zero mutating gh calls.
+      echo "$LABEL: skipped (up to date)"
+    else
+      # Refresh BOTH title and body/marker in the one call: the marker JSON
+      # carries the title, so updating title alone would drift the marker.
+      EDIT_RC=0
+      EDIT_OUT=$(gh_retry gh issue edit "$EXISTING_NUM" \
+        --repo "$OFFICE_HOURS_NATE_REPO" --title "$PR_TITLE" --body "$ISSUE_BODY" 2>&1) \
+        || EDIT_RC=$?
+      if [[ "$EDIT_RC" -ne 0 ]]; then
+        echo "$LABEL: error (gh issue edit failed: $EDIT_OUT)" >&2
+        HARD_ERROR=1
+        continue
+      fi
+      echo "$LABEL: updated #$EXISTING_NUM"
+    fi
+  fi
+done
+
+# ---- Close path (PR no longer mergeable) ------------------------------------
+# Enumerate all open tracking issues in one call, recover the PR number from the
+# `merge-pr:` label, and close any whose PR number is no longer in the mergeable
+# set. We are past the find-or-create loop, so on a gh failure here we set
+# HARD_ERROR=1 and skip the close path rather than exiting early.
+CLOSE_LIST_RC=0
+CLOSE_JSON=$(gh issue list --repo "$OFFICE_HOURS_NATE_REPO" --state open \
+  --limit "$DISPATCH_OH_ISSUE_LIMIT" --json number,labels 2>&1) || CLOSE_LIST_RC=$?
+if [[ "$CLOSE_LIST_RC" -ne 0 ]]; then
+  echo "error: gh issue list (close path) failed: $CLOSE_JSON" >&2
+  HARD_ERROR=1
+elif [[ "$(printf '%s' "$CLOSE_JSON" | jq 'length')" -eq "$DISPATCH_OH_ISSUE_LIMIT" ]]; then
+  # The open-issue snapshot is exactly the limit, so it is likely truncated.
+  # Closing stale tracking issues from a truncated set would miss the excess,
+  # leaving them open forever. Bail loudly rather than silently under-closing.
+  echo "error: gh issue list (close path) returned exactly $DISPATCH_OH_ISSUE_LIMIT open issues (the --limit) — the open tracking-issue snapshot is likely truncated; stale issues would be missed. Raise DISPATCH_OH_ISSUE_LIMIT." >&2
+  HARD_ERROR=1
+else
+  # Emit "<issue-number> <pr-number>" for each open tracking issue carrying a
+  # merge-pr:* label, recovering the PR number FROM THE LABEL (not the marker).
+  while read -r ISSUE_NUM PR_NUM; do
+    [[ -z "$ISSUE_NUM" ]] && continue
+    if [[ -n "${MERGEABLE_NUMS[$PR_NUM]:-}" ]]; then
+      # Still mergeable — leave the tracking issue open.
+      continue
+    fi
+    CLOSE_RC=0
+    CLOSE_OUT=$(gh_retry gh issue close "$ISSUE_NUM" \
+      --repo "$OFFICE_HOURS_NATE_REPO" 2>&1) || CLOSE_RC=$?
+    if [[ "$CLOSE_RC" -ne 0 ]]; then
+      echo "merge-pr:$PR_NUM: error (gh issue close failed: $CLOSE_OUT)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    echo "merge-pr:$PR_NUM: closed (no longer mergeable)"
+  done < <(printf '%s' "$CLOSE_JSON" | jq -r '
+    .[]
+    | (.labels | map(.name) | map(select(startswith("merge-pr:")))) as $mlabels
+    | select(($mlabels | length) > 0)
+    | ($mlabels[0] | sub("^merge-pr:"; "")) as $pr
+    | "\(.number) \($pr)"
+  ')
+fi
+
+if [[ "$HARD_ERROR" -ne 0 ]]; then
+  exit 1
+fi
+exit 0

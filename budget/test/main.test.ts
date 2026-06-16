@@ -46,6 +46,8 @@ const mockFlushWriteBack = vi.fn();
 const mockResetFileSync = vi.fn();
 const mockGetSyncHandle = vi.fn();
 const mockGetLastSyncedModified = vi.fn();
+const mockSetWriteBackStatusListener = vi.fn();
+const mockAdvanceSyncWatermark = vi.fn();
 
 const mockIsEncrypted = vi.fn();
 const mockDecrypt = vi.fn();
@@ -88,6 +90,8 @@ vi.mock("../src/file-sync.js", () => ({
   resetFileSync: mockResetFileSync,
   getSyncHandle: mockGetSyncHandle,
   getLastSyncedModified: mockGetLastSyncedModified,
+  setWriteBackStatusListener: mockSetWriteBackStatusListener,
+  advanceSyncWatermark: mockAdvanceSyncWatermark,
 }));
 
 vi.mock("../src/crypto.js", () => ({
@@ -149,6 +153,8 @@ function resetAndMockAll(): void {
     resetFileSync: mockResetFileSync,
     getSyncHandle: mockGetSyncHandle,
     getLastSyncedModified: mockGetLastSyncedModified,
+    setWriteBackStatusListener: mockSetWriteBackStatusListener,
+    advanceSyncWatermark: mockAdvanceSyncWatermark,
   }));
   vi.mock("../src/crypto.js", () => ({
     isEncrypted: mockIsEncrypted,
@@ -158,6 +164,30 @@ function resetAndMockAll(): void {
   vi.mock("../src/active-data-source.js", () => ({
     setActiveDataSource: vi.fn(),
   }));
+}
+
+// Capture the window "focus" listener that the *next* `import("../src/main")`
+// registers, and return a function that fires only that listener. jsdom shares
+// one window across the whole test file and main.ts never removes its focus
+// listener, so every prior test's module instance stays subscribed; a real
+// `window.dispatchEvent(new Event("focus"))` would run all of them against the
+// current shared mocks and pollute exact-count / not-called assertions. Spying on
+// addEventListener isolates a test to its own module's reload. Call this BEFORE
+// the per-test `await import("../src/main")`; vi.restoreAllMocks() in beforeEach
+// removes the spy for the next test.
+function captureModuleFocusHandler(): () => void {
+  const handlers: Array<(e: Event) => void> = [];
+  const realAdd = window.addEventListener.bind(window);
+  vi.spyOn(window, "addEventListener").mockImplementation(
+    ((type: string, listener: EventListenerOrEventListenerObject, opts?: boolean | AddEventListenerOptions) => {
+      if (type === "focus") handlers.push(listener as (e: Event) => void);
+      return realAdd(type as keyof WindowEventMap, listener as EventListener, opts);
+    }) as typeof window.addEventListener,
+  );
+  return () => {
+    expect(handlers).toHaveLength(1);
+    handlers[0](new Event("focus"));
+  };
 }
 
 // Set up DOM elements before dynamic import
@@ -184,6 +214,8 @@ describe("main module", () => {
     mockResetFileSync.mockReset();
     mockGetSyncHandle.mockReset().mockReturnValue(null);
     mockGetLastSyncedModified.mockReset().mockReturnValue(null);
+    mockSetWriteBackStatusListener.mockReset();
+    mockAdvanceSyncWatermark.mockReset();
     // Default: plaintext files (no BENC header) — preserves the existing
     // upload/auto-load tests that pass a bare `{}` file.
     mockIsEncrypted.mockReset().mockReturnValue(false);
@@ -271,7 +303,11 @@ describe("main module", () => {
     const handle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
     mockGetFileHandle.mockResolvedValue(handle);
     mockQueryReadWritePermission.mockResolvedValue("granted");
-    mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "budget.benc"));
+    mockReadFileFromHandle.mockResolvedValue(new File(["enc"], "budget.benc"));
+    // Encrypted handle: the granted branch auto-loads it (a plaintext handle is
+    // unlinked + cached-display instead, per Unit 2, so it never stores).
+    mockIsEncrypted.mockReturnValue(true);
+    mockDecrypt.mockResolvedValue("{}");
 
     resetAndMockAll();
 
@@ -281,6 +317,14 @@ describe("main module", () => {
     mockStoreParsedData.mockResolvedValue(undefined);
 
     await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // An encrypted load opens a password dialog; submit it to commit the load.
+    const input = document.querySelector(".password-input") as HTMLInputElement;
+    expect(input).not.toBeNull();
+    input.value = "s3cret";
+    (input.closest("form") as HTMLFormElement).requestSubmit();
     await new Promise(r => setTimeout(r, 0));
     await new Promise(r => setTimeout(r, 0));
 
@@ -343,10 +387,14 @@ describe("main module", () => {
   });
 
   it("clears the persisted handle when the linked file fails content validation", async () => {
-    const handle = { name: "wrong.json" } as unknown as FileSystemFileHandle;
+    const handle = { name: "wrong.benc" } as unknown as FileSystemFileHandle;
     mockGetFileHandle.mockResolvedValue(handle);
     mockQueryReadWritePermission.mockResolvedValue("granted");
-    mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "wrong.json"));
+    mockReadFileFromHandle.mockResolvedValue(new File(["enc"], "wrong.benc"));
+    // Encrypted, so the granted branch auto-loads and reaches the parse/validation
+    // step (a plaintext handle is unlinked before parsing, per Unit 2).
+    mockIsEncrypted.mockReturnValue(true);
+    mockDecrypt.mockResolvedValue("{}");
 
     resetAndMockAll();
 
@@ -356,6 +404,15 @@ describe("main module", () => {
     });
 
     await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // An encrypted load opens a password dialog; submit it so the decrypted
+    // content reaches the validation step that throws.
+    const input = document.querySelector(".password-input") as HTMLInputElement;
+    expect(input).not.toBeNull();
+    input.value = "s3cret";
+    (input.closest("form") as HTMLFormElement).requestSubmit();
     await new Promise(r => setTimeout(r, 0));
     await new Promise(r => setTimeout(r, 0));
 
@@ -406,7 +463,11 @@ describe("main module", () => {
       version: 1,
       exportedAt: "2025-06-15T10:30:00Z",
     });
-    mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "budget.benc"));
+    mockReadFileFromHandle.mockResolvedValue(new File(["enc"], "budget.benc"));
+    // The picked file is encrypted, so its committed load persists the handle
+    // (a plaintext commit would clear it instead, per Unit 1).
+    mockIsEncrypted.mockReturnValue(true);
+    mockDecrypt.mockResolvedValue("{}");
 
     resetAndMockAll();
 
@@ -427,6 +488,14 @@ describe("main module", () => {
     mockPickBencFile.mockResolvedValue(newHandle);
     button.click();
     await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // The picked encrypted file opens a password dialog; submit it to commit.
+    const input = document.querySelector(".password-input") as HTMLInputElement;
+    expect(input).not.toBeNull();
+    input.value = "s3cret";
+    (input.closest("form") as HTMLFormElement).requestSubmit();
     await new Promise(r => setTimeout(r, 0));
     await new Promise(r => setTimeout(r, 0));
 
@@ -486,6 +555,8 @@ describe("main module", () => {
 
     expect(mockStoreParsedData).toHaveBeenCalled();
     expect(mockConfigureFileSync).toHaveBeenCalledWith(handle, "s3cret", expect.any(Number));
+    // The encrypted commit also persists the handle so it auto-loads next session.
+    expect(mockPutFileHandle).toHaveBeenCalledWith(handle);
   });
 
   it("flushes a pending write-back on visibilitychange -> hidden", async () => {
@@ -542,7 +613,11 @@ describe("main module", () => {
     mockGetMeta.mockResolvedValue(undefined);
     mockIsFsaSupported.mockReturnValue(true);
     mockPickBencFile.mockResolvedValue(handle);
-    mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "budget.benc"));
+    mockReadFileFromHandle.mockResolvedValue(new File(["enc"], "budget.benc"));
+    // Encrypted: a committed encrypted load persists the handle (a plaintext
+    // commit would clear it instead, per Unit 1).
+    mockIsEncrypted.mockReturnValue(true);
+    mockDecrypt.mockResolvedValue("{}");
 
     resetAndMockAll();
 
@@ -557,6 +632,14 @@ describe("main module", () => {
     const label = document.querySelector(".upload-label") as HTMLLabelElement;
     label.click();
     await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // The picked encrypted file opens a password dialog; submit it to commit.
+    const input = document.querySelector(".password-input") as HTMLInputElement;
+    expect(input).not.toBeNull();
+    input.value = "s3cret";
+    (input.closest("form") as HTMLFormElement).requestSubmit();
     await new Promise(r => setTimeout(r, 0));
     await new Promise(r => setTimeout(r, 0));
 
@@ -737,6 +820,147 @@ describe("main module", () => {
     expect(mockClearFileHandle).not.toHaveBeenCalled();
   });
 
+  it("rejects a plaintext external file when session is encrypted and advances the watermark", async () => {
+    // Set up a prior committed encrypted load so importPassword is non-null (mirrors AC2 harness).
+    const handleA = { name: "a.benc" } as unknown as FileSystemFileHandle;
+    mockGetFileHandle.mockResolvedValue(handleA);
+    mockQueryReadWritePermission.mockResolvedValue("granted");
+    mockReadFileFromHandle.mockResolvedValue(new File(["enc-a"], "a.benc"));
+    mockIsEncrypted.mockReturnValue(true);
+    mockDecrypt.mockResolvedValue("{}");
+    mockIsFsaSupported.mockReturnValue(true);
+
+    resetAndMockAll();
+
+    // Capture THIS module's focus listener so we can fire it in isolation. Every
+    // `import("../src/main")` registers a new window "focus" listener on the shared
+    // jsdom window and they are never removed, so a real dispatchEvent("focus")
+    // would also run every prior test's accumulated reload against the current
+    // shared mocks — polluting exact-count / not-called assertions. The spy is
+    // installed after the per-test import, so it captures only this module's handler.
+    const fireFocus = captureModuleFocusHandler();
+
+    const { parseUploadedJson, toParsedData } = await import("../src/upload.js");
+    (parseUploadedJson as ReturnType<typeof vi.fn>).mockReturnValue({ groupName: "household" });
+    (toParsedData as ReturnType<typeof vi.fn>).mockReturnValue({ meta: { groupName: "household" } });
+    mockStoreParsedData.mockResolvedValue(undefined);
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Submit password "pw-A" to complete the initial encrypted load and arm the session.
+    const inputA = document.querySelector(".password-input") as HTMLInputElement;
+    expect(inputA).not.toBeNull();
+    inputA.value = "pw-A";
+    (inputA.closest("form") as HTMLFormElement).requestSubmit();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Confirm the session is armed (importPassword is non-null from here on).
+    expect(mockConfigureFileSync).toHaveBeenCalledWith(handleA, "pw-A", expect.any(Number));
+
+    // The external file was swapped for a NEWER *plaintext* file. The encrypted
+    // session must reject it (mode-downgrade) rather than silently load plaintext.
+    mockGetSyncHandle.mockReturnValue(handleA);
+    mockGetLastSyncedModified.mockReturnValue(1000);
+    mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "budget.benc", { lastModified: 9000 }));
+    mockIsEncrypted.mockReturnValue(false);
+    mockStoreParsedData.mockClear();
+    mockClearFileHandle.mockClear();
+
+    fireFocus();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // The plaintext file must be rejected: storeParsedData not called, handle kept.
+    expect(mockStoreParsedData).not.toHaveBeenCalled();
+    expect(mockClearFileHandle).not.toHaveBeenCalled();
+    // The watermark must be advanced past this bad version to break the focus loop.
+    expect(mockAdvanceSyncWatermark).toHaveBeenCalledWith(9000);
+  });
+
+  it("advances the watermark after a wrong-password reload to break the focus retry loop", async () => {
+    // Set up a prior committed encrypted load so importPassword is non-null.
+    const handleA = { name: "a.benc" } as unknown as FileSystemFileHandle;
+    mockGetFileHandle.mockResolvedValue(handleA);
+    mockQueryReadWritePermission.mockResolvedValue("granted");
+    mockReadFileFromHandle.mockResolvedValue(new File(["enc-a"], "a.benc"));
+    mockIsEncrypted.mockReturnValue(true);
+    mockDecrypt.mockResolvedValue("{}");
+    mockIsFsaSupported.mockReturnValue(true);
+
+    resetAndMockAll();
+
+    // Fire only this module's focus listener (see the mode-mismatch test above for
+    // why dispatchEvent would pollute the decrypt count across accumulated modules).
+    const fireFocus = captureModuleFocusHandler();
+
+    const { parseUploadedJson, toParsedData } = await import("../src/upload.js");
+    (parseUploadedJson as ReturnType<typeof vi.fn>).mockReturnValue({ groupName: "household" });
+    (toParsedData as ReturnType<typeof vi.fn>).mockReturnValue({ meta: { groupName: "household" } });
+    mockStoreParsedData.mockResolvedValue(undefined);
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Submit password "pw-A" to arm the session.
+    const inputA = document.querySelector(".password-input") as HTMLInputElement;
+    expect(inputA).not.toBeNull();
+    inputA.value = "pw-A";
+    (inputA.closest("form") as HTMLFormElement).requestSubmit();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(mockConfigureFileSync).toHaveBeenCalledWith(handleA, "pw-A", expect.any(Number));
+
+    const { UploadValidationError } = await import("../src/upload.js");
+
+    // The on-disk file is re-encrypted under a *different* password: decrypt throws
+    // UploadValidationError. Make the watermark-advance mock actually move the guard
+    // so the second focus can observe a watermark that now covers the bad version.
+    mockGetSyncHandle.mockReturnValue(handleA);
+    mockGetLastSyncedModified.mockReturnValue(1000);
+    mockReadFileFromHandle.mockResolvedValue(new File(["enc"], "budget.benc", { lastModified: 9000 }));
+    mockIsEncrypted.mockReturnValue(true);
+    mockAdvanceSyncWatermark.mockImplementation((ms: number) => {
+      mockGetLastSyncedModified.mockReturnValue(ms);
+    });
+    mockDecrypt.mockReset();
+    mockDecrypt.mockRejectedValue(new UploadValidationError("Wrong password or corrupted file."));
+    mockDecrypt.mockClear();
+
+    // First focus: the reload reads the newer file (9000 > 1000), decrypts, fails,
+    // and the catch advances the watermark to 9000. Settle fully before the second.
+    fireFocus();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Second focus: the watermark now equals the file's lastModified (9000 <= 9000),
+    // so the reload short-circuits before decrypt is attempted again — the loop is
+    // broken. (A single focus does not prove this; the second dispatch is the point.)
+    fireFocus();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Decrypt was attempted exactly once: the second focus did not re-derive.
+    expect(mockDecrypt).toHaveBeenCalledTimes(1);
+    // The watermark was advanced past the bad version.
+    expect(mockAdvanceSyncWatermark).toHaveBeenCalledWith(9000);
+  });
+
   // AC1 — any committed load disarms the prior file-sync session.
   // A committed plaintext load (non-FSA upload) calls resetFileSync and does NOT
   // call configureFileSync (no handle to re-arm with).
@@ -912,5 +1136,151 @@ describe("main module", () => {
     const postSwitchCalls = mockConfigureFileSync.mock.calls;
     const armedHandleA = postSwitchCalls.some(([h]) => h === handleA);
     expect(armedHandleA).toBe(false);
+  });
+
+  // A freshly-picked PLAINTEXT file is shown for the session, but its handle is
+  // never persisted (so it can't silently auto-load with no auth next startup)
+  // and write-back is never armed (no encryption ⇒ nothing to safely write back).
+  it("does not persist the handle or arm write-back for a freshly picked plaintext file", async () => {
+    const handle = { name: "budget.json" } as unknown as FileSystemFileHandle;
+    // No persisted handle so initialize() doesn't touch clearFileHandle and muddy
+    // the assertion; the only clearFileHandle call must come from the plaintext commit.
+    mockGetFileHandle.mockResolvedValue(undefined);
+    mockGetMeta.mockResolvedValue(undefined);
+    mockIsFsaSupported.mockReturnValue(true);
+    mockPickBencFile.mockResolvedValue(handle);
+    mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "budget.json"));
+    // Default mockIsEncrypted -> false: the picked file is plaintext.
+
+    resetAndMockAll();
+
+    const { parseUploadedJson, toParsedData } = await import("../src/upload.js");
+    (parseUploadedJson as ReturnType<typeof vi.fn>).mockReturnValue({ groupName: "household" });
+    (toParsedData as ReturnType<typeof vi.fn>).mockReturnValue({ meta: { groupName: "household" } });
+    mockStoreParsedData.mockResolvedValue(undefined);
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+
+    const label = document.querySelector(".upload-label") as HTMLLabelElement;
+    label.click();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // Plaintext: data is loaded for the session (storeParsedData), but the handle
+    // is dropped and write-back is not armed.
+    expect(mockStoreParsedData).toHaveBeenCalled();
+    expect(mockPutFileHandle).not.toHaveBeenCalled();
+    expect(mockClearFileHandle).toHaveBeenCalled();
+    expect(mockConfigureFileSync).not.toHaveBeenCalled();
+    // The session-only notice is surfaced.
+    const errorEl = document.querySelector(".nav-error") as HTMLElement;
+    expect(errorEl.hidden).toBe(false);
+    expect(errorEl.textContent).toContain("auto-loaded next session");
+  });
+
+  // initialize() with a granted PLAINTEXT handle: unlink it and show the cached
+  // IDB data WITHOUT re-storing (no clobber of this session's edits), per Unit 2.
+  it("unlinks a granted plaintext handle and shows cached data without clobbering", async () => {
+    const handle = { name: "budget.json" } as unknown as FileSystemFileHandle;
+    mockGetFileHandle.mockResolvedValue(handle);
+    mockQueryReadWritePermission.mockResolvedValue("granted");
+    mockReadFileFromHandle.mockResolvedValue(new File(["{}"], "budget.json"));
+    mockGetMeta.mockResolvedValue({
+      key: "upload",
+      groupName: "household",
+      version: 1,
+      exportedAt: "2025-06-15T10:30:00Z",
+    });
+    // Default mockIsEncrypted -> false: the persisted handle points at plaintext.
+
+    resetAndMockAll();
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // The plaintext handle is unlinked and cached data is shown — but never re-stored.
+    expect(mockClearFileHandle).toHaveBeenCalled();
+    expect(mockStoreParsedData).not.toHaveBeenCalled();
+    // Cached meta drives the display: local state -> hero hidden.
+    expect(mockGetMeta).toHaveBeenCalled();
+    const heroContainer = document.getElementById("hero-container")!;
+    expect(heroContainer.hidden).toBe(true);
+    // A notice explains the unlink.
+    const errorEl = document.querySelector(".nav-error") as HTMLElement;
+    expect(errorEl.hidden).toBe(false);
+    expect(errorEl.textContent).toContain("unencrypted");
+  });
+
+  // Cancelling the password prompt for a freshly-picked ENCRYPTED file is an
+  // uncommitted load: the handle must NOT be persisted.
+  it("does not persist a freshly picked encrypted handle when the password prompt is cancelled", async () => {
+    const handle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
+    mockGetFileHandle.mockResolvedValue(undefined);
+    mockGetMeta.mockResolvedValue(undefined);
+    mockIsFsaSupported.mockReturnValue(true);
+    mockPickBencFile.mockResolvedValue(handle);
+    mockReadFileFromHandle.mockResolvedValue(new File(["enc"], "budget.benc"));
+    mockIsEncrypted.mockReturnValue(true);
+    mockDecrypt.mockResolvedValue("{}");
+
+    resetAndMockAll();
+
+    const { parseUploadedJson, toParsedData } = await import("../src/upload.js");
+    (parseUploadedJson as ReturnType<typeof vi.fn>).mockReturnValue({ groupName: "household" });
+    (toParsedData as ReturnType<typeof vi.fn>).mockReturnValue({ meta: { groupName: "household" } });
+    mockStoreParsedData.mockResolvedValue(undefined);
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+
+    const label = document.querySelector(".upload-label") as HTMLLabelElement;
+    label.click();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // The password dialog for the encrypted file is open. Cancel it.
+    const cancelBtn = document.querySelector(".password-cancel") as HTMLButtonElement;
+    expect(cancelBtn).not.toBeNull();
+    cancelBtn.click();
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    // A cancelled (uncommitted) load must not persist the handle.
+    expect(mockPutFileHandle).not.toHaveBeenCalled();
+  });
+
+  it("write-back status listener shows and clears the nav warning, with clobber guard", async () => {
+    const FILE_SYNC_WARNING = "Changes could not be saved to disk — an error occurred.";
+
+    mockGetMeta.mockResolvedValue(undefined);
+    resetAndMockAll();
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(mockSetWriteBackStatusListener).toHaveBeenCalled();
+    const cb = mockSetWriteBackStatusListener.mock.calls[0][0] as (ok: boolean) => void;
+
+    const errorEl = document.querySelector(".nav-error") as HTMLElement;
+
+    // ok=false: warning is shown
+    cb(false);
+    expect(errorEl.hidden).toBe(false);
+    expect(errorEl.textContent).toContain(FILE_SYNC_WARNING);
+
+    // ok=true: warning is cleared
+    cb(true);
+    expect(errorEl.hidden).toBe(true);
+
+    // Clobber guard: an unrelated nav error must not be cleared by ok=true
+    errorEl.textContent = "Some unrelated error";
+    errorEl.hidden = false;
+    cb(true);
+    expect(errorEl.hidden).toBe(false);
+    expect(errorEl.textContent).toBe("Some unrelated error");
   });
 });

@@ -89,6 +89,8 @@ export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
       }
     };
     tx.onerror = () => {
+      // Sanctioned bare reportError — see connection.ts for the full rationale;
+      // the global handler records it under operation "uncaught".
       reportError(new Error("Failed to touch lastAccessed", { cause: tx.error }));
     };
   }

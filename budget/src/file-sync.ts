@@ -18,12 +18,14 @@ import {
   requestReadWritePermission,
 } from "./local-file.js";
 
+type WriteResult = "ok" | "failed" | "abandoned";
+
 const DEBOUNCE_MS = 800;
 
 let handle: FileSystemFileHandle | null = null;
 let password: string | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
-let inFlight: Promise<void> | null = null;
+let inFlight: Promise<unknown> | null = null;
 // Set by scheduleWriteBack when a mutation arrives. The writer loop re-runs while
 // it is set, so edits made *during* an in-flight write are still persisted.
 let dirty = false;
@@ -36,6 +38,24 @@ let generation = 0;
 // watcher compares the live lastModified against this watermark to detect an
 // external write; stamping it on our own write-back prevents a self-trigger.
 let lastSyncedModified: number | null = null;
+
+let statusListener: ((ok: boolean) => void) | null = null;
+
+/** Register the write-back status listener (one-time top-level registration). */
+export function setWriteBackStatusListener(cb: ((ok: boolean) => void) | null): void {
+  statusListener = cb;
+}
+
+// Notify the status listener of a write outcome. Wrapped so a throwing listener
+// cannot break the writer loop.
+function notifyWriteStatus(ok: boolean): void {
+  if (statusListener === null) return;
+  try {
+    statusListener(ok);
+  } catch (e) {
+    logError(e, { operation: "file-sync" });
+  }
+}
 
 /** Arm write-back for an encrypted FSA-handle session. */
 export function configureFileSync(h: FileSystemFileHandle, pw: string, modifiedMs: number): void {
@@ -56,6 +76,17 @@ export function resetFileSync(): void {
   dirty = false;
   lastSyncedModified = null;
   generation++;
+}
+
+/**
+ * Advance-only watermark bump. Moves `lastSyncedModified` past a rejected
+ * external file version so the focus watcher stops re-triggering on it.
+ * Does NOT re-arm sync and does NOT bump `generation` — a failed reload
+ * leaves the in-memory dataset unchanged, so any in-flight debounced write
+ * is still authoritative and must not be abandoned.
+ */
+export function advanceSyncWatermark(modifiedMs: number): void {
+  lastSyncedModified = modifiedMs;
 }
 
 /** Debounced trigger; no-op when unconfigured (seed / non-FSA upload). */
@@ -88,37 +119,65 @@ export async function flushWriteBack(): Promise<void> {
   }
   // Force at least one write (flush semantics), then keep writing while new
   // mutations arrive mid-write.
-  do {
+  writer: do {
     dirty = false;
     const h = handle;
     const pw = password;
     const gen = generation;
-    inFlight = doWrite(h, pw, gen).catch((e) => logError(e, { operation: "file-sync" }));
-    await inFlight;
+    const result = await (inFlight = doWrite(h, pw, gen));
     inFlight = null;
+    switch (result) {
+      case "failed":
+        // Re-set dirty so a future scheduleWriteBack retries, but break the loop
+        // — do not busy-retry a persistent failure here.
+        dirty = true;
+        notifyWriteStatus(false);
+        break writer;
+      case "ok":
+        notifyWriteStatus(true);
+        break;
+      case "abandoned":
+        // Session was reset/re-armed mid-write — do not notify or re-set dirty;
+        // the while guard stops the loop.
+        break;
+    }
   } while (dirty && handle && password !== null);
 }
 
-async function doWrite(h: FileSystemFileHandle, pw: string, gen: number): Promise<void> {
-  let perm = await queryReadWritePermission(h);
-  if (perm !== "granted") perm = await requestReadWritePermission(h);
-  if (perm !== "granted") {
-    logError(new Error("write-back permission not granted"), { operation: "file-sync" });
-    return;
+async function doWrite(h: FileSystemFileHandle, pw: string, gen: number): Promise<WriteResult> {
+  try {
+    let perm = await queryReadWritePermission(h);
+    if (perm !== "granted") perm = await requestReadWritePermission(h);
+    if (perm !== "granted") {
+      logError(new Error("write-back permission not granted"), { operation: "file-sync" });
+      return "failed";
+    }
+    const json = await exportToJson();
+    const bytes = await encrypt(json, pw);
+    // The session was disarmed or re-armed (clear-data, or a new file loaded) while
+    // this write was in flight — abandon it rather than overwrite the on-disk file
+    // with a now-stale snapshot.
+    if (gen !== generation) return "abandoned";
+    await writeFileToHandle(h, bytes);
+  } catch (e) {
+    logError(e, { operation: "file-sync" });
+    return "failed";
   }
-  const json = await exportToJson();
-  const bytes = await encrypt(json, pw);
-  // The session was disarmed or re-armed (clear-data, or a new file loaded) while
-  // this write was in flight — abandon it rather than overwrite the on-disk file
-  // with a now-stale snapshot.
-  if (gen !== generation) return;
-  await writeFileToHandle(h, bytes);
-  // Stamp the watermark from the file as just written so the focus watcher does
-  // not mistake our own write-back for an external change. Skip if the session was
-  // re-armed/reset mid-write (gen changed) — that path set its own watermark.
+  // The write itself succeeded and is safe on disk — return "ok" regardless of
+  // whether the post-write watermark readback works. Stamp the watermark from the
+  // file as just written so the focus watcher does not mistake our own write-back
+  // for an external change. Skip if the session was re-armed/reset mid-write (gen
+  // changed) — that path set its own watermark.
   if (gen === generation) {
-    lastSyncedModified = (await readFileFromHandle(h)).lastModified;
+    try {
+      lastSyncedModified = (await readFileFromHandle(h)).lastModified;
+    } catch (e) {
+      // A readback failure must not masquerade as a write failure. Log it and
+      // leave lastSyncedModified unchanged; the next successful write will stamp it.
+      logError(e, { operation: "file-sync" });
+    }
   }
+  return "ok";
 }
 
 /** Active FSA handle for this session, or null in seed / non-FSA upload mode. */

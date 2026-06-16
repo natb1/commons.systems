@@ -191,6 +191,26 @@ strip_office_hours_label() {
     || echo "[dispatch-stop] WARNING: gh issue edit --remove-label failed" >&2
 }
 
+# Best-effort: strip any dispatch:rate-limit-retry-<n> counter labels from the
+# ISSUE on a clean marker-present advance ("reset on real progress"). Called by
+# every advance/self-close site, so a session that recovered after one or more
+# rate-limit resumes starts its next death from a clean counter rather than
+# inheriting the prior backoff bucket. MUST return 0 even on a `gh` flake: the
+# file runs `set -uo pipefail` with `trap ... exit 0 ERR`, so an unguarded
+# non-zero return from this helper at its (pre-advance) call sites would fire the
+# ERR trap and exit 0 BEFORE the advance/self-close runs — skipping the very work
+# this hook owns. The trailing `return 0` makes the function total.
+clear_rate_limit_retry_labels() {
+  local lbl
+  gh issue view "$ISSUE_NUM" --json labels --jq \
+    '.labels[].name | select(test("^dispatch:rate-limit-retry-[0-9]+$"))' 2>/dev/null \
+    | while IFS= read -r lbl; do
+        [ -n "$lbl" ] && gh issue edit "$ISSUE_NUM" --remove-label "$lbl" >/dev/null 2>&1 \
+          || echo "[dispatch-stop] WARNING: could not clear $lbl (non-fatal)" >&2
+      done || true
+  return 0
+}
+
 spawn_tick() {
   "$SCRIPTS/dispatch-spawn-tick" >/dev/null 2>&1 \
     || echo "[dispatch-stop] WARNING: dispatch-spawn-tick failed" >&2
@@ -300,11 +320,19 @@ fi
 #     BEFORE dispatch-phase: a pending dispatch-phase would exit 3, leave
 #     CURRENT_PHASE="" via the `|| CURRENT_PHASE=""` fallback below, and drive a
 #     spurious Branch D office-hours park.
+#
+# Rate-limit self-heal degradation: a rate-limit death while the PR's CI is
+# back IN PROGRESS hits THIS early not-ready gate before Branch A, so it gets
+# the from-scratch re-tick rather than the context-preserving resume that
+# Branch A's rate-limit self-heal arms. Acceptable, intentional degradation:
+# the work still continues (the next tick re-gates once CI concludes); only the
+# session-context preservation is lost in this narrow window.
 if ! "$SCRIPTS/dispatch-ci-ready" "$ISSUE_NUM" >/dev/null 2>&1; then
   spawn_tick
   if [ -n "$MARKER_PHASE" ]; then
     # Marker present (see the block above): the phase completed and only CI
     # is still running — self-close so the session does not leak idle.
+    clear_rate_limit_retry_labels
     spawn_sweep
     self_close
   fi
@@ -327,6 +355,37 @@ if [ -z "$MARKER_PHASE" ]; then
     # cycle, oscillating dispatch:office-hours (#1590).
     exit 0
   fi
+  # Rate-limit self-heal (#1733). A worker that died on a TRANSIENT Anthropic
+  # server-overload rate-limit (not the user's own usage limit) must NOT park on
+  # office-hours as if it hit a human-input wall — that condition self-heals on
+  # retry. Checked AFTER the scheduled-wakeup gate (a live poller still takes
+  # precedence) and BEFORE the office-hours park below. On a positive detection
+  # arm a backed-off resume of the dead session in place.
+  if "$SCRIPTS/dispatch-detect-rate-limit-death" "$TRANSCRIPT_PATH"; then
+    _sid=$(jq -r '.sessionId // empty' "$STATE_FILE" 2>/dev/null)
+    _cwd=$(jq -r '.cwd // empty' "$STATE_FILE" 2>/dev/null)
+    _model=$("$SCRIPTS/dispatch-phase-model" "$CURRENT_PHASE" 2>/dev/null || true)
+    if [ -n "$_sid" ] && [ -n "$_cwd" ]; then
+      sched_out=$("$SCRIPTS/dispatch-schedule-rate-limit-resume" \
+        "$ISSUE_NUM" "$_sid" "$_cwd" "$JOB_NAME" "$_model" 2>&1) && sched_rc=0 || sched_rc=$?
+      if [ "$sched_rc" -eq 0 ]; then
+        case "$sched_out" in
+          *escalated*)
+            # cap hit — the schedule script already parked office-hours.
+            # Spawn a tick like the normal park (safe: the issue now carries
+            # dispatch:office-hours, so the tick skips it — no race).
+            spawn_tick ;;
+          *)
+            # reseeded — timer armed. Do NOT spawn a tick: the resume timer
+            # owns this issue's continuation; a competing tick could launch a
+            # fresh from-scratch worker and race the resume.
+            : ;;
+        esac
+        exit 0
+      fi
+      # schedule failed → fall through to the normal office-hours park below.
+    fi
+  fi
   "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
     "$(resolve_office_hours_reason "phase exited before completion (mid-phase exit or context compaction)")" \
     || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
@@ -336,6 +395,7 @@ fi
 
 if [ -n "$CURRENT_PHASE" ] && [ "$MARKER_PHASE" != "$CURRENT_PHASE" ]; then
   # Branch B — phase advanced.
+  clear_rate_limit_retry_labels
   strip_office_hours_label
   spawn_tick
   spawn_sweep
@@ -355,6 +415,7 @@ case "$CURRENT_PHASE" in
         # Branch C — transient no-push fix-* outcome; CI concluded, nothing
         # pending. Self-close so the session does not leak idle holding its
         # worktree; the next tick re-runs the fix-* phase or escalates at the cap.
+        clear_rate_limit_retry_labels
         spawn_tick
         spawn_sweep
         self_close
@@ -369,6 +430,7 @@ case "$CURRENT_PHASE" in
       # present means fix-conflicts completed successfully. Any OTHER fix-* phase
       # with an empty PR_NUM matches neither branch and deliberately falls
       # through to Branch D (office-hours park).
+      clear_rate_limit_retry_labels
       spawn_tick
       spawn_sweep
       self_close

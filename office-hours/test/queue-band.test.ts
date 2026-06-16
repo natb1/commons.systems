@@ -41,11 +41,18 @@ describe("renderQueueBand runway readout", () => {
     expect(state!.classList.contains("draining")).toBe(true);
   });
 
-  it("ceil rounding: a fractional runway rounds up to ~1 days", () => {
+  it("ceil rounding: a fractional runway rounds up to ~1 day", () => {
     const section = renderQueueBand(make({ runwayDays: 0.6 }));
 
     const state = section.querySelector(".queue-runway-state");
-    expect(state!.textContent).toContain("~1 days");
+    expect(state!.textContent).toBe("~1 day until the queue empties");
+  });
+
+  it("singular: runwayDays exactly 1.0 renders ~1 day", () => {
+    const section = renderQueueBand(make({ runwayDays: 1.0 }));
+
+    const state = section.querySelector(".queue-runway-state");
+    expect(state!.textContent).toBe("~1 day until the queue empties");
   });
 
   it("stable: null runway with zero net drain reads 'queue stable'", () => {
@@ -62,6 +69,15 @@ describe("renderQueueBand runway readout", () => {
     const state = section.querySelector(".queue-runway-state");
     expect(state!.textContent).toBe("queue growing");
     expect(state!.classList.contains("growing")).toBe(true);
+  });
+
+  it("negative runway falls through to the null-runway path: 'queue growing'", () => {
+    const section = renderQueueBand(make({ runwayDays: -5, netDrainPerDay: -0.5 }));
+
+    const state = section.querySelector(".queue-runway-state");
+    expect(state!.textContent).toBe("queue growing");
+    expect(state!.classList.contains("growing")).toBe(true);
+    expect(/-\d/.test(state!.textContent ?? "")).toBe(false);
   });
 
   it("empty queue wins over null runway: 'queue empty'", () => {

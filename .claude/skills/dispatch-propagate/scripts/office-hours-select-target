@@ -18,15 +18,25 @@
 #     /office-hours picks up fresh.
 #     <issue> — the selected issue number.
 #     <phase> — implement | qa | code-review | review | security | fix-checks |
-#               waiting | done. `waiting` comes from dispatch-ci-ready (draft PR
-#               with CI still pending); all other values come from dispatch-phase.
+#               waiting | done | main-qa. `waiting` comes from dispatch-ci-ready
+#               (draft PR with CI still pending); `main-qa` is set here for a
+#               fresh item carrying the `main-qa` label (a needs-main QA
+#               follow-up, #1648) and overrides the dispatch-phase value; all
+#               other values come from dispatch-phase.
 #               /office-hours branches on this: implement → plan-approval
 #               residue; qa → QA walkthrough residue; anything past qa →
-#               deviation-review.
-#     <pr-or-dash> — the issue's open PR number, or `-` when none exists.
+#               deviation-review; main-qa → the no-worktree main-qa review.
+#     <pr-or-dash> — the issue's open PR number, or `-` when none exists. A
+#               main-qa follow-up has no PR, so this is `-`.
 #     <worktree-path> — the path to the item's <N>-* worktree, or `-` when no
 #               <N>-* worktree is registered. The entry script launches the
 #               fresh /office-hours session worker-style with --cwd this path.
+#               EXCEPTION: a `main-qa` item has NO <N>-* worktree (it is a
+#               brand-new, no-PR issue, #1648), so this field is the MAIN
+#               worktree path instead — a real existing directory the entry
+#               dispatcher's `-` guard accepts and dispatch-spawn-office-hours
+#               uses as the spawn --cwd. The main-qa review needs no worktree
+#               (pure gh: read the issue, present it, close it).
 #   parked-router <sessionId> <name>
 #     A target-less parked /dispatch-propagate router (#1010). When no labeled
 #     item is resumable or sessionless, this fallback surfaces a live, idle/waiting
@@ -60,8 +70,31 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 
-# Open issues carrying dispatch:office-hours, with their creation times.
-ISSUE_LIST=$(gh issue list --label dispatch:office-hours --state open --json number,createdAt)
+# resolve_main_worktree — print the MAIN worktree path on stdout (rc 0), or print
+# a diagnostic and return non-zero when the project root cannot be resolved. The
+# SINGLE resolution shared by both consumers: the main-qa fresh-branch override
+# (#1648) and the parked-router fallback. Honors the DISPATCH_OFFICE_HOURS_MAIN_
+# WORKTREE override (tests; the real resolve_project_root needs a git rev-parse
+# the stub harness lacks). Resolved LAZILY only where needed, so a non-main-qa
+# fresh item never invokes resolve_project_root. Uses `return`, not `exit` — an
+# `exit` inside `$(...)` only kills the command-substitution subshell.
+resolve_main_worktree() {
+  if [[ -n "${DISPATCH_OFFICE_HOURS_MAIN_WORKTREE:-}" ]]; then
+    printf '%s' "$DISPATCH_OFFICE_HOURS_MAIN_WORKTREE"
+    return 0
+  fi
+  local root
+  if ! root="$(resolve_project_root)"; then
+    echo "office-hours-select-target: cannot resolve project root (not in a git repo?)" >&2
+    return 1
+  fi
+  printf '%s' "$root/worktrees/main"
+}
+
+# Open issues carrying dispatch:office-hours, with their creation times and
+# labels (labels ride this existing fetch — no extra gh call; the main-qa
+# override below re-queries ISSUE_LIST by number to detect the `main-qa` label).
+ISSUE_LIST=$(gh issue list --label dispatch:office-hours --state open --json number,createdAt,labels)
 
 # Map each registered <N>-* worktree to its on-disk path(s), keyed by issue
 # number — the same construction dispatch-select-target uses for its liveness
@@ -136,21 +169,49 @@ fi
 # fetched lazily here — only the fresh path needs it, so the resume path makes
 # no `gh pr list` call. The field set is dispatch-phase's superset;
 # dispatch-find-pr accepts it too (mirrors dispatch-select-target's
-# DISPATCH_PR_LIST).
+# DISPATCH_PR_LIST_FILE). The list is written to a temp file and passed by path,
+# sidestepping the E2BIG an inline JSON string hits past ~32 open PRs (#1646).
 if [[ -n "$FRESH_NUM" ]]; then
-  PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable")
+  PR_LIST=$(pr_list_open "number,headRefName,isDraft,headRefOid,labels,mergeable")
+  PR_LIST_FILE=$(pr_list_export_file "$PR_LIST")
+  trap 'rm -f "$PR_LIST_FILE"' EXIT
   # Readiness gate: dispatch-phase no longer emits `waiting`; check CI readiness
-  # first. A not-ready draft PR (exit non-zero) maps to phase=waiting, preserving
-  # the byte-identical output contract callers expect.
-  if ! DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-ci-ready" "$FRESH_NUM" >/dev/null; then
+  # first. A not-ready draft PR (exit 1) maps to phase=waiting, preserving
+  # the byte-identical output contract callers expect. Exit >= 2 is an exec/IO
+  # error (e.g. unreadable DISPATCH_PR_LIST_FILE) — surface it, don't map to waiting.
+  ci_rc=0
+  DISPATCH_PR_LIST_FILE="$PR_LIST_FILE" "$SCRIPT_DIR/dispatch-ci-ready" "$FRESH_NUM" >/dev/null || ci_rc=$?
+  if (( ci_rc >= 2 )); then
+    echo "error: dispatch-ci-ready failed (exit $ci_rc) for $FRESH_NUM — environment error, not a CI verdict" >&2
+    exit "$ci_rc"
+  fi
+  if (( ci_rc == 1 )); then
     phase="waiting"
   else
-    phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$FRESH_NUM")
+    phase=$(DISPATCH_PR_LIST_FILE="$PR_LIST_FILE" "$SCRIPT_DIR/dispatch-phase" "$FRESH_NUM")
   fi
-  pr=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-find-pr" "$FRESH_NUM")
+  pr=$(DISPATCH_PR_LIST_FILE="$PR_LIST_FILE" "$SCRIPT_DIR/dispatch-find-pr" "$FRESH_NUM")
   # The path to this item's <N>-* worktree (newline-separated values per key;
   # take the first), or empty when no <N>-* worktree is registered.
   wt_path=$(printf '%s' "${WORKTREE_PATHS_BY_NUM[$FRESH_NUM]:-}" | head -n 1)
+  # main-qa override (#1648): a fresh item carrying the `main-qa` label is a
+  # needs-main QA follow-up — a brand-new, no-PR, NO-WORKTREE issue whose review
+  # disposition needs no worktree (pure gh: read the issue, present it, close it).
+  # It is the first office-hours kind reaching the queue without a prior phase
+  # having provisioned an <N>-* worktree, so wt_path is empty above. Surface the
+  # MAIN worktree as the spawn cwd instead: a real existing directory means the
+  # entry dispatcher's `-` guard never trips and dispatch-spawn-office-hours
+  # accepts the cwd. Detect the label in the already-fetched ISSUE_LIST json
+  # (no extra gh call); `.labels // []` stays null-tolerant for label-less items.
+  if jq -e --argjson n "$FRESH_NUM" \
+       'any(.[]; .number == $n and ((.labels // []) | any(.name == "main-qa")))' \
+       <<<"$ISSUE_LIST" >/dev/null; then
+    if ! MAIN_WORKTREE="$(resolve_main_worktree)"; then
+      exit 1
+    fi
+    phase="main-qa"
+    wt_path="$MAIN_WORKTREE"
+  fi
   printf 'office-hours %s %s %s %s\n' "$FRESH_NUM" "$phase" "${pr:--}" "${wt_path:--}"
   exit 0
 fi
@@ -160,13 +221,8 @@ fi
 # worktrees/main, kept alive by dispatch-self-close's continuation invariant. It
 # carries no issue/PR, so no label anchors it — discover it directly by cwd +
 # state. The human resumes it by re-engaging that exact session.
-MAIN_WORKTREE="${DISPATCH_OFFICE_HOURS_MAIN_WORKTREE:-}"
-if [[ -z "$MAIN_WORKTREE" ]]; then
-  if ! project_root="$(resolve_project_root)"; then
-    echo "office-hours-select-target: cannot resolve project root (not in a git repo?)" >&2
-    exit 1
-  fi
-  MAIN_WORKTREE="$project_root/worktrees/main"
+if ! MAIN_WORKTREE="$(resolve_main_worktree)"; then
+  exit 1
 fi
 
 # claude_sessions_under honors the UNKNOWN contract: a non-zero return means the

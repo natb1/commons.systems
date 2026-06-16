@@ -7,7 +7,7 @@
 # Writes the dispatch parse-job-done sentinel that dispatch-stop.sh's parse-job
 # clean-completion branch reads to spawn the next tick and self-close — the
 # terminal disposition for a parse-job whose budget-etl statement merge
-# succeeded. Unlike an implement/verify phase, a clean parse-job produces NO PR:
+# succeeded. Unlike an implement/fix-checks phase, a clean parse-job produces NO PR:
 # the handler skill has already closed the parse-job issue, so there is no label
 # work and no PR-centric disposition. The sentinel is written atomically
 # (tempfile + mv) under the $CLAUDE_JOB_DIR guard, exactly as the marker scripts
