@@ -215,6 +215,77 @@ else
       printf '%s' "$LANDING_RESP" \
         | jq -r '.rows[]? | "  \(((.dimensionValues[0].value // "") | gsub("[\\r\\n]"; " "))[0:200]): \(.metricValues[0].value) sessions, \(.metricValues[1].value) views"'
     fi
+
+    # (d) Web Vitals field metrics (Core Web Vitals from the web_vitals event,
+    # 30-day window). The producer (#1493) emits one web_vitals event per CWV
+    # with custom params metric_name/metric_rating/metric_value. Those params are
+    # only queryable as customEvent:* dimensions/metrics once registered as
+    # custom definitions in each GA4 property; until then runReport returns an
+    # API error, absorbed by the three-way error branch below. runReport has no
+    # percentile aggregation, so we deliver average + rating distribution rather
+    # than p75. Group by metric_name and metric_rating; GA4 returns the per-cell
+    # SUM of metric_value, so the metric average is the grand sum of per-cell
+    # totals divided by the total event count.
+    WEBVITALS_BODY=$(jq -n '{
+      dateRanges: [{startDate: "30daysAgo", endDate: "today"}],
+      dimensions: [{name: "customEvent:metric_name"}, {name: "customEvent:metric_rating"}],
+      metrics: [{name: "eventCount"}, {name: "customEvent:metric_value"}],
+      dimensionFilter: {filter: {fieldName: "eventName", stringFilter: {value: "web_vitals"}}},
+      limit: 100
+    }')
+    RC=0
+    WEBVITALS_RESP=$(curl -sf -X POST \
+      -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d "$WEBVITALS_BODY" \
+      "$RUN_REPORT_URL" 2>/dev/null) || RC=$?
+    WEBVITALS_ERR=$(api_error_reason "$WEBVITALS_RESP")
+    if [[ "$RC" -ne 0 ]]; then
+      echo "(GA4 runReport failed for ${APP}: curl exit $RC)"
+    elif [[ -n "$WEBVITALS_ERR" ]]; then
+      echo "(GA4 runReport failed for ${APP}: ${WEBVITALS_ERR})"
+    elif ! printf '%s' "$WEBVITALS_RESP" | jq -e '.rows // [] | length > 0' >/dev/null 2>&1; then
+      # An `if` condition suppresses set -e, so a false (exit 1) jq -e here does
+      # not abort the script. GA4 omits the rows key entirely when empty, hence
+      # `.rows // []`.
+      echo "(web-vitals field metrics: no web_vitals events for ${APP} in the 30-day window yet)"
+    else
+      echo "Web Vitals (field RUM, 30-day):"
+      # One line per metric_name: weighted average value (CLS unscaled by 1000,
+      # others in ms) and the % of events rated "good". All dimension values are
+      # sanitized (newline strip + 200-char slice) before display.
+      printf '%s' "$WEBVITALS_RESP" \
+        | jq -r '
+          .rows // []
+          | map({
+              name: ((.dimensionValues[0].value // "") | gsub("[\\r\\n]"; " "))[0:200],
+              rating: ((.dimensionValues[1].value // "") | gsub("[\\r\\n]"; " "))[0:200],
+              count: ((.metricValues[0].value // "0") | tonumber),
+              val: ((.metricValues[1].value // "0") | tonumber)
+            })
+          | group_by(.name)
+          | map(
+              . as $g
+              | ($g[0].name) as $name
+              | ([$g[].count] | add) as $total
+              | if $total == 0 then
+                  "  \($name): n/a"
+                else
+                  (([$g[].val] | add) / $total) as $avg
+                  | (([$g[] | select(.rating == "good") | .count] | add) // 0) as $good
+                  | (($good / $total) * 1000 | round) / 10 as $pct
+                  | if $name == "CLS" then
+                      # avg is already in CLS×1000 integer units (see CLS_SCALE in analyticsutil)
+                      ($avg | round) / 1000 as $a
+                      | "  \($name): \($a) avg, \($pct)% good"
+                    else
+                      ($avg * 10 | round) / 10 as $a
+                      | "  \($name): \($a) ms avg, \($pct)% good"
+                    end
+                end
+            )
+          | .[]'
+    fi
   done
 fi
 

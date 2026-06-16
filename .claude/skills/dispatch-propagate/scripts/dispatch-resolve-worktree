@@ -101,7 +101,13 @@ resolve_pr_head() {
 # `enter`-bound path (explicit, and queue-orphan recycle).
 emit_enter_reconciled() {
   local wt_path="$1" wt_branch="$2" pr pr_head unique
-  if ! pr=$("$SCRIPT_DIR/dispatch-find-pr" "$ISSUE"); then
+  # dispatch-find-pr runs under the dispatch lock here (#1612), so zero its 1s
+  # self-fetch retry sleep (DISPATCH_FIND_PR_RETRY_DELAY=0). The retry's only job
+  # is to ride out a transient gh flake; dispatch-find-pr's
+  # closedByPullRequestsReferences cross-check still runs as the second "no PR"
+  # authority, so the false-'no PR' race stays guarded while the mandatory
+  # wall-clock sleep no longer extends the lock window.
+  if ! pr=$(DISPATCH_FIND_PR_RETRY_DELAY=0 "$SCRIPT_DIR/dispatch-find-pr" "$ISSUE"); then
     echo "error: dispatch-find-pr failed for issue $ISSUE; cannot reconcile branch" >&2
     exit 1
   fi
@@ -149,7 +155,14 @@ done < <(list_worktree_records)
 # (#943). If so, the caller must materialize that existing PR-head branch, not
 # branch a fresh <issue>-<slug> from origin/main. This mirrors the enter path's
 # #913 reconciliation. No PR → fall through to the unchanged create logic.
-if ! pr=$("$SCRIPT_DIR/dispatch-find-pr" "$ISSUE"); then
+#
+# This create-path check (added by #1591) also runs under the dispatch lock, so
+# zero dispatch-find-pr's 1s self-fetch retry sleep here too (#1612), matching
+# emit_enter_reconciled above: the closedByPullRequestsReferences cross-check
+# still guards the false-'no PR' case, so only the lock-extending wall-clock
+# sleep is dropped. A genuine-new-issue (the common queue path) returns no PR
+# here, so without this it would pay the full sleep under the lock.
+if ! pr=$(DISPATCH_FIND_PR_RETRY_DELAY=0 "$SCRIPT_DIR/dispatch-find-pr" "$ISSUE"); then
   echo "error: dispatch-find-pr failed for issue $ISSUE; cannot resolve create path" >&2
   exit 1
 fi

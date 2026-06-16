@@ -9,7 +9,7 @@ Evaluate the project through the lens of **technical health** and **long-term su
 
 ## Input
 
-You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, and any additional project context.
+You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, field-RUM web-vitals metrics (from the `=== Analytics (GA4 + Search Console) ===` section), and any additional project context.
 
 ## Thinking Frameworks
 
@@ -27,6 +27,12 @@ You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, 
 - **Coverage gaps** — what's tested, what isn't, and what's the risk of the gaps?
 - **Test pyramid assessment** — is the balance of unit/integration/e2e tests appropriate? Are tests testing the right things?
 - **CI health** — are tests reliable? How long do they take? Are there flaky tests?
+
+### Web Performance (Field RUM)
+- **Read the signal** — find the "Web Vitals (field RUM, 30-day)" lines in the `=== Analytics (GA4 + Search Console) ===` context section; each deployed app reports LCP, CLS, INP, FCP, and TTFB as an average value plus a `% good` rating share.
+- **Weigh field data over intuition** — these are real-user measurements, not synthetic runs; treat the averages and `% good` shares as ground-truth web-performance health for each app.
+- **Prioritize the Core Web Vitals** — LCP, CLS, and INP are the three Core Web Vitals that affect user experience and search ranking; poor or degrading scores in these three warrant surfacing as technical-health priorities.
+- **Absent data ≠ good performance** — if the note says no `web_vitals` events have been recorded yet (or the custom event definitions are unregistered in GA4), treat the signal as absent, not as a clean bill of health.
 
 ### Forkability
 - **Shallow fork viability** — can someone take one app without the whole monorepo?
