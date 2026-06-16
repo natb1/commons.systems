@@ -223,8 +223,9 @@ else
     # custom definitions in each GA4 property; until then runReport returns an
     # API error, absorbed by the three-way error branch below. runReport has no
     # percentile aggregation, so we deliver average + rating distribution rather
-    # than p75. Group by metric_name and metric_rating; metric_value is weighted
-    # by eventCount per row to recover the metric average.
+    # than p75. Group by metric_name and metric_rating; GA4 returns the per-cell
+    # SUM of metric_value, so the metric average is the grand sum of per-cell
+    # totals divided by the total event count.
     WEBVITALS_BODY=$(jq -n '{
       dateRanges: [{startDate: "30daysAgo", endDate: "today"}],
       dimensions: [{name: "customEvent:metric_name"}, {name: "customEvent:metric_rating"}],
@@ -259,8 +260,8 @@ else
           | map({
               name: ((.dimensionValues[0].value // "") | gsub("[\\r\\n]"; " "))[0:200],
               rating: ((.dimensionValues[1].value // "") | gsub("[\\r\\n]"; " "))[0:200],
-              count: (.metricValues[0].value | tonumber),
-              val: (.metricValues[1].value | tonumber)
+              count: ((.metricValues[0].value // "0") | tonumber),
+              val: ((.metricValues[1].value // "0") | tonumber)
             })
           | group_by(.name)
           | map(
@@ -270,11 +271,12 @@ else
               | if $total == 0 then
                   "  \($name): n/a"
                 else
-                  (([$g[] | (.val * .count)] | add) / $total) as $avg
+                  (([$g[].val] | add) / $total) as $avg
                   | (([$g[] | select(.rating == "good") | .count] | add) // 0) as $good
                   | (($good / $total) * 1000 | round) / 10 as $pct
                   | if $name == "CLS" then
-                      (($avg / 1000) * 1000 | round) / 1000 as $a
+                      # avg is already in CLS×1000 integer units (see CLS_SCALE in analyticsutil)
+                      ($avg | round) / 1000 as $a
                       | "  \($name): \($a) avg, \($pct)% good"
                     else
                       ($avg * 10 | round) / 10 as $a
