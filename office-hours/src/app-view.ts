@@ -166,9 +166,9 @@ export function renderApp(container: Element, state: ViewState, now: Date): AppV
   }
 
   const ctx = buildContext(state, now);
-  // Retain the panel data (everything in the context except `now`) so tick can
-  // reconstruct a fresh context without re-invoking the demo data getters.
-  const { now: _now, ...data } = ctx;
+  // Retain the panel context so tick can reconstruct a fresh context (with an
+  // updated `now`) without re-invoking the demo data getters.
+  const data = ctx;
 
   const grid = document.createElement("div");
   grid.className = "panel-grid";
