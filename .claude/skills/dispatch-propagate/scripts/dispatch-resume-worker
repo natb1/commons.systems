@@ -1,0 +1,225 @@
+#!/usr/bin/env bash
+# dispatch-resume-worker — resume a dead dispatch phase-worker session after a
+# transient API rate-limit (server overload) death, fired by a systemd timer.
+#
+# Part of issue #1733. A phase worker that dies on a transient API rate-limit
+# (the daemon surfaces a 429/overload, the session exits) must NOT park on
+# office-hours as if it hit a human-input wall — that wedges autonomous progress
+# behind a human for a condition that self-heals on retry. Instead, the worker's
+# Stop hook schedules a systemd timer that, after a backoff, fires this script to
+# resume the dead session in place.
+#
+# Usage: dispatch-resume-worker <name> <cwd> <sessionId> [<model>]
+#   <name>       The dead worker's `<N>-slug` (e.g. 1733-dispatch-self-heal-phase-wo).
+#                Must match ^[0-9]+- (the real phase-worker shape).
+#   <cwd>        The worktree directory the worker ran in (must exist).
+#   <sessionId>  The dead session's id (matches ^[A-Za-z0-9._-]+$).
+#   <model>      Optional model override; possibly empty. When non-empty it is
+#                forwarded as `--model <model>`; when empty/absent the flag is
+#                omitted and the resumed session inherits the default model.
+#
+# Behavior, in order:
+#   1. Validate args (see the regexes above). Bad args → stderr diagnostic +
+#      exit non-zero (mirrors the sibling rejection style). Derive N=<name>%%-*.
+#   2. Dedup like dispatch-spawn-job: source lib-claude-agents.sh and query
+#      `claude_sessions_under <cwd>`. If a LIVE (non-`stopped`) session named
+#      <name> already exists, print `deduped` and exit 0. FAIL-SAFE: if the
+#      registry cannot be queried (claude_sessions_under returns non-zero), treat
+#      as occupied → print `deduped`, exit 0 (a dispatch agent may be live).
+#   3. Primary resume: from a subshell `cd`'d into <cwd>,
+#        claude --bg --name <name> --permission-mode auto [--model <model>] \
+#               --resume <sessionId> "continue"
+#      then verify via verify_agent_registered_under <name> <cwd>. On a clean
+#      kick + verify, print `resumed`, exit 0.
+#   4. Graceful degradation — KICK-TIME failures only:
+#        a. If the primary kick OR verify fails, retry ONCE with the same command
+#           plus `--fork-session` (covers a dead <sessionId> colliding in the
+#           daemon registry). Verify again → `resumed-forked`.
+#        b. If that also fails, fall back to a from-scratch re-tick:
+#           `dispatch-tick <N>` → `reticked`.
+#        c. If the re-tick invocation itself fails, last-resort park:
+#           `dispatch-apply-office-hours <N> "rate-limit resume failed ..."` →
+#           `parked`. Exit non-zero only if even the park primitive fails.
+#
+# Scope note — kick-time failures ONLY. This fallback chain catches failures that
+# manifest at kick/registration time. A session that kicks successfully then dies
+# on REPLAY of a dangling `tool_use` (the resumed transcript replays a half-
+# emitted tool call that the API rejects) is invisible here — it re-enters its
+# Stop hook → Branch A → (if the rate-limit-death signature reappears) another
+# scheduled resume, else the normal office-hours park. This script deliberately
+# does NOT attempt to detect replay-death at kick time; the kick succeeded and
+# the daemon registered the agent, so from here everything looks healthy.
+#
+# Stdout protocol (exactly one token):
+#   deduped         a live same-name session already exists, or the registry
+#                   could not be queried — nothing was resumed.
+#   resumed         the primary --resume kicked and verified.
+#   resumed-forked  the --resume --fork-session retry kicked and verified.
+#   reticked        both resume attempts failed; a from-scratch dispatch-tick ran.
+#   parked          all of the above failed; the issue was parked to office-hours.
+#
+# Exit codes:
+#   0  any handled outcome (deduped / resumed / resumed-forked / reticked /
+#      parked) — stdout disambiguates.
+#   non-zero  bad args (validation), or the last-resort park primitive itself
+#             failed.
+#
+# Environment overrides for testability (mirrors the dispatch-spawn-job /
+# dispatch-schedule-target-reseed convention):
+#   DISPATCH_RESUME_WORKER_CLAUDE_CMD        The `claude` command. The script's
+#                                            own `claude --bg` calls use it, and
+#                                            it is exported as CLAUDE_AGENTS_CMD
+#                                            so the sourced lib-claude-agents.sh
+#                                            helper's `claude agents` calls are
+#                                            faked consistently. Default: `claude`.
+#   DISPATCH_RESUME_WORKER_TICK_CMD          The from-scratch re-tick command.
+#                                            Default: <script-dir>/dispatch-tick.
+#   DISPATCH_RESUME_WORKER_OFFICE_HOURS_CMD  The last-resort park command.
+#                                            Default:
+#                                            <script-dir>/dispatch-apply-office-hours.
+#
+# Sandbox: every `claude` call here reaches the local Claude daemon over a Unix
+# socket, so the systemd timer that fires this script needs HOST network — a
+# sandboxed call returns `[]` indistinguishable from "no sessions" (see
+# `.claude/rules/sandbox.md § claude agents --json`). The timer inherits the
+# scheduling caller's PATH: the scheduler passes `--setenv=PATH=<caller PATH>`
+# into the transient unit (same idiom as dispatch-schedule-target-reseed), so the
+# nix-store `claude`/`git`/`jq` resolve at fire time.
+#
+# set -e IS enabled, but the entire degradation chain is built from commands that
+# are EXPECTED to fail (each kick, each verify, the dedup query's UNKNOWN return,
+# the re-tick, the park). Every such command therefore sits in a guarded position
+# — an `if` condition or a `cmd || rc=$?` capture — so a non-zero exit advances
+# the fallback rather than aborting the script. A bare unguarded failure here
+# would silently skip the rest of the chain, killing the exact behavior the
+# script exists for.
+set -euo pipefail
+
+# ---- Step 0: parse and validate arguments -----------------------------------
+NAME="${1:-}"
+CWD="${2:-}"
+SESSION_ID="${3:-}"
+MODEL="${4:-}"
+
+if [[ -z "$NAME" || ! "$NAME" =~ ^[0-9]+- ]]; then
+  echo "dispatch-resume-worker: <name> must be a '<N>-slug' (match ^[0-9]+-), got '${NAME}'" >&2
+  echo "usage: dispatch-resume-worker <name> <cwd> <sessionId> [<model>]" >&2
+  exit 2
+fi
+if [[ -z "$CWD" || ! -d "$CWD" ]]; then
+  echo "dispatch-resume-worker: <cwd> '${CWD}' does not exist or is not a directory" >&2
+  exit 2
+fi
+if [[ -z "$SESSION_ID" || ! "$SESSION_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "dispatch-resume-worker: <sessionId> must match ^[A-Za-z0-9._-]+\$, got '${SESSION_ID}'" >&2
+  exit 2
+fi
+if [[ -n "$MODEL" && ! "$MODEL" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "dispatch-resume-worker: <model> value '${MODEL}' contains unexpected characters" >&2
+  exit 2
+fi
+
+# N is the numeric prefix of the worker name — the issue number the re-tick /
+# office-hours park key on.
+N="${NAME%%-*}"
+
+# ---- Step 1: resolve config -------------------------------------------------
+CLAUDE_CMD="${DISPATCH_RESUME_WORKER_CLAUDE_CMD:-claude}"
+# The sourced helper reads CLAUDE_AGENTS_CMD for its own `claude agents --json`
+# calls; point it at the same command so a faked `claude` fakes every path.
+export CLAUDE_AGENTS_CMD="$CLAUDE_CMD"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TICK_CMD="${DISPATCH_RESUME_WORKER_TICK_CMD:-$SCRIPT_DIR/dispatch-tick}"
+OFFICE_HOURS_CMD="${DISPATCH_RESUME_WORKER_OFFICE_HOURS_CMD:-$SCRIPT_DIR/dispatch-apply-office-hours}"
+
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+# ---- Step 2: dedup guard ----------------------------------------------------
+# If a live session already has name == <name> under <cwd>, the worker is not
+# actually dead (or has already been resumed) — resume nothing. Fail safe: an
+# unknown (unqueryable) registry is treated as "a dispatch agent may be running",
+# so nothing is resumed. Mirrors dispatch-spawn-job's dedup core exactly, minus
+# the self-exclusion line (a systemd-timer-fired script is not a claude session,
+# so there is no "this very session" to exclude).
+if ! sessions=$(claude_sessions_under "$CWD"); then
+  echo deduped
+  exit 0
+fi
+while IFS=$'\t' read -r sid _ status sname; do
+  [[ -z "$sid" ]] && continue
+  [[ "$sname" == "$NAME" ]] || continue       # not a same-name session
+  # Defensive: `claude agents --json` only lists live sessions, so a "stopped"
+  # row should not appear here in normal operation. The check survives a
+  # registry that nonetheless surfaces a terminal status.
+  [[ "$status" == "stopped" ]] && continue
+  # Another live session already owns this name; resume nothing.
+  echo deduped
+  exit 0
+done <<<"$sessions"
+
+# ---- Step 3: primary resume -------------------------------------------------
+# Resume the dead session in place: born with cwd = <cwd> via a subshell `cd` so
+# SessionStart-derived attributes key on the right directory. --model is inserted
+# only when non-empty (mirrors dispatch-spawn-job's bg_args construction). The
+# positional prompt "continue" stays last.
+resume_args=(--bg --name "$NAME" --permission-mode auto)
+[[ -n "$MODEL" ]] && resume_args+=(--model "$MODEL")
+resume_args+=(--resume "$SESSION_ID" "continue")
+
+resume_rc=0
+( cd "$CWD" && "$CLAUDE_CMD" "${resume_args[@]}" ) >/dev/null 2>&1 || resume_rc=$?
+
+# `resumed` requires kick rc 0 AND verify passing — "kick OR verify fails" sends
+# us to the fork branch.
+if [[ "$resume_rc" -eq 0 ]] && verify_agent_registered_under "$NAME" "$CWD"; then
+  echo resumed
+  exit 0
+fi
+
+# ---- Step 4a: graceful degradation — --fork-session retry -------------------
+# The primary kick or verify failed. A dead <sessionId> can collide in the daemon
+# registry (the daemon still tracks the terminal session under that id, so a plain
+# --resume is rejected); --fork-session resumes off a fresh id derived from the
+# same transcript. Retry ONCE with that flag.
+fork_args=(--bg --name "$NAME" --permission-mode auto)
+[[ -n "$MODEL" ]] && fork_args+=(--model "$MODEL")
+fork_args+=(--resume "$SESSION_ID" --fork-session "continue")
+
+fork_rc=0
+( cd "$CWD" && "$CLAUDE_CMD" "${fork_args[@]}" ) >/dev/null 2>&1 || fork_rc=$?
+
+if [[ "$fork_rc" -eq 0 ]] && verify_agent_registered_under "$NAME" "$CWD"; then
+  echo resumed-forked
+  exit 0
+fi
+
+# ---- Step 4b: graceful degradation — from-scratch re-tick -------------------
+# Both resume attempts failed at kick time. Fall back to a from-scratch re-tick
+# on the issue: dispatch-tick re-seeds the chain on N, which re-derives the
+# actionable phase and spawns a fresh worker rather than resuming the dead
+# transcript.
+tick_rc=0
+"$TICK_CMD" "$N" >/dev/null 2>&1 || tick_rc=$?
+if [[ "$tick_rc" -eq 0 ]]; then
+  echo reticked
+  exit 0
+fi
+
+# ---- Step 4c: last-resort office-hours park ---------------------------------
+# Resume, fork-session, AND re-tick all failed — this is no longer a transient
+# condition the chain can self-heal. Park the issue durably to office-hours so the
+# failure is visible to a human instead of vanishing. Exit non-zero ONLY if even
+# the park primitive fails (nothing else can be done).
+park_rc=0
+"$OFFICE_HOURS_CMD" "$N" \
+  "rate-limit resume failed (resume, fork-session, and re-tick all failed)" \
+  >/dev/null 2>&1 || park_rc=$?
+if [[ "$park_rc" -eq 0 ]]; then
+  echo parked
+  exit 0
+fi
+
+echo "dispatch-resume-worker: last-resort office-hours park for #$N failed (rc=$park_rc); nothing left to try" >&2
+exit 1
