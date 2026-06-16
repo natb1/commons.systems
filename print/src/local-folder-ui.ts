@@ -31,6 +31,7 @@ import type { MediaItem } from "./types.js";
 
 const store = createFsaHandleStore({ app: "print" });
 const PURPOSE = "library-folder";
+export const FOCUS_RESCAN_DEBOUNCE_MS = 400;
 
 export type FolderUiState = "open" | "grant" | "list";
 
@@ -72,13 +73,21 @@ export async function initLocalFolder(
     createLocalSource(dir);
     await renderLocalIntoList(mediaListContainer);
     if (focusCleanup) focusCleanup();
+    let rescanTimer: ReturnType<typeof setTimeout> | null = null;
     const onFocus = () => {
-      renderLocalIntoList(mediaListContainer).catch((err) =>
-        logError(err, { operation: "local-folder-rescan" }),
-      );
+      if (rescanTimer) clearTimeout(rescanTimer);
+      rescanTimer = setTimeout(() => {
+        rescanTimer = null;
+        renderLocalIntoList(mediaListContainer).catch((err) =>
+          logError(err, { operation: "local-folder-rescan" }),
+        );
+      }, FOCUS_RESCAN_DEBOUNCE_MS);
     };
     window.addEventListener("focus", onFocus);
-    focusCleanup = () => window.removeEventListener("focus", onFocus);
+    focusCleanup = () => {
+      window.removeEventListener("focus", onFocus);
+      if (rescanTimer) clearTimeout(rescanTimer);
+    };
     // Signal that localSource is now bound — lets the caller re-render a
     // viewer route that was stuck on Not Found before this bind (any path:
     // auto-bind, grant-click, or first-open picker).
