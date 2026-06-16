@@ -5,24 +5,29 @@
 # of truth for the queue: it enumerates the open dispatch:office-hours issues and
 # their <N>-* worktrees once, makes one per-item liveness call, and emits exactly
 # one disposition. This script reads that disposition and acts on it — it does no
-# enumeration or liveness checking of its own.
+# queue enumeration or liveness checking of its own (its only daemon query is the
+# single sessionId→job-id lookup attach_session does at the point of attach).
+#
+# The selector's dispositions name a session by its sessionId; this script
+# attaches via `claude attach`, which keys on the daemon JOB id (the `id` field
+# of `claude agents --json`, the sessionId's first UUID group), not the
+# sessionId. attach_session() bridges the two — see its comment.
 #
 # Dispositions and the action each triggers:
-#   live <sessionId>              → exec `claude attach <sessionId>`: the user
-#                                   joins a still-live blocked session to supply
-#                                   its pending input. No skill is loaded.
-#   parked-router <sessionId> ... → exec `claude attach <sessionId>`: re-engage
-#                                   a target-less parked dispatch router (#1010),
-#                                   the artifact dispatch-self-close's continuation
-#                                   invariant keeps alive. No skill is loaded.
+#   live <sessionId>              → attach the user to the still-live blocked
+#                                   session so they supply its pending input. No
+#                                   skill is loaded.
+#   parked-router <sessionId> ... → attach to re-engage a target-less parked
+#                                   dispatch router (#1010), the artifact
+#                                   dispatch-self-close's continuation invariant
+#                                   keeps alive. No skill is loaded.
 #   office-hours <N> <phase> <pr> <worktree-path>
 #                                 → launch the fresh /office-hours session
 #                                   worker-style: a `--bg` job named
 #                                   office-hours-<N>, with cwd = that
 #                                   worktree (5th field), via
-#                                   dispatch-spawn-office-hours; then exec
-#                                   `claude attach <sessionId>` to attach the
-#                                   human. Born in the worktree, the session's
+#                                   dispatch-spawn-office-hours; then attach the
+#                                   human to it. Born in the worktree, the session's
 #                                   branch is <N>-..., so the strip hook clears
 #                                   the dispatch:office-hours label and the
 #                                   session holds the per-worktree concurrency
@@ -53,13 +58,45 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # for its own liveness queries (default `claude`); this script does not set it.
 CLAUDE_CMD="${OFFICE_HOURS_CLAUDE_CMD:-claude}"
 
+# attach_session <sessionId> — exec `claude attach` on the background job that
+# owns <sessionId>.
+#
+# `claude attach <id>` resolves a job by its SHORT job id — the `id` field of
+# `claude agents --json`, the first UUID group of the sessionId — NOT the full
+# sessionId. The selector and dispatch-spawn-office-hours both traffic in
+# sessionIds (stable session identity), so translate to the job id HERE, at the
+# single point of attach, by looking the session up in the live registry. (Until
+# this translation existed, the sessionId was passed straight to `claude attach`,
+# which always failed with `No job matching '<sessionId>'` — the regression that
+# shipped when #1597 switched the resume mechanism from `claude --resume`, which
+# DOES key on the sessionId, to `claude attach`, which does not.)
+#
+# A clear error beats a fallback: if the session is not in the live registry —
+# the daemon is unreachable, or it died between selection and attach — there is
+# no job to attach, so report it and exit rather than invoke attach with an
+# empty or stale handle.
+attach_session() {
+  local session_id="$1" job_id
+  job_id=$("$CLAUDE_CMD" agents --json 2>/dev/null \
+    | jq -r --arg s "$session_id" '
+        if type == "array"
+        then (first(.[] | select(.sessionId == $s) | .id) // empty)
+        else empty end' 2>/dev/null) || true
+  if [[ -z "$job_id" ]]; then
+    echo "office-hours: no live background job for session $session_id — cannot attach (the daemon may be unreachable, or the session ended). Run 'claude agents' to inspect." >&2
+    exit 1
+  fi
+  exec "$CLAUDE_CMD" attach "$job_id"
+}
+
 # One call to the single source of truth; dispatch on the returned verb.
 directive=$("$SCRIPT_DIR/office-hours-select-target")
 read -r verb a b c d <<< "$directive"
 case "$verb" in
   live|parked-router)
-    # a = the live worker / parked-router sessionId.
-    exec "$CLAUDE_CMD" attach "$a"
+    # a = the live worker / parked-router sessionId. attach_session translates
+    # it to the daemon job id `claude attach` requires.
+    attach_session "$a"
     ;;
   office-hours)
     # a b c d = <N> <phase> <pr-or-dash> <worktree-path>. Launch a fresh
@@ -82,7 +119,9 @@ case "$verb" in
       echo "office-hours: failed to launch a fresh /office-hours session for #$a in $d" >&2
       exit 1
     fi
-    exec "$CLAUDE_CMD" attach "$sid"
+    # sid is the spawned (or deduped) session's sessionId; attach_session
+    # translates it to the daemon job id `claude attach` requires.
+    attach_session "$sid"
     ;;
   empty)
     echo "office-hours: queue is empty — nothing to resume or start."

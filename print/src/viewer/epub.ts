@@ -348,6 +348,9 @@ export function createEpubRenderer(
     },
 
     clearSearch(): void {
+      // Stand down any in-flight search(): bumping the epoch trips its post-loop
+      // guard (search ~line 318) so it applies no highlights for the cleared query.
+      _searchEpoch++;
       clearSearchHighlights();
     },
 
