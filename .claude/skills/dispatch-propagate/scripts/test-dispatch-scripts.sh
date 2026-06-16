@@ -2240,6 +2240,17 @@ line_count=$(wc -l < "$STUB_DIR/gh-issue-view-fields.log" | tr -d ' ')
 assert_eq "two children: two log lines" "2" "$line_count"
 teardown
 
+# E. Empty FIELDS arg: guard fires → exit 2 with descriptive stderr (before any API call).
+echo "Test: issue-sub-issues — empty FIELDS arg → exit 2 with error"
+setup
+cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
+chmod +x "$TMPDIR_TEST/issue-sub-issues"
+err=$("$TMPDIR_TEST/issue-sub-issues" 84 "" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "empty FIELDS: exit code 2" "2" "$rc"
+assert_eq "empty FIELDS: descriptive stderr" "1" \
+  "$(printf '%s' "$err" | grep -c 'FIELDS arg must not be empty' || true)"
+teardown
+
 # ============================================================================
 # dispatch-close-resolved tests
 # ============================================================================
