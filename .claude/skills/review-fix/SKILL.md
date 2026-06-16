@@ -394,9 +394,8 @@ summary. The subagent:
    ```
 
    If this fails with a `*"not found"*` message, the label does not exist yet —
-   create it then retry once, following the create-on-not-found idiom in
-   `dispatch-apply-office-hours` (lines 67–83). Pass no `--color` on the `gh label
-   create` call — same convention as other dispatch-created labels here.
+   create it with `gh label create "source-pr:<PR_NUM>" --color 1d76db --description "review follow-up: surfaced reviewing this PR"` then retry the add once, following the create-on-not-found idiom in
+   `dispatch-apply-office-hours` (lines 67–83).
 4. Returns every `<N>` to this thread.
 
 Capture each `<N>` against its source finding for the Step 7 comment.
@@ -467,7 +466,7 @@ summary. Each subagent:
    gh issue edit <N> --add-label security --add-label bug --add-label "source-pr:$PR_NUM"
    ```
 
-   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed. If the `source-pr:$PR_NUM` label does not exist yet the edit fails with a `*"not found"*` message — apply the same create-on-not-found idiom as 5a (`gh label create` then retry once; pass no `--color`).
+   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed. If the `source-pr:$PR_NUM` label does not exist yet the edit fails with a `*"not found"*` message — apply the same create-on-not-found idiom as 5a (`gh label create "source-pr:$PR_NUM" --color 1d76db --description "review follow-up: surfaced reviewing this PR"` then retry once).
 
 4. Returns `<N>` mapped to the follow-up's `identifier`.
 

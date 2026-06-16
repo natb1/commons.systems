@@ -617,8 +617,8 @@ way to identify orphaned follow-ups that point at code that never landed on main
 The label is applied immediately after `/file-issue` returns the new issue
 number, using the create-on-not-found idiom (try `gh issue edit <N>
 --add-label "source-pr:<N>"`; if the label is absent, run `gh label create
-"source-pr:<N>"` then retry — the same pattern as `dispatch-apply-office-hours`
-lines 67–83). In 5a the value substituted is the literal `<PR_NUM>` the main
+"source-pr:<N>" --color 1d76db --description "review follow-up: surfaced reviewing this PR"`
+then retry — the same pattern as `dispatch-apply-office-hours` lines 67–83). In 5a the value substituted is the literal `<PR_NUM>` the main
 thread passes into the fork prompt; in 5b it is the shell variable `$PR_NUM`
 already in scope (used at the `dispatch-security-followup` invocation).
 
