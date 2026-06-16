@@ -4,8 +4,9 @@ import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils.js";
 import type { ContentRenderer, OutlineEntry, SearchResult } from "./types.js";
 import { parsePositionPage } from "./types.js";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 // ---------------------------------------------------------------------------
 // Pure search helpers — no DOM, no pdf.js calls. Exported for unit tests.
