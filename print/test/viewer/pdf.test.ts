@@ -521,9 +521,11 @@ describe("clearSearch()", () => {
     const page1Result = results.find((r) => r.label === "Page 1");
     expect(page1Result).toBeDefined();
 
+    // goToResult is ARM-ONLY — no highlight appears until renderResult() runs.
     await renderer.goToResult!(page1Result!);
+    await renderer.renderResult!();
 
-    // After goToResult, a .search-highlight.active span should exist in the container
+    // After renderResult, a .search-highlight.active span should exist in the container
     const highlight = container.querySelector(".search-highlight.active");
     expect(highlight).not.toBeNull();
     expect(highlight!.textContent).toBe("the");
@@ -549,7 +551,10 @@ describe("clearSearch()", () => {
       await renderer.init(container, "fake://source.pdf");
       const results = await renderer.search!("the");
       const page1Result = results.find((r) => r.label === "Page 1");
+      // Arm then render so the highlight is live before the resize re-render
+      // (goToResult is arm-only).
       await renderer.goToResult!(page1Result!);
+      await renderer.renderResult!();
 
       const firstSpan = container.querySelector(".search-highlight");
       expect(firstSpan).not.toBeNull();
@@ -576,6 +581,8 @@ describe("clearSearch()", () => {
     const results = await renderer.search!("the");
     const page1Result = results.find((r) => r.label === "Page 1");
     await renderer.goToResult!(page1Result!);
+    // Apply the highlight so clearSearch has something real to clear.
+    await renderer.renderResult!();
 
     renderer.clearSearch!();
 
@@ -583,6 +590,25 @@ describe("clearSearch()", () => {
     await renderer.goToPage(1);
 
     expect(container.querySelector(".search-highlight.active")).toBeNull();
+  });
+
+  it("goToResult alone (arm-only) produces no highlight span; renderResult() applies it", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the");
+    const page1Result = results.find((r) => r.label === "Page 1");
+    expect(page1Result).toBeDefined();
+
+    // ARM step only — no render triggered, so no highlight span in the DOM.
+    await renderer.goToResult!(page1Result!);
+    expect(container.querySelector(".search-highlight")).toBeNull();
+
+    // RENDER step — highlight should now appear with the matched text.
+    await renderer.renderResult!();
+    const highlight = container.querySelector(".search-highlight.active");
+    expect(highlight).not.toBeNull();
+    expect(highlight!.textContent).toBe("the");
   });
 
   it("goToOutlineEntry() drains stale highlight and disarms pendingHighlight", async () => {
@@ -601,6 +627,8 @@ describe("clearSearch()", () => {
       const results = await renderer.search!("the");
       const page1Result = results.find((r) => r.label === "Page 1");
       await renderer.goToResult!(page1Result!);
+      // goToResult is arm-only now (#1719); renderResult() applies the highlight.
+      await renderer.renderResult!();
       expect(container.querySelector(".search-highlight.active")).not.toBeNull();
 
       const outline = await renderer.getOutline!();
@@ -635,10 +663,12 @@ describe("clearSearch()", () => {
     const page1Result = results.find((r) => r.label === "Page 1");
     expect(page1Result).toBeDefined();
 
-    // Render #1: capture the first textLayer span before any re-render so it
-    // holds the render-#1 node (which renderPage's up-front replaceChildren
-    // will detach on the next render).
+    // Render #1: arm then render so the first textLayer span carries the
+    // render-#1 node (which renderPage's up-front replaceChildren will detach
+    // on the next render). goToResult is arm-only, so renderResult() drives
+    // the visible render.
     await renderer.goToResult!(page1Result!);
+    await renderer.renderResult!();
     const firstDiv = container.querySelector(".textLayer span") as HTMLElement;
     expect(firstDiv).not.toBeNull();
     expect(firstDiv.querySelector(".search-highlight")).not.toBeNull();
@@ -648,6 +678,7 @@ describe("clearSearch()", () => {
     // now-detached firstDiv, collapsing its stale highlight span. On unfixed
     // code firstDiv stays wrapped and this assertion fails.
     await renderer.goToResult!(page1Result!);
+    await renderer.renderResult!();
     expect(firstDiv.querySelector(".search-highlight")).toBeNull();
 
     // The live layer should still show exactly one highlighted "the".
@@ -671,7 +702,10 @@ describe("clearSearch()", () => {
     const page1Result = results.find((r) => r.label === "Page 1");
     expect(page1Result).toBeDefined();
 
+    // Arm then render so the first highlight is live before the resize
+    // re-render fires (goToResult is arm-only).
     await renderer.goToResult!(page1Result!);
+    await renderer.renderResult!();
     const firstDiv = container.querySelector(".textLayer span") as HTMLElement;
     expect(firstDiv).not.toBeNull();
     expect(firstDiv.querySelector(".search-highlight")).not.toBeNull();
@@ -700,7 +734,10 @@ describe("clearSearch()", () => {
 
     const results = await renderer.search!("the");
     const page1Result = results.find((r) => r.label === "Page 1");
+    // Arm then render so clearSearch has a real highlight to clean up
+    // (goToResult is arm-only).
     await renderer.goToResult!(page1Result!);
+    await renderer.renderResult!();
 
     renderer.clearSearch!();
 
@@ -720,17 +757,21 @@ describe("clearSearch()", () => {
     const r1 = results.find((r) => r.label === "Page 1")!;
     const r2 = results.find((r) => r.label === "Page 2")!;
 
+    // Arm then render the first result so its highlight is live in the DOM.
     await renderer.goToResult!(r1);
+    await renderer.renderResult!();
     // Capture the text-layer div that holds the first result's highlight span.
     const div1 = container.querySelector(".search-highlight")!.parentElement!;
     expect(div1.querySelector(".search-highlight")).not.toBeNull();
 
     // Arming the second result must drain the first entry (unwrapHighlights),
-    // restoring div1 instead of leaking it in highlightRestores.
+    // restoring div1 instead of leaking it in highlightRestores. The drain
+    // lives inside goToResult, so it happens without a render.
     await renderer.goToResult!(r2);
     expect(div1.querySelector(".search-highlight")).toBeNull();
 
-    // Exactly one highlight is live in the DOM (the current result).
+    // Render the second result so exactly one highlight is live in the DOM.
+    await renderer.renderResult!();
     expect(container.querySelectorAll(".search-highlight.active").length).toBe(1);
   });
 
@@ -738,11 +779,12 @@ describe("clearSearch()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    // Arm pendingHighlight for page 1 via the only public path that sets it.
+    // Arm then render pendingHighlight for page 1 so the highlight is live in the DOM.
     const results = await renderer.search!("the");
     const page1Result = results.find((r) => r.label === "Page 1");
     expect(page1Result).toBeDefined();
     await renderer.goToResult!(page1Result!);
+    await renderer.renderResult!();
     expect(container.querySelector(".search-highlight.active")).not.toBeNull();
 
     // A fresh spread target with a non-zero rect so renderPageInto proceeds past
@@ -800,13 +842,16 @@ describe("clearSearch()", () => {
 
     const results = await renderer.search!("the");
     const r1 = results.find((r) => r.label === "Page 1")!;
+    // Arm then render so the highlight is live before navigating away.
     await renderer.goToResult!(r1);
+    await renderer.renderResult!();
 
     // Capture the text-layer div holding the highlight before navigation.
     const div1 = container.querySelector(".search-highlight")!.parentElement!;
     expect(div1.querySelector(".search-highlight")).not.toBeNull();
 
-    // goToPosition must unwrap the highlight and disarm pendingHighlight.
+    // goToPosition must unwrap the highlight and disarm pendingHighlight
+    // (goToPosition itself renders and drains).
     await renderer.goToPosition("2");
 
     // The highlight span is removed from the previously-live text div.
