@@ -40,8 +40,10 @@ url="$(git --git-dir="$common_dir" config --get remote.origin.url 2>/dev/null)" 
 # (dirname(common_dir) is not a working tree in the bare-repo + worktrees layout).
 # Handles https://github.com/<owner>/<repo>(.git) and git@github.com:<owner>/<repo>(.git).
 repo="${url%.git}"; repo="${repo#*github.com[:/]}"
-[[ -n "$repo" && "$repo" == */* ]] || {
+[[ -n "$repo" ]] || {
   echo "dispatch-write-plan: could not resolve owner/repo from remote.origin.url ('$url')" >&2; exit 1; }
+[[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || {
+  echo "dispatch-write-plan: unexpected owner/repo format from remote.origin.url ('$url'): $repo" >&2; exit 1; }
 export GH_REPO="$repo"
 
 MARKER='<!-- dispatch:plan -->'

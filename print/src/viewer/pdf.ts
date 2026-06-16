@@ -313,10 +313,13 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
    * Children are rebuilt with createTextNode/createElement (never innerHTML) so
    * the text layer's transparent-text CSS keeps applying.
    *
-   * Calls unwrapHighlights() first so it is idempotent: any prior highlight
-   * (including detached divs from a superseded render) is restored and
-   * highlightRestores is cleared before the new entries are recorded. After
-   * this function returns, highlightRestores holds exactly one entry per
+   * Calls unwrapHighlights() first so it is idempotent: any divs mutated by a
+   * prior call (including detached divs from a superseded render) are restored
+   * and highlightRestores is cleared before the new entries are recorded, so
+   * the divs read here are always pristine and the log never accumulates stale
+   * entries. This makes applyHighlight safe to call repeatedly for the same
+   * page — covering both the single-page and spread render paths uniformly.
+   * After this function returns, highlightRestores holds exactly one entry per
    * currently-highlighted div.
    */
   function applyHighlight(tl: TextLayer, h: { offset: number; length: number }): void {
@@ -561,6 +564,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     async search(query: string): Promise<SearchResult[]> {
       const trimmed = query.trim();
       if (!trimmed) return [];
+      if (!pdfDoc) return [];
 
       const results: SearchResult[] = [];
 
