@@ -80,7 +80,7 @@ test.describe("home page content", () => {
     });
   });
 
-  test("auth integration shows private items", async ({ page }) => {
+  test("auth integration shows private items @testonly", async ({ page }) => {
     await page.goto("/");
     await signIn(page);
     await expect(page.locator(".audio-row")).toHaveCount(5, {
