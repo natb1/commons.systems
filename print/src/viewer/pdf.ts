@@ -160,8 +160,12 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
   // re-render (renderPage(_currentPage)) re-applies it after a resize. Cleared
   // by the public manual-nav methods so a stale highlight never reappears.
   let pendingHighlight: { page: number; offset: number; length: number } | null = null;
-  // Records the original text content of every div mutated by applyHighlight so
-  // unwrapHighlights can restore the text layer to its pristine state.
+  // Records the original text content of every div mutated by the most recent
+  // applyHighlight call so unwrapHighlights can restore the text layer to its
+  // pristine state. Invariant: after applyHighlight returns, this array holds
+  // exactly one entry per currently-highlighted div (the divs from the most
+  // recent call only — earlier entries are cleared by the unwrapHighlights()
+  // call at the start of applyHighlight).
   const highlightRestores: { div: HTMLElement; originalText: string }[] = [];
   interface SpreadPage { renderTask: RenderTask; textLayer: TextLayer | null; }
   const spreadPages: SpreadPage[] = [];
@@ -308,8 +312,15 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
    *
    * Children are rebuilt with createTextNode/createElement (never innerHTML) so
    * the text layer's transparent-text CSS keeps applying.
+   *
+   * Calls unwrapHighlights() first so it is idempotent: any prior highlight
+   * (including detached divs from a superseded render) is restored and
+   * highlightRestores is cleared before the new entries are recorded. After
+   * this function returns, highlightRestores holds exactly one entry per
+   * currently-highlighted div.
    */
   function applyHighlight(tl: TextLayer, h: { offset: number; length: number }): void {
+    unwrapHighlights();
     const itemsStr = tl.textContentItemsStr;
     const divs = tl.textDivs;
     const segments = offsetToDivRanges(itemsStr, h.offset, h.length);
@@ -553,14 +564,33 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       // very short and matches thousands of positions across a long document.
       const MAX_RESULTS = 200;
 
+      // Capture pdfDoc into a local so a concurrent destroy() — which nulls
+      // pdfDoc — cannot turn a non-null assertion into a TypeError. Matches the
+      // guard pattern in getOutline()/renderPage(). The destroyed flag still
+      // short-circuits after each await below.
+      const doc = pdfDoc;
+      if (!doc || destroyed) return results;
+
       for (let i = 1; i <= _pageCount; i++) {
         // Lazily populate the page-text cache. Re-fetching text for every
         // debounced keystroke would be wasteful; cache across search calls.
         let pageText = pageTextCache.get(i);
         if (pageText === undefined) {
-          const page = await pdfDoc!.getPage(i);
-          if (destroyed) return results;
-          const tc = await page.getTextContent();
+          let tc;
+          try {
+            const page = await doc.getPage(i);
+            if (destroyed) return results;
+            tc = await page.getTextContent();
+          } catch (err) {
+            // A concurrent destroy() tears down the pdfjs worker, which rejects
+            // pending getPage()/getTextContent() calls with an
+            // UnknownErrorException. Degrade silently — same intent as the
+            // `destroyed` short-circuits — instead of surfacing "Search failed".
+            if (destroyed || (err as { name?: string })?.name === "UnknownErrorException") {
+              return results;
+            }
+            throw err;
+          }
           if (destroyed) return results;
           pageText = buildPageText(tc.items as { str?: string }[]);
           pageTextCache.set(i, pageText);
@@ -597,6 +627,11 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     async goToResult(result: SearchResult): Promise<void> {
       const decoded = decodeLocation(result.location);
       if (!decoded) return;
+      // Drain stale highlightRestores entries — they reference now-detached
+      // nodes from the previous result's text layer — before arming the new
+      // highlight, mirroring goToPage/next/prev. Without this the array grows
+      // unboundedly across result clicks, leaking detached DOM node references.
+      unwrapHighlights();
       _currentPage = decoded.page;
       // Arm the highlight before rendering; renderPage applies it as its final
       // gen-guarded step. Call the internal renderPage directly (like

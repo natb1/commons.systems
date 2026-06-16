@@ -16,5 +16,6 @@ export interface MediaItem {
   readonly groupId: string | null;
   readonly memberEmails: readonly string[];
   readonly addedAt: string;
+  readonly pageCount?: number;
   readonly origin?: ItemOrigin;
 }

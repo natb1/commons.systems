@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Apply main-qa routing labels to a needs-main QA follow-up issue.
+# Usage: dispatch-qa-apply-main-qa-labels <issue-num>
+#
+# Idempotent: safe to re-run. Performs three label ops:
+#   1. Removes "help wanted" (tolerates absent — not an error).
+#   2. Applies "main-qa" (add-then-create-on-not-found pattern).
+#   3. Applies "dispatch:office-hours" via the shared helper (which also posts
+#      a why-comment on first apply).
+#
+# @me / assignees are never touched.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+ISSUE_NUM="${1:-}"
+
+# Missing arg is a clear misuse, not a recoverable condition — hard error.
+if [[ -z "$ISSUE_NUM" ]]; then
+  echo "error: usage: dispatch-qa-apply-main-qa-labels <issue-num>" >&2
+  exit 1
+fi
+
+# ISSUE_NUM is interpolated into gh calls. A non-numeric, flag-like value
+# (e.g. --repo other/repo) would be parsed by gh as an option rather than an
+# issue number, redirecting those writes. Reject anything not a bare positive
+# integer.
+if [[ ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
+  echo "error: dispatch-qa-apply-main-qa-labels: issue-num must be a positive integer, got '${ISSUE_NUM}'" >&2
+  exit 1
+fi
+
+# ---- Step 1: Remove "help wanted" -------------------------------------------
+#
+# Tolerate the absent case: gh exits non-zero with a "not found" message when
+# the label is not present on the issue. Treat absent as success — a re-run
+# after the label was already removed must not fail.
+if ! hw_output=$(gh issue edit "$ISSUE_NUM" --remove-label "help wanted" 2>&1); then
+  if [[ "$hw_output" == *"not found"* ]]; then
+    # Label not present — already removed or never applied. That is fine.
+    true
+  else
+    echo "dispatch-qa-apply-main-qa-labels: warning: could not remove 'help wanted' from issue #$ISSUE_NUM: $hw_output" >&2
+    exit 1
+  fi
+fi
+
+# ---- Step 2: Apply "main-qa" -------------------------------------------------
+#
+# Add-then-create-on-not-found: try the edit first; if gh reports the label
+# does not exist in the repo, create it with canonical metadata and retry once.
+MAIN_QA_LABEL="main-qa"
+MAIN_QA_COLOR="5319E7"
+MAIN_QA_DESC="QA verification that can only run against deployed main/production"
+
+if ! mq_output=$(gh issue edit "$ISSUE_NUM" --add-label "$MAIN_QA_LABEL" 2>&1); then
+  if [[ "$mq_output" != *"not found"* ]]; then
+    echo "dispatch-qa-apply-main-qa-labels: warning: could not apply $MAIN_QA_LABEL to issue #$ISSUE_NUM: $mq_output" >&2
+    exit 1
+  fi
+  if ! create_output=$(gh label create "$MAIN_QA_LABEL" --color "$MAIN_QA_COLOR" --description "$MAIN_QA_DESC" 2>&1); then
+    echo "dispatch-qa-apply-main-qa-labels: warning: could not create label $MAIN_QA_LABEL: $create_output" >&2
+    exit 1
+  fi
+  if ! retry_output=$(gh issue edit "$ISSUE_NUM" --add-label "$MAIN_QA_LABEL" 2>&1); then
+    echo "dispatch-qa-apply-main-qa-labels: warning: could not apply $MAIN_QA_LABEL to issue #$ISSUE_NUM after create: $retry_output" >&2
+    exit 1
+  fi
+fi
+
+# ---- Step 3: Apply "dispatch:office-hours" ----------------------------------
+#
+# Reuse the shared helper — it owns idempotency, label creation, and the
+# why-comment. Pass a clear reason so a human reading the parked issue
+# understands why it landed in office-hours.
+"$SCRIPT_DIR/dispatch-apply-office-hours" "$ISSUE_NUM" \
+  "needs-main QA: this follow-up can only be verified against deployed main/production — routed to office-hours for human review"
+
+exit 0
