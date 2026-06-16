@@ -1,5 +1,5 @@
 import * as Plot from "@observablehq/plot";
-import { type IssueSample } from "./issue-samples.js";
+import { sampleTotal, type IssueSample } from "./issue-samples.js";
 import { fitBacklogRunway, runwayVerdict } from "./backlog-runway.js";
 import {
   getThemeFg,
@@ -18,21 +18,27 @@ const POINT_WIDTH = 60;
 const CONTAINER_WIDTH = 640;
 const CHART_HEIGHT = 220;
 
-const COLOR_HELP_WANTED = "#42a5f5";
+const COLOR_SECURITY = "#ef5350";
+const COLOR_BUG = "#ffa726";
+const COLOR_ENHANCEMENT = "#42a5f5";
 const COLOR_OTHER = "#26a69a";
 const COLOR_PROJECTION = "#ab47bc";
 
 interface Point {
   x: Date;
-  openHelpWanted: number;
+  openSecurity: number;
+  openBug: number;
+  openEnhancement: number;
   openOther: number;
 }
 
 /**
- * Renders the office-hours backlog-history panel: a stacked area chart of
- * openHelpWanted (bottom) + openOther (top) over sampledAt — the two summing to
- * total backlog — plus a dashed runway projection line extended to the queue's
- * zero-crossing when draining, plus a textContent-assertable runway caption.
+ * Renders the office-hours backlog-history panel: a stacked area chart of the
+ * four mutually-exclusive work-type buckets — security (bottom), bug,
+ * enhancement, other (top) — over sampledAt, the four summing to total backlog,
+ * plus a dashed runway projection line (fitted on the total) extended to the
+ * queue's zero-crossing when draining, plus a textContent-assertable runway
+ * caption.
  *
  * Pure: does not mutate the input array. Returns the panel root element (which
  * receives panel-grid-full from the registry), or an empty-state element when
@@ -66,11 +72,13 @@ export function renderIssueHistoryChart(samples: IssueSample[]): HTMLElement {
 
   const points: Point[] = sorted.map((s) => ({
     x: s.sampledAt,
-    openHelpWanted: s.openHelpWanted,
+    openSecurity: s.openSecurity,
+    openBug: s.openBug,
+    openEnhancement: s.openEnhancement,
     openOther: s.openOther,
   }));
 
-  const maxTotal = Math.max(...points.map((p) => p.openHelpWanted + p.openOther));
+  const maxTotal = Math.max(...sorted.map((s) => sampleTotal(s)));
   const yDomain: [number, number] = [0, Math.max(1, Math.ceil(maxTotal * 1.1))];
 
   const fg = getThemeFg(container);
@@ -78,20 +86,37 @@ export function renderIssueHistoryChart(samples: IssueSample[]): HTMLElement {
 
   const axisSvg = renderAxisSvg({ height: CHART_HEIGHT, style: sharedStyle, yDomain, label: "issues" });
 
-  // Stacked areas: openHelpWanted on the bottom, openOther stacked on top.
+  // Stacked areas in precedence order: security (bottom), bug, enhancement,
+  // other (top), each offset by the cumulative sum of the buckets beneath it.
   const marks: Plot.Markish[] = [
     Plot.areaY(points, {
       x: "x",
       y1: 0,
-      y2: "openHelpWanted",
-      fill: COLOR_HELP_WANTED,
+      y2: "openSecurity",
+      fill: COLOR_SECURITY,
       fillOpacity: 0.6,
       curve: "monotone-x",
     }),
     Plot.areaY(points, {
       x: "x",
-      y1: "openHelpWanted",
-      y2: (d: Point) => d.openHelpWanted + d.openOther,
+      y1: (d: Point) => d.openSecurity,
+      y2: (d: Point) => d.openSecurity + d.openBug,
+      fill: COLOR_BUG,
+      fillOpacity: 0.6,
+      curve: "monotone-x",
+    }),
+    Plot.areaY(points, {
+      x: "x",
+      y1: (d: Point) => d.openSecurity + d.openBug,
+      y2: (d: Point) => d.openSecurity + d.openBug + d.openEnhancement,
+      fill: COLOR_ENHANCEMENT,
+      fillOpacity: 0.6,
+      curve: "monotone-x",
+    }),
+    Plot.areaY(points, {
+      x: "x",
+      y1: (d: Point) => d.openSecurity + d.openBug + d.openEnhancement,
+      y2: (d: Point) => d.openSecurity + d.openBug + d.openEnhancement + d.openOther,
       fill: COLOR_OTHER,
       fillOpacity: 0.6,
       curve: "monotone-x",
@@ -168,7 +193,9 @@ export function renderIssueHistoryChart(samples: IssueSample[]): HTMLElement {
   caption.appendChild(stateSpan);
 
   const legend = buildLegend([
-    { label: "help wanted", color: COLOR_HELP_WANTED },
+    { label: "security", color: COLOR_SECURITY },
+    { label: "bug", color: COLOR_BUG },
+    { label: "enhancement", color: COLOR_ENHANCEMENT },
     { label: "other", color: COLOR_OTHER },
     { label: "projection", color: COLOR_PROJECTION, dashed: true },
   ]);

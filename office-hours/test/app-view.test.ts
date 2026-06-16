@@ -333,9 +333,9 @@ describe("renderApp — panel-registry: all panels present per tier", () => {
     makeReminder("overdue-task", -4 * HOUR),
   ];
   const issueSamples: IssueSample[] = [
-    { sampledAt: new Date("2026-06-07T00:00:00Z"), openHelpWanted: 18, openOther: 5, groupId: "g" },
-    { sampledAt: new Date("2026-06-08T00:00:00Z"), openHelpWanted: 12, openOther: 4, groupId: "g" },
-    { sampledAt: new Date("2026-06-09T00:00:00Z"), openHelpWanted: 6, openOther: 3, groupId: "g" },
+    { sampledAt: new Date("2026-06-07T00:00:00Z"), openSecurity: 2, openBug: 8, openEnhancement: 8, openOther: 5, groupId: "g" },
+    { sampledAt: new Date("2026-06-08T00:00:00Z"), openSecurity: 1, openBug: 6, openEnhancement: 5, openOther: 4, groupId: "g" },
+    { sampledAt: new Date("2026-06-09T00:00:00Z"), openSecurity: 1, openBug: 3, openEnhancement: 2, openOther: 3, groupId: "g" },
   ];
 
   it("demo: all six panels are present", () => {
