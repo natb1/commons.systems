@@ -779,11 +779,12 @@ describe("clearSearch()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    // Arm pendingHighlight for page 1 via the only public path that sets it.
+    // Arm then render pendingHighlight for page 1 so the highlight is live in the DOM.
     const results = await renderer.search!("the");
     const page1Result = results.find((r) => r.label === "Page 1");
     expect(page1Result).toBeDefined();
     await renderer.goToResult!(page1Result!);
+    await renderer.renderResult!();
     expect(container.querySelector(".search-highlight.active")).not.toBeNull();
 
     // A fresh spread target with a non-zero rect so renderPageInto proceeds past
