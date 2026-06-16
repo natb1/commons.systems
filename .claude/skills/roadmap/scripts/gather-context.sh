@@ -42,6 +42,10 @@ gh api "repos/$OWNER_REPO" --jq '{stargazers_count, forks_count, watchers_count}
 echo ""
 echo "=== Analytics (GA4 + Search Console) ==="
 "$REPO_ROOT/.claude/skills/roadmap/scripts/fetch-analytics.sh" || true
+
+echo ""
+echo "=== Web Performance (PageSpeed Insights) ==="
+"$REPO_ROOT/.claude/skills/roadmap/scripts/fetch-psi.sh" || true
 } > "$OUTPUT"
 
 echo "$OUTPUT"

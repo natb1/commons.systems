@@ -139,10 +139,11 @@ Run the gather-context script. It writes output to a file and prints the path:
 .claude/skills/roadmap/scripts/gather-context.sh
 ```
 
-This script also calls `fetch-analytics.sh` to append GA4 and Search Console
-data. Run it with `dangerouslyDisableSandbox: true` — both scripts make network
-calls to Google's OAuth and API hosts, which the sandbox's network namespace
-isolation blocks (see `.claude/rules/sandbox.md`).
+This script also calls `fetch-analytics.sh` and `fetch-psi.sh` to append GA4,
+Search Console, and PageSpeed Insights data. Run it with
+`dangerouslyDisableSandbox: true` — all three scripts make network calls to
+Google's OAuth and API hosts, which the sandbox's network namespace isolation
+blocks (see `.claude/rules/sandbox.md`).
 
 Read the output file at the printed path. Store the contents as a single block
 to pass to each agent, together with the `WINDOW_START` instruction above.
@@ -179,6 +180,32 @@ export GOOGLE_ANALYTICS_REFRESH_TOKEN="$(pass show google-analytics/refresh-toke
 In autonomous mode the analytics env vars are typically unset (no interactive
 `pass` warm-up). That is fine — the personas note the absence of analytics data
 rather than guessing.
+
+### Web performance setup
+
+`gather-context.sh` calls `fetch-psi.sh`, which queries the PageSpeed Insights
+API. Unlike the GA4 feed, PSI runs **keyless by default** — no credentials are
+required and the section is populated in autonomous mode without any interactive
+`pass` warm-up.
+
+**Optional API key env var:**
+- `PAGESPEED_API_KEY` — raises the PSI rate limit. When unset, the script runs
+  keyless (rate-limited but functional). To set it, warm the gpg-agent cache
+  once in an interactive shell, then export:
+
+```bash
+export PAGESPEED_API_KEY="$(pass show pagespeed/api-key)"
+```
+
+**Config env vars** (optional, with defaults):
+- `ROADMAP_PSI_URLS` — comma-separated list of app URLs to audit. Default:
+  `https://commons.systems,https://budget.commons.systems,https://print.commons.systems,https://audio.commons.systems,https://fellspiral.commons.systems`
+- `ROADMAP_PSI_STRATEGY` — `mobile` (default) or `desktop`.
+
+**Graceful degradation:** per-URL failures or timeouts emit an inline warning
+in the context file; the script always exits 0. Personas see a partial or
+empty section rather than a missing one. Unlike GA4 (which is silently skipped
+when credentials are absent), the PSI section is always attempted.
 
 ## Phase 2: Independent Assessments
 
