@@ -12,6 +12,7 @@ import type { FirebaseStorage } from "firebase/storage";
 import type { User } from "firebase/auth";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError, registerErrorSink } from "@commons-systems/errorutil/log";
+import { installGlobalErrorHandlers } from "@commons-systems/errorutil/global-handler";
 import type { DeferredAppAuth } from "@commons-systems/authutil/deferred-app-auth";
 import { firebaseConfig } from "./config.js";
 import {
@@ -294,6 +295,10 @@ export function createAppContext(
       getCurrentUser: errorSinkGetCurrentUser,
     }),
   );
+
+  // Route uncaught errors, unhandled promise rejections, and bare
+  // reportError() calls through logError → the Firestore sink just registered.
+  installGlobalErrorHandlers();
 
   const trackPageView = initAnalyticsSafe(app);
 
