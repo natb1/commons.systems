@@ -1,4 +1,4 @@
-import { renderCapacityBand, selectLatestSample } from "./capacity-band.js";
+import { renderCapacityBand } from "./capacity-band.js";
 import { renderPacePositionPanel } from "./pace-position-panel.js";
 import { renderHistoryBand } from "./history-band.js";
 import { renderReminderList } from "./office-hours.js";
@@ -7,7 +7,7 @@ import { renderIssueHistoryChart } from "./issue-history-chart.js";
 import { getDemoSamples } from "./usage-data.js";
 import { getDemoReminders, getDemoQueueMetrics } from "./data.js";
 import { getDemoIssueSamples } from "./issue-data.js";
-import type { UsageSample } from "./usage-samples.js";
+import { selectLatestSample, type UsageSample } from "./usage-samples.js";
 import type { Reminder } from "./reminders.js";
 import type { QueueMetricsSnapshot } from "./queue-metrics.js";
 import type { IssueSample } from "./issue-samples.js";

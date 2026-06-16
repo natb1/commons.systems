@@ -74,6 +74,17 @@ export function toUsageSample(id: string, data: Record<string, unknown>): UsageS
   };
 }
 
+/**
+ * Returns the sample with the maximum sampledAt, or null for an empty array.
+ * Does not mutate the input array.
+ */
+export function selectLatestSample(samples: UsageSample[]): UsageSample | null {
+  if (samples.length === 0) return null;
+  return samples.reduce((best, s) =>
+    s.sampledAt.getTime() > best.sampledAt.getTime() ? s : best,
+  );
+}
+
 export function usageSampleToDoc(
   s: UsageSample,
   memberEmails: string[],
