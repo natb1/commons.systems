@@ -814,4 +814,63 @@ describe("clearSearch()", () => {
     // No highlight exists anywhere in the container.
     expect(container.querySelectorAll(".search-highlight").length).toBe(0);
   });
+
+  // -------------------------------------------------------------------------
+  // Exception-path wrapper leak (#1816): a throw inside renderPageInto() must
+  // not leave a stray .pdf-page-wrapper attached to target. The try/finally
+  // keyed on `committed` covers all non-committed exit paths.
+  // -------------------------------------------------------------------------
+
+  it("renderPageInto() throwing on canvas context leaves no wrapper", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const target = document.createElement("div");
+    target.getBoundingClientRect = () => ({
+      width: 400,
+      height: 600,
+      top: 0,
+      left: 0,
+      right: 400,
+      bottom: 600,
+      x: 0,
+      y: 0,
+      toJSON() { return {}; },
+    });
+
+    // null context makes renderPageToCanvas throw "Could not acquire 2D canvas context".
+    getContextSpy.mockReturnValue(null);
+
+    await expect(renderer.renderPageInto!(1, target)).rejects.toThrow(/Could not acquire 2D canvas context/);
+    expect(target.querySelectorAll(".pdf-page-wrapper").length).toBe(0);
+  });
+
+  it("renderPageInto() throwing on text layer leaves no wrapper", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const target = document.createElement("div");
+    target.getBoundingClientRect = () => ({
+      width: 400,
+      height: 600,
+      top: 0,
+      left: 0,
+      right: 400,
+      bottom: 600,
+      x: 0,
+      y: 0,
+      toJSON() { return {}; },
+    });
+
+    // Import the mocked TextLayer (MockTextLayer) and make render() reject with a
+    // non-AbortException error so renderTextLayer rethrows it.
+    const { TextLayer } = await import("pdfjs-dist");
+    const renderSpy = vi.spyOn(TextLayer.prototype, "render").mockRejectedValue(new Error("boom"));
+    try {
+      await expect(renderer.renderPageInto!(1, target)).rejects.toThrow();
+      expect(target.querySelectorAll(".pdf-page-wrapper").length).toBe(0);
+    } finally {
+      renderSpy.mockRestore();
+    }
+  });
 });
