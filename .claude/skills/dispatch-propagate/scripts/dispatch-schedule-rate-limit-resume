@@ -1,0 +1,325 @@
+#!/usr/bin/env bash
+# dispatch-schedule-rate-limit-resume — schedule a backed-off resume of a dead
+# dispatch phase-worker session that died on a transient API rate-limit (server
+# overload) instead of parking it on office-hours.
+#
+# Part of issue #1733. A phase worker that dies on a transient API rate-limit
+# (the daemon surfaces a 429/overload, the session exits) must NOT park on
+# office-hours as if it hit a human-input wall — that wedges autonomous progress
+# behind a human for a condition that self-heals on retry. dispatch-stop.sh
+# Branch A detects the rate-limit-death signature and arms this script, which
+# schedules a transient systemd.user timer that, after an exponential backoff,
+# fires `dispatch-resume-worker` to resume the dead session in place.
+#
+# The retry is bounded by an attempt counter — `dispatch:rate-limit-retry-<n>`
+# labels on the ISSUE (NOT a PR: a plan-phase death has no PR) — that escalates
+# the issue to `dispatch:office-hours` after a cap, so a server overload that
+# never clears does not retry forever.
+#
+# Behavior, in order:
+#   1. Validate args: <N> a positive integer; <sessionId>, <cwd>, <name> non-
+#      empty. <model> is optional/possibly-empty and is passed through verbatim
+#      (never rejected, even when empty). Bad args → stderr diagnostic + exit 2.
+#   2. Read the highest extant dispatch:rate-limit-retry-<n> label on the ISSUE →
+#      CUR (max // 0), via the same jq capture idiom as the ci-wait counter. A
+#      non-integer (label-read flake / tampered labels) fails closed → exit 2.
+#   3. Cap check: if CUR >= CAP, park the ISSUE on dispatch:office-hours via
+#      dispatch-apply-office-hours, print `escalated`, schedule NO timer, exit 0.
+#   4. Otherwise (under cap): NEXT=CUR+1. Remove the prior counter label (if
+#      CUR>0) and apply dispatch:rate-limit-retry-<NEXT> on the ISSUE (apply-first
+#      / create-on-"not found"). A label failure warns but does NOT abort the
+#      schedule — the timer matters more than the bookkeeping label.
+#   5. Exponential backoff: DELAY = min(BASE * 2^CUR, MAX). With the defaults
+#      (BASE 60, MAX 900) the per-CUR sequence is 60 → 120 → 240 → 480 → 900
+#      (the CUR=4 step, 60*16=960, is clamped by MAX). FIRE = NOW + DELAY.
+#   6. Schedule a transient systemd.user timer at FIRE whose ExecStart is
+#      `dispatch-resume-worker <name> <cwd> <sessionId> <model>`. The unit name
+#      embeds N and the fire epoch — a repeated call with the same (N, FIRE)
+#      collides on the unit name and systemd refuses to recreate, giving
+#      idempotency.
+#
+# Stdout protocol (exactly one line on the action paths):
+#   reseeded <unit> at <FIRE>   timer was scheduled (token kept literal so the
+#                               caller, dispatch-stop.sh Branch A, greps it the
+#                               same way it greps the sibling schedulers).
+#   escalated                   cap hit; issue parked on dispatch:office-hours.
+#
+# Exit codes:
+#   0  on a scheduled resume, an escalate, or an idempotent already-exists no-op.
+#   2  on bad args, a non-integer counter, or a bad env-integer override.
+#   non-zero — `systemd-run` failed for a reason other than the already-exists
+#              collision; the exit code is passed through.
+#
+# Environment overrides for testability (mirrors the dispatch-schedule-target-
+# reseed convention):
+#
+#   DISPATCH_RATE_LIMIT_RESUME_GH_CMD
+#     Override the `gh` binary used for label reads/edits. Default: `gh`.
+#
+#   DISPATCH_RATE_LIMIT_RESUME_OFFICE_HOURS_CMD
+#     Override the dispatch-apply-office-hours binary. Default:
+#     <script-dir>/dispatch-apply-office-hours.
+#
+#   DISPATCH_RATE_LIMIT_RESUME_SYSTEMD_RUN_CMD
+#     Override the `systemd-run` binary. Default: `systemd-run`.
+#
+#   DISPATCH_RATE_LIMIT_RESUME_CAP
+#     Override the retry cap (positive integer). Default: 5.
+#
+#   DISPATCH_RATE_LIMIT_RESUME_BASE
+#     Override the backoff base seconds (integer). Default: 60.
+#
+#   DISPATCH_RATE_LIMIT_RESUME_MAX
+#     Override the backoff cap seconds (integer). Default: 900.
+#
+#   DISPATCH_RATE_LIMIT_RESUME_NOW
+#     Override the current epoch seconds. Default: date +%s.
+#
+#   DISPATCH_RATE_LIMIT_RESUME_MAIN_WORKTREE
+#     Override the main worktree path. When set, the script does NOT require a
+#     git repo. Default: <project-root>/worktrees/main, where project-root is
+#     the parent of git --git-common-dir. Mirrors dispatch-schedule-target-reseed.
+#
+# Sandbox: `systemd-run --user` talks to the user's systemd over D-Bus, and the
+# label reads/edits use `gh` (macOS Security-framework TLS); this script is not
+# sandbox-safe and callers must invoke it with `dangerouslyDisableSandbox: true`.
+#
+# set -e is enabled, but the systemd-run call below is EXPECTED to fail on the
+# idempotent already-exists collision; it is guarded by `|| RC=$?` so a non-zero
+# exit is captured rather than aborting the script (mirrors dispatch-resume-worker).
+
+set -euo pipefail
+
+# ---- Step 0: defaults & config ----------------------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+GH_CMD="${DISPATCH_RATE_LIMIT_RESUME_GH_CMD:-gh}"
+OFFICE_HOURS_CMD="${DISPATCH_RATE_LIMIT_RESUME_OFFICE_HOURS_CMD:-$SCRIPT_DIR/dispatch-apply-office-hours}"
+SYSTEMD_RUN_CMD="${DISPATCH_RATE_LIMIT_RESUME_SYSTEMD_RUN_CMD:-systemd-run}"
+
+# ---- Step 1: parse & validate arguments -------------------------------------
+#
+# Usage: dispatch-schedule-rate-limit-resume <N> <sessionId> <cwd> <name> [<model>]
+#
+# N is interpolated into the unit name, the gh issue calls, and reaches
+# `(( CUR >= CAP ))` indirectly via the label read below; reject anything that is
+# not a bare positive integer. sessionId/cwd/name need only be non-empty — they
+# are forwarded verbatim into the ExecStart, and dispatch-resume-worker
+# re-validates their shape (and re-checks that <cwd> exists) at fire time. model
+# is optional and possibly-empty — pass it through, never reject empty.
+
+N="${1:-}"
+SESSION_ID="${2:-}"
+CWD="${3:-}"
+NAME="${4:-}"
+MODEL="${5:-}"
+
+if [[ -z "$N" || ! "$N" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: usage: dispatch-schedule-rate-limit-resume <N> <sessionId> <cwd> <name> [<model>] (N must be a positive integer)" >&2
+  exit 2
+fi
+if [[ -z "$SESSION_ID" ]]; then
+  echo "error: dispatch-schedule-rate-limit-resume: <sessionId> must be non-empty" >&2
+  exit 2
+fi
+if [[ -z "$CWD" ]]; then
+  echo "error: dispatch-schedule-rate-limit-resume: <cwd> must be non-empty" >&2
+  exit 2
+fi
+if [[ -z "$NAME" ]]; then
+  echo "error: dispatch-schedule-rate-limit-resume: <name> must be non-empty" >&2
+  exit 2
+fi
+
+# ---- Step 2: read the highest rate-limit-retry counter on the ISSUE ---------
+#
+# Same label-capture idiom as the ci-wait counter, adapted to the
+# dispatch:rate-limit-retry- prefix and read off the ISSUE (a plan-phase death
+# has no PR). `max // 0` yields 0 when no counter label is present yet.
+
+CUR=$("$GH_CMD" issue view "$N" --json labels \
+  --jq '[.labels[].name | capture("^dispatch:rate-limit-retry-(?<n>[0-9]+)$").n | tonumber] | max // 0' \
+  2>/dev/null || true)
+
+# CUR feeds `(( CUR >= CAP ))`, `(( CUR > 0 ))`, and the backoff shift — bash
+# arithmetic context evaluates array-index command substitution, so any value
+# entering `(( ))` must be a literal integer. Fail closed on a non-integer; do
+# NOT silently proceed with a bogus counter.
+if [[ ! "$CUR" =~ ^[0-9]+$ ]]; then
+  echo "error: dispatch-schedule-rate-limit-resume: rate-limit-retry counter is not an integer, got '$CUR'; aborting" >&2
+  exit 2
+fi
+
+# ---- Step 3: cap check ------------------------------------------------------
+
+CAP="${DISPATCH_RATE_LIMIT_RESUME_CAP:-5}"
+if [[ ! "$CAP" =~ ^[0-9]+$ ]] || (( CAP < 1 )); then
+  echo "error: dispatch-schedule-rate-limit-resume: CAP must be a positive integer, got '$CAP'; aborting" >&2
+  exit 2
+fi
+
+if (( CUR >= CAP )); then
+  # Cap hit — park the issue on a human and schedule no further resume. A failure
+  # here is surfaced by dispatch-apply-office-hours (which warns and exits 0 on gh
+  # failures); we still report `escalated` since the retries are over.
+  "$OFFICE_HOURS_CMD" "$N" "rate-limit retries exhausted after $CAP attempts" || true
+  echo "escalated"
+  exit 0
+fi
+
+# ---- Step 4: bump the attempt counter on the ISSUE --------------------------
+#
+# Apply-first / create-on-"not found" — the label may not exist yet on a fresh
+# repo. A gh label failure warns on stderr but does NOT abort the schedule: the
+# timer is the load-bearing side effect; the bookkeeping label is best-effort.
+# Uses `gh issue edit` (NOT `gh pr edit`): the counter lives on the issue.
+
+NEXT=$(( CUR + 1 ))
+
+if (( CUR > 0 )); then
+  if ! rm_out=$("$GH_CMD" issue edit "$N" --remove-label "dispatch:rate-limit-retry-$CUR" 2>&1); then
+    echo "dispatch-schedule-rate-limit-resume: warning: could not remove dispatch:rate-limit-retry-$CUR from issue #$N: $rm_out" >&2
+  fi
+fi
+
+if ! add_out=$("$GH_CMD" issue edit "$N" --add-label "dispatch:rate-limit-retry-$NEXT" 2>&1); then
+  if [[ "$add_out" != *"not found"* ]]; then
+    echo "dispatch-schedule-rate-limit-resume: warning: could not apply dispatch:rate-limit-retry-$NEXT to issue #$N: $add_out" >&2
+  else
+    if ! create_out=$("$GH_CMD" label create "dispatch:rate-limit-retry-$NEXT" \
+        --description "dispatch workflow: rate-limit resume attempt $NEXT of $CAP" 2>&1); then
+      echo "dispatch-schedule-rate-limit-resume: warning: could not create label dispatch:rate-limit-retry-$NEXT: $create_out" >&2
+    elif ! retry_out=$("$GH_CMD" issue edit "$N" --add-label "dispatch:rate-limit-retry-$NEXT" 2>&1); then
+      echo "dispatch-schedule-rate-limit-resume: warning: could not apply dispatch:rate-limit-retry-$NEXT to issue #$N after create: $retry_out" >&2
+    fi
+  fi
+fi
+
+# ---- Step 5: compute the fire time (exponential backoff) --------------------
+#
+# DELAY = min(BASE * 2^CUR, MAX). NOW, BASE, and MAX all reach `(( ))`; bash
+# arithmetic context evaluates array-index command substitution, so each must be
+# a literal integer. The defaults (`date +%s`, 60, 900) are always safe; the
+# env-override path is the surface that requires validation. CUR maxes at
+# CAP-1 = 4 under the cap check above, so BASE * 2^CUR cannot overflow for any
+# sane BASE.
+
+NOW="${DISPATCH_RATE_LIMIT_RESUME_NOW:-$(date +%s)}"
+if [[ ! "$NOW" =~ ^[0-9]+$ ]]; then
+  echo "error: dispatch-schedule-rate-limit-resume: NOW must be an integer epoch, got '$NOW'; aborting" >&2
+  exit 2
+fi
+
+BASE="${DISPATCH_RATE_LIMIT_RESUME_BASE:-60}"
+if [[ ! "$BASE" =~ ^[0-9]+$ ]]; then
+  echo "error: dispatch-schedule-rate-limit-resume: BASE must be an integer, got '$BASE'; aborting" >&2
+  exit 2
+fi
+
+MAX="${DISPATCH_RATE_LIMIT_RESUME_MAX:-900}"
+if [[ ! "$MAX" =~ ^[0-9]+$ ]]; then
+  echo "error: dispatch-schedule-rate-limit-resume: MAX must be an integer, got '$MAX'; aborting" >&2
+  exit 2
+fi
+
+DELAY=$(( BASE * (2 ** CUR) ))
+if (( DELAY > MAX )); then
+  DELAY=$MAX
+fi
+
+FIRE=$(( NOW + DELAY ))
+
+# ---- Step 6: resolve the main worktree --------------------------------------
+#
+# Same idiom as dispatch-schedule-target-reseed. The spawned resume runs from the
+# main worktree.
+
+if [[ -n "${DISPATCH_RATE_LIMIT_RESUME_MAIN_WORKTREE:-}" ]]; then
+  MAIN_WORKTREE="$DISPATCH_RATE_LIMIT_RESUME_MAIN_WORKTREE"
+else
+  PROJECT_ROOT=$(resolve_project_root) \
+    || { echo "dispatch-schedule-rate-limit-resume: not in a git repo and DISPATCH_RATE_LIMIT_RESUME_MAIN_WORKTREE is unset" >&2; exit 2; }
+  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+fi
+
+# Install the OnFailure recovery unit (dispatch-tick-recover.service) before
+# scheduling the transient resume timer. Best-effort: OnFailure= resolves lazily
+# at failure time, so a failure here is non-fatal — a missing target only logs an
+# error if the resume unit ever fails. We still pass OnFailure= unconditionally
+# below so an abnormal resume exit is guaranteed a chain continuation.
+ensure_recover_unit "$MAIN_WORKTREE" || true
+
+# ---- Step 7: schedule the transient timer -----------------------------------
+#
+# The unit name embeds N and the epoch fire time — a repeated call with the same
+# (N, FIRE) collides, and systemd refuses to recreate the unit. That gives
+# idempotency without coordinating across callers.
+#
+# Persistent=true covers a WSL-down window that crosses fire time — a resume
+# missed while WSL was down runs on the next start.
+#
+# ExecStart is dispatch-resume-worker with its CLI in its OWN positional order:
+# `<name> <cwd> <sessionId> [<model>]`. Note that order differs from this
+# script's CLI (`<N> <sessionId> <cwd> <name> [<model>]`) — the four positionals
+# are emitted as name, cwd, sessionId, model. The possibly-empty <model> is
+# passed UNCONDITIONALLY as the final positional; dispatch-resume-worker treats an
+# empty value as "omit --model".
+#
+# --setenv=PATH="$PATH" propagates the scheduling caller's PATH into the
+# transient unit. Without it the unit inherits the systemd user manager's minimal
+# default PATH, which omits the nix store — so on NixOS/WSL hosts /usr/bin/env
+# can't resolve bash (exit 127) and the resume can't find claude/git/jq. The
+# caller carries the full nix-store PATH, so capturing it at schedule time makes
+# the unit self-sufficient.
+#
+# --property=KillMode=process (#1196): Claude Code's per-user bg supervisor daemon
+# and its worker children can be born inside this transient unit's cgroup — the
+# `claude --bg` resume call spawns them. systemd's default
+# KillMode=control-group SIGTERMs the entire cgroup when the resume finishes,
+# reaping the daemon and every worker. The bg hosts are spawned detached (setsid)
+# to outlive their launcher, but setsid only changes the session/process-group,
+# not the cgroup, so cgroup-kill ignores it. KillMode=process confines the kill to
+# the dispatch-resume-worker process itself, so the detached bg hosts survive.
+
+UNIT_NAME="dispatch-rate-limit-resume-${N}-${FIRE}"
+
+RUN_STDERR=$(mktemp)
+trap 'rm -f "$RUN_STDERR"' EXIT
+# Capture the exit code directly via `|| RC=$?` — after `if cmd; then ... fi`,
+# `$?` is the exit status of the `if` construct, NOT of `cmd`. The explicit
+# capture preserves the real exit code so the "pass-through on unexpected
+# failure" contract holds. (This is also how dispatch-resume-worker, under
+# `set -e`, guards every fallible command.)
+RC=0
+"$SYSTEMD_RUN_CMD" --user \
+     --unit="$UNIT_NAME" \
+     --on-calendar="@$FIRE" \
+     --property=OnFailure=dispatch-tick-recover.service \
+     --working-directory="$MAIN_WORKTREE" \
+     --timer-property=Persistent=true \
+     --property=KillMode=process \
+     --setenv=PATH="$PATH" \
+     "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-resume-worker" \
+       "$NAME" "$CWD" "$SESSION_ID" "$MODEL" \
+     2>"$RUN_STDERR" || RC=$?
+if (( RC == 0 )); then
+  echo "reseeded $UNIT_NAME at $FIRE"
+  exit 0
+fi
+
+err=$(cat "$RUN_STDERR")
+# systemd's already-exists message varies slightly across versions. Match on the
+# substring rather than the full phrase.
+if [[ "$err" == *"already exists"* ]]; then
+  echo "dispatch-schedule-rate-limit-resume: $UNIT_NAME already scheduled; no-op" >&2
+  # Emit the same stdout token as a fresh schedule so the caller routes
+  # idempotently rather than treating the collision as a failure.
+  echo "reseeded $UNIT_NAME at $FIRE"
+  exit 0
+fi
+
+# Some other failure — surface stderr and pass the exit code through.
+echo "$err" >&2
+exit "$RC"

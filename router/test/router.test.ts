@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { parsePath, createHistoryRouter, type Route, type Router } from "../src/index";
+import { registerErrorSink, type ErrorSink } from "@commons-systems/errorutil/log";
 
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -29,6 +30,7 @@ describe("createHistoryRouter", () => {
   let routes: [Route, ...Route[]];
   let router: Router;
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+  let sink: ErrorSink;
 
   beforeEach(() => {
     history.pushState({}, "", "/");
@@ -38,16 +40,14 @@ describe("createHistoryRouter", () => {
       { path: "/about", render: () => "<h2>About</h2>" },
     ];
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    if (typeof globalThis.reportError !== "function") {
-      globalThis.reportError = () => {};
-    }
-    vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+    sink = vi.fn() as ErrorSink;
+    registerErrorSink(sink);
   });
 
   afterEach(() => {
     router?.destroy();
     consoleErrorSpy.mockRestore();
-    vi.mocked(globalThis.reportError).mockRestore();
+    registerErrorSink(undefined);
   });
 
   it("renders default route", async () => {
@@ -227,6 +227,7 @@ describe("createHistoryRouter", () => {
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<p>Something went wrong. Please try again.</p>");
     });
+    expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "router-render" }));
   });
 
   it("formatError returns custom message", async () => {
@@ -357,6 +358,7 @@ describe("createHistoryRouter", () => {
       expect(outlet.innerHTML).toContain("<h2>Home</h2>");
       expect(outlet.innerHTML).toContain("Some content failed to load");
     });
+    expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "router-afterRender" }));
   });
 
   it("afterRender TypeError/ReferenceError deferred", async () => {
@@ -382,6 +384,7 @@ describe("createHistoryRouter", () => {
       });
       expect(deferredErrors).toHaveLength(1);
       expect(deferredErrors[0]).toBeInstanceOf(TypeError);
+      expect(sink).not.toHaveBeenCalled();
     } finally {
       vi.mocked(globalThis.setTimeout).mockRestore();
     }
@@ -394,6 +397,7 @@ describe("createHistoryRouter", () => {
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>Home</h2>");
     });
+    expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "router-onNavigate" }));
   });
 
   it("onNavigate TypeError/ReferenceError deferred", async () => {
@@ -414,6 +418,7 @@ describe("createHistoryRouter", () => {
       });
       expect(deferredErrors).toHaveLength(1);
       expect(deferredErrors[0]).toBeInstanceOf(TypeError);
+      expect(sink).not.toHaveBeenCalled();
     } finally {
       vi.mocked(globalThis.setTimeout).mockRestore();
     }

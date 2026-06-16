@@ -25,6 +25,8 @@ export interface OutlineEntry {
 export interface ContentRenderer {
   init(container: HTMLElement, source: string | ArrayBuffer, initialPosition?: string): Promise<void>;
   goToPage(page: number): Promise<void>;
+  /** Navigate to an arbitrary serialized position (page-number string or EPUB CFI). */
+  goToPosition(position: string): Promise<void>;
   /** Optional percent-based navigation [0,1]. EPUB-only. Generates locations lazily. */
   goToFraction?(fraction: number): Promise<void>;
   next(): Promise<void>;
@@ -42,9 +44,13 @@ export interface ContentRenderer {
   resetZoom?(): void;
   readonly isZoomed?: boolean;
   onZoomChange?: () => void;
-  /** Renderers implementing search must also implement goToResult and clearSearch. */
+  /**
+   * Renderers implementing search must also implement goToResult and
+   * clearSearch, and implement renderResult to render the armed highlight.
+   */
   search?(query: string): Promise<SearchResult[]>;
   goToResult?(result: SearchResult): Promise<void>;
+  renderResult?(): Promise<void>;
   clearSearch?(): void;
   /** Renderers implementing getOutline must also implement goToOutlineEntry. */
   getOutline?(): Promise<OutlineEntry[]>;

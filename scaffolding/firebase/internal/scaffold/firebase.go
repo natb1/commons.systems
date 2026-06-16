@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -148,8 +147,8 @@ func (c FirebaseConfig) MarshalJSON() ([]byte, error) {
 type ProjectTargets map[string]HostingSiteMap
 
 type FirebaseRC struct {
-	Projects map[string]string          `json:"projects"`
-	Targets  map[string]ProjectTargets  `json:"targets,omitempty"`
+	Projects map[string]string         `json:"projects"`
+	Targets  map[string]ProjectTargets `json:"targets,omitempty"`
 	// extra preserves unknown JSON keys during round-trip read/write.
 	extra map[string]json.RawMessage
 }
@@ -382,7 +381,7 @@ func WritePackageJSON(repoRoot string, pkg *PackageJSON) error {
 	return nil
 }
 
-// AddWorkspace inserts name into the workspaces array in sorted order.
+// AddWorkspace appends name to the workspaces array preserving existing order.
 // Returns an error if the workspace already exists.
 func AddWorkspace(pkg *PackageJSON, name string) error {
 	for _, w := range pkg.Workspaces {
@@ -391,7 +390,6 @@ func AddWorkspace(pkg *PackageJSON, name string) error {
 		}
 	}
 	pkg.Workspaces = append(pkg.Workspaces, name)
-	sort.Strings(pkg.Workspaces)
 	return nil
 }
 
