@@ -29,76 +29,81 @@ A reference workflow for individuals who want to fork and adapt an agentic codin
 
 | Phase | Meaning | Skill |
 |-------|---------|-------|
-| plan | No PR, unplanned issue | [plan-issue](.claude/skills/plan-issue/SKILL.md) |
-| implement | No PR, dispatch:planned | [implement](.claude/skills/implement/SKILL.md) |
+| plan | No PR, unplanned issue (no `dispatch:planned`) | [plan-issue](.claude/skills/plan-issue/SKILL.md) |
+| implement | No PR, `dispatch:planned` | [implement](.claude/skills/implement/SKILL.md) |
 | fix-checks | Draft PR, CI failed | [fix-checks](.claude/skills/fix-checks/SKILL.md) |
+| fix-conflicts | Draft PR, `origin/main` merge conflict | [fix-conflicts](.claude/skills/fix-conflicts/SKILL.md) |
 | waiting | Draft PR, CI in progress | (nothing — wait) |
-| qa | Draft PR, CI green | [qa-fix](.claude/skills/qa-fix/SKILL.md) (autonomous) or [office-hours](.claude/skills/office-hours/SKILL.md) (human-driven; see #758) |
-| code-review | Post-QA code quality | [code-review-fix](.claude/skills/code-review-fix/SKILL.md) (wraps `/code-review`) |
-| review | Post-code-review pass | [review-fix](.claude/skills/review-fix/SKILL.md) (wraps `/review`) |
-| security | Post-review security | [security-review-fix](.claude/skills/security-review-fix/SKILL.md) (wraps `/security-review`) |
-| ready | All reviews complete | flip draft PR to ready |
+| qa | Draft PR, CI green, review labels absent | [qa-fix](.claude/skills/qa-fix/SKILL.md) (autonomous) or [office-hours](.claude/skills/office-hours/SKILL.md) (human-driven; see #758) |
+| review | Draft PR, QA passed — the single terminal pass: code + security review, applies in-scope fixes, flips draft→ready | [review-fix](.claude/skills/review-fix/SKILL.md) |
+
+The `review` phase is the workflow's single terminal review pass. It consolidates
+what were three separate phases — code-review, review, and security — into one
+pass over a single diff via the [Workflow tool](.claude/skills/review-fix/SKILL.md),
+and flips the PR from draft to ready itself once the reviews are clean.
 
 ### Two queues, two control paths
 
 Issues and PRs flow through two parallel queues (see #755 for the framing):
 
-- **Dispatch queue** — autonomous work, advanced by the `/dispatch-propagate` router and its `/dispatch-worker` background jobs. Once a target is selected, the chain runs unattended, one phase at a time.
+- **Dispatch queue** — autonomous work, advanced by the headless `dispatch-tick` script and the phase-skill worker sessions it spawns. Once a target is selected, the chain runs unattended, one phase at a time.
 - **Office hours queue** — human-driven work. Items here wait for live human attention: requirement changes, judgment calls during QA, or deviations flagged by phase skills.
 
 The `dispatch:office-hours` label is the transition signal between the two. Input-block hooks apply it when a phase skill requests user input mid-run (see #757); phase skills apply it on a deviation (see #826). The office-hours queue surfaces labeled items for a human; the label clears once the user engages the worktree.
 
-Ground truth lives in PR state (draft vs. ready), CI status, the accumulating `dispatch:*` label set, and `claude agents --json` for the live session list. There is no persisted state machine and no side file — every router invocation re-derives the world from GitHub and the live agent list.
+Ground truth lives in PR state (draft vs. ready), CI status, the accumulating `dispatch:*` label set, and `claude agents --json` for the live session list. There is no persisted state machine and no side file — every tick re-derives the world from GitHub and the live agent list.
 
 JIT (just-in-time) reminders seed both queues. Each dispatch tick fires a JIT scan that creates due reminders from `dispatch.config/jit.json` (see #769); some surface as dispatch-queue work that the chain picks up next tick, while others run as office-hours sessions for a human to read.
 
-This section describes the **target** dispatch model. The current implementation lives in [.claude/skills/dispatch-propagate/SKILL.md](.claude/skills/dispatch-propagate/SKILL.md); inline issue references below mark the open work that ages the README forward as it merges.
+The mechanics below are documented in present tense in [.claude/skills/dispatch-propagate/reference.md](.claude/skills/dispatch-propagate/reference.md) — the companion to the now-retired `dispatch-propagate` skill. Inline issue references point at the design discussions behind each mechanism.
 
 ### Dispatch Queue
 
 #### 1. Entry points
 
-- [`/dispatch-propagate`](.claude/skills/dispatch-propagate/SKILL.md) — the router. Runs in `worktrees/main`. Selects the next target, resolves its worktree, releases the selection lock, spawns a worker, and exits.
-- [`/dispatch-worker <N>`](.claude/skills/dispatch-worker/SKILL.md) — the worker. Runs in `worktrees/<N>-…`, one per in-flight issue. Runs exactly one phase skill, then hands off.
+- **`dispatch-tick`** — the autonomous tick. A headless bash script (`.claude/skills/dispatch-propagate/scripts/dispatch-tick`) with no model-decision seam: it runs `dispatch-select-tick` then `dispatch-materialize-spawn` and exits. `dispatch-spawn-tick` launches it as a transient `systemd-run --user` unit (fixed unit name for one-at-a-time dedup).
+- **`dispatch`** — the human entry point. Run the `dispatch` terminal command (bare, or `dispatch <N>`) to invoke one tick from a terminal; its stdout streams directly.
+- **Workers** — phase-skill sessions, one per in-flight issue, each spawned by `dispatch-launch-worker` into its `worktrees/<N>-…` worktree. A worker runs exactly one phase skill, then its Stop-hook re-launches a tick.
 
-See #839 for the router/worker split.
+See #839 for the original router/worker split and #849 for its replacement by the headless tick.
 
 #### 2. The chaining procedure
 
-Each router tick:
+Each tick, holding the per-repo selection lock:
 
-1. Acquires the per-repo selection lock.
+1. Acquires the lock.
 2. Runs the JIT engine (see Section 4) and the `origin/main` health gate.
-3. Selects a target via the selection ladder (Section 3).
-4. Resolves the target's worktree (creating one for an `implement`-phase issue).
-5. Releases the lock.
-6. Spawns a `/dispatch-worker <N>` background job (`claude --bg`) with `cwd` set to that worktree, and exits.
+3. Computes the concurrency `gap = TARGET_N − effective_live` (Section 5), then selects up to `gap` targets via the selection ladder (Section 3).
+4. For each target: resolves (and, for an `implement`-phase issue, creates) its worktree, writes a reservation marker, and spawns a worker (`dispatch-launch-worker`) with `cwd` set to that worktree.
+5. Releases the lock **after** each spawned worker registers (#945) — closing the boot-gap re-selection race — and exits.
 
-The worker, inside its worktree:
+This is a **seed once → fan out to `gap`** pattern, replacing the old serial "one tick, one worker, repeat."
+
+Each worker, inside its worktree:
 
 1. Derives the phase from PR/CI state via [`dispatch-phase`](.claude/skills/dispatch-propagate/scripts/dispatch-phase).
 2. Runs exactly one phase skill — the skill named in the [PR Control Flow](#pr-control-flow) table for that phase.
-3. Hands off with one of two dispositions:
-   - `--phase-completed` — spawns a fresh `/dispatch-propagate` router back in `worktrees/main` and self-deletes (`claude rm`). If `dispatch:office-hours` is on the PR, the worker still spawns the router but **skips** self-delete, so the parked transcript stays visible for human review.
-   - `--early-stop` — skips the router spawn and self-deletes. The #725 heartbeat re-seeds the chain when the queue drains.
+3. On exit, its Stop-hook (`.claude/hooks/dispatch-stop.sh`) launches a fresh headless tick via `dispatch-spawn-tick` (deduped to one live tick unit), which fans out again to the newly freed gap. If `dispatch:office-hours` is on the PR, the worker still triggers the tick but stays visible for human review.
+
+When the chain stalls on the concurrency budget rather than a freed slot, the #725 cap-keyed re-seed re-launches the tick when the budget reopens; the #1010 continuation invariant parks a tick that would otherwise leave no continuation, so a terminal stall is visible rather than silently lost.
 
 Workers and phase skills call [`/commit-merge-push`](.claude/skills/commit-merge-push/SKILL.md) inline to commit, merge `origin/main`, and push. See #824, #826, #831 for the worker contract, deviation handling, and lock semantics.
 
 #### 3. Prioritization
 
-The router runs a single selection ladder, top to bottom. The ladder spans both queues; the [Office Hours Queue](#office-hours-queue) spine cross-references it rather than restating it.
+The tick runs a single selection ladder, top to bottom. The ladder spans both queues; the [Office Hours Queue](#office-hours-queue) spine cross-references it rather than restating it.
 
-1. **Current-worktree continuation** — if the router was started inside an `<N>-…` worktree on an open issue, continue there.
+1. **Current-worktree continuation** — if the tick was invoked against an `<N>-…` worktree on an open issue, continue there.
 2. **JIT scan** — surface the most-overdue jit-reminder. Bypasses the `origin/main` health gate so reminders fire even when main is red.
 3. **`origin/main` health gate** — if main is red, stop; do not start new work. [`/dispatch-diagnose-main`](.claude/skills/dispatch-diagnose-main/SKILL.md) reports the failing checks.
 4. **Sweep orphan adoption** — adopt a stray `<N>-…` worktree with no live session (see #847).
-5. **Topic-category × priority × phase ladder.** Three tiers nest from outermost to innermost. Topic categories, highest first: `security` → `bug` → `testing infrastructure` → `dispatch` → `other`. Within each topic category, items carrying the `priority` label rank above items without it (`priority` is human-applied; the selector never adds it automatically). Within each `(topic, priority)` bucket, the phase ladder is, highest first: `security` → `review` → `code-review` → `qa` → `implement`. The selector exhausts one bucket's full phase ladder before moving to the next.
+5. **Priority × topic-category × phase ladder.** Three tiers nest from outermost to innermost. The **priority bit** is the outermost axis: the selector exhausts every `priority=1` item — across all topics and phases — before any non-priority item, so a `priority` item in a low-ranked topic outranks every non-priority item in a higher-ranked one (`priority` is human-applied; the selector never adds it automatically). Within one priority level, **topic categories**, highest first: `security` → `bug` → `testing infrastructure` → `dispatch` → `landing` → `fellspiral` → `budget` → `print` → `audio` → `other`. Within each `(priority, topic)` bucket, the **phase ladder** runs closest-to-done first: oldest `review` PR → oldest `fix-checks` PR → oldest `help wanted` issue (planned/`implement` before unplanned/`plan`) → oldest `qa` PR. The selector exhausts one bucket's full phase ladder before moving to the next.
 
-The QA reorder (`qa` above `implement` rather than at the bottom of the ladder) lands with #758; the README documents the post-#758 target. Concurrent worker count scales with the rate-limit window per #845.
+Concurrent worker count scales with the rate-limit window (see Section 5).
 
 #### 4. JIT-on-dispatch
 
-Local `dispatch.config/jit.json` declares recurring "just-in-time" issues. The engine runs at every router tick:
+Local `dispatch.config/jit.json` declares recurring "just-in-time" issues. The engine runs at every dispatch tick:
 
 1. Debounce by `lastTickAt`.
 2. Open-issue guard — skip if the previous jit issue for that key is still open.
@@ -110,9 +115,9 @@ With no `dispatch.config/jit.json` present the engine is a no-op.
 
 #### 5. Token-budget pacing
 
-The router paces worker spawning against a cumulative weekly token-budget curve (#917, building on #845 and #878). Rather than a flat cap, the weekly target at any moment is proportional to how far through the weekly rate-limit window you are — so token spend is spread smoothly across the week instead of burning early and idling. The controller is more conservative early-week than a simple headroom check: it pauses spawning whenever actual usage runs ahead of the curve, even when the weekly total is still low. A separate 5-hour headroom ramp then maps the remaining budget into a live worker count (0..`max_concurrent_workers`).
+The tick paces worker spawning against a cumulative weekly token-budget curve (#917, building on #845 and #878). Rather than a flat cap, the weekly target at any moment is proportional to how far through the weekly rate-limit window you are — so token spend is spread smoothly across the week instead of burning early and idling. The controller is more conservative early-week than a simple headroom check: it pauses spawning whenever actual usage runs ahead of the curve, even when the weekly total is still low. A separate 5-hour headroom ramp then maps the remaining budget into a live worker count (0..`max_concurrent_workers`).
 
-Tunables live in `dispatch.config/target-workers.json` (see `dispatch-propagate/SKILL.md` for the full formula and table). When no telemetry file is present, the router falls back to spawning one worker per tick.
+Tunables live in `dispatch.config/target-workers.json` (see `dispatch-propagate/reference.md` for the full formula and table). When no telemetry file is present, the tick falls back to spawning one worker per tick.
 
 ### Office Hours Queue
 
@@ -141,11 +146,13 @@ label, not by a separate ranking.
 
 #### 2. Pre-dispatch intake
 
-[`/ready`](.claude/skills/ready/SKILL.md) evaluates a candidate issue or a
-plain-text description across seven quality categories and returns an
-evaluation a human can act on before the dispatch chain reaches the item. Use
-it to triage an inbound idea or a backlogged issue into ready shape before it
-competes in the selection ladder.
+[`/file-issue`](.claude/skills/file-issue/SKILL.md) is the single
+issue-filing and issue-improvement chokepoint. It separates multi-topic input
+into independent issues, then per issue runs duplicate detection, an eight-category
+quality evaluation, a decomposition gate, and type/topic classification —
+applying the results directly with no approval gate. Use it to file an inbound
+idea or to bring a backlogged issue into ready shape before it competes in the
+selection ladder.
 
 #### 3. Mid-flight requirement changes
 
@@ -180,14 +187,14 @@ subsection — this covers only the office-hours-side surfacing.
 
 - **Ground truth is PR/CI + label state.** No persisted state machine; [`dispatch-phase`](.claude/skills/dispatch-propagate/scripts/dispatch-phase) derives the phase from draft state, CI status, and the accumulating `dispatch:*` labels.
 - **Per-worktree concurrency.** N issues in flight equals N concurrent worker sessions in N worktrees. The per-repo selection lock serializes router *selection* only — the worker holds no lock.
-- **Self-perpetuating background-job chain.** Each `/dispatch-worker` runs as a `claude --bg` background session that self-deletes on clean completion and spawns its successor router. The #725 heartbeat re-seeds the chain if it drains.
+- **Self-perpetuating headless chain.** The tick (`dispatch-tick`) is a headless script, not a model session; workers are phase-skill sessions. A worker's Stop-hook re-launches a tick via `dispatch-spawn-tick`. The #725 cap-keyed re-seed resumes the chain when it stalls on the token budget, and the #1010 continuation invariant parks a tick that would otherwise leave no continuation.
 - **Transient escalation via `dispatch:office-hours`.** One label, two writers (input-block hooks per #757, phase-skill deviation detection per #826), one reader (the office-hours queue). The label clears when the user engages the worktree.
 - **JIT is a reminder layer, not an autonomous executor.** Office-hours jit-reminders are surfaced for a human to read.
 - **Local config sits outside every worktree.** `dispatch.config/` lives beside `worktrees/main/` so it is shared across worktrees and physically cannot be committed.
 
 ## CI/CD
 
-Four consolidated workflows handle all CI/CD. Change detection determines which apps to test and deploy.
+Seven workflows handle all CI/CD. Change detection determines which apps to test and deploy.
 
 ### Workflows
 
@@ -196,7 +203,10 @@ Four consolidated workflows handle all CI/CD. Change detection determines which 
 | Push to non-`main` branch | `unit-tests.yml` | `unit-tests`, `lint` |
 | PR opened/synchronized | `pr-checks.yml` | `acceptance`, `preview-and-smoke` |
 | PR merged to `main` | `prod-deploy.yml` | `deploy-and-smoke`, `cleanup-preview` |
-| Push `firestore.rules` to `main` | `firestore-deploy.yml` | `deploy-rules` |
+| Push `firestore.rules`/`firestore.indexes.json` to `main` | `firestore-deploy.yml` | deploy rules and indexes |
+| Push `functions/**` to `main` (or manual dispatch) | `functions-deploy.yml` | deploy Cloud Functions |
+| Push `storage.rules` to `main` | `storage-deploy.yml` | deploy storage rules |
+| Push a `budget-etl-v*` tag | `budget-etl-release.yml` | build and publish the `budget-etl` release |
 
 ### Change detection
 
@@ -242,7 +252,6 @@ run-all-cleanup-preview.sh <pr-number>
 ## Where to go next
 
 - **Landing page** — [commons.systems](https://commons.systems): the deployed apps and project overview.
-- **Charter** — [CHARTER.md](CHARTER.md): audiences, principles, and the philosophy behind the workflow.
 - **License** — CC-BY-SA; forking is encouraged.
 
 ## Usage and Contributing
