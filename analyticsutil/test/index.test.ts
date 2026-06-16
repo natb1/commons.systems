@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { FirebaseApp } from "firebase/app";
+import { registerErrorSink, type ErrorSink } from "@commons-systems/errorutil/log";
 
 vi.mock("firebase/analytics", () => ({
   initializeAnalytics: vi.fn(() => ({ app: {} })),
@@ -7,16 +8,35 @@ vi.mock("firebase/analytics", () => ({
   setUserProperties: vi.fn(),
 }));
 
+vi.mock("web-vitals", () => ({
+  onLCP: vi.fn(),
+  onCLS: vi.fn(),
+  onINP: vi.fn(),
+  onFCP: vi.fn(),
+  onTTFB: vi.fn(),
+}));
+
 import { initializeAnalytics, logEvent, setUserProperties } from "firebase/analytics";
-import { initAnalytics, initAnalyticsSafe } from "../src/index";
+import { onLCP, onCLS, onINP, onFCP, onTTFB } from "web-vitals";
+import {
+  initAnalytics,
+  initAnalyticsSafe,
+  __resetWebVitalsRegistrationForTest,
+} from "../src/index";
 
-// reportError is a browser API not available in Node — stub it so tests that
-// don't mock it fail loudly rather than silently swallowing errors.
-globalThis.reportError ??= (error: unknown) => {
-  throw error;
-};
+beforeEach(() => {
+  vi.resetAllMocks();
+  __resetWebVitalsRegistrationForTest();
+});
 
-beforeEach(() => vi.clearAllMocks());
+afterEach(() => {
+  // Restore any spies (e.g. console.error) created in test bodies so a thrown
+  // assertion before an inline restore cannot leak a mock into later tests.
+  vi.restoreAllMocks();
+  // Clear the module-level error sink so a test that does not register its own
+  // sink cannot observe a previous test's stale vi.fn().
+  registerErrorSink(undefined);
+});
 
 describe("initAnalytics", () => {
   it("returns no-op tracker and logs debug when measurementId is missing", () => {
@@ -78,7 +98,9 @@ describe("initAnalytics", () => {
   });
 
   it("reports error when logEvent throws", () => {
-    const reportErrorSpy = vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+    const sink: ErrorSink = vi.fn();
+    registerErrorSink(sink);
+    vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
     const badStateError = new Error("bad state");
     vi.mocked(logEvent).mockImplementation(() => {
@@ -89,12 +111,11 @@ describe("initAnalytics", () => {
     const tracker = initAnalytics(app);
 
     expect(() => tracker("/about")).not.toThrow();
-    const reported = reportErrorSpy.mock.calls[0][0] as Error;
+    const reported = (vi.mocked(sink).mock.calls[0][0] as Error);
     expect(reported.message).toBe(
       "Failed to log page view (path: /about): bad state",
     );
-
-    reportErrorSpy.mockRestore();
+    expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "analytics-page-view" }));
   });
 
   it("re-throws TypeError from logEvent", () => {
@@ -218,7 +239,9 @@ describe("traffic tagging", () => {
   });
 
   it("continues with organic tag when localStorage throws", () => {
-    const reportErrorSpy = vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+    const sink: ErrorSink = vi.fn();
+    registerErrorSink(sink);
+    vi.spyOn(console, "error").mockImplementation(() => {});
     setLocation("https://example.com/page?_ct=internal");
     vi.spyOn(localStorage, "setItem").mockImplementation(() => {
       throw new DOMException("The operation is insecure.", "SecurityError");
@@ -228,10 +251,9 @@ describe("traffic tagging", () => {
     expect(setUserProperties).toHaveBeenCalledWith(expect.anything(), {
       traffic_type: "organic",
     });
-    const reported = reportErrorSpy.mock.calls[0][0] as Error;
+    const reported = (vi.mocked(sink).mock.calls[0][0] as Error);
     expect(reported.message).toContain("Failed to apply traffic tag");
-    reportErrorSpy.mockRestore();
-    vi.mocked(localStorage.setItem).mockRestore();
+    expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "analytics-traffic-tag" }));
   });
 
   it("calls setUserProperties before returning the tracker", () => {
@@ -252,9 +274,146 @@ describe("traffic tagging", () => {
   });
 });
 
+describe("web-vitals reporting", () => {
+  const validApp = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
+
+  beforeEach(() => {
+    Object.defineProperty(window, "location", {
+      value: new URL("https://example.com/page"),
+      writable: true,
+      configurable: true,
+    });
+    vi.spyOn(history, "replaceState").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.mocked(history.replaceState).mockRestore();
+  });
+
+  it("registers onLCP/onCLS/onINP/onFCP/onTTFB callbacks when measurementId is set", () => {
+    initAnalytics(validApp);
+
+    expect(onLCP).toHaveBeenCalledTimes(1);
+    expect(onCLS).toHaveBeenCalledTimes(1);
+    expect(onINP).toHaveBeenCalledTimes(1);
+    expect(onFCP).toHaveBeenCalledTimes(1);
+    expect(onTTFB).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT register web-vitals callbacks when measurementId is absent", () => {
+    const app = { options: {} } as unknown as FirebaseApp;
+    const consoleDebugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    initAnalytics(app);
+
+    expect(onLCP).not.toHaveBeenCalled();
+    expect(onCLS).not.toHaveBeenCalled();
+    expect(onINP).not.toHaveBeenCalled();
+    expect(onFCP).not.toHaveBeenCalled();
+    expect(onTTFB).not.toHaveBeenCalled();
+    consoleDebugSpy.mockRestore();
+  });
+
+  it("fires logEvent with web_vitals event and correct params when LCP callback is invoked", () => {
+    const fakeAnalytics = { app: {} };
+    vi.mocked(initializeAnalytics).mockReturnValue(fakeAnalytics as never);
+
+    initAnalytics(validApp);
+
+    const capturedCallback = vi.mocked(onLCP).mock.calls[0][0];
+    const fakeMetric = {
+      name: "LCP",
+      value: 2500,
+      rating: "good",
+      id: "v4-1234",
+    } as unknown as Parameters<typeof capturedCallback>[0];
+
+    capturedCallback(fakeMetric);
+
+    expect(logEvent).toHaveBeenCalledWith(fakeAnalytics, "web_vitals", {
+      metric_name: "LCP",
+      metric_value: 2500,
+      metric_rating: "good",
+      metric_id: "v4-1234",
+    });
+  });
+
+  it("scales CLS value by 1000 and rounds to integer", () => {
+    const fakeAnalytics = { app: {} };
+    vi.mocked(initializeAnalytics).mockReturnValue(fakeAnalytics as never);
+
+    initAnalytics(validApp);
+
+    const capturedCallback = vi.mocked(onCLS).mock.calls[0][0];
+    const fakeMetric = {
+      name: "CLS",
+      value: 0.123,
+      rating: "good",
+      id: "v4-5678",
+    } as unknown as Parameters<typeof capturedCallback>[0];
+
+    capturedCallback(fakeMetric);
+
+    expect(logEvent).toHaveBeenCalledWith(fakeAnalytics, "web_vitals", {
+      metric_name: "CLS",
+      metric_value: 123,
+      metric_rating: "good",
+      metric_id: "v4-5678",
+    });
+  });
+
+  it("reports non-programmer logEvent error without propagating", () => {
+    const sink: ErrorSink = vi.fn();
+    registerErrorSink(sink);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
+    const networkError = new Error("network failure");
+    vi.mocked(logEvent).mockImplementation(() => {
+      throw networkError;
+    });
+
+    initAnalytics(validApp);
+
+    const capturedCallback = vi.mocked(onLCP).mock.calls[0][0];
+    const fakeMetric = {
+      name: "LCP",
+      value: 1800,
+      rating: "good",
+      id: "v4-abc",
+    } as unknown as Parameters<typeof capturedCallback>[0];
+
+    expect(() => capturedCallback(fakeMetric)).not.toThrow();
+    const reported = (vi.mocked(sink).mock.calls[0][0] as Error);
+    expect(reported.message).toBe(
+      "Failed to log web-vital (metric: LCP): network failure",
+    );
+    expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "analytics-web-vitals" }));
+  });
+
+  it("re-throws TypeError from logEvent inside web-vital callback", () => {
+    vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
+    vi.mocked(logEvent).mockImplementation(() => {
+      throw new TypeError("invalid argument");
+    });
+
+    initAnalytics(validApp);
+
+    const capturedCallback = vi.mocked(onLCP).mock.calls[0][0];
+    const fakeMetric = {
+      name: "LCP",
+      value: 1800,
+      rating: "good",
+      id: "v4-abc",
+    } as unknown as Parameters<typeof capturedCallback>[0];
+
+    expect(() => capturedCallback(fakeMetric)).toThrow(TypeError);
+  });
+});
+
 describe("initAnalyticsSafe", () => {
   it("returns no-op and reports error when initializeAnalytics throws", () => {
-    const reportErrorSpy = vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+    const sink: ErrorSink = vi.fn();
+    registerErrorSink(sink);
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const cspError = new Error("CSP blocked");
     vi.mocked(initializeAnalytics).mockImplementation(() => {
       throw cspError;
@@ -263,15 +422,14 @@ describe("initAnalyticsSafe", () => {
     const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
     const tracker = initAnalyticsSafe(app);
 
-    const reported = reportErrorSpy.mock.calls[0][0] as Error;
+    const reported = (vi.mocked(sink).mock.calls[0][0] as Error);
     expect(reported.message).toBe(
       "Failed to initialize analytics (appId: 1:test:web:abc, measurementId: G-TEST): CSP blocked",
     );
+    expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "analytics-init" }));
 
     tracker("/about");
     expect(logEvent).not.toHaveBeenCalled();
-
-    reportErrorSpy.mockRestore();
   });
 
   it("re-throws TypeError from initializeAnalytics", () => {

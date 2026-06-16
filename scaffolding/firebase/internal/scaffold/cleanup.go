@@ -8,10 +8,17 @@ import (
 	"strings"
 )
 
-// RemoveFirestoreRules removes all rule blocks for appName from firestore.rules.
-// Rules are identified by path pattern (match /<appName>/...) rather than markers.
-// Each removed block also strips immediately preceding comment lines and adjacent blank lines.
-// If no rules are found, it logs a note and returns nil (not an error).
+// RemoveFirestoreRules removes the SCAFFOLD-marked rule block for appName from
+// firestore.rules. The block is the contiguous span between the
+// "// SCAFFOLD BEGIN <app>" and "// SCAFFOLD END <app>" marker lines (inclusive),
+// plus the single blank line that immediately follows END.
+//
+// Three boundary cases:
+//  1. BEGIN marker present  → the marker span is deleted.
+//  2. No BEGIN marker, but lines with prefix "match /<app>/" present → returns an
+//     error, because the rules exist without SCAFFOLD markers and so must be
+//     removed manually (this is the case for pre-marker apps).
+//  3. Neither marker nor prefix → logs a note and returns nil (not an error).
 func RemoveFirestoreRules(repoRoot, appName string) error {
 	rulesPath := filepath.Join(repoRoot, "firestore.rules")
 	content, err := os.ReadFile(rulesPath)
@@ -20,55 +27,48 @@ func RemoveFirestoreRules(repoRoot, appName string) error {
 	}
 
 	lines := strings.Split(string(content), "\n")
+	beginMarker := scaffoldBeginMarker(appName)
+	endMarker := scaffoldEndMarker(appName)
 	matchPrefix := "match /" + appName + "/"
 
-	var result []string
-	found := false
-	i := 0
-	for i < len(lines) {
-		if strings.HasPrefix(strings.TrimSpace(lines[i]), matchPrefix) {
-			found = true
-			// Pop preceding comment lines (e.g. "// Messages are publicly readable")
-			for len(result) > 0 && strings.HasPrefix(strings.TrimSpace(result[len(result)-1]), "//") {
-				result = result[:len(result)-1]
-			}
-			// Remove preceding blank line if present
-			if len(result) > 0 && strings.TrimSpace(result[len(result)-1]) == "" {
-				result = result[:len(result)-1]
-			}
-			// Skip block by counting braces
-			depth := 0
-			for i < len(lines) {
-				for _, ch := range lines[i] {
-					if ch == '{' {
-						depth++
-					}
-					if ch == '}' {
-						depth--
-					}
-				}
-				i++
-				if depth == 0 {
-					break
-				}
-			}
-			if depth != 0 {
-				return fmt.Errorf("unbalanced braces in rules block for %q (depth %d)", appName, depth)
-			}
-			// Skip trailing blank line after block
-			if i < len(lines) && strings.TrimSpace(lines[i]) == "" {
-				i++
-			}
-			continue
+	begin := -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == beginMarker {
+			begin = i
+			break
 		}
-		result = append(result, lines[i])
-		i++
 	}
 
-	if !found {
+	if begin == -1 {
+		// No marker span. Distinguish a pre-marker app (rules present without
+		// markers) from a genuinely absent app.
+		for _, line := range lines {
+			if strings.HasPrefix(strings.TrimSpace(line), matchPrefix) {
+				return fmt.Errorf("rules for %q exist in firestore.rules but have no SCAFFOLD markers; remove the block manually", appName)
+			}
+		}
 		fmt.Printf("NOTE: no rules for %q found in firestore.rules\n", appName)
 		return nil
 	}
+
+	end := -1
+	for i := begin + 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == endMarker {
+			end = i
+			break
+		}
+	}
+	if end == -1 {
+		return fmt.Errorf("found %q but no matching %q in firestore.rules", beginMarker, endMarker)
+	}
+
+	// Drop [begin..end] inclusive, plus one immediately-following blank line.
+	dropEnd := end + 1
+	if dropEnd < len(lines) && strings.TrimSpace(lines[dropEnd]) == "" {
+		dropEnd++
+	}
+
+	result := append(append([]string{}, lines[:begin]...), lines[dropEnd:]...)
 	return os.WriteFile(rulesPath, []byte(strings.Join(result, "\n")), 0o644)
 }
 
