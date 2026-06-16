@@ -946,5 +946,25 @@ describe("createEpubRenderer", () => {
         expect(highlightCfis).not.toContain("cfi-A");
       });
     });
+
+    describe("renderResult", () => {
+      it("is exposed as a method on the renderer", async () => {
+        const renderer = await initRenderer();
+        expect(typeof renderer.renderResult).toBe("function");
+      });
+
+      it("is a harmless no-op: resolves without throwing and does not call rendition.display", async () => {
+        const renderer = await initRenderer();
+
+        // Record display call count before renderResult — it may already have
+        // been called during init (initial display). Only new calls would matter.
+        const displayCallsBefore = mockRendition.display.mock.calls.length;
+
+        await expect(renderer.renderResult()).resolves.toBeUndefined();
+
+        // renderResult must not trigger an additional rendition.display call.
+        expect(mockRendition.display.mock.calls.length).toBe(displayCallsBefore);
+      });
+    });
   });
 });
