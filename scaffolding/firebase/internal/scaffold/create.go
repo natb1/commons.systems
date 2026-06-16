@@ -180,6 +180,9 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 
 const firestoreRulesCatchAll = "// SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment."
 
+func scaffoldBeginMarker(app string) string { return "// SCAFFOLD BEGIN " + app }
+func scaffoldEndMarker(app string) string   { return "// SCAFFOLD END " + app }
+
 // InsertFirestoreRules inserts a default rules block for appName into firestore.rules,
 // just before the deny-all catch-all rule. Rules use the literal app name as a
 // top-level path segment (e.g. match /myapp/{env}/messages/{messageId}).
@@ -192,12 +195,12 @@ func InsertFirestoreRules(repoRoot, appName string) error {
 
 	content := string(raw)
 
-	if strings.Contains(content, "match /"+appName+"/") {
+	if strings.Contains(content, "    "+scaffoldBeginMarker(appName)+"\n") {
 		fmt.Printf("NOTE: rules for %q already exist in firestore.rules, skipping insertion\n", appName)
 		return nil
 	}
 
-	block := fmt.Sprintf(
+	matchBlocks := fmt.Sprintf(
 		"    // Groups are readable only by their members (email-based membership).\n"+
 			"    // Uses resource.data directly instead of get() because getUserGroups\n"+
 			"    // performs a list query that Firestore cannot resolve with get() calls.\n"+
@@ -219,8 +222,13 @@ func InsertFirestoreRules(repoRoot, appName string) error {
 			"    match /%s/{env}/errors/{errorId} {\n"+
 			"      allow create: if isKnownErrorEnv(env) && isValidErrorLog();\n"+
 			"      allow read, update, delete: if false;\n"+
-			"    }\n\n",
+			"    }\n",
 		appName, appName, appName, appName)
+
+	block := "    " + scaffoldBeginMarker(appName) + "\n" +
+		matchBlocks +
+		"    " + scaffoldEndMarker(appName) + "\n" +
+		"\n"
 
 	catchAll := "    " + firestoreRulesCatchAll
 	idx := strings.Index(content, catchAll)
