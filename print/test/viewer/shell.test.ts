@@ -820,6 +820,96 @@ describe("initViewer spread mode", () => {
     expect(canvasWrap.style.transform).toBe(`scale(${1.2 ** 2})`);
   });
 
+  it("search result click in spread mode: routes via controller.goToPage (renderPageInto), not renderResult", async () => {
+    const renderResult = vi.fn().mockResolvedValue(undefined);
+    const searchResult = {
+      location: "1:0:3",
+      label: "Page 1",
+      snippet: "the cat sat",
+      matchStart: 0,
+      matchLength: 3,
+    };
+    const renderer = makeMockSpreadRenderer({
+      renderPageInto: vi.fn().mockResolvedValue(undefined),
+      search: vi.fn().mockResolvedValue([searchResult]),
+      goToResult: vi.fn().mockResolvedValue(undefined),
+      clearSearch: vi.fn(),
+      renderResult,
+    });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
+    await flushInit();
+
+    // Enter spread mode
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
+    spreadBtn.click();
+    await flushInit();
+
+    // Run a search: set input value and dispatch the search event for immediate (no-debounce) execution
+    const searchInput = outlet.querySelector(".viewer-search-input") as HTMLInputElement;
+    searchInput.value = "the";
+    searchInput.dispatchEvent(new Event("search"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Clear mock call history accumulated during spread entry so only the click render counts
+    vi.mocked(renderer.renderPageInto!).mockClear();
+
+    // Click the first search result
+    const resultsList = outlet.querySelector(".viewer-search-results") as HTMLUListElement;
+    (resultsList.children[0] as HTMLElement).click();
+
+    // Flush: goToResult resolves → onNavigate → controller.goToPage → render() → renderPageInto
+    await vi.advanceTimersByTimeAsync(0);
+    await flushInit();
+
+    // Spread path: controller.goToPage called renderPageInto
+    expect(renderer.renderPageInto).toHaveBeenCalled();
+    // renderResult must NOT be called in spread mode
+    expect(renderResult).not.toHaveBeenCalled();
+  });
+
+  it("search result click in single mode: routes via renderResult, not renderPageInto", async () => {
+    const renderResult = vi.fn().mockResolvedValue(undefined);
+    const searchResult = {
+      location: "1:0:3",
+      label: "Page 1",
+      snippet: "the cat sat",
+      matchStart: 0,
+      matchLength: 3,
+    };
+    const renderer = makeMockSpreadRenderer({
+      renderPageInto: vi.fn().mockResolvedValue(undefined),
+      search: vi.fn().mockResolvedValue([searchResult]),
+      goToResult: vi.fn().mockResolvedValue(undefined),
+      clearSearch: vi.fn(),
+      renderResult,
+    });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
+    await flushInit();
+
+    // Do NOT enter spread mode — stay in single mode
+
+    // Run a search
+    const searchInput = outlet.querySelector(".viewer-search-input") as HTMLInputElement;
+    searchInput.value = "the";
+    searchInput.dispatchEvent(new Event("search"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    vi.mocked(renderer.renderPageInto!).mockClear();
+
+    // Click the first search result
+    const resultsList = outlet.querySelector(".viewer-search-results") as HTMLUListElement;
+    (resultsList.children[0] as HTMLElement).click();
+
+    // Flush: goToResult resolves → onNavigate → renderer.renderResult
+    await vi.advanceTimersByTimeAsync(0);
+    await flushInit();
+
+    // Single mode path: renderResult must be called
+    expect(renderResult).toHaveBeenCalled();
+    // renderPageInto must NOT be called via the search click
+    expect(renderer.renderPageInto).not.toHaveBeenCalled();
+  });
+
   // Criterion 3: user-initiated navigation in spread mode clears any stale
   // search highlight before re-rendering, so it never reappears on a spread
   // that contains the previously highlighted page.

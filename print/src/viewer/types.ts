@@ -44,9 +44,13 @@ export interface ContentRenderer {
   resetZoom?(): void;
   readonly isZoomed?: boolean;
   onZoomChange?: () => void;
-  /** Renderers implementing search must also implement goToResult and clearSearch. */
+  /**
+   * Renderers implementing search must also implement goToResult and
+   * clearSearch, and implement renderResult to render the armed highlight.
+   */
   search?(query: string): Promise<SearchResult[]>;
   goToResult?(result: SearchResult): Promise<void>;
+  renderResult?(): Promise<void>;
   clearSearch?(): void;
   /** Renderers implementing getOutline must also implement goToOutlineEntry. */
   getOutline?(): Promise<OutlineEntry[]>;
