@@ -9,6 +9,9 @@ import { createEpubRenderer } from "../viewer/epub.js";
 import { createImageArchiveRenderer } from "../viewer/image-archive.js";
 import { getFile, putFile } from "../media-cache.js";
 import { isLocalId, getLocalItem, resolveLocalBlob, whenLocalFolderReady } from "../library.js";
+import type { PositionStore } from "../sidecar.js";
+import { makeSidecarPositionStore } from "../sidecar.js";
+import { makeFirestorePositionStore } from "../reading-position.js";
 
 const BACK_LINK = '<a href="/" class="viewer-back">&larr; Back to Library</a>';
 
@@ -24,13 +27,50 @@ const ERROR_HTML = `
       ${BACK_LINK}
     `;
 
+function localStorageKey(mediaId: string): string {
+  return `reading-position:${mediaId}`;
+}
+
 /**
- * Reading-position uid for the viewer. Local-folder items are read
- * unauthenticated and must never write a `local:` id to Firestore, so they
- * force the localStorage path (uid=null). Cloud items use the signed-in uid.
+ * A PositionStore backed by localStorage, keyed on `mediaId`. Used for anonymous
+ * cloud items. Reproduces the exact key and read/write behavior the viewer used
+ * to do inline.
  */
-export function readingPositionUid(isLocal: boolean, userUid: string | null): string | null {
-  return isLocal ? null : userUid;
+export function makeLocalStoragePositionStore(mediaId: string): PositionStore {
+  return {
+    async load(): Promise<string | null> {
+      try {
+        return localStorage.getItem(localStorageKey(mediaId));
+      } catch (e) {
+        reportError(new Error("Could not load reading position from localStorage", { cause: e }));
+        return null;
+      }
+    },
+    async save(pos: string): Promise<void> {
+      try {
+        localStorage.setItem(localStorageKey(mediaId), pos);
+      } catch (e) {
+        reportError(new Error("Could not save reading position to localStorage", { cause: e }));
+      }
+    },
+  };
+}
+
+/**
+ * Pick the reading-position store for the viewer. Routing keys on `isLocal`, NOT
+ * on auth — a local item ALWAYS uses the sidecar (keyed on the bare filename),
+ * even for a signed-in user, so a `local:` item never touches Firestore. Cloud
+ * items use Firestore when signed in (keyed on mediaId) and localStorage when
+ * anonymous.
+ */
+export function pickPositionStore(
+  item: MediaItem,
+  isLocal: boolean,
+  userUid: string | null,
+): PositionStore {
+  if (isLocal) return makeSidecarPositionStore(item.storagePath);
+  if (userUid) return makeFirestorePositionStore(userUid, item.id);
+  return makeLocalStoragePositionStore(item.id);
 }
 
 let pendingItem: MediaItem | null = null;
@@ -123,7 +163,7 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
   pendingUrl = null;
   pendingLocal = false;
 
-  const uid = readingPositionUid(local, user?.uid ?? null);
+  const store = pickPositionStore(item, local, user?.uid ?? null);
 
   if (local) {
     const resolveLocal = (): Promise<ArrayBuffer> => {
@@ -146,10 +186,10 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
     };
     switch (item.mediaType) {
       case "pdf":
-        cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), resolveLocal, item.id, uid);
+        cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), resolveLocal, item.id, store, null);
         break;
       case "epub":
-        cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), resolveLocal, item.id, uid);
+        cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), resolveLocal, item.id, store, null);
         break;
       default:
         reportError(new Error(`Unsupported local mediaType in viewer: ${item.mediaType}`));
@@ -161,13 +201,13 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
 
   switch (item.mediaType) {
     case "pdf":
-      cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), () => resolveFileSource(url, spath), item.id, uid);
+      cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), () => resolveFileSource(url, spath), item.id, store, user?.uid ?? null);
       break;
     case "epub":
-      cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), () => resolveFileSource(url, spath), item.id, uid);
+      cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), () => resolveFileSource(url, spath), item.id, store, user?.uid ?? null);
       break;
     case "image-archive":
-      cleanupFn = initViewer(outlet, (onError) => createImageArchiveRenderer(onError, spath), () => Promise.resolve(url), item.id, uid);
+      cleanupFn = initViewer(outlet, (onError) => createImageArchiveRenderer(onError, spath), () => Promise.resolve(url), item.id, store, user?.uid ?? null);
       break;
     default: {
       const _exhaustive: never = item.mediaType;

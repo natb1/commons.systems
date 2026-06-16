@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 #
 # dispatch-auto-merge — tick-time reconciler that squash-merges every open PR
-# already at the dispatch "ready" state whose closing issues are all enhancement
-# and none bug/security (issue #1540).
+# already at the dispatch "ready" state (issue #1739).
 #
 # Runs in the tick at Step 1d, immediately after dispatch-reconcile-ready (which
 # reconciles the draft↔ready bit). dispatch-reconcile-ready is the readiness
@@ -12,28 +11,18 @@
 #   ready(PR)  ≡  isDraft == false  ∧  dispatch:reviewed  ∧  CI == passing
 #                ∧  mergeable == MERGEABLE
 #
-# On top of readiness, a PR must clear the closing-set gate to be auto-merged:
-#
-#   closing-set gate:
-#     - the PR's closing-issue set is NON-EMPTY, and
-#     - EVERY closing issue carries every type in $types  (PER-ISSUE, default
-#       ["enhancement"] — checked on each closing issue's own label array, NOT a
-#       union), and
-#     - NO closing issue carries any type in $excludeTypes (default
-#       ["bug","security"] — sound on the flattened union of all closing issues'
-#       labels).
-#
-#   Fail-closed: a closing issue ABSENT from the open-issue→labels map resolves
-#   to [] → has no enhancement → fails the per-issue `all` → the PR skips. The
-#   per-issue half (each closing issue's own labels) and the union exclude half
-#   are deliberately different shapes; do not collapse the type half to a union.
+# Eligibility ≡ readiness PLUS a non-empty closing-set guard: the PR must still
+# carry at least one `Closes #N`. This is defense-in-depth against a ready PR
+# that has lost its closing reference — it is NOT a type filter. dispatch:reviewed
+# already certifies the full review chain ran for any issue type, so a green
+# reviewed conflict-free PR auto-merges regardless of whether it closes a bug,
+# security, or enhancement issue.
 #
 # Config gate (off by default): read from dispatch-config-load auto-merge.
 #   - no config file  → `no-config` → exit 0 with no output (current human-merge
 #                       behavior preserved).
 #   - file present but .enabled != true → exit 0 with no output.
-#   - .enabled == true → arm auto-merging; .types / .excludeTypes override the
-#                       defaults above.
+#   - .enabled == true → arm auto-merging.
 #
 # Merge: gh pr merge <n> --squash with explicit --subject (the PR title) and
 # --body (the PR body), so the non-TTY squash is deterministic and the
@@ -59,7 +48,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "$SCRIPT_DIR/lib.sh"  # pr_list_open, dispatch_ci_verdict_rest, gh_retry, gh_issue_list_rest
+source "$SCRIPT_DIR/lib.sh"  # pr_list_open, dispatch_ci_verdict_rest, gh_retry
 
 # ---- Step 1: config gate (no-op when off) -----------------------------------
 CFG=$("$SCRIPT_DIR/dispatch-config-load" auto-merge) || {
@@ -69,14 +58,6 @@ CFG=$("$SCRIPT_DIR/dispatch-config-load" auto-merge) || {
 [[ "$CFG" == "no-config" ]] && exit 0
 ENABLED=$(jq -r '.enabled' <<<"$CFG")
 [[ "$ENABLED" == "true" ]] || exit 0
-# dispatch-config-load rejects an explicit empty `types`/`excludeTypes` array, so
-# a loaded config can only carry a non-empty array or omit the field. The
-# `length == 0` arm here is a defense-in-depth guard against a config that
-# reaches this script unvalidated: `.types // [...]` substitutes the default only
-# on null, so a bare `[]` would otherwise pass through and vacuously satisfy the
-# per-issue type guard, silently dropping the type gate.
-TYPES_JSON=$(jq -c 'if (.types // [] | length) == 0 then ["enhancement"] else .types end' <<<"$CFG")
-EXCLUDE_JSON=$(jq -c 'if (.excludeTypes // [] | length) == 0 then ["bug","security"] else .excludeTypes end' <<<"$CFG")
 
 # ---- Step 2: one fresh fetch of every open PR -------------------------------
 # Never proceed on a partial fetch — a truncated snapshot could merge a PR whose
@@ -88,18 +69,7 @@ if [[ "$PR_LIST_RC" -ne 0 ]]; then
   exit 1
 fi
 
-# ---- Step 3: open-issue → labels map, once ----------------------------------
-# number → labels-array map, built once from the open-issue list, exactly as
-# dispatch-select-target builds ISSUE_LABELS_JSON. Each closing issue's labels
-# are resolved against this map below.
-ISSUE_LIST=$(gh_issue_list_rest --state open) || {
-  echo "dispatch-auto-merge: error: gh_issue_list_rest --state open failed" >&2
-  exit 1
-}
-ISSUE_LABELS_JSON=$(printf '%s' "$ISSUE_LIST" \
-  | jq -c 'reduce .[] as $i ({}; .[$i.number | tostring] = ($i.labels // []))')
-
-# ---- Step 4: per-PR eligibility + merge -------------------------------------
+# ---- Step 3: per-PR eligibility + merge -------------------------------------
 HARD_ERROR=0
 
 while IFS= read -r pr; do
@@ -118,26 +88,11 @@ while IFS= read -r pr; do
   HAS_REVIEWED=$(jq -r '[.labels[].name] | index("dispatch:reviewed") != null' <<<"$pr")
   [[ "$HAS_REVIEWED" == "true" ]] || continue
 
-  # ---- Closing-set gate -----------------------------------------------------
-  # Non-empty closing set; EVERY closing issue carries every type in $types
-  # (PER-ISSUE — do NOT collapse to a union); NO closing issue carries any
-  # excludeType (sound on the flattened union). pr_combined_labels in
-  # dispatch-select-target is the union-half analogue but is script-local there
-  # (not in lib.sh), so the union logic is reproduced inline here.
-  #
-  # Fail-closed: a closing issue absent from $map resolves to [] → no
-  # enhancement → fails the per-issue `all` → the PR skips.
-  ELIGIBLE=$(jq -r \
-    --argjson map "$ISSUE_LABELS_JSON" \
-    --argjson types "$TYPES_JSON" \
-    --argjson exclude "$EXCLUDE_JSON" '
-    [.closingIssuesReferences[].number | tostring] as $nums
-    | ($nums | map($map[.] // [] | map(.name))) as $perissue
-    | (($perissue | length) > 0)
-      and ($perissue | all(. as $names | $types | all(. as $t | ($names | index($t)) != null)))
-      and (([$perissue[]] | add // []) | all(. as $l | ($exclude | index($l)) == null))
-    ' <<<"$pr")
-  [[ "$ELIGIBLE" == "true" ]] || continue
+  # ---- Closing-set guard (defense-in-depth, NOT a type filter) --------------
+  # A ready PR must still carry at least one Closes #N. This catches a PR that
+  # lost its closing reference; it does NOT gate on issue type.
+  HAS_CLOSING=$(jq -r '(.closingIssuesReferences | length) > 0' <<<"$pr")
+  [[ "$HAS_CLOSING" == "true" ]] || continue
 
   # ---- CI verdict (REST, memoized) — the only per-PR network read; done last -
   VERDICT=$(dispatch_ci_verdict_rest "$(jq -r '.headRefOid' <<<"$pr")")

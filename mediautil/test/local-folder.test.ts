@@ -156,6 +156,45 @@ describe("resolveToBlob", () => {
     );
   });
 
+  it("coalesces concurrent list() calls into a single directory scan", async () => {
+    const file = new File(["hello"], "doc.txt", { lastModified: 1000 });
+    const dir = makeFakeDirectory([{ kind: "file", name: "doc.txt", file }]);
+    let valuesCalls = 0;
+    const originalValues = dir.values.bind(dir);
+    dir.values = function (): AsyncIterableIterator<LocalDirEntryLike> {
+      valuesCalls += 1;
+      return originalValues();
+    };
+    const source = createLocalFolderMediaSource<TestItem>({ directory: dir, toItem });
+
+    await Promise.all([source.list(), source.list()]);
+
+    expect(valuesCalls).toBe(1);
+  });
+
+  it("does not throw 'no longer present' for a present item while a scan is in flight", async () => {
+    const content = "hello world";
+    const file = new File([content], "doc.txt", { lastModified: 1000 });
+    const dir = makeFakeDirectory([{ kind: "file", name: "doc.txt", file }]);
+    const source = createLocalFolderMediaSource<TestItem>({ directory: dir, toItem });
+
+    const presentItem: TestItem = {
+      id: "id:doc.txt",
+      addedAt: new Date(1000).toISOString(),
+      name: "doc.txt",
+    };
+
+    // Start a scan but do not await it: the index has just been cleared and is
+    // being repopulated. resolveToBlob must coalesce onto this in-flight scan
+    // rather than observe the momentarily-empty index and re-scan.
+    const p1 = source.list();
+    const buf = await source.resolveToBlob(presentItem);
+    const text = new TextDecoder().decode(buf);
+
+    expect(text).toBe(content);
+    await p1;
+  });
+
   it("propagates getFile() failure for a cached handle after initial scan", async () => {
     let shouldFail = false;
     const file = new File(["data"], "flaky.txt", { lastModified: 1000 });
