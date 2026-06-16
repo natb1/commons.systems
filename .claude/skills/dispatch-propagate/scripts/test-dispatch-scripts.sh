@@ -2472,17 +2472,21 @@ FAKE
 # office_hours_fake_claude <live-worktree-basename>... — the `office-hours`
 # entry-point fake. Reuses select_target_fake_claude's payload generation so the
 # liveness parsing matches production exactly: each named worktree basename gets
-# a live session row (sessionId `s-<name>`). The fake branches on its first arg:
-# `agents` returns the JSON payload (the liveness query); any other invocation —
-# `attach <id>` or `/office-hours` — prints `LAUNCH: $*` so a test can assert
-# which launch fired. Wires both OFFICE_HOURS_CLAUDE_CMD (the entry script's
-# launch target) and CLAUDE_AGENTS_CMD (the selector subprocess's liveness query)
-# at the same fake, so a single binary serves both the query and the launch.
+# a live session row whose sessionId is `s-<name>` and whose job id is `j-<name>`
+# (deliberately DISTINCT, mirroring production where `id` is the sessionId's
+# first UUID group — so the entry test proves attach uses the job `id`, not the
+# sessionId). The fake branches on its first arg: `agents` returns the JSON
+# payload (the selector's liveness query AND the entry's sessionId→job-id
+# resolution); any other invocation — `attach <id>` or `/office-hours` — prints
+# `LAUNCH: $*` so a test can assert which launch fired. Wires both
+# OFFICE_HOURS_CLAUDE_CMD (the entry script's launch + resolution target) and
+# CLAUDE_AGENTS_CMD (the selector subprocess's liveness query) at the same fake,
+# so a single binary serves both the query and the launch.
 office_hours_fake_claude() {
   local payload="[" name first=1
   for name in "$@"; do
     if (( first )); then first=0; else payload+=","; fi
-    payload+="{\"sessionId\":\"s-$name\",\"pid\":1,\"status\":\"busy\",\"name\":\"$name\",\"cwd\":\"\"}"
+    payload+="{\"sessionId\":\"s-$name\",\"id\":\"j-$name\",\"pid\":1,\"status\":\"busy\",\"name\":\"$name\",\"cwd\":\"\"}"
   done
   payload+="]"
   printf '%s' "$payload" > "$TMPDIR_TEST/claude-payload.json"
@@ -2508,9 +2512,12 @@ FAKE
 
 # office_hours_fresh_fake_claude — fake `claude` for the fresh (spawn-worker-
 # style) entry path. Serves `agents` from an oh-registry.json (starts empty); on
-# `--bg` records argv + $PWD and registers {"sessionId":"sess-<name>",...} under
-# --name (so dispatch-spawn-job's verify + dispatch-spawn-office-hours' resolve
-# both find it); prints `LAUNCH: $*` on anything else (the entry's attach).
+# `--bg` records argv + $PWD and registers
+# {"sessionId":"sess-<name>","id":"job-<name>",...} under --name (so
+# dispatch-spawn-job's verify + dispatch-spawn-office-hours' resolve both find
+# it, and the entry's sessionId→job-id resolution finds the `id`; sessionId and
+# `id` are DISTINCT so the test proves attach uses the job `id`); prints
+# `LAUNCH: $*` on anything else (the entry's attach).
 office_hours_fresh_fake_claude() {
   printf '[]' > "$TMPDIR_TEST/oh-registry.json"
   cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
@@ -2531,7 +2538,7 @@ case "${1:-}" in
       shift
     done
     tmp=$(mktemp)
-    jq --arg name "$name" '. + [{"sessionId":("sess-"+$name),"pid":9999,"status":"busy","name":$name,"cwd":"/worker"}]' "$REG" > "$tmp" && mv "$tmp" "$REG"
+    jq --arg name "$name" '. + [{"sessionId":("sess-"+$name),"id":("job-"+$name),"pid":9999,"status":"busy","name":$name,"cwd":"/worker"}]' "$REG" > "$tmp" && mv "$tmp" "$REG"
     ;;
   *)
     echo "LAUNCH: $*"
@@ -5486,7 +5493,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "42-x"   # 42's worktree has a live session
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "attaches the live session by its sessionId" "LAUNCH: attach s-42-x" "$result"
+assert_eq "attaches the live session by its job id" "LAUNCH: attach j-42-x" "$result"
 teardown
 
 # OH2. Two labeled items both live → attach the oldest one's session.
@@ -5498,7 +5505,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "42-x" "99-y"   # both worktrees live
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "attaches the oldest live item's session" "LAUNCH: attach s-42-x" "$result"
+assert_eq "attaches the oldest live item's session by its job id" "LAUNCH: attach j-42-x" "$result"
 teardown
 
 # OH3. Labeled items but none with a live session → launch the fresh /office-hours
@@ -5514,8 +5521,8 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD
   "$TMPDIR_TEST/worktrees/42-x" > "$STUB_DIR/worktree-list.txt"
 office_hours_fresh_fake_claude
 result=$("$TMPDIR_TEST/office-hours")
-# Attaches the human by attaching the just-spawned session id.
-assert_eq "fresh path attaches the spawned session id" "LAUNCH: attach sess-office-hours-42" "$result"
+# Attaches the human to the just-spawned session, by its resolved job id.
+assert_eq "fresh path attaches the spawned session's job id" "LAUNCH: attach job-office-hours-42" "$result"
 # The spawn was a --bg job named office-hours-<N> running /office-hours.
 mapfile -t oh_argv < "$TMPDIR_TEST/oh-bg-argv"
 assert_eq "fresh: --bg" "--bg" "${oh_argv[0]:-}"
@@ -5539,7 +5546,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "office-hours-42"   # the live session is the office-hours-<N> one
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "attaches the live office-hours-<N> session by its sessionId" "LAUNCH: attach s-office-hours-42" "$result"
+assert_eq "attaches the live office-hours-<N> session by its job id" "LAUNCH: attach j-office-hours-42" "$result"
 teardown
 
 # OH3b. Sessionless item with NO <N>-* worktree on disk (the worktree was swept) →
@@ -5580,7 +5587,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "99-y"   # only 99's worktree is live
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "live wins over fresh whenever any labeled item is live" "LAUNCH: attach s-99-y" "$result"
+assert_eq "live wins over fresh whenever any labeled item is live" "LAUNCH: attach j-99-y" "$result"
 teardown
 
 # OH6. UNKNOWN daemon (claude unqueryable). Under the single fail-safe convention
@@ -5627,7 +5634,7 @@ office_hours_fake_claude   # sets OFFICE_HOURS_CLAUDE_CMD + CLAUDE_AGENTS_CMD
 cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "agents" ]]; then
-  printf '%s' '[{"sessionId":"s-dispatch-abc123","pid":1,"status":"waiting","name":"dispatch-abc123","cwd":""}]'
+  printf '%s' '[{"sessionId":"s-dispatch-abc123","id":"j-dispatch-abc123","pid":1,"status":"waiting","name":"dispatch-abc123","cwd":""}]'
   exit 0
 fi
 echo "LAUNCH: $*"
@@ -5635,7 +5642,7 @@ exit 0
 FAKE
 chmod +x "$TMPDIR_TEST/bin/claude"
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "parked-router directive attaches the router session" "LAUNCH: attach s-dispatch-abc123" "$result"
+assert_eq "parked-router directive attaches the router session by its job id" "LAUNCH: attach j-dispatch-abc123" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
@@ -30690,6 +30697,464 @@ teardown
 echo "Test: dispatch-auto-merge is executable"
 assert_eq "dispatch-auto-merge is executable" "yes" \
   "$([[ -x "$SCRIPT_DIR/dispatch-auto-merge" ]] && echo yes || echo no)"
+
+# ============================================================================
+# dispatch-detect-rate-limit-death tests (#1733)
+# ============================================================================
+#
+# Exercises the rate-limit-death detector: exit 0 iff the transcript's LAST
+# assistant turn is an isApiErrorMessage:true turn whose joined text contains the
+# literal `(not your usage limit)`; exit 1 otherwise (fail-safe). Fixtures are
+# one compact JSON object per line, written with printf '%s\n' (NOT echo) so the
+# JSONL is byte-exact.
+echo ""
+echo "=== dispatch-detect-rate-limit-death ==="
+
+DRD="$SCRIPT_DIR/dispatch-detect-rate-limit-death"
+
+drd_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+}
+drd_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+}
+
+# The rate-limit-death turn: isApiErrorMessage:true + the `(not your usage limit)`
+# server-overload substring. A normal assistant final turn has no isApiErrorMessage.
+RL_TURN='{"type":"assistant","isApiErrorMessage":true,"message":{"role":"assistant","content":[{"type":"text","text":"API Error: Server is temporarily limiting requests (not your usage limit) · Rate limited"}]}}'
+NORMAL_TURN='{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"work in progress"}]}}'
+# The user's OWN usage-limit exhaustion error — apiError, but WITHOUT the
+# `(not your usage limit)` substring, so the detector must NOT match it.
+USAGE_TURN='{"type":"assistant","isApiErrorMessage":true,"message":{"role":"assistant","content":[{"type":"text","text":"API Error: You have exceeded your usage limit. Resets at 5pm."}]}}'
+
+# --- Test 1: MATCH — last assistant turn IS the rate-limit apiError → exit 0 --
+echo "Test: last turn is the rate-limit apiError → exit 0 (match)"
+drd_setup
+printf '%s\n' "$NORMAL_TURN" "$RL_TURN" > "$TMPDIR_TEST/match.jsonl"
+if "$DRD" "$TMPDIR_TEST/match.jsonl"; then rc=0; else rc=$?; fi
+assert_eq "rate-limit-death match exits 0" "0" "$rc"
+drd_teardown
+
+# --- Test 2: NO-MATCH — a normal assistant final turn → exit 1 ---------------
+echo "Test: normal assistant final turn (no apiError) → exit 1 (no match)"
+drd_setup
+printf '%s\n' "$RL_TURN" "$NORMAL_TURN" > "$TMPDIR_TEST/nomatch.jsonl"
+if "$DRD" "$TMPDIR_TEST/nomatch.jsonl"; then rc=0; else rc=$?; fi
+assert_eq "normal final turn exits 1" "1" "$rc"
+drd_teardown
+
+# --- Test 3: USAGE-LIMIT EXCLUSION — final apiError lacks the substring → 1 ---
+# A final apiError turn whose text is the user's OWN usage-limit message must NOT
+# match: auto-retry on quota exhaustion would loop forever.
+echo "Test: final apiError is the user's usage-limit (no substring) → exit 1"
+drd_setup
+printf '%s\n' "$NORMAL_TURN" "$USAGE_TURN" > "$TMPDIR_TEST/usage.jsonl"
+if "$DRD" "$TMPDIR_TEST/usage.jsonl"; then rc=0; else rc=$?; fi
+assert_eq "usage-limit apiError exits 1 (no false self-heal)" "1" "$rc"
+drd_teardown
+
+# --- Test 4: NOT-LAST — rate-limit turn present but a later normal turn follows
+# A session that recovered after the rate-limit and died later for a different
+# reason has a DIFFERENT last turn; must NOT self-heal.
+echo "Test: rate-limit apiError present but NOT the last turn (recovered) → exit 1"
+drd_setup
+printf '%s\n' "$RL_TURN" "$NORMAL_TURN" "$NORMAL_TURN" > "$TMPDIR_TEST/notlast.jsonl"
+if "$DRD" "$TMPDIR_TEST/notlast.jsonl"; then rc=0; else rc=$?; fi
+assert_eq "rate-limit not the last turn exits 1" "1" "$rc"
+drd_teardown
+
+# --- Test 5: EMPTY file → exit 1 (no assistant turns) ------------------------
+echo "Test: empty transcript → exit 1"
+drd_setup
+: > "$TMPDIR_TEST/empty.jsonl"
+if "$DRD" "$TMPDIR_TEST/empty.jsonl"; then rc=0; else rc=$?; fi
+assert_eq "empty transcript exits 1" "1" "$rc"
+drd_teardown
+
+# --- Test 6: MISSING path → exit 1 -------------------------------------------
+echo "Test: missing transcript path → exit 1"
+drd_setup
+if "$DRD" "$TMPDIR_TEST/does-not-exist.jsonl"; then rc=0; else rc=$?; fi
+assert_eq "missing transcript exits 1" "1" "$rc"
+drd_teardown
+
+# --- Test 7: UNREADABLE file (chmod 000) → exit 1 ----------------------------
+echo "Test: unreadable transcript (no read perm) → exit 1"
+drd_setup
+printf '%s\n' "$RL_TURN" > "$TMPDIR_TEST/noread.jsonl"
+chmod 000 "$TMPDIR_TEST/noread.jsonl"
+if "$DRD" "$TMPDIR_TEST/noread.jsonl"; then rc=0; else rc=$?; fi
+assert_eq "unreadable transcript exits 1" "1" "$rc"
+chmod 644 "$TMPDIR_TEST/noread.jsonl"
+drd_teardown
+
+# --- Test 8: no-arg invocation → exit 1 --------------------------------------
+echo "Test: no transcript argument → exit 1"
+if "$DRD"; then rc=0; else rc=$?; fi
+assert_eq "no-arg detector exits 1" "1" "$rc"
+
+# ============================================================================
+# dispatch-schedule-rate-limit-resume tests (#1733)
+# ============================================================================
+#
+# Exercises the backed-off resume scheduler: reads the highest
+# dispatch:rate-limit-retry-<n> label on the ISSUE → CUR; under cap, bumps the
+# counter, computes DELAY=min(BASE*2^CUR, MAX), FIRE=NOW+DELAY, and arms a
+# transient systemd.user timer whose ExecStart is
+# `dispatch-resume-worker <name> <cwd> <sessionId> <model>`; at cap (CUR>=CAP)
+# parks office-hours, prints `escalated`, and arms NO timer.
+#
+# Mirrors the dispatch-schedule-target-reseed harness exactly:
+#   $TMPDIR_TEST/scripts/      copy of the script + lib.sh
+#   $TMPDIR_TEST/bin/          systemd-run / fake-gh / fake-oh / systemctl stubs
+#   $TMPDIR_TEST/systemd-log   recorded systemd-run argv (one line per call)
+#   $TMPDIR_TEST/gh-edit-log   recorded fake-gh issue-edit / label-create argv
+#   $TMPDIR_TEST/oh-log        recorded fake dispatch-apply-office-hours argv
+#   $TMPDIR_TEST/main/         a synthetic main worktree path
+#
+# gh stub contract: `issue view ... --jq ...` echoes the test-controlled CUR
+# directly ($FAKE_CUR, default 0) — the same numeric-echo contract the
+# target-reseed harness uses for `pr view`, bypassing the real --jq so the test
+# controls the counter without constructing a labels JSON. `issue edit` /
+# `label create` record their argv to gh-edit-log and exit 0.
+echo ""
+echo "=== dispatch-schedule-rate-limit-resume ==="
+
+srl_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/main"
+
+  cp "$SCRIPT_DIR/dispatch-schedule-rate-limit-resume" \
+    "$TMPDIR_TEST/scripts/dispatch-schedule-rate-limit-resume"
+  # The script sources lib.sh via its SCRIPT_DIR — so lib.sh must sit alongside.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-schedule-rate-limit-resume"
+
+  export DISPATCH_RATE_LIMIT_RESUME_MAIN_WORKTREE="$TMPDIR_TEST/main"
+  export DISPATCH_RATE_LIMIT_RESUME_NOW=1000000000
+  export DISPATCH_RATE_LIMIT_RESUME_BASE=60
+  export DISPATCH_RATE_LIMIT_RESUME_MAX=900
+  export DISPATCH_RATE_LIMIT_RESUME_CAP=5
+
+  # systemd-run stub: records its argv (one line per call), exits 0.
+  cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/systemd-log"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemd-run"
+  export DISPATCH_RATE_LIMIT_RESUME_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
+
+  # fake gh: `issue view ... --jq ...` echoes the test-controlled CUR
+  # ($FAKE_CUR, default 0 — the script consumes the jq result as the integer
+  # counter). `issue edit` / `label create` record their argv to a log + exit 0.
+  cat > "$TMPDIR_TEST/bin/fake-gh" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "issue" && "\$2" == "view" ]]; then
+  echo "\${FAKE_CUR:-0}"
+  exit 0
+fi
+echo "\$*" >> "$TMPDIR_TEST/gh-edit-log"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-gh"
+  export DISPATCH_RATE_LIMIT_RESUME_GH_CMD="$TMPDIR_TEST/bin/fake-gh"
+
+  # fake dispatch-apply-office-hours: records its argv to a log, exits 0.
+  cat > "$TMPDIR_TEST/bin/fake-oh" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/oh-log"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-oh"
+  export DISPATCH_RATE_LIMIT_RESUME_OFFICE_HOURS_CMD="$TMPDIR_TEST/bin/fake-oh"
+
+  # The script calls ensure_recover_unit (lib.sh) before scheduling. Point its
+  # unit dir into the tmp tree and its systemctl at a no-op stub so the call
+  # never writes outside the test sandbox (same as the target-reseed harness).
+  cat > "$TMPDIR_TEST/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
+  export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+}
+
+srl_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_RATE_LIMIT_RESUME_MAIN_WORKTREE
+  unset DISPATCH_RATE_LIMIT_RESUME_NOW
+  unset DISPATCH_RATE_LIMIT_RESUME_BASE
+  unset DISPATCH_RATE_LIMIT_RESUME_MAX
+  unset DISPATCH_RATE_LIMIT_RESUME_CAP
+  unset DISPATCH_RATE_LIMIT_RESUME_SYSTEMD_RUN_CMD
+  unset DISPATCH_RATE_LIMIT_RESUME_GH_CMD
+  unset DISPATCH_RATE_LIMIT_RESUME_OFFICE_HOURS_CMD
+  unset FAKE_CUR
+  unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
+}
+
+# srl_run <CUR> — run the scheduler with the given CUR and standard positionals,
+# capturing stdout into $out and rc into $rc. Positionals are the script's CLI:
+#   <N> <sessionId> <cwd> <name> [<model>]
+srl_run() {
+  export FAKE_CUR="$1"
+  if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-rate-limit-resume" \
+             1733 sess-abc /work/cwd worker-name claude-opus \
+             2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+}
+
+# --- Test 1: CUR=0 → DELAY=BASE (60), FIRE=NOW+60, applies attempt-1 ----------
+echo "Test: CUR=0 → FIRE=NOW+60, attempt-1 applied, ExecStart shape correct"
+srl_setup
+srl_run 0
+assert_eq "CUR=0 exits 0" "0" "$rc"
+assert_eq "CUR=0 stdout names unit + FIRE (NOW+60)" \
+  "reseeded dispatch-rate-limit-resume-1733-1000000060 at 1000000060" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-rate-limit-resume-1733-1000000060"* \
+   && "$log" == *"--on-calendar=@1000000060"* \
+   && "$log" == *"--property=OnFailure=dispatch-tick-recover.service"* \
+   && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
+   && "$log" == *"--timer-property=Persistent=true"* \
+   && "$log" == *"--property=KillMode=process"* \
+   && "$log" == *"--setenv=PATH="* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: CUR=0 systemd-run argv (unit + calendar@FIRE + OnFailure + Persistent + KillMode + cwd + setenv)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CUR=0 systemd-run argv (unit + calendar@FIRE + OnFailure + Persistent + KillMode + cwd + setenv)"
+  echo "    log: $log"
+fi
+# ExecStart: dispatch-resume-worker with the 4 positionals in OWN order
+# <name> <cwd> <sessionId> <model>.
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"/dispatch-resume-worker worker-name /work/cwd sess-abc claude-opus"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: CUR=0 ExecStart names dispatch-resume-worker with <name> <cwd> <sessionId> <model>"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CUR=0 ExecStart names dispatch-resume-worker with <name> <cwd> <sessionId> <model>"
+  echo "    log: $log"
+fi
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--add-label dispatch:rate-limit-retry-1"* \
+   && "$edits" != *"--remove-label"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: CUR=0 applies retry-1 with no remove (CUR was 0)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CUR=0 applies retry-1 with no remove (CUR was 0)"
+  echo "    edits: $edits"
+fi
+srl_teardown
+
+# --- Test 2: CUR=1 → FIRE=NOW+120, removes retry-1, applies retry-2 -----------
+echo "Test: CUR=1 → FIRE=NOW+120 (BASE*2), counter bumped retry-1→retry-2"
+srl_setup
+srl_run 1
+assert_eq "CUR=1 exits 0" "0" "$rc"
+assert_eq "CUR=1 stdout FIRE=NOW+120" \
+  "reseeded dispatch-rate-limit-resume-1733-1000000120 at 1000000120" "$out"
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--remove-label dispatch:rate-limit-retry-1"* \
+   && "$edits" == *"--add-label dispatch:rate-limit-retry-2"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: CUR=1 removes retry-1 and adds retry-2"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CUR=1 removes retry-1 and adds retry-2"
+  echo "    edits: $edits"
+fi
+srl_teardown
+
+# --- Test 3: CUR=2 → FIRE=NOW+240 (BASE*4) -----------------------------------
+echo "Test: CUR=2 → FIRE=NOW+240 (BASE*4)"
+srl_setup
+srl_run 2
+assert_eq "CUR=2 stdout FIRE=NOW+240" \
+  "reseeded dispatch-rate-limit-resume-1733-1000000240 at 1000000240" "$out"
+srl_teardown
+
+# --- Test 4: CUR=3 → FIRE=NOW+480 (BASE*8) -----------------------------------
+echo "Test: CUR=3 → FIRE=NOW+480 (BASE*8)"
+srl_setup
+srl_run 3
+assert_eq "CUR=3 stdout FIRE=NOW+480" \
+  "reseeded dispatch-rate-limit-resume-1733-1000000480 at 1000000480" "$out"
+srl_teardown
+
+# --- Test 5: CUR=4 → FIRE=NOW+900 (BASE*16=960 clamped by MAX=900) ------------
+echo "Test: CUR=4 → FIRE=NOW+900 (BASE*16=960 clamped by MAX=900)"
+srl_setup
+srl_run 4
+assert_eq "CUR=4 stdout FIRE=NOW+900 (MAX cap)" \
+  "reseeded dispatch-rate-limit-resume-1733-1000000900 at 1000000900" "$out"
+srl_teardown
+
+# --- Test 6: CUR=CAP (5) → escalate to office-hours, NO timer -----------------
+echo "Test: CUR>=CAP (5) escalates to office-hours, prints 'escalated', no timer"
+srl_setup
+srl_run 5
+assert_eq "CUR=CAP exits 0" "0" "$rc"
+assert_eq "CUR=CAP stdout is 'escalated'" "escalated" "$out"
+oh=$(cat "$TMPDIR_TEST/oh-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$oh" == "1733 "* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: CUR=CAP office-hours stub called with issue 1733 as arg1"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CUR=CAP office-hours stub called with issue 1733 as arg1"
+  echo "    oh-log: $oh"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: CUR=CAP arms no timer (systemd-log empty)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CUR=CAP arms no timer (systemd-log empty)"
+  echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+srl_teardown
+
+# --- Test 7: empty <model> is passed through as the final positional ----------
+# The possibly-empty <model> is forwarded UNCONDITIONALLY; dispatch-resume-worker
+# treats empty as "omit --model". The ExecStart still has the worker path + 3
+# positionals followed by a trailing space (the empty model arg).
+echo "Test: empty <model> → ExecStart carries the 3 non-empty positionals"
+srl_setup
+export FAKE_CUR=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-rate-limit-resume" \
+           1733 sess-abc /work/cwd worker-name \
+           2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "empty-model exits 0" "0" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"/dispatch-resume-worker worker-name /work/cwd sess-abc"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: empty-model ExecStart carries <name> <cwd> <sessionId>"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: empty-model ExecStart carries <name> <cwd> <sessionId>"
+  echo "    log: $log"
+fi
+srl_teardown
+
+# --- Test 8: already-exists collision → exit 0, stdout 'reseeded ...' ---------
+echo "Test: systemd-run already-exists collision → exit 0 and stdout 'reseeded ...'"
+srl_setup
+cat > "$TMPDIR_TEST/bin/systemd-run" <<STUB
+#!/usr/bin/env bash
+echo "Unit dispatch-rate-limit-resume-1733-1000000060.timer already exists." >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/bin/systemd-run"
+srl_run 0
+assert_eq "already-exists exits 0" "0" "$rc"
+assert_eq "already-exists stdout is the reseeded line" \
+  "reseeded dispatch-rate-limit-resume-1733-1000000060 at 1000000060" "$out"
+err=$(cat "$TMPDIR_TEST/stderr" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"already scheduled"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: already-exists stderr notes already-scheduled"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-exists stderr notes already-scheduled"
+  echo "    stderr: $err"
+fi
+srl_teardown
+
+# --- Test 9: bad <N> (flag-like) → exit 2, no side effects -------------------
+echo "Test: flag-like <N> exits 2 with no timer / no label edit / no escalate"
+srl_setup
+export FAKE_CUR=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-rate-limit-resume" \
+           --repo sess /cwd nm 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "flag-like <N> exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/systemd-log" && ! -s "$TMPDIR_TEST/gh-edit-log" && ! -s "$TMPDIR_TEST/oh-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: flag-like <N>; no timer / no label edit / no escalate"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: flag-like <N>; no timer / no label edit / no escalate"
+fi
+srl_teardown
+
+# ============================================================================
+# dispatch-stop.sh rate-limit-retry counter-reset idiom (#1733)
+# ============================================================================
+#
+# dispatch-stop.sh's clear_rate_limit_retry_labels strips every
+# dispatch:rate-limit-retry-<n> label from the issue on a clean advance, so a
+# recovered session starts its next death from a fresh counter. The hook has no
+# test harness, so this covers the idiom at the label-pipeline level: the exact
+# `gh issue view ... --jq '<filter>' | while read lbl; gh issue edit
+# --remove-label "$lbl"` pipeline, with a gh stub that runs the REAL jq filter
+# against a labels fixture and records each --remove-label arg. Asserts the
+# remove fires for the matching retry labels and NOT for non-matching labels.
+echo ""
+echo "=== dispatch-stop.sh rate-limit-retry counter-reset idiom ==="
+
+echo "Test: clear idiom removes only dispatch:rate-limit-retry-<n> labels"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/bin"
+
+# Labels fixture: two matching retry labels (incl. multi-digit) plus three
+# non-matching labels that must survive (office-hours, a bug topic, and the
+# similarly-prefixed ci-wait-attempt counter).
+cat > "$TMPDIR_TEST/labels.json" <<'JSON'
+{"labels":[
+  {"name":"dispatch:rate-limit-retry-3"},
+  {"name":"dispatch:office-hours"},
+  {"name":"dispatch:rate-limit-retry-10"},
+  {"name":"bug"},
+  {"name":"dispatch:ci-wait-attempt-2"}
+]}
+JSON
+
+# fake gh: `issue view --json labels --jq <filter>` runs the REAL jq filter
+# against the labels fixture (so the test exercises the actual select(test(...))
+# regex, not a hand-rolled list). `issue edit --remove-label <lbl>` records the
+# label to remove-log.
+cat > "$TMPDIR_TEST/bin/gh" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "issue" && "\$2" == "view" ]]; then
+  # Locate the --jq filter argument and run it against the fixture.
+  filter=""
+  prev=""
+  for a in "\$@"; do
+    [[ "\$prev" == "--jq" ]] && filter="\$a"
+    prev="\$a"
+  done
+  jq -r "\$filter" "$TMPDIR_TEST/labels.json"
+  exit 0
+fi
+if [[ "\$1" == "issue" && "\$2" == "edit" ]]; then
+  prev=""
+  for a in "\$@"; do
+    [[ "\$prev" == "--remove-label" ]] && echo "\$a" >> "$TMPDIR_TEST/remove-log"
+    prev="\$a"
+  done
+  exit 0
+fi
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/bin/gh"
+
+# Reproduce the exact dispatch-stop.sh clear_rate_limit_retry_labels pipeline.
+ISSUE_NUM=1733
+(
+  PATH="$TMPDIR_TEST/bin:$PATH"
+  gh issue view "$ISSUE_NUM" --json labels --jq \
+    '.labels[].name | select(test("^dispatch:rate-limit-retry-[0-9]+$"))' 2>/dev/null \
+    | while IFS= read -r lbl; do
+        [ -n "$lbl" ] && gh issue edit "$ISSUE_NUM" --remove-label "$lbl" >/dev/null 2>&1 \
+          || true
+      done || true
+)
+removed=$(cat "$TMPDIR_TEST/remove-log" 2>/dev/null || true)
+assert_eq "idiom removes retry-3" "present" \
+  "$(printf '%s\n' "$removed" | grep -qx 'dispatch:rate-limit-retry-3' && echo present || echo absent)"
+assert_eq "idiom removes retry-10 (multi-digit)" "present" \
+  "$(printf '%s\n' "$removed" | grep -qx 'dispatch:rate-limit-retry-10' && echo present || echo absent)"
+assert_eq "idiom leaves dispatch:office-hours" "absent" \
+  "$(printf '%s\n' "$removed" | grep -qx 'dispatch:office-hours' && echo present || echo absent)"
+assert_eq "idiom leaves the bug topic label" "absent" \
+  "$(printf '%s\n' "$removed" | grep -qx 'bug' && echo present || echo absent)"
+assert_eq "idiom leaves the similarly-prefixed ci-wait-attempt-2" "absent" \
+  "$(printf '%s\n' "$removed" | grep -qx 'dispatch:ci-wait-attempt-2' && echo present || echo absent)"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
 
 # ============================================================================
 # summary
