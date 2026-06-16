@@ -302,11 +302,34 @@ export function createEpubRenderer(
       for (let i = 0; i < spineItems.length; i++) {
         const section = spineItems[i]!;
         try {
-          await section.load(loader);
-          const label = labelForSection(section, i);
-          for (const match of section.find(trimmed)) {
-            const result = buildResult(match, trimmed, label);
-            if (result) results.push(result);
+          try {
+            await section.load(loader);
+          } catch (err) {
+            // A single section that fails to load (corrupt/missing resource,
+            // malformed EPUB) is skipped; the search continues over the
+            // remaining sections.
+            reportError(
+              err instanceof Error
+                ? err
+                : new Error("EPUB search: section failed to load", { cause: err }),
+            );
+            continue;
+          }
+          try {
+            const label = labelForSection(section, i);
+            for (const match of section.find(trimmed)) {
+              const result = buildResult(match, trimmed, label);
+              if (result) results.push(result);
+            }
+          } catch (err) {
+            // The section loaded, but find()/buildResult() threw (e.g.
+            // createRange() on a malformed loaded document); skip this section
+            // and continue over the remaining sections.
+            reportError(
+              err instanceof Error
+                ? err
+                : new Error("EPUB search: section failed during find", { cause: err }),
+            );
           }
         } finally {
           section.unload();
