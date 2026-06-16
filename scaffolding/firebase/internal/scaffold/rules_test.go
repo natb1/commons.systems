@@ -64,6 +64,21 @@ func TestInsertFirestoreRules(t *testing.T) {
 		if appIdx >= catchAllIdx {
 			t.Error("app rules should appear before catch-all")
 		}
+
+		beginIdx := strings.Index(got, "// SCAFFOLD BEGIN myapp")
+		endIdx := strings.Index(got, "// SCAFFOLD END myapp")
+		if beginIdx == -1 {
+			t.Error("expected SCAFFOLD BEGIN marker")
+		}
+		if endIdx == -1 {
+			t.Error("expected SCAFFOLD END marker")
+		}
+		if beginIdx >= catchAllIdx {
+			t.Error("BEGIN marker should appear before catch-all")
+		}
+		if beginIdx >= endIdx {
+			t.Error("BEGIN marker should appear before END marker")
+		}
 	})
 
 	t.Run("groups rule uses inline resource.data.members check", func(t *testing.T) {
@@ -141,10 +156,12 @@ func TestRemoveFirestoreRules(t *testing.T) {
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // SCAFFOLD BEGIN myapp
     match /myapp/{env}/messages/{messageId} {
       allow read: if true;
       allow write: if false;
     }
+    // SCAFFOLD END myapp
 
     // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
     match /{document=**} {
@@ -177,22 +194,69 @@ service cloud.firestore {
 		}
 	})
 
-	t.Run("errors on unbalanced braces", func(t *testing.T) {
+	t.Run("errors when rules exist without markers", func(t *testing.T) {
 		rules := `rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
     match /myapp/{env}/messages/{messageId} {
       allow read: if true;
+      allow write: if false;
+    }
+
+    // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
 `
 		dir := writeRulesFile(t, t.TempDir(), rules)
 
 		err := RemoveFirestoreRules(dir, "myapp")
 		if err == nil {
-			t.Fatal("expected error for unbalanced braces")
+			t.Fatal("expected error for rules without SCAFFOLD markers")
 		}
-		if !strings.Contains(err.Error(), "unbalanced braces") {
-			t.Errorf("error should mention unbalanced braces, got: %v", err)
+		if !strings.Contains(err.Error(), "marker") {
+			t.Errorf("error should mention markers, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "manual") {
+			t.Errorf("error should mention manual removal, got: %v", err)
 		}
 	})
+}
+
+// TestInsertNotSkippedByStaleComment guards the insert/remove detection
+// asymmetry defect: a stray comment mentioning "match /myapp/" must NOT make
+// InsertFirestoreRules treat the app as already present and skip insertion.
+func TestInsertNotSkippedByStaleComment(t *testing.T) {
+	rules := `rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // historical note: match /myapp/ was here
+
+    // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+`
+	dir := writeRulesFile(t, t.TempDir(), rules)
+
+	if err := InsertFirestoreRules(dir, "myapp"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := readRulesFile(t, dir)
+	if !strings.Contains(got, "// SCAFFOLD BEGIN myapp") {
+		t.Error("insert should not be skipped by a stale comment; expected BEGIN marker")
+	}
+	if !strings.Contains(got, "// SCAFFOLD END myapp") {
+		t.Error("insert should not be skipped by a stale comment; expected END marker")
+	}
+	if !strings.Contains(got, "match /myapp/{env}/messages/{messageId}") {
+		t.Error("expected real messages rule block to be inserted")
+	}
 }
