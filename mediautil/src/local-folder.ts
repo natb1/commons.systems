@@ -47,14 +47,13 @@ export function createLocalFolderMediaSource<T extends { id: string; addedAt: st
 
       const fileHandle = entry as unknown as LocalFileHandleLike;
 
-      let file: File;
+      let item: T | null;
       try {
-        file = await fileHandle.getFile();
+        const file = await fileHandle.getFile();
+        item = config.toItem(file, entry.name);
       } catch {
         continue;
       }
-
-      const item = config.toItem(file, entry.name);
       if (item === null) continue;
 
       results.push(item);
