@@ -29,6 +29,7 @@
   "overrides": {
     "@xmldom/xmldom": "^0.8.13",
     "fast-xml-builder": "^1.2.0",
+    "esbuild": "^0.28.1",
     "protobufjs": "^7.6.4"
   },
   "devDependencies": {

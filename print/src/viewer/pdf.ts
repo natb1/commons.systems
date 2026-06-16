@@ -4,8 +4,9 @@ import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils.js";
 import type { ContentRenderer, OutlineEntry, SearchResult } from "./types.js";
 import { parsePositionPage } from "./types.js";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 // ---------------------------------------------------------------------------
 // Pure search helpers — no DOM, no pdf.js calls. Exported for unit tests.
@@ -444,7 +445,10 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     target.appendChild(wrapper);
 
     const result = await renderPageToCanvas(pageNum, c, targetRect, wrapper, () => gen !== spreadGen);
-    if (!result) return;
+    if (!result) {
+      wrapper.remove();
+      return;
+    }
     if (gen !== spreadGen) {
       // The canvas render already completed; only the orphaned wrapper needs cleanup.
       wrapper.remove();
