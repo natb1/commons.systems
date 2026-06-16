@@ -601,6 +601,27 @@ dependency-free. In dry-run mode the member-email payload is injected via the
 the secret would return). This seam is for testing only — it is never consulted
 in real mode, which always reads Secret Manager.
 
+## The source-pr:<N> follow-up label
+
+Every follow-up issue filed by the `review-fix` skill's 5a and 5b subagents
+receives the per-issue label `source-pr:<N>`, where `<N>` is the PR under
+review at the time the follow-up was filed. The label records the provenance:
+"this follow-up's out-of-scope findings were surfaced while reviewing PR #<N>."
+
+The label is the machine key consumed by the `dispatch-retriage-orphaned-followups`
+scan. When PR #<N> is later closed without merging, that scan locates all open
+follow-up issues carrying `source-pr:<N>` and parks each one on
+`dispatch:office-hours` for human re-triage — without the label the scan has no
+way to identify orphaned follow-ups that point at code that never landed on main.
+
+The label is applied immediately after `/file-issue` returns the new issue
+number, using the create-on-not-found idiom (try `gh issue edit <N>
+--add-label "source-pr:<N>"`; if the label is absent, run `gh label create
+"source-pr:<N>"` then retry — the same pattern as `dispatch-apply-office-hours`
+lines 67–83). In 5a the value substituted is the literal `<PR_NUM>` the main
+thread passes into the fork prompt; in 5b it is the shell variable `$PR_NUM`
+already in scope (used at the `dispatch-security-followup` invocation).
+
 ## Target-keyed CI-wait reseed (#979)
 
 CI-wait handling splits on available queue size, not invocation mode. In a

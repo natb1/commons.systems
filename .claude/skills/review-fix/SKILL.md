@@ -348,13 +348,22 @@ prepared filing structures in `result.deferred_filings` and
 `result.security_followup_input`; this skill executes the actual `gh` calls.
 Skip a path when its bucket is empty.
 
+Every follow-up filed in this step receives the label `source-pr:<PR_NUM>`,
+recording which PR's review surfaced the finding. This label is the machine key
+used by the `dispatch-retriage-orphaned-followups` scan to park orphaned
+follow-ups when PR #<PR_NUM> is later closed without merging — without it, such
+follow-ups silently point at code that never landed on main.
+
 #### 5a. Deferred code-review/review findings → `/file-issue` with a blocked-by link
 
 The Workflow prepares `result.deferred_filings`, each entry carrying `title`,
 `body`, and `blocker_issue_nums` (the implementing issue numbers from
-`Closes #N`, or `"independent"`). For each entry, fork a subagent (`subagent_type:
-general-purpose`, `model: sonnet`). When these subagents return, this is mid-tail
-— continue to Step 6 without a closing summary. The subagent:
+`Closes #N`, or `"independent"`). The main thread also passes the run-level
+`PR_NUM` (the PR under review, captured in the preamble) into each fork prompt
+alongside `title`, `body`, and `blocker_issue_nums`. For each entry, fork a
+subagent (`subagent_type: general-purpose`, `model: sonnet`). When these
+subagents return, this is mid-tail — continue to Step 6 without a closing
+summary. The subagent:
 
 1. Invokes `/file-issue` with a leading `--follow-up` token prepended to the
    `$INPUT` it builds from the finding's `title` and `body` (the token must come
@@ -363,7 +372,7 @@ general-purpose`, `model: sonnet`). When these subagents return, this is mid-tai
    detection, 8-category evaluation, decomposition gate, type/topic classification,
    issue creation, `@me` assignment, and the `help wanted` label. `/file-issue` ends
    with a `===FILE-ISSUE-RESULTS===` … `===FILE-ISSUE-RESULTS-END===` block; read
-   every `<disposition> <N>` record line between the sentinels and iterate steps 2–3
+   every `<disposition> <N>` record line between the sentinels and iterate steps 2–4
    over each. A single finding normally yields one record; a finding that legitimately
    separates into multiple issues yields several — link them all.
 2. For each record, for a non-independent finding, record a `blocked_by` dependency
@@ -376,7 +385,19 @@ general-purpose`, `model: sonnet`). When these subagents return, this is mid-tai
    dependencies API — see `ref-github-issues`) and skip the POST for any blocker
    already present, so a duplicate does not error. An `independent` finding records
    no dependency.
-3. Returns every `<N>` to this thread.
+3. Applies the `source-pr:<PR_NUM>` label to each `<N>` (use
+   `dangerouslyDisableSandbox: true` — `gh` needs network, see
+   `.claude/rules/sandbox.md`):
+
+   ```bash
+   gh issue edit <N> --add-label "source-pr:<PR_NUM>"
+   ```
+
+   If this fails with a `*"not found"*` message, the label does not exist yet —
+   create it then retry once, following the create-on-not-found idiom in
+   `dispatch-apply-office-hours` (lines 67–83). Pass no `--color` on the `gh label
+   create` call — same convention as other dispatch-created labels here.
+4. Returns every `<N>` to this thread.
 
 Capture each `<N>` against its source finding for the Step 7 comment.
 
@@ -439,14 +460,14 @@ summary. Each subagent:
    `===FILE-ISSUE-RESULTS-END===` block. Read the `<disposition> <N>` record(s)
    between the sentinels — a single machine-keyed follow-up normally yields one
    record; iterate step 3 over each if more.
-3. Applies the topic and type labels to each `<N>` (use
+3. Applies the topic, type, and source-PR labels to each `<N>` (use
    `dangerouslyDisableSandbox: true` — `gh` needs network):
 
    ```bash
-   gh issue edit <N> --add-label security --add-label bug
+   gh issue edit <N> --add-label security --add-label bug --add-label "source-pr:$PR_NUM"
    ```
 
-   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed.
+   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed. If the `source-pr:$PR_NUM` label does not exist yet the edit fails with a `*"not found"*` message — apply the same create-on-not-found idiom as 5a (`gh label create` then retry once; pass no `--color`).
 
 4. Returns `<N>` mapped to the follow-up's `identifier`.
 
