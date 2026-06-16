@@ -2472,17 +2472,21 @@ FAKE
 # office_hours_fake_claude <live-worktree-basename>... — the `office-hours`
 # entry-point fake. Reuses select_target_fake_claude's payload generation so the
 # liveness parsing matches production exactly: each named worktree basename gets
-# a live session row (sessionId `s-<name>`). The fake branches on its first arg:
-# `agents` returns the JSON payload (the liveness query); any other invocation —
-# `attach <id>` or `/office-hours` — prints `LAUNCH: $*` so a test can assert
-# which launch fired. Wires both OFFICE_HOURS_CLAUDE_CMD (the entry script's
-# launch target) and CLAUDE_AGENTS_CMD (the selector subprocess's liveness query)
-# at the same fake, so a single binary serves both the query and the launch.
+# a live session row whose sessionId is `s-<name>` and whose job id is `j-<name>`
+# (deliberately DISTINCT, mirroring production where `id` is the sessionId's
+# first UUID group — so the entry test proves attach uses the job `id`, not the
+# sessionId). The fake branches on its first arg: `agents` returns the JSON
+# payload (the selector's liveness query AND the entry's sessionId→job-id
+# resolution); any other invocation — `attach <id>` or `/office-hours` — prints
+# `LAUNCH: $*` so a test can assert which launch fired. Wires both
+# OFFICE_HOURS_CLAUDE_CMD (the entry script's launch + resolution target) and
+# CLAUDE_AGENTS_CMD (the selector subprocess's liveness query) at the same fake,
+# so a single binary serves both the query and the launch.
 office_hours_fake_claude() {
   local payload="[" name first=1
   for name in "$@"; do
     if (( first )); then first=0; else payload+=","; fi
-    payload+="{\"sessionId\":\"s-$name\",\"pid\":1,\"status\":\"busy\",\"name\":\"$name\",\"cwd\":\"\"}"
+    payload+="{\"sessionId\":\"s-$name\",\"id\":\"j-$name\",\"pid\":1,\"status\":\"busy\",\"name\":\"$name\",\"cwd\":\"\"}"
   done
   payload+="]"
   printf '%s' "$payload" > "$TMPDIR_TEST/claude-payload.json"
@@ -2508,9 +2512,12 @@ FAKE
 
 # office_hours_fresh_fake_claude — fake `claude` for the fresh (spawn-worker-
 # style) entry path. Serves `agents` from an oh-registry.json (starts empty); on
-# `--bg` records argv + $PWD and registers {"sessionId":"sess-<name>",...} under
-# --name (so dispatch-spawn-job's verify + dispatch-spawn-office-hours' resolve
-# both find it); prints `LAUNCH: $*` on anything else (the entry's attach).
+# `--bg` records argv + $PWD and registers
+# {"sessionId":"sess-<name>","id":"job-<name>",...} under --name (so
+# dispatch-spawn-job's verify + dispatch-spawn-office-hours' resolve both find
+# it, and the entry's sessionId→job-id resolution finds the `id`; sessionId and
+# `id` are DISTINCT so the test proves attach uses the job `id`); prints
+# `LAUNCH: $*` on anything else (the entry's attach).
 office_hours_fresh_fake_claude() {
   printf '[]' > "$TMPDIR_TEST/oh-registry.json"
   cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
@@ -2531,7 +2538,7 @@ case "${1:-}" in
       shift
     done
     tmp=$(mktemp)
-    jq --arg name "$name" '. + [{"sessionId":("sess-"+$name),"pid":9999,"status":"busy","name":$name,"cwd":"/worker"}]' "$REG" > "$tmp" && mv "$tmp" "$REG"
+    jq --arg name "$name" '. + [{"sessionId":("sess-"+$name),"id":("job-"+$name),"pid":9999,"status":"busy","name":$name,"cwd":"/worker"}]' "$REG" > "$tmp" && mv "$tmp" "$REG"
     ;;
   *)
     echo "LAUNCH: $*"
@@ -5486,7 +5493,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "42-x"   # 42's worktree has a live session
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "attaches the live session by its sessionId" "LAUNCH: attach s-42-x" "$result"
+assert_eq "attaches the live session by its job id" "LAUNCH: attach j-42-x" "$result"
 teardown
 
 # OH2. Two labeled items both live → attach the oldest one's session.
@@ -5498,7 +5505,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "42-x" "99-y"   # both worktrees live
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "attaches the oldest live item's session" "LAUNCH: attach s-42-x" "$result"
+assert_eq "attaches the oldest live item's session by its job id" "LAUNCH: attach j-42-x" "$result"
 teardown
 
 # OH3. Labeled items but none with a live session → launch the fresh /office-hours
@@ -5514,8 +5521,8 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD
   "$TMPDIR_TEST/worktrees/42-x" > "$STUB_DIR/worktree-list.txt"
 office_hours_fresh_fake_claude
 result=$("$TMPDIR_TEST/office-hours")
-# Attaches the human by attaching the just-spawned session id.
-assert_eq "fresh path attaches the spawned session id" "LAUNCH: attach sess-office-hours-42" "$result"
+# Attaches the human to the just-spawned session, by its resolved job id.
+assert_eq "fresh path attaches the spawned session's job id" "LAUNCH: attach job-office-hours-42" "$result"
 # The spawn was a --bg job named office-hours-<N> running /office-hours.
 mapfile -t oh_argv < "$TMPDIR_TEST/oh-bg-argv"
 assert_eq "fresh: --bg" "--bg" "${oh_argv[0]:-}"
@@ -5539,7 +5546,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "office-hours-42"   # the live session is the office-hours-<N> one
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "attaches the live office-hours-<N> session by its sessionId" "LAUNCH: attach s-office-hours-42" "$result"
+assert_eq "attaches the live office-hours-<N> session by its job id" "LAUNCH: attach j-office-hours-42" "$result"
 teardown
 
 # OH3b. Sessionless item with NO <N>-* worktree on disk (the worktree was swept) →
@@ -5580,7 +5587,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_fake_claude "99-y"   # only 99's worktree is live
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "live wins over fresh whenever any labeled item is live" "LAUNCH: attach s-99-y" "$result"
+assert_eq "live wins over fresh whenever any labeled item is live" "LAUNCH: attach j-99-y" "$result"
 teardown
 
 # OH6. UNKNOWN daemon (claude unqueryable). Under the single fail-safe convention
@@ -5627,7 +5634,7 @@ office_hours_fake_claude   # sets OFFICE_HOURS_CLAUDE_CMD + CLAUDE_AGENTS_CMD
 cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "agents" ]]; then
-  printf '%s' '[{"sessionId":"s-dispatch-abc123","pid":1,"status":"waiting","name":"dispatch-abc123","cwd":""}]'
+  printf '%s' '[{"sessionId":"s-dispatch-abc123","id":"j-dispatch-abc123","pid":1,"status":"waiting","name":"dispatch-abc123","cwd":""}]'
   exit 0
 fi
 echo "LAUNCH: $*"
@@ -5635,7 +5642,7 @@ exit 0
 FAKE
 chmod +x "$TMPDIR_TEST/bin/claude"
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "parked-router directive attaches the router session" "LAUNCH: attach s-dispatch-abc123" "$result"
+assert_eq "parked-router directive attaches the router session by its job id" "LAUNCH: attach j-dispatch-abc123" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
