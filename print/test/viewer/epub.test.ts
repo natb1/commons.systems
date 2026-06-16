@@ -914,6 +914,37 @@ describe("createEpubRenderer", () => {
         renderer.clearSearch!();
         expect(mockRendition.annotations.remove).not.toHaveBeenCalled();
       });
+
+      it("aborts an in-flight search so its highlights never appear after clearSearch", async () => {
+        // One section whose load parks on a gate; find returns a match.
+        const section: FakeSection = {
+          href: "ch0.xhtml",
+          unload: vi.fn(),
+          find: vi.fn().mockReturnValue([{ cfi: "cfi-A", excerpt: "fox" }]),
+          load: vi.fn() as ReturnType<typeof vi.fn>,
+        };
+        let releaseFirst!: () => void;
+        const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+        section.load.mockImplementationOnce(() => gate);
+        mockSpine.spineItems = [section];
+        mockBook.navigation.get.mockReturnValue({ label: "X" });
+
+        const renderer = await initRenderer();
+
+        // Start the search — it parks on the gated section.load().
+        const p = renderer.search!("fox");
+
+        // Clear the search while parked.
+        renderer.clearSearch!();
+
+        // Release the gate so the in-flight search resumes and hits the epoch guard.
+        releaseFirst();
+        await p;
+
+        // The aborted search must not have painted any highlights.
+        const highlightCfis = mockRendition.annotations.highlight.mock.calls.map((c) => c[0]);
+        expect(highlightCfis).not.toContain("cfi-A");
+      });
     });
   });
 });
