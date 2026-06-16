@@ -586,30 +586,32 @@ describe("clearSearch()", () => {
     pdfjs.__fakeDoc.getOutline = () =>
       Promise.resolve([{ title: "Chapter 1", dest: [{ num: 1, gen: 0 }], items: [] }]);
 
-    const renderer = createPdfRenderer();
-    await renderer.init(container, "fake://source.pdf");
-
-    const results = await renderer.search!("the");
-    const page1Result = results.find((r) => r.label === "Page 1");
-    await renderer.goToResult!(page1Result!);
-    expect(container.querySelector(".search-highlight.active")).not.toBeNull();
-
-    const outline = await renderer.getOutline!();
-    await renderer.goToOutlineEntry!(outline[0]);
-    // Discriminating assertion: on unfixed code, the armed pendingHighlight would
-    // be re-applied during goToOutlineEntry's own renderPage call (same page 1),
-    // leaving a .search-highlight span in the DOM.
-    expect(container.querySelector(".search-highlight")).toBeNull();
-
     vi.useFakeTimers();
-    resizeObserverCallbacks.forEach((cb) => cb());
-    vi.advanceTimersByTime(150);
-    await Promise.resolve();
-    expect(container.querySelector(".search-highlight")).toBeNull();
-    vi.useRealTimers();
+    try {
+      const renderer = createPdfRenderer();
+      await renderer.init(container, "fake://source.pdf");
 
-    // Restore getOutline so this mutation does not affect subsequent tests.
-    pdfjs.__fakeDoc.getOutline = () => Promise.resolve(null);
+      const results = await renderer.search!("the");
+      const page1Result = results.find((r) => r.label === "Page 1");
+      await renderer.goToResult!(page1Result!);
+      expect(container.querySelector(".search-highlight.active")).not.toBeNull();
+
+      const outline = await renderer.getOutline!();
+      await renderer.goToOutlineEntry!(outline[0]);
+      // Discriminating assertion: on unfixed code, the armed pendingHighlight would
+      // be re-applied during goToOutlineEntry's own renderPage call (same page 1),
+      // leaving a .search-highlight span in the DOM.
+      expect(container.querySelector(".search-highlight")).toBeNull();
+
+      resizeObserverCallbacks.forEach((cb) => cb());
+      vi.advanceTimersByTime(150);
+      await Promise.resolve();
+      expect(container.querySelector(".search-highlight")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+      // Restore getOutline so this mutation does not affect subsequent tests.
+      pdfjs.__fakeDoc.getOutline = () => Promise.resolve(null);
+    }
   });
 
   it("goToResult() drains the previous result's highlight before arming the next", async () => {

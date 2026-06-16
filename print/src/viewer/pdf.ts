@@ -509,6 +509,10 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     },
 
     async goToPosition(position: string): Promise<void> {
+      // Manual navigation discards any active search highlight so a stale
+      // highlight never reappears on the new page.
+      pendingHighlight = null;
+      unwrapHighlights();
       const page = parsePositionPage(position, _pageCount);
       _currentPage = page;
       await renderPage(page);
