@@ -622,6 +622,38 @@ lines 67–83). In 5a the value substituted is the literal `<PR_NUM>` the main
 thread passes into the fork prompt; in 5b it is the shell variable `$PR_NUM`
 already in scope (used at the `dispatch-security-followup` invocation).
 
+## Step 2e — orphaned follow-up re-triage scan
+
+`dispatch-retriage-orphaned-followups` is a best-effort Step-2e tick scan that
+runs on every tick immediately after the Step-2d merge-queue reconcile. It
+exists to clean up review follow-up issues that became orphaned when their source
+PR was abandoned or superseded rather than merged.
+
+**What it does.** For each distinct `source-pr:<N>` label present on any open
+issue, the scan calls `gh pr view <N>` and checks the PR's merge state. If PR
+#<N> is closed without merging (state `closed`, `merged` false), every open
+issue carrying `source-pr:<N>` is parked on `dispatch:office-hours` with a
+why-comment explaining that the source PR was closed unmerged and human
+re-triage is needed. The parked issues surface in the office-hours queue the
+same way any other `dispatch:office-hours`-labeled issue does.
+
+**Idempotency key.** Once a source PR's follow-ups have been processed, the scan
+applies the per-PR label `dispatch:orphans-retriaged` to the PR itself. On
+subsequent ticks the scan checks for this label before re-processing a
+closed-unmerged PR, skipping PRs already marked — so each closed-unmerged PR is
+processed exactly once. This avoids re-parking already-parked issues or
+duplicating why-comments.
+
+**Relation to the `source-pr:<N>` label.** The scan reads the
+`source-pr:<N>` label described in the preceding section as its input — without
+that label it has no way to identify which issues belong to which source PR.
+
+**Pass-through prefix.** The scan's stdout lines are passed through the
+orchestrator with the `retriage:` prefix (see the `dispatch-select-tick` header
+comment for the full pass-through-lines ordering). A silent no-op when no open
+issue carries any `source-pr:<N>` label, or when all source PRs that are
+closed-unmerged have already been retriaged.
+
 ## Target-keyed CI-wait reseed (#979)
 
 CI-wait handling splits on available queue size, not invocation mode. In a
