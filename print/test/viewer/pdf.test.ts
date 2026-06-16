@@ -462,6 +462,7 @@ describe("clearSearch()", () => {
   let scrollSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     resizeObserverCallbacks = [];
     vi.clearAllMocks();
 
@@ -498,6 +499,7 @@ describe("clearSearch()", () => {
     getContextSpy.mockRestore();
     scrollSpy.mockRestore();
     vi.mocked(globalThis.reportError).mockRestore();
+    vi.useRealTimers();
   });
 
   it("clearSearch() is callable and idempotent before any goToResult (no active highlight)", async () => {
@@ -580,6 +582,98 @@ describe("clearSearch()", () => {
     await renderer.goToPage(1);
 
     expect(container.querySelector(".search-highlight.active")).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // Double-highlight regression (#1726): applyHighlight() restores any divs
+  // mutated by a prior call before reading them, so re-rendering a page that
+  // already carries a highlight never leaves the previous render's detached
+  // div still wrapped in a stale .search-highlight span.
+  // -------------------------------------------------------------------------
+
+  it("double goToResult() on the same page leaves no stale highlighted div", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the");
+    const page1Result = results.find((r) => r.label === "Page 1");
+    expect(page1Result).toBeDefined();
+
+    // Render #1: capture the first textLayer span before any re-render so it
+    // holds the render-#1 node (which renderPage's up-front replaceChildren
+    // will detach on the next render).
+    await renderer.goToResult!(page1Result!);
+    const firstDiv = container.querySelector(".textLayer span") as HTMLElement;
+    expect(firstDiv).not.toBeNull();
+    expect(firstDiv.querySelector(".search-highlight")).not.toBeNull();
+
+    // Render #2: same page. renderTextLayer detaches firstDiv and builds a
+    // fresh layer; applyHighlight's leading unwrapHighlights() must restore the
+    // now-detached firstDiv, collapsing its stale highlight span. On unfixed
+    // code firstDiv stays wrapped and this assertion fails.
+    await renderer.goToResult!(page1Result!);
+    expect(firstDiv.querySelector(".search-highlight")).toBeNull();
+
+    // The live layer should still show exactly one highlighted "the".
+    const liveHighlights = container.querySelectorAll(".textLayer .search-highlight");
+    expect(liveHighlights.length).toBe(1);
+    expect(liveHighlights[0].textContent).toBe("the");
+
+    renderer.clearSearch!();
+
+    expect(container.querySelector(".search-highlight")).toBeNull();
+    const liveSpans = container.querySelectorAll(".textLayer span");
+    expect(liveSpans.length).toBe(1);
+    expect(liveSpans[0].textContent).toBe("the cat sat");
+  });
+
+  it("ResizeObserver re-render while pendingHighlight is set restores the detached div", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the");
+    const page1Result = results.find((r) => r.label === "Page 1");
+    expect(page1Result).toBeDefined();
+
+    await renderer.goToResult!(page1Result!);
+    const firstDiv = container.querySelector(".textLayer span") as HTMLElement;
+    expect(firstDiv).not.toBeNull();
+    expect(firstDiv.querySelector(".search-highlight")).not.toBeNull();
+
+    // Fire the stored resize callbacks and let the 150ms debounce elapse so the
+    // ResizeObserver re-render (renderPage(_currentPage)) runs while
+    // pendingHighlight is still armed.
+    resizeObserverCallbacks.forEach((cb) => cb());
+    await vi.advanceTimersByTimeAsync(220);
+
+    // The re-render detaches firstDiv; applyHighlight's unwrapHighlights()
+    // restores it so it is no longer highlighted.
+    expect(firstDiv.querySelector(".search-highlight")).toBeNull();
+
+    renderer.clearSearch!();
+
+    expect(container.querySelector(".search-highlight")).toBeNull();
+    const liveSpans = container.querySelectorAll(".textLayer span");
+    expect(liveSpans.length).toBe(1);
+    expect(liveSpans[0].textContent).toBe("the cat sat");
+  });
+
+  it("every live text-layer span returns to its original text after clearSearch (acceptance #3 guard)", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the");
+    const page1Result = results.find((r) => r.label === "Page 1");
+    await renderer.goToResult!(page1Result!);
+
+    renderer.clearSearch!();
+
+    const liveSpans = Array.from(container.querySelectorAll(".textLayer span"));
+    expect(liveSpans.length).toBe(1);
+    for (const span of liveSpans) {
+      expect(span.querySelector(".search-highlight")).toBeNull();
+    }
+    expect(liveSpans[0].textContent).toBe("the cat sat");
   });
 
   it("goToResult() drains the previous result's highlight before arming the next", async () => {
