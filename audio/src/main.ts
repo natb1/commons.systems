@@ -63,7 +63,10 @@ function renderFolderSlot(): void {
     const action = state === "prompt" ? regrantLocalFolder() : connectLocalFolder();
     action
       .then(() => { renderFolderSlot(); router.navigate(); })
-      .catch((err) => logError(err, { operation: "nav-folder-btn" }));
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        logError(err, { operation: "nav-folder-btn" });
+      });
   });
 }
 

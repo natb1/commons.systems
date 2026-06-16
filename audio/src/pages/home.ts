@@ -121,7 +121,7 @@ export function afterRenderHome(
 
   async function rerenderLibraryRegion(): Promise<void> {
     const regionEl = outlet.querySelector<HTMLElement>("#library-region");
-    if (!regionEl) return;
+    if (!regionEl || !isOutletCurrent(outlet, regionEl)) return;
     try {
       const items = await listLibrary(user);
       regionEl.innerHTML = renderMediaList(items);

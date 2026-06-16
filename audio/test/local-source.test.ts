@@ -179,6 +179,52 @@ describe("connect + list", () => {
   });
 });
 
+describe("resolveLocalAudioSource", () => {
+  it("resolves to a blob URL with the correct MIME type", async () => {
+    const handle = fakeDir([fileEntry("tune.flac", 3000)]);
+    (window as unknown as { showDirectoryPicker: unknown }).showDirectoryPicker =
+      vi.fn().mockResolvedValue(handle);
+    fakeStore.put.mockResolvedValue(undefined);
+
+    const created: Blob[] = [];
+    const createObjectURL = vi.fn((blob: Blob) => {
+      created.push(blob);
+      return "blob:fake-url";
+    });
+    (URL as unknown as { createObjectURL: unknown }).createObjectURL =
+      createObjectURL;
+
+    const mod = await loadModule();
+    await mod.connectLocalFolder();
+
+    const url = await mod.resolveLocalAudioSource("tune.flac");
+    expect(url).toBe("blob:fake-url");
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(created[0].type).toBe("audio/flac");
+  });
+
+  it("throws when no folder is connected", async () => {
+    const mod = await loadModule();
+    await expect(mod.resolveLocalAudioSource("tune.flac")).rejects.toThrow(
+      /no connected local folder/,
+    );
+  });
+
+  it("propagates a not-found error when the file handle lookup misses", async () => {
+    const handle = fakeDir([fileEntry("tune.flac", 3000)]);
+    (window as unknown as { showDirectoryPicker: unknown }).showDirectoryPicker =
+      vi.fn().mockResolvedValue(handle);
+    fakeStore.put.mockResolvedValue(undefined);
+
+    const mod = await loadModule();
+    await mod.connectLocalFolder();
+
+    await expect(mod.resolveLocalAudioSource("missing.flac")).rejects.toThrow(
+      /no longer present/,
+    );
+  });
+});
+
 describe("scan errors", () => {
   it("swallows a scan failure and logs it", async () => {
     (window as unknown as { showDirectoryPicker: unknown }).showDirectoryPicker =

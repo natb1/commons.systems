@@ -33,6 +33,7 @@ const MIME_TYPES: Record<AudioFormat, string> = {
 type LocalFolderState = "unsupported" | "none" | "granted" | "prompt" | "denied";
 
 let currentHandle: FileSystemDirectoryHandle | null = null;
+let currentSource: ReturnType<typeof buildSource> | null = null;
 let state: LocalFolderState = "none";
 let restorePromise: Promise<void> | null = null;
 
@@ -107,6 +108,7 @@ export async function connectLocalFolder(): Promise<void> {
   const handle = await picker.showDirectoryPicker({ mode: "read" });
   await store.put(PURPOSE, handle);
   currentHandle = handle;
+  currentSource = null;
   state = "granted";
 }
 
@@ -125,6 +127,7 @@ async function restore(): Promise<void> {
   const perm = await store.queryPermission(handle, "read");
   if (perm === "granted") {
     currentHandle = handle;
+    currentSource = null;
     state = "granted";
   } else {
     state = perm; // "prompt" | "denied"
@@ -157,6 +160,7 @@ export async function regrantLocalFolder(): Promise<boolean> {
   const perm = await store.ensurePermission(handle, "read");
   if (perm === "granted") {
     currentHandle = handle;
+    currentSource = null;
     state = "granted";
     return true;
   }
@@ -168,6 +172,7 @@ export async function regrantLocalFolder(): Promise<boolean> {
 export async function disconnectLocalFolder(): Promise<void> {
   await store.remove(PURPOSE);
   currentHandle = null;
+  currentSource = null;
   state = "none";
 }
 
@@ -178,9 +183,11 @@ export function hasLocalFolder(): boolean {
 
 /** List the connected folder's audio tracks. Returns [] when none / on error. */
 export async function listLocalTracks(): Promise<LibraryItem[]> {
+  await ensureLocalFolderRestored();
   if (!currentHandle) return [];
   try {
-    return await buildSource(currentHandle).list();
+    currentSource ??= buildSource(currentHandle);
+    return await currentSource.list();
   } catch (err) {
     logError(err, { operation: "list-local-tracks" });
     return [];
@@ -198,7 +205,8 @@ export async function resolveLocalAudioSource(localName: string): Promise<string
     throw new Error("resolveLocalAudioSource called with no connected local folder");
   }
   const type = mimeFromName(localName);
-  const buf = await buildSource(currentHandle).resolveToBlob({
+  currentSource ??= buildSource(currentHandle);
+  const buf = await currentSource.resolveToBlob({
     id: "local:" + localName,
   } as LibraryItem);
   return URL.createObjectURL(new Blob([buf], { type }));
