@@ -244,6 +244,11 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
    classification — generic and flake push nothing, main-fixed pushed the merge
    commit — so there is nothing more to do here.
 
+   `/implement-unit` returning here is mid-pass, not the end of the turn. Continue
+   through Steps 7–9; the pass ends only at the Step 9 `dispatch-mark-complete`
+   marker (or the Step 4 needs-human stop). Do not emit a closing summary; the next
+   message is the next tool call.
+
 7. **Append a record to the accumulator.** Append one `## Iteration <n>` section to
    `tmp/fix-checks-summary.md` (see [Accumulator](#accumulator)).
 

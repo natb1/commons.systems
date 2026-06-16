@@ -136,11 +136,12 @@ describe("findMatches", () => {
     expect(findMatches("hello world", "xyz")).toEqual([]);
   });
 
-  it("length equals query length", () => {
+  it("length equals needle (lowercased query) length", () => {
     const query = "needle";
+    const needle = query.toLowerCase();
     const matches = findMatches("needle in a needlestack", query);
     for (const m of matches) {
-      expect(m.length).toBe(query.length);
+      expect(m.length).toBe(needle.length);
     }
   });
 
@@ -148,6 +149,29 @@ describe("findMatches", () => {
     // "aaa" has overlapping potential at 0 and 1, but non-overlapping returns only 0
     const matches = findMatches("aaa", "aa");
     expect(matches).toEqual([{ offset: 0, length: 2 }]);
+  });
+
+  it("uses needle (lowercased) length, not query length, for expanding-case queries", () => {
+    // "İ" (U+0130) lowercases to "i" + U+0307 (combining dot above): length 1 → 2.
+    const query = "İ";
+    const needle = query.toLowerCase(); // "i̇", length 2
+    const pageText = "a" + needle + "b";
+    const matches = findMatches(pageText, query);
+    // Match spans needle.length (2) at offset 1, not query.length (1).
+    expect(matches).toEqual([{ offset: 1, length: 2 }]);
+  });
+
+  it("advances by needle (lowercased) length between adjacent expanding-case matches", () => {
+    // "İ" (U+0130) lowercases to "i" + U+0307 (combining dot above): length 1 → 2.
+    const query = "İ";
+    const needle = query.toLowerCase(); // "i̇", length 2
+    const matches = findMatches(needle + needle, query);
+    // Two adjacent matches: the next search must resume at needle.length (2),
+    // not query.length (1), or it would start inside the consumed needle.
+    expect(matches).toEqual([
+      { offset: 0, length: needle.length },
+      { offset: needle.length, length: needle.length },
+    ]);
   });
 });
 
@@ -253,6 +277,12 @@ describe("offsetToDivRanges", () => {
   it("range entirely within second item", () => {
     const result = offsetToDivRanges(["abc", "defgh"], 3, 3);
     expect(result).toEqual([{ divIndex: 1, localStart: 0, localEnd: 3 }]);
+  });
+
+  it("maps a corrected expanding-case match onto its item", () => {
+    const ci = "İ".toLowerCase(); // "i̇", length 2 — built, not a fragile literal
+    const result = offsetToDivRanges(["a", ci, "b"], 1, 2);
+    expect(result).toEqual([{ divIndex: 1, localStart: 0, localEnd: 2 }]);
   });
 });
 
@@ -367,6 +397,45 @@ describe("search()", () => {
     const decoded = decodeLocation(page2!.location);
     expect(decoded).toEqual({ page: 2, offset: 0, length: 3 });
   });
+
+  it("returns [] without throwing when destroy() ran before search()", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+    renderer.destroy(); // sets destroyed = true and pdfDoc = null
+    // Old code: `await pdfDoc!.getPage(1)` dereferences null → TypeError.
+    await expect(renderer.search!("the")).resolves.toEqual([]);
+  });
+
+  it("resolves (does not reject) when destroy() fires during the page loop", async () => {
+    const pdfjs = await import("pdfjs-dist");
+    let renderer: ReturnType<typeof createPdfRenderer>;
+    const racingDoc = {
+      numPages: 3,
+      destroy() {},
+      getPage: (i: number) => {
+        if (i === 2) renderer.destroy(); // teardown races mid-loop
+        return Promise.resolve({
+          getTextContent: () => Promise.resolve({ items: [{ str: "the cat" }] }),
+          getViewport: () => ({ width: 100, height: 100 }),
+          render: () => ({ promise: Promise.resolve(), cancel() {} }),
+        });
+      },
+      getOutline: () => Promise.resolve(null),
+      getDestination: () => Promise.resolve(null),
+      getPageIndex: () => Promise.resolve(0),
+    };
+    const spy = vi
+      .spyOn(pdfjs, "getDocument")
+      .mockReturnValue({ promise: Promise.resolve(racingDoc) } as never);
+    try {
+      renderer = createPdfRenderer();
+      await renderer.init(container, "fake://source.pdf");
+      // Must resolve to a partial/empty result, never reject.
+      await expect(renderer.search!("the")).resolves.toBeInstanceOf(Array);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -464,6 +533,33 @@ describe("clearSearch()", () => {
     // Find the span whose text includes the original content (restored to textContent)
     const restored = Array.from(spans).find((s) => s.textContent === "the cat sat");
     expect(restored).toBeDefined();
+  });
+
+  it("re-rendering a page with the highlight still armed restores the detached div (idempotent applyHighlight)", async () => {
+    vi.useFakeTimers();
+    try {
+      const renderer = createPdfRenderer();
+      await renderer.init(container, "fake://source.pdf");
+      const results = await renderer.search!("the");
+      const page1Result = results.find((r) => r.label === "Page 1");
+      await renderer.goToResult!(page1Result!);
+
+      const firstSpan = container.querySelector(".search-highlight");
+      expect(firstSpan).not.toBeNull();
+      const firstDiv = firstSpan!.parentElement!; // the textDiv from render 1
+      expect(firstDiv.querySelector(".search-highlight")).not.toBeNull();
+
+      // Debounced resize re-render with pendingHighlight still armed.
+      resizeObserverCallbacks[resizeObserverCallbacks.length - 1]();
+      await vi.advanceTimersByTimeAsync(200);
+      await Promise.resolve();
+
+      // firstDiv is now detached; without the fix it stays wrapped.
+      expect(firstDiv.querySelector(".search-highlight")).toBeNull();
+      expect(firstDiv.textContent).toBe("the cat sat");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("clearSearch() disarms pendingHighlight so re-render does not reapply", async () => {
@@ -572,5 +668,27 @@ describe("clearSearch()", () => {
       expect(span.querySelector(".search-highlight")).toBeNull();
     }
     expect(liveSpans[0].textContent).toBe("the cat sat");
+  });
+
+  it("goToResult() drains the previous result's highlight before arming the next", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the");
+    const r1 = results.find((r) => r.label === "Page 1")!;
+    const r2 = results.find((r) => r.label === "Page 2")!;
+
+    await renderer.goToResult!(r1);
+    // Capture the text-layer div that holds the first result's highlight span.
+    const div1 = container.querySelector(".search-highlight")!.parentElement!;
+    expect(div1.querySelector(".search-highlight")).not.toBeNull();
+
+    // Arming the second result must drain the first entry (unwrapHighlights),
+    // restoring div1 instead of leaking it in highlightRestores.
+    await renderer.goToResult!(r2);
+    expect(div1.querySelector(".search-highlight")).toBeNull();
+
+    // Exactly one highlight is live in the DOM (the current result).
+    expect(container.querySelectorAll(".search-highlight.active").length).toBe(1);
   });
 });
