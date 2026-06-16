@@ -2,7 +2,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import { TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils.js";
-import type { ContentRenderer, OutlineEntry, SearchResult } from "./types.js";
+import type { OutlineEntry, SearchableRenderer, SearchResult } from "./types.js";
 import { parsePositionPage } from "./types.js";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
@@ -137,7 +137,7 @@ export function offsetToDivRanges(
   return segments;
 }
 
-export function createPdfRenderer(onError?: (err: unknown) => void): ContentRenderer {
+export function createPdfRenderer(onError?: (err: unknown) => void): SearchableRenderer {
   let pdfDoc: PDFDocumentProxy | null = null;
   let _currentPage = 0;
   let _pageCount = 0;
