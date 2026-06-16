@@ -3,10 +3,7 @@ import type { MediaItem } from "../types.js";
 import type { ContentRenderer } from "./types.js";
 import { clampGoToPage } from "./types.js";
 import { SpreadController } from "./spread-controller.js";
-import {
-  getReadingPosition,
-  saveReadingPosition,
-} from "../reading-position.js";
+import type { PositionStore } from "../sidecar.js";
 import type { Bookmark } from "../bookmarks.js";
 import { getBookmarks, saveBookmarks } from "../bookmarks.js";
 import { renderSearchSection, initSearch } from "./search.js";
@@ -64,27 +61,6 @@ export function renderViewerShell(item: MediaItem): string {
   `;
 }
 
-function localStorageKey(mediaId: string): string {
-  return `reading-position:${mediaId}`;
-}
-
-function loadLocalPosition(mediaId: string): string | null {
-  try {
-    return localStorage.getItem(localStorageKey(mediaId));
-  } catch (e) {
-    reportError(new Error("Could not load reading position from localStorage", { cause: e }));
-    return null;
-  }
-}
-
-function saveLocalPosition(mediaId: string, position: string): void {
-  try {
-    localStorage.setItem(localStorageKey(mediaId), position);
-  } catch (e) {
-    reportError(new Error("Could not save reading position to localStorage", { cause: e }));
-  }
-}
-
 function bookmarksStorageKey(mediaId: string): string {
   return `bookmarks:${mediaId}`;
 }
@@ -113,6 +89,7 @@ export function initViewer(
   createRenderer: (onError: (err: unknown) => void) => ContentRenderer,
   resolveSource: () => Promise<string | ArrayBuffer>,
   mediaId: string,
+  store: PositionStore,
   uid: string | null,
 ): () => void {
   const viewer = outlet.querySelector(".viewer") as HTMLElement;
@@ -196,26 +173,25 @@ export function initViewer(
   }
   document.addEventListener("fullscreenchange", handleFullscreenChange);
 
-  // Position persistence: Firestore for authenticated users, localStorage otherwise.
-  // Debounced to avoid writes on every sub-page turn.
+  // Position persistence: the injected PositionStore owns the backend (sidecar for
+  // local items, Firestore for authed cloud items, localStorage for anon cloud
+  // items). Debounced to avoid writes on every sub-page turn.
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let lastSavedPosition: string | null = null;
-  // Set true when Firestore read fails at init; prevents overwriting unknown saved state on write.
-  let firestoreReadFailed = false;
+  // Set true when the store's read fails at init; prevents overwriting unknown
+  // saved state on write (backend-agnostic — applies to any store).
+  let readFailed = false;
 
   // Persist position after each navigation — debounced (500ms), deduplicated (skips matching position).
-  // Skips Firestore writes if the initial read failed.
+  // Skips the write if the initial read failed (would clobber unknown saved state).
   function persistPosition() {
     const pos = getSpreadPosition();
     if (!pos || pos === lastSavedPosition) return;
     lastSavedPosition = pos;
-    if (uid && !firestoreReadFailed) {
-      saveReadingPosition(uid, mediaId, pos).catch((err) => {
-        reportError(new Error("Failed to save reading position", { cause: err }));
-      });
-    } else {
-      saveLocalPosition(mediaId, pos);
-    }
+    if (readFailed) return;
+    store.save(pos).catch((err) => {
+      reportError(new Error("Failed to save reading position", { cause: err }));
+    });
   }
 
   function scheduleSave() {
@@ -435,19 +411,16 @@ export function initViewer(
     }
   }
 
-  // Initialize renderer — load saved position (Firestore if authenticated, localStorage otherwise), then init.
-  // Position-load errors are non-fatal: if Firestore or localStorage fails, init proceeds from page 1.
+  // Initialize renderer — load the saved position from the store, then init.
+  // Position-load errors are non-fatal: if the store's read fails, init proceeds
+  // from page 1 and readFailed suppresses the first write (no blind clobber).
   (async () => {
     let savedPosition: string | null = null;
-    if (uid) {
-      try {
-        savedPosition = await getReadingPosition(uid, mediaId);
-      } catch (err) {
-        reportError(new Error("Failed to restore reading position", { cause: err }));
-        firestoreReadFailed = true;
-      }
-    } else {
-      savedPosition = loadLocalPosition(mediaId);
+    try {
+      savedPosition = await store.load();
+    } catch (err) {
+      reportError(new Error("Failed to restore reading position", { cause: err }));
+      readFailed = true;
     }
     lastSavedPosition = savedPosition;
     const source = await resolveSource();
@@ -482,7 +455,7 @@ export function initViewer(
       updateNav();
     });
     outlineCleanup = initOutline(viewer, renderer, () => updateNav());
-    const bookmarksStore = uid && !firestoreReadFailed
+    const bookmarksStore = uid && !readFailed
       ? {
           load: () => getBookmarks(uid, mediaId),
           save: (b: Bookmark[]) => saveBookmarks(uid, mediaId, b),
