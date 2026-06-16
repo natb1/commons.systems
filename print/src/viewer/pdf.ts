@@ -647,11 +647,20 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       // unboundedly across result clicks, leaking detached DOM node references.
       unwrapHighlights();
       _currentPage = decoded.page;
-      // Arm the highlight before rendering; renderPage applies it as its final
-      // gen-guarded step. Call the internal renderPage directly (like
-      // goToOutlineEntry) — the public goToPage would clear pendingHighlight.
+      // ARM-ONLY: record the target page and pending highlight, but do not
+      // render here. The shell drives the visible render afterward, routed by
+      // mode, so the correct surface (single-page vs spread) renders exactly
+      // once. renderResult (single-page) or the SpreadController (spread)
+      // applies the armed highlight as its final gen-guarded step.
       pendingHighlight = { page: decoded.page, offset: decoded.offset, length: decoded.length };
-      await renderPage(decoded.page);
+    },
+
+    // Render the current single-page view, applying any armed search
+    // highlight. The shell drives this on the non-spread result-navigation
+    // path; in spread mode the SpreadController renders instead. Companion to
+    // goToResult, which only arms the highlight.
+    async renderResult(): Promise<void> {
+      await renderPage(_currentPage);
     },
 
     // Called by search.ts when the user clears the query WITHOUT navigating
