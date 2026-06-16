@@ -29,6 +29,15 @@ beforeEach(() => {
   __resetWebVitalsRegistrationForTest();
 });
 
+afterEach(() => {
+  // Restore any spies (e.g. console.error) created in test bodies so a thrown
+  // assertion before an inline restore cannot leak a mock into later tests.
+  vi.restoreAllMocks();
+  // Clear the module-level error sink so a test that does not register its own
+  // sink cannot observe a previous test's stale vi.fn().
+  registerErrorSink(undefined);
+});
+
 describe("initAnalytics", () => {
   it("returns no-op tracker and logs debug when measurementId is missing", () => {
     const consoleDebugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
@@ -91,7 +100,7 @@ describe("initAnalytics", () => {
   it("reports error when logEvent throws", () => {
     const sink: ErrorSink = vi.fn();
     registerErrorSink(sink);
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
     const badStateError = new Error("bad state");
     vi.mocked(logEvent).mockImplementation(() => {
@@ -107,9 +116,6 @@ describe("initAnalytics", () => {
       "Failed to log page view (path: /about): bad state",
     );
     expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "analytics-page-view" }));
-
-    consoleErrorSpy.mockRestore();
-    registerErrorSink(undefined);
   });
 
   it("re-throws TypeError from logEvent", () => {
@@ -235,7 +241,7 @@ describe("traffic tagging", () => {
   it("continues with organic tag when localStorage throws", () => {
     const sink: ErrorSink = vi.fn();
     registerErrorSink(sink);
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
     setLocation("https://example.com/page?_ct=internal");
     vi.spyOn(localStorage, "setItem").mockImplementation(() => {
       throw new DOMException("The operation is insecure.", "SecurityError");
@@ -248,9 +254,6 @@ describe("traffic tagging", () => {
     const reported = (vi.mocked(sink).mock.calls[0][0] as Error);
     expect(reported.message).toContain("Failed to apply traffic tag");
     expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "analytics-traffic-tag" }));
-    consoleErrorSpy.mockRestore();
-    registerErrorSink(undefined);
-    vi.mocked(localStorage.setItem).mockRestore();
   });
 
   it("calls setUserProperties before returning the tracker", () => {
@@ -361,7 +364,7 @@ describe("web-vitals reporting", () => {
   it("reports non-programmer logEvent error without propagating", () => {
     const sink: ErrorSink = vi.fn();
     registerErrorSink(sink);
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
     const networkError = new Error("network failure");
     vi.mocked(logEvent).mockImplementation(() => {
@@ -384,9 +387,6 @@ describe("web-vitals reporting", () => {
       "Failed to log web-vital (metric: LCP): network failure",
     );
     expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "analytics-web-vitals" }));
-
-    consoleErrorSpy.mockRestore();
-    registerErrorSink(undefined);
   });
 
   it("re-throws TypeError from logEvent inside web-vital callback", () => {
@@ -413,7 +413,7 @@ describe("initAnalyticsSafe", () => {
   it("returns no-op and reports error when initializeAnalytics throws", () => {
     const sink: ErrorSink = vi.fn();
     registerErrorSink(sink);
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const cspError = new Error("CSP blocked");
     vi.mocked(initializeAnalytics).mockImplementation(() => {
       throw cspError;
@@ -430,9 +430,6 @@ describe("initAnalyticsSafe", () => {
 
     tracker("/about");
     expect(logEvent).not.toHaveBeenCalled();
-
-    consoleErrorSpy.mockRestore();
-    registerErrorSink(undefined);
   });
 
   it("re-throws TypeError from initializeAnalytics", () => {

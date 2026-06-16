@@ -133,6 +133,12 @@ export function createAppContext(
   appId: string,
   options?: AppContextOptions,
 ): AppContextBase;
+// Disposer for the global error/unhandledrejection handlers installed by the
+// most recent createAppContext call. Re-invoked before re-installing so repeated
+// calls (hot-module reload, framework re-init, tests) don't accumulate listeners
+// and double-log uncaught errors into the Firestore sink.
+let disposeGlobalHandlers: (() => void) | undefined;
+
 export function createAppContext(
   appName: string,
   appId: string,
@@ -298,7 +304,10 @@ export function createAppContext(
 
   // Route uncaught errors, unhandled promise rejections, and bare
   // reportError() calls through logError → the Firestore sink just registered.
-  installGlobalErrorHandlers();
+  // Dispose any handlers from a prior createAppContext call first so repeated
+  // calls self-correct instead of accumulating listeners and double-logging.
+  disposeGlobalHandlers?.();
+  disposeGlobalHandlers = installGlobalErrorHandlers();
 
   const trackPageView = initAnalyticsSafe(app);
 

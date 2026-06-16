@@ -100,6 +100,20 @@ describe("createAppContext", () => {
     expect(ctx).not.toHaveProperty("STORAGE_NAMESPACE");
   });
 
+  it("installs global error and unhandledrejection handlers", async () => {
+    const { createAppContext } = await loadModule();
+    createAppContext("myapp", "app-id-123");
+
+    expect(globalThis.addEventListener).toHaveBeenCalledWith(
+      "error",
+      expect.any(Function),
+    );
+    expect(globalThis.addEventListener).toHaveBeenCalledWith(
+      "unhandledrejection",
+      expect.any(Function),
+    );
+  });
+
   it("initializes Firestore with persistentLocalCache when no emulator", async () => {
     const { createAppContext } = await loadModule();
     const mocks = await loadMocks();
