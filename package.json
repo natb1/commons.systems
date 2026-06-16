@@ -39,6 +39,7 @@
     "critters": "^0.0.23",
     "eslint": "^9.19.0",
     "firebase": "^12.9.0",
+    "firebase-tools": "15.20.0",
     "happy-dom": "^20.8.9",
     "sharp": "^0.34.5",
     "tsx": "^4.19.0",
