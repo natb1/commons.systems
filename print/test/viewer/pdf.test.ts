@@ -697,4 +697,25 @@ describe("clearSearch()", () => {
     // Exactly one highlight is live in the DOM (the current result).
     expect(container.querySelectorAll(".search-highlight.active").length).toBe(1);
   });
+
+  it("goToPosition() drains the active highlight and disarms pendingHighlight", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the");
+    const r1 = results.find((r) => r.label === "Page 1")!;
+    await renderer.goToResult!(r1);
+
+    // Capture the text-layer div holding the highlight before navigation.
+    const div1 = container.querySelector(".search-highlight")!.parentElement!;
+    expect(div1.querySelector(".search-highlight")).not.toBeNull();
+
+    // goToPosition must unwrap the highlight and disarm pendingHighlight.
+    await renderer.goToPosition("2");
+
+    // The highlight span is removed from the previously-live text div.
+    expect(div1.querySelector(".search-highlight")).toBeNull();
+    // No highlight exists anywhere in the container.
+    expect(container.querySelectorAll(".search-highlight").length).toBe(0);
+  });
 });
