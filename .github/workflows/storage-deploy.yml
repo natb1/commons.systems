@@ -17,6 +17,9 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
+          cache: 'npm'
+      - name: Install dependencies
+        run: .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
       - name: Authenticate with Firebase
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
