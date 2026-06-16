@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Detects whether a Claude session died on a transient Anthropic server-overload
+# rate-limit rather than the user's own usage-limit exhaustion.
+#
+# Usage: dispatch-detect-rate-limit-death <transcript-path>
+#
+# Exit codes (fail-safe, positive-evidence-only):
+#   0 — the session's LAST assistant turn is a server-overload rate-limit error
+#   1 — any doubt: file unreadable, no assistant turns, last turn does not match
+#
+# JSONL shape matched (the death turn):
+#   {"type":"assistant","isApiErrorMessage":true,
+#    "message":{"role":"assistant","content":[
+#      {"type":"text","text":"API Error: Server is temporarily limiting requests (not your usage limit) · Rate limited"}
+#    ]}}
+#
+# WHY last turn only: a session that was auto-recovered will have a DIFFERENT
+# last assistant turn (the resumed work). Checking the last turn ensures we only
+# self-heal sessions that actually terminated on the rate-limit, not ones that
+# already recovered and died later for a different reason.
+#
+# WHY "(not your usage limit)": this substring appears only in the server-overload
+# error, not in the user-quota-exhaustion error. Auto-retry on quota exhaustion
+# would loop forever; we must never trigger it.
+#
+# Real fixture (line 44 of the JSONL is the rate-limit turn, but NOT the last
+# assistant turn in that file, so the script correctly exits 1 for it):
+#   ~/.claude/projects/-home-n8-natb1-commons-systems-worktrees-1162-apply-generation-token-guar/bb3d5b13-7563-4b89-af3b-ec0fb85c2a1e.jsonl
+set -euo pipefail
+
+[ -n "${1:-}" ] && [ -r "${1:-}" ] || exit 1
+
+# Emit one compact JSON object per assistant turn: {e: bool, t: joined-text}.
+# tail -1 selects only the LAST assistant turn (non-assistant trailing lines are
+# ignored because the jq select keeps only assistant turns). Reading the file
+# directly (not via echo) avoids the zsh control-char trap (.claude/rules/shell-json.md).
+last=$(jq -rc 'select(.type=="assistant")
+    | { e: (.isApiErrorMessage==true),
+        t: ([.message.content[]? | select(.type=="text") | .text] | join(" ")) }' \
+  "${1}" 2>/dev/null | tail -1)
+
+[ -n "$last" ] || exit 1
+
+printf '%s' "$last" | grep -q '"e":true' \
+  && printf '%s' "$last" | grep -qF '(not your usage limit)'
