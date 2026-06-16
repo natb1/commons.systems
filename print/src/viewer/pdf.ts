@@ -631,6 +631,8 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     async goToOutlineEntry(entry: OutlineEntry): Promise<void> {
       const page = outlinePageMap.get(entry);
       if (page === undefined) return;
+      pendingHighlight = null;
+      unwrapHighlights();
       _currentPage = page;
       await renderPage(page);
     },

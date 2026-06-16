@@ -12,6 +12,7 @@ import type { FirebaseStorage } from "firebase/storage";
 import type { User } from "firebase/auth";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError, registerErrorSink } from "@commons-systems/errorutil/log";
+import { installGlobalErrorHandlers } from "@commons-systems/errorutil/global-handler";
 import type { DeferredAppAuth } from "@commons-systems/authutil/deferred-app-auth";
 import { firebaseConfig } from "./config.js";
 import {
@@ -94,6 +95,12 @@ interface AppContextOptions {
    *  Mutually exclusive with `getCurrentUser`. */
   enableAuth?: boolean;
 }
+
+// Disposer for the global error/unhandledrejection handlers installed by the
+// most recent createAppContext call. Re-invoked before re-installing so repeated
+// calls (hot-module reload, framework re-init, tests) don't accumulate listeners
+// and double-log uncaught errors into the Firestore sink.
+let disposeGlobalHandlers: (() => void) | undefined;
 
 /**
  * Create a Firebase app context with Firestore, analytics, optional AppCheck, and optional Storage.
@@ -294,6 +301,13 @@ export function createAppContext(
       getCurrentUser: errorSinkGetCurrentUser,
     }),
   );
+
+  // Route uncaught errors, unhandled promise rejections, and bare
+  // reportError() calls through logError → the Firestore sink just registered.
+  // Dispose any handlers from a prior createAppContext call first so repeated
+  // calls self-correct instead of accumulating listeners and double-logging.
+  disposeGlobalHandlers?.();
+  disposeGlobalHandlers = installGlobalErrorHandlers();
 
   const trackPageView = initAnalyticsSafe(app);
 
