@@ -46,7 +46,11 @@ vi.mock("../src/library.js", async () => {
   };
 });
 
-import { decideFolderUiState, initLocalFolder } from "../src/local-folder-ui.js";
+import {
+  decideFolderUiState,
+  initLocalFolder,
+  FOCUS_RESCAN_DEBOUNCE_MS,
+} from "../src/local-folder-ui.js";
 import { listLocal } from "../src/library.js";
 
 describe("decideFolderUiState", () => {
@@ -76,6 +80,8 @@ describe("decideFolderUiState", () => {
 });
 
 describe("initLocalFolder", () => {
+  let cleanup: (() => void) | null = null;
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockStore.isSupported.mockReturnValue(true);
@@ -83,12 +89,19 @@ describe("initLocalFolder", () => {
     mockStore.queryPermission.mockResolvedValue("granted");
   });
 
+  afterEach(() => {
+    // Remove the window focus listener registered by initLocalFolder so it
+    // does not persist past this test into later describe blocks.
+    cleanup?.();
+    cleanup = null;
+  });
+
   it("invokes onSourceBound after binding the source (granted/list path)", async () => {
     const section = document.createElement("span");
     const container = document.createElement("div");
     const onSourceBound = vi.fn();
 
-    await initLocalFolder(section, container, onSourceBound);
+    cleanup = await initLocalFolder(section, container, onSourceBound);
 
     expect(onSourceBound).toHaveBeenCalledTimes(1);
   });
@@ -101,7 +114,7 @@ describe("initLocalFolder", () => {
     const container = document.createElement("div");
     const onSourceBound = vi.fn();
 
-    await initLocalFolder(section, container, onSourceBound);
+    cleanup = await initLocalFolder(section, container, onSourceBound);
 
     // The grant path defers the callback until after the user clicks the button.
     expect(onSourceBound).not.toHaveBeenCalled();
@@ -116,6 +129,8 @@ describe("initLocalFolder", () => {
 });
 
 describe("initLocalFolder — focus-rescan debounce", () => {
+  let pendingCleanup: (() => void) | null = null;
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockStore.isSupported.mockReturnValue(true);
@@ -125,6 +140,10 @@ describe("initLocalFolder — focus-rescan debounce", () => {
   });
 
   afterEach(() => {
+    // Remove the window focus listener (and clear any pending timer) so it does
+    // not survive the test, independent of the order or skipping of any case.
+    pendingCleanup?.();
+    pendingCleanup = null;
     vi.useRealTimers();
   });
 
@@ -132,7 +151,7 @@ describe("initLocalFolder — focus-rescan debounce", () => {
     const section = document.createElement("span");
     const container = document.createElement("div");
 
-    await initLocalFolder(section, container);
+    pendingCleanup = await initLocalFolder(section, container);
 
     // Clear the initial bind render so we count only focus-triggered rescans.
     vi.mocked(listLocal).mockClear();
@@ -143,7 +162,7 @@ describe("initLocalFolder — focus-rescan debounce", () => {
     window.dispatchEvent(new Event("focus"));
 
     // Advance past the debounce — the burst should produce exactly one rescan.
-    await vi.advanceTimersByTimeAsync(400);
+    await vi.advanceTimersByTimeAsync(FOCUS_RESCAN_DEBOUNCE_MS);
 
     expect(listLocal).toHaveBeenCalledTimes(1);
   });
@@ -152,14 +171,14 @@ describe("initLocalFolder — focus-rescan debounce", () => {
     const section = document.createElement("span");
     const container = document.createElement("div");
 
-    await initLocalFolder(section, container);
+    pendingCleanup = await initLocalFolder(section, container);
 
     vi.mocked(listLocal).mockClear();
 
     window.dispatchEvent(new Event("focus"));
 
     // Advance less than the debounce window — no rescan should have fired.
-    await vi.advanceTimersByTimeAsync(399);
+    await vi.advanceTimersByTimeAsync(FOCUS_RESCAN_DEBOUNCE_MS - 1);
 
     expect(listLocal).not.toHaveBeenCalled();
   });
@@ -179,7 +198,7 @@ describe("initLocalFolder — focus-rescan debounce", () => {
     cleanup?.();
 
     // Advancing past the debounce must NOT fire a rescan.
-    await vi.advanceTimersByTimeAsync(400);
+    await vi.advanceTimersByTimeAsync(FOCUS_RESCAN_DEBOUNCE_MS);
 
     expect(listLocal).not.toHaveBeenCalled();
   });

@@ -30,7 +30,7 @@ import type { MediaItem } from "./types.js";
 
 const store = createFsaHandleStore({ app: "print" });
 const PURPOSE = "library-folder";
-const FOCUS_RESCAN_DEBOUNCE_MS = 400;
+export const FOCUS_RESCAN_DEBOUNCE_MS = 400;
 
 export type FolderUiState = "open" | "grant" | "list";
 
