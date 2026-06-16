@@ -503,6 +503,21 @@ describe("clearSearch()", () => {
     vi.useRealTimers();
   });
 
+  // A non-zero rect so renderPageInto proceeds past the 0×0 guard. Mirrors the
+  // container stub set up in beforeEach, factored out so the spread/exception
+  // target tests share one stub shape.
+  const makeTargetRect = (): DOMRect => ({
+    width: 400,
+    height: 600,
+    top: 0,
+    left: 0,
+    right: 400,
+    bottom: 600,
+    x: 0,
+    y: 0,
+    toJSON() { return {}; },
+  });
+
   it("clearSearch() is callable and idempotent before any goToResult (no active highlight)", async () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
@@ -790,17 +805,7 @@ describe("clearSearch()", () => {
     // A fresh spread target with a non-zero rect so renderPageInto proceeds past
     // the 0×0 guard.
     const target = document.createElement("div");
-    target.getBoundingClientRect = () => ({
-      width: 400,
-      height: 600,
-      top: 0,
-      left: 0,
-      right: 400,
-      bottom: 600,
-      x: 0,
-      y: 0,
-      toJSON() { return {}; },
-    });
+    target.getBoundingClientRect = makeTargetRect;
 
     // Two concurrent renders of the SAME page into the SAME target. The public
     // renderPageInto runs cancelSpreadRenderTasks() (bumps spreadGen) synchronously
@@ -871,17 +876,7 @@ describe("clearSearch()", () => {
     await renderer.init(container, "fake://source.pdf");
 
     const target = document.createElement("div");
-    target.getBoundingClientRect = () => ({
-      width: 400,
-      height: 600,
-      top: 0,
-      left: 0,
-      right: 400,
-      bottom: 600,
-      x: 0,
-      y: 0,
-      toJSON() { return {}; },
-    });
+    target.getBoundingClientRect = makeTargetRect;
 
     // null context makes renderPageToCanvas throw "Could not acquire 2D canvas context".
     getContextSpy.mockReturnValue(null);
@@ -895,17 +890,7 @@ describe("clearSearch()", () => {
     await renderer.init(container, "fake://source.pdf");
 
     const target = document.createElement("div");
-    target.getBoundingClientRect = () => ({
-      width: 400,
-      height: 600,
-      top: 0,
-      left: 0,
-      right: 400,
-      bottom: 600,
-      x: 0,
-      y: 0,
-      toJSON() { return {}; },
-    });
+    target.getBoundingClientRect = makeTargetRect;
 
     // Import the mocked TextLayer (MockTextLayer) and make render() reject with a
     // non-AbortException error so renderTextLayer rethrows it.
