@@ -100,6 +100,13 @@ for URL in "${PSI_URLS[@]}"; do
     continue
   fi
 
+  # A 200 with a non-JSON body (e.g. a proxy/CDN error page) passes both checks
+  # above; reject it here so metric extraction never emits silently-empty values.
+  if ! printf '%s' "$RESP" | jq empty 2>/dev/null; then
+    echo "(PSI failed for ${URL}: response is not valid JSON)"
+    continue
+  fi
+
   # Category scores (0-100 integers; null/absent → n/a). Use `round` (not floor)
   # to match Lighthouse's own displayed rounding and avoid a float off-by-one,
   # e.g. score 0.29 parses as 0.28999… which would floor to 28.
@@ -129,7 +136,7 @@ for URL in "${PSI_URLS[@]}"; do
   if [[ "$HAS_CRUX" == "yes" ]]; then
     echo "CrUX field data:"
     printf '%s' "$RESP" \
-      | jq -r '.loadingExperience.metrics | to_entries[] | "  \((.key | gsub("[\\r\\n]"; " "))[0:200]): \(.value.percentile // "n/a"), \(((.value.category // "n/a") | gsub("[\\r\\n]"; " "))[0:200])"'
+      | jq -r '.loadingExperience.metrics | to_entries[] | "  \((.key | gsub("[\\r\\n]"; " "))[0:200]): \(.value.percentile // "n/a"), \(((.value.category // "n/a") | gsub("[\\r\\n]"; " "))[0:200])"' 2>/dev/null || true
   else
     echo "(no CrUX field data)"
   fi

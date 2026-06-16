@@ -194,7 +194,7 @@ required and the section is populated in autonomous mode without any interactive
   once in an interactive shell, then export:
 
 ```bash
-export PAGESPEED_API_KEY="$(pass show pagespeed-api-key)"
+export PAGESPEED_API_KEY="$(pass show pagespeed/api-key)"
 ```
 
 **Config env vars** (optional, with defaults):
