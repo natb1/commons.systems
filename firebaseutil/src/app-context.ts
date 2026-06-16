@@ -96,6 +96,12 @@ interface AppContextOptions {
   enableAuth?: boolean;
 }
 
+// Disposer for the global error/unhandledrejection handlers installed by the
+// most recent createAppContext call. Re-invoked before re-installing so repeated
+// calls (hot-module reload, framework re-init, tests) don't accumulate listeners
+// and double-log uncaught errors into the Firestore sink.
+let disposeGlobalHandlers: (() => void) | undefined;
+
 /**
  * Create a Firebase app context with Firestore, analytics, optional AppCheck, and optional Storage.
  *
@@ -133,12 +139,6 @@ export function createAppContext(
   appId: string,
   options?: AppContextOptions,
 ): AppContextBase;
-// Disposer for the global error/unhandledrejection handlers installed by the
-// most recent createAppContext call. Re-invoked before re-installing so repeated
-// calls (hot-module reload, framework re-init, tests) don't accumulate listeners
-// and double-log uncaught errors into the Firestore sink.
-let disposeGlobalHandlers: (() => void) | undefined;
-
 export function createAppContext(
   appName: string,
   appId: string,
