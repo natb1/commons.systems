@@ -641,3 +641,30 @@ func TestEmptyInputNonNilSlices(t *testing.T) {
 		t.Errorf("expected empty result")
 	}
 }
+
+func TestAccountID(t *testing.T) {
+	// Backwards-compat: no special characters — id must match the legacy bare join.
+	if got := AccountID("Example Bank", "Checking"); got != "Example Bank_Checking" {
+		t.Errorf("backwards-compat: AccountID(%q,%q) = %q, want %q",
+			"Example Bank", "Checking", got, "Example Bank_Checking")
+	}
+
+	// Injectivity: the issue case — underscore in institution vs account must produce distinct ids.
+	id1 := AccountID("Bank_A", "Savings")
+	id2 := AccountID("Bank", "A_Savings")
+	if id1 == id2 {
+		t.Errorf("injectivity: AccountID(%q,%q) == AccountID(%q,%q) = %q (collision)",
+			"Bank_A", "Savings", "Bank", "A_Savings", id1)
+	}
+
+	// Escape-the-escape: a literal %5F in institution must not collide with a bare _ in institution.
+	if AccountID("A_B", "x") == AccountID("A%5FB", "x") {
+		t.Errorf("escape-the-escape: AccountID(%q,%q) should differ from AccountID(%q,%q)",
+			"A_B", "x", "A%5FB", "x")
+	}
+	// A literal %25 in institution must not collide with a bare % in institution.
+	if AccountID("A%B", "x") == AccountID("A%25B", "x") {
+		t.Errorf("escape-the-escape: AccountID(%q,%q) should differ from AccountID(%q,%q)",
+			"A%B", "x", "A%25B", "x")
+	}
+}

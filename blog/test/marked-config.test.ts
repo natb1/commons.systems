@@ -132,6 +132,110 @@ describe("link renderer", () => {
     expect(subdomainHtml).not.toContain('rel="noopener noreferrer"');
   });
 
+  // Unsafe scheme rejection
+  it("renders label text only for javascript: links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[click](javascript:alert(1))");
+    expect(html).not.toContain("<a");
+    expect(html).not.toContain("javascript");
+    expect(html).toContain("click");
+  });
+
+  it("rejects javascript: regardless of case", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[x](JavaScript:alert(1))");
+    expect(html).not.toContain("<a");
+    expect(html).toContain("x");
+  });
+
+  it("rejects javascript: with leading space in href", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[x]( javascript:alert(1))");
+    expect(html).not.toContain("<a");
+    expect(html).toContain("x");
+  });
+
+  it("rejects data: scheme links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[x](data:text/plain,hi)");
+    expect(html).not.toContain("<a");
+    expect(html).toContain("x");
+  });
+
+  it("rejects vbscript: scheme links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[x](vbscript:msgbox(1))");
+    expect(html).not.toContain("<a");
+    expect(html).toContain("x");
+  });
+
+  // Safe scheme regression guard
+  it("produces an anchor for https: links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[repo](https://github.com/x)");
+    expect(html).toContain('<a ');
+    expect(html).toContain('href="https://github.com/x"');
+  });
+
+  it("produces an anchor for leading-slash relative links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[post](/post/x)");
+    expect(html).toContain('<a ');
+    expect(html).toContain('href="/post/x"');
+  });
+
+  it("produces an anchor for hash anchor links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[section](#anchor)");
+    expect(html).toContain('<a ');
+    expect(html).toContain('href="#anchor"');
+  });
+
+  it("produces an anchor for same-dir (./) relative links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[post](./sibling)");
+    expect(html).toContain('<a ');
+    expect(html).toContain('href="./sibling"');
+  });
+
+  it("produces an anchor for parent-dir (../) relative links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[post](../parent/x)");
+    expect(html).toContain('<a ');
+    expect(html).toContain('href="../parent/x"');
+  });
+
+  it("produces an anchor for mailto: links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[email](mailto:user@example.com)");
+    expect(html).toContain('<a ');
+    expect(html).toContain('href="mailto:user@example.com"');
+  });
+
+  it("produces an anchor for tel: links", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[call](tel:+15551234)");
+    expect(html).toContain('<a ');
+    expect(html).toContain('href="tel:+15551234"');
+  });
+
+  // HTML metacharacter escaping in rejected label
+  it("escapes HTML metacharacters in rejected link label", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[<b>hi</b>](javascript:alert(1))");
+    expect(html).not.toContain("<a");
+    expect(html).not.toContain("<b>");
+    expect(html).toContain("&lt;b&gt;");
+  });
+
+  // Bare relative path: rejected (blog convention is leading-slash)
+  it("rejects bare relative path links without leading slash", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("[x](foo/bar)");
+    expect(html).not.toContain("<a");
+    expect(html).toContain("x");
+  });
+
   it("strips raw HTML from link labels (XSS in SSR path)", async () => {
     const marked = createMarked();
     const html = await marked.parse("[<img src=x onerror=alert(1)>](https://e.com)");

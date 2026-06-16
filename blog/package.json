@@ -19,6 +19,7 @@
     "./vite-plugin-blog-posts": "./src/vite-plugin-blog-posts.ts",
     "./pages/home": "./src/pages/home.ts",
     "./pages/admin": "./src/pages/admin.ts",
+    "./create-blog-app": "./src/create-blog-app.ts",
     "./og-meta": "./src/og-meta.ts",
     "./prerender": "./src/prerender.ts",
     "./feed": "./src/feed.ts",
@@ -36,9 +37,12 @@
   },
   "peerDependencies": {
     "@commons-systems/authutil": "*",
-    "@commons-systems/router": "*",
+    "@commons-systems/components": "*",
+    "@commons-systems/errorutil": "*",
+    "@commons-systems/firebaseutil": "*",
     "@commons-systems/firestoreutil": "*",
     "@commons-systems/htmlutil": "*",
+    "@commons-systems/router": "*",
     "dompurify": "^3.3.1",
     "firebase": "^12.9.0",
     "marked": "^15"

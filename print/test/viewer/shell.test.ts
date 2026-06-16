@@ -12,6 +12,11 @@ vi.mock("../../src/reading-position.js", () => ({
   saveReadingPosition: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../../src/bookmarks.js", () => ({
+  getBookmarks: vi.fn().mockResolvedValue([]),
+  saveBookmarks: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { renderViewerShell, initViewer } from "../../src/viewer/shell";
 import {
   getReadingPosition,
@@ -157,6 +162,24 @@ describe("renderViewerShell", () => {
     const html = renderViewerShell(makeMediaItem());
 
     expect(html).toContain('class="viewer-outline outline-hidden"');
+  });
+
+  it("contains the bookmark toggle button", () => {
+    const html = renderViewerShell(makeMediaItem());
+
+    expect(html).toContain('class="viewer-bookmark-toggle"');
+  });
+
+  it("contains the bookmarks section, hidden by default", () => {
+    const html = renderViewerShell(makeMediaItem());
+
+    expect(html).toContain('class="viewer-bookmarks bookmarks-hidden"');
+  });
+
+  it("renders the bookmarks section above the outline section", () => {
+    const html = renderViewerShell(makeMediaItem());
+
+    expect(html.indexOf("viewer-bookmarks")).toBeLessThan(html.indexOf("viewer-outline"));
   });
 
   it("renders .viewer-md-actions with both buttons when markdownPath is non-null", () => {
