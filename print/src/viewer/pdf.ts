@@ -160,8 +160,12 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
   // re-render (renderPage(_currentPage)) re-applies it after a resize. Cleared
   // by the public manual-nav methods so a stale highlight never reappears.
   let pendingHighlight: { page: number; offset: number; length: number } | null = null;
-  // Records the original text content of every div mutated by applyHighlight so
-  // unwrapHighlights can restore the text layer to its pristine state.
+  // Records the original text content of every div mutated by the most recent
+  // applyHighlight call so unwrapHighlights can restore the text layer to its
+  // pristine state. Invariant: after applyHighlight returns, this array holds
+  // exactly one entry per currently-highlighted div (the divs from the most
+  // recent call only — earlier entries are cleared by the unwrapHighlights()
+  // call at the start of applyHighlight).
   const highlightRestores: { div: HTMLElement; originalText: string }[] = [];
   interface SpreadPage { renderTask: RenderTask; textLayer: TextLayer | null; }
   const spreadPages: SpreadPage[] = [];
@@ -308,8 +312,15 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
    *
    * Children are rebuilt with createTextNode/createElement (never innerHTML) so
    * the text layer's transparent-text CSS keeps applying.
+   *
+   * Calls unwrapHighlights() first so it is idempotent: any prior highlight
+   * (including detached divs from a superseded render) is restored and
+   * highlightRestores is cleared before the new entries are recorded. After
+   * this function returns, highlightRestores holds exactly one entry per
+   * currently-highlighted div.
    */
   function applyHighlight(tl: TextLayer, h: { offset: number; length: number }): void {
+    unwrapHighlights();
     const itemsStr = tl.textContentItemsStr;
     const divs = tl.textDivs;
     const segments = offsetToDivRanges(itemsStr, h.offset, h.length);
