@@ -312,8 +312,9 @@ case "$args" in
       if [[ -f "$jit_fixture" ]]; then cat "$jit_fixture"; else echo "[]"; fi
     fi
     ;;
-  "issue list --label dispatch:office-hours --state open --json number,createdAt")
+  "issue list --label dispatch:office-hours --state open --json number,createdAt,labels")
     # office-hours-select-target: the office-hours queue (labeled open issues).
+    # The fetch now also carries `labels` (#1648) — the main-qa override reads it.
     if [[ -f "$STUB_DIR/oh-issue-list.json" ]]; then
       cat "$STUB_DIR/oh-issue-list.json"
     else
@@ -2238,6 +2239,17 @@ printf '[{"number":831},{"number":832}]\n' > "$STUB_DIR/subissues-83.json"
 "$TMPDIR_TEST/issue-sub-issues" 83 >/dev/null
 line_count=$(wc -l < "$STUB_DIR/gh-issue-view-fields.log" | tr -d ' ')
 assert_eq "two children: two log lines" "2" "$line_count"
+teardown
+
+# E. Empty FIELDS arg: guard fires → exit 2 with descriptive stderr (before any API call).
+echo "Test: issue-sub-issues — empty FIELDS arg → exit 2 with error"
+setup
+cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
+chmod +x "$TMPDIR_TEST/issue-sub-issues"
+err=$("$TMPDIR_TEST/issue-sub-issues" 84 "" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "empty FIELDS: exit code 2" "2" "$rc"
+assert_eq "empty FIELDS: descriptive stderr" "1" \
+  "$(printf '%s' "$err" | grep -c 'FIELDS arg must not be empty' || true)"
 teardown
 
 # ============================================================================
@@ -5423,6 +5435,24 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
 select_target_fake_claude   # orphan: no live sessions → sessionless, picked fresh
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "fresh disposition carries the worktree path" "office-hours 42 plan - /worktrees/42-x" "$result"
+teardown
+
+# OHST12. A fresh item carrying the `main-qa` label (#1648) — a needs-main QA
+# follow-up that is brand-new, no-PR, NO-WORKTREE — overrides phase=main-qa and
+# emits the MAIN worktree as the 5th field (not `-`), so the entry dispatcher's
+# `-` guard never trips and dispatch-spawn-office-hours accepts the cwd.
+echo "Test: fresh main-qa-labelled item → phase main-qa, main worktree as cwd"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"main-qa"}]}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+select_target_fake_claude   # no live sessions → sessionless, picked fresh
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "main-qa override: phase main-qa, main worktree 5th field" \
+  "office-hours 42 main-qa - $TMPDIR_TEST/worktrees/main" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # ============================================================================
@@ -30388,9 +30418,9 @@ assert_eq "dup-close: no edit (.[0] title matches)" "absent" "$(log_state gh-mer
 teardown
 
 # ============================================================================
-# dispatch-auto-merge (#1540)
+# dispatch-auto-merge (#1739)
 # ============================================================================
-echo "=== dispatch-auto-merge (#1540) ==="
+echo "=== dispatch-auto-merge (#1739) ==="
 
 # Build one auto-merge PR fixture object (the script's field set) + its REST
 # check-runs fixture. Wrap one or more in [ ... ] for auto-merge-pr-list.json.
@@ -30404,7 +30434,7 @@ make_auto_merge_pr() {
 }
 # Enable the feature for a test (writes the config the script reads).
 write_auto_merge_config_enabled() {
-  printf '{"enabled":true,"types":["enhancement"],"excludeTypes":["bug","security"]}' \
+  printf '{"enabled":true}' \
     > "$TMPDIR_TEST/config/auto-merge.json"
 }
 AM_REVIEWED='[{"name":"dispatch:reviewed"}]'
@@ -30416,7 +30446,6 @@ setup
 write_auto_merge_config_enabled
 printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
   > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "merge: stdout is 'merged #50'" "merged #50" "$out"
 assert_eq "merge: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
@@ -30437,7 +30466,6 @@ setup
 write_auto_merge_config_enabled
 printf '[%s]' "$(make_auto_merge_pr 50 true MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
   > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "draft: no stdout" "" "$out"
 assert_eq "draft: no merge call" "absent" "$(log_state gh-pr-merge.log)"
@@ -30453,7 +30481,6 @@ setup
 write_auto_merge_config_enabled
 printf '[%s]' "$(make_auto_merge_pr 50 true MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
   > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "demote-race: no stdout" "" "$out"
 assert_eq "demote-race: no merge call" "absent" "$(log_state gh-pr-merge.log)"
@@ -30465,7 +30492,6 @@ setup
 write_auto_merge_config_enabled
 printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_NO_REVIEWED" '[{"number":100}]')" \
   > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "no-reviewed: no stdout" "" "$out"
 assert_eq "no-reviewed: no merge call" "absent" "$(log_state gh-pr-merge.log)"
@@ -30477,7 +30503,6 @@ setup
 write_auto_merge_config_enabled
 printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$FAILING_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
   > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "failing: no stdout" "" "$out"
 assert_eq "failing: no merge call" "absent" "$(log_state gh-pr-merge.log)"
@@ -30489,7 +30514,6 @@ setup
 write_auto_merge_config_enabled
 printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$PENDING_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
   > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "pending: no stdout" "" "$out"
 assert_eq "pending: no merge call" "absent" "$(log_state gh-pr-merge.log)"
@@ -30501,7 +30525,6 @@ setup
 write_auto_merge_config_enabled
 printf '[%s]' "$(make_auto_merge_pr 50 false CONFLICTING "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
   > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "conflicting: no stdout" "" "$out"
 assert_eq "conflicting: no merge call" "absent" "$(log_state gh-pr-merge.log)"
@@ -30513,138 +30536,92 @@ setup
 write_auto_merge_config_enabled
 printf '[%s]' "$(make_auto_merge_pr 50 false UNKNOWN "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
   > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "unknown: no stdout" "" "$out"
 assert_eq "unknown: no merge call" "absent" "$(log_state gh-pr-merge.log)"
 teardown
 
 # --- 9. zero closing issues → skip -------------------------------------------
+# The non-empty closing-set guard (defense-in-depth): a ready PR that lost its
+# Closes #N is skipped. This is NOT a type gate — it fires only on an empty set.
 echo "Test: empty closing set → skip"
 setup
 write_auto_merge_config_enabled
 printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[]')" \
   > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "no-closing: no stdout" "" "$out"
 assert_eq "no-closing: no merge call" "absent" "$(log_state gh-pr-merge.log)"
 teardown
 
-# --- 10. closing issue lacking enhancement → skip ----------------------------
-echo "Test: closing issue lacks enhancement → skip"
-setup
-write_auto_merge_config_enabled
-printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
-  > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"documentation"}]}]\n' > "$STUB_DIR/issue-list.json"
-out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
-assert_eq "lacks-enh: no stdout" "" "$out"
-assert_eq "lacks-enh: no merge call" "absent" "$(log_state gh-pr-merge.log)"
-teardown
-
-# --- 11. closing issue carrying bug → skip -----------------------------------
-echo "Test: closing issue carries bug → skip"
-setup
-write_auto_merge_config_enabled
-printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
-  > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"},{"name":"bug"}]}]\n' > "$STUB_DIR/issue-list.json"
-out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
-assert_eq "bug: no stdout" "" "$out"
-assert_eq "bug: no merge call" "absent" "$(log_state gh-pr-merge.log)"
-teardown
-
-# --- 12. closing issue carrying security → skip ------------------------------
-echo "Test: closing issue carries security → skip"
-setup
-write_auto_merge_config_enabled
-printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
-  > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"},{"name":"security"}]}]\n' > "$STUB_DIR/issue-list.json"
-out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
-assert_eq "security: no stdout" "" "$out"
-assert_eq "security: no merge call" "absent" "$(log_state gh-pr-merge.log)"
-teardown
-
-# --- 13. per-issue enhancement discriminator → skip --------------------------
-# PR closes BOTH #100 (enhancement) and #101 (documentation). The type gate is
-# PER-ISSUE: #101 lacks enhancement → the PR is skipped. A union
-# "contains-enhancement" check would wrongly merge here (#100 carries it).
-echo "Test: multi-closing, one issue lacks enhancement → skip (per-issue, not union)"
+# --- 10. multi-closing PR → merge --------------------------------------------
+# A ready PR with a closing set of length > 1 merges: the non-empty guard is
+# satisfied and issue type is never consulted.
+echo "Test: multi-closing PR → merge"
 setup
 write_auto_merge_config_enabled
 printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100},{"number":101}]')" \
   > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]},{"number":101,"labels":[{"name":"documentation"}]}]\n' \
-  > "$STUB_DIR/issue-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
-assert_eq "per-issue: no stdout" "" "$out"
-assert_eq "per-issue: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+assert_eq "multi-closing: stdout is 'merged #50'" "merged #50" "$out"
+assert_eq "multi-closing: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
 teardown
 
-# --- 14. exclude on a non-first closing issue → skip -------------------------
-# PR closes #100 (enhancement) and #101 (enhancement + bug). The bug is on the
-# SECOND closing issue → the union exclude scan must cover ALL closing issues,
-# not just [0]. So the PR is skipped.
-echo "Test: multi-closing, bug on the second issue → skip (exclude scans all)"
+# --- 11. closing issue is a bug → merge (type-agnostic, #1739) ----------------
+# The closing-set type gate is gone: a ready PR whose closing issue is a bug
+# merges exactly like any other. The script never reads issue labels, so "bug"
+# here is intent-only — the case documents that bug PRs are no longer skipped.
+echo "Test: ready PR closing a bug issue → merged"
 setup
 write_auto_merge_config_enabled
-printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100},{"number":101}]')" \
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
   > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]},{"number":101,"labels":[{"name":"enhancement"},{"name":"bug"}]}]\n' \
-  > "$STUB_DIR/issue-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
-assert_eq "exclude-2nd: no stdout" "" "$out"
-assert_eq "exclude-2nd: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+assert_eq "bug-merge: stdout is 'merged #50'" "merged #50" "$out"
+assert_eq "bug-merge: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
 teardown
 
-# --- 15. multi-issue all-enhancement → merge ---------------------------------
-# Positive multi-issue control for the per-issue `all`: both closing issues carry
-# enhancement, none excluded → merge.
-echo "Test: multi-closing, both enhancement → merge"
+# --- 12. closing issue is a security issue → merge (type-agnostic, #1739) -----
+# Same as case 11 for a security-typed closing issue: no special-casing remains.
+echo "Test: ready PR closing a security issue → merged"
 setup
 write_auto_merge_config_enabled
-printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100},{"number":101}]')" \
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
   > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]},{"number":101,"labels":[{"name":"enhancement"}]}]\n' \
-  > "$STUB_DIR/issue-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
-assert_eq "multi-enh: stdout is 'merged #50'" "merged #50" "$out"
-assert_eq "multi-enh: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
+assert_eq "security-merge: stdout is 'merged #50'" "merged #50" "$out"
+assert_eq "security-merge: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
 teardown
 
-# --- 16. config enabled:false → no-op (no fetch) -----------------------------
+# --- 13. config enabled:false → no-op (no fetch) -----------------------------
 echo "Test: config enabled:false → no-op, no fetch"
 setup
-printf '{"enabled":false,"types":["enhancement"],"excludeTypes":["bug","security"]}' \
+printf '{"enabled":false}' \
   > "$TMPDIR_TEST/config/auto-merge.json"
 printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
   > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "disabled: no stdout" "" "$out"
 assert_eq "disabled: no merge call" "absent" "$(log_state gh-pr-merge.log)"
 assert_eq "disabled: no PR fetch" "absent" "$(log_state gh-auto-merge-pr-list.log)"
 teardown
 
-# --- 17. absent config → no-op (no fetch) ------------------------------------
+# --- 14. absent config → no-op (no fetch) ------------------------------------
 echo "Test: absent config → no-op, no fetch"
 setup
 # Deliberately do NOT write config/auto-merge.json.
 printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
   > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]}]\n' > "$STUB_DIR/issue-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "no-config: no stdout" "" "$out"
 assert_eq "no-config: no merge call" "absent" "$(log_state gh-pr-merge.log)"
 assert_eq "no-config: no PR fetch" "absent" "$(log_state gh-auto-merge-pr-list.log)"
 teardown
 
-# --- 18. multi-PR independence -----------------------------------------------
-# Two PRs in one fetch: #50 eligible (enhancement, green, mergeable, reviewed,
-# closing #100), #51 ineligible only because its closing issue #101 carries bug.
-# #50 merges; #51 is skipped. Each PR is reconciled independently.
+# --- 15. multi-PR independence -----------------------------------------------
+# Two PRs in one fetch: #50 eligible (green, mergeable, reviewed, closing #100),
+# #51 ineligible because its mergeable state is CONFLICTING. #50 merges; #51 is
+# skipped. Each PR is reconciled independently.
 echo "Test: multi-PR fetch merges only the eligible PR"
 setup
 write_auto_merge_config_enabled
@@ -30652,11 +30629,9 @@ write_auto_merge_config_enabled
   printf '['
   make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]'
   printf ','
-  make_auto_merge_pr 51 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":101}]'
+  make_auto_merge_pr 51 false CONFLICTING "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":101}]'
   printf ']'
 } > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]},{"number":101,"labels":[{"name":"enhancement"},{"name":"bug"}]}]\n' \
-  > "$STUB_DIR/issue-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "multi-PR: stdout is 'merged #50' only" "merged #50" "$out"
 TOTAL=$((TOTAL + 1))
@@ -30669,10 +30644,10 @@ else
 fi
 teardown
 
-# --- 19. merge failure → HARD_ERROR, continue, exit 1 ------------------------
+# --- 16. merge failure → HARD_ERROR, continue, exit 1 ------------------------
 # Two eligible PRs in one fetch: #50 (closing #100) and #51 (closing #101), both
-# enhancement/green/mergeable/reviewed. The gh stub is rigged so `pr merge 50`
-# exits non-zero. The script must: log #50's failure to stderr, set HARD_ERROR,
+# green/mergeable/reviewed. The gh stub is rigged so `pr merge 50` exits
+# non-zero. The script must: log #50's failure to stderr, set HARD_ERROR,
 # `continue` to attempt #51 (which merges), and exit 1 after the loop. This
 # exercises the `|| rc=$?` capture, the `continue`, and the final
 # `if [[ "$HARD_ERROR" -ne 0 ]]; then exit 1; fi` block.
@@ -30686,8 +30661,6 @@ write_auto_merge_config_enabled
   make_auto_merge_pr 51 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":101}]'
   printf ']'
 } > "$STUB_DIR/auto-merge-pr-list.json"
-printf '[{"number":100,"labels":[{"name":"enhancement"}]},{"number":101,"labels":[{"name":"enhancement"}]}]\n' \
-  > "$STUB_DIR/issue-list.json"
 printf '50' > "$STUB_DIR/pr-merge-fail-on"
 am_err=$("$TMPDIR_TEST/dispatch-auto-merge" 2>"$STUB_DIR/am-stderr" >"$STUB_DIR/am-stdout"; echo "$?")
 am_out=$(cat "$STUB_DIR/am-stdout")
@@ -30707,7 +30680,7 @@ assert_eq "merge-fail: pr merge 51 attempted" "present" \
   "$(grep -q 'pr merge 51' "$STUB_DIR/gh-pr-merge.log" && echo present || echo absent)"
 teardown
 
-# --- 20. executable-bit guard ------------------------------------------------
+# --- 17. executable-bit guard ------------------------------------------------
 echo "Test: dispatch-auto-merge is executable"
 assert_eq "dispatch-auto-merge is executable" "yes" \
   "$([[ -x "$SCRIPT_DIR/dispatch-auto-merge" ]] && echo yes || echo no)"
