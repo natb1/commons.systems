@@ -84,6 +84,8 @@ describe("createAppContext", () => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.stubEnv("MODE", "production");
+    vi.stubGlobal("addEventListener", vi.fn());
+    vi.stubGlobal("removeEventListener", vi.fn());
   });
 
   it("returns correct shape without storage option", async () => {
