@@ -1,4 +1,5 @@
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
+import { logError } from "@commons-systems/errorutil/log";
 
 export interface Route {
   /**
@@ -23,7 +24,7 @@ export interface Route {
 }
 
 export interface RouterOptions {
-  /** Called with the parsed path and query params at the start of each navigation, before route matching. Exceptions do not prevent the route from rendering. Programmer errors are deferred as uncaught errors; other exceptions are caught and reported via reportError. */
+  /** Called with the parsed path and query params at the start of each navigation, before route matching. Exceptions do not prevent the route from rendering. Programmer errors are deferred as uncaught errors; other exceptions are caught and reported via `logError`. */
   onNavigate?: (nav: { path: string; params: URLSearchParams }) => void;
   /** Map an error to a user-facing message. Return undefined to use "Something went wrong. Please try again." */
   formatError?: (error: unknown) => string | undefined;
@@ -64,7 +65,7 @@ function createNavigator(
     try {
       options?.onNavigate?.({ path, params });
     } catch (e) {
-      if (!deferProgrammerError(e)) reportError(e);
+      if (!deferProgrammerError(e)) logError(e, { operation: "router-onNavigate" });
     }
     const route = matchRoute(routes, path) ?? routes[0];
     try {
@@ -75,7 +76,7 @@ function createNavigator(
           route.afterRender?.(outlet, path);
         } catch (afterError) {
           if (deferProgrammerError(afterError)) return;
-          reportError(afterError);
+          logError(afterError, { operation: "router-afterRender" });
           outlet.insertAdjacentHTML(
             "beforeend",
             "<p>Some content failed to load. Try refreshing.</p>",
@@ -83,7 +84,7 @@ function createNavigator(
         }
       }
     } catch (error) {
-      if (!deferProgrammerError(error)) reportError(error);
+      if (!deferProgrammerError(error)) logError(error, { operation: "router-render" });
       if (id === navigationId) {
         const message =
           options?.formatError?.(error) ??

@@ -21,6 +21,16 @@ export function registerErrorSink(s: ErrorSink | undefined): void {
 }
 
 /**
+ * Convention: prefer `logError` in any package that depends on `errorutil`,
+ * and in all apps. Bare global `reportError` is permitted ONLY in packages
+ * that do not depend on `errorutil` (e.g. `idbutil`). In those packages, the
+ * global handler installed by `createAppContext` (`installGlobalErrorHandlers`,
+ * in `errorutil/src/global-handler.ts`) catches the dispatched `error` event
+ * and records it via `logError` under `operation: "uncaught"`, so the error
+ * still reaches the Firestore sink — just without a specific operation label.
+ */
+
+/**
  * Log an error with structured context. Always writes to console.error for
  * local visibility, then forwards to the registered sink (e.g., Firestore)
  * if one exists. Synchronous sink failures are caught here. Async sinks
