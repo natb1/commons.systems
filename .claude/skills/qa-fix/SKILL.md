@@ -592,9 +592,17 @@ Otherwise run all steps in order.
          This makes the follow-up `blocked_by` the issue under QA: its manual
          post-merge verification waits until this PR's issue is done. Use the
          `ref-github-issues` dependencies API (invoke `ref-github-issues` for the
-         exact `gh api --input` syntax; do not restate it). The follow-up carries
-         `help wanted` + `@me` from the `/file-issue` pipeline and **no**
-         `dispatch:office-hours`.
+         exact `gh api --input` syntax; do not restate it). `/file-issue` applies
+         `help wanted` + `@me`; then call the post-process helper
+         (`dangerouslyDisableSandbox: true` — it calls `gh`):
+
+         ```bash
+         .claude/skills/dispatch-propagate/scripts/dispatch-qa-apply-main-qa-labels "<followup-N>"
+         ```
+
+         This removes `help wanted` and adds `main-qa` + `dispatch:office-hours`,
+         leaving `@me` — so the follow-up lands on the office-hours queue (human
+         review), not the autonomous dispatch queue.
 
       d. Returns `<followup-N>` mapped to its `identifier`.
 
@@ -661,7 +669,10 @@ Otherwise run all steps in order.
       `unit.scope`, `unit.context`, `unit.commit_intent` into its parameters
       (`id` / `dependencies` / `resolves_ids` are for your ordering and the Step 4
       comment, not passed through). The draft PR already exists — open **NO** new
-      PR.
+      PR. A unit completing in this `/implement-unit` loop is mid-loop, not the end
+      of the turn — continue to the next unit, then Steps 4 and 5 and the marker;
+      do not emit a closing summary. The terminal rule is the **CRITICAL
+      invariants** block below (the fix path HARD-STOPS the skill).
    2. Run **Step 4** (post the PR-comment summary; its disposition section uses the
       **fixing-pass** prose — see Step 4).
    3. Run **Step 5** (cleanup — it self-guards and no-ops if the QA server never
@@ -824,7 +835,8 @@ Otherwise run all steps in order.
      - a failed pre-QA acceptance check (Step 3b, a bug needing a plan-mode fix).
 
    `needs-main`-class residue items are in **neither** part of the set — they were
-   filed as follow-ups in Step 3.6.
+   filed as follow-ups in Step 3.6, now carrying `main-qa` + `dispatch:office-hours`
+   so they route to office-hours human review rather than the autonomous queue.
 
    **Clean autonomous pass** — the escalation set (defined above) is **empty**.
    This now holds even for a run whose only residue items all classified
