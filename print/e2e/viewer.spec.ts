@@ -444,7 +444,7 @@ test.describe("viewer", () => {
 
   test("PDF renders with the CDN blocked (worker served from app origin)", async ({ page }) => {
     // Block all jsdelivr CDN requests — the worker must load from the app origin.
-    await page.route("**cdn.jsdelivr.net**", (route) => route.abort());
+    await page.route("**/cdn.jsdelivr.net/**", (route) => route.abort());
 
     await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer-position")).toContainText("1 / 3", {
