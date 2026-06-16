@@ -5448,6 +5448,12 @@ printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"main
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+# The selector itself does not stat this path; this mkdir is a convention match
+# documenting the production contract (dispatch-spawn-office-hours requires the
+# cwd to exist). A full entry-point integration test for the main-qa fresh-spawn
+# path is needed to actually exercise the dispatch-spawn-office-hours directory
+# guard.
+mkdir -p "$TMPDIR_TEST/worktrees/main"
 select_target_fake_claude   # no live sessions → sessionless, picked fresh
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "main-qa override: phase main-qa, main worktree 5th field" \
@@ -27882,6 +27888,64 @@ else
 fi
 git --git-dir="$bw_root/.bare" worktree prune 2>/dev/null || true
 rm -rf "$bw_root"
+
+# 5b. malformed-URL format guard: SSH-with-port → read-plan rejects it.
+# ssh://git@github.com:22/owner/repo.git strips to "22/owner/repo" — two slashes,
+# would pass the old */* check but fails the strict ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ regex.
+mf_ssh_root=$(mktemp -d)
+git init --bare "$mf_ssh_root/.bare" >/dev/null 2>&1
+git --git-dir="$mf_ssh_root/.bare" config user.email "t@t" 2>/dev/null
+git --git-dir="$mf_ssh_root/.bare" config user.name "t" 2>/dev/null
+git --git-dir="$mf_ssh_root/.bare" remote add origin ssh://git@github.com:22/owner/repo.git
+mf_ssh_seed=$(mktemp -d)
+git -C "$mf_ssh_seed" init -q
+git -C "$mf_ssh_seed" config user.email "t@t"; git -C "$mf_ssh_seed" config user.name "t"
+git -C "$mf_ssh_seed" commit -q --allow-empty -m seed
+git -C "$mf_ssh_seed" remote add bare "$mf_ssh_root/.bare"
+git -C "$mf_ssh_seed" push -q bare HEAD:refs/heads/main
+rm -rf "$mf_ssh_seed"
+mkdir -p "$mf_ssh_root/worktrees"
+git --git-dir="$mf_ssh_root/.bare" worktree add -q "$mf_ssh_root/worktrees/42-foo" main 2>/dev/null
+if err=$( cd "$mf_ssh_root/worktrees/42-foo" && env -u GH_REPO "$WP_READ" 42 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "read-plan: SSH-with-port malformed URL exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"unexpected owner/repo format"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan rejects SSH-with-port malformed URL with format-guard diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan rejects SSH-with-port malformed URL with format-guard diagnostic"
+  echo "    actual: '$err'"
+fi
+git --git-dir="$mf_ssh_root/.bare" worktree prune 2>/dev/null || true
+rm -rf "$mf_ssh_root"
+
+# 5c. malformed-URL format guard: non-GitHub remote → write-plan rejects it.
+# https://gitlab.com/owner/repo.git has no "github.com" to strip, so repo stays the
+# full URL (contains ":") — has slashes, would pass the old */* check but fails the regex.
+mf_gl_root=$(mktemp -d)
+git init --bare "$mf_gl_root/.bare" >/dev/null 2>&1
+git --git-dir="$mf_gl_root/.bare" config user.email "t@t" 2>/dev/null
+git --git-dir="$mf_gl_root/.bare" config user.name "t" 2>/dev/null
+git --git-dir="$mf_gl_root/.bare" remote add origin https://gitlab.com/owner/repo.git
+mf_gl_seed=$(mktemp -d)
+git -C "$mf_gl_seed" init -q
+git -C "$mf_gl_seed" config user.email "t@t"; git -C "$mf_gl_seed" config user.name "t"
+git -C "$mf_gl_seed" commit -q --allow-empty -m seed
+git -C "$mf_gl_seed" remote add bare "$mf_gl_root/.bare"
+git -C "$mf_gl_seed" push -q bare HEAD:refs/heads/main
+rm -rf "$mf_gl_seed"
+mkdir -p "$mf_gl_root/worktrees"
+git --git-dir="$mf_gl_root/.bare" worktree add -q "$mf_gl_root/worktrees/42-foo" main 2>/dev/null
+if err=$( cd "$mf_gl_root/worktrees/42-foo" && env -u GH_REPO "$WP_WRITE" 42 <<<"PLAN" 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "write-plan: non-GitHub remote malformed URL exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"unexpected owner/repo format"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: write-plan rejects non-GitHub remote URL with format-guard diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan rejects non-GitHub remote URL with format-guard diagnostic"
+  echo "    actual: '$err'"
+fi
+git --git-dir="$mf_gl_root/.bare" worktree prune 2>/dev/null || true
+rm -rf "$mf_gl_root"
 
 # 7. two-matching-plan-comments: when the store contains two comments both
 #    authored by plan-bot and both carrying the marker, read-plan must return

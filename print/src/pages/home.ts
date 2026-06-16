@@ -5,11 +5,8 @@ import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { listCloud } from "../library.js";
 import { getMediaDownloadUrl } from "../storage.js";
 import { renderLocalIntoList } from "../local-folder-ui.js";
-import type { MediaItem, MediaType } from "../types.js";
-
-function mediaTypeBadge(mediaType: MediaType): string {
-  return `<span class="media-badge">${escapeHtml(mediaType)}</span>`;
-}
+import type { MediaItem } from "../types.js";
+import { mediaTypeBadge } from "../media-render.js";
 
 function renderMediaList(items: MediaItem[]): string {
   if (items.length === 0) {
@@ -34,26 +31,6 @@ function renderMediaList(items: MediaItem[]): string {
     .join("\n");
 
   return `<ul id="media-list">${rows}</ul>`;
-}
-
-/**
- * Render local-folder items as `<li>` rows for prepending into the shared media
- * list. Local items get a "local" badge and a view link, but no download /
- * markdown actions — their bytes live on the user's disk, not in cloud storage.
- */
-export function renderLocalMediaItems(items: MediaItem[]): string {
-  return items
-    .map((item) => {
-      return `<li class="media-item media-item-local" data-id="${escapeHtml(item.id)}">
-        <div class="media-info">
-          <span class="media-title"><a href="/view/${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a></span>
-          ${mediaTypeBadge(item.mediaType)}
-          <span class="media-badge media-badge-local">local</span>
-          ${item.pageCount !== undefined ? `<span class="media-pagecount">${escapeHtml(String(item.pageCount))} pages</span>` : ""}
-        </div>
-      </li>`;
-    })
-    .join("\n");
 }
 
 async function handleDownload(button: HTMLButtonElement): Promise<void> {
