@@ -257,8 +257,11 @@ fi
 # this runs every tick — independent of the local branch — including a capped
 # tick, so recovery is observed even when no worker is spawned.
 OPEN_MB=$(gh issue list --label "dispatch:main-broken" --state open \
-  --json number -q '.[].number')
-if [[ -n "$OPEN_MB" ]]; then
+  --json number -q '.[].number') || {
+  echo 'dispatch-select-tick: gh issue list (dispatch:main-broken) failed; treating main health as UNKNOWN' >&2
+  OPEN_MB=UNKNOWN
+}
+if [[ -n "$OPEN_MB" && "$OPEN_MB" != "UNKNOWN" ]]; then
   # Use explicit exit-code capture: a failed --main-broken-sha would produce empty
   # output, which -z would treat as "green" and incorrectly close the latch.
   MB_SHA=""
@@ -279,6 +282,23 @@ if [[ -n "$RECONCILE_OUT" ]]; then
   while IFS= read -r ready_line; do
     [[ -n "$ready_line" ]] && echo "ready: $ready_line"
   done <<< "$RECONCILE_OUT"
+fi
+
+# --- Step 1d (cont.): auto-merge every ready PR (#1739) ----------------------
+# Runs after dispatch-reconcile-ready (a PR demoted this tick is seen as draft
+# and skipped) and before Step 2d's sync-merge-queue. Auto-merge runs ONLY when
+# OPEN_MB is definitively empty — i.e. main health is known-good. It is suppressed
+# both while main is broken (OPEN_MB lists open main-broken issues, from Step 1c)
+# and when main health is UNKNOWN (the Step 1c gh issue list failed): a transient
+# gh failure must not defeat this load-bearing safety gate. Inert unless
+# dispatch.config/auto-merge.json enables it; absent config → no-op.
+if [[ -z "$OPEN_MB" ]]; then
+  MERGE_OUT=$("$SCRIPT_DIR/dispatch-auto-merge") || true
+  if [[ -n "$MERGE_OUT" ]]; then
+    while IFS= read -r merge_line; do
+      [[ -n "$merge_line" ]] && echo "merge: $merge_line"
+    done <<< "$MERGE_OUT"
+  fi
 fi
 
 # --- Step 1b: run-scoped concurrency gate (autonomous no-arg queue path only) -

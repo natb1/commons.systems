@@ -84,6 +84,8 @@ describe("createAppContext", () => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.stubEnv("MODE", "production");
+    vi.stubGlobal("addEventListener", vi.fn());
+    vi.stubGlobal("removeEventListener", vi.fn());
   });
 
   it("returns correct shape without storage option", async () => {
@@ -96,6 +98,20 @@ describe("createAppContext", () => {
     expect(ctx).toHaveProperty("trackPageView", mockTrackPageView);
     expect(ctx).not.toHaveProperty("storage");
     expect(ctx).not.toHaveProperty("STORAGE_NAMESPACE");
+  });
+
+  it("installs global error and unhandledrejection handlers", async () => {
+    const { createAppContext } = await loadModule();
+    createAppContext("myapp", "app-id-123");
+
+    expect(globalThis.addEventListener).toHaveBeenCalledWith(
+      "error",
+      expect.any(Function),
+    );
+    expect(globalThis.addEventListener).toHaveBeenCalledWith(
+      "unhandledrejection",
+      expect.any(Function),
+    );
   });
 
   it("initializes Firestore with persistentLocalCache when no emulator", async () => {

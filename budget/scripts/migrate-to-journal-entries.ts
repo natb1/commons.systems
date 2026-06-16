@@ -6,10 +6,11 @@
 //     npx tsx budget/scripts/migrate-to-journal-entries.ts
 //   FIRESTORE_NAMESPACE=budget/prod npx tsx budget/scripts/migrate-to-journal-entries.ts --prod
 //
-// This script is self-contained: it imports only from
-// `@commons-systems/firestoreutil` and `node:*` builtins. It does NOT import
-// from `budget/src/*` — `budget/src/firestore.ts` pulls in the client-SDK
-// `firebase.ts`, which has browser side effects unsuitable for a Node script.
+// This script imports `accountDocId` from `budget/src/entities/account.ts` —
+// that module imports `firebase/firestore` (the package) but does NOT invoke
+// `firebase.ts` (the app's client-SDK initialiser), so it is safe in Node.
+// The app's `budget/src/firestore.ts` IS unsuitable for Node (browser side
+// effects), and this script does not import it.
 //
 // Idempotency: the script derives deterministic doc ids from each transaction
 // id and skips any transaction whose `journalEntryId` is already set. Re-running
@@ -22,6 +23,7 @@ import {
   validateNamespace,
   nsCollectionPath,
 } from "@commons-systems/firestoreutil/namespace";
+import { accountDocId } from "../src/entities/account.js";
 
 // Placeholder counter-account ids. These match doc ids in the seeded reference
 // chart of accounts — see `budget/seeds/firestore.ts` (`accountDocs`). Doc id
@@ -151,8 +153,8 @@ async function main(): Promise<void> {
     }
 
     const family = classifyCategory(category);
-    // Bank account id matches an `accounts` doc id: `{institution}_{account}`.
-    const bankAccountId = `${institution}_${account}`;
+    // Bank account id matches an `accounts` doc id built by `accountDocId`.
+    const bankAccountId = accountDocId(institution, account);
     const counterId = counterAccountId(family);
 
     // Debit/credit direction — one uniform rule for all families. A transaction

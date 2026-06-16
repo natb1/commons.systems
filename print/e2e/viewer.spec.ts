@@ -712,6 +712,47 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-search")).toHaveClass(/search-hidden/);
   });
 
+  test("PDF full-document search finds, navigates, highlights, and clears", async ({ page }) => {
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".textLayer span").first()).toBeAttached({ timeout: 15000 });
+
+    // Search UI un-hides for PDFs (positive counterpart to the image-archive test above).
+    await expect(page.locator(".viewer-search")).not.toHaveClass(/search-hidden/, { timeout: 15000 });
+
+    // Fill the query and press Enter to skip the 300ms debounce.
+    const input = page.locator(".viewer-search-input");
+    await input.fill("the");
+    await input.press("Enter");
+
+    // Wait for at least the first result to appear.
+    await expect(page.locator(".viewer-search-result").first()).toBeVisible({ timeout: 15000 });
+
+    // Assert multi-page coverage: "the" should match on more than one page of
+    // a 3-page PDF. Poll because renderResults is async (search awaits text content).
+    await expect
+      .poll(
+        async () => {
+          const labels = await page.locator(".viewer-search-result-label").allTextContents();
+          return new Set(labels).size;
+        },
+        { timeout: 15000 },
+      )
+      .toBeGreaterThanOrEqual(2);
+
+    // Click a result labeled "Page 2" to assert navigation is observable.
+    await page.locator(".viewer-search-result", { hasText: "Page 2" }).first().click();
+    await expect(page.locator(".viewer-position")).toContainText("2 / 3", { timeout: 15000 });
+
+    // A search-highlight span should be active in the text layer.
+    await expect(page.locator(".textLayer .search-highlight.active").first()).toBeVisible({ timeout: 15000 });
+
+    // Clear the query — highlights should be removed.
+    await input.fill("");
+    await input.press("Enter");
+    await expect(page.locator(".textLayer .search-highlight")).toHaveCount(0, { timeout: 15000 });
+  });
+
   test("EPUB outline is visible with TOC entries", async ({ page }) => {
     await page.goto("/view/gutenberg-3296");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });

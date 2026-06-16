@@ -40,7 +40,7 @@ in
       echo "Generating SSH key at ${primaryKeyFile}..."
       $DRY_RUN_CMD ${pkgs.openssh}/bin/ssh-keygen \
         -t ed25519 \
-        -C "$(whoami)@$(${pkgs.nettools}/bin/hostname)" \
+        -C "$(whoami)@$(hostname)" \
         -N "" \
         -f "${primaryKeyFile}"
 
@@ -54,7 +54,7 @@ in
       echo ""
       echo "Next steps:"
       echo "  1. Copy the public key above"
-      echo "  2. Add it to: nix/ssh-keys/machines/$(${pkgs.nettools}/bin/hostname).pub"
+      echo "  2. Add it to: nix/ssh-keys/machines/$(hostname).pub"
       echo "  3. Commit and push to enable SSH access from other machines"
       echo ""
     fi
