@@ -439,6 +439,7 @@ describe("initViewer", () => {
     const renderer = makeMockRenderer({
       search: vi.fn().mockResolvedValue([]),
       goToResult: vi.fn().mockResolvedValue(undefined),
+      renderResult: vi.fn().mockResolvedValue(undefined),
       clearSearch: vi.fn(),
     });
 
@@ -481,6 +482,24 @@ describe("initViewer", () => {
 
     // Should NOT write — the read failed, so the saved state is unknown.
     expect(store.save).not.toHaveBeenCalled();
+  });
+
+  it("non-searchable renderer (missing renderResult) keeps search-hidden — isSearchable gate skips initSearch", async () => {
+    // A renderer with search/goToResult/clearSearch but NO renderResult does not
+    // satisfy isSearchable(), so shell.ts must not wire search. The .viewer-search
+    // panel must remain hidden.
+    const renderer = makeMockRenderer({
+      search: vi.fn().mockResolvedValue([]),
+      goToResult: vi.fn().mockResolvedValue(undefined),
+      clearSearch: vi.fn(),
+      // renderResult intentionally absent — this is the non-searchable case
+    });
+
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
+    await flushInit();
+
+    const searchSection = outlet.querySelector(".viewer-search") as HTMLElement;
+    expect(searchSection.classList.contains("search-hidden")).toBe(true);
   });
 });
 
@@ -987,6 +1006,7 @@ describe("initViewer spread mode", () => {
     const renderer = makeMockSpreadRenderer({
       search: vi.fn().mockResolvedValue([result]),
       goToResult: vi.fn().mockImplementation(async () => { await renderer.goToPage(4); }),
+      renderResult: vi.fn().mockResolvedValue(undefined),
       clearSearch: vi.fn(),
     });
     initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
