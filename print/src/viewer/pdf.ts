@@ -443,29 +443,25 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
     const gen = spreadGen;
     const { wrapper, canvas: c, textLayerDiv: tlDiv } = createPageWrapper();
     target.appendChild(wrapper);
+    let committed = false;
+    try {
+      const result = await renderPageToCanvas(pageNum, c, targetRect, wrapper, () => gen !== spreadGen);
+      if (!result) return;
+      if (gen !== spreadGen) return;
 
-    const result = await renderPageToCanvas(pageNum, c, targetRect, wrapper, () => gen !== spreadGen);
-    if (!result) {
-      wrapper.remove();
-      return;
-    }
-    if (gen !== spreadGen) {
-      // The canvas render already completed; only the orphaned wrapper needs cleanup.
-      wrapper.remove();
-      return;
-    }
-
-    const tl = await renderTextLayer(result.page, result.cssViewport, tlDiv);
-    if (gen !== spreadGen) {
-      // The canvas render already completed; cancel only the in-flight text layer
-      // and remove the orphaned wrapper.
-      tl?.cancel();
-      wrapper.remove();
-      return;
-    }
-    spreadPages.push({ renderTask: result.task, textLayer: tl });
-    if (pendingHighlight && pendingHighlight.page === pageNum && tl) {
-      applyHighlight(tl, pendingHighlight);
+      const tl = await renderTextLayer(result.page, result.cssViewport, tlDiv);
+      if (gen !== spreadGen) {
+        // Cancel the in-flight text layer; wrapper removal is handled by finally.
+        tl?.cancel();
+        return;
+      }
+      committed = true;
+      spreadPages.push({ renderTask: result.task, textLayer: tl });
+      if (pendingHighlight && pendingHighlight.page === pageNum && tl) {
+        applyHighlight(tl, pendingHighlight);
+      }
+    } finally {
+      if (!committed) wrapper.remove();
     }
   }
 
