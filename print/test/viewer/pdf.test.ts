@@ -775,6 +775,66 @@ describe("clearSearch()", () => {
     expect(container.querySelectorAll(".search-highlight.active").length).toBe(1);
   });
 
+  it("concurrent renderPageInto() for the same page keeps one wrapper (spreadGen guard)", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    // Arm pendingHighlight for page 1 via the only public path that sets it.
+    const results = await renderer.search!("the");
+    const page1Result = results.find((r) => r.label === "Page 1");
+    expect(page1Result).toBeDefined();
+    await renderer.goToResult!(page1Result!);
+    expect(container.querySelector(".search-highlight.active")).not.toBeNull();
+
+    // A fresh spread target with a non-zero rect so renderPageInto proceeds past
+    // the 0×0 guard.
+    const target = document.createElement("div");
+    target.getBoundingClientRect = () => ({
+      width: 400,
+      height: 600,
+      top: 0,
+      left: 0,
+      right: 400,
+      bottom: 600,
+      x: 0,
+      y: 0,
+      toJSON() { return {}; },
+    });
+
+    // Two concurrent renders of the SAME page into the SAME target. The public
+    // renderPageInto runs cancelSpreadRenderTasks() (bumps spreadGen) synchronously
+    // before its first await, so the first call captures the older gen and, after
+    // its canvas render, loses the gen race and removes its orphaned wrapper; only
+    // the second call's wrapper survives.
+    const p1 = renderer.renderPageInto!(1, target);
+    const p2 = renderer.renderPageInto!(1, target);
+    await Promise.all([p1, p2]);
+
+    // Load-bearing: the spreadGen guard makes the superseded render remove its
+    // wrapper. Without the guard both renders keep their wrapper → 2.
+    expect(target.querySelectorAll(".pdf-page-wrapper").length).toBe(1);
+
+    // The surviving render applied the armed highlight exactly once.
+    const highlights = target.querySelectorAll(".search-highlight.active");
+    expect(highlights.length).toBe(1);
+    expect(highlights[0].textContent).toBe("the");
+
+    // applyHighlight() unwraps first, so the main container's highlight from
+    // goToResult was restored when the spread render re-applied the highlight.
+    expect(container.querySelector(".search-highlight.active")).toBeNull();
+
+    // Exact-restore: the surviving wrapper reconstructs the original page text,
+    // and clearSearch() returns it to plain "the cat sat" with no highlight.
+    const wrapper = target.querySelector(".pdf-page-wrapper")!;
+    expect(wrapper.textContent).toBe("the cat sat");
+    renderer.clearSearch!();
+    expect(target.querySelector(".search-highlight")).toBeNull();
+    const restored = Array.from(target.querySelectorAll("span")).find(
+      (s) => s.textContent === "the cat sat",
+    );
+    expect(restored).toBeDefined();
+  });
+
   it("goToPosition() drains the active highlight and disarms pendingHighlight", async () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
