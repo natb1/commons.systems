@@ -244,8 +244,12 @@ process_one_target() {
   # liveness), so the guards run only when the target was explicitly named.
   if [[ "$mode" == "explicit" ]]; then
     # Leaf trace, unless a PR already exists for the target (then the PR is the
-    # unit of work and the issue tree is irrelevant).
-    PR=$("$SCRIPT_DIR/dispatch-find-pr" "$n" 2>/dev/null) || PR=""
+    # unit of work and the issue tree is irrelevant). dispatch-find-pr runs under
+    # the dispatch lock here (#1612), so zero its 1s self-fetch retry sleep
+    # (DISPATCH_FIND_PR_RETRY_DELAY=0): the closedByPullRequestsReferences
+    # cross-check still guards the false-'no PR' case, so only the lock-extending
+    # wall-clock sleep is dropped.
+    PR=$(DISPATCH_FIND_PR_RETRY_DELAY=0 "$SCRIPT_DIR/dispatch-find-pr" "$n" 2>/dev/null) || PR=""
     if [[ -z "$PR" ]]; then
       if LEAF=$("$SCRIPT_DIR/dispatch-trace-leaf" "$n" explicit); then
         n="$LEAF"

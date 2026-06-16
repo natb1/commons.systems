@@ -1,20 +1,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { hydrateOnce, isOutletCurrent } from "../src/hydrate";
+import { registerErrorSink, type ErrorSink } from "@commons-systems/errorutil/log";
 
 describe("hydrateOnce", () => {
   let root: HTMLDivElement;
-  let reportErrorSpy: ReturnType<typeof vi.spyOn>;
+  let sink: ErrorSink;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     root = document.createElement("div");
-    if (typeof globalThis.reportError !== "function") {
-      globalThis.reportError = () => {};
-    }
-    reportErrorSpy = vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+    sink = vi.fn() as ErrorSink;
+    registerErrorSink(sink);
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {
-    reportErrorSpy.mockRestore();
+    registerErrorSink(undefined);
+    consoleErrorSpy.mockRestore();
   });
 
   it("calls hydrate and sets dataset.hydrated to true", () => {
@@ -71,6 +73,7 @@ describe("hydrateOnce", () => {
       expect(onError).not.toHaveBeenCalled();
       expect(deferredErrors).toHaveLength(1);
       expect(deferredErrors[0]).toBeInstanceOf(TypeError);
+      expect(sink).not.toHaveBeenCalled();
     } finally {
       vi.mocked(globalThis.setTimeout).mockRestore();
     }
@@ -93,16 +96,17 @@ describe("hydrateOnce", () => {
       expect(onError).not.toHaveBeenCalled();
       expect(deferredErrors).toHaveLength(1);
       expect(deferredErrors[0]).toBeInstanceOf(ReferenceError);
+      expect(sink).not.toHaveBeenCalled();
     } finally {
       vi.mocked(globalThis.setTimeout).mockRestore();
     }
   });
 
-  it("falls back to reportError when no onError provided", () => {
+  it("falls back to logError when no onError provided", () => {
     root.innerHTML = '<div id="target"></div>';
     const error = new Error("boom");
     hydrateOnce(root, "#target", () => { throw error; });
-    expect(reportErrorSpy).toHaveBeenCalledWith(error);
+    expect(sink).toHaveBeenCalledWith(error, expect.objectContaining({ operation: "router-hydrate" }));
   });
 });
 

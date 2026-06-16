@@ -18,11 +18,12 @@
 # reviewed conflict-free PR auto-merges regardless of whether it closes a bug,
 # security, or enhancement issue.
 #
-# Config gate (off by default): read from dispatch-config-load auto-merge.
-#   - no config file  → `no-config` → exit 0 with no output (current human-merge
-#                       behavior preserved).
-#   - file present but .enabled != true → exit 0 with no output.
-#   - .enabled == true → arm auto-merging.
+# Config gate (ON by default): read from dispatch-config-load auto-merge. The
+# config file is an opt-OUT kill-switch (incident response), inverting the usual
+# absent→inert convention.
+#   - no config file  → `no-config` → armed (auto-merging is the default).
+#   - file present, .enabled == false → exit 0 with no output (kill-switch).
+#   - file present, .enabled == true → armed (redundant with the default).
 #
 # Merge: gh pr merge <n> --squash with explicit --subject (the PR title) and
 # --body (the PR body), so the non-TTY squash is deterministic and the
@@ -55,9 +56,13 @@ CFG=$("$SCRIPT_DIR/dispatch-config-load" auto-merge) || {
   echo "dispatch-auto-merge: error: dispatch-config-load auto-merge failed" >&2
   exit 1
 }
-[[ "$CFG" == "no-config" ]] && exit 0
-ENABLED=$(jq -r '.enabled' <<<"$CFG")
-[[ "$ENABLED" == "true" ]] || exit 0
+# Default ON: an absent config file arms auto-merging. The file exists only as
+# an opt-OUT kill-switch (incident response). When present, enabled:false turns
+# the reconciler off; enabled:true (the redundant explicit form) keeps it on.
+if [[ "$CFG" != "no-config" ]]; then
+  ENABLED=$(jq -r '.enabled' <<<"$CFG")
+  [[ "$ENABLED" == "false" ]] && exit 0
+fi
 
 # ---- Step 2: one fresh fetch of every open PR -------------------------------
 # Never proceed on a partial fetch — a truncated snapshot could merge a PR whose
