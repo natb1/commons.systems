@@ -420,6 +420,99 @@ describe("createBlogApp routing and panel behavior", () => {
     });
   });
 
+  // Case 8 — #1715: onAuthStateChanged unsubscribe is called on destroy().
+  // Production-representative: createAppContext returns Promise<() => void>.
+  it("calls the onAuthStateChanged unsubscribe returned as Promise<() => void> on destroy() (#1715)", async () => {
+    history.pushState({}, "", "/");
+    scaffoldDom();
+
+    const unsubscribeSpy = vi.fn();
+    const config = makeConfig({
+      firebase: {
+        db: { type: "mock-firestore" } as never,
+        namespace: "test/env" as never,
+        trackPageView: vi.fn(),
+        initAppCheck: vi.fn(() => Promise.resolve()),
+        signIn: vi.fn(() => Promise.resolve()),
+        signOut: vi.fn(() => Promise.resolve()),
+        // Production-representative: createAppContext wraps Firebase's
+        // onAuthStateChanged and returns Promise<() => void>.
+        onAuthStateChanged: vi.fn(() => Promise.resolve(unsubscribeSpy)),
+      },
+    });
+
+    handle = createBlogApp(config);
+
+    // setTimeout(r, 0) is a macrotask; all pending Promise .then() callbacks
+    // (including .then(captureUnsub)) run before it, so authUnsub is stored.
+    await new Promise((r) => setTimeout(r, 0));
+
+    handle.destroy();
+
+    expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Case 9 — #1715: destroy-before-resolve race: destroy() runs before the
+  // Promise resolves; captureUnsub must call unsub() immediately on late resolution.
+  it("calls the onAuthStateChanged unsubscribe even when destroy() runs before the Promise resolves (#1715)", async () => {
+    history.pushState({}, "", "/");
+    scaffoldDom();
+
+    const unsubscribeSpy = vi.fn();
+    let resolveUnsub!: (unsub: () => void) => void;
+    const controlledPromise = new Promise<() => void>((resolve) => {
+      resolveUnsub = resolve;
+    });
+
+    const config = makeConfig({
+      firebase: {
+        db: { type: "mock-firestore" } as never,
+        namespace: "test/env" as never,
+        trackPageView: vi.fn(),
+        initAppCheck: vi.fn(() => Promise.resolve()),
+        signIn: vi.fn(() => Promise.resolve()),
+        signOut: vi.fn(() => Promise.resolve()),
+        onAuthStateChanged: vi.fn(() => controlledPromise),
+      },
+    });
+
+    handle = createBlogApp(config);
+
+    // destroy() before the promise resolves — sets authDestroyed, authUnsub is still undefined.
+    handle.destroy();
+
+    // Now resolve with the spy — captureUnsub sees authDestroyed and calls unsub() immediately.
+    resolveUnsub(unsubscribeSpy);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Case 10 — #1715: synchronous-function case: onAuthStateChanged returns
+  // the unsubscribe directly (not a promise).
+  it("calls the onAuthStateChanged unsubscribe returned synchronously on destroy() (#1715)", () => {
+    history.pushState({}, "", "/");
+    scaffoldDom();
+
+    const unsubscribeSpy = vi.fn();
+    const config = makeConfig({
+      firebase: {
+        db: { type: "mock-firestore" } as never,
+        namespace: "test/env" as never,
+        trackPageView: vi.fn(),
+        initAppCheck: vi.fn(() => Promise.resolve()),
+        signIn: vi.fn(() => Promise.resolve()),
+        signOut: vi.fn(() => Promise.resolve()),
+        onAuthStateChanged: vi.fn(() => unsubscribeSpy),
+      },
+    });
+
+    handle = createBlogApp(config);
+    handle.destroy();
+
+    expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
+  });
+
   // Case 7 — #1409: the live-DOM skip fires whenever #posts is live, not only
   // on the initial prerender. After a loadPosts() run renders a fresh #posts,
   // repeat navigations to "/" and "/post/..." both return null from render and
