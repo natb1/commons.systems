@@ -11,6 +11,30 @@ import { onLCP, onCLS, onINP, onFCP, onTTFB, type Metric } from "web-vitals";
 const STORAGE_KEY = "analytics_traffic_type";
 const PARAM_KEY = "_ct";
 
+/**
+ * CLS is a unitless score in [0, 1] with sub-integer precision (e.g. 0.123).
+ * GA4 stores event params as integers in some report/BigQuery surfaces, which
+ * would truncate small CLS values to 0 and lose all signal. We multiply by this
+ * factor and round so the value survives as an integer (0.123 -> 123). To
+ * recover the original CLS in reports or BigQuery, divide metric_value by
+ * CLS_SCALE.
+ */
+const CLS_SCALE = 1000;
+
+// Guards against stacking duplicate web-vitals observers. web-vitals provides
+// no cross-call deduplication, so each reportWebVitals call registers its own
+// set of observers; a repeated initAnalytics (e.g. hot-module reload) would
+// otherwise emit one `web_vitals` event per registration and inflate GA4 counts.
+let webVitalsRegistered = false;
+
+/**
+ * Test-only: resets the module-scope web-vitals registration guard so each test
+ * starts from a clean slate. Not part of the public runtime API.
+ */
+export function __resetWebVitalsRegistrationForTest(): void {
+  webVitalsRegistered = false;
+}
+
 type TrafficType = "internal" | "organic";
 
 /**
@@ -48,9 +72,12 @@ function applyTrafficTag(): TrafficType {
 }
 
 function reportWebVitals(analytics: Analytics): void {
+  if (webVitalsRegistered) return;
+  webVitalsRegistered = true;
+
   function report(metric: Metric): void {
     const metricValue = Math.round(
-      metric.name === "CLS" ? metric.value * 1000 : metric.value,
+      metric.name === "CLS" ? metric.value * CLS_SCALE : metric.value,
     );
     try {
       logEvent(analytics, "web_vitals", {

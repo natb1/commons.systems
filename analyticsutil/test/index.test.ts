@@ -17,7 +17,11 @@ vi.mock("web-vitals", () => ({
 
 import { initializeAnalytics, logEvent, setUserProperties } from "firebase/analytics";
 import { onLCP, onCLS, onINP, onFCP, onTTFB } from "web-vitals";
-import { initAnalytics, initAnalyticsSafe } from "../src/index";
+import {
+  initAnalytics,
+  initAnalyticsSafe,
+  __resetWebVitalsRegistrationForTest,
+} from "../src/index";
 
 // reportError is a browser API not available in Node — stub it so tests that
 // don't mock it fail loudly rather than silently swallowing errors.
@@ -25,7 +29,10 @@ globalThis.reportError ??= (error: unknown) => {
   throw error;
 };
 
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.resetAllMocks();
+  __resetWebVitalsRegistrationForTest();
+});
 
 describe("initAnalytics", () => {
   it("returns no-op tracker and logs debug when measurementId is missing", () => {
@@ -373,7 +380,6 @@ describe("web-vitals reporting", () => {
     );
 
     reportErrorSpy.mockRestore();
-    vi.mocked(logEvent).mockReset();
   });
 
   it("re-throws TypeError from logEvent inside web-vital callback", () => {
@@ -393,8 +399,6 @@ describe("web-vitals reporting", () => {
     } as unknown as Parameters<typeof capturedCallback>[0];
 
     expect(() => capturedCallback(fakeMetric)).toThrow(TypeError);
-
-    vi.mocked(logEvent).mockReset();
   });
 });
 
