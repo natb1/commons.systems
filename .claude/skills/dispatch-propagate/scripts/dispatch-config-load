@@ -215,13 +215,16 @@
 # ---- Schema: auto-merge.json -----------------------------------------------
 #
 # Top-level object gating the dispatch-auto-merge reconciler. Read by
-# dispatch-auto-merge; absent file → no-config → the reconciler is inert and the
-# current human-merge behavior is preserved.
+# dispatch-auto-merge. UNLIKE every other config type, auto-merge INVERTS the
+# generic absent→inert convention documented above (see "Stdout protocol"): an absent file
+# → no-config → ARMED (auto-merge is ON by default). The file exists only as an
+# opt-OUT kill-switch for incident response.
 #
-#   enabled       boolean (required) — master switch. false (or no file) keeps
-#                 the feature off; only true arms auto-merging.
+#   enabled       boolean (required when the file is present) — kill-switch.
+#                 false turns auto-merging off; true (redundant with the absent-
+#                 file default) keeps it on.
 #
-# Example (see auto-merge.example.json):
+# Example (see auto-merge.example.json) — the kill-switch form:
 #   {
 #     "enabled": false
 #   }
