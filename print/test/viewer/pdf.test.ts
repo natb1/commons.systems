@@ -398,6 +398,12 @@ describe("search()", () => {
     expect(decoded).toEqual({ page: 2, offset: 0, length: 3 });
   });
 
+  it("returns [] without throwing when called before init() resolves", async () => {
+    const renderer = createPdfRenderer();
+
+    await expect(renderer.search!("the")).resolves.toEqual([]);
+  });
+
   it("returns [] without throwing when destroy() ran before search()", async () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");

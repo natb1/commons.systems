@@ -557,6 +557,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     async search(query: string): Promise<SearchResult[]> {
       const trimmed = query.trim();
       if (!trimmed) return [];
+      if (!pdfDoc) return [];
 
       const results: SearchResult[] = [];
 
