@@ -10,6 +10,7 @@
  * local items on each render. Non-Chromium browsers (no FSA) get nothing here
  * and stay on the cloud-only path.
  */
+import { escapeHtml } from "@commons-systems/htmlutil";
 import { createFsaHandleStore } from "@commons-systems/local-first/fsa-handle-store";
 import { logError } from "@commons-systems/errorutil/log";
 
@@ -19,7 +20,7 @@ import {
   resolveLocalBlob,
 } from "./library.js";
 import { extractMetadata } from "./local-metadata.js";
-import { renderLocalMediaItems } from "./pages/home.js";
+import { mediaTypeBadge } from "./media-render.js";
 import {
   cacheMetadataBatch,
   ensureLoaded,
@@ -30,6 +31,7 @@ import type { MediaItem } from "./types.js";
 
 const store = createFsaHandleStore({ app: "print" });
 const PURPOSE = "library-folder";
+export const FOCUS_RESCAN_DEBOUNCE_MS = 400;
 
 export type FolderUiState = "open" | "grant" | "list";
 
@@ -71,13 +73,21 @@ export async function initLocalFolder(
     createLocalSource(dir);
     await renderLocalIntoList(mediaListContainer);
     if (focusCleanup) focusCleanup();
+    let rescanTimer: ReturnType<typeof setTimeout> | null = null;
     const onFocus = () => {
-      renderLocalIntoList(mediaListContainer).catch((err) =>
-        logError(err, { operation: "local-folder-rescan" }),
-      );
+      if (rescanTimer) clearTimeout(rescanTimer);
+      rescanTimer = setTimeout(() => {
+        rescanTimer = null;
+        renderLocalIntoList(mediaListContainer).catch((err) =>
+          logError(err, { operation: "local-folder-rescan" }),
+        );
+      }, FOCUS_RESCAN_DEBOUNCE_MS);
     };
     window.addEventListener("focus", onFocus);
-    focusCleanup = () => window.removeEventListener("focus", onFocus);
+    focusCleanup = () => {
+      window.removeEventListener("focus", onFocus);
+      if (rescanTimer) clearTimeout(rescanTimer);
+    };
     // Signal that localSource is now bound — lets the caller re-render a
     // viewer route that was stuck on Not Found before this bind (any path:
     // auto-bind, grant-click, or first-open picker).
@@ -133,6 +143,26 @@ export async function initLocalFolder(
       focusCleanup = null;
     }
   };
+}
+
+/**
+ * Render local-folder items as `<li>` rows for prepending into the shared media
+ * list. Local items get a "local" badge and a view link, but no download /
+ * markdown actions — their bytes live on the user's disk, not in cloud storage.
+ */
+function renderLocalMediaItems(items: MediaItem[]): string {
+  return items
+    .map((item) => {
+      return `<li class="media-item media-item-local" data-id="${escapeHtml(item.id)}">
+        <div class="media-info">
+          <span class="media-title"><a href="/view/${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a></span>
+          ${mediaTypeBadge(item.mediaType)}
+          <span class="media-badge media-badge-local">local</span>
+          ${item.pageCount !== undefined ? `<span class="media-pagecount">${escapeHtml(String(item.pageCount))} pages</span>` : ""}
+        </div>
+      </li>`;
+    })
+    .join("\n");
 }
 
 /**
