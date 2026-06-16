@@ -567,9 +567,9 @@ func TestAddAndRemoveWorkspace(t *testing.T) {
 	if len(pkg.Workspaces) != 3 {
 		t.Fatalf("expected 3 workspaces, got %d", len(pkg.Workspaces))
 	}
-	// Should be sorted: blog, demo, landing
-	if pkg.Workspaces[0] != "blog" || pkg.Workspaces[1] != "demo" || pkg.Workspaces[2] != "landing" {
-		t.Errorf("expected [blog demo landing], got %v", pkg.Workspaces)
+	// Should be appended: blog, landing, demo
+	if pkg.Workspaces[0] != "blog" || pkg.Workspaces[1] != "landing" || pkg.Workspaces[2] != "demo" {
+		t.Errorf("expected [blog landing demo], got %v", pkg.Workspaces)
 	}
 
 	removed := RemoveWorkspace(pkg, "demo")
@@ -594,7 +594,7 @@ func TestAddWorkspaceDuplicate(t *testing.T) {
 	}
 }
 
-func TestAddWorkspaceSorting(t *testing.T) {
+func TestAddWorkspaceAppendPreservesOrder(t *testing.T) {
 	pkg := &PackageJSON{
 		Workspaces: []string{"config", "landing", "style"},
 	}
@@ -602,7 +602,8 @@ func TestAddWorkspaceSorting(t *testing.T) {
 	if err := AddWorkspace(pkg, "blog"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	expected := []string{"blog", "config", "landing", "style"}
+	// config must stay first — this is the regression this test guards against.
+	expected := []string{"config", "landing", "style", "blog"}
 	if len(pkg.Workspaces) != len(expected) {
 		t.Fatalf("expected %d workspaces, got %d", len(expected), len(pkg.Workspaces))
 	}
