@@ -308,6 +308,14 @@ export function createEpubRenderer(
             const result = buildResult(match, trimmed, label);
             if (result) results.push(result);
           }
+        } catch (err) {
+          // A single section that fails to load (corrupt/missing resource, malformed
+          // EPUB) is skipped; the search continues over the remaining sections.
+          reportError(
+            err instanceof Error
+              ? err
+              : new Error("EPUB search: section failed to load", { cause: err }),
+          );
         } finally {
           section.unload();
         }

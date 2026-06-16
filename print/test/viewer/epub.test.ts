@@ -824,6 +824,25 @@ describe("createEpubRenderer", () => {
       expect(removeCfis).not.toContain("cfi-A");
     });
 
+    it("skips a section whose load() rejects, surfaces via reportError, and returns matches from remaining sections", async () => {
+      const s0 = makeSection("ch0.xhtml", [{ cfi: "cfi-0", excerpt: "alpha fox beta" }]);
+      const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "gamma fox delta" }]);
+      const s2 = makeSection("ch2.xhtml", [{ cfi: "cfi-2", excerpt: "epsilon fox" }]);
+      s1.load.mockRejectedValue(new Error("boom"));
+      mockSpine.spineItems = [s0, s1, s2];
+      mockBook.navigation.get.mockImplementation((href: string) => ({ label: `Label ${href}` }));
+
+      const renderer = await initRenderer();
+      const results = await renderer.search!("fox");
+
+      // The failing section's unload() must still be called (finally block).
+      expect(s1.unload).toHaveBeenCalledTimes(1);
+      // Results contain only s0 and s2 matches — s1 is skipped.
+      expect(results.map((r) => r.location)).toEqual(["cfi-0", "cfi-2"]);
+      // The error was surfaced via reportError.
+      expect(globalThis.reportError).toHaveBeenCalled();
+    });
+
     describe("goToResult", () => {
       function driveRelocated() {
         // goToResult awaits waitForRelocated(), which resolves on the captured
