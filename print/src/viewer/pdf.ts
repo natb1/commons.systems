@@ -441,7 +441,10 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     target.appendChild(wrapper);
 
     const result = await renderPageToCanvas(pageNum, c, targetRect, wrapper, () => gen !== spreadGen);
-    if (!result) return;
+    if (!result) {
+      wrapper.remove();
+      return;
+    }
     if (gen !== spreadGen) {
       // The canvas render already completed; only the orphaned wrapper needs cleanup.
       wrapper.remove();
