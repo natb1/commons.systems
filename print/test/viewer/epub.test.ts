@@ -835,12 +835,17 @@ describe("createEpubRenderer", () => {
       const renderer = await initRenderer();
       const results = await renderer.search!("fox");
 
-      // The failing section's unload() must still be called (finally block).
+      // Every section's unload() must still be called (finally block runs
+      // for each section regardless of whether a sibling fails).
+      expect(s0.unload).toHaveBeenCalledTimes(1);
       expect(s1.unload).toHaveBeenCalledTimes(1);
+      expect(s2.unload).toHaveBeenCalledTimes(1);
       // Results contain only s0 and s2 matches — s1 is skipped.
       expect(results.map((r) => r.location)).toEqual(["cfi-0", "cfi-2"]);
-      // The error was surfaced via reportError.
-      expect(globalThis.reportError).toHaveBeenCalled();
+      // The specific error from the failing section was surfaced via reportError.
+      expect(globalThis.reportError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "boom" }),
+      );
     });
 
     describe("goToResult", () => {
