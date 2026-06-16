@@ -824,6 +824,30 @@ describe("createEpubRenderer", () => {
       expect(removeCfis).not.toContain("cfi-A");
     });
 
+    it("skips a section whose load() rejects, surfaces via reportError, and returns matches from remaining sections", async () => {
+      const s0 = makeSection("ch0.xhtml", [{ cfi: "cfi-0", excerpt: "alpha fox beta" }]);
+      const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "gamma fox delta" }]);
+      const s2 = makeSection("ch2.xhtml", [{ cfi: "cfi-2", excerpt: "epsilon fox" }]);
+      s1.load.mockRejectedValue(new Error("boom"));
+      mockSpine.spineItems = [s0, s1, s2];
+      mockBook.navigation.get.mockImplementation((href: string) => ({ label: `Label ${href}` }));
+
+      const renderer = await initRenderer();
+      const results = await renderer.search!("fox");
+
+      // Every section's unload() must still be called (finally block runs
+      // for each section regardless of whether a sibling fails).
+      expect(s0.unload).toHaveBeenCalledTimes(1);
+      expect(s1.unload).toHaveBeenCalledTimes(1);
+      expect(s2.unload).toHaveBeenCalledTimes(1);
+      // Results contain only s0 and s2 matches — s1 is skipped.
+      expect(results.map((r) => r.location)).toEqual(["cfi-0", "cfi-2"]);
+      // The specific error from the failing section was surfaced via reportError.
+      expect(globalThis.reportError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "boom" }),
+      );
+    });
+
     describe("goToResult", () => {
       function driveRelocated() {
         // goToResult awaits waitForRelocated(), which resolves on the captured
@@ -889,6 +913,57 @@ describe("createEpubRenderer", () => {
         mockRendition.annotations.remove.mockClear();
         renderer.clearSearch!();
         expect(mockRendition.annotations.remove).not.toHaveBeenCalled();
+      });
+
+      it("aborts an in-flight search so its highlights never appear after clearSearch", async () => {
+        // One section whose load parks on a gate; find returns a match.
+        const section: FakeSection = {
+          href: "ch0.xhtml",
+          unload: vi.fn(),
+          find: vi.fn().mockReturnValue([{ cfi: "cfi-A", excerpt: "fox" }]),
+          load: vi.fn() as ReturnType<typeof vi.fn>,
+        };
+        let releaseFirst!: () => void;
+        const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+        section.load.mockImplementationOnce(() => gate);
+        mockSpine.spineItems = [section];
+        mockBook.navigation.get.mockReturnValue({ label: "X" });
+
+        const renderer = await initRenderer();
+
+        // Start the search — it parks on the gated section.load().
+        const p = renderer.search!("fox");
+
+        // Clear the search while parked.
+        renderer.clearSearch!();
+
+        // Release the gate so the in-flight search resumes and hits the epoch guard.
+        releaseFirst();
+        await p;
+
+        // The aborted search must not have painted any highlights.
+        const highlightCfis = mockRendition.annotations.highlight.mock.calls.map((c) => c[0]);
+        expect(highlightCfis).not.toContain("cfi-A");
+      });
+    });
+
+    describe("renderResult", () => {
+      it("is exposed as a method on the renderer", async () => {
+        const renderer = await initRenderer();
+        expect(typeof renderer.renderResult).toBe("function");
+      });
+
+      it("is a harmless no-op: resolves without throwing and does not call rendition.display", async () => {
+        const renderer = await initRenderer();
+
+        // Record display call count before renderResult — it may already have
+        // been called during init (initial display). Only new calls would matter.
+        const displayCallsBefore = mockRendition.display.mock.calls.length;
+
+        await expect(renderer.renderResult()).resolves.toBeUndefined();
+
+        // renderResult must not trigger an additional rendition.display call.
+        expect(mockRendition.display.mock.calls.length).toBe(displayCallsBefore);
       });
     });
   });

@@ -14,11 +14,12 @@ function makeSearchResult(overrides: Partial<SearchResult> = {}): SearchResult {
   };
 }
 
-/** Renderer with search/goToResult/clearSearch wired up. Pass `search` override to control results. */
+/** Renderer with all four SearchableRenderer methods. Pass overrides to control results. */
 function makeSearchableRenderer(overrides: Partial<ContentRenderer> = {}) {
   return makeMockRenderer({
     search: vi.fn().mockResolvedValue([]),
     goToResult: vi.fn().mockResolvedValue(undefined),
+    renderResult: vi.fn().mockResolvedValue(undefined),
     clearSearch: vi.fn(),
     ...overrides,
   });
@@ -70,40 +71,18 @@ describe("initSearch", () => {
     vi.mocked(globalThis.reportError).mockRestore();
   });
 
-  it("returns null when renderer lacks search method", () => {
-    const renderer = makeMockRenderer();
-    const result = initSearch(container, renderer, vi.fn());
-    expect(result).toBeNull();
-  });
-
-  it("returns null when renderer has search but lacks goToResult", () => {
-    const renderer = makeMockRenderer({
-      search: vi.fn().mockResolvedValue([]),
-    });
-    const result = initSearch(container, renderer, vi.fn());
-    expect(result).toBeNull();
-  });
-
-  it("returns a cleanup function when renderer has search", () => {
+  it("returns a cleanup function", () => {
     const renderer = makeSearchableRenderer();
     const result = initSearch(container, renderer, vi.fn());
     expect(typeof result).toBe("function");
   });
 
-  it("removes search-hidden class when renderer has search", () => {
+  it("removes search-hidden class", () => {
     const renderer = makeSearchableRenderer();
     initSearch(container, renderer, vi.fn());
 
     const section = container.querySelector(".viewer-search") as HTMLElement;
     expect(section.classList.contains("search-hidden")).toBe(false);
-  });
-
-  it("search-hidden class remains when renderer lacks search", () => {
-    const renderer = makeMockRenderer();
-    initSearch(container, renderer, vi.fn());
-
-    const section = container.querySelector(".viewer-search") as HTMLElement;
-    expect(section.classList.contains("search-hidden")).toBe(true);
   });
 
   it("calls renderer.search after 300ms debounce on input", async () => {

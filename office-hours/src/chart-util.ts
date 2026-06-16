@@ -3,6 +3,11 @@ import * as Plot from "@observablehq/plot";
 export const AXIS_WIDTH = 50;
 export const MARGIN_RIGHT = 20;
 export const MARGIN_BOTTOM = 50;
+/** Per-sample chart width allocation along the time axis. */
+export const POINT_WIDTH = 60;
+/** Approximate visible width before horizontal scrolling kicks in. */
+export const CONTAINER_WIDTH = 640;
+export const CHART_HEIGHT = 220;
 
 /** Compute scrollable chart body width from point count and point width, filling at least the visible area. */
 export function computeChartWidth(pointCount: number, pointWidth: number, containerWidth: number): number {

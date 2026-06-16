@@ -1,5 +1,5 @@
 import ePub, { type Book, type Rendition, type Location, type NavItem } from "epubjs";
-import type { ContentRenderer, OutlineEntry, SearchResult } from "./types.js";
+import type { OutlineEntry, SearchableRenderer, SearchResult } from "./types.js";
 
 // epubjs ships incomplete type declarations. These narrow shapes describe the
 // runtime members we use that are missing from the .d.ts, following the
@@ -26,7 +26,7 @@ const ACTIVE_STYLES = { fill: "#f59e0b", "fill-opacity": "0.5" };
 
 export function createEpubRenderer(
   onError?: (err: unknown) => void,
-): ContentRenderer {
+): SearchableRenderer {
   let book: Book | null = null;
   let rendition: Rendition | null = null;
   let containerDiv: HTMLDivElement | null = null;
@@ -302,11 +302,34 @@ export function createEpubRenderer(
       for (let i = 0; i < spineItems.length; i++) {
         const section = spineItems[i]!;
         try {
-          await section.load(loader);
-          const label = labelForSection(section, i);
-          for (const match of section.find(trimmed)) {
-            const result = buildResult(match, trimmed, label);
-            if (result) results.push(result);
+          try {
+            await section.load(loader);
+          } catch (err) {
+            // A single section that fails to load (corrupt/missing resource,
+            // malformed EPUB) is skipped; the search continues over the
+            // remaining sections.
+            reportError(
+              err instanceof Error
+                ? err
+                : new Error("EPUB search: section failed to load", { cause: err }),
+            );
+            continue;
+          }
+          try {
+            const label = labelForSection(section, i);
+            for (const match of section.find(trimmed)) {
+              const result = buildResult(match, trimmed, label);
+              if (result) results.push(result);
+            }
+          } catch (err) {
+            // The section loaded, but find()/buildResult() threw (e.g.
+            // createRange() on a malformed loaded document); skip this section
+            // and continue over the remaining sections.
+            reportError(
+              err instanceof Error
+                ? err
+                : new Error("EPUB search: section failed during find", { cause: err }),
+            );
           }
         } finally {
           section.unload();
@@ -347,7 +370,14 @@ export function createEpubRenderer(
       _activeCfi = result.location;
     },
 
+    // EPUB renders the armed result directly inside goToResult (rendition.display);
+    // there is no separate single-page render step (no spread mode). Documented no-op.
+    async renderResult(): Promise<void> {},
+
     clearSearch(): void {
+      // Stand down any in-flight search(): bumping the epoch trips its post-loop
+      // guard (search ~line 318) so it applies no highlights for the cleared query.
+      _searchEpoch++;
       clearSearchHighlights();
     },
 
