@@ -216,7 +216,7 @@
 #
 # Top-level object gating the dispatch-auto-merge reconciler. Read by
 # dispatch-auto-merge. UNLIKE every other config type, auto-merge INVERTS the
-# generic absent→inert convention documented above (lines 14-18): an absent file
+# generic absent→inert convention documented above (see "Stdout protocol"): an absent file
 # → no-config → ARMED (auto-merge is ON by default). The file exists only as an
 # opt-OUT kill-switch for incident response.
 #
