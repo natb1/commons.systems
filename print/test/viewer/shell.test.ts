@@ -836,7 +836,7 @@ describe("initViewer spread mode", () => {
       clearSearch: vi.fn(),
       renderResult,
     });
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
     await flushInit();
 
     // Enter spread mode
@@ -883,7 +883,7 @@ describe("initViewer spread mode", () => {
       clearSearch: vi.fn(),
       renderResult,
     });
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
     await flushInit();
 
     // Do NOT enter spread mode — stay in single mode
