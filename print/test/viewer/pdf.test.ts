@@ -81,6 +81,7 @@ vi.mock("pdfjs-dist", () => {
     version: "4.10.38",
     getDocument: (_source: unknown) => ({ promise: Promise.resolve(fakeDoc) }),
     TextLayer: MockTextLayer,
+    __fakeDoc: fakeDoc,
   };
 });
 
@@ -398,6 +399,12 @@ describe("search()", () => {
     expect(decoded).toEqual({ page: 2, offset: 0, length: 3 });
   });
 
+  it("returns [] without throwing when called before init() resolves", async () => {
+    const renderer = createPdfRenderer();
+
+    await expect(renderer.search!("the")).resolves.toEqual([]);
+  });
+
   it("returns [] without throwing when destroy() ran before search()", async () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
@@ -456,6 +463,7 @@ describe("clearSearch()", () => {
   let scrollSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     resizeObserverCallbacks = [];
     vi.clearAllMocks();
 
@@ -492,6 +500,22 @@ describe("clearSearch()", () => {
     getContextSpy.mockRestore();
     scrollSpy.mockRestore();
     vi.mocked(globalThis.reportError).mockRestore();
+    vi.useRealTimers();
+  });
+
+  // A non-zero rect so renderPageInto proceeds past the 0×0 guard. Mirrors the
+  // container stub set up in beforeEach, factored out so the spread/exception
+  // target tests share one stub shape.
+  const makeTargetRect = (): DOMRect => ({
+    width: 400,
+    height: 600,
+    top: 0,
+    left: 0,
+    right: 400,
+    bottom: 600,
+    x: 0,
+    y: 0,
+    toJSON() { return {}; },
   });
 
   it("clearSearch() is callable and idempotent before any goToResult (no active highlight)", async () => {
@@ -512,9 +536,11 @@ describe("clearSearch()", () => {
     const page1Result = results.find((r) => r.label === "Page 1");
     expect(page1Result).toBeDefined();
 
+    // goToResult is ARM-ONLY — no highlight appears until renderResult() runs.
     await renderer.goToResult!(page1Result!);
+    await renderer.renderResult!();
 
-    // After goToResult, a .search-highlight.active span should exist in the container
+    // After renderResult, a .search-highlight.active span should exist in the container
     const highlight = container.querySelector(".search-highlight.active");
     expect(highlight).not.toBeNull();
     expect(highlight!.textContent).toBe("the");
@@ -540,7 +566,10 @@ describe("clearSearch()", () => {
       await renderer.init(container, "fake://source.pdf");
       const results = await renderer.search!("the");
       const page1Result = results.find((r) => r.label === "Page 1");
+      // Arm then render so the highlight is live before the resize re-render
+      // (goToResult is arm-only).
       await renderer.goToResult!(page1Result!);
+      await renderer.renderResult!();
 
       const firstSpan = container.querySelector(".search-highlight");
       expect(firstSpan).not.toBeNull();
@@ -567,6 +596,8 @@ describe("clearSearch()", () => {
     const results = await renderer.search!("the");
     const page1Result = results.find((r) => r.label === "Page 1");
     await renderer.goToResult!(page1Result!);
+    // Apply the highlight so clearSearch has something real to clear.
+    await renderer.renderResult!();
 
     renderer.clearSearch!();
 
@@ -574,6 +605,163 @@ describe("clearSearch()", () => {
     await renderer.goToPage(1);
 
     expect(container.querySelector(".search-highlight.active")).toBeNull();
+  });
+
+  it("goToResult alone (arm-only) produces no highlight span; renderResult() applies it", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the");
+    const page1Result = results.find((r) => r.label === "Page 1");
+    expect(page1Result).toBeDefined();
+
+    // ARM step only — no render triggered, so no highlight span in the DOM.
+    await renderer.goToResult!(page1Result!);
+    expect(container.querySelector(".search-highlight")).toBeNull();
+
+    // RENDER step — highlight should now appear with the matched text.
+    await renderer.renderResult!();
+    const highlight = container.querySelector(".search-highlight.active");
+    expect(highlight).not.toBeNull();
+    expect(highlight!.textContent).toBe("the");
+  });
+
+  it("goToOutlineEntry() drains stale highlight and disarms pendingHighlight", async () => {
+    // Outline entry resolves to page 1 — the SAME page as the search result.
+    // A different page would make the resize assertion pass even on unfixed code,
+    // since applyHighlight is gated on pendingHighlight.page === pageNum.
+    // Same-page is the only configuration where the discriminating assertion is observable.
+    const pdfjs = (await import("pdfjs-dist")) as unknown as { __fakeDoc: { getOutline: () => Promise<unknown> } };
+    pdfjs.__fakeDoc.getOutline = () =>
+      Promise.resolve([{ title: "Chapter 1", dest: [{ num: 1, gen: 0 }], items: [] }]);
+
+    try {
+      const renderer = createPdfRenderer();
+      await renderer.init(container, "fake://source.pdf");
+
+      const results = await renderer.search!("the");
+      const page1Result = results.find((r) => r.label === "Page 1");
+      await renderer.goToResult!(page1Result!);
+      // goToResult is arm-only now (#1719); renderResult() applies the highlight.
+      await renderer.renderResult!();
+      expect(container.querySelector(".search-highlight.active")).not.toBeNull();
+
+      const outline = await renderer.getOutline!();
+      await renderer.goToOutlineEntry!(outline[0]);
+      // Discriminating assertion: on unfixed code, the armed pendingHighlight would
+      // be re-applied during goToOutlineEntry's own renderPage call (same page 1),
+      // leaving a .search-highlight span in the DOM.
+      expect(container.querySelector(".search-highlight")).toBeNull();
+
+      resizeObserverCallbacks.forEach((cb) => cb());
+      vi.advanceTimersByTime(150);
+      await Promise.resolve();
+      expect(container.querySelector(".search-highlight")).toBeNull();
+    } finally {
+      // Restore getOutline so this mutation does not affect subsequent tests.
+      pdfjs.__fakeDoc.getOutline = () => Promise.resolve(null);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Double-highlight regression (#1726): applyHighlight() restores any divs
+  // mutated by a prior call before reading them, so re-rendering a page that
+  // already carries a highlight never leaves the previous render's detached
+  // div still wrapped in a stale .search-highlight span.
+  // -------------------------------------------------------------------------
+
+  it("double goToResult() on the same page leaves no stale highlighted div", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the");
+    const page1Result = results.find((r) => r.label === "Page 1");
+    expect(page1Result).toBeDefined();
+
+    // Render #1: arm then render so the first textLayer span carries the
+    // render-#1 node (which renderPage's up-front replaceChildren will detach
+    // on the next render). goToResult is arm-only, so renderResult() drives
+    // the visible render.
+    await renderer.goToResult!(page1Result!);
+    await renderer.renderResult!();
+    const firstDiv = container.querySelector(".textLayer span") as HTMLElement;
+    expect(firstDiv).not.toBeNull();
+    expect(firstDiv.querySelector(".search-highlight")).not.toBeNull();
+
+    // Render #2: same page. renderTextLayer detaches firstDiv and builds a
+    // fresh layer; applyHighlight's leading unwrapHighlights() must restore the
+    // now-detached firstDiv, collapsing its stale highlight span. On unfixed
+    // code firstDiv stays wrapped and this assertion fails.
+    await renderer.goToResult!(page1Result!);
+    await renderer.renderResult!();
+    expect(firstDiv.querySelector(".search-highlight")).toBeNull();
+
+    // The live layer should still show exactly one highlighted "the".
+    const liveHighlights = container.querySelectorAll(".textLayer .search-highlight");
+    expect(liveHighlights.length).toBe(1);
+    expect(liveHighlights[0].textContent).toBe("the");
+
+    renderer.clearSearch!();
+
+    expect(container.querySelector(".search-highlight")).toBeNull();
+    const liveSpans = container.querySelectorAll(".textLayer span");
+    expect(liveSpans.length).toBe(1);
+    expect(liveSpans[0].textContent).toBe("the cat sat");
+  });
+
+  it("ResizeObserver re-render while pendingHighlight is set restores the detached div", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the");
+    const page1Result = results.find((r) => r.label === "Page 1");
+    expect(page1Result).toBeDefined();
+
+    // Arm then render so the first highlight is live before the resize
+    // re-render fires (goToResult is arm-only).
+    await renderer.goToResult!(page1Result!);
+    await renderer.renderResult!();
+    const firstDiv = container.querySelector(".textLayer span") as HTMLElement;
+    expect(firstDiv).not.toBeNull();
+    expect(firstDiv.querySelector(".search-highlight")).not.toBeNull();
+
+    // Fire the stored resize callbacks and let the 150ms debounce elapse so the
+    // ResizeObserver re-render (renderPage(_currentPage)) runs while
+    // pendingHighlight is still armed.
+    resizeObserverCallbacks.forEach((cb) => cb());
+    await vi.advanceTimersByTimeAsync(220);
+
+    // The re-render detaches firstDiv; applyHighlight's unwrapHighlights()
+    // restores it so it is no longer highlighted.
+    expect(firstDiv.querySelector(".search-highlight")).toBeNull();
+
+    renderer.clearSearch!();
+
+    expect(container.querySelector(".search-highlight")).toBeNull();
+    const liveSpans = container.querySelectorAll(".textLayer span");
+    expect(liveSpans.length).toBe(1);
+    expect(liveSpans[0].textContent).toBe("the cat sat");
+  });
+
+  it("every live text-layer span returns to its original text after clearSearch (acceptance #3 guard)", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the");
+    const page1Result = results.find((r) => r.label === "Page 1");
+    // Arm then render so clearSearch has a real highlight to clean up
+    // (goToResult is arm-only).
+    await renderer.goToResult!(page1Result!);
+    await renderer.renderResult!();
+
+    renderer.clearSearch!();
+
+    const liveSpans = Array.from(container.querySelectorAll(".textLayer span"));
+    expect(liveSpans.length).toBe(1);
+    for (const span of liveSpans) {
+      expect(span.querySelector(".search-highlight")).toBeNull();
+    }
+    expect(liveSpans[0].textContent).toBe("the cat sat");
   });
 
   it("goToResult() drains the previous result's highlight before arming the next", async () => {
@@ -584,17 +772,135 @@ describe("clearSearch()", () => {
     const r1 = results.find((r) => r.label === "Page 1")!;
     const r2 = results.find((r) => r.label === "Page 2")!;
 
+    // Arm then render the first result so its highlight is live in the DOM.
     await renderer.goToResult!(r1);
+    await renderer.renderResult!();
     // Capture the text-layer div that holds the first result's highlight span.
     const div1 = container.querySelector(".search-highlight")!.parentElement!;
     expect(div1.querySelector(".search-highlight")).not.toBeNull();
 
     // Arming the second result must drain the first entry (unwrapHighlights),
-    // restoring div1 instead of leaking it in highlightRestores.
+    // restoring div1 instead of leaking it in highlightRestores. The drain
+    // lives inside goToResult, so it happens without a render.
     await renderer.goToResult!(r2);
     expect(div1.querySelector(".search-highlight")).toBeNull();
 
-    // Exactly one highlight is live in the DOM (the current result).
+    // Render the second result so exactly one highlight is live in the DOM.
+    await renderer.renderResult!();
     expect(container.querySelectorAll(".search-highlight.active").length).toBe(1);
+  });
+
+  it("concurrent renderPageInto() for the same page keeps one wrapper (spreadGen guard)", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    // Arm then render pendingHighlight for page 1 so the highlight is live in the DOM.
+    const results = await renderer.search!("the");
+    const page1Result = results.find((r) => r.label === "Page 1");
+    expect(page1Result).toBeDefined();
+    await renderer.goToResult!(page1Result!);
+    await renderer.renderResult!();
+    expect(container.querySelector(".search-highlight.active")).not.toBeNull();
+
+    // A fresh spread target with a non-zero rect so renderPageInto proceeds past
+    // the 0×0 guard.
+    const target = document.createElement("div");
+    target.getBoundingClientRect = makeTargetRect;
+
+    // Two concurrent renders of the SAME page into the SAME target. The public
+    // renderPageInto runs cancelSpreadRenderTasks() (bumps spreadGen) synchronously
+    // before its first await, so the first call captures the older gen and, after
+    // its canvas render, loses the gen race and removes its orphaned wrapper; only
+    // the second call's wrapper survives.
+    const p1 = renderer.renderPageInto!(1, target);
+    const p2 = renderer.renderPageInto!(1, target);
+    await Promise.all([p1, p2]);
+
+    // Load-bearing: the spreadGen guard makes the superseded render remove its
+    // wrapper. Without the guard both renders keep their wrapper → 2.
+    expect(target.querySelectorAll(".pdf-page-wrapper").length).toBe(1);
+
+    // The surviving render applied the armed highlight exactly once.
+    const highlights = target.querySelectorAll(".search-highlight.active");
+    expect(highlights.length).toBe(1);
+    expect(highlights[0].textContent).toBe("the");
+
+    // applyHighlight() unwraps first, so the main container's highlight from
+    // goToResult was restored when the spread render re-applied the highlight.
+    expect(container.querySelector(".search-highlight.active")).toBeNull();
+
+    // Exact-restore: the surviving wrapper reconstructs the original page text,
+    // and clearSearch() returns it to plain "the cat sat" with no highlight.
+    const wrapper = target.querySelector(".pdf-page-wrapper")!;
+    expect(wrapper.textContent).toBe("the cat sat");
+    renderer.clearSearch!();
+    expect(target.querySelector(".search-highlight")).toBeNull();
+    const restored = Array.from(target.querySelectorAll("span")).find(
+      (s) => s.textContent === "the cat sat",
+    );
+    expect(restored).toBeDefined();
+  });
+
+  it("goToPosition() drains the active highlight and disarms pendingHighlight", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the");
+    const r1 = results.find((r) => r.label === "Page 1")!;
+    // Arm then render so the highlight is live before navigating away.
+    await renderer.goToResult!(r1);
+    await renderer.renderResult!();
+
+    // Capture the text-layer div holding the highlight before navigation.
+    const div1 = container.querySelector(".search-highlight")!.parentElement!;
+    expect(div1.querySelector(".search-highlight")).not.toBeNull();
+
+    // goToPosition must unwrap the highlight and disarm pendingHighlight
+    // (goToPosition itself renders and drains).
+    await renderer.goToPosition("2");
+
+    // The highlight span is removed from the previously-live text div.
+    expect(div1.querySelector(".search-highlight")).toBeNull();
+    // No highlight exists anywhere in the container.
+    expect(container.querySelectorAll(".search-highlight").length).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Exception-path wrapper leak (#1816): a throw inside renderPageInto() must
+  // not leave a stray .pdf-page-wrapper attached to target. The try/finally
+  // keyed on `committed` covers all non-committed exit paths.
+  // -------------------------------------------------------------------------
+
+  it("renderPageInto() throwing on canvas context leaves no wrapper", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const target = document.createElement("div");
+    target.getBoundingClientRect = makeTargetRect;
+
+    // null context makes renderPageToCanvas throw "Could not acquire 2D canvas context".
+    getContextSpy.mockReturnValue(null);
+
+    await expect(renderer.renderPageInto!(1, target)).rejects.toThrow(/Could not acquire 2D canvas context/);
+    expect(target.querySelectorAll(".pdf-page-wrapper").length).toBe(0);
+  });
+
+  it("renderPageInto() throwing on text layer leaves no wrapper", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const target = document.createElement("div");
+    target.getBoundingClientRect = makeTargetRect;
+
+    // Import the mocked TextLayer (MockTextLayer) and make render() reject with a
+    // non-AbortException error so renderTextLayer rethrows it.
+    const { TextLayer } = await import("pdfjs-dist");
+    const renderSpy = vi.spyOn(TextLayer.prototype, "render").mockRejectedValue(new Error("boom"));
+    try {
+      await expect(renderer.renderPageInto!(1, target)).rejects.toThrow();
+      expect(target.querySelectorAll(".pdf-page-wrapper").length).toBe(0);
+    } finally {
+      renderSpy.mockRestore();
+    }
   });
 });

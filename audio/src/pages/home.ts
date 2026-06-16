@@ -4,18 +4,18 @@ import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { isOutletCurrent } from "@commons-systems/router/hydrate";
 import type { User } from "../auth.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
-import { getPublicMedia, getAllAccessibleMedia } from "../firestore.js";
-import type { AudioItem } from "../types.js";
+import type { AudioOrigin, LibraryItem } from "../types.js";
+import { listLibrary } from "../library.js";
 import { formatDuration } from "../player.js";
 import type { PlayerHandle } from "../player.js";
 import { getCacheStats, clearCache, CACHE_UPDATED_EVENT } from "../audio-cache.js";
 
-function renderRow(item: AudioItem): string {
+function renderRow(item: LibraryItem): string {
   const track =
-    item.trackNumber !== null ? String(item.trackNumber) : "\u2014";
-  const year = item.year !== null ? String(item.year) : "\u2014";
+    item.trackNumber !== null ? String(item.trackNumber) : "—";
+  const year = item.year !== null ? String(item.year) : "—";
 
-  return `<details class="expand-row audio-row" data-id="${escapeHtml(item.id)}" data-storage-path="${escapeHtml(item.storagePath)}" data-title="${escapeHtml(item.title)}" data-artist="${escapeHtml(item.artist)}" data-album="${escapeHtml(item.album)}">
+  return `<details class="expand-row audio-row" data-id="${escapeHtml(item.id)}" data-origin="${escapeHtml(item.origin)}" data-storage-path="${escapeHtml(item.storagePath)}" data-local-name="${escapeHtml(item.localName ?? "")}" data-title="${escapeHtml(item.title)}" data-artist="${escapeHtml(item.artist)}" data-album="${escapeHtml(item.album)}">
     <summary>
       <div class="expand-summary">
         <label class="queue-checkbox"><input type="checkbox" data-queue-toggle aria-label="Add ${escapeHtml(item.title)} to queue" /></label>
@@ -37,7 +37,7 @@ function renderRow(item: AudioItem): string {
   </details>`;
 }
 
-function renderMediaList(items: AudioItem[]): string {
+function renderMediaList(items: LibraryItem[]): string {
   if (items.length === 0) {
     return '<p id="media-empty">No audio items available.</p>';
   }
@@ -45,16 +45,14 @@ function renderMediaList(items: AudioItem[]): string {
 }
 
 export async function renderHome(user: User | null): Promise<string> {
-  let mediaHtml: string;
+  let regionHtml: string;
   try {
-    const items = user?.email
-      ? await getAllAccessibleMedia(user.email)
-      : await getPublicMedia();
-    mediaHtml = renderMediaList(items);
+    const items = await listLibrary(user);
+    regionHtml = `<div id="library-region">${renderMediaList(items)}</div>`;
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
     if (!deferProgrammerError(error)) logError(error, { operation: "load-media" });
-    mediaHtml = '<p id="media-error">Could not load audio library.</p>';
+    regionHtml = `<div id="library-region"><p id="media-error">Could not load audio library.</p></div>`;
   }
 
   const publicNotice = !user
@@ -64,7 +62,7 @@ export async function renderHome(user: User | null): Promise<string> {
   return `
     <h2>Library</h2>
     ${publicNotice}
-    ${mediaHtml}
+    ${regionHtml}
     <section id="cache-info">
       <p><span id="cache-stats"></span></p>
       <button id="clear-cache-btn" type="button">Clear audio cache</button>
@@ -96,26 +94,60 @@ function refreshCacheStats(outlet: HTMLElement): void {
 }
 
 let clickAbort: AbortController | undefined;
+let rescanning = false;
 
 export function afterRenderHome(
   outlet: HTMLElement,
   player: PlayerHandle,
+  user: User | null,
+  onFolderStateChange?: () => void,
 ): void {
-  for (const row of outlet.querySelectorAll<HTMLElement>(".audio-row")) {
-    const id = row.dataset.id;
-    if (!id) continue;
-    const checkbox = row.querySelector<HTMLInputElement>(
-      "input[data-queue-toggle]",
-    );
-    if (checkbox) checkbox.checked = player.isQueued(id);
+  function applyCheckboxState(): void {
+    for (const row of outlet.querySelectorAll<HTMLElement>(".audio-row")) {
+      const id = row.dataset.id;
+      if (!id) continue;
+      const checkbox = row.querySelector<HTMLInputElement>(
+        "input[data-queue-toggle]",
+      );
+      if (checkbox) checkbox.checked = player.isQueued(id);
+    }
   }
+
+  applyCheckboxState();
 
   clickAbort?.abort();
   clickAbort = new AbortController();
   const cacheInfo = outlet.querySelector("#cache-info");
 
+  async function rerenderLibraryRegion(): Promise<void> {
+    const regionEl = outlet.querySelector<HTMLElement>("#library-region");
+    if (!regionEl || !isOutletCurrent(outlet, regionEl)) return;
+    try {
+      const items = await listLibrary(user);
+      regionEl.innerHTML = renderMediaList(items);
+    } catch (err) {
+      logError(err, { operation: "library-rescan" });
+      return; // leave the current region intact
+    }
+    applyCheckboxState();
+  }
+
+  async function onFocus(): Promise<void> {
+    if (rescanning) return;
+    rescanning = true;
+    try {
+      await rerenderLibraryRegion();
+      onFolderStateChange?.();
+    } finally {
+      rescanning = false;
+    }
+  }
+  window.addEventListener("focus", () => { void onFocus(); }, { signal: clickAbort.signal });
+
   outlet.addEventListener("click", (e) => {
-    const checkbox = (e.target as HTMLElement).closest(
+    const target = e.target as HTMLElement;
+
+    const checkbox = target.closest(
       "input[data-queue-toggle]",
     ) as HTMLInputElement | null;
     if (!checkbox) return;
@@ -123,12 +155,9 @@ export function afterRenderHome(
     const row = checkbox.closest(".audio-row") as HTMLElement | null;
     if (!row) return;
 
-    const id = row.dataset.id;
-    const storagePath = row.dataset.storagePath;
-    const title = row.dataset.title;
-    const artist = row.dataset.artist;
-    const album = row.dataset.album;
-    if (!id || !storagePath || !title || !artist || !album) {
+    const { id, title, artist, album, origin, storagePath, localName } = row.dataset;
+    const locatorOk = origin === "local" ? !!localName : !!storagePath;
+    if (!id || !title || !artist || !album || !origin || !locatorOk) {
       logError(new Error("Queue toggle: missing data attributes on audio row"), {
         operation: "queue-toggle",
       });
@@ -137,7 +166,14 @@ export function afterRenderHome(
     }
 
     if (checkbox.checked) {
-      player.add({ id, title, artist, album, storagePath });
+      player.add({
+        id,
+        title,
+        artist,
+        album,
+        origin: origin as AudioOrigin,
+        ...(origin === "local" ? { localName } : { storagePath }),
+      });
     } else {
       player.remove(id);
     }

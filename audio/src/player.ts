@@ -2,9 +2,18 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
 import { removeFile, resolveAudioSource } from "./storage.js";
-import type { AudioItem } from "./types.js";
+import { resolveLocalAudioSource } from "./local-source.js";
+import type { AudioOrigin } from "./types.js";
 
-export type PlayRequest = Pick<AudioItem, "id" | "title" | "artist" | "album" | "storagePath">;
+export interface PlayRequest {
+  id: string;
+  title: string;
+  artist: string;
+  album: string;
+  origin: AudioOrigin;
+  storagePath?: string;
+  localName?: string;
+}
 
 export interface PlayerHandle {
   add(item: PlayRequest): void;
@@ -67,7 +76,11 @@ export function initPlayer(
     currentIndex = index;
     renderPlaylist();
     revokeCurrentObjectUrl();
-    resolveAudioSource(item.storagePath)
+    const resolve =
+      item.origin === "local"
+        ? resolveLocalAudioSource(item.localName!)
+        : resolveAudioSource(item.storagePath!);
+    resolve
       .then((url) => {
         if (generation !== playGeneration) {
           URL.revokeObjectURL(url);
@@ -82,7 +95,7 @@ export function initPlayer(
       })
       .catch((err) => {
         if (deferProgrammerError(err)) return;
-        logError(err, { operation: "audio-source-resolve", storagePath: item.storagePath });
+        logError(err, { operation: "audio-source-resolve", id: item.id });
         if (generation !== playGeneration) return;
         advanceOrStop(currentIndex);
       });
@@ -108,12 +121,17 @@ export function initPlayer(
     const item = queue[currentIndex];
     logError(audioEl.error ?? new Error("audio element error"), {
       operation: "audio-element-error",
-      storagePath: item.storagePath,
+      id: item.id,
       code: audioEl.error?.code,
     });
-    removeFile(item.storagePath).catch((err) =>
-      logError(err, { operation: "audio-cache-evict", storagePath: item.storagePath }),
-    );
+    // Only cloud tracks live in the storage cache; a local file has no cache
+    // entry to evict (it streams from disk on each play).
+    if (item.storagePath) {
+      const storagePath = item.storagePath;
+      removeFile(storagePath).catch((err) =>
+        logError(err, { operation: "audio-cache-evict", storagePath }),
+      );
+    }
     advanceOrStop(currentIndex);
   }
 
