@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+#
+# dispatch-retriage-orphaned-followups — tick-time scan that re-triages
+# orphaned review-finding follow-up issues whose source PR was closed without
+# merging (issue #1812).
+#
+# When a review pass files an out-of-scope finding as a follow-up issue, that
+# issue is labeled `source-pr:<N>` recording which PR's review surfaced it.
+# When PR #<N> later lands on main, the follow-up points at real, shipped code.
+# But when PR #<N> is CLOSED WITHOUT MERGING (abandoned or superseded), the
+# follow-up is orphaned: it points at a design that never landed. Such an orphan
+# should be re-triaged by a human (closed as moot, or retargeted to whatever
+# design did ship on main) rather than worked as-is.
+#
+# This scan finds those orphans and parks them on office-hours for human
+# re-triage. It is an INVERSION scan: it inspects only the PRs actually cited by
+# the `source-pr:<N>` labels on currently-open issues — never a window
+# enumeration of all recently-closed PRs.
+#
+# Three-way PR-state gate (load-bearing): a cited PR's follow-ups are flagged
+# ONLY IF the PR is `state == "CLOSED"` AND `mergedAt == null` AND the PR does
+# not already carry the `dispatch:orphans-retriaged` marker. A merged PR
+# (state MERGED + non-null mergedAt) or a still-open PR (state OPEN) must NEVER
+# be touched.
+#
+# Idempotency: the per-PR `dispatch:orphans-retriaged` label is the correct
+# idempotency key — NOT an issue-level "is office-hours already present?" check.
+# A human who resolves an orphan and removes `dispatch:office-hours` would be
+# re-parked on the next tick if we keyed on the issue label. The per-PR marker
+# guarantees each closed-unmerged PR's orphans are flagged exactly once.
+#
+# Best-effort: this is a tick scan and a tick scan must NEVER abort the chain.
+# Every per-PR / per-issue gh failure warns to stderr and continues to the next
+# item; the script ALWAYS exits 0. (NOT set -e, mirroring its sibling scans.)
+#
+# Sandbox note: the CALLER wraps every invocation of this script with
+# dangerouslyDisableSandbox (per .claude/rules/sandbox.md) because `gh` needs
+# network access and gh's TLS validation is blocked by the sandbox. This script
+# therefore sets NOTHING sandbox-related itself.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+RETRIAGED_LABEL="dispatch:orphans-retriaged"
+RETRIAGED_COLOR="5319e7"
+RETRIAGED_DESC="dispatch: orphaned review follow-ups re-triaged after source PR closed unmerged"
+
+# ---- Step 1: gather the open `source-pr:<N>`-labeled follow-up issues --------
+# REST keeps this scan off the shared GraphQL rate-limit bucket (#1601).
+OPEN_JSON=$(gh_issue_list_rest --state open)
+if [[ $? -ne 0 ]]; then
+  # Cannot scan without the open-issue set — best-effort, exit 0.
+  echo "dispatch-retriage-orphaned-followups: warning: gh_issue_list_rest --state open failed; skipping scan" >&2
+  exit 0
+fi
+
+# Map: source-PR number `N` → space-separated list of open follow-up issue
+# numbers. Built with process substitution (NOT a pipe) so the `declare -A`
+# mutations survive the loop — a `| while read` would run the loop in a subshell
+# and discard them.
+declare -A PR_FOLLOWUPS=()
+while read -r issue pr; do
+  [[ -z "$issue" ]] && continue
+  PR_FOLLOWUPS["$pr"]+="$issue "
+done < <(printf '%s' "$OPEN_JSON" | jq -r '
+  .[]
+  | (.labels | map(.name) | map(select(startswith("source-pr:")))) as $slabels
+  | select(($slabels | length) > 0)
+  | ($slabels[0] | sub("^source-pr:"; "")) as $pr
+  | "\(.number) \($pr)"
+')
+
+# ---- Step 2: for each distinct cited source PR, apply the three-way gate -----
+for N in "${!PR_FOLLOWUPS[@]}"; do
+  PR_RC=0
+  PR_JSON=$(gh_retry gh pr view "$N" --json state,mergedAt,labels) || PR_RC=$?
+  if [[ "$PR_RC" -ne 0 ]]; then
+    echo "dispatch-retriage-orphaned-followups: warning: gh pr view #$N failed; skipping" >&2
+    continue
+  fi
+
+  STATE=$(printf '%s' "$PR_JSON" | jq -r '.state')
+  MERGED_AT=$(printf '%s' "$PR_JSON" | jq -r '.mergedAt')
+  HAS_MARKER=$(printf '%s' "$PR_JSON" \
+    | jq -r --arg l "$RETRIAGED_LABEL" 'any(.labels[]?; .name == $l)')
+
+  # The three-way gate. A merged PR has state MERGED + non-null mergedAt; an
+  # open PR has state OPEN; an already-processed PR carries the marker. Skip
+  # silently in every one of those cases — only a CLOSED, never-merged,
+  # unmarked PR's follow-ups get flagged.
+  if [[ "$STATE" != "CLOSED" || "$MERGED_AT" != "null" || "$HAS_MARKER" == "true" ]]; then
+    continue
+  fi
+
+  # ---- Step 3: park each open follow-up of this orphaned PR ------------------
+  for issue in ${PR_FOLLOWUPS[$N]}; do
+    [[ -z "$issue" ]] && continue
+    if ! "$SCRIPT_DIR/dispatch-apply-office-hours" "$issue" \
+        "source PR #$N was closed unmerged — orphaned review finding; re-triage: close as moot or retarget to the shipped design on main"; then
+      echo "dispatch-retriage-orphaned-followups: warning: dispatch-apply-office-hours failed for issue #$issue (source PR #$N)" >&2
+      continue
+    fi
+    echo "retriaged #$issue (source PR #$N closed unmerged)"
+  done
+
+  # ---- Mark the PR processed (idempotency key) ------------------------------
+  # Apply unconditionally after the issue loop — even if an individual park
+  # warned. dispatch-apply-office-hours is itself idempotent, so re-running a
+  # park is harmless; what must NOT happen is re-parking a resolved orphan on a
+  # later tick, which the per-PR marker prevents. Create-on-not-found mirrors
+  # dispatch-apply-office-hours: capture the gh_retry call's COMBINED output
+  # (2>&1 on the gh_retry invocation, since gh_retry forwards stderr to fd2 and
+  # returns only stdout) so the `*"not found"*` match can fire.
+  MARK_RC=0
+  MARK_OUT=$(gh_retry gh pr edit "$N" --add-label "$RETRIAGED_LABEL" 2>&1) || MARK_RC=$?
+  if [[ "$MARK_RC" -ne 0 ]]; then
+    if [[ "$MARK_OUT" != *"not found"* ]]; then
+      echo "dispatch-retriage-orphaned-followups: warning: could not mark PR #$N with $RETRIAGED_LABEL: $MARK_OUT" >&2
+      continue
+    fi
+    # The label does not exist yet — create it with canonical metadata, retry once.
+    if ! create_out=$(gh_retry gh label create "$RETRIAGED_LABEL" \
+        --color "$RETRIAGED_COLOR" --description "$RETRIAGED_DESC" 2>&1); then
+      echo "dispatch-retriage-orphaned-followups: warning: could not create label $RETRIAGED_LABEL: $create_out" >&2
+      continue
+    fi
+    if ! retry_out=$(gh_retry gh pr edit "$N" --add-label "$RETRIAGED_LABEL" 2>&1); then
+      echo "dispatch-retriage-orphaned-followups: warning: could not mark PR #$N with $RETRIAGED_LABEL after create: $retry_out" >&2
+      continue
+    fi
+  fi
+done
+
+# A tick scan must never abort the chain.
+exit 0
