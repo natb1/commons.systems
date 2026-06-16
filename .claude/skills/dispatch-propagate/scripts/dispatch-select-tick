@@ -290,8 +290,9 @@ fi
 # OPEN_MB is definitively empty — i.e. main health is known-good. It is suppressed
 # both while main is broken (OPEN_MB lists open main-broken issues, from Step 1c)
 # and when main health is UNKNOWN (the Step 1c gh issue list failed): a transient
-# gh failure must not defeat this load-bearing safety gate. Inert unless
-# dispatch.config/auto-merge.json enables it; absent config → no-op.
+# gh failure must not defeat this load-bearing safety gate. Auto-merge is ON by
+# default; dispatch.config/auto-merge.json is an opt-OUT kill-switch
+# (enabled:false suppresses it).
 if [[ -z "$OPEN_MB" ]]; then
   MERGE_OUT=$("$SCRIPT_DIR/dispatch-auto-merge") || true
   if [[ -n "$MERGE_OUT" ]]; then
