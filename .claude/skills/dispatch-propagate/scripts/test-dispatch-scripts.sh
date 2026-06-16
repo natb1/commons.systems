@@ -5448,9 +5448,11 @@ printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"main
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
-# dispatch-spawn-office-hours passes this path to claude --bg as --cwd, so it
-# must exist on disk for the full integration; create it like the sibling
-# spawn tests (e.g. OH3) do, even though the selector itself never stats it.
+# The selector itself does not stat this path; this mkdir is a convention match
+# documenting the production contract (dispatch-spawn-office-hours requires the
+# cwd to exist). A full entry-point integration test for the main-qa fresh-spawn
+# path is needed to actually exercise the dispatch-spawn-office-hours directory
+# guard.
 mkdir -p "$TMPDIR_TEST/worktrees/main"
 select_target_fake_claude   # no live sessions → sessionless, picked fresh
 result=$("$TMPDIR_TEST/office-hours-select-target")
