@@ -138,6 +138,9 @@ export function renderApp(container: Element, state: ViewState, now: Date): void
     banner.setAttribute("role", "status");
     banner.textContent = "Demo data — sign in to see your queue.";
     container.appendChild(banner);
+  } else if (state.tier !== "owner") {
+    const _exhaustive: never = state;
+    throw new Error("unhandled ViewState tier: " + String(_exhaustive));
   }
 
   const ctx = buildContext(state, now);
