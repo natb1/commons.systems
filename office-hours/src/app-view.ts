@@ -166,9 +166,6 @@ export function renderApp(container: Element, state: ViewState, now: Date): AppV
   }
 
   const ctx = buildContext(state, now);
-  // Retain the panel context so tick can reconstruct a fresh context (with an
-  // updated `now`) without re-invoking the demo data getters.
-  const data = ctx;
 
   const grid = document.createElement("div");
   grid.className = "panel-grid";
@@ -184,7 +181,7 @@ export function renderApp(container: Element, state: ViewState, now: Date): AppV
   return {
     tick(nextNow: Date) {
       for (const entry of timeSensitive) {
-        const fresh = buildPanelElement(entry.panel, { ...data, now: nextNow });
+        const fresh = buildPanelElement(entry.panel, { ...ctx, now: nextNow });
         grid.replaceChild(fresh, entry.element);
         entry.element = fresh;
       }

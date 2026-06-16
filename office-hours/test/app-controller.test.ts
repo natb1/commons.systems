@@ -82,6 +82,8 @@ describe("createAppController", () => {
 
     // Advance system time past the weekly reset boundary, then fire the 60s tick.
     vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
+    // --fg must be set during advanceTimersByTime: the tick callback fires
+    // synchronously and calls renderHistoryBand, which reads --fg.
     withThemeFg(() => vi.advanceTimersByTime(60_000));
 
     const after = container.querySelectorAll(".capacity-reset-countdown")[1]!.textContent;

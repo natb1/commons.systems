@@ -1,4 +1,4 @@
-import { renderApp, type AppView, type ViewState } from "./app-view.js";
+import { renderApp, type ViewState } from "./app-view.js";
 
 /**
  * Owns the live view and the single 60s tick timer that drives
@@ -23,7 +23,6 @@ export function createAppController(
   const intervalMs = opts.intervalMs ?? 60_000;
   const nowFn = opts.now ?? (() => new Date());
 
-  let view: AppView | null = null;
   let timer: ReturnType<typeof setInterval> | null = null;
 
   function clearTimer(): void {
@@ -38,8 +37,9 @@ export function createAppController(
       // Single-interval invariant: clear before painting so a re-paint
       // (auth-change re-render) never leaves the prior interval running.
       clearTimer();
-      view = renderApp(container, state, now);
-      const v = view;
+      // Capture the view locally so a future paint() (which creates a new view)
+      // does not affect the tick target of this interval.
+      const v = renderApp(container, state, now);
       timer = setInterval(() => v.tick(nowFn()), intervalMs);
     },
     stop(): void {

@@ -524,7 +524,11 @@ describe("renderApp — AppView.tick refreshes time-sensitive panels", () => {
     const countdownBefore =
       container.querySelectorAll(".capacity-reset-countdown")[1]!.textContent;
 
-    const laterNow = new Date(now.getTime() + 3 * DAY);
+    // The demo seed computes its weekly reset relative to actual wall time
+    // (Date.now() + ~2.5 days), so a fixed laterNow can fall before the reset
+    // boundary and leave the countdown unchanged. Advance past it from wall
+    // time with a margin that always clears the seed's offset.
+    const laterNow = new Date(Date.now() + 4 * DAY);
     withThemeFg(() => view.tick(laterNow));
 
     const countdownAfter =
