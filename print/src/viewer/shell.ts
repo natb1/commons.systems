@@ -1,7 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { MediaItem } from "../types.js";
 import type { ContentRenderer } from "./types.js";
-import { clampGoToPage } from "./types.js";
+import { clampGoToPage, isSearchable } from "./types.js";
 import { SpreadController } from "./spread-controller.js";
 import type { PositionStore } from "../sidecar.js";
 import type { Bookmark } from "../bookmarks.js";
@@ -453,14 +453,16 @@ export function initViewer(
       }
     }
     initGoto();
-    searchCleanup = initSearch(viewer, renderer, () => {
-      if (controller.enabled) {
-        controller.goToPage(renderer.currentPage).catch(handleRenderError);
-      } else {
-        renderer.renderResult?.().catch(handleRenderError);
-      }
-      updateNav();
-    });
+    if (isSearchable(renderer)) {
+      searchCleanup = initSearch(viewer, renderer, () => {
+        if (controller.enabled) {
+          controller.goToPage(renderer.currentPage).catch(handleRenderError);
+        } else {
+          renderer.renderResult().catch(handleRenderError);
+        }
+        updateNav();
+      });
+    }
     outlineCleanup = initOutline(viewer, renderer, () => updateNav());
     const bookmarksStore = uid && !readFailed
       ? {
