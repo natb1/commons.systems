@@ -301,6 +301,7 @@ export function initViewer(
 
   async function goPrev() {
     if (controller.enabled) {
+      if (!controller.canGoPrev) return;
       renderer.clearSearch?.();
       await controller.goPrev();
     } else {
@@ -311,6 +312,7 @@ export function initViewer(
 
   async function goNext() {
     if (controller.enabled) {
+      if (!controller.canGoNext) return;
       renderer.clearSearch?.();
       await controller.goNext();
     } else {

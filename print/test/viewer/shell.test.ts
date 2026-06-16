@@ -825,7 +825,7 @@ describe("initViewer spread mode", () => {
   // that contains the previously highlighted page.
   it("spread mode: clicking next clears the search highlight", async () => {
     const renderer = makeMockSpreadRenderer({ clearSearch: vi.fn() });
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
     await flushInit();
 
     const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
@@ -841,7 +841,7 @@ describe("initViewer spread mode", () => {
 
   it("spread mode: clicking prev clears the search highlight", async () => {
     const renderer = makeMockSpreadRenderer({ clearSearch: vi.fn() });
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
     await flushInit();
 
     const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
@@ -866,7 +866,7 @@ describe("initViewer spread mode", () => {
 
   it("spread mode: submitting 'go to page' clears the search highlight", async () => {
     const renderer = makeMockSpreadRenderer({ clearSearch: vi.fn() });
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
     await flushInit();
 
     const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
@@ -899,7 +899,7 @@ describe("initViewer spread mode", () => {
       goToResult: vi.fn().mockImplementation(async () => { await renderer.goToPage(4); }),
       clearSearch: vi.fn(),
     });
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
     await flushInit();
 
     const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
