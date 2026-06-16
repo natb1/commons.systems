@@ -5448,6 +5448,10 @@ printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"main
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+# dispatch-spawn-office-hours passes this path to claude --bg as --cwd, so it
+# must exist on disk for the full integration; create it like the sibling
+# spawn tests (e.g. OH3) do, even though the selector itself never stats it.
+mkdir -p "$TMPDIR_TEST/worktrees/main"
 select_target_fake_claude   # no live sessions → sessionless, picked fresh
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "main-qa override: phase main-qa, main worktree 5th field" \
