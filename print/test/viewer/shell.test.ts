@@ -15,7 +15,7 @@ vi.mock("../../src/bookmarks.js", () => ({
 import { renderViewerShell, initViewer } from "../../src/viewer/shell";
 import type { PositionStore } from "../../src/sidecar";
 import type { MediaItem } from "../../src/types";
-import type { ContentRenderer } from "../../src/viewer/types";
+import type { ContentRenderer, SearchResult } from "../../src/viewer/types";
 import { makeMockRenderer } from "./mock-renderer";
 
 /**
@@ -439,6 +439,7 @@ describe("initViewer", () => {
     const renderer = makeMockRenderer({
       search: vi.fn().mockResolvedValue([]),
       goToResult: vi.fn().mockResolvedValue(undefined),
+      renderResult: vi.fn().mockResolvedValue(undefined),
       clearSearch: vi.fn(),
     });
 
@@ -481,6 +482,24 @@ describe("initViewer", () => {
 
     // Should NOT write — the read failed, so the saved state is unknown.
     expect(store.save).not.toHaveBeenCalled();
+  });
+
+  it("non-searchable renderer (missing renderResult) keeps search-hidden — isSearchable gate skips initSearch", async () => {
+    // A renderer with search/goToResult/clearSearch but NO renderResult does not
+    // satisfy isSearchable(), so shell.ts must not wire search. The .viewer-search
+    // panel must remain hidden.
+    const renderer = makeMockRenderer({
+      search: vi.fn().mockResolvedValue([]),
+      goToResult: vi.fn().mockResolvedValue(undefined),
+      clearSearch: vi.fn(),
+      // renderResult intentionally absent — this is the non-searchable case
+    });
+
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
+    await flushInit();
+
+    const searchSection = outlet.querySelector(".viewer-search") as HTMLElement;
+    expect(searchSection.classList.contains("search-hidden")).toBe(true);
   });
 });
 
@@ -818,6 +837,201 @@ describe("initViewer spread mode", () => {
 
     // 1.2^2 = 1.44
     expect(canvasWrap.style.transform).toBe(`scale(${1.2 ** 2})`);
+  });
+
+  it("search result click in spread mode: routes via controller.goToPage (renderPageInto), not renderResult", async () => {
+    const renderResult = vi.fn().mockResolvedValue(undefined);
+    const searchResult = {
+      location: "1:0:3",
+      label: "Page 1",
+      snippet: "the cat sat",
+      matchStart: 0,
+      matchLength: 3,
+    };
+    const renderer = makeMockSpreadRenderer({
+      renderPageInto: vi.fn().mockResolvedValue(undefined),
+      search: vi.fn().mockResolvedValue([searchResult]),
+      goToResult: vi.fn().mockResolvedValue(undefined),
+      clearSearch: vi.fn(),
+      renderResult,
+    });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
+    await flushInit();
+
+    // Enter spread mode
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
+    spreadBtn.click();
+    await flushInit();
+
+    // Run a search: set input value and dispatch the search event for immediate (no-debounce) execution
+    const searchInput = outlet.querySelector(".viewer-search-input") as HTMLInputElement;
+    searchInput.value = "the";
+    searchInput.dispatchEvent(new Event("search"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Clear mock call history accumulated during spread entry so only the click render counts
+    vi.mocked(renderer.renderPageInto!).mockClear();
+
+    // Click the first search result
+    const resultsList = outlet.querySelector(".viewer-search-results") as HTMLUListElement;
+    (resultsList.children[0] as HTMLElement).click();
+
+    // Flush: goToResult resolves → onNavigate → controller.goToPage → render() → renderPageInto
+    await vi.advanceTimersByTimeAsync(0);
+    await flushInit();
+
+    // Spread path: controller.goToPage called renderPageInto
+    expect(renderer.renderPageInto).toHaveBeenCalled();
+    // renderResult must NOT be called in spread mode
+    expect(renderResult).not.toHaveBeenCalled();
+  });
+
+  it("search result click in single mode: routes via renderResult, not renderPageInto", async () => {
+    const renderResult = vi.fn().mockResolvedValue(undefined);
+    const searchResult = {
+      location: "1:0:3",
+      label: "Page 1",
+      snippet: "the cat sat",
+      matchStart: 0,
+      matchLength: 3,
+    };
+    const renderer = makeMockSpreadRenderer({
+      renderPageInto: vi.fn().mockResolvedValue(undefined),
+      search: vi.fn().mockResolvedValue([searchResult]),
+      goToResult: vi.fn().mockResolvedValue(undefined),
+      clearSearch: vi.fn(),
+      renderResult,
+    });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
+    await flushInit();
+
+    // Do NOT enter spread mode — stay in single mode
+
+    // Run a search
+    const searchInput = outlet.querySelector(".viewer-search-input") as HTMLInputElement;
+    searchInput.value = "the";
+    searchInput.dispatchEvent(new Event("search"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    vi.mocked(renderer.renderPageInto!).mockClear();
+
+    // Click the first search result
+    const resultsList = outlet.querySelector(".viewer-search-results") as HTMLUListElement;
+    (resultsList.children[0] as HTMLElement).click();
+
+    // Flush: goToResult resolves → onNavigate → renderer.renderResult
+    await vi.advanceTimersByTimeAsync(0);
+    await flushInit();
+
+    // Single mode path: renderResult must be called
+    expect(renderResult).toHaveBeenCalled();
+    // renderPageInto must NOT be called via the search click
+    expect(renderer.renderPageInto).not.toHaveBeenCalled();
+  });
+
+  // Criterion 3: user-initiated navigation in spread mode clears any stale
+  // search highlight before re-rendering, so it never reappears on a spread
+  // that contains the previously highlighted page.
+  it("spread mode: clicking next clears the search highlight", async () => {
+    const renderer = makeMockSpreadRenderer({ clearSearch: vi.fn() });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
+    await flushInit();
+
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
+    spreadBtn.click();
+    await flushInit();
+
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    nextBtn.click();
+    await flushInit();
+
+    expect(renderer.clearSearch).toHaveBeenCalled();
+  });
+
+  it("spread mode: clicking prev clears the search highlight", async () => {
+    const renderer = makeMockSpreadRenderer({ clearSearch: vi.fn() });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
+    await flushInit();
+
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
+    spreadBtn.click();
+    await flushInit();
+
+    // Advance off spread 0 first; jsdom won't dispatch click on a disabled
+    // prev button, which would make the assertion a silent no-op.
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    nextBtn.click();
+    await flushInit();
+
+    vi.mocked(renderer.clearSearch!).mockClear();
+
+    const prevBtn = outlet.querySelector(".viewer-prev") as HTMLButtonElement;
+    expect(prevBtn.disabled).toBe(false);
+    prevBtn.click();
+    await flushInit();
+
+    expect(renderer.clearSearch).toHaveBeenCalled();
+  });
+
+  it("spread mode: submitting 'go to page' clears the search highlight", async () => {
+    const renderer = makeMockSpreadRenderer({ clearSearch: vi.fn() });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
+    await flushInit();
+
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
+    spreadBtn.click();
+    await flushInit();
+
+    const input = outlet.querySelector(".viewer-goto-input") as HTMLInputElement;
+    input.value = "5";
+    const ev = new KeyboardEvent("keydown", { key: "Enter", bubbles: true });
+    Object.defineProperty(ev, "target", { value: input });
+    input.dispatchEvent(ev);
+    await flushInit();
+
+    expect(renderer.clearSearch).toHaveBeenCalled();
+  });
+
+  // Criterion 1 guard: navigating via a clicked search result (the onNavigate
+  // path) must NOT clear the highlight — the clicked result must stay
+  // highlighted on the spread it lands on.
+  it("spread mode: search-result navigation does NOT clear the highlight", async () => {
+    const result: SearchResult = {
+      location: "4",
+      label: "Page 4",
+      snippet: "the matched text here",
+      matchStart: 4,
+      matchLength: 7,
+    };
+    const renderer = makeMockSpreadRenderer({
+      search: vi.fn().mockResolvedValue([result]),
+      goToResult: vi.fn().mockImplementation(async () => { await renderer.goToPage(4); }),
+      renderResult: vi.fn().mockResolvedValue(undefined),
+      clearSearch: vi.fn(),
+    });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", fakeStore(), null);
+    await flushInit();
+
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
+    spreadBtn.click();
+    await flushInit();
+
+    // Run the search (dispatch "search" event to bypass the 300ms debounce).
+    const searchInput = outlet.querySelector(".viewer-search-input") as HTMLInputElement;
+    searchInput.value = "matched";
+    searchInput.dispatchEvent(new Event("search", { bubbles: true }));
+    await flushInit();
+
+    // Click the rendered result, exercising goToResult -> onNavigate.
+    const resultLi = outlet.querySelector(".viewer-search-result") as HTMLElement;
+    expect(resultLi).not.toBeNull();
+    resultLi.click();
+    await flushInit();
+
+    // Positive control: the result navigation actually fired.
+    expect(renderer.goToResult).toHaveBeenCalledWith(result);
+    // Guard: the onNavigate path preserved the highlight (no clearSearch).
+    expect(renderer.clearSearch).not.toHaveBeenCalled();
   });
 });
 

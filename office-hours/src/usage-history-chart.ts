@@ -9,6 +9,9 @@ import {
   renderAxisSvg,
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
+  POINT_WIDTH,
+  CONTAINER_WIDTH,
+  CHART_HEIGHT,
 } from "./chart-util.js";
 
 const SERIES_FIVE_HOUR = "5-hour %";
@@ -19,12 +22,6 @@ const COLOR_FIVE_HOUR = "#42a5f5";
 const COLOR_WEEKLY = "#26a69a";
 const COLOR_PACE = "#ab47bc";
 const COLOR_RESET = "#ef5350";
-
-/** Per-sample chart width allocation along the time axis. */
-const POINT_WIDTH = 60;
-/** Approximate visible width before horizontal scrolling kicks in. */
-const CONTAINER_WIDTH = 640;
-const CHART_HEIGHT = 220;
 
 interface UsagePoint {
   x: Date;

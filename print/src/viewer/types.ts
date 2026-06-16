@@ -44,14 +44,53 @@ export interface ContentRenderer {
   resetZoom?(): void;
   readonly isZoomed?: boolean;
   onZoomChange?: () => void;
-  /** Renderers implementing search must also implement goToResult and clearSearch. */
+  /**
+   * Optional search surface. A renderer that supports search should implement
+   * the SearchableRenderer contract (all four methods required); these stay
+   * optional here so non-searchable renderers (image-archive) and generic
+   * `clearSearch?.()` call sites compile unchanged. Use isSearchable() to narrow
+   * a ContentRenderer to SearchableRenderer at call sites that need all four.
+   */
   search?(query: string): Promise<SearchResult[]>;
   goToResult?(result: SearchResult): Promise<void>;
+  renderResult?(): Promise<void>;
   clearSearch?(): void;
   /** Renderers implementing getOutline must also implement goToOutlineEntry. */
   getOutline?(): Promise<OutlineEntry[]>;
   goToOutlineEntry?(entry: OutlineEntry): Promise<void>;
   destroy(): void;
+}
+
+/**
+ * A ContentRenderer that supports full-text search. Re-declares the four search
+ * methods as REQUIRED (TypeScript lets a sub-interface promote an optional
+ * member to required), so a concrete searchable renderer that omits any of them
+ * is a compile error rather than a silent `renderResult?.()` no-op.
+ */
+export interface SearchableRenderer extends ContentRenderer {
+  search(query: string): Promise<SearchResult[]>;
+  goToResult(result: SearchResult): Promise<void>;
+  /**
+   * Render the armed result in single-page mode. A renderer whose goToResult
+   * already renders the result (no spread mode / no renderPageInto) implements
+   * this as a documented no-op; an arm-only renderer (whose goToResult only
+   * arms a pending highlight) MUST render the armed result here.
+   */
+  renderResult(): Promise<void>;
+  clearSearch(): void;
+}
+
+/**
+ * Runtime type guard narrowing a ContentRenderer to SearchableRenderer by
+ * checking that all four search methods are present.
+ */
+export function isSearchable(r: ContentRenderer): r is SearchableRenderer {
+  return (
+    typeof r.search === "function" &&
+    typeof r.goToResult === "function" &&
+    typeof r.renderResult === "function" &&
+    typeof r.clearSearch === "function"
+  );
 }
 
 /**

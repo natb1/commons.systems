@@ -2,10 +2,11 @@ import * as pdfjsLib from "pdfjs-dist";
 import { TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils.js";
-import type { ContentRenderer, OutlineEntry, SearchResult } from "./types.js";
+import type { OutlineEntry, SearchableRenderer, SearchResult } from "./types.js";
 import { parsePositionPage } from "./types.js";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 // ---------------------------------------------------------------------------
 // Pure search helpers — no DOM, no pdf.js calls. Exported for unit tests.
@@ -136,7 +137,7 @@ export function offsetToDivRanges(
   return segments;
 }
 
-export function createPdfRenderer(onError?: (err: unknown) => void): ContentRenderer {
+export function createPdfRenderer(onError?: (err: unknown) => void): SearchableRenderer {
   let pdfDoc: PDFDocumentProxy | null = null;
   let _currentPage = 0;
   let _pageCount = 0;
@@ -442,26 +443,25 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     const gen = spreadGen;
     const { wrapper, canvas: c, textLayerDiv: tlDiv } = createPageWrapper();
     target.appendChild(wrapper);
+    let committed = false;
+    try {
+      const result = await renderPageToCanvas(pageNum, c, targetRect, wrapper, () => gen !== spreadGen);
+      if (!result) return;
+      if (gen !== spreadGen) return;
 
-    const result = await renderPageToCanvas(pageNum, c, targetRect, wrapper, () => gen !== spreadGen);
-    if (!result) return;
-    if (gen !== spreadGen) {
-      // The canvas render already completed; only the orphaned wrapper needs cleanup.
-      wrapper.remove();
-      return;
-    }
-
-    const tl = await renderTextLayer(result.page, result.cssViewport, tlDiv);
-    if (gen !== spreadGen) {
-      // The canvas render already completed; cancel only the in-flight text layer
-      // and remove the orphaned wrapper.
-      tl?.cancel();
-      wrapper.remove();
-      return;
-    }
-    spreadPages.push({ renderTask: result.task, textLayer: tl });
-    if (pendingHighlight && pendingHighlight.page === pageNum && tl) {
-      applyHighlight(tl, pendingHighlight);
+      const tl = await renderTextLayer(result.page, result.cssViewport, tlDiv);
+      if (gen !== spreadGen) {
+        // Cancel the in-flight text layer; wrapper removal is handled by finally.
+        tl?.cancel();
+        return;
+      }
+      committed = true;
+      spreadPages.push({ renderTask: result.task, textLayer: tl });
+      if (pendingHighlight && pendingHighlight.page === pageNum && tl) {
+        applyHighlight(tl, pendingHighlight);
+      }
+    } finally {
+      if (!committed) wrapper.remove();
     }
   }
 
@@ -628,6 +628,8 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     async goToOutlineEntry(entry: OutlineEntry): Promise<void> {
       const page = outlinePageMap.get(entry);
       if (page === undefined) return;
+      pendingHighlight = null;
+      unwrapHighlights();
       _currentPage = page;
       await renderPage(page);
     },
@@ -641,11 +643,20 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       // unboundedly across result clicks, leaking detached DOM node references.
       unwrapHighlights();
       _currentPage = decoded.page;
-      // Arm the highlight before rendering; renderPage applies it as its final
-      // gen-guarded step. Call the internal renderPage directly (like
-      // goToOutlineEntry) — the public goToPage would clear pendingHighlight.
+      // ARM-ONLY: record the target page and pending highlight, but do not
+      // render here. The shell drives the visible render afterward, routed by
+      // mode, so the correct surface (single-page vs spread) renders exactly
+      // once. renderResult (single-page) or the SpreadController (spread)
+      // applies the armed highlight as its final gen-guarded step.
       pendingHighlight = { page: decoded.page, offset: decoded.offset, length: decoded.length };
-      await renderPage(decoded.page);
+    },
+
+    // Render the current single-page view, applying any armed search
+    // highlight. The shell drives this on the non-spread result-navigation
+    // path; in spread mode the SpreadController renders instead. Companion to
+    // goToResult, which only arms the highlight.
+    async renderResult(): Promise<void> {
+      await renderPage(_currentPage);
     },
 
     // Called by search.ts when the user clears the query WITHOUT navigating
