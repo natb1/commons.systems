@@ -57,7 +57,9 @@ export interface CreateBlogAppConfig {
     initAppCheck: (() => Promise<void>) | undefined;
     signIn: () => Promise<unknown> | void;
     signOut: () => Promise<unknown> | void;
-    onAuthStateChanged: (cb: (user: User | null) => void) => PromiseLike<unknown>;
+    onAuthStateChanged: (
+      cb: (user: User | null) => void,
+    ) => (() => void) | PromiseLike<(() => void) | void>;
   };
   adminGroupId: GroupId;
   // optional hooks (consumed in units 2/3)
@@ -267,7 +269,28 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
     updateInfoPanel();
   }
 
-  config.firebase.onAuthStateChanged((user) => {
+  // Capture the auth-state unsubscribe so destroy() can tear it down; without
+  // this an auth event can still fire refreshAfterAuthChange on a destroyed
+  // instance. Production passes firebaseutil's async wrapper resolving to the
+  // unsubscribe (Promise<() => void>), so we handle both a sync function return
+  // and a promise resolving to one, with a guard for the destroy-before-resolve
+  // race. The teardown is registered before the call so a synchronous capture
+  // and the race guard share the same closure state.
+  let authUnsub: (() => void) | undefined;
+  let authDestroyed = false;
+  teardowns.push(() => {
+    authDestroyed = true;
+    authUnsub?.();
+  });
+
+  const captureUnsub = (unsub: (() => void) | void): void => {
+    if (typeof unsub !== "function") return;
+    // destroy() may have run before an async unsubscribe resolved.
+    if (authDestroyed) unsub();
+    else authUnsub = unsub;
+  };
+
+  const authResult = config.firebase.onAuthStateChanged((user) => {
     if (user?.uid === currentUser?.uid) return;
     currentUser = user;
     // Intentional silent degradation — user sees stale content rather than an error.
@@ -275,10 +298,16 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
       if (deferProgrammerError(err)) return;
       logError(err, { operation: "auth-change-refresh" });
     });
-  }).then(undefined, (err) => {
-    if (deferProgrammerError(err)) return;
-    logError(err, { operation: "auth-init" });
   });
+
+  if (typeof authResult === "function") {
+    captureUnsub(authResult);
+  } else {
+    authResult.then(captureUnsub, (err) => {
+      if (deferProgrammerError(err)) return;
+      logError(err, { operation: "auth-init" });
+    });
+  }
 
   deferAppCheckInit(
     config.firebase.initAppCheck,

@@ -65,6 +65,15 @@ not implement, so this is a same-tick crash-recovery edge.)
 
 ## Steps
 
+**Single named exit.** Take exactly one terminal action to end the turn: the
+final action is a call to `dispatch-mark-complete` (no deviation) or
+`dispatch-mark-deviation` (deviation). This is the single named exit.
+
+- Any OTHER most-recent tool call — a unit finishing in Step 2, the draft PR
+  opening in Step 3 — means the orchestrator is mid-loop, not done.
+- Mid-loop, the next message contains the next tool call, never a closing
+  summary. Do not end the turn until the named exit fires.
+
 ### 1. Read the plan
 
 Read the persisted plan from the issue's `<!-- dispatch:plan -->` comment. Invoke
@@ -84,6 +93,17 @@ Exit codes:
 - **exit 2** — non-numeric arg.
 
 ### 2. Build each unit
+
+Before building, create a tracked task list with the harness `TaskCreate` tool:
+
+- one task per planned unit from the Step 1 plan,
+- one task for "open the draft PR" (Step 3),
+- one task for "write the completion marker" (Step 4).
+
+Mark each task completed via the harness `TaskUpdate` tool as it lands. This
+keeps the remaining work durable and visible rather than held in the model's
+head, reinforcing the single-named-exit invariant: the turn ends only when every
+task — including the marker — is completed.
 
 For each unit in the plan read in Step 1, in dependency order, invoke
 `/implement-unit` via the Skill tool, passing:

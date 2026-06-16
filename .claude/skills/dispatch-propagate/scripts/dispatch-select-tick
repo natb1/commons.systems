@@ -284,7 +284,7 @@ if [[ -n "$RECONCILE_OUT" ]]; then
   done <<< "$RECONCILE_OUT"
 fi
 
-# --- Step 1d (cont.): auto-merge ready enhancement PRs (#1540) ---------------
+# --- Step 1d (cont.): auto-merge every ready PR (#1739) ----------------------
 # Runs after dispatch-reconcile-ready (a PR demoted this tick is seen as draft
 # and skipped) and before Step 2d's sync-merge-queue. Auto-merge runs ONLY when
 # OPEN_MB is definitively empty — i.e. main health is known-good. It is suppressed
