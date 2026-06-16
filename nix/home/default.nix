@@ -89,9 +89,6 @@
     pkgs.python3
   ];
 
-  # Eastern time. America/New_York tracks EST/EDT automatically.
-  home.sessionVariables.TZ = "America/New_York";
-
   # Let Home Manager manage itself
   programs.home-manager.enable = true;
 

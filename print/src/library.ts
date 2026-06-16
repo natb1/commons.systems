@@ -125,3 +125,9 @@ export async function resolveLocalBlob(item: MediaItem): Promise<ArrayBuffer | n
 export function hasLocalSource(): boolean {
   return localSource !== null;
 }
+
+/** Reset the bound local source. Test-only: lets order-independent tests
+ *  assert the no-source-bound state regardless of suite execution order. */
+export function resetLocalSource(): void {
+  localSource = null;
+}

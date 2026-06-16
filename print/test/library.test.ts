@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import type { LocalDirEntryLike } from "@commons-systems/mediautil/local-folder";
 
@@ -22,6 +22,7 @@ import {
   getLocalItem,
   resolveLocalBlob,
   hasLocalSource,
+  resetLocalSource,
   LOCAL_ID_PREFIX,
 } from "../src/library.js";
 import type { MediaItem } from "../src/types.js";
@@ -121,9 +122,11 @@ describe("isLocalId", () => {
   });
 });
 
-// Module state is shared across these tests, so the "no source bound" assertions
-// run BEFORE createLocalSource binds a source.
+// The beforeEach reset makes these assertions order-independent: each test starts
+// with localSource null regardless of which describe block ran first.
 describe("local source — before binding", () => {
+  beforeEach(() => resetLocalSource());
+
   it("hasLocalSource() is false", () => {
     expect(hasLocalSource()).toBe(false);
   });

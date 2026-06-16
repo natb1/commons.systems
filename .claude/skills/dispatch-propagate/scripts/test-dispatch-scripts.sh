@@ -83,6 +83,11 @@ setup() {
   # dispatch_classify_rollup) via its SCRIPT_DIR, which resolves to TMPDIR_TEST
   # for this copy — lib.sh is already copied below, so the source resolves.
   cp "$SCRIPT_DIR/dispatch-sync-merge-queue" "$TMPDIR_TEST/dispatch-sync-merge-queue"
+  # dispatch-auto-merge sources lib.sh (pr_list_open, dispatch_ci_verdict_rest,
+  # gh_retry, gh_issue_list_rest) and calls dispatch-config-load via its
+  # SCRIPT_DIR (= TMPDIR_TEST for this copy) — both already copied below/above,
+  # so both resolve.
+  cp "$SCRIPT_DIR/dispatch-auto-merge" "$TMPDIR_TEST/dispatch-auto-merge"
   # dispatch-select-target's JIT scan calls dispatch-config-load and
   # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
   # TMPDIR_TEST for the copied dispatch-select-target, so the two helpers must
@@ -122,7 +127,8 @@ setup() {
            "$TMPDIR_TEST/dispatch-reconcile-ready" \
            "$TMPDIR_TEST/dispatch-config-load" \
            "$TMPDIR_TEST/dispatch-project-status-read" \
-           "$TMPDIR_TEST/dispatch-sync-merge-queue"
+           "$TMPDIR_TEST/dispatch-sync-merge-queue" \
+           "$TMPDIR_TEST/dispatch-auto-merge"
 
   # Default no-op stub for dispatch-provision-worktree. dispatch-route now invokes
   # it (after the worktree cross-check, before phase derivation). The real script
@@ -306,8 +312,9 @@ case "$args" in
       if [[ -f "$jit_fixture" ]]; then cat "$jit_fixture"; else echo "[]"; fi
     fi
     ;;
-  "issue list --label dispatch:office-hours --state open --json number,createdAt")
+  "issue list --label dispatch:office-hours --state open --json number,createdAt,labels")
     # office-hours-select-target: the office-hours queue (labeled open issues).
+    # The fetch now also carries `labels` (#1648) — the main-qa override reads it.
     if [[ -f "$STUB_DIR/oh-issue-list.json" ]]; then
       cat "$STUB_DIR/oh-issue-list.json"
     else
@@ -580,6 +587,16 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  "pr list --state open --limit "*" --json number,title,body,isDraft,labels,headRefOid,mergeable,closingIssuesReferences")
+    # dispatch-auto-merge's one fetch. auto-merge-pr-list.json supplies the
+    # per-test PR array; absence means no open PRs.
+    echo "pr list" >> "$STUB_DIR/gh-auto-merge-pr-list.log"
+    if [[ -f "$STUB_DIR/auto-merge-pr-list.json" ]]; then
+      cat "$STUB_DIR/auto-merge-pr-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
   pr\ ready\ --undo\ *)
     # dispatch-reconcile-ready demote. Match --undo BEFORE the bare `pr ready`
     # case below so a demote does not fall through to the promote log.
@@ -590,6 +607,21 @@ case "$args" in
     # dispatch-reconcile-ready promote (bare `gh pr ready <N>`).
     num=$(printf '%s' "$args" | awk '{print $NF}')
     echo "$num" >> "$STUB_DIR/gh-pr-ready.log"
+    ;;
+  pr\ merge\ *)
+    # dispatch-auto-merge: gh pr merge <N> --squash --subject ... --body ...
+    echo "$args" >> "$STUB_DIR/gh-pr-merge.log"
+    # Optional failure injection: if $STUB_DIR/pr-merge-fail-on holds a PR
+    # number matching this merge's <N>, emit a non-transient error to stderr
+    # and exit non-zero so gh_retry returns immediately (no retry backoff) and
+    # dispatch-auto-merge takes its HARD_ERROR path for that PR.
+    if [[ -f "$STUB_DIR/pr-merge-fail-on" ]]; then
+      merge_num=$(printf '%s' "$args" | awk '{print $3}')
+      if [[ "$merge_num" == "$(cat "$STUB_DIR/pr-merge-fail-on")" ]]; then
+        echo "merge of the base branch into #$merge_num was rejected" >&2
+        exit 1
+      fi
+    fi
     ;;
   "api repos/{owner}/{repo}/commits/main")
     # main_broken_sha: resolve origin/main's HEAD SHA. Default: healthy main.
@@ -2207,6 +2239,17 @@ printf '[{"number":831},{"number":832}]\n' > "$STUB_DIR/subissues-83.json"
 "$TMPDIR_TEST/issue-sub-issues" 83 >/dev/null
 line_count=$(wc -l < "$STUB_DIR/gh-issue-view-fields.log" | tr -d ' ')
 assert_eq "two children: two log lines" "2" "$line_count"
+teardown
+
+# E. Empty FIELDS arg: guard fires → exit 2 with descriptive stderr (before any API call).
+echo "Test: issue-sub-issues — empty FIELDS arg → exit 2 with error"
+setup
+cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
+chmod +x "$TMPDIR_TEST/issue-sub-issues"
+err=$("$TMPDIR_TEST/issue-sub-issues" 84 "" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "empty FIELDS: exit code 2" "2" "$rc"
+assert_eq "empty FIELDS: descriptive stderr" "1" \
+  "$(printf '%s' "$err" | grep -c 'FIELDS arg must not be empty' || true)"
 teardown
 
 # ============================================================================
@@ -5392,6 +5435,24 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
 select_target_fake_claude   # orphan: no live sessions → sessionless, picked fresh
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "fresh disposition carries the worktree path" "office-hours 42 plan - /worktrees/42-x" "$result"
+teardown
+
+# OHST12. A fresh item carrying the `main-qa` label (#1648) — a needs-main QA
+# follow-up that is brand-new, no-PR, NO-WORKTREE — overrides phase=main-qa and
+# emits the MAIN worktree as the 5th field (not `-`), so the entry dispatcher's
+# `-` guard never trips and dispatch-spawn-office-hours accepts the cwd.
+echo "Test: fresh main-qa-labelled item → phase main-qa, main worktree as cwd"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"main-qa"}]}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+select_target_fake_claude   # no live sessions → sessionless, picked fresh
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "main-qa override: phase main-qa, main worktree 5th field" \
+  "office-hours 42 main-qa - $TMPDIR_TEST/worktrees/main" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # ============================================================================
@@ -21398,6 +21459,18 @@ cat >> "$TMPDIR_TEST/logs/escalate-stdin.log"
 echo called >> "$TMPDIR_TEST/logs/escalate-sync-broken.log"
 exit 0
 FAKE
+  # #1540: fake dispatch-auto-merge invoked by Step 1d (cont.) when main is not
+  # broken. Logs its invocation and emits a configurable merge line so a wiring
+  # test can assert the tick prefixes it with `merge: `. The real merge logic has
+  # its own unit tests above; here we only verify the tick wiring.
+  cat > "$TMPDIR_TEST/dispatch-auto-merge" <<'FAKE'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/stub" && pwd)"
+echo called >> "$STUB_DIR/auto-merge-calls.log"
+[[ -n "${SEL_AUTO_MERGE_OUT:-}" ]] && printf '%s\n' "$SEL_AUTO_MERGE_OUT"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/dispatch-auto-merge"
   # Sourced helper: provides claude_agents_count_busy_workers (driven by
   # SEL_LIVE_COUNT*) and claude_agents_list_all (driven by SEL_AGENTS_*, used by
   # the reservation-ledger sweep the gate runs before counting). The heredoc is
@@ -21526,7 +21599,8 @@ sel_tick_teardown() {
     DISPATCH_RESERVATION_DIR SEL_AGENTS_TSV SEL_AGENTS_LIST_FAIL \
     DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE SEL_GIT_MERGE_LOG \
     SEL_SESSIONS_UNDER_RC SEL_SESSIONS_UNDER_TSV \
-    DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT
+    DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT \
+    SEL_AUTO_MERGE_OUT
 }
 
 # Run the orchestrator, capturing full stdout; the decision is the last line.
@@ -21639,6 +21713,53 @@ out=$(run_sel_tick)
 assert_eq "re-arm green+no-issue: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "re-arm green+no-issue: no close attempted" "absent" \
   "$([[ -e "$STUB_DIR/gh-issue-close.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Step 1d (cont.): auto-merge wiring, main healthy → invoked (#1540) -------
+# main is healthy (no main-broken-open.txt → OPEN_MB empty), so Step 1d (cont.)
+# runs dispatch-auto-merge and prefixes each of its `merged #N` lines with
+# `merge: `. The fake emits SEL_AUTO_MERGE_OUT.
+echo "Test: select-tick auto-merge wiring (main healthy) → merge: line, auto-merge invoked"
+sel_tick_setup
+export SEL_AUTO_MERGE_OUT="merged #42"
+out=$(run_sel_tick)
+TOTAL=$((TOTAL + 1))
+if grep -q '^merge: merged #42$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: tick emits 'merge: merged #42'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tick emits 'merge: merged #42'"
+  echo "    actual stdout: '$out'"
+fi
+assert_eq "auto-merge wiring: dispatch-auto-merge invoked" "present" \
+  "$([[ -f "$STUB_DIR/auto-merge-calls.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Step 1d (cont.): auto-merge suppressed while main is broken (#1540) ------
+# An open main-broken latch (OPEN_MB non-empty) suppresses Step 1d (cont.):
+# dispatch-auto-merge is NOT invoked and no `merge:` line is emitted, even though
+# the fake would emit one if called. The select-target fake returns a sha for
+# --main-broken-sha so the latch persists (main is still red), mirroring the
+# red+open re-arm test above.
+echo "Test: select-tick auto-merge suppressed while main is broken"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--main-broken-sha" ]]; then echo redsha1; exit 0; fi
+echo empty
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+printf '99\n' > "$STUB_DIR/main-broken-open.txt"
+export SEL_AUTO_MERGE_OUT="merged #42"
+out=$(run_sel_tick)
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'merge:' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: no 'merge:' line while main is broken"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no 'merge:' line while main is broken"
+  echo "    actual stdout: '$out'"
+fi
+assert_eq "auto-merge suppressed: dispatch-auto-merge NOT invoked" "absent" \
+  "$([[ -f "$STUB_DIR/auto-merge-calls.log" ]] && echo present || echo absent)"
 sel_tick_teardown
 
 # --- #1495: dirty main → sync-failed, reseed armed, counter bumped -----------
@@ -30237,6 +30358,274 @@ fi
 assert_eq "dup-close: no spurious create" "absent" "$(log_state gh-merge-issue-create.log)"
 assert_eq "dup-close: no edit (.[0] title matches)" "absent" "$(log_state gh-merge-issue-edit.log)"
 teardown
+
+# ============================================================================
+# dispatch-auto-merge (#1739)
+# ============================================================================
+echo "=== dispatch-auto-merge (#1739) ==="
+
+# Build one auto-merge PR fixture object (the script's field set) + its REST
+# check-runs fixture. Wrap one or more in [ ... ] for auto-merge-pr-list.json.
+#  $1=num $2=isDraft(true|false) $3=mergeable $4=rollup_json $5=labels_json $6=closing_json
+make_auto_merge_pr() {
+  local num="$1" is_draft="$2" mergeable="$3" rollup_json="$4" labels_json="$5" closing_json="$6"
+  local sha="sha${num}"
+  write_rest_check_runs "$sha" "$rollup_json"
+  printf '{"number":%s,"title":"PR %s","body":"Closes #%s","isDraft":%s,"labels":%s,"headRefOid":"%s","mergeable":"%s","closingIssuesReferences":%s}' \
+    "$num" "$num" "$num" "$is_draft" "$labels_json" "$sha" "$mergeable" "$closing_json"
+}
+# Enable the feature for a test (writes the config the script reads).
+write_auto_merge_config_enabled() {
+  printf '{"enabled":true}' \
+    > "$TMPDIR_TEST/config/auto-merge.json"
+}
+AM_REVIEWED='[{"name":"dispatch:reviewed"}]'
+AM_NO_REVIEWED='[{"name":"dispatch:planned"}]'
+
+# --- 1. merge (happy path) ---------------------------------------------------
+echo "Test: eligible PR → squash-merged"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "merge: stdout is 'merged #50'" "merged #50" "$out"
+assert_eq "merge: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q -- '--squash' "$STUB_DIR/gh-pr-merge.log" \
+   && grep -q -- '--subject' "$STUB_DIR/gh-pr-merge.log" \
+   && grep -q -- '--body' "$STUB_DIR/gh-pr-merge.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: merge args carry --squash, --subject, and --body"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: merge args carry --squash, --subject, and --body"
+  echo "    actual gh-pr-merge.log: '$(cat "$STUB_DIR/gh-pr-merge.log")'"
+fi
+teardown
+
+# --- 2. draft → skip ---------------------------------------------------------
+echo "Test: draft PR → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 true MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "draft: no stdout" "" "$out"
+assert_eq "draft: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 3. demote-race skip -----------------------------------------------------
+# Models a PR that dispatch-reconcile-ready demoted to draft earlier in the same
+# tick: this script's fresh fetch sees isDraft==true and skips. Mechanically the
+# same as case 2, but kept as its own case to document the race the predicate
+# ordering guards against.
+echo "Test: demote-race (fresh fetch sees draft) → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 true MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "demote-race: no stdout" "" "$out"
+assert_eq "demote-race: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 4. missing dispatch:reviewed → skip -------------------------------------
+echo "Test: no dispatch:reviewed → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_NO_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "no-reviewed: no stdout" "" "$out"
+assert_eq "no-reviewed: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 5. CI verdict failing → skip --------------------------------------------
+echo "Test: CI failing → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$FAILING_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "failing: no stdout" "" "$out"
+assert_eq "failing: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 6. CI verdict pending → skip --------------------------------------------
+echo "Test: CI pending → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$PENDING_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "pending: no stdout" "" "$out"
+assert_eq "pending: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 7. mergeable CONFLICTING → skip -----------------------------------------
+echo "Test: mergeable CONFLICTING → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false CONFLICTING "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "conflicting: no stdout" "" "$out"
+assert_eq "conflicting: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 8. mergeable UNKNOWN → skip ---------------------------------------------
+echo "Test: mergeable UNKNOWN → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false UNKNOWN "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "unknown: no stdout" "" "$out"
+assert_eq "unknown: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 9. zero closing issues → skip -------------------------------------------
+# The non-empty closing-set guard (defense-in-depth): a ready PR that lost its
+# Closes #N is skipped. This is NOT a type gate — it fires only on an empty set.
+echo "Test: empty closing set → skip"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "no-closing: no stdout" "" "$out"
+assert_eq "no-closing: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 10. multi-closing PR → merge --------------------------------------------
+# A ready PR with a closing set of length > 1 merges: the non-empty guard is
+# satisfied and issue type is never consulted.
+echo "Test: multi-closing PR → merge"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100},{"number":101}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "multi-closing: stdout is 'merged #50'" "merged #50" "$out"
+assert_eq "multi-closing: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 11. closing issue is a bug → merge (type-agnostic, #1739) ----------------
+# The closing-set type gate is gone: a ready PR whose closing issue is a bug
+# merges exactly like any other. The script never reads issue labels, so "bug"
+# here is intent-only — the case documents that bug PRs are no longer skipped.
+echo "Test: ready PR closing a bug issue → merged"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "bug-merge: stdout is 'merged #50'" "merged #50" "$out"
+assert_eq "bug-merge: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 12. closing issue is a security issue → merge (type-agnostic, #1739) -----
+# Same as case 11 for a security-typed closing issue: no special-casing remains.
+echo "Test: ready PR closing a security issue → merged"
+setup
+write_auto_merge_config_enabled
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "security-merge: stdout is 'merged #50'" "merged #50" "$out"
+assert_eq "security-merge: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
+teardown
+
+# --- 13. config enabled:false → no-op (no fetch) -----------------------------
+echo "Test: config enabled:false → no-op, no fetch"
+setup
+printf '{"enabled":false}' \
+  > "$TMPDIR_TEST/config/auto-merge.json"
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "disabled: no stdout" "" "$out"
+assert_eq "disabled: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+assert_eq "disabled: no PR fetch" "absent" "$(log_state gh-auto-merge-pr-list.log)"
+teardown
+
+# --- 14. absent config → no-op (no fetch) ------------------------------------
+echo "Test: absent config → no-op, no fetch"
+setup
+# Deliberately do NOT write config/auto-merge.json.
+printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
+  > "$STUB_DIR/auto-merge-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "no-config: no stdout" "" "$out"
+assert_eq "no-config: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+assert_eq "no-config: no PR fetch" "absent" "$(log_state gh-auto-merge-pr-list.log)"
+teardown
+
+# --- 15. multi-PR independence -----------------------------------------------
+# Two PRs in one fetch: #50 eligible (green, mergeable, reviewed, closing #100),
+# #51 ineligible because its mergeable state is CONFLICTING. #50 merges; #51 is
+# skipped. Each PR is reconciled independently.
+echo "Test: multi-PR fetch merges only the eligible PR"
+setup
+write_auto_merge_config_enabled
+{
+  printf '['
+  make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]'
+  printf ','
+  make_auto_merge_pr 51 false CONFLICTING "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":101}]'
+  printf ']'
+} > "$STUB_DIR/auto-merge-pr-list.json"
+out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
+assert_eq "multi-PR: stdout is 'merged #50' only" "merged #50" "$out"
+TOTAL=$((TOTAL + 1))
+if grep -q 'pr merge 50' "$STUB_DIR/gh-pr-merge.log" \
+   && ! grep -q 'pr merge 51' "$STUB_DIR/gh-pr-merge.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: multi-PR: merge log carries pr merge 50 but NOT pr merge 51"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: multi-PR: merge log carries pr merge 50 but NOT pr merge 51"
+  echo "    actual gh-pr-merge.log: '$(cat "$STUB_DIR/gh-pr-merge.log" 2>/dev/null)'"
+fi
+teardown
+
+# --- 16. merge failure → HARD_ERROR, continue, exit 1 ------------------------
+# Two eligible PRs in one fetch: #50 (closing #100) and #51 (closing #101), both
+# green/mergeable/reviewed. The gh stub is rigged so `pr merge 50` exits
+# non-zero. The script must: log #50's failure to stderr, set HARD_ERROR,
+# `continue` to attempt #51 (which merges), and exit 1 after the loop. This
+# exercises the `|| rc=$?` capture, the `continue`, and the final
+# `if [[ "$HARD_ERROR" -ne 0 ]]; then exit 1; fi` block.
+echo "Test: one PR's merge fails → exit 1, remaining PRs still attempted"
+setup
+write_auto_merge_config_enabled
+{
+  printf '['
+  make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]'
+  printf ','
+  make_auto_merge_pr 51 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":101}]'
+  printf ']'
+} > "$STUB_DIR/auto-merge-pr-list.json"
+printf '50' > "$STUB_DIR/pr-merge-fail-on"
+am_err=$("$TMPDIR_TEST/dispatch-auto-merge" 2>"$STUB_DIR/am-stderr" >"$STUB_DIR/am-stdout"; echo "$?")
+am_out=$(cat "$STUB_DIR/am-stdout")
+am_stderr=$(cat "$STUB_DIR/am-stderr")
+assert_eq "merge-fail: exit 1" "1" "$am_err"
+# (a) The successfully-merged PR after the failed one still emits its line.
+assert_eq "merge-fail: stdout carries 'merged #51'" "present" \
+  "$(printf '%s' "$am_out" | grep -q 'merged #51' && echo present || echo absent)"
+# (b) The failed PR is NOT reported as merged.
+assert_eq "merge-fail: stdout omits 'merged #50'" "absent" \
+  "$(printf '%s' "$am_out" | grep -q 'merged #50' && echo present || echo absent)"
+# (c) The failed PR number surfaces on stderr.
+assert_eq "merge-fail: stderr names #50" "present" \
+  "$(printf '%s' "$am_stderr" | grep -q '#50' && echo present || echo absent)"
+# (d) The merge of the PR after the failed one was actually attempted.
+assert_eq "merge-fail: pr merge 51 attempted" "present" \
+  "$(grep -q 'pr merge 51' "$STUB_DIR/gh-pr-merge.log" && echo present || echo absent)"
+teardown
+
+# --- 17. executable-bit guard ------------------------------------------------
+echo "Test: dispatch-auto-merge is executable"
+assert_eq "dispatch-auto-merge is executable" "yes" \
+  "$([[ -x "$SCRIPT_DIR/dispatch-auto-merge" ]] && echo yes || echo no)"
 
 # ============================================================================
 # summary
