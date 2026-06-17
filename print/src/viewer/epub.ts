@@ -1,5 +1,5 @@
 import ePub, { type Book, type Rendition, type Location, type NavItem } from "epubjs";
-import type { ContentRenderer, OutlineEntry, SearchResult } from "./types.js";
+import type { OutlineEntry, SearchableRenderer, SearchResult } from "./types.js";
 
 // epubjs ships incomplete type declarations. These narrow shapes describe the
 // runtime members we use that are missing from the .d.ts, following the
@@ -26,7 +26,7 @@ const ACTIVE_STYLES = { fill: "#f59e0b", "fill-opacity": "0.5" };
 
 export function createEpubRenderer(
   onError?: (err: unknown) => void,
-): ContentRenderer {
+): SearchableRenderer {
   let book: Book | null = null;
   let rendition: Rendition | null = null;
   let containerDiv: HTMLDivElement | null = null;
@@ -369,6 +369,10 @@ export function createEpubRenderer(
       annotations.highlight(result.location, {}, undefined, "viewer-search-active", ACTIVE_STYLES);
       _activeCfi = result.location;
     },
+
+    // EPUB renders the armed result directly inside goToResult (rendition.display);
+    // there is no separate single-page render step (no spread mode). Documented no-op.
+    async renderResult(): Promise<void> {},
 
     clearSearch(): void {
       // Stand down any in-flight search(): bumping the epoch trips its post-loop

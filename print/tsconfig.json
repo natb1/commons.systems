@@ -1,4 +1,4 @@
 {
   "extends": "@commons-systems/config/tsconfig.app.json",
-  "include": ["src"]
+  "include": ["src", "test/viewer/searchable-renderer.test-d.ts"]
 }

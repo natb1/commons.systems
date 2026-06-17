@@ -2,7 +2,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import { TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils.js";
-import type { ContentRenderer, OutlineEntry, SearchResult } from "./types.js";
+import type { OutlineEntry, SearchableRenderer, SearchResult } from "./types.js";
 import { parsePositionPage } from "./types.js";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
@@ -137,7 +137,7 @@ export function offsetToDivRanges(
   return segments;
 }
 
-export function createPdfRenderer(onError?: (err: unknown) => void): ContentRenderer {
+export function createPdfRenderer(onError?: (err: unknown) => void): SearchableRenderer {
   let pdfDoc: PDFDocumentProxy | null = null;
   let _currentPage = 0;
   let _pageCount = 0;
@@ -443,29 +443,25 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     const gen = spreadGen;
     const { wrapper, canvas: c, textLayerDiv: tlDiv } = createPageWrapper();
     target.appendChild(wrapper);
+    let committed = false;
+    try {
+      const result = await renderPageToCanvas(pageNum, c, targetRect, wrapper, () => gen !== spreadGen);
+      if (!result) return;
+      if (gen !== spreadGen) return;
 
-    const result = await renderPageToCanvas(pageNum, c, targetRect, wrapper, () => gen !== spreadGen);
-    if (!result) {
-      wrapper.remove();
-      return;
-    }
-    if (gen !== spreadGen) {
-      // The canvas render already completed; only the orphaned wrapper needs cleanup.
-      wrapper.remove();
-      return;
-    }
-
-    const tl = await renderTextLayer(result.page, result.cssViewport, tlDiv);
-    if (gen !== spreadGen) {
-      // The canvas render already completed; cancel only the in-flight text layer
-      // and remove the orphaned wrapper.
-      tl?.cancel();
-      wrapper.remove();
-      return;
-    }
-    spreadPages.push({ renderTask: result.task, textLayer: tl });
-    if (pendingHighlight && pendingHighlight.page === pageNum && tl) {
-      applyHighlight(tl, pendingHighlight);
+      const tl = await renderTextLayer(result.page, result.cssViewport, tlDiv);
+      if (gen !== spreadGen) {
+        // Cancel the in-flight text layer; wrapper removal is handled by finally.
+        tl?.cancel();
+        return;
+      }
+      committed = true;
+      spreadPages.push({ renderTask: result.task, textLayer: tl });
+      if (pendingHighlight && pendingHighlight.page === pageNum && tl) {
+        applyHighlight(tl, pendingHighlight);
+      }
+    } finally {
+      if (!committed) wrapper.remove();
     }
   }
 

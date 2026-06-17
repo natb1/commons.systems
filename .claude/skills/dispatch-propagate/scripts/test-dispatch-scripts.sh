@@ -30694,16 +30694,16 @@ assert_eq "disabled: no merge call" "absent" "$(log_state gh-pr-merge.log)"
 assert_eq "disabled: no PR fetch" "absent" "$(log_state gh-auto-merge-pr-list.log)"
 teardown
 
-# --- 14. absent config → no-op (no fetch) ------------------------------------
-echo "Test: absent config → no-op, no fetch"
+# --- 14. absent config → armed (merges) --------------------------------------
+echo "Test: absent config → armed (merges)"
 setup
 # Deliberately do NOT write config/auto-merge.json.
 printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVIEWED" '[{"number":100}]')" \
   > "$STUB_DIR/auto-merge-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
-assert_eq "no-config: no stdout" "" "$out"
-assert_eq "no-config: no merge call" "absent" "$(log_state gh-pr-merge.log)"
-assert_eq "no-config: no PR fetch" "absent" "$(log_state gh-auto-merge-pr-list.log)"
+assert_eq "no-config: stdout is 'merged #50'" "merged #50" "$out"
+assert_eq "no-config: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
+assert_eq "no-config: PR fetch present" "present" "$(log_state gh-auto-merge-pr-list.log)"
 teardown
 
 # --- 15. multi-PR independence -----------------------------------------------
