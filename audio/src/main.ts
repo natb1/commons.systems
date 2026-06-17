@@ -2,6 +2,7 @@ import "missing.css";
 import "./style/theme.css";
 import { createHistoryRouter } from "@commons-systems/router";
 import { classifyError } from "@commons-systems/errorutil/classify";
+import { logError } from "@commons-systems/errorutil/log";
 import { renderHome, afterRenderHome } from "./pages/home.js";
 import { renderAbout } from "./pages/about.js";
 import "@commons-systems/components/nav";
@@ -10,12 +11,20 @@ import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "./auth.js";
 import { trackPageView } from "./firebase.js";
 import { clearCache } from "./audio-cache.js";
-import { logError } from "@commons-systems/errorutil/log";
 import { initPanelToggle } from "@commons-systems/components/panel-toggle";
 import { initPlayer } from "./player.js";
+import {
+  ensureLocalFolderRestored,
+  getLocalFolderState,
+  isLocalFolderSupported,
+  connectLocalFolder,
+  regrantLocalFolder,
+} from "./local-source.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
+const folderSlot = document.getElementById("nav-folder-slot") as HTMLSpanElement;
+if (!folderSlot) throw new Error("#nav-folder-slot element not found");
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 
@@ -30,6 +39,38 @@ if (!nowPlayingEl) throw new Error("#now-playing element not found");
 
 initPanelToggle(playerPanel, panelToggle);
 const player = initPlayer(audioEl, nowPlayingEl);
+
+function renderFolderSlot(): void {
+  if (!isLocalFolderSupported()) {
+    folderSlot.innerHTML = "";
+    return;
+  }
+  const state = getLocalFolderState();
+  let label: string;
+  switch (state) {
+    case "granted":
+      label = "Change folder";
+      break;
+    case "prompt":
+      label = "Reconnect folder";
+      break;
+    default:
+      label = "Choose folder";
+      break;
+  }
+  folderSlot.innerHTML = `<button id="nav-folder-btn" type="button">${label}</button>`;
+  folderSlot.querySelector<HTMLButtonElement>("#nav-folder-btn")!.addEventListener("click", () => {
+    const action = state === "prompt" ? regrantLocalFolder() : connectLocalFolder();
+    action
+      .then(() => { renderFolderSlot(); router.navigate(); })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        logError(err, { operation: "nav-folder-btn" });
+      });
+  });
+}
+
+void ensureLocalFolderRestored().then(() => renderFolderSlot());
 
 navEl.links = [
   { href: "/", label: "Library" },
@@ -48,7 +89,7 @@ const router = createHistoryRouter(
     {
       path: "/",
       render: () => renderHome(currentUser),
-      afterRender: (outlet) => afterRenderHome(outlet, player),
+      afterRender: (outlet) => afterRenderHome(outlet, player, currentUser, renderFolderSlot),
     },
     { path: "/about", render: renderAbout },
   ],

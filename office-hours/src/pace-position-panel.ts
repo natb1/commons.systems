@@ -1,7 +1,6 @@
 import * as Plot from "@observablehq/plot";
-import { type UsageSample } from "./usage-samples.js";
+import { selectLatestSample, type UsageSample } from "./usage-samples.js";
 import { segmentByWeek, aheadBehindDelta, paceBackdrop } from "./pace-position.js";
-import { selectLatestSample } from "./capacity-band.js";
 import { elapsedWeekFraction } from "./weekly-pace-curve.js";
 import {
   getThemeFg,

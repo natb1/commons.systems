@@ -8,6 +8,13 @@ vi.mock("../src/storage.js", () => ({
   removeFile: (...args: unknown[]) => mockRemoveFile(...args),
 }));
 
+const mockResolveLocalAudioSource = vi.fn();
+
+vi.mock("../src/local-source.js", () => ({
+  resolveLocalAudioSource: (...args: unknown[]) =>
+    mockResolveLocalAudioSource(...args),
+}));
+
 const mockLogError = vi.fn();
 
 vi.mock("@commons-systems/errorutil/log", () => ({
@@ -45,6 +52,7 @@ describe("initPlayer", () => {
     title: "Song One",
     artist: "Artist A",
     album: "Album A",
+    origin: "cloud",
     storagePath: "media/t1.mp3",
   };
 
@@ -53,7 +61,17 @@ describe("initPlayer", () => {
     title: "Song Two",
     artist: "Artist B",
     album: "Album B",
+    origin: "cloud",
     storagePath: "media/t2.mp3",
+  };
+
+  const localTrack: PlayRequest = {
+    id: "local:song.mp3",
+    title: "song",
+    artist: "Artist L",
+    album: "Album L",
+    origin: "local",
+    localName: "song.mp3",
   };
 
   const track3: PlayRequest = {
@@ -61,6 +79,7 @@ describe("initPlayer", () => {
     title: "Song Three",
     artist: "Artist C",
     album: "Album C",
+    origin: "cloud",
     storagePath: "media/t3.mp3",
   };
 
@@ -71,6 +90,7 @@ describe("initPlayer", () => {
     vi.spyOn(audioEl, "play").mockResolvedValue();
     revokeObjectURLSpy = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     mockResolveAudioSource.mockResolvedValue("blob:http://localhost/track-blob");
+    mockResolveLocalAudioSource.mockResolvedValue("blob:http://localhost/local-blob");
     mockRemoveFile.mockResolvedValue(undefined);
   });
 
@@ -116,6 +136,52 @@ describe("initPlayer", () => {
       player.add(track1);
 
       expect(playlistEl.querySelectorAll("#playlist-queue li")).toHaveLength(1);
+    });
+  });
+
+  describe("origin dispatch", () => {
+    it("resolves a cloud track via resolveAudioSource(storagePath)", async () => {
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(track1);
+
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(1);
+      });
+      expect(mockResolveAudioSource).toHaveBeenCalledWith("media/t1.mp3");
+      expect(mockResolveLocalAudioSource).not.toHaveBeenCalled();
+    });
+
+    it("resolves a local track via resolveLocalAudioSource(localName)", async () => {
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(localTrack);
+
+      await vi.waitFor(() => {
+        expect(mockResolveLocalAudioSource).toHaveBeenCalledWith("song.mp3");
+      });
+      expect(audioEl.play).toHaveBeenCalledTimes(1);
+      expect(mockResolveAudioSource).not.toHaveBeenCalled();
+    });
+
+    it("advances past a missing local file (resolve rejects)", async () => {
+      mockResolveLocalAudioSource.mockRejectedValueOnce(new Error("missing"));
+      mockResolveAudioSource.mockResolvedValueOnce("blob:http://localhost/t2-blob");
+
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(localTrack);
+      player.add(track2);
+
+      // The local track fails to resolve, the player advances to the cloud track.
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(1);
+      });
+      expect(mockResolveAudioSource).toHaveBeenCalledWith("media/t2.mp3");
+      expect(playlistEl.querySelector(".playlist-active")?.textContent).toContain(
+        "Song Two",
+      );
+      expect(mockLogError).toHaveBeenCalledWith(expect.any(Error), {
+        operation: "audio-source-resolve",
+        id: "local:song.mp3",
+      });
     });
   });
 
@@ -243,7 +309,7 @@ describe("initPlayer", () => {
         expect.anything(),
         expect.objectContaining({
           operation: "audio-element-error",
-          storagePath: "media/t1.mp3",
+          id: "t1",
         }),
       );
       expect(mockRemoveFile).toHaveBeenCalledWith("media/t1.mp3");
@@ -267,7 +333,7 @@ describe("initPlayer", () => {
           mediaError,
           expect.objectContaining({
             operation: "audio-element-error",
-            storagePath: "media/t1.mp3",
+            id: "t1",
             code: 3,
           }),
         );

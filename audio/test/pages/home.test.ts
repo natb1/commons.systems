@@ -1,18 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { AudioItem } from "../../src/types";
+import type { LibraryItem } from "../../src/types";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
-const mockGetPublicMedia = vi.fn();
-const mockGetAllAccessibleMedia = vi.fn();
+const mockListLibrary = vi.fn();
 
-vi.mock("../../src/firestore.js", () => ({
-  getPublicMedia: (...args: unknown[]) => mockGetPublicMedia(...args),
-  getAllAccessibleMedia: (...args: unknown[]) =>
-    mockGetAllAccessibleMedia(...args),
+vi.mock("../../src/library.js", () => ({
+  listLibrary: (...args: unknown[]) => mockListLibrary(...args),
 }));
 
+vi.mock("../../src/local-source.js", () => ({}));
+
+// home.ts → player.js → storage.js → firebase.js (config requires env);
+// mock storage.js to keep the page render unit isolated from Firebase config.
 vi.mock("../../src/storage.js", () => ({
-  getMediaDownloadUrl: vi.fn(),
+  resolveAudioSource: vi.fn(),
 }));
 
 vi.mock("../../src/audio-cache.js", () => ({
@@ -33,7 +34,7 @@ import type { PlayerHandle } from "../../src/player";
 
 const mockGetCacheStats = vi.mocked(getCacheStats);
 
-function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
+function makeLibraryItem(overrides: Partial<LibraryItem> = {}): LibraryItem {
   return {
     id: "item-1",
     title: "Test Title",
@@ -50,8 +51,23 @@ function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
     groupId: null,
     memberEmails: ["user@example.com"],
     addedAt: "2026-01-01T00:00:00Z",
+    origin: "cloud",
     ...overrides,
   };
+}
+
+function makeLocalItem(overrides: Partial<LibraryItem> = {}): LibraryItem {
+  return makeLibraryItem({
+    id: "local:song.mp3",
+    title: "song",
+    artist: "Unknown artist",
+    album: "Unknown album",
+    sourceNotes: "Local file",
+    storagePath: "",
+    origin: "local",
+    localName: "song.mp3",
+    ...overrides,
+  });
 }
 
 function makeMockPlayer(): PlayerHandle & {
@@ -71,21 +87,17 @@ function makeMockPlayer(): PlayerHandle & {
 describe("renderHome", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockListLibrary.mockResolvedValue([]);
   });
 
-  it("calls getPublicMedia when signed out", async () => {
-    mockGetPublicMedia.mockResolvedValue([]);
-
+  it("calls listLibrary with the user when signed out", async () => {
     const html = await renderHome(null);
 
-    expect(mockGetPublicMedia).toHaveBeenCalledOnce();
-    expect(mockGetAllAccessibleMedia).not.toHaveBeenCalled();
+    expect(mockListLibrary).toHaveBeenCalledWith(null);
     expect(html).toContain("public-notice");
   });
 
   it("shows public notice when signed out", async () => {
-    mockGetPublicMedia.mockResolvedValue([]);
-
     const html = await renderHome(null);
 
     expect(html).toContain('id="public-notice"');
@@ -93,29 +105,21 @@ describe("renderHome", () => {
   });
 
   it("renders Library heading", async () => {
-    mockGetPublicMedia.mockResolvedValue([]);
-
     const html = await renderHome(null);
 
     expect(html).toContain("<h2>Library</h2>");
   });
 
-  it("calls getAllAccessibleMedia when signed in", async () => {
-    mockGetAllAccessibleMedia.mockResolvedValue([]);
+  it("calls listLibrary with the user when signed in and hides public notice", async () => {
+    const user = { uid: "u1", email: "alice@example.com" };
 
-    const html = await renderHome({
-      uid: "u1",
-      email: "alice@example.com",
-    });
+    const html = await renderHome(user);
 
-    expect(mockGetAllAccessibleMedia).toHaveBeenCalledWith("alice@example.com");
-    expect(mockGetPublicMedia).not.toHaveBeenCalled();
+    expect(mockListLibrary).toHaveBeenCalledWith(user);
     expect(html).not.toContain("public-notice");
   });
 
   it("shows #media-empty for empty list", async () => {
-    mockGetPublicMedia.mockResolvedValue([]);
-
     const html = await renderHome(null);
 
     expect(html).toContain('id="media-empty"');
@@ -123,11 +127,10 @@ describe("renderHome", () => {
   });
 
   it("renders media list with items", async () => {
-    const items = [
-      makeAudioItem({ id: "a1", title: "Song A", artist: "Artist A", album: "Album A" }),
-      makeAudioItem({ id: "a2", title: "Song B", artist: "Artist B", album: "Album B" }),
-    ];
-    mockGetPublicMedia.mockResolvedValue(items);
+    mockListLibrary.mockResolvedValue([
+      makeLibraryItem({ id: "a1", title: "Song A", artist: "Artist A", album: "Album A" }),
+      makeLibraryItem({ id: "a2", title: "Song B", artist: "Artist B", album: "Album B" }),
+    ]);
 
     const html = await renderHome(null);
 
@@ -140,25 +143,49 @@ describe("renderHome", () => {
     expect(html).toContain('data-album="Album A"');
   });
 
-  it("renders checkbox in each row", async () => {
-    mockGetPublicMedia.mockResolvedValue([makeAudioItem()]);
+  it("wraps the region in #library-region", async () => {
+    const html = await renderHome(null);
+    expect(html).toContain('id="library-region"');
+  });
+
+  it("tags cloud rows with origin and storage-path", async () => {
+    mockListLibrary.mockResolvedValue([makeLibraryItem({ id: "c1" })]);
 
     const html = await renderHome(null);
 
-    expect(html).toContain('data-queue-toggle');
+    expect(html).toContain('data-origin="cloud"');
+    expect(html).toContain('data-storage-path="media/item-1.mp3"');
+  });
+
+  it("tags local rows with origin and local-name", async () => {
+    mockListLibrary.mockResolvedValue([makeLocalItem()]);
+
+    const html = await renderHome(null);
+
+    expect(html).toContain('data-origin="local"');
+    expect(html).toContain('data-local-name="song.mp3"');
+  });
+
+  it("renders checkbox in each row", async () => {
+    mockListLibrary.mockResolvedValue([makeLibraryItem()]);
+
+    const html = await renderHome(null);
+
+    expect(html).toContain("data-queue-toggle");
     expect(html).toContain('class="queue-checkbox"');
     expect(html).toContain('aria-label="Add Test Title to queue"');
   });
 
   it("renders expanded details with genre, year, duration, format, source", async () => {
-    const item = makeAudioItem({
-      genre: "Jazz",
-      year: 1959,
-      duration: 90,
-      format: "flac",
-      sourceNotes: "Vinyl rip",
-    });
-    mockGetPublicMedia.mockResolvedValue([item]);
+    mockListLibrary.mockResolvedValue([
+      makeLibraryItem({
+        genre: "Jazz",
+        year: 1959,
+        duration: 90,
+        format: "flac",
+        sourceNotes: "Vinyl rip",
+      }),
+    ]);
 
     const html = await renderHome(null);
 
@@ -169,8 +196,8 @@ describe("renderHome", () => {
     expect(html).toContain("Vinyl rip");
   });
 
-  it("shows #media-error when query fails", async () => {
-    mockGetPublicMedia.mockRejectedValue(new Error("network failure"));
+  it("shows #media-error when listLibrary fails", async () => {
+    mockListLibrary.mockRejectedValue(new Error("network failure"));
 
     const html = await renderHome(null);
 
@@ -182,9 +209,7 @@ describe("renderHome", () => {
   });
 
   it("re-throws DataIntegrityError", async () => {
-    mockGetPublicMedia.mockRejectedValue(
-      new DataIntegrityError("corrupt data"),
-    );
+    mockListLibrary.mockRejectedValue(new DataIntegrityError("corrupt data"));
 
     await expect(renderHome(null)).rejects.toThrow(DataIntegrityError);
     expect(mockLogError).not.toHaveBeenCalled();
@@ -194,24 +219,25 @@ describe("renderHome", () => {
 describe("afterRenderHome", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockListLibrary.mockResolvedValue([]);
   });
 
-  it("calls player.add when checkbox is checked", () => {
+  async function buildOutlet(user: Parameters<typeof renderHome>[0] = null): Promise<HTMLElement> {
     const outlet = document.createElement("div");
-    outlet.innerHTML = `
-      <details class="expand-row audio-row" data-id="x1" data-storage-path="media/x1.mp3" data-title="Track" data-artist="Art" data-album="Alb">
-        <summary><div class="expand-summary">
-          <label class="queue-checkbox"><input type="checkbox" data-queue-toggle /></label>
-          <span class="title">Track</span>
-        </div></summary>
-      </details>
-    `;
+    outlet.innerHTML = await renderHome(user);
+    return outlet;
+  }
+
+  it("calls player.add with a cloud PlayRequest when a cloud checkbox is checked", async () => {
+    mockListLibrary.mockResolvedValue([
+      makeLibraryItem({ id: "x1", title: "Track", artist: "Art", album: "Alb" }),
+    ]);
+    const outlet = await buildOutlet(null);
 
     const player = makeMockPlayer();
-    afterRenderHome(outlet, player);
+    afterRenderHome(outlet, player, null);
 
     const checkbox = outlet.querySelector<HTMLInputElement>("input[data-queue-toggle]")!;
-    // .click() toggles checked state in happy-dom: false → true
     checkbox.click();
 
     expect(player.add).toHaveBeenCalledWith({
@@ -219,24 +245,40 @@ describe("afterRenderHome", () => {
       title: "Track",
       artist: "Art",
       album: "Alb",
-      storagePath: "media/x1.mp3",
+      origin: "cloud",
+      storagePath: "media/item-1.mp3",
     });
   });
 
-  it("calls player.remove when checkbox is unchecked", () => {
-    const outlet = document.createElement("div");
-    outlet.innerHTML = `
-      <details class="expand-row audio-row" data-id="x1" data-storage-path="media/x1.mp3" data-title="Track" data-artist="Art" data-album="Alb">
-        <summary><div class="expand-summary">
-          <label class="queue-checkbox"><input type="checkbox" data-queue-toggle /></label>
-          <span class="title">Track</span>
-        </div></summary>
-      </details>
-    `;
+  it("calls player.add with a local PlayRequest when a local checkbox is checked", async () => {
+    mockListLibrary.mockResolvedValue([
+      makeLocalItem({ id: "local:song.mp3", title: "song", artist: "Unknown artist", album: "Unknown album" }),
+    ]);
+    const outlet = await buildOutlet(null);
+
+    const player = makeMockPlayer();
+    afterRenderHome(outlet, player, null);
+
+    const checkbox = outlet.querySelector<HTMLInputElement>("input[data-queue-toggle]")!;
+    checkbox.click();
+
+    expect(player.add).toHaveBeenCalledWith({
+      id: "local:song.mp3",
+      title: "song",
+      artist: "Unknown artist",
+      album: "Unknown album",
+      origin: "local",
+      localName: "song.mp3",
+    });
+  });
+
+  it("calls player.remove when checkbox is unchecked", async () => {
+    mockListLibrary.mockResolvedValue([makeLibraryItem({ id: "x1" })]);
+    const outlet = await buildOutlet(null);
 
     const player = makeMockPlayer();
     player.isQueued.mockReturnValue(true);
-    afterRenderHome(outlet, player);
+    afterRenderHome(outlet, player, null);
 
     const checkbox = outlet.querySelector<HTMLInputElement>("input[data-queue-toggle]")!;
     // afterRenderHome set checked=true via isQueued mock; .click() toggles false in happy-dom
@@ -245,19 +287,12 @@ describe("afterRenderHome", () => {
     expect(player.remove).toHaveBeenCalledWith("x1");
   });
 
-  it("does not call player methods when clicking summary outside checkbox", () => {
-    const outlet = document.createElement("div");
-    outlet.innerHTML = `
-      <details class="expand-row audio-row" data-id="x1" data-storage-path="media/x1.mp3" data-title="Track" data-artist="Art" data-album="Alb">
-        <summary><div class="expand-summary">
-          <label class="queue-checkbox"><input type="checkbox" data-queue-toggle /></label>
-          <span class="title">Track</span>
-        </div></summary>
-      </details>
-    `;
+  it("does not call player methods when clicking summary outside checkbox", async () => {
+    mockListLibrary.mockResolvedValue([makeLibraryItem({ id: "x1" })]);
+    const outlet = await buildOutlet(null);
 
     const player = makeMockPlayer();
-    afterRenderHome(outlet, player);
+    afterRenderHome(outlet, player, null);
 
     const title = outlet.querySelector(".title")!;
     (title as HTMLElement).click();
@@ -266,12 +301,12 @@ describe("afterRenderHome", () => {
     expect(player.remove).not.toHaveBeenCalled();
   });
 
-  it("does not call player when clicking outside a row", () => {
+  it("does not call player when clicking outside a row", async () => {
     const outlet = document.createElement("div");
-    outlet.innerHTML = '<p>Not a row</p>';
+    outlet.innerHTML = '<div id="library-region"><p>Not a row</p></div>';
 
     const player = makeMockPlayer();
-    afterRenderHome(outlet, player);
+    afterRenderHome(outlet, player, null);
 
     outlet.querySelector("p")!.click();
 
@@ -279,21 +314,14 @@ describe("afterRenderHome", () => {
     expect(player.remove).not.toHaveBeenCalled();
   });
 
-  it("does not duplicate click listener on repeated afterRenderHome calls", () => {
-    const outlet = document.createElement("div");
-    outlet.innerHTML = `
-      <details class="expand-row audio-row" data-id="x1" data-storage-path="media/x1.mp3" data-title="Track" data-artist="Art" data-album="Alb">
-        <summary><div class="expand-summary">
-          <label class="queue-checkbox"><input type="checkbox" data-queue-toggle /></label>
-          <span class="title">Track</span>
-        </div></summary>
-      </details>
-    `;
+  it("does not duplicate click listener on repeated afterRenderHome calls", async () => {
+    mockListLibrary.mockResolvedValue([makeLibraryItem({ id: "x1" })]);
+    const outlet = await buildOutlet(null);
 
     const player = makeMockPlayer();
-    afterRenderHome(outlet, player);
-    afterRenderHome(outlet, player);
-    afterRenderHome(outlet, player);
+    afterRenderHome(outlet, player, null);
+    afterRenderHome(outlet, player, null);
+    afterRenderHome(outlet, player, null);
 
     const checkbox = outlet.querySelector<HTMLInputElement>("input[data-queue-toggle]")!;
     checkbox.click();
@@ -301,24 +329,40 @@ describe("afterRenderHome", () => {
     expect(player.add).toHaveBeenCalledTimes(1);
   });
 
-  it("syncs checkbox state on render for queued tracks", () => {
-    const outlet = document.createElement("div");
-    outlet.innerHTML = `
-      <details class="expand-row audio-row" data-id="x1" data-storage-path="media/x1.mp3" data-title="Track" data-artist="Art" data-album="Alb">
-        <summary><div class="expand-summary">
-          <label class="queue-checkbox"><input type="checkbox" data-queue-toggle /></label>
-          <span class="title">Track</span>
-        </div></summary>
-      </details>
-    `;
+  it("syncs checkbox state on render for queued tracks", async () => {
+    mockListLibrary.mockResolvedValue([makeLibraryItem({ id: "x1" })]);
+    const outlet = await buildOutlet(null);
 
     const player = makeMockPlayer();
     player.isQueued.mockReturnValue(true);
-    afterRenderHome(outlet, player);
+    afterRenderHome(outlet, player, null);
 
     const checkbox = outlet.querySelector<HTMLInputElement>("input[data-queue-toggle]")!;
     expect(checkbox.checked).toBe(true);
     expect(player.isQueued).toHaveBeenCalledWith("x1");
+  });
+
+  it("rescans the library on window focus", async () => {
+    mockListLibrary.mockResolvedValue([makeLibraryItem({ id: "x1" })]);
+    const outlet = await buildOutlet(null);
+
+    const player = makeMockPlayer();
+    afterRenderHome(outlet, player, null);
+
+    mockListLibrary.mockClear();
+    mockListLibrary.mockResolvedValue([
+      makeLibraryItem({ id: "x1" }),
+      makeLocalItem({ id: "local:new.mp3", localName: "new.mp3" }),
+    ]);
+
+    window.dispatchEvent(new Event("focus"));
+
+    await vi.waitFor(() => {
+      expect(mockListLibrary).toHaveBeenCalled();
+    });
+    await vi.waitFor(() => {
+      expect(outlet.querySelector('[data-id="local:new.mp3"]')).not.toBeNull();
+    });
   });
 
   it("does not log cache-stats error when CACHE_UPDATED_EVENT fires after navigation away", async () => {
@@ -334,7 +378,7 @@ describe("afterRenderHome", () => {
     `;
 
     const player = makeMockPlayer();
-    afterRenderHome(outlet, player);
+    afterRenderHome(outlet, player, null);
 
     // Simulate navigation away: replace outlet content with non-Home markup,
     // detaching the original #cache-info element.
@@ -369,7 +413,7 @@ describe("afterRenderHome", () => {
     `;
 
     const player = makeMockPlayer();
-    afterRenderHome(outlet, player);
+    afterRenderHome(outlet, player, null);
     await Promise.resolve();
 
     // With no #cache-info (hence no #cache-stats), mount's refreshCacheStats logs
@@ -405,8 +449,8 @@ describe("afterRenderHome", () => {
     const player = makeMockPlayer();
     // Two afterRenderHome calls simulate a re-render. The second must abort the
     // first call's AbortController, removing the first document listener.
-    afterRenderHome(outlet, player);
-    afterRenderHome(outlet, player);
+    afterRenderHome(outlet, player, null);
+    afterRenderHome(outlet, player, null);
     await Promise.resolve();
 
     // refreshCacheStats runs at each mount (one getCacheStats call each).

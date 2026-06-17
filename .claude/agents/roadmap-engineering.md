@@ -9,7 +9,7 @@ Evaluate the project through the lens of **technical health** and **long-term su
 
 ## Input
 
-You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, field-RUM web-vitals metrics (from the `=== Analytics (GA4 + Search Console) ===` section), and any additional project context.
+You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, field-RUM web-vitals metrics (from the `=== Analytics (GA4 + Search Console) ===` section), and any additional project context. The context block also includes a `=== Web Performance (PageSpeed Insights) ===` section with per-URL Lighthouse category scores (performance, accessibility, best-practices, SEO) and lab metrics (LCP, CLS, TBT, FCP) for each deployed app.
 
 ## Thinking Frameworks
 
@@ -27,6 +27,7 @@ You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, 
 - **Coverage gaps** — what's tested, what isn't, and what's the risk of the gaps?
 - **Test pyramid assessment** — is the balance of unit/integration/e2e tests appropriate? Are tests testing the right things?
 - **CI health** — are tests reliable? How long do they take? Are there flaky tests?
+- **Performance health** — read the `=== Web Performance (PageSpeed Insights) ===` section and treat regressions in Lighthouse scores or lab metrics (LCP, CLS, TBT, FCP) versus prior reviews as tech-debt and sustainability signals: a declining performance score indicates accumulating load-weight or render-blocking debt, not just a UX issue. Attribute regressions to specific apps and categorize by debt type (dependency bloat, render-blocking resources, infrastructure). When the web-performance section is absent or all URLs failed, note it explicitly and reason qualitatively about known performance risks rather than omitting the assessment.
 
 ### Web Performance (Field RUM)
 - **Read the signal** — find the "Web Vitals (field RUM, 30-day)" lines in the `=== Analytics (GA4 + Search Console) ===` context section; each deployed app reports LCP, CLS, INP, FCP, and TTFB as an average value plus a `% good` rating share.
