@@ -10935,6 +10935,76 @@ else
 fi
 config_teardown
 
+# --- Test 7p: force-opus.json enabled → normalized JSON, exit 0 --------------
+
+echo "Test: valid force-opus.json with enabled:true prints normalized JSON"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/force-opus.json" <<'EOF'
+{"enabled":true}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" force-opus 2>/dev/null); rc=$?
+assert_eq "force-opus enabled: exits 0" "0" "$rc"
+fo_enabled=$(printf '%s' "$out" | jq -r '.enabled')
+assert_eq "force-opus enabled: .enabled is true" "true" "$fo_enabled"
+config_teardown
+
+# --- Test 7q: force-opus.json disabled → normalized JSON, exit 0 -------------
+
+echo "Test: valid force-opus.json with enabled:false prints normalized JSON"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/force-opus.json" <<'EOF'
+{"enabled":false}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" force-opus 2>/dev/null); rc=$?
+assert_eq "force-opus disabled: exits 0" "0" "$rc"
+fo_enabled=$(printf '%s' "$out" | jq -r '.enabled')
+assert_eq "force-opus disabled: .enabled is false" "false" "$fo_enabled"
+config_teardown
+
+# --- Test 7r: absent force-opus.json → no-config, exit 0 --------------------
+
+echo "Test: absent force-opus.json prints no-config and exits 0"
+config_setup
+# no file written — config dir is empty
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" force-opus 2>/dev/null); rc=$?
+assert_eq "force-opus absent: exits 0" "0" "$rc"
+assert_eq "force-opus absent: prints no-config" "no-config" "$out"
+config_teardown
+
+# --- Test 7s: force-opus.json missing enabled field → exit 1 -----------------
+
+echo "Test: force-opus.json missing required enabled field exits 1 and stderr mentions enabled"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/force-opus.json" <<'EOF'
+{}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" force-opus 2>&1 1>/dev/null) || rc=$?
+assert_eq "force-opus missing enabled: exits 1" "1" "$rc"
+if [[ "$err" == *"enabled"* ]]; then
+  assert_eq "force-opus missing enabled: stderr mentions enabled" "yes" "yes"
+else
+  assert_eq "force-opus missing enabled: stderr mentions enabled" "yes" "no: $err"
+fi
+config_teardown
+
+# --- Test 7t: force-opus.json enabled is a string → exit 1 ------------------
+
+echo "Test: force-opus.json with enabled as a string exits 1 and stderr mentions enabled"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/force-opus.json" <<'EOF'
+{"enabled":"yes"}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" force-opus 2>&1 1>/dev/null) || rc=$?
+assert_eq "force-opus string enabled: exits 1" "1" "$rc"
+if [[ "$err" == *"enabled"* ]]; then
+  assert_eq "force-opus string enabled: stderr mentions enabled" "yes" "yes"
+else
+  assert_eq "force-opus string enabled: stderr mentions enabled" "yes" "no: $err"
+fi
+config_teardown
+
 # ============================================================================
 # ingest-downloads.sh tests
 # ============================================================================
@@ -14883,6 +14953,7 @@ SPAWN_WORKER_REGISTRY=""
 SPAWN_WORKER_BG_ARGV=""
 SPAWN_WORKER_PWD_LOG=""
 SPAWN_WORKER_PENDING=""
+SPAWN_WORKER_SUBAGENT_MODEL=""
 WORKER_TARGET_WORKTREE=""
 
 # write_fake_spawn_worker_claude — install the multi-subcommand fake `claude`.
@@ -14929,6 +15000,7 @@ case "\${1:-}" in
   --bg)
     pwd >> "$SPAWN_WORKER_PWD_LOG"
     printf '%s\n' "\$@" > "$SPAWN_WORKER_BG_ARGV"
+    printf '%s\n' "\${CLAUDE_CODE_SUBAGENT_MODEL:-<unset>}" > "$SPAWN_WORKER_SUBAGENT_MODEL"
     name=""
     while [[ \$# -gt 0 ]]; do
       if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
@@ -14952,22 +15024,34 @@ spawn_worker_setup() {
   TMPDIR_TEST=$(mktemp -d)
   mkdir -p "$TMPDIR_TEST/scripts" \
     "$TMPDIR_TEST/worktrees/main" \
-    "$TMPDIR_TEST/worktrees/839-test-worker"
+    "$TMPDIR_TEST/worktrees/839-test-worker" \
+    "$TMPDIR_TEST/config"
 
   # dispatch-spawn-job (the generalized spawn primitive) sources
   # lib-claude-agents.sh from its own directory, so both must sit alongside the
   # copy. lib-claude-agents.sh is sourced, not executed — no chmod;
   # dispatch-spawn-job is run, so it is chmod'd.
+  # dispatch-spawn-job's force-opus gate calls dispatch-config-load, which in
+  # turn sources lib.sh — both must sit alongside the copy. dispatch-config-load
+  # is run, so it is chmod'd; lib.sh is sourced, no chmod.
   cp "$SCRIPT_DIR/dispatch-spawn-job" "$TMPDIR_TEST/scripts/dispatch-spawn-job"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-job"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-config-load"
 
   SPAWN_WORKER_REGISTRY="$TMPDIR_TEST/registry.json"
   SPAWN_WORKER_BG_ARGV="$TMPDIR_TEST/bg-argv"
   SPAWN_WORKER_PWD_LOG="$TMPDIR_TEST/pwd-log"
   SPAWN_WORKER_PENDING="$TMPDIR_TEST/pending"
+  SPAWN_WORKER_SUBAGENT_MODEL="$TMPDIR_TEST/subagent-model"
   WORKER_TARGET_WORKTREE="$TMPDIR_TEST/worktrees/839-test-worker"
   printf '[]' > "$SPAWN_WORKER_REGISTRY"
+
+  # Point dispatch-config-load at the test's config dir so force-opus.json is
+  # under test control (absent config dir → no-config → gate off by default).
+  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
 }
 
 spawn_worker_teardown() {
@@ -14977,10 +15061,12 @@ spawn_worker_teardown() {
   SPAWN_WORKER_BG_ARGV=""
   SPAWN_WORKER_PWD_LOG=""
   SPAWN_WORKER_PENDING=""
+  SPAWN_WORKER_SUBAGENT_MODEL=""
   WORKER_TARGET_WORKTREE=""
   unset DISPATCH_SPAWN_JOB_CLAUDE_CMD DISPATCH_SPAWN_JOB_SESSION_ID \
     SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
-    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S \
+    DISPATCH_CONFIG_DIR CLAUDE_CODE_SUBAGENT_MODEL
 }
 
 # ============================================================================
@@ -15007,17 +15093,24 @@ spawn_office_hours_setup() {
   TMPDIR_TEST=$(mktemp -d)
   mkdir -p "$TMPDIR_TEST/scripts" \
     "$TMPDIR_TEST/worktrees/main" \
-    "$TMPDIR_TEST/worktrees/839-test-worker"
+    "$TMPDIR_TEST/worktrees/839-test-worker" \
+    "$TMPDIR_TEST/config"
 
   # dispatch-spawn-office-hours sources lib-claude-agents.sh from its own
   # directory and runs dispatch-spawn-job from there, so both must sit alongside
   # the copy. lib-claude-agents.sh is sourced, not executed — no chmod; the two
   # executables are run, so they are chmod'd.
+  # dispatch-spawn-job's force-opus gate calls dispatch-config-load, which
+  # sources lib.sh — both must sit alongside the copy. dispatch-config-load is
+  # run, so it is chmod'd; lib.sh is sourced, no chmod.
   cp "$SCRIPT_DIR/dispatch-spawn-office-hours" "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours"
   cp "$SCRIPT_DIR/dispatch-spawn-job" "$TMPDIR_TEST/scripts/dispatch-spawn-job"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-job"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-config-load"
 
   # Reuse the SPAWN_WORKER_* fixture globals so write_fake_spawn_worker_claude
   # (which references them) backs this script too.
@@ -15025,11 +15118,16 @@ spawn_office_hours_setup() {
   SPAWN_WORKER_BG_ARGV="$TMPDIR_TEST/bg-argv"
   SPAWN_WORKER_PWD_LOG="$TMPDIR_TEST/pwd-log"
   SPAWN_WORKER_PENDING="$TMPDIR_TEST/pending"
+  SPAWN_WORKER_SUBAGENT_MODEL="$TMPDIR_TEST/subagent-model"
   WORKER_TARGET_WORKTREE="$TMPDIR_TEST/worktrees/839-test-worker"
   printf '[]' > "$SPAWN_WORKER_REGISTRY"
 
   export DISPATCH_SPAWN_OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
   export DISPATCH_SPAWN_OFFICE_HOURS_SESSION_ID="sess-self"
+
+  # Point dispatch-config-load at the test's config dir so force-opus.json is
+  # under test control (absent config dir → no-config → gate off by default).
+  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
 }
 
 spawn_office_hours_teardown() {
@@ -15039,11 +15137,13 @@ spawn_office_hours_teardown() {
   SPAWN_WORKER_BG_ARGV=""
   SPAWN_WORKER_PWD_LOG=""
   SPAWN_WORKER_PENDING=""
+  SPAWN_WORKER_SUBAGENT_MODEL=""
   WORKER_TARGET_WORKTREE=""
   unset DISPATCH_SPAWN_OFFICE_HOURS_CLAUDE_CMD DISPATCH_SPAWN_OFFICE_HOURS_SESSION_ID \
     DISPATCH_SPAWN_JOB_CLAUDE_CMD DISPATCH_SPAWN_JOB_SESSION_ID \
     SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
-    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S \
+    DISPATCH_CONFIG_DIR CLAUDE_CODE_SUBAGENT_MODEL
 }
 
 # --- Test 1: happy path — spawn worker-style, resolve + print the id ---------
@@ -15280,6 +15380,83 @@ assert_eq "spawn-job-model: argv[4] is claude-sonnet-4-6" "claude-sonnet-4-6" "$
 assert_eq "spawn-job-model: argv[5] is --permission-mode" "--permission-mode" "${sj_bg_argv[5]:-}"
 assert_eq "spawn-job-model: argv[6] is auto" "auto" "${sj_bg_argv[6]:-}"
 assert_eq "spawn-job-model: argv[7] is the prompt" "/dispatch-diagnose-main abc123" "${sj_bg_argv[7]:-}"
+spawn_worker_teardown
+
+# --- Test 2c: force-opus enabled — overrides caller's --model (#1830) --------
+# With force-opus.json {"enabled":true}, dispatch-spawn-job must replace any
+# caller-supplied --model with --model opus in the bg argv AND set
+# CLAUDE_CODE_SUBAGENT_MODEL=opus so the spawned process inherits it.
+
+echo "Test: force-opus enabled overrides --model claude-sonnet-4-6 with --model opus in bg argv"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+# Write an enabled force-opus config into the test's config dir.
+printf '{"enabled":true}\n' > "$DISPATCH_CONFIG_DIR/force-opus.json"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" --model claude-sonnet-4-6 \
+    "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job-force-opus-on: exits 0" "0" "$rc"
+assert_eq "spawn-job-force-opus-on: stdout is 'spawned'" "spawned" "$out"
+# Check the bg argv — caller passed --model claude-sonnet-4-6 but force-opus
+# must have overridden it to --model opus.
+mapfile -t sj_fo_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-job-force-opus-on: argv[0] is --bg" "--bg" "${sj_fo_argv[0]:-}"
+assert_eq "spawn-job-force-opus-on: argv[1] is --name" "--name" "${sj_fo_argv[1]:-}"
+assert_eq "spawn-job-force-opus-on: argv[2] is diagnose-main" "diagnose-main" "${sj_fo_argv[2]:-}"
+assert_eq "spawn-job-force-opus-on: argv[3] is --model" "--model" "${sj_fo_argv[3]:-}"
+assert_eq "spawn-job-force-opus-on: argv[4] is opus (not claude-sonnet-4-6)" "opus" "${sj_fo_argv[4]:-}"
+# Check that CLAUDE_CODE_SUBAGENT_MODEL was opus when the fake ran.
+sj_fo_subagent=$(cat "$SPAWN_WORKER_SUBAGENT_MODEL" 2>/dev/null || true)
+assert_eq "spawn-job-force-opus-on: CLAUDE_CODE_SUBAGENT_MODEL recorded as opus" "opus" "$sj_fo_subagent"
+spawn_worker_teardown
+
+# --- Test 2d: force-opus disabled — caller's --model passes verbatim (#1830) -
+# With force-opus.json {"enabled":false}, dispatch-spawn-job must leave the
+# caller's --model untouched and must NOT set CLAUDE_CODE_SUBAGENT_MODEL.
+
+echo "Test: force-opus disabled leaves --model claude-sonnet-4-6 verbatim in bg argv"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+printf '{"enabled":false}\n' > "$DISPATCH_CONFIG_DIR/force-opus.json"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" --model claude-sonnet-4-6 \
+    "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job-force-opus-off: exits 0" "0" "$rc"
+assert_eq "spawn-job-force-opus-off: stdout is 'spawned'" "spawned" "$out"
+mapfile -t sj_foff_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-job-force-opus-off: argv[3] is --model" "--model" "${sj_foff_argv[3]:-}"
+assert_eq "spawn-job-force-opus-off: argv[4] is claude-sonnet-4-6 (unchanged)" "claude-sonnet-4-6" "${sj_foff_argv[4]:-}"
+sj_foff_subagent=$(cat "$SPAWN_WORKER_SUBAGENT_MODEL" 2>/dev/null || true)
+assert_eq "spawn-job-force-opus-off: CLAUDE_CODE_SUBAGENT_MODEL is <unset>" "<unset>" "$sj_foff_subagent"
+spawn_worker_teardown
+
+# --- Test 2e: force-opus absent — caller's --model passes verbatim (#1830) ---
+# With no force-opus.json at all, the gate must be off: caller's --model is
+# untouched and CLAUDE_CODE_SUBAGENT_MODEL is not set.
+
+echo "Test: force-opus absent (no file) leaves --model claude-sonnet-4-6 verbatim in bg argv"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+# No force-opus.json written — config dir is empty (dispatch-config-load → no-config).
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" --model claude-sonnet-4-6 \
+    "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job-force-opus-absent: exits 0" "0" "$rc"
+assert_eq "spawn-job-force-opus-absent: stdout is 'spawned'" "spawned" "$out"
+mapfile -t sj_fabsent_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-job-force-opus-absent: argv[3] is --model" "--model" "${sj_fabsent_argv[3]:-}"
+assert_eq "spawn-job-force-opus-absent: argv[4] is claude-sonnet-4-6 (unchanged)" "claude-sonnet-4-6" "${sj_fabsent_argv[4]:-}"
+sj_fabsent_subagent=$(cat "$SPAWN_WORKER_SUBAGENT_MODEL" 2>/dev/null || true)
+assert_eq "spawn-job-force-opus-absent: CLAUDE_CODE_SUBAGENT_MODEL is <unset>" "<unset>" "$sj_fabsent_subagent"
 spawn_worker_teardown
 
 # --- Test 3: exact-name dedup ------------------------------------------------
