@@ -39,7 +39,9 @@
 #                   `claude --bg --model <model>`. When absent or empty, the
 #                   --model flag is omitted entirely and the session inherits the
 #                   launcher's default model (Opus). See dispatch-phase-model for
-#                   the phase → model policy (#1171).
+#                   the phase → model policy (#1171). An enabled force-opus.json
+#                   (Step 1b) overrides the requested model with Opus regardless
+#                   of what is passed here.
 #   --park-issue <N> Optional positive integer. Best-effort, and requires
 #                   --no-verify — passing it without --no-verify is rejected with
 #                   exit 2 (parking only applies to the --no-verify kick-failure
@@ -51,6 +53,11 @@
 #                   Absent → no park; behavior is byte-identical to before.
 #
 # Behavior, in order:
+#   0. Force-opus gate — when dispatch.config/force-opus.json is enabled, force
+#                 MODEL=opus (overriding any --model) and export
+#                 CLAUDE_CODE_SUBAGENT_MODEL=opus so the spawned worker and all
+#                 its subagents run on Opus, overriding every per-site Sonnet pin.
+#                 Off (absent file → no-config, or enabled:false) → no change.
 #   1. Dedup    — if another live session with name == <name> is already running
 #                 under <cwd>, spawn nothing. Fail-safe: if the registry cannot
 #                 be queried, also spawn nothing (a dispatch agent may be live).
@@ -200,6 +207,35 @@ SESSION_ID="${DISPATCH_SPAWN_JOB_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+# ---- Step 1b: force-opus gate (the model-precedence chokepoint) --------------
+# The dispatch queue pins several phases/subagents to Sonnet (skill frontmatter
+# `model: sonnet`, prose "launch a model: sonnet subagent", per-unit "Recommended
+# model: sonnet" in persisted plans, and dispatch-phase-model emitting
+# `claude-sonnet-4-6` for qa/review — carried here as --model). The force-opus
+# config overrides them all FROM ABOVE at the one precedence level that beats
+# every per-site request, set at this single launch chokepoint:
+#   - CLAUDE_CODE_SUBAGENT_MODEL=opus is Claude Code's rank-1 subagent override;
+#     it outranks frontmatter, prose, and persisted-plan model requests for the
+#     spawned worker and ALL its subagents (inherited through the Step 3 cd
+#     subshell, which runs in this script's exported environment).
+#   - MODEL=opus forces the worker's own session model, overriding any --model
+#     the caller passed (e.g. claude-sonnet-4-6 from dispatch-launch-worker for
+#     qa/review); the existing Step 3 bg_args logic then carries --model opus.
+# Per .claude/rules/code-style.md a malformed opt-in config is a misconfigured
+# environment: fail loudly. Silently skipping the force would leave the user
+# wrongly believing they are on Opus.
+FORCE_OPUS_CFG=$("$SCRIPT_DIR/dispatch-config-load" force-opus) || {
+  echo "dispatch-spawn-job: error: dispatch-config-load force-opus failed" >&2
+  exit 1
+}
+if [[ "$FORCE_OPUS_CFG" != "no-config" ]] \
+   && [[ "$(jq -r '.enabled' <<<"$FORCE_OPUS_CFG")" == "true" ]]; then
+  # opus is the correct ALIAS — it passes the --model regex above; do NOT expand
+  # it to a full model id.
+  export CLAUDE_CODE_SUBAGENT_MODEL=opus
+  MODEL=opus
+fi
 
 # ---- Step 2: dedup guard ----------------------------------------------------
 # If another live session already has name == <name>, spawn nothing. The
