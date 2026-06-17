@@ -18,10 +18,14 @@ an unexpected permission prompt, or a bounded auto-fix-exhausted bug (cap
 reached / scope-deviation / planning-failed on an `opus-fixable` item) — it
 escalates to the office-hours queue via the standard path (skip the
 `phase-completed` marker, write `office-hours-reason`; the Stop hook applies
-`dispatch:office-hours` to the issue and parks the session). `opus-fixable`
-bugs are auto-fixed in the bounded Opus fix lane (Step 3.7); `needs-main` bugs
-are filed as `blocked_by` follow-up issues (Step 3.6) and do not escalate. The
-user-input residue runs later via `/office-hours`.
+`dispatch:office-hours` to the issue and parks the session). The Step 3.5
+disposition Workflow classifies residue items on a **four-class axis**:
+`opus-fixable` bugs are auto-fixed in the bounded Opus fix lane (Step 3.7);
+`needs-main` bugs are filed as `blocked_by` follow-up issues (Step 3.6) and do
+not escalate; `already-satisfied` items are **dropped as PASS** — partitioned
+into `result.already_satisfied` by the Workflow, excluded from `result.dispositions`,
+and never reaching fix-plan or the escalation set. The user-input residue
+(`needs-human`) runs later via `/office-hours`.
 
 The QA plan (Step 2) is authored by a **single bounded Opus triage subagent** that
 consumes the live context pack and returns a three-way-classified, ordered item
@@ -484,15 +488,24 @@ Otherwise run all steps in order.
 
    ```
    result = {
-     dispositions:  [ {id, title, kind, class, aesthetic, verify, rationale} ],
-     verify_report: [ {id, verdict, skeptic_votes, rationale} ],
-     fix_plan:      { units, deviation, deviation_reason } | null,
-     deviation:     <bool>
+     dispositions:      [ {id, title, kind, class, aesthetic, verify, rationale} ],
+     already_satisfied: [ {id, title, kind, rationale} ],  // dropped-as-PASS items partitioned out of dispositions
+     verify_report:     [ {id, verdict, skeptic_votes, rationale} ],
+     fix_plan:          { units, deviation, deviation_reason } | null,
+     deviation:         <bool>
    }
    ```
 
-   - `dispositions[].class` is the final class: `opus-fixable` | `needs-main` |
-     `needs-human`. `verify` is `Upheld` | `Refuted` | `Unverified` | `n/a`.
+   - `dispositions[].class` is the final class for items still in the set:
+     `opus-fixable` | `needs-main` | `needs-human`. `verify` is `Upheld` |
+     `Refuted` | `Unverified` | `n/a`. `dispositions` excludes already-satisfied
+     items — those are partitioned into `result.already_satisfied` by the Workflow.
+   - The **four-class disposition axis** is: `opus-fixable` | `needs-main` |
+     `needs-human` | `already-satisfied`. Items the Workflow classifies
+     `already-satisfied` are **dropped as PASS** in the Workflow's aggregation:
+     excluded from `result.dispositions`, never reaching fix-plan, never entering
+     the escalation set, and surfaced separately in `result.already_satisfied`
+     carrying `{id, title, kind, rationale}`.
    - `verify_report` has one entry per non-aesthetic `needs-human` candidate that
      went through the skeptic fan-out (`verdict`: `upheld` | `refuted` |
      `unverified`).
@@ -742,15 +755,18 @@ Otherwise run all steps in order.
    - Items executed (across all three lanes).
    - PASS / FAIL / SKIP counts.
    - **Deferred to office-hours** — each `needs-human-judgment` item **whose
-     disposition class is not `needs-main`**, listed so the `/office-hours`
-     walkthrough can pick them up. A `needs-human-judgment` item the triage
-     classified `needs-main` is filed as a follow-up per Step 3.6 instead (see the
-     filed-follow-ups sub-list below) and is **not** deferred to office-hours.
+     disposition class is `needs-human`** (i.e. neither `needs-main` nor
+     `already-satisfied`), listed so the `/office-hours` walkthrough can pick them
+     up. A `needs-human-judgment` item the triage classified `needs-main` is filed
+     as a follow-up per Step 3.6 instead (see the filed-follow-ups sub-list below)
+     and is **not** deferred to office-hours. A `needs-human-judgment` item the
+     Workflow classified `already-satisfied` is dropped as PASS (in
+     `result.already_satisfied`) and is likewise **not** deferred to office-hours.
    - List of bugs found (if any), each with the item title and the finding.
    - When the walkthrough lane ran: the GIF filename (`tmp/qa-fix-walkthrough-<n>.gif`).
    - **Disposition triage** — include this section only when the residue list was
-     non-empty (i.e. Step 3.5 ran). For each residue item, list its `class` from
-     `result.dispositions`. For non-aesthetic `needs-human` items (where
+     non-empty (i.e. Step 3.5 ran). For each **disposition item**, list its `class`
+     from `result.dispositions`. For non-aesthetic `needs-human` items (where
      `dispositions[item].aesthetic === false`), include the verify verdict and
      rationale from the matching entry in `result.verify_report` (matched by `id`).
      For aesthetic `needs-human` items, use `dispositions[item].verify` (which will
@@ -779,6 +795,11 @@ Otherwise run all steps in order.
      "already tracked by #<N>" (an existing tracking issue was found via
      `dispatch-followup-exists`), using the `identifier`→`<N>` mappings Step 3.6
      captured.
+   - **Assessed by Opus (already satisfied)** — include this sub-list only when
+     `result.already_satisfied` is non-empty. For each item in
+     `result.already_satisfied`, list its `title` and `rationale`. These items had
+     their acceptance criterion provably met at QA time — no code defect exists and
+     no human input is needed — so they are dropped as PASS and do not park the PR.
 
    Post via (use `dangerouslyDisableSandbox: true` — the script invokes `gh`):
    ```bash
@@ -811,23 +832,28 @@ Otherwise run all steps in order.
       items to fix, so Step 3.7 fell through; *or* a cap/scope-deviation/
       planning-failed escalate already finalized in Step 3.7 and STOPPED before
       here) — the existing office-hours escalation path, unchanged. The escalation
-      set **excludes** `needs-main`-class residue: each `needs-main` item was filed
-      as a `blocked_by` follow-up in Step 3.6 and is **dropped** from the set below;
-      `opus-fixable` and `needs-human` residue items still escalate exactly as
-      before (see the **User-input blocker** branch below and the **Escalation**
-      section).
+      set **excludes** `needs-main`-class residue (each `needs-main` item was filed
+      as a `blocked_by` follow-up in Step 3.6 and is **dropped** from the set below)
+      and **excludes** `already-satisfied`-class residue (dropped as PASS by the
+      Workflow, absent from `result.dispositions`); `opus-fixable` and `needs-human`
+      residue items still escalate exactly as before (see the **User-input blocker**
+      branch below and the **Escalation** section).
 
-   3. **Clean pass** — no residue at all (or only `needs-main` residue, all of which
-      was filed and dropped): `dispatch-complete-phase qa` + `dispatch-mark-complete`,
-      unchanged (see **Clean autonomous pass** below).
+   3. **Clean pass** — no residue at all (or only `needs-main` residue, all filed
+      and dropped; or only `already-satisfied` residue, all dropped as PASS):
+      `dispatch-complete-phase qa` + `dispatch-mark-complete`, unchanged (see
+      **Clean autonomous pass** below).
 
-   **Escalation set.** Define it as:
+   **Escalation set.** Build it directly from **`result.dispositions`** — the
+   Workflow's already-filtered output — not by re-deriving class from the raw
+   in-memory residue list. (Re-deriving would find already-satisfied items absent
+   from `result.dispositions`, get `undefined` for their class, and wrongly include
+   them because `undefined !== 'needs-main'`.) Define the set as:
 
-   - every **residue item whose final disposition class is NOT `needs-main`** —
-     i.e. `opus-fixable` and `needs-human` items, which still escalate (the skill
-     does not yet act on those classes); **plus**
+   - every **item in `result.dispositions`** — i.e. `opus-fixable` and `needs-human`
+     items, which still escalate (the skill does not yet act on those classes); **plus**
    - the **non-residue terminal blockers** that already escalate, unchanged. These
-     stay terminal — only `needs-main`-class residue is dropped from the set:
+     stay terminal — only disposition-class residue is dropped from the set:
      - a malformed or empty triage plan (Step 3 plan validation),
      - an `origin/main` merge conflict (Step 0.5),
      - the Chrome extension unavailable so browser items could not run (Step 3c),
@@ -838,13 +864,21 @@ Otherwise run all steps in order.
    filed as follow-ups in Step 3.6, now carrying `main-qa` + `dispatch:office-hours`
    so they route to office-hours human review rather than the autonomous queue.
 
+   `already-satisfied` residue items are likewise in **neither** part of the set —
+   they are **dropped as PASS** by the Workflow (partitioned into
+   `result.already_satisfied`, excluded from `result.dispositions`) and are therefore
+   never members of the escalation set. They do not park this PR.
+
    **Clean autonomous pass** — the escalation set (defined above) is **empty**.
    This now holds even for a run whose only residue items all classified
    `needs-main`: those were filed as `blocked_by` follow-ups in Step 3.6 and
-   dropped, leaving the escalation set empty. (It also holds, as before, when every
-   `script-verifiable` and `needs-browser` item PASSed, zero `needs-human-judgment`
-   items were recorded, no bug was found, and none of the non-residue blockers
-   fired.)
+   dropped, leaving the escalation set empty. It also holds when every residue item
+   classified `already-satisfied`: those were dropped as PASS by the Workflow
+   (partitioned into `result.already_satisfied`), leaving `result.dispositions` and
+   the escalation set both empty — `dispatch:qa-done` applies. (It also holds, as
+   before, when every `script-verifiable` and `needs-browser` item PASSed, zero
+   `needs-human-judgment` items were recorded, no bug was found, and none of the
+   non-residue blockers fired.)
 
    On a clean pass apply the `dispatch:qa-done` label via `dispatch-complete-phase`
    (use
@@ -880,7 +914,10 @@ Otherwise run all steps in order.
    Step 3b), the Chrome extension unavailable so browser items could not run (Step
    3c), a multi-app demo choice (Step 1), or the `origin/main` merge conflicted
    (Step 0.5). A `needs-main`-class residue item is **not** a member — it was filed
-   as a follow-up in Step 3.6 and does not, on its own, trigger this blocker.
+   as a follow-up in Step 3.6 and does not, on its own, trigger this blocker. An
+   `already-satisfied`-class residue item is likewise **not** a member — it was
+   dropped as PASS by the Workflow (absent from `result.dispositions`) and does not
+   trigger this blocker.
 
    Do **not** apply `dispatch:qa-done`. Escalate per the **Escalation** section
    below and **stop**.
