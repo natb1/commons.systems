@@ -9,6 +9,7 @@ import { listLibrary } from "../library.js";
 import { formatDuration } from "../player.js";
 import type { PlayerHandle } from "../player.js";
 import { getCacheStats, clearCache, CACHE_UPDATED_EVENT } from "../audio-cache.js";
+import { enrichLocalTracks } from "../local-source.js";
 
 function renderRow(item: LibraryItem): string {
   const track =
@@ -136,6 +137,7 @@ export function afterRenderHome(
     if (rescanning) return;
     rescanning = true;
     try {
+      await enrichLocalTracks();
       await rerenderLibraryRegion();
       onFolderStateChange?.();
     } finally {
@@ -205,4 +207,9 @@ export function afterRenderHome(
         });
     }, { signal: clickAbort.signal });
   }
+
+  void (async () => {
+    await enrichLocalTracks();
+    await rerenderLibraryRegion();
+  })();
 }
