@@ -771,11 +771,15 @@ Otherwise run all steps in order.
      rationale from the matching entry in `result.verify_report` (matched by `id`).
      For aesthetic `needs-human` items, use `dispositions[item].verify` (which will
      be `n/a`) directly — no `verify_report` entry exists for them. If the residue
-     list was empty (Step 3.5 was skipped), omit this section entirely.
+     list was empty (Step 3.5 was skipped), omit this section entirely. If
+     `result.dispositions` is empty (every residue item was `already-satisfied`),
+     skip the per-item enumeration and the `needs-main` handling prose below — there
+     are no disposition items and no `needs-main` items to describe; only the
+     **Assessed by Opus (already satisfied)** sub-section applies.
 
-     Always state the `needs-main` handling: **"`needs-main` items are filed as
-     `blocked_by` follow-ups (Step 3.6) and dropped from the escalation set, so they
-     do not park this PR."**
+     When `result.dispositions` contains any item, always state the `needs-main`
+     handling: **"`needs-main` items are filed as `blocked_by` follow-ups (Step 3.6)
+     and dropped from the escalation set, so they do not park this PR."**
 
      The remaining terminal-behavior prose is **conditional** on which Step-3.7 path
      this pass took:
@@ -908,7 +912,8 @@ Otherwise run all steps in order.
    **User-input blocker** — the escalation set (defined above) is **non-empty**.
    This fires when any member of the set is present: an `opus-fixable` or
    `needs-human` residue item (a `script-verifiable`/`needs-browser` FAIL or a
-   `needs-human-judgment` item that did **not** classify `needs-main`), OR any
+   `needs-human-judgment` item that classified `needs-human` — i.e. it did **not**
+   classify `needs-main` or `already-satisfied`), OR any
    non-residue blocker — a malformed or empty triage plan (Step 3 plan
    validation), the pre-QA acceptance check failed (a bug needing a plan-mode fix,
    Step 3b), the Chrome extension unavailable so browser items could not run (Step
