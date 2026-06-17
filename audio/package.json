@@ -25,7 +25,8 @@
     "@commons-systems/router": "file:../router",
     "@commons-systems/style": "file:../style",
     "firebase": "^12.9.0",
-    "missing.css": "^1.1.3"
+    "missing.css": "^1.1.3",
+    "music-metadata": "11.13.0"
   },
   "devDependencies": {
     "@commons-systems/config": "file:../config",
