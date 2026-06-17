@@ -22,8 +22,12 @@ vi.mock("@commons-systems/errorutil/log", () => ({
 }));
 
 const mockSetLocalDirectory = vi.fn();
+const mockGetMetadata = vi.fn();
+const mockCacheMetadataBatch = vi.fn();
 vi.mock("../src/sidecar.js", () => ({
   setLocalDirectory: (...args: unknown[]) => mockSetLocalDirectory(...args),
+  getMetadata: (...args: unknown[]) => mockGetMetadata(...args),
+  cacheMetadataBatch: (...args: unknown[]) => mockCacheMetadataBatch(...args),
 }));
 
 interface FakeEntry {
