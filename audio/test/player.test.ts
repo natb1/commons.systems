@@ -15,6 +15,12 @@ vi.mock("../src/local-source.js", () => ({
     mockResolveLocalAudioSource(...args),
 }));
 
+const mockSavePlayerState = vi.fn();
+
+vi.mock("../src/sidecar.js", () => ({
+  savePlayerState: (...args: unknown[]) => mockSavePlayerState(...args),
+}));
+
 const mockLogError = vi.fn();
 
 vi.mock("@commons-systems/errorutil/log", () => ({
@@ -92,6 +98,7 @@ describe("initPlayer", () => {
     mockResolveAudioSource.mockResolvedValue("blob:http://localhost/track-blob");
     mockResolveLocalAudioSource.mockResolvedValue("blob:http://localhost/local-blob");
     mockRemoveFile.mockResolvedValue(undefined);
+    mockSavePlayerState.mockResolvedValue(undefined);
   });
 
   it("renders empty state on init", () => {

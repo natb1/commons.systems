@@ -19,7 +19,9 @@ import {
   isLocalFolderSupported,
   connectLocalFolder,
   regrantLocalFolder,
+  listLocalTracks,
 } from "./local-source.js";
+import { getPlayerState } from "./sidecar.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
@@ -70,7 +72,13 @@ function renderFolderSlot(): void {
   });
 }
 
-void ensureLocalFolderRestored().then(() => renderFolderSlot());
+void (async () => {
+  await ensureLocalFolderRestored();
+  renderFolderSlot();
+  const localItems = await listLocalTracks();
+  const state = await getPlayerState();
+  if (state) player.restore(state, localItems);
+})().catch((err) => logError(err, { operation: "restore-player-state" }));
 
 navEl.links = [
   { href: "/", label: "Library" },
