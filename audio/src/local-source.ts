@@ -16,6 +16,7 @@ import { createFsaHandleStore } from "@commons-systems/local-first/fsa-handle-st
 import { createLocalFolderMediaSource } from "@commons-systems/mediautil/local-folder";
 import type { LocalDirectoryHandleLike } from "@commons-systems/mediautil/local-folder";
 import { logError } from "@commons-systems/errorutil/log";
+import { setLocalDirectory } from "./sidecar.js";
 import { AUDIO_FORMATS } from "./types.js";
 import type { AudioFormat, LibraryItem } from "./types.js";
 
@@ -92,24 +93,39 @@ function buildSource(directoryHandle: FileSystemDirectoryHandle) {
   });
 }
 
+/**
+ * Bind a granted handle as the live local folder and hand it to the sidecar
+ * owner. `isWritable` flows to `setLocalDirectory` so the sidecar knows whether
+ * disk writes are allowed (read-only binds make sidecar writes no-op). This is
+ * the SINGLE handoff point — every grant path (connect / restore / regrant)
+ * funnels through here so the sidecar is bound before `listLocalTracks` runs.
+ */
+function bindFolder(handle: FileSystemDirectoryHandle, isWritable: boolean): void {
+  currentHandle = handle;
+  currentSource = null;
+  state = "granted";
+  setLocalDirectory(handle, isWritable);
+}
+
 /** True when the browser can pick and persist an on-disk folder handle. */
 export function isLocalFolderSupported(): boolean {
   return store.isSupported() && "showDirectoryPicker" in window;
 }
 
 /**
- * Prompt the user to pick a folder (read-only), persist its handle, and mark the
- * source connected. Must be called from within a user gesture.
+ * Prompt the user to pick a folder (readwrite), persist its handle, and mark the
+ * source connected. A successful pick grants readwrite, so the sidecar binds
+ * writable. Must be called from within a user gesture.
  */
 export async function connectLocalFolder(): Promise<void> {
   const picker = window as unknown as {
-    showDirectoryPicker(o: { mode: "read" }): Promise<FileSystemDirectoryHandle>;
+    showDirectoryPicker(o: {
+      mode: "readwrite";
+    }): Promise<FileSystemDirectoryHandle>;
   };
-  const handle = await picker.showDirectoryPicker({ mode: "read" });
+  const handle = await picker.showDirectoryPicker({ mode: "readwrite" });
   await store.put(PURPOSE, handle);
-  currentHandle = handle;
-  currentSource = null;
-  state = "granted";
+  bindFolder(handle, true);
 }
 
 async function restore(): Promise<void> {
@@ -123,15 +139,21 @@ async function restore(): Promise<void> {
     return;
   }
   const handle = loaded as FileSystemDirectoryHandle;
-  // Query only — never request permission at startup (no user gesture).
-  const perm = await store.queryPermission(handle, "read");
-  if (perm === "granted") {
-    currentHandle = handle;
-    currentSource = null;
-    state = "granted";
-  } else {
-    state = perm; // "prompt" | "denied"
+  // Query only — never request permission at startup (no user gesture). Prefer
+  // readwrite (needed to write the sidecar); fall back to a read-only bind when
+  // only read is granted (extraction still works in-memory; sidecar writes
+  // no-op).
+  const rw = await store.queryPermission(handle, "readwrite");
+  if (rw === "granted") {
+    bindFolder(handle, true);
+    return;
   }
+  const r = await store.queryPermission(handle, "read");
+  if (r === "granted") {
+    bindFolder(handle, false);
+    return;
+  }
+  state = r; // "prompt" | "denied"
 }
 
 /** Restore the persisted folder once per session (memoized). */
@@ -157,14 +179,18 @@ export async function regrantLocalFolder(): Promise<boolean> {
   }
   const handle = loaded as FileSystemDirectoryHandle;
   // Request within the gesture — ensurePermission only prompts on "prompt".
-  const perm = await store.ensurePermission(handle, "read");
-  if (perm === "granted") {
-    currentHandle = handle;
-    currentSource = null;
-    state = "granted";
+  // Prefer readwrite; fall back to a read-only bind when only read is granted.
+  const rw = await store.ensurePermission(handle, "readwrite");
+  if (rw === "granted") {
+    bindFolder(handle, true);
     return true;
   }
-  state = perm;
+  const r = await store.ensurePermission(handle, "read");
+  if (r === "granted") {
+    bindFolder(handle, false);
+    return true;
+  }
+  state = r;
   return false;
 }
 
@@ -210,4 +236,31 @@ export async function resolveLocalAudioSource(localName: string): Promise<string
     id: "local:" + localName,
   } as LibraryItem);
   return URL.createObjectURL(new Blob([buf], { type }));
+}
+
+/**
+ * Resolve a listed local item's raw bytes for metadata enrichment, or null when
+ * unavailable. Distinct from `resolveLocalAudioSource` (which wraps bytes in a
+ * blob URL for `<audio>`) — enrichment needs the raw ArrayBuffer, not a URL.
+ *
+ * DESIGN NOTE — returns null on ANY failure ON PURPOSE; do not "correct" this to
+ * throw. The repo code-style rule prefers clear errors over fallbacks, but this
+ * is a deliberate, documented exception: enrichment is BEST-EFFORT and runs over
+ * every listed file. A vanished file ("Local file no longer present"), a read
+ * miss, or a permission error here is a skip-and-retry-later signal, not a
+ * misconfiguration to surface. Unit 4 relies on the null return to AVOID caching
+ * an empty `{}` (which would permanently suppress a retry). The error is still
+ * logged for observability before returning null.
+ */
+export async function resolveLocalBytes(
+  item: LibraryItem,
+): Promise<ArrayBuffer | null> {
+  if (!currentHandle) return null;
+  currentSource ??= buildSource(currentHandle);
+  try {
+    return await currentSource.resolveToBlob(item);
+  } catch (err) {
+    logError(err, { operation: "resolve-local-bytes" });
+    return null;
+  }
 }

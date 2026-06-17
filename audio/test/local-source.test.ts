@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { LibraryItem } from "../src/types.js";
 
 const fakeStore = {
   isSupported: vi.fn(),
@@ -18,6 +19,11 @@ vi.mock("@commons-systems/local-first/fsa-handle-store", () => ({
 const mockLogError = vi.fn();
 vi.mock("@commons-systems/errorutil/log", () => ({
   logError: (...args: unknown[]) => mockLogError(...args),
+}));
+
+const mockSetLocalDirectory = vi.fn();
+vi.mock("../src/sidecar.js", () => ({
+  setLocalDirectory: (...args: unknown[]) => mockSetLocalDirectory(...args),
 }));
 
 interface FakeEntry {
@@ -97,24 +103,44 @@ describe("unsupported", () => {
 });
 
 describe("restore", () => {
-  it("zero-click when permission is already granted", async () => {
-    fakeStore.get.mockResolvedValue(fakeDir([]));
+  it("zero-click writable bind when readwrite is already granted", async () => {
+    const dir = fakeDir([]);
+    fakeStore.get.mockResolvedValue(dir);
+    // "granted" for any mode → the readwrite branch binds first.
     fakeStore.queryPermission.mockResolvedValue("granted");
     const mod = await loadModule();
     await mod.ensureLocalFolderRestored();
     expect(mod.getLocalFolderState()).toBe("granted");
     expect(mod.hasLocalFolder()).toBe(true);
+    expect(mockSetLocalDirectory).toHaveBeenCalledWith(dir, true);
+    expect(fakeStore.requestPermission).not.toHaveBeenCalled();
+    expect(fakeStore.ensurePermission).not.toHaveBeenCalled();
+  });
+
+  it("read-only bind when only read is granted (readwrite in prompt)", async () => {
+    const dir = fakeDir([]);
+    fakeStore.get.mockResolvedValue(dir);
+    fakeStore.queryPermission.mockImplementation(
+      (_h: unknown, mode: string) => (mode === "readwrite" ? "prompt" : "granted"),
+    );
+    const mod = await loadModule();
+    await mod.ensureLocalFolderRestored();
+    expect(mod.getLocalFolderState()).toBe("granted");
+    expect(mod.hasLocalFolder()).toBe(true);
+    expect(mockSetLocalDirectory).toHaveBeenCalledWith(dir, false);
     expect(fakeStore.requestPermission).not.toHaveBeenCalled();
     expect(fakeStore.ensurePermission).not.toHaveBeenCalled();
   });
 
   it("does not request permission at startup when in prompt state", async () => {
     fakeStore.get.mockResolvedValue(fakeDir([]));
+    // Both readwrite and read queries return "prompt".
     fakeStore.queryPermission.mockResolvedValue("prompt");
     const mod = await loadModule();
     await mod.ensureLocalFolderRestored();
     expect(mod.getLocalFolderState()).toBe("prompt");
     expect(mod.hasLocalFolder()).toBe(false);
+    expect(mockSetLocalDirectory).not.toHaveBeenCalled();
     expect(fakeStore.requestPermission).not.toHaveBeenCalled();
     expect(fakeStore.ensurePermission).not.toHaveBeenCalled();
   });
@@ -129,13 +155,15 @@ describe("restore", () => {
 });
 
 describe("regrant", () => {
-  it("returns true and connects when permission is granted", async () => {
-    fakeStore.get.mockResolvedValue(fakeDir([]));
+  it("returns true and binds writable when readwrite is granted", async () => {
+    const dir = fakeDir([]);
+    fakeStore.get.mockResolvedValue(dir);
     fakeStore.ensurePermission.mockResolvedValue("granted");
     const mod = await loadModule();
     expect(await mod.regrantLocalFolder()).toBe(true);
     expect(mod.getLocalFolderState()).toBe("granted");
     expect(mod.hasLocalFolder()).toBe(true);
+    expect(mockSetLocalDirectory).toHaveBeenCalledWith(dir, true);
   });
 
   it("returns false when there is no persisted handle", async () => {
@@ -159,7 +187,12 @@ describe("connect + list", () => {
 
     const mod = await loadModule();
     await mod.connectLocalFolder();
+    expect(
+      (window as unknown as { showDirectoryPicker: ReturnType<typeof vi.fn> })
+        .showDirectoryPicker,
+    ).toHaveBeenCalledWith({ mode: "readwrite" });
     expect(fakeStore.put).toHaveBeenCalledWith("library-folder", handle);
+    expect(mockSetLocalDirectory).toHaveBeenCalledWith(handle, true);
     expect(mod.hasLocalFolder()).toBe(true);
 
     const items = await mod.listLocalTracks();
@@ -222,6 +255,50 @@ describe("resolveLocalAudioSource", () => {
     await expect(mod.resolveLocalAudioSource("missing.flac")).rejects.toThrow(
       /no longer present/,
     );
+  });
+});
+
+describe("resolveLocalBytes", () => {
+  it("returns the bytes for a listed local item", async () => {
+    const handle = fakeDir([fileEntry("tune.flac", 3000)]);
+    (window as unknown as { showDirectoryPicker: unknown }).showDirectoryPicker =
+      vi.fn().mockResolvedValue(handle);
+    fakeStore.put.mockResolvedValue(undefined);
+
+    const mod = await loadModule();
+    await mod.connectLocalFolder();
+
+    const buf = await mod.resolveLocalBytes({
+      id: "local:tune.flac",
+    } as LibraryItem);
+    expect(buf).not.toBeNull();
+    expect(new TextDecoder().decode(buf!)).toBe("tune.flac");
+  });
+
+  it("returns null (not a throw) when the item is no longer present", async () => {
+    const handle = fakeDir([fileEntry("tune.flac", 3000)]);
+    (window as unknown as { showDirectoryPicker: unknown }).showDirectoryPicker =
+      vi.fn().mockResolvedValue(handle);
+    fakeStore.put.mockResolvedValue(undefined);
+
+    const mod = await loadModule();
+    await mod.connectLocalFolder();
+
+    const buf = await mod.resolveLocalBytes({
+      id: "local:missing.flac",
+    } as LibraryItem);
+    expect(buf).toBeNull();
+    expect(mockLogError).toHaveBeenCalledWith(expect.anything(), {
+      operation: "resolve-local-bytes",
+    });
+  });
+
+  it("returns null when no folder is connected", async () => {
+    const mod = await loadModule();
+    const buf = await mod.resolveLocalBytes({
+      id: "local:tune.flac",
+    } as LibraryItem);
+    expect(buf).toBeNull();
   });
 });
 
