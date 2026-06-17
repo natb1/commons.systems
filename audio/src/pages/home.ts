@@ -9,7 +9,8 @@ import { listLibrary } from "../library.js";
 import { formatDuration } from "../player.js";
 import type { PlayerHandle } from "../player.js";
 import { getCacheStats, clearCache, CACHE_UPDATED_EVENT } from "../audio-cache.js";
-import { enrichLocalTracks } from "../local-source.js";
+import { enrichLocalTracks, listLocalTracks } from "../local-source.js";
+import { savePlaylist, getPlaylists } from "../sidecar.js";
 
 function renderRow(item: LibraryItem): string {
   const track =
@@ -67,6 +68,12 @@ export async function renderHome(user: User | null): Promise<string> {
     <section id="cache-info">
       <p><span id="cache-stats"></span></p>
       <button id="clear-cache-btn" type="button">Clear audio cache</button>
+    </section>
+    <section id="playlists">
+      <button id="save-playlist-btn" type="button">Save queue as playlist</button>
+      <select id="load-playlist-select" aria-label="Load playlist">
+        <option value="">Load playlist…</option>
+      </select>
     </section>
   `;
 }
@@ -206,6 +213,55 @@ export function afterRenderHome(
           if (statsEl) statsEl.textContent = "Failed to clear cache. Try again.";
         });
     }, { signal: clickAbort.signal });
+  }
+
+  async function refreshPlaylistOptions(outletEl: HTMLElement): Promise<void> {
+    const select = outletEl.querySelector<HTMLSelectElement>("#load-playlist-select");
+    if (!select) return;
+    // Remove all non-placeholder options (keep the first "Load playlist…" option).
+    while (select.options.length > 1) select.remove(1);
+    const playlists = await getPlaylists();
+    for (const name of Object.keys(playlists)) {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+    }
+  }
+
+  const saveBtn = outlet.querySelector<HTMLButtonElement>("#save-playlist-btn");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", () => {
+      const name = window.prompt("Playlist name")?.trim();
+      if (!name) return;
+      const names = player.getLocalQueueNames();
+      if (names.length === 0) {
+        window.alert("Queue has no local tracks");
+        return;
+      }
+      savePlaylist(name, names)
+        .then(() => refreshPlaylistOptions(outlet))
+        .catch((err) => logError(err, { operation: "save-playlist" }));
+    }, { signal: clickAbort.signal });
+  }
+
+  const loadSelect = outlet.querySelector<HTMLSelectElement>("#load-playlist-select");
+  if (loadSelect) {
+    loadSelect.addEventListener("change", () => {
+      const name = loadSelect.value;
+      if (!name) return;
+      getPlaylists()
+        .then(async (playlists) => {
+          const names = playlists[name];
+          if (!names) return;
+          const items = await listLocalTracks();
+          player.loadPlaylist(names, items);
+          loadSelect.value = "";
+        })
+        .catch((err) => logError(err, { operation: "load-playlist" }));
+    }, { signal: clickAbort.signal });
+
+    void refreshPlaylistOptions(outlet);
   }
 
   void (async () => {

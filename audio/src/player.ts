@@ -22,6 +22,8 @@ export interface PlayerHandle {
   remove(id: string): void;
   isQueued(id: string): boolean;
   restore(state: PlayerState, items: LibraryItem[]): void;
+  getLocalQueueNames(): string[];
+  loadPlaylist(localNames: string[], items: LibraryItem[]): void;
   destroy(): void;
 }
 
@@ -211,6 +213,23 @@ export function initPlayer(
       });
   }
 
+  // Dedup-push-autoplay-or-render: the shared enqueue body reused by both
+  // `add` (single item) and `loadPlaylist` (bulk load). Skips the item when
+  // already in the queue; starts playback when the queue was empty; otherwise
+  // appends and persists the updated queue without interrupting the current track.
+  function enqueue(item: PlayRequest): void {
+    if (queue.some((q) => q.id === item.id)) return;
+    queue.push(item);
+    if (currentIndex < 0) {
+      playTrack(queue.length - 1);
+    } else {
+      renderPlaylist();
+      // The autoplay branch's playTrack already persisted; here the queue
+      // changed but the current track/position did not.
+      persistState(audioEl.currentTime || 0);
+    }
+  }
+
   audioEl.addEventListener("ended", onEnded);
   audioEl.addEventListener("error", onError);
   audioEl.addEventListener("timeupdate", onTimeUpdate);
@@ -218,16 +237,7 @@ export function initPlayer(
 
   return {
     add(item: PlayRequest): void {
-      if (queue.some((q) => q.id === item.id)) return;
-      queue.push(item);
-      if (currentIndex < 0) {
-        playTrack(queue.length - 1);
-      } else {
-        renderPlaylist();
-        // The autoplay branch's playTrack already persisted; here the queue
-        // changed but the current track/position did not.
-        persistState(audioEl.currentTime || 0);
-      }
+      enqueue(item);
     },
 
     remove(id: string): void {
@@ -251,6 +261,32 @@ export function initPlayer(
 
     isQueued(id: string): boolean {
       return queue.some((q) => q.id === id);
+    },
+
+    getLocalQueueNames(): string[] {
+      return queue
+        .filter((q) => q.origin === "local" && q.localName)
+        .map((q) => q.localName as string);
+    },
+
+    loadPlaylist(localNames: string[], items: LibraryItem[]): void {
+      const byName = new Map<string, LibraryItem>();
+      for (const item of items) {
+        if (item.localName) byName.set(item.localName, item);
+      }
+      for (const localName of localNames) {
+        const item = byName.get(localName);
+        // SKIP names with no matching item (file no longer present).
+        if (!item) continue;
+        enqueue({
+          id: item.id,
+          title: item.title,
+          artist: item.artist,
+          album: item.album,
+          origin: "local",
+          localName,
+        });
+      }
     },
 
     restore(state: PlayerState, items: LibraryItem[]): void {

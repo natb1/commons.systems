@@ -8,7 +8,15 @@ vi.mock("../../src/library.js", () => ({
   listLibrary: (...args: unknown[]) => mockListLibrary(...args),
 }));
 
-vi.mock("../../src/local-source.js", () => ({ enrichLocalTracks: vi.fn() }));
+vi.mock("../../src/local-source.js", () => ({
+  enrichLocalTracks: vi.fn(),
+  listLocalTracks: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock("../../src/sidecar.js", () => ({
+  savePlaylist: vi.fn(),
+  getPlaylists: vi.fn().mockResolvedValue({}),
+}));
 
 // home.ts → player.js → storage.js → firebase.js (config requires env);
 // mock storage.js to keep the page render unit isolated from Firebase config.
