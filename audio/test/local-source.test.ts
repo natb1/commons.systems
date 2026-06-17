@@ -30,6 +30,11 @@ vi.mock("../src/sidecar.js", () => ({
   cacheMetadataBatch: (...args: unknown[]) => mockCacheMetadataBatch(...args),
 }));
 
+const mockExtract = vi.fn();
+vi.mock("../src/local-metadata.js", () => ({
+  extractAudioMetadata: (...args: unknown[]) => mockExtract(...args),
+}));
+
 interface FakeEntry {
   kind: "file" | "directory";
   name: string;
@@ -318,5 +323,118 @@ describe("scan errors", () => {
     expect(mockLogError).toHaveBeenCalledWith(expect.anything(), {
       operation: "list-local-tracks",
     });
+  });
+});
+
+describe("enrichment", () => {
+  function connectDir(handle: FileSystemDirectoryHandle) {
+    (window as unknown as { showDirectoryPicker: unknown }).showDirectoryPicker = vi
+      .fn()
+      .mockResolvedValue(handle);
+    fakeStore.put.mockResolvedValue(undefined);
+  }
+
+  it("cache-first overlay in listLocalTracks: cached entry overlays artist/duration", async () => {
+    const handle = fakeDir([fileEntry("song.mp3", 1000)]);
+    connectDir(handle);
+
+    // Cache returns tags for song.mp3
+    mockGetMetadata.mockImplementation(async (name: string) => {
+      if (name === "song.mp3") return { artist: "Real Artist", duration: 100 };
+      return undefined;
+    });
+
+    const mod = await loadModule();
+    await mod.connectLocalFolder();
+    const items = await mod.listLocalTracks();
+
+    const song = items.find((i) => i.localName === "song.mp3");
+    expect(song?.artist).toBe("Real Artist");
+    expect(song?.duration).toBe(100);
+    // title not in cache, keeps filename-stem placeholder
+    expect(song?.title).toBe("song");
+  });
+
+  it("uncached item in listLocalTracks keeps placeholder artist", async () => {
+    const handle = fakeDir([fileEntry("song.mp3", 1000)]);
+    connectDir(handle);
+
+    mockGetMetadata.mockResolvedValue(undefined);
+
+    const mod = await loadModule();
+    await mod.connectLocalFolder();
+    const items = await mod.listLocalTracks();
+
+    const song = items.find((i) => i.localName === "song.mp3");
+    expect(song?.artist).toBe("Unknown artist");
+  });
+
+  it("enrichLocalTracks extracts uncached items and writes a single batch", async () => {
+    const handle = fakeDir([fileEntry("song.mp3", 1000), fileEntry("tune.flac", 2000)]);
+    connectDir(handle);
+
+    // Nothing cached
+    mockGetMetadata.mockResolvedValue(undefined);
+    // Extract returns a tag
+    mockExtract.mockResolvedValue({ artist: "X" });
+    mockCacheMetadataBatch.mockResolvedValue(undefined);
+
+    const mod = await loadModule();
+    await mod.connectLocalFolder();
+    await mod.enrichLocalTracks();
+
+    // One extract call per file
+    expect(mockExtract).toHaveBeenCalledTimes(2);
+    // Single batched write
+    expect(mockCacheMetadataBatch).toHaveBeenCalledTimes(1);
+    const batchArg = mockCacheMetadataBatch.mock.calls[0][0] as Record<string, unknown>;
+    expect(batchArg["song.mp3"]).toEqual({ artist: "X" });
+    expect(batchArg["tune.flac"]).toEqual({ artist: "X" });
+  });
+
+  it("focus-rescan write suppression: all cached → cacheMetadataBatch called with {}", async () => {
+    const handle = fakeDir([fileEntry("song.mp3", 1000)]);
+    connectDir(handle);
+
+    // Everything already cached (even an empty entry signals 'present')
+    mockGetMetadata.mockResolvedValue({});
+    mockCacheMetadataBatch.mockResolvedValue(undefined);
+
+    const mod = await loadModule();
+    await mod.connectLocalFolder();
+    await mod.enrichLocalTracks();
+
+    // extract was never called (all cached)
+    expect(mockExtract).not.toHaveBeenCalled();
+    // cacheMetadataBatch called with empty (real impl no-ops; mock records the call)
+    expect(mockCacheMetadataBatch).toHaveBeenCalledWith({});
+  });
+
+  it("unreadable file is not included in the batch (null bytes → retry later)", async () => {
+    // Build a dir where song.mp3's getFile rejects
+    const failingEntry: FakeEntry = {
+      kind: "file",
+      name: "song.mp3",
+      getFile: async () => {
+        throw new Error("read error");
+      },
+    };
+    const goodEntry = fileEntry("tune.flac", 2000);
+    const handle = fakeDir([failingEntry, goodEntry]);
+    connectDir(handle);
+
+    mockGetMetadata.mockResolvedValue(undefined);
+    mockExtract.mockResolvedValue({ artist: "Y" });
+    mockCacheMetadataBatch.mockResolvedValue(undefined);
+
+    const mod = await loadModule();
+    await mod.connectLocalFolder();
+    await mod.enrichLocalTracks();
+
+    // batch arg must not include the failing file
+    const batchArg = mockCacheMetadataBatch.mock.calls[0][0] as Record<string, unknown>;
+    expect("song.mp3" in batchArg).toBe(false);
+    // good file is present
+    expect(batchArg["tune.flac"]).toEqual({ artist: "Y" });
   });
 });
