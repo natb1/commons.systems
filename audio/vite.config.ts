@@ -1,3 +1,5 @@
 import { createAppConfig } from "@commons-systems/config/vite";
 
-export default createAppConfig();
+export default createAppConfig({
+  optimizeDeps: { esbuildOptions: { target: "esnext" } },
+});
