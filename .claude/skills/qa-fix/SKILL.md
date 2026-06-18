@@ -383,9 +383,27 @@ Otherwise run all steps in order.
       IIFE — `(async () => { … })()` — because a top-level `await` raises
       `SyntaxError: await is only valid in async functions`.
 
+      **Minimize browser payload.** A `computer` `screenshot`/`zoom` returns the
+      full image into context, so prefer cheaper text/element queries whenever the
+      check is non-visual:
+      - Verify an `Expected outcome` with `get_page_text` / `find` whenever the
+        check is textual or element-presence.
+      - Use `find` (≤20 targeted elements) over `get_page_text` when checking for
+        a SPECIFIC element or value; reserve `get_page_text` for genuinely
+        text-heavy reads.
+      - Take a `computer` screenshot ONLY when the check is genuinely visual
+        (layout/rendering) or as FAIL evidence. When you do, CROP to the relevant
+        area with the `zoom` action and a `region` rather than a full-viewport
+        `screenshot`, unless the failure is viewport-wide.
+      - If an accessibility-tree read is needed, use `read_page` with a bounded
+        `max_chars` / `depth` (or a `ref_id` focus / `filter:"interactive"`) —
+        never an unbounded dump.
+      - Applies to HOW evidence is captured, not WHAT is checked: the same
+        checks run and the clean-pass cadence is untouched (AC#2).
+
       1. Load chrome tools via:
          ```
-         ToolSearch("select:mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__read_console_messages,mcp__claude-in-chrome__read_network_requests,mcp__claude-in-chrome__gif_creator,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__form_input,mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__list_connected_browsers,mcp__claude-in-chrome__select_browser")
+         ToolSearch("select:mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__find,mcp__claude-in-chrome__read_page,mcp__claude-in-chrome__read_console_messages,mcp__claude-in-chrome__read_network_requests,mcp__claude-in-chrome__gif_creator,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__form_input,mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__list_connected_browsers,mcp__claude-in-chrome__select_browser")
          ```
          If ToolSearch fails or the tools are unavailable → the browser lanes cannot run. Note "Chrome extension unavailable" in results, record every `needs-browser` and single-assertion `script-verifiable` item as a user-input blocker, and escalate per the **Escalation** section (these items cannot be machine-verified without the browser).
       2. **Select the browser.** Default to the Windows Chrome — it reaches the WSL QA server over WSL2's shared `localhost` with no tunnel. Call `list_connected_browsers`, find the entry whose `osPlatform` is `"Windows"`, and `select_browser` it. (DeviceIds change on re-registration — never hard-code one; always match on `osPlatform`.) If no Windows entry is found and the user has not explicitly requested macOS → record this as a user-input blocker and escalate per the **Escalation** section (do not silently fall back to macOS). Use the macOS Chrome only on explicit user request: because macOS is a separate machine, first hand the user the `ssh -L` tunnel command that `run-qa-server.sh` printed in its "Remote access" block (it forwards the Vite port plus every emulator port) — if that block has scrolled out of context, reproduce it from the known Vite and emulator ports: `http://localhost:<vite>/` plus `ssh -L <vite>:localhost:<vite> [-L <emu>:localhost:<emu> ...] <ssh-host>`; once the tunnel is up, `select_browser` the entry whose `osPlatform` is `"macOS"`. See `.claude/docs/chrome-extension.md` § Browser selection for the authoritative policy.
@@ -393,7 +411,7 @@ Otherwise run all steps in order.
       4. Navigate to the App URL.
       5. Suppress JS dialogs via `javascript_tool`: override `window.alert`, `window.confirm`, `window.prompt` with no-ops.
       6. Clear baselines: `read_console_messages` and `read_network_requests` with `clear: true`.
-      7. Start GIF recording: `gif_creator` with `action: "start_recording"`. Take an initial screenshot.
+      7. Start GIF recording: `gif_creator` with `action: "start_recording"`. Take an initial `computer` screenshot ONLY IF a later visual / before-after comparison will need it; otherwise establish the baseline with `get_page_text`.
       8. **Single-assertion lane — for each `script-verifiable` item whose `Command`
          is a single `javascript_tool` assertion:** `navigate` to the item's `URL
          path` (if not "current"), then run the **one** assertion `Command` (wrapped
@@ -404,12 +422,16 @@ Otherwise run all steps in order.
          record-and-continue" at the top of Step 3).
       9. **Walkthrough lane — for each `needs-browser` item:**
          a. **Set up state.** Navigate to the item's `URL path` (if not "current"). Execute the `Steps` using `computer`, `form_input`, `navigate`. Capture extra GIF frames before and after.
-         b. **Check output.** Take a screenshot only on genuine state transitions — not on every iterative debug step. Read `get_page_text` to verify the `Expected outcome`. Check `read_console_messages` (filter for errors). Check `read_network_requests` for 4xx/5xx using the tool's filter parameter (e.g. filter to error status codes); request a count rather than full metadata when only request counts or specific requests matter — do not pull the full request dump.
+         b. **Check output.** Verify the `Expected outcome` via `get_page_text` / `find` by default. Take a `computer` screenshot ONLY when the transition is genuinely visual (and not on every iterative debug step), cropping with the `zoom` action and a `region` to the changed area. Check `read_console_messages` (filter for errors). Check `read_network_requests` for 4xx/5xx using the tool's filter parameter (e.g. filter to error status codes); request a count rather than full metadata when only request counts or specific requests matter — do not pull the full request dump.
 
             **Screenshot capture on a walkthrough FAIL (verify-early-or-fall-back).**
             On a FAIL in this lane, take a screenshot with the `computer` tool
-            action `screenshot, save_to_disk: true` and record the returned saved
-            path as the residue item's `screenshot_path`. Passing this path to a
+            and record the returned saved path as the residue item's
+            `screenshot_path`. When the failure locus is a known region, CROP to
+            it — `zoom` action with a `region`, `save_to_disk: true` — rather than
+            a full-viewport shot; use a full-viewport `screenshot, save_to_disk: true`
+            only when the failure is viewport-wide. Passing
+            this path to a
             **separate** Agent/Workflow invocation (the disposition classifier,
             Step 3.5) is **UNVERIFIED**: if `save_to_disk`
             does not return a Readable path, or the disposition subagent cannot Read

@@ -3,6 +3,7 @@ import type { User } from "firebase/auth";
 
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
+import "@commons-systems/components/footer";
 import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck";
 import { createAuthTierController } from "@commons-systems/firebaseutil/auth-tier-controller";
 
