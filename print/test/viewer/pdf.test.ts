@@ -27,8 +27,10 @@ stubBrowserGlobals();
 // ---------------------------------------------------------------------------
 
 vi.mock("pdfjs-dist", () => {
-  // Per-page canned text items for B and C tests.
-  const PAGE_ITEMS: Record<number, { str: string }[]> = {
+  // Per-page canned text items for B and C tests. hasEOL is optional so the
+  // renderer's reconstructPage(textContent.items) sees it; existing items leave
+  // it undefined (no separator), preserving current behavior.
+  const PAGE_ITEMS: Record<number, { str: string; hasEOL?: boolean }[]> = {
     1: [{ str: "the cat sat" }],
     2: [{ str: "the dog ran" }],
     3: [{ str: "a fish swims" }],
@@ -87,12 +89,12 @@ vi.mock("pdfjs-dist", () => {
 
 // Import after mocks are in place.
 import {
-  buildPageText,
+  reconstructPage,
   findMatches,
   buildSnippet,
   encodeLocation,
   decodeLocation,
-  offsetToDivRanges,
+  offsetToItemRanges,
   createPdfRenderer,
 } from "../../src/viewer/pdf";
 
@@ -100,18 +102,31 @@ import {
 // A. Pure helper tests — no mock dependencies needed.
 // ---------------------------------------------------------------------------
 
-describe("buildPageText", () => {
-  it("joins str values with empty separator", () => {
-    expect(buildPageText([{ str: "foo" }, { str: "bar" }])).toBe("foobar");
+describe("reconstructPage", () => {
+  it("joins str values with empty separator (no hasEOL) and records item ranges", () => {
+    const layout = reconstructPage([{ str: "foo" }, { str: "bar" }]);
+    expect(layout.text).toBe("foobar");
+    expect(layout.items).toEqual([
+      { start: 0, length: 3 },
+      { start: 3, length: 3 },
+    ]);
   });
 
   it("marked-content items (no str key) contribute empty string", () => {
     // {} has no `str` property; should not throw and contributes ""
-    expect(buildPageText([{ str: "a" }, {}, { str: "b" }])).toBe("ab");
+    const layout = reconstructPage([{ str: "a" }, {}, { str: "b" }]);
+    expect(layout.text).toBe("ab");
+    expect(layout.items).toEqual([
+      { start: 0, length: 1 },
+      { start: 1, length: 0 },
+      { start: 1, length: 1 },
+    ]);
   });
 
-  it("empty array returns empty string", () => {
-    expect(buildPageText([])).toBe("");
+  it("empty array returns empty string and no items", () => {
+    const layout = reconstructPage([]);
+    expect(layout.text).toBe("");
+    expect(layout.items).toEqual([]);
   });
 });
 
@@ -249,16 +264,21 @@ describe("encodeLocation / decodeLocation", () => {
   });
 });
 
-describe("offsetToDivRanges", () => {
+describe("offsetToItemRanges", () => {
+  // Inputs are built via reconstructPage(...).items so the layout offsets match
+  // exactly what the production search path produces (and exercise it for free).
+  const layoutItems = (strs: string[]) =>
+    reconstructPage(strs.map((str) => ({ str }))).items;
+
   it("single-div case: maps range entirely within one item", () => {
-    const result = offsetToDivRanges(["hello world"], 6, 5);
+    const result = offsetToItemRanges(layoutItems(["hello world"]), 6, 5);
     expect(result).toEqual([{ divIndex: 0, localStart: 6, localEnd: 11 }]);
   });
 
   it("spanning-div case: maps range across two items", () => {
     // "foo"(0-2) + "bar"(3-5) + "baz"(6-8) → concatenation "foobarbaz"
     // offset 2, length 3: covers "o" from "foo" [2,3) + "ba" from "bar" [0,2)
-    const result = offsetToDivRanges(["foo", "bar", "baz"], 2, 3);
+    const result = offsetToItemRanges(layoutItems(["foo", "bar", "baz"]), 2, 3);
     expect(result).toEqual([
       { divIndex: 0, localStart: 2, localEnd: 3 },
       { divIndex: 1, localStart: 0, localEnd: 2 },
@@ -268,7 +288,7 @@ describe("offsetToDivRanges", () => {
   it("empty-string item contributes zero width and is skipped", () => {
     // "ab"(0-1) + ""(empty) + "cd"(2-3) → concatenation "abcd"
     // offset 1, length 2: covers "b" from "ab" [1,2) + "c" from "cd" [0,1)
-    const result = offsetToDivRanges(["ab", "", "cd"], 1, 2);
+    const result = offsetToItemRanges(layoutItems(["ab", "", "cd"]), 1, 2);
     expect(result).toEqual([
       { divIndex: 0, localStart: 1, localEnd: 2 },
       { divIndex: 2, localStart: 0, localEnd: 1 },
@@ -276,13 +296,13 @@ describe("offsetToDivRanges", () => {
   });
 
   it("range entirely within second item", () => {
-    const result = offsetToDivRanges(["abc", "defgh"], 3, 3);
+    const result = offsetToItemRanges(layoutItems(["abc", "defgh"]), 3, 3);
     expect(result).toEqual([{ divIndex: 1, localStart: 0, localEnd: 3 }]);
   });
 
   it("maps a corrected expanding-case match onto its item", () => {
     const ci = "İ".toLowerCase(); // "i̇", length 2 — built, not a fragile literal
-    const result = offsetToDivRanges(["a", ci, "b"], 1, 2);
+    const result = offsetToItemRanges(layoutItems(["a", ci, "b"]), 1, 2);
     expect(result).toEqual([{ divIndex: 1, localStart: 0, localEnd: 2 }]);
   });
 });

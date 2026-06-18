@@ -13,15 +13,44 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 // ---------------------------------------------------------------------------
 
 /**
- * Reconstruct a page's plain text from a pdf.js getTextContent() items array.
- *
- * LOAD-BEARING: the empty-separator join is intentional and must not be
- * changed. Later units map highlight offsets back to text-layer spans using
- * these exact byte offsets. Any separator (space, newline, etc.) would shift
- * every offset and break highlight placement.
+ * An index-aligned layout for a reconstructed page: the plain `text` plus, for
+ * each input item, the half-open `[start, start+length)` slice of `text` it
+ * occupies. `items` is index-aligned with the source `getTextContent().items`
+ * array (and therefore with `tl.textDivs`, which is one div per item).
  */
-export function buildPageText(items: ReadonlyArray<{ str?: string }>): string {
-  return items.map((i) => ("str" in i ? i.str : "")).join("");
+export interface PageLayout {
+  text: string;
+  items: ReadonlyArray<{ start: number; length: number }>;
+}
+
+/**
+ * Reconstruct a page's plain text AND its offset->item layout from a pdf.js
+ * getTextContent() items array.
+ *
+ * LOAD-BEARING byte-alignment contract: each returned `items[k]` records the
+ * `[start, start+length)` slice of `text` covered by source item k, so the
+ * layout is index-aligned with `getTextContent().items` and with `tl.textDivs`.
+ * A single space separator is inserted into `text` AFTER any item whose
+ * `hasEOL` is true; that separator advances `text.length` but is NOT part of
+ * any item's range. This lets searches match across a line break (e.g.
+ * "the"+"quick" on two lines becomes "the quick") while the per-item ranges
+ * still map every match offset back onto the exact text-layer div. With no
+ * `hasEOL` anywhere this reduces EXACTLY to the old empty-separator join, so
+ * the stored offsets are byte-identical to the pre-separator behaviour.
+ */
+export function reconstructPage(
+  items: ReadonlyArray<{ str?: string; hasEOL?: boolean }>,
+): PageLayout {
+  let text = "";
+  const layout: { start: number; length: number }[] = [];
+  for (const item of items) {
+    const str = item.str ?? "";
+    const start = text.length;
+    text += str;
+    layout.push({ start, length: str.length });
+    if (item.hasEOL) text += " ";
+  }
+  return { text, items: layout };
 }
 
 /**
@@ -96,32 +125,36 @@ export function decodeLocation(
 }
 
 /**
- * Map a [offset, offset+length) range — expressed in the coordinate space of
- * `textContentItemsStr.join("")` — onto per-item (per-div) local segments.
+ * Map a [offset, offset+length) range — expressed in the coordinate space of a
+ * PageLayout's `text` — onto per-item (per-div) local segments.
  *
- * LOAD-BEARING: the concatenation uses an EMPTY join, matching buildPageText's
- * empty-separator rule. The cumulative character offset summed across
- * `textContentItemsStr` is the same coordinate space as the offset stored in a
- * SearchResult.location. Adding any separator here would shift every segment.
+ * SEPARATOR-AGNOSTIC: each item's absolute span is read straight from its
+ * recorded `{start, length}`, so any hasEOL-gated separators that occupy text
+ * offsets between items are simply skipped — a range that lands wholly inside a
+ * separator (a gap between two items) produces no segment. This is the exact
+ * coordinate space of a SearchResult.location offset, which indexes into the
+ * same `layout.text`.
  *
  * Returns one segment per item that overlaps the range, in item order. Each
- * segment's localStart/localEnd are offsets within that item's own string.
- * Empty-string items contribute zero width and are skipped. Walking stops once
- * the cumulative offset passes the end of the range.
+ * segment's localStart/localEnd are offsets within that item's own string
+ * (local to `item.start`). Empty / zero-width items contribute nothing.
+ * Walking stops once an item's start passes the end of the range (items are
+ * monotonic in `start`).
  */
-export function offsetToDivRanges(
-  textContentItemsStr: readonly string[],
+export function offsetToItemRanges(
+  items: ReadonlyArray<{ start: number; length: number }>,
   offset: number,
   length: number,
 ): { divIndex: number; localStart: number; localEnd: number }[] {
   const segments: { divIndex: number; localStart: number; localEnd: number }[] = [];
   const rangeStart = offset;
   const rangeEnd = offset + length;
-  let cumulative = 0;
-  for (let k = 0; k < textContentItemsStr.length; k++) {
-    const itemStart = cumulative;
-    const itemEnd = cumulative + textContentItemsStr[k].length;
-    cumulative = itemEnd;
+  for (let k = 0; k < items.length; k++) {
+    const itemStart = items[k].start;
+    // Early-out: items are monotonic in start, so once an item begins at or
+    // past rangeEnd no later item can overlap the range.
+    if (itemStart >= rangeEnd) break;
+    const itemEnd = itemStart + items[k].length;
     // Intersect [itemStart, itemEnd) with [rangeStart, rangeEnd).
     const interStart = Math.max(itemStart, rangeStart);
     const interEnd = Math.min(itemEnd, rangeEnd);
@@ -132,7 +165,6 @@ export function offsetToDivRanges(
         localEnd: interEnd - itemStart,
       });
     }
-    if (cumulative >= rangeEnd) break;
   }
   return segments;
 }
@@ -146,16 +178,17 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
   let pageWrapper: HTMLDivElement | null = null;
   let textLayerDiv: HTMLDivElement | null = null;
   let activeTextLayer: TextLayer | null = null;
+  let activeLayout: PageLayout | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   let renderTask: RenderTask | null = null;
   let renderGen = 0;
   let spreadGen = 0;
   let destroyed = false;
-  // Lazily-populated cache of page plain-text strings. Keyed by 1-based page
-  // number. Populated on first search pass and reused across debounced
-  // keystrokes. Unit 4 clears this in destroy().
-  const pageTextCache = new Map<number, string>();
+  // Lazily-populated cache of per-page reconstructed layouts (text + per-item
+  // offset map). Keyed by 1-based page number. Populated on first search pass
+  // and reused across debounced keystrokes. Cleared in destroy().
+  const pageLayoutCache = new Map<number, PageLayout>();
   // A pending search-result highlight to apply once its page finishes
   // rendering. Left set across renders so the debounced ResizeObserver
   // re-render (renderPage(_currentPage)) re-applies it after a resize. Cleared
@@ -168,7 +201,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
   // recent call only — earlier entries are cleared by the unwrapHighlights()
   // call at the start of applyHighlight).
   const highlightRestores: { div: HTMLElement; originalText: string }[] = [];
-  interface SpreadPage { renderTask: RenderTask; textLayer: TextLayer | null; }
+  interface SpreadPage { renderTask: RenderTask; textLayer: TextLayer | null; layout: PageLayout | null; }
   const spreadPages: SpreadPage[] = [];
   const outlinePageMap = new WeakMap<OutlineEntry, number>();
 
@@ -282,10 +315,17 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
     page: PDFPageProxy,
     cssViewport: PageViewport,
     targetDiv: HTMLDivElement,
-  ): Promise<TextLayer | null> {
+  ): Promise<{ tl: TextLayer; layout: PageLayout } | null> {
     if (destroyed) return null;
     const textContent = await page.getTextContent();
     if (destroyed) return null;
+
+    // Reconstruct the page layout from the SAME items the TextLayer renders, so
+    // layout.items stays index-aligned with tl.textDivs. hasEOL is read from
+    // textContent.items (the source), not from the rendered TextLayer.
+    const layout = reconstructPage(
+      textContent.items as { str?: string; hasEOL?: boolean }[],
+    );
 
     targetDiv.replaceChildren();
     const tl = new TextLayer({
@@ -301,15 +341,21 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
       if ((e as Error).name !== "AbortException") throw e;
       return null;
     }
-    return tl;
+    return { tl, layout };
   }
 
   /**
    * Wrap the text covered by `h` in <span class="search-highlight active">
    * elements inside the rendered text layer, then scroll the first highlight
-   * into view. The text layer's textContentItemsStr/textDivs are index-aligned;
-   * offsetToDivRanges maps the stored offset/length onto per-div local segments
-   * using the same empty-join coordinate space as buildPageText.
+   * into view. `layout` is the PageLayout reconstructed from the SAME
+   * getTextContent() items that produced `tl`, so layout.items is index-aligned
+   * with tl.textDivs; offsetToItemRanges maps the stored offset/length onto
+   * per-div local segments straight from each item's recorded {start, length},
+   * ignoring any hasEOL separators between items.
+   *
+   * DETERMINISM: this alignment holds only because the match-side and
+   * render-side getTextContent() calls use the same (default, no-arg) options,
+   * so the items — and the layout derived from them — are identical.
    *
    * Children are rebuilt with createTextNode/createElement (never innerHTML) so
    * the text layer's transparent-text CSS keeps applying.
@@ -323,11 +369,24 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
    * After this function returns, highlightRestores holds exactly one entry per
    * currently-highlighted div.
    */
-  function applyHighlight(tl: TextLayer, h: { offset: number; length: number }): void {
+  function applyHighlight(
+    tl: TextLayer,
+    layout: PageLayout,
+    h: { offset: number; length: number },
+  ): void {
+    // Boundary guard: layout.items must be index-aligned with tl.textDivs (one
+    // div per item). A mismatch means the match-side and render-side
+    // getTextContent() calls diverged, which would silently offset every
+    // highlight by N divs — turn that into a clear error here.
+    if (layout.items.length !== tl.textDivs.length) {
+      throw new Error(
+        `applyHighlight layout/textDivs length mismatch: ` +
+          `${layout.items.length} layout items vs ${tl.textDivs.length} text divs`,
+      );
+    }
     unwrapHighlights();
-    const itemsStr = tl.textContentItemsStr;
     const divs = tl.textDivs;
-    const segments = offsetToDivRanges(itemsStr, h.offset, h.length);
+    const segments = offsetToItemRanges(layout.items, h.offset, h.length);
     let firstSpan: HTMLSpanElement | null = null;
     for (const seg of segments) {
       const div = divs[seg.divIndex];
@@ -373,6 +432,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
     if (activeTextLayer) {
       activeTextLayer.cancel();
       activeTextLayer = null;
+      activeLayout = null;
     }
 
     const containerRect = container.getBoundingClientRect();
@@ -407,17 +467,18 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
 
     renderTask = result.task;
     if (textLayerDiv) {
-      const tl = await renderTextLayer(result.page, result.cssViewport, textLayerDiv);
+      const layerResult = await renderTextLayer(result.page, result.cssViewport, textLayerDiv);
       if (gen !== renderGen) {
-        tl?.cancel();
+        layerResult?.tl.cancel();
         return;
       }
-      activeTextLayer = tl;
+      activeTextLayer = layerResult?.tl ?? null;
+      activeLayout = layerResult?.layout ?? null;
       // Reaching here means this render won the gen race (checked just above,
       // no await since). Apply a pending search highlight for this page. Kept
       // set (not cleared) so a ResizeObserver re-render re-applies it.
-      if (pendingHighlight && pendingHighlight.page === pageNum && activeTextLayer) {
-        applyHighlight(activeTextLayer, pendingHighlight);
+      if (pendingHighlight && pendingHighlight.page === pageNum && activeTextLayer && activeLayout) {
+        applyHighlight(activeTextLayer, activeLayout, pendingHighlight);
       }
     }
   }
@@ -449,16 +510,18 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
       if (!result) return;
       if (gen !== spreadGen) return;
 
-      const tl = await renderTextLayer(result.page, result.cssViewport, tlDiv);
+      const layerResult = await renderTextLayer(result.page, result.cssViewport, tlDiv);
       if (gen !== spreadGen) {
         // Cancel the in-flight text layer; wrapper removal is handled by finally.
-        tl?.cancel();
+        layerResult?.tl.cancel();
         return;
       }
       committed = true;
-      spreadPages.push({ renderTask: result.task, textLayer: tl });
-      if (pendingHighlight && pendingHighlight.page === pageNum && tl) {
-        applyHighlight(tl, pendingHighlight);
+      const tl = layerResult?.tl ?? null;
+      const layout = layerResult?.layout ?? null;
+      spreadPages.push({ renderTask: result.task, textLayer: tl, layout });
+      if (pendingHighlight && pendingHighlight.page === pageNum && tl && layout) {
+        applyHighlight(tl, layout, pendingHighlight);
       }
     } finally {
       if (!committed) wrapper.remove();
@@ -580,14 +643,18 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
       if (!doc || destroyed) return results;
 
       for (let i = 1; i <= _pageCount; i++) {
-        // Lazily populate the page-text cache. Re-fetching text for every
+        // Lazily populate the page-layout cache. Re-fetching text for every
         // debounced keystroke would be wasteful; cache across search calls.
-        let pageText = pageTextCache.get(i);
-        if (pageText === undefined) {
+        let layout = pageLayoutCache.get(i);
+        if (layout === undefined) {
           let tc;
           try {
             const page = await doc.getPage(i);
             if (destroyed) return results;
+            // DETERMINISM: this getTextContent() call must use the same
+            // (default, no-arg) options as the render-side call in
+            // renderTextLayer, so the items — and the layout reconstructed from
+            // them — are identical and highlight offsets land on the right divs.
             tc = await page.getTextContent();
           } catch (err) {
             // A concurrent destroy() tears down the pdfjs worker, which rejects
@@ -600,15 +667,15 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
             throw err;
           }
           if (destroyed) return results;
-          pageText = buildPageText(tc.items as { str?: string }[]);
-          pageTextCache.set(i, pageText);
+          layout = reconstructPage(tc.items as { str?: string; hasEOL?: boolean }[]);
+          pageLayoutCache.set(i, layout);
         }
 
-        const matches = findMatches(pageText, trimmed);
+        const matches = findMatches(layout.text, trimmed);
         for (const { offset, length } of matches) {
           const location = encodeLocation(i, offset, length);
           const label = "Page " + i;
-          const { snippet, matchStart, matchLength } = buildSnippet(pageText, offset, length);
+          const { snippet, matchStart, matchLength } = buildSnippet(layout.text, offset, length);
           results.push({ location, label, snippet, matchStart, matchLength });
           if (results.length >= MAX_RESULTS) break;
         }
@@ -682,6 +749,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
       if (activeTextLayer) {
         activeTextLayer.cancel();
         activeTextLayer = null;
+        activeLayout = null;
       }
       cancelSpreadRenderTasks();
       if (resizeObserver) {
@@ -700,10 +768,10 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
       textLayerDiv = null;
       container = null;
       // Tear down search state: restore any highlight-mutated divs, disarm the
-      // pending highlight, and release the page-text cache.
+      // pending highlight, and release the page-layout cache.
       unwrapHighlights();
       pendingHighlight = null;
-      pageTextCache.clear();
+      pageLayoutCache.clear();
     },
   };
 }
