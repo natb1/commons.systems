@@ -12,7 +12,7 @@
 #
 # Per-item input fields (at minimum):
 #   id        — string, unique per item
-#   class     — string; one of: opus-fixable | needs-main | needs-human
+#   class     — string; one of: opus-fixable | needs-main | needs-human | already-satisfied
 #   aesthetic — boolean; true when the finding is aesthetic-only
 #   (plus arbitrary passthrough fields preserved unchanged)
 #
@@ -20,6 +20,12 @@
 #   A missing id in votes is treated as [] (no votes — both skeptics failed).
 #
 # Downgrade rule (applied in order; first matching branch wins):
+#
+#   class == "already-satisfied"
+#     → final_class = "already-satisfied", verify = "n/a"
+#       (criterion already provably met; no vote fan-out, no fix, no human —
+#       symmetric with the aesthetic bypass; explicit for kernel-sync with
+#       qa-fix.js applyQaDisposition, not a behavior fix)
 #
 #   class != "needs-human"
 #     → final_class = class, verify = "n/a"
@@ -68,7 +74,16 @@ jq '
       (($votes[$item.id] // [])) as $item_votes |
       ($item_votes | map(select(. == "refuted")) | length) as $refuted_count |
 
-      if $item.class != "needs-human" then
+      if $item.class == "already-satisfied" then
+        # Already-satisfied: the criterion is already provably met by evidence the
+        # agent can read; no code defect to fix, no human needed. No-vote pass-through,
+        # symmetric with the aesthetic bypass below. NOTE: the existing
+        # `class != "needs-human"` branch would already return this exact shape — this
+        # explicit branch is for kernel-sync/legibility with qa-fix.js
+        # applyQaDisposition, not a behavior fix.
+        $item + {final_class: "already-satisfied", verify: "n/a"}
+
+      elif $item.class != "needs-human" then
         # opus-fixable and needs-main: pass through unchanged.
         $item + {final_class: $item.class, verify: "n/a"}
 
