@@ -173,8 +173,10 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
     continue
   fi
 
-  # Check in-sync; the helper logs its own KEEP/ERROR reason.
-  if worktree_in_sync "$wt_path" "$LOG_FILE" "dispatch-sweep"; then
+  # Tree-identity in-sync check (#1845): a squash-merge deletes the remote head
+  # branch, so use worktree_merged_in_sync (not reachability) here. The helper
+  # logs its own KEEP/ERROR reason.
+  if worktree_merged_in_sync "$wt_path" "$LOG_FILE" "dispatch-sweep"; then
     if git worktree remove "$wt_path" 2>>"$LOG_FILE"; then
       git worktree prune 2>/dev/null || true
       if ! git branch -D "$wt_branch" >>"$LOG_FILE" 2>&1; then
