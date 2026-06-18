@@ -6,6 +6,9 @@ import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
 import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck";
 
+import "@commons-systems/components/nav";
+import type { AppNavElement } from "@commons-systems/components/nav";
+
 import { createAppController } from "./app-controller.js";
 import { getOwnerReminders, getOwnerQueueMetrics } from "./data.js";
 import { getOwnerSamples } from "./usage-data.js";
@@ -23,14 +26,13 @@ import {
 const app = document.querySelector("#app");
 if (!app) throw new Error("#app element not found");
 
-const authToggle = document.querySelector("#auth-toggle");
-if (!authToggle) throw new Error("#auth-toggle element not found");
+const navEl = document.querySelector("#nav") as AppNavElement | null;
+if (!navEl) throw new Error("#nav element not found");
+
+// office-hours shows no app nav links.
+navEl.links = [];
 
 let currentUser: User | null = null;
-
-function updateAuthButton(user: User | null): void {
-  authToggle!.textContent = user ? "Sign out" : "Sign in";
-}
 
 // Owns the live view plus its single 60s tick timer; each paint re-renders and
 // restarts the timer (clearing any prior interval — see createAppController).
@@ -69,15 +71,13 @@ async function refresh(): Promise<void> {
   }
 }
 
-authToggle.addEventListener("click", () => {
-  if (currentUser) void signOut();
-  else void signIn();
-});
+navEl.addEventListener("sign-in", () => void signIn());
+navEl.addEventListener("sign-out", () => void signOut());
 
 onAuthStateChanged((user) => {
   if (user?.uid === currentUser?.uid) return;
   currentUser = user;
-  updateAuthButton(user);
+  navEl.user = user;
   refresh().catch((err) => {
     if (deferProgrammerError(err)) return;
     logError(err, { operation: "auth-change-refresh" });
