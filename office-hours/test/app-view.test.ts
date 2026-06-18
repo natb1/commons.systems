@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderApp } from "../src/app-view.js";
+import { renderApp, type AppView, type ViewState } from "../src/app-view.js";
 import type { UsageSample } from "../src/usage-samples.js";
 import type { Reminder } from "../src/reminders.js";
 import type { IssueSample } from "../src/issue-samples.js";
@@ -461,5 +461,100 @@ describe("renderApp — panel-registry: queue-metrics in both tiers", () => {
     const empties = Array.from(container.querySelectorAll(".empty"));
     const queueEmpty = empties.find((el) => el.textContent === "No queue metrics yet.");
     expect(queueEmpty).not.toBeUndefined();
+  });
+});
+
+// ── AppView.tick: in-place refresh of time-sensitive panels ───────────────────
+
+describe("renderApp — AppView.tick refreshes time-sensitive panels", () => {
+  const samples = [
+    makeSample({ sampledAt: new Date("2026-06-07T10:00:00Z") }),
+    makeSample({ sampledAt: new Date("2026-06-08T10:00:00Z"), activeWorkers: 2, targetWorkers: 3 }),
+  ];
+  const reminders = [
+    makeReminder("weekly-review", 30 * MINUTE),
+    makeReminder("overdue-task", -4 * HOUR),
+  ];
+
+  // The first .capacity-reset-countdown is the 5-hour reset, already in the past
+  // for this fixture (formatCountdown stays "now"). The SECOND is the weekly
+  // reset at 2026-06-14T00:00, which counts down and crosses to "now" once
+  // laterNow advances past it — that's the value the tick must refresh.
+  const ownerState: ViewState = {
+    tier: "owner",
+    samples,
+    reminders,
+    queueMetrics: queueMetricsFixture,
+    issueSamples: [],
+  };
+
+  it("owner: weekly countdown text changes after tick(laterNow)", () => {
+    const container = document.createElement("div");
+    const view = withThemeFg(() => renderApp(container, ownerState, now));
+
+    const weeklyCountdownBefore =
+      container.querySelectorAll(".capacity-reset-countdown")[1]!.textContent;
+
+    // 2026-06-15 is past the weekly reset boundary (2026-06-14T00:00)
+    const laterNow = new Date("2026-06-15T12:00:00Z");
+    withThemeFg(() => view.tick(laterNow));
+
+    const weeklyCountdownAfter =
+      container.querySelectorAll(".capacity-reset-countdown")[1]!.textContent;
+    expect(weeklyCountdownAfter).not.toBe(weeklyCountdownBefore);
+  });
+
+  it("owner: reminder-due text changes after tick(laterNow)", () => {
+    const container = document.createElement("div");
+    const view = withThemeFg(() => renderApp(container, ownerState, now));
+
+    const dueBefore = container.querySelector(".reminder-due")!.textContent;
+
+    const laterNow = new Date("2026-06-15T12:00:00Z");
+    withThemeFg(() => view.tick(laterNow));
+
+    const dueAfter = container.querySelector(".reminder-due")!.textContent;
+    expect(dueAfter).not.toBe(dueBefore);
+  });
+
+  it("demo: weekly countdown text changes after tick(laterNow)", () => {
+    const container = document.createElement("div");
+    const view = withThemeFg(() => renderApp(container, { tier: "demo" }, now));
+
+    const countdownBefore =
+      container.querySelectorAll(".capacity-reset-countdown")[1]!.textContent;
+
+    // The demo seed computes its weekly reset relative to actual wall time
+    // (Date.now() + ~2.5 days), so a fixed laterNow can fall before the reset
+    // boundary and leave the countdown unchanged. Advance past it from wall
+    // time with a margin that always clears the seed's offset.
+    const laterNow = new Date(Date.now() + 4 * DAY);
+    withThemeFg(() => view.tick(laterNow));
+
+    const countdownAfter =
+      container.querySelectorAll(".capacity-reset-countdown")[1]!.textContent;
+    expect(countdownAfter).not.toBe(countdownBefore);
+  });
+
+  it("chart panels' DOM nodes are identity-stable across a tick", () => {
+    const container = document.createElement("div");
+    const view = withThemeFg(() => renderApp(container, ownerState, now));
+
+    const historyBefore = container.querySelector(".capacity-history");
+    const backlogBefore = container.querySelector(".backlog-history");
+    expect(historyBefore).not.toBeNull();
+    expect(backlogBefore).not.toBeNull();
+
+    withThemeFg(() => view.tick(new Date("2026-06-15T12:00:00Z")));
+
+    // Charts are NOT re-rendered: the same DOM nodes remain in place.
+    expect(container.querySelector(".capacity-history")).toBe(historyBefore);
+    expect(container.querySelector(".backlog-history")).toBe(backlogBefore);
+  });
+
+  it("error-tier AppView.tick is a harmless no-op", () => {
+    const container = document.createElement("div");
+    const view: AppView = renderApp(container, { tier: "error" }, now);
+    expect(() => view.tick(new Date("2026-06-15T12:00:00Z"))).not.toThrow();
   });
 });
