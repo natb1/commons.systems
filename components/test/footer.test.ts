@@ -2,7 +2,6 @@
  * @vitest-environment happy-dom
  */
 import { describe, it, expect, beforeEach } from "vitest";
-import "../src/footer";
 import { FOOTER_HTML } from "../src/footer";
 import type { AppFooterElement } from "../src/footer";
 

@@ -3,7 +3,7 @@ export const FOOTER_HTML =
 
 class AppFooterElement extends HTMLElement {
   connectedCallback(): void {
-    if (!this.innerHTML) {
+    if (!this.innerHTML.trim()) {
       this.innerHTML = FOOTER_HTML;
     }
   }
