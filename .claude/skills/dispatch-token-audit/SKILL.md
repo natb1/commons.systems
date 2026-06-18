@@ -21,6 +21,20 @@ This skill parses recent Claude session transcripts and emits a ranked report of
 
    The script prints paths of any corrupt files and the total `files_failed` count to stderr. If `files_failed` is nonzero, surface that count in the report header so the reader knows the window data is incomplete.
 
+   **Optional: persist each window aggregate to Firestore.** When `DISPATCH_AUDIT_AGGREGATES_ENABLED=1` is set in the environment, `aggregate-usage.sh` pipes the assembled JSON document to `audit-aggregate-writer.mjs` after writing the report artifact. The writer stores it idempotently (`.set()` on a deterministic doc id) under `office-hours/{env}/audit-aggregates` via the firebase-admin SDK. The admin SDK bypasses Firestore security rules, so this does not depend on #1863's read rule being deployed. The write is fail-closed: writer failure exits non-zero with a clear stderr message, but only after the report file is already written.
+
+   Required additional env vars for the persist path (consumed by the writer binary):
+   - `DISPATCH_AUDIT_AGGREGATES_GROUP_ID` — owning group id (required, no `/`)
+   - ADC credentials: either `GOOGLE_APPLICATION_CREDENTIALS` pointing at a service-account key, or `gcloud auth application-default login`
+
+   Optional env vars (writer defaults shown):
+   - `DISPATCH_AUDIT_AGGREGATES_NAMESPACE` — Firestore path prefix, default `office-hours/prod`
+   - `DISPATCH_AUDIT_AGGREGATES_PROJECT_ID` — GCP project, default `commons-systems`
+   - `DISPATCH_AUDIT_AGGREGATES_TTL_DAYS` — retention days in [30, 730], default `365`
+   - `DISPATCH_AUDIT_AGGREGATES_WRITER` — override the writer binary path (test seam)
+
+   Member emails are NOT an env var. The writer resolves them from the `OFFICE_HOURS_MEMBER_EMAILS` Secret Manager secret at runtime (the same canonical secret the office-hours-sync Cloud Function uses). When the gate is off, report generation is unaffected and no Firestore writes occur.
+
 3. **Read cheaply via targeted jq slices** of `tmp/usage-audit.json`. Do NOT `cat` the whole file into context — read only the slices needed for each ranking step:
 
    ```bash
