@@ -203,9 +203,7 @@ searches for existing implementations to reuse, another explores related
 components, a third investigates testing patterns). Follow the appendix's
 *Exploration* block.
 
-Collect from the agents: the relevant filenames, the code-path traces, and the
-reuse candidates with their file paths. This is the exploration context Step 4
-hands to the design agents.
+**Return contract (output format only — does not change how the agent explores).** Instruct each `Explore` agent to RETURN a compact structured findings block, and to NOT dump whole files into its reply. Each agent returns: a **summary** of what it found relevant to the issue scope; **relevant excerpts** as small `path:line`-anchored spans (the few lines that matter), not whole-file contents or large verbatim blocks; and **reuse candidates** — existing functions/utilities/patterns to reuse, each with its `path:line`. The parent context then carries these findings, not the files. Mirror the disposition-struct discipline from `review-fix`/`qa-fix`: the orchestrator "never holds raw findings — only this compact summary." This is the exploration context Step 4 hands to the design agents.
 
 ### 4. Design — built-in `Plan` subagent, direct fan-out
 
