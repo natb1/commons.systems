@@ -40,6 +40,18 @@ report_results() {
 
 # --- harness ----------------------------------------------------------------
 
+# Outcome-envelope fixture blocks (#1860). Authored as literal bytes so the
+# marker `<!-- dispatch:outcome:v1 -->` is byte-exact — the reader anchors on it.
+# envelope_block builds the marker + fenced JSON with real newlines; the line is
+# embedded into .jsonl via jq so .content is correctly escaped.
+WORKER_ENV_JSON='{"schema":"dispatch.outcome.v1","phase":"review","repo":"natb1/commons.systems","issue":999,"pr":1234,"base_sha":"abc123","findings_surfaced":8,"findings_actionable":5,"fixes_applied":3,"followups_filed":2,"subagents_launched":12,"disposition":"completed_with_fixes","terminated_reason":null}'
+ROUTER_ENV_JSON='{"schema":"dispatch.outcome.v1","phase":"qa","repo":"natb1/commons.systems","issue":999,"pr":1234,"base_sha":null,"findings_surfaced":0,"findings_actionable":0,"fixes_applied":0,"followups_filed":0,"subagents_launched":0,"disposition":"completed","terminated_reason":null}'
+SUBAGENT_ENV_JSON='{"schema":"dispatch.outcome.v1","phase":"review","repo":"natb1/commons.systems","issue":999,"pr":1234,"base_sha":"def456","findings_surfaced":1000,"findings_actionable":1000,"fixes_applied":1000,"followups_filed":1000,"subagents_launched":1000,"disposition":"escalated","terminated_reason":"subagent excluded"}'
+envelope_block() { printf '<!-- dispatch:outcome:v1 -->\n```json\n%s\n```' "$1"; }
+WORKER_BLOCK="$(envelope_block "$WORKER_ENV_JSON")"
+ROUTER_BLOCK="$(envelope_block "$ROUTER_ENV_JSON")"
+SUBAGENT_BLOCK="$(envelope_block "$SUBAGENT_ENV_JSON")"
+
 ROOT=""
 
 setup() {
@@ -88,6 +100,13 @@ setup() {
   printf '%s\n' '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_001","content":"PAYLOAD_0123456789"}]}}' \
     >> "$worker_jsonl"
 
+  # line 7: outcome-envelope tool_result (#1860). tool_use_id toolu_001 maps to a
+  # Bash tool_use, so its bytes land in the Bash payload bucket. Built with jq so
+  # the multi-line block is correctly JSON-escaped in .content.
+  jq -nc --arg c "$WORKER_BLOCK" \
+    '{type:"user",message:{content:[{type:"tool_result",tool_use_id:"toolu_001",content:$c}]}}' \
+    >> "$worker_jsonl"
+
   # Verify fixture line is valid JSON
   jq . "$worker_jsonl" >/dev/null
 
@@ -121,6 +140,13 @@ setup() {
   printf '%s\n' '{"type":"assistant","attributionSkill":"review-fix","isSidechain":true,"gitBranch":"999-fixture","message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":130000,"output_tokens":0}}}' \
     >> "$subagent_b_jsonl"
 
+  # outcome-envelope on a SUBAGENT transcript (#1860), distinctive 1000 counts.
+  # The reader EXCLUDES subagent envelopes from by_phase_outcome; this proves it
+  # does not inflate the review pool. No tool_use_id -> "unknown" payload bucket.
+  jq -nc --arg c "$SUBAGENT_BLOCK" \
+    '{type:"user",message:{content:[{type:"tool_result",content:$c}]}}' \
+    >> "$subagent_b_jsonl"
+
   jq . "$subagent_b_jsonl" >/dev/null
 
   # 3. Bare router session:
@@ -137,6 +163,13 @@ setup() {
   # line 2: assistant — gitBranch HEAD -> router-tick, opus,
   # usage input=1, cc=2, cr=4, out=1
   printf '%s\n' '{"type":"assistant","gitBranch":"HEAD","message":{"model":"claude-opus-4-8","usage":{"input_tokens":1,"cache_creation_input_tokens":2,"cache_read_input_tokens":4,"output_tokens":1}}}' \
+    >> "$router_jsonl"
+
+  # outcome-envelope on the router-tick (non-subagent) session (#1860): a qa
+  # clean-pass with zero counts, exercising the null-guard (rates -> null) and a
+  # second phase bucket. No tool_use_id -> "unknown" payload bucket.
+  jq -nc --arg c "$ROUTER_BLOCK" \
+    '{type:"user",message:{content:[{type:"tool_result",content:$c}]}}' \
     >> "$router_jsonl"
 
   jq . "$router_jsonl" >/dev/null
@@ -214,18 +247,23 @@ assert_eq 'tool_sequences env-var prefix stripped to "Bash:npm run"' "1" \
 assert_eq 'tool_sequences: no n-gram token keeps an env-var assignment' "0" \
   "$(jq '[.tool_sequences.top[].sequence[] | select(test("="))] | length' <<<"$OUT")"
 
-# payload_bytes: Bash payload "PAYLOAD_0123456789" (18 bytes) + the no-id error
-# result "Exit code 1\nsome detail" parsed to 23 bytes (the \n becomes a real
-# newline) → total 41 bytes.
-PAYLOAD_TOTAL=$(jq -n '("PAYLOAD_0123456789"|utf8bytelength) + ("Exit code 1\nsome detail"|utf8bytelength)')
-PAYLOAD_BASH=$(jq -n '"PAYLOAD_0123456789"|utf8bytelength')
-PAYLOAD_UNKNOWN=$(jq -n '"Exit code 1\nsome detail"|utf8bytelength')
+# payload_bytes (#1860 recompute): base is Bash "PAYLOAD_0123456789" (18 bytes) +
+# the no-id error "Exit code 1\nsome detail" (23 bytes, \n -> real newline). The
+# worker now also carries a Bash-attributed envelope (WORKER_BLOCK), and the
+# router + subagent each carry an unknown-attributed envelope. Expected bytes are
+# computed from the same block strings so they track the fixture exactly.
+PAYLOAD_BASH=$(jq -n --arg e "$WORKER_BLOCK" \
+  '("PAYLOAD_0123456789"|utf8bytelength) + ($e|utf8bytelength)')
+PAYLOAD_UNKNOWN=$(jq -n --arg r "$ROUTER_BLOCK" --arg s "$SUBAGENT_BLOCK" \
+  '("Exit code 1\nsome detail"|utf8bytelength) + ($r|utf8bytelength) + ($s|utf8bytelength)')
+PAYLOAD_TOTAL=$(jq -n --arg e "$WORKER_BLOCK" --arg r "$ROUTER_BLOCK" --arg s "$SUBAGENT_BLOCK" \
+  '("PAYLOAD_0123456789"|utf8bytelength) + ("Exit code 1\nsome detail"|utf8bytelength) + ($e|utf8bytelength) + ($r|utf8bytelength) + ($s|utf8bytelength)')
 
 assert_eq "payload_bytes.total" "$PAYLOAD_TOTAL" \
   "$(jq '.payload_bytes.total' <<<"$OUT")"
 assert_eq "payload_bytes Bash bytes" "$PAYLOAD_BASH" \
   "$(jq '[.payload_bytes.by_tool[] | select(.tool=="Bash")][0].bytes' <<<"$OUT")"
-assert_eq "payload_bytes Bash results" "1" \
+assert_eq "payload_bytes Bash results" "2" \
   "$(jq '[.payload_bytes.by_tool[] | select(.tool=="Bash")][0].results' <<<"$OUT")"
 assert_eq "payload_bytes unknown bytes" "$PAYLOAD_UNKNOWN" \
   "$(jq '[.payload_bytes.by_tool[] | select(.tool=="unknown")][0].bytes' <<<"$OUT")"
@@ -254,6 +292,67 @@ assert_eq "lenses.baseline_context.median_boot_tokens" "16.5" \
   "$(jq '.lenses.baseline_context.median_boot_tokens' <<<"$OUT")"
 assert_eq "lenses.baseline_context.total_proxy_usd" "$EXPECTED_BASELINE_PROXY" \
   "$(jq '.lenses.baseline_context.total_proxy_usd' <<<"$OUT")"
+
+# --- outcome-envelope assertions (#1860) ------------------------------------
+# by_phase_outcome.review pools non-subagent sessions carrying a review envelope
+# = the worker only. The agent-bbb SUBAGENT review envelope (counts 1000) is
+# EXCLUDED, so the pooled counts equal the worker envelope's.
+assert_eq "by_phase_outcome.review.sessions" "1" \
+  "$(jq '.by_phase_outcome.review.sessions' <<<"$OUT")"
+assert_eq "by_phase_outcome.review.findings_surfaced (subagent 1000 excluded)" "8" \
+  "$(jq '.by_phase_outcome.review.findings_surfaced' <<<"$OUT")"
+assert_eq "by_phase_outcome.review.findings_actionable" "5" \
+  "$(jq '.by_phase_outcome.review.findings_actionable' <<<"$OUT")"
+assert_eq "by_phase_outcome.review.fixes_applied" "3" \
+  "$(jq '.by_phase_outcome.review.fixes_applied' <<<"$OUT")"
+assert_eq "by_phase_outcome.review.followups_filed" "2" \
+  "$(jq '.by_phase_outcome.review.followups_filed' <<<"$OUT")"
+assert_eq "by_phase_outcome.review.subagents_launched" "12" \
+  "$(jq '.by_phase_outcome.review.subagents_launched' <<<"$OUT")"
+# pooled rates from summed counts: 3/8=0.375, 5/8=0.625, 3/5=0.6
+assert_eq "by_phase_outcome.review.hit_rate" "0.375" \
+  "$(jq '.by_phase_outcome.review.hit_rate' <<<"$OUT")"
+assert_eq "by_phase_outcome.review.actionability" "0.625" \
+  "$(jq '.by_phase_outcome.review.actionability' <<<"$OUT")"
+assert_eq "by_phase_outcome.review.fix_rate" "0.6" \
+  "$(jq '.by_phase_outcome.review.fix_rate' <<<"$OUT")"
+assert_eq "by_phase_outcome.review.disposition_distribution.completed_with_fixes" "1" \
+  "$(jq '.by_phase_outcome.review.disposition_distribution.completed_with_fixes' <<<"$OUT")"
+
+# by_phase_outcome.qa: the router-tick zero-count clean-pass. Zero denominators
+# -> all three rates null (the null-guard), never a divide-by-zero or a 0.
+assert_eq "by_phase_outcome.qa.sessions" "1" \
+  "$(jq '.by_phase_outcome.qa.sessions' <<<"$OUT")"
+assert_eq "by_phase_outcome.qa.findings_surfaced" "0" \
+  "$(jq '.by_phase_outcome.qa.findings_surfaced' <<<"$OUT")"
+assert_eq "by_phase_outcome.qa.hit_rate is null (zero denom)" "null" \
+  "$(jq '.by_phase_outcome.qa.hit_rate' <<<"$OUT")"
+assert_eq "by_phase_outcome.qa.actionability is null (zero denom)" "null" \
+  "$(jq '.by_phase_outcome.qa.actionability' <<<"$OUT")"
+assert_eq "by_phase_outcome.qa.fix_rate is null (zero denom)" "null" \
+  "$(jq '.by_phase_outcome.qa.fix_rate' <<<"$OUT")"
+assert_eq "by_phase_outcome.qa.disposition_distribution.completed" "1" \
+  "$(jq '.by_phase_outcome.qa.disposition_distribution.completed' <<<"$OUT")"
+
+# Subagent exclusion (defense-in-depth): the review pool must not see the
+# subagent's 1000-count envelope.
+assert_eq "by_phase_outcome.review excludes subagent (not 1008)" "true" \
+  "$(jq '.by_phase_outcome.review.findings_surfaced == 8' <<<"$OUT")"
+
+# Per-run rates on the worker session entry (#1860 AC: per-run hit-rate).
+assert_eq "sessions[sess-worker].outcome.findings_surfaced" "8" \
+  "$(jq '[.sessions[]|select(.id=="sess-worker")][0].outcome.findings_surfaced' <<<"$OUT")"
+assert_eq "sessions[sess-worker].outcome_rates.hit_rate" "0.375" \
+  "$(jq '[.sessions[]|select(.id=="sess-worker")][0].outcome_rates.hit_rate' <<<"$OUT")"
+assert_eq "sessions[sess-worker].outcome_rates.actionability" "0.625" \
+  "$(jq '[.sessions[]|select(.id=="sess-worker")][0].outcome_rates.actionability' <<<"$OUT")"
+assert_eq "sessions[sess-worker].outcome_rates.fix_rate" "0.6" \
+  "$(jq '[.sessions[]|select(.id=="sess-worker")][0].outcome_rates.fix_rate' <<<"$OUT")"
+# A session with no envelope carries outcome:null and null rates (no crash).
+assert_eq "sessions[agent-aaa].outcome is null" "null" \
+  "$(jq '[.sessions[]|select(.id=="agent-aaa")][0].outcome' <<<"$OUT")"
+assert_eq "sessions[agent-aaa].outcome_rates is null" "null" \
+  "$(jq '[.sessions[]|select(.id=="agent-aaa")][0].outcome_rates' <<<"$OUT")"
 
 report_results
 exit $FAIL
