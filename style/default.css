@@ -9,6 +9,8 @@
   --muted: light-dark(#6b5e4f, #8a7d6e);
   --border: light-dark(#c4b8a4, #3d3529);
   --surface: light-dark(#ece5d8, #252017);
+  --danger: light-dark(#c0392b, #ff6b6b);
+  --ok: light-dark(#2e7d32, #4caf50);
 
   --main-max-width: 48rem;
   --line-length: var(--main-max-width);
