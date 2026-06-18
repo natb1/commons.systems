@@ -142,6 +142,15 @@ export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
     const { totalSize, oldSize } = await getTotalAndOldSize(db, key);
     const delta = incomingSize - oldSize;
 
+    // When a replacement shrinks an entry (incomingSize < oldSize), delta < 0,
+    // so totalSize + delta < totalSize. Because the totalSize ≤ maxBytes
+    // invariant holds after every write, totalSize + delta < maxBytes and the
+    // guard below always returns early — a negative delta never triggers
+    // eviction in the sequential single-writer case. The eviction body is
+    // reachable on a negative delta only if totalSize has drifted above the cap
+    // via concurrent writes (the same best-effort window noted in the comment
+    // above evictIfNeeded). In that drifted path, the `entry.key === key` skip
+    // protects the entry being replaced from eviction.
     if (totalSize + delta <= maxBytes) return;
 
     const evictTx = db.transaction([DATA_STORE, META_STORE], "readwrite");
