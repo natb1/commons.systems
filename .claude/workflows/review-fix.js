@@ -566,11 +566,20 @@ const requiredFindings = deduped.filter((f) => f.bucket === 'Required');
 const votesById = {};
 const rationalesById = {};
 if (requiredFindings.length) {
-  log(`verify: ${requiredFindings.length} Required finding(s), 2 skeptics each`);
+  log(
+    `verify: ${requiredFindings.length} Required finding(s), severity-scaled ` +
+      `skeptics (2 for high-confidence, 1 for medium/low)`
+  );
   // Flat thunk list across (finding × skeptic) so the barrier covers all votes.
+  // Skeptic count scales with finding confidence: a high-confidence Required
+  // finding (the only tier that can trigger the deviation gate) gets 2 skeptics;
+  // medium/low get 1. The floor is 1, NEVER 0 — a Required finding given 0 votes
+  // is treated as "Unverified" by applyVerifyDrop (dropped + filed, not fixed),
+  // so 1 vote is the minimum that preserves the existing verify-drop semantics.
   const verifyJobs = [];
   for (const f of requiredFindings) {
-    for (let k = 0; k < 2; k++) {
+    const skepticCount = f.Confidence === 'high' ? 2 : 1;
+    for (let k = 0; k < skepticCount; k++) {
       verifyJobs.push({ id: f.id, k, finding: f });
     }
   }
@@ -598,7 +607,7 @@ if (requiredFindings.length) {
     })
   );
   // Collect votes per id. A dead skeptic (null) contributes no vote, so a
-  // finding whose both skeptics died gets [] → handled by applyVerifyDrop as
+  // finding whose every skeptic died gets [] → handled by applyVerifyDrop as
   // "Unverified": dropped (not auto-fixed) and surfaced as verdict "unverified"
   // in verify_report, matching the skeptic prompt's "refute under uncertainty"
   // bias. (A finding is only Upheld when at least one skeptic ran and voted.)
