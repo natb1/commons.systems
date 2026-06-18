@@ -201,8 +201,9 @@ describe("LRU eviction", () => {
     await cache.putEntry("b", new ArrayBuffer(60)); // replace "b": delta=-30, total+delta=60≤200 → no eviction, total=60
     expect(await cache.getEntry("b")).not.toBeNull();
     expect(await cache.getEntry("a")).toBeNull();
-    expect((await cache.getStats()).totalBytes).toBe(60);
-    expect((await cache.getStats()).entryCount).toBe(1);
+    const stats = await cache.getStats();
+    expect(stats.totalBytes).toBe(60);
+    expect(stats.entryCount).toBe(1);
     vi.restoreAllMocks();
     await cache.closeDb();
   });
