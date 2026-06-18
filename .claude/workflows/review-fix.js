@@ -179,6 +179,9 @@ const FIX_SCHEMA = {
 // Returns the AGENT finder-source set (the codeql/npm finders are NOT agents —
 // they arrive via args.prescanned_findings — so they are excluded here).
 function agentFinderSet(surface, app_or_rules) {
+  // Any non-`code` surface (`empty`/`docs`/`tests`) yields only the two quality
+  // finders — the `surface === 'code'` gate below covers `tests` with no code
+  // change, since a test-only diff has no production attack surface.
   const set = ['code-review', 'review'];
   if (surface === 'code') {
     set.push('input-validation', 'secrets', 'red-team', 'security-review');

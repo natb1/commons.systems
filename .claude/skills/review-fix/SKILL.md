@@ -138,7 +138,8 @@ of diff size.
 
 - `surface` is `empty` (no changed files), `docs` (every changed path is
   documentation — markdown/text/license, no executable, config, dependency, or
-  rules surface), or `code` (anything else).
+  rules surface), `tests` (every changed path is a test file — no production
+  source, config, dependency, or rules surface), or `code` (anything else).
 - `deps` is `true` when the diff touches `package.json` / `package-lock.json`.
 - `app_or_rules` is `true` when the diff touches application source
   (`.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs`/`.go` outside `.claude/`) or a
@@ -146,6 +147,7 @@ of diff size.
 
 Set `security_note` for the Workflow `args`:
 - `surface=docs`: `Security review: no attack surface — docs-only diff (no executable, config, dependency, or Firestore-rules changes).`
+- `surface=tests`: `Security review: no attack surface — test-only diff (every changed path is a test file).`
 - `surface=empty`: `Security review: no attack surface — diff is empty (no changed files detected).`
 - `surface=code`: omit `security_note` (leave it unset).
 
@@ -230,12 +232,12 @@ args = {
   pr_num:              <PR_NUM>,
   merge_base:          <MERGE_BASE>,
   changed_files:       [ ...the changed-file list from the pack's === DIFF section (same list dispatch-changed-files extracts)... ],
-  surface:             "empty" | "docs" | "code",
+  surface:             "empty" | "docs" | "tests" | "code",
   deps:                <true|false>,
   app_or_rules:        <true|false>,
   prescanned_findings: [ ...normalized CodeQL + npm findings in Per-finding schema... ],
   implementing_issues: [ <N>, ... ],    // parsed from Closes #N lines; [] if none
-  security_note:       <string or omit> // set for empty/docs; omit for code
+  security_note:       <string or omit> // set for empty/docs/tests; omit for code
 }
 ```
 
@@ -616,10 +618,10 @@ through to the unified set — has these fields:
 
 ## Edge cases
 
-- **Empty or docs-only diff** — `surface` is `empty` or `docs`; the Workflow
-  launches no security finders and no security agents. The code-review and review
-  agents still run. The skill still applies `dispatch:reviewed` and writes the
-  marker.
+- **Empty, docs-only, or test-only diff** — `surface` is `empty`, `docs`, or
+  `tests`; the Workflow launches no security finders and no security agents. The
+  code-review and review agents still run. The skill still applies
+  `dispatch:reviewed` and writes the marker.
 - **A finder finds nothing** — record that source as clean; it contributes no
   findings to the Workflow.
 - **A finder agent fails** — the Workflow retries once. If it fails again, partial
