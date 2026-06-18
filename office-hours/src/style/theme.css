@@ -1,0 +1,3 @@
+@import "@commons-systems/style/default.css";
+
+body { --main-max-width: none; }
