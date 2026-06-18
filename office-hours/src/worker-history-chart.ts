@@ -6,6 +6,7 @@ import {
   buildLegend,
   computeChartWidth,
   renderAxisSvg,
+  CHART_PALETTE,
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
   POINT_WIDTH,
@@ -16,8 +17,8 @@ import {
 const SERIES_ACTIVE = "active workers";
 const SERIES_TARGET = "target (step)";
 
-const COLOR_ACTIVE = "#42a5f5";
-const COLOR_TARGET = "#ab47bc";
+const COLOR_ACTIVE = CHART_PALETTE.primary;
+const COLOR_TARGET = CHART_PALETTE.tertiary;
 
 interface WorkerPoint {
   x: Date;

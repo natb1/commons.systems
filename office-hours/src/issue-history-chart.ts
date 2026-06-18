@@ -7,6 +7,7 @@ import {
   buildLegend,
   computeChartWidth,
   renderAxisSvg,
+  CHART_PALETTE,
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
   AXIS_WIDTH,
@@ -18,9 +19,9 @@ const POINT_WIDTH = 60;
 const CONTAINER_WIDTH = 640;
 const CHART_HEIGHT = 220;
 
-const COLOR_HELP_WANTED = "#42a5f5";
-const COLOR_OTHER = "#26a69a";
-const COLOR_PROJECTION = "#ab47bc";
+const COLOR_HELP_WANTED = CHART_PALETTE.primary;
+const COLOR_OTHER = CHART_PALETTE.secondary;
+const COLOR_PROJECTION = CHART_PALETTE.tertiary;
 
 interface Point {
   x: Date;

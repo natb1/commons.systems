@@ -7,13 +7,14 @@ import {
   assembleChartLayout,
   buildLegend,
   renderAxisSvg,
+  CHART_PALETTE,
   AXIS_WIDTH,
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
 } from "./chart-util.js";
 
-const COLOR_WEEKLY = "#26a69a";
-const COLOR_BACKDROP = "#ab47bc";
+const COLOR_WEEKLY = CHART_PALETTE.secondary;
+const COLOR_BACKDROP = CHART_PALETTE.tertiary;
 
 /** Approximate visible width; the x domain is bounded [0, 1] so no scrolling. */
 const CONTAINER_WIDTH = 640;

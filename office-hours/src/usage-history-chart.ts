@@ -3,10 +3,12 @@ import { type UsageSample } from "./usage-samples.js";
 import { weeklyPaceCurve } from "./weekly-pace-curve.js";
 import {
   getThemeFg,
+  readThemeVar,
   assembleChartLayout,
   buildLegend,
   computeChartWidth,
   renderAxisSvg,
+  CHART_PALETTE,
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
   POINT_WIDTH,
@@ -18,10 +20,9 @@ const SERIES_FIVE_HOUR = "5-hour %";
 const SERIES_WEEKLY = "weekly %";
 const SERIES_PACE = "pace W";
 
-const COLOR_FIVE_HOUR = "#42a5f5";
-const COLOR_WEEKLY = "#26a69a";
-const COLOR_PACE = "#ab47bc";
-const COLOR_RESET = "#ef5350";
+const COLOR_FIVE_HOUR = CHART_PALETTE.primary;
+const COLOR_WEEKLY = CHART_PALETTE.secondary;
+const COLOR_PACE = CHART_PALETTE.tertiary;
 
 interface UsagePoint {
   x: Date;
@@ -81,6 +82,9 @@ export function renderUsageHistoryChart(samples: UsageSample[]): HTMLElement {
   const yDomain: [number, number] = [0, 100];
 
   const fg = getThemeFg(container);
+  // Reset/danger color is a runtime read of the --danger theme token (warm red),
+  // falling back to #ff6b6b — matching theme.css's var(--danger, #ff6b6b) usages.
+  const COLOR_RESET = readThemeVar(container, "--danger") || "#ff6b6b";
   const sharedStyle = { background: "transparent", color: fg };
 
   const axisSvg = renderAxisSvg({ height: CHART_HEIGHT, style: sharedStyle, yDomain, label: "%" });

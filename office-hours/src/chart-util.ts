@@ -1,5 +1,26 @@
 import * as Plot from "@observablehq/plot";
 
+/**
+ * Shared warm chart palette — the single source of truth for series hues across
+ * the office-hours charts, tuned to read on the warm-dark shell (`--bg` #1a1714,
+ * `--surface` #252017). Roles map to each chart's series semantics:
+ *
+ * - `primary`   — amber/orange, the leading line/area series (help-wanted,
+ *   5-hour %, active workers).
+ * - `secondary` — warm gold, the second series (other, weekly %, weekly).
+ * - `tertiary`  — warm tan/terracotta for dashed overlays (projection, pace W,
+ *   target, backdrop), distinct from `primary` in both hue and lightness.
+ *
+ * The reset/danger color is intentionally NOT a palette constant — it is a
+ * runtime read of the `--danger` theme token (see `readThemeVar`), so it tracks
+ * theme changes rather than freezing a hex here.
+ */
+export const CHART_PALETTE = {
+  primary: "#e8943a",
+  secondary: "#d4a017",
+  tertiary: "#c98a5e",
+} as const;
+
 export const AXIS_WIDTH = 50;
 export const MARGIN_RIGHT = 20;
 export const MARGIN_BOTTOM = 50;
