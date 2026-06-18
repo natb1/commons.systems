@@ -242,10 +242,18 @@ recommended approach only, not all alternatives.
 
 ### 5. Self-review — main thread
 
-Read the **critical files** the `Explore`/`Plan` subagents flagged before
-finalizing, to deepen your own understanding and confirm the plan is executable
-and aligned with the issue's acceptance criteria (the appendix's *Review* block).
-Resolve any disagreement between multiple `Plan` proposals here.
+Finalize from the **compact findings** the `Explore`/`Plan` subagents returned
+(Step 3's return contract) — not by re-reading critical files whole. Confirm the
+plan is executable and aligned with the issue's acceptance criteria, and resolve
+any disagreement between multiple `Plan` proposals here.
+
+**Bounded confirmatory read (escape hatch).** If a single specific decision
+turns on a detail the findings did not capture, you may `Read` **one specific
+span** (a named `path:line` range, not a whole file) to confirm it — a narrow,
+targeted check, never a re-hydration of the critical files. If you find yourself
+wanting to re-read files wholesale, the findings were insufficient: re-run a
+focused `Explore` agent (Step 3) with a tighter ask rather than pulling whole
+files into the parent.
 
 ### 6. Clarification / deviation gate — main thread
 
@@ -395,13 +403,17 @@ assemble the plan.
 
 This session does **not** have plan mode active, so it cannot receive these as
 injected tool instructions. They are reproduced verbatim and govern Steps 3–7,
-with two substitutions:
+with these substitutions:
 
 - (i) "the user's request" / "the user provided specific file paths" → the
   **issue scope / acceptance criteria** (there is no live user supplying paths).
 - (ii) "Use `AskUserQuestion` to clarify any remaining questions" is the
   **escalation trigger** (Step 6: ambiguity or major scope deviation →
   office-hours), **not** a routine default.
+- (iii) the *Review* block's "Read the critical files identified by agents" →
+  Step 5's **findings-first** discipline: finalize from the compact findings, and
+  only `Read` one named `path:line` span as a bounded confirmatory check — never
+  re-hydrate the critical files whole.
 
 ### Exploration (built-in `Explore`)
 
