@@ -1736,7 +1736,13 @@ teardown
 # for this harness, so assert at the source that STOP closed is in the no-park arm.
 echo "Test: dispatch-launch-worker lists STOP closed in the no-park benign arm"
 TOTAL=$((TOTAL + 1))
-if grep -Eq '"STOP done" \| "STOP waiting" \| "STOP wrong-worktree" \| "STOP closed"\)' \
+# Match the no-park benign-races case arm loosely: a single case-arm line that
+# bundles "STOP closed" with at least one other benign STOP alternative and ends
+# the pattern list with `)`. This tolerates future reordering or added
+# alternatives (e.g. `| "STOP pr-list-failed")`) without a false FAIL, while the
+# `\|` between alternatives still distinguishes this shared arm from the lone
+# `*)` park arm.
+if grep -Eq '"STOP [a-z-]+" \|.*"STOP closed".*\)' \
    "$SCRIPT_DIR/dispatch-launch-worker"; then
   PASS=$((PASS + 1)); echo "  PASS: STOP closed is in the launcher's no-park benign-races arm"
 else
