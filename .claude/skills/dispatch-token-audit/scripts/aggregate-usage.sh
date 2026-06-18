@@ -253,6 +253,7 @@ def cmd_prefix(c):
 | {
     type: $type,
     id: $id,
+    artifact: ( ($stamp[0] // null) | if . == null then null else {repo, issue, pr, base_sha, branch} end ),
     file: $path,
     primary_model: $primary_model,
     models: $models,
@@ -428,6 +429,7 @@ def ngrams($L; $n):
 # ---- per-session summaries ----
 | ( [ $rows[] | {
         id: .id, file: .file, type: .type,
+        artifact: .artifact,
         model: .primary_model, models: .models,
         turns: .turns, peak_context: .peak_context,
         input: .usage.input, cache_creation: .usage.cache_creation,
@@ -516,7 +518,12 @@ if [[ -d "$PROJECTS_ROOT" ]]; then
   # Gather candidate project dirs (worktrees + bare), then find *.jsonl in window.
   while IFS= read -r -d '' file; do
     FILES_SCANNED=$((FILES_SCANNED + 1))
-    if jq -cs -f "$TMP/stage1.jq" "$file" >>"$STAGE1_OUT" 2>/dev/null; then
+    # Per-session sidecar (#1861): <stem>.dispatch-stamp.json next to the
+    # transcript. Most transcripts have none; --slurpfile needs a readable file,
+    # so absent sidecars point at /dev/null, which slurps to [].
+    stamp="${file%.jsonl}.dispatch-stamp.json"
+    [[ -f "$stamp" ]] || stamp=/dev/null
+    if jq -cs --slurpfile stamp "$stamp" -f "$TMP/stage1.jq" "$file" >>"$STAGE1_OUT" 2>/dev/null; then
       :
     else
       FILES_FAILED=$((FILES_FAILED + 1))
