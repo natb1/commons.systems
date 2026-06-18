@@ -265,19 +265,20 @@ echo ""
 echo "--- persist-wiring ---"
 
 FAKE_WRITER_DIR=$(mktemp -d)
-trap 'rm -rf "$FAKE_WRITER_DIR"' EXIT
+trap 'rm -rf "$FAKE_WRITER_DIR"; teardown' EXIT
 
 # P1 — gate OFF: writer never invoked.
 SENTINEL_P1="$FAKE_WRITER_DIR/invoked-p1"
 printf '#!/usr/bin/env bash\n: > %s\ncat >/dev/null\n' "'$SENTINEL_P1'" \
   > "$FAKE_WRITER_DIR/fake-writer-p1"
 chmod +x "$FAKE_WRITER_DIR/fake-writer-p1"
-(
+if (
   export DISPATCH_AUDIT_PROJECTS_ROOT="$ROOT"
   export DISPATCH_AUDIT_AGGREGATES_WRITER="$FAKE_WRITER_DIR/fake-writer-p1"
   unset DISPATCH_AUDIT_AGGREGATES_ENABLED 2>/dev/null || true
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 >/dev/null
-)
+); then rc_p1=0; else rc_p1=$?; fi
+assert_eq "P1 gate-off: script succeeded" "0" "$rc_p1"
 assert_eq "P1 gate-off: writer not invoked" "1" \
   "$([[ ! -e "$SENTINEL_P1" ]] && echo 1 || echo 0)"
 

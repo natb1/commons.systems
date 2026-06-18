@@ -122,6 +122,67 @@ OUT3=$(printf '%s' "$PAYLOAD" | DISPATCH_AUDIT_AGGREGATES_NOW=1790000000 node "$
 ID3=$(jq -r '.id' <<<"$OUT3")
 assert_eq "doc id unchanged when NOW changes" "$ID" "$ID3"
 
+# --- Case 9: fail-closed validation branches --------------------------------
+# Each branch must exit non-zero and print exactly the matching one-line stderr
+# diagnostic prefixed "audit-aggregate-writer:". assert_fail captures both the
+# exit code and stderr so a wrong-but-still-failing branch can't pass silently.
+#
+# stdin is the otherwise-valid PAYLOAD unless a case overrides it, so the only
+# thing under test in each case is the single injected fault.
+assert_fail() {
+  local name="$1" expected_diag="$2"; shift 2
+  # "$@" is the env-prefixed node invocation; run it with the valid PAYLOAD on
+  # stdin, capturing stderr and the exit code.
+  local err rc
+  err=$(printf '%s' "$PAYLOAD" | "$@" 2>&1 >/dev/null) && rc=0 || rc=$?
+  if [[ "$rc" -eq 0 ]]; then
+    FAIL=$((FAIL + 1))
+    printf 'FAIL %s\n      expected: non-zero exit\n      actual:   exit 0\n' "$name"
+    return
+  fi
+  if [[ "$err" == *"$expected_diag"* ]]; then
+    PASS=$((PASS + 1))
+    printf 'ok   %s\n' "$name"
+  else
+    FAIL=$((FAIL + 1))
+    printf 'FAIL %s\n      expected diag substring: %s\n      actual stderr:           %s\n' \
+      "$name" "$expected_diag" "$err"
+  fi
+}
+
+# (a) unset GROUP_ID → required-and-non-empty error.
+assert_fail "unset GROUP_ID → fail-closed" \
+  "audit-aggregate-writer: DISPATCH_AUDIT_AGGREGATES_GROUP_ID is required and must be non-empty" \
+  env -u DISPATCH_AUDIT_AGGREGATES_GROUP_ID node "$WRITER_MJS" --dry-run
+
+# (b) TTL_DAYS=20 → out-of-range [30, 730] error.
+assert_fail "TTL_DAYS=20 (below range) → fail-closed" \
+  "audit-aggregate-writer: DISPATCH_AUDIT_AGGREGATES_TTL_DAYS 20 is outside the allowed range [30, 730]" \
+  env DISPATCH_AUDIT_AGGREGATES_TTL_DAYS=20 node "$WRITER_MJS" --dry-run
+
+# (b') TTL_DAYS=abc → non-integer error (the other TTL branch).
+assert_fail "TTL_DAYS=abc (non-integer) → fail-closed" \
+  'audit-aggregate-writer: DISPATCH_AUDIT_AGGREGATES_TTL_DAYS "abc" is not an integer' \
+  env DISPATCH_AUDIT_AGGREGATES_TTL_DAYS=abc node "$WRITER_MJS" --dry-run
+
+# (c) stdin that is not JSON → parse error. Override stdin via a dedicated run.
+NOT_JSON_ERR=$(printf 'not json' | node "$WRITER_MJS" --dry-run 2>&1 >/dev/null) && NOT_JSON_RC=0 || NOT_JSON_RC=$?
+assert_eq "stdin not JSON → exit non-zero" "1" "$([[ "$NOT_JSON_RC" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "stdin not JSON → diagnostic" "1" \
+  "$([[ "$NOT_JSON_ERR" == *'audit-aggregate-writer: stdin is not valid JSON'* ]] && echo 1 || echo 0)"
+
+# (c') stdin missing by_phase → bucket-map object error (malformed payload field).
+NO_BY_PHASE=$(jq -c 'del(.by_phase)' <<<"$PAYLOAD")
+MISSING_ERR=$(printf '%s' "$NO_BY_PHASE" | node "$WRITER_MJS" --dry-run 2>&1 >/dev/null) && MISSING_RC=0 || MISSING_RC=$?
+assert_eq "stdin missing by_phase → exit non-zero" "1" "$([[ "$MISSING_RC" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "stdin missing by_phase → diagnostic" "1" \
+  "$([[ "$MISSING_ERR" == *'audit-aggregate-writer: payload field by_phase must be a JSON object'* ]] && echo 1 || echo 0)"
+
+# (d) --dry-run without SECRET_OVERRIDE → the dry-run-only guard.
+assert_fail "dry-run without SECRET_OVERRIDE → fail-closed" \
+  "audit-aggregate-writer: --dry-run requires DISPATCH_AUDIT_AGGREGATES_SECRET_OVERRIDE" \
+  env -u DISPATCH_AUDIT_AGGREGATES_SECRET_OVERRIDE node "$WRITER_MJS" --dry-run
+
 # --- Summary ----------------------------------------------------------------
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [[ "$FAIL" -eq 0 ]]
