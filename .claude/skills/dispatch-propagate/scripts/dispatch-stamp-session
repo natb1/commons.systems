@@ -115,7 +115,7 @@ if [[ -n "$BACKFILL_PR" ]]; then
 
   # --- Mode B: PR backfill --------------------------------------------------
   # A non-numeric --backfill-pr value is the one genuine caller bug → exit 2.
-  if [[ ! "$BACKFILL_PR" =~ ^[0-9]+$ ]]; then
+  if [[ ! "$BACKFILL_PR" =~ ^[1-9][0-9]*$ ]]; then
     echo "dispatch-stamp-session: --backfill-pr must be a positive integer, got: $BACKFILL_PR" >&2
     usage
     exit 2
@@ -221,16 +221,30 @@ fi
 # Locate the sidecar path: transcript with .jsonl → .dispatch-stamp.json.
 sidecar="${TRANSCRIPT_PATH%.jsonl}.dispatch-stamp.json"
 
-# Idempotency: preserve a non-null .pr already on disk (e.g. a prior backfill).
+# Idempotency: Mode A runs on both `startup` and `resume`. The audit joins a
+# session to its *starting* ground truth, so an existing sidecar's anchor fields
+# are authoritative — a resume after committed work must not advance them to a
+# post-resume HEAD/clock. Preserve a non-null .pr (e.g. a prior backfill) and the
+# original base_sha/stamped_at when the sidecar already exists; only re-derive
+# them on the first (startup) write.
 pr=null
 if [[ -f "$sidecar" ]]; then
   existing_pr=$(jq '.pr' "$sidecar" 2>/dev/null || echo null)
   if [[ -n "$existing_pr" && "$existing_pr" != "null" ]]; then
     pr="$existing_pr"
   fi
+  existing_base_sha=$(jq -r '.base_sha // empty' "$sidecar" 2>/dev/null || echo "")
+  if [[ -n "$existing_base_sha" ]]; then
+    base_sha="$existing_base_sha"
+  fi
+  existing_stamped_at=$(jq -r '.stamped_at // empty' "$sidecar" 2>/dev/null || echo "")
 fi
 
-stamped_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+if [[ -n "${existing_stamped_at:-}" ]]; then
+  stamped_at="$existing_stamped_at"
+else
+  stamped_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+fi
 
 # Build atomically with jq -n so the JSON is always valid. Numerics
 # (schema/issue/pr) use --argjson; strings use --arg.
@@ -249,4 +263,4 @@ if ! jq -n \
   rm -f "$sidecar.tmp"
   exit 0
 fi
-mv "$sidecar.tmp" "$sidecar"
+mv "$sidecar.tmp" "$sidecar" || { echo "dispatch-stamp-session: failed to move sidecar into place; skipping stamp" >&2; rm -f "$sidecar.tmp"; exit 0; }

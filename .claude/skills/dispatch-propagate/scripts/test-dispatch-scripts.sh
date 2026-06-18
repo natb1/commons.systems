@@ -31545,6 +31545,19 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   rm -rf "$d"
 )
 
+# 1b. SSH origin URL normalizes to owner/name (git@github.com:owner/name.git).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin git@github.com:natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  ( cd "$d" && "$STAMP" --session-id sessSSH --transcript-path "$d/sessSSH.jsonl" )
+  sc="$d/sessSSH.dispatch-stamp.json"
+  assert_eq "stamp: .repo parsed from SSH origin" "natb1/commons.systems" "$(jq -r .repo "$sc")"
+  rm -rf "$d"
+)
+
 # 2. No-op on main — no sidecar, exit 0.
 (
   d=$(mktemp -d)
