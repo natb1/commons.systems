@@ -383,12 +383,11 @@ Otherwise run all steps in order.
       IIFE — `(async () => { … })()` — because a top-level `await` raises
       `SyntaxError: await is only valid in async functions`.
 
-      **Minimize browser payload.** Every `computer` `screenshot`/`zoom` action
-      returns the image into context, so prefer cheaper text/element queries
-      whenever the check is non-visual:
+      **Minimize browser payload.** A `computer` `screenshot`/`zoom` returns the
+      full image into context, so prefer cheaper text/element queries whenever the
+      check is non-visual:
       - Verify an `Expected outcome` with `get_page_text` / `find` whenever the
-        check is textual or element-presence — far cheaper than a `computer`
-        screenshot, which returns the full image into context.
+        check is textual or element-presence.
       - Use `find` (≤20 targeted elements) over `get_page_text` when checking for
         a SPECIFIC element or value; reserve `get_page_text` for genuinely
         text-heavy reads.
@@ -399,7 +398,7 @@ Otherwise run all steps in order.
       - If an accessibility-tree read is needed, use `read_page` with a bounded
         `max_chars` / `depth` (or a `ref_id` focus / `filter:"interactive"`) —
         never an unbounded dump.
-      - This changes HOW evidence is captured, not WHAT is checked: the same
+      - Applies to HOW evidence is captured, not WHAT is checked: the same
         checks run and the clean-pass cadence is untouched (AC#2).
 
       1. Load chrome tools via:
@@ -412,7 +411,7 @@ Otherwise run all steps in order.
       4. Navigate to the App URL.
       5. Suppress JS dialogs via `javascript_tool`: override `window.alert`, `window.confirm`, `window.prompt` with no-ops.
       6. Clear baselines: `read_console_messages` and `read_network_requests` with `clear: true`.
-      7. Start GIF recording: `gif_creator` with `action: "start_recording"` — GIF frames are captured independently and exported to a file, not returned into context. Take an initial `computer` screenshot ONLY IF a later visual / before-after comparison will need it; otherwise establish the baseline with `get_page_text`.
+      7. Start GIF recording: `gif_creator` with `action: "start_recording"`. Take an initial `computer` screenshot ONLY IF a later visual / before-after comparison will need it; otherwise establish the baseline with `get_page_text`.
       8. **Single-assertion lane — for each `script-verifiable` item whose `Command`
          is a single `javascript_tool` assertion:** `navigate` to the item's `URL
          path` (if not "current"), then run the **one** assertion `Command` (wrapped
@@ -430,8 +429,8 @@ Otherwise run all steps in order.
             and record the returned saved path as the residue item's
             `screenshot_path`. When the failure locus is a known region, CROP to
             it — `zoom` action with a `region`, `save_to_disk: true` — rather than
-            a full-viewport shot; a full-viewport `screenshot, save_to_disk: true`
-            stays the right call only when the failure is viewport-wide. Passing
+            a full-viewport shot; use a full-viewport `screenshot, save_to_disk: true`
+            only when the failure is viewport-wide. Passing
             this path to a
             **separate** Agent/Workflow invocation (the disposition classifier,
             Step 3.5) is **UNVERIFIED**: if `save_to_disk`
