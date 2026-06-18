@@ -31511,6 +31511,110 @@ rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
 
 # ============================================================================
+# dispatch-stamp-session — per-session GitHub-artifact sidecar writer/backfill
+# ============================================================================
+# These cases call "$SCRIPT_DIR/dispatch-stamp-session" directly: it has no
+# sibling-script dependencies (git/jq/find/date only), so no setup() copy is
+# needed. Each case is a self-contained subshell over its own fake git repo /
+# fake projects root under a mktemp -d, cleaned at block end — env seams
+# (DISPATCH_STAMP_PROJECTS_ROOT, CLAUDE_CODE_SESSION_ID) are scoped per-subshell
+# so nothing leaks across tests and teardown() is untouched.
+echo ""
+echo "=== dispatch-stamp-session ==="
+
+STAMP="$SCRIPT_DIR/dispatch-stamp-session"
+
+# 1. Initial write on a worker branch derives repo/issue/branch/base_sha.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  ( cd "$d" && "$STAMP" --session-id sess1 --transcript-path "$d/sess1.jsonl" )
+  sc="$d/sess1.dispatch-stamp.json"
+  assert_eq "stamp: sidecar written on worker branch" "yes" \
+    "$([ -f "$sc" ] && echo yes || echo no)"
+  assert_eq "stamp: .repo parsed from HTTPS origin" "natb1/commons.systems" "$(jq -r .repo "$sc")"
+  assert_eq "stamp: .issue is numeric branch prefix" "999" "$(jq -r .issue "$sc")"
+  assert_eq "stamp: .branch" "999-fixture" "$(jq -r .branch "$sc")"
+  assert_eq "stamp: .pr null on initial write" "null" "$(jq -r .pr "$sc")"
+  assert_eq "stamp: .base_sha equals HEAD" "$(git -C "$d" rev-parse HEAD)" "$(jq -r .base_sha "$sc")"
+  assert_eq "stamp: .session_id" "sess1" "$(jq -r .session_id "$sc")"
+  assert_eq "stamp: .schema is 1" "1" "$(jq -r .schema "$sc")"
+  rm -rf "$d"
+)
+
+# 2. No-op on main — no sidecar, exit 0.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b main
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  ( cd "$d" && "$STAMP" --session-id s --transcript-path "$d/m.jsonl" ) 2>/dev/null || rc=$?
+  assert_eq "stamp: main exits 0" "0" "$rc"
+  assert_eq "stamp: main writes no sidecar" "no" \
+    "$([ -f "$d/m.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 3. No-op on office-hours-5 — no sidecar, exit 0.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b office-hours-5
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  ( cd "$d" && "$STAMP" --session-id s --transcript-path "$d/o.jsonl" ) 2>/dev/null || rc=$?
+  assert_eq "stamp: office-hours-5 exits 0" "0" "$rc"
+  assert_eq "stamp: office-hours-5 writes no sidecar" "no" \
+    "$([ -f "$d/o.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 4. Backfill sets .pr and exits 0.
+(
+  root=$(mktemp -d)
+  mkdir -p "$root/somedir"
+  sc="$root/somedir/sess2.dispatch-stamp.json"
+  printf '%s\n' '{"schema":1,"session_id":"sess2","repo":"natb1/commons.systems","issue":5,"pr":null,"branch":"5-x","base_sha":"abc123","stamped_at":"2026-01-01T00:00:00Z"}' > "$sc"
+  rc=0
+  CLAUDE_CODE_SESSION_ID=sess2 DISPATCH_STAMP_PROJECTS_ROOT="$root" "$STAMP" --backfill-pr 4242 2>/dev/null || rc=$?
+  assert_eq "stamp: backfill exits 0" "0" "$rc"
+  assert_eq "stamp: backfill sets .pr" "4242" "$(jq -r .pr "$sc")"
+  rm -rf "$root"
+)
+
+# 5. Backfill no-ops + exits 0 when the sidecar is missing.
+(
+  root=$(mktemp -d)
+  rc=0
+  CLAUDE_CODE_SESSION_ID=nope DISPATCH_STAMP_PROJECTS_ROOT="$root" "$STAMP" --backfill-pr 7 2>/dev/null || rc=$?
+  assert_eq "stamp: backfill missing sidecar exits 0" "0" "$rc"
+  rm -rf "$root"
+)
+
+# 6. Idempotent re-write preserves a set .pr (does not clobber to null).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  sc="$d/sess6.dispatch-stamp.json"
+  # Seed a sidecar that already carries a backfilled pr.
+  printf '%s\n' '{"schema":1,"session_id":"sess6","repo":"old/repo","issue":1,"pr":4242,"branch":"old","base_sha":"old","stamped_at":"2026-01-01T00:00:00Z"}' > "$sc"
+  ( cd "$d" && "$STAMP" --session-id sess6 --transcript-path "$d/sess6.jsonl" )
+  assert_eq "stamp: re-write preserves set .pr" "4242" "$(jq -r .pr "$sc")"
+  assert_eq "stamp: re-write re-derives .branch" "999-fixture" "$(jq -r .branch "$sc")"
+  assert_eq "stamp: re-write re-derives .base_sha" "$(git -C "$d" rev-parse HEAD)" "$(jq -r .base_sha "$sc")"
+  rm -rf "$d"
+)
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
