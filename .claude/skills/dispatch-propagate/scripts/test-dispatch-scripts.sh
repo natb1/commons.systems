@@ -31615,6 +31615,88 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
 )
 
 # ============================================================================
+# dispatch-open-pr — PR backfill into the per-session sidecar (#1861)
+# ============================================================================
+# dispatch-open-pr resolves its sibling dispatch-stamp-session via its own
+# SCRIPT_DIR. Running the REAL "$SCRIPT_DIR/dispatch-open-pr" (not a copy) means
+# that sibling resolves to the real script, so the backfill actually runs. Each
+# case is a self-contained subshell that (a) puts a gh stub first on PATH and
+# (b) sets CLAUDE_CODE_SESSION_ID + DISPATCH_STAMP_PROJECTS_ROOT so the backfill
+# targets a seeded fake sidecar. The backfill needs only find/jq (no git), so no
+# fake git repo is required. Env exports are scoped per-subshell — teardown()
+# untouched. The gh stub keeps the two numbers DISTINCT: `pr create` returns a
+# URL whose basename is 4242 (the PR number), while `pr view` prints 1861 (the
+# primary issue), so the exact-match branch fires on pass 1 (no `pr edit`) and a
+# sidecar `.pr == 4242` proves the backfill wrote the PR number, not the issue.
+echo ""
+echo "=== dispatch-open-pr backfill (#1861) ==="
+
+OPENPR="$SCRIPT_DIR/dispatch-open-pr"
+
+open_pr_backfill_gh_stub() {
+  # $1 = bin dir to write the stub into.
+  cat > "$1/gh" <<'STUB'
+#!/usr/bin/env bash
+case "$1 $2" in
+  "pr create")
+    # Basename of the URL is the PR number.
+    echo "https://github.com/natb1/commons.systems/pull/4242"
+    ;;
+  "pr view")
+    # The intended close set is the primary issue 1861 only — print it so the
+    # exact-match branch in dispatch-open-pr fires immediately.
+    echo "1861"
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $*" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$1/gh"
+}
+
+# 1. Backfill on PR open: the seeded sidecar's .pr is set to the PR number, and
+#    stdout is the BARE PR number only.
+(
+  bin=$(mktemp -d)
+  root=$(mktemp -d)
+  open_pr_backfill_gh_stub "$bin"
+  mkdir -p "$root/projdir"
+  sc="$root/projdir/sessP.dispatch-stamp.json"
+  printf '%s\n' '{"schema":1,"session_id":"sessP","repo":"natb1/commons.systems","issue":1861,"pr":null,"branch":"1861-x","base_sha":"abc123","stamped_at":"2026-01-01T00:00:00Z"}' > "$sc"
+  body=$(mktemp)
+  echo "Body prose." > "$body"
+  export PATH="$bin:$PATH"
+  export CLAUDE_CODE_SESSION_ID=sessP
+  export DISPATCH_STAMP_PROJECTS_ROOT="$root"
+  rc=0
+  out=$("$OPENPR" 1861 --title "t" --body-file "$body" 2>/dev/null) || rc=$?
+  assert_eq "open-pr backfill: rc 0" "0" "$rc"
+  assert_eq "open-pr backfill: stdout is bare PR number only" "4242" "$out"
+  assert_eq "open-pr backfill: sidecar .pr set to PR number" "4242" "$(jq -r .pr "$sc")"
+  rm -rf "$bin" "$root" "$body"
+)
+
+# 2. Missing-sidecar run is non-fatal: PR creation is unaffected by the backfill
+#    miss — still rc 0 and the bare PR number on stdout.
+(
+  bin=$(mktemp -d)
+  root=$(mktemp -d)
+  open_pr_backfill_gh_stub "$bin"
+  body=$(mktemp)
+  echo "Body prose." > "$body"
+  export PATH="$bin:$PATH"
+  export CLAUDE_CODE_SESSION_ID=no-such-session
+  export DISPATCH_STAMP_PROJECTS_ROOT="$root"
+  rc=0
+  out=$("$OPENPR" 1861 --title "t" --body-file "$body" 2>/dev/null) || rc=$?
+  assert_eq "open-pr backfill: missing sidecar → rc 0" "0" "$rc"
+  assert_eq "open-pr backfill: missing sidecar → bare PR number on stdout" "4242" "$out"
+  rm -rf "$bin" "$root" "$body"
+)
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
