@@ -7,7 +7,7 @@
 # the normalized result to stdout.
 #
 # Usage:
-#   dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic>
+#   dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus>
 #
 # Config files live in <project-root>/dispatch.config/. The project root is
 # resolved via resolve_project_root (lib.sh).
@@ -229,6 +229,24 @@
 #     "enabled": false
 #   }
 #
+# ---- Schema: force-opus.json ------------------------------------------------
+#
+# Top-level object gating a manual Opus override for dispatch-spawned workers.
+# This config type follows the GENERIC absent→inert convention (see "Stdout
+# protocol" above): when the file is absent, no-config is emitted and the
+# feature is OFF (inert) — workers use their normal model. Do NOT confuse this
+# with auto-merge, which INVERTS that convention (absent → ON). force-opus
+# does NOT invert; absent means OFF.
+#
+#   enabled       boolean (required when the file is present) — opt-in toggle.
+#                 true forces all dispatch-spawned workers onto Opus; false
+#                 (or file absent) leaves model selection at the default.
+#
+# Example (see force-opus.example.json) — the opt-in form:
+#   {
+#     "enabled": true
+#   }
+#
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -237,9 +255,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 CONFIG_TYPE="${1:-}"
 case "$CONFIG_TYPE" in
-  projects|jit|statements|target-workers|budget-etl|epic|auto-merge) ;;
+  projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus) ;;
   *)
-    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge>" >&2
+    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus>" >&2
     exit 2
     ;;
 esac
@@ -439,6 +457,21 @@ case "$CONFIG_TYPE" in
     ' "$CONFIG_FILE")
     ;;
   auto-merge)
+    ERRORS=$(jq -r '
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      else
+        . as $cfg |
+        # enabled: required boolean
+        (if ($cfg | has("enabled")) | not then
+          "missing required field enabled"
+        elif ($cfg.enabled | type) != "boolean" then
+          "enabled must be a boolean, got \($cfg.enabled | type)"
+        else empty end)
+      end
+    ' "$CONFIG_FILE")
+    ;;
+  force-opus)
     ERRORS=$(jq -r '
       if type != "object" then
         "top-level value must be a JSON object, got \(type)"
