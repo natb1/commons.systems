@@ -23,6 +23,7 @@
 #   STOP pr-list-failed             pr_list_open failed (gh error or truncation guard);
 #                                   an office-hours-reason is written here before printing it
 #   STOP wrong-worktree             cross-check failed (diagnostic on stderr); exits non-zero
+#   STOP closed                     issue is CLOSED — never dispatch a closed issue to a phase
 #
 # Usage error (missing <N> or <worktree-path>) → stderr message, exit 2 (matches
 # the sibling-script convention).
@@ -84,6 +85,19 @@ if [[ "$ACTUAL_TOPLEVEL" != "$WORKTREE_PATH" ]]; then
   echo "dispatch-route invoked with mismatched <worktree-path>: spawn cwd '$ACTUAL_TOPLEVEL' != argument '$WORKTREE_PATH'" >&2
   echo "STOP wrong-worktree"
   exit 1
+fi
+
+# Closed-issue guard (#1845): a closed issue's lingering worktree must never be
+# routed to a phase skill. Fetch state once, before provisioning. On a gh
+# failure, log and continue (do not strand the issue on a transient error) —
+# matches the gh-failure fallbacks already used below.
+ISSUE_STATE=$(gh_retry gh issue view "$N" --json state -q .state) || {
+  echo "dispatch-route: gh issue view $N --json state failed; continuing to route" >&2
+  ISSUE_STATE=""
+}
+if [[ "$ISSUE_STATE" == "CLOSED" ]]; then
+  echo "STOP closed"
+  exit 0
 fi
 
 # Provision the worktree and merge origin/main — runs here, after the cross-check

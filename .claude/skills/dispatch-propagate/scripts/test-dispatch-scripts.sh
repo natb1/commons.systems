@@ -690,6 +690,18 @@ case "$args" in
     # dispatch-close-resolved (#1456): gh issue close <num> --reason completed --comment ...
     echo "$args" >> "$STUB_DIR/gh-issue-close.log"
     ;;
+  issue\ view\ *\ --json\ state\ -q\ .state)
+    # Closed-issue router guard (#1845): gh issue view <num> --json state -q .state.
+    # The -q flag projects .state to a bare string; the fixture file holds
+    # {"state":"..."}, so project it here. Absent fixture → OPEN (every existing
+    # route test makes this call and must keep routing normally).
+    num=$(printf '%s' "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/issue-state-${num}.json" ]]; then
+      jq -r .state "$STUB_DIR/issue-state-${num}.json"
+    else
+      echo "OPEN"
+    fi
+    ;;
   issue\ view\ *\ --json\ *)
     # Generic catch-all for `gh issue view <num> --json <FIELDS>` calls that do
     # not match the specific arms above (e.g. issue-sub-issues default/explicit
@@ -1700,6 +1712,42 @@ assert_eq "no PR + dispatch:planned → INVOKE /implement (directive)" \
   "INVOKE /implement" "$ROUTE_OUT"
 assert_eq "no PR + dispatch:planned → INVOKE /implement (exit 0)" "0" "$ROUTE_RC"
 teardown
+
+# 1c. Closed issue → STOP closed (#1845). The router's closed-issue guard fires
+# AFTER the worktree cross-check and BEFORE provisioning: it fetches the issue
+# state once and short-circuits a closed issue so its lingering worktree is never
+# routed to a phase skill. issue-state-43.json marks #43 CLOSED. On the PRE-FIX
+# code (no guard) this routed to INVOKE /plan-issue (no PR, unplanned), so the
+# assertion genuinely guards the new behavior.
+echo "Test: closed issue → STOP closed"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/43-closed-feature" > "$STUB_DIR/worktree-toplevel.txt"
+echo '{"state":"CLOSED"}' > "$STUB_DIR/issue-state-43.json"
+route_run 43 /wt/43-closed-feature
+assert_eq "closed issue → STOP closed (directive)" "STOP closed" "$ROUTE_OUT"
+assert_eq "closed issue → STOP closed (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 1d. Criterion #4 (#1845): a closed issue must NEVER be office-hours-parked. The
+# route-level test above cannot prove this — dispatch-launch-worker's case arm is
+# what routes STOP closed to the no-park benign-races handler (release_and_tick,
+# no dispatch-apply-office-hours). Driving the launcher end-to-end is out of scope
+# for this harness, so assert at the source that STOP closed is in the no-park arm.
+echo "Test: dispatch-launch-worker lists STOP closed in the no-park benign arm"
+TOTAL=$((TOTAL + 1))
+# Match the no-park benign-races case arm loosely: a single case-arm line that
+# bundles "STOP closed" with at least one other benign STOP alternative and ends
+# the pattern list with `)`. This tolerates future reordering or added
+# alternatives (e.g. `| "STOP pr-list-failed")`) without a false FAIL, while the
+# `\|` between alternatives still distinguishes this shared arm from the lone
+# `*)` park arm.
+if grep -Eq '"STOP [a-z-]+" \|.*"STOP closed".*\)' \
+   "$SCRIPT_DIR/dispatch-launch-worker"; then
+  PASS=$((PASS + 1)); echo "  PASS: STOP closed is in the launcher's no-park benign-races arm"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: STOP closed is in the launcher's no-park benign-races arm"
+fi
 
 # 2. Draft + failing CI → INVOKE /fix-checks.
 echo "Test: draft + failing CI → INVOKE /fix-checks"
@@ -7325,6 +7373,14 @@ if [[ "${1:-}" == "-C" ]]; then
       if [[ -f "$f" ]]; then cat "$f"; else echo "0"; fi
       exit 0
       ;;
+    "diff --quiet origin/main HEAD")
+      # worktree_merged_in_sync tree-identity check (#1845). diffrc<key>.txt holds
+      # the exit code: 0 = identical (retire-able), 1 = real diff, >1 = bad-ref
+      # error. Default 0 (identical) so existing merged-in-sync tests stay green.
+      key=$(echo "$ctx_path" | tr '/' '_')
+      f="$STUB_DIR/diffrc${key}.txt"
+      if [[ -f "$f" ]]; then exit "$(cat "$f")"; else exit 0; fi
+      ;;
     "log -1 --format=%ct HEAD")
       key=$(echo "$ctx_path" | tr '/' '_')
       f="$STUB_DIR/headct${key}.txt"
@@ -7488,6 +7544,46 @@ if grep -q "REMOVE_MERGED: '$WT_PATH' branch=42-feature pr=#100" \
   PASS=$((PASS + 1)); echo "  PASS: REMOVE_MERGED log line present"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_MERGED log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test 1a: squash-merged worktree retired despite non-zero rev-list (#1845) ---
+# Reproduces the squash-merge bug: a `git merge origin/main` left a local-only
+# merge commit, so `rev-list --count HEAD --not --remotes` is >=1 even though the
+# tree is byte-identical to origin/main (the squash-merge deleted the remote head
+# branch, defeating reachability). The merged path now uses worktree_merged_in_sync
+# (tree identity), so the worktree is retired. On the PRE-FIX worktree_in_sync,
+# rev-list>=1 → SKIP_MERGED_NOT_IN_SYNC and this test FAILS — proving it reproduces
+# the bug, not merely exercises the fix.
+echo "Test: squash-merged worktree retired despite non-zero rev-list (#1845)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/80-squash-merged"
+sweep_register_wt "$WT_PATH" "80-squash-merged"
+echo '[{"state":"MERGED","number":800}]' \
+  > "$STUB_DIR/pr-state-80-squash-merged.json"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"          # clean working tree
+echo "1" > "$STUB_DIR/revlist${key}.txt"  # local-only merge commit (would defeat rev-list)
+echo "0" > "$STUB_DIR/diffrc${key}.txt"   # tree identical to origin/main
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "squash-merged sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH"; then
+  PASS=$((PASS + 1)); echo "  PASS: squash-merged worktree remove call recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: squash-merged worktree remove call recorded"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "REMOVE_MERGED: '$WT_PATH' branch=80-squash-merged pr=#800" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: REMOVE_MERGED log line present (squash-merged, non-zero rev-list)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_MERGED log line present (squash-merged, non-zero rev-list)"
   echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
 sweep_teardown

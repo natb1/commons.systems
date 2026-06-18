@@ -190,6 +190,23 @@ describe("LRU eviction", () => {
     vi.restoreAllMocks();
     await cache.closeDb();
   });
+
+  it("replace with a smaller blob shrinks the total and evicts nothing", async () => {
+    const cache = createLruBlobCache({ name: uniqueDbName(), version: 1, maxBytes: 200 });
+    vi.spyOn(Date, "now").mockReturnValue(1000);
+    await cache.putEntry("a", new ArrayBuffer(180));
+    vi.mocked(Date.now).mockReturnValue(2000);
+    await cache.putEntry("b", new ArrayBuffer(90)); // total+delta=270>200 → evicts "a", total=90
+    vi.mocked(Date.now).mockReturnValue(3000);
+    await cache.putEntry("b", new ArrayBuffer(60)); // replace "b": delta=-30, total+delta=60≤200 → no eviction, total=60
+    expect(await cache.getEntry("b")).not.toBeNull();
+    expect(await cache.getEntry("a")).toBeNull();
+    const stats = await cache.getStats();
+    expect(stats.totalBytes).toBe(60);
+    expect(stats.entryCount).toBe(1);
+    vi.restoreAllMocks();
+    await cache.closeDb();
+  });
 });
 
 describe("clearCache", () => {
