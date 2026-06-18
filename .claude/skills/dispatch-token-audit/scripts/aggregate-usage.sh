@@ -24,6 +24,16 @@
 #     --json-out PATH write the document to PATH instead of stdout.
 #   DISPATCH_AUDIT_PROJECTS_ROOT  override the projects root (used by the test
 #                     fixture). Default: $HOME/.claude/projects.
+#   DISPATCH_AUDIT_AGGREGATES_ENABLED  opt-in persist gate: set to "1" to pipe
+#                     each assembled aggregate JSON document to the writer binary
+#                     after the report artifact is written. Off by default so
+#                     machines without Firestore config stay inert.
+#   DISPATCH_AUDIT_AGGREGATES_WRITER  override the writer binary path (test
+#                     seam; mirrors DISPATCH_USAGE_SAMPLES_WRITER). Default:
+#                     $SCRIPT_DIR/audit-aggregate-writer.mjs.
+#   Additional DISPATCH_AUDIT_AGGREGATES_* env vars are consumed by the writer
+#   binary itself (GROUP_ID, NAMESPACE, TTL_DAYS, PROJECT_ID, etc.) — see
+#   audit-aggregate-writer.mjs for the full list.
 #
 # BEHAVIOR CONTRACT
 #   - The window filter uses an explicit timestamp computed from `date -d`. The
@@ -37,9 +47,17 @@
 #   - Prices are an Opus list-price-equivalent USD PROXY applied to every session
 #     regardless of its actual model — a relative-magnitude figure for ranking,
 #     NOT the actual bill.
+#   - When DISPATCH_AUDIT_AGGREGATES_ENABLED=1, the assembled JSON document is
+#     piped to the writer after the report artifact is written (json-out or
+#     stdout), so the report is always produced first. The writer's own stdout
+#     is redirected to stderr so the script's "stdout must stay a pure JSON
+#     document" contract holds regardless of the gate setting. Writer failure
+#     exits non-zero (clear error, fail-closed) but only after the report is
+#     written.
 #
 # EXIT CODES
 #   0  ok
+#   1  persist step (env-gated) failed; report still written
 #   2  usage error (bad/unknown arg, non-integer --days)
 set -euo pipefail
 
@@ -48,6 +66,8 @@ if ! date -d '1 day ago' +%s >/dev/null 2>&1; then
   echo "error: GNU date required (this script does not support BSD/macOS date)" >&2
   exit 2
 fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 DAYS=7
 JSON_OUT=""
@@ -561,4 +581,12 @@ if [[ -n "$JSON_OUT" ]]; then
   printf '%s\n' "$DOC" >"$JSON_OUT"
 else
   printf '%s\n' "$DOC"
+fi
+
+if [[ "${DISPATCH_AUDIT_AGGREGATES_ENABLED:-}" == "1" ]]; then
+  WRITER="${DISPATCH_AUDIT_AGGREGATES_WRITER:-$SCRIPT_DIR/audit-aggregate-writer.mjs}"
+  if ! printf '%s' "$DOC" | "$WRITER" >&2; then
+    echo "aggregate-usage.sh: audit-aggregate-writer failed; aggregate not persisted (report still written)" >&2
+    exit 1
+  fi
 fi

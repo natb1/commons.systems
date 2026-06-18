@@ -275,5 +275,87 @@ assert_eq "lenses.baseline_context.median_boot_tokens" "16.5" \
 assert_eq "lenses.baseline_context.total_proxy_usd" "$EXPECTED_BASELINE_PROXY" \
   "$(jq '.lenses.baseline_context.total_proxy_usd' <<<"$OUT")"
 
+# ---------------------------------------------------------------------------
+# Persist-wiring tests (Unit 2).  These use a fake writer stub controlled via
+# DISPATCH_AUDIT_AGGREGATES_WRITER, mirroring the DISPATCH_USAGE_SAMPLES_WRITER
+# pattern from test-dispatch-scripts.sh.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- persist-wiring ---"
+
+FAKE_WRITER_DIR=$(mktemp -d)
+trap 'rm -rf "$FAKE_WRITER_DIR"; teardown' EXIT
+
+# P1 — gate OFF: writer never invoked.
+SENTINEL_P1="$FAKE_WRITER_DIR/invoked-p1"
+printf '#!/usr/bin/env bash\n: > %s\ncat >/dev/null\n' "'$SENTINEL_P1'" \
+  > "$FAKE_WRITER_DIR/fake-writer-p1"
+chmod +x "$FAKE_WRITER_DIR/fake-writer-p1"
+if (
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$ROOT"
+  export DISPATCH_AUDIT_AGGREGATES_WRITER="$FAKE_WRITER_DIR/fake-writer-p1"
+  unset DISPATCH_AUDIT_AGGREGATES_ENABLED 2>/dev/null || true
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 >/dev/null
+); then rc_p1=0; else rc_p1=$?; fi
+assert_eq "P1 gate-off: script succeeded" "0" "$rc_p1"
+assert_eq "P1 gate-off: writer not invoked" "1" \
+  "$([[ ! -e "$SENTINEL_P1" ]] && echo 1 || echo 0)"
+
+# P2 — gate ON: the assembled JSON is piped to the writer.
+CAPTURE_P2="$FAKE_WRITER_DIR/captured-p2.json"
+SENTINEL_P2="$FAKE_WRITER_DIR/invoked-p2"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\n' "'$SENTINEL_P2'" "'$CAPTURE_P2'" \
+  > "$FAKE_WRITER_DIR/fake-writer-p2"
+chmod +x "$FAKE_WRITER_DIR/fake-writer-p2"
+JSON_OUT_P2="$FAKE_WRITER_DIR/report-p2.json"
+(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$ROOT"
+  export DISPATCH_AUDIT_AGGREGATES_ENABLED="1"
+  export DISPATCH_AUDIT_AGGREGATES_WRITER="$FAKE_WRITER_DIR/fake-writer-p2"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --json-out "$JSON_OUT_P2"
+)
+assert_eq "P2 gate-on: writer invoked" "1" \
+  "$([[ -e "$SENTINEL_P2" ]] && echo 1 || echo 0)"
+# The document received by the writer must match the report file — both are
+# the same assembled JSON.
+GOT_P2=$(jq -S . "$CAPTURE_P2")
+WANT_P2=$(jq -S . "$JSON_OUT_P2")
+assert_eq "P2 gate-on: writer received full aggregate JSON" "$WANT_P2" "$GOT_P2"
+
+# P3 — writer-fail: aggregate-usage.sh exits non-zero AND the json-out file
+# still exists (report written before the failing persist step).
+JSON_OUT_P3="$FAKE_WRITER_DIR/report-p3.json"
+printf '#!/usr/bin/env bash\ncat >/dev/null\nexit 1\n' \
+  > "$FAKE_WRITER_DIR/fake-writer-p3"
+chmod +x "$FAKE_WRITER_DIR/fake-writer-p3"
+if (
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$ROOT"
+  export DISPATCH_AUDIT_AGGREGATES_ENABLED="1"
+  export DISPATCH_AUDIT_AGGREGATES_WRITER="$FAKE_WRITER_DIR/fake-writer-p3"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --json-out "$JSON_OUT_P3" 2>/dev/null
+); then rc_p3=0; else rc_p3=$?; fi
+assert_eq "P3 writer-fail: exit non-zero" "1" "$([[ "$rc_p3" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "P3 writer-fail: json-out still written" "1" \
+  "$([[ -s "$JSON_OUT_P3" ]] && echo 1 || echo 0)"
+
+# P4 — gate ON stdout-mode: writer stdout must NOT leak into the script's
+# stdout (the >&2 redirect works).  The stub prints a recognizable token
+# to its own stdout; the script's stdout must be clean JSON that does NOT
+# contain that token.
+printf '#!/usr/bin/env bash\ncat >/dev/null\necho LEAKED-DOCID\n' \
+  > "$FAKE_WRITER_DIR/fake-writer-p4"
+chmod +x "$FAKE_WRITER_DIR/fake-writer-p4"
+OUT_P4=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$ROOT"
+  export DISPATCH_AUDIT_AGGREGATES_ENABLED="1"
+  export DISPATCH_AUDIT_AGGREGATES_WRITER="$FAKE_WRITER_DIR/fake-writer-p4"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+assert_eq "P4 stdout pure JSON (no leak): valid JSON" "object" \
+  "$(jq -r 'type' <<<"$OUT_P4")"
+assert_eq "P4 stdout pure JSON (no leak): token absent" "0" \
+  "$(grep -c 'LEAKED-DOCID' <<<"$OUT_P4" || true)"
+
 report_results
 exit $FAIL
