@@ -66,11 +66,6 @@ describe("web app manifest", () => {
     expect(maskableIcon?.type).toBe("image/png");
   });
 
-  it("icons includes at least one maskable entry", () => {
-    const maskable = manifest.icons.find((i) => i.purpose.includes("maskable"));
-    expect(maskable).toBeDefined();
-  });
-
   it("every icon src resolves to an existing file under public/", () => {
     for (const icon of manifest.icons) {
       const filePath = join(publicDir, icon.src.replace(/^\//, ""));
