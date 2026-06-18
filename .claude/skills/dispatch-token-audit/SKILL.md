@@ -56,7 +56,13 @@ This skill parses recent Claude session transcripts and emits a ranked report of
 
    # Top 10 costliest individual sessions
    jq '.sessions | sort_by(-.price_proxy_usd) | .[0:10] | map({id,type,model,peak_context,price_proxy_usd})' tmp/usage-audit.json
+
+   # Per-session GitHub artifact join record — repo/issue/pr/base_sha/branch the session
+   # acted on. null for sessions without a sidecar (subagents, router ticks, pre-#1861 sessions).
+   jq '.sessions | map({id, artifact}) | map(select(.artifact != null))' tmp/usage-audit.json
    ```
+
+   The join key is the session id: the sidecar `<id>.dispatch-stamp.json` sits next to `<id>.jsonl` in the transcripts directory, so `.sessions[].id` is the join key between audit findings and GitHub artifacts. Each `artifact` record carries `{repo, issue, pr, base_sha, branch}`. The sidecar is the authoritative source of the overlapping join keys (`repo/issue/pr/base_sha`); the sibling outcome envelope (the #1860 internal-yield record) carries only its own non-overlapping outcome fields (findings, disposition) — so there is exactly one join-key source.
 
 4. **Interpret and rank against all nine lenses.** Evaluate every lens. Map each to the script output it draws from:
 
