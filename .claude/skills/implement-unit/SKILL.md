@@ -60,6 +60,23 @@ The caller supplies:
      changes at a time. `.claude/docs/firestore.md` is the authoritative source for
      all three.
 
+   - **If the unit's `scope` is broad or underspecified relative to its `path:line`
+     anchors** — e.g. "refactor across X" or "update all callers of Y" with no
+     enumerated paths, or anchors that name a target but not the surrounding code the
+     change depends on — gather context FIRST via up to 2 built-in `Explore` agents
+     (`subagent_type: Explore`, direct fan-out from this caller thread; the
+     implementation subagent cannot spawn built-in subagents, so exploration happens
+     here, pre-launch). Pass each agent the unit's `scope` and `context` inline. Each
+     RETURNS a compact structured findings block — **not** whole files: a **summary**,
+     **relevant excerpts** as small `path:line`-anchored spans, and **reuse
+     candidates** with their `path:line`. Fold the returned findings into the
+     `context` passed to the implementation subagent, which then reads far fewer whole
+     files — it receives findings + anchors instead of exploring from scratch.
+
+     **Default: do not explore.** When the plan's `path:line` anchors already pin the
+     unit's scope (the common case for most planned units), skip this and lean on the
+     anchors. A mandatory per-unit `Explore` would add cost, not remove it.
+
 2. **Commit, merge `origin/main`, and push — script-first, skill-fork fallback.**
    This step is the **canonical commit-merge-push recipe** — `/qa-fix` and
    `/review-fix` reference this step rather than restating it.
