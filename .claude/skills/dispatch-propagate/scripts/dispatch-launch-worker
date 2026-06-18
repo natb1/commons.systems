@@ -167,9 +167,10 @@ case "$DIRECTIVE" in
       "dispatch-launch-worker: provisioning/merge of origin/main failed for #$N; parking for review" || true
     release_and_tick
     ;;
-  "STOP done" | "STOP waiting" | "STOP wrong-worktree")
-    # Benign races — the router's #1109 done re-check, the CI re-gate, and the
-    # spawn-coherence cross-check. No park: just release the slot and tick.
+  "STOP done" | "STOP waiting" | "STOP wrong-worktree" | "STOP closed")
+    # Benign races — the router's #1109 done re-check, the CI re-gate, the
+    # spawn-coherence cross-check, and the #1845 closed-issue guard (a closed
+    # issue's lingering worktree must never park). No park: release the slot and tick.
     release_and_tick
     ;;
   *)
