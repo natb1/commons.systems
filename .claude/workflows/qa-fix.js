@@ -6,9 +6,11 @@
  * ------------
  * A self-contained, sandboxed Workflow-tool script structurally modeled on
  * .claude/workflows/review-fix.js. It ALWAYS classifies each QA residue item
- * (opus-fixable / needs-main / needs-human), adversarially verifies the
- * non-aesthetic `needs-human` calls with Sonnet skeptics, and returns the
- * resulting dispositions.
+ * (opus-fixable / needs-main / needs-human / already-satisfied), adversarially
+ * verifies the non-aesthetic `needs-human` calls with Sonnet skeptics, and
+ * returns the resulting dispositions. `already-satisfied` items — whose
+ * criterion is already provably met by readable evidence — are dropped from the
+ * residue as PASS, partitioned out into the `already_satisfied` return array.
  *
  * It is REPORT-ONLY when `plan_fix` is false (the #1551 callers): it emits no
  * fix plan and `deviation` is `false`. WHEN `plan_fix` is true AND at least one
@@ -30,12 +32,17 @@
  *
  * return OUT:
  *   { dispositions:[ { id, title, kind, class, aesthetic, verify, rationale } ],
+ *     already_satisfied:[ { id, title, kind, rationale } ],
  *     verify_report:[ { id, verdict, skeptic_votes, rationale } ],
  *     fix_plan: { units, deviation, deviation_reason } | null,
  *     deviation:boolean }
- *   - dispositions: one entry PER residue item, in input order. `class` is the
- *     FINAL class after any downgrade. `verify` is "Upheld"|"Refuted"|
- *     "Unverified"|"n/a".
+ *   - dispositions: one entry per residue item, in input order, EXCEPT
+ *     already-satisfied items, which are partitioned into `already_satisfied`.
+ *     `class` is the FINAL class after any downgrade. `verify` is "Upheld"|
+ *     "Refuted"|"Unverified"|"n/a".
+ *   - already_satisfied: items whose criterion is already provably met by
+ *     readable evidence (passing tests, page text, code) — dropped from the
+ *     residue as PASS, so no fix-plan and no office-hours escalation.
  *   - verify_report: one entry per NON-AESTHETIC needs-human candidate that went
  *     through the skeptic fan-out. `verdict` is "refuted"|"upheld"|"unverified".
  *   - fix_plan: the ordered Opus fix plan ({ units, deviation, deviation_reason })
@@ -52,7 +59,7 @@
 
 export const meta = {
   name: 'qa-fix',
-  description: 'QA disposition triage + gated fix-planning (#1553): classify each QA residue item opus-fixable / needs-main / needs-human and adversarially verify the needs-human calls; when plan_fix is set and opus-fixable items exist, emit an ordered Opus fix plan and a live deviation flag.',
+  description: 'QA disposition triage + gated fix-planning (#1553): classify each QA residue item opus-fixable / needs-main / needs-human / already-satisfied and adversarially verify the needs-human calls; when plan_fix is set and opus-fixable items exist, emit an ordered Opus fix plan and a live deviation flag.',
   phases: [{ title: 'classify' }, { title: 'verify' }, { title: 'fix-plan' }],
 };
 
@@ -71,7 +78,7 @@ const CLASSIFY_SCHEMA = {
         required: ['id', 'class', 'aesthetic', 'rationale'],
         properties: {
           id: { type: 'string' },
-          class: { enum: ['opus-fixable', 'needs-main', 'needs-human'] },
+          class: { enum: ['opus-fixable', 'needs-main', 'needs-human', 'already-satisfied'] },
           aesthetic: { type: 'boolean' },
           rationale: { type: 'string' },
         },
@@ -153,6 +160,15 @@ const hasRefuted = (votes) => votes.includes('refuted');
 //   the two contexts. Do not align them.
 function applyQaDisposition(classifications, votesById) {
   return classifications.map((c) => {
+    if (c.class === 'already-satisfied') {
+      // No-skeptic-fan-out pass-through, symmetric with the aesthetic bypass:
+      // the criterion is already provably met, so there is nothing to verify
+      // and nothing to fix. The `!== 'needs-human'` branch below would already
+      // return this exact shape; the explicit branch is for legibility and
+      // kernel-sync (so the dispatch-qa-disposition mirror reads the same),
+      // not a behavior fix.
+      return { id: c.id, final_class: 'already-satisfied', verify: 'n/a' };
+    }
     if (c.class !== 'needs-human') {
       // opus-fixable and needs-main pass straight through; never annotated.
       return { id: c.id, final_class: c.class, verify: 'n/a' };
@@ -214,11 +230,12 @@ const classifyItems = residue.map((r) => ({
 
 const classifyPrompt = [
   'You are the QA disposition-triage classifier. For each QA residue item below,',
-  'assign exactly one class: "opus-fixable", "needs-main", or "needs-human".',
+  'assign exactly one class: "opus-fixable", "needs-main", "needs-human", or',
+  '"already-satisfied".',
   '',
   UNTRUSTED_GUARD,
   '',
-  'THE THREE-WAY AXIS:',
+  'THE FOUR-WAY AXIS:',
   '- "opus-fixable" — a code defect, OR a "judgment" item that is really',
   '  resolvable from the DOM / page text with best judgment.',
   '- "needs-main" — only verifiable against merged main / production.',
@@ -226,6 +243,14 @@ const classifyPrompt = [
   '  "main-gated-fail", classify it "needs-main".',
   '- "needs-human" — a pixel-level "does this look right" aesthetic judgment, OR',
   '  a decision that requires the user\'s intent.',
+  '- "already-satisfied" — the item\'s criterion is already provably met by',
+  '  evidence the agent can read (passing tests, page text, code) — emit this',
+  '  when there is no code defect to fix, only a positive confirmation; no code',
+  '  change and no human needed.',
+  '',
+  'The schema still requires `aesthetic` on every item, so emit it for',
+  'already-satisfied items too — its value is immaterial (they never enter the',
+  'candidate filter), so `false` is fine.',
   '',
   'VISUAL-EVIDENCE HANDLING:',
   '- page_text is the always-reliable text-primary baseline.',
@@ -349,9 +374,11 @@ const dispoResults = applyQaDisposition(classifications, votesById);
 const dispoById = new Map(dispoResults.map((d) => [d.id, d]));
 const classMetaById = new Map(classifications.map((c) => [c.id, c]));
 
-// dispositions: one per residue item, in input order, joining residue
-// (id, title, kind) with the final class + aesthetic + verify + rationale.
-const dispositions = residue.map((r) => {
+// Full joined disposition list: one per residue item, in input order, joining
+// residue (id, title, kind) with the final class + aesthetic + verify +
+// rationale. PARTITION it below into the residue dispositions and the
+// already-satisfied PASS items.
+const allDispositions = residue.map((r) => {
   const d = dispoById.get(r.id);
   const c = classMetaById.get(r.id);
   return {
@@ -364,6 +391,16 @@ const dispositions = residue.map((r) => {
     rationale: c.rationale,
   };
 });
+
+// already_satisfied: items whose criterion is already provably met. They are
+// DROPPED from the residue as PASS — partitioned out so every downstream
+// consumer that filters/iterates `dispositions` naturally excludes them.
+const already_satisfied = allDispositions
+  .filter((d) => d.class === 'already-satisfied')
+  .map((d) => ({ id: d.id, title: d.title, kind: d.kind, rationale: d.rationale }));
+
+// dispositions: opus-fixable / needs-main / needs-human only, in input order.
+const dispositions = allDispositions.filter((d) => d.class !== 'already-satisfied');
 
 // verify_report: one entry per non-aesthetic needs-human candidate. verdict is
 // computed from votes exactly like review-fix.js's verify_report (lowercase):
@@ -478,6 +515,7 @@ if (_a.plan_fix === true && opusFixable.length > 0) {
 
 return {
   dispositions,
+  already_satisfied,
   verify_report,
   fix_plan,
   deviation: fix_plan ? fix_plan.deviation : false,
