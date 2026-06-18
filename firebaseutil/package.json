@@ -8,7 +8,8 @@
     "./app-context": "./src/app-context.ts",
     "./error-sink": "./src/error-sink.ts",
     "./defer-appcheck": "./src/defer-appcheck.ts",
-    "./seed-storage": "./src/seed-storage.ts"
+    "./seed-storage": "./src/seed-storage.ts",
+    "./auth-tier-controller": "./src/auth-tier-controller.ts"
   },
   "peerDependencies": {
     "@commons-systems/errorutil": "*",
