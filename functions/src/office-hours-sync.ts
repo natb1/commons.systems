@@ -74,6 +74,54 @@ export function parseJitDueMarker(body: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+export interface MergePrMarker {
+  prRepo: string;
+  prNumber: number;
+  prUrl: string;
+  prTitle: string;
+}
+
+// Matches the marker written by dispatch-sync-merge-queue:
+//   <!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":42,"url":"https://...","title":"..."} -->
+// Mirrors the null-on-malformed contract of parseJitDueMarker: returns null for
+// any missing/wrong-typed field so callers need no additional guards.
+const OH_MERGE_PR_RE = /<!--\s*oh-merge-pr:\s*(\{.*?\})\s*-->/;
+
+export function parseMergePrMarker(body: string): MergePrMarker | null {
+  const match = body.match(OH_MERGE_PR_RE);
+  if (!match) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const obj = parsed as Record<string, unknown>;
+  const prRepo = obj["repo"];
+  const prNumber = obj["number"];
+  const prUrl = obj["url"];
+  const prTitle = obj["title"];
+  if (
+    typeof prRepo !== "string" ||
+    prRepo === "" ||
+    typeof prUrl !== "string" ||
+    prUrl === "" ||
+    typeof prTitle !== "string" ||
+    prTitle === "" ||
+    !Number.isInteger(prNumber) ||
+    (prNumber as number) <= 0
+  ) {
+    return null;
+  }
+  return {
+    prRepo,
+    prNumber: prNumber as number,
+    prUrl,
+    prTitle,
+  };
+}
+
 // A jitKey is the `jit:<key>` label suffix and becomes a Firestore document ID.
 // The label name is external input from the scanned repo, so guard it: a key
 // containing a slash would make `collection.doc(key)` resolve to a nested path

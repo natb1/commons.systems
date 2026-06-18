@@ -33,9 +33,11 @@ import {
   syncOfficeHoursCore,
   fetchOpenJitIssuesLive,
   parseJitDueMarker,
+  parseMergePrMarker,
   buildAppJwt,
   mintInstallationToken,
   type JitIssue,
+  type MergePrMarker,
 } from "../src/office-hours-sync";
 import { truncateForLog } from "../src/log-utils";
 
@@ -408,6 +410,80 @@ describe("parseJitDueMarker", () => {
 
   it("returns null when the marker is malformed", () => {
     expect(parseJitDueMarker("<!-- jit-due: not-a-date -->")).toBeNull();
+  });
+});
+
+describe("parseMergePrMarker", () => {
+  const WELL_FORMED_BODY =
+    'Body text\n\n<!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":42,"url":"https://github.com/natb1/commons.systems/pull/42","title":"Some PR"} -->';
+
+  it("parses a well-formed marker", () => {
+    const result = parseMergePrMarker(WELL_FORMED_BODY);
+    expect(result).not.toBeNull();
+    expect(result!.prRepo).toBe("natb1/commons.systems");
+    expect(result!.prNumber).toBe(42);
+    expect(result!.prUrl).toBe(
+      "https://github.com/natb1/commons.systems/pull/42"
+    );
+    expect(result!.prTitle).toBe("Some PR");
+  });
+
+  it("tolerates extra whitespace inside the marker", () => {
+    const body =
+      '<!--   oh-merge-pr:   {"repo":"natb1/commons.systems","number":42,"url":"https://github.com/natb1/commons.systems/pull/42","title":"Some PR"}   -->';
+    const result = parseMergePrMarker(body);
+    expect(result).not.toBeNull();
+    expect(result!.prNumber).toBe(42);
+  });
+
+  it("returns null when no marker is present", () => {
+    expect(parseMergePrMarker("Plain body, no marker.")).toBeNull();
+  });
+
+  it("returns null for invalid JSON", () => {
+    expect(
+      parseMergePrMarker("<!-- oh-merge-pr: {not json} -->")
+    ).toBeNull();
+  });
+
+  it("returns null when a field is missing (title omitted)", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":42,"url":"https://github.com/natb1/commons.systems/pull/42"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when number is zero", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":0,"url":"https://github.com/natb1/commons.systems/pull/42","title":"Some PR"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when number is negative", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":-1,"url":"https://github.com/natb1/commons.systems/pull/42","title":"Some PR"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when number is non-integer (1.5)", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":1.5,"url":"https://github.com/natb1/commons.systems/pull/42","title":"Some PR"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when number is a string", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":"42","url":"https://github.com/natb1/commons.systems/pull/42","title":"Some PR"} -->'
+      )
+    ).toBeNull();
   });
 });
 
