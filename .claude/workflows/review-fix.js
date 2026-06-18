@@ -365,22 +365,52 @@ function finderPrompt(name, args) {
 const _a = typeof args === 'string' ? JSON.parse(args) : (args || {});
 log(`args type: ${typeof args}; surface=${_a.surface}; changed_files count=${(_a.changed_files || []).length}`);
 
-// --- 1. FINDERS (parallel, barrier) ------------------------------------------
+// --- 1. FINDERS (two waves, probe-gated) -------------------------------------
 phase('finders');
 const finderNames = agentFinderSet(_a.surface, _a.app_or_rules);
-log(`finders: launching ${finderNames.length} agent finder(s) for surface=${_a.surface}`);
-
-const finderResults = await parallel(
-  finderNames.map((name) => () =>
-    agent(finderPrompt(name, _a), {
-      model: 'sonnet',
-      agentType: 'general-purpose',
-      schema: FINDINGS_SCHEMA,
-      label: `find:${name}`,
-      phase: 'finders',
-    })
-  )
+// Probe-wave throttle short-circuit: the two always-on quality finders are real
+// review work that runs on every surface, so launch them FIRST as wave 1 and
+// double them as a throttle probe. If BOTH return null (a strong outage signal —
+// far more robust than one flake), skip the security finder wave entirely rather
+// than waste those launches on a throttled model. On empty/docs/tests surfaces
+// there are no security finders, so this degenerates to a single wave (no change).
+const qualityFinders = finderNames.filter((n) => n === 'code-review' || n === 'review');
+const securityFinders = finderNames.filter((n) => n !== 'code-review' && n !== 'review');
+log(
+  `finders: wave 1 = ${qualityFinders.length} quality finder(s); ` +
+    `${securityFinders.length} security finder(s) pending for surface=${_a.surface}`
 );
+
+const launchFinder = (name) => () =>
+  agent(finderPrompt(name, _a), {
+    model: 'sonnet',
+    agentType: 'general-purpose',
+    schema: FINDINGS_SCHEMA,
+    label: `find:${name}`,
+    phase: 'finders',
+  });
+
+// Wave 1 — the quality finders (also the throttle probe).
+const qualityResults = await parallel(qualityFinders.map(launchFinder));
+
+// Gate: both quality finders dead → model likely throttled; skip the security
+// wave. coverage_incomplete records the degraded review for the Step 6 comment.
+let securityResults = [];
+let coverage_incomplete = false;
+let coverage_note = '';
+const bothQualityDead = qualityResults.filter(Boolean).length === 0;
+if (securityFinders.length && bothQualityDead) {
+  coverage_incomplete = true;
+  coverage_note =
+    'Security finders skipped: both quality finders failed (model likely throttled).';
+  log(`finders: ${coverage_note} Backing off the security wave.`);
+} else if (securityFinders.length) {
+  // Wave 2 — the surface-gated security finders.
+  log(`finders: wave 2 = launching ${securityFinders.length} security finder(s)`);
+  securityResults = await parallel(securityFinders.map(launchFinder));
+}
+
+const finderResults = qualityResults.concat(securityResults);
 
 // Gather: surviving finder findings + the prescanned codeql/npm findings.
 let allFindings = [];
@@ -853,4 +883,9 @@ return {
   verify_report,
   deviation,
   security_note: _a.security_note,
+  // coverage_incomplete is independent of `deviation`: it flags a launch-efficiency
+  // back-off (security wave skipped because both quality finders died — model
+  // likely throttled), surfaced in the Step 6 partial-coverage comment line.
+  coverage_incomplete,
+  coverage_note,
 };

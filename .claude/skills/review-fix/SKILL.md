@@ -490,8 +490,11 @@ stands in for the security buckets):
 
 If a security reviewer or inline scan could not run (re-launch / retry exhausted),
 note partial coverage here — name the reviewer or scan whose domain could not be
-reviewed. If every bucket is empty and there was no security note, the comment is
-still well-formed (render empty buckets as `_None._`).
+reviewed. When `result.coverage_incomplete` is true, include `result.coverage_note`
+in this partial-coverage line (the probe-wave skipped the security finders because
+both quality finders died — the model was likely throttled). If every bucket is
+empty and there was no security note, the comment is still well-formed (render
+empty buckets as `_None._`).
 
 Then post it (use `dangerouslyDisableSandbox: true` — the script invokes `gh`):
 
@@ -661,3 +664,21 @@ claude-sonnet-4-6`). The model tiering is now owned by the Workflow's per-`agent
 Opus fix agents** (`model: opus`) write all working-tree changes. Fix-authoring is
 pinned to Opus **exactly once** in the Workflow's fix phase — there is no
 double-tiering. The orchestrator (this skill) authors no product code.
+
+**Probe-wave throttle short-circuit (#1857).** On a `code` surface the Workflow
+splits the finder fan-out into two waves instead of one barrier. Wave 1 launches
+only the two always-on quality finders (`code-review`, `review`) — real review
+work that runs on every surface — and doubles them as a throttle probe. If **both**
+return `null` (a strong outage signal — far more robust than a single flake), the
+Workflow skips the security finder wave entirely rather than waste those launches
+on a throttled model, and sets `result.coverage_incomplete = true` with a human
+`result.coverage_note` (surfaced in the Step 6 partial-coverage line). Otherwise
+wave 2 launches the surface-gated security finders. On `empty`/`docs`/`tests`
+surfaces there are no security finders, so this degenerates to a single wave (no
+change). **Marker/label behavior is intentionally unchanged:** a throttled run
+still applies `dispatch:reviewed` and writes the marker — this matches today's
+behavior when all finders return `null`, producing a degraded quality-only review.
+This is a launch-efficiency change only; genuine worker *death* on a transient
+rate-limit (and its backed-off resume) remains #1733's responsibility via the Stop
+hook, not this gate. `coverage_incomplete` is independent of the `deviation`
+criterion.
