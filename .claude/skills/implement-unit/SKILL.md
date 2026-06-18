@@ -66,8 +66,9 @@ The caller supplies:
      change depends on — gather context FIRST via up to 2 built-in `Explore` agents
      (`subagent_type: Explore`, direct fan-out from this caller thread; the
      implementation subagent cannot spawn built-in subagents, so exploration happens
-     here, pre-launch). Pass each agent the unit's `scope` and `context` inline. Each
-     RETURNS a compact structured findings block — **not** whole files: a **summary**,
+     here, pre-launch). Pass each agent the unit's `scope` and `context` inline.
+     Instruct each `Explore` agent to RETURN a compact structured findings block,
+     and to NOT dump whole files into its reply. Each agent returns: a **summary**,
      **relevant excerpts** as small `path:line`-anchored spans, and **reuse
      candidates** with their `path:line`. Fold the returned findings into the
      `context` passed to the implementation subagent, which then reads far fewer whole

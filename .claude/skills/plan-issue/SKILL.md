@@ -35,7 +35,7 @@ The built-in plan-mode workflow normally injects its instructions as tool
 guidance when `EnterPlanMode` is active. This session does **not** enter plan
 mode, so it never receives them. The adopted plan-mode instructions are therefore
 reproduced **verbatim in the appendix** below — follow them as the authority for
-how to explore, design, review, and shape the plan artifact, with the two
+how to explore, design, review, and shape the plan artifact, with the
 substitutions the appendix documents.
 
 ## Idempotency preamble and target resolution
@@ -217,9 +217,9 @@ warranted).
 
 In each `Plan` agent's prompt, provide:
 
-1. The **Step-3 exploration context** — the filenames and code-path traces the
-   `Explore` agents surfaced. The `Plan` agents skip `CLAUDE.md`/git too, so this
-   context must be inline.
+1. The **Step-3 exploration context** — the compact findings the `Explore`
+   agents returned (summary, path:line-anchored excerpts, and reuse candidates).
+   The `Plan` agents skip `CLAUDE.md`/git too, so this context must be inline.
 2. The **issue scope and acceptance criteria**.
 3. The **`/implement-unit` model-selection heuristic, inline** (the `Plan` agent
    will not read `implement-unit/SKILL.md`, so reproduce it):
