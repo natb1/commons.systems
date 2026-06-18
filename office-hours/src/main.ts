@@ -4,6 +4,7 @@ import type { User } from "firebase/auth";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
 import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck";
+import { createAuthTierController } from "@commons-systems/firebaseutil/auth-tier-controller";
 
 import { createAppController } from "./app-controller.js";
 import { getOwnerReminders, getOwnerQueueMetrics } from "./data.js";
@@ -18,6 +19,10 @@ import {
   signOut,
   onAuthStateChanged,
 } from "./firebase.js";
+import type { UsageSample } from "./usage-samples.js";
+import type { Reminder } from "./reminders.js";
+import type { QueueMetricsSnapshot } from "./queue-metrics.js";
+import type { IssueSample } from "./issue-samples.js";
 
 const app = document.querySelector("#app");
 if (!app) throw new Error("#app element not found");
@@ -35,38 +40,40 @@ function updateAuthButton(user: User | null): void {
 // restarts the timer (clearing any prior interval — see createAppController).
 const controller = createAppController(app!);
 
-// Paint the demo tier immediately so the view is meaningful before auth resolves.
-controller.paint({ tier: "demo" }, new Date());
+type OwnerData = {
+  samples: UsageSample[];
+  reminders: Reminder[];
+  queueMetrics: QueueMetricsSnapshot | null;
+  issueSamples: IssueSample[];
+};
 
-async function refresh(): Promise<void> {
-  const refreshUser = currentUser;
-  if (refreshUser === null) {
-    controller.paint({ tier: "demo" }, new Date());
-    return;
-  }
-  try {
-    const [samples, reminders, queueMetrics, issueSamples] = await Promise.all([
-      getOwnerSamples(db, NAMESPACE, refreshUser),
-      getOwnerReminders(db, NAMESPACE, refreshUser),
-      getOwnerQueueMetrics(db, NAMESPACE, refreshUser),
-      getOwnerIssueSamples(db, NAMESPACE, refreshUser),
-    ]);
-    // Auth may have changed while the Firestore calls were in flight — skip the
-    // render so the in-flight result does not clobber the already-updated view.
-    if (currentUser !== refreshUser) return;
-    controller.paint({ tier: "owner", samples, reminders, queueMetrics, issueSamples }, new Date());
-  } catch (error) {
-    // Auth may have changed while the Firestore calls were in flight — skip the
-    // render so the in-flight error does not clobber the already-updated view.
-    if (currentUser !== refreshUser) return;
-    // Load failed — render an explicit error state rather than masking it as
-    // demo data. A non-owner's read is "permission-denied"; logError classifies it.
-    if (!deferProgrammerError(error)) {
-      logError(error, { operation: "load-owner-data" });
+// Paints the demo tier immediately (synchronous in constructor), then
+// transitions to owner/error as auth identities arrive via handleAuthChange.
+const auth = createAuthTierController<User, OwnerData>({
+  load: async (user) => {
+    try {
+      const [samples, reminders, queueMetrics, issueSamples] = await Promise.all([
+        getOwnerSamples(db, NAMESPACE, user),
+        getOwnerReminders(db, NAMESPACE, user),
+        getOwnerQueueMetrics(db, NAMESPACE, user),
+        getOwnerIssueSamples(db, NAMESPACE, user),
+      ]);
+      return { samples, reminders, queueMetrics, issueSamples };
+    } catch (error) {
+      // Load failed — render an explicit error state rather than masking it as
+      // demo data. A non-owner's read is "permission-denied"; logError classifies it.
+      if (!deferProgrammerError(error)) {
+        logError(error, { operation: "load-owner-data" });
+      }
+      throw error; // controller → error tier
     }
-    controller.paint({ tier: "error" }, new Date());
-  }
-}
+  },
+  render: (t) =>
+    controller.paint(
+      t.tier === "owner" ? { tier: "owner", ...t.data } : { tier: t.tier },
+      new Date(),
+    ),
+});
 
 authToggle.addEventListener("click", () => {
   if (currentUser) void signOut();
@@ -77,10 +84,7 @@ onAuthStateChanged((user) => {
   if (user?.uid === currentUser?.uid) return;
   currentUser = user;
   updateAuthButton(user);
-  refresh().catch((err) => {
-    if (deferProgrammerError(err)) return;
-    logError(err, { operation: "auth-change-refresh" });
-  });
+  auth.handleAuthChange(user);
 }).catch((err) => {
   if (deferProgrammerError(err)) return;
   logError(err, { operation: "auth-init" });
