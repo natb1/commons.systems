@@ -579,7 +579,8 @@ case "$args" in
     fi
     ;;
   issue\ edit\ *)
-    # dispatch-apply-office-hours applies the label to the ISSUE.
+    # Multiple scripts (dispatch-apply-office-hours, dispatch-qa-apply-main-qa-labels, ...)
+    # route their `gh issue edit` calls through this block.
     # $STUB_DIR/issue-edit-mode selects behavior (default: succeed and log args).
     mode="ok"
     [[ -f "$STUB_DIR/issue-edit-mode" ]] && mode=$(cat "$STUB_DIR/issue-edit-mode")
@@ -6931,6 +6932,25 @@ if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log";
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: office-hours unaffected by lazy create"
 fi
+teardown
+
+# Non-numeric, flag-like issue number → hard error (exit 1), no gh calls. The
+# guard exists so a flag-like value can never be parsed by gh as an option that
+# redirects the label writes.
+echo "Test: non-numeric issue number → non-zero exit, no edit/label-create"
+setup
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" "--repo other/repo" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "non-numeric issue number exits non-zero" "1" "$rc"
+assert_eq "non-numeric: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "non-numeric: no label create" "absent" "$(log_state gh-label-create.log)"
+teardown
+
+# Missing arg → hard error (exit 1).
+echo "Test: missing issue number → non-zero exit"
+setup
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "missing issue number exits non-zero" "1" "$rc"
+assert_eq "missing arg: no label edit" "absent" "$(log_state gh-issue-edit.log)"
 teardown
 
 # ============================================================================
