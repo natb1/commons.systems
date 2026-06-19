@@ -9,6 +9,7 @@ const DAY = 86_400_000;
 
 function reminder(title: string, offsetMs: number): Reminder {
   return {
+    kind: "reminder",
     jitKey: `jit-${title}`,
     title,
     repo: "natb1/office-hours-nate",

@@ -1,10 +1,34 @@
-import { type Reminder, sortByDueAscending, formatDueLabel } from "./reminders.js";
+import {
+  type OfficeHoursItem,
+  type Reminder,
+  type MergePrItem,
+  sortByDueAscending,
+  formatDueLabel,
+} from "./reminders.js";
 
-export function renderReminderList(reminders: Reminder[], now: Date): HTMLElement {
+export function renderReminderList(items: OfficeHoursItem[], now: Date): HTMLElement {
   const section = document.createElement("section");
   const list = document.createElement("ul");
   list.id = "reminder-list";
   section.appendChild(list);
+
+  const mergePrs = items.filter((i): i is MergePrItem => i.kind === "merge-pr");
+  const reminders = items.filter((i): i is Reminder => i.kind === "reminder");
+
+  for (const item of mergePrs) {
+    const li = document.createElement("li");
+    li.className = "merge-pr";
+
+    const link = document.createElement("a");
+    link.className = "merge-pr-link";
+    link.href = item.prUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = item.prTitle;
+
+    li.appendChild(link);
+    list.appendChild(li);
+  }
 
   const sorted = sortByDueAscending(reminders);
   for (const reminder of sorted) {
@@ -25,7 +49,7 @@ export function renderReminderList(reminders: Reminder[], now: Date): HTMLElemen
     list.appendChild(item);
   }
 
-  if (sorted.length === 0) {
+  if (mergePrs.length === 0 && reminders.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty";
     empty.textContent = "No reminders.";

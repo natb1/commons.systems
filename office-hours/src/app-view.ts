@@ -10,7 +10,7 @@ import { getDemoIssueSamples } from "./issue-data.js";
 import { renderAuditAggregateChart } from "./audit-aggregate-chart.js";
 import { getDemoAuditAggregates } from "./audit-data.js";
 import { selectLatestSample, type UsageSample } from "./usage-samples.js";
-import type { OfficeHoursItem, Reminder } from "./reminders.js";
+import type { OfficeHoursItem } from "./reminders.js";
 import type { QueueMetricsSnapshot } from "./queue-metrics.js";
 import type { IssueSample } from "./issue-samples.js";
 import type { AuditAggregate } from "./audit-aggregates.js";
@@ -104,7 +104,7 @@ const PANELS: readonly Panel[] = [
     title: "Reminders",
     availableIn: ["demo", "owner"],
     timeSensitive: true,
-    load: (c) => c.reminders.filter((r): r is Reminder => r.kind === "reminder"),
+    load: (c) => c.reminders,
     render: (r, now) => renderReminderList(r, now),
   }),
   definePanel({
