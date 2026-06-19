@@ -4,10 +4,23 @@ import type { DataSource } from "../../src/data-source";
 
 vi.mock("firebase/firestore", () => timestampMockFactory());
 
-import { renderBudgets } from "../../src/pages/budgets";
+import { renderBudgetsContent } from "../../src/pages/budgets";
 
 function seedOptions(dsOverrides: Partial<DataSource> = {}) {
   return { authorized: false, groupName: "", dataSource: createMockDataSource(dsOverrides) };
+}
+
+// Unit 4 removed the legacy renderBudgets async wrapper; the surviving sync
+// renderBudgetsContent (still used by the SSG prerender) produces the same
+// markup these selector smoke checks assert on. This local helper resolves the
+// mock dataSource exactly as renderBudgets did, then renders.
+async function renderBudgets(options: ReturnType<typeof seedOptions>): Promise<string> {
+  const [budgets, periods, weeklyAggregates] = await Promise.all([
+    options.dataSource.getBudgets(),
+    options.dataSource.getBudgetPeriods(),
+    options.dataSource.getWeeklyAggregates(),
+  ]);
+  return renderBudgetsContent(budgets, periods, weeklyAggregates, options.authorized);
 }
 
 describe("budgets pie chart smoke", () => {

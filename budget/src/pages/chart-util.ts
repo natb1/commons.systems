@@ -39,6 +39,13 @@ export function readThemeVar(container: HTMLElement, name: string, style?: CSSSt
   return value;
 }
 
+const CHART_SERIES_COUNT = 6;
+
+/** Resolve the categorical series color for `index`, cycling the `--chart-1..6` tokens. */
+export function chartSeriesColor(container: HTMLElement, index: number, style?: CSSStyleDeclaration): string {
+  return readThemeVar(container, `--chart-${(index % CHART_SERIES_COUNT) + 1}`, style);
+}
+
 export function computePanelWidth(budgetCount: number): number {
   return Math.max(budgetCount * 30 + 30, 80);
 }
