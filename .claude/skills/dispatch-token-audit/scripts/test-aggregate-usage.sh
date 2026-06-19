@@ -353,7 +353,16 @@ assert_eq "sessions[agent-aaa].outcome is null" "null" \
   "$(jq '[.sessions[]|select(.id=="agent-aaa")][0].outcome' <<<"$OUT")"
 assert_eq "sessions[agent-aaa].outcome_rates is null" "null" \
   "$(jq '[.sessions[]|select(.id=="agent-aaa")][0].outcome_rates' <<<"$OUT")"
-# A session whose envelope has all-zero counts carries null rates (zero-denominator guard).
+# A session whose envelope has all-zero counts carries a non-null outcome_rates
+# object whose individual rate fields are null (zero-denominator guard).
+# Anchor first that the envelope was actually parsed (outcome non-null) and that
+# outcome_rates is a non-null object, so the per-field null assertions below
+# distinguish the zero-count path from the unparsed-envelope path (outcome:null,
+# under which null.outcome_rates.hit_rate would also be null — a false pass).
+assert_eq 'sessions[sess-router].outcome.findings_surfaced' '0' \
+  "$(jq '[.sessions[]|select(.id=="sess-router")][0].outcome.findings_surfaced' <<<"$OUT")"
+assert_eq 'sessions[sess-router].outcome_rates is non-null object' 'true' \
+  "$(jq '[.sessions[]|select(.id=="sess-router")][0].outcome_rates != null' <<<"$OUT")"
 assert_eq 'sessions[sess-router].outcome_rates.hit_rate is null' 'null' \
   "$(jq '[.sessions[]|select(.id=="sess-router")][0].outcome_rates.hit_rate' <<<"$OUT")"
 assert_eq 'sessions[sess-router].outcome_rates.actionability is null' 'null' \
