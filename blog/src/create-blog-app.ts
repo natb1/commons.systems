@@ -98,8 +98,9 @@ export interface BlogAppHandle {
 export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   const navMount = document.getElementById("nav");
   if (!navMount) throw new Error("#nav element not found");
-  const app = document.getElementById("app");
-  if (!app) throw new Error("#app element not found");
+  const appEl = document.getElementById("app");
+  if (!appEl) throw new Error("#app element not found");
+  const app: HTMLElement = appEl;
   const infoPanel = document.getElementById("info-panel");
   if (!infoPanel) throw new Error("#info-panel element not found");
 

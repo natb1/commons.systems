@@ -46,7 +46,7 @@ prerenderStaticPage({
   page: ABOUT_PAGE_META,
   bodyHtml: renderAboutHtml(),
   navLinks: NAV_LINKS,
-  panelHtml: renderAboutPanelHtml(),
+  aboutContent: renderAboutPanelHtml(),
   jsonLdBlocks: [personJsonLd(PERSON)],
   relMe: REL_ME,
   showHomeLink: false,
