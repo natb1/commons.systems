@@ -1,7 +1,8 @@
 // React port of the backlog-history panel. The chart is the imperative
 // Observable Plot core renderIssueHistoryChart (issue-history-chart.ts), which
-// builds a detached .backlog-history element (stacked help-wanted/other areas,
-// dashed runway projection, runway caption, legend) from an IssueSample array.
+// builds a detached .backlog-history element (stacked security/bug/enhancement/
+// other areas, dashed runway projection, runway caption, legend) from an
+// IssueSample array.
 // The core stays untouched — this component wraps it as a chart island: an
 // effect appends the core's element into a ref'd <div> and returns a teardown
 // that empties it, so React removes the prior render before re-running on a
