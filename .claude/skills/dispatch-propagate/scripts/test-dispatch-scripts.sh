@@ -4909,6 +4909,34 @@ printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 assert_eq "--priority-only --top 3 → exit 0 (no rejection)" "0" "$rc"
 teardown
 
+# PT6. Shared startable leaf across sibling roots is emitted EXACTLY ONCE (#1915).
+#      Two distinct help-wanted+priority roots 1858 and 1861 carry the SAME topic
+#      category (dispatch), so they fall in ONE (category, priority, enh, phase)
+#      bucket. Both roots descend (via their sub-issues) to the SAME startable
+#      leaf 1863. Before the fix, each root re-seeded `root_excl` only from the
+#      frozen global EXCLUDED and `bucket_append` did no value-level dedup, so the
+#      leaf recorded while descending root 1858 was not excluded when sibling root
+#      1861 descended to it — emitting `issue 1863` twice and inflating N_PRIO.
+#      The fix records every successfully-appended leaf in a global
+#      RECORDED_LEAVES set and, at TOP>1, seeds each root's `root_excl` from it,
+#      so a leaf reached from a sibling root is skipped. Run at --top 3 (NOT
+#      --top 1): the TOP=1 byte-identity guard means the cross-root dedup is a
+#      TOP>1 concern. Assert the shared leaf appears exactly once.
+echo "Test: --priority-only --top 3 shared leaf across sibling roots emitted once (#1915)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":1858,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"dispatch"}]},{"number":1861,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"dispatch"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+# Both sibling roots descend to the SAME shared leaf 1863 via their sub-issues.
+printf '[{"number":1863}]\n' > "$STUB_DIR/subissues-1858.json"
+printf '[{"number":1863}]\n' > "$STUB_DIR/subissues-1861.json"
+printf '{"title":"Issue 1863","body":"","comments":[],"number":1863,"state":"OPEN"}\n' > "$STUB_DIR/issue-1863.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3)
+assert_eq "--priority-only --top 3 shared leaf 1863 emitted exactly once" "1" "$(printf '%s\n' "$result" | grep -c '^issue 1863$')"
+assert_eq "--priority-only --top 3 shared leaf → single issue line" "issue 1863" "$result"
+teardown
+
 # ============================================================================
 # --- JIT scan ---
 # dispatch-select-target's JIT scan runs before the main-broken health gate.

@@ -290,14 +290,14 @@ const classifyRes = await agent(classifyPrompt, {
 
 const classById = new Map();
 if (classifyRes && classifyRes.classifications) {
-  for (const c of classifyRes.classifications) classById.set(c.id, c);
+  for (const c of classifyRes.classifications) classById.set(String(c.id), c);
 }
 
 // Build the classification list in residue (input) order. Prefer a clear error
 // over a silent fallback (code-style.md): if the classify agent omitted an id,
 // name it — do not invent a class.
 const classifications = residue.map((r) => {
-  const c = classById.get(r.id);
+  const c = classById.get(String(r.id));
   if (!c) {
     throw new Error(`classify: agent returned no classification for residue id "${r.id}"`);
   }
