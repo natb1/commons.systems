@@ -28232,19 +28232,19 @@ assert_eq "qa-fix partition: call site present in qa-fix.js" "1" "$(grep -c '= p
 # planned-deferral branch (issue #1891) — three separate input objects to avoid
 # disturbing the f1..f7 order assertion above.
 #
-# (a) opus-fixable + planned_deferral:true → authoritatively needs-human / n/a
+# (a) opus-fixable + planned_deferral:true → authoritatively needs-main / n/a
 #     (the literal original failure mode: an opus-fixable item routed to the
 #     auto-fix loop because the planned-deferral branch was absent)
 IN_PD_A='{"items":[{"id":"pd1","class":"opus-fixable","aesthetic":false,"planned_deferral":true}],"votes":{}}'
 out_pd_a=$(printf '%s' "$IN_PD_A" | "$SCRIPT_DIR/dispatch-qa-disposition")
-assert_eq "qa-disposition: planned_deferral opus-fixable → final_class=needs-human" "needs-human" "$(printf '%s' "$out_pd_a" | jq -r '.dispositions[0].final_class')"
+assert_eq "qa-disposition: planned_deferral opus-fixable → final_class=needs-main" "needs-main" "$(printf '%s' "$out_pd_a" | jq -r '.dispositions[0].final_class')"
 assert_eq "qa-disposition: planned_deferral opus-fixable → verify=n/a" "n/a" "$(printf '%s' "$out_pd_a" | jq -r '.dispositions[0].verify')"
 
-# (b) needs-human + planned_deferral:true WITH a refuting vote → stays needs-human/n/a
+# (b) needs-human + planned_deferral:true WITH a refuting vote → stays needs-main/n/a
 #     (NOT downgraded to opus-fixable — the fan-out is bypassed by the first branch)
 IN_PD_B='{"items":[{"id":"pd2","class":"needs-human","aesthetic":false,"planned_deferral":true}],"votes":{"pd2":["refuted"]}}'
 out_pd_b=$(printf '%s' "$IN_PD_B" | "$SCRIPT_DIR/dispatch-qa-disposition")
-assert_eq "qa-disposition: planned_deferral needs-human with refuted vote → final_class=needs-human (not downgraded)" "needs-human" "$(printf '%s' "$out_pd_b" | jq -r '.dispositions[0].final_class')"
+assert_eq "qa-disposition: planned_deferral needs-human with refuted vote → final_class=needs-main (not downgraded to opus-fixable)" "needs-main" "$(printf '%s' "$out_pd_b" | jq -r '.dispositions[0].final_class')"
 assert_eq "qa-disposition: planned_deferral needs-human with refuted vote → verify=n/a (not Refuted)" "n/a" "$(printf '%s' "$out_pd_b" | jq -r '.dispositions[0].verify')"
 
 # (c) regression guard — non-flagged needs-human with refuting vote still downgrades

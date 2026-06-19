@@ -179,11 +179,13 @@ function applyQaDisposition(classifications, votesById) {
     if (c.planned_deferral === true) {
       // Planned-deferral residue item (issue #1891): its acceptance criterion is
       // documented as non-assertable at merge time, so it is authoritatively
-      // needs-human and never auto-fixable. FIRST branch — fires regardless of
+      // needs-main and never auto-fixable. FIRST branch — fires regardless of
       // the class the classify agent assigned, symmetric with the aesthetic
       // bypass below; placing it after the `!== 'needs-human'` pass-through would
       // let an opus-fixable planned-deferral item reintroduce the auto-fix loop.
-      return { id: c.id, final_class: 'needs-human', verify: 'n/a' };
+      // needs-main items are filed as blocked_by follow-ups in Step 3.6 — never
+      // auto-fixed, never skeptic-downgraded.
+      return { id: c.id, final_class: 'needs-main', verify: 'n/a' };
     }
     if (c.class === 'already-satisfied') {
       // No-skeptic-fan-out pass-through, symmetric with the aesthetic bypass:
@@ -298,7 +300,7 @@ const classifyPrompt = [
   'PLANNED-DEFERRAL ITEMS:',
   '- When an item\'s `planned_deferral` is true, its acceptance criterion is',
   '  documented as non-assertable at merge time (measured downstream), so classify',
-  '  it "needs-human", NOT "opus-fixable" — there is no defect Opus can fix now.',
+  '  it "needs-main", NOT "opus-fixable" — there is no defect Opus can fix now.',
   '',
   'VISUAL-EVIDENCE HANDLING:',
   '- page_text is the always-reliable text-primary baseline.',
