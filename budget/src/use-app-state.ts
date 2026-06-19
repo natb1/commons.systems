@@ -490,6 +490,17 @@ export function useAppState(): AppApi {
     };
     window.addEventListener("focus", onFocus);
 
+    // Mirror the legacy router's popstate-driven route re-render: the reconcile
+    // flow (accounts-reconcile-hydrate triggerReload) dispatches a popstate to
+    // force the current route body to re-resolve against the new data + query.
+    // use-router no-ops a same-path popstate, so bump navEpoch here to re-key
+    // <LegacyRoute>. Harmless for path-changing back/forward (which already re-key).
+    const onPopState = () => {
+      navEpochRef.current += 1;
+      setNavEpochValue(navEpochRef.current);
+    };
+    window.addEventListener("popstate", onPopState);
+
     initialize().catch((error) => {
       if (deferProgrammerError(error)) return;
       logError(error, { operation: "initialization" });
@@ -502,6 +513,7 @@ export function useAppState(): AppApi {
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("popstate", onPopState);
     };
   }, []);
 

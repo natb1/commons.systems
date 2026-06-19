@@ -584,7 +584,7 @@ export function Transactions({ options }: { options: RenderPageOptions }) {
   const load = useTransactionsData(options);
 
   return (
-    <>
+    <main id="app">
       <h2>Transactions</h2>
       {options.authorized ? null : (
         <p id="seed-data-notice">Viewing example data. Load a data file to see your transactions.</p>
@@ -594,6 +594,6 @@ export function Transactions({ options }: { options: RenderPageOptions }) {
       ) : load.status === "loaded" ? (
         <LoadedTransactions data={load.data} options={options} />
       ) : null}
-    </>
+    </main>
   );
 }
