@@ -104,6 +104,16 @@ Otherwise run all steps in order.
 
 ## Steps
 
+**Track a `SKILL_SUBAGENTS` tally** (agent-maintained running count, NOT a shell
+variable — the steps below fork subagents as an agent-driven sequence, not a bash
+`for`-loop): initialize it to `0` before the first step that may fork a subagent.
+It counts the subagents **this skill body** forks directly — source (2) of the
+`subagents_launched` contract in `.claude/docs/outcome-envelope.md:132-144`. The
+Step-3.5 Workflow's own fan-out is tracked separately by
+`result.subagents_launched` and is added only when `result` is in scope. After
+each fork, increment `SKILL_SUBAGENTS` immediately per the increment notes at each
+fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7).
+
 0. **Target resolution.**
 
    `/qa-fix` operates in place — the **current worktree dictates the target**.
@@ -137,7 +147,9 @@ Otherwise run all steps in order.
    canonical fork recipe `/implement-unit` Step 2 documents (`subagent_type` is
    `general-purpose`, never the skill name). This invocation runs with no pending
    working-tree changes — `/commit-merge-push` tolerates that and creates no
-   commit. If the script exits 3 (merge conflict) or the fork reports a merge
+   commit. If the fallback fork is spawned, increment `SKILL_SUBAGENTS` by 1 —
+   only on the fork path; do **not** increment on the exit-0 (script-only) path.
+   If the script exits 3 (merge conflict) or the fork reports a merge
    conflict, escalate to office-hours per the **Escalation** section and stop — do
    not begin the QA walkthrough.
 
@@ -257,6 +269,9 @@ Otherwise run all steps in order.
           or a "does this look right" call. **Not** walked here; recorded as
           deferred-to-office-hours and is a user-input blocker (see terminal
           disposition). Carries no `Command`.
+
+   After the triage subagent returns, increment `SKILL_SUBAGENTS` by 1 (the one
+   bounded Opus triage fork always runs).
 
    Step 3 parses this returned list and routes each item by its `Classification`
    value (and, for `script-verifiable`, by its `Command` shape) into one of three
@@ -642,7 +657,13 @@ Otherwise run all steps in order.
       d. Returns `<followup-N>` mapped to its `identifier`.
 
    4. **Capture** each filed-or-existing `<followup-N>` against its `identifier` for
-      the Step 4 filed-follow-ups sub-list.
+      the Step 4 filed-follow-ups sub-list. Increment `SKILL_SUBAGENTS` by the
+      number of **filing subagents forked** in sub-step 3 — i.e. the number of
+      emitted `{identifier, title, body}` follow-up items, counting *every* forked
+      subagent including those for already-tracked items (whose subagent still runs
+      the `dispatch-followup-exists` existence check). This is the FORKED count, a
+      distinct number from `--followups-filed` (which counts only newly-filed
+      items): the two diverge whenever an item was already-tracked.
 
    The needs-main filing is **idempotent** (guarded per-identifier by
    `dispatch-followup-exists`), so it is safe to run on every pass — including a
@@ -728,6 +749,13 @@ Otherwise run all steps in order.
       envelope call, below — replacing the planned `units.length` with the count of
       resolved opus-fixable findings).
 
+      **Also increment `SKILL_SUBAGENTS` by 1 after EACH `/implement-unit`
+      invocation**, regardless of whether the unit landed a commit — every
+      invocation is a spawn. Keep this distinct from `fixes_applied_count`, which
+      increments only on a landed commit: an invocation that errors, dies, or
+      returns without a landed commit still bumps `SKILL_SUBAGENTS` (it forked) but
+      does **not** bump `fixes_applied_count`.
+
       **If `fixes_applied_count == 0` after the loop** (no opus-fixable finding was
       resolved this pass — either no unit landed a commit, or the landed units
       collectively resolved zero findings), do **NOT** continue down this fix
@@ -767,9 +795,12 @@ Otherwise run all steps in order.
       - `--followups-filed` = the count of `needs-main` follow-ups Step 3.6 actually
         filed this pass (newly-filed only, not already-tracked); `0` if Step 3.6 did
         not run.
-      - `--subagents-launched` = `result.subagents_launched` (Workflow fan-out)
-        **plus** the Step-2b Opus triage subagent (always +1) **plus** the Step-3.6
-        filing subagents spawned **plus** the Step-3.7 `/implement-unit` invocations.
+      - `--subagents-launched` = `SKILL_SUBAGENTS + result.subagents_launched`.
+        `result` is always in scope on the fix finalize path (it runs after Step
+        3.5), so add the Workflow's own fan-out (`result.subagents_launched`) to the
+        skill-body tally. `SKILL_SUBAGENTS` already counts every skill-body fork
+        this pass — the Step-2b triage, any Step-0.5 fallback fork, the Step-3.6
+        filing subagents, and the Step-3.7 `/implement-unit` invocations.
 
       qa-fix keeps **no** merge base (Step 1 runs only a name-only
       `git diff origin/main...HEAD`), so **omit** `--base-sha` (it serializes as
@@ -782,7 +813,7 @@ Otherwise run all steps in order.
         --findings-actionable <result.findings_actionable> \
         --fixes-applied <fixes_applied_count> \
         --followups-filed <count of needs-main follow-ups Step 3.6 newly filed> \
-        --subagents-launched <result.subagents_launched + 1 (Step-2b triage) + Step-3.6 filing subagents + Step-3.7 /implement-unit invocations> \
+        --subagents-launched <SKILL_SUBAGENTS + result.subagents_launched> \
         --disposition completed_with_fixes
       ```
    6. **STOP.**
@@ -1021,12 +1052,14 @@ Otherwise run all steps in order.
    - **Step 3.5 ran** (clean pass via only-`needs-main` or only-`already-satisfied`
      residue): use `result.findings_surfaced` / `result.findings_actionable`;
      `--followups-filed` = the Step-3.6 newly-filed count (`0` if Step 3.6 did not
-     run); `--subagents-launched` = `result.subagents_launched` + 1 (Step-2b triage)
-     + any Step-3.6 filing subagents.
+     run); `--subagents-launched` = `SKILL_SUBAGENTS + result.subagents_launched`
+     (`SKILL_SUBAGENTS` already counts the Step-2b triage and any Step-3.6 filing
+     subagents).
    - **Step 3.5 was skipped** (the common clean pass — residue list was empty, so
      `result` is absent): pass `--findings-surfaced 0 --findings-actionable 0
-     --followups-filed 0` and `--subagents-launched 1` (only the Step-2b Opus triage
-     subagent ran).
+     --followups-filed 0` and `--subagents-launched <SKILL_SUBAGENTS>` (typically
+     just the Step-2b Opus triage subagent — `result` is absent, so no Workflow
+     fan-out is added).
 
    qa-fix keeps **no** merge base, so **omit** `--base-sha`. Derive `repo` from the
    local remote (read-only git, sandbox-safe):
@@ -1039,7 +1072,7 @@ Otherwise run all steps in order.
      --findings-actionable <result.findings_actionable, or 0 if Step 3.5 was skipped> \
      --fixes-applied 0 \
      --followups-filed <Step-3.6 newly-filed count, or 0> \
-     --subagents-launched <result.subagents_launched + 1 + Step-3.6 subagents when Step 3.5 ran; else 1> \
+     --subagents-launched <SKILL_SUBAGENTS + result.subagents_launched when Step 3.5 ran; else SKILL_SUBAGENTS> \
      --disposition completed
    ```
 
@@ -1105,15 +1138,22 @@ differ in whether the Step-3.5 Workflow ran — source the counts accordingly:
   scope. Use
   `result.findings_surfaced` / `result.findings_actionable`; `fixes-applied 0` and
   `followups-filed` = the Step-3.6 newly-filed count (the escalate path applied no
-  fixes); `subagents-launched` = `result.subagents_launched` + 1 (Step-2b triage)
-  + any Step-3.6 filing subagents.
+  fixes); `subagents-launched` = `SKILL_SUBAGENTS + result.subagents_launched`.
+  On the **fix-pass-landed-nothing** escalate, `SKILL_SUBAGENTS` includes the `k`
+  `/implement-unit` invocations the loop forked this pass (`+ k`) — the faithful
+  counter reports them even though no unit landed; this is a correction over the
+  old Step-3.5-ran escalation formula, which had no Step-3.7 term.
 - **An early blocker before Step 3.5** (Step 0.5 merge conflict, Step 1 multi-app,
   Step 3 malformed/empty plan, Step 3b acceptance fail, Step 3c Chrome
   unavailable) — `result` is **absent**. Pass `--findings-surfaced 0
   --findings-actionable 0 --fixes-applied 0 --followups-filed 0` and
-  `--subagents-launched <1 if the Step-2b triage subagent had already been spawned
-  before the blocker fired, else 0>` (Step 0.5 / Step 1 blockers fire before Step
-  2, so 0; a Step 3/3b/3c blocker fires after, so 1).
+  `--subagents-launched <SKILL_SUBAGENTS>`. The counter reports exactly what was
+  forked before the blocker: a Step 0.5 / Step 1 blocker that forked nothing yields
+  `0`; a Step 3/3b/3c blocker fires after the Step-2b triage forked, yielding `1`.
+  Note the **Step 0.5 fork-then-conflict** case: when the Step 0.5 fallback fork
+  was taken and *then* hit a merge conflict, `SKILL_SUBAGENTS` is `1`, because the
+  fallback fork ran before the conflict — a correction over the old rule, which
+  reported `0`.
 
 qa-fix keeps **no** merge base, so **omit** `--base-sha`. Derive `repo` from the
 local remote (read-only git, sandbox-safe):
@@ -1126,7 +1166,7 @@ REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
   --findings-actionable <result.findings_actionable, or 0 if Step 3.5 did not run> \
   --fixes-applied 0 \
   --followups-filed <Step-3.6 newly-filed count, or 0> \
-  --subagents-launched <result.subagents_launched + 1 + Step-3.6 filing subagents when Step 3.5 ran; else 0 or 1 per the early-blocker rule above> \
+  --subagents-launched <SKILL_SUBAGENTS + result.subagents_launched when Step 3.5 ran; else SKILL_SUBAGENTS> \
   --disposition escalated \
   --terminated-reason "<the same tailored reason string passed to dispatch-mark-deviation>"
 ```
