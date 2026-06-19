@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool: surface-conditional finders (code-review, review, security domain reviewers) in parallel → code dedup → classify → adversarial-verify (Required findings refuted by 2 skeptics before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
+description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool: surface-conditional finders (code-review, review, security domain reviewers) in parallel → code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
 ---
 
 # Review and Fix
@@ -138,7 +138,8 @@ of diff size.
 
 - `surface` is `empty` (no changed files), `docs` (every changed path is
   documentation — markdown/text/license, no executable, config, dependency, or
-  rules surface), or `code` (anything else).
+  rules surface), `tests` (every changed path is a test file — no production
+  source, config, dependency, or rules surface), or `code` (anything else).
 - `deps` is `true` when the diff touches `package.json` / `package-lock.json`.
 - `app_or_rules` is `true` when the diff touches application source
   (`.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs`/`.go` outside `.claude/`) or a
@@ -146,6 +147,7 @@ of diff size.
 
 Set `security_note` for the Workflow `args`:
 - `surface=docs`: `Security review: no attack surface — docs-only diff (no executable, config, dependency, or Firestore-rules changes).`
+- `surface=tests`: `Security review: no attack surface — test-only diff (every changed path is a test file).`
 - `surface=empty`: `Security review: no attack surface — diff is empty (no changed files detected).`
 - `surface=code`: omit `security_note` (leave it unset).
 
@@ -230,12 +232,12 @@ args = {
   pr_num:              <PR_NUM>,
   merge_base:          <MERGE_BASE>,
   changed_files:       [ ...the changed-file list from the pack's === DIFF section (same list dispatch-changed-files extracts)... ],
-  surface:             "empty" | "docs" | "code",
+  surface:             "empty" | "docs" | "tests" | "code",
   deps:                <true|false>,
   app_or_rules:        <true|false>,
   prescanned_findings: [ ...normalized CodeQL + npm findings in Per-finding schema... ],
   implementing_issues: [ <N>, ... ],    // parsed from Closes #N lines; [] if none
-  security_note:       <string or omit> // set for empty/docs; omit for code
+  security_note:       <string or omit> // set for empty/docs/tests; omit for code
 }
 ```
 
@@ -252,6 +254,8 @@ result = {
   security_followup_input: [ ...codeql/npm out-of-scope subset... ],
   verify_report:        [ {id, location, verdict, skeptic_votes, rationale} ],
   deviation:            <bool>,
+  coverage_incomplete:  <bool>,
+  coverage_note?:       <string>,
   security_note?:       <string>
 }
 ```
@@ -488,8 +492,11 @@ stands in for the security buckets):
 
 If a security reviewer or inline scan could not run (re-launch / retry exhausted),
 note partial coverage here — name the reviewer or scan whose domain could not be
-reviewed. If every bucket is empty and there was no security note, the comment is
-still well-formed (render empty buckets as `_None._`).
+reviewed. When `result.coverage_incomplete` is true, include `result.coverage_note`
+in this partial-coverage line (the probe-wave skipped the security finders because
+both quality finders died — the model was likely throttled). If every bucket is
+empty and there was no security note, the comment is still well-formed (render
+empty buckets as `_None._`).
 
 Then post it (use `dangerouslyDisableSandbox: true` — the script invokes `gh`):
 
@@ -662,10 +669,10 @@ through to the unified set — has these fields:
 
 ## Edge cases
 
-- **Empty or docs-only diff** — `surface` is `empty` or `docs`; the Workflow
-  launches no security finders and no security agents. The code-review and review
-  agents still run. The skill still applies `dispatch:reviewed` and writes the
-  marker.
+- **Empty, docs-only, or test-only diff** — `surface` is `empty`, `docs`, or
+  `tests`; the Workflow launches no security finders and no security agents. The
+  code-review and review agents still run. The skill still applies
+  `dispatch:reviewed` and writes the marker.
 - **A finder finds nothing** — record that source as clean; it contributes no
   findings to the Workflow.
 - **A finder agent fails** — the Workflow retries once. If it fails again, partial
@@ -705,3 +712,21 @@ claude-sonnet-4-6`). The model tiering is now owned by the Workflow's per-`agent
 Opus fix agents** (`model: opus`) write all working-tree changes. Fix-authoring is
 pinned to Opus **exactly once** in the Workflow's fix phase — there is no
 double-tiering. The orchestrator (this skill) authors no product code.
+
+**Probe-wave throttle short-circuit (#1857).** On a `code` surface the Workflow
+splits the finder fan-out into two waves instead of one barrier. Wave 1 launches
+only the two always-on quality finders (`code-review`, `review`) — real review
+work that runs on every surface — and doubles them as a throttle probe. If **both**
+return `null` (a strong outage signal — far more robust than a single flake), the
+Workflow skips the security finder wave entirely rather than waste those launches
+on a throttled model, and sets `result.coverage_incomplete = true` with a human
+`result.coverage_note` (surfaced in the Step 6 partial-coverage line). Otherwise
+wave 2 launches the surface-gated security finders. On `empty`/`docs`/`tests`
+surfaces there are no security finders, so this degenerates to a single wave (no
+change). **Marker/label behavior is intentionally unchanged:** a throttled run
+still applies `dispatch:reviewed` and writes the marker — this matches today's
+behavior when all finders return `null`, producing a degraded quality-only review.
+This is a launch-efficiency change only; genuine worker *death* on a transient
+rate-limit (and its backed-off resume) remains #1733's responsibility via the Stop
+hook, not this gate. `coverage_incomplete` is independent of the `deviation`
+criterion.
