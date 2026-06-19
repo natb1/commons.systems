@@ -6791,11 +6791,13 @@ cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
 #!/usr/bin/env bash
 cf="$NPX_COUNT_FILE"
 c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+[[ -n "${NPX_ARGS_FILE:-}" ]] && echo "$@" >> "$NPX_ARGS_FILE"
 exit "${NPX_EXIT:-0}"
 FAKE
 chmod +x "$TMPDIR_TEST/bin/npx"
 cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
 #!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
 while [[ "$1" == -* ]]; do shift; done
 shift
 exec "$@"
@@ -6807,16 +6809,24 @@ exit 0
 FAKE
 chmod +x "$TMPDIR_TEST/bin/sleep"
 NPX_COUNT_FILE="$TMPDIR_TEST/npx-2"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-2.log"
+NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-2"
 rc=0
 (
   source "$TMPDIR_TEST/lib.sh"
   unset PLAYWRIGHT_BROWSERS_PATH
   export NPX_EXIT=0
   export NPX_COUNT_FILE="$TMPDIR_TEST/npx-2"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-2.log"
+  export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-2"
   playwright_install_with_deps
 ) || rc=$?
 assert_eq "first-attempt success → rc 0" "0" "$rc"
 assert_eq "first-attempt success → 1 npx call" "1" "$(cat "$NPX_COUNT_FILE")"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
+assert_eq "first-attempt success → timeout invoked" "nonempty" "$timeout_calls"
+assert_eq "first-attempt success → npx args" \
+  "playwright install --with-deps chromium" "$(cat "$NPX_ARGS_FILE")"
 teardown
 
 # 3. Both attempts fail: npx exits 1 twice → rc non-zero, exactly 2 npx calls.
@@ -6831,6 +6841,7 @@ FAKE
 chmod +x "$TMPDIR_TEST/bin/npx"
 cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
 #!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
 while [[ "$1" == -* ]]; do shift; done
 shift
 exec "$@"
@@ -6842,6 +6853,7 @@ exit 0
 FAKE
 chmod +x "$TMPDIR_TEST/bin/sleep"
 NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-3.log"
 rc=0
 (
   source "$TMPDIR_TEST/lib.sh"
@@ -6849,11 +6861,14 @@ rc=0
   export NPX_EXIT=1
   export PLAYWRIGHT_INSTALL_ATTEMPTS=2
   export NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-3.log"
   playwright_install_with_deps 2>/dev/null
 ) || rc=$?
 [[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
 assert_eq "both-attempts fail → rc non-zero" "nonzero" "$rc_state"
 assert_eq "both-attempts fail → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
+assert_eq "both attempts fail → timeout invoked" "nonempty" "$timeout_calls"
 teardown
 
 # 4. First attempt fails, second succeeds: npx exits 1 then 0 → rc 0, 2 npx calls.
@@ -6869,6 +6884,7 @@ FAKE
 chmod +x "$TMPDIR_TEST/bin/npx"
 cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
 #!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
 while [[ "$1" == -* ]]; do shift; done
 shift
 exec "$@"
@@ -6880,16 +6896,20 @@ exit 0
 FAKE
 chmod +x "$TMPDIR_TEST/bin/sleep"
 NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-4.log"
 rc=0
 (
   source "$TMPDIR_TEST/lib.sh"
   unset PLAYWRIGHT_BROWSERS_PATH
   export PLAYWRIGHT_INSTALL_ATTEMPTS=2
   export NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-4.log"
   playwright_install_with_deps 2>/dev/null
 ) || rc=$?
 assert_eq "first-fails-then-succeeds → rc 0" "0" "$rc"
 assert_eq "first-fails-then-succeeds → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
+assert_eq "first fails then succeeds → timeout invoked" "nonempty" "$timeout_calls"
 teardown
 
 # ============================================================================
