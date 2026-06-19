@@ -14,9 +14,11 @@ import { renderAuditAggregateChart } from "../audit-aggregate-chart.js";
 
 export interface AuditPanelProps {
   aggregates: AuditAggregate[];
+  /** Extra class(es) for the panel root (Dashboard threads "panel-grid-full"). */
+  className?: string;
 }
 
-export function AuditPanel({ aggregates }: AuditPanelProps) {
+export function AuditPanel({ aggregates, className }: AuditPanelProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -28,5 +30,5 @@ export function AuditPanel({ aggregates }: AuditPanelProps) {
     };
   }, [aggregates]);
 
-  return <div ref={ref} />;
+  return <div ref={ref} className={className} />;
 }

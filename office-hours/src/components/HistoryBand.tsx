@@ -17,6 +17,13 @@ import { renderWorkerHistoryChart } from "../worker-history-chart.js";
 
 export interface HistoryBandProps {
   samples: UsageSample[];
+  /**
+   * Extra class(es) for the panel root. Dashboard threads "panel-grid-full"
+   * here so the class lands on this section — the direct grid child — exactly
+   * as the vanilla buildPanelElement did with `el.classList.add`. This keeps
+   * the `.panel-grid > .capacity-history` margin-zeroing selector matching.
+   */
+  className?: string;
 }
 
 /** Mounts an imperative chart core (samples -> HTMLElement) into a ref'd div. */
@@ -50,9 +57,9 @@ function ChartIsland({
  * chart over the full usage-samples time series. Each chart is an imperative
  * Observable Plot island; empty-state is delegated to the cores.
  */
-export function HistoryBand({ samples }: HistoryBandProps) {
+export function HistoryBand({ samples, className }: HistoryBandProps) {
   return (
-    <section className="capacity-history">
+    <section className={className ? `capacity-history ${className}` : "capacity-history"}>
       <h2 className="capacity-history-heading">HISTORY</h2>
       <ChartIsland samples={samples} build={renderUsageHistoryChart} />
       <ChartIsland samples={samples} build={renderWorkerHistoryChart} />

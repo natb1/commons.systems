@@ -13,9 +13,11 @@ import { renderIssueHistoryChart } from "../issue-history-chart.js";
 
 export interface BacklogPanelProps {
   samples: IssueSample[];
+  /** Extra class(es) for the panel root (Dashboard threads "panel-grid-full"). */
+  className?: string;
 }
 
-export function BacklogPanel({ samples }: BacklogPanelProps) {
+export function BacklogPanel({ samples, className }: BacklogPanelProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -27,5 +29,5 @@ export function BacklogPanel({ samples }: BacklogPanelProps) {
     };
   }, [samples]);
 
-  return <div ref={ref} />;
+  return <div ref={ref} className={className} />;
 }
