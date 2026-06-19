@@ -8381,6 +8381,16 @@ sweep_setup() {
   cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/scripts/lib-worktree-in-sync.sh"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
   cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/scripts/lib-reservation-ledger.sh"
+  # dispatch-sweep sources lib-worktree-reap.sh (marker ledger + quarantine) from
+  # its SCRIPT_DIR — required for the not-in-sync reap path.
+  cp "$SCRIPT_DIR/lib-worktree-reap.sh" "$TMPDIR_TEST/scripts/lib-worktree-reap.sh"
+  # dispatch-sweep resolves the grace window by shelling out to dispatch-config-load
+  # ("$SCRIPT_DIR/dispatch-config-load" sweep). Without this copy the binary is
+  # absent, the call exits non-zero, and the whole config branch (config-file
+  # present / field present / field absent) is never exercised — the env-override
+  # path silently masks it. Copy it so tests can exercise the config precedence.
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-config-load"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
 
   # Default empty worktree list (each test should overwrite with its records).
@@ -8472,6 +8482,32 @@ if [[ "${1:-}" == "-C" ]]; then
       if [[ -f "$f" ]]; then cat "$f"; else exit 1; fi
       exit 0
       ;;
+    "format-patch origin/main..HEAD -o "*)
+      # reap_quarantine committed-divergence capture. SWEEP_FORMAT_PATCH_FAIL
+      # forces a failure (quarantine-abort test). Zero patches written is fine
+      # (the lib treats 0 patches as success); the -o dest already exists.
+      if [[ -n "${SWEEP_FORMAT_PATCH_FAIL:-}" ]]; then
+        echo "git -C stub: simulated format-patch failure" >&2
+        exit 1
+      fi
+      exit 0
+      ;;
+    "diff HEAD")
+      # reap_quarantine uncommitted-tracked capture → working-tree.patch. Emit a
+      # real diff body so the captured patch is non-empty when a fixture exists.
+      key=$(echo "$ctx_path" | tr '/' '_')
+      f="$STUB_DIR/wtdiff${key}.txt"
+      [[ -f "$f" ]] && cat "$f"
+      exit 0
+      ;;
+    "ls-files --others --exclude-standard")
+      # reap_quarantine untracked-files capture. The fixture lists relative paths;
+      # the lib cp -p's each REAL file from the worktree into untracked/.
+      key=$(echo "$ctx_path" | tr '/' '_')
+      f="$STUB_DIR/untracked${key}.txt"
+      [[ -f "$f" ]] && cat "$f"
+      exit 0
+      ;;
     *)
       echo "git -C stub: unknown invocation: -C $ctx_path $sub $rest" >&2
       exit 1
@@ -8532,6 +8568,14 @@ FAKE
   # marker files, so reservation_exists is false for every row and the
   # reserved-skip is inert. A reserved-skip test opts in by creating a marker here.
   export DISPATCH_RESERVATION_DIR="$STUB_DIR/reservations"
+  # dispatch-sweep's grace-resolution shells out to dispatch-config-load, which
+  # reads DISPATCH_CONFIG_DIR. Point it at an EMPTY dir by default: with no
+  # sweep.json present the loader prints "no-config", so dispatch-sweep falls
+  # through to the env override (DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S) / baked
+  # default — exactly the behavior every existing env-override test relies on. A
+  # config-path test opts in by writing sweep.json into this dir.
+  mkdir -p "$STUB_DIR/config"
+  export DISPATCH_CONFIG_DIR="$STUB_DIR/config"
 }
 
 sweep_teardown() {
@@ -8540,6 +8584,10 @@ sweep_teardown() {
   STUB_DIR=""
   export PATH="$SAVED_PATH"
   unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR GH_RETRY_BASE_DELAY SWEEP_GH_PR_FAIL SWEEP_GH_ISSUE_FAIL
+  # DISPATCH_CONFIG_DIR is sweep-local — never leak it into later non-sweep tests.
+  unset DISPATCH_CONFIG_DIR
+  # Not-in-sync reap seams — never leak the epoch/grace/fail toggles across tests.
+  unset DISPATCH_SWEEP_NOW_EPOCH DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S SWEEP_FORMAT_PATCH_FAIL
 }
 
 # Helper: register a worktree in the porcelain list AND create its directory.
@@ -9188,6 +9236,669 @@ else
   echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
 unset SWEEP_GH_PR_FAIL
+sweep_teardown
+
+# ============================================================================
+# Age-gated not-in-sync reap tests (#2026)
+# ============================================================================
+#
+# A merged/closed worktree that is NOT in sync is skipped on first observation
+# (a write-once marker starts the grace clock), kept while age < grace, then
+# QUARANTINED + force-reaped once age >= grace. AC3: a live session or a
+# reservation short-circuits before the reap path is ever reached. AC2: the
+# divergence is captured under the RUNNER root and survives the worktree removal;
+# a quarantine failure ABORTS the reap (worktree left intact).
+#
+# Determinism: AGE is driven purely by DISPATCH_SWEEP_NOW_EPOCH (epoch seconds,
+# distinct from the ISO DISPATCH_SWEEP_NOW used for log timestamps) and GRACE by
+# DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S — never wall-clock. Marker stamp = NOW_EPOCH
+# of the sweep that first records it; reap requires NOW_EPOCH - stamp >= grace.
+
+# --- Test N1 (merged): TWO-SWEEP marker-then-reap ----------------------------
+# THE load-bearing case (guards the inert-feature trap): sweep #1 only records the
+# marker + SKIPs; a LATER sweep past grace REAPs. Two real sweep invocations share
+# the same marker dir — a refresh-every-sweep bug would reset the clock and never
+# reap. Marker stamp=1000, grace=100; an intermediate sweep at 1050 (age 50 < 100)
+# must still SKIP and must NOT have refreshed the stamp; the final sweep at 1300
+# (age 300 >= 100) REAPs.
+echo "Test: N1 merged not-in-sync — sweep records marker, later sweep past grace reaps"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+WT_PATH="$TMPDIR_TEST/project/worktrees/2100-merged-dirty"
+WT_BASE="2100-merged-dirty"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2100}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+# Not-in-sync: dirty tree (drives worktree_merged_in_sync to non-zero).
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+
+# Sweep #1 at epoch 1000 — first observation: record marker + SKIP, no removal.
+export DISPATCH_SWEEP_NOW_EPOCH=1000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N1 sweep#1 exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ -f "$MARKER" ]] && [[ "$(cat "$MARKER")" == "1000" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#1 wrote marker stamped 1000"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#1 wrote marker stamped 1000 (got: $(cat "$MARKER" 2>/dev/null))"
+fi
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#1 no removal"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#1 no removal"; echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2100 (grace clock started)" \
+   "$DISPATCH_SWEEP_LOG_FILE" && ! grep -q "REAP_MERGED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#1 logged SKIP (grace clock started), no REAP"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#1 logged SKIP (grace clock started), no REAP"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+
+# Intermediate sweep #1b at epoch 1050 — age 50 < 100: still SKIP, marker UNCHANGED
+# (write-once: a refresh would reset the stamp to 1050 and the reap never fires).
+export DISPATCH_SWEEP_NOW_EPOCH=1050
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N1 sweep#1b exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$(cat "$MARKER")" == "1000" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#1b marker NOT refreshed (still 1000)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#1b marker NOT refreshed (got: $(cat "$MARKER" 2>/dev/null))"
+fi
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" && ! grep -q "REAP_MERGED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#1b within-grace, no removal, no REAP"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#1b within-grace, no removal, no REAP"; echo "    calls: $calls"
+fi
+
+# Sweep #2 at epoch 1300 — age 300 >= 100: quarantine + force-reap.
+export DISPATCH_SWEEP_NOW_EPOCH=1300
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N1 sweep#2 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH"; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#2 force-removed the aged-out worktree"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#2 force-removed the aged-out worktree"; echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "branch-D:$WT_BASE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#2 deleted the branch"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#2 deleted the branch"; echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "REAP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2100 age_seconds=300 grace_seconds=100 quarantine=" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#2 logged REAP_MERGED_NOT_IN_SYNC with age/grace/quarantine"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#2 logged REAP_MERGED_NOT_IN_SYNC with age/grace/quarantine"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+# Marker cleared after a successful reap.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$MARKER" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#2 cleared the marker after reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#2 cleared the marker after reap"
+fi
+sweep_teardown
+
+# --- Test N1c (closed): TWO-SWEEP marker-then-reap ---------------------------
+echo "Test: N1c closed not-in-sync — sweep records marker, later sweep past grace reaps"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+WT_PATH="$TMPDIR_TEST/project/worktrees/2101-closed-dirty"
+WT_BASE="2101-closed-dirty"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+# No pr-state fixture → issue path; issue CLOSED.
+echo "CLOSED" > "$STUB_DIR/issue-state-2101.txt"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+
+# Sweep #1 at epoch 1000.
+export DISPATCH_SWEEP_NOW_EPOCH=1000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N1c sweep#1 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$(cat "$MARKER" 2>/dev/null)" == "1000" ]] && ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_CLOSED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE issue=#2101 (grace clock started)" \
+   "$DISPATCH_SWEEP_LOG_FILE" && ! grep -q "REAP_CLOSED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N1c sweep#1 recorded marker + SKIP (grace clock started), no reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1c sweep#1 recorded marker + SKIP (grace clock started), no reap"
+  echo "    marker: $(cat "$MARKER" 2>/dev/null)  calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+
+# Sweep #2 at epoch 1300 — reap.
+export DISPATCH_SWEEP_NOW_EPOCH=1300
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N1c sweep#2 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH" \
+   && grep -q "REAP_CLOSED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE issue=#2101 age_seconds=300 grace_seconds=100 quarantine=" \
+   "$DISPATCH_SWEEP_LOG_FILE" && [[ ! -e "$MARKER" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N1c sweep#2 force-reaped, logged REAP_CLOSED_NOT_IN_SYNC, marker cleared"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1c sweep#2 force-reaped, logged REAP_CLOSED_NOT_IN_SYNC, marker cleared"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N2 (merged): WITHIN GRACE with marker already present → kept --------
+# Marker pre-exists (stamp 1000); sweep at 1050 → age 50 < grace 100 → SKIP with
+# age_seconds/grace_seconds fields, no removal, no REAP.
+echo "Test: N2 merged not-in-sync within grace (marker present) → kept"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+WT_PATH="$TMPDIR_TEST/project/worktrees/2200-merged-young"
+WT_BASE="2200-merged-young"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2200}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+# Pre-seed the marker (write-once already happened on a prior sweep).
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+export DISPATCH_SWEEP_NOW_EPOCH=1050
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N2 sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" && ! grep -q "REAP_MERGED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N2 within grace — no removal, no REAP"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N2 within grace — no removal, no REAP"; echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2200 age_seconds=50 grace_seconds=100" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N2 logged SKIP with age_seconds=50 grace_seconds=100"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N2 logged SKIP with age_seconds=50 grace_seconds=100"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N2c (closed): WITHIN GRACE with marker present → kept --------------
+echo "Test: N2c closed not-in-sync within grace (marker present) → kept"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+WT_PATH="$TMPDIR_TEST/project/worktrees/2201-closed-young"
+WT_BASE="2201-closed-young"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo "CLOSED" > "$STUB_DIR/issue-state-2201.txt"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+export DISPATCH_SWEEP_NOW_EPOCH=1050
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N2c sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_CLOSED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE issue=#2201 age_seconds=50 grace_seconds=100" \
+   "$DISPATCH_SWEEP_LOG_FILE" && ! grep -q "REAP_CLOSED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N2c within grace — SKIP with age/grace fields, no reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N2c within grace — SKIP with age/grace fields, no reap"; echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N3a (merged): past grace + LIVE SESSION → reap never reached --------
+# AC3 by construction: the live-session guard precedes the not-in-sync decision,
+# so a past-grace worktree with a live session logs the live-session skip and
+# NEVER reaches reap_or_skip_not_in_sync (no marker recorded, no REAP).
+echo "Test: N3a merged past-grace with a live session → live-session skip, no reap"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+export DISPATCH_SWEEP_NOW_EPOCH=99999
+WT_PATH="$TMPDIR_TEST/project/worktrees/2300-merged-live"
+WT_BASE="2300-merged-live"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2300}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+# Pre-seed an aged-out marker so ONLY the live-session guard prevents the reap.
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+sweep_fake_claude_sessions_by_name "$WT_BASE=sess-live-2300"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N3a sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_MERGED_LIVE_SESSION: '$WT_PATH' branch=$WT_BASE pr=#2300" "$DISPATCH_SWEEP_LOG_FILE" \
+   && ! grep -q "REAP_MERGED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N3a live-session skip logged, no removal, no REAP"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N3a live-session skip logged, no removal, no REAP"; echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N3b (closed): past grace + RESERVATION → reap never reached ---------
+# The loop-top reservation guard precedes everything, so a reserved past-grace
+# worktree logs SKIP_RESERVED and never reaches the not-in-sync decision.
+echo "Test: N3b closed past-grace with a reservation → SKIP_RESERVED, no reap"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+export DISPATCH_SWEEP_NOW_EPOCH=99999
+WT_PATH="$TMPDIR_TEST/project/worktrees/2301-closed-reserved"
+WT_BASE="2301-closed-reserved"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo "CLOSED" > "$STUB_DIR/issue-state-2301.txt"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv\nissue=2301\ntimestamp=2026-01-01T00:00:00Z\n' \
+  > "$DISPATCH_RESERVATION_DIR/$WT_BASE"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N3b sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_RESERVED: '$WT_PATH' branch=$WT_BASE" "$DISPATCH_SWEEP_LOG_FILE" \
+   && ! grep -q "REAP_CLOSED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N3b SKIP_RESERVED logged, no removal, no REAP"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N3b SKIP_RESERVED logged, no removal, no REAP"; echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N4a (merged): quarantine captures the real divergence + survives removal
+# AC2: on a successful reap the quarantine holds the REAL divergence (untracked
+# file body + non-empty working-tree.patch), under the RUNNER root, and SURVIVES
+# the worktree removal. The dest path is deterministic (suffixed with NOW_EPOCH),
+# so derive it directly. The git stub's worktree-remove is a no-op, so simulate
+# the real force-remove with rm -rf BEFORE the survives-removal assertion: if the
+# quarantine had been co-located inside the worktree, that rm would take it too.
+echo "Test: N4a merged reap quarantine captures real divergence + survives worktree removal"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+export DISPATCH_SWEEP_NOW_EPOCH=5000
+WT_PATH="$TMPDIR_TEST/project/worktrees/2400-merged-quarantine"
+WT_BASE="2400-merged-quarantine"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2400}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+# Aged-out marker (age 5000-1000=4000 >= 100).
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+# Real untracked file in the worktree + a fixture listing it (lib cp -p's it).
+echo "UNTRACKED-BODY-2400" > "$WT_PATH/residue.txt"
+echo "residue.txt" > "$STUB_DIR/untracked${key}.txt"
+# Non-empty working-tree diff fixture.
+printf 'diff --git a/tracked.txt b/tracked.txt\n+dirty-edit-2400\n' > "$STUB_DIR/wtdiff${key}.txt"
+# Deterministic dest: <root>/tmp/dispatch-sweep-quarantine/<base>-<NOW_EPOCH>.
+DEST="$TMPDIR_TEST/project/tmp/dispatch-sweep-quarantine/$WT_BASE-5000"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N4a sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH" \
+   && grep -q "REAP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2400 .*quarantine='$DEST'" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N4a reaped + logged quarantine='$DEST'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N4a reaped + logged quarantine='$DEST'"; echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+# Simulate the real force-remove the stub elided.
+rm -rf "$WT_PATH"
+# Survives-removal + real content: untracked body captured, working-tree.patch non-empty.
+TOTAL=$((TOTAL + 1))
+if [[ -f "$DEST/untracked/residue.txt" ]] && grep -q "UNTRACKED-BODY-2400" "$DEST/untracked/residue.txt"; then
+  PASS=$((PASS + 1)); echo "  PASS: N4a untracked file body survives in quarantine after removal"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N4a untracked file body survives in quarantine after removal"
+  echo "    dest contents:"; ls -R "$DEST" 2>/dev/null | sed 's/^/      /'
+fi
+TOTAL=$((TOTAL + 1))
+if [[ -s "$DEST/working-tree.patch" ]] && grep -q "dirty-edit-2400" "$DEST/working-tree.patch"; then
+  PASS=$((PASS + 1)); echo "  PASS: N4a working-tree.patch is non-empty with the dirty edit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N4a working-tree.patch is non-empty with the dirty edit"
+fi
+sweep_teardown
+
+# --- Test N4a-fail (merged): quarantine failure ABORTS the reap --------------
+# Pre-create the quarantine root as a regular FILE so the lib's `mkdir -p "$dest"`
+# fails with ENOTDIR → quarantine error → reap aborts: worktree LEFT INTACT,
+# SKIP_*_QUARANTINE_FAILED logged, NO REAP, marker still present.
+echo "Test: N4a-fail merged quarantine failure aborts reap (worktree left intact)"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+export DISPATCH_SWEEP_NOW_EPOCH=5000
+WT_PATH="$TMPDIR_TEST/project/worktrees/2401-merged-qfail"
+WT_BASE="2401-merged-qfail"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2401}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+# Quarantine root is a regular file → mkdir -p of the dest under it fails (ENOTDIR).
+: > "$TMPDIR_TEST/project/tmp/dispatch-sweep-quarantine"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N4a-fail sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_MERGED_NOT_IN_SYNC_QUARANTINE_FAILED: '$WT_PATH' branch=$WT_BASE pr=#2401" \
+   "$DISPATCH_SWEEP_LOG_FILE" && ! grep -q "REAP_MERGED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE" \
+   && [[ -e "$MARKER" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N4a-fail aborted — no removal, QUARANTINE_FAILED logged, marker intact"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N4a-fail aborted — no removal, QUARANTINE_FAILED logged, marker intact"
+  echo "    calls: $calls  marker-exists: $([[ -e "$MARKER" ]] && echo yes || echo no)"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N4c (closed): quarantine captures real divergence + survives removal -
+echo "Test: N4c closed reap quarantine captures real divergence + survives worktree removal"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+export DISPATCH_SWEEP_NOW_EPOCH=5000
+WT_PATH="$TMPDIR_TEST/project/worktrees/2402-closed-quarantine"
+WT_BASE="2402-closed-quarantine"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo "CLOSED" > "$STUB_DIR/issue-state-2402.txt"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+echo "UNTRACKED-BODY-2402" > "$WT_PATH/residue.txt"
+echo "residue.txt" > "$STUB_DIR/untracked${key}.txt"
+printf 'diff --git a/tracked.txt b/tracked.txt\n+dirty-edit-2402\n' > "$STUB_DIR/wtdiff${key}.txt"
+DEST="$TMPDIR_TEST/project/tmp/dispatch-sweep-quarantine/$WT_BASE-5000"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N4c sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH" \
+   && grep -q "REAP_CLOSED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE issue=#2402 .*quarantine='$DEST'" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N4c reaped + logged quarantine='$DEST'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N4c reaped + logged quarantine='$DEST'"; echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+rm -rf "$WT_PATH"
+TOTAL=$((TOTAL + 1))
+if [[ -f "$DEST/untracked/residue.txt" ]] && grep -q "UNTRACKED-BODY-2402" "$DEST/untracked/residue.txt" \
+   && [[ -s "$DEST/working-tree.patch" ]] && grep -q "dirty-edit-2402" "$DEST/working-tree.patch"; then
+  PASS=$((PASS + 1)); echo "  PASS: N4c quarantine holds real divergence and survives removal"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N4c quarantine holds real divergence and survives removal"
+  echo "    dest contents:"; ls -R "$DEST" 2>/dev/null | sed 's/^/      /'
+fi
+sweep_teardown
+
+# --- Test N5a: marker cleared on a normal in-sync removal ---------------------
+# After REMOVE_MERGED / REMOVE_CLOSED_ISSUE (in-sync removal), any stale marker for
+# that basename is cleared so a future same-named worktree never inherits the
+# grace timestamp.
+echo "Test: N5a in-sync REMOVE_MERGED clears any stale not-in-sync marker"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/2500-merged-clean"
+WT_BASE="2500-merged-clean"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2500}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"          # clean
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+echo "0" > "$STUB_DIR/diffrc${key}.txt"   # tree identical → in-sync
+# A stale marker (e.g. from an earlier dirty observation before the tree was synced).
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N5a sweep exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q "REMOVE_MERGED: '$WT_PATH' branch=$WT_BASE pr=#2500" "$DISPATCH_SWEEP_LOG_FILE" \
+   && [[ ! -e "$MARKER" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N5a in-sync removal cleared the stale marker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N5a in-sync removal cleared the stale marker"
+  echo "    marker-exists: $([[ -e "$MARKER" ]] && echo yes || echo no)"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N5a-closed: marker cleared on a normal in-sync REMOVE_CLOSED_ISSUE ---
+echo "Test: N5a-closed in-sync REMOVE_CLOSED_ISSUE clears any stale not-in-sync marker"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/2501-closed-clean"
+WT_BASE="2501-closed-clean"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo "CLOSED" > "$STUB_DIR/issue-state-2501.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N5a-closed sweep exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q "REMOVE_CLOSED_ISSUE: '$WT_PATH' branch=$WT_BASE issue=#2501" "$DISPATCH_SWEEP_LOG_FILE" \
+   && [[ ! -e "$MARKER" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N5a-closed in-sync removal cleared the stale marker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N5a-closed in-sync removal cleared the stale marker"
+  echo "    marker-exists: $([[ -e "$MARKER" ]] && echo yes || echo no)"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N5b: vanished-worktree marker is GC'd ------------------------------
+# A marker whose basename is NOT in the registered WT_PATHS set is deleted by the
+# post-loop GC, with GC_NOT_IN_SYNC_MARKER logged — so a future same-named
+# worktree never inherits a stale grace timestamp. A registered worktree's own
+# marker (within grace) must be left untouched to prove GC targets only vanished ones.
+echo "Test: N5b vanished-worktree marker is GC'd (registered marker untouched)"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+export DISPATCH_SWEEP_NOW_EPOCH=1050
+# A registered, within-grace not-in-sync worktree keeps its marker.
+WT_PATH="$TMPDIR_TEST/project/worktrees/2600-live-marked"
+WT_BASE="2600-live-marked"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2600}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+KEPT_MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+# A marker for a basename that is NOT registered → must be GC'd.
+VANISHED="2699-vanished"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$VANISHED"
+VANISHED_MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$VANISHED"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N5b sweep exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$VANISHED_MARKER" ]] \
+   && grep -q "GC_NOT_IN_SYNC_MARKER: vanished worktree basename=$VANISHED" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N5b vanished marker deleted + GC_NOT_IN_SYNC_MARKER logged"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N5b vanished marker deleted + GC_NOT_IN_SYNC_MARKER logged"
+  echo "    vanished-exists: $([[ -e "$VANISHED_MARKER" ]] && echo yes || echo no)"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+TOTAL=$((TOTAL + 1))
+if [[ -e "$KEPT_MARKER" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N5b registered worktree's marker left intact"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N5b registered worktree's marker left intact"
+fi
+sweep_teardown
+
+# --- Config-precedence path (Finding 1): sweep.json grace flows through -------
+# The grace window resolves with precedence: sweep config notInSyncGraceSeconds →
+# env override → baked default. The sweep harness now copies dispatch-config-load
+# and points DISPATCH_CONFIG_DIR at an empty dir, so these tests exercise the
+# config-file branch end-to-end (it was previously masked: with the loader binary
+# absent the call failed and the env-override path silently handled everything).
+
+# --- Test N6a: sweep.json notInSyncGraceSeconds drives the reap decision ------
+# Config grace=100; marker stamped 1000; a sweep at 1300 (age 300 >= config 100)
+# REAPs. The baked default is 86400 and no env override is set — so a reap here
+# proves the CONFIG value (not the default) governed the decision, and the logged
+# grace_seconds=100 must echo the config value.
+echo "Test: N6a sweep.json notInSyncGraceSeconds governs the reap (config precedence)"
+sweep_setup
+printf '{"notInSyncGraceSeconds":100}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+WT_PATH="$TMPDIR_TEST/project/worktrees/2700-config-grace"
+WT_BASE="2700-config-grace"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2700}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+# Sweep #1 at 1000 records the marker (below config grace).
+export DISPATCH_SWEEP_NOW_EPOCH=1000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6a sweep#1 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$(cat "$MARKER" 2>/dev/null)" == "1000" ]] && ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: N6a sweep#1 recorded marker, no removal"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N6a sweep#1 recorded marker, no removal"; echo "    calls: $calls"
+fi
+# Sweep #2 at 1300 — age 300 >= config grace 100 → REAP. With the baked default
+# (86400) the worktree would still be kept; a reap proves config grace governed.
+export DISPATCH_SWEEP_NOW_EPOCH=1300
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6a sweep#2 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH" \
+   && grep -q "REAP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2700 age_seconds=300 grace_seconds=100 quarantine=" \
+      "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N6a config grace=100 reaped at age 300 (grace_seconds=100 logged)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N6a config grace=100 reaped at age 300 (grace_seconds=100 logged)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N6b: sweep.json present but field absent → env override wins --------
+# (Finding 1 regression.) A sweep.json that omits notInSyncGraceSeconds must NOT
+# pin the grace to the baked default — the lowest-precedence env override must
+# still fire. Config present-but-empty + env grace=100 + age 300 → REAP, logged
+# grace_seconds=100. PRE-FIX dispatch-sweep took the "!= no-config" branch,
+# found the field empty, and skipped the elif env branch entirely (grace stayed
+# 86400) → no reap → this test FAILS, proving it reproduces Finding 1.
+echo "Test: N6b sweep.json without the field falls through to the env override (Finding 1)"
+sweep_setup
+printf '{}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+WT_PATH="$TMPDIR_TEST/project/worktrees/2710-empty-config"
+WT_BASE="2710-empty-config"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2710}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+export DISPATCH_SWEEP_NOW_EPOCH=1000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6b sweep#1 exits 0" "0" "$rc"
+export DISPATCH_SWEEP_NOW_EPOCH=1300
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6b sweep#2 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH" \
+   && grep -q "REAP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2710 age_seconds=300 grace_seconds=100 quarantine=" \
+      "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N6b empty config + env grace=100 reaped at age 300 (env override fired)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N6b empty config + env grace=100 reaped at age 300 (env override fired)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N6c: sweep.json fractional grace is rejected, fallback used ---------
+# (Finding 2 regression, end-to-end through dispatch-sweep.) A fractional
+# notInSyncGraceSeconds (0.5) must NOT reach the bash `[[ "$age" -lt "$grace" ]]`
+# integer comparison (which would error and reap every not-in-sync worktree).
+# dispatch-config-load rejects the fractional value and exits non-zero; dispatch-sweep
+# folds the stderr, logs SWEEP_CONFIG_ERROR, and falls back to the env override
+# (grace=100 here) — so the worktree at age 300 still reaps via the env value, and
+# the run never crashes. PRE-FIX the loader accepted 0.5 (1.5|type=="number", >0),
+# dispatch-sweep set grace=0.5, and the integer compare errored → this test FAILS,
+# proving it reproduces Finding 2.
+echo "Test: N6c sweep.json fractional grace rejected by loader, env fallback governs (Finding 2)"
+sweep_setup
+printf '{"notInSyncGraceSeconds":0.5}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+WT_PATH="$TMPDIR_TEST/project/worktrees/2720-frac-config"
+WT_BASE="2720-frac-config"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2720}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+export DISPATCH_SWEEP_NOW_EPOCH=1000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6c sweep#1 exits 0 (no arithmetic crash on fractional config)" "0" "$rc"
+export DISPATCH_SWEEP_NOW_EPOCH=1300
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6c sweep#2 exits 0 (no arithmetic crash on fractional config)" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH" \
+   && grep -q "REAP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2720 age_seconds=300 grace_seconds=100 quarantine=" \
+      "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N6c fractional config rejected, env grace=100 governed the reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N6c fractional config rejected, env grace=100 governed the reap"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+# The loader's diagnostic must be surfaced, not swallowed.
+TOTAL=$((TOTAL + 1))
+if grep -q "SWEEP_CONFIG_ERROR" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N6c SWEEP_CONFIG_ERROR logged for the rejected fractional config"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N6c SWEEP_CONFIG_ERROR logged for the rejected fractional config"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
 sweep_teardown
 
 # ============================================================================
@@ -12183,6 +12894,111 @@ if [[ "$err" == *"enabled"* ]]; then
   assert_eq "force-opus string enabled: stderr mentions enabled" "yes" "yes"
 else
   assert_eq "force-opus string enabled: stderr mentions enabled" "yes" "no: $err"
+fi
+config_teardown
+
+# --- sweep config type validation (#2026) -----------------------------------
+# The sweep config gates the not-in-sync reap grace window. Its validator is the
+# only code path that catches a malformed grace BEFORE it reaches dispatch-sweep's
+# bash arithmetic `[[ "$age" -lt "$grace" ]]` — where a non-integer would error
+# and force-reap every not-in-sync worktree. These tests cover the validator
+# directly: absent → no-config; empty object → valid; valid integer → printed;
+# fractional/<=0/wrong-type/non-object → rejected.
+
+# --- Test 7u: absent sweep.json → no-config, exit 0 --------------------------
+echo "Test: absent sweep.json prints no-config and exits 0"
+config_setup
+# no file written — config dir is empty
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>/dev/null); rc=$?
+assert_eq "7u absent sweep.json exits 0" "0" "$rc"
+assert_eq "7u absent sweep.json prints no-config" "no-config" "$out"
+config_teardown
+
+# --- Test 7v: empty-object sweep.json → valid, prints {} ---------------------
+# All sweep tunables are optional, so an empty object is valid and round-trips.
+echo "Test: empty-object sweep.json is valid and prints the normalized object"
+config_setup
+printf '{}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>/dev/null); rc=$?
+assert_eq "7v empty-object sweep.json exits 0" "0" "$rc"
+norm=$(printf '%s' "$out" | jq -c '.')
+assert_eq "7v empty-object sweep.json normalizes to {}" "{}" "$norm"
+config_teardown
+
+# --- Test 7w: notInSyncGraceSeconds integer → valid, value round-trips -------
+echo "Test: sweep.json with a valid integer notInSyncGraceSeconds round-trips"
+config_setup
+printf '{"notInSyncGraceSeconds":3600}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>/dev/null); rc=$?
+assert_eq "7w integer grace exits 0" "0" "$rc"
+grace=$(printf '%s' "$out" | jq -r '.notInSyncGraceSeconds')
+assert_eq "7w integer grace round-trips" "3600" "$grace"
+config_teardown
+
+# --- Test 7x: notInSyncGraceSeconds fractional → exit 1 ----------------------
+# The integer-vs-float bug: 1.5|type=="number" and 1.5>0, so the field passes the
+# type and positivity checks. The whole-number guard is the ONLY thing that rejects
+# a fractional grace before it reaches dispatch-sweep's integer arithmetic.
+echo "Test: sweep.json with a fractional notInSyncGraceSeconds exits 1 and names the field"
+config_setup
+printf '{"notInSyncGraceSeconds":0.5}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>&1 1>/dev/null) || rc=$?
+assert_eq "7x fractional grace exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"notInSyncGraceSeconds"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7x fractional grace error names notInSyncGraceSeconds"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7x fractional grace error names notInSyncGraceSeconds"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7y: notInSyncGraceSeconds <= 0 → exit 1 ----------------------------
+echo "Test: sweep.json with notInSyncGraceSeconds <= 0 exits 1 and names the field"
+config_setup
+printf '{"notInSyncGraceSeconds":0}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>&1 1>/dev/null) || rc=$?
+assert_eq "7y non-positive grace exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"notInSyncGraceSeconds"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7y non-positive grace error names notInSyncGraceSeconds"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7y non-positive grace error names notInSyncGraceSeconds"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7z: notInSyncGraceSeconds wrong type (string) → exit 1 -------------
+echo "Test: sweep.json with a string notInSyncGraceSeconds exits 1 and names the field"
+config_setup
+printf '{"notInSyncGraceSeconds":"3600"}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>&1 1>/dev/null) || rc=$?
+assert_eq "7z string grace exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"notInSyncGraceSeconds"* && "$err" == *"number"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7z string grace error names the field and 'number'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7z string grace error names the field and 'number'"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7za: non-object top-level sweep.json → exit 1 ----------------------
+echo "Test: non-object top-level sweep.json exits 1 and stderr mentions object"
+config_setup
+printf '[]\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>&1 1>/dev/null) || rc=$?
+assert_eq "7za non-object sweep.json exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"object"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7za non-object sweep.json error mentions 'object'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7za non-object sweep.json error mentions 'object'"
+  echo "    stderr: $err"
 fi
 config_teardown
 
