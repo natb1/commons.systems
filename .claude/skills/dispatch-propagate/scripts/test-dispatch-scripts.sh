@@ -4383,6 +4383,59 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 20)
 assert_eq "excluded PR 20 filtered → empty" "empty" "$result"
 teardown
 
+# 39e. A transient gh API error on root 55's blocker lookup (exit 3 from trace-
+#      leaf) does NOT abort the entire propagation tick (#2005). Covers:
+#        AC #1 — the queue scan continues past the transiently-failing root.
+#        AC #2 — the failed root 55 is NOT dispatched.
+#        AC #4 — select-target exits 0 (tick does not enter the failed state).
+#      Two help-wanted roots: 55 (older, blocker lookup fails transiently) and 66
+#      (newer, fully startable). The selector must skip 55 and select 66.
+echo "Test: transient gh API error on root 55 -> select-target skips it, selects 66"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+: > "$STUB_DIR/gh-fail-blocked_by-55"
+if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "transient trace fail on root 55 -> select-target still exits 0" "0" "$rc"
+assert_eq "transient trace fail on root 55 -> next startable root 66 selected" "issue 66" "$result"
+teardown
+
+# 39f. The mirror-image of 39e, guarding the exit-1 abort path against a future
+#      refactor that extends the exit-3 skip to exit-1 (the invariant documented
+#      at dispatch-select-target's trace-status block: exit 1 is a usage/program
+#      error — a hard failure affecting every root, never swallowed as a skip).
+#      Same two-root 55/66 fixture as 39e, but dispatch-trace-leaf exits 1
+#      UNCONDITIONALLY. Unlike the exit-3 skip (which continues to root 66), the
+#      exit-1 path must ABORT: select-target exits non-zero and must NOT reach,
+#      let alone select, the otherwise-startable root 66. Test 39 already proves
+#      the single-root exit-1 hard-fail; this adds the two-root case so the
+#      "abort vs skip-and-continue" distinction (the precise opposite of 39e) is
+#      regression-tested — an exit-1-treated-as-exit-3 refactor would surface
+#      "issue 66" here and trip the assertion below.
+echo "Test: trace-leaf exit 1 on root 55 -> select-target aborts, does NOT select 66"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Replace the copied leaf-trace script with a stub that always exits 1 (a
+# usage/programming error, NOT a transient gh failure). setup re-copies a fresh
+# real trace-leaf for the next test, so this override does not leak.
+cat > "$TMPDIR_TEST/dispatch-trace-leaf" <<'STUB'
+#!/usr/bin/env bash
+echo "error: usage" >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-trace-leaf"
+if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
+[[ "$rc" -ne 0 ]] && rc_nonzero=yes || rc_nonzero=no
+assert_eq "trace-leaf exit 1 on root 55 -> select-target exits non-zero" "yes" "$rc_nonzero"
+[[ "$result" != "issue 66" ]] && not_66=yes || not_66=no
+assert_eq "trace-leaf exit 1 on root 55 -> 66 NOT selected (abort, not skip)" "yes" "$not_66"
+teardown
+
 # --- --top N: single-pass multi-target selection (#1317) ---------------------
 # `--top N` emits up to N DISTINCT ranked decision lines in ONE queue scan,
 # preserving the existing priority order (priority axis 1→0, then topic category,
@@ -6665,34 +6718,34 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
 assert_eq "queue: child with one live worktree among many skipped → sibling 702" "702" "$result"
 teardown
 
-# 13. issue-blocking failure → hard error (exit 1), never emits N as a leaf.
-echo "Test: issue-blocking failure → exit 1, no leaf emitted"
+# 13. issue-blocking failure → hard error (exit 3), never emits N as a leaf.
+echo "Test: issue-blocking failure → exit 3, no leaf emitted"
 setup
 # No stub files: 800 would otherwise resolve as a childless leaf. The injected
 # blocked_by failure must abort instead of mis-classifying 800 as startable.
 : > "$STUB_DIR/gh-fail-blocked_by-800"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "queue" 2>/dev/null) && rc=0 || rc=$?
-assert_eq "issue-blocking failure → exit 1" "1" "$rc"
+assert_eq "issue-blocking failure → exit 3" "3" "$rc"
 assert_eq "issue-blocking failure → no leaf on stdout" "" "$stdout"
 teardown
 
 # 14. issue-sub-issues failure → same hard error. issue-blocking succeeds
 #     (empty = no blockers), then the sub_issues lookup fails.
-echo "Test: issue-sub-issues failure → exit 1, no leaf emitted"
+echo "Test: issue-sub-issues failure → exit 3, no leaf emitted"
 setup
 : > "$STUB_DIR/gh-fail-sub_issues-800"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "queue" 2>/dev/null) && rc=0 || rc=$?
-assert_eq "issue-sub-issues failure → exit 1" "1" "$rc"
+assert_eq "issue-sub-issues failure → exit 3" "3" "$rc"
 assert_eq "issue-sub-issues failure → no leaf on stdout" "" "$stdout"
 teardown
 
-# 15. issue-blocking failure in explicit mode → exit 1, NOT the cycle-fallback
+# 15. issue-blocking failure in explicit mode → exit 3, NOT the cycle-fallback
 #     "print N".
-echo "Test: issue-blocking failure (explicit) → exit 1, not cycle-fallback"
+echo "Test: issue-blocking failure (explicit) → exit 3, not cycle-fallback"
 setup
 : > "$STUB_DIR/gh-fail-blocked_by-800"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "explicit" 2>/dev/null) && rc=0 || rc=$?
-assert_eq "issue-blocking failure (explicit) → exit 1" "1" "$rc"
+assert_eq "issue-blocking failure (explicit) → exit 3" "3" "$rc"
 assert_eq "issue-blocking failure (explicit) → no N printed" "" "$stdout"
 teardown
 
@@ -6702,12 +6755,12 @@ teardown
 #     it is 801's blocker lookup that fails — exercising the `rc -eq 3` branch
 #     in find_leaf's descent loop, which must carry the hard error up rather
 #     than mask it as "no leaf in this subtree".
-echo "Test: gh failure one level deep → re-propagated, exit 1"
+echo "Test: gh failure one level deep → re-propagated, exit 3"
 setup
 printf '[{"number":801}]\n' > "$STUB_DIR/subissues-800.json"
 : > "$STUB_DIR/gh-fail-blocked_by-801"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "queue" 2>/dev/null) && rc=0 || rc=$?
-assert_eq "deep gh failure → exit 1" "1" "$rc"
+assert_eq "deep gh failure → exit 3" "3" "$rc"
 assert_eq "deep gh failure → no leaf on stdout" "" "$stdout"
 teardown
 
@@ -24583,7 +24636,7 @@ assert_eq "explicit PR: launcher keyed on original 839" \
 mat_teardown
 
 # --- explicit trace-leaf hard failure → exit 2, lock released, no spawn -------
-# dispatch-trace-leaf's exit 1 is a hard sibling-gh failure the caller must NOT
+# dispatch-trace-leaf's exit 3 is a hard sibling-gh failure the caller must NOT
 # swallow as "no work" (its documented contract). A swallowed failure would
 # dispatch the un-traced N; instead the script releases the lock and exits 2.
 echo "Test: materialize-spawn explicit trace-leaf hard failure → exit 2 + lock released"
@@ -24591,7 +24644,7 @@ mat_setup
 cat > "$TMPDIR_TEST/dispatch-trace-leaf" <<'STUB'
 #!/usr/bin/env bash
 echo "trace-leaf gh failure" >&2
-exit 1
+exit 3
 STUB
 chmod +x "$TMPDIR_TEST/dispatch-trace-leaf"
 out=$(run_mat 839 explicit) && rc=0 || rc=$?
@@ -31726,7 +31779,7 @@ teardown
 
 # E. Hard error survives caching (criterion 2). With DISPATCH_TRACE_CACHE_DIR set,
 #    inject a gh blocked_by failure on child 830 reachable from root 810. The
-#    trace must hard-fail (exit 1) — the gh failure is NOT swallowed or cached as
+#    trace must hard-fail (exit 3) — the gh failure is NOT swallowed or cached as
 #    an empty result — and no `blocking-830` cache file is written. Invoked via
 #    dispatch-trace-leaf directly, mirroring the existing failure tests (~4815).
 echo "Test: #1452 E — sibling gh failure hard-fails and is never cached"
@@ -31740,7 +31793,7 @@ printf '{"title":"Issue 830","body":"","comments":[],"number":830,"state":"OPEN"
   > "$STUB_DIR/issue-830.json"
 : > "$STUB_DIR/gh-fail-blocked_by-830"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "810" "queue" 2>/dev/null) && rc=0 || rc=$?
-assert_eq "#1452 E — sibling gh failure → exit 1" "1" "$rc"
+assert_eq "#1452 E — sibling gh failure → exit 3" "3" "$rc"
 assert_eq "#1452 E — sibling gh failure → no leaf on stdout" "" "$stdout"
 [[ -f "$cache/blocking-830" ]] && cached=present || cached=absent
 assert_eq "#1452 E — failed blocked_by lookup is never cached" "absent" "$cached"
