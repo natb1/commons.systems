@@ -27,11 +27,19 @@ stubBrowserGlobals();
 // ---------------------------------------------------------------------------
 
 vi.mock("pdfjs-dist", () => {
-  // Per-page canned text items for B and C tests.
-  const PAGE_ITEMS: Record<number, { str: string }[]> = {
+  // Per-page canned text items for B and C tests. hasEOL is optional so the
+  // renderer's reconstructPage(textContent.items) sees it; existing items leave
+  // it undefined (no separator), preserving current behavior.
+  const PAGE_ITEMS: Record<number, { str: string; hasEOL?: boolean }[]> = {
     1: [{ str: "the cat sat" }],
     2: [{ str: "the dog ran" }],
     3: [{ str: "a fish swims" }],
+    // Page 4: cross-line match test. Reconstructs to "alpha the quick"
+    // (space after each hasEOL item). Items: [{0,5},{6,3},{10,5}].
+    4: [{ str: "alpha", hasEOL: true }, { str: "the", hasEOL: true }, { str: "quick" }],
+    // Page 5: intra-word same-line regression. No hasEOL → no separator.
+    // Reconstructs to "world". Items: [{0,3},{3,2}].
+    5: [{ str: "wor" }, { str: "ld" }],
   };
 
   // TextLayer mock: builds index-aligned textDivs and textContentItemsStr so
@@ -63,7 +71,7 @@ vi.mock("pdfjs-dist", () => {
   }
 
   const fakeDoc = {
-    numPages: 3,
+    numPages: 5,
     destroy() {},
     getPage: (i: number) =>
       Promise.resolve({
@@ -87,12 +95,12 @@ vi.mock("pdfjs-dist", () => {
 
 // Import after mocks are in place.
 import {
-  buildPageText,
+  reconstructPage,
   findMatches,
   buildSnippet,
   encodeLocation,
   decodeLocation,
-  offsetToDivRanges,
+  offsetToItemRanges,
   createPdfRenderer,
 } from "../../src/viewer/pdf";
 
@@ -100,18 +108,40 @@ import {
 // A. Pure helper tests — no mock dependencies needed.
 // ---------------------------------------------------------------------------
 
-describe("buildPageText", () => {
-  it("joins str values with empty separator", () => {
-    expect(buildPageText([{ str: "foo" }, { str: "bar" }])).toBe("foobar");
+describe("reconstructPage", () => {
+  it("joins str values with empty separator (no hasEOL) and records item ranges", () => {
+    const layout = reconstructPage([{ str: "foo" }, { str: "bar" }]);
+    expect(layout.text).toBe("foobar");
+    expect(layout.items).toEqual([
+      { start: 0, length: 3 },
+      { start: 3, length: 3 },
+    ]);
+  });
+
+  it("inserts a space separator after a hasEOL item, excluded from item ranges", () => {
+    const layout = reconstructPage([{ str: "foo", hasEOL: true }, { str: "bar" }]);
+    expect(layout.text).toBe("foo bar");
+    expect(layout.items).toEqual([
+      { start: 0, length: 3 },
+      { start: 4, length: 3 },
+    ]);
   });
 
   it("marked-content items (no str key) contribute empty string", () => {
     // {} has no `str` property; should not throw and contributes ""
-    expect(buildPageText([{ str: "a" }, {}, { str: "b" }])).toBe("ab");
+    const layout = reconstructPage([{ str: "a" }, {}, { str: "b" }]);
+    expect(layout.text).toBe("ab");
+    expect(layout.items).toEqual([
+      { start: 0, length: 1 },
+      { start: 1, length: 0 },
+      { start: 1, length: 1 },
+    ]);
   });
 
-  it("empty array returns empty string", () => {
-    expect(buildPageText([])).toBe("");
+  it("empty array returns empty string and no items", () => {
+    const layout = reconstructPage([]);
+    expect(layout.text).toBe("");
+    expect(layout.items).toEqual([]);
   });
 });
 
@@ -249,16 +279,21 @@ describe("encodeLocation / decodeLocation", () => {
   });
 });
 
-describe("offsetToDivRanges", () => {
+describe("offsetToItemRanges", () => {
+  // Inputs are built via reconstructPage(...).items so the layout offsets match
+  // exactly what the production search path produces (and exercise it for free).
+  const layoutItems = (strs: string[]) =>
+    reconstructPage(strs.map((str) => ({ str }))).items;
+
   it("single-div case: maps range entirely within one item", () => {
-    const result = offsetToDivRanges(["hello world"], 6, 5);
+    const result = offsetToItemRanges(layoutItems(["hello world"]), 6, 5);
     expect(result).toEqual([{ divIndex: 0, localStart: 6, localEnd: 11 }]);
   });
 
   it("spanning-div case: maps range across two items", () => {
     // "foo"(0-2) + "bar"(3-5) + "baz"(6-8) → concatenation "foobarbaz"
     // offset 2, length 3: covers "o" from "foo" [2,3) + "ba" from "bar" [0,2)
-    const result = offsetToDivRanges(["foo", "bar", "baz"], 2, 3);
+    const result = offsetToItemRanges(layoutItems(["foo", "bar", "baz"]), 2, 3);
     expect(result).toEqual([
       { divIndex: 0, localStart: 2, localEnd: 3 },
       { divIndex: 1, localStart: 0, localEnd: 2 },
@@ -268,7 +303,7 @@ describe("offsetToDivRanges", () => {
   it("empty-string item contributes zero width and is skipped", () => {
     // "ab"(0-1) + ""(empty) + "cd"(2-3) → concatenation "abcd"
     // offset 1, length 2: covers "b" from "ab" [1,2) + "c" from "cd" [0,1)
-    const result = offsetToDivRanges(["ab", "", "cd"], 1, 2);
+    const result = offsetToItemRanges(layoutItems(["ab", "", "cd"]), 1, 2);
     expect(result).toEqual([
       { divIndex: 0, localStart: 1, localEnd: 2 },
       { divIndex: 2, localStart: 0, localEnd: 1 },
@@ -276,14 +311,32 @@ describe("offsetToDivRanges", () => {
   });
 
   it("range entirely within second item", () => {
-    const result = offsetToDivRanges(["abc", "defgh"], 3, 3);
+    const result = offsetToItemRanges(layoutItems(["abc", "defgh"]), 3, 3);
     expect(result).toEqual([{ divIndex: 1, localStart: 0, localEnd: 3 }]);
   });
 
   it("maps a corrected expanding-case match onto its item", () => {
     const ci = "İ".toLowerCase(); // "i̇", length 2 — built, not a fragile literal
-    const result = offsetToDivRanges(["a", ci, "b"], 1, 2);
+    const result = offsetToItemRanges(layoutItems(["a", ci, "b"]), 1, 2);
     expect(result).toEqual([{ divIndex: 1, localStart: 0, localEnd: 2 }]);
+  });
+
+  it("gap-boundary: hasEOL separator produces no segment for the gap; correct segments either side", () => {
+    // reconstructPage([{str:"foo",hasEOL:true},{str:"bar"}]) → text:"foo bar"
+    // Items: [{start:0,length:3},{start:4,length:3}]. Offset 3 is the separator
+    // gap (a plain space in text, not part of any item range).
+    // Range [1,7) = offset:1, length:6 covers "oo bar":
+    //   - "oo" from "foo": div0 localStart:1, localEnd:3
+    //   - (gap at text[3]: no segment produced)
+    //   - "bar" from "bar": div1 localStart:0, localEnd:3
+    const { items } = reconstructPage([{ str: "foo", hasEOL: true }, { str: "bar" }]);
+    const result = offsetToItemRanges(items, 1, 6);
+    expect(result).toEqual([
+      { divIndex: 0, localStart: 1, localEnd: 3 },
+      { divIndex: 1, localStart: 0, localEnd: 3 },
+    ]);
+    // Confirm: length is 2, not 3 — no gap segment present.
+    expect(result.length).toBe(2);
   });
 });
 
@@ -411,6 +464,64 @@ describe("search()", () => {
     renderer.destroy(); // sets destroyed = true and pdfDoc = null
     // Old code: `await pdfDoc!.getPage(1)` dereferences null → TypeError.
     await expect(renderer.search!("the")).resolves.toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Criterion 2: Cross-line match — page 4 has items
+  //   [{str:"alpha",hasEOL:true},{str:"the",hasEOL:true},{str:"quick"}]
+  // reconstructPage produces "alpha the quick" with items
+  //   [{start:0,length:5},{start:6,length:3},{start:10,length:5}].
+  // Old empty-join code would build "alphathequick" and find nothing for
+  // "the quick". New code with hasEOL separator finds one match at offset 6, length 9.
+  // ---------------------------------------------------------------------------
+
+  it("cross-line: search('the quick') returns exactly one result on page 4 (criterion 2)", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the quick");
+    const page4Results = results.filter((r) => r.label === "Page 4");
+    expect(page4Results.length).toBe(1);
+    expect(page4Results[0].label).toBe("Page 4");
+
+    const decoded = decodeLocation(page4Results[0].location);
+    expect(decoded).not.toBeNull();
+    expect(decoded!.offset).toBe(6);
+    expect(decoded!.length).toBe(9);
+  });
+
+  // Criterion 4: snippet offset invariant for each result of the cross-line search.
+  it("cross-line: every result has matchStart/matchLength within snippet and slice equals query (criterion 4)", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the quick");
+    expect(results.length).toBeGreaterThan(0);
+
+    for (const result of results) {
+      const { snippet, matchStart, matchLength } = result;
+      expect(matchStart).toBeGreaterThanOrEqual(0);
+      expect(matchLength).toBeGreaterThan(0);
+      expect(matchStart + matchLength).toBeLessThanOrEqual(snippet.length);
+      expect(snippet.slice(matchStart, matchStart + matchLength).toLowerCase()).toBe("the quick");
+    }
+  });
+
+  // Criterion 5 (search half): intra-word same-line regression.
+  // Page 5: [{str:"wor"},{str:"ld"}] → no hasEOL → reconstructs to "world".
+  // search("world") must find one match at offset:0, length:5.
+  it("intra-word same-line: search('world') finds match at offset:0,length:5 on page 5 (criterion 5)", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("world");
+    const page5Results = results.filter((r) => r.label === "Page 5");
+    expect(page5Results.length).toBe(1);
+
+    const decoded = decodeLocation(page5Results[0].location);
+    expect(decoded).not.toBeNull();
+    expect(decoded!.offset).toBe(0);
+    expect(decoded!.length).toBe(5);
   });
 
   it("resolves (does not reject) when destroy() fires during the page loop", async () => {
@@ -902,5 +1013,90 @@ describe("clearSearch()", () => {
     } finally {
       renderSpy.mockRestore();
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Criterion 3: Spanning-div highlight, EXACT coverage (DISCRIMINATING test).
+  //
+  // Page 4 items: [{str:"alpha",hasEOL:true},{str:"the",hasEOL:true},{str:"quick"}]
+  // reconstructPage produces text "alpha the quick" with items:
+  //   [{start:0,length:5},{start:6,length:3},{start:10,length:5}]
+  //
+  // "the quick" matches at offset:6, length:9. offsetToItemRanges(items,6,9):
+  //   - item1 {start:6,length:3}: inter=[6,9) → localStart:0,localEnd:3 → "the"
+  //   - item2 {start:10,length:5}: inter=[10,15) → localStart:0,localEnd:5 → "quick"
+  //   → exactly two spans reading "the" and "quick".
+  //
+  // DISCRIMINATION REASONING: The leading {str:"alpha",hasEOL:true} item places a
+  // separator at text offset 5, shifting item1 from start:5 (old empty-join) to
+  // start:6 (new hasEOL code). An old/unmirrored mapper without the separator
+  // would compute items [{0,5},{5,3},{8,5}], yielding localStart:1 for item1 →
+  // "he" instead of "the". The exact-"the" assertion FAILS against that mapper.
+  // A match at offset 0 (no leading item) would pass on BOTH old and new code
+  // and would NOT be discriminating — this is why the leading "alpha" item is
+  // load-bearing and must be kept.
+  // ---------------------------------------------------------------------------
+
+  it("spanning-div highlight: search('the quick') on page 4 produces exactly two spans 'the'+'quick' (criterion 3)", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    // Search to populate the pageLayoutCache for page 4.
+    const results = await renderer.search!("the quick");
+    const page4Result = results.find((r) => r.label === "Page 4");
+    expect(page4Result).toBeDefined();
+
+    // Arm then render: goToResult arms pendingHighlight; renderResult renders page 4
+    // with the text layer and applies the highlight via applyHighlight.
+    await renderer.goToResult!(page4Result!);
+    await renderer.renderResult!();
+
+    // EXACT coverage: must be exactly two .search-highlight.active spans.
+    // If the separator is not mirrored, the first span reads "he" (localStart:1)
+    // and this assertion fails — making this test genuinely discriminating.
+    const highlights = container.querySelectorAll(".search-highlight.active");
+    expect(highlights.length).toBe(2);
+    expect(highlights[0].textContent).toBe("the");
+    expect(highlights[1].textContent).toBe("quick");
+
+    renderer.clearSearch!();
+    expect(container.querySelector(".search-highlight")).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Criterion 5 (highlight half): intra-word same-line regression.
+  //
+  // Page 5 items: [{str:"wor"},{str:"ld"}] — NO hasEOL anywhere.
+  // reconstructPage → text:"world", items:[{start:0,length:3},{start:3,length:2}].
+  // No separator inserted. offsetToItemRanges(items,0,5):
+  //   - item0 {0,3}: inter=[0,3) → localStart:0,localEnd:3 → "wor"
+  //   - item1 {3,2}: inter=[3,5) → localStart:0,localEnd:2 → "ld"
+  //   → two spans "wor"+"ld"; concatenation equals "world".
+  // This proves no separator is inserted at same-line item boundaries.
+  // ---------------------------------------------------------------------------
+
+  it("intra-word same-line: highlight on page 5 covers exactly 'world' across two divs, no separator (criterion 5)", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("world");
+    const page5Result = results.find((r) => r.label === "Page 5");
+    expect(page5Result).toBeDefined();
+
+    await renderer.goToResult!(page5Result!);
+    await renderer.renderResult!();
+
+    // Two spans: "wor" + "ld" — the highlight crosses the item boundary without
+    // any inserted separator, confirming no hasEOL spacing on same-line items.
+    const highlights = container.querySelectorAll(".search-highlight.active");
+    expect(highlights.length).toBe(2);
+    expect(highlights[0].textContent).toBe("wor");
+    expect(highlights[1].textContent).toBe("ld");
+    // Concatenation equals the full matched word.
+    const combined = Array.from(highlights).map((h) => h.textContent).join("");
+    expect(combined).toBe("world");
+
+    renderer.clearSearch!();
+    expect(container.querySelector(".search-highlight")).toBeNull();
   });
 });
