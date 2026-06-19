@@ -1183,6 +1183,16 @@ while IFS=$'\t' read -r issue_num issue_pri issue_enh issue_catrank issue_cat; d
     else
       trace_status=$?
       [[ "$trace_status" -eq 2 ]] && break
+      if [[ "$trace_status" -eq 3 ]]; then
+        # A transient gh API error tracing THIS root (post-gh_retry exhaustion).
+        # Skip the root this pass and continue scanning the rest of the queue —
+        # do NOT dispatch it (trace-leaf already refused to treat it as startable)
+        # and do NOT fail the whole tick (#2005). The next tick retries the root.
+        echo "warning: dispatch-trace-leaf $issue_num queue: transient gh API error tracing this root; skipping it this pass and continuing" >&2
+        break
+      fi
+      # Any other nonzero status is a usage/programming error (trace-leaf exit 1) —
+      # a hard failure affecting every root; never swallow it as a skip.
       echo "error: dispatch-trace-leaf $issue_num queue failed (exit $trace_status)" >&2
       exit 1
     fi

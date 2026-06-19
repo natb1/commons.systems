@@ -255,7 +255,7 @@ process_one_target() {
         n="$LEAF"
       else
         # explicit-mode dispatch-trace-leaf exits non-zero only on a hard
-        # sibling-gh failure (its exit 1) — never "no work". Per its contract
+        # sibling-gh failure (its exit 3) — never "no work". Per its contract
         # the caller must not swallow it and dispatch the un-traced n; surface
         # the error (mirrors dispatch-select-target's exit-1 propagation in
         # queue mode).
