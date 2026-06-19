@@ -22,15 +22,16 @@ vi.mock("@commons-systems/ds", () => ({
   Nav: ({ end }: { end?: React.ReactNode }) => <nav>{end}</nav>,
 }));
 vi.mock("../src/pages/home.js", () => ({ renderHome: vi.fn().mockResolvedValue("<div>home</div>") }));
-vi.mock("../src/pages/budgets.js", () => ({ renderBudgets: vi.fn().mockResolvedValue("<div>budgets</div>") }));
+// "/" is now the React Budgets page (Unit 4), not a LegacyRoute string render.
+// The mock renders its own <main id="app"> (the real Budgets.tsx owns that
+// wrapper — LegacyRoute used to provide it for the string body).
+vi.mock("../src/pages/Budgets.js", () => ({ Budgets: vi.fn(() => <main id="app">budgets</main>) }));
 vi.mock("../src/pages/accounts.js", () => ({ renderAccounts: vi.fn().mockResolvedValue("<div>accounts</div>") }));
 vi.mock("../src/pages/accounts-reconcile.js", () => ({ renderAccountsReconcile: vi.fn().mockResolvedValue("<div>reconcile</div>") }));
 vi.mock("../src/pages/rules.js", () => ({ renderRules: vi.fn().mockResolvedValue("<div>rules</div>") }));
 vi.mock("../src/pages/home-hydrate.js", () => ({ hydrateTransactionTable: vi.fn() }));
 vi.mock("../src/pages/home-chart.js", () => ({ hydrateCategorySankey: vi.fn() }));
-vi.mock("../src/pages/budgets-hydrate.js", () => ({
-  hydrateBudgetTable: vi.fn(), hydrateBudgetChart: vi.fn(), hydrateOverridesTable: vi.fn(),
-}));
+vi.mock("../src/pages/budgets-hydrate.js", () => ({ hydrateBudgetChart: vi.fn() }));
 vi.mock("../src/pages/rules-hydrate.js", () => ({ hydrateRulesTable: vi.fn() }));
 vi.mock("../src/pages/accounts-hydrate.js", () => ({ hydrateAccountsCharts: vi.fn() }));
 vi.mock("../src/pages/accounts-reconcile-hydrate.js", () => ({ hydrateAccountsReconcile: vi.fn() }));
@@ -713,18 +714,18 @@ describe("budget app shell + orchestration", () => {
 
   // Parity lock for legacy's trailing router.navigate(): a data transition on
   // the SAME path must re-resolve the route body against the new data source.
-  // The real <LegacyRoute> injects the renderBudgets() string into #app; making
-  // the mock vary by `authorized` proves the body refreshes seed → local after
-  // an upload (the legacy `transition() → router.navigate() → innerHTML = html`
-  // behavior). Without the navEpoch re-key the body would stay on seed data.
+  // "/" is the React Budgets page, keyed by `${BUDGETS_PATH}:${navEpoch}`; making
+  // the mock vary by `options.authorized` proves the body refreshes seed → local
+  // after an upload (the navEpoch bump re-keys → remounts → re-reads options).
+  // Without the navEpoch re-key the body would stay on seed data.
   it("re-resolves the route body against the new data source after an upload (same path)", async () => {
     mockGetFileHandle.mockResolvedValue(undefined);
     mockGetMeta.mockResolvedValue(undefined);
 
-    const { renderBudgets } = await import("../src/pages/budgets.js");
-    (renderBudgets as ReturnType<typeof vi.fn>).mockImplementation((o: { authorized: boolean }) =>
-      Promise.resolve(o.authorized ? "<div>LOCAL</div>" : "<div>SEED</div>"),
-    );
+    const { Budgets } = await import("../src/pages/Budgets.js");
+    (Budgets as ReturnType<typeof vi.fn>).mockImplementation(({ options }: { options: { authorized: boolean } }) => (
+      <main id="app">{options.authorized ? "LOCAL" : "SEED"}</main>
+    ));
 
     const { parseUploadedJson, toParsedData } = await import("../src/upload.js");
     (parseUploadedJson as ReturnType<typeof vi.fn>).mockReturnValue({ groupName: "household" });
