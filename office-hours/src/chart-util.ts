@@ -1,5 +1,50 @@
 import * as Plot from "@observablehq/plot";
 
+/**
+ * The sanctioned DS categorical palette (`@commons-systems/ds`
+ * tokens/colors.css `--chart-1` … `--chart-6`), as runtime CSS-var reads with
+ * the DS hex values baked in as fallbacks. This is the single source of truth
+ * for series hues across the office-hours charts.
+ *
+ * Why read at runtime rather than freeze hexes: when a stylesheet defines the
+ * `--chart-*` tokens (a future DS-tokens import on the shell), the live values
+ * win automatically and the charts track theme changes. Until then the DS-hex
+ * fallbacks below — copied verbatim from tokens/colors.css — make the live read
+ * resolve to the exact sanctioned palette, so vanilla and React render paths
+ * are identical today.
+ *
+ * The palette is read INSIDE each chart's build function (where a `container`
+ * element exists) via `readChartPalette` — `getComputedStyle` needs an element,
+ * so this cannot be a module-top-level constant.
+ *
+ * The reset/danger color is intentionally NOT in this palette — it is a runtime
+ * read of the `--danger` theme token (see `readThemeVar`), out of scope here.
+ */
+export const CHART_PALETTE_FALLBACKS = [
+  "#4d6f8f", // --chart-1 slate-blue
+  "#c98a3c", // --chart-2 amber
+  "#a35d5d", // --chart-3 terracotta
+  "#7a8c5a", // --chart-4 olive
+  "#b08a4f", // --chart-5 tan
+  "#5f8a8a", // --chart-6 teal
+] as const;
+
+/** The DS categorical palette read from the container at runtime, indexed 0..5 (--chart-1 .. --chart-6). */
+export type ChartPalette = readonly [string, string, string, string, string, string];
+
+/**
+ * Read the DS categorical palette (`--chart-1` … `--chart-6`) from the
+ * container's computed style, each falling back to its DS hex when the token is
+ * absent (e.g. no stylesheet defines it, or a happy-dom test without a mock).
+ * Must be called where `container` exists — the values are element-scoped reads.
+ */
+export function readChartPalette(container: HTMLElement): ChartPalette {
+  const style = getComputedStyle(container);
+  return CHART_PALETTE_FALLBACKS.map(
+    (fallback, i) => readThemeVar(container, `--chart-${i + 1}`, style) || fallback,
+  ) as unknown as ChartPalette;
+}
+
 export const AXIS_WIDTH = 50;
 export const MARGIN_RIGHT = 20;
 export const MARGIN_BOTTOM = 50;
