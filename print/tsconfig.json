@@ -3,5 +3,5 @@
   "compilerOptions": {
     "jsx": "react-jsx"
   },
-  "include": ["src", "test"]
+  "include": ["src", "test/viewer/searchable-renderer.test-d.ts"]
 }
