@@ -535,6 +535,7 @@ PARTIAL_ENV_JSON='{"schema":"dispatch.outcome.v1","phase":"review","repo":"natb1
 PARTIAL_BLOCK="$(envelope_block "$PARTIAL_ENV_JSON")"
 
 PARTIAL_ROOT=$(mktemp -d)
+trap 'rm -rf "$PARTIAL_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
 partial_worktree="$PARTIAL_ROOT/-home-x-worktrees-1909-partial"
 mkdir -p "$partial_worktree"
 partial_jsonl="$partial_worktree/sess-partial.jsonl"
