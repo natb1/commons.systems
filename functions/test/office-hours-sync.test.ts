@@ -534,8 +534,22 @@ describe("syncOfficeHoursCore", () => {
     // Regression guard for #1896: two PRs with the same number in different repos
     // must not collide to a single doc.
     const store = createInMemoryFirestore();
-    const issueA = makeMergePrIssue({ number: 10 }, { prNumber: 5, prRepo: "natb1/commons.systems" });
-    const issueB = makeMergePrIssue({ number: 11 }, { prNumber: 5, prRepo: "natb1/office-hours-nate" });
+    const issueA = makeMergePrIssue(
+      { number: 10 },
+      {
+        prNumber: 5,
+        prRepo: "natb1/commons.systems",
+        prUrl: "https://github.com/natb1/commons.systems/pull/5",
+      },
+    );
+    const issueB = makeMergePrIssue(
+      { number: 11 },
+      {
+        prNumber: 5,
+        prRepo: "natb1/office-hours-nate",
+        prUrl: "https://github.com/natb1/office-hours-nate/pull/5",
+      },
+    );
 
     const result = await syncOfficeHoursCore({
       fetchOpenJitIssues: async () => [issueA, issueB],
@@ -550,8 +564,17 @@ describe("syncOfficeHoursCore", () => {
       skippedNoDate: 0,
       skippedMalformed: 0,
     });
-    expect(store._docs.has("office-hours/prod/items/merge-pr-natb1~commons.systems~5")).toBe(true);
-    expect(store._docs.has("office-hours/prod/items/merge-pr-natb1~office-hours-nate~5")).toBe(true);
+    const docA = store._docs.get(
+      "office-hours/prod/items/merge-pr-natb1~commons.systems~5",
+    ) as Record<string, unknown> | undefined;
+    const docB = store._docs.get(
+      "office-hours/prod/items/merge-pr-natb1~office-hours-nate~5",
+    ) as Record<string, unknown> | undefined;
+    expect(docA).toBeDefined();
+    expect(docB).toBeDefined();
+    // Each doc must carry its own repo — confirms no cross-write between the two.
+    expect(docA!.prRepo).toBe("natb1/commons.systems");
+    expect(docB!.prRepo).toBe("natb1/office-hours-nate");
   });
 });
 
@@ -646,6 +669,45 @@ describe("parseMergePrMarker", () => {
     expect(
       parseMergePrMarker(
         '<!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":"42","url":"https://github.com/natb1/commons.systems/pull/42","title":"Some PR"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when repo contains a tilde (would forge the doc-ID delimiter, #1896)", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1~commons.systems","number":5,"url":"https://github.com/natb1/commons.systems/pull/5","title":"Some PR"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when an otherwise-valid owner/name has a tilde inside the name (#1896)", () => {
+    // Distinct from the no-slash tilde case above: this repo IS owner/name shaped,
+    // so only the per-segment [A-Za-z0-9._-]+ class rejects the "~". The merge-pr
+    // doc ID uses "~" as both the slash-replacement and the repo↔number delimiter;
+    // its injectivity proof depends on a valid prRepo never containing "~". This
+    // makes that assumption machine-verifiable: a "~"-bearing name is rejected at
+    // the parser, so it can never reach the ID builder to forge a delimiter and
+    // alias another PR's doc.
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1/foo~bar","number":5,"url":"https://github.com/natb1/foo~bar/pull/5","title":"Some PR"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when repo is not in owner/name shape (no slash)", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"commons.systems","number":5,"url":"https://github.com/natb1/commons.systems/pull/5","title":"Some PR"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when repo has an extra slash segment", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1/commons/systems","number":5,"url":"https://github.com/natb1/commons.systems/pull/5","title":"Some PR"} -->'
       )
     ).toBeNull();
   });

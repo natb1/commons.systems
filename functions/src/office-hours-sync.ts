@@ -117,6 +117,11 @@ export function parseMergePrMarker(body: string): MergePrMarker | null {
   if (
     typeof prRepo !== "string" ||
     prRepo === "" ||
+    // Enforce the GitHub owner/name shape so injectivity of the merge-pr doc ID
+    // is provable by construction: a "~"-free prRepo means replaceAll("/","~") is
+    // reversible and the "~" delimiter in syncOfficeHoursCore can never be forged
+    // by the repo field (#1896).
+    !/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(prRepo) ||
     typeof prUrl !== "string" ||
     !prUrl.startsWith("https://github.com/") ||
     typeof prTitle !== "string" ||
