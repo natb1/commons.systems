@@ -10,6 +10,7 @@ import { createAppController } from "./app-controller.js";
 import { getOwnerReminders, getOwnerQueueMetrics } from "./data.js";
 import { getOwnerSamples } from "./usage-data.js";
 import { getOwnerIssueSamples } from "./issue-data.js";
+import { getOwnerAuditAggregates } from "./audit-data.js";
 import {
   db,
   NAMESPACE,
@@ -46,16 +47,17 @@ async function refresh(): Promise<void> {
     return;
   }
   try {
-    const [samples, reminders, queueMetrics, issueSamples] = await Promise.all([
+    const [samples, reminders, queueMetrics, issueSamples, auditAggregates] = await Promise.all([
       getOwnerSamples(db, NAMESPACE, refreshUser),
       getOwnerReminders(db, NAMESPACE, refreshUser),
       getOwnerQueueMetrics(db, NAMESPACE, refreshUser),
       getOwnerIssueSamples(db, NAMESPACE, refreshUser),
+      getOwnerAuditAggregates(db, NAMESPACE, refreshUser),
     ]);
     // Auth may have changed while the Firestore calls were in flight — skip the
     // render so the in-flight result does not clobber the already-updated view.
     if (currentUser !== refreshUser) return;
-    controller.paint({ tier: "owner", samples, reminders, queueMetrics, issueSamples }, new Date());
+    controller.paint({ tier: "owner", samples, reminders, queueMetrics, issueSamples, auditAggregates }, new Date());
   } catch (error) {
     // Auth may have changed while the Firestore calls were in flight — skip the
     // render so the in-flight error does not clobber the already-updated view.

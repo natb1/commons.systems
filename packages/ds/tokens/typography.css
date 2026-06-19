@@ -1,0 +1,14 @@
+:root {
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  --font-serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  --font-body: var(--font-mono); --font-heading: var(--font-mono); --font-prose: var(--font-serif);
+
+  --text-micro:.65rem; --text-xs:.75rem; --text-sm:.875rem; --text-base:1rem;
+  --text-lg:1.1rem; --text-xl:1.5rem; --text-2xl:2rem;
+  --text-display:clamp(1.75rem,7vw,2.75rem);
+
+  --weight-normal:400; --weight-bold:700;          /* only these two */
+  --leading-tight:1.2; --leading-snug:1.4; --leading-normal:1.5; --leading-prose:1.6;
+  --tracking-tight:0; --tracking-heading:.05em; --tracking-label:.1em;
+  --measure-prose:70ch;
+}

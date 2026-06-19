@@ -7,14 +7,17 @@ import { renderIssueHistoryChart } from "./issue-history-chart.js";
 import { getDemoSamples } from "./usage-data.js";
 import { getDemoReminders, getDemoQueueMetrics } from "./data.js";
 import { getDemoIssueSamples } from "./issue-data.js";
+import { renderAuditAggregateChart } from "./audit-aggregate-chart.js";
+import { getDemoAuditAggregates } from "./audit-data.js";
 import { selectLatestSample, type UsageSample } from "./usage-samples.js";
 import type { Reminder } from "./reminders.js";
 import type { QueueMetricsSnapshot } from "./queue-metrics.js";
 import type { IssueSample } from "./issue-samples.js";
+import type { AuditAggregate } from "./audit-aggregates.js";
 
 export type ViewState =
   | { tier: "demo" }                                                  // unauthenticated → labeled demo
-  | { tier: "owner"; samples: UsageSample[]; reminders: Reminder[]; queueMetrics: QueueMetricsSnapshot | null; issueSamples: IssueSample[] }  // authenticated → real (possibly empty)
+  | { tier: "owner"; samples: UsageSample[]; reminders: Reminder[]; queueMetrics: QueueMetricsSnapshot | null; issueSamples: IssueSample[]; auditAggregates: AuditAggregate[] }  // authenticated → real (possibly empty)
   | { tier: "error" };                                                // authenticated load failed
 
 type PanelTier = "demo" | "owner";
@@ -24,6 +27,7 @@ interface PanelContext {
   reminders: Reminder[];
   queueMetrics: QueueMetricsSnapshot | null;
   issueSamples: IssueSample[];
+  auditAggregates: AuditAggregate[];
   now: Date;
 }
 
@@ -88,6 +92,14 @@ const PANELS: readonly Panel[] = [
     render: (s) => renderIssueHistoryChart(s),
   }),
   definePanel({
+    id: "audit",
+    title: "Audit",
+    availableIn: ["demo", "owner"],
+    fullWidth: true,
+    load: (c) => c.auditAggregates,
+    render: (a) => renderAuditAggregateChart(a),
+  }),
+  definePanel({
     id: "reminders",
     title: "Reminders",
     availableIn: ["demo", "owner"],
@@ -114,6 +126,7 @@ function buildContext(
       reminders: getDemoReminders(),
       queueMetrics: getDemoQueueMetrics(),
       issueSamples: getDemoIssueSamples(),
+      auditAggregates: getDemoAuditAggregates(),
       now,
     };
   return {
@@ -121,6 +134,7 @@ function buildContext(
     reminders: state.reminders,
     queueMetrics: state.queueMetrics,
     issueSamples: state.issueSamples,
+    auditAggregates: state.auditAggregates,
     now,
   };
 }

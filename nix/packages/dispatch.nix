@@ -9,6 +9,10 @@
 pkgs.writeShellScriptBin "dispatch" ''
   set -euo pipefail
 
+  # Strip the unbounded direnv blob before the first execve (git) so a bloated
+  # interactive-shell environment can't trigger E2BIG (#1879). Exec-free builtin.
+  unset -v "''${!DIRENV_@}" 2>/dev/null || true
+
   TOPLEVEL="$(git rev-parse --show-toplevel)"
   TICK="$TOPLEVEL/.claude/skills/dispatch-propagate/scripts/dispatch-tick"
 
@@ -16,6 +20,14 @@ pkgs.writeShellScriptBin "dispatch" ''
     echo "dispatch: dispatch-tick not found or not executable: $TICK" >&2
     exit 1
   fi
+
+  SANITIZE="$TOPLEVEL/.claude/skills/dispatch-propagate/scripts/lib-sanitize-launch-env.sh"
+  if [ ! -r "$SANITIZE" ]; then
+    echo "dispatch: sanitize lib not found: $SANITIZE" >&2
+    exit 1
+  fi
+  . "$SANITIZE"
+  sanitize_launch_env || exit 1
 
   if [ "$#" -eq 0 ]; then
     exec "$TICK" --manual
