@@ -97,7 +97,7 @@ export function mountResponsiveChart(slot: HTMLElement, render: (width: number) 
       return;
     }
     const entry = entries[entries.length - 1];
-    const next = Math.round(entry.contentRect.width) || FALLBACK_CONTAINER_WIDTH;
+    const next = entry.contentRect.width > 0 ? Math.round(entry.contentRect.width) : FALLBACK_CONTAINER_WIDTH;
     // Debounce sub-pixel jitter and guard against any re-paint feedback loop.
     if (Math.abs(next - last) >= 1) {
       last = next;
