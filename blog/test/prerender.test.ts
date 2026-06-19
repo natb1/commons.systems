@@ -375,8 +375,15 @@ describe("prerenderPosts", () => {
       (c) => String(c[0]) === "/dist/index.html",
     );
     const html = rootCall![1] as string;
-    expect(html).toContain('<app-nav id="nav"><span class="nav-links">');
-    expect(html).toContain('<a href="/">Home</a>');
+    // The <app-nav> wrapper survives as an inert tag; inside it the ds Nav
+    // renders the nav links (crawlers still see them) plus the home link.
+    expect(html).toContain('<app-nav id="nav">');
+    expect(html).toContain("cs-nav");
+    expect(html).toContain('href="/"');
+    expect(html).toContain("Home");
+    // Anonymous prerender: home link present, no auth "Login" control.
+    expect(html).toContain("commons.systems");
+    expect(html).not.toContain("Login");
     expect(html).not.toContain('<app-nav id="nav"></app-nav>');
   });
 

@@ -192,9 +192,17 @@ describe("prerenderStaticPage", () => {
   it("injects nav links into <app-nav>", () => {
     prerenderStaticPage(makeStaticConfig());
     const html = getWrittenHtml("/dist/about/index.html");
-    expect(html).toContain('<app-nav id="nav"><span class="nav-links">');
-    expect(html).toContain('<a href="/">Home</a>');
-    expect(html).toContain('<a href="/about">About</a>');
+    // The <app-nav> wrapper survives; inside it the ds Nav renders both links
+    // (the /about link is align:undefined here, so it stays in the start group)
+    // plus the home link, anonymously (no "Login").
+    expect(html).toContain('<app-nav id="nav">');
+    expect(html).toContain("cs-nav");
+    expect(html).toContain('href="/"');
+    expect(html).toContain("Home");
+    expect(html).toContain('href="/about"');
+    expect(html).toContain("About");
+    expect(html).toContain("commons.systems");
+    expect(html).not.toContain("Login");
   });
 
   it("writes output to ${distDir}${path}/index.html and creates the directory", () => {
