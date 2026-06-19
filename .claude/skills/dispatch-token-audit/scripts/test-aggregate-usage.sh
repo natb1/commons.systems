@@ -48,9 +48,11 @@ WORKER_ENV_JSON='{"schema":"dispatch.outcome.v1","phase":"review","repo":"natb1/
 ROUTER_ENV_JSON='{"schema":"dispatch.outcome.v1","phase":"qa","repo":"natb1/commons.systems","issue":999,"pr":1234,"base_sha":null,"findings_surfaced":0,"findings_actionable":0,"fixes_applied":0,"followups_filed":0,"subagents_launched":0,"disposition":"completed","terminated_reason":null}'
 SUBAGENT_ENV_JSON='{"schema":"dispatch.outcome.v1","phase":"review","repo":"natb1/commons.systems","issue":999,"pr":1234,"base_sha":"def456","findings_surfaced":1000,"findings_actionable":1000,"fixes_applied":1000,"followups_filed":1000,"subagents_launched":1000,"disposition":"escalated","terminated_reason":"subagent excluded"}'
 envelope_block() { printf '<!-- dispatch:outcome:v1 -->\n```json\n%s\n```' "$1"; }
+RECOVERY_ENV_JSON='{"schema":"dispatch.outcome.v1","phase":"review","repo":"natb1/commons.systems","issue":998,"pr":5555,"base_sha":"rec111","findings_surfaced":5555,"findings_actionable":4444,"fixes_applied":3333,"followups_filed":2222,"subagents_launched":1111,"disposition":"completed_with_fixes","terminated_reason":null}'
 WORKER_BLOCK="$(envelope_block "$WORKER_ENV_JSON")"
 ROUTER_BLOCK="$(envelope_block "$ROUTER_ENV_JSON")"
 SUBAGENT_BLOCK="$(envelope_block "$SUBAGENT_ENV_JSON")"
+RECOVERY_BLOCK="$(envelope_block "$RECOVERY_ENV_JSON")"
 
 ROOT=""
 
@@ -174,8 +176,34 @@ setup() {
 
   jq . "$router_jsonl" >/dev/null
 
-  # 4. Touch every .jsonl to now so they fall inside the window
-  touch "$worker_jsonl" "$subagent_jsonl" "$router_jsonl" "$subagent_b_jsonl"
+  # 4. Recovery session (NEGATIVE regression fixture, #1905):
+  #    $ROOT/-home-x-worktrees-998-recovery/sess-recovery.jsonl
+  #    Classifies as `recovery` (firstuser_str contains /recover-api-error).
+  #    Zero usage so token/price/baseline-proxy totals are unchanged.
+  #    Carries a RECOVERY_BLOCK envelope with distinctive 5555 counts;
+  #    by_phase_outcome MUST NOT include it after the allowlist filter change.
+  local recovery_dir="$ROOT/-home-x-worktrees-998-recovery"
+  mkdir -p "$recovery_dir"
+
+  local recovery_jsonl="$recovery_dir/sess-recovery.jsonl"
+
+  # line 1: first user line — classifies as recovery
+  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/recover-api-error</command-name>"}}' \
+    >> "$recovery_jsonl"
+
+  # line 2: assistant — opus, normal gitBranch, ZERO usage so totals stay stable
+  printf '%s\n' '{"type":"assistant","gitBranch":"998-recovery","message":{"model":"claude-opus-4-8","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+    >> "$recovery_jsonl"
+
+  # line 3: outcome-envelope tool_result, no tool_use_id -> "unknown" payload bucket
+  jq -nc --arg c "$RECOVERY_BLOCK" \
+    '{type:"user",message:{content:[{type:"tool_result",content:$c}]}}' \
+    >> "$recovery_jsonl"
+
+  jq . "$recovery_jsonl" >/dev/null
+
+  # 5. Touch every .jsonl to now so they fall inside the window
+  touch "$worker_jsonl" "$subagent_jsonl" "$router_jsonl" "$subagent_b_jsonl" "$recovery_jsonl"
 
   export DISPATCH_AUDIT_PROJECTS_ROOT="$ROOT"
 }
@@ -221,6 +249,8 @@ assert_eq "by_session_type.subagent.sessions" "2" \
   "$(jq '.by_session_type.subagent.sessions' <<<"$OUT")"
 assert_eq 'by_session_type["router-tick"].sessions' "1" \
   "$(jq '.by_session_type["router-tick"].sessions' <<<"$OUT")"
+assert_eq "by_session_type.recovery.sessions" "1" \
+  "$(jq '.by_session_type.recovery.sessions' <<<"$OUT")"
 
 assert_eq 'by_phase["plan-implement"].output' "550" \
   "$(jq '.by_phase["plan-implement"].output' <<<"$OUT")"
@@ -254,10 +284,10 @@ assert_eq 'tool_sequences: no n-gram token keeps an env-var assignment' "0" \
 # computed from the same block strings so they track the fixture exactly.
 PAYLOAD_BASH=$(jq -n --arg e "$WORKER_BLOCK" \
   '("PAYLOAD_0123456789"|utf8bytelength) + ($e|utf8bytelength)')
-PAYLOAD_UNKNOWN=$(jq -n --arg r "$ROUTER_BLOCK" --arg s "$SUBAGENT_BLOCK" \
-  '("Exit code 1\nsome detail"|utf8bytelength) + ($r|utf8bytelength) + ($s|utf8bytelength)')
-PAYLOAD_TOTAL=$(jq -n --arg e "$WORKER_BLOCK" --arg r "$ROUTER_BLOCK" --arg s "$SUBAGENT_BLOCK" \
-  '("PAYLOAD_0123456789"|utf8bytelength) + ("Exit code 1\nsome detail"|utf8bytelength) + ($e|utf8bytelength) + ($r|utf8bytelength) + ($s|utf8bytelength)')
+PAYLOAD_UNKNOWN=$(jq -n --arg r "$ROUTER_BLOCK" --arg s "$SUBAGENT_BLOCK" --arg recovery "$RECOVERY_BLOCK" \
+  '("Exit code 1\nsome detail"|utf8bytelength) + ($r|utf8bytelength) + ($s|utf8bytelength) + ($recovery|utf8bytelength)')
+PAYLOAD_TOTAL=$(jq -n --arg e "$WORKER_BLOCK" --arg r "$ROUTER_BLOCK" --arg s "$SUBAGENT_BLOCK" --arg recovery "$RECOVERY_BLOCK" \
+  '("PAYLOAD_0123456789"|utf8bytelength) + ("Exit code 1\nsome detail"|utf8bytelength) + ($e|utf8bytelength) + ($r|utf8bytelength) + ($s|utf8bytelength) + ($recovery|utf8bytelength)')
 
 assert_eq "payload_bytes.total" "$PAYLOAD_TOTAL" \
   "$(jq '.payload_bytes.total' <<<"$OUT")"
@@ -279,16 +309,16 @@ assert_eq 'context_over_120k.by_phase["review-fix"].sessions' "1" \
   "$(jq '.lenses.context_over_120k.by_phase["review-fix"].sessions' <<<"$OUT")"
 
 # --- baseline_context lens ---
-# baseline_context counts ALL sessions (rows). Our PR's agent-bbb is a 4th
-# in-window transcript, so sessions==4. Its first assistant msg has init
+# baseline_context counts ALL sessions (rows). The recovery session (#1905) is a
+# 5th in-window transcript, so sessions==5. Its first assistant msg has init
 # input=0/cc=0 → boot=0, so it does not change peak_boot_tokens (still 3000)
-# nor total_proxy_usd. Boot-token list across the four sessions sorts to
-# [0, 3, 30, 3000]; the even-length median is (3+30)/2 = 16.5.
-assert_eq "lenses.baseline_context.sessions" "4" \
+# nor total_proxy_usd. Boot-token list across the five sessions sorts to
+# [0, 0, 3, 30, 3000]; the odd-length (5) median is the middle value = 3.
+assert_eq "lenses.baseline_context.sessions" "5" \
   "$(jq '.lenses.baseline_context.sessions' <<<"$OUT")"
 assert_eq "lenses.baseline_context.peak_boot_tokens" "3000" \
   "$(jq '.lenses.baseline_context.peak_boot_tokens' <<<"$OUT")"
-assert_eq "lenses.baseline_context.median_boot_tokens" "16.5" \
+assert_eq "lenses.baseline_context.median_boot_tokens" "3" \
   "$(jq '.lenses.baseline_context.median_boot_tokens' <<<"$OUT")"
 assert_eq "lenses.baseline_context.total_proxy_usd" "$EXPECTED_BASELINE_PROXY" \
   "$(jq '.lenses.baseline_context.total_proxy_usd' <<<"$OUT")"
@@ -339,6 +369,15 @@ assert_eq "by_phase_outcome.qa.disposition_distribution.completed" "1" \
 assert_eq "by_phase_outcome.review excludes subagent (not 1008)" "true" \
   "$(jq '.by_phase_outcome.review.findings_surfaced == 8' <<<"$OUT")"
 
+# Recovery exclusion (#1905 negative regression): the recovery session carries a
+# review envelope with findings_surfaced=5555. The allowlist filter admits only
+# worker and router-tick, so recovery is excluded. Without the fix the old
+# blocklist would admit it and findings_surfaced would be 5563 instead of 8.
+assert_eq "by_session_type.recovery.sessions (recovery is ingested)" "1" \
+  "$(jq '.by_session_type.recovery.sessions' <<<"$OUT")"
+assert_eq "by_phase_outcome.review.findings_surfaced excludes recovery (not 5563)" "8" \
+  "$(jq '.by_phase_outcome.review.findings_surfaced' <<<"$OUT")"
+
 # Per-run rates on the worker session entry (#1860 AC: per-run hit-rate).
 assert_eq "sessions[sess-worker].outcome.findings_surfaced" "8" \
   "$(jq '[.sessions[]|select(.id=="sess-worker")][0].outcome.findings_surfaced' <<<"$OUT")"
@@ -353,6 +392,22 @@ assert_eq "sessions[agent-aaa].outcome is null" "null" \
   "$(jq '[.sessions[]|select(.id=="agent-aaa")][0].outcome' <<<"$OUT")"
 assert_eq "sessions[agent-aaa].outcome_rates is null" "null" \
   "$(jq '[.sessions[]|select(.id=="agent-aaa")][0].outcome_rates' <<<"$OUT")"
+# A session whose envelope has all-zero counts carries a non-null outcome_rates
+# object whose individual rate fields are null (zero-denominator guard).
+# Anchor first that the envelope was actually parsed (outcome non-null) and that
+# outcome_rates is a non-null object, so the per-field null assertions below
+# distinguish the zero-count path from the unparsed-envelope path (outcome:null,
+# under which null.outcome_rates.hit_rate would also be null — a false pass).
+assert_eq 'sessions[sess-router].outcome.findings_surfaced' '0' \
+  "$(jq '[.sessions[]|select(.id=="sess-router")][0].outcome.findings_surfaced' <<<"$OUT")"
+assert_eq 'sessions[sess-router].outcome_rates is non-null object' 'true' \
+  "$(jq '[.sessions[]|select(.id=="sess-router")][0].outcome_rates != null' <<<"$OUT")"
+assert_eq 'sessions[sess-router].outcome_rates.hit_rate is null' 'null' \
+  "$(jq '[.sessions[]|select(.id=="sess-router")][0].outcome_rates.hit_rate' <<<"$OUT")"
+assert_eq 'sessions[sess-router].outcome_rates.actionability is null' 'null' \
+  "$(jq '[.sessions[]|select(.id=="sess-router")][0].outcome_rates.actionability' <<<"$OUT")"
+assert_eq 'sessions[sess-router].outcome_rates.fix_rate is null' 'null' \
+  "$(jq '[.sessions[]|select(.id=="sess-router")][0].outcome_rates.fix_rate' <<<"$OUT")"
 
 # ---------------------------------------------------------------------------
 # Persist-wiring tests (Unit 2).  These use a fake writer stub controlled via
@@ -456,6 +511,67 @@ assert_eq "P4 stdout pure JSON (no leak): valid JSON" "object" \
   "$(jq -r 'type' <<<"$OUT_P4")"
 assert_eq "P4 stdout pure JSON (no leak): token absent" "0" \
   "$(grep -c 'LEAKED-DOCID' <<<"$OUT_P4" || true)"
+
+# ---------------------------------------------------------------------------
+# Partial-envelope null-ification (#1909). ISOLATED fixture: a fresh projects
+# root with ONE non-subagent worker session whose envelope OMITS the required
+# count key `findings_surfaced` (otherwise well-formed). The reader must treat
+# this partial envelope as ABSENT (outcome:null) — never coerce the missing
+# count to a zero, which rate()'s `($num // 0)` would otherwise turn into a
+# fabricated 0 rate.
+#
+# Built in its own mktemp root (NOT the shared setup() tree) so the existing
+# count assertions are untouched. The session lives under a -worktrees- path,
+# NOT a /subagents/ one, so a clean fix (not the unrelated subagent exclusion)
+# is what keeps it out of by_phase_outcome.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- partial-envelope null-ification (#1909) ---"
+
+# Partial envelope: findings_surfaced OMITTED; everything else mirrors the valid
+# worker envelope (phase "review", the other two counts present as numbers).
+PARTIAL_ENV_JSON='{"schema":"dispatch.outcome.v1","phase":"review","repo":"natb1/commons.systems","issue":1909,"pr":2000,"base_sha":"aaa111","findings_actionable":5,"fixes_applied":3,"followups_filed":2,"subagents_launched":12,"disposition":"completed_with_fixes","terminated_reason":null}'
+PARTIAL_BLOCK="$(envelope_block "$PARTIAL_ENV_JSON")"
+
+PARTIAL_ROOT=$(mktemp -d)
+trap 'rm -rf "$PARTIAL_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+partial_worktree="$PARTIAL_ROOT/-home-x-worktrees-1909-partial"
+mkdir -p "$partial_worktree"
+partial_jsonl="$partial_worktree/sess-partial.jsonl"
+
+# line 1: first user line — classifies as worker (mirror line 68)
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+  >> "$partial_jsonl"
+# line 2: assistant — opus, minimal usage (mirror the worker assistant shape)
+printf '%s\n' '{"type":"assistant","attributionSkill":"review-fix","isSidechain":false,"gitBranch":"1909-partial","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_p01","name":"Bash","input":{"command":"echo hi"}}],"usage":{"input_tokens":1,"cache_creation_input_tokens":2,"cache_read_input_tokens":4,"output_tokens":1}}}' \
+  >> "$partial_jsonl"
+# line 3: partial outcome-envelope tool_result (mirror lines 106–108)
+jq -nc --arg c "$PARTIAL_BLOCK" \
+  '{type:"user",message:{content:[{type:"tool_result",tool_use_id:"toolu_p01",content:$c}]}}' \
+  >> "$partial_jsonl"
+jq . "$partial_jsonl" >/dev/null
+touch "$partial_jsonl"
+
+OUT_PARTIAL=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$PARTIAL_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+# (a) the session's per-run outcome is null (partial envelope treated as absent)
+assert_eq "partial-envelope sessions[sess-partial].outcome is null" "null" \
+  "$(jq '[.sessions[]|select(.id=="sess-partial")][0].outcome' <<<"$OUT_PARTIAL")"
+# (b) its outcome_rates is null too (no fabricated 0 rate)
+assert_eq "partial-envelope sessions[sess-partial].outcome_rates is null" "null" \
+  "$(jq '[.sessions[]|select(.id=="sess-partial")][0].outcome_rates' <<<"$OUT_PARTIAL")"
+# (c) by_phase_outcome carries NO entry for the envelope's "review" phase — the
+# null outcome is filtered at the pool, so the whole object is empty ({}). An
+# absent bucket is `null`, not `0`, so we assert the object is {} (not
+# .review.sessions == 0, which would itself be null).
+assert_eq "partial-envelope by_phase_outcome is empty {} (no fabricated entry)" "{}" \
+  "$(jq -c '.by_phase_outcome' <<<"$OUT_PARTIAL")"
+
+rm -rf "$PARTIAL_ROOT"
 
 report_results
 exit $FAIL

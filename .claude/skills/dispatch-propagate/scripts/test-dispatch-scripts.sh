@@ -282,6 +282,10 @@ case "$args" in
     # branch (case is first-wins). Log the full $args so tests can assert whether
     # --paginate was passed and what per_page= value was used.
     echo "$args" >> "$STUB_DIR/gh-issue-list-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
     rest_path_dt=$(printf '%s' "$args" | grep -oE 'repos/[^ ]+')
     rest_query_dt="${rest_path_dt#*\?}"
     rest_label_dt=""
@@ -1218,6 +1222,51 @@ if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
   assert_eq "limit: log does not contain --paginate" "no" "yes"
 else
   assert_eq "limit: log does not contain --paginate" "no" "no"
+fi
+teardown
+
+echo "Test: gh-failure -- both branches return non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+: > "$STUB_DIR/gh-fail-rest"
+rc_fail=0
+err_fail=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-empty 2>&1 >/dev/null) || rc_fail=$?
+assert_eq "gh-failure: --paginate branch returns non-zero" "1" "$rc_fail"
+case "$err_fail" in *"gh_issue_list_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "gh-failure: stderr names the helper failure" "yes" "$m"
+rc_fail_lim=0
+err_fail_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 50 --label dispatch-test-empty 2>&1 >/dev/null) || rc_fail_lim=$?
+assert_eq "gh-failure: single-page branch returns non-zero" "1" "$rc_fail_lim"
+case "$err_fail_lim" in *"gh_issue_list_rest: gh api failed"*) m_lim=yes ;; *) m_lim=no ;; esac
+assert_eq "gh-failure: single-page stderr names the helper failure" "yes" "$m_lim"
+teardown
+
+echo "Test: --repo flag -- cross-repo path uses owner/other-repo segment, not placeholder"
+setup
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_repo=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --repo owner/other-repo --label dispatch-test-empty)
+if grep -q 'repos/owner/other-repo/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "--repo: API path uses cross-repo segment" "yes" "$seg"
+if grep -q 'repos/{owner}/{repo}/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then ph=yes; else ph=no; fi
+assert_eq "--repo: placeholder absent from cross-repo call" "no" "$ph"
+assert_eq "--repo: returns the stub's empty array" "[]" "$actual_repo"
+# Single-page (--limit) branch with --repo: pin that the cross-repo segment is
+# emitted under the per_page= (no --paginate) path too, not just --paginate.
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_repo_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 50 --repo owner/other-repo --label dispatch-test-empty)
+assert_eq "--repo+--limit: returns the stub's empty array" "[]" "$actual_repo_lim"
+if grep -q 'repos/owner/other-repo/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then seg_lim=yes; else seg_lim=no; fi
+assert_eq "--repo+--limit: single-page API path uses cross-repo segment" "yes" "$seg_lim"
+# Prove it was the single-page branch (not --paginate) that emitted the segment.
+if grep -q 'per_page=50[^0-9]' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "--repo+--limit: log contains per_page=50" "yes" "yes"
+else
+  assert_eq "--repo+--limit: log contains per_page=50" "yes" "no"
+fi
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "--repo+--limit: log does not contain --paginate" "no" "yes"
+else
+  assert_eq "--repo+--limit: log does not contain --paginate" "no" "no"
 fi
 teardown
 
@@ -4721,6 +4770,46 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
 assert_eq "--priority-only returns priority issue" "issue 400" "$result"
 teardown
 
+# Build the shared ancestor-priority fixture for the PO-ANC* tests.
+#
+# Args:
+#   $1 depth         — 1 (issues 100/101/200, parent 101->100) or
+#                      2 (issues 100/102/101/200, parent 101->102->100, the
+#                        `priority` label sits on grandparent 100 via neutral 102)
+#   $2 pr20_rollup   — the rollup JSON for PR 20 ($FAILING_ROLLUP for the
+#                      selection tests, $PENDING_ROLLUP for the CI-pending
+#                      waiting-fallback test)
+#
+# Writes pr-list-union.json (PR 10 closes 200 / always $FAILING_ROLLUP;
+# PR 20 closes 101 / $2), issue-list.json, worktree-list.txt, and the parent
+# stub(s) into $STUB_DIR. Caller runs setup first and teardown after.
+#
+# INVARIANT (do NOT change): issue 101 carries ONLY [help wanted] and NEVER an
+# own `priority` label — priority reaches it solely through the ancestor chain.
+# Several callers (esp. PO-ANC5) depend on 101 being non-priority to exercise the
+# correct branch; adding `priority` to 101 here would silently break that
+# coverage for ALL five tests at once. See the PO-ANC5 block comment.
+setup_ancestor_priority_fixture() {
+  local depth="$1" pr20_rollup="$2"
+  local union
+  union='['
+  union+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+  union+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$pr20_rollup" '[{"number":101}]')"
+  union+=']'
+  setup_union_pr_list "$union"
+  printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+  if [[ "$depth" == 2 ]]; then
+    printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":102,"created_at":"2024-01-01T00:00:00Z","labels":[]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+      > "$STUB_DIR/issue-list.json"
+    printf '102' > "$STUB_DIR/parent-101.json"   # 101 -> 102
+    printf '100' > "$STUB_DIR/parent-102.json"   # 102 -> 100 (priority grandparent)
+  else
+    printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+      > "$STUB_DIR/issue-list.json"
+    printf '100' > "$STUB_DIR/parent-101.json"   # 101 -> 100 (priority epic)
+  fi
+}
+
 # PO-ANC1. A PR whose closing issue carries NO own `priority` label, but whose
 #           ancestor epic IS open and carries `priority`, is lifted into the
 #           priority tier via ancestor inheritance (#1914). In DEFAULT mode this
@@ -4748,22 +4837,73 @@ teardown
 #           PR 10 (older) wins. With it, PR 20 gets pri=1 and wins outright.
 echo "Test: default mode — ancestor priority lifts PR over non-priority PR"
 setup
-UNION='['
-UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
-UNION+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"
-UNION+=']'
-setup_union_pr_list "$UNION"
-# issue 100: priority epic (open ancestor of 101); issue 101: leaf (no own priority);
-# issue 200: plain bug. Neither 100 nor 200 has `help wanted`, so neither enters the
-# startable issue queue. Issue 101 has `help wanted` but no own `priority`, so it is
-# not in the priority issue tier and does not preempt the PR selection.
-printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
-  > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-# parent fixture: issue 101's parent is 100 (the priority epic); no grandparent.
-printf '100' > "$STUB_DIR/parent-101.json"
+setup_ancestor_priority_fixture 1 "$FAILING_ROLLUP"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "ancestor priority lifts PR 20 over older PR 10 (default mode)" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
+# PO-ANC-TRUNC. The depth-7 truncation warning must fire WITHOUT disabling
+#           ancestor-priority evaluation across the supported window. This is a
+#           two-PR contest, not an uncontested selection: without ancestor
+#           inheritance PR 10 wins on the higher `bug` topic category (and is
+#           also older); with it, issue 95's depth-6 priority lifts PR 20 on the
+#           outermost priority axis. So a correct result REQUIRES ancestor
+#           priority to be evaluated correctly across the supported window WHILE
+#           the depth-7 chain trips the truncation warning. Placing `priority`
+#           on the depth-6 (deepest in-window) ancestor proves both happen at
+#           once.
+#
+#           Fixture:
+#             issue 101  labels: [help wanted]   (leaf; closed by PR 20; no own priority)
+#             issue 95   labels: [priority]       (depth-6 ancestor of 101; priority-only)
+#             issue 200  labels: [bug]            (closed by PR 10; no priority)
+#             PR 10 (older, 2024-01-01) closes issue 200 (bug, no priority)
+#             PR 20 (newer, 2024-01-02) closes issue 101 (help wanted, no own
+#                     priority — priority only via depth-6 ancestor 95)
+#           Issue 95 is `priority`-only (NOT `help wanted`), so it never enters
+#           the startable issue queue and acts solely as an inherited-priority
+#           ancestor.
+#           Deep parent chain: 7 parent links (101->100->...->94). The closing
+#           issue 101 MUST itself have parent-101.json or the 7th-hop sentinel
+#           never fires. Issue 95 is the depth-6 (deepest in-window) ancestor;
+#           94 (the 7th-level ancestor) has no parent file. build_parent_json
+#           caps at depth>=7.
+echo "Test: default mode — ancestor chain deeper than supported depth emits truncation warning"
+setup
+UNION='['
+UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 20 "20-deep-chain-leaf" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":95,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+for i in 101 100 99 98 97 96 95; do
+  printf '%d' $((i - 1)) > "$STUB_DIR/parent-$i.json"
+done
+result=$("$TMPDIR_TEST/dispatch-select-target" 2>"$TMPDIR_TEST/stderr") && rc=0 || rc=$?
+stderr=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "deep-chain selection still exits 0" "0" "$rc"
+assert_eq "ancestor priority lifts PR 20 over older PR 10 despite truncation" "pr 20 20-deep-chain-leaf fix-checks" "$result"
+assert_eq "truncation warning on stderr" "1" "$(grep -c 'ancestor chain deeper than supported depth (6) for issue 101' <<<"$stderr")"
+teardown
+
+echo "Test: default mode — ancestor chain at supported depth (6) emits no truncation warning"
+setup
+UNION='['"$(make_pr_union 10 "10-deep-chain-leaf" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Chain exactly 6 levels deep (101->100->...->95), parent-95.json ABSENT so the
+# 7th .parent hop resolves to null and the sentinel stays silent.
+for i in 101 100 99 98 97 96; do
+  printf '%d' $((i - 1)) > "$STUB_DIR/parent-$i.json"
+done
+result=$("$TMPDIR_TEST/dispatch-select-target" 2>"$TMPDIR_TEST/stderr") && rc=0 || rc=$?
+stderr=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "depth-6 selection exits 0" "0" "$rc"
+assert_eq "uncontested PR selected at depth 6" "pr 10 10-deep-chain-leaf fix-checks" "$result"
+# Harness has no assert_not_contains; assert absence by counting matches.
+assert_eq "no truncation warning at depth 6" "0" "$(grep -c 'ancestor chain deeper' <<<"$stderr")"
 teardown
 
 # PO-ANC2. Same fixture, --priority-only mode. PR 10 (closes issue 200, no priority)
@@ -4773,17 +4913,93 @@ teardown
 #           returns empty (both bits 0); with it, returns pr 20.
 echo "Test: --priority-only — ancestor priority qualifies PR (PO-ANC2)"
 setup
-UNION='['
-UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
-UNION+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"
-UNION+=']'
-setup_union_pr_list "$UNION"
-printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
-  > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf '100' > "$STUB_DIR/parent-101.json"
+setup_ancestor_priority_fixture 1 "$FAILING_ROLLUP"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
 assert_eq "--priority-only ancestor priority qualifies PR 20" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
+# PO-ANC3. Depth-2 ancestor priority. Same shape as PO-ANC1, but the `priority`
+#           label sits on the GRANDPARENT (issue 100), reached through a
+#           NON-priority intermediate parent (issue 102). The assertion passes
+#           only if ancestor detection recurses to depth 2: a 1-level recursion
+#           bug would see only the intermediate 102 (no priority), fail to lift
+#           PR 20, and let the older PR 10 win. So this assertion proves the
+#           depth-2 `recurse`/`.[1:7]` ancestor path detects inherited priority
+#           through a multi-hop chain.
+#
+#           Fixture:
+#             issue 100  labels: [priority]        (open grandparent epic)
+#             issue 102  labels: []                (intermediate parent; NO priority)
+#             issue 101  labels: [help wanted]     (leaf; child of 102 via parent-101.json)
+#             issue 200  labels: [bug]             (unrelated, non-priority issue)
+#             PR 10 (older, 2024-01-01) closes issue 200 (bug, no priority)
+#             PR 20 (newer, 2024-01-02) closes issue 101 (help wanted, no own
+#                     priority — priority only via grandparent 100)
+#           parent-101.json → 102; parent-102.json → 100; no parent-100.json.
+#           Issue 102's neutral labels keep it out of the startable issue queue so
+#           it does not perturb selection. Without depth-2 recursion both PRs have
+#           pri=0 and PR 10 (older) wins; with it PR 20 gets pri=1 and wins.
+echo "Test: default mode — depth-2 ancestor priority lifts PR over non-priority PR"
+setup
+# Fixture written by setup_ancestor_priority_fixture 2: grandparent 100 carries
+# `priority`; neutral intermediate 102 connects 101→102→100 (see helper comment).
+setup_ancestor_priority_fixture 2 "$FAILING_ROLLUP"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "depth-2 ancestor priority lifts PR 20 over older PR 10 (PO-ANC3)" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
+# PO-ANC4. Depth-2 ancestor priority, --priority-only mode. Same fixture as
+#           PO-ANC3, but exercises the `--priority-only` early-skip guard, which
+#           also calls pr_priority_bit (dispatch-select-target line 811-812) and
+#           its depth-2 ANCESTOR_NUMS traversal. PR 10 (closes issue 200, no
+#           priority) is filtered by the guard; PR 20 (closes issue 101, priority
+#           only via grandparent 100 through intermediate 102) passes the guard via
+#           inherited priority. The discriminator: a 1-level recursion bug would see
+#           only the neutral intermediate 102, leave PR 20 with pri=0, and
+#           --priority-only would return empty (both bits 0); with depth-2 recursion
+#           it returns pr 20. Mirrors the PO-ANC1/PO-ANC2 (depth-1) pattern at depth 2.
+echo "Test: --priority-only — depth-2 ancestor priority qualifies PR (PO-ANC4)"
+setup
+setup_ancestor_priority_fixture 2 "$FAILING_ROLLUP"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only depth-2 ancestor priority qualifies PR 20 (PO-ANC4)" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
+# PO-ANC5. Same fixture as PO-ANC2 but PR 20's rollup is PENDING, not FAILING.
+#           This exercises the CI-pending ancestor-priority WAITING_NUM FALLBACK
+#           path — the orthogonal case to PO-ANC1/PO-ANC2's *selection* assertions.
+#
+#           PR 20 qualifies for the priority tier (ci_rc path at line 849 checks
+#           --priority-only + inherited ancestor priority to enter WAITING_NUM arm).
+#           Its CI is pending (ci_rc==1), so it is NOT selectable. The selector
+#           emits `waiting <first-closing-issue-num>` from the fallback arm of the
+#           jq at dispatch-select-target:864-869:
+#
+#             ( map(.number|tostring|select(own-priority-label?)) | .[0] )
+#             // ( [.[].number|tostring] | .[0] )
+#             // empty
+#
+#           CRITICAL INVARIANT — do NOT change this: issue 101 carries ONLY
+#           [help wanted] and has NO own `priority` label. Priority comes solely
+#           from ancestor 100 (via parent-101.json). This is exactly what forces
+#           the jq FALLBACK arm: the first arm (select own priority-labeled issues)
+#           returns null because 101 is not directly priority-labeled, so the
+#           fallback `[.[].number|tostring]|.[0]` resolves to "101". If anyone
+#           adds `priority` to issue 101, the FIRST arm would fire and also return
+#           101 — the assertion would still pass while silently testing the WRONG
+#           branch. So 101 MUST stay non-priority. A broken fallback arm yields
+#           `empty` (no `waiting` line; the PR falls through), not `waiting 101`.
+#
+#           PR 10 (older, closes issue 200, $FAILING_ROLLUP) is dropped by the
+#           --priority-only early-skip guard (issue 200 has `bug` only, no priority,
+#           no ancestor with priority), proving the ancestor-priority PR is the only
+#           candidate and does not interfere with the waiting result.
+echo "Test: --priority-only — CI-pending ancestor priority → waiting fallback (PO-ANC5)"
+setup
+setup_ancestor_priority_fixture 1 "$PENDING_ROLLUP"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only CI-pending ancestor priority → waiting (fallback target) (PO-ANC5)" \
+  "waiting 101" "$result"
 teardown
 
 # PO3. main is red and no latch issue open → main-broken fires first, before the
@@ -6601,6 +6817,248 @@ rc=0
 [[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
 assert_eq "403 auth → rc non-zero" "nonzero" "$rc_state"
 assert_eq "403 auth → 1 attempt (fail fast)" "1" "$(cat "$TMPDIR_TEST/c-e")"
+teardown
+
+# ============================================================================
+# playwright_install_with_deps tests
+# ============================================================================
+echo ""
+echo "=== playwright_install_with_deps ==="
+
+# Group-local stub writers (not hoisted into setup() — other groups rely on
+# real timeout/sleep for hang protection). Each writes to $TMPDIR_TEST/bin,
+# already first on PATH.
+write_playwright_npx_stub() {
+  cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+exit "${NPX_EXIT:-0}"
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/npx"
+}
+write_playwright_hang_stubs() {
+  cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/timeout"
+  cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/sleep"
+}
+
+# 1. Skip-guard: PLAYWRIGHT_BROWSERS_PATH set → return 0, 0 npx calls.
+echo "Test: playwright_install_with_deps skip-guard → rc 0, 0 npx calls"
+setup
+write_playwright_npx_stub
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-1"
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export PLAYWRIGHT_BROWSERS_PATH=/nix/some/path
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-1"
+  playwright_install_with_deps
+)
+rc=$?
+count=$( [[ -f "$NPX_COUNT_FILE" ]] && cat "$NPX_COUNT_FILE" || echo 0 )
+assert_eq "skip-guard → rc 0" "0" "$rc"
+assert_eq "skip-guard → 0 npx calls" "0" "$count"
+teardown
+
+# 2. First-attempt success: npx exits 0 → rc 0, exactly 1 npx call.
+echo "Test: playwright_install_with_deps first-attempt success → rc 0, 1 npx call"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+[[ -n "${NPX_ARGS_FILE:-}" ]] && echo "$@" >> "$NPX_ARGS_FILE"
+exit "${NPX_EXIT:-0}"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-2"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-2.log"
+NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-2"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export NPX_EXIT=0
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-2"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-2.log"
+  export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-2"
+  playwright_install_with_deps
+) || rc=$?
+assert_eq "first-attempt success → rc 0" "0" "$rc"
+assert_eq "first-attempt success → 1 npx call" "1" "$(cat "$NPX_COUNT_FILE")"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
+assert_eq "first-attempt success → timeout invoked" "nonempty" "$timeout_calls"
+assert_eq "first-attempt success → npx args" \
+  "playwright install --with-deps chromium" \
+  "$( [[ -f "$NPX_ARGS_FILE" ]] && cat "$NPX_ARGS_FILE" || echo '<file missing>' )"
+teardown
+
+# 3. Both attempts fail: npx exits 1 twice → rc non-zero, exactly 2 npx calls.
+echo "Test: playwright_install_with_deps both-attempts fail → rc non-zero, 2 npx calls"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+[[ -n "${NPX_ARGS_FILE:-}" ]] && echo "$@" >> "$NPX_ARGS_FILE"
+exit "${NPX_EXIT:-0}"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-3.log"
+NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-3"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export NPX_EXIT=1
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-3.log"
+  export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-3"
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+assert_eq "both-attempts fail → rc non-zero" "nonzero" "$rc_state"
+assert_eq "both-attempts fail → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
+assert_eq "both attempts fail → timeout invoked" "nonempty" "$timeout_calls"
+assert_eq "both-attempts fail → npx args (retry path)" \
+  $'playwright install --with-deps chromium\nplaywright install --with-deps chromium' \
+  "$( [[ -f "$NPX_ARGS_FILE" ]] && cat "$NPX_ARGS_FILE" || echo '<file missing>' )"
+teardown
+
+# 4. First attempt fails, second succeeds: npx exits 1 then 0 → rc 0, 2 npx calls.
+#    Exercises the retry loop's core recovery behavior (the #1899 motivation).
+echo "Test: playwright_install_with_deps first fails then succeeds → rc 0, 2 npx calls"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+[[ -n "${NPX_ARGS_FILE:-}" ]] && echo "$@" >> "$NPX_ARGS_FILE"
+if [[ "$c" -le 1 ]]; then exit 1; else exit 0; fi
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-4.log"
+NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-4"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-4.log"
+  export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-4"
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+assert_eq "first-fails-then-succeeds → rc 0" "0" "$rc"
+assert_eq "first-fails-then-succeeds → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
+assert_eq "first fails then succeeds → timeout invoked" "nonempty" "$timeout_calls"
+assert_eq "first-fails-then-succeeds → npx args (retry path)" \
+  $'playwright install --with-deps chromium\nplaywright install --with-deps chromium' \
+  "$( [[ -f "$NPX_ARGS_FILE" ]] && cat "$NPX_ARGS_FILE" || echo '<file missing>' )"
+teardown
+
+# 5. Timeout expiry (exit 124, stall) → retry exhausted → rc non-zero, 2 npx calls.
+#    Proves the timeout-expiry path works: timeout starts npx (counter increments)
+#    then returns 124 (simulating the child stalling past the deadline).  With
+#    PLAYWRIGHT_INSTALL_ATTEMPTS=2 both attempts time out and the wrapper fails.
+echo "Test: playwright_install_with_deps timeout-stall → rc non-zero, 2 npx calls"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+[[ -n "${NPX_ARGS_FILE:-}" ]] && echo "$@" >> "$NPX_ARGS_FILE"
+exit "${NPX_EXIT:-0}"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
+while [[ "$1" == -* ]]; do shift; done
+shift                     # drop the <timeout_s> duration arg
+"$@"                      # run npx (increments NPX_COUNT_FILE); not exec
+exit 124                  # simulate timeout killing the stalled child
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-5"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-5.log"
+NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-5"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-5"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-5.log"
+  export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-5"
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
+assert_eq "timeout-stall → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
+assert_eq "timeout-stall → timeout invoked" "nonempty" "$timeout_calls"
+assert_eq "timeout-stall → rc non-zero" "nonzero" "$rc_state"
+assert_eq "timeout-stall → npx args (timeout path)" \
+  $'playwright install --with-deps chromium\nplaywright install --with-deps chromium' \
+  "$( [[ -f "$NPX_ARGS_FILE" ]] && cat "$NPX_ARGS_FILE" || echo '<file missing>' )"
 teardown
 
 # ============================================================================
@@ -26204,6 +26662,44 @@ f6
 f7
 f8" "$(printf '%s' "$out" | jq -r '.dispositions[].id')"
 
+# ============================================================================
+# === qa-fix partition (#1844) ===
+# ============================================================================
+# CI vector: run-unit-tests.sh has no mapping for .claude/workflows/*, so a PR
+# touching only qa-fix.js triggers no vitest suite. The hook-tests job (this
+# script) is the only test that runs on every PR, so coverage for
+# partitionDispositions must live here. The probe slices the pure function out
+# of qa-fix.js between sentinel comments and evals just that slice.
+
+echo "Test: qa-fix partition (#1844)"
+
+out=$(node "$SCRIPT_DIR/qa-fix-partition-probe.mjs")
+
+# already-satisfied id (p4) is partitioned OUT of dispositions
+assert_eq "qa-fix partition: already-satisfied id absent from dispositions" "false" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p4")')"
+# already-satisfied id (p4) is partitioned INTO already_satisfied
+assert_eq "qa-fix partition: already-satisfied id present in already_satisfied" "true" "$(printf '%s' "$out" | jq -r '.already_satisfied | any(. == "p4")')"
+# inverse guard: a non-already-satisfied id (p1, opus-fixable) stays in dispositions
+assert_eq "qa-fix partition: non-already-satisfied id present in dispositions" "true" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p1")')"
+# anti-over-filtering: needs-main (p2) and needs-human (p3) must ALSO survive in
+# dispositions. Without these, a regression like `class !== 'needs-main'` in the
+# dispositions filter would pass (p1 still present, p4 still absent).
+assert_eq "qa-fix partition: needs-main id present in dispositions" "true" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p2")')"
+assert_eq "qa-fix partition: needs-human id present in dispositions" "true" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p3")')"
+# count guard: exactly the 3 non-already-satisfied items land in dispositions.
+assert_eq "qa-fix partition: dispositions count is 3" "3" "$(printf '%s' "$out" | jq -r '.dispositions | length')"
+# shape guard: the already_satisfied projection keeps exactly {id, title, kind,
+# rationale} — class/aesthetic/verify are stripped. A regression that omits a
+# key or leaks a stripped field changes this sorted key set.
+assert_eq "qa-fix partition: already_satisfied element keys" '["id","kind","rationale","title"]' "$(printf '%s' "$out" | jq -c '.already_satisfied_keys')"
+# call-site coverage: qa-fix.js still invokes the function the probe slices.
+# This file defines its own assert_eq (it does not source test-helpers.sh), so
+# use the grep -c | assert_eq convention the rest of the suite uses.
+# Match `= partitionDispositions(allDispositions)` (the call site), not the bare
+# `function partitionDispositions(allDispositions)` definition — both contain the
+# call substring, so the `= ` prefix isolates the invocation to exactly one line.
+assert_eq "qa-fix partition: call site present in qa-fix.js" "1" "$(grep -c '= partitionDispositions(allDispositions)' "$REPO_ROOT/.claude/workflows/qa-fix.js" || true)"
+
 # dispatch-jit-skill tests
 # ============================================================================
 #
@@ -28621,27 +29117,40 @@ else
 fi
 rm -rf "$wp_forge"
 
+# Build a bare-repo + worktree fixture whose origin remote is <url>. Creates a
+# temp root with .bare/, seeds one commit on main via a throwaway seed repo,
+# adds a worktree at worktrees/42-foo, and echoes the root path for the caller
+# to capture. Serves both the real-github.com 5a case and the malformed-URL
+# 5b-5e cases:
+#   root=$(make_bare_worktree_fixture <url>)
+make_bare_worktree_fixture() {
+  set -e
+  local url="$1"
+  local root seed
+  root=$(mktemp -d)
+  git init --bare "$root/.bare" >/dev/null 2>&1
+  git --git-dir="$root/.bare" config user.email "t@t" 2>/dev/null
+  git --git-dir="$root/.bare" config user.name "t" 2>/dev/null
+  git --git-dir="$root/.bare" remote add origin "$url"
+  seed=$(mktemp -d)
+  git -C "$seed" init -q
+  git -C "$seed" config user.email "t@t"; git -C "$seed" config user.name "t"
+  git -C "$seed" commit -q --allow-empty -m seed
+  git -C "$seed" remote add bare "$root/.bare"
+  git -C "$seed" push -q bare HEAD:refs/heads/main
+  rm -rf "$seed"
+  mkdir -p "$root/worktrees"
+  git --git-dir="$root/.bare" worktree add -q "$root/worktrees/42-foo" main 2>/dev/null
+  printf '%s' "$root"
+}
+
 # 5. bare+worktree repo resolution: from a worktree whose dirname(common_dir) is
 # NOT a git repo (the real bare-repo + worktrees layout), with GH_REPO unset, both
 # scripts must still resolve the repo for gh. This would FAIL against the pre-fix
 # `cd "$(dirname "$common_dir")"` version, which lands in the non-repo container and
 # leaves gh's {owner}/{repo} unresolvable (and GH_REPO unset). The fake gh below
 # requires GH_REPO and never reads cwd, so it stands in for that failure.
-bw_root=$(mktemp -d)
-git init --bare "$bw_root/.bare" >/dev/null 2>&1
-git --git-dir="$bw_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$bw_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$bw_root/.bare" remote add origin https://github.com/natb1/commons.systems.git
-# Seed one commit on the bare repo so `worktree add` works, then add the worktree.
-bw_seed=$(mktemp -d)
-git -C "$bw_seed" init -q
-git -C "$bw_seed" config user.email "t@t"; git -C "$bw_seed" config user.name "t"
-git -C "$bw_seed" commit -q --allow-empty -m seed
-git -C "$bw_seed" remote add bare "$bw_root/.bare"
-git -C "$bw_seed" push -q bare HEAD:refs/heads/main
-mkdir -p "$bw_root/worktrees"
-git --git-dir="$bw_root/.bare" worktree add -q "$bw_root/worktrees/42-foo" main 2>/dev/null
-rm -rf "$bw_seed"
+bw_root=$(make_bare_worktree_fixture https://github.com/natb1/commons.systems.git)
 
 # Fake gh that requires GH_REPO (never reads cwd) over a fresh JSON store.
 mkdir -p "$bw_root/bin"
@@ -28680,20 +29189,7 @@ rm -rf "$bw_root"
 # 5b. malformed-URL format guard: SSH-with-port → read-plan rejects it.
 # ssh://git@github.com:22/owner/repo.git strips to "22/owner/repo" — two slashes,
 # would pass the old */* check but fails the strict ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ regex.
-mf_ssh_root=$(mktemp -d)
-git init --bare "$mf_ssh_root/.bare" >/dev/null 2>&1
-git --git-dir="$mf_ssh_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$mf_ssh_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$mf_ssh_root/.bare" remote add origin ssh://git@github.com:22/owner/repo.git
-mf_ssh_seed=$(mktemp -d)
-git -C "$mf_ssh_seed" init -q
-git -C "$mf_ssh_seed" config user.email "t@t"; git -C "$mf_ssh_seed" config user.name "t"
-git -C "$mf_ssh_seed" commit -q --allow-empty -m seed
-git -C "$mf_ssh_seed" remote add bare "$mf_ssh_root/.bare"
-git -C "$mf_ssh_seed" push -q bare HEAD:refs/heads/main
-rm -rf "$mf_ssh_seed"
-mkdir -p "$mf_ssh_root/worktrees"
-git --git-dir="$mf_ssh_root/.bare" worktree add -q "$mf_ssh_root/worktrees/42-foo" main 2>/dev/null
+mf_ssh_root=$(make_bare_worktree_fixture ssh://git@github.com:22/owner/repo.git)
 if err=$( cd "$mf_ssh_root/worktrees/42-foo" && env -u GH_REPO "$WP_READ" 42 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "read-plan: SSH-with-port malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
@@ -28709,20 +29205,7 @@ rm -rf "$mf_ssh_root"
 # 5c. malformed-URL format guard: non-GitHub remote → write-plan rejects it.
 # https://gitlab.com/owner/repo.git has no "github.com" to strip, so repo stays the
 # full URL (contains ":") — has slashes, would pass the old */* check but fails the regex.
-mf_gl_root=$(mktemp -d)
-git init --bare "$mf_gl_root/.bare" >/dev/null 2>&1
-git --git-dir="$mf_gl_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$mf_gl_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$mf_gl_root/.bare" remote add origin https://gitlab.com/owner/repo.git
-mf_gl_seed=$(mktemp -d)
-git -C "$mf_gl_seed" init -q
-git -C "$mf_gl_seed" config user.email "t@t"; git -C "$mf_gl_seed" config user.name "t"
-git -C "$mf_gl_seed" commit -q --allow-empty -m seed
-git -C "$mf_gl_seed" remote add bare "$mf_gl_root/.bare"
-git -C "$mf_gl_seed" push -q bare HEAD:refs/heads/main
-rm -rf "$mf_gl_seed"
-mkdir -p "$mf_gl_root/worktrees"
-git --git-dir="$mf_gl_root/.bare" worktree add -q "$mf_gl_root/worktrees/42-foo" main 2>/dev/null
+mf_gl_root=$(make_bare_worktree_fixture https://gitlab.com/owner/repo.git)
 if err=$( cd "$mf_gl_root/worktrees/42-foo" && env -u GH_REPO "$WP_WRITE" 42 <<<"PLAN" 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "write-plan: non-GitHub remote malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
@@ -28738,20 +29221,7 @@ rm -rf "$mf_gl_root"
 # 5d. malformed-URL format guard: SSH-with-port → write-plan rejects it.
 # Symmetric counterpart to 5b: same ssh://git@github.com:22/owner/repo.git fixture,
 # exercised against dispatch-write-plan instead of dispatch-read-plan.
-mf_ssh_w_root=$(mktemp -d)
-git init --bare "$mf_ssh_w_root/.bare" >/dev/null 2>&1
-git --git-dir="$mf_ssh_w_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$mf_ssh_w_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$mf_ssh_w_root/.bare" remote add origin ssh://git@github.com:22/owner/repo.git
-mf_ssh_w_seed=$(mktemp -d)
-git -C "$mf_ssh_w_seed" init -q
-git -C "$mf_ssh_w_seed" config user.email "t@t"; git -C "$mf_ssh_w_seed" config user.name "t"
-git -C "$mf_ssh_w_seed" commit -q --allow-empty -m seed
-git -C "$mf_ssh_w_seed" remote add bare "$mf_ssh_w_root/.bare"
-git -C "$mf_ssh_w_seed" push -q bare HEAD:refs/heads/main
-rm -rf "$mf_ssh_w_seed"
-mkdir -p "$mf_ssh_w_root/worktrees"
-git --git-dir="$mf_ssh_w_root/.bare" worktree add -q "$mf_ssh_w_root/worktrees/42-foo" main 2>/dev/null
+mf_ssh_w_root=$(make_bare_worktree_fixture ssh://git@github.com:22/owner/repo.git)
 if err=$( cd "$mf_ssh_w_root/worktrees/42-foo" && env -u GH_REPO "$WP_WRITE" 42 <<<"PLAN" 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "write-plan: SSH-with-port malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
@@ -28767,20 +29237,7 @@ rm -rf "$mf_ssh_w_root"
 # 5e. malformed-URL format guard: non-GitHub remote → read-plan rejects it.
 # Symmetric counterpart to 5c: same https://gitlab.com/owner/repo.git fixture,
 # exercised against dispatch-read-plan instead of dispatch-write-plan.
-mf_gl_r_root=$(mktemp -d)
-git init --bare "$mf_gl_r_root/.bare" >/dev/null 2>&1
-git --git-dir="$mf_gl_r_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$mf_gl_r_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$mf_gl_r_root/.bare" remote add origin https://gitlab.com/owner/repo.git
-mf_gl_r_seed=$(mktemp -d)
-git -C "$mf_gl_r_seed" init -q
-git -C "$mf_gl_r_seed" config user.email "t@t"; git -C "$mf_gl_r_seed" config user.name "t"
-git -C "$mf_gl_r_seed" commit -q --allow-empty -m seed
-git -C "$mf_gl_r_seed" remote add bare "$mf_gl_r_root/.bare"
-git -C "$mf_gl_r_seed" push -q bare HEAD:refs/heads/main
-rm -rf "$mf_gl_r_seed"
-mkdir -p "$mf_gl_r_root/worktrees"
-git --git-dir="$mf_gl_r_root/.bare" worktree add -q "$mf_gl_r_root/worktrees/42-foo" main 2>/dev/null
+mf_gl_r_root=$(make_bare_worktree_fixture https://gitlab.com/owner/repo.git)
 if err=$( cd "$mf_gl_r_root/worktrees/42-foo" && env -u GH_REPO "$WP_READ" 42 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "read-plan: non-GitHub remote malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))

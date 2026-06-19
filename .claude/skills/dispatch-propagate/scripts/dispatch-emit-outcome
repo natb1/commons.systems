@@ -48,8 +48,8 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Allowed enum values — edit these to extend the enum sets.
 # ---------------------------------------------------------------------------
-ALLOWED_PHASES="review qa"
-ALLOWED_DISPOSITIONS="completed completed_with_fixes escalated"
+ALLOWED_PHASES=("review" "qa")
+ALLOWED_DISPOSITIONS=("completed" "completed_with_fixes" "escalated")
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -165,21 +165,21 @@ _require disposition    "$DISPOSITION"
 # Enum validation
 # ---------------------------------------------------------------------------
 _in_set() {
-  local val="$1" set="$2"
+  local val="$1"; shift
   local item
-  for item in $set; do
+  for item in "$@"; do
     [[ "$item" == "$val" ]] && return 0
   done
   return 1
 }
 
-if ! _in_set "$PHASE" "$ALLOWED_PHASES"; then
-  echo "dispatch-emit-outcome: unknown phase: $PHASE (expected one of: $ALLOWED_PHASES)" >&2
+if ! _in_set "$PHASE" "${ALLOWED_PHASES[@]}"; then
+  echo "dispatch-emit-outcome: unknown phase: $PHASE (expected one of: ${ALLOWED_PHASES[*]})" >&2
   exit 2
 fi
 
-if ! _in_set "$DISPOSITION" "$ALLOWED_DISPOSITIONS"; then
-  echo "dispatch-emit-outcome: unknown disposition: $DISPOSITION (expected one of: $ALLOWED_DISPOSITIONS)" >&2
+if ! _in_set "$DISPOSITION" "${ALLOWED_DISPOSITIONS[@]}"; then
+  echo "dispatch-emit-outcome: unknown disposition: $DISPOSITION (expected one of: ${ALLOWED_DISPOSITIONS[*]})" >&2
   exit 2
 fi
 
