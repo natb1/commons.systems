@@ -402,6 +402,27 @@ GOT_P2=$(jq -S . "$CAPTURE_P2")
 WANT_P2=$(jq -S . "$JSON_OUT_P2")
 assert_eq "P2 gate-on: writer received full aggregate JSON" "$WANT_P2" "$GOT_P2"
 
+# P2b — gate ON stdout-mode (no --json-out): the assembled JSON piped to the
+# writer matches the script's own stdout (same $DOC, same pipe).
+CAPTURE_P2B="$FAKE_WRITER_DIR/captured-p2b.json"
+SENTINEL_P2B="$FAKE_WRITER_DIR/invoked-p2b"
+printf '#!/usr/bin/env bash\n: > %s\ncat > %s\n' "'$SENTINEL_P2B'" "'$CAPTURE_P2B'" \
+  > "$FAKE_WRITER_DIR/fake-writer-p2b"
+chmod +x "$FAKE_WRITER_DIR/fake-writer-p2b"
+OUT_P2B=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$ROOT"
+  export DISPATCH_AUDIT_AGGREGATES_ENABLED="1"
+  export DISPATCH_AUDIT_AGGREGATES_WRITER="$FAKE_WRITER_DIR/fake-writer-p2b"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+assert_eq "P2b stdout-mode: writer invoked" "1" \
+  "$([[ -e "$SENTINEL_P2B" ]] && echo 1 || echo 0)"
+# The document received by the writer must match the script's own stdout — both
+# are the same assembled JSON.
+GOT_P2B=$(jq -S . "$CAPTURE_P2B")
+WANT_P2B=$(jq -S . <<<"$OUT_P2B")
+assert_eq "P2b stdout-mode: writer received full aggregate JSON" "$WANT_P2B" "$GOT_P2B"
+
 # P3 — writer-fail: aggregate-usage.sh exits non-zero AND the json-out file
 # still exists (report written before the failing persist step).
 JSON_OUT_P3="$FAKE_WRITER_DIR/report-p3.json"
