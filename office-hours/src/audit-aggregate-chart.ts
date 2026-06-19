@@ -7,11 +7,11 @@ import {
   buildLegend,
   computeChartWidth,
   renderAxisSvg,
+  mountResponsiveChart,
   type LegendEntry,
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
   POINT_WIDTH,
-  CONTAINER_WIDTH,
   CHART_HEIGHT,
 } from "./chart-util.js";
 
@@ -109,8 +109,6 @@ export function renderAuditAggregateChart(aggregates: AuditAggregate[]): HTMLEle
     sorted[sorted.length - 1].computedAt,
   ];
 
-  const chartWidth = computeChartWidth(sorted.length, POINT_WIDTH, CONTAINER_WIDTH);
-
   const fg = getThemeFg(container);
   const sharedStyle = { background: "transparent", color: fg };
 
@@ -126,87 +124,100 @@ export function renderAuditAggregateChart(aggregates: AuditAggregate[]): HTMLEle
   }
   const spendDomain: [number, number] = [0, maxSpend > 0 ? maxSpend : 1];
 
-  const spendAxisSvg = renderAxisSvg({
-    height: CHART_HEIGHT,
-    style: sharedStyle,
-    yDomain: spendDomain,
-    label: "$",
-  });
-
-  const spendChartSvg = Plot.plot({
-    width: chartWidth,
-    height: CHART_HEIGHT,
-    marginBottom: MARGIN_BOTTOM,
-    marginLeft: 0,
-    marginRight: MARGIN_RIGHT,
-    style: sharedStyle,
-    x: { type: "time", label: null, domain: xDomain },
-    y: { label: null, axis: null, grid: true, domain: spendDomain },
-    marks: phases.map((phase, i) =>
-      Plot.lineY(phaseSeries[phase], {
-        x: "x",
-        y: "spend",
-        stroke: phaseColor(i),
-        strokeWidth: 2,
-        curve: "monotone-x",
-      }),
-    ),
-  });
-
-  spendChartSvg.style.width = `${chartWidth}px`;
-  spendChartSvg.style.minWidth = `${chartWidth}px`;
-
-  const { layout: spendLayout, wrapper: spendWrapper } = assembleChartLayout(
-    spendAxisSvg,
-    spendChartSvg,
-  );
-
   // --- Bottom sub-chart: derived hit-rate trend (%). ---
   const hitDomain: [number, number] = [0, 100];
 
-  const hitAxisSvg = renderAxisSvg({
-    height: CHART_HEIGHT,
-    style: sharedStyle,
-    yDomain: hitDomain,
-    label: "%",
-  });
-
-  const hitChartSvg = Plot.plot({
-    width: chartWidth,
-    height: CHART_HEIGHT,
-    marginBottom: MARGIN_BOTTOM,
-    marginLeft: 0,
-    marginRight: MARGIN_RIGHT,
-    style: sharedStyle,
-    x: { type: "time", label: null, domain: xDomain },
-    y: { label: null, axis: null, grid: true, domain: hitDomain },
-    marks: [
-      Plot.lineY(hitRatePoints, {
-        x: "x",
-        y: "hitPct",
-        stroke: COLOR_HIT_RATE,
-        strokeWidth: 2,
-        curve: "monotone-x",
-      }),
-    ],
-  });
-
-  hitChartSvg.style.width = `${chartWidth}px`;
-  hitChartSvg.style.minWidth = `${chartWidth}px`;
-
-  const { layout: hitLayout, wrapper: hitWrapper } = assembleChartLayout(hitAxisSvg, hitChartSvg);
-
   const legend = buildLegend([...phaseEntries, { label: SERIES_HIT_RATE, color: COLOR_HIT_RATE }]);
 
-  container.replaceChildren(spendLayout, hitLayout, legend);
+  // Block-level slot the ResizeObserver measures; the .chart-scroll-wrapper
+  // inside each sub-layout clips horizontally so the slot stays at the panel
+  // content-box width.
+  const slot = document.createElement("div");
 
-  // Scroll both bodies to the newest data (rightmost) on first paint. The
-  // container is still detached here (the view appends it after this returns),
-  // so scrollWidth is 0 until a layout pass — defer to the next frame.
-  requestAnimationFrame(() => {
-    spendWrapper.scrollLeft = spendWrapper.scrollWidth;
-    hitWrapper.scrollLeft = hitWrapper.scrollWidth;
+  mountResponsiveChart(slot, (width) => {
+    const chartWidth = computeChartWidth(sorted.length, POINT_WIDTH, width);
+
+    const spendAxisSvg = renderAxisSvg({
+      height: CHART_HEIGHT,
+      style: sharedStyle,
+      yDomain: spendDomain,
+      label: "$",
+    });
+
+    const spendChartSvg = Plot.plot({
+      width: chartWidth,
+      height: CHART_HEIGHT,
+      marginBottom: MARGIN_BOTTOM,
+      marginLeft: 0,
+      marginRight: MARGIN_RIGHT,
+      style: sharedStyle,
+      x: { type: "time", label: null, domain: xDomain },
+      y: { label: null, axis: null, grid: true, domain: spendDomain },
+      marks: phases.map((phase, i) =>
+        Plot.lineY(phaseSeries[phase], {
+          x: "x",
+          y: "spend",
+          stroke: phaseColor(i),
+          strokeWidth: 2,
+          curve: "monotone-x",
+        }),
+      ),
+    });
+
+    spendChartSvg.style.width = `${chartWidth}px`;
+    spendChartSvg.style.minWidth = `${chartWidth}px`;
+
+    const { layout: spendLayout, wrapper: spendWrapper } = assembleChartLayout(
+      spendAxisSvg,
+      spendChartSvg,
+    );
+
+    const hitAxisSvg = renderAxisSvg({
+      height: CHART_HEIGHT,
+      style: sharedStyle,
+      yDomain: hitDomain,
+      label: "%",
+    });
+
+    const hitChartSvg = Plot.plot({
+      width: chartWidth,
+      height: CHART_HEIGHT,
+      marginBottom: MARGIN_BOTTOM,
+      marginLeft: 0,
+      marginRight: MARGIN_RIGHT,
+      style: sharedStyle,
+      x: { type: "time", label: null, domain: xDomain },
+      y: { label: null, axis: null, grid: true, domain: hitDomain },
+      marks: [
+        Plot.lineY(hitRatePoints, {
+          x: "x",
+          y: "hitPct",
+          stroke: COLOR_HIT_RATE,
+          strokeWidth: 2,
+          curve: "monotone-x",
+        }),
+      ],
+    });
+
+    hitChartSvg.style.width = `${chartWidth}px`;
+    hitChartSvg.style.minWidth = `${chartWidth}px`;
+
+    const { layout: hitLayout, wrapper: hitWrapper } = assembleChartLayout(hitAxisSvg, hitChartSvg);
+
+    // Scroll both bodies to the newest data (rightmost). The slot is detached on
+    // the first paint, so scrollWidth is 0 until a layout pass — defer to the
+    // next frame.
+    requestAnimationFrame(() => {
+      spendWrapper.scrollLeft = spendWrapper.scrollWidth;
+      hitWrapper.scrollLeft = hitWrapper.scrollWidth;
+    });
+
+    const fragment = document.createDocumentFragment();
+    fragment.append(spendLayout, hitLayout);
+    return fragment;
   });
+
+  container.replaceChildren(slot, legend);
 
   return container;
 }
