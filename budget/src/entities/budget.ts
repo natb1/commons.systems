@@ -211,10 +211,15 @@ export function budgetToIdbRecord(b: Budget): IdbBudget {
 // ── IdbBudget → Budget ────────────────────────────────────────────────────────
 
 export function idbToBudget(row: IdbBudget): Budget {
-  const overrides = (row.overrides ?? []).map(o => ({
-    date: msToTs(o.dateMs) as Timestamp,
-    balance: o.balance,
-  }));
+  const overrides = (row.overrides ?? []).map(o => {
+    if (!Number.isFinite(o.dateMs)) {
+      throw new DataIntegrityError("overrides[].dateMs must be a finite number");
+    }
+    return {
+      date: msToTs(o.dateMs) as Timestamp,
+      balance: o.balance,
+    };
+  });
   assertOverridesSortedAscending(overrides);
   return {
     id: row.id as BudgetId,
