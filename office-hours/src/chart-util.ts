@@ -50,13 +50,61 @@ export const MARGIN_RIGHT = 20;
 export const MARGIN_BOTTOM = 50;
 /** Per-sample chart width allocation along the time axis. */
 export const POINT_WIDTH = 60;
-/** Approximate visible width before horizontal scrolling kicks in. */
-export const CONTAINER_WIDTH = 640;
+/**
+ * Fallback width used only for the initial synchronous paint, when the chart
+ * core builds a DETACHED element whose `clientWidth` is 0. Once mounted and
+ * sized, `mountResponsiveChart`'s ResizeObserver re-paints at the slot's real
+ * content-box width. Private — layout width now comes from the live container,
+ * not a fixed constant.
+ */
+const FALLBACK_CONTAINER_WIDTH = 640;
 export const CHART_HEIGHT = 220;
 
 /** Compute scrollable chart body width from point count and point width, filling at least the visible area. */
 export function computeChartWidth(pointCount: number, pointWidth: number, containerWidth: number): number {
   return Math.max(pointCount * pointWidth + MARGIN_RIGHT, containerWidth - AXIS_WIDTH);
+}
+
+/**
+ * Mount a responsive chart into `slot`: paint once synchronously at the slot's
+ * measured width (or the fallback when detached/unsized), then re-paint via a
+ * ResizeObserver as the slot's real width changes.
+ *
+ * `render(width)` must build and return the chart DOM for the given container
+ * width. It is called on every (debounced) size change, so all width-dependent
+ * DOM — Plot bodies, layout, scroll-to-newest — belongs inside it.
+ *
+ * Observer cleanup is by `isConnected` self-disconnect rather than an explicit
+ * teardown handle: the React/vanilla mount paths tear down only via
+ * `host.replaceChildren()`, which detaches the slot. A spec-compliant
+ * ResizeObserver then fires a final size→0 callback, and the `!slot.isConnected`
+ * guard disconnects the observer. Documented fallback (NOT implemented now): if
+ * that final callback proves unreliable in a target browser, return a disconnect
+ * fn here for the islands' teardowns to call. Self-disconnect is the chosen path.
+ */
+export function mountResponsiveChart(slot: HTMLElement, render: (width: number) => Node): void {
+  const w = slot.clientWidth || FALLBACK_CONTAINER_WIDTH;
+  slot.replaceChildren(render(w));
+  let last = w;
+
+  // happy-dom test env has no ResizeObserver — the synchronous fallback-width
+  // paint above already produced the asserted DOM, so we are done.
+  if (typeof ResizeObserver === "undefined") return;
+
+  const obs = new ResizeObserver((entries) => {
+    if (!slot.isConnected) {
+      obs.disconnect();
+      return;
+    }
+    const entry = entries[entries.length - 1];
+    const next = Math.round(entry.contentRect.width) || FALLBACK_CONTAINER_WIDTH;
+    // Debounce sub-pixel jitter and guard against any re-paint feedback loop.
+    if (Math.abs(next - last) >= 1) {
+      last = next;
+      slot.replaceChildren(render(next));
+    }
+  });
+  obs.observe(slot);
 }
 
 /** Read a CSS custom property from the container's computed style; returns fallback if empty or missing. */
