@@ -190,7 +190,15 @@ _require_nonneg_int() {
   fi
 }
 
-_require_nonneg_int issue               "$ISSUE"
+_require_pos_int() {
+  local flag="$1" val="$2"
+  if [[ ! "$val" =~ ^[1-9][0-9]*$ ]]; then
+    echo "dispatch-emit-outcome: --${flag} must be a positive integer (>= 1), got: $val" >&2
+    exit 2
+  fi
+}
+
+_require_pos_int issue               "$ISSUE"
 _require_nonneg_int findings-surfaced   "$FINDINGS_SURFACED"
 _require_nonneg_int findings-actionable "$FINDINGS_ACTIONABLE"
 _require_nonneg_int fixes-applied       "$FIXES_APPLIED"
@@ -198,7 +206,7 @@ _require_nonneg_int followups-filed     "$FOLLOWUPS_FILED"
 _require_nonneg_int subagents-launched  "$SUBAGENTS_LAUNCHED"
 
 if [[ -n "$PR" ]]; then
-  _require_nonneg_int pr "$PR"
+  _require_pos_int pr "$PR"
 fi
 
 # ---------------------------------------------------------------------------
