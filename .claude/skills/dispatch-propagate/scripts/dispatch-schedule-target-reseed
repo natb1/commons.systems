@@ -232,6 +232,13 @@ fi
 # continuation (#1570).
 ensure_recover_unit "$MAIN_WORKTREE" || true
 
+# Install the durable heartbeat timer (#2022) — a 15-min drumbeat that fires
+# dispatch-tick independently of Stop-hooks and reseed timers, so abnormal
+# worker death and post-cap stalls self-recover. Best-effort: a failure here
+# is non-fatal; the existing OnFailure chain still covers the common-case
+# recovery path.
+ensure_heartbeat_units "$MAIN_WORKTREE" || true
+
 # ---- Step 8: schedule the transient timer -----------------------------------
 #
 # The unit name embeds N and the epoch fire time — a repeated call with the same

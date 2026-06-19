@@ -1,3 +1,19 @@
+/*
+ * Token dependency: this stylesheet uses var(--sidebar-width) for the two-column
+ * grid column width (at ≥768px) and the absolute-positioned sidebar width (at <768px).
+ * That token is defined in @commons-systems/ds/tokens/spacing.css and is provided
+ * transitively by @commons-systems/style/default.css. Each usage carries an explicit
+ * `16rem` fallback, so layout.css renders correctly regardless of import order; loading
+ * default.css (or the ds spacing tokens) lets the token override that fallback.
+ *
+ * Without --sidebar-width, var(--sidebar-width) resolves to a guaranteed-invalid value
+ * and the grid-template-columns declaration falls back to its initial value (none), so
+ * the grid loses its grid context and children lay out as blocks. The `16rem` fallback
+ * prevents this.
+ *
+ * The scaffolding/firebase/templates/app template imports default.css, so if a developer
+ * adds layout.css to it they should place it after the existing default.css import.
+ */
 .content-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -25,12 +41,12 @@
 
 @media (min-width: 768px) {
   .content-grid {
-    grid-template-columns: 1fr var(--sidebar-width);
+    grid-template-columns: 1fr var(--sidebar-width, 16rem);
   }
 
   .page > header {
     display: grid;
-    grid-template-columns: 1fr var(--sidebar-width);
+    grid-template-columns: 1fr var(--sidebar-width, 16rem);
     column-gap: var(--space-6);
   }
 
@@ -86,7 +102,7 @@
     background: var(--bg);
     border: var(--border-width) solid var(--border);
     padding: var(--space-4);
-    width: var(--sidebar-width);
+    width: var(--sidebar-width, 16rem);
     max-height: 80vh;
     overflow-y: auto;
   }
