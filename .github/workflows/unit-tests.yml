@@ -109,6 +109,24 @@ jobs:
       - name: Run lint
         run: .claude/skills/dispatch-propagate/scripts/run-lint.sh
 
+  dead-code:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.changes.outputs.deadcode == 'true'
+        with:
+          node-version-file: .node-version
+          cache: 'npm'
+      - name: Run dead-code check
+        if: steps.changes.outputs.deadcode == 'true'
+        run: .claude/skills/dispatch-propagate/scripts/run-dead-code.sh
+
   typecheck:
     runs-on: ubuntu-latest
     steps:
