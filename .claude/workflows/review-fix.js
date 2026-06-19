@@ -362,10 +362,18 @@ function finderPrompt(name, args) {
 const _a = typeof args === 'string' ? JSON.parse(args) : (args || {});
 log(`args type: ${typeof args}; surface=${_a.surface}; changed_files count=${(_a.changed_files || []).length}`);
 
+// subagents_launched (source 1, this Workflow's own fan-out): a single
+// accumulator incremented at each spawn site, inside the guard that actually
+// launches the agents. A launched-but-dead agent still counts — increment at
+// the spawn, not on the result. The SKILL body (Unit 4) adds its own source-2
+// subagents (Step-5a/5b /file-issue) before emitting the envelope.
+let subagentsLaunched = 0;
+
 // --- 1. FINDERS (parallel, barrier) ------------------------------------------
 phase('finders');
 const finderNames = agentFinderSet(_a.surface, _a.app_or_rules);
 log(`finders: launching ${finderNames.length} agent finder(s) for surface=${_a.surface}`);
+subagentsLaunched += finderNames.length;
 
 const finderResults = await parallel(
   finderNames.map((name) => () =>
@@ -435,6 +443,7 @@ for (const [loc, group] of locationGroups) {
       `exactly one subgroup. The ids are: ${ids.join(', ')}.`,
       `Findings:\n${JSON.stringify(compact, null, 2)}`,
     ].join('\n');
+    subagentsLaunched += 1;
     const res = await agent(prompt, {
       model: 'sonnet',
       agentType: 'general-purpose',
@@ -513,6 +522,7 @@ if (deduped.length) {
     `Findings:\n${JSON.stringify(compact, null, 2)}`,
   ].join('\n');
 
+  subagentsLaunched += 1;
   const classifyRes = await agent(classifyPrompt, {
     model: 'sonnet',
     agentType: 'general-purpose',
@@ -571,6 +581,7 @@ if (requiredFindings.length) {
       verifyJobs.push({ id: f.id, k, finding: f });
     }
   }
+  subagentsLaunched += verifyJobs.length;
   const verifyResults = await parallel(
     verifyJobs.map((job) => () => {
       const f = job.finding;
@@ -668,6 +679,7 @@ const fixed = [];
 if (fileGroups.size) {
   log(`fix: ${fixSet.length} finding(s) across ${fileGroups.size} file-group(s) on Opus`);
   const fixFileList = Array.from(fileGroups.entries()); // [ [file, findings], ... ]
+  subagentsLaunched += fixFileList.length;
   const fixResults = await parallel(
     fixFileList.map(([file, group]) => () => {
       const findingList = group
@@ -833,6 +845,27 @@ const dispositions = deduped.map((f) => {
   return entry;
 });
 
+// --- outcome-envelope counts (Unit 3, issue #1860) ---------------------------
+// Computed per .claude/docs/outcome-envelope.md. Unit 4 passes these straight
+// into dispatch-emit-outcome; Unit 5 aggregates them. Additive only.
+const findings_surfaced = dispositions.length; // every deduped finding, any bucket
+const fixes_applied = fixed.length; // = the count of Fixed-bucket dispositions
+const followups_filed = deferred_filings.length; // this Workflow's OWN deferred filings
+// findings_actionable: dispositions whose FINAL bucket ∈ {Fixed, Required, Deferred}.
+// Compute from `dispositions` (the post-remap array) NOT `deduped`: dispositions
+// remaps refuted/unverified Required findings to Refuted/Unverified, so Required
+// here means upheld-only. Computing from `deduped` would wrongly count those
+// dropped findings (they still carry bucket==='Required' there) as actionable.
+const ACTIONABLE_BUCKETS = new Set(['Fixed', 'Required', 'Deferred']);
+const findings_actionable = dispositions.filter((d) => ACTIONABLE_BUCKETS.has(d.bucket)).length;
+// disposition: escalated on deviation; else completed_with_fixes when any fix
+// landed; else completed. Matches the path→value table in outcome-envelope.md.
+const disposition = deviation
+  ? 'escalated'
+  : fixed.length > 0
+    ? 'completed_with_fixes'
+    : 'completed';
+
 return {
   dispositions,
   fixed,
@@ -841,4 +874,10 @@ return {
   verify_report,
   deviation,
   security_note: _a.security_note,
+  findings_surfaced,
+  findings_actionable,
+  fixes_applied,
+  followups_filed,
+  subagents_launched: subagentsLaunched,
+  disposition,
 };
