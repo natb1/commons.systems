@@ -1,12 +1,18 @@
 import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("viewer", () => {
-  // Public seed items (by addedAt desc):
+  // Seed source of truth: print/seeds/firestore.ts. Classification is derived
+  // from which `media` collection block a document sits in: items in a block
+  // WITHOUT a `testOnly` flag are public; items in a block with `testOnly: true`
+  // are seeded only when SEED_TEST_ONLY=true (so tests must not depend on them
+  // against production emulator data). Verify any item below against that file.
+  //
+  // Public seed items (by addedAt desc) — in the un-flagged `media` block:
   //   1. "Republic" (plato-republic, PDF, 3 pages)
   //   2. "Phaedrus" (plato-phaedrus, PDF, 1 page)
   //   3. "Confessions..." (gutenberg-3296, EPUB)
   //
-  // testOnly seed items (seeded only with SEED_TEST_ONLY=true):
+  // testOnly seed items (in the `testOnly: true` `media` block):
   //   - "Little Nemo..." (test-image-archive, image-archive, 5 images)
   //
   // Navigate to Republic (3 pages) for navigation testing:
