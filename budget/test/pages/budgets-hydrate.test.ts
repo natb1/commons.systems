@@ -281,6 +281,12 @@ describe("hydrateBudgetTable — variance", () => {
     "--fg": "#e0e0e0",
     "--favorable": "#4caf50",
     "--unfavorable": "#e45858",
+    "--chart-1": "#4d6f8f",
+    "--chart-2": "#c98a3c",
+    "--chart-3": "#a35d5d",
+    "--chart-4": "#7a8c5a",
+    "--chart-5": "#b08a4f",
+    "--chart-6": "#5f8a8a",
   };
   let originalClientWidth: PropertyDescriptor | undefined;
   let originalGetComputedStyle: typeof window.getComputedStyle;
