@@ -60,6 +60,16 @@ describe("renderQueueMetricsPanel with runwayDays: null", () => {
   });
 });
 
+describe("renderQueueMetricsPanel with negative runwayDays", () => {
+  it("renders 'growing' when runwayDays is negative", () => {
+    const metrics: QueueMetricsSnapshot = { ...baseMetrics, runwayDays: -5, netDrainPerDay: -0.5 };
+    const section = renderQueueMetricsPanel(metrics);
+    const value = section.querySelector(".queue-runway-value");
+    expect(value).not.toBeNull();
+    expect(value!.textContent).toBe("growing");
+  });
+});
+
 describe("renderQueueMetricsPanel with null metrics", () => {
   it("renders the queue-metrics-heading", () => {
     const section = renderQueueMetricsPanel(null);

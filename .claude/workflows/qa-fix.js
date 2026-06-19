@@ -217,6 +217,16 @@ function applyQaDisposition(classifications, votesById) {
   });
 }
 
+// >>> partitionDispositions: sliced + eval'd by test-dispatch-scripts.sh (#1844) >>>
+function partitionDispositions(allDispositions) {
+  const already_satisfied = allDispositions
+    .filter((d) => d.class === 'already-satisfied')
+    .map((d) => ({ id: d.id, title: d.title, kind: d.kind, rationale: d.rationale }));
+  const dispositions = allDispositions.filter((d) => d.class !== 'already-satisfied');
+  return { dispositions, already_satisfied };
+}
+// <<< partitionDispositions <<<
+
 // --- shared prompt fragments -------------------------------------------------
 
 const UNTRUSTED_GUARD = [
@@ -321,14 +331,14 @@ const classifyRes = await agent(classifyPrompt, {
 
 const classById = new Map();
 if (classifyRes && classifyRes.classifications) {
-  for (const c of classifyRes.classifications) classById.set(c.id, c);
+  for (const c of classifyRes.classifications) classById.set(String(c.id), c);
 }
 
 // Build the classification list in residue (input) order. Prefer a clear error
 // over a silent fallback (code-style.md): if the classify agent omitted an id,
 // name it — do not invent a class.
 const classifications = residue.map((r) => {
-  const c = classById.get(r.id);
+  const c = classById.get(String(r.id));
   if (!c) {
     throw new Error(`classify: agent returned no classification for residue id "${r.id}"`);
   }
@@ -445,12 +455,7 @@ const allDispositions = residue.map((r) => {
 // already_satisfied: items whose criterion is already provably met. They are
 // DROPPED from the residue as PASS — partitioned out so every downstream
 // consumer that filters/iterates `dispositions` naturally excludes them.
-const already_satisfied = allDispositions
-  .filter((d) => d.class === 'already-satisfied')
-  .map((d) => ({ id: d.id, title: d.title, kind: d.kind, rationale: d.rationale }));
-
-// dispositions: opus-fixable / needs-main / needs-human only, in input order.
-const dispositions = allDispositions.filter((d) => d.class !== 'already-satisfied');
+const { dispositions, already_satisfied } = partitionDispositions(allDispositions);
 
 // verify_report: one entry per non-aesthetic needs-human candidate. verdict is
 // computed from votes exactly like review-fix.js's verify_report (lowercase):
