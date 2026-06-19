@@ -4829,6 +4829,34 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "depth-2 ancestor priority lifts PR 20 over older PR 10 (PO-ANC3)" "pr 20 20-leaf-pr fix-checks" "$result"
 teardown
 
+# PO-ANC4. Depth-2 ancestor priority, --priority-only mode. Same fixture as
+#           PO-ANC3, but exercises the `--priority-only` early-skip guard, which
+#           also calls pr_priority_bit (dispatch-select-target line 811-812) and
+#           its depth-2 ANCESTOR_NUMS traversal. PR 10 (closes issue 200, no
+#           priority) is filtered by the guard; PR 20 (closes issue 101, priority
+#           only via grandparent 100 through intermediate 102) passes the guard via
+#           inherited priority. The discriminator: a 1-level recursion bug would see
+#           only the neutral intermediate 102, leave PR 20 with pri=0, and
+#           --priority-only would return empty (both bits 0); with depth-2 recursion
+#           it returns pr 20. Mirrors the PO-ANC1/PO-ANC2 (depth-1) pattern at depth 2.
+echo "Test: --priority-only — depth-2 ancestor priority qualifies PR (PO-ANC4)"
+setup
+UNION='['
+UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":102,"created_at":"2024-01-01T00:00:00Z","labels":[]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# 2-hop parent chain: 101 → 102 → 100. Priority sits on the grandparent (100).
+printf '102' > "$STUB_DIR/parent-101.json"   # 101 → 102
+printf '100' > "$STUB_DIR/parent-102.json"   # 102 → 100
+# no parent-100.json — chain terminates at the grandparent
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only depth-2 ancestor priority qualifies PR 20 (PO-ANC4)" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
 # PO3. main is red and no latch issue open → main-broken fires first, before the
 #      priority scan (the gate runs ahead of the ladder, same as default mode).
 echo "Test: --priority-only — main red, no latch → main-broken (gate first)"
