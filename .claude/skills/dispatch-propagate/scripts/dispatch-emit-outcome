@@ -1,0 +1,277 @@
+#!/usr/bin/env bash
+# dispatch-emit-outcome — emit a machine-readable per-run outcome envelope.
+#
+# Usage: dispatch-emit-outcome \
+#          --phase <phase> \
+#          --repo <owner/repo> \
+#          --issue <issue-num> \
+#          [--pr <pr-num>] \
+#          [--base-sha <sha>] \
+#          --findings-surfaced <n> \
+#          --findings-actionable <n> \
+#          --fixes-applied <n> \
+#          --followups-filed <n> \
+#          --subagents-launched <n> \
+#          --disposition <disposition> \
+#          [--terminated-reason <reason>]
+#
+# Prints the canonical outcome envelope block — a marker line followed by a
+# fenced JSON block — to stdout. The block lands in the worker session's
+# transcript so the reader (aggregate-usage.sh) can locate and parse it.
+#
+# The envelope contract is defined in .claude/docs/outcome-envelope.md.
+# That doc is the single source of truth for fields, enums, and formulas.
+#
+# --phase: one of the ALLOWED_PHASES set (review, qa). Extensible: update
+#   ALLOWED_PHASES below to add future phases.
+# --disposition: one of the ALLOWED_DISPOSITIONS set
+#   (completed, completed_with_fixes, escalated).
+# --terminated-reason: required-non-null when disposition == escalated;
+#   must be absent (or not provided) for any other disposition.
+# --pr, --base-sha: optional; serialize as JSON null when absent.
+#
+# DIVERGENCE FROM dispatch-mark-complete:
+#   dispatch-mark-complete no-ops when CLAUDE_JOB_DIR is unset/empty, so
+#   that the same call is harmless in an interactive run without writing
+#   marker files. This script does NOT guard on CLAUDE_JOB_DIR. It prints
+#   unconditionally so the envelope always lands in the transcript, including
+#   on escalation/deviation paths where no phase-completed marker is written.
+#   Callers must not gate this call on CLAUDE_JOB_DIR themselves.
+#
+# Validation errors exit 2 with a descriptive message to stderr.
+# An unknown flag exits 2.
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Allowed enum values — edit these to extend the enum sets.
+# ---------------------------------------------------------------------------
+ALLOWED_PHASES="review qa"
+ALLOWED_DISPOSITIONS="completed completed_with_fixes escalated"
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
+PHASE=""
+REPO=""
+ISSUE=""
+PR=""
+BASE_SHA=""
+FINDINGS_SURFACED=""
+FINDINGS_ACTIONABLE=""
+FIXES_APPLIED=""
+FOLLOWUPS_FILED=""
+SUBAGENTS_LAUNCHED=""
+DISPOSITION=""
+TERMINATED_REASON=""
+
+usage() {
+  cat >&2 <<'EOF'
+usage: dispatch-emit-outcome \
+         --phase <phase> \
+         --repo <owner/repo> \
+         --issue <issue-num> \
+         [--pr <pr-num>] \
+         [--base-sha <sha>] \
+         --findings-surfaced <n> \
+         --findings-actionable <n> \
+         --fixes-applied <n> \
+         --followups-filed <n> \
+         --subagents-launched <n> \
+         --disposition <disposition> \
+         [--terminated-reason <reason>]
+
+  --phase        one of: review qa
+  --disposition  one of: completed completed_with_fixes escalated
+  --terminated-reason  required when disposition=escalated, forbidden otherwise
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --phase)
+      [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --phase requires a value" >&2; exit 2; }
+      PHASE="$2"; shift 2 ;;
+    --repo)
+      [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --repo requires a value" >&2; exit 2; }
+      REPO="$2"; shift 2 ;;
+    --issue)
+      [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --issue requires a value" >&2; exit 2; }
+      ISSUE="$2"; shift 2 ;;
+    --pr)
+      [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --pr requires a value" >&2; exit 2; }
+      PR="$2"; shift 2 ;;
+    --base-sha)
+      [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --base-sha requires a value" >&2; exit 2; }
+      BASE_SHA="$2"; shift 2 ;;
+    --findings-surfaced)
+      [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --findings-surfaced requires a value" >&2; exit 2; }
+      FINDINGS_SURFACED="$2"; shift 2 ;;
+    --findings-actionable)
+      [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --findings-actionable requires a value" >&2; exit 2; }
+      FINDINGS_ACTIONABLE="$2"; shift 2 ;;
+    --fixes-applied)
+      [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --fixes-applied requires a value" >&2; exit 2; }
+      FIXES_APPLIED="$2"; shift 2 ;;
+    --followups-filed)
+      [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --followups-filed requires a value" >&2; exit 2; }
+      FOLLOWUPS_FILED="$2"; shift 2 ;;
+    --subagents-launched)
+      [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --subagents-launched requires a value" >&2; exit 2; }
+      SUBAGENTS_LAUNCHED="$2"; shift 2 ;;
+    --disposition)
+      [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --disposition requires a value" >&2; exit 2; }
+      DISPOSITION="$2"; shift 2 ;;
+    --terminated-reason)
+      [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --terminated-reason requires a value" >&2; exit 2; }
+      TERMINATED_REASON="$2"; shift 2 ;;
+    *)
+      echo "dispatch-emit-outcome: unexpected argument: $1" >&2
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+# ---------------------------------------------------------------------------
+# Required-field checks
+# ---------------------------------------------------------------------------
+_require() {
+  local flag="$1" val="$2"
+  if [[ -z "$val" ]]; then
+    echo "dispatch-emit-outcome: --${flag} is required" >&2
+    exit 2
+  fi
+}
+
+_require phase          "$PHASE"
+_require repo           "$REPO"
+_require issue          "$ISSUE"
+_require findings-surfaced   "$FINDINGS_SURFACED"
+_require findings-actionable "$FINDINGS_ACTIONABLE"
+_require fixes-applied       "$FIXES_APPLIED"
+_require followups-filed     "$FOLLOWUPS_FILED"
+_require subagents-launched  "$SUBAGENTS_LAUNCHED"
+_require disposition    "$DISPOSITION"
+
+# ---------------------------------------------------------------------------
+# Enum validation
+# ---------------------------------------------------------------------------
+_in_set() {
+  local val="$1" set="$2"
+  local item
+  for item in $set; do
+    [[ "$item" == "$val" ]] && return 0
+  done
+  return 1
+}
+
+if ! _in_set "$PHASE" "$ALLOWED_PHASES"; then
+  echo "dispatch-emit-outcome: unknown phase: $PHASE (expected one of: $ALLOWED_PHASES)" >&2
+  exit 2
+fi
+
+if ! _in_set "$DISPOSITION" "$ALLOWED_DISPOSITIONS"; then
+  echo "dispatch-emit-outcome: unknown disposition: $DISPOSITION (expected one of: $ALLOWED_DISPOSITIONS)" >&2
+  exit 2
+fi
+
+# ---------------------------------------------------------------------------
+# Integer validation (non-negative integers only)
+# ---------------------------------------------------------------------------
+_require_nonneg_int() {
+  local flag="$1" val="$2"
+  if [[ ! "$val" =~ ^[0-9]+$ ]]; then
+    echo "dispatch-emit-outcome: --${flag} must be a non-negative integer, got: $val" >&2
+    exit 2
+  fi
+}
+
+_require_nonneg_int issue               "$ISSUE"
+_require_nonneg_int findings-surfaced   "$FINDINGS_SURFACED"
+_require_nonneg_int findings-actionable "$FINDINGS_ACTIONABLE"
+_require_nonneg_int fixes-applied       "$FIXES_APPLIED"
+_require_nonneg_int followups-filed     "$FOLLOWUPS_FILED"
+_require_nonneg_int subagents-launched  "$SUBAGENTS_LAUNCHED"
+
+if [[ -n "$PR" ]]; then
+  _require_nonneg_int pr "$PR"
+fi
+
+# ---------------------------------------------------------------------------
+# terminated_reason cross-validation
+# ---------------------------------------------------------------------------
+if [[ "$DISPOSITION" == "escalated" && -z "$TERMINATED_REASON" ]]; then
+  echo "dispatch-emit-outcome: --terminated-reason is required when --disposition is escalated" >&2
+  exit 2
+fi
+
+if [[ "$DISPOSITION" != "escalated" && -n "$TERMINATED_REASON" ]]; then
+  echo "dispatch-emit-outcome: --terminated-reason must not be provided when --disposition is $DISPOSITION (only valid for escalated)" >&2
+  exit 2
+fi
+
+# ---------------------------------------------------------------------------
+# Build jq argument arrays for nullable fields.
+# Integers use --argjson; strings use --arg.
+# Absent nullable fields bind to JSON null via --argjson.
+# ---------------------------------------------------------------------------
+
+if [[ -n "$PR" ]]; then
+  pr_arg=(--argjson pr "$PR")
+else
+  pr_arg=(--argjson pr "null")
+fi
+
+if [[ -n "$BASE_SHA" ]]; then
+  base_sha_arg=(--arg base_sha "$BASE_SHA")
+else
+  base_sha_arg=(--argjson base_sha "null")
+fi
+
+if [[ -n "$TERMINATED_REASON" ]]; then
+  terminated_reason_arg=(--arg terminated_reason "$TERMINATED_REASON")
+else
+  terminated_reason_arg=(--argjson terminated_reason "null")
+fi
+
+# ---------------------------------------------------------------------------
+# Emit the envelope block.
+# Field order matches the doc's field table exactly.
+# jq preserves literal insertion order (no -S).
+# ---------------------------------------------------------------------------
+printf '<!-- dispatch:outcome:v1 -->\n'
+printf '```json\n'
+jq -n \
+  --arg     schema              "dispatch.outcome.v1" \
+  --arg     phase               "$PHASE" \
+  --arg     repo                "$REPO" \
+  --argjson issue               "$ISSUE" \
+  "${pr_arg[@]}" \
+  "${base_sha_arg[@]}" \
+  --argjson findings_surfaced   "$FINDINGS_SURFACED" \
+  --argjson findings_actionable "$FINDINGS_ACTIONABLE" \
+  --argjson fixes_applied       "$FIXES_APPLIED" \
+  --argjson followups_filed     "$FOLLOWUPS_FILED" \
+  --argjson subagents_launched  "$SUBAGENTS_LAUNCHED" \
+  --arg     disposition         "$DISPOSITION" \
+  "${terminated_reason_arg[@]}" \
+  '{
+    schema:               $schema,
+    phase:                $phase,
+    repo:                 $repo,
+    issue:                $issue,
+    pr:                   $pr,
+    base_sha:             $base_sha,
+    findings_surfaced:    $findings_surfaced,
+    findings_actionable:  $findings_actionable,
+    fixes_applied:        $fixes_applied,
+    followups_filed:      $followups_filed,
+    subagents_launched:   $subagents_launched,
+    disposition:          $disposition,
+    terminated_reason:    $terminated_reason
+  }'
+printf '```\n'
