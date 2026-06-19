@@ -4926,6 +4926,51 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
 assert_eq "--priority-only depth-2 ancestor priority qualifies PR 20 (PO-ANC4)" "pr 20 20-leaf-pr fix-checks" "$result"
 teardown
 
+# PO-ANC5. Same fixture as PO-ANC2 but PR 20's rollup is PENDING, not FAILING.
+#           This exercises the CI-pending ancestor-priority WAITING_NUM FALLBACK
+#           path — the orthogonal case to PO-ANC1/PO-ANC2's *selection* assertions.
+#
+#           PR 20 qualifies for the priority tier (ci_rc path at line 849 checks
+#           --priority-only + inherited ancestor priority to enter WAITING_NUM arm).
+#           Its CI is pending (ci_rc==1), so it is NOT selectable. The selector
+#           emits `waiting <first-closing-issue-num>` from the fallback arm of the
+#           jq at dispatch-select-target:864-869:
+#
+#             ( map(.number|tostring|select(own-priority-label?)) | .[0] )
+#             // ( [.[].number|tostring] | .[0] )
+#             // empty
+#
+#           CRITICAL INVARIANT — do NOT change this: issue 101 carries ONLY
+#           [help wanted] and has NO own `priority` label. Priority comes solely
+#           from ancestor 100 (via parent-101.json). This is exactly what forces
+#           the jq FALLBACK arm: the first arm (select own priority-labeled issues)
+#           returns null because 101 is not directly priority-labeled, so the
+#           fallback `[.[].number|tostring]|.[0]` resolves to "101". If anyone
+#           adds `priority` to issue 101, the FIRST arm would fire and also return
+#           101 — the assertion would still pass while silently testing the WRONG
+#           branch. So 101 MUST stay non-priority. A broken fallback arm yields
+#           `empty` (no `waiting` line; the PR falls through), not `waiting 101`.
+#
+#           PR 10 (older, closes issue 200, $FAILING_ROLLUP) is dropped by the
+#           --priority-only early-skip guard (issue 200 has `bug` only, no priority,
+#           no ancestor with priority), proving the ancestor-priority PR is the only
+#           candidate and does not interfere with the waiting result.
+echo "Test: --priority-only — CI-pending ancestor priority → waiting fallback (PO-ANC5)"
+setup
+UNION='['
+UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":101}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '100' > "$STUB_DIR/parent-101.json"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only CI-pending ancestor priority → waiting (fallback target) (PO-ANC5)" \
+  "waiting 101" "$result"
+teardown
+
 # PO3. main is red and no latch issue open → main-broken fires first, before the
 #      priority scan (the gate runs ahead of the ladder, same as default mode).
 echo "Test: --priority-only — main red, no latch → main-broken (gate first)"
@@ -28968,23 +29013,36 @@ fi
 git --git-dir="$bw_root/.bare" worktree prune 2>/dev/null || true
 rm -rf "$bw_root"
 
+# Build a bare-repo + worktree fixture whose origin remote is <url>, for the
+# malformed-URL format-guard tests (5b-5e). Creates a temp root with .bare/,
+# seeds one commit on main via a throwaway seed repo, adds a worktree at
+# worktrees/42-foo, and echoes the root path for the caller to capture:
+#   root=$(make_malformed_remote_fixture <url>)
+make_malformed_remote_fixture() {
+  set -e
+  local url="$1"
+  local root seed
+  root=$(mktemp -d)
+  git init --bare "$root/.bare" >/dev/null 2>&1
+  git --git-dir="$root/.bare" config user.email "t@t" 2>/dev/null
+  git --git-dir="$root/.bare" config user.name "t" 2>/dev/null
+  git --git-dir="$root/.bare" remote add origin "$url"
+  seed=$(mktemp -d)
+  git -C "$seed" init -q
+  git -C "$seed" config user.email "t@t"; git -C "$seed" config user.name "t"
+  git -C "$seed" commit -q --allow-empty -m seed
+  git -C "$seed" remote add bare "$root/.bare"
+  git -C "$seed" push -q bare HEAD:refs/heads/main
+  rm -rf "$seed"
+  mkdir -p "$root/worktrees"
+  git --git-dir="$root/.bare" worktree add -q "$root/worktrees/42-foo" main 2>/dev/null
+  printf '%s' "$root"
+}
+
 # 5b. malformed-URL format guard: SSH-with-port → read-plan rejects it.
 # ssh://git@github.com:22/owner/repo.git strips to "22/owner/repo" — two slashes,
 # would pass the old */* check but fails the strict ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ regex.
-mf_ssh_root=$(mktemp -d)
-git init --bare "$mf_ssh_root/.bare" >/dev/null 2>&1
-git --git-dir="$mf_ssh_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$mf_ssh_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$mf_ssh_root/.bare" remote add origin ssh://git@github.com:22/owner/repo.git
-mf_ssh_seed=$(mktemp -d)
-git -C "$mf_ssh_seed" init -q
-git -C "$mf_ssh_seed" config user.email "t@t"; git -C "$mf_ssh_seed" config user.name "t"
-git -C "$mf_ssh_seed" commit -q --allow-empty -m seed
-git -C "$mf_ssh_seed" remote add bare "$mf_ssh_root/.bare"
-git -C "$mf_ssh_seed" push -q bare HEAD:refs/heads/main
-rm -rf "$mf_ssh_seed"
-mkdir -p "$mf_ssh_root/worktrees"
-git --git-dir="$mf_ssh_root/.bare" worktree add -q "$mf_ssh_root/worktrees/42-foo" main 2>/dev/null
+mf_ssh_root=$(make_malformed_remote_fixture ssh://git@github.com:22/owner/repo.git)
 if err=$( cd "$mf_ssh_root/worktrees/42-foo" && env -u GH_REPO "$WP_READ" 42 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "read-plan: SSH-with-port malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
@@ -29000,20 +29058,7 @@ rm -rf "$mf_ssh_root"
 # 5c. malformed-URL format guard: non-GitHub remote → write-plan rejects it.
 # https://gitlab.com/owner/repo.git has no "github.com" to strip, so repo stays the
 # full URL (contains ":") — has slashes, would pass the old */* check but fails the regex.
-mf_gl_root=$(mktemp -d)
-git init --bare "$mf_gl_root/.bare" >/dev/null 2>&1
-git --git-dir="$mf_gl_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$mf_gl_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$mf_gl_root/.bare" remote add origin https://gitlab.com/owner/repo.git
-mf_gl_seed=$(mktemp -d)
-git -C "$mf_gl_seed" init -q
-git -C "$mf_gl_seed" config user.email "t@t"; git -C "$mf_gl_seed" config user.name "t"
-git -C "$mf_gl_seed" commit -q --allow-empty -m seed
-git -C "$mf_gl_seed" remote add bare "$mf_gl_root/.bare"
-git -C "$mf_gl_seed" push -q bare HEAD:refs/heads/main
-rm -rf "$mf_gl_seed"
-mkdir -p "$mf_gl_root/worktrees"
-git --git-dir="$mf_gl_root/.bare" worktree add -q "$mf_gl_root/worktrees/42-foo" main 2>/dev/null
+mf_gl_root=$(make_malformed_remote_fixture https://gitlab.com/owner/repo.git)
 if err=$( cd "$mf_gl_root/worktrees/42-foo" && env -u GH_REPO "$WP_WRITE" 42 <<<"PLAN" 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "write-plan: non-GitHub remote malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
@@ -29029,20 +29074,7 @@ rm -rf "$mf_gl_root"
 # 5d. malformed-URL format guard: SSH-with-port → write-plan rejects it.
 # Symmetric counterpart to 5b: same ssh://git@github.com:22/owner/repo.git fixture,
 # exercised against dispatch-write-plan instead of dispatch-read-plan.
-mf_ssh_w_root=$(mktemp -d)
-git init --bare "$mf_ssh_w_root/.bare" >/dev/null 2>&1
-git --git-dir="$mf_ssh_w_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$mf_ssh_w_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$mf_ssh_w_root/.bare" remote add origin ssh://git@github.com:22/owner/repo.git
-mf_ssh_w_seed=$(mktemp -d)
-git -C "$mf_ssh_w_seed" init -q
-git -C "$mf_ssh_w_seed" config user.email "t@t"; git -C "$mf_ssh_w_seed" config user.name "t"
-git -C "$mf_ssh_w_seed" commit -q --allow-empty -m seed
-git -C "$mf_ssh_w_seed" remote add bare "$mf_ssh_w_root/.bare"
-git -C "$mf_ssh_w_seed" push -q bare HEAD:refs/heads/main
-rm -rf "$mf_ssh_w_seed"
-mkdir -p "$mf_ssh_w_root/worktrees"
-git --git-dir="$mf_ssh_w_root/.bare" worktree add -q "$mf_ssh_w_root/worktrees/42-foo" main 2>/dev/null
+mf_ssh_w_root=$(make_malformed_remote_fixture ssh://git@github.com:22/owner/repo.git)
 if err=$( cd "$mf_ssh_w_root/worktrees/42-foo" && env -u GH_REPO "$WP_WRITE" 42 <<<"PLAN" 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "write-plan: SSH-with-port malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
@@ -29058,20 +29090,7 @@ rm -rf "$mf_ssh_w_root"
 # 5e. malformed-URL format guard: non-GitHub remote → read-plan rejects it.
 # Symmetric counterpart to 5c: same https://gitlab.com/owner/repo.git fixture,
 # exercised against dispatch-read-plan instead of dispatch-write-plan.
-mf_gl_r_root=$(mktemp -d)
-git init --bare "$mf_gl_r_root/.bare" >/dev/null 2>&1
-git --git-dir="$mf_gl_r_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$mf_gl_r_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$mf_gl_r_root/.bare" remote add origin https://gitlab.com/owner/repo.git
-mf_gl_r_seed=$(mktemp -d)
-git -C "$mf_gl_r_seed" init -q
-git -C "$mf_gl_r_seed" config user.email "t@t"; git -C "$mf_gl_r_seed" config user.name "t"
-git -C "$mf_gl_r_seed" commit -q --allow-empty -m seed
-git -C "$mf_gl_r_seed" remote add bare "$mf_gl_r_root/.bare"
-git -C "$mf_gl_r_seed" push -q bare HEAD:refs/heads/main
-rm -rf "$mf_gl_r_seed"
-mkdir -p "$mf_gl_r_root/worktrees"
-git --git-dir="$mf_gl_r_root/.bare" worktree add -q "$mf_gl_r_root/worktrees/42-foo" main 2>/dev/null
+mf_gl_r_root=$(make_malformed_remote_fixture https://gitlab.com/owner/repo.git)
 if err=$( cd "$mf_gl_r_root/worktrees/42-foo" && env -u GH_REPO "$WP_READ" 42 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "read-plan: non-GitHub remote malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
