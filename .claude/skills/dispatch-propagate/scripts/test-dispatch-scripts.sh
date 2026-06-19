@@ -288,6 +288,7 @@ case "$args" in
         labels=*) rest_label_dt="${kv#labels=}" ;;
       esac
     done
+    rest_label_dt="${rest_label_dt//%20/ }"
     case "$rest_label_dt" in
       dispatch-test-empty)
         echo '[]'
@@ -1101,9 +1102,18 @@ echo "=== gh_issue_list_rest (edge cases) ==="
 
 echo "Test: empty result -- helper returns [] with length 0"
 setup
+# Create the call-log file before invocation so the grep assertion below has a
+# valid target even if gh is never called.
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
 actual_empty=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-empty)
 assert_eq "empty result: length == 0" "0" "$(jq 'length' <<<"$actual_empty")"
 assert_eq "empty result: .[0].number is absent" "" "$(jq -r '.[0].number // empty' <<<"$actual_empty")"
+# No --limit was passed, so the helper must take the full-paginate path.
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "empty result: log contains --paginate" "yes" "yes"
+else
+  assert_eq "empty result: log contains --paginate" "yes" "no"
+fi
 teardown
 
 echo "Test: pagination boundary -- two pages merged, all numbers present, PR objects filtered"
@@ -1119,6 +1129,9 @@ printf '%s\n' '[
   {"number":201,"created_at":"2024-01-04T00:00:00Z","closed_at":null,"labels":[]},
   {"number":202,"created_at":"2024-01-05T00:00:00Z","closed_at":null,"labels":[]}
 ]' > "$STUB_DIR/rest-page-2.json"
+# Create the call-log file before invocation so the grep assertion below has a
+# valid target even if gh is never called.
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
 actual_pag=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-paginate)
 # Page-1 issue numbers 101 and 103 must appear (PR object 102 must NOT).
 assert_eq "paginate: issue 101 present" "true" "$(jq 'any(.[]; .number == 101)' <<<"$actual_pag")"
@@ -1128,6 +1141,14 @@ assert_eq "paginate: issue 201 present" "true" "$(jq 'any(.[]; .number == 201)' 
 assert_eq "paginate: issue 202 present" "true" "$(jq 'any(.[]; .number == 202)' <<<"$actual_pag")"
 # PR object 102 must be absent (helper filters .pull_request != null).
 assert_eq "paginate: PR object 102 filtered out" "false" "$(jq 'any(.[]; .number == 102)' <<<"$actual_pag")"
+# No --limit was passed, so the helper must take the --paginate path. This pins
+# the code path: a regression to single-page would still merge the two fixture
+# pages here but would not pass --paginate.
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "paginate: log contains --paginate" "yes" "yes"
+else
+  assert_eq "paginate: log contains --paginate" "yes" "no"
+fi
 teardown
 
 echo "Test: --limit flag -- single-page branch (per_page=limit, no --paginate)"
@@ -1137,14 +1158,14 @@ printf '%s\n' '[
   {"number":302,"created_at":"2024-01-07T00:00:00Z","closed_at":null,"labels":[]},
   {"number":303,"created_at":"2024-01-08T00:00:00Z","closed_at":null,"labels":[]}
 ]' > "$STUB_DIR/rest-limit.json"
-# Clear the call-log before this specific invocation so earlier --paginate calls
-# (from the empty and paginate tests above, which ran their own setup/teardown)
-# don't pollute the absence assertion.
+# Create the call-log file before invocation so the grep assertions below have a
+# valid target even if gh is never called.
 : > "$STUB_DIR/gh-issue-list-rest-calls.log"
 actual_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 50 --label dispatch-test-limit)
 assert_eq "limit: result length matches fixture (3 items)" "3" "$(jq 'length' <<<"$actual_lim")"
 # The call log must contain per_page=50 (limit was passed through) ...
-if grep -q 'per_page=50' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+# Anchor with a trailing non-digit so this cannot spuriously match per_page=500.
+if grep -q 'per_page=50[^0-9]' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
   assert_eq "limit: log contains per_page=50" "yes" "yes"
 else
   assert_eq "limit: log contains per_page=50" "yes" "no"
