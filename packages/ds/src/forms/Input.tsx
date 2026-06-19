@@ -1,7 +1,7 @@
 import { useId } from "react";
 import type { CSSProperties, InputHTMLAttributes, ReactNode } from "react";
 
-interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: ReactNode;
   helper?: ReactNode;
   error?: ReactNode;

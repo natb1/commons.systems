@@ -1,6 +1,6 @@
 import type { CSSProperties, InputHTMLAttributes, ReactNode } from "react";
 
-interface CheckboxProps extends InputHTMLAttributes<HTMLInputElement> {
+export interface CheckboxProps extends InputHTMLAttributes<HTMLInputElement> {
   label: ReactNode;
   type?: "checkbox" | "radio";
 }

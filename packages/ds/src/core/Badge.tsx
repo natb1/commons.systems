@@ -1,6 +1,6 @@
 import type { CSSProperties, HTMLAttributes } from "react";
 
-interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
+export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   variant?: "neutral" | "accent" | "success" | "error";
 }
 

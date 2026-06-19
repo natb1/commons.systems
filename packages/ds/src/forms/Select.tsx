@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode, SelectHTMLAttributes } from "react";
 
 type Option = string | { value: string; label: string };
 
-interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: ReactNode;
   helper?: ReactNode;
   error?: ReactNode;

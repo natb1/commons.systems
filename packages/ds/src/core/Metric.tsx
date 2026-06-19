@@ -1,6 +1,6 @@
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 
-interface MetricProps extends HTMLAttributes<HTMLDivElement> {
+export interface MetricProps extends HTMLAttributes<HTMLDivElement> {
   label: ReactNode;
   value: ReactNode;
   delta?: ReactNode;

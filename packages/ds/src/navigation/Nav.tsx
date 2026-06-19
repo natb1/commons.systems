@@ -6,7 +6,7 @@ interface NavLink {
   align?: "end";
 }
 
-interface NavProps extends HTMLAttributes<HTMLElement> {
+export interface NavProps extends HTMLAttributes<HTMLElement> {
   links: NavLink[];
   current?: string;
   end?: ReactNode;

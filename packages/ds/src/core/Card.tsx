@@ -1,6 +1,6 @@
 import type { CSSProperties, ElementType, HTMLAttributes } from "react";
 
-interface CardProps extends HTMLAttributes<HTMLElement> {
+export interface CardProps extends HTMLAttributes<HTMLElement> {
   as?: ElementType;
   interactive?: boolean;
 }
