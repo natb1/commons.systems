@@ -19,6 +19,7 @@
 # so gh addresses the right repository from any caller cwd. A missing arg, a
 # non-numeric issue-num, or empty STDIN is a clear error, not a fallback (exit 2).
 set -euo pipefail
+source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
 N="${1:-}"
 if [[ $# -ne 1 || -z "$N" ]]; then
@@ -36,15 +37,8 @@ common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
   echo "dispatch-write-plan: not inside a git repository" >&2; exit 1; }
 url="$(git --git-dir="$common_dir" config --get remote.origin.url 2>/dev/null)" || {
   echo "dispatch-write-plan: no remote.origin.url in git config at $common_dir" >&2; exit 1; }
-# Resolve owner/repo from the remote so gh addresses the repo independent of cwd
-# (dirname(common_dir) is not a working tree in the bare-repo + worktrees layout).
-# Handles https://github.com/<owner>/<repo>(.git) and git@github.com:<owner>/<repo>(.git).
-repo="${url%.git}"; repo="${repo#*github.com[:/]}"
-[[ -n "$repo" ]] || {
-  echo "dispatch-write-plan: could not resolve owner/repo from remote.origin.url ('$url')" >&2; exit 1; }
-[[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || {
-  echo "dispatch-write-plan: unexpected owner/repo format from remote.origin.url ('$url'): $repo" >&2; exit 1; }
-export GH_REPO="$repo"
+GH_REPO="$(gh_repo_from_remote "$url" dispatch-write-plan)" || exit 1
+export GH_REPO
 
 MARKER='<!-- dispatch:plan -->'
 PLAN_AUTHOR_ID="${DISPATCH_PLAN_AUTHOR_ID:-$(gh api user --jq '.id')}"

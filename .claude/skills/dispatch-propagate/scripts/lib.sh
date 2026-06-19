@@ -28,6 +28,32 @@ resolve_issue_number() {
   echo "$num"
 }
 
+# Derive and validate owner/repo from a git remote URL.
+# Args: $1 = remote.origin.url value; $2 = caller name (error-message prefix).
+# Resolve owner/repo from the remote so gh addresses the repo independent of cwd
+# (dirname(common_dir) is not a working tree in the bare-repo + worktrees layout).
+# Handles https://github.com/<owner>/<repo>(.git) and git@github.com:<owner>/<repo>(.git).
+# Prints owner/repo to stdout on success; on an empty/non-GitHub/malformed result,
+# prints a caller-prefixed message to stderr and returns 1.
+gh_repo_from_remote() {
+  local url="$1" caller="$2" stripped repo
+  stripped="${url%.git}"
+  repo="${stripped#*github.com[:/]}"
+  if [[ -z "$stripped" ]]; then
+    echo "$caller: could not resolve owner/repo from remote.origin.url ('$url')" >&2
+    return 1
+  fi
+  if [[ "$repo" == "$stripped" ]]; then
+    echo "$caller: remote is not a GitHub repository ('$url')" >&2
+    return 1
+  fi
+  if [[ ! "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    echo "$caller: unexpected owner/repo format from remote.origin.url ('$url'): $repo" >&2
+    return 1
+  fi
+  printf '%s\n' "$repo"
+}
+
 # ---- parse_duration <str> — duration string to whole seconds ----------------
 # Accepts <int><unit> where unit is one of s|m|h|d|w (second/minute/hour/day/
 # week). Prints the duration in seconds on stdout and returns 0. On unparseable

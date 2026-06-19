@@ -26140,7 +26140,7 @@ assert_eq "verify-drop: i1 non-Required kept without verify key" "false" "$(prin
 
 echo "Test: dispatch-qa-disposition"
 
-# All branches in one object (order: f1..f6) plus a separate passthrough check.
+# All branches in one object (order: f1..f8) plus a separate passthrough check.
 # f1: opus-fixable  → final_class=opus-fixable, verify=n/a
 # f2: needs-main    → final_class=needs-main,   verify=n/a
 # f3: needs-human, aesthetic:false, votes=[refuted,upheld] → opus-fixable, Refuted
@@ -26148,7 +26148,8 @@ echo "Test: dispatch-qa-disposition"
 # f5: needs-human, aesthetic:false, NO entry in votes map  → needs-human,  Unverified (INVERTED EDGE)
 # f6: needs-human, aesthetic:true,  votes=[refuted,refuted]→ needs-human,  n/a (aesthetic bypasses)
 # f7: already-satisfied (no votes entry) → final_class=already-satisfied, verify=n/a (first-branch pass-through)
-IN='{"items":[{"id":"f1","class":"opus-fixable","aesthetic":false},{"id":"f2","class":"needs-main","aesthetic":false},{"id":"f3","class":"needs-human","aesthetic":false},{"id":"f4","class":"needs-human","aesthetic":false},{"id":"f5","class":"needs-human","aesthetic":false},{"id":"f6","class":"needs-human","aesthetic":true},{"id":"f7","class":"already-satisfied","aesthetic":false}],"votes":{"f3":["refuted","upheld"],"f4":["upheld","upheld"],"f6":["refuted","refuted"]}}'
+# f8: already-satisfied, votes=[refuted,refuted] present → final_class=already-satisfied, verify=n/a (votes ignored; vote-bypass invariant)
+IN='{"items":[{"id":"f1","class":"opus-fixable","aesthetic":false},{"id":"f2","class":"needs-main","aesthetic":false},{"id":"f3","class":"needs-human","aesthetic":false},{"id":"f4","class":"needs-human","aesthetic":false},{"id":"f5","class":"needs-human","aesthetic":false},{"id":"f6","class":"needs-human","aesthetic":true},{"id":"f7","class":"already-satisfied","aesthetic":false},{"id":"f8","class":"already-satisfied","aesthetic":false}],"votes":{"f3":["refuted","upheld"],"f4":["upheld","upheld"],"f6":["refuted","refuted"],"f8":["refuted","refuted"]}}'
 out=$(printf '%s' "$IN" | "$SCRIPT_DIR/dispatch-qa-disposition")
 
 # Branch: opus-fixable passes through
@@ -26180,6 +26181,10 @@ assert_eq "qa-disposition: aesthetic needs-human with refuted votes → verify=n
 assert_eq "qa-disposition: already-satisfied → final_class=already-satisfied" "already-satisfied" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f7") | .final_class')"
 assert_eq "qa-disposition: already-satisfied → verify=n/a" "n/a" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f7") | .verify')"
 
+# Branch: already-satisfied with refuting votes present → still first-branch pass-through (votes ignored; the vote-bypass invariant f7 cannot catch)
+assert_eq "qa-disposition: already-satisfied with refuted votes → final_class=already-satisfied" "already-satisfied" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f8") | .final_class')"
+assert_eq "qa-disposition: already-satisfied with refuted votes → verify=n/a" "n/a" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f8") | .verify')"
+
 # Passthrough: original class and aesthetic fields survive on output items
 assert_eq "qa-disposition: passthrough class field preserved" "needs-human" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .class')"
 assert_eq "qa-disposition: passthrough aesthetic field preserved" "false" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .aesthetic')"
@@ -26189,14 +26194,15 @@ IN_TITLE='{"items":[{"id":"t1","class":"needs-human","aesthetic":false,"title":"
 out_title=$(printf '%s' "$IN_TITLE" | "$SCRIPT_DIR/dispatch-qa-disposition")
 assert_eq "qa-disposition: passthrough title field preserved" "Check me" "$(printf '%s' "$out_title" | jq -r '.dispositions[0].title')"
 
-# Output order: items must appear in input order (f1..f7)
+# Output order: items must appear in input order (f1..f8)
 assert_eq "qa-disposition: output order preserved" "f1
 f2
 f3
 f4
 f5
 f6
-f7" "$(printf '%s' "$out" | jq -r '.dispositions[].id')"
+f7
+f8" "$(printf '%s' "$out" | jq -r '.dispositions[].id')"
 
 # dispatch-jit-skill tests
 # ============================================================================
@@ -28720,10 +28726,10 @@ git --git-dir="$mf_gl_root/.bare" worktree add -q "$mf_gl_root/worktrees/42-foo"
 if err=$( cd "$mf_gl_root/worktrees/42-foo" && env -u GH_REPO "$WP_WRITE" 42 <<<"PLAN" 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "write-plan: non-GitHub remote malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"unexpected owner/repo format"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: write-plan rejects non-GitHub remote URL with format-guard diagnostic"
+if [[ "$err" == *"remote is not a GitHub repository"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: write-plan rejects non-GitHub remote URL with not-GitHub diagnostic"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan rejects non-GitHub remote URL with format-guard diagnostic"
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan rejects non-GitHub remote URL with not-GitHub diagnostic"
   echo "    actual: '$err'"
 fi
 git --git-dir="$mf_gl_root/.bare" worktree prune 2>/dev/null || true
@@ -28780,6 +28786,61 @@ rm -rf "$wp_two"
 
 rm -rf "$wp_root"
 unset DISPATCH_PLAN_AUTHOR_ID
+
+echo ""
+echo "=== gh_repo_from_remote ==="
+
+# gh_repo_from_remote is pure string logic (no git, no gh), so each case sources
+# the real lib.sh in a subshell and calls the helper directly. Success cases
+# assert the derived owner/repo; failure cases assert a non-zero return and that
+# the caller-name prefix appears in the stderr diagnostic (AC: error messages
+# include the caller name).
+
+# Success — HTTPS with .git suffix.
+if out=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "https://github.com/natb1/commons.systems.git" probe 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "gh_repo_from_remote: https .git → owner/repo" "natb1/commons.systems" "$out"
+assert_eq "gh_repo_from_remote: https .git → exit 0" "0" "$rc"
+
+# Success — HTTPS without .git suffix.
+out=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "https://github.com/natb1/commons.systems" probe 2>/dev/null )
+assert_eq "gh_repo_from_remote: https no-.git → owner/repo" "natb1/commons.systems" "$out"
+
+# Success — SSH scp-style.
+out=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "git@github.com:natb1/commons.systems.git" probe 2>/dev/null )
+assert_eq "gh_repo_from_remote: ssh → owner/repo" "natb1/commons.systems" "$out"
+
+# Failure — empty URL: non-zero return, caller-prefixed "could not resolve" diagnostic.
+if err=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "" probe 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "gh_repo_from_remote: empty URL exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"probe: could not resolve owner/repo"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: gh_repo_from_remote empty URL emits caller-prefixed diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: gh_repo_from_remote empty URL emits caller-prefixed diagnostic"
+  echo "    actual: '$err'"
+fi
+
+# Failure — non-GitHub remote: non-zero return, caller-prefixed not-GitHub diagnostic.
+if err=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "https://gitlab.com/a/b" probe 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "gh_repo_from_remote: non-GitHub remote exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"probe: remote is not a GitHub repository"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: gh_repo_from_remote non-GitHub remote emits caller-prefixed diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: gh_repo_from_remote non-GitHub remote emits caller-prefixed diagnostic"
+  echo "    actual: '$err'"
+fi
+
+# Failure — malformed owner/repo (no slash): non-zero return, format diagnostic.
+if err=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "https://github.com/onlyowner" probe 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "gh_repo_from_remote: malformed owner/repo exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"probe: unexpected owner/repo format"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: gh_repo_from_remote malformed owner/repo emits caller-prefixed diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: gh_repo_from_remote malformed owner/repo emits caller-prefixed diagnostic"
+  echo "    actual: '$err'"
+fi
 
 # ============================================================================
 # claim_fixed_vite_port (fixed Vite-port pool) tests
