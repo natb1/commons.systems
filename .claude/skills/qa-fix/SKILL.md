@@ -708,6 +708,15 @@ Otherwise run all steps in order.
       of the turn — continue to the next unit, then Steps 4 and 5 and the marker;
       do not emit a closing summary. The terminal rule is the **CRITICAL
       invariants** block below (the fix path HARD-STOPS the skill).
+
+      **Track a `fixes_applied_count` tally** (agent-maintained running count, NOT
+      a shell variable — this loop is an agent-driven sequence of Skill calls, not
+      a bash `for`-loop): initialize it to `0` before the first `/implement-unit`
+      invocation. After each invocation, increment by `1` **only** when the
+      invocation hands control back per its Step 4 (the unit's commit landed
+      cleanly). Do **not** increment when an invocation errors, dies, or returns
+      without a landed commit. This tally feeds `--fixes-applied` in Step 5
+      (replacing the planned `units.length`).
    2. Run **Step 4** (post the PR-comment summary; its disposition section uses the
       **fixing-pass** prose — see Step 4).
    3. Run **Step 5** (cleanup — it self-guards and no-ops if the QA server never
@@ -725,9 +734,12 @@ Otherwise run all steps in order.
       `--disposition` to `completed_with_fixes` and **recompute** the counts the
       Workflow could not — do **NOT** forward `result.fixes_applied` /
       `result.followups_filed` (both literal `0` from the Workflow):
-      - `--fixes-applied` = `result.fix_plan.units.length` — the units the
-        `/implement-unit` loop actually ran this pass (the Workflow plans but never
-        executes; see its header).
+      - `--fixes-applied` = `fixes_applied_count` — the count of units that
+        completed successfully this pass (the tally maintained by the loop above,
+        per the `outcome-envelope.md` contract that `fixes_applied` = items the
+        phase actually fixed). Do **not** use `result.fix_plan.units.length` (the
+        planned count) or `result.fixes_applied` (a literal `0` from the Workflow,
+        which plans but never executes).
       - `--followups-filed` = the count of `needs-main` follow-ups Step 3.6 actually
         filed this pass (newly-filed only, not already-tracked); `0` if Step 3.6 did
         not run.
@@ -744,7 +756,7 @@ Otherwise run all steps in order.
         --phase qa --repo "$REPO" --issue "$N" --pr "$PR_NUM" \
         --findings-surfaced <result.findings_surfaced> \
         --findings-actionable <result.findings_actionable> \
-        --fixes-applied <result.fix_plan.units.length> \
+        --fixes-applied <fixes_applied_count> \
         --followups-filed <count of needs-main follow-ups Step 3.6 newly filed> \
         --subagents-launched <result.subagents_launched + 1 (Step-2b triage) + Step-3.6 filing subagents + Step-3.7 /implement-unit invocations> \
         --disposition completed_with_fixes
