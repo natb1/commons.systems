@@ -108,6 +108,12 @@ export interface AppApi {
   // Bumped on every data transition; App keys <LegacyRoute> by it so the body
   // re-resolves against the new data (legacy's trailing router.navigate()).
   navEpoch: number;
+  // False until initialize() settles (success OR error). App gates the route
+  // body on this so the body mounts exactly once — after initialize's trailing
+  // transition() has already bumped navEpoch 0→1 — instead of mounting eagerly
+  // at navEpoch=0 and then unmounting on that bump (the startup double-mount
+  // race the e2e chart/table visibility checks tripped over).
+  initialized: boolean;
   // The handle whose permission is in the "prompt" state, surfaced by App as a
   // one-click "Reload <name>" affordance. null when no prompt is pending.
   reloadHandle: FileSystemFileHandle | null;
@@ -143,6 +149,8 @@ export function useAppState(): AppApi {
   // (upload / clear / external reload / initialize) where `path` is unchanged.
   const [navEpoch, setNavEpochValue] = useState(0);
   const navEpochRef = useRef(0);
+  // Gates the route body's first render until initialize() settles (see AppApi).
+  const [initialized, setInitialized] = useState(false);
 
   const setState = useCallback((next: AppState) => {
     stateRef.current = next;
@@ -506,6 +514,10 @@ export function useAppState(): AppApi {
       logError(error, { operation: "initialization" });
       showNavError("Could not load saved data. You may need to re-upload your file.");
       transition({ source: "seed" });
+    }).finally(() => {
+      // Both paths end with a transition() that already bumped navEpoch to 1;
+      // flip `initialized` so App now mounts the body once at navEpoch=1.
+      setInitialized(true);
     });
 
     deferAppCheckInit(initAppCheck);
@@ -557,6 +569,7 @@ export function useAppState(): AppApi {
     state,
     navError,
     navEpoch,
+    initialized,
     reloadHandle,
     renderOptions,
     onUploadInputChange,

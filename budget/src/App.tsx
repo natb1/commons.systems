@@ -98,8 +98,15 @@ export function App() {
           /transactions is a real React page (Unit 3) — same keying so a
           same-path data transition re-mounts it and re-resolves; renderOptions()
           is read at mount and also calls setActiveDataSource for the route,
-          matching how LegacyRoute is fed. The other four routes stay legacy. */}
-      {isTransactions ? (
+          matching how LegacyRoute is fed. The other four routes stay legacy.
+
+          Gated on app.initialized: initialize() always ends with a transition()
+          that bumps navEpoch 0→1, which would unmount-then-remount a body
+          rendered eagerly at navEpoch=0 and wipe its just-hydrated chart/table.
+          Holding the body until initialize settles mounts it exactly once at
+          navEpoch=1 — matching legacy's single post-initialize router.navigate().
+          The AppShell/nav/header/footer/hero still render immediately. */}
+      {!app.initialized ? null : isTransactions ? (
         <Transactions
           key={`${TRANSACTIONS_PATH}:${app.navEpoch}`}
           options={app.renderOptions()}

@@ -253,15 +253,6 @@ export function buildCategorySankey(
     return NOOP_TEARDOWN;
   }
 
-  const collapsedPaths = new Set<string>();
-  let currentNumWeeks = 12;
-  let currentEndWeekIdx = weeks.length - 1;
-  let currentMode: ChartMode = "spending";
-  let currentUnbudgetedOnly = false;
-  let currentShowCardPayment = false;
-  let currentCategoryFilter = "";
-  let currentBudgetFilter = "";
-
   const controlsDiv = document.getElementById("sankey-controls");
   if (!controlsDiv) throw new Error("sankey-controls element not found");
   const weeksInput = controlsDiv.querySelector("#sankey-weeks") as HTMLInputElement | null;
@@ -279,6 +270,26 @@ export function buildCategorySankey(
   }
   const categoryFilterInput = categoryFilterInputEl;
   const budgetFilterInput = budgetFilterInputEl;
+
+  // Seed the chart's filter state FROM the persisted controls rather than from
+  // hardcoded defaults. The component instance is not remounted on scroll-append
+  // (Transactions dropped the key), so an in-progress filter survives the rebuild
+  // and must be honored here. On the FIRST mount the controls hold their defaults
+  // (spending radio checked, empty filter inputs, weeks="12"), so these reads
+  // yield exactly the prior hardcoded behavior. currentEndWeekIdx is NOT
+  // preserved — it always tracks the latest window; collapsedPaths starts fresh.
+  const checkedMode = controlsDiv.querySelector<HTMLInputElement>('input[name="sankey-mode"]:checked')?.value;
+  const currentModeInit: ChartMode = checkedMode === "credits" ? "credits" : "spending";
+  const parsedWeeks = parseInt(weeksInput.value, 10);
+
+  const collapsedPaths = new Set<string>();
+  let currentNumWeeks = Number.isFinite(parsedWeeks) && parsedWeeks >= 1 ? parsedWeeks : 12;
+  let currentEndWeekIdx = weeks.length - 1;
+  let currentMode: ChartMode = currentModeInit;
+  let currentUnbudgetedOnly = unbudgetedCheckbox.checked;
+  let currentShowCardPayment = cardPaymentCheckbox.checked;
+  let currentCategoryFilter = categoryFilterInput.value;
+  let currentBudgetFilter = budgetFilterInput.value;
 
   endSlider.min = "0";
   endSlider.max = String(weeks.length - 1);

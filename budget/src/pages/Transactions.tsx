@@ -426,9 +426,13 @@ function LoadedTransactions({ data, options }: { data: LoadedData; options: Rend
     return merged;
   }, [data.transactions, appended]);
 
-  // #578: feed the chart the combined transactions and re-key on append so the
-  // island remounts and buildCategorySankey re-runs with the larger data set
-  // (replacing the legacy TRANSACTIONS_APPENDED_EVENT dispatch from scroll).
+  // #578: feed the chart the combined transactions so buildCategorySankey
+  // rebuilds with the larger data set on scroll-append (replacing the legacy
+  // TRANSACTIONS_APPENDED_EVENT dispatch from scroll). The island is NOT re-keyed
+  // on append: a key change would remount it and reset the JSX control inputs
+  // (defaultValue/defaultChecked), losing an in-progress filter. Instead the
+  // chartData prop change drives a rebuild inside CategorySankey's effect while
+  // the component instance — and its controls — persist.
   const budgetIdToName = useMemo(() => new Map(data.budgets.map(b => [b.id, b.name])), [data.budgets]);
   const chartData = useMemo<SerializedChartTransaction[] | null>(() => {
     if (data.chartData === null) return null;
@@ -448,7 +452,6 @@ function LoadedTransactions({ data, options }: { data: LoadedData; options: Rend
         <p className="chart-error">Chart unavailable.</p>
       ) : (
         <CategorySankey
-          key={appended.length}
           chartData={chartData}
           categoryOptions={data.chartCategoryOptions}
           budgetOptions={data.chartBudgetOptions}

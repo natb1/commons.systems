@@ -8,6 +8,14 @@
 // and a ResizeObserver, and returns a teardown. Returning that teardown from the
 // effect is the #1267 stale-listener fix — React runs it before re-running the
 // effect or on unmount, so listeners never accumulate.
+//
+// The effect REBUILDS the chart whenever chartData (or the option lists) change —
+// e.g. a scroll-append grows the data set. The component instance is no longer
+// remounted on append (Transactions dropped the key={appended.length}), so the
+// JSX control inputs (#sankey-* radios/checkboxes/filters) persist across
+// rebuilds and an in-progress filter survives the append. buildCategorySankey
+// seeds its initial filter state from those persisted controls, so the rebuilt
+// chart honors the active selection rather than resetting to defaults.
 import { useEffect, useRef } from "react";
 import { buildCategorySankey, type SerializedChartTransaction } from "./home-chart.js";
 
@@ -27,9 +35,10 @@ export function CategorySankey({ chartData, categoryOptions, budgetOptions }: Ca
     // inputs) via document.getElementById; they are rendered as siblings above,
     // so they exist by the time this effect runs.
     return buildCategorySankey(container, chartData, categoryOptions, budgetOptions);
-    // chartData/options are captured at mount; the page is re-keyed per navEpoch,
-    // so a data transition re-mounts this island with fresh props.
-  }, []);
+    // Re-runs when chartData/options change (scroll-append). React invokes the
+    // returned teardown before each re-run and on unmount, removing the prior
+    // run's listeners (#1267) so they never accumulate across rebuilds.
+  }, [chartData, categoryOptions, budgetOptions]);
 
   return (
     <>
