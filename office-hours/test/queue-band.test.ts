@@ -90,6 +90,16 @@ describe("renderQueueBand runway readout", () => {
     expect(state!.classList.contains("empty")).toBe(true);
   });
 
+  it("empty queue wins over non-null runway: first branch wins, 'queue empty'", () => {
+    const section = renderQueueBand(
+      make({ openHelpWanted: 0, runwayDays: 24, netDrainPerDay: 0.5 }),
+    );
+
+    const state = section.querySelector(".queue-runway-state");
+    expect(state!.textContent).toBe("queue empty");
+    expect(state!.classList.contains("empty")).toBe(true);
+  });
+
   it("never renders Infinity, NaN, or a negative number for the null-runway fixtures", () => {
     const fixtures = [
       make({ runwayDays: null, netDrainPerDay: 0 }),
