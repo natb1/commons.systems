@@ -26140,7 +26140,7 @@ assert_eq "verify-drop: i1 non-Required kept without verify key" "false" "$(prin
 
 echo "Test: dispatch-qa-disposition"
 
-# All branches in one object (order: f1..f6) plus a separate passthrough check.
+# All branches in one object (order: f1..f8) plus a separate passthrough check.
 # f1: opus-fixable  → final_class=opus-fixable, verify=n/a
 # f2: needs-main    → final_class=needs-main,   verify=n/a
 # f3: needs-human, aesthetic:false, votes=[refuted,upheld] → opus-fixable, Refuted
@@ -26148,7 +26148,8 @@ echo "Test: dispatch-qa-disposition"
 # f5: needs-human, aesthetic:false, NO entry in votes map  → needs-human,  Unverified (INVERTED EDGE)
 # f6: needs-human, aesthetic:true,  votes=[refuted,refuted]→ needs-human,  n/a (aesthetic bypasses)
 # f7: already-satisfied (no votes entry) → final_class=already-satisfied, verify=n/a (first-branch pass-through)
-IN='{"items":[{"id":"f1","class":"opus-fixable","aesthetic":false},{"id":"f2","class":"needs-main","aesthetic":false},{"id":"f3","class":"needs-human","aesthetic":false},{"id":"f4","class":"needs-human","aesthetic":false},{"id":"f5","class":"needs-human","aesthetic":false},{"id":"f6","class":"needs-human","aesthetic":true},{"id":"f7","class":"already-satisfied","aesthetic":false}],"votes":{"f3":["refuted","upheld"],"f4":["upheld","upheld"],"f6":["refuted","refuted"]}}'
+# f8: already-satisfied, votes=[refuted,refuted] present → final_class=already-satisfied, verify=n/a (votes ignored; vote-bypass invariant)
+IN='{"items":[{"id":"f1","class":"opus-fixable","aesthetic":false},{"id":"f2","class":"needs-main","aesthetic":false},{"id":"f3","class":"needs-human","aesthetic":false},{"id":"f4","class":"needs-human","aesthetic":false},{"id":"f5","class":"needs-human","aesthetic":false},{"id":"f6","class":"needs-human","aesthetic":true},{"id":"f7","class":"already-satisfied","aesthetic":false},{"id":"f8","class":"already-satisfied","aesthetic":false}],"votes":{"f3":["refuted","upheld"],"f4":["upheld","upheld"],"f6":["refuted","refuted"],"f8":["refuted","refuted"]}}'
 out=$(printf '%s' "$IN" | "$SCRIPT_DIR/dispatch-qa-disposition")
 
 # Branch: opus-fixable passes through
@@ -26180,6 +26181,10 @@ assert_eq "qa-disposition: aesthetic needs-human with refuted votes → verify=n
 assert_eq "qa-disposition: already-satisfied → final_class=already-satisfied" "already-satisfied" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f7") | .final_class')"
 assert_eq "qa-disposition: already-satisfied → verify=n/a" "n/a" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f7") | .verify')"
 
+# Branch: already-satisfied with refuting votes present → still first-branch pass-through (votes ignored; the vote-bypass invariant f7 cannot catch)
+assert_eq "qa-disposition: already-satisfied with refuted votes → final_class=already-satisfied" "already-satisfied" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f8") | .final_class')"
+assert_eq "qa-disposition: already-satisfied with refuted votes → verify=n/a" "n/a" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f8") | .verify')"
+
 # Passthrough: original class and aesthetic fields survive on output items
 assert_eq "qa-disposition: passthrough class field preserved" "needs-human" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .class')"
 assert_eq "qa-disposition: passthrough aesthetic field preserved" "false" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .aesthetic')"
@@ -26189,14 +26194,15 @@ IN_TITLE='{"items":[{"id":"t1","class":"needs-human","aesthetic":false,"title":"
 out_title=$(printf '%s' "$IN_TITLE" | "$SCRIPT_DIR/dispatch-qa-disposition")
 assert_eq "qa-disposition: passthrough title field preserved" "Check me" "$(printf '%s' "$out_title" | jq -r '.dispositions[0].title')"
 
-# Output order: items must appear in input order (f1..f7)
+# Output order: items must appear in input order (f1..f8)
 assert_eq "qa-disposition: output order preserved" "f1
 f2
 f3
 f4
 f5
 f6
-f7" "$(printf '%s' "$out" | jq -r '.dispositions[].id')"
+f7
+f8" "$(printf '%s' "$out" | jq -r '.dispositions[].id')"
 
 # dispatch-jit-skill tests
 # ============================================================================
