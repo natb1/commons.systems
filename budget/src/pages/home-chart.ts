@@ -188,13 +188,13 @@ function filterTable(opts: FilterTableOptions): void {
   }
 }
 
-function attachFilterListeners(input: HTMLInputElement, options: string[], onBlur: (value: string) => void): void {
-  input.addEventListener("focus", () => showDropdown(input, options, ""));
-  input.addEventListener("input", () => showDropdown(input, options));
+function attachFilterListeners(input: HTMLInputElement, options: string[], onBlur: (value: string) => void, signal: AbortSignal): void {
+  input.addEventListener("focus", () => showDropdown(input, options, ""), { signal });
+  input.addEventListener("input", () => showDropdown(input, options), { signal });
   input.addEventListener("blur", () => {
     if (input.value && !options.includes(input.value) && !options.some(o => o.startsWith(input.value + ":"))) input.value = "";
     onBlur(input.value);
-  });
+  }, { signal });
 }
 
 function assertChartTransactions(data: unknown): asserts data is SerializedChartTransaction[] {
@@ -403,13 +403,20 @@ export function buildCategorySankey(
 
   const debounced = makeDebounced();
 
+  // All control-element listeners are registered with this controller's signal
+  // so the returned teardown can remove every one with a single abort(). The
+  // React island reruns buildCategorySankey on each scroll-append against the
+  // same persistent control DOM nodes, so without this they would stack (#1267).
+  const controlListeners = new AbortController();
+  const controlSignal = controlListeners.signal;
+
   weeksInput.addEventListener("input", () => {
     const v = parseInt(weeksInput.value, 10);
     if (Number.isFinite(v) && v >= 1) {
       currentNumWeeks = v;
       debounced(update, 100);
     }
-  });
+  }, { signal: controlSignal });
 
   endSlider.addEventListener("input", () => {
     const v = parseInt(endSlider.value, 10);
@@ -418,7 +425,7 @@ export function buildCategorySankey(
       endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
       debounced(update, 100);
     }
-  });
+  }, { signal: controlSignal });
 
   modeRadios.forEach(radio => {
     radio.addEventListener("change", () => {
@@ -440,29 +447,29 @@ export function buildCategorySankey(
         }
         update();
       }
-    });
+    }, { signal: controlSignal });
   });
 
   unbudgetedCheckbox.addEventListener("change", () => {
     currentUnbudgetedOnly = unbudgetedCheckbox.checked;
     update();
-  });
+  }, { signal: controlSignal });
 
   cardPaymentCheckbox.addEventListener("change", () => {
     currentShowCardPayment = cardPaymentCheckbox.checked;
     update();
-  });
+  }, { signal: controlSignal });
 
   registerAutocompleteListeners();
 
   attachFilterListeners(categoryFilterInput, categoryOptions, (value) => {
     currentCategoryFilter = value;
     update();
-  });
+  }, controlSignal);
   attachFilterListeners(budgetFilterInput, budgetOptions, (value) => {
     currentBudgetFilter = value;
     update();
-  });
+  }, controlSignal);
 
   let resizeTimer: ReturnType<typeof setTimeout> | undefined;
   const observer = new ResizeObserver(() => {
@@ -473,6 +480,7 @@ export function buildCategorySankey(
 
   return () => {
     document.removeEventListener(TRANSACTIONS_APPENDED_EVENT, localAppendedListener);
+    controlListeners.abort();
     observer.disconnect();
     clearTimeout(resizeTimer);
   };

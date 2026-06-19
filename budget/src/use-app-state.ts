@@ -526,6 +526,7 @@ export function useAppState(): AppApi {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("popstate", onPopState);
+      setWriteBackStatusListener(null);
     };
   }, []);
 

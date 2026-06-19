@@ -45,7 +45,7 @@ export function AppShell({ current, navEnd, hero, children }: AppShellProps) {
       {hero ?? <div id="hero-container" className="content-grid" />}
       <div className="content-grid">{children}</div>
       <footer>
-        <p>Created with <a href="https://github.com/natb1/commons.systems" target="_blank" rel="noopener">commons.systems</a> | &copy; 2026 RUMOR.ML <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" className="cc-badge" /></a></p>
+        <p>Created with <a href="https://github.com/natb1/commons.systems" target="_blank" rel="noopener noreferrer">commons.systems</a> | &copy; 2026 RUMOR.ML <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" className="cc-badge" /></a></p>
       </footer>
     </div>
   );

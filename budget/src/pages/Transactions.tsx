@@ -303,12 +303,16 @@ function TransactionTable({
   scrollError: ScrollErrorKind | null;
   clearedBalances: Set<string>;
 }) {
+  const balances = useMemo(
+    () => computeAllBudgetBalances(transactions, budgets, budgetPeriods),
+    [transactions, budgets, budgetPeriods],
+  );
+
   if (transactions.length === 0 && sinceMs === null) {
     return <p>No transactions found.</p>;
   }
 
   const budgetIdToName = new Map(budgets.map(b => [b.id, b.name]));
-  const balances = computeAllBudgetBalances(transactions, budgets, budgetPeriods);
   const getBalance = (id: string) => balances.get(id as TransactionId) ?? null;
   const ctx: RowContext = { editable: authorized, budgetIdToName, groupName, clearedBalances };
 
