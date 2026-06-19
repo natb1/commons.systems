@@ -88,6 +88,7 @@ const FINDING_ITEM_SCHEMA = {
         'firebase',
         'codeql',
         'npm',
+        'erosion',
       ],
     },
     OWASP: { type: 'string' },
@@ -238,7 +239,9 @@ function dedupMerge(groupFindings) {
 }
 
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-review-verify-drop
-// For each Required finding:
+// For each VERIFY-ELIGIBLE finding — a security `Required` finding OR (erosion-
+// scoped, issue #2064) an erosion/`Fixed` finding (`Source==='erosion' &&
+// bucket==='Fixed'`):
 //   - no skeptic vote at all (both verify agents failed) → drop (Unverified):
 //     verification could not run, so for a terminal auto-ready phase we do NOT
 //     auto-spend an Opus fix on it — it is dropped from the fix set and filed as
@@ -246,13 +249,16 @@ function dedupMerge(groupFindings) {
 //     uncertainty" bias (a crashed skeptic is the most uncertain case of all).
 //   - ≥1 skeptic voted "refuted" → drop (Refuted).
 //   - otherwise → keep (Upheld).
-// Non-Required findings are never affected. Annotates each Required finding with
-// `verify`. Returns {kept, dropped}.
+// An erosion/Fixed finding is treated identically to a Required one here, EXCEPT
+// it can never reach the `deviation` gate (that gate keys on bucket==='Required';
+// erosion stays bucket==='Fixed') — preserving the non-escalation invariant.
+// All other (non-eligible) findings are never affected. Annotates each eligible
+// finding with `verify`. Returns {kept, dropped}.
 function applyVerifyDrop(findings, votesById) {
   const kept = [];
   const dropped = [];
   for (const f of findings) {
-    if (f.bucket === 'Required') {
+    if (f.bucket === 'Required' || (f.Source === 'erosion' && f.bucket === 'Fixed')) {
       const votes = votesById[f.id] || [];
       const refutedCount = votes.filter((v) => v === 'refuted').length;
       if (!votes.length) {
@@ -547,6 +553,11 @@ if (deduped.length) {
     '- False-positive (security): not an actual vulnerability — a misread / non-issue.',
     '- Deferred (code-review/review): valid but out of scope for this PR (filed as a follow-up).',
     '- Out-of-scope (security): a genuine concern in pre-existing code the diff did not touch.',
+    '- Fixed (erosion): an actionable net-erosion finding (Source "erosion") with a concrete refactor',
+    '  that reverses the structural decay this diff introduced → Fixed (it runs the same adversarial',
+    '  verify→fix machinery as a code-review Fixed finding; it is a QUALITY concern, never a vulnerability).',
+    '- Informational (erosion): an advisory complexity/duplication increase with no clear single refactor',
+    '  → Informational (an FYI; no change required and nothing is filed).',
     'RULES: A finding is NEVER Dismissed merely because the change is small — if it is a real',
     'improvement within scope, classify it Fixed. When a code-review/review finding is ambiguous,',
     'default to Informational rather than inventing a code change.',
@@ -603,7 +614,15 @@ if (deduped.length) {
 
 // --- 4. VERIFY (parallel) ----------------------------------------------------
 phase('verify');
-const requiredFindings = deduped.filter((f) => f.bucket === 'Required');
+// Verify-eligible set: security `Required` findings AND (erosion-scoped, per
+// issue #2064) erosion/`Fixed` findings — an actionable net-erosion finding runs
+// the SAME adversarial verify→drop→fix machinery as a Required vulnerability, but
+// it is a QUALITY concern: it is `bucket==='Fixed'`, never `Required`, so it can
+// never reach the `deviation` gate (non-escalation invariant). The literal
+// `Source === 'erosion'` check keeps this erosion-scoped — do NOT generalize it.
+const requiredFindings = deduped.filter(
+  (f) => f.bucket === 'Required' || (f.Source === 'erosion' && f.bucket === 'Fixed')
+);
 const votesById = {};
 const rationalesById = {};
 if (requiredFindings.length) {
@@ -628,17 +647,41 @@ if (requiredFindings.length) {
   const verifyResults = await parallel(
     verifyJobs.map((job) => () => {
       const f = job.finding;
-      const prompt = [
-        'You are an adversarial skeptic. Build the STRONGEST possible case that the finding below',
-        'is a FALSE POSITIVE / not-exploitable. Default to verdict="refuted" under uncertainty —',
-        'this gate guards spending an expensive Opus fix and a false "required" deviation that marks',
-        'the PR ready without review.',
-        `Finding location: ${f.Location}`,
-        `Description: ${f.Description}`,
-        `OWASP: ${f.OWASP}  STRIDE: ${f.STRIDE}  Confidence: ${f.Confidence}`,
-        `Recommended fix: ${f['Recommended fix']}`,
-        'Return { "verdict": "refuted" | "upheld", "rationale": "..." }.',
-      ].join('\n');
+      // Erosion findings (Source "erosion", issue #2064) are a QUALITY concern, not
+      // a vulnerability — the "false positive / not-exploitable" framing below is
+      // wrong for them (erosion is NEVER "exploitable", so an exploitability skeptic
+      // would systematically refute→drop every erosion finding). Give the skeptic an
+      // erosion-aware brief instead: argue the structural METRIC MISFIRED rather than
+      // that the finding is non-exploitable. Keep the security framing for all other
+      // sources. This branch is erosion-scoped on a literal `Source === 'erosion'`.
+      const prompt =
+        f.Source === 'erosion'
+          ? [
+              'You are an adversarial skeptic reviewing a code-quality net-erosion finding (a structural',
+              'metric — complexity and/or duplication — increased on this diff). Build the STRONGEST possible',
+              'case that the METRIC MISFIRED and there is no genuine net erosion here:',
+              '- the complexity delta is spurious (a measurement artifact, not a real branching/nesting increase);',
+              '- the "new duplication" is coincidental, boilerplate, or generated code, not extractable shared logic;',
+              '- the increase is a rename / move / file-boundary artifact (code relocated, not added) rather than net growth.',
+              'Default to verdict="refuted" under uncertainty — this gate guards spending an expensive Opus refactor',
+              'on a metric false positive. (Do NOT argue exploitability — this is a quality finding, never a vulnerability.)',
+              `Finding location: ${f.Location}`,
+              `Description: ${f.Description}`,
+              `Confidence: ${f.Confidence}`,
+              `Recommended fix: ${f['Recommended fix']}`,
+              'Return { "verdict": "refuted" | "upheld", "rationale": "..." }.',
+            ].join('\n')
+          : [
+              'You are an adversarial skeptic. Build the STRONGEST possible case that the finding below',
+              'is a FALSE POSITIVE / not-exploitable. Default to verdict="refuted" under uncertainty —',
+              'this gate guards spending an expensive Opus fix and a false "required" deviation that marks',
+              'the PR ready without review.',
+              `Finding location: ${f.Location}`,
+              `Description: ${f.Description}`,
+              `OWASP: ${f.OWASP}  STRIDE: ${f.STRIDE}  Confidence: ${f.Confidence}`,
+              `Recommended fix: ${f['Recommended fix']}`,
+              'Return { "verdict": "refuted" | "upheld", "rationale": "..." }.',
+            ].join('\n');
       return agent(prompt, {
         model: 'sonnet',
         agentType: 'general-purpose',
@@ -770,6 +813,19 @@ if (fileGroups.size) {
 }
 const fixedIds = new Set(fixed.map((e) => e.id));
 
+// Upheld erosion findings (issue #2064): an erosion/`Fixed` finding that survived
+// adversarial verify (verify==='Upheld'). The `verify` annotation lives ONLY on
+// applyVerifyDrop's OUTPUT copies (keptFindings), NOT on the `deduped` entries the
+// deferred_filings filter iterates — so derive an id membership set here, mirroring
+// the existing unverifiedIds pattern. The `verify === 'Upheld'` clause is
+// LOAD-BEARING: an Informational-bucket erosion finding also lands in keptFindings
+// (via applyVerifyDrop's else branch) but carries NO verify field, so filtering on
+// Source alone would wrongly scoop it up. Informational erosion is a pure FYI — it
+// must be filed nowhere.
+const upheldErosionIds = new Set(
+  keptFindings.filter((f) => f.Source === 'erosion' && f.verify === 'Upheld').map((f) => f.id)
+);
+
 // --- 6. FILE-PREP (pure JS, no gh) -------------------------------------------
 phase('file');
 
@@ -786,16 +842,30 @@ const blockerNums =
     : 'independent';
 
 const deferred_filings = deduped
-  // Deferred code-review/review findings, plus Unverified Required findings
-  // (every skeptic failed): not auto-fixed in this terminal phase, so file a
-  // follow-up rather than silently dropping them.
-  .filter((f) => f.bucket === 'Deferred' || unverifiedIds.has(f.id))
+  // Deferred code-review/review findings, Unverified Required findings (every
+  // skeptic failed), plus (issue #2064) upheld erosion findings Opus did NOT fix:
+  // none are resolved in this terminal phase, so file a follow-up rather than
+  // silently dropping them. A REFUTED erosion finding falls through all three
+  // clauses (it is not in upheldErosionIds and not Deferred/Unverified) → not
+  // filed, which is correct. Upheld erosion NEVER escalates the PR — it is a
+  // non-blocking follow-up only (the non-escalation invariant).
+  .filter(
+    (f) =>
+      f.bucket === 'Deferred' ||
+      unverifiedIds.has(f.id) ||
+      (upheldErosionIds.has(f.id) && !fixedIds.has(f.id))
+  )
   .map((f) => {
     const files = filePath(f.Location);
+    const isUpheldErosionUnfixed = upheldErosionIds.has(f.id) && !fixedIds.has(f.id);
     const isUnverified = unverifiedIds.has(f.id);
-    const tail = isUnverified
-      ? 'Required finding whose adversarial-verify skeptics both failed to vote: deferred to a follow-up rather than auto-applied in the terminal review phase.'
-      : 'Out of scope for this PR: surfaced by the review pass but not a change this PR delivers.';
+    // Order: upheld-erosion check FIRST (it is bucket==='Fixed', never Deferred,
+    // and never in unverifiedIds, so the three predicates are disjoint here).
+    const tail = isUpheldErosionUnfixed
+      ? 'Net structural erosion verified but not auto-fixed: filed as a non-blocking follow-up rather than escalating the PR (this is a quality finding, never a release blocker).'
+      : isUnverified
+        ? 'Finding whose adversarial-verify skeptics both failed to vote: deferred to a follow-up rather than auto-applied in the terminal review phase.'
+        : 'Out of scope for this PR: surfaced by the review pass but not a change this PR delivers.';
     const body = [
       f.Description,
       '',
