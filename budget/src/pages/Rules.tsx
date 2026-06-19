@@ -8,14 +8,17 @@
 // interactivity (blur-save, autocomplete, add/delete mutators, desktop-open) is
 // wired in Unit 2 (use-rules-table.ts); the containerRef and uncontrolled
 // defaultValue inputs are the seams that hook attaches to.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
 import { Input, Select, Button } from "@commons-systems/ds";
-import { type Rule, type NormalizationRule } from "../firestore.js";
+import { removeDropdown } from "@commons-systems/components/autocomplete";
+import { type Rule, type NormalizationRule, type RuleType, type RuleId, type NormalizationRuleId } from "../firestore.js";
 import { type RenderPageOptions } from "./render-options.js";
-import { uniqueSorted } from "./hydrate-util.js";
+import { getActiveDataSource } from "../active-data-source.js";
+import { uniqueSorted, handleActionError } from "./hydrate-util.js";
+import { useRulesTable } from "./use-rules-table.js";
 
 interface LoadedRulesData {
   rules: Rule[];
@@ -121,18 +124,46 @@ export function Rules({ options }: { options: RenderPageOptions }) {
 function LoadedRules({ data }: { data: LoadedRulesData }) {
   const { rules, normalizationRules, authorized, budgetNames, categoryTargets, uniqueInstitutions, uniqueAccounts } = data;
 
-  // Value-only seeding — Unit 2 adds the setters and mutators.
-  const [ruleRows] = useState<Rule[]>(() =>
+  const [ruleRows, setRuleRows] = useState<Rule[]>(() =>
     [...rules].sort((a, b) => a.priority - b.priority || a.pattern.localeCompare(b.pattern)));
-  const [normalizationRows] = useState<NormalizationRule[]>(() =>
+  const [normalizationRows, setNormalizationRows] = useState<NormalizationRule[]>(() =>
     [...normalizationRules].sort((a, b) => a.priority - b.priority || a.pattern.localeCompare(b.pattern)));
 
   // The type filter is React state — drives data-active-filter and works for all
   // users including seed (the e2e selectOption runs on seed data).
   const [filter, setFilter] = useState("categorization");
 
-  // Container ref for Unit 2's interactivity hook.
+  // Container ref for the imperative interactivity hook (blur-save/autocomplete/summary-guard).
   const containerRef = useRef<HTMLDivElement>(null);
+  useRulesTable(containerRef);
+
+  async function handleAddRule(btn: HTMLElement) {
+    try {
+      const ds = getActiveDataSource();
+      if (filter === "normalization") {
+        const defaultFields = { pattern: "new rule", canonicalDescription: "New Description", patternType: null, dateWindowDays: 7, priority: 100, institution: null, account: null };
+        const newId = await ds.createNormalizationRule(defaultFields);
+        setNormalizationRows(prev => [...prev, { id: newId, groupId: null, ...defaultFields }]);
+      } else {
+        const ruleType = filter as RuleType;
+        const defaultFields = { type: ruleType, pattern: "new rule", target: ruleType === "budget_assignment" ? "Unassigned" : "Uncategorized", priority: 100, institution: null, account: null, minAmount: null, maxAmount: null, excludeCategory: null, matchCategory: null };
+        const newId = await ds.createRule(defaultFields);
+        setRuleRows(prev => [...prev, { id: newId, groupId: null, ...defaultFields }]);
+      }
+    } catch (error) {
+      handleActionError(btn, error, "add rule");
+    }
+  }
+
+  async function handleDeleteRule(id: RuleId, btn: HTMLElement) {
+    try { await getActiveDataSource().deleteRule(id); setRuleRows(prev => prev.filter(r => r.id !== id)); }
+    catch (error) { handleActionError(btn, error, "delete rule"); }
+  }
+
+  async function handleDeleteNormalizationRule(id: NormalizationRuleId, btn: HTMLElement) {
+    try { await getActiveDataSource().deleteNormalizationRule(id); setNormalizationRows(prev => prev.filter(r => r.id !== id)); }
+    catch (error) { handleActionError(btn, error, "delete rule"); }
+  }
 
   const dataAttrs: Record<string, string> = authorized ? {
     "data-budget-options": JSON.stringify(budgetNames),
@@ -146,7 +177,7 @@ function LoadedRules({ data }: { data: LoadedRulesData }) {
       <Select
         id="rule-type-filter"
         value={filter}
-        onChange={(e) => setFilter(e.target.value)}
+        onChange={(e) => { setFilter(e.target.value); removeDropdown(); }}
         options={[
           { value: "categorization", label: "Categorization" },
           { value: "budget_assignment", label: "Budget Assignment" },
@@ -173,17 +204,19 @@ function LoadedRules({ data }: { data: LoadedRulesData }) {
           <span>Date Window</span>
           <span></span>
         </div>
-        {ruleRows.map(r => <RuleRow key={r.id} rule={r} authorized={authorized} />)}
-        {normalizationRows.map(r => <NormalizationRuleRow key={r.id} rule={r} authorized={authorized} />)}
-        {authorized ? <Button id="add-rule">Add Rule</Button> : null}
+        {ruleRows.map(r => <RuleRow key={r.id} rule={r} authorized={authorized} onDelete={(btn) => { void handleDeleteRule(r.id, btn); }} />)}
+        {normalizationRows.map(r => <NormalizationRuleRow key={r.id} rule={r} authorized={authorized} onDelete={(btn) => { void handleDeleteNormalizationRule(r.id, btn); }} />)}
+        {authorized ? <Button id="add-rule" onClick={(e) => { void handleAddRule(e.currentTarget); }}>Add Rule</Button> : null}
       </div>
     </>
   );
 }
 
-function RuleRow({ rule, authorized }: { rule: Rule; authorized: boolean }) {
+function RuleRow({ rule, authorized, onDelete }: { rule: Rule; authorized: boolean; onDelete?: (btn: HTMLElement) => void }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  useLayoutEffect(() => { if (window.innerWidth >= 768) detailsRef.current?.setAttribute("open", ""); }, []);
   return (
-    <details className="expand-row rule-row" data-rule-type={rule.type} {...(authorized ? { "data-rule-id": rule.id } : {})}>
+    <details ref={detailsRef} className="expand-row rule-row" data-rule-type={rule.type} {...(authorized ? { "data-rule-id": rule.id } : {})}>
       <summary>
         <div className="expand-summary rule-summary-content">
           <span>
@@ -217,16 +250,18 @@ function RuleRow({ rule, authorized }: { rule: Rule; authorized: boolean }) {
           <Input type="text" className="edit-match-category" defaultValue={rule.matchCategory ?? ""} aria-label="Match Category" disabled={!authorized} />
         </span>
         <span>
-          {authorized ? <Button className="delete-rule" aria-label="Delete rule">Delete</Button> : <span></span>}
+          {authorized ? <Button className="delete-rule" aria-label="Delete rule" onClick={(e) => onDelete?.(e.currentTarget)}>Delete</Button> : <span></span>}
         </span>
       </div>
     </details>
   );
 }
 
-function NormalizationRuleRow({ rule, authorized }: { rule: NormalizationRule; authorized: boolean }) {
+function NormalizationRuleRow({ rule, authorized, onDelete }: { rule: NormalizationRule; authorized: boolean; onDelete?: (btn: HTMLElement) => void }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  useLayoutEffect(() => { if (window.innerWidth >= 768) detailsRef.current?.setAttribute("open", ""); }, []);
   return (
-    <details className="expand-row rule-row" data-rule-type="normalization" {...(authorized ? { "data-rule-id": rule.id } : {})}>
+    <details ref={detailsRef} className="expand-row rule-row" data-rule-type="normalization" {...(authorized ? { "data-rule-id": rule.id } : {})}>
       <summary>
         <div className="expand-summary rule-summary-content">
           <span>
@@ -246,7 +281,7 @@ function NormalizationRuleRow({ rule, authorized }: { rule: NormalizationRule; a
         </span>
         <span></span>
         <span>
-          {authorized ? <Button className="delete-rule" aria-label="Delete rule">Delete</Button> : <span></span>}
+          {authorized ? <Button className="delete-rule" aria-label="Delete rule" onClick={(e) => onDelete?.(e.currentTarget)}>Delete</Button> : <span></span>}
         </span>
       </div>
     </details>
