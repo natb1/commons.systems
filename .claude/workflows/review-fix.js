@@ -17,7 +17,7 @@
  * node:* — the skill does all of that around the call.
  *
  * args IN:
- *   { pr_num, merge_base, changed_files:[...], surface:"empty"|"docs"|"code",
+ *   { pr_num, merge_base, changed_files:[...], surface:"empty"|"docs"|"tests"|"code",
  *     deps:bool, app_or_rules:bool,
  *     prescanned_findings:[...Per-finding items, Source "codeql"|"npm",
  *       carrying their source-specific fields...],
@@ -30,7 +30,7 @@
  *     deferred_filings:[{title, body, blocker_issue_nums:[N,...]|"independent"}],
  *     security_followup_input:[...codeql/npm out-of-scope subset...],
  *     verify_report:[{id, location, verdict, skeptic_votes, rationale}],
- *     deviation:bool, security_note? }
+ *     deviation:bool, security_note?, coverage_incomplete:bool, coverage_note?:string }
  *
  * NORMATIVE SPECS for the three inline kernel helpers below are the pure bash/jq
  * scripts (unit-tested by test-dispatch-scripts.sh). The JS helpers are kept
@@ -179,6 +179,9 @@ const FIX_SCHEMA = {
 // Returns the AGENT finder-source set (the codeql/npm finders are NOT agents —
 // they arrive via args.prescanned_findings — so they are excluded here).
 function agentFinderSet(surface, app_or_rules) {
+  // Any non-`code` surface (`empty`/`docs`/`tests`) yields only the two quality
+  // finders — the `surface === 'code'` gate below covers `tests` with no code
+  // change, since a test-only diff has no production attack surface.
   const set = ['code-review', 'review'];
   if (surface === 'code') {
     set.push('input-validation', 'secrets', 'red-team', 'security-review');
@@ -369,23 +372,54 @@ log(`args type: ${typeof args}; surface=${_a.surface}; changed_files count=${(_a
 // subagents (Step-5a/5b /file-issue) before emitting the envelope.
 let subagentsLaunched = 0;
 
-// --- 1. FINDERS (parallel, barrier) ------------------------------------------
+// --- 1. FINDERS (two waves, probe-gated) -------------------------------------
 phase('finders');
 const finderNames = agentFinderSet(_a.surface, _a.app_or_rules);
-log(`finders: launching ${finderNames.length} agent finder(s) for surface=${_a.surface}`);
-subagentsLaunched += finderNames.length;
-
-const finderResults = await parallel(
-  finderNames.map((name) => () =>
-    agent(finderPrompt(name, _a), {
-      model: 'sonnet',
-      agentType: 'general-purpose',
-      schema: FINDINGS_SCHEMA,
-      label: `find:${name}`,
-      phase: 'finders',
-    })
-  )
+// Probe-wave throttle short-circuit: the two always-on quality finders are real
+// review work that runs on every surface, so launch them FIRST as wave 1 and
+// double them as a throttle probe. If BOTH return null (a strong outage signal —
+// far more robust than one flake), skip the security finder wave entirely rather
+// than waste those launches on a throttled model. On empty/docs/tests surfaces
+// there are no security finders, so this degenerates to a single wave (no change).
+const qualityFinders = finderNames.filter((n) => n === 'code-review' || n === 'review');
+const securityFinders = finderNames.filter((n) => n !== 'code-review' && n !== 'review');
+log(
+  `finders: wave 1 = ${qualityFinders.length} quality finder(s); ` +
+    `${securityFinders.length} security finder(s) pending for surface=${_a.surface}`
 );
+
+const launchFinder = (name) => () =>
+  agent(finderPrompt(name, _a), {
+    model: 'sonnet',
+    agentType: 'general-purpose',
+    schema: FINDINGS_SCHEMA,
+    label: `find:${name}`,
+    phase: 'finders',
+  });
+
+// Wave 1 — the quality finders (also the throttle probe).
+subagentsLaunched += qualityFinders.length;
+const qualityResults = await parallel(qualityFinders.map(launchFinder));
+
+// Gate: both quality finders dead → model likely throttled; skip the security
+// wave. coverage_incomplete records the degraded review for the Step 6 comment.
+let securityResults = [];
+let coverage_incomplete = false;
+let coverage_note = '';
+const bothQualityDead = qualityResults.filter(Boolean).length === 0;
+if (securityFinders.length && bothQualityDead) {
+  coverage_incomplete = true;
+  coverage_note =
+    'Security finders skipped: both quality finders failed (model likely throttled).';
+  log(`finders: ${coverage_note} Backing off the security wave.`);
+} else if (securityFinders.length) {
+  // Wave 2 — the surface-gated security finders.
+  log(`finders: wave 2 = launching ${securityFinders.length} security finder(s)`);
+  subagentsLaunched += securityFinders.length;
+  securityResults = await parallel(securityFinders.map(launchFinder));
+}
+
+const finderResults = qualityResults.concat(securityResults);
 
 // Gather: surviving finder findings + the prescanned codeql/npm findings.
 let allFindings = [];
@@ -573,11 +607,20 @@ const requiredFindings = deduped.filter((f) => f.bucket === 'Required');
 const votesById = {};
 const rationalesById = {};
 if (requiredFindings.length) {
-  log(`verify: ${requiredFindings.length} Required finding(s), 2 skeptics each`);
+  log(
+    `verify: ${requiredFindings.length} Required finding(s), severity-scaled ` +
+      `skeptics (2 for high-confidence, 1 for medium/low)`
+  );
   // Flat thunk list across (finding × skeptic) so the barrier covers all votes.
+  // Skeptic count scales with finding confidence: a high-confidence Required
+  // finding (the only tier that can trigger the deviation gate) gets 2 skeptics;
+  // medium/low get 1. The floor is 1, NEVER 0 — a Required finding given 0 votes
+  // is treated as "Unverified" by applyVerifyDrop (dropped + filed, not fixed),
+  // so 1 vote is the minimum that preserves the existing verify-drop semantics.
   const verifyJobs = [];
   for (const f of requiredFindings) {
-    for (let k = 0; k < 2; k++) {
+    const skepticCount = f.Confidence === 'high' ? 2 : 1;
+    for (let k = 0; k < skepticCount; k++) {
       verifyJobs.push({ id: f.id, k, finding: f });
     }
   }
@@ -606,7 +649,7 @@ if (requiredFindings.length) {
     })
   );
   // Collect votes per id. A dead skeptic (null) contributes no vote, so a
-  // finding whose both skeptics died gets [] → handled by applyVerifyDrop as
+  // finding whose every skeptic died gets [] → handled by applyVerifyDrop as
   // "Unverified": dropped (not auto-fixed) and surfaced as verdict "unverified"
   // in verify_report, matching the skeptic prompt's "refute under uncertainty"
   // bias. (A finding is only Upheld when at least one skeptic ran and voted.)
@@ -624,7 +667,7 @@ if (requiredFindings.length) {
 const { kept: keptFindings, dropped: refutedFindings } = applyVerifyDrop(deduped, votesById);
 
 // verify_report — one entry per Required finding (upheld / refuted / unverified).
-// "unverified" = both skeptics failed to vote: distinct from a clean upheld pass
+// "unverified" = every skeptic failed to vote: distinct from a clean upheld pass
 // so the PR comment shows the verification could not run rather than masking it
 // as verdict "upheld" with empty evidence.
 const verify_report = requiredFindings.map((f) => {
@@ -744,7 +787,7 @@ const blockerNums =
 
 const deferred_filings = deduped
   // Deferred code-review/review findings, plus Unverified Required findings
-  // (both skeptics failed): not auto-fixed in this terminal phase, so file a
+  // (every skeptic failed): not auto-fixed in this terminal phase, so file a
   // follow-up rather than silently dropping them.
   .filter((f) => f.bucket === 'Deferred' || unverifiedIds.has(f.id))
   .map((f) => {
@@ -874,6 +917,11 @@ return {
   verify_report,
   deviation,
   security_note: _a.security_note,
+  // coverage_incomplete is independent of `deviation`: it flags a launch-efficiency
+  // back-off (security wave skipped because both quality finders died — model
+  // likely throttled), surfaced in the Step 6 partial-coverage comment line.
+  coverage_incomplete,
+  coverage_note,
   findings_surfaced,
   findings_actionable,
   fixes_applied,
