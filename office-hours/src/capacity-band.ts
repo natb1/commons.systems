@@ -4,24 +4,13 @@ const MINUTE = 60_000;
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
 
-/**
- * Returns the sample with the maximum sampledAt, or null for an empty array.
- * Does not mutate the input array.
- */
-export function selectLatestSample(samples: UsageSample[]): UsageSample | null {
-  if (samples.length === 0) return null;
-  return samples.reduce((best, s) =>
-    s.sampledAt.getTime() > best.sampledAt.getTime() ? s : best,
-  );
-}
-
-function workerState(active: number, target: number): string {
+export function workerState(active: number, target: number): string {
   if (target === 0) return "paused";
   if (active < target) return "spawning";
   return "steady";
 }
 
-function formatCountdown(resetAt: Date, now: Date): string {
+export function formatCountdown(resetAt: Date, now: Date): string {
   const delta = resetAt.getTime() - now.getTime();
   if (delta < MINUTE) return "now";
   if (delta >= DAY) {
@@ -38,7 +27,7 @@ function formatCountdown(resetAt: Date, now: Date): string {
   return `in ${m}m`;
 }
 
-function formatResetClock(resetAt: Date, now: Date): string {
+export function formatResetClock(resetAt: Date, now: Date): string {
   const timeStr = resetAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   if (
     resetAt.getFullYear() === now.getFullYear() &&

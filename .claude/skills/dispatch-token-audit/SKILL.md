@@ -21,6 +21,20 @@ This skill parses recent Claude session transcripts and emits a ranked report of
 
    The script prints paths of any corrupt files and the total `files_failed` count to stderr. If `files_failed` is nonzero, surface that count in the report header so the reader knows the window data is incomplete.
 
+   **Optional: persist each window aggregate to Firestore.** When `DISPATCH_AUDIT_AGGREGATES_ENABLED=1` is set in the environment, `aggregate-usage.sh` pipes the assembled JSON document to `audit-aggregate-writer.mjs` after writing the report artifact. The writer stores it idempotently (`.set()` on a deterministic doc id) under `office-hours/{env}/audit-aggregates` via the firebase-admin SDK. The admin SDK bypasses Firestore security rules, so this does not depend on #1863's read rule being deployed. The write is fail-closed: writer failure exits non-zero with a clear stderr message, but only after the report file is already written.
+
+   Required additional env vars for the persist path (consumed by the writer binary):
+   - `DISPATCH_AUDIT_AGGREGATES_GROUP_ID` — owning group id (required, no `/`)
+   - ADC credentials: either `GOOGLE_APPLICATION_CREDENTIALS` pointing at a service-account key, or `gcloud auth application-default login`
+
+   Optional env vars (writer defaults shown):
+   - `DISPATCH_AUDIT_AGGREGATES_NAMESPACE` — Firestore path prefix, default `office-hours/prod`
+   - `DISPATCH_AUDIT_AGGREGATES_PROJECT_ID` — GCP project, default `commons-systems`
+   - `DISPATCH_AUDIT_AGGREGATES_TTL_DAYS` — retention days in [30, 730], default `365`
+   - `DISPATCH_AUDIT_AGGREGATES_WRITER` — override the writer binary path (test seam)
+
+   Member emails are NOT an env var. The writer resolves them from the `OFFICE_HOURS_MEMBER_EMAILS` Secret Manager secret at runtime (the same canonical secret the office-hours-sync Cloud Function uses). When the gate is off, report generation is unaffected and no Firestore writes occur.
+
 3. **Read cheaply via targeted jq slices** of `tmp/usage-audit.json`. Do NOT `cat` the whole file into context — read only the slices needed for each ranking step:
 
    ```bash
@@ -91,3 +105,40 @@ This skill parses recent Claude session transcripts and emits a ranked report of
    - **All nine lenses represented**: lenses with negligible measured impact appear at the bottom with their measured magnitude and a note that the data shows near-zero impact.
 
 7. **Report-only.** The skill does NOT create GitHub issues and does NOT modify the dispatch workflow. The user reads the report and decides what to file. This prevents the skill from racing or duplicating the optimization issues it surfaces (e.g. #1171, #1172).
+
+## Per-run outcome hit-rates
+
+Each dispatch phase (review-fix, qa-fix) now emits a machine-readable outcome envelope at the end of every run. Previously, measuring phase yield required LLM-classifying prose summaries — expensive, non-reproducible, and a `completed_with_fixes` disposition could lie when no diff materialized. The envelope makes hit-rate a deterministic aggregation: `aggregate-usage.sh` reads each session's last `<!-- dispatch:outcome:v1 -->` block and surfaces per-run data on `.sessions[]` and pooled data under `.by_phase_outcome`. Field definitions, enums, and formulas are in `.claude/docs/outcome-envelope.md` (the single source of truth).
+
+**`by_phase_outcome`** — pooled over non-subagent worker sessions that carry an envelope, keyed by `phase` enum (`"review"`, `"qa"`). Per phase:
+
+- Summed counts: `sessions`, `findings_surfaced`, `findings_actionable`, `fixes_applied`, `followups_filed`, `subagents_launched`
+- `disposition_distribution` — count of `completed` / `completed_with_fixes` / `escalated` outcomes
+- Pooled rates (each `null` when its denominator is 0): `hit_rate`, `actionability`, `fix_rate`
+
+**Per-run** — each `.sessions[]` entry carries `outcome` (the parsed envelope object, or `null`) and `outcome_rates` (`{hit_rate, actionability, fix_rate}`, or `null`).
+
+Formulas (from `.claude/docs/outcome-envelope.md`):
+- `hit_rate = fixes_applied / findings_surfaced`
+- `actionability = findings_actionable / findings_surfaced`
+- `fix_rate = fixes_applied / findings_actionable`
+
+Each rate is `null` when its denominator is 0.
+
+**jq slices against `tmp/usage-audit.json`:**
+
+```bash
+# Full by_phase_outcome table (pooled counts + rates per phase)
+jq '.by_phase_outcome' tmp/usage-audit.json
+
+# Pooled review hit-rate
+jq '.by_phase_outcome.review.hit_rate' tmp/usage-audit.json
+
+# QA disposition distribution
+jq '.by_phase_outcome.qa.disposition_distribution' tmp/usage-audit.json
+
+# Top 10 worker sessions by per-run hit_rate
+jq '[.sessions[] | select(.outcome_rates.hit_rate != null)] | sort_by(-.outcome_rates.hit_rate) | .[0:10] | map({id, hit_rate: .outcome_rates.hit_rate})' tmp/usage-audit.json
+```
+
+These slices are yield metrics, not cost metrics — they do not sort into the ranked token-reduction report. Read them alongside the report to correlate phase spend with phase effectiveness.

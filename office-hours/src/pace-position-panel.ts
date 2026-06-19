@@ -1,10 +1,10 @@
 import * as Plot from "@observablehq/plot";
-import { type UsageSample } from "./usage-samples.js";
+import { selectLatestSample, type UsageSample } from "./usage-samples.js";
 import { segmentByWeek, aheadBehindDelta, paceBackdrop } from "./pace-position.js";
-import { selectLatestSample } from "./capacity-band.js";
 import { elapsedWeekFraction } from "./weekly-pace-curve.js";
 import {
   getThemeFg,
+  readChartPalette,
   assembleChartLayout,
   buildLegend,
   renderAxisSvg,
@@ -12,9 +12,6 @@ import {
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
 } from "./chart-util.js";
-
-const COLOR_WEEKLY = "#26a69a";
-const COLOR_BACKDROP = "#ab47bc";
 
 /** Approximate visible width; the x domain is bounded [0, 1] so no scrolling. */
 const CONTAINER_WIDTH = 640;
@@ -55,6 +52,10 @@ export function renderPacePositionPanel(samples: UsageSample[]): HTMLElement {
   const nowX = elapsedWeekFraction(latest.sampledAt, latest.weeklyResetsAt);
 
   const fg = getThemeFg(section);
+  // DS categorical palette, read from the section at runtime.
+  const palette = readChartPalette(section);
+  const COLOR_WEEKLY = palette[5]; // --chart-6 teal
+  const COLOR_BACKDROP = palette[4]; // --chart-5 tan (dashed W(x) backdrop)
   const sharedStyle = { background: "transparent", color: fg };
 
   const chartWidth = CONTAINER_WIDTH - AXIS_WIDTH;

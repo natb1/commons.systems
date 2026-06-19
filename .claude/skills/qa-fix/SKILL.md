@@ -18,10 +18,14 @@ an unexpected permission prompt, or a bounded auto-fix-exhausted bug (cap
 reached / scope-deviation / planning-failed on an `opus-fixable` item) — it
 escalates to the office-hours queue via the standard path (skip the
 `phase-completed` marker, write `office-hours-reason`; the Stop hook applies
-`dispatch:office-hours` to the issue and parks the session). `opus-fixable`
-bugs are auto-fixed in the bounded Opus fix lane (Step 3.7); `needs-main` bugs
-are filed as `blocked_by` follow-up issues (Step 3.6) and do not escalate. The
-user-input residue runs later via `/office-hours`.
+`dispatch:office-hours` to the issue and parks the session). The Step 3.5
+disposition Workflow classifies residue items on a **four-class axis**:
+`opus-fixable` bugs are auto-fixed in the bounded Opus fix lane (Step 3.7);
+`needs-main` bugs are filed as `blocked_by` follow-up issues (Step 3.6) and do
+not escalate; `already-satisfied` items are **dropped as PASS** — partitioned
+into `result.already_satisfied` by the Workflow, excluded from `result.dispositions`,
+and never reaching fix-plan or the escalation set. The user-input residue
+(`needs-human`) runs later via `/office-hours`.
 
 The QA plan (Step 2) is authored by a **single bounded Opus triage subagent** that
 consumes the live context pack and returns a three-way-classified, ordered item
@@ -100,6 +104,16 @@ Otherwise run all steps in order.
 
 ## Steps
 
+**Track a `SKILL_SUBAGENTS` tally** (agent-maintained running count, NOT a shell
+variable — the steps below fork subagents as an agent-driven sequence, not a bash
+`for`-loop): initialize it to `0` before the first step that may fork a subagent.
+It counts the subagents **this skill body** forks directly — source (2) of the
+`subagents_launched` contract in `.claude/docs/outcome-envelope.md:132-144`. The
+Step-3.5 Workflow's own fan-out is tracked separately by
+`result.subagents_launched` and is added only when `result` is in scope. After
+each fork, increment `SKILL_SUBAGENTS` immediately per the increment notes at each
+fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7).
+
 0. **Target resolution.**
 
    `/qa-fix` operates in place — the **current worktree dictates the target**.
@@ -129,13 +143,17 @@ Otherwise run all steps in order.
    .claude/skills/dispatch-propagate/scripts/commit-merge-push --merge-only
    ```
 
-   Exit 0 → proceed to Step 1. On a non-zero exit, fall back to the fork — the
-   canonical fork recipe `/implement-unit` Step 2 documents (`subagent_type` is
-   `general-purpose`, never the skill name). This invocation runs with no pending
-   working-tree changes — `/commit-merge-push` tolerates that and creates no
-   commit. If the script exits 3 (merge conflict) or the fork reports a merge
-   conflict, escalate to office-hours per the **Escalation** section and stop — do
-   not begin the QA walkthrough.
+   Exit 0 → proceed to Step 1. If the script exits 3 (merge conflict), escalate
+   directly to office-hours per the **Escalation** section and stop — do not spawn
+   the fork and do **not** increment `SKILL_SUBAGENTS`; do not begin the QA
+   walkthrough. On a non-zero exit *other than* exit 3, fall back to the fork —
+   the canonical fork recipe `/implement-unit` Step 2 documents (`subagent_type`
+   is `general-purpose`, never the skill name). This invocation runs with no
+   pending working-tree changes — `/commit-merge-push` tolerates that and creates
+   no commit. When the fallback fork is spawned, increment `SKILL_SUBAGENTS` by 1
+   — only on the fork path; do **not** increment on the exit-0 (script-only) path.
+   If the fork then reports a merge conflict, escalate to office-hours per the
+   **Escalation** section and stop — do not begin the QA walkthrough.
 
 1. **Detect whether the implementation has a browser component.**
 
@@ -242,6 +260,7 @@ Otherwise run all steps in order.
         - Expected outcome: <what success looks like to the user>
         - Classification: script-verifiable | needs-browser | needs-human-judgment
         - Command: <exact command/assertion>   # required iff script-verifiable
+        - Flag: planned-deferral — <reason>   # optional; emit ONLY for a planned deferral
         ```
       - **The classification axis (three-way):**
         - `script-verifiable` — outcome decided by a shell command / file check, a
@@ -253,6 +272,17 @@ Otherwise run all steps in order.
           or a "does this look right" call. **Not** walked here; recorded as
           deferred-to-office-hours and is a user-input blocker (see terminal
           disposition). Carries no `Command`.
+      - **Planned-deferral flag.** A planned deferral is an acceptance criterion the
+        issue/PR documents as non-assertable at merge time — verified downstream by
+        monitoring or audit tooling rather than at this PR's merge. Example: "no
+        regression in caught-finding rate, measured downstream by
+        `dispatch-token-audit`." Classify such an item `needs-human-judgment` (it is
+        not script- or browser-verifiable) **and** add the `Flag: planned-deferral —
+        <reason>` line with a one-line reason. The flag annotates; it does not replace
+        the classification axis — both lines must appear.
+
+   After the triage subagent returns, increment `SKILL_SUBAGENTS` by 1 (the one
+   bounded Opus triage fork always runs).
 
    Step 3 parses this returned list and routes each item by its `Classification`
    value (and, for `script-verifiable`, by its `Command` shape) into one of three
@@ -309,12 +339,18 @@ Otherwise run all steps in order.
    the Workflow `args`. Each residue entry is an object:
 
    ```
-   { id, title, kind, url_path, expected_outcome, finding, page_text, screenshot_path }
+   { id, title, kind, url_path, expected_outcome, finding, page_text, screenshot_path,
+     planned_deferral }
    ```
 
    - `id` — a stable identifier for the item (the plan item's number/title).
    - `kind` — one of exactly **three** values (below). SKIP results are **not**
      residue; only these three kinds are recorded in the list.
+   - `planned_deferral` — **optional boolean**. Absent or `false` means a normal item.
+     Set to `true` when the plan item carried `Flag: planned-deferral — <reason>`.
+     The flag is orthogonal to `kind` — it normally rides a `needs-human-judgment`
+     item but may in principle ride any kind. When set, put the `<reason>` into the
+     item's `finding` so the office-hours human sees why it was deferred.
 
    The three residue kinds:
 
@@ -326,7 +362,9 @@ Otherwise run all steps in order.
    - **`needs-human-judgment`** — every plan-triage deferred item (the
      `needs-human-judgment` classification from Step 2; the
      deferred-to-office-hours items noted above). `page_text=''` — it is classified
-     by its nature, not by a browser observation.
+     by its nature, not by a browser observation. When the plan item carried `Flag:
+     planned-deferral`, also set `planned_deferral: true` on this residue entry and
+     put the flag's `<reason>` in `finding`.
    - **`main-gated-fail`** — a permission-denied smoke FAIL when the
      `firestore_caveat` derived in Step 1 applies (see below). Tag the residue item
      `kind:"main-gated-fail"` instead of `"fail"`.
@@ -379,9 +417,27 @@ Otherwise run all steps in order.
       IIFE — `(async () => { … })()` — because a top-level `await` raises
       `SyntaxError: await is only valid in async functions`.
 
+      **Minimize browser payload.** A `computer` `screenshot`/`zoom` returns the
+      full image into context, so prefer cheaper text/element queries whenever the
+      check is non-visual:
+      - Verify an `Expected outcome` with `get_page_text` / `find` whenever the
+        check is textual or element-presence.
+      - Use `find` (≤20 targeted elements) over `get_page_text` when checking for
+        a SPECIFIC element or value; reserve `get_page_text` for genuinely
+        text-heavy reads.
+      - Take a `computer` screenshot ONLY when the check is genuinely visual
+        (layout/rendering) or as FAIL evidence. When you do, CROP to the relevant
+        area with the `zoom` action and a `region` rather than a full-viewport
+        `screenshot`, unless the failure is viewport-wide.
+      - If an accessibility-tree read is needed, use `read_page` with a bounded
+        `max_chars` / `depth` (or a `ref_id` focus / `filter:"interactive"`) —
+        never an unbounded dump.
+      - Applies to HOW evidence is captured, not WHAT is checked: the same
+        checks run and the clean-pass cadence is untouched (AC#2).
+
       1. Load chrome tools via:
          ```
-         ToolSearch("select:mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__read_console_messages,mcp__claude-in-chrome__read_network_requests,mcp__claude-in-chrome__gif_creator,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__form_input,mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__list_connected_browsers,mcp__claude-in-chrome__select_browser")
+         ToolSearch("select:mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__find,mcp__claude-in-chrome__read_page,mcp__claude-in-chrome__read_console_messages,mcp__claude-in-chrome__read_network_requests,mcp__claude-in-chrome__gif_creator,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__form_input,mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__list_connected_browsers,mcp__claude-in-chrome__select_browser")
          ```
          If ToolSearch fails or the tools are unavailable → the browser lanes cannot run. Note "Chrome extension unavailable" in results, record every `needs-browser` and single-assertion `script-verifiable` item as a user-input blocker, and escalate per the **Escalation** section (these items cannot be machine-verified without the browser).
       2. **Select the browser.** Default to the Windows Chrome — it reaches the WSL QA server over WSL2's shared `localhost` with no tunnel. Call `list_connected_browsers`, find the entry whose `osPlatform` is `"Windows"`, and `select_browser` it. (DeviceIds change on re-registration — never hard-code one; always match on `osPlatform`.) If no Windows entry is found and the user has not explicitly requested macOS → record this as a user-input blocker and escalate per the **Escalation** section (do not silently fall back to macOS). Use the macOS Chrome only on explicit user request: because macOS is a separate machine, first hand the user the `ssh -L` tunnel command that `run-qa-server.sh` printed in its "Remote access" block (it forwards the Vite port plus every emulator port) — if that block has scrolled out of context, reproduce it from the known Vite and emulator ports: `http://localhost:<vite>/` plus `ssh -L <vite>:localhost:<vite> [-L <emu>:localhost:<emu> ...] <ssh-host>`; once the tunnel is up, `select_browser` the entry whose `osPlatform` is `"macOS"`. See `.claude/docs/chrome-extension.md` § Browser selection for the authoritative policy.
@@ -389,7 +445,7 @@ Otherwise run all steps in order.
       4. Navigate to the App URL.
       5. Suppress JS dialogs via `javascript_tool`: override `window.alert`, `window.confirm`, `window.prompt` with no-ops.
       6. Clear baselines: `read_console_messages` and `read_network_requests` with `clear: true`.
-      7. Start GIF recording: `gif_creator` with `action: "start_recording"`. Take an initial screenshot.
+      7. Start GIF recording: `gif_creator` with `action: "start_recording"`. Take an initial `computer` screenshot ONLY IF a later visual / before-after comparison will need it; otherwise establish the baseline with `get_page_text`.
       8. **Single-assertion lane — for each `script-verifiable` item whose `Command`
          is a single `javascript_tool` assertion:** `navigate` to the item's `URL
          path` (if not "current"), then run the **one** assertion `Command` (wrapped
@@ -400,12 +456,16 @@ Otherwise run all steps in order.
          record-and-continue" at the top of Step 3).
       9. **Walkthrough lane — for each `needs-browser` item:**
          a. **Set up state.** Navigate to the item's `URL path` (if not "current"). Execute the `Steps` using `computer`, `form_input`, `navigate`. Capture extra GIF frames before and after.
-         b. **Check output.** Take a screenshot only on genuine state transitions — not on every iterative debug step. Read `get_page_text` to verify the `Expected outcome`. Check `read_console_messages` (filter for errors). Check `read_network_requests` for 4xx/5xx using the tool's filter parameter (e.g. filter to error status codes); request a count rather than full metadata when only request counts or specific requests matter — do not pull the full request dump.
+         b. **Check output.** Verify the `Expected outcome` via `get_page_text` / `find` by default. Take a `computer` screenshot ONLY when the transition is genuinely visual (and not on every iterative debug step), cropping with the `zoom` action and a `region` to the changed area. Check `read_console_messages` (filter for errors). Check `read_network_requests` for 4xx/5xx using the tool's filter parameter (e.g. filter to error status codes); request a count rather than full metadata when only request counts or specific requests matter — do not pull the full request dump.
 
             **Screenshot capture on a walkthrough FAIL (verify-early-or-fall-back).**
             On a FAIL in this lane, take a screenshot with the `computer` tool
-            action `screenshot, save_to_disk: true` and record the returned saved
-            path as the residue item's `screenshot_path`. Passing this path to a
+            and record the returned saved path as the residue item's
+            `screenshot_path`. When the failure locus is a known region, CROP to
+            it — `zoom` action with a `region`, `save_to_disk: true` — rather than
+            a full-viewport shot; use a full-viewport `screenshot, save_to_disk: true`
+            only when the failure is viewport-wide. Passing
+            this path to a
             **separate** Agent/Workflow invocation (the disposition classifier,
             Step 3.5) is **UNVERIFIED**: if `save_to_disk`
             does not return a Readable path, or the disposition subagent cannot Read
@@ -451,7 +511,8 @@ Otherwise run all steps in order.
                                               // each entry: {id, title, kind,
                                               //   url_path, expected_outcome,
                                               //   finding, page_text,
-                                              //   screenshot_path}
+                                              //   screenshot_path,
+                                              //   planned_deferral}  // optional bool
      plan_fix:           <bool>,              // (ATTEMPT_N < CAP) from the
                                               //   idempotency preamble — a
                                               //   read-only pre-gate: false at
@@ -484,18 +545,27 @@ Otherwise run all steps in order.
 
    ```
    result = {
-     dispositions:  [ {id, title, kind, class, aesthetic, verify, rationale} ],
-     verify_report: [ {id, verdict, skeptic_votes, rationale} ],
-     fix_plan:      { units, deviation, deviation_reason } | null,
-     deviation:     <bool>
+     dispositions:      [ {id, title, kind, class, aesthetic, verify, rationale} ],
+     already_satisfied: [ {id, title, kind, rationale} ],  // dropped-as-PASS items partitioned out of dispositions
+     verify_report:     [ {id, verdict, skeptic_votes, rationale} ],
+     fix_plan:          { units, deviation, deviation_reason } | null,
+     deviation:         <bool>
    }
    ```
 
-   - `dispositions[].class` is the final class: `opus-fixable` | `needs-main` |
-     `needs-human`. `verify` is `Upheld` | `Refuted` | `Unverified` | `n/a`.
-   - `verify_report` has one entry per non-aesthetic `needs-human` candidate that
-     went through the skeptic fan-out (`verdict`: `upheld` | `refuted` |
-     `unverified`).
+   - `dispositions[].class` is the final class for items still in the set:
+     `opus-fixable` | `needs-main` | `needs-human`. `verify` is `Upheld` |
+     `Refuted` | `Unverified` | `n/a`. `dispositions` excludes already-satisfied
+     items — those are partitioned into `result.already_satisfied` by the Workflow.
+   - The **four-class disposition axis** is: `opus-fixable` | `needs-main` |
+     `needs-human` | `already-satisfied`. Items the Workflow classifies
+     `already-satisfied` are **dropped as PASS** in the Workflow's aggregation:
+     excluded from `result.dispositions`, never reaching fix-plan, never entering
+     the escalation set, and surfaced separately in `result.already_satisfied`
+     carrying `{id, title, kind, rationale}`.
+   - `verify_report` has one entry per non-aesthetic, non-planned-deferral
+     `needs-human` candidate that went through the skeptic fan-out (`verdict`:
+     `upheld` | `refuted` | `unverified`).
    - `result.fix_plan` is the ordered Opus fix plan when the gated `fix-plan`
      phase ran — `{ units, deviation, deviation_reason }`, where each unit is
      `{ id, scope, model, dependencies, commit_intent, context, resolves_ids }`.
@@ -607,7 +677,13 @@ Otherwise run all steps in order.
       d. Returns `<followup-N>` mapped to its `identifier`.
 
    4. **Capture** each filed-or-existing `<followup-N>` against its `identifier` for
-      the Step 4 filed-follow-ups sub-list.
+      the Step 4 filed-follow-ups sub-list. Increment `SKILL_SUBAGENTS` by the
+      number of **filing subagents forked** in sub-step 3 — i.e. the number of
+      emitted `{identifier, title, body}` follow-up items, counting *every* forked
+      subagent including those for already-tracked items (whose subagent still runs
+      the `dispatch-followup-exists` existence check). This is the FORKED count, a
+      distinct number from `--followups-filed` (which counts only newly-filed
+      items): the two diverge whenever an item was already-tracked.
 
    The needs-main filing is **idempotent** (guarded per-identifier by
    `dispatch-followup-exists`), so it is safe to run on every pass — including a
@@ -668,11 +744,49 @@ Otherwise run all steps in order.
       `/implement-unit` via the Skill tool, mapping only `unit.model`,
       `unit.scope`, `unit.context`, `unit.commit_intent` into its parameters
       (`id` / `dependencies` / `resolves_ids` are for your ordering and the Step 4
-      comment, not passed through). The draft PR already exists — open **NO** new
+      comment, not passed through; `resolves_ids` is **also** read to compute the
+      `--fixes-applied` count below, but is still not passed into `/implement-unit`).
+      The draft PR already exists — open **NO** new
       PR. A unit completing in this `/implement-unit` loop is mid-loop, not the end
       of the turn — continue to the next unit, then Steps 4 and 5 and the marker;
       do not emit a closing summary. The terminal rule is the **CRITICAL
       invariants** block below (the fix path HARD-STOPS the skill).
+
+      **Track a `fixes_applied_count` tally** (agent-maintained running count, NOT
+      a shell variable — this loop is an agent-driven sequence of Skill calls, not
+      a bash `for`-loop): initialize it to `0` before the first `/implement-unit`
+      invocation. After each invocation, accumulate the unit's resolved
+      opus-fixable finding IDs — increment by `len(unit.resolves_ids)` (equivalently,
+      add the unit's `resolves_ids` to a running set of resolved IDs and use that
+      set's size) **only** when the invocation hands control back per its Step 4
+      (the unit's commit landed cleanly). `resolves_ids` is already available per
+      unit in the loop. Do **not** increment when an invocation errors, dies, or
+      returns without a landed commit. The precise definition: `fixes_applied_count`
+      = the count of **distinct** opus-fixable finding IDs resolved by landed units
+      this pass (the planner partitions opus-fixable findings disjointly across
+      units, so this equals the sum of `resolves_ids` lengths over landed units).
+      This tally feeds `--fixes-applied` in item 5 of this path (the outcome
+      envelope call, below — replacing the planned `units.length` with the count of
+      resolved opus-fixable findings).
+
+      **Also increment `SKILL_SUBAGENTS` by 1 after EACH `/implement-unit`
+      invocation**, regardless of whether the unit landed a commit — every
+      invocation is a spawn. Keep this distinct from `fixes_applied_count`, which
+      increments only on a landed commit: an invocation that errors, dies, or
+      returns without a landed commit still bumps `SKILL_SUBAGENTS` (it forked) but
+      does **not** bump `fixes_applied_count`.
+
+      **If `fixes_applied_count == 0` after the loop** (no opus-fixable finding was
+      resolved this pass — either no unit landed a commit, or the landed units
+      collectively resolved zero findings), do **NOT** continue down this fix
+      finalize path — its outcome envelope hard-codes
+      `--disposition completed_with_fixes`, which the `outcome-envelope.md`
+      contract defines as "the phase finished and applied one or more fixes."
+      Emitting it with `fixes_applied = 0` violates the contract and corrupts
+      downstream hit-rate metrics. Instead take the **escalate finalize path**
+      below with a `terminated_reason` of `fix-pass-landed-nothing` (no opus-fixable
+      finding was resolved this pass). The guard now fires on resolved-finding
+      count, not on the planned `units.length`.
    2. Run **Step 4** (post the PR-comment summary; its disposition section uses the
       **fixing-pass** prose — see Step 4).
    3. Run **Step 5** (cleanup — it self-guards and no-ops if the QA server never
@@ -683,16 +797,58 @@ Otherwise run all steps in order.
       .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
         --phase qa --pr "$PR_NUM"
       ```
-   5. **STOP.**
+   5. **Emit the outcome envelope** (contract: `.claude/docs/outcome-envelope.md`).
+      This call runs **sandboxed** — `dispatch-emit-outcome` is pure (no
+      gh/git/network), so do **not** pass `dangerouslyDisableSandbox`. The fix
+      finalize path always runs after Step 3.5, so `result` is in scope. **Override**
+      `--disposition` to `completed_with_fixes` and **recompute** the counts the
+      Workflow could not — do **NOT** forward `result.fixes_applied` /
+      `result.followups_filed` (both literal `0` from the Workflow):
+      - `--fixes-applied` = `fixes_applied_count` — the count of distinct
+        opus-fixable finding IDs resolved by successfully landed units this pass
+        (the sum of `resolves_ids` lengths over landed units; the tally maintained
+        by the loop above, per the `outcome-envelope.md` contract that
+        `fixes_applied` = items the phase actually fixed). Do **not** use
+        `result.fix_plan.units.length` (the planned unit count) or
+        `result.fixes_applied` (a literal `0` from the Workflow, which plans but
+        never executes).
+      - `--followups-filed` = the count of `needs-main` follow-ups Step 3.6 actually
+        filed this pass (newly-filed only, not already-tracked); `0` if Step 3.6 did
+        not run.
+      - `--subagents-launched` = `SKILL_SUBAGENTS + result.subagents_launched`.
+        `result` is always in scope on the fix finalize path (it runs after Step
+        3.5), so add the Workflow's own fan-out (`result.subagents_launched`) to the
+        skill-body tally. `SKILL_SUBAGENTS` already counts every skill-body fork
+        this pass — the Step-2b triage, any Step-0.5 fallback fork, the Step-3.6
+        filing subagents, and the Step-3.7 `/implement-unit` invocations.
 
-   **Escalate finalize path** (cap reached, scope-deviation, planning-failed, or
-   the gate printed `escalate`):
+      qa-fix keeps **no** merge base (Step 1 runs only a name-only
+      `git diff origin/main...HEAD`), so **omit** `--base-sha` (it serializes as
+      null). Derive `repo` from the local remote (read-only git, sandbox-safe):
+      ```bash
+      REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+      .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
+        --phase qa --repo "$REPO" --issue "$N" --pr "$PR_NUM" \
+        --findings-surfaced <result.findings_surfaced> \
+        --findings-actionable <result.findings_actionable> \
+        --fixes-applied <fixes_applied_count> \
+        --followups-filed <count of needs-main follow-ups Step 3.6 newly filed> \
+        --subagents-launched <SKILL_SUBAGENTS + result.subagents_launched> \
+        --disposition completed_with_fixes
+      ```
+   6. **STOP.**
+
+   **Escalate finalize path** (cap reached, scope-deviation, planning-failed,
+   fix-pass-landed-nothing, or the gate printed `escalate`):
    1. Run **Step 4** (post the PR-comment summary; non-fixing-pass / escalation
       prose).
    2. Run **Step 5** (cleanup — self-guards).
    3. Escalate per the **Escalation** section (`dispatch-mark-deviation`), tailored
       to the reason that fired (cap reached / scope-deviation with
-      `deviation_reason` / planning-failed).
+      `deviation_reason` / planning-failed / fix-pass-landed-nothing — no
+      opus-fixable finding was resolved this pass — either no unit landed a commit,
+      or the landed units collectively resolved zero findings, so
+      `fixes_applied_count` stayed `0`).
    4. **STOP.**
 
    **CRITICAL invariants — state and obey these:**
@@ -742,33 +898,63 @@ Otherwise run all steps in order.
    - Items executed (across all three lanes).
    - PASS / FAIL / SKIP counts.
    - **Deferred to office-hours** — each `needs-human-judgment` item **whose
-     disposition class is not `needs-main`**, listed so the `/office-hours`
-     walkthrough can pick them up. A `needs-human-judgment` item the triage
-     classified `needs-main` is filed as a follow-up per Step 3.6 instead (see the
-     filed-follow-ups sub-list below) and is **not** deferred to office-hours.
+     disposition class is `needs-human`** (i.e. neither `needs-main` nor
+     `already-satisfied`), listed so the `/office-hours` walkthrough can pick them
+     up. A `needs-human-judgment` item the triage classified `needs-main` is filed
+     as a follow-up per Step 3.6 instead (see the filed-follow-ups sub-list below)
+     and is **not** deferred to office-hours. A `needs-human-judgment` item the
+     Workflow classified `already-satisfied` is dropped as PASS (in
+     `result.already_satisfied`) and is likewise **not** deferred to office-hours.
    - List of bugs found (if any), each with the item title and the finding.
    - When the walkthrough lane ran: the GIF filename (`tmp/qa-fix-walkthrough-<n>.gif`).
    - **Disposition triage** — include this section only when the residue list was
-     non-empty (i.e. Step 3.5 ran). For each residue item, list its `class` from
-     `result.dispositions`. For non-aesthetic `needs-human` items (where
-     `dispositions[item].aesthetic === false`), include the verify verdict and
-     rationale from the matching entry in `result.verify_report` (matched by `id`).
-     For aesthetic `needs-human` items, use `dispositions[item].verify` (which will
-     be `n/a`) directly — no `verify_report` entry exists for them. If the residue
-     list was empty (Step 3.5 was skipped), omit this section entirely.
+     non-empty (i.e. Step 3.5 ran). For each **disposition item**, list its `class`
+     from `result.dispositions`. For `needs-human` items, choose the verify source
+     by joining the disposition back to the in-memory residue list by `id` and
+     reading `residue[item].planned_deferral`:
+     - **Aesthetic items** (`dispositions[item].aesthetic === true`): use
+       `dispositions[item].verify` (which will be `n/a`) directly — no
+       `verify_report` entry exists for them.
+     - **Planned-deferral items** (`residue[item].planned_deferral === true`): use
+       `dispositions[item].verify` (which will be `n/a`) directly — these items are
+       excluded from the skeptic candidate set and have no `verify_report` entry.
+       Note them in the deferred-to-office-hours list as deferred ACs (measured
+       downstream), distinct from aesthetic judgment calls, so the office-hours human
+       understands the deferral reason from `residue[item].finding`.
+     - **All other non-aesthetic, non-planned-deferral `needs-human` items**: include
+       the verify verdict and rationale from the matching entry in
+       `result.verify_report` (matched by `id`).
 
-     Always state the `needs-main` handling: **"`needs-main` items are filed as
-     `blocked_by` follow-ups (Step 3.6) and dropped from the escalation set, so they
-     do not park this PR."**
+     If the residue list was empty (Step 3.5 was skipped), omit this section entirely. If
+     `result.dispositions` is empty (every residue item was `already-satisfied`),
+     skip the per-item enumeration and the `needs-main` handling prose below — there
+     are no disposition items and no `needs-main` items to describe; only the
+     **Assessed by Opus (already satisfied)** sub-section applies.
+
+     When `result.dispositions` contains any item, always state the `needs-main`
+     handling: **"`needs-main` items are filed as `blocked_by` follow-ups (Step 3.6)
+     and dropped from the escalation set, so they do not park this PR."**
 
      The remaining terminal-behavior prose is **conditional** on which Step-3.7 path
      this pass took:
-     - **Fixing pass** (Step 3.7 took the fix finalize path): say which items were
-       fixed and which were deferred — e.g. **"Fixed this pass: \<opus-fixable
-       items>; deferred to re-QA: \<needs-human items>; filed as follow-ups:
-       \<needs-main items>."** The fixed commits restart CI and the chain re-QAs once
-       it passes; the deferred `needs-human` items re-surface on a later pass, while
-       the `needs-main` items were already filed in Step 3.6.
+     - **Fixing pass** (Step 3.7 took the fix finalize path): say which items
+       actually landed and which were deferred. List only the units confirmed
+       landed (the ones counted into the `fixes_applied_count` tally) — **not** the
+       full planned opus-fixable set. Note the dimension difference: the outcome
+       envelope's `fixes_applied` is the number of resolved opus-fixable finding
+       IDs, while this PR comment lists the *units* that landed; the listed landed
+       units collectively resolved `fixes_applied_count` findings (so a reader does
+       not re-read `fixes_applied` as a count of the listed units). Any opus-fixable
+       unit whose `/implement-unit` invocation
+       did not reach its Step 4 (errored, died, or returned without a landed
+       commit, so it was not counted) goes in a separate "failed to land" list,
+       not the fixed list — e.g. **"Fixed this pass: \<opus-fixable items where
+       /implement-unit landed a commit, i.e. that contributed to fixes_applied_count>;
+       failed to land: \<opus-fixable items where /implement-unit did not reach
+       its Step 4>; deferred to re-QA: \<needs-human items>; filed as follow-ups:
+       \<needs-main items>."** The fixed commits restart CI and the chain re-QAs
+       once it passes; the deferred `needs-human` items re-surface on a later
+       pass, while the `needs-main` items were already filed in Step 3.6.
      - **Non-fixing pass** (no opus-fixable items, so residue escalates; or the
        Step-3.7 escalate finalize path fired) — keep the existing escalation
        framing: every `opus-fixable`/`needs-human` residue item escalates to
@@ -779,6 +965,11 @@ Otherwise run all steps in order.
      "already tracked by #<N>" (an existing tracking issue was found via
      `dispatch-followup-exists`), using the `identifier`→`<N>` mappings Step 3.6
      captured.
+   - **Assessed by Opus (already satisfied)** — include this sub-list only when
+     `result.already_satisfied` is non-empty. For each item in
+     `result.already_satisfied`, list its `title` and `rationale`. These items had
+     their acceptance criterion provably met at QA time — no code defect exists and
+     no human input is needed — so they are dropped as PASS and do not park the PR.
 
    Post via (use `dangerouslyDisableSandbox: true` — the script invokes `gh`):
    ```bash
@@ -811,23 +1002,28 @@ Otherwise run all steps in order.
       items to fix, so Step 3.7 fell through; *or* a cap/scope-deviation/
       planning-failed escalate already finalized in Step 3.7 and STOPPED before
       here) — the existing office-hours escalation path, unchanged. The escalation
-      set **excludes** `needs-main`-class residue: each `needs-main` item was filed
-      as a `blocked_by` follow-up in Step 3.6 and is **dropped** from the set below;
-      `opus-fixable` and `needs-human` residue items still escalate exactly as
-      before (see the **User-input blocker** branch below and the **Escalation**
-      section).
+      set **excludes** `needs-main`-class residue (each `needs-main` item was filed
+      as a `blocked_by` follow-up in Step 3.6 and is **dropped** from the set below)
+      and **excludes** `already-satisfied`-class residue (dropped as PASS by the
+      Workflow, absent from `result.dispositions`); `opus-fixable` and `needs-human`
+      residue items still escalate exactly as before (see the **User-input blocker**
+      branch below and the **Escalation** section).
 
-   3. **Clean pass** — no residue at all (or only `needs-main` residue, all of which
-      was filed and dropped): `dispatch-complete-phase qa` + `dispatch-mark-complete`,
-      unchanged (see **Clean autonomous pass** below).
+   3. **Clean pass** — no residue at all (or only `needs-main` residue, all filed
+      and dropped; or only `already-satisfied` residue, all dropped as PASS):
+      `dispatch-complete-phase qa` + `dispatch-mark-complete`, unchanged (see
+      **Clean autonomous pass** below).
 
-   **Escalation set.** Define it as:
+   **Escalation set.** Build it directly from **`result.dispositions`** — the
+   Workflow's already-filtered output — not by re-deriving class from the raw
+   in-memory residue list. (Re-deriving would find already-satisfied items absent
+   from `result.dispositions`, get `undefined` for their class, and wrongly include
+   them because `undefined !== 'needs-main'`.) Define the set as:
 
-   - every **residue item whose final disposition class is NOT `needs-main`** —
-     i.e. `opus-fixable` and `needs-human` items, which still escalate (the skill
-     does not yet act on those classes); **plus**
+   - every **item in `result.dispositions`** — i.e. `opus-fixable` and `needs-human`
+     items, which still escalate (the skill does not yet act on those classes); **plus**
    - the **non-residue terminal blockers** that already escalate, unchanged. These
-     stay terminal — only `needs-main`-class residue is dropped from the set:
+     stay terminal — only disposition-class residue is dropped from the set:
      - a malformed or empty triage plan (Step 3 plan validation),
      - an `origin/main` merge conflict (Step 0.5),
      - the Chrome extension unavailable so browser items could not run (Step 3c),
@@ -838,13 +1034,21 @@ Otherwise run all steps in order.
    filed as follow-ups in Step 3.6, now carrying `main-qa` + `dispatch:office-hours`
    so they route to office-hours human review rather than the autonomous queue.
 
+   `already-satisfied` residue items are likewise in **neither** part of the set —
+   they are **dropped as PASS** by the Workflow (partitioned into
+   `result.already_satisfied`, excluded from `result.dispositions`) and are therefore
+   never members of the escalation set. They do not park this PR.
+
    **Clean autonomous pass** — the escalation set (defined above) is **empty**.
    This now holds even for a run whose only residue items all classified
    `needs-main`: those were filed as `blocked_by` follow-ups in Step 3.6 and
-   dropped, leaving the escalation set empty. (It also holds, as before, when every
-   `script-verifiable` and `needs-browser` item PASSed, zero `needs-human-judgment`
-   items were recorded, no bug was found, and none of the non-residue blockers
-   fired.)
+   dropped, leaving the escalation set empty. It also holds when every residue item
+   classified `already-satisfied`: those were dropped as PASS by the Workflow
+   (partitioned into `result.already_satisfied`), leaving `result.dispositions` and
+   the escalation set both empty — `dispatch:qa-done` applies. (It also holds, as
+   before, when every `script-verifiable` and `needs-browser` item PASSed, zero
+   `needs-human-judgment` items were recorded, no bug was found, and none of the
+   non-residue blockers fired.)
 
    On a clean pass apply the `dispatch:qa-done` label via `dispatch-complete-phase`
    (use
@@ -869,18 +1073,56 @@ Otherwise run all steps in order.
      --phase qa --pr "$PR_NUM"
    ```
 
+   **Then emit the outcome envelope** (contract:
+   `.claude/docs/outcome-envelope.md`). This call runs **sandboxed** —
+   `dispatch-emit-outcome` is pure, so do **not** pass
+   `dangerouslyDisableSandbox`. Pass `--disposition completed`, `--fixes-applied 0`,
+   and **omit** `--terminated-reason` (forbidden on a non-escalated disposition).
+   Source the counts by whether Step 3.5 ran this pass:
+
+   - **Step 3.5 ran** (clean pass via only-`needs-main` or only-`already-satisfied`
+     residue): use `result.findings_surfaced` / `result.findings_actionable`;
+     `--followups-filed` = the Step-3.6 newly-filed count (`0` if Step 3.6 did not
+     run); `--subagents-launched` = `SKILL_SUBAGENTS + result.subagents_launched`
+     (`SKILL_SUBAGENTS` already counts the Step-2b triage and any Step-3.6 filing
+     subagents).
+   - **Step 3.5 was skipped** (the common clean pass — residue list was empty, so
+     `result` is absent): pass `--findings-surfaced 0 --findings-actionable 0
+     --followups-filed 0` and `--subagents-launched <SKILL_SUBAGENTS>` (typically
+     just the Step-2b Opus triage subagent — `result` is absent, so no Workflow
+     fan-out is added).
+
+   qa-fix keeps **no** merge base, so **omit** `--base-sha`. Derive `repo` from the
+   local remote (read-only git, sandbox-safe):
+
+   ```bash
+   REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+   .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
+     --phase qa --repo "$REPO" --issue "$N" --pr "$PR_NUM" \
+     --findings-surfaced <result.findings_surfaced, or 0 if Step 3.5 was skipped> \
+     --findings-actionable <result.findings_actionable, or 0 if Step 3.5 was skipped> \
+     --fixes-applied 0 \
+     --followups-filed <Step-3.6 newly-filed count, or 0> \
+     --subagents-launched <SKILL_SUBAGENTS + result.subagents_launched when Step 3.5 ran; else SKILL_SUBAGENTS> \
+     --disposition completed
+   ```
+
    Then **stop**. The Stop hook reads the marker and advances the chain.
 
    **User-input blocker** — the escalation set (defined above) is **non-empty**.
    This fires when any member of the set is present: an `opus-fixable` or
    `needs-human` residue item (a `script-verifiable`/`needs-browser` FAIL or a
-   `needs-human-judgment` item that did **not** classify `needs-main`), OR any
+   `needs-human-judgment` item that classified `needs-human` — i.e. it did **not**
+   classify `needs-main` or `already-satisfied`), OR any
    non-residue blocker — a malformed or empty triage plan (Step 3 plan
    validation), the pre-QA acceptance check failed (a bug needing a plan-mode fix,
    Step 3b), the Chrome extension unavailable so browser items could not run (Step
    3c), a multi-app demo choice (Step 1), or the `origin/main` merge conflicted
    (Step 0.5). A `needs-main`-class residue item is **not** a member — it was filed
-   as a follow-up in Step 3.6 and does not, on its own, trigger this blocker.
+   as a follow-up in Step 3.6 and does not, on its own, trigger this blocker. An
+   `already-satisfied`-class residue item is likewise **not** a member — it was
+   dropped as PASS by the Workflow (absent from `result.dispositions`) and does not
+   trigger this blocker.
 
    Do **not** apply `dispatch:qa-done`. Escalate per the **Escalation** section
    below and **stop**.
@@ -909,7 +1151,58 @@ plan, `needs-human-judgment` item, `script-verifiable`/`needs-browser` FAIL, fai
 pre-QA check, Chrome extension unavailable, multi-app choice, merge conflict, **the
 qa-fix attempt cap reached on opus-fixable residue**, or **a planner scope-deviation
 on the opus-fixable residue** — pass `result.fix_plan.deviation_reason` for the
-latter). Then **stop**.
+latter).
+
+**Then emit the outcome envelope** (contract:
+`.claude/docs/outcome-envelope.md`). This call runs **sandboxed** —
+`dispatch-emit-outcome` is pure, so do **not** pass `dangerouslyDisableSandbox`.
+It must fire **before** the session stops; order relative to
+`dispatch-mark-deviation` does not matter. Pass `--disposition escalated` and
+`--terminated-reason` set to the **same tailored reason string** passed to
+`dispatch-mark-deviation` above.
+
+This Escalation section is the funnel for **two kinds** of escalate route, which
+differ in whether the Step-3.5 Workflow ran — source the counts accordingly:
+
+- **Step-3.5 ran** (the Step-3.7 escalate-finalize path: cap reached,
+  scope-deviation, planning-failed, or fix-pass-landed-nothing) — `result` is in
+  scope. Use
+  `result.findings_surfaced` / `result.findings_actionable`; `fixes-applied 0` and
+  `followups-filed` = the Step-3.6 newly-filed count (the escalate path applied no
+  fixes); `subagents-launched` = `SKILL_SUBAGENTS + result.subagents_launched`.
+  On the **fix-pass-landed-nothing** escalate, `SKILL_SUBAGENTS` includes the `k`
+  `/implement-unit` invocations the loop forked this pass (`+ k`) — the faithful
+  counter reports them even though no unit landed; this is a correction over the
+  old Step-3.5-ran escalation formula, which had no Step-3.7 term.
+- **An early blocker before Step 3.5** (Step 0.5 merge conflict, Step 1 multi-app,
+  Step 3 malformed/empty plan, Step 3b acceptance fail, Step 3c Chrome
+  unavailable) — `result` is **absent**. Pass `--findings-surfaced 0
+  --findings-actionable 0 --fixes-applied 0 --followups-filed 0` and
+  `--subagents-launched <SKILL_SUBAGENTS>`. The counter reports exactly what was
+  forked before the blocker: a Step 0.5 / Step 1 blocker that forked nothing yields
+  `0`; a Step 3/3b/3c blocker fires after the Step-2b triage forked, yielding `1`.
+  Note the **Step 0.5 fork-then-conflict** case: when the Step 0.5 fallback fork
+  was taken and *then* hit a merge conflict, `SKILL_SUBAGENTS` is `1`, because the
+  fallback fork ran before the conflict — a correction over the old rule, which
+  reported `0`.
+
+qa-fix keeps **no** merge base, so **omit** `--base-sha`. Derive `repo` from the
+local remote (read-only git, sandbox-safe):
+
+```bash
+REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+.claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
+  --phase qa --repo "$REPO" --issue "$N" --pr "$PR_NUM" \
+  --findings-surfaced <result.findings_surfaced, or 0 if Step 3.5 did not run> \
+  --findings-actionable <result.findings_actionable, or 0 if Step 3.5 did not run> \
+  --fixes-applied 0 \
+  --followups-filed <Step-3.6 newly-filed count, or 0> \
+  --subagents-launched <SKILL_SUBAGENTS + result.subagents_launched when Step 3.5 ran; else SKILL_SUBAGENTS> \
+  --disposition escalated \
+  --terminated-reason "<the same tailored reason string passed to dispatch-mark-deviation>"
+```
+
+Then **stop**.
 Marking a deviation is **terminal** for the walkthrough — do not restart the QA
 server or re-run the walkthrough after escalating.
 

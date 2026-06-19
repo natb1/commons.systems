@@ -1,5 +1,6 @@
 import { createLibConfig } from "@commons-systems/config/vite";
 
 export default createLibConfig({
-  test: { environment: "happy-dom" },
+  esbuild: { jsx: "automatic", jsxImportSource: "react" },
+  test: { environment: "happy-dom", include: ["test/**/*.test.{ts,tsx}"] },
 });

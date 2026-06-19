@@ -1,6 +1,6 @@
 ---
 name: brand
-description: Brand voice and messaging reference for commons.systems — use when writing or reviewing any user-facing content (landing pages, blog posts, documentation, issue descriptions, README)
+description: Brand voice, messaging, and visual tone reference for commons.systems — use when writing or reviewing any user-facing content (landing pages, blog posts, documentation, issue descriptions, README) or when designing/reviewing the visual language (styling, UI, design systems)
 user-invocable: false
 ---
 
@@ -73,6 +73,16 @@ Blog voice is the ceiling: the most expressive register, with assertions, cross-
 The about / services page is the one context where the project makes an offer rather than only giving gifts. The voice does not change — the authority still comes from the artifacts that function as a portfolio, not from rhetoric. What changes is the *content*: pricing, what an engagement delivers, what the institution owns when it ends. Honesty about limitations is the selling point here, not a liability — a sophisticated buyer reads it as competence. Hype stays out: overclaiming is dishonest and validates nothing about whether the work is useful. A conversion funnel is not hype, though — a clear path with explicit calls to action that moves a curious institution toward an engagement is legitimate, and optimizing practitioner engagement depends on it. The line is hype and manufactured urgency, not the funnel itself.
 
 One terminology note for this page: `artifact` is the project's internal term, and a business reader has no context for it — describe deliverables with concrete plain nouns instead ("the software", "the application", "what's built"). `solution` as a noun still stays out; it is vendor jargon a sophisticated buyer discounts, and a business audience is not helped by it. This page is also written in the first person: the offer's core differentiator is that the buyer deals directly with the implementer, and third-person copy about the contractor implies the intermediary the offer denies.
+
+## Visual Tone
+
+The visual language is the same voice in another medium. Where the writing is "the neighbor showing you what they built in their garage," the interface should look built, not branded — functional, legible, honestly DIY. The aesthetic is **cassette-futurism**: the personal computer before platforms, a tool not a storefront.
+
+The concrete visual spec — tokens, the eight `cs-*` components, the square-corner reset, and the full list of what the system rejects — lives in [`packages/ds/README.md`](../../../packages/ds/README.md), the design system's own source of truth. This section holds only the cross-surface judgment that applies everywhere, including artifacts outside the design system (blog imagery, OG cards, diagrams).
+
+- **Functional minimalism, not retro costume.** Cassette-futurism is the restraint of early computing, not a theme-park version of it. CRT scanlines, fake vintage skeuomorphism, and blinking-cursor nostalgia are tell, not show — they manufacture a vibe instead of being one. The moment it looks like a costume, it has crossed from show into tell.
+- **Legibility is the honest form of polish.** "Looks like it works" has to actually work for real eyes. This is where the charter's privilege-gradient risk bites: an aesthetic that gatekeeps by taste narrows the audience. A user-facing surface may soften toward approachability without leaving the family.
+- **No platform chrome.** The absence is the statement: no signup walls, no cookie banners, no attention-grabbing modals, no account gate on the first screen. Flow carries the anti-platform message as much as the pixels do.
 
 ## Terminology
 
