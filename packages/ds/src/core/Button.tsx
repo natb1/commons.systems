@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from "react";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -33,7 +34,10 @@ const variantStyles: Record<
   },
 };
 
-export function Button(props: ButtonProps) {
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  props,
+  ref,
+) {
   const {
     variant = "secondary",
     size = "md",
@@ -63,6 +67,7 @@ export function Button(props: ButtonProps) {
   return (
     <button
       {...rest}
+      ref={ref}
       type={type}
       className={["cs-btn", `cs-btn--${variant}`, className]
         .filter(Boolean)
@@ -73,4 +78,4 @@ export function Button(props: ButtonProps) {
       {children}
     </button>
   );
-}
+});
