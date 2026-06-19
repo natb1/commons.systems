@@ -491,6 +491,32 @@ ensure_deps() {
   fi
 }
 
+# Ensure Playwright browsers are resolvable. When PLAYWRIGHT_BROWSERS_PATH is
+# unset and nix is available (NixOS), re-exec the calling script under
+# `nix develop --command` so the devShell shellHook exports the nix-provisioned
+# browsers path. When nix is unavailable (e.g. CI on ubuntu), return so the
+# caller's `npx playwright install --with-deps chromium` fallback runs.
+#
+# Call as: ensure_playwright_browsers "$0" "$@"
+ensure_playwright_browsers() {
+  if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
+    return 0
+  fi
+  if command -v nix >/dev/null 2>&1; then
+    if [ -n "${_DISPATCH_NIX_REEXEC:-}" ]; then
+      echo "ERROR: re-exec'd under 'nix develop' but PLAYWRIGHT_BROWSERS_PATH is still unset." >&2
+      echo "       Enter the dev shell ('direnv allow', or 'nix develop') and retry." >&2
+      return 1
+    fi
+    local flake_dir
+    flake_dir="$(git rev-parse --show-toplevel)"
+    export _DISPATCH_NIX_REEXEC=1
+    exec nix develop "$flake_dir" --command "$@"
+  fi
+  # nix unavailable (CI ubuntu): caller's npx fallback handles install
+  return 0
+}
+
 # Extract the app name from the app directory path.
 # Args: $1 = app directory (e.g. "hello" or "/path/to/hello")
 get_app_name() {
