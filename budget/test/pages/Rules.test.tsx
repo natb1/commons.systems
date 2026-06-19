@@ -12,10 +12,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, cleanup, waitFor } from "@testing-library/react";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import type { DataSource } from "../../src/data-source";
-import type { Rule } from "../../src/entities/rule";
-import type { RuleId } from "../../src/entities/rule";
-import type { NormalizationRule } from "../../src/entities/normalization-rule";
-import type { NormalizationRuleId } from "../../src/entities/normalization-rule";
+import type { Rule, RuleId } from "../../src/entities/rule";
+import type { NormalizationRule, NormalizationRuleId } from "../../src/entities/normalization-rule";
 import { createMockDataSource } from "../helpers";
 
 // The page and hook import registerAutocompleteListeners/removeDropdown from
@@ -305,6 +303,30 @@ describe("Rules page markup-parity", () => {
     const errEl = container.querySelector("#rules-error");
     expect(errEl).not.toBeNull();
     expect(errEl?.textContent).toContain("Access denied");
+  });
+
+  // 10e. programmer error (TypeError) → "Something went wrong"
+  it("shows 'Something went wrong' for a programmer error (TypeError)", async () => {
+    // deferProgrammerError re-throws the TypeError via setTimeout(…, 0) so it
+    // surfaces in devtools/an error boundary. This hermetic suite has no boundary,
+    // so the deferred throw escapes as a Node uncaughtException that would fail the
+    // run. Capture it with a one-shot listener while the test renders and settles.
+    const captured: unknown[] = [];
+    const onUncaught = (err: unknown) => { captured.push(err); };
+    process.on("uncaughtException", onUncaught);
+    try {
+      const { container } = await renderRules(seedOptions({
+        getRules: vi.fn().mockRejectedValue(new TypeError("unexpected null")),
+      }));
+      const errEl = container.querySelector("#rules-error");
+      expect(errEl).not.toBeNull();
+      expect(errEl?.textContent).toContain("Something went wrong");
+      // Let the deferred setTimeout(…, 0) rethrow land in our listener.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(captured.some((e) => e instanceof TypeError)).toBe(true);
+    } finally {
+      process.off("uncaughtException", onUncaught);
+    }
   });
 
   // 11. Default filter is "categorization"

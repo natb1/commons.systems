@@ -35,8 +35,8 @@ type LoadState =
   | { status: "loaded"; data: LoadedRulesData }
   | { status: "error"; message: string };
 
-// Mirror renderLoadError's classification (render-options.ts:20-27): rethrow
-// programmer/data-integrity/range; permission-denied → access-denied; else soft.
+// Classify a load error into a user-visible message. (Rethrow of programmer
+// errors happens in the effect's catch block via deferProgrammerError, not here.)
 function loadErrorMessage(error: unknown): string {
   const kind = classifyError(error);
   if (kind === "programmer") {
@@ -131,7 +131,7 @@ function LoadedRules({ data }: { data: LoadedRulesData }) {
 
   // The type filter is React state — drives data-active-filter and works for all
   // users including seed (the e2e selectOption runs on seed data).
-  const [filter, setFilter] = useState("categorization");
+  const [filter, setFilter] = useState<RuleType | "normalization">("categorization");
 
   // Container ref for the imperative interactivity hook (blur-save/autocomplete/summary-guard).
   const containerRef = useRef<HTMLDivElement>(null);
@@ -145,7 +145,7 @@ function LoadedRules({ data }: { data: LoadedRulesData }) {
         const newId = await ds.createNormalizationRule(defaultFields);
         setNormalizationRows(prev => [...prev, { id: newId, groupId: null, ...defaultFields }]);
       } else {
-        const ruleType = filter as RuleType;
+        const ruleType = filter;
         const defaultFields = { type: ruleType, pattern: "new rule", target: ruleType === "budget_assignment" ? "Unassigned" : "Uncategorized", priority: 100, institution: null, account: null, minAmount: null, maxAmount: null, excludeCategory: null, matchCategory: null };
         const newId = await ds.createRule(defaultFields);
         setRuleRows(prev => [...prev, { id: newId, groupId: null, ...defaultFields }]);
@@ -177,7 +177,7 @@ function LoadedRules({ data }: { data: LoadedRulesData }) {
       <Select
         id="rule-type-filter"
         value={filter}
-        onChange={(e) => { setFilter(e.target.value); removeDropdown(); }}
+        onChange={(e) => { setFilter(e.target.value as RuleType | "normalization"); removeDropdown(); }}
         options={[
           { value: "categorization", label: "Categorization" },
           { value: "budget_assignment", label: "Budget Assignment" },
@@ -212,7 +212,7 @@ function LoadedRules({ data }: { data: LoadedRulesData }) {
   );
 }
 
-function RuleRow({ rule, authorized, onDelete }: { rule: Rule; authorized: boolean; onDelete?: (btn: HTMLElement) => void }) {
+function RuleRow({ rule, authorized, onDelete }: { rule: Rule; authorized: boolean; onDelete: (btn: HTMLElement) => void }) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
   useLayoutEffect(() => { if (window.innerWidth >= 768) detailsRef.current?.setAttribute("open", ""); }, []);
   return (
@@ -250,14 +250,14 @@ function RuleRow({ rule, authorized, onDelete }: { rule: Rule; authorized: boole
           <Input type="text" className="edit-match-category" defaultValue={rule.matchCategory ?? ""} aria-label="Match Category" disabled={!authorized} />
         </span>
         <span>
-          {authorized ? <Button className="delete-rule" aria-label="Delete rule" onClick={(e) => onDelete?.(e.currentTarget)}>Delete</Button> : <span></span>}
+          {authorized ? <Button className="delete-rule" aria-label="Delete rule" onClick={(e) => onDelete(e.currentTarget)}>Delete</Button> : <span></span>}
         </span>
       </div>
     </details>
   );
 }
 
-function NormalizationRuleRow({ rule, authorized, onDelete }: { rule: NormalizationRule; authorized: boolean; onDelete?: (btn: HTMLElement) => void }) {
+function NormalizationRuleRow({ rule, authorized, onDelete }: { rule: NormalizationRule; authorized: boolean; onDelete: (btn: HTMLElement) => void }) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
   useLayoutEffect(() => { if (window.innerWidth >= 768) detailsRef.current?.setAttribute("open", ""); }, []);
   return (
@@ -281,7 +281,7 @@ function NormalizationRuleRow({ rule, authorized, onDelete }: { rule: Normalizat
         </span>
         <span></span>
         <span>
-          {authorized ? <Button className="delete-rule" aria-label="Delete rule" onClick={(e) => onDelete?.(e.currentTarget)}>Delete</Button> : <span></span>}
+          {authorized ? <Button className="delete-rule" aria-label="Delete rule" onClick={(e) => onDelete(e.currentTarget)}>Delete</Button> : <span></span>}
         </span>
       </div>
     </details>
