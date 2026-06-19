@@ -1,10 +1,8 @@
 import * as Plot from "@observablehq/plot";
-import { scaleOrdinal } from "d3-scale";
-import { schemeTableau10 } from "d3-scale-chromatic";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { isFavorableDiff, type CategoryActualRow, type VarianceWindow } from "../balance.js";
 import { formatCurrency } from "../format.js";
-import { readThemeVar } from "./chart-util.js";
+import { readThemeVar, chartSeriesColor } from "./chart-util.js";
 
 const ALLOWANCE_LABEL = "Allowance";
 const ACTUAL_LABEL = "Actual";
@@ -79,15 +77,20 @@ export function renderVarianceWaterfall(container: HTMLElement, options: Waterfa
   const favorableColor = readThemeVar(container, "--favorable", style);
   const unfavorableColor = readThemeVar(container, "--unfavorable", style);
   const categoryNames = options.categories.map(c => c.kind === "other" ? OTHER_LABEL : c.category);
-  const categoryColor = scaleOrdinal<string, string>()
-    .domain(categoryNames)
-    .range(schemeTableau10);
+  // Category bars cycle the --chart-* tokens by domain order.
+  const categoryColorByName = new Map(
+    categoryNames.map((name, i) => [name, chartSeriesColor(container, i, style)]),
+  );
 
   function fillFor(bar: WaterfallBar): string {
     switch (bar.kind) {
       case "allowance": return fg;
       case "actual": return favorable ? favorableColor : unfavorableColor;
-      case "category": return categoryColor(bar.label);
+      case "category": {
+        const color = categoryColorByName.get(bar.label);
+        if (color === undefined) throw new Error(`Missing category color for bar "${bar.label}"`);
+        return color;
+      }
       default: {
         const _exhaustive: never = bar.kind;
         return _exhaustive;

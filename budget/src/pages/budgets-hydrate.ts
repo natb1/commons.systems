@@ -1,9 +1,7 @@
 import { Timestamp } from "firebase/firestore";
 import { type Budget, type BudgetId, type BudgetOverride, type BudgetPeriod, type BudgetPeriodId, type SerializedBudgetPeriod } from "../firestore.js";
-import { getActiveDataSource } from "../active-data-source.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
-import { escapeHtml } from "@commons-systems/htmlutil";
-import { showInputError, handleSaveError, handleActionError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize, makeDebounced, toISODate } from "./hydrate-util.js";
+import { showInputError, handleActionError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize, makeDebounced } from "./hydrate-util.js";
 import { renderBudgetChart } from "./budgets-chart.js";
 import { renderBudgetPieChart } from "./budgets-pie-chart.js";
 import { renderPerBudgetAreaChart } from "./budgets-area-chart.js";
@@ -13,7 +11,7 @@ import { toSundayEntry, computeRollingAverage, type CategoryActualRow, type PerB
 import { formatCurrency } from "../format.js";
 import type { SerializedBudget, SerializedBudgetOverride } from "./budgets.js";
 
-function rowBudgetId(el: HTMLElement): BudgetId | null {
+export function rowBudgetId(el: HTMLElement): BudgetId | null {
   const row = el.closest(".budget-row");
   if (!(row instanceof HTMLElement)) return null;
   return (row.dataset.budgetId ?? null) as BudgetId | null;
@@ -155,7 +153,7 @@ function renderVarianceDetails(
   }
 }
 
-function hydrateVarianceDetails(row: HTMLDetailsElement): void {
+export function hydrateVarianceDetails(row: HTMLDetailsElement): void {
   const varianceEl = row.querySelector<HTMLElement>(".budget-variance");
   if (!varianceEl) throw new DataIntegrityError(".budget-variance element missing from expanded budget row");
   if (varianceEl.dataset.hydrated === "true" || varianceEl.dataset.hydrated === "error") return;
@@ -182,93 +180,7 @@ function hydrateVarianceDetails(row: HTMLDetailsElement): void {
   varianceEl.dataset.hydrated = "true";
 }
 
-export function hydrateBudgetTable(container: HTMLElement): void {
-  // Capture-phase delegation lets a single listener handle every expanded row
-  // before any row-level handlers fire.
-  container.addEventListener("toggle", (e) => {
-    const target = e.target;
-    if (!(target instanceof HTMLDetailsElement)) return;
-    if (!target.classList.contains("budget-row")) return;
-    if (!target.open) return;
-    try {
-      hydrateVarianceDetails(target);
-    } catch (error) {
-      const varianceEl = target.querySelector<HTMLElement>(".budget-variance");
-      if (varianceEl) varianceEl.dataset.hydrated = "error";
-      handleActionError(varianceEl ?? target, error, "variance-hydrate");
-    }
-  }, true);
-
-  container.addEventListener("blur", async (e) => {
-    const target = e.target;
-    if (!(target instanceof HTMLInputElement)) return;
-    const budgetId = rowBudgetId(target);
-    if (!budgetId) return;
-
-    if (target.value === target.defaultValue) return;
-
-    try {
-      if (target.classList.contains("edit-name")) {
-        if (!target.value) {
-          showInputError(target, "Budget name cannot be empty");
-          return;
-        }
-        await getActiveDataSource().updateBudget(budgetId, { name: target.value });
-      } else if (target.classList.contains("edit-allowance")) {
-        const allowance = Number(target.value);
-        if (!Number.isFinite(allowance) || allowance < 0) {
-          showInputError(target, "Allowance must be a non-negative number");
-          return;
-        }
-        await getActiveDataSource().updateBudget(budgetId, { allowance: allowance });
-      } else {
-        return;
-      }
-      target.defaultValue = target.value;
-    } catch (error) {
-      handleSaveError(target, error, "budget");
-    }
-  }, true);
-
-  container.addEventListener("change", async (e) => {
-    const target = e.target;
-    if (!(target instanceof HTMLSelectElement)) return;
-    const budgetId = rowBudgetId(target);
-    if (!budgetId) return;
-
-    const saved = target.querySelector("option[selected]") as HTMLOptionElement | null;
-    if (saved && target.value === saved.value) return;
-
-    try {
-      if (target.classList.contains("edit-rollover")) {
-        const value = target.value;
-        if (value !== "none" && value !== "debt" && value !== "balance") {
-          showInputError(target, "Invalid rollover value");
-          return;
-        }
-        await getActiveDataSource().updateBudget(budgetId, { rollover: value });
-      } else if (target.classList.contains("edit-period")) {
-        const value = target.value;
-        if (value !== "weekly" && value !== "monthly" && value !== "quarterly") {
-          showInputError(target, "Invalid period value");
-          return;
-        }
-        await getActiveDataSource().updateBudget(budgetId, { allowancePeriod: value });
-      } else {
-        return;
-      }
-      // Update the selected attribute (not just .value) so showInputError can
-      // revert to the last-saved value via option[selected].
-      if (saved) saved.removeAttribute("selected");
-      const newSelected = Array.from(target.options).find(o => o.value === target.value) ?? null;
-      if (newSelected) newSelected.setAttribute("selected", "");
-    } catch (error) {
-      handleSaveError(target, error, "budget");
-    }
-  });
-}
-
-function deserializeBudgets(raw: string): Budget[] {
+export function deserializeBudgets(raw: string): Budget[] {
   let parsed: Array<Omit<SerializedBudget, "rollover" | "allowancePeriod" | "overrides"> & { rollover: string; allowancePeriod?: string; overrides?: SerializedBudgetOverride[] }>;
   try { parsed = JSON.parse(raw); } catch (e) { throw new DataIntegrityError(`Invalid budget chart data: ${e instanceof Error ? e.message : e}`); }
   return parsed.map(b => {
@@ -365,7 +277,7 @@ export function applyRollingAverage(data: PerBudgetPoint[], windowSize: number):
   return result;
 }
 
-export function hydrateBudgetChart(container: HTMLElement): void {
+export function hydrateBudgetChart(container: HTMLElement): () => void {
   const budgetsRaw = container.dataset.budgets;
   const periodsRaw = container.dataset.periods;
   if (!budgetsRaw || !periodsRaw)
@@ -431,12 +343,12 @@ export function hydrateBudgetChart(container: HTMLElement): void {
     render();
     reattachScrollSync();
   });
-  wireChartResize(container, render, getAllScrollWrappers, [container, areaEl], reattachScrollSync);
+  const resizeObserver = wireChartResize(container, render, getAllScrollWrappers, [container, areaEl], reattachScrollSync);
 
   const weeksInput = document.getElementById("area-chart-weeks") as HTMLInputElement | null;
   if (!weeksInput) throw new DataIntegrityError("area-chart-weeks input not found in page markup");
   const debounced = makeDebounced();
-  weeksInput.addEventListener("input", () => {
+  const onWeeksInput = (): void => {
     const v = parseInt(weeksInput.value, 10);
     if (Number.isFinite(v) && v >= 1 && v <= 104) {
       currentWindowSize = v;
@@ -446,10 +358,22 @@ export function hydrateBudgetChart(container: HTMLElement): void {
         reattachScrollSync();
       }, 100);
     }
-  });
+  };
+  weeksInput.addEventListener("input", onWeeksInput);
+
+  // Teardown for a React island host that remounts (App re-keys per navEpoch):
+  // disconnect the ResizeObserver, abort the document-level scroll-sync listeners,
+  // and drop the weeks-input listener. The date-picker listener lives on a
+  // JSX-owned element that React removes on unmount, so it needs no explicit
+  // cleanup. The legacy LegacyRoute caller ignores this return.
+  return () => {
+    resizeObserver.disconnect();
+    if (scrollAbort) { scrollAbort.abort(); scrollAbort = null; }
+    weeksInput.removeEventListener("input", onWeeksInput);
+  };
 }
 
-function collectOverridesForBudget(container: HTMLElement, budgetId: string): BudgetOverride[] | null {
+export function collectOverridesForBudget(container: HTMLElement, budgetId: string): BudgetOverride[] | null {
   const rows = container.querySelectorAll<HTMLElement>(`.override-row[data-budget-id="${budgetId}"]`);
   const overrides = new Map<number, BudgetOverride>();
   for (const row of rows) {
@@ -469,113 +393,4 @@ function collectOverridesForBudget(container: HTMLElement, budgetId: string): Bu
     overrides.set(dateMs, { date: Timestamp.fromMillis(dateMs), balance });
   }
   return [...overrides.values()].sort((a, b) => a.date.toMillis() - b.date.toMillis());
-}
-
-export function hydrateOverridesTable(container: HTMLElement): void {
-  container.addEventListener("blur", async (e) => {
-    const target = e.target;
-    if (!(target instanceof HTMLInputElement)) return;
-    const row = target.closest(".override-row");
-    if (!(row instanceof HTMLElement)) return;
-    const budgetId = row.dataset.budgetId as BudgetId | undefined;
-    if (!budgetId) return;
-
-    if (target.value === target.defaultValue) return;
-
-    try {
-      const overrides = collectOverridesForBudget(container, budgetId);
-      if (overrides) {
-        await getActiveDataSource().updateBudgetOverrides(budgetId, overrides);
-        target.defaultValue = target.value;
-      }
-    } catch (error) {
-      handleSaveError(target, error, "override");
-    }
-  }, true);
-
-  container.addEventListener("click", async (e) => {
-    const target = e.target;
-
-    // Delete override
-    if (target instanceof HTMLButtonElement && target.classList.contains("delete-override")) {
-      const row = target.closest(".override-row");
-      if (!(row instanceof HTMLElement)) return;
-      const budgetId = row.dataset.budgetId as BudgetId | undefined;
-      if (!budgetId) return;
-      const addBtn = container.querySelector("#add-override");
-      row.style.opacity = "0.5";
-      try {
-        row.remove();
-        const overrides = collectOverridesForBudget(container, budgetId);
-        if (overrides) {
-          await getActiveDataSource().updateBudgetOverrides(budgetId, overrides);
-        } else {
-          if (!row.parentElement && addBtn) addBtn.before(row);
-          row.style.opacity = "";
-        }
-      } catch (error) {
-        if (!row.parentElement && addBtn) addBtn.before(row);
-        row.style.opacity = "";
-        handleSaveError(target, error, "override");
-      }
-      return;
-    }
-
-    // Add override
-    if (target instanceof HTMLButtonElement && target.id === "add-override") {
-      const budgetsRaw = target.dataset.budgets;
-      if (!budgetsRaw) return;
-      const budgets = deserializeBudgets(budgetsRaw);
-      if (budgets.length === 0) return;
-
-      const firstBudget = budgets[0];
-      const dateStr = toISODate(Date.now());
-
-      const newRow = document.createElement("div");
-      newRow.className = "override-row";
-      newRow.dataset.budgetId = firstBudget.id;
-      newRow.dataset.overrideIndex = "new";
-
-      const budgetOptions = budgets.map(b =>
-        `<option value="${escapeHtml(b.id)}">${escapeHtml(b.name)}</option>`
-      ).join("");
-
-      newRow.innerHTML = `
-        <span><select class="edit-override-budget" aria-label="Budget">${budgetOptions}</select></span>
-        <span><input type="date" class="edit-override-date" value="${dateStr}" aria-label="Override date"></span>
-        <span><input type="number" class="edit-override-balance" value="0" step="0.01" aria-label="Override balance"></span>
-        <span><button class="delete-override" aria-label="Delete override">Delete</button></span>
-      `;
-
-      target.before(newRow);
-
-      // Wire budget select change
-      const select = newRow.querySelector<HTMLSelectElement>(".edit-override-budget");
-      if (select) {
-        select.addEventListener("change", async () => {
-          const oldBudgetId = newRow.dataset.budgetId as BudgetId | undefined;
-          newRow.dataset.budgetId = select.value;
-          try {
-            const newBudgetId = select.value as BudgetId;
-            const newOverrides = collectOverridesForBudget(container, newBudgetId);
-            if (newOverrides) await getActiveDataSource().updateBudgetOverrides(newBudgetId, newOverrides);
-            if (oldBudgetId && oldBudgetId !== newBudgetId) {
-              const oldOverrides = collectOverridesForBudget(container, oldBudgetId);
-              if (oldOverrides) await getActiveDataSource().updateBudgetOverrides(oldBudgetId, oldOverrides);
-            }
-          } catch (error) {
-            handleSaveError(select, error, "override");
-          }
-        });
-      }
-
-      // Save immediately
-      try {
-        const overrides = collectOverridesForBudget(container, firstBudget.id);
-        if (overrides) await getActiveDataSource().updateBudgetOverrides(firstBudget.id as BudgetId, overrides);
-      } catch (error) {
-        handleSaveError(target, error, "override");
-      }
-    }
-  });
 }
