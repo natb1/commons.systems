@@ -36,10 +36,15 @@ resolve_issue_number() {
 # Prints owner/repo to stdout on success; on an empty/non-GitHub/malformed result,
 # prints a caller-prefixed message to stderr and returns 1.
 gh_repo_from_remote() {
-  local url="$1" caller="$2" repo
-  repo="${url%.git}"; repo="${repo#*github.com[:/]}"
-  if [[ -z "$repo" ]]; then
+  local url="$1" caller="$2" stripped repo
+  stripped="${url%.git}"
+  repo="${stripped#*github.com[:/]}"
+  if [[ -z "$stripped" ]]; then
     echo "$caller: could not resolve owner/repo from remote.origin.url ('$url')" >&2
+    return 1
+  fi
+  if [[ "$repo" == "$stripped" ]]; then
+    echo "$caller: remote is not a GitHub repository ('$url')" >&2
     return 1
   fi
   if [[ ! "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
