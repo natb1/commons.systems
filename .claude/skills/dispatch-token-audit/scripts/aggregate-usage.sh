@@ -268,8 +268,9 @@ def cmd_prefix(c):
 # truncated. This matters because dispatch-emit-outcome runs `jq -n` WITHOUT
 # `-c`, so it emits a pretty-printed MULTI-LINE JSON object; the "m" flag is what
 # lets this single regex capture it whole. (Verify the DOTALL semantics directly:
-# `printf 'A\nB' | jq -Rsr '[match("A(?<x>.)B"; "m")]'` -> ["\n"]; drop the "m"
-# and it is []. test-aggregate-usage.sh guards this with a multi-line fixture.)
+# `printf 'A\nB' | jq -Rs '[match("A(?<x>.)B"; "m")][0].captures[0].string'` ->
+# "\n" (the "." captured the newline); drop the "m" and `[match(...)]` is [].
+# test-aggregate-usage.sh guards this with a multi-line fixture.)
 #
 # LAST-WINS (reader contract): collect every envelope match across all
 # tool_results in document order and take the last. fromjson is wrapped in
