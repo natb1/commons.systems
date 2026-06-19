@@ -850,17 +850,21 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
       # number (e.g. `100-fix` closing priority issue `200`), and a branch with
       # no `<N>-` prefix yields a non-numeric value the reseed sink rejects —
       # silently stranding the very priority item this path exists to rescue.
-      # Resolve the priority-labeled closing issue from `pr_closing` (already in
-      # scope), reusing ISSUE_LABELS_JSON exactly as pr_combined_labels does. The
-      # line-712 gate guarantees at least one closing issue carries `priority` in
-      # --priority-only mode, and dispatch-find-pr resolves issue→PR via the
-      # issue's closedByPullRequestsReferences fallback, so the priority issue
-      # number is the resolvable, correct target.
+      # Resolve the reseed target from `pr_closing` (already in scope), reusing
+      # ISSUE_LABELS_JSON exactly as pr_combined_labels does. The --priority-only
+      # early skip now admits PRs that are priority via an open ANCESTOR (see
+      # pr_priority_bit), so a PR reaching here may have NO closing issue that
+      # carries `priority` on its own labels. Prefer the priority-direct closing
+      # issue as the target, but fall back to the first closing-issue number when
+      # none is directly priority-labeled. Either way the target is a resolvable
+      # closing-issue number (not the branch prefix #1444) — dispatch-find-pr
+      # resolves issue→PR via the issue's closedByPullRequestsReferences fallback.
       local_issue=$(printf '%s' "$pr_closing" \
         | jq -r --argjson map "$ISSUE_LABELS_JSON" \
-          'map(.number | tostring
-               | select((($map[.] // []) | any(.name == "priority"))))
-           | .[0] // empty')
+          '( map(.number | tostring
+                 | select((($map[.] // []) | any(.name == "priority")))) | .[0] )
+           // ( [.[].number | tostring] | .[0] )
+           // empty')
       if [[ "$local_issue" =~ ^[0-9]+$ && -z "${EXCLUDED[$local_issue]:-}" ]] \
          && ! pr_issue_office_hours_parked "$local_issue" \
          && ! pr_blocked_by_open "$pr_closing"; then
