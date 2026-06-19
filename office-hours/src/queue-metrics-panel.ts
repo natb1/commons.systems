@@ -65,7 +65,9 @@ export function renderQueueMetricsPanel(
   const runwayValue = document.createElement("span");
   runwayValue.className = "capacity-card-value queue-runway-value";
   runwayValue.textContent =
-    metrics.runwayDays !== null ? `${metrics.runwayDays} days` : "growing";
+    metrics.runwayDays !== null && metrics.runwayDays >= 0
+      ? `${metrics.runwayDays} days`
+      : "growing";
   runwayCard.appendChild(runwayLabel);
   runwayCard.appendChild(runwayValue);
 
