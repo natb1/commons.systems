@@ -500,14 +500,16 @@ def outcome_rates($o):
 
 # ---- by_phase_outcome (pooled hit-rate per envelope phase, #1860) ----
 # Keyed by the envelope's own `.phase` enum value (e.g. "review", "qa") — NOT by
-# skill name like $by_phase. DOUBLE-COUNT GUARD: fold ONLY non-subagent rows that
-# carry an envelope. Per the doc, only top-level worker sessions emit; a subagent
-# transcript that happens to print the marker is excluded so it cannot inflate
-# the pool. Counts are SUMMED across a phase's rows, then the same null-guarded
-# formulas are applied to the pooled sums (pooled rate, not a mean of per-run
-# rates). disposition_distribution counts rows per disposition enum value.
+# skill name like $by_phase. DOUBLE-COUNT GUARD: admit ONLY the allowlisted emitter
+# types — `worker` and `router-tick` — that carry an envelope. The `subagent`,
+# `recovery`, and `other` session types are excluded: subagents are nested
+# transcripts that cannot be top-level emitters, and recovery/other are not
+# proven envelope emitters. Counts are SUMMED across a phase's rows, then the
+# same null-guarded formulas are applied to the pooled sums (pooled rate, not a
+# mean of per-run rates). disposition_distribution counts rows per disposition
+# enum value.
 | ( reduce ( $rows[]
-             | select(.type != "subagent" and .outcome != null) ) as $r ({};
+             | select((.type == "worker" or .type == "router-tick") and .outcome != null) ) as $r ({};
       ($r.outcome.phase // "<unknown>") as $ph
       | ($r.outcome) as $o
       | .[$ph] as $cur
