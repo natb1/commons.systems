@@ -19461,6 +19461,37 @@ else
 fi
 stop_teardown
 
+# --- Test 1a: dispatch-stop surfaces spawn-tick result on stderr (#2013) ------
+
+echo "Test: stop hook surfaces the dispatch-spawn-tick result (deduped) on stderr (#2013)"
+stop_setup
+# Override the spawn-tick fake to emit "deduped" (models a tick already running).
+cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-tick" <<'FAKE'
+#!/usr/bin/env bash
+echo "spawn" >> "$STUB_DIR/spawn-calls.log"
+echo "deduped"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-tick"
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "fix-checks" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=implement" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>"$STUB_DIR/hook-stderr.log"
+rc=$?
+assert_eq "stop stderr-surface: hook exits 0" "0" "$rc"
+hook_stderr=$(cat "$STUB_DIR/hook-stderr.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$hook_stderr" == *"dispatch-spawn-tick: deduped"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop stderr-surface: spawn-tick result surfaced on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop stderr-surface: spawn-tick result surfaced on stderr"
+  echo "    hook-stderr: $hook_stderr"
+fi
+stop_teardown
+
 # --- Test 1a2: dispatch-stop clears the worker's reservation marker (#1454) ---
 # Unit 3: the hook releases the worktree's reservation marker (named by JOB_NAME
 # = state.json .name) on session end, BEFORE any tick spawn, so a normally-
