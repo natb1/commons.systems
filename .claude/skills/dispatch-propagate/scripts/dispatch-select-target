@@ -113,8 +113,9 @@
 # it closes (closingIssuesReferences); a PR that closes no issue, or whose
 # closing issues carry no topic label, is "other". An issue's category is the
 # highest-priority topic among its own labels, else "other". A PR's priority
-# bit is 1 if the union of its closing issues' labels carries `priority`, else
-# 0; an issue's priority bit is 1 if its own labels carry `priority`, else 0.
+# bit is 1 if any closing issue, or any open ancestor of a closing issue (up to
+# 6 levels), carries the `priority` label, else 0; an issue's priority bit is 1
+# if its own labels carry `priority`, else 0.
 #
 # Within each (priority, topic) bucket, default-mode priority (oldest PR wins
 # within a tier):
