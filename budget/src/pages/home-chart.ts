@@ -329,6 +329,7 @@ export function buildCategorySankey(
     }
 
     const svg = renderSankeySvg({
+      container,
       rootData,
       collapsedPaths,
       containerWidth,
