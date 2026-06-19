@@ -208,7 +208,14 @@ export async function syncOfficeHoursCore(deps: {
           continue;
         }
 
-        const docId = `merge-pr-${issue.marker.prNumber}`;
+        // Firestore doc IDs may not contain "/". GitHub full-names
+        // ([A-Za-z0-9._-]+/[A-Za-z0-9._-]+) never contain "~", so using "~" as both
+        // the slash-replacement and the repo↔number delimiter keeps the ID injective:
+        // distinct (prRepo, prNumber) pairs map to distinct IDs, so two PRs with the
+        // same number in different repos can no longer collide (#1896). replaceAll
+        // guards a malformed multi-slash prRepo against escaping the items collection.
+        const repoKey = issue.marker.prRepo.replaceAll("/", "~");
+        const docId = `merge-pr-${repoKey}~${issue.marker.prNumber}`;
         const docRef = itemsCollection.doc(docId);
         writes.push(
           writer.set(docRef, {

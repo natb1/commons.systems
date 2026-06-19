@@ -314,7 +314,7 @@ describe("syncOfficeHoursCore", () => {
       skippedMalformed: 0,
     });
 
-    const written = store._docs.get("office-hours/prod/items/merge-pr-42") as
+    const written = store._docs.get("office-hours/prod/items/merge-pr-natb1~commons.systems~42") as
       | Record<string, unknown>
       | undefined;
     expect(written).toBeDefined();
@@ -385,7 +385,7 @@ describe("syncOfficeHoursCore", () => {
     expect(store._docs.has("office-hours/prod/items/stale-chore")).toBe(false);
     expect(store._docs.has("office-hours/prod/items/merge-pr-99")).toBe(false);
     expect(store._docs.has("office-hours/prod/items/fresh-chore")).toBe(true);
-    expect(store._docs.has("office-hours/prod/items/merge-pr-7")).toBe(true);
+    expect(store._docs.has("office-hours/prod/items/merge-pr-natb1~commons.systems~7")).toBe(true);
   });
 
   it("skips an issue whose jitKey would escape the items collection", async () => {
@@ -528,6 +528,30 @@ describe("syncOfficeHoursCore", () => {
 
     // The failed op must not have deleted its doc.
     expect(store._docs.has("office-hours/prod/items/stale-key")).toBe(true);
+  });
+
+  it("assigns distinct doc IDs to merge-pr items with the same prNumber in different repos", async () => {
+    // Regression guard for #1896: two PRs with the same number in different repos
+    // must not collide to a single doc.
+    const store = createInMemoryFirestore();
+    const issueA = makeMergePrIssue({ number: 10 }, { prNumber: 5, prRepo: "natb1/commons.systems" });
+    const issueB = makeMergePrIssue({ number: 11 }, { prNumber: 5, prRepo: "natb1/office-hours-nate" });
+
+    const result = await syncOfficeHoursCore({
+      fetchOpenJitIssues: async () => [issueA, issueB],
+      firestore: store as unknown as Firestore,
+      namespace: "office-hours/prod",
+      memberEmails: ["owner@example.com"],
+    });
+
+    expect(result).toEqual({
+      written: 2,
+      deleted: 0,
+      skippedNoDate: 0,
+      skippedMalformed: 0,
+    });
+    expect(store._docs.has("office-hours/prod/items/merge-pr-natb1~commons.systems~5")).toBe(true);
+    expect(store._docs.has("office-hours/prod/items/merge-pr-natb1~office-hours-nate~5")).toBe(true);
   });
 });
 
