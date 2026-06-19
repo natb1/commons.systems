@@ -6,6 +6,7 @@ import type { User } from "./auth.js";
 import { clearCache } from "./audio-cache.js";
 import { useRouter } from "./router.js";
 import { NavControls } from "./components/NavControls.js";
+import { RouteErrorBoundary } from "./components/RouteErrorBoundary.js";
 import { Home } from "./pages/Home.js";
 import { About } from "./pages/About.js";
 
@@ -110,7 +111,9 @@ export function App() {
       </header>
       <div className="content-grid">
         <main id="app">
-          {activePath === "/about" ? <About /> : <Home user={currentUser} />}
+          <RouteErrorBoundary>
+            {activePath === "/about" ? <About /> : <Home user={currentUser} />}
+          </RouteErrorBoundary>
         </main>
         <aside
           id="player-panel"
