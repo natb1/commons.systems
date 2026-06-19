@@ -162,6 +162,13 @@ else
   MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
 fi
 
+# Install the durable heartbeat timer (#2022) early — before the COUNT > CAP
+# gate — so a cold start that hits a post-cap stall still arms the heartbeat.
+# The late ensure_daemon_service call (below) is never reached on the cap-exit
+# path, so this early call is the only one that fires on that path. Best-effort:
+# a failure here is non-fatal; the chain continuation still runs via OnFailure.
+ensure_heartbeat_units "$MAIN_WORKTREE" || true
+
 # ---- Step 1: NOW ------------------------------------------------------------
 
 NOW="${DISPATCH_TICK_RECOVER_NOW:-$(date +%s)}"

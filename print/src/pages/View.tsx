@@ -1,4 +1,5 @@
 import type { ViewFrame } from "./view.js";
+import { Viewer } from "../viewer/Viewer.js";
 
 function BackLink() {
   return (
@@ -10,8 +11,8 @@ function BackLink() {
 
 export function ViewPage({ frame }: { frame: ViewFrame }) {
   switch (frame.kind) {
-    case "shell":
-      return <div dangerouslySetInnerHTML={{ __html: frame.shellHtml }} />;
+    case "ready":
+      return <Viewer {...frame.props} />;
     case "error":
       return (
         <>
