@@ -26,13 +26,15 @@ vi.mock("../src/pages/home.js", () => ({ renderHome: vi.fn().mockResolvedValue("
 // The mock renders its own <main id="app"> (the real Budgets.tsx owns that
 // wrapper — LegacyRoute used to provide it for the string body).
 vi.mock("../src/pages/Budgets.js", () => ({ Budgets: vi.fn(() => <main id="app">budgets</main>) }));
+// /rules is now the React Rules page; no test here navigates to /rules, so the
+// mock is never rendered — it only keeps the static App import from pulling in
+// the real Rules.tsx transitive graph.
+vi.mock("../src/pages/Rules.js", () => ({ Rules: vi.fn(() => <main id="app">rules</main>) }));
 vi.mock("../src/pages/accounts.js", () => ({ renderAccounts: vi.fn().mockResolvedValue("<div>accounts</div>") }));
 vi.mock("../src/pages/accounts-reconcile.js", () => ({ renderAccountsReconcile: vi.fn().mockResolvedValue("<div>reconcile</div>") }));
-vi.mock("../src/pages/rules.js", () => ({ renderRules: vi.fn().mockResolvedValue("<div>rules</div>") }));
 vi.mock("../src/pages/home-hydrate.js", () => ({ hydrateTransactionTable: vi.fn() }));
 vi.mock("../src/pages/home-chart.js", () => ({ hydrateCategorySankey: vi.fn() }));
 vi.mock("../src/pages/budgets-hydrate.js", () => ({ hydrateBudgetChart: vi.fn() }));
-vi.mock("../src/pages/rules-hydrate.js", () => ({ hydrateRulesTable: vi.fn() }));
 vi.mock("../src/pages/accounts-hydrate.js", () => ({ hydrateAccountsCharts: vi.fn() }));
 vi.mock("../src/pages/accounts-reconcile-hydrate.js", () => ({ hydrateAccountsReconcile: vi.fn() }));
 vi.mock("../src/legacy-hydrate.js", () => ({ hydrateTable: vi.fn(), runHydrationSpecs: vi.fn() }));
