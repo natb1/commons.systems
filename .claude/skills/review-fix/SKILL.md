@@ -580,6 +580,29 @@ marker. Call `dispatch-mark-deviation` instead:
   "/review-fix: high-confidence required security finding(s) left unresolved after fixes"
 ```
 
+**Then emit the outcome envelope** (the contract is
+`.claude/docs/outcome-envelope.md`). This call runs **sandboxed** —
+`dispatch-emit-outcome` is pure (no gh/git/network), so do **not** pass
+`dangerouslyDisableSandbox`. It must fire **before** the session stops below;
+order relative to `dispatch-mark-deviation` does not matter. The deviation path
+only runs when the Workflow ran this session, so `result` is in scope. Pass
+`--disposition escalated` and `--terminated-reason` set to the **same string**
+passed to `dispatch-mark-deviation` above. Derive `repo` from the local remote
+(read-only git, sandbox-safe — no network):
+
+```bash
+REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+.claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
+  --phase review --repo "$REPO" --issue <N> --pr "$PR_NUM" --base-sha "$MERGE_BASE" \
+  --findings-surfaced <result.findings_surfaced> \
+  --findings-actionable <result.findings_actionable> \
+  --fixes-applied <result.fixes_applied> \
+  --followups-filed <result.followups_filed + count of Step-5b security follow-ups actually filed> \
+  --subagents-launched <result.subagents_launched + count of Step-5a and Step-5b filing subagents this SKILL spawned> \
+  --disposition escalated \
+  --terminated-reason "/review-fix: high-confidence required security finding(s) left unresolved after fixes"
+```
+
 The Stop hook reads marker-absence as Branch A and applies `dispatch:office-hours`
 to the issue, surfacing the reason in the why-comment, so the parked item explains
 which criterion fired. Do not apply the `dispatch:office-hours` label inline — the
@@ -592,6 +615,29 @@ run; the script no-ops with a clear diagnostic.
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
   --phase review --pr "$PR_NUM"
+```
+
+**Then, only when the Workflow ran this session** (i.e. **not** the idempotent
+re-entry path, where Steps 1–6 were skipped and `result` is absent), **emit the
+outcome envelope** (contract: `.claude/docs/outcome-envelope.md`). Skip the emit
+entirely on re-entry — re-entry is a separate transcript and emitting zeros would
+inject a phantom run into the aggregate. This call runs **sandboxed** —
+`dispatch-emit-outcome` is pure, so do **not** pass `dangerouslyDisableSandbox`.
+Use `result.disposition` directly (the Workflow already computes `completed` vs
+`completed_with_fixes` from `fixed.length`); **omit** `--terminated-reason` (it
+must be absent on a non-escalated disposition). Derive `repo` from the local
+remote (read-only git, sandbox-safe):
+
+```bash
+REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+.claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
+  --phase review --repo "$REPO" --issue <N> --pr "$PR_NUM" --base-sha "$MERGE_BASE" \
+  --findings-surfaced <result.findings_surfaced> \
+  --findings-actionable <result.findings_actionable> \
+  --fixes-applied <result.fixes_applied> \
+  --followups-filed <result.followups_filed + count of Step-5b security follow-ups actually filed> \
+  --subagents-launched <result.subagents_launched + count of Step-5a and Step-5b filing subagents this SKILL spawned> \
+  --disposition <result.disposition>
 ```
 
 Then **stop**. The Stop hook reads the marker and advances the chain. Applying
