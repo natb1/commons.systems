@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { renderReminderList } from "../src/office-hours.js";
-import type { Reminder } from "../src/reminders.js";
+import type { Reminder, MergePrItem } from "../src/reminders.js";
 
 const now = new Date("2026-06-05T12:00:00Z");
 const MINUTE = 60_000;
@@ -15,6 +15,20 @@ function reminder(title: string, offsetMs: number): Reminder {
     repo: "natb1/office-hours-nate",
     issueNumber: 1,
     dueAt: new Date(now.getTime() + offsetMs),
+  };
+}
+
+function mergePr(overrides: Partial<MergePrItem> = {}): MergePrItem {
+  return {
+    kind: "merge-pr",
+    title: "Fix flaky test",
+    repo: "natb1/commons.systems",
+    issueNumber: 42,
+    prTitle: "fix: stop the flakiness",
+    prUrl: "https://github.com/natb1/commons.systems/pull/99",
+    prNumber: 99,
+    prRepo: "natb1/commons.systems",
+    ...overrides,
   };
 }
 
@@ -79,5 +93,48 @@ describe("renderReminderList", () => {
 
     expect(futureLi.querySelector(".reminder-title")?.textContent).toBe("future-2d");
     expect(futureLi.querySelector(".reminder-due")?.classList.contains("overdue")).toBe(false);
+  });
+});
+
+describe("renderReminderList merge-pr", () => {
+  it("renders a single merge-pr item as li.merge-pr with a.merge-pr-link pointing to prUrl", () => {
+    const item = mergePr();
+    const el = renderReminderList([item], now);
+
+    const list = el.querySelector("#reminder-list");
+    expect(list).not.toBeNull();
+
+    const liItems = list!.querySelectorAll("li.merge-pr");
+    expect(liItems.length).toBe(1);
+
+    const link = liItems[0].querySelector("a.merge-pr-link");
+    expect(link).not.toBeNull();
+    expect(link!.getAttribute("href")).toBe(item.prUrl);
+    expect(link!.textContent).toBe(item.prTitle);
+
+    // No empty placeholder when there is a merge-pr item.
+    expect(el.querySelector(".empty")).toBeNull();
+  });
+
+  it("renders merge-pr items before reminder items regardless of input order", () => {
+    const r = reminder("some-reminder", DAY);
+    const mp = mergePr();
+
+    // Input order: reminder first, then merge-pr.
+    const el = renderReminderList([r, mp], now);
+    const allLis = Array.from(el.querySelectorAll("#reminder-list li"));
+
+    expect(allLis.length).toBe(2);
+    expect(allLis[0].classList.contains("merge-pr")).toBe(true);
+    expect(allLis[1].classList.contains("reminder")).toBe(true);
+  });
+
+  it("renders only li.reminder elements (no li.merge-pr) when input contains only reminders", () => {
+    const el = renderReminderList([reminder("only-reminder", HOUR)], now);
+    const list = el.querySelector("#reminder-list");
+
+    expect(list!.querySelectorAll("li.reminder").length).toBe(1);
+    expect(list!.querySelectorAll("li.merge-pr").length).toBe(0);
+    expect(el.querySelector(".empty")).toBeNull();
   });
 });

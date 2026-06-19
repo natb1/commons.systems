@@ -73,3 +73,84 @@ describe("toReminder", () => {
     expect(captured).toHaveLength(0);
   });
 });
+
+const validMergePrData = {
+  kind: "merge-pr" as const,
+  title: "Fix flaky test",
+  repo: "natb1/commons.systems",
+  issueNumber: 7,
+  prTitle: "fix: stop the flakiness",
+  prUrl: "https://github.com/natb1/commons.systems/pull/9",
+  prNumber: 9,
+  prRepo: "natb1/commons.systems",
+};
+
+describe("toReminder merge-pr", () => {
+  it("(a) valid merge-pr doc — returns MergePrItem with all PR fields, sink NOT fired", () => {
+    const id = "merge-pr-doc-abc";
+    const result = toReminder(id, validMergePrData);
+
+    expect(result).not.toBeNull();
+    if (result === null) return;
+
+    expect(result.kind).toBe("merge-pr");
+    expect(result.title).toBe(validMergePrData.title);
+    expect(result.repo).toBe(validMergePrData.repo);
+    expect(result.issueNumber).toBe(validMergePrData.issueNumber);
+    if (result.kind !== "merge-pr") return;
+    expect(result.prTitle).toBe(validMergePrData.prTitle);
+    expect(result.prUrl).toBe(validMergePrData.prUrl);
+    expect(result.prNumber).toBe(validMergePrData.prNumber);
+    expect(result.prRepo).toBe(validMergePrData.prRepo);
+
+    expect(captured).toHaveLength(0);
+  });
+
+  it("(b) missing prUrl — returns null, logs missing-required-fields with correct context", () => {
+    const id = "merge-pr-doc-bad-url";
+    const data = { ...validMergePrData, prUrl: undefined };
+    const result = toReminder(id, data);
+
+    expect(result).toBeNull();
+    expect(captured).toHaveLength(1);
+    expect((captured[0].error as Error).message).toMatch(/missing required fields/);
+    expect(captured[0].context.operation).toBe("reminder-validation");
+    expect(captured[0].context.itemId).toBe(id);
+  });
+
+  it("(c) empty prTitle — returns null, logs missing-required-fields with correct context", () => {
+    const id = "merge-pr-doc-empty-title";
+    const data = { ...validMergePrData, prTitle: "" };
+    const result = toReminder(id, data);
+
+    expect(result).toBeNull();
+    expect(captured).toHaveLength(1);
+    expect((captured[0].error as Error).message).toMatch(/missing required fields/);
+    expect(captured[0].context.operation).toBe("reminder-validation");
+    expect(captured[0].context.itemId).toBe(id);
+  });
+
+  it("(d) non-github prUrl — returns null, logs missing-required-fields with correct context", () => {
+    const id = "merge-pr-doc-bad-host";
+    const data = { ...validMergePrData, prUrl: "https://gitlab.com/natb1/x/pull/9" };
+    const result = toReminder(id, data);
+
+    expect(result).toBeNull();
+    expect(captured).toHaveLength(1);
+    expect((captured[0].error as Error).message).toMatch(/missing required fields/);
+    expect(captured[0].context.operation).toBe("reminder-validation");
+    expect(captured[0].context.itemId).toBe(id);
+  });
+
+  it("(e) non-positive prNumber — returns null, logs missing-required-fields with correct context", () => {
+    const id = "merge-pr-doc-bad-prnum";
+    const data = { ...validMergePrData, prNumber: 0 };
+    const result = toReminder(id, data);
+
+    expect(result).toBeNull();
+    expect(captured).toHaveLength(1);
+    expect((captured[0].error as Error).message).toMatch(/missing required fields/);
+    expect(captured[0].context.operation).toBe("reminder-validation");
+    expect(captured[0].context.itemId).toBe(id);
+  });
+});
