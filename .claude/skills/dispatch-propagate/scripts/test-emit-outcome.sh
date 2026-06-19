@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
-# Tests for dispatch-emit-outcome — the terminated_reason cross-validation contract (#1907).
+# Tests for dispatch-emit-outcome. Two suites share the sourced helpers from
+# test-helpers.sh (assert_eq, assert_contains, report_results, PASS/FAIL/TOTAL):
+#   1. the terminated_reason cross-validation contract (#1907)
+#   2. the integer validators _require_pos_int / _require_nonneg_int (#1902)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 source "$SCRIPT_DIR/test-helpers.sh"
 SUT="$SCRIPT_DIR/dispatch-emit-outcome"
+
+# ============================================================================
+# Suite 1: terminated_reason cross-validation contract (#1907)
+# ============================================================================
 
 COMMON=(--phase review --repo natb1/commons.systems --issue 1907
   --findings-surfaced 0 --findings-actionable 0 --fixes-applied 0
@@ -45,5 +52,51 @@ run_sut --disposition completed
 assert_eq "REGRESSION: exit code is 0" "0" "$RC"
 NULLVAL=$(printf '%s\n' "$OUT" | sed -n '/^```json$/,/^```$/p' | sed '1d;$d' | jq -r '.terminated_reason')
 assert_eq "REGRESSION: terminated_reason null" "null" "$NULLVAL"
+
+# ============================================================================
+# Suite 2: integer validators _require_pos_int / _require_nonneg_int (#1902)
+#
+# Verifies that _require_pos_int (regex ^[1-9][0-9]*$) rejects 0 and
+# leading-zero forms for --issue and --pr, while _require_nonneg_int still
+# accepts 0 for the five count fields (findings-surfaced, findings-actionable,
+# fixes-applied, followups-filed, subagents-launched).
+# ============================================================================
+
+# run_emit: runs dispatch-emit-outcome with a baseline valid argument set and
+# any extra flags appended via "$@". Echoes only the exit code; discards
+# stdout/stderr. The "; echo $?" idiom captures the exit code without letting
+# a non-zero exit abort this script (which runs under set -e).
+#
+# The baseline seeds every count field with a non-zero value (1) so that a test
+# overriding one of them with 0 (via a later "$@" flag, which wins) genuinely
+# exercises _require_nonneg_int's acceptance of 0 — rather than the override
+# being indistinguishable from the baseline.
+run_emit() {  # echoes the exit code; discards stdout/stderr
+  "$SCRIPT_DIR/dispatch-emit-outcome" \
+    --phase review --repo natb1/commons.systems \
+    --findings-surfaced 1 --findings-actionable 1 --fixes-applied 1 \
+    --followups-filed 1 --subagents-launched 1 --disposition completed \
+    "$@" >/dev/null 2>&1; echo $?
+}
+
+echo ""
+echo "Testing dispatch-emit-outcome validator (#1902)..."
+echo ""
+echo "--- _require_pos_int on --issue and --pr ---"
+
+assert_eq "issue 0 rejected"              2 "$(run_emit --issue 0)"
+assert_eq "pr 0 rejected"                 2 "$(run_emit --issue 1 --pr 0)"
+assert_eq "issue 1 accepted"              0 "$(run_emit --issue 1)"
+assert_eq "issue 1 pr 1 accepted"         0 "$(run_emit --issue 1 --pr 1)"
+assert_eq "issue 01 (leading zero) rejected" 2 "$(run_emit --issue 01)"
+assert_eq "pr 01 (leading zero) rejected" 2 "$(run_emit --issue 1 --pr 01)"
+
+echo ""
+echo "--- _require_nonneg_int count fields still accept 0 ---"
+
+# The baseline seeds --findings-surfaced 1; appending --findings-surfaced 0
+# overrides it (last flag wins), so a pass here proves _require_nonneg_int
+# accepts 0 independently of the baseline value.
+assert_eq "count field 0 accepted"        0 "$(run_emit --issue 1 --findings-surfaced 0)"
 
 report_results

@@ -250,12 +250,17 @@ test.describe("transactions", () => {
     // count() is a one-shot snapshot with no auto-wait; poll until the
     // blur-triggered filter re-render settles before reading the count.
     await expect.poll(async () => visibleRows.count()).toBeLessThan(countBefore);
-    const countAfter = await visibleRows.count();
-    expect(countAfter).toBeGreaterThan(0);
-    for (let i = 0; i < countAfter; i++) {
-      const category = await visibleRows.nth(i).getAttribute("data-category");
-      expect(category).toMatch(/^Food/);
-    }
+    // Auto-waiting assertion: no visible row's data-category falls outside the
+    // "Food" prefix. expect(locator).toHaveCount re-queries on each retry, so a
+    // transient non-Food row from an in-flight second render pass is retried
+    // away rather than read once and asserted (the prior one-shot loop raced
+    // the re-render, especially on mobile).
+    const visibleNonFoodRows = page.locator(
+      '.txn-row:not([style*="display: none"]):not([data-category^="Food"])',
+    );
+    await expect(visibleNonFoodRows).toHaveCount(0);
+    // At least one Food row stays visible after filtering.
+    await expect(visibleRows).not.toHaveCount(0);
   });
 
   test("clearing the filter input and blurring restores all rows", async ({ page }) => {
