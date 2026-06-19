@@ -150,9 +150,10 @@ source 2 before calling the emit script. The emitted value is the total.
   the marker line.
 - **Last-wins** precedence: if multiple envelope blocks appear in one transcript,
   the reader uses the last one.
-- Only top-level worker sessions emit. The reader excludes subagent transcripts,
-  so a subagent that happens to print the marker does not produce a stray
-  envelope.
+- The reader's `by_phase_outcome` reduce admits exactly two session types:
+  `worker` and `router-tick`. Subagent transcripts are excluded (a subagent
+  that happens to print the marker produces no stray envelope), and `recovery`
+  and `other` session types are also excluded — they are not envelope emitters.
 - **Strict count validation**: an envelope that parses as JSON but is missing
   any of the three rate-feeding counts — `findings_surfaced`,
   `findings_actionable`, `fixes_applied` (each non-nullable here) — is null-ified

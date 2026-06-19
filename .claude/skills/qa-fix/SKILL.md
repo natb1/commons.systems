@@ -703,7 +703,9 @@ Otherwise run all steps in order.
       `/implement-unit` via the Skill tool, mapping only `unit.model`,
       `unit.scope`, `unit.context`, `unit.commit_intent` into its parameters
       (`id` / `dependencies` / `resolves_ids` are for your ordering and the Step 4
-      comment, not passed through). The draft PR already exists — open **NO** new
+      comment, not passed through; `resolves_ids` is **also** read to compute the
+      `--fixes-applied` count below, but is still not passed into `/implement-unit`).
+      The draft PR already exists — open **NO** new
       PR. A unit completing in this `/implement-unit` loop is mid-loop, not the end
       of the turn — continue to the next unit, then Steps 4 and 5 and the marker;
       do not emit a closing summary. The terminal rule is the **CRITICAL
@@ -712,23 +714,31 @@ Otherwise run all steps in order.
       **Track a `fixes_applied_count` tally** (agent-maintained running count, NOT
       a shell variable — this loop is an agent-driven sequence of Skill calls, not
       a bash `for`-loop): initialize it to `0` before the first `/implement-unit`
-      invocation. After each invocation, increment by `1` **only** when the
-      invocation hands control back per its Step 4 (the unit's commit landed
-      cleanly). Do **not** increment when an invocation errors, dies, or returns
-      without a landed commit. This tally feeds `--fixes-applied` in item 5 of
-      this path (the outcome envelope call, below — replacing the planned
-      `units.length`).
+      invocation. After each invocation, accumulate the unit's resolved
+      opus-fixable finding IDs — increment by `len(unit.resolves_ids)` (equivalently,
+      add the unit's `resolves_ids` to a running set of resolved IDs and use that
+      set's size) **only** when the invocation hands control back per its Step 4
+      (the unit's commit landed cleanly). `resolves_ids` is already available per
+      unit in the loop. Do **not** increment when an invocation errors, dies, or
+      returns without a landed commit. The precise definition: `fixes_applied_count`
+      = the count of **distinct** opus-fixable finding IDs resolved by landed units
+      this pass (the planner partitions opus-fixable findings disjointly across
+      units, so this equals the sum of `resolves_ids` lengths over landed units).
+      This tally feeds `--fixes-applied` in item 5 of this path (the outcome
+      envelope call, below — replacing the planned `units.length` with the count of
+      resolved opus-fixable findings).
 
-      **If `fixes_applied_count == 0` after the loop** (every `/implement-unit`
-      invocation errored, died, or returned without a landed commit), do **NOT**
-      continue down this fix finalize path — its outcome envelope hard-codes
+      **If `fixes_applied_count == 0` after the loop** (no opus-fixable finding was
+      resolved this pass — either no unit landed a commit, or the landed units
+      collectively resolved zero findings), do **NOT** continue down this fix
+      finalize path — its outcome envelope hard-codes
       `--disposition completed_with_fixes`, which the `outcome-envelope.md`
       contract defines as "the phase finished and applied one or more fixes."
       Emitting it with `fixes_applied = 0` violates the contract and corrupts
       downstream hit-rate metrics. Instead take the **escalate finalize path**
-      below with a `terminated_reason` of `fix-pass-landed-nothing` (all planned
-      opus-fixable units failed to land a commit). This restores the implicit
-      guard that held when the value was the planned `units.length` (always ≥ 1).
+      below with a `terminated_reason` of `fix-pass-landed-nothing` (no opus-fixable
+      finding was resolved this pass). The guard now fires on resolved-finding
+      count, not on the planned `units.length`.
    2. Run **Step 4** (post the PR-comment summary; its disposition section uses the
       **fixing-pass** prose — see Step 4).
    3. Run **Step 5** (cleanup — it self-guards and no-ops if the QA server never
@@ -746,12 +756,14 @@ Otherwise run all steps in order.
       `--disposition` to `completed_with_fixes` and **recompute** the counts the
       Workflow could not — do **NOT** forward `result.fixes_applied` /
       `result.followups_filed` (both literal `0` from the Workflow):
-      - `--fixes-applied` = `fixes_applied_count` — the count of units that
-        completed successfully this pass (the tally maintained by the loop above,
-        per the `outcome-envelope.md` contract that `fixes_applied` = items the
-        phase actually fixed). Do **not** use `result.fix_plan.units.length` (the
-        planned count) or `result.fixes_applied` (a literal `0` from the Workflow,
-        which plans but never executes).
+      - `--fixes-applied` = `fixes_applied_count` — the count of distinct
+        opus-fixable finding IDs resolved by successfully landed units this pass
+        (the sum of `resolves_ids` lengths over landed units; the tally maintained
+        by the loop above, per the `outcome-envelope.md` contract that
+        `fixes_applied` = items the phase actually fixed). Do **not** use
+        `result.fix_plan.units.length` (the planned unit count) or
+        `result.fixes_applied` (a literal `0` from the Workflow, which plans but
+        never executes).
       - `--followups-filed` = the count of `needs-main` follow-ups Step 3.6 actually
         filed this pass (newly-filed only, not already-tracked); `0` if Step 3.6 did
         not run.
@@ -782,9 +794,10 @@ Otherwise run all steps in order.
    2. Run **Step 5** (cleanup — self-guards).
    3. Escalate per the **Escalation** section (`dispatch-mark-deviation`), tailored
       to the reason that fired (cap reached / scope-deviation with
-      `deviation_reason` / planning-failed / fix-pass-landed-nothing — every
-      planned opus-fixable unit failed to land a commit, so `fixes_applied_count`
-      stayed `0`).
+      `deviation_reason` / planning-failed / fix-pass-landed-nothing — no
+      opus-fixable finding was resolved this pass — either no unit landed a commit,
+      or the landed units collectively resolved zero findings, so
+      `fixes_applied_count` stayed `0`).
    4. **STOP.**
 
    **CRITICAL invariants — state and obey these:**
@@ -863,14 +876,18 @@ Otherwise run all steps in order.
      The remaining terminal-behavior prose is **conditional** on which Step-3.7 path
      this pass took:
      - **Fixing pass** (Step 3.7 took the fix finalize path): say which items
-       actually landed and which were deferred. List only the items confirmed
-       landed by the `fixes_applied_count` tally — **not** the full planned
-       opus-fixable set — so the PR comment matches the outcome envelope's
-       `fixes_applied`. Any opus-fixable unit whose `/implement-unit` invocation
+       actually landed and which were deferred. List only the units confirmed
+       landed (the ones counted into the `fixes_applied_count` tally) — **not** the
+       full planned opus-fixable set. Note the dimension difference: the outcome
+       envelope's `fixes_applied` is the number of resolved opus-fixable finding
+       IDs, while this PR comment lists the *units* that landed; the listed landed
+       units collectively resolved `fixes_applied_count` findings (so a reader does
+       not re-read `fixes_applied` as a count of the listed units). Any opus-fixable
+       unit whose `/implement-unit` invocation
        did not reach its Step 4 (errored, died, or returned without a landed
        commit, so it was not counted) goes in a separate "failed to land" list,
        not the fixed list — e.g. **"Fixed this pass: \<opus-fixable items where
-       /implement-unit landed a commit, i.e. counted in fixes_applied_count>;
+       /implement-unit landed a commit, i.e. that contributed to fixes_applied_count>;
        failed to land: \<opus-fixable items where /implement-unit did not reach
        its Step 4>; deferred to re-QA: \<needs-human items>; filed as follow-ups:
        \<needs-main items>."** The fixed commits restart CI and the chain re-QAs
