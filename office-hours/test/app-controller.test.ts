@@ -57,6 +57,7 @@ const ownerState: ViewState = {
   reminders,
   queueMetrics: queueMetricsFixture,
   issueSamples: [],
+  auditAggregates: [],
 };
 
 afterEach(() => {

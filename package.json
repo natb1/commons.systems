@@ -22,6 +22,7 @@
     "local-first",
     "mediautil",
     "print",
+    "packages/ds",
     "router",
     "style",
     "rules-test"
