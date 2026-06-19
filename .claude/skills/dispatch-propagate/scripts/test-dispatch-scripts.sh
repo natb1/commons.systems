@@ -404,9 +404,28 @@ case "$args" in
     # Batched blockedBy lookup for dispatch-select-target (#794). The query text
     # arrives in $args as the -f query= value; extract each issue number and
     # project the existing blockers-<num>.json fixture (default []) into the
-    # GraphQL alias shape _<num>: { number, blockedBy { nodes { state } } }. This
-    # reuses the same fixtures the REST blocked_by case serves, so the
+    # GraphQL alias shape _<num>: { number, blockedBy { nodes { state } }, parent }.
+    # This reuses the same fixtures the REST blocked_by case serves, so the
     # select-target blocked-skip tests pass via either delivery mechanism.
+    #
+    # parent fixture: parent-<num>.json holds a single parent number (e.g. "100"),
+    # or is absent. When absent, parent is null. When present, the parent chain is
+    # built recursively (following parent-<k>.json for each ancestor) up to 7
+    # levels deep, producing {number, parent:{number, parent:...null}}.
+    build_parent_json() {
+      local n="$1" depth="${2:-0}"
+      # Cap at 7 levels to prevent infinite loops on cyclic fixtures.
+      if [[ "$depth" -ge 7 ]] || [[ ! -f "$STUB_DIR/parent-${n}.json" ]]; then
+        echo "null"
+        return
+      fi
+      local p
+      p=$(cat "$STUB_DIR/parent-${n}.json")
+      [[ -z "$p" ]] && { echo "null"; return; }
+      local grandparent_json
+      grandparent_json=$(build_parent_json "$p" $(( depth + 1 )))
+      printf '{"number":%s,"parent":%s}' "$p" "$grandparent_json"
+    }
     echo "api graphql" >> "$STUB_DIR/gh-graphql-calls.log"
     nums=$(printf '%s' "$args" | grep -oE 'issue\(number: [0-9]+' | grep -oE '[0-9]+')
     aliases="{}"
@@ -418,8 +437,9 @@ case "$args" in
         fixture="[]"
       fi
       node=$(printf '%s' "$fixture" | jq -c '{nodes: [.[] | {state: .state}]}')
-      aliases=$(printf '%s' "$aliases" | jq -c --arg k "_${n}" --argjson num "$n" --argjson bb "$node" \
-        '.[$k] = {number: $num, blockedBy: $bb}')
+      parent_json=$(build_parent_json "$n" 0)
+      aliases=$(printf '%s' "$aliases" | jq -c --arg k "_${n}" --argjson num "$n" --argjson bb "$node" --argjson par "$parent_json" \
+        '.[$k] = {number: $num, blockedBy: $bb, parent: $par}')
     done <<< "$nums"
     printf '{"data":{"repository":%s}}\n' "$aliases"
     ;;
@@ -4676,6 +4696,71 @@ printf '[{"number":300,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"he
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
 assert_eq "--priority-only returns priority issue" "issue 400" "$result"
+teardown
+
+# PO-ANC1. A PR whose closing issue carries NO own `priority` label, but whose
+#           ancestor epic IS open and carries `priority`, is lifted into the
+#           priority tier via ancestor inheritance (#1914). In DEFAULT mode this
+#           PR (priority-via-ancestor) outranks an older PR whose closing issue
+#           carries `bug` but no priority. The priority axis is the outermost
+#           sort key, so the inherited-priority PR wins regardless of topic
+#           category or creation order.
+#
+#           Fixture:
+#             issue 100  labels: [priority]        (the open ancestor epic)
+#             issue 101  labels: [help wanted]      (leaf; child of 100 via parent-101.json)
+#             issue 200  labels: [bug]              (unrelated, non-priority issue)
+#             PR 10 (older, 2024-01-01) closes issue 200 (bug, no priority)
+#             PR 20 (newer, 2024-01-02) closes issue 101 (help wanted, no own
+#                     priority — priority only via ancestor 100)
+#           parent-101.json → 100; no parent-100.json; no parent-200.json
+#           issue-list.json: 100, 101, 200 — all open; issue 101 is help-wanted
+#             but has no own `priority` so it stays OUT of the issue priority
+#             tier (ISSUE_SORTED uses own labels only). Issues 100 and 200 lack
+#             `help wanted` and are never startable. The issue queue produces
+#             no priority-1 selection — only the PR path selects here.
+#
+#           This is the ONLY assertion that proves ancestor-priority lifts PR 20
+#           above PR 10. Without ancestor inheritance, both PRs have pri=0 and
+#           PR 10 (older) wins. With it, PR 20 gets pri=1 and wins outright.
+echo "Test: default mode — ancestor priority lifts PR over non-priority PR"
+setup
+UNION='['
+UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# issue 100: priority epic (open ancestor of 101); issue 101: leaf (no own priority);
+# issue 200: plain bug. Neither 100 nor 200 has `help wanted`, so neither enters the
+# startable issue queue. Issue 101 has `help wanted` but no own `priority`, so it is
+# not in the priority issue tier and does not preempt the PR selection.
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# parent fixture: issue 101's parent is 100 (the priority epic); no grandparent.
+printf '100' > "$STUB_DIR/parent-101.json"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "ancestor priority lifts PR 20 over older PR 10 (default mode)" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
+# PO-ANC2. Same fixture, --priority-only mode. PR 10 (closes issue 200, no priority)
+#           is filtered by the early-skip guard. PR 20 (closes issue 101, no own
+#           priority but ancestor 100 is priority) passes the guard via inherited
+#           priority. The discriminator: without ancestor inheritance --priority-only
+#           returns empty (both bits 0); with it, returns pr 20.
+echo "Test: --priority-only — ancestor priority qualifies PR (PO-ANC2)"
+setup
+UNION='['
+UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '100' > "$STUB_DIR/parent-101.json"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only ancestor priority qualifies PR 20" "pr 20 20-leaf-pr fix-checks" "$result"
 teardown
 
 # PO3. main is red and no latch issue open → main-broken fires first, before the
