@@ -15557,6 +15557,149 @@ fi
 sw_teardown
 
 # ============================================================================
+# ensure_sweep_timer: periodic worktree-sweep timer install (#2023)
+# ============================================================================
+echo ""
+echo "=== ensure_sweep_timer periodic sweep timer ==="
+# Issue #2023: the worktree sweep must also run on a durable periodic
+# systemd --user timer so idle/drained chains still GC worktrees. These two
+# halves cover (a) the install/enable idempotency of ensure_sweep_timer and
+# (b) AC#4 — the timer-fired service path reaches dispatch-sweep with no live
+# worker. The stubbing idiom mirrors the ensure_daemon_service block: a
+# recording systemctl stub whose `is-active` exit code is env-driven so the
+# steady-state hot path can be exercised.
+est_tmp=$(mktemp -d)
+mkdir -p "$est_tmp/bin"
+cat > "$est_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUB_LOG"
+for a in "$@"; do
+  case "$a" in
+    is-active) exit "${STUB_IS_ACTIVE_RC:-0}" ;;
+    enable) exit "${STUB_ENABLE_RC:-0}" ;;
+    daemon-reload) exit "${STUB_RELOAD_RC:-0}" ;;
+  esac
+done
+exit 0
+STUB
+chmod +x "$est_tmp/bin/systemctl"
+est_unit_dir="$est_tmp/systemd-user"
+est_service="$est_unit_dir/dispatch-sweep-periodic.service"
+est_timer="$est_unit_dir/dispatch-sweep-periodic.timer"
+est_log="$est_tmp/systemctl.log"
+# A synthetic main worktree path. ensure_sweep_timer does not require it to
+# exist on disk — it only interpolates it into ExecStart=/WorkingDirectory=.
+est_main="$est_tmp/main-worktree"
+
+# --- (a) 1. Cold install path -----------------------------------------------
+# First call: neither unit exists, so the hot-path short-circuit fails on the
+# `-f "$SERVICE_PATH"` test before reaching is-active. Both units are written,
+# daemon-reload runs, and enable --now arms the timer.
+: > "$est_log"
+if (
+  export DISPATCH_SWEEP_TIMER_UNIT_DIR="$est_unit_dir"
+  export DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD="$est_tmp/bin/systemctl"
+  export STUB_LOG="$est_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_sweep_timer "$est_main"
+); then
+  TOTAL=$((TOTAL + 1))
+  if [ -f "$est_timer" ] && [ -f "$est_service" ]; then
+    PASS=$((PASS + 1)); echo "  PASS: cold path wrote both .timer and .service"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not write both unit files"
+  fi
+  grep -q '^OnUnitActiveSec=' "$est_timer" 2>/dev/null \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: .timer has OnUnitActiveSec="; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: .timer missing OnUnitActiveSec="; }
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'Persistent=' "$est_timer" 2>/dev/null; then
+    FAIL=$((FAIL + 1)); echo "  FAIL: .timer contains Persistent= (monotonic timer should not)"
+  else
+    PASS=$((PASS + 1)); echo "  PASS: .timer has no Persistent="
+  fi
+  TOTAL=$((TOTAL + 1))
+  if grep '^ExecStart=' "$est_service" 2>/dev/null | grep -q 'dispatch-spawn-sweep'; then
+    PASS=$((PASS + 1)); echo "  PASS: .service ExecStart points at dispatch-spawn-sweep"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: .service ExecStart does not point at dispatch-spawn-sweep"
+  fi
+  grep -q 'enable --now dispatch-sweep-periodic.timer' "$est_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran enable --now dispatch-sweep-periodic.timer"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run enable --now dispatch-sweep-periodic.timer"; }
+else
+  TOTAL=$((TOTAL + 5)); FAIL=$((FAIL + 5))
+  echo "  FAIL: ensure_sweep_timer (cold path) returned non-zero"
+fi
+
+# --- (a) 2. Idempotent steady-state path ------------------------------------
+# Second call with byte-for-byte identical content (same PATH → identical
+# desired_service/desired_timer, same absolute stub) and is-active reporting
+# active. The hot-path short-circuit fires: no rewrite (no daemon-reload) and
+# no enable. Truncating the log isolates this call's invocations.
+: > "$est_log"
+est_service_inode_before=$(stat -c '%i' "$est_service" 2>/dev/null || echo missing)
+if (
+  export DISPATCH_SWEEP_TIMER_UNIT_DIR="$est_unit_dir"
+  export DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD="$est_tmp/bin/systemctl"
+  export STUB_LOG="$est_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_sweep_timer "$est_main"
+); then
+  TOTAL=$((TOTAL + 1))
+  if ! grep -q 'enable' "$est_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: idempotent path did not re-run enable"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: idempotent path re-ran enable (hot-path skip did not fire)"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if ! grep -q 'daemon-reload' "$est_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: idempotent path did not rewrite the units (no daemon-reload)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: idempotent path rewrote the units (daemon-reload ran)"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if [ "$(stat -c '%i' "$est_service" 2>/dev/null || echo missing)" = "$est_service_inode_before" ]; then
+    PASS=$((PASS + 1)); echo "  PASS: idempotent path did not rewrite the .service (inode stable)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: idempotent path rewrote the .service (inode changed)"
+  fi
+else
+  TOTAL=$((TOTAL + 3)); FAIL=$((FAIL + 3))
+  echo "  FAIL: ensure_sweep_timer (idempotent path) returned non-zero"
+fi
+
+rm -rf "$est_tmp"
+
+# --- (b) AC#4: the timer path invokes the sweep with no live worker ----------
+# Model the timer firing by running the .service's ExecStart command directly
+# (dispatch-spawn-sweep) under the sw_setup harness, in the default no-live-
+# worker environment. dispatch-spawn-sweep itself does not consult
+# `claude agents --json` — "no live worker" here is the ambient default with no
+# Stop hook driving the launch — so reaching the recorded `--unit=dispatch-sweep`
+# systemd-run argv proves the timer path reaches the sweep unconditionally,
+# exactly as the periodic timer fires it. Clones the SW1 argv assertion.
+echo "Test: AC#4 #2023 — the timer-fired service path launches dispatch-sweep with no live worker"
+sw_setup
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-sweep" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "ac4-timer: dispatch-spawn-sweep exits 0" "0" "$rc"
+assert_eq "ac4-timer: stdout is 'spawned'" "spawned" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-sweep"* \
+   && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
+   && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-sweep"* \
+   && "$log" != *"OnFailure"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: ac4-timer: timer path reached dispatch-sweep (unit + cwd + exec, no OnFailure)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ac4-timer: timer path reached dispatch-sweep (unit + cwd + exec, no OnFailure)"
+  echo "    log: $log"
+fi
+sw_teardown
+
+# ============================================================================
 # dispatch-tick-recover tests (#1150)
 # ============================================================================
 echo ""
