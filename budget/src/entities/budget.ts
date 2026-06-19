@@ -112,6 +112,14 @@ function requireAllowancePeriod(value: unknown): AllowancePeriod {
   return requireEnum(value, ALLOWANCE_PERIODS, "allowancePeriod");
 }
 
+function assertOverridesSortedAscending(overrides: readonly BudgetOverride[]): void {
+  for (let i = 1; i < overrides.length; i++) {
+    if (overrides[i].date.toMillis() <= overrides[i - 1].date.toMillis()) {
+      throw new DataIntegrityError(`overrides not sorted by date ascending at index ${i}`);
+    }
+  }
+}
+
 function requireOverrides(value: unknown): BudgetOverride[] {
   if (value == null) return [];
   if (!Array.isArray(value)) {
@@ -127,11 +135,7 @@ function requireOverrides(value: unknown): BudgetOverride[] {
     const balance = requireNumber(entry.balance, `overrides[${i}].balance`);
     result.push({ date, balance });
   }
-  for (let i = 1; i < result.length; i++) {
-    if (result[i].date.toMillis() <= result[i - 1].date.toMillis()) {
-      throw new DataIntegrityError(`overrides not sorted by date ascending at index ${i}`);
-    }
-  }
+  assertOverridesSortedAscending(result);
   return result;
 }
 
@@ -207,16 +211,18 @@ export function budgetToIdbRecord(b: Budget): IdbBudget {
 // ── IdbBudget → Budget ────────────────────────────────────────────────────────
 
 export function idbToBudget(row: IdbBudget): Budget {
+  const overrides = (row.overrides ?? []).map(o => ({
+    date: msToTs(o.dateMs) as Timestamp,
+    balance: o.balance,
+  }));
+  assertOverridesSortedAscending(overrides);
   return {
     id: row.id as BudgetId,
     name: row.name,
     allowance: row.allowance,
     allowancePeriod: requireAllowancePeriod(row.allowancePeriod),
     rollover: requireEnum(row.rollover, ROLLOVERS, "rollover"),
-    overrides: (row.overrides ?? []).map(o => ({
-      date: msToTs(o.dateMs) as Timestamp,
-      balance: o.balance,
-    })),
+    overrides,
     groupId: null as GroupId | null,
   };
 }
