@@ -372,8 +372,9 @@ in the worktree `<worktree-path>` (branch `<N>-…`). Build each unit below in
 order via `/implement-unit` (one commit per unit), then run the terminal
 procedure verbatim:
 
-1. **Execute the plan's Verification section** (auto-runnable ` ```verify `
-   blocks): `.claude/skills/dispatch-propagate/scripts/dispatch-read-plan <N> | .claude/skills/dispatch-propagate/scripts/dispatch-run-verification` — exit 3 →
+1. **Execute the plan's Verification section** (`dangerouslyDisableSandbox: true`
+   — `dispatch-read-plan` calls `gh`). Run the auto-runnable ` ```verify `
+   blocks: `.claude/skills/dispatch-propagate/scripts/dispatch-read-plan <N> | .claude/skills/dispatch-propagate/scripts/dispatch-run-verification` — exit 3 →
    proceed unchanged; exit 0 → proceed; exit 1 → fix via `/implement-unit`
    (cap 2) and re-run, else `dispatch-mark-deviation` and stop.
 
