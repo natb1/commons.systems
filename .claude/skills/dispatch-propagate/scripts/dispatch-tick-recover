@@ -221,8 +221,10 @@ write_state() {
 #
 # The chain is already carried iff a pending `dispatch-reseed*` timer exists.
 # A pending timer is a systemd-GUARANTEED continuation — it fires even if the
-# scheduling agent dies. A busy worker is NOT a guaranteed continuation: liveness
-# is ~50% stale and a worker can be killed or hang. If a timer exists → no-op.
+# scheduling agent dies. A busy worker is NOT a guaranteed continuation: a
+# point-in-time liveness snapshot can't promise the worker is still alive when
+# it's relied on to carry the chain forward — it can be killed or hang. If a
+# timer exists → no-op.
 # After any no-op, Step 5's heartbeat path arms a deferred backstop reseed so
 # a phantom busy carrier cannot strand the chain permanently.
 
