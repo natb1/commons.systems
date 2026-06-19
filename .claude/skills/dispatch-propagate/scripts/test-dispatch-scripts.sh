@@ -4797,6 +4797,44 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "ancestor priority lifts PR 20 over older PR 10 (default mode)" "pr 20 20-leaf-pr fix-checks" "$result"
 teardown
 
+echo "Test: default mode — ancestor chain deeper than supported depth emits truncation warning"
+setup
+UNION='['"$(make_pr_union 10 "10-deep-chain-leaf" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Deep parent chain: 7 parent links (101->100->...->94). The closing issue 101
+# MUST itself have parent-101.json or the 7th-hop sentinel never fires. 94 (the
+# 7th-level ancestor) has no parent file. build_parent_json caps at depth>=7.
+for i in 101 100 99 98 97 96 95; do
+  printf '%d' $((i - 1)) > "$STUB_DIR/parent-$i.json"
+done
+result=$("$TMPDIR_TEST/dispatch-select-target" 2>"$TMPDIR_TEST/stderr") && rc=0 || rc=$?
+stderr=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "deep-chain selection still exits 0" "0" "$rc"
+assert_eq "uncontested PR selected despite truncation" "pr 10 10-deep-chain-leaf fix-checks" "$result"
+assert_eq "truncation warning on stderr" "1" "$(grep -c 'ancestor chain deeper than supported depth (6) for issue 101' <<<"$stderr")"
+teardown
+
+echo "Test: default mode — ancestor chain at supported depth (6) emits no truncation warning"
+setup
+UNION='['"$(make_pr_union 10 "10-deep-chain-leaf" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Chain exactly 6 levels deep (101->100->...->95), parent-95.json ABSENT so the
+# 7th .parent hop resolves to null and the sentinel stays silent.
+for i in 101 100 99 98 97 96; do
+  printf '%d' $((i - 1)) > "$STUB_DIR/parent-$i.json"
+done
+result=$("$TMPDIR_TEST/dispatch-select-target" 2>"$TMPDIR_TEST/stderr") && rc=0 || rc=$?
+stderr=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "depth-6 selection exits 0" "0" "$rc"
+assert_eq "uncontested PR selected at depth 6" "pr 10 10-deep-chain-leaf fix-checks" "$result"
+# Harness has no assert_not_contains; assert absence by counting matches.
+assert_eq "no truncation warning at depth 6" "0" "$(grep -c 'ancestor chain deeper' <<<"$stderr")"
+teardown
+
 # PO-ANC2. Same fixture, --priority-only mode. PR 10 (closes issue 200, no priority)
 #           is filtered by the early-skip guard. PR 20 (closes issue 101, no own
 #           priority but ancestor 100 is priority) passes the guard via inherited
