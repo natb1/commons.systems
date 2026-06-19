@@ -22,8 +22,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--muted-fg, #888);
+  padding: var(--space-2) 0;
+  border-bottom: var(--border-width) solid var(--border);
 }
 
 .media-info {
@@ -34,20 +34,20 @@
 }
 
 .media-title {
-  font-weight: 700;
+  font-weight: var(--weight-bold);
 }
 
 .media-badge {
   display: inline-block;
   padding: 0.1rem 0.4rem;
-  font-size: 0.75rem;
-  border: 1px solid var(--muted-fg, #888);
-  border-radius: 3px;
+  font-size: var(--text-xs);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
 .media-actions {
   display: flex;
-  gap: 0.25rem;
+  gap: var(--space-1);
   align-items: center;
 }
 
@@ -57,7 +57,7 @@
   background: none;
   border: none;
   font-size: 1.2rem;
-  padding: 0.25rem;
+  padding: var(--space-1);
   text-decoration: none;
   color: inherit;
 }
@@ -68,9 +68,9 @@
 }
 
 .download-error {
-  color: var(--error-fg, #c00);
+  color: var(--error);
   font-size: 0.85rem;
-  margin: 0.25rem 0 0;
+  margin: var(--space-1) 0 0;
 }
 
 /* Local-folder items + controls */
@@ -91,12 +91,12 @@
   cursor: pointer;
   padding: 0.4rem 0.8rem;
   font-size: 0.9rem;
-  border: 1px solid var(--muted-fg, #888);
-  border-radius: 3px;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-sm);
   background: none;
   color: inherit;
 }
 
 .local-folder-button:hover {
-  border-color: var(--fg, #ddd);
+  border-color: var(--fg);
 }
