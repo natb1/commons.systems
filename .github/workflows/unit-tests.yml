@@ -203,3 +203,23 @@ jobs:
             (cd "$dir" && go test ./...) || failed=1
           done <<< "$modules"
           exit "$failed"
+
+  darwin-build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      - name: Install nix (if nix files changed)
+        if: steps.changes.outputs.nix == 'true'
+        uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
+        with:
+          extra-conf: |
+            extra-substituters = https://claude-code.cachix.org
+            extra-trusted-public-keys = claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk=
+      - name: Build darwinConfigurations.default
+        if: steps.changes.outputs.nix == 'true'
+        run: .github/scripts/build-darwin-config.sh
