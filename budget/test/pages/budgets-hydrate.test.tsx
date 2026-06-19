@@ -14,9 +14,11 @@
 // The malformed-data variance error-path tests (corrupt data-window12 blobs,
 // missing data-weekly-allowance, etc.) CANNOT be expressed through <Budgets> —
 // those blobs come from the real computeBudgetStatsAndVariances, so corruption is
-// not injectable. They remain in budgets-hydrate.test.ts as direct unit tests of
-// the still-live legacy hydrateBudgetTable (which Unit 4 removes). This file
-// covers the React save paths + a variance happy-path (expand → wrapper renders).
+// not injectable. They live below in the "hydrateVarianceDetails — malformed-data
+// error paths" describe block, driving the still-live exported hydrateVarianceDetails
+// directly against hand-built rows (ported from the deleted budgets-hydrate.test.ts).
+// This file also covers the React save paths + a variance happy-path (expand →
+// wrapper renders).
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, cleanup, waitFor } from "@testing-library/react";
 import type { DataSource } from "../../src/data-source";
@@ -51,6 +53,8 @@ vi.mock("../../src/active-data-source.js", () => ({
 }));
 
 import { Budgets } from "../../src/pages/Budgets";
+import { hydrateVarianceDetails } from "../../src/pages/budgets-hydrate";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import type { Budget, BudgetPeriod } from "../../src/firestore";
 import { Timestamp } from "firebase/firestore";
 
@@ -353,5 +357,98 @@ describe("Budgets overrides table interactivity — Unit 3 contract", () => {
     // Row restored after the failed write.
     expect(c.querySelector("#overrides-table .override-row")).not.toBeNull();
     expect(delBtn.classList.contains("save-error")).toBe(true);
+  });
+});
+
+// Malformed-data variance error paths, ported from the deleted budgets-hydrate.test.ts.
+// These corruptions originate in the SSG-serialized .budget-variance data-* blobs and
+// cannot be injected through <Budgets> (which builds those blobs from real, valid
+// stats), so they drive the exported hydrateVarianceDetails directly against
+// hand-built rows. The React toggle listener (use-budget-table.ts) wraps this same
+// function in a try/catch that routes the thrown DataIntegrityError to
+// handleActionError + dataset.hydrated="error"; here we assert the function's own
+// throw contract, which is what that wrapper relies on.
+describe("hydrateVarianceDetails — malformed-data error paths", () => {
+  const POPULATED_W12 = JSON.stringify([
+    { kind: "category", category: "Food:Groceries", avgWeekly: 60 },
+    { kind: "category", category: "Food:Restaurants", avgWeekly: 30 },
+  ]);
+  const POPULATED_W52 = JSON.stringify([
+    { kind: "category", category: "Food:Groceries", avgWeekly: 55 },
+    { kind: "category", category: "Food:Restaurants", avgWeekly: 25 },
+  ]);
+
+  interface VarianceRowOpts {
+    readonly weeklyAllowance?: string;
+    readonly window12?: string;
+    readonly window52?: string;
+    readonly omitVariance?: boolean;
+    readonly omitBudgetId?: boolean;
+  }
+
+  function makeRow(opts: VarianceRowOpts = {}): { details: HTMLDetailsElement; varianceEl: HTMLElement | null } {
+    const details = document.createElement("details") as HTMLDetailsElement;
+    details.classList.add("budget-row");
+    if (!opts.omitBudgetId) details.setAttribute("data-budget-id", "food");
+    details.appendChild(document.createElement("summary"));
+
+    let varianceEl: HTMLElement | null = null;
+    if (!opts.omitVariance) {
+      varianceEl = document.createElement("div");
+      varianceEl.classList.add("budget-variance");
+      if (opts.weeklyAllowance !== undefined) varianceEl.setAttribute("data-weekly-allowance", opts.weeklyAllowance);
+      if (opts.window12 !== undefined) varianceEl.setAttribute("data-window12", opts.window12);
+      if (opts.window52 !== undefined) varianceEl.setAttribute("data-window52", opts.window52);
+      details.appendChild(varianceEl);
+    }
+    document.body.appendChild(details);
+    if (varianceEl) Object.defineProperty(varianceEl, "clientWidth", { value: 640, configurable: true });
+    return { details, varianceEl };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  // Each of these throws DataIntegrityError directly out of hydrateVarianceDetails,
+  // BEFORE the render step, so dataset.hydrated is never set.
+  const directThrowCases: ReadonlyArray<[string, VarianceRowOpts]> = [
+    [".budget-variance element is missing", { omitVariance: true }],
+    ["data-budget-id is missing", { omitBudgetId: true, weeklyAllowance: "100", window12: POPULATED_W12, window52: POPULATED_W52 }],
+    ["data-weekly-allowance is missing", { window12: POPULATED_W12, window52: POPULATED_W52 }],
+    ["data-weekly-allowance is not finite", { weeklyAllowance: "NaN", window12: POPULATED_W12, window52: POPULATED_W52 }],
+    ["data-window12 is not valid JSON", { weeklyAllowance: "100", window12: "not json", window52: POPULATED_W52 }],
+    ["data-window12 decodes to a non-array", { weeklyAllowance: "100", window12: "{}", window52: POPULATED_W52 }],
+    ["a row is a non-object element", { weeklyAllowance: "100", window12: JSON.stringify([null]), window52: POPULATED_W52 }],
+    ["a row is missing avgWeekly", { weeklyAllowance: "100", window12: JSON.stringify([{ kind: "category", category: "X" }]), window52: POPULATED_W52 }],
+    ["avgWeekly is not a finite number", { weeklyAllowance: "100", window12: JSON.stringify([{ kind: "category", category: "X", avgWeekly: null }]), window52: POPULATED_W52 }],
+    ["category variant has a non-string category field", { weeklyAllowance: "100", window12: JSON.stringify([{ kind: "category", category: 123, avgWeekly: 5 }]), window52: POPULATED_W52 }],
+    ["row kind is unknown", { weeklyAllowance: "100", window12: JSON.stringify([{ kind: "zzz", avgWeekly: 0 }]), window52: POPULATED_W52 }],
+    ["Other row has a non-integer groupedCount", { weeklyAllowance: "100", window12: JSON.stringify([{ kind: "other", avgWeekly: 10, groupedCount: 0.5 }]), window52: POPULATED_W52 }],
+    ["Other row has groupedCount=0 (producer requires >=1)", { weeklyAllowance: "100", window12: JSON.stringify([{ kind: "other", avgWeekly: 10, groupedCount: 0 }]), window52: POPULATED_W52 }],
+    ["Other row has a negative groupedCount", { weeklyAllowance: "100", window12: JSON.stringify([{ kind: "other", avgWeekly: 10, groupedCount: -1 }]), window52: POPULATED_W52 }],
+  ];
+
+  for (const [label, opts] of directThrowCases) {
+    it(`throws DataIntegrityError when ${label}`, () => {
+      const { details, varianceEl } = makeRow(opts);
+      expect(() => hydrateVarianceDetails(details)).toThrow(DataIntegrityError);
+      // The throw happens before render, so it leaves no "hydrated" marker.
+      if (varianceEl) expect(varianceEl.dataset.hydrated).toBeUndefined();
+    });
+  }
+
+  it("throws and flags dataset.hydrated='error' when all categories sum to zero (draw-time)", () => {
+    // absTotal===0 is detected inside renderVarianceDetails' draw(12), which sets
+    // dataset.hydrated='error' before re-throwing — a different path than the
+    // pre-render deserialize throws above.
+    const zeroWindow = JSON.stringify([{ kind: "category", category: "X", avgWeekly: 0 }]);
+    const { details, varianceEl } = makeRow({ weeklyAllowance: "100", window12: zeroWindow, window52: POPULATED_W52 });
+    expect(() => hydrateVarianceDetails(details)).toThrow(DataIntegrityError);
+    expect(varianceEl!.dataset.hydrated).toBe("error");
   });
 });

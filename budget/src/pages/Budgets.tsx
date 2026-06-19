@@ -329,8 +329,8 @@ function OverridesTable({ budgets, authorized, containerRef }: { budgets: Budget
         <span>Balance</span>
         <span></span>
       </div>
-      {allOverrides.map((o, i) => (
-        <OverrideRow key={`${o.budgetId}-${o.index}-${i}`} budgetId={o.budgetId} budgetName={o.budgetName} override={o.override} index={o.index} editable={authorized} />
+      {allOverrides.map((o) => (
+        <OverrideRow key={`${o.budgetId}-${o.index}`} budgetId={o.budgetId} budgetName={o.budgetName} override={o.override} index={o.index} editable={authorized} />
       ))}
       {authorized ? (
         <button id="add-override" data-budgets={serializeBudgets(budgets)}>Add Override</button>
