@@ -6,7 +6,7 @@ import { logError } from "@commons-systems/errorutil/log";
 import { loadMediaHtml, afterRenderHome, wireDownloadActions } from "./pages/home.js";
 import { wireMarkdownActions } from "./markdown-actions.js";
 import { initLocalFolder } from "./local-folder-ui.js";
-import { renderView, afterRenderView, cleanupView, getViewFrame, markViewNotFound } from "./pages/view.js";
+import { renderView, getViewFrame, markViewNotFound } from "./pages/view.js";
 import { createRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { AppNav } from "./components/AppNav.js";
@@ -99,9 +99,9 @@ const router = createHistoryRouter(
           id = decodeURIComponent(path.slice("/view/".length));
         } catch {
           // Malformed percent-encoding (e.g. /view/%ZZ) is normal user input,
-          // not an error to report — treat it as a missing item (verbatim with
-          // the old NOT_FOUND_HTML behavior). renderView is intentionally NOT
-          // called, so pendingItem stays null and afterRenderView is a no-op.
+          // not an error to report — treat it as a missing item. renderView is
+          // intentionally NOT called; markViewNotFound sets the "notFound" frame
+          // so afterRender mounts the not-found <ViewPage>.
           markViewNotFound();
           return '<div id="page-root"></div>';
         }
@@ -112,15 +112,10 @@ const router = createHistoryRouter(
         const mount = outlet.querySelector("#page-root");
         if (!mount) return;
         currentPageRoot = createRoot(mount as HTMLElement);
-        // flushSync so the viewer-shell DOM (dangerouslySetInnerHTML) is committed
-        // synchronously BEFORE afterRenderView → initViewer queries `.viewer`.
-        flushSync(() => currentPageRoot!.render(<ViewPage frame={getViewFrame()} />));
-        // Re-render the live root from the current frame. Read currentPageRoot
-        // through the closure (not captured) so a navigation that nulled it
-        // before this async error fires is a safe no-op via `?.`.
-        afterRenderView(outlet, currentUser, () =>
-          currentPageRoot?.render(<ViewPage frame={getViewFrame()} />),
-        );
+        // No flushSync/querySelector dance: <Viewer> mounts the viewer chrome and
+        // the controller hook inits inside its own effect, after React commits the
+        // canvas node.
+        currentPageRoot.render(<ViewPage frame={getViewFrame()} />);
       },
     },
     {
@@ -136,9 +131,10 @@ const router = createHistoryRouter(
   ],
   {
     onNavigate: ({ path }) => {
+      // Unmounting the page root triggers the viewer controller hook's
+      // effect-cleanup (full teardown), so there is no separate cleanup step.
       currentPageRoot?.unmount();
       currentPageRoot = null;
-      cleanupView();
       trackPageView(path);
     },
     formatError: (error) => {
