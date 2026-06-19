@@ -29,8 +29,14 @@
 #                                   dispatch-spawn-office-hours; then attach the
 #                                   human to it. Born in the worktree, the session's
 #                                   branch is <N>-..., so the strip hook clears
-#                                   the dispatch:office-hours label and the
-#                                   session holds the per-worktree concurrency
+#                                   the dispatch:office-hours label. EXCEPTION:
+#                                   for main-qa items, cwd is the main worktree
+#                                   (branch `main`), which does not match the
+#                                   strip hook `^[0-9]+` discriminator — the
+#                                   label is NOT auto-cleared; closing the issue
+#                                   is what removes it from the queue (see
+#                                   SKILL.md Step 5). The session also holds the
+#                                   per-worktree concurrency
 #                                   lock via the occupancy guard's
 #                                   office-hours-name check in
 #                                   worktree_has_live_session, which recognizes
