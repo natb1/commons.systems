@@ -293,7 +293,7 @@ body.viewer-active {
 .outline-hidden,
 .bookmarks-hidden,
 .goto-hidden {
-  display: none;
+  display: none !important;
 }
 
 .viewer-prev:disabled,
