@@ -6843,6 +6843,97 @@ assert_eq "missing issue number exits non-zero" "1" "$rc"
 teardown
 
 # ============================================================================
+# dispatch-qa-apply-main-qa-labels tests (#1758)
+# ============================================================================
+echo ""
+echo "=== dispatch-qa-apply-main-qa-labels (#1758) ==="
+
+# Happy path: both main-qa and dispatch:office-hours labels exist in the repo
+# (default stub mode), so remove-label succeeds, both adds succeed, and the
+# script exits 0. No label create needed.
+echo "Test: happy path → remove help-wanted, add main-qa, route to office-hours; exit 0"
+setup
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
+assert_eq "happy path: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--remove-label help wanted" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: removed help wanted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: removed help wanted"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: added main-qa"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: added main-qa"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: routed to office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: routed to office-hours"
+fi
+assert_eq "no gh label create" "absent" "$(log_state gh-label-create.log)"
+teardown
+
+# Idempotent re-run: the "help wanted" label is no longer on the issue so the
+# remove-label call returns "not found". The script must tolerate this and still
+# apply main-qa and dispatch:office-hours, exiting 0.
+echo "Test: remove-label-missing → tolerated, main-qa and office-hours still applied; exit 0"
+setup
+echo "remove-label-missing" > "$STUB_DIR/issue-edit-mode"
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
+assert_eq "not-found removal tolerated, exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: main-qa applied after tolerated removal"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: main-qa applied after tolerated removal"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours routing still runs"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours routing still runs"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q -- "--remove-label" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: remove-label not logged (not-found path fired)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: remove-label unexpectedly logged"
+fi
+teardown
+
+# Lazy label-create: the main-qa label does not yet exist in the repo. The
+# first add attempt fails "not found"; the script creates the label with
+# canonical metadata (5319E7) and retries the add. The office-hours step runs
+# unaffected.
+echo "Test: main-qa-missing → create with canonical metadata, retry add, office-hours unaffected; exit 0"
+setup
+echo "main-qa-missing" > "$STUB_DIR/issue-edit-mode"
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
+assert_eq "lazy create: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q "^label create main-qa --color 5319E7 --description QA verification that can only run against deployed main/production" "$STUB_DIR/gh-label-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: created with canonical metadata"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: created with canonical metadata"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: main-qa applied on retry"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: main-qa applied on retry"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours unaffected by lazy create"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours unaffected by lazy create"
+fi
+teardown
+
+# ============================================================================
 # dispatch-plan-finalize tests (#1230)
 # ============================================================================
 echo ""
