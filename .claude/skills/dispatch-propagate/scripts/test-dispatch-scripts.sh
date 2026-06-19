@@ -20542,6 +20542,20 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-self-close"
 
+  # Fake dispatch-recover-dispatched-phase: prints $STUB_DIR/dispatched-phase.txt
+  # when that file is present and non-empty, exits 0; otherwise exits 1 (no output).
+  # The default non-zero exit keeps every existing marker-absent park test unaffected:
+  # DISPATCHED_PHASE="" → condition false → fall through to park.
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-recover-dispatched-phase" <<'FAKE'
+#!/usr/bin/env bash
+if [[ -s "$STUB_DIR/dispatched-phase.txt" ]]; then
+  cat "$STUB_DIR/dispatched-phase.txt"
+  exit 0
+fi
+exit 1
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-recover-dispatched-phase"
+
   # gh PATH stub. issue-edit-mode "label-missing" models the apply-first /
   # create-on-"not found" idiom — first add-label fails with "not found" stderr,
   # exits 1; once gh-label-create.log exists, the retry succeeds.
@@ -21775,6 +21789,260 @@ fi
 # NOT that the payload was parsed (it never is in this hook).
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop open-stdin: spawn invoked exactly once (disposition unaffected)" "1" "$spawn_calls"
+stop_teardown
+
+# ============================================================================
+# dispatch-stop: side-effect recovery wiring tests (#2025)
+# ============================================================================
+#
+# These tests exercise the recovery block inserted after the #1590 wakeup gate
+# and the #1733 rate-limit block in Branch A (marker absent). They reach it by
+# supplying < /dev/null (no payload, no trailing ScheduleWakeup, no rate-limit
+# death transcript) and staging dispatched-phase.txt / current-phase.txt stubs
+# so the fake dispatch-recover-dispatched-phase and dispatch-phase return
+# controlled values.
+
+# --- Test #2025-1: false-park recovered (plan→implement) → advance (no park) --
+echo "Test: #2025 stop recovery: dispatched=plan, current=implement → advance (spawn+self-close+sweep, no park)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "plan"      > "$STUB_DIR/dispatched-phase.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker, no office-hours-reason → Branch A.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "#2025 plan→implement advance: hook exits 0" "0" "$rc"
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "#2025 plan→implement advance: spawn invoked exactly once" "1" "$spawn_calls"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "#2025 plan→implement advance: self-close invoked exactly once" "1" "$self_close_calls"
+sweep_calls=$(wc -l < "$STUB_DIR/sweep-calls.log" 2>/dev/null || echo 0)
+assert_eq "#2025 plan→implement advance: sweep invoked (sweep log present)" "1" "$sweep_calls"
+issue_remove_log=$(cat "$STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 plan→implement advance: strip_office_hours_label ran (issue remove-label)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 plan→implement advance: strip_office_hours_label ran (issue remove-label)"
+  echo "    issue-remove-log: $issue_remove_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 plan→implement advance: NOT parked on office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 plan→implement advance: NOT parked on office-hours"
+  echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log")"
+fi
+stop_teardown
+
+# --- Test #2025-2: per-phase advance pairs → advance for each -----------------
+# (implement→qa), (qa→review), (review→done): main-chain forward moves advance.
+# (fix-checks→qa), (fix-conflicts→implement): fix-* phases also advance once
+# their structural side-effect (green CI / resolved conflict) lands and the
+# chain re-derives the downstream phase. These two guard fix-phase recovery,
+# which the main-chain-only pairs never exercise.
+for _pair in "implement:qa" "qa:review" "review:done" \
+             "fix-checks:qa" "fix-conflicts:implement"; do
+  _dispatched="${_pair%%:*}"
+  _current="${_pair##*:}"
+  echo "Test: #2025 stop recovery: dispatched=$_dispatched, current=$_current → advance (spawn+self-close+sweep, no park)"
+  stop_setup
+  echo "123-foo-bar"  > "$STUB_DIR/current-branch.txt"
+  echo "$_dispatched" > "$STUB_DIR/dispatched-phase.txt"
+  echo "$_current"    > "$STUB_DIR/current-phase.txt"
+  echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+  export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+  "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+  rc=$?
+  assert_eq "#2025 $_dispatched→$_current advance: hook exits 0" "0" "$rc"
+  spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+  assert_eq "#2025 $_dispatched→$_current advance: spawn invoked exactly once" "1" "$spawn_calls"
+  self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+  assert_eq "#2025 $_dispatched→$_current advance: self-close invoked exactly once" "1" "$self_close_calls"
+  TOTAL=$((TOTAL + 1))
+  if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: #2025 $_dispatched→$_current advance: NOT parked on office-hours"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: #2025 $_dispatched→$_current advance: NOT parked on office-hours"
+  fi
+  stop_teardown
+done
+
+# --- Test #2025-3: genuine park (implement→implement, equal phases) -----------
+echo "Test: #2025 stop recovery: dispatched=implement, current=implement (equal) → genuine park, no advance"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement"  > "$STUB_DIR/dispatched-phase.txt"
+echo "implement"  > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "#2025 implement=implement genuine-park: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 implement=implement genuine-park: office-hours applied to issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 implement=implement genuine-park: office-hours applied to issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 implement=implement genuine-park: self-close NOT invoked (no false advance)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 implement=implement genuine-park: self-close NOT invoked (no false advance)"
+fi
+stop_teardown
+
+# --- Test #2025-4: recovery fails (no dispatched-phase.txt) → park -----------
+echo "Test: #2025 stop recovery: recovery fails (no dispatched-phase.txt stub) → genuine park preserved"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+# Intentionally do NOT write dispatched-phase.txt → fake exits 1 → DISPATCHED_PHASE=""
+echo "implement"  > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "#2025 recovery-fails park: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 recovery-fails park: office-hours applied to issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 recovery-fails park: office-hours applied to issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 recovery-fails park: self-close NOT invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 recovery-fails park: self-close NOT invoked"
+fi
+stop_teardown
+
+# --- Test #2025-5: fix-checks no-progress (equal phases) → park ---------------
+echo "Test: #2025 stop recovery: dispatched=fix-checks, current=fix-checks (equal) → genuine park, no advance"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "fix-checks" > "$STUB_DIR/dispatched-phase.txt"
+echo "fix-checks" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "#2025 fix-checks=fix-checks genuine-park: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 fix-checks=fix-checks genuine-park: office-hours applied to issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 fix-checks=fix-checks genuine-park: office-hours applied to issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 fix-checks=fix-checks genuine-park: self-close NOT invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 fix-checks=fix-checks genuine-park: self-close NOT invoked"
+fi
+stop_teardown
+
+# --- Test #2025-6: idle-poll precedence preserved (#1590 gate fires first) ----
+# Supply a trailing-ScheduleWakeup transcript AND set dispatched-phase.txt=plan
+# with current-phase.txt=implement (values that WOULD advance if the recovery
+# block were reached). The wakeup gate MUST fire first so the hook exits 0 early
+# without ever reaching the recovery block.
+echo "Test: #2025 stop recovery: #1590 wakeup gate fires before recovery (idle-poll precedence preserved)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "plan"      > "$STUB_DIR/dispatched-phase.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Trailing-ScheduleWakeup transcript: matches the #1590 idle-poll discriminator.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"user","message":{"content":[{"type":"text","text":"poll"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"ok"}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"waiting"},{"type":"tool_use","name":"ScheduleWakeup","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"scheduled"}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2025 idle-poll precedence: hook exits 0 (wakeup gate fired)" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 idle-poll precedence: NOT parked (wakeup gate fired before recovery)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 idle-poll precedence: NOT parked (wakeup gate fired before recovery)"
+  echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 idle-poll precedence: NOT spawned (wakeup gate fired, no tick)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 idle-poll precedence: NOT spawned (wakeup gate fired, no tick)"
+  echo "    spawn-calls: $(cat "$STUB_DIR/spawn-calls.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 idle-poll precedence: NOT self-closed (wakeup gate fired, no advance)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 idle-poll precedence: NOT self-closed (wakeup gate fired, no advance)"
+  echo "    self-close-calls: $(cat "$STUB_DIR/self-close-calls.log")"
+fi
+stop_teardown
+
+# --- Test #2025-7: backwards phase (dispatched=qa, current=implement) → park --
+# The recovery block must advance ONLY when the chain moved FORWARD past the
+# dispatched phase. A dispatched=qa session whose PR was closed mid-phase
+# re-derives to implement — a BACKWARDS move. The chain did not progress past
+# the dispatched phase, so the structural side-effects of qa never landed: this
+# must park on office-hours, NOT self-close-and-advance.
+#
+# NOTE: this asserts forward-only recovery. It passes only once the recovery
+# block's `[ "$DISPATCHED_PHASE" != "$CURRENT_PHASE" ]` comparison is replaced
+# with a forward-only (phase-rank) check. Under the current `!=` comparison the
+# hook treats any inequality — including this backwards move — as an advance, so
+# this test is RED until that sibling hook fix lands in the same commit. Its
+# redness is the point: it is the regression guard the finding asks for.
+echo "Test: #2025 stop recovery: dispatched=qa, current=implement (backwards) → genuine park, no advance"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "qa"        > "$STUB_DIR/dispatched-phase.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "#2025 qa→implement backwards-park: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 qa→implement backwards-park: office-hours applied to issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 qa→implement backwards-park: office-hours applied to issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 qa→implement backwards-park: self-close NOT invoked (no false advance)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 qa→implement backwards-park: self-close NOT invoked (no false advance)"
+fi
 stop_teardown
 
 # ============================================================================
@@ -33912,6 +34180,184 @@ drd_teardown
 echo "Test: no transcript argument → exit 1"
 if "$DRD"; then rc=0; else rc=$?; fi
 assert_eq "no-arg detector exits 1" "1" "$rc"
+
+# ============================================================================
+# dispatch-recover-dispatched-phase tests (#2025)
+# ============================================================================
+#
+# Exercises the phase-recovery tool: greps the transcript's first
+# <command-name>/skill</command-name> tag and maps it to a dispatch phase.
+# Exits 0 + prints the phase on a recognised dispatch skill; exits 1 + no
+# output for unrecognised skills, missing/empty files, and no-arg invocations.
+# Fixtures are JSONL files written with printf '%s\n' (NOT echo) to avoid
+# zsh backslash-escape corruption.
+echo ""
+echo "=== dispatch-recover-dispatched-phase ==="
+
+DRDP="$SCRIPT_DIR/dispatch-recover-dispatched-phase"
+
+drdp_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+}
+drdp_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+}
+
+# Helper: write a one-line JSONL fixture whose content embeds a command-name tag
+# for the given skill name. Single quotes + concatenation avoids any shell
+# escaping of the tag's forward slash.
+_drdp_fixture() {
+  local path="$1" skill="$2"
+  printf '%s\n' \
+    '{"type":"user","message":{"content":[{"type":"text","text":"<command-name>/'"${skill}"'</command-name>"}]}}' \
+    > "$path"
+}
+
+# --- Test 1: /plan-issue → "plan", exit 0 ------------------------------------
+echo "Test: /plan-issue tag → stdout 'plan', exit 0"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/plan.jsonl" "plan-issue"
+if out=$("$DRDP" "$TMPDIR_TEST/plan.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover plan-issue: stdout is 'plan'" "plan" "$out"
+assert_eq "recover plan-issue: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 2: /implement → "implement", exit 0 --------------------------------
+echo "Test: /implement tag → stdout 'implement', exit 0"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/impl.jsonl" "implement"
+if out=$("$DRDP" "$TMPDIR_TEST/impl.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover implement: stdout is 'implement'" "implement" "$out"
+assert_eq "recover implement: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 3: /qa-fix → "qa", exit 0 -----------------------------------------
+echo "Test: /qa-fix tag → stdout 'qa', exit 0"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/qa.jsonl" "qa-fix"
+if out=$("$DRDP" "$TMPDIR_TEST/qa.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover qa-fix: stdout is 'qa'" "qa" "$out"
+assert_eq "recover qa-fix: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 4: /review-fix → "review", exit 0 ----------------------------------
+echo "Test: /review-fix tag → stdout 'review', exit 0"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/review.jsonl" "review-fix"
+if out=$("$DRDP" "$TMPDIR_TEST/review.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover review-fix: stdout is 'review'" "review" "$out"
+assert_eq "recover review-fix: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 5: /fix-checks → "fix-checks", exit 0 ------------------------------
+echo "Test: /fix-checks tag → stdout 'fix-checks', exit 0"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/fc.jsonl" "fix-checks"
+if out=$("$DRDP" "$TMPDIR_TEST/fc.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover fix-checks: stdout is 'fix-checks'" "fix-checks" "$out"
+assert_eq "recover fix-checks: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 6: /fix-conflicts → "fix-conflicts", exit 0 ------------------------
+echo "Test: /fix-conflicts tag → stdout 'fix-conflicts', exit 0"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/fcon.jsonl" "fix-conflicts"
+if out=$("$DRDP" "$TMPDIR_TEST/fcon.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover fix-conflicts: stdout is 'fix-conflicts'" "fix-conflicts" "$out"
+assert_eq "recover fix-conflicts: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 7: /office-hours → empty stdout, non-zero exit ---------------------
+echo "Test: /office-hours tag → empty stdout, non-zero exit"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/oh.jsonl" "office-hours"
+if out=$("$DRDP" "$TMPDIR_TEST/oh.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover office-hours: stdout is empty" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: recover office-hours: exit non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: recover office-hours: exit non-zero (got 0)"
+fi
+drdp_teardown
+
+# --- Test 8: /budget-parse-job → empty stdout, non-zero exit -----------------
+echo "Test: /budget-parse-job tag → empty stdout, non-zero exit"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/bpj.jsonl" "budget-parse-job"
+if out=$("$DRDP" "$TMPDIR_TEST/bpj.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover budget-parse-job: stdout is empty" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: recover budget-parse-job: exit non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: recover budget-parse-job: exit non-zero (got 0)"
+fi
+drdp_teardown
+
+# --- Test 9: missing path → empty stdout, non-zero exit ----------------------
+echo "Test: missing transcript path → empty stdout, non-zero exit"
+drdp_setup
+if out=$("$DRDP" "$TMPDIR_TEST/nope.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover missing-path: stdout is empty" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: recover missing-path: exit non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: recover missing-path: exit non-zero (got 0)"
+fi
+drdp_teardown
+
+# --- Test 10: grep -m1 first-match wins (first line wins, later line ignored) --
+# First line embeds /implement; a later line embeds /commit-merge-push.
+# The script must return "implement" (first match) and NOT silently yield
+# nothing (commit-merge-push is not a dispatch phase, but it must not shadow).
+echo "Test: first-match semantics (implement first, commit-merge-push later) → 'implement', exit 0"
+drdp_setup
+printf '%s\n' \
+  '{"type":"user","message":{"content":[{"type":"text","text":"<command-name>/implement</command-name>"}]}}' \
+  '{"type":"assistant","message":{"content":[{"type":"text","text":"<command-name>/commit-merge-push</command-name>"}]}}' \
+  > "$TMPDIR_TEST/firstmatch.jsonl"
+if out=$("$DRDP" "$TMPDIR_TEST/firstmatch.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover first-match: stdout is 'implement' (not shadowed by commit-merge-push)" "implement" "$out"
+assert_eq "recover first-match: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 11: fallback path (no command-name tag) → recognized skill, exit 0 --
+# Transcript has NO <command-name> tag; line 1 embeds a .claude/skills/<skill>
+# path. The fallback grep must recover the skill and map it to its phase.
+echo "Test: fallback path (no tag, .claude/skills/qa-fix on line 1) → 'qa', exit 0"
+drdp_setup
+printf '%s\n' \
+  '{"type":"user","message":{"content":[{"type":"text","text":"see .claude/skills/qa-fix/SKILL.md"}]}}' \
+  > "$TMPDIR_TEST/fallback.jsonl"
+if out=$("$DRDP" "$TMPDIR_TEST/fallback.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover fallback: stdout is 'qa'" "qa" "$out"
+assert_eq "recover fallback: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 12: fallback ignores skills paths in later records → exit 1 --------
+# No tag anywhere; line 1 carries NO skills path, but line 2 references
+# .claude/skills/implement (e.g. tool output / Read result). The fallback is
+# scoped to line 1, so it must NOT recover "implement" from the later record —
+# any doubt → empty stdout, non-zero exit. A whole-file grep would wrongly
+# return "implement"; this test proves the line-1 restriction.
+echo "Test: fallback ignores skills path in later record → empty stdout, exit 1"
+drdp_setup
+printf '%s\n' \
+  '{"type":"user","message":{"content":[{"type":"text","text":"recover this dead session"}]}}' \
+  '{"type":"assistant","message":{"content":[{"type":"text","text":"reading .claude/skills/implement/SKILL.md"}]}}' \
+  > "$TMPDIR_TEST/fallback-later.jsonl"
+if out=$("$DRDP" "$TMPDIR_TEST/fallback-later.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover fallback-later: stdout is empty" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: recover fallback-later: exit non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: recover fallback-later: exit non-zero (got 0)"
+fi
+drdp_teardown
 
 # ============================================================================
 # dispatch-schedule-rate-limit-resume tests (#1733)
