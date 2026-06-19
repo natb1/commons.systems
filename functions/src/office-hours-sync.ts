@@ -117,6 +117,11 @@ export function parseMergePrMarker(body: string): MergePrMarker | null {
   if (
     typeof prRepo !== "string" ||
     prRepo === "" ||
+    // Enforce the GitHub owner/name shape so injectivity of the merge-pr doc ID
+    // is provable by construction: a "~"-free prRepo means replaceAll("/","~") is
+    // reversible and the "~" delimiter in syncOfficeHoursCore can never be forged
+    // by the repo field (#1896).
+    !/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(prRepo) ||
     typeof prUrl !== "string" ||
     !prUrl.startsWith("https://github.com/") ||
     typeof prTitle !== "string" ||
@@ -208,7 +213,14 @@ export async function syncOfficeHoursCore(deps: {
           continue;
         }
 
-        const docId = `merge-pr-${issue.marker.prNumber}`;
+        // Firestore doc IDs may not contain "/". GitHub full-names
+        // ([A-Za-z0-9._-]+/[A-Za-z0-9._-]+) never contain "~", so using "~" as both
+        // the slash-replacement and the repo↔number delimiter keeps the ID injective:
+        // distinct (prRepo, prNumber) pairs map to distinct IDs, so two PRs with the
+        // same number in different repos can no longer collide (#1896). replaceAll
+        // guards a malformed multi-slash prRepo against escaping the items collection.
+        const repoKey = issue.marker.prRepo.replaceAll("/", "~");
+        const docId = `merge-pr-${repoKey}~${issue.marker.prNumber}`;
         const docRef = itemsCollection.doc(docId);
         writes.push(
           writer.set(docRef, {
