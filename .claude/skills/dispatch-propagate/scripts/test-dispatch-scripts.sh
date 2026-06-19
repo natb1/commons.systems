@@ -282,6 +282,10 @@ case "$args" in
     # branch (case is first-wins). Log the full $args so tests can assert whether
     # --paginate was passed and what per_page= value was used.
     echo "$args" >> "$STUB_DIR/gh-issue-list-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
     rest_path_dt=$(printf '%s' "$args" | grep -oE 'repos/[^ ]+')
     rest_query_dt="${rest_path_dt#*\?}"
     rest_label_dt=""
@@ -1219,6 +1223,33 @@ if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
 else
   assert_eq "limit: log does not contain --paginate" "no" "no"
 fi
+teardown
+
+echo "Test: gh-failure -- both branches return non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+: > "$STUB_DIR/gh-fail-rest"
+rc_fail=0
+err_fail=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-empty 2>&1 >/dev/null) || rc_fail=$?
+assert_eq "gh-failure: --paginate branch returns non-zero" "1" "$rc_fail"
+case "$err_fail" in *"gh_issue_list_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "gh-failure: stderr names the helper failure" "yes" "$m"
+rc_fail_lim=0
+err_fail_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 50 --label dispatch-test-empty 2>&1 >/dev/null) || rc_fail_lim=$?
+assert_eq "gh-failure: single-page branch returns non-zero" "1" "$rc_fail_lim"
+case "$err_fail_lim" in *"gh_issue_list_rest: gh api failed"*) m_lim=yes ;; *) m_lim=no ;; esac
+assert_eq "gh-failure: single-page stderr names the helper failure" "yes" "$m_lim"
+teardown
+
+echo "Test: --repo flag -- cross-repo path uses owner/other-repo segment, not placeholder"
+setup
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_repo=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --repo owner/other-repo --label dispatch-test-empty)
+if grep -q 'repos/owner/other-repo/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "--repo: API path uses cross-repo segment" "yes" "$seg"
+if grep -q 'repos/{owner}/{repo}/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then ph=yes; else ph=no; fi
+assert_eq "--repo: placeholder absent from cross-repo call" "no" "$ph"
+assert_eq "--repo: returns the stub's empty array" "[]" "$actual_repo"
 teardown
 
 # ============================================================================
@@ -4786,7 +4817,78 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
 assert_eq "--priority-only ancestor priority qualifies PR 20" "pr 20 20-leaf-pr fix-checks" "$result"
 teardown
 
-# PO-ANC3. Same fixture as PO-ANC2 but PR 20's rollup is PENDING, not FAILING.
+# PO-ANC3. Depth-2 ancestor priority. Same shape as PO-ANC1, but the `priority`
+#           label sits on the GRANDPARENT (issue 100), reached through a
+#           NON-priority intermediate parent (issue 102). The assertion passes
+#           only if ancestor detection recurses to depth 2: a 1-level recursion
+#           bug would see only the intermediate 102 (no priority), fail to lift
+#           PR 20, and let the older PR 10 win. So this assertion proves the
+#           depth-2 `recurse`/`.[1:7]` ancestor path detects inherited priority
+#           through a multi-hop chain.
+#
+#           Fixture:
+#             issue 100  labels: [priority]        (open grandparent epic)
+#             issue 102  labels: []                (intermediate parent; NO priority)
+#             issue 101  labels: [help wanted]     (leaf; child of 102 via parent-101.json)
+#             issue 200  labels: [bug]             (unrelated, non-priority issue)
+#             PR 10 (older, 2024-01-01) closes issue 200 (bug, no priority)
+#             PR 20 (newer, 2024-01-02) closes issue 101 (help wanted, no own
+#                     priority — priority only via grandparent 100)
+#           parent-101.json → 102; parent-102.json → 100; no parent-100.json.
+#           Issue 102's neutral labels keep it out of the startable issue queue so
+#           it does not perturb selection. Without depth-2 recursion both PRs have
+#           pri=0 and PR 10 (older) wins; with it PR 20 gets pri=1 and wins.
+echo "Test: default mode — depth-2 ancestor priority lifts PR over non-priority PR"
+setup
+UNION='['
+UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# issue 100: priority grandparent epic; issue 102: neutral intermediate parent (no
+# priority); issue 101: leaf (help wanted, no own priority); issue 200: plain bug.
+# Only the grandparent carries priority, reached via the 102 → 100 hop.
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":102,"created_at":"2024-01-01T00:00:00Z","labels":[]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# 2-hop parent chain: 101 → 102 → 100. Priority sits on the grandparent (100),
+# so the assertion proves ancestor detection recurses to depth 2.
+printf '102' > "$STUB_DIR/parent-101.json"   # 101 → 102
+printf '100' > "$STUB_DIR/parent-102.json"   # 102 → 100
+# no parent-100.json — chain terminates at the grandparent
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "depth-2 ancestor priority lifts PR 20 over older PR 10 (PO-ANC3)" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
+# PO-ANC4. Depth-2 ancestor priority, --priority-only mode. Same fixture as
+#           PO-ANC3, but exercises the `--priority-only` early-skip guard, which
+#           also calls pr_priority_bit (dispatch-select-target line 811-812) and
+#           its depth-2 ANCESTOR_NUMS traversal. PR 10 (closes issue 200, no
+#           priority) is filtered by the guard; PR 20 (closes issue 101, priority
+#           only via grandparent 100 through intermediate 102) passes the guard via
+#           inherited priority. The discriminator: a 1-level recursion bug would see
+#           only the neutral intermediate 102, leave PR 20 with pri=0, and
+#           --priority-only would return empty (both bits 0); with depth-2 recursion
+#           it returns pr 20. Mirrors the PO-ANC1/PO-ANC2 (depth-1) pattern at depth 2.
+echo "Test: --priority-only — depth-2 ancestor priority qualifies PR (PO-ANC4)"
+setup
+UNION='['
+UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":102,"created_at":"2024-01-01T00:00:00Z","labels":[]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# 2-hop parent chain: 101 → 102 → 100. Priority sits on the grandparent (100).
+printf '102' > "$STUB_DIR/parent-101.json"   # 101 → 102
+printf '100' > "$STUB_DIR/parent-102.json"   # 102 → 100
+# no parent-100.json — chain terminates at the grandparent
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only depth-2 ancestor priority qualifies PR 20 (PO-ANC4)" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
+# PO-ANC5. Same fixture as PO-ANC2 but PR 20's rollup is PENDING, not FAILING.
 #           This exercises the CI-pending ancestor-priority WAITING_NUM FALLBACK
 #           path — the orthogonal case to PO-ANC1/PO-ANC2's *selection* assertions.
 #
@@ -4815,7 +4917,7 @@ teardown
 #           --priority-only early-skip guard (issue 200 has `bug` only, no priority,
 #           no ancestor with priority), proving the ancestor-priority PR is the only
 #           candidate and does not interfere with the waiting result.
-echo "Test: --priority-only — CI-pending ancestor priority → waiting fallback (PO-ANC3)"
+echo "Test: --priority-only — CI-pending ancestor priority → waiting fallback (PO-ANC5)"
 setup
 UNION='['
 UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
@@ -4827,7 +4929,7 @@ printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"pr
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '100' > "$STUB_DIR/parent-101.json"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
-assert_eq "--priority-only CI-pending ancestor priority → waiting (fallback target)" \
+assert_eq "--priority-only CI-pending ancestor priority → waiting (fallback target) (PO-ANC5)" \
   "waiting 101" "$result"
 teardown
 
@@ -6646,6 +6748,155 @@ rc=0
 [[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
 assert_eq "403 auth → rc non-zero" "nonzero" "$rc_state"
 assert_eq "403 auth → 1 attempt (fail fast)" "1" "$(cat "$TMPDIR_TEST/c-e")"
+teardown
+
+# ============================================================================
+# playwright_install_with_deps tests
+# ============================================================================
+echo ""
+echo "=== playwright_install_with_deps ==="
+
+# 1. Skip-guard: PLAYWRIGHT_BROWSERS_PATH set → return 0, 0 npx calls.
+echo "Test: playwright_install_with_deps skip-guard → rc 0, 0 npx calls"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+exit "${NPX_EXIT:-0}"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-1"
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export PLAYWRIGHT_BROWSERS_PATH=/nix/some/path
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-1"
+  playwright_install_with_deps
+)
+rc=$?
+count=$( [[ -f "$NPX_COUNT_FILE" ]] && cat "$NPX_COUNT_FILE" || echo 0 )
+assert_eq "skip-guard → rc 0" "0" "$rc"
+assert_eq "skip-guard → 0 npx calls" "0" "$count"
+teardown
+
+# 2. First-attempt success: npx exits 0 → rc 0, exactly 1 npx call.
+echo "Test: playwright_install_with_deps first-attempt success → rc 0, 1 npx call"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+exit "${NPX_EXIT:-0}"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-2"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export NPX_EXIT=0
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-2"
+  playwright_install_with_deps
+) || rc=$?
+assert_eq "first-attempt success → rc 0" "0" "$rc"
+assert_eq "first-attempt success → 1 npx call" "1" "$(cat "$NPX_COUNT_FILE")"
+teardown
+
+# 3. Both attempts fail: npx exits 1 twice → rc non-zero, exactly 2 npx calls.
+echo "Test: playwright_install_with_deps both-attempts fail → rc non-zero, 2 npx calls"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+exit "${NPX_EXIT:-0}"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export NPX_EXIT=1
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+assert_eq "both-attempts fail → rc non-zero" "nonzero" "$rc_state"
+assert_eq "both-attempts fail → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
+teardown
+
+# 4. First attempt fails, second succeeds: npx exits 1 then 0 → rc 0, 2 npx calls.
+#    Exercises the retry loop's core recovery behavior (the #1899 motivation).
+echo "Test: playwright_install_with_deps first fails then succeeds → rc 0, 2 npx calls"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+if [[ "$c" -le 1 ]]; then exit 1; else exit 0; fi
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+assert_eq "first-fails-then-succeeds → rc 0" "0" "$rc"
+assert_eq "first-fails-then-succeeds → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
 teardown
 
 # ============================================================================
