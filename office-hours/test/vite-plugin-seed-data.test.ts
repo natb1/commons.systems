@@ -40,24 +40,40 @@ describe("officeHoursSeedDataPlugin", () => {
   });
 
   describe("generated reminders", () => {
-    let reminders: Array<{
+    type GeneratedReminder = {
+      kind: "reminder";
       jitKey: string;
       title: string;
       repo: string;
       issueNumber: number;
       dueAt: Date;
-    }>;
+    };
+    type GeneratedMergePr = {
+      kind: "merge-pr";
+      title: string;
+      repo: string;
+      issueNumber: number;
+      prTitle: string;
+      prUrl: string;
+      prNumber: number;
+      prRepo: string;
+    };
+    type GeneratedItem = GeneratedReminder | GeneratedMergePr;
+
+    let items: GeneratedItem[];
+    let reminders: GeneratedReminder[];
     let now: number;
 
     beforeAll(() => {
       now = Date.now();
       const body = moduleCode!.replace("export default", "return");
-      reminders = new Function(body)() as typeof reminders;
+      items = new Function(body)() as GeneratedItem[];
+      reminders = items.filter((i): i is GeneratedReminder => i.kind === "reminder");
     });
 
-    it("returns an array of reminders", () => {
-      expect(Array.isArray(reminders)).toBe(true);
-      expect(reminders.length).toBeGreaterThan(0);
+    it("returns an array of items", () => {
+      expect(Array.isArray(items)).toBe(true);
+      expect(items.length).toBeGreaterThan(0);
     });
 
     it("every reminder has the correct fields with correct types", () => {
@@ -89,6 +105,21 @@ describe("officeHoursSeedDataPlugin", () => {
         (r) => r.dueAt.getTime() > now + oneDayMs
       );
       expect(dueLater.length).toBeGreaterThan(0);
+    });
+
+    it("includes exactly one merge-pr item with correct fields and no dueAt", () => {
+      const mergePrItems = items.filter((i): i is GeneratedMergePr => i.kind === "merge-pr");
+      expect(mergePrItems.length).toBe(1);
+      const mp = mergePrItems[0];
+      expect(typeof mp.prTitle).toBe("string");
+      expect(mp.prTitle.length).toBeGreaterThan(0);
+      expect(typeof mp.prUrl).toBe("string");
+      expect(mp.prUrl.startsWith("https://github.com/")).toBe(true);
+      expect(typeof mp.prNumber).toBe("number");
+      expect(mp.prNumber).toBeGreaterThan(0);
+      expect(typeof mp.prRepo).toBe("string");
+      expect(mp.prRepo.length).toBeGreaterThan(0);
+      expect((mp as unknown as { dueAt?: unknown }).dueAt).toBeUndefined();
     });
   });
 });

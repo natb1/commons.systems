@@ -9,14 +9,28 @@ import type { OfficeHoursItem, MergePrItem } from "./reminders.js";
 import { parseQueueMetrics, type QueueMetricsSnapshot } from "./queue-metrics.js";
 
 export function getDemoReminders(): OfficeHoursItem[] {
-  return seedReminders.map((s) => ({
-    kind: "reminder",
-    jitKey: s.jitKey,
-    title: s.title,
-    repo: s.repo,
-    issueNumber: s.issueNumber,
-    dueAt: s.dueAt,
-  }));
+  return seedReminders.map((s) => {
+    if (s.kind === "merge-pr") {
+      return {
+        kind: "merge-pr",
+        title: s.title,
+        repo: s.repo,
+        issueNumber: s.issueNumber,
+        prTitle: s.prTitle,
+        prUrl: s.prUrl,
+        prNumber: s.prNumber,
+        prRepo: s.prRepo,
+      };
+    }
+    return {
+      kind: "reminder",
+      jitKey: s.jitKey,
+      title: s.title,
+      repo: s.repo,
+      issueNumber: s.issueNumber,
+      dueAt: s.dueAt,
+    };
+  });
 }
 
 export function getDemoQueueMetrics(): QueueMetricsSnapshot {

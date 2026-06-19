@@ -13,9 +13,15 @@ export function officeHoursSeedDataPlugin(): Plugin {
       moduleCode =
         `const seeds = ${JSON.stringify(seedReminders)};\n` +
         `const now = Date.now();\n` +
-        `export default seeds.map(({ jitKey, title, repo, issueNumber, dueInMinutes }) => ({\n` +
-        `  jitKey, title, repo, issueNumber, dueAt: new Date(now + dueInMinutes * 60000),\n` +
-        `}));\n`;
+        `export default seeds.map((s) => {\n` +
+        `  if (s.kind === "reminder") {\n` +
+        `    const { jitKey, title, repo, issueNumber, dueInMinutes } = s;\n` +
+        `    return { kind: "reminder", jitKey, title, repo, issueNumber, dueAt: new Date(now + dueInMinutes * 60000) };\n` +
+        `  } else {\n` +
+        `    const { title, repo, issueNumber, prTitle, prUrl, prNumber, prRepo } = s;\n` +
+        `    return { kind: "merge-pr", title, repo, issueNumber, prTitle, prUrl, prNumber, prRepo };\n` +
+        `  }\n` +
+        `});\n`;
     },
     resolveId(id) {
       if (id === VIRTUAL_MODULE_ID) return RESOLVED_VIRTUAL_MODULE_ID;
