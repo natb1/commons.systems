@@ -414,6 +414,8 @@ ensure_recover_unit "$MAIN_WORKTREE" || true
 # failure here is non-fatal — the on-demand daemon then falls back to surviving
 # a finishing reseed tick via KillMode=process (#1196).
 ensure_daemon_service || true
+# Install+enable the durable periodic sweep timer so idle/drained chains still GC worktrees (#2023).
+ensure_sweep_timer "$MAIN_WORKTREE" || true
 
 # ---- Step 6: schedule the transient timer -----------------------------------
 #

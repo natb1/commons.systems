@@ -198,6 +198,8 @@ fi
 # copied verbatim from dispatch-schedule-reseed's Step 5.
 ensure_recover_unit "$MAIN_WORKTREE" || true
 ensure_daemon_service || true
+# Install+enable the durable periodic sweep timer so idle/drained chains still GC worktrees (#2023).
+ensure_sweep_timer "$MAIN_WORKTREE" || true
 
 # ---- Step 6: schedule the transient timer -----------------------------------
 #

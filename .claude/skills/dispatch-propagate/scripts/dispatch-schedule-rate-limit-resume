@@ -250,6 +250,8 @@ fi
 # error if the resume unit ever fails. We still pass OnFailure= unconditionally
 # below so an abnormal resume exit is guaranteed a chain continuation.
 ensure_recover_unit "$MAIN_WORKTREE" || true
+# Install+enable the durable periodic sweep timer so idle/drained chains still GC worktrees (#2023).
+ensure_sweep_timer "$MAIN_WORKTREE" || true
 
 # ---- Step 7: schedule the transient timer -----------------------------------
 #

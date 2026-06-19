@@ -231,6 +231,8 @@ fi
 # unconditionally below so an abnormal reseed exit is guaranteed a chain
 # continuation (#1570).
 ensure_recover_unit "$MAIN_WORKTREE" || true
+# Install+enable the durable periodic sweep timer so idle/drained chains still GC worktrees (#2023).
+ensure_sweep_timer "$MAIN_WORKTREE" || true
 
 # ---- Step 8: schedule the transient timer -----------------------------------
 #
