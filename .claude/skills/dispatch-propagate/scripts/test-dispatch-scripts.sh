@@ -31511,6 +31511,48 @@ rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
 
 # ============================================================================
+# resolve_dirty_apps (#1887)
+# ============================================================================
+#
+# Covers the longest-prefix workspace resolution and shared-package retrigger
+# path introduced in #1887. A synthetic fixture declares three workspaces:
+# landing (flat), blog (flat, consumes @commons-systems/ds), and packages/ds
+# (nested). Each case is sorted before asserting because resolve_dirty_apps
+# emits names in hash-iteration order.
+
+echo ""
+echo "=== resolve_dirty_apps: nested workspace resolution ==="
+
+echo "Test: resolve_dirty_apps -- nested direct + shared retrigger"
+root=$(mktemp -d)
+mkdir -p "$root/landing" "$root/blog" "$root/packages/ds"
+printf '%s' '{"workspaces":["landing","blog","packages/ds"]}' > "$root/package.json"
+printf '%s' '{}' > "$root/landing/package.json"
+printf '%s' '{"dependencies":{"@commons-systems/ds":"*"}}' > "$root/blog/package.json"
+printf '%s' '{}' > "$root/packages/ds/package.json"
+
+out=$(printf '%s\n' "packages/ds/base.css" | (source "$SCRIPT_DIR/lib.sh"; resolve_dirty_apps "$root") | sort)
+assert_eq "resolve_dirty_apps: nested direct + shared retrigger" \
+  $'blog\npackages/ds' "$out"
+
+echo "Test: resolve_dirty_apps -- flat workspace regression"
+out=$(printf '%s\n' "landing/index.html" | (source "$SCRIPT_DIR/lib.sh"; resolve_dirty_apps "$root") | sort)
+assert_eq "resolve_dirty_apps: flat workspace regression" \
+  "landing" "$out"
+
+echo "Test: resolve_dirty_apps -- prefix boundary marks nothing"
+out=$(printf '%s\n' "packages/dsx/foo" | (source "$SCRIPT_DIR/lib.sh"; resolve_dirty_apps "$root") | sort)
+assert_eq "resolve_dirty_apps: prefix boundary marks nothing" \
+  "" "$out"
+
+echo "Test: resolve_dirty_apps -- root-config fan-out marks all workspaces"
+out=$(printf '%s\n' "package.json" | (source "$SCRIPT_DIR/lib.sh"; resolve_dirty_apps "$root") | sort)
+assert_eq "resolve_dirty_apps: root-config fan-out marks all workspaces" \
+  $'blog\nlanding\npackages/ds' "$out"
+
+rm -rf "$root"
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
