@@ -3,6 +3,7 @@ import type { PositionStore } from "../sidecar.js";
 import type { ContentRenderer } from "./types.js";
 import { useViewerController } from "./useViewerController.js";
 import { ViewerToolbar } from "./ViewerToolbar.js";
+import { SearchPanel } from "./SearchPanel.js";
 
 export interface ViewerProps {
   item: MediaItem;
@@ -67,7 +68,7 @@ export function Viewer({ item, createRenderer, resolveSource, store, uid }: View
           ← Back to Library
         </a>
         <ViewerToolbar controller={controller} />
-        {/* Search section (Unit 3) goes here. */}
+        <SearchPanel controller={controller} />
         {/* Bookmarks section (Unit 5) goes here. */}
         {/* Outline section (Unit 4) goes here. */}
         <div className="viewer-meta">
