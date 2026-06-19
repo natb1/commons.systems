@@ -19,20 +19,16 @@ describe("post body typography", () => {
       expect(bodyRule, "expected a rule for #posts article [id^=post-content-]").toBeDefined();
     });
 
-    it("declares IBM Plex Serif first in the family stack", () => {
-      expect(bodyRule).toMatch(/font-family:\s*"IBM Plex Serif"/);
+    it("uses the ds prose font token", () => {
+      expect(bodyRule).toMatch(/font-family:\s*var\(--font-prose\)/);
     });
 
-    it("ends the family stack with a generic serif", () => {
-      expect(bodyRule).toMatch(/font-family:[^;]*,\s*serif\s*;/);
+    it("uses the ds prose leading token", () => {
+      expect(bodyRule).toMatch(/line-height:\s*var\(--leading-prose\)/);
     });
 
-    it("sets line-height to 1.6", () => {
-      expect(bodyRule).toMatch(/line-height:\s*1\.6/);
-    });
-
-    it("constrains line length to 70ch", () => {
-      expect(bodyRule).toMatch(/max-width:\s*70ch/);
+    it("uses the ds prose measure token", () => {
+      expect(bodyRule).toMatch(/max-width:\s*var\(--measure-prose\)/);
     });
   });
 
