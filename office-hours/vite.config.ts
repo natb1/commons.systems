@@ -18,4 +18,7 @@ export default createAppConfig({
     officeHoursQueueSeedPlugin(),
     auditAggregateSeedPlugin(),
   ],
+  // Include .test.tsx (React panel tests) alongside the vanilla .test.ts; the
+  // shared appBase default only matches test/**/*.test.ts.
+  test: { include: ["test/**/*.test.{ts,tsx}"] },
 });
