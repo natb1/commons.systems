@@ -44,6 +44,7 @@
       "Bash(.claude/skills/dispatch-propagate/scripts/dispatch-mark-parse-job-done:*)",
       "Bash(.claude/skills/dispatch-propagate/scripts/dispatch-open-pr:*)",
       "Bash(.claude/skills/dispatch-propagate/scripts/dispatch-write-plan:*)",
+      "Bash(.claude/skills/dispatch-propagate/scripts/dispatch-plan-finalize:*)",
       "Bash(.claude/skills/dispatch-propagate/scripts/dispatch-apply-planned:*)",
       "Bash(.claude/skills/dispatch-propagate/scripts/dispatch-close-resolved:*)",
       "Bash(gh search:*)",
