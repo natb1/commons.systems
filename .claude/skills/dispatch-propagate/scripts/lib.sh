@@ -509,7 +509,14 @@ ensure_playwright_browsers() {
       return 1
     fi
     local flake_dir
-    flake_dir="$(git rev-parse --show-toplevel)"
+    flake_dir="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+      echo "ERROR: could not determine repo root; ensure you are inside a git repository" >&2
+      return 1
+    }
+    [ -n "$flake_dir" ] || {
+      echo "ERROR: git rev-parse --show-toplevel returned empty string" >&2
+      return 1
+    }
     export _DISPATCH_NIX_REEXEC=1
     exec nix develop "$flake_dir" --command "$@"
   fi
