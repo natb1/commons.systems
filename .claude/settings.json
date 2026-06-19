@@ -42,6 +42,7 @@
       "Bash(.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete:*)",
       "Bash(.claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation:*)",
       "Bash(.claude/skills/dispatch-propagate/scripts/dispatch-mark-parse-job-done:*)",
+      "Bash(.claude/skills/dispatch-propagate/scripts/dispatch-plan-finalize:*)",
       "Bash(gh search:*)",
       "Bash(go build:*)",
       "Bash(go test:*)",
