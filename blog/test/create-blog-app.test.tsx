@@ -328,6 +328,51 @@ describe("createBlogApp routing and panel behavior", () => {
     expect(app.innerHTML).not.toContain('data-test="about"');
   });
 
+  // Case 4b — infoPanelContentForPath: navigating to /about routes the override
+  // panel HTML through InfoPanelRegion (aboutContent); navigating back to / shows
+  // the standard blogroll panel again. Starts at / so the scaffold's standard
+  // panel matches the initial hydrate (scaffoldDom has no aboutContent path).
+  it("routes infoPanelContentForPath through the info panel on /about and restores the standard panel on /", async () => {
+    history.pushState({}, "", "/");
+    const config = makeConfig({
+      buildTimeMetadata: [PUBLISHED_POST],
+      buildTimeContent: PUBLISHED_CONTENT,
+      blogRollEntries: BLOGROLL,
+      strategies: new Map([["test-blog", { fetchLatestPost: () => Promise.resolve(LATEST) }]]),
+      infoPanelContentForPath: (p) =>
+        p === "/about" ? '<section class="profile-card">ABOUT PANEL</section>' : undefined,
+    });
+    config.extraRoutes = [
+      { path: "/about", render: () => '<div data-test="about">ABOUT</div>' },
+    ];
+    scaffoldDom(config, "/");
+
+    handle = createBlogApp(config);
+    const app = document.getElementById("app")!;
+    const panel = document.getElementById("info-panel")!;
+    await settle();
+
+    // Standard panel is present on / (blogroll markup), no about override.
+    expect(panel.querySelector("li[data-blogroll-id]")).not.toBeNull();
+    expect(panel.innerHTML).not.toContain("ABOUT PANEL");
+
+    await navigate("/about");
+    await vi.waitFor(() => {
+      expect(app.innerHTML).toContain('data-test="about"');
+      expect(panel.innerHTML).toContain("ABOUT PANEL");
+      // The about override replaces the standard blogroll panel.
+      expect(panel.querySelector("li[data-blogroll-id]")).toBeNull();
+    });
+
+    await navigate("/");
+    await vi.waitFor(() => {
+      expect(app.querySelector("#posts")).not.toBeNull();
+      // Standard blogroll panel restored; the about override is gone.
+      expect(panel.querySelector("li[data-blogroll-id]")).not.toBeNull();
+      expect(panel.innerHTML).not.toContain("ABOUT PANEL");
+    });
+  });
+
   // Case 5a — useScrollIndicator: false → initScrollIndicator NOT called.
   it("does not call initScrollIndicator when useScrollIndicator is false", async () => {
     history.pushState({}, "", "/");

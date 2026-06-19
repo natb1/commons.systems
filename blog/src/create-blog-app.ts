@@ -70,6 +70,8 @@ export interface CreateBlogAppConfig {
     ) => (() => void) | PromiseLike<(() => void) | void>;
   };
   adminGroupId: GroupId;
+  /** Per-route info-panel content override (raw, pre-sanitized HTML). When it returns a string for the current path, InfoPanelRegion renders it as the panel (via aboutContent) instead of the standard blogroll panel; returning undefined yields the standard panel. Landing uses this for /about. */
+  infoPanelContentForPath?: (path: string) => string | undefined;
   // optional hooks (consumed in units 2/3)
   extraRoutes?: Route[];
   onHomeAfterRender?: (slug: string | undefined) => void;
@@ -127,6 +129,11 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   // when it changes. cachedPosts starts as the build-time metadata so the
   // initial hydrateRoot matches the prerendered (published-only) markup.
   let currentUser: User | null = null;
+  // Tracks the path of the current navigation so panelElement() (used by both the
+  // initial hydrateRoot and renderPanel()) can compute the per-route info-panel
+  // override; initialized from the entry path so a deep entry like /about reflects
+  // its panel content from the first render.
+  let currentPath = parsePath().path;
   let cachedPosts: PostMeta[] = config.buildTimeMetadata;
   let lastSkippedCount = 0;
   let postsErrorMsg: string | undefined;
@@ -181,7 +188,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
       },
       strategies: config.strategies,
       useScrollIndicator: config.useScrollIndicator,
-      aboutContent: undefined, // Unit 4 wires landing's /about panel
+      aboutContent: config.infoPanelContentForPath?.(currentPath),
     });
   }
 
@@ -190,6 +197,8 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   // with the home element: per prerender.ts every page embeds the full posts
   // feed, so the home element is the right hydration target for / and /post/*;
   // a deep /admin or /about entry reconciles on the router's immediate dispatch.
+  // panelElement() reads its aboutContent from infoPanelContentForPath(currentPath),
+  // so a deep /about entry hydrates the panel with the About content directly.
   const navRoot = hydrateRoot(navMount, navElement(parsePath().path));
   const appRoot = hydrateRoot(app, homeElement());
   const panelRoot = hydrateRoot(infoPanel, panelElement());
@@ -248,6 +257,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   // staleness guard for async branches.
   let navSeq = 0;
   async function dispatch(path: string): Promise<void> {
+    currentPath = path;
     const seq = ++navSeq;
 
     // Per-nav side-effects (every navigation), matching the old updateNav +
@@ -255,6 +265,11 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
     renderNav(path);
     config.onNavigate?.(path); // landing sets document.body.dataset.route; fellspiral omits
     config.firebase.trackPageView(path);
+    // Centralized panel render: one per navigation, so entering/leaving a route
+    // with an infoPanelContentForPath override (landing's /about) toggles
+    // aboutContent. The blogroll effect's stable deps mean a same-path home→home
+    // nav does NOT re-fetch; only an aboutContent toggle re-runs it.
+    renderPanel();
 
     const isHome = path === "/" || path.startsWith("/post/");
     if (isHome) {
@@ -269,7 +284,6 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
         config.siteDefaults,
       );
       updateCanonical(config.siteUrl, slug);
-      renderPanel();
       return;
     }
 
@@ -326,7 +340,6 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
     // No match — createHistoryRouter falls back to route[0] (the home regex),
     // so treat an unmatched path as home for parity.
     appRoot.render(homeElement());
-    renderPanel();
   }
 
   const router = createHistoryRouter(
@@ -346,6 +359,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
 
   async function refreshAfterAuthChange(): Promise<void> {
     const { path } = parsePath();
+    currentPath = path;
     renderNav(path);
     if (currentUser !== null) {
       await loadPosts(); // sign-in: fetch firestore posts (incl. drafts)
