@@ -1237,6 +1237,8 @@ assert_eq "gh-failure: stderr names the helper failure" "yes" "$m"
 rc_fail_lim=0
 err_fail_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 50 --label dispatch-test-empty 2>&1 >/dev/null) || rc_fail_lim=$?
 assert_eq "gh-failure: single-page branch returns non-zero" "1" "$rc_fail_lim"
+case "$err_fail_lim" in *"gh_issue_list_rest: gh api failed"*) m_lim=yes ;; *) m_lim=no ;; esac
+assert_eq "gh-failure: single-page stderr names the helper failure" "yes" "$m_lim"
 teardown
 
 echo "Test: --repo flag -- cross-repo path uses owner/other-repo segment, not placeholder"
@@ -1247,6 +1249,7 @@ if grep -q 'repos/owner/other-repo/issues' "$STUB_DIR/gh-issue-list-rest-calls.l
 assert_eq "--repo: API path uses cross-repo segment" "yes" "$seg"
 if grep -q 'repos/{owner}/{repo}/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then ph=yes; else ph=no; fi
 assert_eq "--repo: placeholder absent from cross-repo call" "no" "$ph"
+assert_eq "--repo: returns the stub's empty array" "[]" "$actual_repo"
 teardown
 
 # ============================================================================
