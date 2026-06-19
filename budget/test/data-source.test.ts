@@ -1,21 +1,8 @@
 import "fake-indexeddb/auto";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { timestampMockFactory, makeParsedData } from "./helpers";
 
-vi.mock("firebase/firestore", () => {
-  class MockTimestamp {
-    constructor(
-      public readonly seconds: number,
-      public readonly nanoseconds: number,
-    ) {}
-    toMillis() {
-      return this.seconds * 1000 + this.nanoseconds / 1e6;
-    }
-    static fromMillis(ms: number) {
-      return new MockTimestamp(Math.floor(ms / 1000), (ms % 1000) * 1e6);
-    }
-  }
-  return { Timestamp: MockTimestamp };
-});
+vi.mock("firebase/firestore", () => timestampMockFactory());
 
 vi.mock("../src/firestore.js", () => ({
   getTransactions: vi.fn(),
@@ -39,7 +26,6 @@ import { IdbDataSource, SeedDataSource, FileSyncingDataSource } from "../src/dat
 import type { DataSource } from "../src/data-source";
 import type { TransactionId, BudgetId, BudgetPeriodId, RuleId } from "../src/firestore";
 import type { BudgetOverride } from "../src/entities/budget";
-import { makeParsedData } from "./helpers";
 import { DataIntegrityError } from "../src/entities/_helpers";
 
 beforeEach(async () => {
