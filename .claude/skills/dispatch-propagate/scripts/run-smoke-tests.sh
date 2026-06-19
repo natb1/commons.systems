@@ -11,6 +11,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
+# Resolve nix-provisioned Playwright browsers when PLAYWRIGHT_BROWSERS_PATH is
+# unset (re-execs under `nix develop` on NixOS); no-op when the var is set or
+# nix is absent, leaving the npx fallback below to run.
+ensure_playwright_browsers "$0" "$@"
+
 ensure_deps
 
 cd "$REPO_ROOT/$APP_DIR"
