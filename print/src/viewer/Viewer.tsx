@@ -4,6 +4,7 @@ import type { ContentRenderer } from "./types.js";
 import { useViewerController } from "./useViewerController.js";
 import { ViewerToolbar } from "./ViewerToolbar.js";
 import { SearchPanel } from "./SearchPanel.js";
+import { OutlinePanel } from "./OutlinePanel.js";
 
 export interface ViewerProps {
   item: MediaItem;
@@ -70,7 +71,7 @@ export function Viewer({ item, createRenderer, resolveSource, store, uid }: View
         <ViewerToolbar controller={controller} />
         <SearchPanel controller={controller} />
         {/* Bookmarks section (Unit 5) goes here. */}
-        {/* Outline section (Unit 4) goes here. */}
+        <OutlinePanel controller={controller} />
         <div className="viewer-meta">
           <h3 className="viewer-title">{item.title}</h3>
           <p className="viewer-type">
