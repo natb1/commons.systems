@@ -17,6 +17,9 @@ export function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [open, setOpen] = useState(false);
   const [playerHandle, setPlayerHandle] = useState<PlayerHandle | null>(null);
+  // Bumped when the local folder is connected/regranted, so Home refetches its
+  // library (local tracks appear). Ports main.ts:65's router.navigate() refresh.
+  const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
 
   // Auth state (ports main.ts:106-118). Sets currentUser immediately so the Nav
   // re-renders before any await; clears the cache once on sign-out.
@@ -99,7 +102,12 @@ export function App() {
             { href: "/about", label: "About" },
           ]}
           current={activePath}
-          end={<NavControls user={currentUser} />}
+          end={
+            <NavControls
+              user={currentUser}
+              onFolderConnected={() => setLibraryRefreshKey((k) => k + 1)}
+            />
+          }
         />
         <button
           className="panel-toggle"
@@ -118,7 +126,11 @@ export function App() {
             {activePath === "/about" ? (
               <About />
             ) : (
-              <Home user={currentUser} player={playerHandle} />
+              <Home
+                user={currentUser}
+                player={playerHandle}
+                refreshKey={libraryRefreshKey}
+              />
             )}
           </RouteErrorBoundary>
         </main>

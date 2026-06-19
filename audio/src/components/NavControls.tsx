@@ -16,6 +16,11 @@ const HOME_LABEL = "commons.systems";
 export interface NavControlsProps {
   /** The signed-in user, or null. Owned by App. */
   user: User | null;
+  /**
+   * Called after the local folder is successfully connected / regranted, so the
+   * App can trigger a library refetch (local tracks appear). Ports main.ts:65.
+   */
+  onFolderConnected?: () => void;
 }
 
 /**
@@ -30,7 +35,7 @@ export interface NavControlsProps {
  * regrant click resolves.
  */
 export function NavControls(props: NavControlsProps) {
-  const { user } = props;
+  const { user, onFolderConnected } = props;
   const [folderState, setFolderState] = useState(() => getLocalFolderState());
 
   useEffect(() => {
@@ -43,12 +48,27 @@ export function NavControls(props: NavControlsProps) {
     };
   }, []);
 
+  // The folder permission can change while the tab was blurred (ports main.ts's
+  // focus behavior), so re-read the module-singleton state on window focus.
+  useEffect(() => {
+    const controller = new AbortController();
+    window.addEventListener(
+      "focus",
+      () => {
+        setFolderState(getLocalFolderState());
+      },
+      { signal: controller.signal },
+    );
+    return () => controller.abort();
+  }, []);
+
   const onFolderClick = () => {
     const action =
       folderState === "prompt" ? regrantLocalFolder() : connectLocalFolder();
     action
       .then(() => {
         setFolderState(getLocalFolderState());
+        onFolderConnected?.();
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
