@@ -27,7 +27,10 @@
 # --disposition: one of the ALLOWED_DISPOSITIONS set
 #   (completed, completed_with_fixes, escalated).
 # --terminated-reason: required-non-null when disposition == escalated;
-#   must be absent (or not provided) for any other disposition.
+#   forbidden for any other disposition. An explicit empty
+#   --terminated-reason '' on a non-escalated disposition is rejected
+#   (exit 2), not silently treated as absent — presence is tracked by a
+#   set-flag, not by emptiness.
 # --pr, --base-sha: optional; serialize as JSON null when absent.
 #
 # DIVERGENCE FROM dispatch-mark-complete:
@@ -63,6 +66,7 @@ FOLLOWUPS_FILED=""
 SUBAGENTS_LAUNCHED=""
 DISPOSITION=""
 TERMINATED_REASON=""
+TERMINATED_REASON_SET=false
 
 usage() {
   cat >&2 <<'EOF'
@@ -127,7 +131,7 @@ while [[ $# -gt 0 ]]; do
       DISPOSITION="$2"; shift 2 ;;
     --terminated-reason)
       [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --terminated-reason requires a value" >&2; exit 2; }
-      TERMINATED_REASON="$2"; shift 2 ;;
+      TERMINATED_REASON="$2"; TERMINATED_REASON_SET=true; shift 2 ;;
     *)
       echo "dispatch-emit-outcome: unexpected argument: $1" >&2
       usage
@@ -203,13 +207,16 @@ fi
 
 # ---------------------------------------------------------------------------
 # terminated_reason cross-validation
+# "Provided" is tracked by TERMINATED_REASON_SET (set in the parser), NOT by
+# emptiness, so an explicit --terminated-reason '' on a non-escalated
+# disposition is rejected rather than silently treated as absent.
 # ---------------------------------------------------------------------------
 if [[ "$DISPOSITION" == "escalated" && -z "$TERMINATED_REASON" ]]; then
   echo "dispatch-emit-outcome: --terminated-reason is required when --disposition is escalated" >&2
   exit 2
 fi
 
-if [[ "$DISPOSITION" != "escalated" && -n "$TERMINATED_REASON" ]]; then
+if [[ "$DISPOSITION" != "escalated" && "$TERMINATED_REASON_SET" == true ]]; then
   echo "dispatch-emit-outcome: --terminated-reason must not be provided when --disposition is $DISPOSITION (only valid for escalated)" >&2
   exit 2
 fi
